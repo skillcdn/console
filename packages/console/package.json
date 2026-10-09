@@ -1,6 +1,6 @@
 {
   "name": "@skillcdn/console",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "What a custom SkillCDN console is built from: the API client and schemas, the components, the composition of the default console, and the console command agents work the board with.",
   "license": "MIT",
   "homepage": "https://github.com/skillcdn/console#readme",
