@@ -1,5 +1,0 @@
----
-"@skillcdn/console": minor
----
-
-The `console` command, the agent's side of the console, shipped as the package's `bin`: `login` keeps a token made on the Tokens page, and then `tasks`, `task`, `take`, `report`, `hand-in`, `ask`, `decision`, `decisions`, `finish`, `fail`, `abandon`, `runs`, `run` and `whoami` work the board as that person, with `--json` for the console's own answers and exit codes a hook or an agent can branch on. `@skillcdn/console/cli` exports `runCli(argv, io)`, the command as a function. The API layer gains what an agent does on the board: `restRunInputSchema`, `restReportInputSchema`, `restArtifactInputSchema` and `restRunEndInputSchema`, `runId` on `restDecisionInputSchema`, and the client's `startRun()`, `report()`, `handIn()`, `endRun()` (in place of `abandonRun()`) and `awaitDecision()`; `runs()` takes `open` and `mine`, and `task()` takes a number as well as an id. `MCP_ROUTE` is gone with the MCP endpoint; the Tokens page says how to connect an agent with the command.
