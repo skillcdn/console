@@ -4,14 +4,15 @@ Everything needed to build the image and hand it to whatever runs it. This repos
 
 | File | Purpose |
 |---|---|
+| [`Dockerfile`](Dockerfile) | The one multi-stage image. Roles `api`, `worker` and `migrate` are selected by the container command. |
 | [`compose.dev.yaml`](compose.dev.yaml) | Local development dependencies (PostgreSQL 18 on `127.0.0.1:5433`, next to a SkillCDN development database on 5432). Not a production topology. |
-| [`../.github/workflows/ci.yml`](../.github/workflows/ci.yml) | Lint, build, typecheck, tests (integration tests run against a PostgreSQL service container) and a secret scan. It needs no secrets. |
+| [`../.github/workflows/ci.yml`](../.github/workflows/ci.yml) | Lint, build, typecheck, tests (integration tests run against a PostgreSQL service container), a secret scan, and an image build that is then exercised: exit codes, `migrate`, readiness, the page, non-root user, clean shutdown. It needs no secrets. |
 
-A `Dockerfile` and an image job in CI arrive with the first milestone ([roadmap](../docs/roadmap.md)); a release workflow for the package arrives with its first publish.
+A release workflow for the package arrives with its first publish ([roadmap](../docs/roadmap.md)).
 
-## The image, as it will be
+## The image
 
-One multi-stage image, non-root, production dependencies only, no secrets and no configuration baked in. The container command selects the role:
+One multi-stage image, non-root, production dependencies only, no secrets and no configuration baked in. It carries the server, the migrations and the default UI (`WEB_ROOT=/app/web`; set it to an empty value to run without a UI). The container command selects the role:
 
 ```sh
 docker build -f deploy/Dockerfile -t skillcdn-console .    # from the repository root
@@ -78,4 +79,20 @@ The client address and the request id are read from the proxy's headers only whe
 - `GET /healthz` is liveness. `GET /readyz` is readiness: the database reachable, the schema at least at the version this build ships, the workspace found, and not shutting down.
 - `SIGTERM` or `SIGINT`: readiness fails, the listener stops accepting, requests in flight finish, idle connections close, and the process exits within `SHUTDOWN_GRACE_SECONDS`; what is still open then is cut off.
 
+## Building a release
+
+CI builds the image on every change and exercises it, but publishes nothing. A release is built from a commit of `main` with `docker build -f deploy/Dockerfile`, tagged with that commit, and pushed to whatever registry the deployment uses, by whoever operates it; none of that lives here.
+
+## Rollout contract
+
+1. Build the image from the commit, and run its `migrate` role once against the database, before anything else of the new version starts. Migrations only add (expand); what the previous version reads is removed in a later release (contract), so the old `api` and `worker` keep working while the new ones roll out.
+2. Start the new `api` replicas; the platform sends traffic once `GET /readyz` answers `200`, which it does only with the schema of this build applied and the workspace found.
+3. Stop the old replicas with `SIGTERM` and a stop timeout above `SHUTDOWN_GRACE_SECONDS`: readiness fails at once, requests in flight finish, the feed's streams end (browsers reconnect to the new replicas on their own, from where they were), and the process exits `0`.
+4. Replace the `worker` the same way; a sweep it was in the middle of is the next one's work.
+
 The definitions of a particular deployment (accounts, networks, hostnames, sizes) are not in this repository and must not be added to it.
+
+## Gotchas
+
+- The image build keeps the pnpm store in a BuildKit cache mount, and the `pnpm fetch` layer copies packages out of it. A build that dies halfway (the daemon stopped, the machine went down) can leave a truncated file in the store, and every later build then fails in `pnpm install --offline` with `ERR_PNPM_CMD_SHIM_PARSE_MANIFEST` on some package's `package.json`. Clear the mount and rebuild without the layer cache: `docker builder prune -f --filter type=exec.cachemount`, then `docker build --no-cache ...`.
+- `docker stop` sends `SIGTERM`, which the roles handle; `kill` from a Windows shell does not deliver signals to a Node.js process, so a shutdown is only seen in a container or on Linux.

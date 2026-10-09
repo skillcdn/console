@@ -1,0 +1,34 @@
+# Keep the build context small and secret-free. Mirrors .gitignore, plus things an image never needs.
+.git
+.github
+.changeset
+.claude
+.turbo
+.vscode
+.idea
+
+**/node_modules
+**/dist
+**/coverage
+**/*.tsbuildinfo
+**/*.log
+
+# Secrets must never reach a build context, layer or image.
+**/.env
+**/.env.*
+!**/.env.example
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/.aws
+**/secrets
+**/*.tfstate*
+**/*.tfvars
+
+.data
+tmp
+docs
+**/*.md
+# What the image carries of the repository itself: its license (deploy/Dockerfile).
+!LICENSE.md

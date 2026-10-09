@@ -69,3 +69,73 @@ jobs:
           rm gitleaks.tar.gz
       - name: Scan full history
         run: '"$RUNNER_TEMP/gitleaks/gitleaks" git . --redact --no-banner'
+
+  image:
+    name: Image build (no push)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # The image is exercised against a real database: packaging mistakes (a missing migrations
+    # folder, a dependency that did not make it into the image, a UI that is not there) only show
+    # up there.
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: console
+          POSTGRES_PASSWORD: console-dev-only
+          POSTGRES_DB: console
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U console -d console"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgres://console:console-dev-only@127.0.0.1:5432/console
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/Dockerfile
+          push: false
+          load: true
+          tags: skillcdn-console:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Exit codes (64 for an unknown role, 78 for invalid configuration)
+        run: |
+          set +e
+          docker run --rm skillcdn-console:ci not-a-role
+          usage=$?
+          docker run --rm skillcdn-console:ci api
+          config=$?
+          set -e
+          test "$usage" -eq 64
+          test "$config" -eq 78
+      - name: Migrate, serve, become ready, shut down cleanly
+        run: |
+          docker run --rm --network host -e DATABASE_URL skillcdn-console:ci migrate
+          docker run -d --name api --network host -e DATABASE_URL -e WORKER_IN_PROCESS=true skillcdn-console:ci api
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:11190/readyz; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:11190/readyz
+          test "$(docker exec api id -u)" -ne 0
+          # The default UI ships in the image: the page for the board and for any path of the app,
+          # under its policy; the API answers its own paths.
+          curl -fsS -H 'accept: text/html' 'http://127.0.0.1:11190/' | grep -q '<div id="root">'
+          curl -fsS -D - -o /dev/null 'http://127.0.0.1:11190/decisions' | grep -qi '^content-security-policy:'
+          curl -fsS 'http://127.0.0.1:11190/api/v1/me' | grep -q '"signIn":null'
+          curl -sS -o /dev/null -w '%{http_code}' 'http://127.0.0.1:11190/api/v1/tasks' | grep -q '^401$'
+          # The license ships with the image.
+          docker run --rm --entrypoint sh skillcdn-console:ci -c 'test -s /app/LICENSE.md && test -d /app/migrations'
+          docker stop --time 30 api
+          test "$(docker inspect --format '{{.State.ExitCode}}' api)" -eq 0
+          docker logs api 2>&1 | grep -q 'shutdown complete'
+          docker logs api

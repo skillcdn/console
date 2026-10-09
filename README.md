@@ -17,7 +17,9 @@
 
 **What it is to SkillCDN.** The reference console, as [`skillcdn/skills`](https://github.com/skillcdn/skills) is the reference skill repository: an example that follows the standard and is meant for real use, built on the published packages and the REST API like any other consumer would build theirs. It is packaged and published so that anyone can start from it, and it is not a second standard: nothing about SkillCDN is defined here, a repository in the format and a reader of it owe the console nothing, and nothing in [`skillcdn/skillcdn`](https://github.com/skillcdn/skillcdn) depends on this repository ([its ADR-0047](https://github.com/skillcdn/skillcdn/blob/main/docs/adr/0047-the-console-is-a-separate-repository-built-on-the-published-packages.md)). It is not the web UI of `skillcdn.ai` or of a self-hosted SkillCDN either: that UI lives with the server.
 
-## How it will work
+## How it works
+
+The first two steps and the board are there today; agents arrive with the second milestone of the roadmap.
 
 1. **Deploy it once.** One container image, one PostgreSQL, S3-compatible storage for what runs leave behind. Locally with compose; on a cloud, the same image next to a managed database and a bucket.
 2. **People sign in** with the git host the organization already uses, and each connects their own agent to the console's MCP endpoint. Several people, each with their own agent, work on the same board.

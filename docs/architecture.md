@@ -1,6 +1,6 @@
 # Architecture
 
-> **Status: design baseline.** Nothing described here is implemented yet; [roadmap.md](roadmap.md) tracks what exists. The decisions with lasting consequences are in [adr/](adr/); the rest of this document is the proposed shape, kept current as the implementation lands: when they diverge, update this document in the same change. The open questions are at the end.
+> **Status:** the board (milestone 1) is implemented as described here; what agents do is the proposed shape for milestone 2. [roadmap.md](roadmap.md) tracks what exists. The decisions with lasting consequences are in [adr/](adr/); the rest of this document is kept current as the implementation lands: when they diverge, update this document in the same change. The open questions are at the end.
 
 ## Overview
 
@@ -28,11 +28,11 @@ Five properties shape everything else:
 
 ## Vocabulary
 
-These are the concepts the schema, the API and the UI are named after. The first milestone turns them into code; until then this list is the contract.
+These are the concepts the schema, the API and the UI are named after. The vocabulary in code is `@skillcdn/console/api`; the schema is in [`apps/console/README.md`](../apps/console/README.md#data-model). Runs, agents and artifacts arrive with the second milestone.
 
 | Concept | What it is |
 |---|---|
-| **Workspace** | An organization's board. A deployment holds one until a need for more appears. |
+| **Workspace** | An organization's board. A deployment holds one until a need for more appears (`WORKSPACE_NAME`). |
 | **Person** | Someone who signed in through the git host and is a member of the workspace. |
 | **Agent** | An agent connected by a person: its kind (Claude Code, Codex, another MCP client), the token it holds, the person it acts for. An agent is that person for the board's purposes, and is shown as "agent for *person*". |
 | **Task** | A unit of work: title, body in Markdown, state, owner (a person), assignee (a person or their agent), priority, links (repositories, pull requests, documents), parent task for a breakdown. States: `idea`, `ready`, `in_progress`, `in_review`, `done`, `dropped`. |
@@ -87,7 +87,7 @@ PostgreSQL holds the workspace, the people, their sessions and the agents' token
 
 ## Deployment
 
-- **Locally:** `deploy/compose.dev.yaml` runs PostgreSQL; the console runs from `pnpm dev`. The image is built from `deploy/Dockerfile` once there is one.
+- **Locally:** `deploy/compose.dev.yaml` runs PostgreSQL; the console runs from the built output (`apps/console/README.md`). The image is built from `deploy/Dockerfile`, and CI builds and exercises it on every change.
 - **On a cloud:** the same image as containers, a managed PostgreSQL and a bucket. [`deploy/README.md`](../deploy/README.md) is the contract: the roles, the environment variables, what a platform must provide (secrets at runtime, health probes, a stop timeout above the grace period, logs from stdout). The definitions of a particular deployment live outside this repository ([AGENTS.md](../AGENTS.md), rule 8).
 
 ## Stack
