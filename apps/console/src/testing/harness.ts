@@ -1,4 +1,10 @@
-import { AUTH_ROUTES } from "@skillcdn/console/api";
+import {
+  AUTH_ROUTES,
+  REST_ROUTES,
+  type RestProject,
+  type RestProjectInput,
+  restProjectSchema,
+} from "@skillcdn/console/api";
 import { parseAddress } from "@skillcdn/core";
 import type { Hono } from "hono";
 import { pino } from "pino";
@@ -33,6 +39,11 @@ export interface Harness {
    * header that carries the session.
    */
   signIn(person: string): Promise<string>;
+  /**
+   * Makes a project from the console's own pages, as the person whose session the cookie
+   * carries, and answers it: what every test of the board needs first.
+   */
+  project(cookie: string, input: RestProjectInput): Promise<RestProject>;
   /** Ends the feed and the listener, for a harness that was given `live`. */
   close(): Promise<void>;
 }
@@ -152,6 +163,17 @@ export function createHarness(testDatabase: TestDatabase, options: HarnessOption
         { headers: { cookie: cookieOf(begun, "console_login") } },
       );
       return cookieOf(done, "console_session");
+    },
+    async project(cookie, input) {
+      const response = await request(REST_ROUTES.projects, {
+        method: "POST",
+        headers: { cookie, origin, "content-type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      if (response.status !== 201) {
+        throw new Error(`the project was not made: ${response.status} ${await response.text()}`);
+      }
+      return restProjectSchema.parse(await response.json());
     },
     async close() {
       feed.close();

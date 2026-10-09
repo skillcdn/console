@@ -45,7 +45,7 @@ describe("the skills of the board", () => {
       source,
       clock: { now: () => new Date(0) },
     });
-    expect(await skills.read()).toEqual({
+    expect(await skills.read(undefined)).toEqual({
       address: null,
       source: "https://skillcdn.test",
       page: null,
@@ -68,7 +68,7 @@ describe("the skills of the board", () => {
       clock: { now: () => new Date(now) },
       cacheMs: 1000,
     });
-    const [first, second] = await Promise.all([skills.read(), skills.read()]);
+    const [first, second] = await Promise.all([skills.read(undefined), skills.read(undefined)]);
     expect(first).toEqual({
       address: "/gh/acme/skills@v1",
       source: "https://skillcdn.test",
@@ -89,15 +89,34 @@ describe("the skills of the board", () => {
     expect(second).toBe(first);
     expect(calls()).toBe(1);
     now = 999;
-    expect(await skills.read()).toBe(first);
+    expect(await skills.read(undefined)).toBe(first);
     expect(calls()).toBe(1);
     now = 1000;
-    expect((await skills.read()).status).toBe("unavailable");
+    expect((await skills.read(undefined)).status).toBe("unavailable");
     expect(calls()).toBe(2);
     // A deployment that could not be reached is asked again at once, not in a while.
-    expect((await skills.read()).status).toBe("indexing");
+    expect((await skills.read(undefined)).status).toBe("indexing");
     expect(calls()).toBe(3);
-    expect((await skills.read()).status).toBe("indexing");
+    expect((await skills.read(undefined)).status).toBe("indexing");
     expect(calls()).toBe(3);
+  });
+
+  it("read a project's own address over the organization's, each held on its own", async () => {
+    const { source, calls } = sourceOf([READY, { status: "indexing", skills: [] }]);
+    const skills = new Skills({
+      config: { source: "https://skillcdn.test", address: ADDRESS },
+      source,
+      clock: { now: () => new Date(0) },
+    });
+    const own = await skills.read("/gh/acme/playbooks");
+    expect(own).toMatchObject({ address: "/gh/acme/playbooks", status: "ready" });
+    expect(own.items[0]?.uri).toBe("skill://gh/acme/playbooks/review/SKILL.md");
+    const organization = await skills.read(undefined);
+    expect(organization).toMatchObject({ address: "/gh/acme/skills@v1", status: "indexing" });
+    expect(calls()).toBe(2);
+    expect(await skills.read("/gh/acme/playbooks")).toBe(own);
+    expect(calls()).toBe(2);
+    // An address that is not one, which a project should never hold, is none at all.
+    expect((await skills.read("not an address")).status).toBe("none");
   });
 });

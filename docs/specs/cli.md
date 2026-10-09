@@ -9,35 +9,41 @@ A person installs the package where the agent runs and signs the command in once
 
 From then on the agent is that person on the board ([ADR-0004](../adr/0004-people-and-agents-reach-the-board-only-through-the-api-with-a-credential-of-their-own.md)): what it does is attributed to the person and shown as done by the agent, called what the person called the token unless `take --agent` says otherwise.
 
+## The project
+
+The board is a project's ([ADR-0008](../adr/0008-a-workspace-holds-projects-and-what-a-person-may-see-and-change-is-decided-per-project.md)), and every command on it works in one: the one `--project <key>` names, else `CONSOLE_PROJECT` in the environment, else the one `.skillcdn-console.json` names in the working directory or the nearest directory above it. `console use <key>` writes that file, after checking that the console knows the project to the person; it is meant to be committed, so that everyone who works in the checkout, and every agent they run in it, is in the same project without saying so. With none of the three, a command on the board says so and exits with `1`. `console projects` lists the projects the person may work in, with what they are in each; a project the person may not see is not found, as if it were not there.
+
 ## The commands
 
 | Command | Asks the console | Says |
 |---|---|---|
 | `login --url <origin> [--token-stdin]` | `GET /api/v1/me`, with the token | who the token is; keeps the credentials |
 | `logout` | nothing | that they are forgotten |
-| `whoami` | `GET /api/v1/me` | the login, the role, the workspace, the address |
-| `tasks [--state <state>]` | `GET /api/v1/tasks` | one line per task: number, state, priority, title, owner, assignee, what waits on it |
-| `task <number\|id>` | `GET /api/v1/tasks/<ref>`, the decisions about it, the runs on it | the task in full |
-| `task new <title> [--body <markdown>\|--file <path>] [--state <state>] [--priority <priority>]` | `POST /api/v1/tasks` | the number and the id |
-| `skills` | `GET /api/v1/skills` | the organization's skills: each with its description and the URI an agent loads it by through its own SkillCDN connection; or why there are none to show |
-| `take <number\|id> [--agent <name>]` | `GET /api/v1/tasks/<ref>`, then `POST /api/v1/runs` | the run that began, the task in full, and what to do next |
-| `report <markdown>`, `report --file <path>`, `report -` | `POST /api/v1/runs/<id>/reports` | how many reports the run carries |
-| `hand-in <https url \| file path> [--label <words>]` | `POST /api/v1/runs/<id>/artifacts` for a link; `POST /api/v1/runs/<id>/files` for a file, sent as a form with its name and its media type by extension | how many artifacts |
-| `ask "<question>" --option "<label>" ... [--body <markdown>\|--file <path>] [--wait <seconds>]` | `POST /api/v1/decisions` with `runId`, then `GET /api/v1/decisions/<id>?wait=` | the decision raised, its options; then the answer, or that it still waits |
-| `decision <id> [--wait <seconds>]` | `GET /api/v1/decisions/<id>`, with `?wait=` while waiting | the decision; with a wait, the answer or that it still waits |
-| `decisions [--open]` | `GET /api/v1/decisions` | one line per decision |
-| `finish [--summary <markdown>\|--file <path>]`, `fail [...]` | `POST /api/v1/runs/<id>/end` | how the run ended |
-| `abandon [<run id>] [--summary <markdown>]` | `POST /api/v1/runs/<id>/end`, as `abandoned` | the same |
-| `runs [--task <number\|id>] [--open] [--mine]` | `GET /api/v1/runs` | one line per run |
-| `run <id>` | `GET /api/v1/runs/<id>` | the run in full, with its reports and what it handed in |
+| `whoami` | `GET /api/v1/me` | the login, the role, the workspace, the address, and the project this directory works in |
+| `projects` | `GET /api/v1/projects` | one line per project: key, name, what the person is in it, what waits in it |
+| `use <key>` | `GET /api/v1/projects/<key>` | that the directory works in the project from now on; writes `.skillcdn-console.json` |
+| `tasks [--state <state>]` | `GET .../tasks` | one line per task: number, state, priority, title, owner, assignee, what waits on it |
+| `task <number\|id>` | `GET .../tasks/<ref>`, the decisions about it, the runs on it | the task in full |
+| `task new <title> [--body <markdown>\|--file <path>] [--state <state>] [--priority <priority>]` | `POST .../tasks` | the number and the id |
+| `skills` | `GET .../skills` | the project's skills, or the organization's: each with its description and the URI an agent loads it by through its own SkillCDN connection; or why there are none to show |
+| `take <number\|id> [--agent <name>]` | `GET .../tasks/<ref>`, then `POST .../runs` | the run that began, the task in full, and what to do next |
+| `report <markdown>`, `report --file <path>`, `report -` | `POST .../runs/<id>/reports` | how many reports the run carries |
+| `hand-in <https url \| file path> [--label <words>]` | `POST .../runs/<id>/artifacts` for a link; `POST .../runs/<id>/files` for a file, sent as a form with its name and its media type by extension | how many artifacts |
+| `ask "<question>" --option "<label>" ... [--body <markdown>\|--file <path>] [--wait <seconds>]` | `POST .../decisions` with `runId`, then `GET .../decisions/<id>?wait=` | the decision raised, its options; then the answer, or that it still waits |
+| `decision <id> [--wait <seconds>]` | `GET .../decisions/<id>`, with `?wait=` while waiting | the decision; with a wait, the answer or that it still waits |
+| `decisions [--open]` | `GET .../decisions` | one line per decision |
+| `finish [--summary <markdown>\|--file <path>]`, `fail [...]` | `POST .../runs/<id>/end` | how the run ended |
+| `abandon [<run id>] [--summary <markdown>]` | `POST .../runs/<id>/end`, as `abandoned` | the same |
+| `runs [--task <number\|id>] [--open] [--mine]` | `GET .../runs` | one line per run |
+| `run <id>` | `GET .../runs/<id>` | the run in full, with its reports, what it handed in and where each file is read |
 | `help [<command>]` | nothing | the usage, written for an agent that meets the command for the first time |
 | `--version` (also `version`, `-v`) | nothing | which version of the command this is |
 
-Everywhere: `--json` prints the console's own answer as JSON, in the shapes of `@skillcdn/console/api`; `--url <origin>` names another console for this one command. A Markdown body given as `-` is read from standard input. Every argument is bounded and checked by the console, as the REST API's schemas say; the command sends it as it was given.
+`...` is `/api/v1/projects/<key>`, the project the command works in. Everywhere: `--json` prints the console's own answer as JSON, in the shapes of `@skillcdn/console/api`; `--url <origin>` names another console for this one command; `--project <key>` the project. A Markdown body given as `-` is read from standard input. Every argument is bounded and checked by the console, as the REST API's schemas say; the command sends it as it was given.
 
 ## The run a command means
 
-`report`, `hand-in`, `ask`, `finish` and `fail` act on a run. Named with `--run <id>`, that one; else the one open run begun with this token (`GET /api/v1/runs?open=true&mine=true`). None open, or several: the command exits with `1` and says so, listing the open ones, so that an agent working two tasks at once says which.
+`report`, `hand-in`, `ask`, `finish` and `fail` act on a run. Named with `--run <id>`, that one; else the one open run begun with this token in the project (`GET .../runs?open=true&mine=true`). None open, or several: the command exits with `1` and says so, listing the open ones, so that an agent working two tasks at once says which.
 
 ## Waiting for a decision
 
@@ -56,14 +62,14 @@ Plain text on standard output: one line per thing in a list, a few lines for one
 
 ## What an agent is told
 
-`console help` says what the board is, that the agent acts as the person whose token it holds and that everything it sends is shown to people as text, what each command does (take a task, report at the milestones of the work, hand in what was made, ask when a person must decide, finish when done), and the refusals any command may meet. `console help <command>` adds what the command takes, the limits the console holds it to (how long a report, a summary, a question or an option may be; how many options, reports and links) and the refusals it may meet, by code, so that an agent learns them before it runs into them. An organization's own skill for working with its console says the rest: which tasks to take, what to report, when to ask ([roadmap](../roadmap.md)).
+`console help` says what the board is, that the agent acts as the person whose token it holds and that everything it sends is shown to people as text, which project the commands work in and how it is named, what each command does (take a task, report at the milestones of the work, hand in what was made, ask when a person must decide, finish when done), and the refusals any command may meet. `console help <command>` adds what the command takes, the limits the console holds it to (how long a report, a summary, a question or an option may be; how many options, reports and links) and the refusals it may meet, by code, so that an agent learns them before it runs into them. An organization's own skill for working with its console says the rest: which tasks to take, what to report, when to ask ([roadmap](../roadmap.md)).
 
 ## Running an agent on a task
 
 What a person does, once the command is signed in where the agent runs; tried with Claude Code on 2026-10-09, with an agent that took a task, reported at each milestone, raised a decision, acted on the answer, handed in and finished, and a person who answered on the board.
 
-1. Write the task on the board, with its body as the work order: what to make, where, the milestones, what to ask.
-2. Start the agent in the directory it is to work in, and tell it, in its own words, what this amounts to: run `console help`; take the task with `console take <number>` and follow its body; report at the milestones with `console report`; ask with `console ask` when a person must decide, and keep waiting with `console decision <id> --wait 100` until the answer comes; hand in with `console hand-in`; finish with `console finish --summary`. Say that the command is signed in already and that it must never look for or print a token.
+1. Write the task on the board of the project, with its body as the work order: what to make, where, the milestones, what to ask.
+2. Start the agent in the directory it is to work in, where `console use <key>` has named the project (once, committed), and tell it, in its own words, what this amounts to: run `console help`; take the task with `console take <number>` and follow its body; report at the milestones with `console report`; ask with `console ask` when a person must decide, and keep waiting with `console decision <id> --wait 100` until the answer comes; hand in with `console hand-in`; finish with `console finish --summary`. Say that the command is signed in already and that it must never look for or print a token.
 3. Follow the run on the board, and answer the decisions it raises. The agent's reports, what it handed in and its summary are the run's record on the task's page.
 
 ## Not yet

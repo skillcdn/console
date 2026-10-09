@@ -3,15 +3,16 @@ import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
 import { decisions, runs, tasks } from "../schema.js";
-import { recordEvent } from "./events.js";
+import { type Actor, recordEvent, type Scope } from "./events.js";
 import { answerers, type PersonRecord, personColumns, raisers, toPerson } from "./people.js";
 
 // The questions that need a person. A decision is raised once and answered once; both are
-// one transaction with the event that records them.
+// one transaction with the event that records them. Every read is scoped to the project.
 
 export interface DecisionRecord {
   readonly id: string;
   readonly workspaceId: string;
+  readonly projectId: string;
   readonly taskId: string | undefined;
   /** The task's number, as people say it, when there is a task. */
   readonly taskNumber: number | undefined;
@@ -48,7 +49,7 @@ export class DecisionError extends DomainError {
       code === "decision.not_found"
         ? "the decision was not found"
         : code === "decision.invalid_task"
-          ? "the task is not one of the workspace"
+          ? "the task is not one of the project"
           : code === "decision.answered"
             ? "the decision has been answered"
             : code === "decision.no_such_option"
@@ -61,6 +62,7 @@ export class DecisionError extends DomainError {
 const decisionColumns = {
   id: decisions.id,
   workspaceId: decisions.workspaceId,
+  projectId: decisions.projectId,
   taskId: decisions.taskId,
   taskNumber: tasks.number,
   question: decisions.question,
@@ -77,9 +79,10 @@ const decisionColumns = {
   runAgent: runs.agent,
 };
 
+type Handle = Transaction | ReturnType<typeof drizzleOf>;
 type DecisionRow = Awaited<ReturnType<typeof selectDecisions>>[number];
 
-function selectDecisions(handle: Transaction | ReturnType<typeof drizzleOf>) {
+function selectDecisions(handle: Handle) {
   return handle
     .select(decisionColumns)
     .from(decisions)
@@ -102,6 +105,7 @@ function toDecision(row: DecisionRow): DecisionRecord {
   return {
     id: row.id,
     workspaceId: row.workspaceId,
+    projectId: row.projectId,
     taskId: row.taskId ?? undefined,
     taskNumber: row.taskNumber ?? undefined,
     question: row.question,
@@ -119,26 +123,26 @@ function toDecision(row: DecisionRow): DecisionRecord {
 }
 
 async function readDecision(
-  handle: Transaction | ReturnType<typeof drizzleOf>,
-  workspaceId: string,
+  handle: Handle,
+  scope: Scope,
   decisionId: string,
 ): Promise<DecisionRecord | undefined> {
   const [row] = await selectDecisions(handle)
-    .where(and(eq(decisions.workspaceId, workspaceId), eq(decisions.id, decisionId)))
+    .where(and(eq(decisions.projectId, scope.projectId), eq(decisions.id, decisionId)))
     .limit(1);
   return row === undefined ? undefined : toDecision(row);
 }
 
 /**
  * Raises a decision, with its options numbered from one, and tells the board. The task, when
- * there is one, must be the workspace's. Raised from a run, which must be the actor's and not
+ * there is one, must be the project's. Raised from a run, which must be the actor's and not
  * over, the decision is about the run's task and the run waits for the answer.
  */
 export async function raiseDecision(
   database: Database,
   input: {
-    readonly workspaceId: string;
-    readonly actorId: string;
+    readonly scope: Scope;
+    readonly actor: Actor;
     readonly decision: {
       readonly question: string;
       readonly body?: string;
@@ -149,7 +153,7 @@ export async function raiseDecision(
     readonly now: Date;
   },
 ): Promise<DecisionRecord> {
-  const { workspaceId, actorId, decision, now } = input;
+  const { scope, actor, decision, now } = input;
   return drizzleOf(database).transaction(async (tx) => {
     let runId: string | null = null;
     let agent: string | undefined;
@@ -164,11 +168,11 @@ export async function raiseDecision(
           status: runs.status,
         })
         .from(runs)
-        .where(and(eq(runs.workspaceId, workspaceId), eq(runs.id, decision.runId)))
+        .where(and(eq(runs.projectId, scope.projectId), eq(runs.id, decision.runId)))
         .for("update");
       if (
         run === undefined ||
-        run.personId !== actorId ||
+        run.personId !== actor.id ||
         (run.status !== "running" && run.status !== "waiting")
       ) {
         throw new DecisionError("decision.invalid_run");
@@ -185,7 +189,7 @@ export async function raiseDecision(
       const [task] = await tx
         .select({ id: tasks.id, number: tasks.number, title: tasks.title })
         .from(tasks)
-        .where(and(eq(tasks.workspaceId, workspaceId), eq(tasks.id, wanted)))
+        .where(and(eq(tasks.projectId, scope.projectId), eq(tasks.id, wanted)))
         .limit(1);
       if (task === undefined) {
         throw new DecisionError("decision.invalid_task");
@@ -197,13 +201,14 @@ export async function raiseDecision(
     const [inserted] = await tx
       .insert(decisions)
       .values({
-        workspaceId,
+        workspaceId: scope.workspaceId,
+        projectId: scope.projectId,
         taskId,
         runId,
         question: decision.question,
         body: decision.body ?? "",
         options,
-        raisedById: actorId,
+        raisedById: actor.id,
         createdAt: now,
         updatedAt: now,
       })
@@ -212,16 +217,17 @@ export async function raiseDecision(
       throw new Error("decision insert returned no row");
     }
     await recordEvent(tx, {
-      workspaceId,
+      ...scope,
       kind: "decision.raised",
-      actorId,
+      // Asked from a run, the decision is the run's agent's doing.
+      actor: agent === undefined ? actor : { id: actor.id, agent },
       taskId: taskId ?? undefined,
       decisionId: inserted.id,
       runId: runId ?? undefined,
       data: { question: decision.question, ...about, ...(agent === undefined ? {} : { agent }) },
       now,
     });
-    const written = await readDecision(tx, workspaceId, inserted.id);
+    const written = await readDecision(tx, scope, inserted.id);
     if (written === undefined) {
       throw new Error("the decision written was not found");
     }
@@ -237,15 +243,15 @@ export async function raiseDecision(
 export async function answerDecision(
   database: Database,
   input: {
-    readonly workspaceId: string;
-    readonly actorId: string;
+    readonly scope: Scope;
+    readonly actor: Actor;
     readonly decisionId: string;
     readonly option: string;
     readonly note: string | undefined;
     readonly now: Date;
   },
 ): Promise<DecisionRecord> {
-  const { workspaceId, actorId, decisionId, option, note, now } = input;
+  const { scope, actor, decisionId, option, note, now } = input;
   return drizzleOf(database).transaction(async (tx) => {
     const [current] = await tx
       .select({
@@ -256,7 +262,7 @@ export async function answerDecision(
         runId: decisions.runId,
       })
       .from(decisions)
-      .where(and(eq(decisions.workspaceId, workspaceId), eq(decisions.id, decisionId)))
+      .where(and(eq(decisions.projectId, scope.projectId), eq(decisions.id, decisionId)))
       .for("update");
     if (current === undefined) {
       throw new DecisionError("decision.not_found");
@@ -273,15 +279,15 @@ export async function answerDecision(
       .set({
         answer: chosen.id,
         answerNote: note ?? null,
-        answeredById: actorId,
+        answeredById: actor.id,
         answeredAt: now,
         updatedAt: now,
       })
       .where(eq(decisions.id, decisionId));
     await recordEvent(tx, {
-      workspaceId,
+      ...scope,
       kind: "decision.answered",
-      actorId,
+      actor,
       taskId: current.taskId ?? undefined,
       decisionId,
       runId: current.runId ?? undefined,
@@ -301,7 +307,7 @@ export async function answerDecision(
           ),
         );
     }
-    const written = await readDecision(tx, workspaceId, decisionId);
+    const written = await readDecision(tx, scope, decisionId);
     if (written === undefined) {
       throw new DecisionError("decision.not_found");
     }
@@ -311,16 +317,16 @@ export async function answerDecision(
 
 export function getDecision(
   database: Database,
-  workspaceId: string,
+  scope: Scope,
   decisionId: string,
 ): Promise<DecisionRecord | undefined> {
-  return readDecision(drizzleOf(database), workspaceId, decisionId);
+  return readDecision(drizzleOf(database), scope, decisionId);
 }
 
-/** The decisions, the ones that wait first and newest first within each; or only those that wait. */
+/** The decisions of the project, the ones that wait first and newest first within each; or only those that wait. */
 export async function listDecisions(
   database: Database,
-  workspaceId: string,
+  scope: Scope,
   filter: {
     readonly open?: boolean | undefined;
     readonly taskId?: string | undefined;
@@ -330,7 +336,7 @@ export async function listDecisions(
   const rows = await selectDecisions(drizzleOf(database))
     .where(
       and(
-        eq(decisions.workspaceId, workspaceId),
+        eq(decisions.projectId, scope.projectId),
         filter.open === true ? isNull(decisions.answeredAt) : undefined,
         filter.taskId === undefined ? undefined : eq(decisions.taskId, filter.taskId),
       ),

@@ -1,7 +1,9 @@
 import type {
   RestDecision,
   RestEvent,
+  RestMember,
   RestPerson,
+  RestProject,
   RestRun,
   RestTask,
   RestToken,
@@ -9,6 +11,7 @@ import type {
 import type { DecisionRecord } from "../db/queries/decisions.js";
 import type { EventRecord } from "../db/queries/events.js";
 import type { PersonRecord } from "../db/queries/people.js";
+import type { MemberRecord, ProjectView } from "../db/queries/projects.js";
 import type { RunRecord } from "../db/queries/runs.js";
 import type { TaskRecord } from "../db/queries/tasks.js";
 import type { TokenRecord } from "../db/queries/tokens.js";
@@ -24,6 +27,31 @@ export function restPerson(person: PersonRecord): RestPerson {
     name: person.name ?? null,
     avatar: person.avatarUrl ?? null,
     role: person.role,
+  };
+}
+
+/** A project as the asker sees it: with what they are in it, and what waits in it. */
+export function restProject(project: ProjectView): RestProject {
+  return {
+    id: project.id,
+    key: project.key,
+    name: project.name,
+    description: project.description,
+    visibility: project.visibility,
+    skillsAddress: project.skillsAddress ?? null,
+    role: project.role,
+    openDecisions: project.openDecisions,
+    openRuns: project.openRuns,
+    createdAt: project.createdAt.toISOString(),
+    updatedAt: project.updatedAt.toISOString(),
+  };
+}
+
+export function restMember(member: MemberRecord): RestMember {
+  return {
+    person: restPerson(member.person),
+    role: member.role,
+    addedAt: member.addedAt.toISOString(),
   };
 }
 
@@ -122,6 +150,8 @@ export function restEvent(event: EventRecord): RestEvent {
     id: event.id,
     kind: event.kind,
     actor: event.actor === undefined ? null : restPerson(event.actor),
+    agent: event.agent ?? null,
+    projectId: event.projectId ?? null,
     taskId: event.taskId ?? null,
     decisionId: event.decisionId ?? null,
     runId: event.runId ?? null,

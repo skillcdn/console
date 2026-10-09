@@ -8,8 +8,14 @@ import {
   type RestDecisionInput,
   type RestEvent,
   type RestMe,
+  type RestMember,
+  type RestMemberInput,
+  type RestMemberPatch,
   type RestPerson,
   type RestPersonPatch,
+  type RestProject,
+  type RestProjectInput,
+  type RestProjectPatch,
   type RestRun,
   type RestSkills,
   type RestTask,
@@ -21,9 +27,10 @@ import {
   restEventSchema,
 } from "./api.js";
 
-// What the console shows, and how it stays current: the board is loaded whole, the feed is
-// read from the beginning, and from then on the server's stream says when something changed.
-// On every event the lists are loaded again, which is the boring way to be right.
+// What the console shows, and how it stays current: the workspace (who is signed in, the
+// projects, the people, the tokens) is loaded once; the project the page is on is loaded whole,
+// its feed from the beginning, and from then on the project's stream says when something
+// changed: on every event the lists are loaded again, which is the boring way to be right.
 
 /** How many events the feed keeps on the page. */
 const FEED_KEEP = 200;
@@ -33,6 +40,13 @@ const FEED_MAX_PAGES = 20;
 const RELOAD_DELAY_MS = 150;
 
 export interface ConsoleActions {
+  /** Makes a project, whose owner the person becomes. */
+  createProject(input: RestProjectInput): Promise<RestProject>;
+  /** Changes the settings of the project the page is on; for an owner. */
+  updateProject(patch: RestProjectPatch): Promise<RestProject>;
+  addMember(input: RestMemberInput): Promise<RestMember>;
+  updateMember(personId: string, patch: RestMemberPatch): Promise<RestMember>;
+  removeMember(personId: string): Promise<void>;
   createTask(input: RestTaskInput): Promise<RestTask>;
   updateTask(id: string, patch: RestTaskPatch): Promise<RestTask>;
   raiseDecision(input: RestDecisionInput): Promise<RestDecision>;
@@ -41,6 +55,8 @@ export interface ConsoleActions {
   updatePerson(id: string, patch: RestPersonPatch): Promise<RestPerson>;
   /** Marks a run that will not come back as abandoned. */
   abandonRun(id: string): Promise<RestRun>;
+  /** Everything that happened to one task of the project, oldest first. */
+  taskHistory(taskId: string, signal?: AbortSignal): Promise<RestEvent[]>;
   /** Makes a token for whoever is signed in; the answer carries the secret, this once. */
   createToken(input: RestTokenInput): Promise<RestTokenCreated>;
   revokeToken(id: string): Promise<void>;
@@ -52,32 +68,46 @@ export interface ConsoleData {
   readonly me: RestMe | undefined;
   /** What went wrong asking who is signed in, for a person. */
   readonly error: string | undefined;
-  /** True once the board has been loaded for the first time. */
+  /** True once the workspace has been loaded for the first time: the projects, the people, the tokens. */
   readonly loaded: boolean;
-  /** Whether the stream of events is connected. */
+  /** The projects the person may see, by name. */
+  readonly projects: readonly RestProject[];
+  readonly people: readonly RestPerson[];
+  /** The tokens of whoever is signed in, newest first. */
+  readonly tokens: readonly RestToken[];
+  /** The project the page is on, once loaded; `undefined` while loading, or when the page is on none. */
+  readonly project: RestProject | undefined;
+  /** True once the project the page is on has been loaded; false while it loads, or when there is none. */
+  readonly projectLoaded: boolean;
+  /** Why the project could not be loaded: not one the person may see, for instance. */
+  readonly projectError: string | undefined;
+  /** Whether the project's stream of events is connected. */
   readonly live: boolean;
   readonly tasks: readonly RestTask[];
   readonly decisions: readonly RestDecision[];
-  readonly people: readonly RestPerson[];
-  /** The runs of the board, newest first. */
+  /** The runs of the project, newest first. */
   readonly runs: readonly RestRun[];
-  /** Oldest first. */
+  /** The project's events, oldest first. */
   readonly events: readonly RestEvent[];
-  /** The tokens of whoever is signed in, newest first. */
-  readonly tokens: readonly RestToken[];
-  /** The organization's skills, as the console answered; `undefined` until it has. */
+  /** Those listed in the project, by login. */
+  readonly members: readonly RestMember[];
+  /** The project's skills, as the console answered; `undefined` until it has. */
   readonly skills: RestSkills | undefined;
   readonly actions: ConsoleActions;
   /** Asks everything again, from who is signed in on. */
   reload(): void;
 }
 
-/** The whole feed from the beginning, page by page, bounded. */
-async function readFeed(client: ConsoleClient, signal: AbortSignal): Promise<RestEvent[]> {
+/** The whole feed of a project from the beginning, page by page, bounded. */
+async function readFeed(
+  client: ConsoleClient,
+  key: string,
+  signal: AbortSignal,
+): Promise<RestEvent[]> {
   const events: RestEvent[] = [];
   let after = 0;
   for (let page = 0; page < FEED_MAX_PAGES; page += 1) {
-    const result = await client.events(after, signal);
+    const result = await client.project(key).events(after, {}, signal);
     events.push(...result.items);
     after = result.items.at(-1)?.id ?? after;
     if (!result.more) {
@@ -87,61 +117,91 @@ async function readFeed(client: ConsoleClient, signal: AbortSignal): Promise<Res
   return events.slice(-FEED_KEEP);
 }
 
-export function useConsoleData(client: ConsoleClient): ConsoleData {
+const wordsOf = (failure: unknown, fallback: string): string =>
+  failure instanceof ApiError ? failure.message : fallback;
+
+/**
+ * The data of the console: the workspace, and the project `projectKey` names, kept current.
+ * A composition of its own calls this with the key of the project its page is on, or none.
+ */
+export function useConsoleData(client: ConsoleClient, projectKey: string | undefined): ConsoleData {
   const [me, setMe] = useState<RestMe | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
   const [loaded, setLoaded] = useState(false);
+  const [projects, setProjects] = useState<readonly RestProject[]>([]);
+  const [people, setPeople] = useState<readonly RestPerson[]>([]);
+  const [tokens, setTokens] = useState<readonly RestToken[]>([]);
+  const [project, setProject] = useState<RestProject | undefined>(undefined);
+  const [projectLoaded, setProjectLoaded] = useState(false);
+  const [projectError, setProjectError] = useState<string | undefined>(undefined);
   const [live, setLive] = useState(false);
   const [tasks, setTasks] = useState<readonly RestTask[]>([]);
   const [decisions, setDecisions] = useState<readonly RestDecision[]>([]);
-  const [people, setPeople] = useState<readonly RestPerson[]>([]);
   const [runs, setRuns] = useState<readonly RestRun[]>([]);
   const [events, setEvents] = useState<readonly RestEvent[]>([]);
-  const [tokens, setTokens] = useState<readonly RestToken[]>([]);
+  const [members, setMembers] = useState<readonly RestMember[]>([]);
   const [skills, setSkills] = useState<RestSkills | undefined>(undefined);
   const [generation, setGeneration] = useState(0);
   const lastEvent = useRef(0);
+  const signedIn = me?.person !== null && me !== undefined;
 
   const reload = useCallback(() => setGeneration((current) => current + 1), []);
 
-  /** Loads the lists again. What fails stays as it was; the next event asks again. */
-  const refreshLists = useCallback(
+  /** Loads the workspace's lists again. What fails stays as it was. */
+  const refreshWorkspace = useCallback(
     async (signal?: AbortSignal) => {
-      const [nextTasks, nextDecisions, nextPeople, nextRuns] = await Promise.all([
-        client.tasks(undefined, signal),
-        client.decisions(undefined, signal),
+      const [nextProjects, nextPeople] = await Promise.all([
+        client.projects(signal),
         client.people(signal),
-        client.runs(undefined, signal),
       ]);
       if (signal?.aborted === true) {
         return;
       }
-      setTasks(nextTasks.items);
-      setDecisions(nextDecisions.items);
+      setProjects(nextProjects.items);
       setPeople(nextPeople.items);
-      setRuns(nextRuns.items);
     },
     [client],
   );
 
-  // Who is signed in, then the board, then the feed; and the stream from where the feed ends.
+  /** Loads the project's lists again. What fails stays as it was; the next event asks again. */
+  const refreshProject = useCallback(
+    async (signal?: AbortSignal) => {
+      if (projectKey === undefined) {
+        return;
+      }
+      const scope = client.project(projectKey);
+      const [nextProject, nextTasks, nextDecisions, nextRuns, nextMembers] = await Promise.all([
+        scope.get(signal),
+        scope.tasks(undefined, signal),
+        scope.decisions(undefined, signal),
+        scope.runs(undefined, signal),
+        scope.members(signal),
+      ]);
+      if (signal?.aborted === true) {
+        return;
+      }
+      setProject(nextProject);
+      setTasks(nextTasks.items);
+      setDecisions(nextDecisions.items);
+      setRuns(nextRuns.items);
+      setMembers(nextMembers.items);
+    },
+    [client, projectKey],
+  );
+
+  // Who is signed in, then the workspace: the projects, the people, the person's tokens.
   // biome-ignore lint/correctness/useExhaustiveDependencies: `generation` is the trigger
   useEffect(() => {
     const controller = new AbortController();
     const { signal } = controller;
-    let source: EventSource | undefined;
-    let reloadTimer: ReturnType<typeof setTimeout> | undefined;
     setError(undefined);
-
     const run = async () => {
       let answer: RestMe;
       try {
         answer = await client.me(signal);
       } catch (failure) {
         if (!signal.aborted) {
-          setError(
-            failure instanceof ApiError ? failure.message : "The server could not be reached.",
-          );
+          setError(wordsOf(failure, "The server could not be reached."));
         }
         return;
       }
@@ -154,29 +214,65 @@ export function useConsoleData(client: ConsoleClient): ConsoleData {
         return;
       }
       try {
-        const [, feed, mine] = await Promise.all([
-          refreshLists(signal),
-          readFeed(client, signal),
-          client.tokens(signal),
+        const [, mine] = await Promise.all([refreshWorkspace(signal), client.tokens(signal)]);
+        if (signal.aborted) {
+          return;
+        }
+        setTokens(mine.items);
+        setLoaded(true);
+      } catch (failure) {
+        if (!signal.aborted) {
+          setError(wordsOf(failure, "The workspace could not be loaded."));
+        }
+      }
+    };
+    void run();
+    return () => controller.abort();
+  }, [client, generation, refreshWorkspace]);
+
+  // The project the page is on: its lists, its feed from the beginning, and its stream from
+  // where the feed ends. Another project, or none, starts over.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `generation` is the trigger
+  useEffect(() => {
+    setProject(undefined);
+    setProjectLoaded(false);
+    setProjectError(undefined);
+    setTasks([]);
+    setDecisions([]);
+    setRuns([]);
+    setEvents([]);
+    setMembers([]);
+    setSkills(undefined);
+    setLive(false);
+    if (projectKey === undefined || !signedIn) {
+      return;
+    }
+    const controller = new AbortController();
+    const { signal } = controller;
+    let source: EventSource | undefined;
+    let reloadTimer: ReturnType<typeof setTimeout> | undefined;
+    const scope = client.project(projectKey);
+    const run = async () => {
+      try {
+        const [, feed] = await Promise.all([
+          refreshProject(signal),
+          readFeed(client, projectKey, signal),
         ]);
         if (signal.aborted) {
           return;
         }
         setEvents(feed);
-        setTokens(mine.items);
         lastEvent.current = feed.at(-1)?.id ?? 0;
-        setLoaded(true);
+        setProjectLoaded(true);
       } catch (failure) {
         if (!signal.aborted) {
-          setError(
-            failure instanceof ApiError ? failure.message : "The board could not be loaded.",
-          );
+          setProjectError(wordsOf(failure, "The project could not be loaded."));
         }
         return;
       }
       // The skills are someone else's to serve: asked for on their own, so that the board
       // stands without them.
-      client
+      scope
         .skills(signal)
         .then((answer) => {
           if (!signal.aborted) {
@@ -187,7 +283,7 @@ export function useConsoleData(client: ConsoleClient): ConsoleData {
       if (typeof EventSource === "undefined") {
         return;
       }
-      source = new EventSource(client.eventStreamUrl(lastEvent.current));
+      source = new EventSource(scope.eventStreamUrl(lastEvent.current));
       source.onopen = () => setLive(true);
       source.onerror = () => setLive(false);
       const arrived = (message: MessageEvent) => {
@@ -200,7 +296,10 @@ export function useConsoleData(client: ConsoleClient): ConsoleData {
         setEvents((current) => [...current, event].slice(-FEED_KEEP));
         clearTimeout(reloadTimer);
         reloadTimer = setTimeout(() => {
-          refreshLists(signal).catch(() => undefined);
+          refreshProject(signal).catch(() => undefined);
+          if (event.kind.startsWith("project.")) {
+            refreshWorkspace(signal).catch(() => undefined);
+          }
         }, RELOAD_DELAY_MS);
       };
       for (const kind of EVENT_KINDS) {
@@ -208,47 +307,91 @@ export function useConsoleData(client: ConsoleClient): ConsoleData {
       }
     };
     void run();
-
     return () => {
       controller.abort();
       clearTimeout(reloadTimer);
       source?.close();
       setLive(false);
     };
-  }, [client, generation, refreshLists]);
+  }, [client, projectKey, signedIn, generation, refreshProject, refreshWorkspace]);
 
-  const actions = useMemo<ConsoleActions>(
-    () => ({
+  const actions = useMemo<ConsoleActions>(() => {
+    /** The project the page is on, for an action that needs one. */
+    const scope = () => {
+      if (projectKey === undefined) {
+        throw new ApiError(0, "no_project", "The page is on no project.");
+      }
+      return client.project(projectKey);
+    };
+    return {
+      async createProject(input) {
+        const made = await client.createProject(input);
+        await refreshWorkspace();
+        return made;
+      },
+      async updateProject(patch) {
+        const changed = await scope().update(patch);
+        setProject(changed);
+        await refreshWorkspace();
+        return changed;
+      },
+      async addMember(input) {
+        const member = await scope().addMember(input);
+        await refreshProject();
+        return member;
+      },
+      async updateMember(personId, patch) {
+        const member = await scope().updateMember(personId, patch);
+        await refreshProject();
+        return member;
+      },
+      async removeMember(personId) {
+        await scope().removeMember(personId);
+        await refreshProject();
+      },
       async createTask(input) {
-        const task = await client.createTask(input);
-        await refreshLists();
+        const task = await scope().createTask(input);
+        await refreshProject();
         return task;
       },
       async updateTask(id, patch) {
-        const task = await client.updateTask(id, patch);
+        const task = await scope().updateTask(id, patch);
         setTasks((current) => current.map((candidate) => (candidate.id === id ? task : candidate)));
         return task;
       },
       async raiseDecision(input) {
-        const decision = await client.raiseDecision(input);
-        await refreshLists();
+        const decision = await scope().raiseDecision(input);
+        await refreshProject();
         return decision;
       },
       async answerDecision(id, input) {
-        const decision = await client.answerDecision(id, input);
-        await refreshLists();
+        const decision = await scope().answerDecision(id, input);
+        await refreshProject();
         return decision;
       },
       async updatePerson(id, patch) {
         const person = await client.updatePerson(id, patch);
         setMe((current) => (current?.person?.id === id ? { ...current, person } : current));
-        await refreshLists();
+        await refreshWorkspace();
         return person;
       },
       async abandonRun(id) {
-        const run = await client.endRun(id, { status: "abandoned" });
-        await refreshLists();
+        const run = await scope().endRun(id, { status: "abandoned" });
+        await refreshProject();
         return run;
+      },
+      async taskHistory(taskId, signal) {
+        const history: RestEvent[] = [];
+        let after = 0;
+        for (let page = 0; page < FEED_MAX_PAGES; page += 1) {
+          const result = await scope().events(after, { task: taskId }, signal);
+          history.push(...result.items);
+          after = result.items.at(-1)?.id ?? after;
+          if (!result.more) {
+            break;
+          }
+        }
+        return history;
       },
       async createToken(input) {
         const made = await client.createToken(input);
@@ -264,21 +407,25 @@ export function useConsoleData(client: ConsoleClient): ConsoleData {
         setMe((current) => (current === undefined ? undefined : { ...current, person: null }));
         setLoaded(false);
       },
-    }),
-    [client, refreshLists],
-  );
+    };
+  }, [client, projectKey, refreshProject, refreshWorkspace]);
 
   return {
     me,
     error,
     loaded,
+    projects,
+    people,
+    tokens,
+    project,
+    projectLoaded,
+    projectError,
     live,
     tasks,
     decisions,
-    people,
     runs,
     events,
-    tokens,
+    members,
     skills,
     actions,
     reload,

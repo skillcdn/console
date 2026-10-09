@@ -4,7 +4,7 @@ import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf } from "../client.js";
 import { people, workspaces } from "../schema.js";
-import { recordEvent } from "./events.js";
+import { type Actor, recordEvent } from "./events.js";
 
 // The people of the workspace: everyone who signed in through an identity provider and was let in.
 // Identity data: every query names the person, or the workspace they are all in.
@@ -152,7 +152,7 @@ export async function savePerson(
       await recordEvent(tx, {
         workspaceId,
         kind: "person.joined",
-        actorId: person.id,
+        actor: { id: person.id },
         data: {},
         now,
       });
@@ -183,13 +183,13 @@ export async function updatePersonRole(
   database: Database,
   input: {
     readonly workspaceId: string;
-    readonly actorId: string;
+    readonly actor: Actor;
     readonly personId: string;
     readonly role: PersonRole;
     readonly now: Date;
   },
 ): Promise<PersonRecord> {
-  const { workspaceId, actorId, personId, role, now } = input;
+  const { workspaceId, actor, personId, role, now } = input;
   return drizzleOf(database).transaction(async (tx) => {
     await tx
       .select({ id: workspaces.id })
@@ -228,7 +228,7 @@ export async function updatePersonRole(
     await recordEvent(tx, {
       workspaceId,
       kind: "person.role_changed",
-      actorId,
+      actor,
       data: { login: person.login, role },
       now,
     });

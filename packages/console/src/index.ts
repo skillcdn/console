@@ -16,6 +16,18 @@ export { describeEvent, EventFeed, type EventFeedProps } from "./components/even
 export { Markdown } from "./components/markdown.js";
 export { PeopleList, type PeopleListProps } from "./components/people.js";
 export {
+  keyOf,
+  MemberList,
+  type MemberListProps,
+  PROJECT_ROLE_LABELS,
+  ProjectForm,
+  type ProjectFormProps,
+  ProjectList,
+  type ProjectListProps,
+  ProjectRoleBadge,
+  VISIBILITY_LABELS,
+} from "./components/projects.js";
+export {
   RUN_STATUS_LABELS,
   RunCard,
   type RunCardProps,
@@ -66,6 +78,8 @@ export { type ConsoleActions, type ConsoleData, useConsoleData } from "./data.js
 export {
   matchRoute,
   PATHS,
+  type ProjectPage,
+  projectHref,
   type Route,
   signInFailureOf,
   taskHref,

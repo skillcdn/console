@@ -244,8 +244,30 @@ svg {
   white-space: nowrap;
 }
 
+.sc-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sc-space-2);
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.sc-crumb-separator {
+  color: var(--sc-color-text-faint);
+}
+
+.sc-crumb-link {
+  overflow: hidden;
+  max-width: 14rem;
+  color: var(--sc-color-text);
+  font-weight: var(--sc-weight-medium);
+  text-decoration: none;
+  text-overflow: ellipsis;
+}
+
 .sc-nav {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--sc-space-1);
 }
 
@@ -1259,7 +1281,75 @@ svg {
   font-size: var(--sc-text-sm);
 }
 
-/* Skills: the organization's, as SkillCDN serves them at the console's address. */
+/* Projects: what a person may see, each with what they are in it and what waits in it. */
+
+.sc-projects {
+  display: grid;
+  gap: var(--sc-space-3);
+}
+
+.sc-project {
+  padding: var(--sc-space-4);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-bg-subtle);
+}
+
+.sc-project-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-3);
+}
+
+.sc-project-name {
+  color: var(--sc-color-text);
+  font-size: var(--sc-text-lg);
+  font-weight: var(--sc-weight-bold);
+  text-decoration: none;
+}
+
+.sc-project-name:hover {
+  text-decoration: underline;
+}
+
+.sc-project-key {
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-project-description {
+  margin: var(--sc-space-2) 0 0;
+  color: var(--sc-color-text-muted);
+}
+
+.sc-project-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-2);
+  margin: var(--sc-space-2) 0 0;
+}
+
+.sc-project-meta:empty {
+  display: none;
+}
+
+.sc-members {
+  display: grid;
+  gap: var(--sc-space-4);
+}
+
+.sc-member-form .sc-field-row {
+  align-items: end;
+}
+
+.sc-feed-agent {
+  margin-left: var(--sc-space-2);
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+/* Skills: the project's, or the organization's, as SkillCDN serves them at the address. */
 
 .sc-skills {
   display: grid;

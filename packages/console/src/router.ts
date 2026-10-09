@@ -1,44 +1,49 @@
 import { isSignInFailure, SIGN_IN_PARAM, type SignInFailure } from "./api.js";
 
-// A few kinds of page and no nesting, so the router is a function from a URL to a route.
+// A few kinds of page and one level of nesting, the project, so the router is a function from
+// a URL to a route. A project's pages live under `/p/<key>` (ADR-0008); the workspace's own,
+// the projects, the people and the tokens, at the top.
 
 export type Route =
-  | { readonly name: "board" }
-  | { readonly name: "task"; readonly id: string }
-  | { readonly name: "decisions" }
-  | { readonly name: "feed" }
-  | { readonly name: "skills" }
+  | { readonly name: "projects" }
+  | { readonly name: "board"; readonly project: string }
+  | { readonly name: "task"; readonly project: string; readonly id: string }
+  | { readonly name: "decisions"; readonly project: string }
+  | { readonly name: "feed"; readonly project: string }
+  | { readonly name: "skills"; readonly project: string }
+  | { readonly name: "members"; readonly project: string }
+  | { readonly name: "settings"; readonly project: string }
   | { readonly name: "tokens" }
   | { readonly name: "people" }
   | { readonly name: "not-found" };
 
+/** The pages of a project, after its key. */
+export type ProjectPage = "decisions" | "feed" | "skills" | "members" | "settings";
+
 export const PATHS = {
-  board: "/",
-  tasks: "/tasks",
-  decisions: "/decisions",
-  feed: "/feed",
-  /** The organization's skills, as SkillCDN serves them. */
-  skills: "/skills",
+  /** The projects the person may see: the front page. */
+  projects: "/",
+  /** Where a project's pages are: `/p/<key>`, then the page. */
+  project: "/p",
   /** The tokens of whoever is signed in: their own page. */
   tokens: "/tokens",
   people: "/people",
 } as const;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const PROJECT_KEY = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
+const PROJECT_PAGES: readonly ProjectPage[] = [
+  "decisions",
+  "feed",
+  "skills",
+  "members",
+  "settings",
+];
 
 export function matchRoute(pathname: string): Route {
   const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
-  if (path === PATHS.board) {
-    return { name: "board" };
-  }
-  if (path === PATHS.decisions) {
-    return { name: "decisions" };
-  }
-  if (path === PATHS.feed) {
-    return { name: "feed" };
-  }
-  if (path === PATHS.skills) {
-    return { name: "skills" };
+  if (path === PATHS.projects) {
+    return { name: "projects" };
   }
   if (path === PATHS.tokens) {
     return { name: "tokens" };
@@ -46,15 +51,33 @@ export function matchRoute(pathname: string): Route {
   if (path === PATHS.people) {
     return { name: "people" };
   }
-  if (path.startsWith(`${PATHS.tasks}/`)) {
-    const id = path.slice(PATHS.tasks.length + 1);
-    return UUID.test(id) ? { name: "task", id } : { name: "not-found" };
+  if (path.startsWith(`${PATHS.project}/`)) {
+    const [project, page, id, ...rest] = path.slice(PATHS.project.length + 1).split("/");
+    if (project === undefined || !PROJECT_KEY.test(project) || rest.length > 0) {
+      return { name: "not-found" };
+    }
+    if (page === undefined) {
+      return { name: "board", project };
+    }
+    if (page === "tasks" && id !== undefined && UUID.test(id)) {
+      return { name: "task", project, id };
+    }
+    const found = PROJECT_PAGES.find((candidate) => candidate === page);
+    return found !== undefined && id === undefined
+      ? { name: found, project }
+      : { name: "not-found" };
   }
   return { name: "not-found" };
 }
 
-export function taskHref(id: string): string {
-  return `${PATHS.tasks}/${id}`;
+/** Where a project's board is, or one of its pages. */
+export function projectHref(key: string, page?: ProjectPage): string {
+  const base = `${PATHS.project}/${key}`;
+  return page === undefined ? base : `${base}/${page}`;
+}
+
+export function taskHref(key: string, id: string): string {
+  return `${PATHS.project}/${key}/tasks/${id}`;
 }
 
 /** Why the last sign-in did not complete, as the page's URL says it, or nothing. */

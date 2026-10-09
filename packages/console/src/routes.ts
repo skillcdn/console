@@ -1,26 +1,34 @@
 // Where the console answers (docs/architecture.md). The REST API is for the pages and for a
-// custom console; signing in and out are navigations and one form post, not part of it.
+// custom console; signing in and out are navigations and one form post, not part of it. The
+// board is nested under the project it belongs to (ADR-0008).
 import type { ProviderKey } from "./vocabulary.js";
 
-/** One prefix per resource; an id follows where one is needed. */
+/** One prefix per resource of the workspace; an id follows where one is needed. */
 export const REST_ROUTES = {
   /** Who is signed in, what the workspace is called, and whether anyone can sign in. */
   me: "/api/v1/me",
   /** The people of the workspace: everyone who has signed in. */
   people: "/api/v1/people",
-  tasks: "/api/v1/tasks",
-  decisions: "/api/v1/decisions",
-  /** The feed, from a point on; and `/stream` under it, the same as it happens. */
+  /** The projects the asker may see; the board of each is under its key. */
+  projects: "/api/v1/projects",
+  /** The workspace's own events, the ones about no project: who joined, who was made what. */
   events: "/api/v1/events",
   /** The tokens of whoever asks: what their agents, scripts and consoles act as them with. */
   tokens: "/api/v1/tokens",
-  /** The runs: agents at work, and what they did. */
-  runs: "/api/v1/runs",
-  /** The bytes of a file a run handed in: `/api/v1/files/<artifact id>`. */
-  files: "/api/v1/files",
-  /** The organization's skills, as SkillCDN serves them at the console's address. */
-  skills: "/api/v1/skills",
 } as const;
+
+/** What a project holds, each under `/api/v1/projects/<key>/<collection>`. */
+export const PROJECT_COLLECTIONS = [
+  "tasks",
+  "decisions",
+  "runs",
+  "files",
+  "events",
+  "skills",
+  "members",
+] as const;
+
+export type ProjectCollection = (typeof PROJECT_COLLECTIONS)[number];
 
 /** Where a browser signs in and out. Signing in is per provider: `/auth/<provider>/...`. */
 export const AUTH_ROUTES = {
@@ -58,10 +66,21 @@ export function signInPath(page: string, failure: SignInFailure): string {
   return `${page}${page.includes("?") ? "&" : "?"}${SIGN_IN_PARAM}=${failure}`;
 }
 
-/** The REST path of one task, decision, token, person, run or file: the collection, then the id. */
-export function restPath(
-  collection: "tasks" | "decisions" | "tokens" | "people" | "runs" | "files",
-  id: string,
-): string {
+/** The REST path of one person, token or project: the collection, then the id or the key. */
+export function restPath(collection: "people" | "tokens" | "projects", id: string): string {
   return `${REST_ROUTES[collection]}/${encodeURIComponent(id)}`;
+}
+
+/**
+ * The REST path of a project, of one of its collections, or of one item in it: the tasks of
+ * `web` are at `projectPath("web", "tasks")`, task 7 at `projectPath("web", "tasks", "7")`.
+ */
+export function projectPath(key: string, collection?: ProjectCollection, id?: string): string {
+  const base = restPath("projects", key);
+  if (collection === undefined) {
+    return base;
+  }
+  return id === undefined
+    ? `${base}/${collection}`
+    : `${base}/${collection}/${encodeURIComponent(id)}`;
 }

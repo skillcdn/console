@@ -12,7 +12,11 @@ import {
   MAX_NOTE_LENGTH,
   MAX_OPTION_LABEL_LENGTH,
   MAX_OPTIONS,
+  MAX_PROJECT_DESCRIPTION_LENGTH,
+  MAX_PROJECT_KEY_LENGTH,
+  MAX_PROJECT_NAME_LENGTH,
   MAX_QUESTION_LENGTH,
+  MAX_SKILLS_ADDRESS_LENGTH,
   MAX_SUMMARY_LENGTH,
   MAX_TITLE_LENGTH,
   MAX_TOKEN_DAYS,
@@ -25,6 +29,8 @@ import {
   ARTIFACT_KINDS,
   EVENT_KINDS,
   PERSON_ROLES,
+  PROJECT_ROLES,
+  PROJECT_VISIBILITIES,
   PROVIDER_KEYS,
   RUN_ENDINGS,
   RUN_STATUSES,
@@ -42,11 +48,15 @@ const line = (maxLength: number) =>
     z.refine((value) => !hasForbiddenCodePoint(value), "must not contain control characters"),
   );
 
-/** A body in Markdown: bounded, with its line breaks, and otherwise the same rule. */
-const body = z.string().check(
-  z.maxLength(MAX_BODY_LENGTH),
-  z.refine((value) => !hasForbiddenCodePoint(value, true), "must not contain control characters"),
-);
+/** A text of a few lines: bounded, with its line breaks, and otherwise the same rule. */
+const paragraphs = (maxLength: number) =>
+  z.string().check(
+    z.maxLength(maxLength),
+    z.refine((value) => !hasForbiddenCodePoint(value, true), "must not contain control characters"),
+  );
+
+/** A body in Markdown. */
+const body = paragraphs(MAX_BODY_LENGTH);
 
 /** A link a person adds to a task: the web, over https, and nothing that runs. */
 const url = z.string().check(z.trim(), z.maxLength(MAX_URL_LENGTH), z.url({ protocol: /^https$/ }));
@@ -97,6 +107,90 @@ export type RestPeople = z.infer<typeof restPeopleSchema>;
 export const restPersonPatchSchema = z.object({ role: z.enum(PERSON_ROLES) });
 export type RestPersonPatch = z.infer<typeof restPersonPatchSchema>;
 
+/**
+ * A project's key: what its paths and the command say. Lowercase letters, digits and hyphens,
+ * beginning and ending with a letter or a digit; immutable once the project is made.
+ */
+const projectKey = z
+  .string()
+  .check(
+    z.maxLength(MAX_PROJECT_KEY_LENGTH),
+    z.regex(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/, "must be lowercase letters, digits and hyphens"),
+  );
+
+/** The address of a project's skills, as the standard spells one; the console checks it as one. */
+const skillsAddress = line(MAX_SKILLS_ADDRESS_LENGTH);
+
+/** A project of the workspace, as the asker sees it: with what they are in it. */
+export const restProjectSchema = z.object({
+  id: uuid,
+  key: projectKey,
+  name: z.string(),
+  description: z.string(),
+  /** Who is a member: every member of the workspace, or only those listed. */
+  visibility: z.enum(PROJECT_VISIBILITIES),
+  /** The address of the project's skills at the SkillCDN deployment, canonical, or `null` for the organization's. */
+  skillsAddress: z.nullable(z.string()),
+  /** What the asker is in it: an owner configures the project, a member works on it. */
+  role: z.enum(PROJECT_ROLES),
+  /** How many decisions in it wait for a person. */
+  openDecisions: count,
+  /** How many agents are at work in it, or waiting. */
+  openRuns: count,
+  createdAt: instant,
+  updatedAt: instant,
+});
+export type RestProject = z.infer<typeof restProjectSchema>;
+
+/** `GET /api/v1/projects`: the projects the asker may see, by name. */
+export const restProjectsSchema = z.object({ items: z.array(restProjectSchema) });
+export type RestProjects = z.infer<typeof restProjectsSchema>;
+
+/** What `POST /api/v1/projects` is sent: the key and the name; the rest has a default. */
+export const restProjectInputSchema = z.object({
+  key: projectKey,
+  name: line(MAX_PROJECT_NAME_LENGTH),
+  description: z.optional(paragraphs(MAX_PROJECT_DESCRIPTION_LENGTH)),
+  /** Left out: `private`. */
+  visibility: z.optional(z.enum(PROJECT_VISIBILITIES)),
+  /** Left out or `null`: the organization's skills. */
+  skillsAddress: z.optional(z.nullable(skillsAddress)),
+});
+export type RestProjectInput = z.infer<typeof restProjectInputSchema>;
+
+/** What `PATCH /api/v1/projects/<key>` is sent: only what changes; the key does not. */
+export const restProjectPatchSchema = z.object({
+  name: z.optional(line(MAX_PROJECT_NAME_LENGTH)),
+  description: z.optional(paragraphs(MAX_PROJECT_DESCRIPTION_LENGTH)),
+  visibility: z.optional(z.enum(PROJECT_VISIBILITIES)),
+  skillsAddress: z.optional(z.nullable(skillsAddress)),
+});
+export type RestProjectPatch = z.infer<typeof restProjectPatchSchema>;
+
+/** A person listed in a project, with what they are in it. */
+export const restMemberSchema = z.object({
+  person: restPersonSchema,
+  role: z.enum(PROJECT_ROLES),
+  addedAt: instant,
+});
+export type RestMember = z.infer<typeof restMemberSchema>;
+
+/** `GET /api/v1/projects/<key>/members`: those listed, by login. */
+export const restMembersSchema = z.object({ items: z.array(restMemberSchema) });
+export type RestMembers = z.infer<typeof restMembersSchema>;
+
+/** What `POST /api/v1/projects/<key>/members` is sent: a person of the workspace, and what they are to be. */
+export const restMemberInputSchema = z.object({
+  personId: uuid,
+  /** Left out: `member`. */
+  role: z.optional(z.enum(PROJECT_ROLES)),
+});
+export type RestMemberInput = z.infer<typeof restMemberInputSchema>;
+
+/** What `PATCH /api/v1/projects/<key>/members/<person id>` is sent. */
+export const restMemberPatchSchema = z.object({ role: z.enum(PROJECT_ROLES) });
+export type RestMemberPatch = z.infer<typeof restMemberPatchSchema>;
+
 export const restTaskLinkSchema = z.object({
   url: z.string(),
   label: z.nullable(z.string()),
@@ -105,7 +199,7 @@ export type RestTaskLink = z.infer<typeof restTaskLinkSchema>;
 
 export const restTaskSchema = z.object({
   id: uuid,
-  /** The task's number in the workspace, the one people say out loud. */
+  /** The task's number in its project, the one people say out loud. */
   number: z.int().check(z.positive()),
   title: z.string(),
   /** Markdown. Shown as text or rendered to elements, never as HTML. */
@@ -126,7 +220,7 @@ export const restTaskSchema = z.object({
 });
 export type RestTask = z.infer<typeof restTaskSchema>;
 
-/** `GET /api/v1/tasks`: the board, newest first. */
+/** `GET /api/v1/projects/<key>/tasks`: the board, newest first. */
 export const restTasksSchema = z.object({ items: z.array(restTaskSchema) });
 export type RestTasks = z.infer<typeof restTasksSchema>;
 
@@ -135,7 +229,7 @@ const taskLinkInput = z.object({
   label: z.optional(z.nullable(line(MAX_LINK_LABEL_LENGTH))),
 });
 
-/** What `POST /api/v1/tasks` is sent. Everything but the title has a default. */
+/** What `POST /api/v1/projects/<key>/tasks` is sent. Everything but the title has a default. */
 export const restTaskInputSchema = z.object({
   title: line(MAX_TITLE_LENGTH),
   body: z.optional(body),
@@ -147,7 +241,7 @@ export const restTaskInputSchema = z.object({
 });
 export type RestTaskInput = z.infer<typeof restTaskInputSchema>;
 
-/** What `PATCH /api/v1/tasks/<id>` is sent: only what changes. */
+/** What `PATCH /api/v1/projects/<key>/tasks/<id>` is sent: only what changes. */
 export const restTaskPatchSchema = z.object({
   title: z.optional(line(MAX_TITLE_LENGTH)),
   body: z.optional(body),
@@ -194,11 +288,11 @@ export const restDecisionSchema = z.object({
 });
 export type RestDecision = z.infer<typeof restDecisionSchema>;
 
-/** `GET /api/v1/decisions`: the ones that wait first, newest first within each. */
+/** `GET /api/v1/projects/<key>/decisions`: the ones that wait first, newest first within each. */
 export const restDecisionsSchema = z.object({ items: z.array(restDecisionSchema) });
 export type RestDecisions = z.infer<typeof restDecisionsSchema>;
 
-/** What `POST /api/v1/decisions` is sent: the question, its context, and the options. */
+/** What `POST /api/v1/projects/<key>/decisions` is sent: the question, its context, and the options. */
 export const restDecisionInputSchema = z.object({
   question: line(MAX_QUESTION_LENGTH),
   body: z.optional(body),
@@ -211,18 +305,10 @@ export const restDecisionInputSchema = z.object({
 });
 export type RestDecisionInput = z.infer<typeof restDecisionInputSchema>;
 
-/** What `POST /api/v1/decisions/<id>/answer` is sent: an option, and a word about it. */
+/** What `POST .../decisions/<id>/answer` is sent: an option, and a word about it. */
 export const restAnswerInputSchema = z.object({
   option: z.string().check(z.minLength(1), z.maxLength(64)),
-  note: z.optional(
-    z.string().check(
-      z.maxLength(MAX_NOTE_LENGTH),
-      z.refine(
-        (value) => !hasForbiddenCodePoint(value, true),
-        "must not contain control characters",
-      ),
-    ),
-  ),
+  note: z.optional(paragraphs(MAX_NOTE_LENGTH)),
 });
 export type RestAnswerInput = z.infer<typeof restAnswerInputSchema>;
 
@@ -233,7 +319,7 @@ export type RestAnswerInput = z.infer<typeof restAnswerInputSchema>;
 export const restEventDataSchema = z.object({
   number: z.optional(z.int()),
   title: z.optional(z.string()),
-  /** For `task.updated`: which fields changed. */
+  /** For `task.updated` and `project.updated`: which fields changed. */
   fields: z.optional(z.array(z.string())),
   /** For `task.moved`. */
   from: z.optional(z.enum(TASK_STATES)),
@@ -241,9 +327,12 @@ export const restEventDataSchema = z.object({
   question: z.optional(z.string()),
   /** For `decision.answered`: the label of the chosen option. */
   option: z.optional(z.string()),
-  /** For `person.role_changed`: whose role, and what it became. */
+  /** For `person.role_changed` and the events about a project's members: whose role, and what it became. */
   login: z.optional(z.string()),
-  role: z.optional(z.enum(PERSON_ROLES)),
+  role: z.optional(z.string()),
+  /** For the events about a project: its key and its name. */
+  key: z.optional(z.string()),
+  name: z.optional(z.string()),
   /** For what an agent did: what it calls itself. */
   agent: z.optional(z.string()),
   /** For `run.ended`: how. */
@@ -261,6 +350,10 @@ export const restEventSchema = z.object({
   kind: z.enum(EVENT_KINDS),
   /** Who did it; `null` for the console itself. */
   actor: z.nullable(restPersonSchema),
+  /** The agent the actor acted as, when they acted with a token; `null` when a person did it themselves. */
+  agent: z.nullable(z.string()),
+  /** The project it happened in, or `null` for what happened to the workspace itself. */
+  projectId: z.nullable(uuid),
   taskId: z.nullable(uuid),
   decisionId: z.nullable(uuid),
   runId: z.nullable(uuid),
@@ -277,7 +370,7 @@ export const restReportSchema = z.object({
 });
 export type RestReport = z.infer<typeof restReportSchema>;
 
-/** A file a run handed in, as the console keeps it; its bytes are at `restPath("files", <artifact id>)`. */
+/** A file a run handed in, as the console keeps it; its bytes are at `projectPath(key, "files", <artifact id>)`. */
 export const restFileSchema = z.object({
   /** What the agent called it: one line, without a path. */
   name: z.string(),
@@ -326,11 +419,11 @@ export const restRunSchema = z.object({
 });
 export type RestRun = z.infer<typeof restRunSchema>;
 
-/** `GET /api/v1/runs?task=`: the runs, newest first. */
+/** `GET /api/v1/projects/<key>/runs`: the runs, newest first. */
 export const restRunsSchema = z.object({ items: z.array(restRunSchema) });
 export type RestRuns = z.infer<typeof restRunsSchema>;
 
-/** `GET /api/v1/events?after=`: what happened after that number, oldest first. */
+/** `GET .../events?after=`: what happened after that number, oldest first. */
 export const restEventsSchema = z.object({
   items: z.array(restEventSchema),
   /** True when there is more after the last item than one page carries. */
@@ -374,7 +467,7 @@ export const restTokenCreatedSchema = z.object({
 });
 export type RestTokenCreated = z.infer<typeof restTokenCreatedSchema>;
 
-/** One of the organization's skills, as the SkillCDN deployment lists it at the console's address. */
+/** One of the project's skills, as the SkillCDN deployment lists it at the project's address. */
 export const restSkillSchema = z.object({
   name: z.string(),
   description: z.string(),
@@ -393,9 +486,9 @@ export const restSkillSchema = z.object({
 });
 export type RestSkill = z.infer<typeof restSkillSchema>;
 
-/** `GET /api/v1/skills`: the organization's skills, read by address through SkillCDN. */
+/** `GET /api/v1/projects/<key>/skills`: the project's skills, read by address through SkillCDN. */
 export const restSkillsSchema = z.object({
-  /** The address, canonical, or `null` when the deployment has none configured. */
+  /** The address, canonical, or `null` when neither the project nor the deployment names one. */
   address: z.nullable(z.string()),
   /** The origin of the SkillCDN deployment the skills are read through. */
   source: z.string(),
@@ -418,12 +511,9 @@ export const restErrorSchema = z.object({
 export type RestError = z.infer<typeof restErrorSchema>;
 
 /** What an agent says when it ends a run: Markdown, bounded. */
-const summary = z.string().check(
-  z.maxLength(MAX_SUMMARY_LENGTH),
-  z.refine((value) => !hasForbiddenCodePoint(value, true), "must not contain control characters"),
-);
+const summary = paragraphs(MAX_SUMMARY_LENGTH);
 
-/** What `POST /api/v1/runs` is sent: the task to take, and what the agent calls itself. */
+/** What `POST /api/v1/projects/<key>/runs` is sent: the task to take, and what the agent calls itself. */
 export const restRunInputSchema = z.object({
   taskId: uuid,
   /** Left out, the agent is called what its person called the token, or by the person's login. */
@@ -431,13 +521,13 @@ export const restRunInputSchema = z.object({
 });
 export type RestRunInput = z.infer<typeof restRunInputSchema>;
 
-/** What `POST /api/v1/runs/<id>/reports` is sent: how the work goes, in Markdown. */
+/** What `POST .../runs/<id>/reports` is sent: how the work goes, in Markdown. */
 export const restReportInputSchema = z.object({
   body: body.check(z.refine((value) => value.trim().length > 0, "must say something")),
 });
 export type RestReportInput = z.infer<typeof restReportInputSchema>;
 
-/** What `POST /api/v1/runs/<id>/artifacts` is sent: a link to what was made. */
+/** What `POST .../runs/<id>/artifacts` is sent: a link to what was made. */
 export const restArtifactInputSchema = z.object({
   url,
   label: z.optional(line(MAX_LINK_LABEL_LENGTH)),
@@ -455,7 +545,7 @@ const mediaType = z
   );
 
 /**
- * What `POST /api/v1/runs/<id>/files` is sent beside the bytes, as the parts of a form: the
+ * What `POST .../runs/<id>/files` is sent beside the bytes, as the parts of a form: the
  * file's name and media type come with the `file` part, the `label` is a part of its own.
  */
 export const restFileInputSchema = z.object({
@@ -470,7 +560,7 @@ export const restFileInputSchema = z.object({
 });
 export type RestFileInput = z.infer<typeof restFileInputSchema>;
 
-/** What `POST /api/v1/runs/<id>/end` is sent: how the run ended, and what was done and left. */
+/** What `POST .../runs/<id>/end` is sent: how the run ended, and what was done and left. */
 export const restRunEndInputSchema = z.object({
   status: z.enum(RUN_ENDINGS),
   summary: z.optional(summary),

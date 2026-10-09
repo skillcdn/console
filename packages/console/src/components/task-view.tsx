@@ -1,8 +1,10 @@
 import { useState } from "react";
 import type {
   RestAnswerInput,
+  RestArtifact,
   RestDecision,
   RestDecisionInput,
+  RestEvent,
   RestPerson,
   RestRun,
   RestTask,
@@ -12,14 +14,15 @@ import type {
 import { TASK_STATES } from "../vocabulary.js";
 import { DecisionForm } from "./decision-form.js";
 import { DecisionCard } from "./decision-list.js";
+import { EventFeed } from "./event-feed.js";
 import { Markdown } from "./markdown.js";
 import { RunList } from "./runs.js";
 import { TaskForm } from "./task-form.js";
 import { Button, PersonChip, PriorityBadge, STATE_LABELS, StateBadge, Time } from "./ui.js";
 
 // One task: what it is, who it is on, what it links to, the agents at work on it, the decisions
-// about it, the tasks that are part of it, and the ways to change it. Takes its data as props
-// and nothing from the network.
+// about it, the tasks that are part of it, everything that happened to it, and the ways to
+// change it. Takes its data as props and nothing from the network.
 
 export interface TaskViewProps {
   readonly task: RestTask;
@@ -29,9 +32,13 @@ export interface TaskViewProps {
   readonly decisions: readonly RestDecision[];
   /** The runs of the board, or of this task; the ones on this task are shown. */
   readonly runs?: readonly RestRun[] | undefined;
+  /** Everything that happened to the task, oldest first, when the page has read it. */
+  readonly history?: readonly RestEvent[] | undefined;
   readonly taskHref: (task: RestTask) => string;
   /** Where a decision is answered, for a run that waits for one. */
   readonly decisionHref?: ((decisionId: string) => string) | undefined;
+  /** Where a file a run handed in is read. */
+  readonly fileHref?: ((artifact: RestArtifact) => string) | undefined;
   readonly busy?: boolean | undefined;
   readonly error?: string | undefined;
   readonly onChange: (task: RestTask, patch: RestTaskInput) => void;
@@ -191,6 +198,7 @@ export function TaskView(props: TaskViewProps) {
           <RunList
             runs={runs}
             decisionHref={props.decisionHref}
+            fileHref={props.fileHref}
             onAbandon={props.onAbandonRun}
             busy={props.busy}
           />
@@ -208,6 +216,12 @@ export function TaskView(props: TaskViewProps) {
               busy={props.busy}
             />
           ))}
+        </section>
+      )}
+      {props.history !== undefined && props.history.length > 0 && (
+        <section className="sc-task-section" aria-label="History">
+          <h2 className="sc-section-title">What happened</h2>
+          <EventFeed events={props.history} />
         </section>
       )}
       {subtasks.length > 0 && (

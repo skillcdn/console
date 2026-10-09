@@ -4,13 +4,14 @@ import { alias } from "drizzle-orm/pg-core";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
 import { artifacts, decisions, people, reports, runs, tasks } from "../schema.js";
-import { recordEvent } from "./events.js";
+import { type Actor, recordEvent, type Scope } from "./events.js";
 import { type PersonRecord, personColumns, toPerson } from "./people.js";
 import { updateTaskIn } from "./tasks.js";
 
 // One agent at work on one task for one person: started when the agent takes the task, grown
 // by what it reports and hands in, waiting while a decision it raised waits, and over when the
-// agent says so or a person gives up on it. Every change is one transaction with its event.
+// agent says so or a person gives up on it. Every change is one transaction with its event,
+// and every read is scoped to the project.
 
 export interface ReportRecord {
   readonly id: string;
@@ -46,6 +47,7 @@ export type HandedIn =
 export interface RunRecord {
   readonly id: string;
   readonly workspaceId: string;
+  readonly projectId: string;
   readonly taskId: string;
   /** The task's number, as people say it. */
   readonly taskNumber: number;
@@ -84,7 +86,7 @@ export class RunError extends DomainError {
 
 const RUN_ERROR_WORDS = {
   "run.not_found": "the run was not found",
-  "run.task_not_found": "the task is not one of the workspace",
+  "run.task_not_found": "the task is not one of the project",
   "run.task_closed": "the task is done or dropped",
   "run.task_taken": "an agent is at work on the task already",
   "run.not_yours": "the run is another person's",
@@ -107,6 +109,7 @@ const waitingForOf = sql<
 const runColumns = {
   id: runs.id,
   workspaceId: runs.workspaceId,
+  projectId: runs.projectId,
   taskId: runs.taskId,
   taskNumber: tasks.number,
   tokenId: runs.tokenId,
@@ -190,6 +193,7 @@ async function attach(handle: Handle, rows: readonly RunRow[]): Promise<RunRecor
   return rows.map((row) => ({
     id: row.id,
     workspaceId: row.workspaceId,
+    projectId: row.projectId,
     taskId: row.taskId,
     taskNumber: row.taskNumber,
     person: toPerson(row.person),
@@ -209,11 +213,11 @@ async function attach(handle: Handle, rows: readonly RunRow[]): Promise<RunRecor
 
 async function readRun(
   handle: Handle,
-  workspaceId: string,
+  scope: Scope,
   runId: string,
 ): Promise<RunRecord | undefined> {
   const rows = await selectRuns(handle)
-    .where(and(eq(runs.workspaceId, workspaceId), eq(runs.id, runId)))
+    .where(and(eq(runs.projectId, scope.projectId), eq(runs.id, runId)))
     .limit(1);
   return (await attach(handle, rows))[0];
 }
@@ -238,7 +242,7 @@ export function excerptOf(body: string): string {
  */
 async function lockRun(
   tx: Transaction,
-  workspaceId: string,
+  scope: Scope,
   runId: string,
   actorId: string,
   anyone = false,
@@ -252,7 +256,7 @@ async function lockRun(
       status: runs.status,
     })
     .from(runs)
-    .where(and(eq(runs.workspaceId, workspaceId), eq(runs.id, runId)))
+    .where(and(eq(runs.projectId, scope.projectId), eq(runs.id, runId)))
     .for("update");
   if (run === undefined) {
     throw new RunError("run.not_found");
@@ -274,6 +278,9 @@ async function lockRun(
   return { ...run, task };
 }
 
+/** What a run's event names as its actor: the person, as the agent of the run. */
+const asAgent = (actor: Actor, agent: string): Actor => ({ id: actor.id, agent });
+
 /**
  * An agent takes a task for its person: the run begins, the task is at work and the person's,
  * and the board is told. A task that is done or dropped, or that an agent is at work on
@@ -282,20 +289,20 @@ async function lockRun(
 export async function startRun(
   database: Database,
   input: {
-    readonly workspaceId: string;
-    readonly actorId: string;
+    readonly scope: Scope;
+    readonly actor: Actor;
     readonly tokenId: string | undefined;
     readonly taskId: string;
     readonly agent: string;
     readonly now: Date;
   },
 ): Promise<RunRecord> {
-  const { workspaceId, actorId, tokenId, taskId, agent, now } = input;
+  const { scope, actor, tokenId, taskId, agent, now } = input;
   return drizzleOf(database).transaction(async (tx) => {
     const [task] = await tx
       .select({ id: tasks.id, number: tasks.number, title: tasks.title, state: tasks.state })
       .from(tasks)
-      .where(and(eq(tasks.workspaceId, workspaceId), eq(tasks.id, taskId)))
+      .where(and(eq(tasks.projectId, scope.projectId), eq(tasks.id, taskId)))
       .for("update");
     if (task === undefined) {
       throw new RunError("run.task_not_found");
@@ -314,9 +321,10 @@ export async function startRun(
     const [inserted] = await tx
       .insert(runs)
       .values({
-        workspaceId,
+        workspaceId: scope.workspaceId,
+        projectId: scope.projectId,
         taskId,
-        personId: actorId,
+        personId: actor.id,
         tokenId: tokenId ?? null,
         agent,
         status: "running",
@@ -328,23 +336,24 @@ export async function startRun(
     if (inserted === undefined) {
       throw new Error("run insert returned no row");
     }
+    const runner = asAgent(actor, agent);
     await recordEvent(tx, {
-      workspaceId,
+      ...scope,
       kind: "run.started",
-      actorId,
+      actor: runner,
       taskId,
       runId: inserted.id,
       data: { number: task.number, title: task.title, agent },
       now,
     });
     await updateTaskIn(tx, {
-      workspaceId,
-      actorId,
+      scope,
+      actor: runner,
       taskId,
-      patch: { state: "in_progress", assigneeId: actorId },
+      patch: { state: "in_progress", assigneeId: actor.id },
       now,
     });
-    const written = await readRun(tx, workspaceId, inserted.id);
+    const written = await readRun(tx, scope, inserted.id);
     if (written === undefined) {
       throw new Error("the run written was not found");
     }
@@ -356,17 +365,17 @@ export async function startRun(
 export async function addReport(
   database: Database,
   input: {
-    readonly workspaceId: string;
-    readonly actorId: string;
+    readonly scope: Scope;
+    readonly actor: Actor;
     readonly runId: string;
     readonly body: string;
     readonly limit: number;
     readonly now: Date;
   },
 ): Promise<RunRecord> {
-  const { workspaceId, actorId, runId, body, limit, now } = input;
+  const { scope, actor, runId, body, limit, now } = input;
   return drizzleOf(database).transaction(async (tx) => {
-    const run = await lockRun(tx, workspaceId, runId, actorId);
+    const run = await lockRun(tx, scope, runId, actor.id);
     const [held] = await tx
       .select({ count: count() })
       .from(reports)
@@ -377,9 +386,9 @@ export async function addReport(
     await tx.insert(reports).values({ runId, body, createdAt: now });
     await tx.update(runs).set({ updatedAt: now }).where(eq(runs.id, runId));
     await recordEvent(tx, {
-      workspaceId,
+      ...scope,
       kind: "run.reported",
-      actorId,
+      actor: asAgent(actor, run.agent),
       taskId: run.taskId,
       runId,
       data: {
@@ -390,7 +399,7 @@ export async function addReport(
       },
       now,
     });
-    const written = await readRun(tx, workspaceId, runId);
+    const written = await readRun(tx, scope, runId);
     if (written === undefined) {
       throw new RunError("run.not_found");
     }
@@ -405,8 +414,8 @@ export async function addReport(
 export async function addArtifact(
   database: Database,
   input: {
-    readonly workspaceId: string;
-    readonly actorId: string;
+    readonly scope: Scope;
+    readonly actor: Actor;
     readonly runId: string;
     readonly handedIn: HandedIn;
     readonly label: string | undefined;
@@ -414,9 +423,9 @@ export async function addArtifact(
     readonly now: Date;
   },
 ): Promise<RunRecord> {
-  const { workspaceId, actorId, runId, handedIn, label, limit, now } = input;
+  const { scope, actor, runId, handedIn, label, limit, now } = input;
   return drizzleOf(database).transaction(async (tx) => {
-    const run = await lockRun(tx, workspaceId, runId, actorId);
+    const run = await lockRun(tx, scope, runId, actor.id);
     const [held] = await tx
       .select({ count: count() })
       .from(artifacts)
@@ -440,9 +449,9 @@ export async function addArtifact(
     );
     await tx.update(runs).set({ updatedAt: now }).where(eq(runs.id, runId));
     await recordEvent(tx, {
-      workspaceId,
+      ...scope,
       kind: "run.handed_in",
-      actorId,
+      actor: asAgent(actor, run.agent),
       taskId: run.taskId,
       runId,
       data: {
@@ -453,7 +462,7 @@ export async function addArtifact(
       },
       now,
     });
-    const written = await readRun(tx, workspaceId, runId);
+    const written = await readRun(tx, scope, runId);
     if (written === undefined) {
       throw new RunError("run.not_found");
     }
@@ -469,8 +478,8 @@ export async function addArtifact(
 export async function endRun(
   database: Database,
   input: {
-    readonly workspaceId: string;
-    readonly actorId: string;
+    readonly scope: Scope;
+    readonly actor: Actor;
     readonly runId: string;
     readonly status: RunEnding;
     readonly summary: string | undefined;
@@ -478,17 +487,20 @@ export async function endRun(
     readonly now: Date;
   },
 ): Promise<RunRecord> {
-  const { workspaceId, actorId, runId, status, summary, now } = input;
+  const { scope, actor, runId, status, summary, now } = input;
   return drizzleOf(database).transaction(async (tx) => {
-    const run = await lockRun(tx, workspaceId, runId, actorId, input.anyone === true);
+    const run = await lockRun(tx, scope, runId, actor.id, input.anyone === true);
     await tx
       .update(runs)
       .set({ status, summary: summary ?? null, endedAt: now, updatedAt: now })
       .where(eq(runs.id, runId));
+    // A person who gives up on a run does so themselves; the agent ends its own as itself.
+    const ender =
+      status === "abandoned" && actor.agent === undefined ? actor : asAgent(actor, run.agent);
     await recordEvent(tx, {
-      workspaceId,
+      ...scope,
       kind: "run.ended",
-      actorId,
+      actor: ender,
       taskId: run.taskId,
       runId,
       data: { number: run.task.number, title: run.task.title, agent: run.agent, status },
@@ -496,14 +508,14 @@ export async function endRun(
     });
     if (status === "finished" && run.task.state === "in_progress") {
       await updateTaskIn(tx, {
-        workspaceId,
-        actorId,
+        scope,
+        actor: ender,
         taskId: run.taskId,
         patch: { state: "in_review" },
         now,
       });
     }
-    const written = await readRun(tx, workspaceId, runId);
+    const written = await readRun(tx, scope, runId);
     if (written === undefined) {
       throw new RunError("run.not_found");
     }
@@ -513,32 +525,32 @@ export async function endRun(
 
 export function getRun(
   database: Database,
-  workspaceId: string,
+  scope: Scope,
   runId: string,
 ): Promise<RunRecord | undefined> {
-  return readRun(drizzleOf(database), workspaceId, runId);
+  return readRun(drizzleOf(database), scope, runId);
 }
 
-/** One artifact of the workspace, by its id: how the bytes of a file handed in are found. */
+/** One artifact of the project, by its id: how the bytes of a file handed in are found. */
 export async function findArtifact(
   database: Database,
-  workspaceId: string,
+  scope: Scope,
   artifactId: string,
 ): Promise<ArtifactRecord | undefined> {
   const [row] = await selectArtifacts(drizzleOf(database))
     .innerJoin(runs, eq(runs.id, artifacts.runId))
-    .where(and(eq(runs.workspaceId, workspaceId), eq(artifacts.id, artifactId)))
+    .where(and(eq(runs.projectId, scope.projectId), eq(artifacts.id, artifactId)))
     .limit(1);
   return row === undefined ? undefined : toArtifact(row);
 }
 
 /**
- * The runs, newest first: all of them, those on one task, those that are open or over, those
- * for one person, those begun with one token (which is one agent's own).
+ * The runs of the project, newest first: all of them, those on one task, those that are open
+ * or over, those for one person, those begun with one token (which is one agent's own).
  */
 export async function listRuns(
   database: Database,
-  workspaceId: string,
+  scope: Scope,
   filter: {
     readonly taskId?: string | undefined;
     readonly open?: boolean | undefined;
@@ -551,7 +563,7 @@ export async function listRuns(
   const rows = await selectRuns(handle)
     .where(
       and(
-        eq(runs.workspaceId, workspaceId),
+        eq(runs.projectId, scope.projectId),
         filter.taskId === undefined ? undefined : eq(runs.taskId, filter.taskId),
         filter.open === undefined
           ? undefined

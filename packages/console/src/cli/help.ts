@@ -58,7 +58,19 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   },
   whoami: {
     usage: "whoami",
-    about: "Who the token acts as, and which console it is for.",
+    about:
+      "Who the token acts as, which console it is for, and which project this directory works in.",
+  },
+  projects: {
+    usage: "projects",
+    about:
+      "The projects you may work in: each with its key, its name, what you are in it, and what waits in it. Every command on the board works in one project.",
+  },
+  use: {
+    usage: "use <key>",
+    about:
+      "Says which project this directory works in: writes .skillcdn-console.json here, which the commands read from this directory or one above it, and which is meant to be committed. --project <key> on any command, or CONSOLE_PROJECT in the environment, wins over it.",
+    refusals: ["project.not_found: no project has the key, or it is not yours to see"],
   },
   tasks: {
     usage: "tasks [--state <state>]",
@@ -174,12 +186,13 @@ const preamble = (version: string | undefined): string =>
   `console${version === undefined ? "" : ` ${version}`}: the board of your organization's work with AI agents, from the command line.
 You act as the person whose token you hold; everything you send is shown to people as text.
 
-Usage: console <command> [arguments] [--json] [--url <origin>]
+Usage: console <command> [arguments] [--json] [--url <origin>] [--project <key>]
 `;
 
-const CLOSING = `Options everywhere: --json answers with the console's own JSON; --url names another console.
-Commands on a run (report, hand-in, ask, finish, fail) act on your one open run; with several open,
-say which with --run <id>. A Markdown body given as - is read from standard input.
+const CLOSING = `Options everywhere: --json answers with the console's own JSON; --url names another console;
+--project names the project to work in, over CONSOLE_PROJECT and over what console use kept here.
+Commands on a run (report, hand-in, ask, finish, fail) act on your one open run in the project;
+with several open, say which with --run <id>. A Markdown body given as - is read from standard input.
 console help <command> says what each command takes, the limits the console holds it to, and
 what it may refuse. console --version says which version of the command this is.
 
@@ -193,7 +206,10 @@ $XDG_CONFIG_HOME/skillcdn-console/credentials.json (~/.config when XDG_CONFIG_HO
 `;
 
 const SECTIONS: readonly { readonly title: string; readonly commands: readonly string[] }[] = [
-  { title: "Signing in, once, as a person", commands: ["login", "logout", "whoami"] },
+  {
+    title: "Signing in, once, as a person, and the project to work in",
+    commands: ["login", "logout", "whoami", "projects", "use"],
+  },
   {
     title: "The board",
     commands: ["tasks", "task", "decisions", "decision", "runs", "run", "skills"],

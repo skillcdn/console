@@ -2,8 +2,9 @@ import type { ReactNode } from "react";
 import type { RestEvent } from "../api.js";
 import { PersonChip, STATE_LABELS, Time } from "./ui.js";
 
-// The feed: one line per event, newest first, as a sentence a person reads at a glance. It
-// takes its data as props and nothing from the network.
+// The feed: one line per event, newest first, as a sentence a person reads at a glance: who,
+// as which agent when through one, and what. It takes its data as props and nothing from the
+// network.
 
 const FIELD_WORDS: Readonly<Record<string, string>> = {
   title: "the title",
@@ -12,10 +13,20 @@ const FIELD_WORDS: Readonly<Record<string, string>> = {
   assigneeId: "the assignee",
   parentId: "what it is part of",
   links: "the links",
+  name: "the name",
+  description: "the description",
+  visibility: "who is a member",
+  skillsAddress: "the skills address",
 };
 
-/** "(as Claude Code)": what an agent did is said with what the agent calls itself. */
-const as = (agent: string | undefined): string => (agent === undefined ? "" : ` (as ${agent})`);
+const roleWords = (role: string | undefined): string =>
+  role === "admin"
+    ? "an administrator"
+    : role === "owner"
+      ? "an owner"
+      : role === "member"
+        ? "a member"
+        : "something";
 
 /** What an event says, without its actor: the words after the name. */
 export function describeEvent(event: RestEvent): string {
@@ -24,31 +35,41 @@ export function describeEvent(event: RestEvent): string {
     data.number === undefined
       ? "a task"
       : `#${data.number}${data.title === undefined ? "" : ` ${data.title}`}`;
+  const project = data.name ?? data.key ?? "a project";
+  const fields = (data.fields ?? []).map((field) => FIELD_WORDS[field] ?? field);
   switch (event.kind) {
     case "person.joined":
       return "joined the board";
     case "person.role_changed":
-      return `made ${data.login ?? "someone"} ${data.role === "admin" ? "an administrator" : "a member"}`;
+      return `made ${data.login ?? "someone"} ${roleWords(data.role)}`;
+    case "project.created":
+      return `made the project ${project}`;
+    case "project.updated":
+      return `changed ${fields.length === 0 ? "something" : fields.join(", ")} of the project ${project}`;
+    case "project.member_added":
+      return `added ${data.login ?? "someone"} to ${project} as ${roleWords(data.role)}`;
+    case "project.member_changed":
+      return `made ${data.login ?? "someone"} ${roleWords(data.role)} of ${project}`;
+    case "project.member_removed":
+      return `removed ${data.login ?? "someone"} from ${project}`;
     case "task.created":
       return `wrote ${task}`;
     case "task.moved":
       return `moved ${task} from ${STATE_LABELS[data.from ?? "idea"]} to ${STATE_LABELS[data.to ?? "idea"]}`;
-    case "task.updated": {
-      const fields = (data.fields ?? []).map((field) => FIELD_WORDS[field] ?? field);
+    case "task.updated":
       return `changed ${fields.length === 0 ? "something" : fields.join(", ")} of ${task}`;
-    }
     case "decision.raised":
-      return `asked${as(data.agent)}: ${data.question ?? "a question"}`;
+      return `asked: ${data.question ?? "a question"}`;
     case "decision.answered":
       return `answered "${data.question ?? "a question"}": ${data.option ?? ""}`;
     case "run.started":
-      return `started on ${task}${as(data.agent)}`;
+      return `started on ${task}`;
     case "run.reported":
-      return `reported on ${task}${as(data.agent)}${data.excerpt === undefined ? "" : `: ${data.excerpt}`}`;
+      return `reported on ${task}${data.excerpt === undefined ? "" : `: ${data.excerpt}`}`;
     case "run.handed_in":
-      return `handed in ${data.label ?? "something"} on ${task}${as(data.agent)}`;
+      return `handed in ${data.label ?? "something"} on ${task}`;
     case "run.ended":
-      return `${data.status === "finished" ? "finished" : data.status === "failed" ? "failed on" : "gave up on"} ${task}${as(data.agent)}`;
+      return `${data.status === "finished" ? "finished" : data.status === "failed" ? "failed on" : "gave up on"} ${task}`;
   }
 }
 
@@ -77,6 +98,11 @@ export function EventFeed(props: EventFeedProps) {
                 <span className="sc-person-login">The console</span>
               ) : (
                 <PersonChip person={event.actor} />
+              )}
+              {event.agent !== null && (
+                <span className="sc-feed-agent" title="The agent the person acted through">
+                  as {event.agent}
+                </span>
               )}
             </span>
             <span className="sc-feed-words">

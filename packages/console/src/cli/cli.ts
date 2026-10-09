@@ -1,15 +1,23 @@
 import { basename, extname } from "node:path";
 import { parseArgs } from "node:util";
-import { ApiError, type ConsoleClient, createClient, type FetchLike } from "../client.js";
+import {
+  ApiError,
+  type ConsoleClient,
+  createClient,
+  type FetchLike,
+  type ProjectClient,
+} from "../client.js";
 import { MAX_OPTIONS, MIN_OPTIONS } from "../limits.js";
 import type { RestDecision } from "../schemas.js";
 import { TASK_PRIORITIES, TASK_STATES, type TaskPriority, type TaskState } from "../vocabulary.js";
 import type { CredentialStore } from "./credentials.js";
+import type { DirectoryStore } from "./directory.js";
 import {
   formatAnswer,
   formatDecision,
   formatDecisionLine,
   formatOptions,
+  formatProjectLine,
   formatRun,
   formatRunLine,
   formatSkills,
@@ -21,7 +29,8 @@ import { COMMAND_HELP, helpFor, usage } from "./help.js";
 // The `console` command (docs/specs/cli.md): the agent's side of the console. A thin client of
 // the REST API with no logic of its own: every command is one or two requests and the words to
 // say what came back. It takes what it needs from `CliIo`, so that tests run it whole, against
-// the app and no socket, with a store and readers of their own.
+// the app and no socket, with a store and readers of their own. The board is a project's: every
+// command on it works in the project the flag, the environment or the working directory names.
 
 /** The exit codes of the command, for whoever runs it: a shell, a hook, an agent. */
 export const EXIT = {
@@ -57,6 +66,8 @@ export interface CliIo {
   /** A file handed in, as bytes. */
   readonly readBytes: (path: string) => Promise<Uint8Array>;
   readonly store: CredentialStore;
+  /** What the working directory says of the project, and the way to write it. */
+  readonly directory: DirectoryStore;
   readonly sleep: (ms: number) => Promise<void>;
   readonly now: () => number;
   /** The version of the package the command runs from, when the entry point knows it. */
@@ -81,7 +92,11 @@ type OptionSpec = Readonly<
   Record<string, { readonly type: "string" | "boolean"; readonly multiple?: boolean }>
 >;
 
-const GLOBAL_OPTIONS: OptionSpec = { json: { type: "boolean" }, url: { type: "string" } };
+const GLOBAL_OPTIONS: OptionSpec = {
+  json: { type: "boolean" },
+  url: { type: "string" },
+  project: { type: "string" },
+};
 
 function parse(args: readonly string[], options: OptionSpec, allowPositionals = true) {
   try {
@@ -115,7 +130,14 @@ interface Session {
   readonly client: ConsoleClient;
   readonly url: string;
   readonly json: boolean;
+  /** The project the command works in: named by `--project`, the environment, or the working directory. */
+  project(): Promise<ProjectClient>;
+  /** The key of that project, or nothing when none is named. */
+  projectKey(): Promise<string | undefined>;
 }
+
+const NO_PROJECT =
+  "Say which project: --project <key>, CONSOLE_PROJECT in the environment, or console use <key> once in this directory. console projects lists the projects you may work in.";
 
 /** The console and the token to talk to it with: the flags, the environment, then what login kept. */
 async function open(io: CliIo, values: Values): Promise<Session> {
@@ -127,10 +149,21 @@ async function open(io: CliIo, values: Values): Promise<Session> {
       "Not signed in. A person signs the command in: console login --url <the console's origin>",
     );
   }
+  const client = createClient({ baseUrl: url, token, fetch: io.fetch });
+  const projectKey = async () =>
+    text(values, "project") ?? io.env.CONSOLE_PROJECT ?? (await io.directory.load())?.project;
   return {
-    client: createClient({ baseUrl: url, token, fetch: io.fetch }),
+    client,
     url,
     json: on(values, "json"),
+    projectKey,
+    async project() {
+      const key = await projectKey();
+      if (key === undefined) {
+        throw failed(NO_PROJECT);
+      }
+      return client.project(key);
+    },
   };
 }
 
@@ -139,19 +172,21 @@ function answer(io: CliIo, session: Session, value: unknown, words: () => string
   io.stdout(session.json ? `${JSON.stringify(value, null, 2)}\n` : `${words()}\n`);
 }
 
-/** The run a command on a run means: the one named, else the one open run of this token. */
-async function currentRun(session: Session, values: Values): Promise<string> {
+/** The run a command on a run means: the one named, else the one open run of this token in the project. */
+async function currentRun(project: ProjectClient, values: Values): Promise<string> {
   const given = text(values, "run");
   if (given !== undefined) {
     return given;
   }
-  const { items } = await session.client.runs({ open: true, mine: true });
+  const { items } = await project.runs({ open: true, mine: true });
   const [only] = items;
   if (only !== undefined && items.length === 1) {
     return only.id;
   }
   if (items.length === 0) {
-    throw failed("No run of yours is open. Take a task first: console take <number>");
+    throw failed(
+      "No run of yours is open in this project. Take a task first: console take <number>",
+    );
   }
   throw failed(
     `Several runs of yours are open; say which with --run <id>:\n${items.map((run) => `  ${formatRunLine(run)}`).join("\n")}`,
@@ -235,7 +270,7 @@ function theOne(positionals: readonly string[], ask: string): string {
  */
 async function waitForAnswer(
   io: CliIo,
-  client: ConsoleClient,
+  project: ProjectClient,
   decision: RestDecision,
   seconds: number,
 ): Promise<RestDecision> {
@@ -246,7 +281,7 @@ async function waitForAnswer(
     if (current.answer !== null || left <= 0) {
       return current;
     }
-    current = await client.awaitDecision(
+    current = await project.awaitDecision(
       current.id,
       Math.max(1, Math.min(Math.ceil(left / 1000), WAIT_STEP_SECONDS)),
     );
@@ -266,13 +301,14 @@ const stillWaiting = (id: string): string =>
 async function settle(
   io: CliIo,
   session: Session,
+  project: ProjectClient,
   decision: RestDecision,
   seconds: number,
   shown = false,
 ): Promise<number> {
   const outcome =
     decision.answer === null && seconds > 0
-      ? await waitForAnswer(io, session.client, decision, seconds)
+      ? await waitForAnswer(io, project, decision, seconds)
       : decision;
   if (session.json) {
     if (!shown || outcome.answer !== null) {
@@ -311,7 +347,7 @@ const login: Command = async (args, io) => {
   }
   const kept = await io.store.save({ url, token });
   io.stdout(
-    `Signed in to ${me.workspace.name} at ${url} as ${person.login} (${person.role}). The token is kept in ${kept}.\n`,
+    `Signed in to ${me.workspace.name} at ${url} as ${person.login} (${person.role}). The token is kept in ${kept}.\nNext, say which project this directory works in: console use <key> (console projects lists them).\n`,
   );
   return EXIT.ok;
 };
@@ -331,11 +367,41 @@ const whoami: Command = async (args, io) => {
   if (person === null) {
     throw failed("The console does not know this token. Sign in again: console login");
   }
+  const key = await session.projectKey();
   answer(
     io,
     session,
-    me,
-    () => `${person.login} (${person.role}) at ${me.workspace.name}, ${session.url}`,
+    { ...me, project: key ?? null },
+    () =>
+      `${person.login} (${person.role}) at ${me.workspace.name}, ${session.url}${key === undefined ? "; no project named here" : `; project ${key}`}`,
+  );
+  return EXIT.ok;
+};
+
+const projects: Command = async (args, io) => {
+  const { values } = parse(args, {}, false);
+  const session = await open(io, values);
+  const found = await session.client.projects();
+  answer(io, session, found, () =>
+    found.items.length === 0
+      ? "No projects you may work in. A person makes one on the console's Projects page."
+      : found.items.map(formatProjectLine).join("\n"),
+  );
+  return EXIT.ok;
+};
+
+const use: Command = async (args, io) => {
+  const { values, positionals } = parse(args, {});
+  const key = theOne(positionals, "Say which project: console use <key>");
+  const session = await open(io, values);
+  const project = await session.client.project(key).get();
+  const kept = await io.directory.save({ project: project.key });
+  answer(
+    io,
+    session,
+    project,
+    () =>
+      `Working in ${project.name} (${project.key}) from this directory on: kept in ${kept}, which is meant to be committed.`,
   );
   return EXIT.ok;
 };
@@ -344,7 +410,8 @@ const tasks: Command = async (args, io) => {
   const { values } = parse(args, { state: { type: "string" } }, false);
   const state = stateOf(text(values, "state"));
   const session = await open(io, values);
-  const found = await session.client.tasks(state === undefined ? {} : { state });
+  const project = await session.project();
+  const found = await project.tasks(state === undefined ? {} : { state });
   answer(io, session, found, () =>
     found.items.length === 0 ? "No tasks." : found.items.map(formatTaskLine).join("\n"),
   );
@@ -354,7 +421,8 @@ const tasks: Command = async (args, io) => {
 const skills: Command = async (args, io) => {
   const { values } = parse(args, {}, false);
   const session = await open(io, values);
-  const found = await session.client.skills();
+  const project = await session.project();
+  const found = await project.skills();
   answer(io, session, found, () => formatSkills(found));
   return EXIT.ok;
 };
@@ -371,7 +439,8 @@ const newTask: Command = async (args, io) => {
   const priority = priorityOf(text(values, "priority"));
   const body = await bodyOf(io, values, text(values, "body"));
   const session = await open(io, values);
-  const made = await session.client.createTask({
+  const project = await session.project();
+  const made = await project.createTask({
     title,
     ...(body === undefined ? {} : { body }),
     ...(state === undefined ? {} : { state }),
@@ -388,10 +457,11 @@ const task: Command = async (args, io) => {
   const { values, positionals } = parse(args, {});
   const ref = theOne(positionals, "Say which task: console task <number|id>");
   const session = await open(io, values);
-  const found = await session.client.task(ref);
+  const project = await session.project();
+  const found = await project.task(ref);
   const [decisions, runs] = await Promise.all([
-    session.client.decisions({ task: found.id }),
-    session.client.runs({ task: found.id }),
+    project.decisions({ task: found.id }),
+    project.runs({ task: found.id }),
   ]);
   answer(io, session, { task: found, decisions: decisions.items, runs: runs.items }, () =>
     formatTask(found, decisions.items, runs.items),
@@ -403,9 +473,10 @@ const take: Command = async (args, io) => {
   const { values, positionals } = parse(args, { agent: { type: "string" } });
   const ref = theOne(positionals, "Say which task: console take <number|id>");
   const session = await open(io, values);
-  const found = await session.client.task(ref);
+  const project = await session.project();
+  const found = await project.task(ref);
   const agent = text(values, "agent");
-  const run = await session.client.startRun({
+  const run = await project.startRun({
     taskId: found.id,
     ...(agent === undefined ? {} : { agent }),
   });
@@ -437,8 +508,9 @@ const report: Command = async (args, io) => {
     );
   }
   const session = await open(io, values);
-  const runId = await currentRun(session, values);
-  const run = await session.client.report(runId, { body });
+  const project = await session.project();
+  const runId = await currentRun(project, values);
+  const run = await project.report(runId, { body });
   answer(
     io,
     session,
@@ -482,11 +554,12 @@ const handIn: Command = async (args, io) => {
   );
   const label = text(values, "label");
   const session = await open(io, values);
-  const runId = await currentRun(session, values);
+  const project = await session.project();
+  const runId = await currentRun(project, values);
   // A URL is handed in as a link, and the console says whether it takes it; anything else
   // names a file on this machine.
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(what)) {
-    const run = await session.client.handIn(runId, {
+    const run = await project.handIn(runId, {
       url: what,
       ...(label === undefined ? {} : { label }),
     });
@@ -506,7 +579,7 @@ const handIn: Command = async (args, io) => {
   }
   const name = basename(what);
   const contentType = CONTENT_TYPES[extname(name).toLowerCase()];
-  const run = await session.client.handInFile(runId, {
+  const run = await project.handInFile(runId, {
     name,
     bytes,
     ...(contentType === undefined ? {} : { contentType }),
@@ -541,8 +614,9 @@ const ask: Command = async (args, io) => {
   const seconds = secondsOf(text(values, "wait"), DEFAULT_ASK_WAIT_SECONDS);
   const body = await bodyOf(io, values, text(values, "body"));
   const session = await open(io, values);
-  const runId = await currentRun(session, values);
-  const raised = await session.client.raiseDecision({
+  const project = await session.project();
+  const runId = await currentRun(project, values);
+  const raised = await project.raiseDecision({
     question,
     options: options.map((label) => ({ label })),
     runId,
@@ -554,7 +628,7 @@ const ask: Command = async (args, io) => {
       ? `${JSON.stringify(raised, null, 2)}\n`
       : `Decision ${raised.id} raised on run ${runId}; the run waits for a person.\n${formatOptions(raised)}\n`,
   );
-  return settle(io, session, raised, seconds, true);
+  return settle(io, session, project, raised, seconds, true);
 };
 
 const decision: Command = async (args, io) => {
@@ -562,18 +636,20 @@ const decision: Command = async (args, io) => {
   const id = theOne(positionals, "Say which decision: console decision <id> [--wait <seconds>]");
   const seconds = secondsOf(text(values, "wait"), 0);
   const session = await open(io, values);
-  const found = await session.client.decision(id);
+  const project = await session.project();
+  const found = await project.decision(id);
   if (seconds === 0) {
     answer(io, session, found, () => formatDecision(found));
     return EXIT.ok;
   }
-  return settle(io, session, found, seconds);
+  return settle(io, session, project, found, seconds);
 };
 
 const decisions: Command = async (args, io) => {
   const { values } = parse(args, { open: { type: "boolean" } }, false);
   const session = await open(io, values);
-  const found = await session.client.decisions(on(values, "open") ? { open: true } : {});
+  const project = await session.project();
+  const found = await project.decisions(on(values, "open") ? { open: true } : {});
   answer(io, session, found, () =>
     found.items.length === 0 ? "No decisions." : found.items.map(formatDecisionLine).join("\n"),
   );
@@ -590,8 +666,9 @@ const ending =
     );
     const summary = await bodyOf(io, values, text(values, "summary"));
     const session = await open(io, values);
-    const runId = await currentRun(session, values);
-    const run = await session.client.endRun(runId, {
+    const project = await session.project();
+    const runId = await currentRun(project, values);
+    const run = await project.endRun(runId, {
       status,
       ...(summary === undefined ? {} : { summary }),
     });
@@ -614,8 +691,9 @@ const abandon: Command = async (args, io) => {
   }
   const summary = await bodyOf(io, values, text(values, "summary"));
   const session = await open(io, values);
-  const runId = positionals[0] ?? (await currentRun(session, values));
-  const run = await session.client.endRun(runId, {
+  const project = await session.project();
+  const runId = positionals[0] ?? (await currentRun(project, values));
+  const run = await project.endRun(runId, {
     status: "abandoned",
     ...(summary === undefined ? {} : { summary }),
   });
@@ -630,9 +708,10 @@ const runs: Command = async (args, io) => {
     false,
   );
   const session = await open(io, values);
+  const project = await session.project();
   const ref = text(values, "task");
-  const taskId = ref === undefined ? undefined : (await session.client.task(ref)).id;
-  const found = await session.client.runs({
+  const taskId = ref === undefined ? undefined : (await project.task(ref)).id;
+  const found = await project.runs({
     ...(taskId === undefined ? {} : { task: taskId }),
     ...(on(values, "open") ? { open: true } : {}),
     ...(on(values, "mine") ? { mine: true } : {}),
@@ -647,8 +726,9 @@ const run: Command = async (args, io) => {
   const { values, positionals } = parse(args, {});
   const id = theOne(positionals, "Say which run: console run <id>");
   const session = await open(io, values);
-  const found = await session.client.run(id);
-  answer(io, session, found, () => formatRun(found));
+  const project = await session.project();
+  const found = await project.run(id);
+  answer(io, session, found, () => formatRun(found, (artifactId) => project.fileUrl(artifactId)));
   return EXIT.ok;
 };
 
@@ -656,6 +736,8 @@ const COMMANDS: Readonly<Record<string, Command>> = {
   login,
   logout,
   whoami,
+  projects,
+  use,
   tasks,
   task,
   skills,
@@ -690,6 +772,8 @@ function hintFor(error: ApiError): string {
   switch (error.code) {
     case "auth.required":
       return "The token is not one the console knows, any more or at all. A person signs the command in again: console login\n";
+    case "project.not_found":
+      return "No project has this key, or it is not yours to see. console projects lists the projects you may work in.\n";
     case "network":
       return "Is the console's address right? console whoami --url <origin> says what the command uses.\n";
     default:

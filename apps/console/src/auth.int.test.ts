@@ -138,7 +138,12 @@ describe("signing in", () => {
       name: "Acme",
       now: new Date(),
     });
-    const { items } = await listEventsAfter(testDatabase.database, workspace.id, 0, 100);
+    const { items } = await listEventsAfter(
+      testDatabase.database,
+      { workspaceId: workspace.id, projectId: null },
+      0,
+      100,
+    );
     expect(items.filter((event) => event.actor?.login === "bob")).toHaveLength(1);
   });
 
@@ -216,7 +221,12 @@ describe("signing in", () => {
       name: "Acme",
       now: new Date(),
     });
-    const { items } = await listEventsAfter(testDatabase.database, workspace.id, 0, 100);
+    const { items } = await listEventsAfter(
+      testDatabase.database,
+      { workspaceId: workspace.id, projectId: null },
+      0,
+      100,
+    );
     expect(items.some((event) => event.actor?.login === "carol")).toBe(false);
   });
 

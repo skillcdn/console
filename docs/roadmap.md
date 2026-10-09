@@ -25,18 +25,18 @@ Goal: a person connects their agent to the console; the agent takes work from th
 - [x] The release workflow (2026-10-10): pending changesets become one version pull request, and merging it publishes through the registry's trusted publishing; the version follows the `@skillcdn/core` line ([ADR-0007](adr/0007-the-package-is-published-through-trusted-publishing-and-versioned-on-the-core-line.md)).
 - [x] `@skillcdn/console` published (2026-10-10): 0.1.0 by hand by a maintainer, then the trusted publisher registered and 0.1.1 published by the workflow, so that `npm install -g @skillcdn/console` is how a machine gets the command.
 
-## In progress: milestone 3, projects (started 2026-10-10)
+## Done: milestone 3, projects (2026-10-10)
 
 Goal: a workspace holds projects; a project owns its board, its skills address and its people with a role each, so that what a person and their agents may see and change is decided per project and fails closed ([ADR-0008](adr/0008-a-workspace-holds-projects-and-what-a-person-may-see-and-change-is-decided-per-project.md)). Sign-in, membership and tokens stay the workspace's. Traceability comes with it: a task's page shows everything that happened to it, and every event made with a token names the agent as well as the person.
 
 - [x] The decision (2026-10-10): what a project owns, what stays the workspace's, the REST paths, the command's project, the UI's paths ([ADR-0008](adr/0008-a-workspace-holds-projects-and-what-a-person-may-see-and-change-is-decided-per-project.md)).
-- [ ] The data model: projects and their members; every task, run, decision and event in a project; tasks numbered per project; the migration that moves the board into the project `general`.
-- [ ] Permissions per project: an owner who configures, a member who works, a workspace administrator as owner everywhere; visibility `workspace` or `private`; decided on every request and not found when it cannot be confirmed.
-- [ ] The REST API nested under the project, with the projects and their members as resources, and the events of a project filtered by task, run or decision.
-- [ ] The skills address per project, with the deployment's as the default.
-- [ ] The command: `--project`, `CONSOLE_PROJECT`, `.skillcdn-console.json` written by `console use`, and `console projects`.
-- [ ] The default UI: the projects page, a project's pages under `/p/<key>`, its members and settings for an owner, the task's history, and the agent named in the feed.
-- [ ] Traceability: every event made with a token names the agent.
+- [x] The data model (2026-10-10): projects and their members; every task, run, decision and event in a project; tasks numbered per project; the migration that moves the board into the project `general`.
+- [x] Permissions per project (2026-10-10): an owner who configures, a member who works, a workspace administrator as owner everywhere; visibility `workspace` or `private`; decided on every request and not found when it cannot be confirmed.
+- [x] The REST API nested under the project (2026-10-10), with the projects and their members as resources, and the events of a project filtered by task, run or decision ([specs/rest.md](specs/rest.md)).
+- [x] The skills address per project (2026-10-10), with the deployment's as the default.
+- [x] The command (2026-10-10): `--project`, `CONSOLE_PROJECT`, `.skillcdn-console.json` written by `console use`, and `console projects` ([specs/cli.md](specs/cli.md)).
+- [x] The default UI (2026-10-10): the projects page, a project's pages under `/p/<key>`, its members and settings for an owner, the task's history, and the agent named in the feed.
+- [x] Traceability (2026-10-10): every event names the agent the person acted through, on a task edited as on a run.
 
 ## After milestone 3
 

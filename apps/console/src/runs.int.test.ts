@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import {
   MAX_FILE_BYTES,
+  projectPath,
   REST_ROUTES,
   restDecisionSchema,
   restErrorSchema,
@@ -17,13 +18,15 @@ import { createFixtureProvider } from "./testing/fixture-provider.js";
 import { createHarness, type Harness, SIGN_IN_URL } from "./testing/harness.js";
 
 // An agent at work through the REST API, as the command line drives it: with a token and no
-// origin, as its person.
+// origin, as its person, in a project.
 
 let testDatabase: TestDatabase;
 let h: Harness;
 let alice: string;
 let bob: string;
 let aliceToken: string;
+/** The project the tests work in, open to the workspace, under its key. */
+const IN = projectPath("web");
 
 const JSON_HEADERS = { "content-type": "application/json" };
 
@@ -38,6 +41,7 @@ beforeAll(async () => {
   alice = await h.signIn("alice");
   bob = await h.signIn("bob");
   aliceToken = await tokenFor(h, alice, "Claude Code on the laptop");
+  await h.project(alice, { key: "web", name: "The web app", visibility: "workspace" });
 });
 
 afterAll(async () => {
@@ -74,27 +78,25 @@ const asAgent = (token: string, method: "GET" | "POST", path: string, body?: unk
 const errorOf = async (response: Response) =>
   restErrorSchema.parse(await response.json()).error.code;
 
-async function writeTask(cookie: string, body: unknown) {
-  const written = await asPerson(cookie, "POST", REST_ROUTES.tasks, body);
+async function writeTask(cookie: string, body: unknown, at = IN) {
+  const written = await asPerson(cookie, "POST", `${at}/tasks`, body);
   expect(written.status).toBe(201);
   return restTaskSchema.parse(await written.json());
 }
 
 const readTask = async (ref: string) =>
-  restTaskSchema.parse(
-    await (await asAgent(aliceToken, "GET", `${REST_ROUTES.tasks}/${ref}`)).json(),
-  );
+  restTaskSchema.parse(await (await asAgent(aliceToken, "GET", `${IN}/tasks/${ref}`)).json());
 const readRun = async (id: string) =>
-  restRunSchema.parse(await (await asAgent(aliceToken, "GET", `${REST_ROUTES.runs}/${id}`)).json());
-const startRun = async (token: string, taskId: string) => {
-  const taken = await asAgent(token, "POST", REST_ROUTES.runs, { taskId });
+  restRunSchema.parse(await (await asAgent(aliceToken, "GET", `${IN}/runs/${id}`)).json());
+const startRun = async (token: string, taskId: string, at = IN) => {
+  const taken = await asAgent(token, "POST", `${at}/runs`, { taskId });
   expect(taken.status).toBe(201);
   return restRunSchema.parse(await taken.json());
 };
 
 describe("runs", () => {
   it("begin when an agent takes a task, carry what it reports and hands in, wait for a decision, and end", async () => {
-    const nothing = await asAgent(aliceToken, "GET", REST_ROUTES.tasks);
+    const nothing = await asAgent(aliceToken, "GET", `${IN}/tasks`);
     expect(restTasksSchema.parse(await nothing.json()).items).toEqual([]);
 
     // A person writes a task; the agent reads it by its number, as people say it.
@@ -107,7 +109,7 @@ describe("runs", () => {
       id: task.id,
       body: "It fails on empty input.",
     });
-    expect((await asAgent(aliceToken, "GET", `${REST_ROUTES.tasks}/999999`)).status).toBe(404);
+    expect((await asAgent(aliceToken, "GET", `${IN}/tasks/999999`)).status).toBe(404);
 
     // The agent takes it, called what Alice called its token: the task is hers and at work.
     const run = await startRun(aliceToken, task.id);
@@ -124,7 +126,7 @@ describe("runs", () => {
     const atWork = await readTask(task.id);
     expect(atWork).toMatchObject({ state: "in_progress", openRuns: 1 });
     expect(atWork.assignee?.login).toBe("Alice");
-    const again = await asAgent(aliceToken, "POST", REST_ROUTES.runs, {
+    const again = await asAgent(aliceToken, "POST", `${IN}/runs`, {
       taskId: task.id,
       agent: "another",
     });
@@ -132,16 +134,16 @@ describe("runs", () => {
     expect(await errorOf(again)).toBe("run.task_taken");
 
     // It reports and hands in; a report says something, and only https is handed in.
-    const reported = await asAgent(aliceToken, "POST", `${REST_ROUTES.runs}/${run.id}/reports`, {
+    const reported = await asAgent(aliceToken, "POST", `${IN}/runs/${run.id}/reports`, {
       body: "# Found it\n\nThe parser trusts its input.",
     });
     expect(reported.status).toBe(201);
     expect(restRunSchema.parse(await reported.json()).reports).toHaveLength(1);
-    const silent = await asAgent(aliceToken, "POST", `${REST_ROUTES.runs}/${run.id}/reports`, {
+    const silent = await asAgent(aliceToken, "POST", `${IN}/runs/${run.id}/reports`, {
       body: "  \n",
     });
     expect(silent.status).toBe(400);
-    const handed = await asAgent(aliceToken, "POST", `${REST_ROUTES.runs}/${run.id}/artifacts`, {
+    const handed = await asAgent(aliceToken, "POST", `${IN}/runs/${run.id}/artifacts`, {
       url: "https://github.com/acme/app/pull/3",
       label: "the fix",
     });
@@ -150,14 +152,14 @@ describe("runs", () => {
       url: "https://github.com/acme/app/pull/3",
       label: "the fix",
     });
-    const insecure = await asAgent(aliceToken, "POST", `${REST_ROUTES.runs}/${run.id}/artifacts`, {
+    const insecure = await asAgent(aliceToken, "POST", `${IN}/runs/${run.id}/artifacts`, {
       url: "http://insecure.test/x",
     });
     expect(insecure.status).toBe(400);
     expect(await errorOf(insecure)).toBe("request.invalid");
 
     // It asks: the decision is about the run's task, and the run waits.
-    const asked = await asAgent(aliceToken, "POST", REST_ROUTES.decisions, {
+    const asked = await asAgent(aliceToken, "POST", `${IN}/decisions`, {
       question: "Keep the old behaviour?",
       body: "Both are defensible.",
       options: [{ label: "Keep it" }, { label: "Change it" }],
@@ -176,17 +178,13 @@ describe("runs", () => {
     // A read that waits comes back when the server's while is over, the decision still waiting,
     // and at once when a person answers on the board meanwhile.
     const began = Date.now();
-    const stillWaiting = await asAgent(
-      aliceToken,
-      "GET",
-      `${REST_ROUTES.decisions}/${decision.id}?wait=30`,
-    );
+    const stillWaiting = await asAgent(aliceToken, "GET", `${IN}/decisions/${decision.id}?wait=30`);
     expect(stillWaiting.status).toBe(200);
     expect(restDecisionSchema.parse(await stillWaiting.json()).answer).toBeNull();
     expect(Date.now() - began).toBeGreaterThanOrEqual(300);
-    const pending = asAgent(aliceToken, "GET", `${REST_ROUTES.decisions}/${decision.id}?wait=30`);
+    const pending = asAgent(aliceToken, "GET", `${IN}/decisions/${decision.id}?wait=30`);
     await new Promise((resolve) => setTimeout(resolve, 100));
-    const answered = await asPerson(bob, "POST", `${REST_ROUTES.decisions}/${decision.id}/answer`, {
+    const answered = await asPerson(bob, "POST", `${IN}/decisions/${decision.id}/answer`, {
       option: "2",
       note: "Change it, carefully.",
     });
@@ -195,12 +193,12 @@ describe("runs", () => {
     expect(outcome.answer).toMatchObject({ option: "2", note: "Change it, carefully." });
     expect(outcome.answer?.by.login).toBe("bob");
     expect(await readRun(run.id)).toMatchObject({ status: "running", waitingFor: null });
-    expect(
-      (await asAgent(aliceToken, "GET", `${REST_ROUTES.decisions}/${decision.id}?wait=x`)).status,
-    ).toBe(400);
+    expect((await asAgent(aliceToken, "GET", `${IN}/decisions/${decision.id}?wait=x`)).status).toBe(
+      400,
+    );
 
     // It finishes: the task goes up for review, and the run takes nothing more.
-    const finished = await asAgent(aliceToken, "POST", `${REST_ROUTES.runs}/${run.id}/end`, {
+    const finished = await asAgent(aliceToken, "POST", `${IN}/runs/${run.id}/end`, {
       status: "finished",
       summary: "Done: the parser refuses empty input.",
     });
@@ -211,22 +209,22 @@ describe("runs", () => {
       endedAt: expect.any(String),
     });
     expect(await readTask(task.id)).toMatchObject({ state: "in_review", openRuns: 0 });
-    const late = await asAgent(aliceToken, "POST", `${REST_ROUTES.runs}/${run.id}/reports`, {
+    const late = await asAgent(aliceToken, "POST", `${IN}/runs/${run.id}/reports`, {
       body: "late",
     });
     expect(late.status).toBe(409);
     expect(await errorOf(late)).toBe("run.over");
     const onTask = restRunsSchema.parse(
-      await (await asAgent(aliceToken, "GET", `${REST_ROUTES.runs}?task=${task.id}`)).json(),
+      await (await asAgent(aliceToken, "GET", `${IN}/runs?task=${task.id}`)).json(),
     );
     expect(onTask.items.map((item) => item.id)).toEqual([run.id]);
 
-    // The board was told of all of it: as Alice, as the agent.
+    // The board was told of all of it: as Alice, through the agent; and the task's history
+    // says so for what the run did to the task itself.
     const events = restEventsSchema.parse(
-      await (await asPerson(bob, "GET", `${REST_ROUTES.events}?after=0`)).json(),
+      await (await asPerson(bob, "GET", `${IN}/events?run=${run.id}`)).json(),
     );
-    const ofRun = events.items.filter((event) => event.runId === run.id);
-    expect(ofRun.map((event) => event.kind)).toEqual([
+    expect(events.items.map((event) => event.kind)).toEqual([
       "run.started",
       "run.reported",
       "run.handed_in",
@@ -234,15 +232,35 @@ describe("runs", () => {
       "decision.answered",
       "run.ended",
     ]);
-    expect(ofRun.find((event) => event.kind === "run.reported")?.data).toMatchObject({
+    expect(events.items.find((event) => event.kind === "run.reported")?.data).toMatchObject({
       agent: "Claude Code on the laptop",
       excerpt: "Found it",
     });
     expect(
-      ofRun
-        .filter((event) => event.kind.startsWith("run."))
-        .every((event) => event.actor?.login === "Alice"),
+      events.items
+        .filter((event) => event.kind !== "decision.answered")
+        .every(
+          (event) => event.actor?.login === "Alice" && event.agent === "Claude Code on the laptop",
+        ),
     ).toBe(true);
+    expect(events.items.find((event) => event.kind === "decision.answered")).toMatchObject({
+      agent: null,
+    });
+    const history = restEventsSchema.parse(
+      await (await asPerson(bob, "GET", `${IN}/events?task=${task.id}`)).json(),
+    );
+    expect(history.items.map((event) => [event.kind, event.agent])).toEqual([
+      ["task.created", null],
+      ["run.started", "Claude Code on the laptop"],
+      ["task.moved", "Claude Code on the laptop"],
+      ["task.updated", "Claude Code on the laptop"],
+      ["run.reported", "Claude Code on the laptop"],
+      ["run.handed_in", "Claude Code on the laptop"],
+      ["decision.raised", "Claude Code on the laptop"],
+      ["decision.answered", null],
+      ["run.ended", "Claude Code on the laptop"],
+      ["task.moved", "Claude Code on the laptop"],
+    ]);
   });
 
   it("are listed by task, open or over, and as one's own: a person's, or those begun with one token", async () => {
@@ -253,79 +271,93 @@ describe("runs", () => {
     const theirs = await startRun(codex, other.id);
     const list = async (token: string, query: string) =>
       restRunsSchema
-        .parse(await (await asAgent(token, "GET", `${REST_ROUTES.runs}${query}`)).json())
+        .parse(await (await asAgent(token, "GET", `${IN}/runs${query}`)).json())
         .items.map((item) => item.id);
     expect(await list(aliceToken, "?open=true&mine=true")).toEqual([mine.id]);
     expect(await list(codex, "?open=true&mine=true")).toEqual([theirs.id]);
     // On a session, one's own runs are all those for the person.
     const ofAlice = restRunsSchema.parse(
-      await (await asPerson(alice, "GET", `${REST_ROUTES.runs}?mine=true&open=true`)).json(),
+      await (await asPerson(alice, "GET", `${IN}/runs?mine=true&open=true`)).json(),
     );
     expect(ofAlice.items.map((item) => item.id).sort()).toEqual([mine.id, theirs.id].sort());
     expect(
-      restRunsSchema.parse(
-        await (await asPerson(bob, "GET", `${REST_ROUTES.runs}?mine=true`)).json(),
-      ).items,
+      restRunsSchema.parse(await (await asPerson(bob, "GET", `${IN}/runs?mine=true`)).json()).items,
     ).toEqual([]);
-    const failed = await asAgent(codex, "POST", `${REST_ROUTES.runs}/${theirs.id}/end`, {
+    const failed = await asAgent(codex, "POST", `${IN}/runs/${theirs.id}/end`, {
       status: "failed",
       summary: "Could not.",
     });
     expect(failed.status).toBe(200);
     expect(await list(codex, "?open=true&mine=true")).toEqual([]);
     expect(await list(codex, "?open=false&mine=true")).toEqual([theirs.id]);
-    expect((await asAgent(codex, "GET", `${REST_ROUTES.runs}?open=maybe`)).status).toBe(400);
+    expect((await asAgent(codex, "GET", `${IN}/runs?open=maybe`)).status).toBe(400);
     expect(
-      (
-        await asAgent(aliceToken, "POST", `${REST_ROUTES.runs}/${mine.id}/end`, {
-          status: "abandoned",
-        })
-      ).status,
+      (await asAgent(aliceToken, "POST", `${IN}/runs/${mine.id}/end`, { status: "abandoned" }))
+        .status,
     ).toBe(200);
   });
 
-  it("keep a run to its agent, refuse a closed task and a decision from another's run, and let a person give up on one", async () => {
+  it("keep a run to its agent and its project, refuse a closed task and a decision from another's run, and let a person give up on one", async () => {
     const bobToken = await tokenFor(h, bob, "Bob's agent");
     const task = await writeTask(alice, { title: "Write the changelog" });
     const run = await startRun(aliceToken, task.id);
-    const notYours = await asAgent(bobToken, "POST", `${REST_ROUTES.runs}/${run.id}/reports`, {
+    const notYours = await asAgent(bobToken, "POST", `${IN}/runs/${run.id}/reports`, {
       body: "mine?",
     });
     expect(notYours.status).toBe(403);
     expect(await errorOf(notYours)).toBe("run.not_yours");
-    const notYourAsk = await asAgent(bobToken, "POST", REST_ROUTES.decisions, {
+    const notYourAsk = await asAgent(bobToken, "POST", `${IN}/decisions`, {
       question: "May I?",
       options: [{ label: "a" }, { label: "b" }],
       runId: run.id,
     });
     expect(notYourAsk.status).toBe(400);
     expect(await errorOf(notYourAsk)).toBe("decision.invalid_run");
-    // Reading is everyone's.
-    expect((await asAgent(bobToken, "GET", `${REST_ROUTES.runs}/${run.id}`)).status).toBe(200);
+    // Reading is everyone's in the project; another project does not find the run at all.
+    expect((await asAgent(bobToken, "GET", `${IN}/runs/${run.id}`)).status).toBe(200);
+    await h.project(alice, { key: "docs", name: "The docs", visibility: "workspace" });
+    expect((await asAgent(bobToken, "GET", `${projectPath("docs")}/runs/${run.id}`)).status).toBe(
+      404,
+    );
+    const elsewhere = await asAgent(
+      aliceToken,
+      "POST",
+      `${projectPath("docs")}/runs/${run.id}/reports`,
+      {
+        body: "from the wrong project",
+      },
+    );
+    expect(elsewhere.status).toBe(404);
+    expect(await errorOf(elsewhere)).toBe("run.not_found");
+    // A task of one project cannot be taken from another.
+    const crossed = await asAgent(aliceToken, "POST", `${projectPath("docs")}/runs`, {
+      taskId: task.id,
+    });
+    expect(crossed.status).toBe(404);
+    expect(await errorOf(crossed)).toBe("run.task_not_found");
 
     const closed = await writeTask(alice, { title: "Old news", state: "done" });
-    const refused = await asAgent(aliceToken, "POST", REST_ROUTES.runs, { taskId: closed.id });
+    const refused = await asAgent(aliceToken, "POST", `${IN}/runs`, { taskId: closed.id });
     expect(refused.status).toBe(409);
     expect(await errorOf(refused)).toBe("run.task_closed");
-    const nowhere = await asAgent(aliceToken, "POST", REST_ROUTES.runs, {
+    const nowhere = await asAgent(aliceToken, "POST", `${IN}/runs`, {
       taskId: "0199c4d8-0000-7000-8000-000000000099",
     });
     expect(nowhere.status).toBe(404);
     expect(await errorOf(nowhere)).toBe("run.task_not_found");
-    const tooLong = await asAgent(aliceToken, "POST", REST_ROUTES.runs, {
+    const tooLong = await asAgent(aliceToken, "POST", `${IN}/runs`, {
       taskId: task.id,
       agent: "x".repeat(500),
     });
     expect(tooLong.status).toBe(400);
     expect(
-      (await asAgent(aliceToken, "POST", `${REST_ROUTES.runs}/not-a-run/reports`, { body: "x" }))
-        .status,
+      (await asAgent(aliceToken, "POST", `${IN}/runs/not-a-run/reports`, { body: "x" })).status,
     ).toBe(404);
 
-    // A person gives up on a run that will not come back: the one it is for, or an administrator
-    // on the console's own pages; an agent, with a token, never on another's.
+    // A person gives up on a run that will not come back: the one it is for, or an owner of the
+    // project on the console's own pages; an agent, with a token, never on another's.
     const giveUp = (cookie: string, id: string) =>
-      asPerson(cookie, "POST", `${REST_ROUTES.runs}/${id}/end`, { status: "abandoned" });
+      asPerson(cookie, "POST", `${IN}/runs/${id}/end`, { status: "abandoned" });
     const byBob = await giveUp(bob, run.id);
     expect(byBob.status).toBe(403);
     expect(await errorOf(byBob)).toBe("run.not_yours");
@@ -337,7 +369,14 @@ describe("runs", () => {
     });
     expect((await giveUp(alice, run.id)).status).toBe(409);
     expect((await readTask(task.id)).state).toBe("in_progress");
+    // Giving up is the person's own doing, not an agent's: the event names no agent.
+    const ended = restEventsSchema
+      .parse(await (await asPerson(bob, "GET", `${IN}/events?run=${run.id}`)).json())
+      .items.find((event) => event.kind === "run.ended");
+    expect(ended).toMatchObject({ agent: null, data: { status: "abandoned" } });
+    expect(ended?.actor?.login).toBe("Alice");
 
+    // An administrator owns every project, and so may give up on anyone's run there, signed in.
     const named = createHarness(testDatabase, {
       providers: [createFixtureProvider()],
       admins: ["carol"],
@@ -345,11 +384,11 @@ describe("runs", () => {
     const carol = await named.signIn("carol");
     const carolToken = await tokenFor(named, carol, "Carol's agent");
     const second = await startRun(aliceToken, task.id);
-    const byAdminToken = await asAgent(carolToken, "POST", `${REST_ROUTES.runs}/${second.id}/end`, {
+    const byAdminToken = await asAgent(carolToken, "POST", `${IN}/runs/${second.id}/end`, {
       status: "abandoned",
     });
     expect(byAdminToken.status).toBe(403);
-    const byAdmin = await named.request(`${REST_ROUTES.runs}/${second.id}/end`, {
+    const byAdmin = await named.request(`${IN}/runs/${second.id}/end`, {
       method: "POST",
       headers: { cookie: carol, origin: SIGN_IN_URL, ...JSON_HEADERS },
       body: JSON.stringify({ status: "abandoned" }),
@@ -358,7 +397,7 @@ describe("runs", () => {
     await named.close();
   });
 
-  it("carry files handed in, which the console keeps and whoever may see the board reads back", async () => {
+  it("carry files handed in, which the console keeps and whoever may see the project reads back", async () => {
     const task = await writeTask(alice, { title: "Write the report" });
     const run = await startRun(aliceToken, task.id);
     const content = '# The report\n\nAll of it, <with> "quotes".\n';
@@ -369,6 +408,7 @@ describe("runs", () => {
       runId: string,
       file: { name: string; type?: string; bytes?: Uint8Array } | undefined,
       label?: string,
+      at = IN,
     ) => {
       const form = new FormData();
       if (file !== undefined) {
@@ -381,7 +421,7 @@ describe("runs", () => {
       if (label !== undefined) {
         form.set("label", label);
       }
-      return h.request(`${REST_ROUTES.runs}/${runId}/files`, {
+      return h.request(`${at}/runs/${runId}/files`, {
         method: "POST",
         headers: { authorization: `Bearer ${token}` },
         body: form,
@@ -410,9 +450,9 @@ describe("runs", () => {
     });
     const id = artifact?.id ?? "";
 
-    // Read back by the agent and by any person of the board, as it was, shown in place for a
-    // kind a browser may show, and never sniffed.
-    const byAgent = await asAgent(aliceToken, "GET", `${REST_ROUTES.files}/${id}`);
+    // Read back by the agent and by any person of the project, as it was, shown in place for a
+    // kind a browser may show, and never sniffed; and not through another project.
+    const byAgent = await asAgent(aliceToken, "GET", `${IN}/files/${id}`);
     expect(byAgent.status).toBe(200);
     expect(await byAgent.text()).toBe(content);
     expect(byAgent.headers.get("content-type")).toBe("text/markdown; charset=utf-8");
@@ -423,10 +463,13 @@ describe("runs", () => {
     expect(byAgent.headers.get("x-content-type-options")).toBe("nosniff");
     expect(byAgent.headers.get("content-security-policy")).toContain("sandbox");
     expect(byAgent.headers.get("cache-control")).toBe("no-store");
-    const byPerson = await h.request(`${REST_ROUTES.files}/${id}`, { headers: { cookie: bob } });
+    const byPerson = await h.request(`${IN}/files/${id}`, { headers: { cookie: bob } });
     expect(byPerson.status).toBe(200);
     expect(await byPerson.text()).toBe(content);
-    expect((await h.request(`${REST_ROUTES.files}/${id}`)).status).toBe(401);
+    expect((await h.request(`${IN}/files/${id}`)).status).toBe(401);
+    expect((await asAgent(aliceToken, "GET", `${projectPath("docs")}/files/${id}`)).status).toBe(
+      404,
+    );
 
     // A kind a browser might run is handed over as bytes, to be saved; the same bytes handed in
     // again are kept once; a file without a label is called by its name on the board.
@@ -434,7 +477,7 @@ describe("runs", () => {
     expect(page.status).toBe(201);
     const [, html] = restRunSchema.parse(await page.json()).artifacts;
     expect(html?.file).toMatchObject({ contentType: "text/html", sha256 });
-    const asBytes = await asAgent(aliceToken, "GET", `${REST_ROUTES.files}/${html?.id ?? ""}`);
+    const asBytes = await asAgent(aliceToken, "GET", `${IN}/files/${html?.id ?? ""}`);
     expect(asBytes.headers.get("content-type")).toBe("application/octet-stream");
     expect(asBytes.headers.get("content-disposition")).toMatch(
       /^attachment; filename="page\.html"/,
@@ -449,16 +492,16 @@ describe("runs", () => {
       size: 4,
     });
     const events = restEventsSchema.parse(
-      await (await asPerson(bob, "GET", `${REST_ROUTES.events}?after=0`)).json(),
+      await (await asPerson(bob, "GET", `${IN}/events?run=${run.id}`)).json(),
     );
     expect(
       events.items
-        .filter((event) => event.runId === run.id && event.kind === "run.handed_in")
+        .filter((event) => event.kind === "run.handed_in")
         .map((event) => event.data.label),
     ).toEqual(["the report", "page.html", "data.bin"]);
 
     // What is refused: no file, an empty one, a name that is a path, one over the limit, a file
-    // on another's run, and a read of what is not a file.
+    // on another's run, a file on a run of another project, and a read of what is not a file.
     const noFile = await upload(aliceToken, run.id, undefined, "nothing");
     expect(noFile.status).toBe(400);
     expect(await errorOf(noFile)).toBe("request.invalid");
@@ -477,22 +520,24 @@ describe("runs", () => {
     const notYours = await upload(bobToken, run.id, { name: "mine.md" });
     expect(notYours.status).toBe(403);
     expect(await errorOf(notYours)).toBe("run.not_yours");
-    const link = await asAgent(aliceToken, "POST", `${REST_ROUTES.runs}/${run.id}/artifacts`, {
+    const crossed = await upload(
+      aliceToken,
+      run.id,
+      { name: "mine.md" },
+      undefined,
+      projectPath("docs"),
+    );
+    expect(crossed.status).toBe(404);
+    const link = await asAgent(aliceToken, "POST", `${IN}/runs/${run.id}/artifacts`, {
       url: "https://github.com/acme/app/pull/4",
     });
     const linkId = restRunSchema.parse(await link.json()).artifacts.at(-1)?.id ?? "";
-    expect((await asAgent(aliceToken, "GET", `${REST_ROUTES.files}/${linkId}`)).status).toBe(404);
+    expect((await asAgent(aliceToken, "GET", `${IN}/files/${linkId}`)).status).toBe(404);
     expect(
-      (
-        await asAgent(
-          aliceToken,
-          "GET",
-          `${REST_ROUTES.files}/0199c4d8-0000-7000-8000-0000000000ff`,
-        )
-      ).status,
+      (await asAgent(aliceToken, "GET", `${IN}/files/0199c4d8-0000-7000-8000-0000000000ff`)).status,
     ).toBe(404);
-    expect((await asAgent(aliceToken, "GET", `${REST_ROUTES.files}/not-an-id`)).status).toBe(404);
-    const ended = await asAgent(aliceToken, "POST", `${REST_ROUTES.runs}/${run.id}/end`, {
+    expect((await asAgent(aliceToken, "GET", `${IN}/files/not-an-id`)).status).toBe(404);
+    const ended = await asAgent(aliceToken, "POST", `${IN}/runs/${run.id}/end`, {
       status: "finished",
     });
     expect(ended.status).toBe(200);

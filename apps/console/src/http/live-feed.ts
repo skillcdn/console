@@ -1,5 +1,5 @@
 import type { Database } from "../db/client.js";
-import { type EventRecord, listEventsAfter } from "../db/queries/events.js";
+import { type EventRecord, type EventScope, listEventsAfter } from "../db/queries/events.js";
 
 // The feed as it happens: every subscriber holds a cursor, the number of the last event it was
 // sent, and is woken to ask for what is after it whenever any process changes the board
@@ -12,7 +12,6 @@ export type FeedMessage =
 
 export interface LiveFeedOptions {
   readonly database: Database;
-  readonly workspaceId: () => Promise<string>;
   /** How many events one wake-up sends at most before the next; the rest follow at once. */
   readonly pageLimit: number;
   /** How long a subscriber waits in silence before a heartbeat. */
@@ -25,17 +24,19 @@ function sleep(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-/** One subscriber: a cursor, and the way to wake it. */
+/** One subscriber: a cursor, the scope of the feed it reads, and the way to wake it. */
 export class Subscription implements AsyncIterable<FeedMessage> {
   #cursor: number;
   #wake: (() => void) | undefined;
   #pending = false;
   #ended = false;
+  readonly #scope: EventScope;
   readonly #options: LiveFeedOptions;
   readonly #onEnd: () => void;
 
-  constructor(after: number, options: LiveFeedOptions, onEnd: () => void) {
+  constructor(after: number, scope: EventScope, options: LiveFeedOptions, onEnd: () => void) {
     this.#cursor = after;
+    this.#scope = scope;
     this.#options = options;
     this.#onEnd = onEnd;
   }
@@ -61,7 +62,7 @@ export class Subscription implements AsyncIterable<FeedMessage> {
   }
 
   async *[Symbol.asyncIterator](): AsyncGenerator<FeedMessage, void, undefined> {
-    const { database, workspaceId, pageLimit, heartbeatMs, pollMs } = this.#options;
+    const { database, pageLimit, heartbeatMs, pollMs } = this.#options;
     let lastAsked = Date.now();
     let lastSent = Date.now();
     this.#pending = true;
@@ -72,12 +73,7 @@ export class Subscription implements AsyncIterable<FeedMessage> {
           lastAsked = Date.now();
           let more = true;
           while (more && !this.#ended) {
-            const page = await listEventsAfter(
-              database,
-              await workspaceId(),
-              this.#cursor,
-              pageLimit,
-            );
+            const page = await listEventsAfter(database, this.#scope, this.#cursor, pageLimit);
             more = page.more;
             if (page.items.length > 0) {
               this.#cursor = page.items[page.items.length - 1]?.id ?? this.#cursor;
@@ -151,9 +147,9 @@ export class LiveFeed {
     }
   }
 
-  /** A subscription from event number `after` on; ended at once when the feed is closed. */
-  subscribe(after: number): Subscription {
-    const subscription = new Subscription(after, this.#options, () => {
+  /** A subscription to one scope of the feed from event number `after` on; ended at once when the feed is closed. */
+  subscribe(after: number, scope: EventScope): Subscription {
+    const subscription = new Subscription(after, scope, this.#options, () => {
       this.#subscriptions.delete(subscription);
     });
     if (this.#closed) {

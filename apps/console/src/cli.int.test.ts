@@ -1,4 +1,5 @@
 import {
+  projectPath,
   REST_ROUTES,
   restRunSchema,
   restTaskSchema,
@@ -11,13 +12,16 @@ import { createFixtureProvider } from "./testing/fixture-provider.js";
 import { createHarness, type Harness, SIGN_IN_URL } from "./testing/harness.js";
 
 // The command line against the app, through its `fetch` and no socket: an agent working a task
-// as its person, from taking it to finishing it, with a person answering on the board meanwhile.
+// as its person, in the project the environment or the directory names, from taking it to
+// finishing it, with a person answering on the board meanwhile.
 
 let testDatabase: TestDatabase;
 let h: Harness;
 let alice: string;
 let bob: string;
 let aliceToken: string;
+/** The project the tests work in, under its key. */
+const IN = projectPath("web");
 
 const JSON_HEADERS = { origin: SIGN_IN_URL, "content-type": "application/json" };
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -33,6 +37,7 @@ beforeAll(async () => {
   alice = await h.signIn("alice");
   bob = await h.signIn("bob");
   aliceToken = await tokenFor(alice, "Claude Code on the laptop");
+  await h.project(alice, { key: "web", name: "The web app", visibility: "workspace" });
 });
 
 afterAll(async () => {
@@ -51,7 +56,7 @@ async function tokenFor(cookie: string, name: string): Promise<string> {
 }
 
 async function writeTask(cookie: string, body: unknown) {
-  const written = await h.request(REST_ROUTES.tasks, {
+  const written = await h.request(`${IN}/tasks`, {
     method: "POST",
     headers: { cookie, ...JSON_HEADERS },
     body: JSON.stringify(body),
@@ -62,19 +67,44 @@ async function writeTask(cookie: string, body: unknown) {
 
 const readTask = async (cookie: string, id: string) =>
   restTaskSchema.parse(
-    await (await h.request(`${REST_ROUTES.tasks}/${id}`, { headers: { cookie } })).json(),
+    await (await h.request(`${IN}/tasks/${id}`, { headers: { cookie } })).json(),
   );
 const readRun = async (cookie: string, id: string) =>
-  restRunSchema.parse(
-    await (await h.request(`${REST_ROUTES.runs}/${id}`, { headers: { cookie } })).json(),
-  );
+  restRunSchema.parse(await (await h.request(`${IN}/runs/${id}`, { headers: { cookie } })).json());
 
-/** Runs the command as the holder of `token`, against the app. */
-async function console_(args: readonly string[], token = aliceToken) {
+/** What the working directory says of the project, kept in memory. */
+function memoryDirectory(initial?: { project: string }) {
+  let kept = initial;
+  return {
+    store: {
+      load: async () => kept,
+      save: async (settings: { project: string }) => {
+        kept = settings;
+        return "/work/app/.skillcdn-console.json";
+      },
+    },
+    kept: () => kept,
+  };
+}
+
+/** Runs the command as the holder of `token`, against the app, in the project the environment names. */
+async function console_(
+  args: readonly string[],
+  token = aliceToken,
+  options: {
+    readonly project?: string | undefined;
+    readonly directory?: ReturnType<typeof memoryDirectory>;
+  } = {},
+) {
   const out: string[] = [];
   const err: string[] = [];
+  const project = "project" in options ? options.project : "web";
   const io: CliIo = {
-    env: { CONSOLE_URL: SIGN_IN_URL, CONSOLE_TOKEN: token },
+    env: {
+      CONSOLE_URL: SIGN_IN_URL,
+      CONSOLE_TOKEN: token,
+      ...(project === undefined ? {} : { CONSOLE_PROJECT: project }),
+    },
     stdout: (text) => {
       out.push(text);
     },
@@ -96,6 +126,7 @@ async function console_(args: readonly string[], token = aliceToken) {
       save: async () => "nowhere",
       clear: async () => undefined,
     },
+    directory: (options.directory ?? memoryDirectory()).store,
     sleep,
     now: () => Date.now(),
   };
@@ -151,11 +182,11 @@ describe("the command line", () => {
       label: "the report",
       file: { name: "report.md", contentType: "text/markdown" },
     });
-    const bytes = await h.request(`${REST_ROUTES.files}/${kept?.id ?? ""}`, {
-      headers: { cookie: bob },
-    });
+    const bytes = await h.request(`${IN}/files/${kept?.id ?? ""}`, { headers: { cookie: bob } });
     expect(bytes.status).toBe(200);
     expect(await bytes.text()).toBe("# The report\n\nAll of it.\n");
+    const shown = await console_(["run", runId]);
+    expect(shown.out).toContain(`read at ${SIGN_IN_URL}${IN}/files/${kept?.id ?? ""}`);
 
     // Asking, and nobody answering in time: the run waits, and the command says so and exits 3.
     const asked = await console_([
@@ -177,7 +208,7 @@ describe("the command line", () => {
     // A person answers on the board while the command waits: it learns the answer at once.
     const waiting = console_(["decision", decisionId, "--wait", "10"]);
     await sleep(150);
-    const answered = await h.request(`${REST_ROUTES.decisions}/${decisionId}/answer`, {
+    const answered = await h.request(`${IN}/decisions/${decisionId}/answer`, {
       method: "POST",
       headers: { cookie: bob, ...JSON_HEADERS },
       body: JSON.stringify({ option: "2", note: "Change it, carefully." }),
@@ -187,9 +218,9 @@ describe("the command line", () => {
     expect(outcome.code, outcome.err).toBe(EXIT.ok);
     expect(outcome.out).toContain("Answered: 2) Change it, by bob");
     expect(outcome.out).toContain("Note: Change it, carefully.");
-    const shown = await console_(["task", String(task.number)]);
-    expect(shown.out).toContain("answered 2");
-    expect(shown.out).toContain(`${runId}  running  Claude Code on the laptop for Alice`);
+    const taskShown = await console_(["task", String(task.number)]);
+    expect(taskShown.out).toContain("answered 2");
+    expect(taskShown.out).toContain(`${runId}  running  Claude Code on the laptop for Alice`);
 
     // Finishing: the task goes up for review, and there is no open run to report on any more.
     const finished = await console_([
@@ -214,6 +245,33 @@ describe("the command line", () => {
     expect(mine.out).toContain(`task #${task.number}`);
   });
 
+  it("works in the project the directory names, lists the projects, and refuses one it may not see", async () => {
+    const none = await console_(["tasks"], aliceToken, { project: undefined });
+    expect(none.code).toBe(EXIT.failed);
+    expect(none.err).toContain("console use <key>");
+    const directory = memoryDirectory();
+    const used = await console_(["use", "web"], aliceToken, { project: undefined, directory });
+    expect(used.code, used.err).toBe(EXIT.ok);
+    expect(used.out).toContain("Working in The web app (web)");
+    expect(directory.kept()).toEqual({ project: "web" });
+    const fromDirectory = await console_(["tasks", "--state", "idea"], aliceToken, {
+      project: undefined,
+      directory,
+    });
+    expect(fromDirectory.code, fromDirectory.err).toBe(EXIT.ok);
+    const listed = await console_(["projects"]);
+    expect(listed.out).toContain("web  The web app  (owner");
+    // A private project Bob made is not Alice's to see: not found, as if it were not there.
+    await h.project(bob, { key: "secret", name: "Bob's own" });
+    const hidden = await console_(["tasks", "--project", "secret"]);
+    expect(hidden.code).toBe(EXIT.failed);
+    expect(hidden.err).toContain("project.not_found");
+    expect(hidden.err).toContain("console projects");
+    expect((await console_(["projects"])).out).not.toContain("secret");
+    const who = await console_(["whoami"]);
+    expect(who.out).toBe(`Alice (member) at Acme, ${SIGN_IN_URL}; project web\n`);
+  });
+
   it("keeps an agent to its person's runs, and says when a token is nothing", async () => {
     const nobody = await console_(["tasks"], "cns_t_nonsense");
     expect(nobody.code).toBe(EXIT.failed);
@@ -230,6 +288,6 @@ describe("the command line", () => {
     const theirs = await console_(["runs", "--open", "--mine"], bobToken);
     expect(theirs.out).toBe("No runs.\n");
     const whoami = await console_(["whoami"], bobToken);
-    expect(whoami.out).toBe(`bob (member) at Acme, ${SIGN_IN_URL}\n`);
+    expect(whoami.out).toBe(`bob (member) at Acme, ${SIGN_IN_URL}; project web\n`);
   });
 });

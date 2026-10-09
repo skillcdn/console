@@ -1,5 +1,11 @@
-import { restPath } from "../routes.js";
-import type { RestArtifact, RestDecision, RestRun, RestSkills, RestTask } from "../schemas.js";
+import type {
+  RestArtifact,
+  RestDecision,
+  RestProject,
+  RestRun,
+  RestSkills,
+  RestTask,
+} from "../schemas.js";
 
 // What the command prints: one line per thing in a list, a few lines for one thing in full.
 // Plain text, for an agent to read and a person to skim; ids are given, since the commands take
@@ -18,6 +24,18 @@ const asker = (decision: RestDecision): string =>
   decision.run === null
     ? decision.raisedBy.login
     : `${decision.run.agent} for ${decision.raisedBy.login}`;
+
+/** One project: its key, its name, what the person is in it, and what waits in it. */
+export function formatProjectLine(project: RestProject): string {
+  const notes: string[] = [project.role];
+  if (project.openDecisions > 0) {
+    notes.push(`${plural(project.openDecisions, "decision")} waiting`);
+  }
+  if (project.openRuns > 0) {
+    notes.push(`${plural(project.openRuns, "agent")} at work`);
+  }
+  return `${project.key}  ${project.name}  (${notes.join("; ")})`;
+}
 
 export function formatTaskLine(task: RestTask): string {
   const notes = [`owner ${task.owner.login}`];
@@ -76,7 +94,8 @@ export function formatRunLine(run: RestRun): string {
   return `${run.id}  ${run.status}  ${run.agent} for ${run.person.login}  task #${run.taskNumber}  (${notes.join(", ")})`;
 }
 
-export function formatRun(run: RestRun): string {
+/** One run in full; with where each file handed in is read, when the caller knows. */
+export function formatRun(run: RestRun, fileUrl?: (artifactId: string) => string): string {
   const lines = [
     formatRunLine(run),
     `started: ${run.startedAt}${run.endedAt === null ? "" : `  ended: ${run.endedAt}`}`,
@@ -93,18 +112,21 @@ export function formatRun(run: RestRun): string {
   if (run.artifacts.length > 0) {
     lines.push("", "artifacts:");
     for (const artifact of run.artifacts) {
-      lines.push(`  ${formatArtifact(artifact)}`);
+      lines.push(`  ${formatArtifact(artifact, fileUrl)}`);
     }
   }
   return lines.join("\n");
 }
 
 /** What was handed in: the link, or the file with its size and where its bytes are read. */
-export function formatArtifact(artifact: RestArtifact): string {
+export function formatArtifact(
+  artifact: RestArtifact,
+  fileUrl?: (artifactId: string) => string,
+): string {
   const what =
     artifact.file === null
       ? (artifact.url ?? "")
-      : `${artifact.file.name} (${artifact.file.size} bytes, ${artifact.file.contentType}; read at ${restPath("files", artifact.id)})`;
+      : `${artifact.file.name} (${artifact.file.size} bytes, ${artifact.file.contentType}${fileUrl === undefined ? "" : `; read at ${fileUrl(artifact.id)}`})`;
   return artifact.label === null ? what : `${artifact.label}: ${what}`;
 }
 
@@ -118,7 +140,7 @@ const SKILLS_WORDS: Readonly<Record<Exclude<RestSkills["status"], "none" | "read
 /** The organization's skills: where they are, and each with what an agent loads it by. */
 export function formatSkills(skills: RestSkills): string {
   if (skills.status === "none" || skills.address === null) {
-    return "No skills address is configured on this console.";
+    return "No skills address: neither this project nor the console names one.";
   }
   const head = `skills at ${skills.address}, served by ${skills.source}: ${skills.status}`;
   if (skills.status !== "ready") {

@@ -9,6 +9,20 @@ const PERSON = {
   role: "member",
 };
 
+const PROJECT = {
+  id: "0199c4d8-0000-7000-8000-000000000050",
+  key: "web",
+  name: "The web app",
+  description: "",
+  visibility: "private",
+  skillsAddress: null,
+  role: "owner",
+  openDecisions: 0,
+  openRuns: 0,
+  createdAt: "2026-10-09T10:00:00.000Z",
+  updatedAt: "2026-10-09T10:00:00.000Z",
+};
+
 /** A fetch that answers from a table of routes and remembers what it was sent. */
 function fakeFetch(answers: Record<string, { status?: number; body?: unknown }>) {
   const calls: { url: string; init: RequestInit | undefined }[] = [];
@@ -47,7 +61,7 @@ describe("createClient", () => {
     expect(calls[0]?.init?.credentials).toBe("same-origin");
   });
 
-  it("sends what changes as JSON, and names the task in the path", async () => {
+  it("sends what changes as JSON, and names the project and the task in the path", async () => {
     const task = {
       id: "0199c4d8-0000-7000-8000-000000000010",
       number: 1,
@@ -65,10 +79,10 @@ describe("createClient", () => {
       updatedAt: "2026-10-09T10:00:00.000Z",
     };
     const { send, calls } = fakeFetch({
-      [`PATCH /api/v1/tasks/${task.id}`]: { body: { ...task, state: "done" } },
+      [`PATCH /api/v1/projects/web/tasks/${task.id}`]: { body: { ...task, state: "done" } },
     });
     const client = createClient({ fetch: send });
-    const updated = await client.updateTask(task.id, { state: "done" });
+    const updated = await client.project("web").updateTask(task.id, { state: "done" });
     expect(updated.state).toBe("done");
     expect(calls[0]?.init?.body).toBe(JSON.stringify({ state: "done" }));
     expect(new Headers(calls[0]?.init?.headers).get("content-type")).toBe("application/json");
@@ -76,13 +90,13 @@ describe("createClient", () => {
 
   it("turns an error body into an ApiError with its code", async () => {
     const { send } = fakeFetch({
-      "GET /api/v1/tasks?state=done": {
+      "GET /api/v1/projects/web/tasks?state=done": {
         status: 401,
         body: { error: { code: "auth.required", message: "Sign in to continue." } },
       },
     });
     const client = createClient({ fetch: send });
-    await expect(client.tasks({ state: "done" })).rejects.toMatchObject({
+    await expect(client.project("web").tasks({ state: "done" })).rejects.toMatchObject({
       name: "ApiError",
       status: 401,
       code: "auth.required",
@@ -105,9 +119,22 @@ describe("createClient", () => {
     await expect(wrong.me()).rejects.toBeInstanceOf(ApiError);
   });
 
-  it("names where the feed is subscribed to, after a number", () => {
-    const client = createClient({ baseUrl: "https://console.test" });
-    expect(client.eventStreamUrl(42)).toBe("https://console.test/api/v1/events/stream?after=42");
+  it("names where a project's feed is subscribed to, after a number, and narrows a read of it", async () => {
+    const { send, calls } = fakeFetch({
+      "GET https://console.test/api/v1/projects/web/events?after=0&task=0199c4d8-0000-7000-8000-000000000010":
+        { body: { items: [], more: false } },
+      "GET https://console.test/api/v1/events?after=7": { body: { items: [], more: false } },
+    });
+    const client = createClient({ baseUrl: "https://console.test", fetch: send });
+    expect(client.project("web").eventStreamUrl(42)).toBe(
+      "https://console.test/api/v1/projects/web/events/stream?after=42",
+    );
+    await client.project("web").events(0, { task: "0199c4d8-0000-7000-8000-000000000010" });
+    await client.events(7);
+    expect(calls.map((call) => call.url)).toEqual([
+      "https://console.test/api/v1/projects/web/events?after=0&task=0199c4d8-0000-7000-8000-000000000010",
+      "https://console.test/api/v1/events?after=7",
+    ]);
   });
 
   it("lets an abort through as it is", async () => {
@@ -185,10 +212,14 @@ describe("createClient", () => {
       waitingFor: null,
     };
     const { send, calls } = fakeFetch({
-      [`POST https://console.test/api/v1/runs/${run.id}/files`]: { status: 201, body: run },
+      [`POST https://console.test/api/v1/projects/web/runs/${run.id}/files`]: {
+        status: 201,
+        body: run,
+      },
     });
     const client = createClient({ baseUrl: "https://console.test", fetch: send, token: "cns_t_x" });
-    const handed = await client.handInFile(run.id, {
+    const project = client.project("web");
+    const handed = await project.handInFile(run.id, {
       name: "report.md",
       bytes: new TextEncoder().encode("hello"),
       contentType: "text/markdown",
@@ -206,8 +237,8 @@ describe("createClient", () => {
     expect(form.get("label")).toBe("the report");
     // The form names its own type, with the boundary in it; nothing else is said.
     expect(new Headers(calls[0]?.init?.headers).get("content-type")).toBeNull();
-    expect(client.fileUrl(run.artifacts[0]?.id ?? "")).toBe(
-      "https://console.test/api/v1/files/0199c4d8-0000-7000-8000-000000000041",
+    expect(project.fileUrl(run.artifacts[0]?.id ?? "")).toBe(
+      "https://console.test/api/v1/projects/web/files/0199c4d8-0000-7000-8000-000000000041",
     );
   });
 
@@ -218,5 +249,33 @@ describe("createClient", () => {
     const client = createClient({ fetch: send });
     expect((await client.updatePerson(PERSON.id, { role: "admin" })).role).toBe("admin");
     expect(calls[0]?.init?.body).toBe(JSON.stringify({ role: "admin" }));
+  });
+
+  it("lists the projects, makes one, and manages one's settings and members", async () => {
+    const member = { person: PERSON, role: "member", addedAt: "2026-10-09T10:00:00.000Z" };
+    const { send, calls } = fakeFetch({
+      "GET /api/v1/projects": { body: { items: [PROJECT] } },
+      "POST /api/v1/projects": { status: 201, body: PROJECT },
+      "GET /api/v1/projects/web": { body: PROJECT },
+      "PATCH /api/v1/projects/web": { body: { ...PROJECT, name: "Web" } },
+      "GET /api/v1/projects/web/members": { body: { items: [member] } },
+      "POST /api/v1/projects/web/members": { status: 201, body: member },
+      [`PATCH /api/v1/projects/web/members/${PERSON.id}`]: { body: { ...member, role: "owner" } },
+      [`DELETE /api/v1/projects/web/members/${PERSON.id}`]: { status: 204 },
+    });
+    const client = createClient({ fetch: send });
+    expect((await client.projects()).items[0]?.key).toBe("web");
+    expect((await client.createProject({ key: "web", name: "The web app" })).id).toBe(PROJECT.id);
+    const project = client.project("web");
+    expect(project.key).toBe("web");
+    expect((await project.get()).role).toBe("owner");
+    expect((await project.update({ name: "Web" })).name).toBe("Web");
+    expect((await project.members()).items[0]?.person.login).toBe("alice");
+    expect((await project.addMember({ personId: PERSON.id, role: "member" })).role).toBe("member");
+    expect((await project.updateMember(PERSON.id, { role: "owner" })).role).toBe("owner");
+    await project.removeMember(PERSON.id);
+    expect(calls[1]?.init?.body).toBe(JSON.stringify({ key: "web", name: "The web app" }));
+    expect(calls[5]?.init?.body).toBe(JSON.stringify({ personId: PERSON.id, role: "member" }));
+    expect(calls[7]?.init?.method).toBe("DELETE");
   });
 });

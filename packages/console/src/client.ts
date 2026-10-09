@@ -1,4 +1,4 @@
-import { AUTH_ROUTES, REST_ROUTES, restPath } from "./routes.js";
+import { AUTH_ROUTES, projectPath, REST_ROUTES, restPath } from "./routes.js";
 import {
   type RestAnswerInput,
   type RestArtifactInput,
@@ -7,9 +7,17 @@ import {
   type RestDecisions,
   type RestEvents,
   type RestMe,
+  type RestMember,
+  type RestMemberInput,
+  type RestMemberPatch,
+  type RestMembers,
   type RestPeople,
   type RestPerson,
   type RestPersonPatch,
+  type RestProject,
+  type RestProjectInput,
+  type RestProjectPatch,
+  type RestProjects,
   type RestReportInput,
   type RestRun,
   type RestRunEndInput,
@@ -27,9 +35,13 @@ import {
   restDecisionsSchema,
   restErrorSchema,
   restEventsSchema,
+  restMemberSchema,
+  restMembersSchema,
   restMeSchema,
   restPeopleSchema,
   restPersonSchema,
+  restProjectSchema,
+  restProjectsSchema,
   restRunSchema,
   restRunsSchema,
   restSkillsSchema,
@@ -43,7 +55,8 @@ import type { TaskState } from "./vocabulary.js";
 // The client of the console's REST API: what the default console and a custom one talk to the
 // server with, and what the command line, a script or a console of a person's own talks to it
 // with, holding a token of theirs. It takes a `fetch` and a base URL and reads nothing else;
-// every answer is parsed with the schemas the server is tested against.
+// every answer is parsed with the schemas the server is tested against. The board is a
+// project's (ADR-0008): `client.project(key)` is the client of one project.
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -88,11 +101,27 @@ interface Schema<T> {
   readonly safeParse: (data: unknown) => { success: true; data: T } | { success: false };
 }
 
-export interface ConsoleClient {
-  me(signal?: AbortSignal): Promise<RestMe>;
-  people(signal?: AbortSignal): Promise<RestPeople>;
-  /** Changes what a person is; for an administrator. */
-  updatePerson(id: string, patch: RestPersonPatch): Promise<RestPerson>;
+/** What the events of a project are filtered by: those about one task, one run or one decision. */
+export interface EventFilter {
+  readonly task?: string | undefined;
+  readonly run?: string | undefined;
+  readonly decision?: string | undefined;
+}
+
+/** The board of one project, as the asker may see and change it. */
+export interface ProjectClient {
+  /** The key the project is reached by. */
+  readonly key: string;
+  /** The project, with what the asker is in it. */
+  get(signal?: AbortSignal): Promise<RestProject>;
+  /** Changes the project's settings; for an owner. */
+  update(patch: RestProjectPatch): Promise<RestProject>;
+  /** Those listed in the project, by login. */
+  members(signal?: AbortSignal): Promise<RestMembers>;
+  /** Lists a person of the workspace in the project; for an owner. */
+  addMember(input: RestMemberInput): Promise<RestMember>;
+  updateMember(personId: string, patch: RestMemberPatch): Promise<RestMember>;
+  removeMember(personId: string): Promise<void>;
   tasks(filter?: { readonly state?: TaskState }, signal?: AbortSignal): Promise<RestTasks>;
   /** One task, by its id or by its number. */
   task(ref: string, signal?: AbortSignal): Promise<RestTask>;
@@ -129,12 +158,27 @@ export interface ConsoleClient {
   fileUrl(artifactId: string): string;
   /** Ends a run: finished or failed by the agent; abandoned by the person it is for, or an administrator. */
   endRun(runId: string, input: RestRunEndInput): Promise<RestRun>;
-  /** What happened after event number `after`; `0` for the beginning. */
-  events(after: number, signal?: AbortSignal): Promise<RestEvents>;
-  /** Where an `EventSource` subscribes to what happens after event number `after`. */
+  /** What happened in the project after event number `after`; `0` for the beginning. Narrowed by `filter`. */
+  events(after: number, filter?: EventFilter, signal?: AbortSignal): Promise<RestEvents>;
+  /** Where an `EventSource` subscribes to what happens in the project after event number `after`. */
   eventStreamUrl(after: number): string;
-  /** The organization's skills, as SkillCDN serves them at the console's address. */
+  /** The project's skills, as SkillCDN serves them at its address, or the organization's. */
   skills(signal?: AbortSignal): Promise<RestSkills>;
+}
+
+export interface ConsoleClient {
+  me(signal?: AbortSignal): Promise<RestMe>;
+  people(signal?: AbortSignal): Promise<RestPeople>;
+  /** Changes what a person is; for an administrator. */
+  updatePerson(id: string, patch: RestPersonPatch): Promise<RestPerson>;
+  /** The projects the asker may see, with what they are in each. */
+  projects(signal?: AbortSignal): Promise<RestProjects>;
+  /** Makes a project, whose owner the asker becomes. */
+  createProject(input: RestProjectInput): Promise<RestProject>;
+  /** The board of one project. */
+  project(key: string): ProjectClient;
+  /** The workspace's own events, the ones about no project, after event number `after`. */
+  events(after: number, signal?: AbortSignal): Promise<RestEvents>;
   /** The tokens of whoever asks. */
   tokens(signal?: AbortSignal): Promise<RestTokens>;
   /** Makes a token; the answer carries the secret, this once. */
@@ -217,83 +261,121 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
   const flag = (value: boolean | undefined): string | undefined =>
     value === undefined ? undefined : String(value);
 
+  const projectClient = (key: string): ProjectClient => {
+    const at = (collection?: Parameters<typeof projectPath>[1], id?: string) =>
+      projectPath(key, collection, id);
+    return {
+      key,
+      get: (signal) => request("GET", `${base}${at()}`, undefined, restProjectSchema, signal),
+      update: (patch) => request("PATCH", `${base}${at()}`, patch, restProjectSchema),
+      members: (signal) =>
+        request("GET", `${base}${at("members")}`, undefined, restMembersSchema, signal),
+      addMember: (input) => request("POST", `${base}${at("members")}`, input, restMemberSchema),
+      updateMember: (personId, patch) =>
+        request("PATCH", `${base}${at("members", personId)}`, patch, restMemberSchema),
+      removeMember: (personId) =>
+        request("DELETE", `${base}${at("members", personId)}`, undefined, undefined),
+      tasks: (filter = {}, signal) =>
+        request(
+          "GET",
+          withQuery(at("tasks"), { state: filter.state }),
+          undefined,
+          restTasksSchema,
+          signal,
+        ),
+      task: (ref, signal) =>
+        request("GET", `${base}${at("tasks", ref)}`, undefined, restTaskSchema, signal),
+      createTask: (input) => request("POST", `${base}${at("tasks")}`, input, restTaskSchema),
+      updateTask: (id, patch) =>
+        request("PATCH", `${base}${at("tasks", id)}`, patch, restTaskSchema),
+      decisions: (filter = {}, signal) =>
+        request(
+          "GET",
+          withQuery(at("decisions"), { open: flag(filter.open), task: filter.task }),
+          undefined,
+          restDecisionsSchema,
+          signal,
+        ),
+      decision: (id, signal) =>
+        request("GET", `${base}${at("decisions", id)}`, undefined, restDecisionSchema, signal),
+      awaitDecision: (id, waitSeconds, signal) =>
+        request(
+          "GET",
+          withQuery(at("decisions", id), { wait: String(waitSeconds) }),
+          undefined,
+          restDecisionSchema,
+          signal,
+        ),
+      raiseDecision: (input) =>
+        request("POST", `${base}${at("decisions")}`, input, restDecisionSchema),
+      answerDecision: (id, input) =>
+        request("POST", `${base}${at("decisions", id)}/answer`, input, restDecisionSchema),
+      runs: (filter = {}, signal) =>
+        request(
+          "GET",
+          withQuery(at("runs"), {
+            task: filter.task,
+            open: flag(filter.open),
+            mine: flag(filter.mine),
+          }),
+          undefined,
+          restRunsSchema,
+          signal,
+        ),
+      run: (id, signal) =>
+        request("GET", `${base}${at("runs", id)}`, undefined, restRunSchema, signal),
+      startRun: (input) => request("POST", `${base}${at("runs")}`, input, restRunSchema),
+      report: (runId, input) =>
+        request("POST", `${base}${at("runs", runId)}/reports`, input, restRunSchema),
+      handIn: (runId, input) =>
+        request("POST", `${base}${at("runs", runId)}/artifacts`, input, restRunSchema),
+      handInFile: (runId, input) => {
+        const form = new FormData();
+        const bytes =
+          input.bytes instanceof Blob ? input.bytes : new Blob([Uint8Array.from(input.bytes)]);
+        form.set(
+          "file",
+          new File([bytes], input.name, { type: input.contentType ?? "application/octet-stream" }),
+          input.name,
+        );
+        if (input.label !== undefined) {
+          form.set("label", input.label);
+        }
+        return request("POST", `${base}${at("runs", runId)}/files`, form, restRunSchema);
+      },
+      fileUrl: (artifactId) => `${base}${at("files", artifactId)}`,
+      endRun: (runId, input) =>
+        request("POST", `${base}${at("runs", runId)}/end`, input, restRunSchema),
+      events: (after, filter = {}, signal) =>
+        request(
+          "GET",
+          withQuery(at("events"), {
+            after: String(after),
+            task: filter.task,
+            run: filter.run,
+            decision: filter.decision,
+          }),
+          undefined,
+          restEventsSchema,
+          signal,
+        ),
+      eventStreamUrl: (after) => withQuery(`${at("events")}/stream`, { after: String(after) }),
+      skills: (signal) =>
+        request("GET", `${base}${at("skills")}`, undefined, restSkillsSchema, signal),
+    };
+  };
+
   return {
     me: (signal) => request("GET", `${base}${REST_ROUTES.me}`, undefined, restMeSchema, signal),
     people: (signal) =>
       request("GET", `${base}${REST_ROUTES.people}`, undefined, restPeopleSchema, signal),
     updatePerson: (id, patch) =>
       request("PATCH", `${base}${restPath("people", id)}`, patch, restPersonSchema),
-    tasks: (filter = {}, signal) =>
-      request(
-        "GET",
-        withQuery(REST_ROUTES.tasks, { state: filter.state }),
-        undefined,
-        restTasksSchema,
-        signal,
-      ),
-    task: (ref, signal) =>
-      request("GET", `${base}${restPath("tasks", ref)}`, undefined, restTaskSchema, signal),
-    createTask: (input) => request("POST", `${base}${REST_ROUTES.tasks}`, input, restTaskSchema),
-    updateTask: (id, patch) =>
-      request("PATCH", `${base}${restPath("tasks", id)}`, patch, restTaskSchema),
-    decisions: (filter = {}, signal) =>
-      request(
-        "GET",
-        withQuery(REST_ROUTES.decisions, { open: flag(filter.open), task: filter.task }),
-        undefined,
-        restDecisionsSchema,
-        signal,
-      ),
-    decision: (id, signal) =>
-      request("GET", `${base}${restPath("decisions", id)}`, undefined, restDecisionSchema, signal),
-    awaitDecision: (id, waitSeconds, signal) =>
-      request(
-        "GET",
-        withQuery(restPath("decisions", id), { wait: String(waitSeconds) }),
-        undefined,
-        restDecisionSchema,
-        signal,
-      ),
-    raiseDecision: (input) =>
-      request("POST", `${base}${REST_ROUTES.decisions}`, input, restDecisionSchema),
-    answerDecision: (id, input) =>
-      request("POST", `${base}${restPath("decisions", id)}/answer`, input, restDecisionSchema),
-    runs: (filter = {}, signal) =>
-      request(
-        "GET",
-        withQuery(REST_ROUTES.runs, {
-          task: filter.task,
-          open: flag(filter.open),
-          mine: flag(filter.mine),
-        }),
-        undefined,
-        restRunsSchema,
-        signal,
-      ),
-    run: (id, signal) =>
-      request("GET", `${base}${restPath("runs", id)}`, undefined, restRunSchema, signal),
-    startRun: (input) => request("POST", `${base}${REST_ROUTES.runs}`, input, restRunSchema),
-    report: (runId, input) =>
-      request("POST", `${base}${restPath("runs", runId)}/reports`, input, restRunSchema),
-    handIn: (runId, input) =>
-      request("POST", `${base}${restPath("runs", runId)}/artifacts`, input, restRunSchema),
-    handInFile: (runId, input) => {
-      const form = new FormData();
-      const bytes =
-        input.bytes instanceof Blob ? input.bytes : new Blob([Uint8Array.from(input.bytes)]);
-      form.set(
-        "file",
-        new File([bytes], input.name, { type: input.contentType ?? "application/octet-stream" }),
-        input.name,
-      );
-      if (input.label !== undefined) {
-        form.set("label", input.label);
-      }
-      return request("POST", `${base}${restPath("runs", runId)}/files`, form, restRunSchema);
-    },
-    fileUrl: (artifactId) => `${base}${restPath("files", artifactId)}`,
-    endRun: (runId, input) =>
-      request("POST", `${base}${restPath("runs", runId)}/end`, input, restRunSchema),
+    projects: (signal) =>
+      request("GET", `${base}${REST_ROUTES.projects}`, undefined, restProjectsSchema, signal),
+    createProject: (input) =>
+      request("POST", `${base}${REST_ROUTES.projects}`, input, restProjectSchema),
+    project: projectClient,
     events: (after, signal) =>
       request(
         "GET",
@@ -302,9 +384,6 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
         restEventsSchema,
         signal,
       ),
-    eventStreamUrl: (after) => withQuery(`${REST_ROUTES.events}/stream`, { after: String(after) }),
-    skills: (signal) =>
-      request("GET", `${base}${REST_ROUTES.skills}`, undefined, restSkillsSchema, signal),
     tokens: (signal) =>
       request("GET", `${base}${REST_ROUTES.tokens}`, undefined, restTokensSchema, signal),
     createToken: (input) =>

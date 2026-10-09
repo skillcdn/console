@@ -4,15 +4,20 @@ import {
   MAX_TOKEN_DAYS,
   MAX_TOKEN_NAME_LENGTH,
   MAX_TOKENS_PER_PERSON,
+  projectPath,
   REST_ROUTES,
   type RestTask,
   restDecisionSchema,
   restDecisionsSchema,
   restErrorSchema,
   restEventsSchema,
+  restMemberSchema,
+  restMembersSchema,
   restMeSchema,
   restPeopleSchema,
   restPersonSchema,
+  restProjectSchema,
+  restProjectsSchema,
   restSkillsSchema,
   restTaskSchema,
   restTasksSchema,
@@ -29,12 +34,15 @@ let testDatabase: TestDatabase;
 let h: Harness;
 let alice: string;
 let bob: string;
+/** The project the board's tests work in, open to the workspace, under its key. */
+const IN = projectPath("web");
 
 beforeAll(async () => {
   testDatabase = await createTestDatabase(process.env.TEST_DATABASE_URL ?? DEV_DATABASE_URL);
   h = createHarness(testDatabase, { providers: [createFixtureProvider()] });
   alice = await h.signIn("alice");
   bob = await h.signIn("bob");
+  await h.project(alice, { key: "web", name: "The web app", visibility: "workspace" });
 });
 
 afterAll(async () => {
@@ -42,11 +50,15 @@ afterAll(async () => {
 });
 
 /** A request from the console's own pages, as the browser of a signed-in person sends one. */
-const send = (cookie: string, method: "POST" | "PATCH", path: string, body: unknown) =>
+const send = (cookie: string, method: "POST" | "PATCH" | "DELETE", path: string, body?: unknown) =>
   h.request(path, {
     method,
-    headers: { cookie, origin: SIGN_IN_URL, "content-type": "application/json" },
-    body: JSON.stringify(body),
+    headers: {
+      cookie,
+      origin: SIGN_IN_URL,
+      ...(body === undefined ? {} : { "content-type": "application/json" }),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
 
 const get = (cookie: string, path: string) => h.request(path, { headers: { cookie } });
@@ -54,39 +66,48 @@ const get = (cookie: string, path: string) => h.request(path, { headers: { cooki
 const errorOf = async (response: Response) =>
   restErrorSchema.parse(await response.json()).error.code;
 
-async function createTask(cookie: string, body: unknown): Promise<RestTask> {
-  const response = await send(cookie, "POST", REST_ROUTES.tasks, body);
+async function createTask(cookie: string, body: unknown, at = IN): Promise<RestTask> {
+  const response = await send(cookie, "POST", `${at}/tasks`, body);
   expect(response.status).toBe(201);
   return restTaskSchema.parse(await response.json());
 }
+
+const latestEventIn = async (cookie: string, at = IN) =>
+  restEventsSchema.parse(await (await get(cookie, `${at}/events?after=0`)).json()).items.at(-1)
+    ?.id ?? 0;
 
 describe("who may ask", () => {
   it("answers nobody with a refusal, on every route", async () => {
     for (const path of [
       REST_ROUTES.people,
-      REST_ROUTES.tasks,
-      `${REST_ROUTES.tasks}/0199c4d8-0000-7000-8000-000000000010`,
-      REST_ROUTES.decisions,
+      REST_ROUTES.projects,
       REST_ROUTES.events,
-      REST_ROUTES.skills,
-      `${REST_ROUTES.events}/stream`,
+      IN,
+      `${IN}/members`,
+      `${IN}/tasks`,
+      `${IN}/tasks/0199c4d8-0000-7000-8000-000000000010`,
+      `${IN}/decisions`,
+      `${IN}/runs`,
+      `${IN}/events`,
+      `${IN}/skills`,
+      `${IN}/events/stream`,
     ]) {
       const response = await h.request(path);
       expect(response.status, path).toBe(401);
       expect(await errorOf(response)).toBe("auth.required");
     }
-    expect((await h.request(REST_ROUTES.tasks, { method: "POST" })).status).toBe(403);
+    expect((await h.request(`${IN}/tasks`, { method: "POST" })).status).toBe(403);
   });
 
   it("takes a change only from the console's own pages", async () => {
-    const elsewhere = await h.request(REST_ROUTES.tasks, {
+    const elsewhere = await h.request(`${IN}/tasks`, {
       method: "POST",
       headers: { cookie: alice, origin: "https://evil.test", "content-type": "application/json" },
       body: JSON.stringify({ title: "Planted" }),
     });
     expect(elsewhere.status).toBe(403);
     expect(await errorOf(elsewhere)).toBe("auth.forbidden_origin");
-    const noOrigin = await h.request(REST_ROUTES.tasks, {
+    const noOrigin = await h.request(`${IN}/tasks`, {
       method: "POST",
       headers: { cookie: alice, "content-type": "application/json" },
       body: JSON.stringify({ title: "Planted" }),
@@ -95,8 +116,210 @@ describe("who may ask", () => {
   });
 });
 
+describe("projects", () => {
+  it("are made on the console's own pages by whoever is signed in, who owns them, and listed as each may see", async () => {
+    const made = await send(alice, "POST", REST_ROUTES.projects, {
+      key: "docs",
+      name: "  The docs  ",
+      description: "What we write.",
+      skillsAddress: "/gh/Acme/Writing@main",
+    });
+    expect(made.status).toBe(201);
+    const docs = restProjectSchema.parse(await made.json());
+    expect(docs).toMatchObject({
+      key: "docs",
+      name: "The docs",
+      description: "What we write.",
+      visibility: "private",
+      skillsAddress: "/gh/acme/writing@main",
+      role: "owner",
+      openDecisions: 0,
+      openRuns: 0,
+    });
+    // Alice sees both; Bob only the open one, as a member; a private project is nothing to him.
+    const mine = restProjectsSchema.parse(await (await get(alice, REST_ROUTES.projects)).json());
+    expect(mine.items.map((project) => [project.key, project.role])).toEqual([
+      ["docs", "owner"],
+      ["web", "owner"],
+    ]);
+    const his = restProjectsSchema.parse(await (await get(bob, REST_ROUTES.projects)).json());
+    expect(his.items.map((project) => [project.key, project.role])).toEqual([["web", "member"]]);
+    for (const path of [
+      projectPath("docs"),
+      `${projectPath("docs")}/tasks`,
+      `${projectPath("docs")}/members`,
+      `${projectPath("docs")}/events`,
+      `${projectPath("docs")}/skills`,
+      projectPath("nothing"),
+      `${REST_ROUTES.projects}/Not-A-Key`,
+      `${REST_ROUTES.projects}/${"k".repeat(41)}`,
+    ]) {
+      const response = await get(bob, path);
+      expect(response.status, path).toBe(404);
+      expect(await errorOf(response)).toBe("project.not_found");
+    }
+    const one = restProjectSchema.parse(await (await get(alice, projectPath("docs"))).json());
+    expect(one).toEqual(docs);
+    const open = restProjectSchema.parse(await (await get(bob, IN)).json());
+    expect(open).toMatchObject({ key: "web", role: "member", visibility: "workspace" });
+  });
+
+  it("refuse a key taken, one that is not a key, and an address that is not one", async () => {
+    const taken = await send(alice, "POST", REST_ROUTES.projects, { key: "web", name: "Again" });
+    expect(taken.status).toBe(409);
+    expect(await errorOf(taken)).toBe("project.key_taken");
+    for (const body of [
+      { key: "Web", name: "x" },
+      { key: "the web", name: "x" },
+      { key: "web-", name: "x" },
+      { key: "", name: "x" },
+      { key: "ok" },
+      { key: "ok", name: "x", visibility: "public" },
+    ]) {
+      const response = await send(alice, "POST", REST_ROUTES.projects, body);
+      expect(response.status, JSON.stringify(body)).toBe(400);
+      expect(await errorOf(response)).toBe("request.invalid");
+    }
+    const address = await send(alice, "POST", REST_ROUTES.projects, {
+      key: "ok",
+      name: "x",
+      skillsAddress: "github.com/acme/skills",
+    });
+    expect(address.status).toBe(400);
+    expect(await errorOf(address)).toBe("project.invalid_address");
+  });
+
+  it("are configured by an owner signed in: never by a member, never with a token", async () => {
+    const changed = await send(alice, "PATCH", projectPath("docs"), {
+      name: "Documentation",
+      visibility: "workspace",
+      skillsAddress: null,
+    });
+    expect(changed.status).toBe(200);
+    expect(restProjectSchema.parse(await changed.json())).toMatchObject({
+      name: "Documentation",
+      visibility: "workspace",
+      skillsAddress: null,
+    });
+    // Open to the workspace now, Bob sees it as a member, and may not change it.
+    const byMember = await send(bob, "PATCH", projectPath("docs"), { name: "Mine" });
+    expect(byMember.status).toBe(403);
+    expect(await errorOf(byMember)).toBe("auth.forbidden");
+    const { secret } = restTokenCreatedSchema.parse(
+      await (await send(alice, "POST", REST_ROUTES.tokens, { name: "an owner's agent" })).json(),
+    );
+    const auth = { authorization: `Bearer ${secret}`, "content-type": "application/json" };
+    const byToken = await h.request(projectPath("docs"), {
+      method: "PATCH",
+      headers: auth,
+      body: JSON.stringify({ name: "Mine" }),
+    });
+    expect(byToken.status).toBe(403);
+    expect(await errorOf(byToken)).toBe("auth.session_required");
+    const madeByToken = await h.request(REST_ROUTES.projects, {
+      method: "POST",
+      headers: auth,
+      body: JSON.stringify({ key: "agents", name: "Agents' own" }),
+    });
+    expect(madeByToken.status).toBe(403);
+    expect(await errorOf(madeByToken)).toBe("auth.session_required");
+    const badAddress = await send(alice, "PATCH", projectPath("docs"), {
+      skillsAddress: "nothing",
+    });
+    expect(badAddress.status).toBe(400);
+    expect(await errorOf(badAddress)).toBe("project.invalid_address");
+    // Said again, nothing changes and nothing is written.
+    const before = await latestEventIn(alice, projectPath("docs"));
+    expect(
+      (await send(alice, "PATCH", projectPath("docs"), { name: "Documentation" })).status,
+    ).toBe(200);
+    expect(await latestEventIn(alice, projectPath("docs"))).toBe(before);
+    // Back to private for the tests of its members.
+    expect(
+      (await send(alice, "PATCH", projectPath("docs"), { visibility: "private" })).status,
+    ).toBe(200);
+  });
+
+  it("list their members, whom an owner adds, changes and removes, and tell the board", async () => {
+    const docs = projectPath("docs");
+    const people = restPeopleSchema.parse(await (await get(alice, REST_ROUTES.people)).json());
+    const bobId = people.items.find((person) => person.login === "bob")?.id ?? "";
+    const before = await latestEventIn(alice, docs);
+    expect((await get(bob, docs)).status).toBe(404);
+    const added = await send(alice, "POST", `${docs}/members`, { personId: bobId });
+    expect(added.status).toBe(201);
+    expect(restMemberSchema.parse(await added.json())).toMatchObject({
+      person: { login: "bob" },
+      role: "member",
+    });
+    expect(restProjectSchema.parse(await (await get(bob, docs)).json()).role).toBe("member");
+    const listed = restMembersSchema.parse(await (await get(bob, `${docs}/members`)).json());
+    expect(listed.items.map((member) => [member.person.login, member.role])).toEqual([
+      ["Alice", "owner"],
+      ["bob", "member"],
+    ]);
+    const again = await send(alice, "POST", `${docs}/members`, { personId: bobId, role: "owner" });
+    expect(again.status).toBe(409);
+    expect(await errorOf(again)).toBe("member.exists");
+    const stranger = await send(alice, "POST", `${docs}/members`, {
+      personId: "0199c4d8-0000-7000-8000-000000000099",
+    });
+    expect(stranger.status).toBe(400);
+    expect(await errorOf(stranger)).toBe("member.invalid_person");
+    // A member may not list others; an owner may make another an owner.
+    const byMember = await send(bob, "POST", `${docs}/members`, { personId: bobId });
+    expect(byMember.status).toBe(403);
+    const promoted = await send(alice, "PATCH", `${docs}/members/${bobId}`, { role: "owner" });
+    expect(promoted.status).toBe(200);
+    expect(restMemberSchema.parse(await promoted.json()).role).toBe("owner");
+    expect(restProjectSchema.parse(await (await get(bob, docs)).json()).role).toBe("owner");
+    const removed = await send(bob, "DELETE", `${docs}/members/${bobId}`);
+    expect(removed.status).toBe(204);
+    expect((await get(bob, docs)).status).toBe(404);
+    expect((await send(alice, "DELETE", `${docs}/members/${bobId}`)).status).toBe(404);
+    expect((await send(alice, "DELETE", `${docs}/members/nobody`)).status).toBe(404);
+    const since = restEventsSchema.parse(
+      await (await get(alice, `${docs}/events?after=${before}`)).json(),
+    );
+    expect(since.items.map((event) => [event.kind, event.actor?.login, event.data])).toEqual([
+      [
+        "project.member_added",
+        "Alice",
+        { key: "docs", name: "Documentation", login: "bob", role: "member" },
+      ],
+      [
+        "project.member_changed",
+        "Alice",
+        { key: "docs", name: "Documentation", login: "bob", role: "owner" },
+      ],
+      ["project.member_removed", "bob", { key: "docs", name: "Documentation", login: "bob" }],
+    ]);
+  });
+
+  it("are every one an administrator's, as owner", async () => {
+    const named = createHarness(testDatabase, {
+      providers: [createFixtureProvider()],
+      admins: ["carol"],
+    });
+    const carol = await named.signIn("carol");
+    const all = restProjectsSchema.parse(
+      await (await named.request(REST_ROUTES.projects, { headers: { cookie: carol } })).json(),
+    );
+    expect(all.items.map((project) => [project.key, project.role])).toEqual([
+      ["docs", "owner"],
+      ["web", "owner"],
+    ]);
+    const renamed = await named.request(projectPath("docs"), {
+      method: "PATCH",
+      headers: { cookie: carol, origin: SIGN_IN_URL, "content-type": "application/json" },
+      body: JSON.stringify({ description: "Kept by the administrators too." }),
+    });
+    expect(renamed.status).toBe(200);
+  });
+});
+
 describe("tasks", () => {
-  it("are written, numbered, listed newest first, and read back as the schema says", async () => {
+  it("are written, numbered per project, listed newest first, and read back as the schema says", async () => {
     const first = await createTask(alice, { title: "  Write the release notes  " });
     expect(first).toMatchObject({
       title: "Write the release notes",
@@ -119,17 +342,28 @@ describe("tasks", () => {
     });
     expect(second.number).toBe(first.number + 1);
     expect(second.assignee?.login).toBe("Alice");
-
-    const listed = restTasksSchema.parse(await (await get(alice, REST_ROUTES.tasks)).json());
-    expect(listed.items.slice(0, 2).map((task) => task.id)).toEqual([second.id, first.id]);
-    const ready = restTasksSchema.parse(
-      await (await get(alice, `${REST_ROUTES.tasks}?state=ready`)).json(),
+    // Another project numbers its own from one, and does not find this one's.
+    const elsewhere = await createTask(
+      alice,
+      { title: "The first of the docs" },
+      projectPath("docs"),
     );
+    expect(elsewhere.number).toBe(1);
+    expect((await get(alice, `${IN}/tasks/${elsewhere.id}`)).status).toBe(404);
+    expect((await get(alice, `${projectPath("docs")}/tasks/${first.id}`)).status).toBe(404);
+
+    const listed = restTasksSchema.parse(await (await get(alice, `${IN}/tasks`)).json());
+    expect(listed.items.slice(0, 2).map((task) => task.id)).toEqual([second.id, first.id]);
+    expect(listed.items.some((task) => task.id === elsewhere.id)).toBe(false);
+    const ready = restTasksSchema.parse(await (await get(alice, `${IN}/tasks?state=ready`)).json());
     expect(ready.items.every((task) => task.state === "ready")).toBe(true);
     expect(ready.items.some((task) => task.id === second.id)).toBe(true);
-    const one = await get(bob, `${REST_ROUTES.tasks}/${second.id}`);
+    const one = await get(bob, `${IN}/tasks/${second.id}`);
     expect(one.headers.get("cache-control")).toBe("no-store");
     expect(restTaskSchema.parse(await one.json())).toEqual(second);
+    expect(
+      restTaskSchema.parse(await (await get(bob, `${IN}/tasks/${second.number}`)).json()),
+    ).toEqual(second);
   });
 
   it("refuse what the schema refuses, and say what is wrong", async () => {
@@ -141,7 +375,7 @@ describe("tasks", () => {
       [{ title: "ok", assigneeId: "alice" }, /assigneeId/],
       ["not json", /readable/],
     ] as const) {
-      const response = await h.request(REST_ROUTES.tasks, {
+      const response = await h.request(`${IN}/tasks`, {
         method: "POST",
         headers: { cookie: alice, origin: SIGN_IN_URL, "content-type": "application/json" },
         body: typeof body === "string" ? body : JSON.stringify(body),
@@ -151,7 +385,7 @@ describe("tasks", () => {
       expect(error.code).toBe("request.invalid");
       expect(error.message).toMatch(expected);
     }
-    const huge = await h.request(REST_ROUTES.tasks, {
+    const huge = await h.request(`${IN}/tasks`, {
       method: "POST",
       headers: { cookie: alice, origin: SIGN_IN_URL, "content-type": "application/json" },
       body: JSON.stringify({ title: "ok", body: "x".repeat(300_000) }),
@@ -160,33 +394,37 @@ describe("tasks", () => {
     expect(await errorOf(huge)).toBe("request.too_large");
   });
 
-  it("refuse an assignee who is nobody here, and a parent that is not a task", async () => {
-    const stranger = await send(alice, "POST", REST_ROUTES.tasks, {
+  it("refuse an assignee who may not work in the project, and a parent that is not its task", async () => {
+    const stranger = await send(alice, "POST", `${IN}/tasks`, {
       title: "ok",
       assigneeId: "0199c4d8-0000-7000-8000-000000000099",
     });
     expect(stranger.status).toBe(400);
     expect(await errorOf(stranger)).toBe("task.invalid_assignee");
-    const orphan = await send(alice, "POST", REST_ROUTES.tasks, {
+    // Bob is not in the private docs project: not an assignee there, though a person of the workspace.
+    const people = restPeopleSchema.parse(await (await get(alice, REST_ROUTES.people)).json());
+    const bobId = people.items.find((person) => person.login === "bob")?.id ?? "";
+    const outsider = await send(alice, "POST", `${projectPath("docs")}/tasks`, {
+      title: "ok",
+      assigneeId: bobId,
+    });
+    expect(outsider.status).toBe(400);
+    expect(await errorOf(outsider)).toBe("task.invalid_assignee");
+    const orphan = await send(alice, "POST", `${IN}/tasks`, {
       title: "ok",
       parentId: "0199c4d8-0000-7000-8000-000000000099",
     });
     expect(await errorOf(orphan)).toBe("task.invalid_parent");
   });
 
-  it("move along and change, and say so in the feed", async () => {
+  it("move along and change, and say so in the project's feed", async () => {
     const task = await createTask(alice, { title: "Review the design" });
-    const before = restEventsSchema.parse(
-      await (await get(alice, `${REST_ROUTES.events}?after=0`)).json(),
-    );
-    const latest = before.items.at(-1)?.id ?? 0;
+    const latest = await latestEventIn(alice);
 
-    const moved = await send(bob, "PATCH", `${REST_ROUTES.tasks}/${task.id}`, {
-      state: "in_progress",
-    });
+    const moved = await send(bob, "PATCH", `${IN}/tasks/${task.id}`, { state: "in_progress" });
     expect(moved.status).toBe(200);
     expect(restTaskSchema.parse(await moved.json()).state).toBe("in_progress");
-    const edited = await send(bob, "PATCH", `${REST_ROUTES.tasks}/${task.id}`, {
+    const edited = await send(bob, "PATCH", `${IN}/tasks/${task.id}`, {
       title: "Review the design, again",
       priority: "urgent",
     });
@@ -197,27 +435,37 @@ describe("tasks", () => {
     });
 
     const since = restEventsSchema.parse(
-      await (await get(alice, `${REST_ROUTES.events}?after=${latest}`)).json(),
+      await (await get(alice, `${IN}/events?after=${latest}`)).json(),
     );
     expect(since.items.map((event) => [event.kind, event.actor?.login, event.taskId])).toEqual([
       ["task.moved", "bob", task.id],
       ["task.updated", "bob", task.id],
     ]);
-    expect(since.items[0]?.data).toEqual({
-      number: task.number,
-      title: "Review the design",
-      from: "idea",
-      to: "in_progress",
+    expect(since.items[0]).toMatchObject({
+      agent: null,
+      data: { number: task.number, title: "Review the design", from: "idea", to: "in_progress" },
     });
+    expect(since.items[0]?.projectId).toBe(
+      restProjectSchema.parse(await (await get(alice, IN)).json()).id,
+    );
     expect(since.more).toBe(false);
+    // The feed narrowed to the task is everything that happened to it.
+    const history = restEventsSchema.parse(
+      await (await get(alice, `${IN}/events?task=${task.id}`)).json(),
+    );
+    expect(history.items.map((event) => event.kind)).toEqual([
+      "task.created",
+      "task.moved",
+      "task.updated",
+    ]);
   });
 
   it("are not found by an id that is nothing, and never by a non-id", async () => {
     for (const id of ["0199c4d8-0000-7000-8000-000000000099", "not-an-id", "..%2F"]) {
-      const response = await get(alice, `${REST_ROUTES.tasks}/${id}`);
+      const response = await get(alice, `${IN}/tasks/${id}`);
       expect(response.status, id).toBe(404);
       expect(await errorOf(response)).toBe("task.not_found");
-      const patched = await send(alice, "PATCH", `${REST_ROUTES.tasks}/${id}`, { state: "done" });
+      const patched = await send(alice, "PATCH", `${IN}/tasks/${id}`, { state: "done" });
       expect(patched.status, id).toBe(404);
     }
   });
@@ -226,7 +474,7 @@ describe("tasks", () => {
 describe("decisions", () => {
   it("are raised about a task or not, listed with the waiting first, and answered once", async () => {
     const task = await createTask(alice, { title: "Choose a database" });
-    const raised = await send(alice, "POST", REST_ROUTES.decisions, {
+    const raised = await send(alice, "POST", `${IN}/decisions`, {
       question: "Which one?",
       body: "Both work.",
       options: [{ label: "The first" }, { label: "The second" }],
@@ -245,25 +493,25 @@ describe("decisions", () => {
     });
     expect(decision.raisedBy.login).toBe("Alice");
     expect(
-      restTaskSchema.parse(await (await get(alice, `${REST_ROUTES.tasks}/${task.id}`)).json())
-        .openDecisions,
+      restTaskSchema.parse(await (await get(alice, `${IN}/tasks/${task.id}`)).json()).openDecisions,
     ).toBe(1);
+    expect(restProjectSchema.parse(await (await get(alice, IN)).json()).openDecisions).toBe(1);
 
     const open = restDecisionsSchema.parse(
-      await (await get(bob, `${REST_ROUTES.decisions}?open=true`)).json(),
+      await (await get(bob, `${IN}/decisions?open=true`)).json(),
     );
     expect(open.items.some((item) => item.id === decision.id)).toBe(true);
     const about = restDecisionsSchema.parse(
-      await (await get(bob, `${REST_ROUTES.decisions}?task=${task.id}`)).json(),
+      await (await get(bob, `${IN}/decisions?task=${task.id}`)).json(),
     );
     expect(about.items.map((item) => item.id)).toEqual([decision.id]);
+    // Another project does not find it.
+    expect((await get(alice, `${projectPath("docs")}/decisions/${decision.id}`)).status).toBe(404);
 
-    const wrong = await send(bob, "POST", `${REST_ROUTES.decisions}/${decision.id}/answer`, {
-      option: "3",
-    });
+    const wrong = await send(bob, "POST", `${IN}/decisions/${decision.id}/answer`, { option: "3" });
     expect(wrong.status).toBe(400);
     expect(await errorOf(wrong)).toBe("decision.no_such_option");
-    const answered = await send(bob, "POST", `${REST_ROUTES.decisions}/${decision.id}/answer`, {
+    const answered = await send(bob, "POST", `${IN}/decisions/${decision.id}/answer`, {
       option: "2",
       note: "Shorter.",
     });
@@ -271,66 +519,73 @@ describe("decisions", () => {
     const answer = restDecisionSchema.parse(await answered.json()).answer;
     expect(answer).toMatchObject({ option: "2", note: "Shorter." });
     expect(answer?.by.login).toBe("bob");
-    const again = await send(alice, "POST", `${REST_ROUTES.decisions}/${decision.id}/answer`, {
+    const again = await send(alice, "POST", `${IN}/decisions/${decision.id}/answer`, {
       option: "1",
     });
     expect(again.status).toBe(409);
     expect(await errorOf(again)).toBe("decision.answered");
     expect(
-      restDecisionSchema.parse(
-        await (await get(alice, `${REST_ROUTES.decisions}/${decision.id}`)).json(),
-      ).answer?.option,
+      restDecisionSchema.parse(await (await get(alice, `${IN}/decisions/${decision.id}`)).json())
+        .answer?.option,
     ).toBe("2");
   });
 
   it("refuse one about a task that is nothing, too few options, and an id that is nothing", async () => {
-    const orphan = await send(alice, "POST", REST_ROUTES.decisions, {
+    const orphan = await send(alice, "POST", `${IN}/decisions`, {
       question: "About nothing?",
       options: [{ label: "a" }, { label: "b" }],
       taskId: "0199c4d8-0000-7000-8000-000000000099",
     });
     expect(orphan.status).toBe(400);
     expect(await errorOf(orphan)).toBe("decision.invalid_task");
-    const few = await send(alice, "POST", REST_ROUTES.decisions, {
+    const few = await send(alice, "POST", `${IN}/decisions`, {
       question: "Alone?",
       options: [{ label: "a" }],
     });
     expect(await errorOf(few)).toBe("request.invalid");
-    expect((await get(alice, `${REST_ROUTES.decisions}/not-an-id`)).status).toBe(404);
+    expect((await get(alice, `${IN}/decisions/not-an-id`)).status).toBe(404);
     expect(
       (
-        await send(
-          alice,
-          "POST",
-          `${REST_ROUTES.decisions}/0199c4d8-0000-7000-8000-000000000099/answer`,
-          {
-            option: "1",
-          },
-        )
+        await send(alice, "POST", `${IN}/decisions/0199c4d8-0000-7000-8000-000000000099/answer`, {
+          option: "1",
+        })
       ).status,
     ).toBe(404);
   });
 });
 
-describe("people and the feed", () => {
+describe("people and the feeds", () => {
   it("list everyone who signed in, by login", async () => {
     const people = restPeopleSchema.parse(await (await get(alice, REST_ROUTES.people)).json());
-    expect(people.items.map((person) => person.login)).toEqual(["Alice", "bob"]);
+    expect(people.items.map((person) => person.login)).toEqual(["Alice", "bob", "carol"]);
   });
 
-  it("page the feed from a number on, and refuse a cursor that is not one", async () => {
+  it("page a project's feed from a number on, keep the workspace's own apart, and refuse a cursor that is not one", async () => {
     const page = restEventsSchema.parse(
-      await (await get(alice, `${REST_ROUTES.events}?after=0&limit=2`)).json(),
+      await (await get(alice, `${IN}/events?after=0&limit=2`)).json(),
     );
     expect(page.items).toHaveLength(2);
     expect(page.more).toBe(true);
-    expect(page.items[0]?.kind).toBe("person.joined");
+    expect(page.items[0]?.kind).toBe("project.created");
+    expect(page.items[0]?.data).toEqual({ key: "web", name: "The web app" });
     const rest = restEventsSchema.parse(
-      await (await get(alice, `${REST_ROUTES.events}?after=${page.items[1]?.id}`)).json(),
+      await (await get(alice, `${IN}/events?after=${page.items[1]?.id}`)).json(),
     );
     expect(rest.more).toBe(false);
-    expect((await get(alice, `${REST_ROUTES.events}?after=-1`)).status).toBe(400);
-    expect((await get(alice, `${REST_ROUTES.events}?limit=1000`)).status).toBe(400);
+    expect(rest.items.every((event) => event.projectId === page.items[0]?.projectId)).toBe(true);
+    // Who joined, and who was made what, is the workspace's own: on no project's feed.
+    const own = restEventsSchema.parse(
+      await (await get(alice, `${REST_ROUTES.events}?after=0`)).json(),
+    );
+    expect(own.items.map((event) => event.kind)).toEqual([
+      "person.joined",
+      "person.joined",
+      "person.joined",
+    ]);
+    expect(own.items.every((event) => event.projectId === null)).toBe(true);
+    expect((await get(alice, `${IN}/events?after=-1`)).status).toBe(400);
+    expect((await get(alice, `${IN}/events?limit=1000`)).status).toBe(400);
+    expect((await get(alice, `${IN}/events?task=7`)).status).toBe(400);
   });
 });
 
@@ -374,7 +629,12 @@ describe("tokens", () => {
     expect(forever.token.expiresAt).toBeNull();
 
     const mine = await listed(alice);
-    expect(mine.map((item) => item.name)).toEqual(["forever", "ci", "Claude Code on the laptop"]);
+    expect(mine.map((item) => item.name)).toEqual([
+      "forever",
+      "ci",
+      "Claude Code on the laptop",
+      "an owner's agent",
+    ]);
     // The page sees names and dates, never a secret.
     expect(JSON.stringify(mine)).not.toContain("cns_t_");
     // Bob sees his own, which are none, and cannot take Alice's away.
@@ -384,18 +644,22 @@ describe("tokens", () => {
     expect((await remove(alice, second.token.id)).status).toBe(204);
     expect((await remove(alice, second.token.id)).status).toBe(404);
     expect((await remove(alice, "not-an-id")).status).toBe(404);
-    expect((await listed(alice)).map((item) => item.id)).toEqual([forever.token.id, token.id]);
+    expect((await listed(alice)).map((item) => item.name)).toEqual([
+      "forever",
+      "Claude Code on the laptop",
+      "an owner's agent",
+    ]);
     expect(JSON.stringify(h.logs)).not.toContain("cns_t_");
   });
 
-  it("act as their person over the API, with no origin needed, and are noted as used", async () => {
+  it("act as their person over the API, with no origin needed, name the agent on what they do, and are noted as used", async () => {
     const { token, secret } = await make(alice, { name: "a script" });
     const auth = { authorization: `Bearer ${secret}` };
     const me = restMeSchema.parse(
       await (await h.request(REST_ROUTES.me, { headers: auth })).json(),
     );
     expect(me.person?.login).toBe("Alice");
-    const created = await h.request(REST_ROUTES.tasks, {
+    const created = await h.request(`${IN}/tasks`, {
       method: "POST",
       headers: { ...auth, "content-type": "application/json" },
       body: JSON.stringify({ title: "Written by a script" }),
@@ -404,12 +668,19 @@ describe("tokens", () => {
     const task = restTaskSchema.parse(await created.json());
     expect(task.owner.login).toBe("Alice");
     const events = restEventsSchema.parse(
-      await (await h.request(`${REST_ROUTES.events}?after=0`, { headers: auth })).json(),
+      await (await h.request(`${IN}/events?task=${task.id}`, { headers: auth })).json(),
     );
-    expect(events.items.at(-1)).toMatchObject({ kind: "task.created", taskId: task.id });
-    expect(events.items.at(-1)?.actor?.login).toBe("Alice");
+    // Traceability: the person, and the agent they acted through.
+    expect(events.items).toHaveLength(1);
+    expect(events.items[0]).toMatchObject({ kind: "task.created", agent: "a script" });
+    expect(events.items[0]?.actor?.login).toBe("Alice");
     const used = (await listed(alice)).find((item) => item.id === token.id);
     expect(used?.lastUsedAt).not.toBeNull();
+    // A token sees the projects its person sees, and no more.
+    const projects = restProjectsSchema.parse(
+      await (await h.request(REST_ROUTES.projects, { headers: auth })).json(),
+    );
+    expect(projects.items.map((project) => project.key)).toEqual(["docs", "web"]);
   });
 
   it("are refused when they are nothing, taken away, expired, or no longer a member's", async () => {
@@ -420,12 +691,12 @@ describe("tokens", () => {
       "Bearer cns_s_not-a-token",
       "Token cns_t_x",
     ]) {
-      const response = await h.request(REST_ROUTES.tasks, { headers: { authorization: header } });
+      const response = await h.request(`${IN}/tasks`, { headers: { authorization: header } });
       expect(response.status, header).toBe(401);
       expect(await errorOf(response)).toBe("auth.required");
     }
     // A token that is nothing is refused beside a good session too: the token is the credential.
-    const beside = await h.request(REST_ROUTES.tasks, {
+    const beside = await h.request(`${IN}/tasks`, {
       headers: { cookie: alice, authorization: "Bearer cns_t_nonsense" },
     });
     expect(beside.status).toBe(401);
@@ -433,9 +704,7 @@ describe("tokens", () => {
 
     const { token, secret } = await make(alice, { name: "short-lived" });
     expect((await remove(alice, token.id)).status).toBe(204);
-    const gone = await h.request(REST_ROUTES.tasks, {
-      headers: { authorization: `Bearer ${secret}` },
-    });
+    const gone = await h.request(`${IN}/tasks`, { headers: { authorization: `Bearer ${secret}` } });
     expect(gone.status).toBe(401);
 
     const clock = movableClock();
@@ -448,9 +717,9 @@ describe("tokens", () => {
     });
     const aDay = restTokenCreatedSchema.parse(await made.json());
     const bearer = { authorization: `Bearer ${aDay.secret}` };
-    expect((await later.request(REST_ROUTES.tasks, { headers: bearer })).status).toBe(200);
+    expect((await later.request(`${IN}/tasks`, { headers: bearer })).status).toBe(200);
     clock.advance(2 * DAY_MS);
-    expect((await later.request(REST_ROUTES.tasks, { headers: bearer })).status).toBe(401);
+    expect((await later.request(`${IN}/tasks`, { headers: bearer })).status).toBe(401);
     const left = restTokensSchema.parse(
       await (await later.request(REST_ROUTES.tokens, { headers: { cookie } })).json(),
     );
@@ -468,7 +737,7 @@ describe("tokens", () => {
     clock.advance(3650 * DAY_MS);
     expect(
       (
-        await later.request(REST_ROUTES.tasks, {
+        await later.request(`${IN}/tasks`, {
           headers: { authorization: `Bearer ${forever.secret}` },
         })
       ).status,
@@ -480,7 +749,7 @@ describe("tokens", () => {
       providers: [createFixtureProvider()],
       members: ["bob"],
     });
-    const out = await bobOnly.request(REST_ROUTES.tasks, {
+    const out = await bobOnly.request(`${IN}/tasks`, {
       headers: { authorization: `Bearer ${whileListed}` },
     });
     expect(out.status).toBe(401);
@@ -541,7 +810,7 @@ describe("tokens", () => {
 });
 
 describe("roles", () => {
-  it("are changed by an administrator signed in, kept to at least one, and told to the board", async () => {
+  it("are changed by an administrator signed in, kept to at least one, and told to the workspace", async () => {
     const named = createHarness(testDatabase, {
       providers: [createFixtureProvider()],
       admins: ["alice"],
@@ -556,6 +825,9 @@ describe("roles", () => {
     const people = restPeopleSchema.parse(await (await get(alice, REST_ROUTES.people)).json());
     const aliceId = people.items.find((person) => person.login === "Alice")?.id ?? "";
     const bobId = people.items.find((person) => person.login === "bob")?.id ?? "";
+    const carolId = people.items.find((person) => person.login === "carol")?.id ?? "";
+    // Carol was made an administrator by an earlier harness; Alice is to be the last one here.
+    expect((await change(admin, carolId, { role: "member" })).status).toBe(200);
 
     // A member may not, a token may not, and nobody may from elsewhere.
     const byMember = await change(bob, aliceId, { role: "member" });
@@ -598,7 +870,7 @@ describe("roles", () => {
         person: { role: string };
       },
     ).toMatchObject({ person: { role: "admin" } });
-    // Now Alice may step down, and the board is told of both.
+    // Now Alice may step down, and the workspace is told of both.
     expect((await change(admin, aliceId, { role: "member" })).status).toBe(200);
     const since = restEventsSchema.parse(
       await (await get(alice, `${REST_ROUTES.events}?after=${latest}`)).json(),
@@ -618,12 +890,19 @@ describe("roles", () => {
       await (await get(alice, `${REST_ROUTES.events}?after=${latest}`)).json(),
     );
     expect(after.items).toHaveLength(2);
+    // Alice, a member again, no longer owns the docs project by right of office; she is listed, so she still does.
+    expect(restProjectSchema.parse(await (await get(alice, projectPath("docs"))).json()).role).toBe(
+      "owner",
+    );
+    // Bob, an administrator now, owns every project.
+    expect((await change(bob, aliceId, { role: "admin" })).status).toBe(200);
+    expect((await change(admin, bobId, { role: "member" })).status).toBe(200);
   });
 });
 
 describe("skills", () => {
-  it("are none without an address, and with one what the deployment serves, read once in a while", async () => {
-    const none = restSkillsSchema.parse(await (await get(alice, REST_ROUTES.skills)).json());
+  it("are none without an address, the organization's with one, and a project's own when it names one", async () => {
+    const none = restSkillsSchema.parse(await (await get(alice, `${IN}/skills`)).json());
     expect(none).toEqual({
       address: null,
       source: "https://skillcdn.ai",
@@ -632,11 +911,10 @@ describe("skills", () => {
       items: [],
     });
 
-    let calls = 0;
+    const asked: string[] = [];
     const source: SkillSource = {
       async list(address) {
-        calls += 1;
-        expect(address.owner).toBe("acme");
+        asked.push(`/gh/${address.owner}/${address.repo}`);
         return {
           status: "ready",
           skills: [
@@ -656,9 +934,9 @@ describe("skills", () => {
       skills: { address: "/gh/Acme/skills", source },
     });
     const cookie = await served.signIn("alice");
-    const read = async () =>
+    const read = async (at = IN) =>
       restSkillsSchema.parse(
-        await (await served.request(REST_ROUTES.skills, { headers: { cookie } })).json(),
+        await (await served.request(`${at}/skills`, { headers: { cookie } })).json(),
       );
     const first = await read();
     expect(first).toMatchObject({
@@ -680,8 +958,19 @@ describe("skills", () => {
     ]);
     // Held for a while: a second read asks the deployment nothing.
     expect(await read()).toEqual(first);
-    expect(calls).toBe(1);
-    expect((await served.request(REST_ROUTES.skills)).status).toBe(401);
+    expect(asked).toEqual(["/gh/acme/skills"]);
+    // A project that names its own address is read at it, and held on its own.
+    const named = await served.request(projectPath("docs"), {
+      method: "PATCH",
+      headers: { cookie, origin: SIGN_IN_URL, "content-type": "application/json" },
+      body: JSON.stringify({ skillsAddress: "/gh/acme/writing" }),
+    });
+    expect(named.status).toBe(200);
+    const own = await read(projectPath("docs"));
+    expect(own).toMatchObject({ address: "/gh/acme/writing", status: "ready" });
+    expect(own.items[0]?.uri).toBe("skill://gh/acme/writing/review/SKILL.md");
+    expect(asked).toEqual(["/gh/acme/skills", "/gh/acme/writing"]);
+    expect((await served.request(`${IN}/skills`)).status).toBe(401);
     await served.close();
   });
 });

@@ -1,11 +1,21 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { RestDecision, RestEvent, RestPerson, RestRun, RestTask, RestToken } from "../api.js";
+import type {
+  RestDecision,
+  RestEvent,
+  RestMember,
+  RestPerson,
+  RestProject,
+  RestRun,
+  RestTask,
+  RestToken,
+} from "../api.js";
 import { Board } from "./board.js";
 import { DecisionList } from "./decision-list.js";
 import { describeEvent, EventFeed } from "./event-feed.js";
 import { Markdown } from "./markdown.js";
 import { PeopleList } from "./people.js";
+import { keyOf, MemberList, ProjectForm, ProjectList } from "./projects.js";
 import { RunList } from "./runs.js";
 import { Shell } from "./shell.js";
 import { SignIn } from "./sign-in.js";
@@ -64,7 +74,7 @@ const decision = (overrides: Partial<RestDecision> = {}): RestDecision => ({
   ...overrides,
 });
 
-const href = (item: RestTask) => `/tasks/${item.id}`;
+const href = (item: RestTask) => `/p/web/tasks/${item.id}`;
 
 describe("the board", () => {
   it("has a column per state, with each task in its own, as text and never as HTML", () => {
@@ -85,7 +95,7 @@ describe("the board", () => {
     expect(html).not.toContain("<b>now</b>");
     expect(html).toContain("1 decision");
     expect(html).toContain("High");
-    expect(html).toContain('href="/tasks/0199c4d8-0000-7000-8000-000000000010"');
+    expect(html).toContain('href="/p/web/tasks/0199c4d8-0000-7000-8000-000000000010"');
     // The second task's column, with its count, and no move control without a handler.
     expect(html).toContain('class="sc-column sc-column-done"');
     expect(html).not.toContain("sc-card-move");
@@ -120,6 +130,20 @@ describe("one task", () => {
           }),
         ]}
         decisions={[decision()]}
+        history={[
+          {
+            id: 3,
+            kind: "task.moved",
+            actor: bob,
+            agent: "Claude Code",
+            projectId: null,
+            taskId: "0199c4d8-0000-7000-8000-000000000010",
+            decisionId: null,
+            runId: null,
+            data: { number: 7, title: "Ship", from: "ready", to: "in_progress" },
+            createdAt: "2026-10-09T10:00:00.000Z",
+          },
+        ]}
         taskHref={href}
         onChange={() => undefined}
         onMove={() => undefined}
@@ -128,6 +152,10 @@ describe("one task", () => {
       />,
     );
     expect(html).toContain("Part of");
+    // Everything that happened to it, with the agent a person acted through.
+    expect(html).toContain('aria-label="History"');
+    expect(html).toContain("moved #7 Ship from Ready to In progress");
+    expect(html).toContain("as Claude Code");
     expect(html).toContain("#1");
     expect(html).toContain("<h1>Plan</h1>");
     expect(html).toContain('href="https://example.com"');
@@ -169,6 +197,8 @@ describe("the feed", () => {
     id: 1,
     kind: "task.created",
     actor: alice,
+    agent: null,
+    projectId: null,
     taskId: null,
     decisionId: null,
     runId: null,
@@ -203,18 +233,53 @@ describe("the feed", () => {
     ).toBe('answered "Which?": The second');
   });
 
-  it("shows the newest first, with the actor, and the console for what it did itself", () => {
+  it("shows the newest first, with the actor and the agent they acted through, and the console for what it did itself", () => {
     const html = renderToStaticMarkup(
       <EventFeed
         events={[
           event({ id: 1, data: { number: 1, title: "First" } }),
           event({ id: 2, actor: null, kind: "person.joined" }),
+          event({
+            id: 3,
+            agent: "Claude Code <on> the laptop",
+            data: { number: 2, title: "Second" },
+          }),
         ]}
-        href={() => "/tasks/x"}
+        href={() => "/p/web/tasks/x"}
       />,
     );
     expect(html.indexOf("joined the board")).toBeLessThan(html.indexOf("wrote #1 First"));
     expect(html).toContain("The console");
+    expect(html).toContain("as Claude Code &lt;on&gt; the laptop");
+    expect(html.match(/sc-feed-agent/g)).toHaveLength(1);
+  });
+
+  it("says what happened to a project, and who was added to it as what", () => {
+    const project = { key: "web", name: "The web app" };
+    expect(describeEvent(event({ kind: "project.created", data: project }))).toBe(
+      "made the project The web app",
+    );
+    expect(
+      describeEvent(
+        event({ kind: "project.updated", data: { ...project, fields: ["name", "skillsAddress"] } }),
+      ),
+    ).toBe("changed the name, the skills address of the project The web app");
+    expect(
+      describeEvent(
+        event({ kind: "project.member_added", data: { ...project, login: "bob", role: "owner" } }),
+      ),
+    ).toBe("added bob to The web app as an owner");
+    expect(
+      describeEvent(
+        event({
+          kind: "project.member_changed",
+          data: { ...project, login: "bob", role: "member" },
+        }),
+      ),
+    ).toBe("made bob a member of The web app");
+    expect(
+      describeEvent(event({ kind: "project.member_removed", data: { ...project, login: "bob" } })),
+    ).toBe("removed bob from The web app");
   });
 });
 
@@ -243,9 +308,10 @@ describe("the shell and signing in", () => {
     const html = renderToStaticMarkup(
       <Shell
         title="Acme"
+        project={{ name: "The web app", href: "/p/web" }}
         nav={[
-          { href: "/", label: "Board", current: true },
-          { href: "/decisions", label: "Decisions", current: false, count: 2 },
+          { href: "/p/web", label: "Board", current: true },
+          { href: "/p/web/decisions", label: "Decisions", current: false, count: 2 },
         ]}
         person={alice}
         live={true}
@@ -256,6 +322,8 @@ describe("the shell and signing in", () => {
       </Shell>,
     );
     expect(html).toContain("Acme");
+    expect(html).toContain('class="sc-crumb-link" href="/p/web"');
+    expect(html).toContain("The web app");
     expect(html).toContain('aria-current="page"');
     expect(html).toContain('class="sc-nav-count">2<');
     expect(html).toContain("Sign out");
@@ -364,6 +432,8 @@ describe("people", () => {
       id: 9,
       kind: "person.role_changed",
       actor: alice,
+      agent: null,
+      projectId: null,
       taskId: null,
       decisionId: null,
       runId: null,
@@ -425,7 +495,8 @@ describe("runs", () => {
     const html = renderToStaticMarkup(
       <RunList
         runs={[run]}
-        decisionHref={(id) => `/decisions#${id}`}
+        decisionHref={(id) => `/p/web/decisions#${id}`}
+        fileHref={(artifact) => `/api/v1/projects/web/files/${artifact.id}`}
         onAbandon={() => undefined}
       />,
     );
@@ -435,7 +506,9 @@ describe("runs", () => {
     expect(html).toContain('href="https://github.com/acme/app/pull/2"');
     expect(html).toContain("the fix");
     // A file is read from the console, by the artifact's id, and shown by its name and size.
-    expect(html).toContain('href="/api/v1/files/0199c4d8-0000-7000-8000-000000000043"');
+    expect(html).toContain(
+      'href="/api/v1/projects/web/files/0199c4d8-0000-7000-8000-000000000043"',
+    );
     expect(html).toContain("report &lt;final&gt;.md");
     expect(html).toContain("3.4 KB");
     expect(html).toContain("Mark abandoned");
@@ -457,40 +530,49 @@ describe("runs", () => {
     expect(over).toContain("Done.");
     expect(over).not.toContain("Mark abandoned");
     expect(renderToStaticMarkup(<RunList runs={[]} empty={<p>none</p>} />)).toBe("<p>none</p>");
+    // Without the way to read a file, it is named and not linked.
+    const unlinked = renderToStaticMarkup(<RunList runs={[run]} />);
+    expect(unlinked).not.toContain("/files/");
+    expect(unlinked).toContain("report &lt;final&gt;.md");
   });
 
-  it("says in the feed what an agent did, as itself", () => {
+  it("says in the feed what an agent did; the agent itself is the line's own", () => {
     const event: RestEvent = {
       id: 10,
       kind: "run.started",
       actor: alice,
+      agent: "Claude Code",
+      projectId: null,
       taskId: run.taskId,
       decisionId: null,
       runId: run.id,
       data: { number: 7, title: "Ship", agent: "Claude Code" },
       createdAt: "2026-10-09T10:00:00.000Z",
     };
-    expect(describeEvent(event)).toBe("started on #7 Ship (as Claude Code)");
+    expect(describeEvent(event)).toBe("started on #7 Ship");
     expect(
       describeEvent({
         ...event,
         kind: "run.reported",
         data: { ...event.data, excerpt: "Found it" },
       }),
-    ).toBe("reported on #7 Ship (as Claude Code): Found it");
+    ).toBe("reported on #7 Ship: Found it");
     expect(
       describeEvent({ ...event, kind: "run.handed_in", data: { ...event.data, label: "the fix" } }),
-    ).toBe("handed in the fix on #7 Ship (as Claude Code)");
+    ).toBe("handed in the fix on #7 Ship");
     expect(
       describeEvent({ ...event, kind: "run.ended", data: { ...event.data, status: "abandoned" } }),
-    ).toBe("gave up on #7 Ship (as Claude Code)");
+    ).toBe("gave up on #7 Ship");
     expect(
       describeEvent({
         ...event,
         kind: "decision.raised",
         data: { question: "Which?", agent: "Claude Code" },
       }),
-    ).toBe("asked (as Claude Code): Which?");
+    ).toBe("asked: Which?");
+    const html = renderToStaticMarkup(<EventFeed events={[event]} />);
+    expect(html).toContain("as Claude Code");
+    expect(html).toContain("started on #7 Ship");
   });
 
   it("marks a task an agent is at work on", () => {
@@ -498,6 +580,114 @@ describe("runs", () => {
       <Board tasks={[task({ openRuns: 1 })]} taskHref={href} onOpen={() => undefined} />,
     );
     expect(html).toContain("agent at work");
+  });
+});
+
+describe("projects", () => {
+  const project = (overrides: Partial<RestProject> = {}): RestProject => ({
+    id: "0199c4d8-0000-7000-8000-000000000050",
+    key: "web",
+    name: "The web <app>",
+    description: "What we ship.",
+    visibility: "private",
+    skillsAddress: "/gh/acme/skills",
+    role: "owner",
+    openDecisions: 2,
+    openRuns: 1,
+    createdAt: "2026-10-09T10:00:00.000Z",
+    updatedAt: "2026-10-09T10:00:00.000Z",
+    ...overrides,
+  });
+
+  it("lists what a person may see, each with what they are in it and what waits, as text", () => {
+    const html = renderToStaticMarkup(
+      <ProjectList
+        projects={[
+          project(),
+          project({
+            id: "0199c4d8-0000-7000-8000-000000000051",
+            key: "ops",
+            name: "Ops",
+            role: "member",
+            visibility: "workspace",
+            description: "",
+            openDecisions: 0,
+            openRuns: 0,
+          }),
+        ]}
+        projectHref={(item) => `/p/${item.key}`}
+        onOpen={() => undefined}
+      />,
+    );
+    expect(html).toContain('href="/p/web"');
+    expect(html).toContain("The web &lt;app&gt;");
+    expect(html).not.toContain("<app>");
+    expect(html).toContain("What we ship.");
+    expect(html).toContain("Owner");
+    expect(html).toContain("Member");
+    expect(html).toContain("Private");
+    expect(html).toContain("2 decisions waiting");
+    expect(html).toContain("1 agent at work");
+    expect(
+      renderToStaticMarkup(
+        <ProjectList
+          projects={[]}
+          projectHref={() => "/"}
+          onOpen={() => undefined}
+          empty={<p>none</p>}
+        />,
+      ),
+    ).toBe("<p>none</p>");
+  });
+
+  it("asks for a key and a name when making one, and keeps the key when changing one", () => {
+    const making = renderToStaticMarkup(<ProjectForm onSubmit={() => undefined} />);
+    expect(making).toContain("Make the project");
+    expect(making).toContain("Key");
+    expect(making).not.toMatch(/<input[^>]*maxLength="40"[^>]*disabled/);
+    const changing = renderToStaticMarkup(
+      <ProjectForm project={project()} onSubmit={() => undefined} />,
+    );
+    expect(changing).toContain(">Save<");
+    expect(changing).toContain('value="web"');
+    expect(changing).toMatch(/<input[^>]*maxLength="40"[^>]*disabled/);
+    expect(changing).toContain("/gh/acme/skills");
+    expect(keyOf("The Web App, v2!")).toBe("the-web-app-v2");
+    expect(keyOf("---")).toBe("");
+  });
+
+  it("lists those in a project, and lets an owner add, change and remove them", () => {
+    const members: RestMember[] = [
+      { person: alice, role: "owner", addedAt: "2026-10-09T10:00:00.000Z" },
+    ];
+    const read = renderToStaticMarkup(
+      <MemberList members={members} people={[alice, bob]} me={alice} />,
+    );
+    expect(read).toContain("Owner");
+    expect(read).toContain("(you)");
+    expect(read).not.toContain("<select");
+    expect(read).not.toContain("Remove");
+    const change = renderToStaticMarkup(
+      <MemberList
+        members={members}
+        people={[alice, bob]}
+        onAdd={() => undefined}
+        onChangeRole={() => undefined}
+        onRemove={() => undefined}
+      />,
+    );
+    expect(change).toContain('aria-label="Add a member"');
+    // Only those not listed yet are offered.
+    expect(change).toContain(`<option value="${bob.id}">bob</option>`);
+    expect(change).not.toContain(`<option value="${alice.id}"`);
+    expect(change).toContain("Remove");
+    const full = renderToStaticMarkup(
+      <MemberList members={members} people={[alice]} onAdd={() => undefined} empty={<p>none</p>} />,
+    );
+    expect(full).not.toContain('aria-label="Add a member"');
+    expect(
+      renderToStaticMarkup(<MemberList members={[]} people={[]} empty={<p>none</p>} />),
+    ).toContain("<p>none</p>");
   });
 });
 

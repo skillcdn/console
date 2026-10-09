@@ -51,7 +51,7 @@ The console is configured only through environment variables. [`.env.example`](.
 | `SESSION_TTL_DAYS` | `api` | no | no | How long a browser stays signed in without being used. Default `30`. |
 | `WEB_ROOT` | `api` | no | no | Directory of a build of the default UI. The image sets `/app/web`; set it to an empty value to run without a UI. A directory without an `index.html` is a configuration error. |
 | `SKILLCDN_URL` | `api` | no | no | The origin of the SkillCDN deployment the organization's skills are read through. Default `https://skillcdn.ai`. |
-| `SKILLS_ADDRESS` | `api` | no | no | The address of the organization's skills at that deployment, as the standard spells one (`/gh/<owner>/<repo>`, with `@<ref>` and a path when needed). Unset: the Skills page says there is no address yet. The console asks as nobody, so a private repository shows only where the deployment serves it to anyone. |
+| `SKILLS_ADDRESS` | `api` | no | no | The address of the organization's skills at that deployment, as the standard spells one (`/gh/<owner>/<repo>`, with `@<ref>` and a path when needed): what a project shows when it names no address of its own on its Settings page. Unset: such a project's Skills page says there is no address yet. The console asks as nobody, so a private repository shows only where the deployment serves it to anyone. |
 
 Every secret `NAME` may also be supplied as `NAME_FILE`, so container secret mounts work.
 

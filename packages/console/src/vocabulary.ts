@@ -33,6 +33,16 @@ export const PERSON_ROLES = ["admin", "member"] as const;
 
 export type PersonRole = (typeof PERSON_ROLES)[number];
 
+/** What a person is within a project: an owner configures it, a member works on it. */
+export const PROJECT_ROLES = ["owner", "member"] as const;
+
+export type ProjectRole = (typeof PROJECT_ROLES)[number];
+
+/** Who is a member of a project: every member of the workspace, or only those listed. */
+export const PROJECT_VISIBILITIES = ["workspace", "private"] as const;
+
+export type ProjectVisibility = (typeof PROJECT_VISIBILITIES)[number];
+
 /** What a run is doing: at work, waiting for a person's decision, or over in one of three ways. */
 export const RUN_STATUSES = ["running", "waiting", "finished", "failed", "abandoned"] as const;
 
@@ -70,6 +80,11 @@ export type SkillsStatus = (typeof SKILLS_STATUSES)[number];
 export const EVENT_KINDS = [
   "person.joined",
   "person.role_changed",
+  "project.created",
+  "project.updated",
+  "project.member_added",
+  "project.member_changed",
+  "project.member_removed",
   "task.created",
   "task.updated",
   "task.moved",

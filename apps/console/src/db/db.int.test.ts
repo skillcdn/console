@@ -9,8 +9,19 @@ import {
   listDecisions,
   raiseDecision,
 } from "./queries/decisions.js";
-import { EVENTS_CHANNEL, latestEventId, listEventsAfter } from "./queries/events.js";
+import { EVENTS_CHANNEL, latestEventId, listEventsAfter, type Scope } from "./queries/events.js";
 import { findPerson, listPeople, type PersonRecord, savePerson } from "./queries/people.js";
+import {
+  addMember,
+  createProject,
+  findProjectFor,
+  listMembers,
+  listProjectsFor,
+  ProjectError,
+  removeMember,
+  updateMember,
+  updateProject,
+} from "./queries/projects.js";
 import { endRun, excerptOf, RunError, startRun } from "./queries/runs.js";
 import {
   createSession,
@@ -43,6 +54,8 @@ import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "./testi
 let testDatabase: TestDatabase;
 let database: Database;
 let workspaceId: string;
+/** The project the board's tests work in. */
+let scope: Scope;
 let alice: PersonRecord;
 let bob: PersonRecord;
 
@@ -74,6 +87,14 @@ beforeAll(async () => {
       now: T0,
     })
   ).person;
+  const project = await createProject(database, {
+    workspaceId,
+    actor: { id: alice.id },
+    person: alice,
+    project: { key: "web", name: "The web app", visibility: "workspace" },
+    now: T0,
+  });
+  scope = { workspaceId, projectId: project.id };
 });
 
 afterAll(async () => {
@@ -142,7 +163,7 @@ describe("people", () => {
   });
 
   it("are told to the board when they join, and not again", async () => {
-    const { items } = await listEventsAfter(database, workspaceId, 0, 100);
+    const { items } = await listEventsAfter(database, { workspaceId, projectId: null }, 0, 100);
     const joined = items.filter((event) => event.kind === "person.joined");
     expect(joined.map((event) => event.actor?.id)).toEqual([alice.id, bob.id]);
   });
@@ -198,14 +219,14 @@ describe("sessions", () => {
 describe("tasks", () => {
   it("are numbered in order, with defaults for what was not said", async () => {
     const first = await createTask(database, {
-      workspaceId,
-      actorId: alice.id,
+      scope,
+      actor: alice,
       task: { title: "Write the release notes" },
       now: minutes(10),
     });
     const second = await createTask(database, {
-      workspaceId,
-      actorId: bob.id,
+      scope,
+      actor: bob,
       task: {
         title: "Ship",
         body: "# Plan",
@@ -236,46 +257,70 @@ describe("tasks", () => {
       assignee: alice,
       links: [{ url: "https://github.com/acme/app/pull/1", label: null }],
     });
-    expect(await getTask(database, workspaceId, second.id)).toEqual(second);
-    expect((await listTasks(database, workspaceId, { limit: 10 })).map((t) => t.number)).toEqual([
-      2, 1,
-    ]);
+    expect(await getTask(database, scope, second.id)).toEqual(second);
+    expect((await listTasks(database, scope, { limit: 10 })).map((t) => t.number)).toEqual([2, 1]);
     expect(
-      (await listTasks(database, workspaceId, { state: "ready", limit: 10 })).map((t) => t.number),
+      (await listTasks(database, scope, { state: "ready", limit: 10 })).map((t) => t.number),
     ).toEqual([2]);
   });
 
   it("refuse an assignee who is not of the workspace, and a parent that is not a task", async () => {
     await expect(
       createTask(database, {
-        workspaceId,
-        actorId: alice.id,
+        scope,
+        actor: alice,
         task: { title: "x", assigneeId: "0199c4d8-0000-7000-8000-000000000099" },
         now: T0,
       }),
     ).rejects.toMatchObject({ code: "task.invalid_assignee" });
     await expect(
       createTask(database, {
-        workspaceId,
-        actorId: alice.id,
+        scope,
+        actor: alice,
         task: { title: "x", parentId: "0199c4d8-0000-7000-8000-000000000099" },
         now: T0,
       }),
     ).rejects.toBeInstanceOf(TaskError);
+    // In a private project, only those listed may be assigned; and its tasks are numbered on their own.
+    const own = await createProject(database, {
+      workspaceId,
+      actor: { id: alice.id },
+      person: alice,
+      project: { key: "own", name: "Alice's own" },
+      now: T0,
+    });
+    const inOwn = { workspaceId, projectId: own.id };
+    await expect(
+      createTask(database, {
+        scope: inOwn,
+        actor: alice,
+        task: { title: "x", assigneeId: bob.id },
+        now: T0,
+      }),
+    ).rejects.toMatchObject({ code: "task.invalid_assignee" });
+    const first = await createTask(database, {
+      scope: inOwn,
+      actor: alice,
+      task: { title: "The first of its own", assigneeId: alice.id },
+      now: T0,
+    });
+    expect(first.number).toBe(1);
+    expect(await getTask(database, scope, first.id)).toBeUndefined();
+    expect(await getTask(database, inOwn, first.id)).toMatchObject({ number: 1 });
   });
 
   it("record a move and an edit as the events they are, and nothing for no change", async () => {
     const task = await createTask(database, {
-      workspaceId,
-      actorId: alice.id,
+      scope,
+      actor: alice,
       task: { title: "Review the design" },
       now: minutes(20),
     });
     const before = await latestEventId(database, workspaceId);
 
     const moved = await updateTask(database, {
-      workspaceId,
-      actorId: bob.id,
+      scope,
+      actor: bob,
       taskId: task.id,
       patch: { state: "in_progress" },
       now: minutes(21),
@@ -284,8 +329,8 @@ describe("tasks", () => {
     expect(moved.updatedAt).toEqual(minutes(21));
 
     const edited = await updateTask(database, {
-      workspaceId,
-      actorId: bob.id,
+      scope,
+      actor: bob,
       taskId: task.id,
       patch: { title: "Review the design, again", assigneeId: bob.id, priority: "urgent" },
       now: minutes(22),
@@ -293,15 +338,15 @@ describe("tasks", () => {
     expect(edited).toMatchObject({ title: "Review the design, again", assignee: bob });
 
     const same = await updateTask(database, {
-      workspaceId,
-      actorId: bob.id,
+      scope,
+      actor: bob,
       taskId: task.id,
       patch: { priority: "urgent" },
       now: minutes(23),
     });
     expect(same.updatedAt).toEqual(minutes(22));
 
-    const { items } = await listEventsAfter(database, workspaceId, before, 100);
+    const { items } = await listEventsAfter(database, scope, before, 100);
     expect(items.map((event) => [event.kind, event.data])).toEqual([
       [
         "task.moved",
@@ -321,8 +366,8 @@ describe("tasks", () => {
     );
     await expect(
       updateTask(database, {
-        workspaceId,
-        actorId: bob.id,
+        scope,
+        actor: bob,
         taskId: "0199c4d8-0000-7000-8000-000000000099",
         patch: { state: "done" },
         now: T0,
@@ -332,31 +377,31 @@ describe("tasks", () => {
 
   it("break down into subtasks, but never into a loop", async () => {
     const parent = await createTask(database, {
-      workspaceId,
-      actorId: alice.id,
+      scope,
+      actor: alice,
       task: { title: "Launch" },
       now: minutes(30),
     });
     const child = await createTask(database, {
-      workspaceId,
-      actorId: alice.id,
+      scope,
+      actor: alice,
       task: { title: "Write the announcement", parentId: parent.id },
       now: minutes(31),
     });
     const grandchild = await createTask(database, {
-      workspaceId,
-      actorId: alice.id,
+      scope,
+      actor: alice,
       task: { title: "Draft it", parentId: child.id },
       now: minutes(32),
     });
-    expect((await listSubtasks(database, workspaceId, parent.id, 10)).map((t) => t.id)).toEqual([
+    expect((await listSubtasks(database, scope, parent.id, 10)).map((t) => t.id)).toEqual([
       child.id,
     ]);
     for (const parentId of [parent.id, grandchild.id]) {
       await expect(
         updateTask(database, {
-          workspaceId,
-          actorId: alice.id,
+          scope,
+          actor: alice,
           taskId: parent.id,
           patch: { parentId },
           now: minutes(33),
@@ -364,8 +409,8 @@ describe("tasks", () => {
       ).rejects.toMatchObject({ code: "task.invalid_parent" });
     }
     const detached = await updateTask(database, {
-      workspaceId,
-      actorId: alice.id,
+      scope,
+      actor: alice,
       taskId: grandchild.id,
       patch: { parentId: null },
       now: minutes(34),
@@ -377,14 +422,14 @@ describe("tasks", () => {
 describe("decisions", () => {
   it("are raised with numbered options, about a task or not, and counted on the task", async () => {
     const task = await createTask(database, {
-      workspaceId,
-      actorId: alice.id,
+      scope,
+      actor: alice,
       task: { title: "Choose a database" },
       now: minutes(40),
     });
     const raised = await raiseDecision(database, {
-      workspaceId,
-      actorId: alice.id,
+      scope,
+      actor: alice,
       decision: {
         question: "Which one?",
         body: "Both work.",
@@ -404,19 +449,19 @@ describe("decisions", () => {
       raisedBy: alice,
       answer: undefined,
     });
-    expect((await getTask(database, workspaceId, task.id))?.openDecisions).toBe(1);
+    expect((await getTask(database, scope, task.id))?.openDecisions).toBe(1);
     const alone = await raiseDecision(database, {
-      workspaceId,
-      actorId: bob.id,
+      scope,
+      actor: bob,
       decision: { question: "Lunch?", options: ["Now", "Later"] },
       now: minutes(42),
     });
     expect(alone.taskId).toBeUndefined();
-    expect(await getDecision(database, workspaceId, alone.id)).toEqual(alone);
+    expect(await getDecision(database, scope, alone.id)).toEqual(alone);
     await expect(
       raiseDecision(database, {
-        workspaceId,
-        actorId: bob.id,
+        scope,
+        actor: bob,
         decision: {
           question: "About nothing?",
           options: ["a", "b"],
@@ -426,7 +471,7 @@ describe("decisions", () => {
       }),
     ).rejects.toMatchObject({ code: "decision.invalid_task" });
 
-    const event = (await listEventsAfter(database, workspaceId, 0, 200)).items.find(
+    const event = (await listEventsAfter(database, scope, 0, 200)).items.find(
       (candidate) => candidate.decisionId === raised.id,
     );
     expect(event).toMatchObject({
@@ -438,21 +483,21 @@ describe("decisions", () => {
 
   it("are answered once, with one of their options, and the task's count goes down", async () => {
     const task = await createTask(database, {
-      workspaceId,
-      actorId: alice.id,
+      scope,
+      actor: alice,
       task: { title: "Pick a name" },
       now: minutes(50),
     });
     const raised = await raiseDecision(database, {
-      workspaceId,
-      actorId: alice.id,
+      scope,
+      actor: alice,
       decision: { question: "Name?", options: ["Console", "Board"], taskId: task.id },
       now: minutes(51),
     });
     await expect(
       answerDecision(database, {
-        workspaceId,
-        actorId: bob.id,
+        scope,
+        actor: bob,
         decisionId: raised.id,
         option: "3",
         note: undefined,
@@ -460,8 +505,8 @@ describe("decisions", () => {
       }),
     ).rejects.toMatchObject({ code: "decision.no_such_option" });
     const answered = await answerDecision(database, {
-      workspaceId,
-      actorId: bob.id,
+      scope,
+      actor: bob,
       decisionId: raised.id,
       option: "2",
       note: "Shorter.",
@@ -469,11 +514,11 @@ describe("decisions", () => {
     });
     expect(answered.answer).toEqual({ option: "2", note: "Shorter.", by: bob, at: minutes(52) });
     expect(answered.updatedAt).toEqual(minutes(52));
-    expect((await getTask(database, workspaceId, task.id))?.openDecisions).toBe(0);
+    expect((await getTask(database, scope, task.id))?.openDecisions).toBe(0);
     await expect(
       answerDecision(database, {
-        workspaceId,
-        actorId: alice.id,
+        scope,
+        actor: alice,
         decisionId: raised.id,
         option: "1",
         note: undefined,
@@ -482,8 +527,8 @@ describe("decisions", () => {
     ).rejects.toBeInstanceOf(DecisionError);
     await expect(
       answerDecision(database, {
-        workspaceId,
-        actorId: alice.id,
+        scope,
+        actor: alice,
         decisionId: "0199c4d8-0000-7000-8000-000000000099",
         option: "1",
         note: undefined,
@@ -491,14 +536,14 @@ describe("decisions", () => {
       }),
     ).rejects.toMatchObject({ code: "decision.not_found" });
 
-    const event = (await listEventsAfter(database, workspaceId, 0, 200)).items.find(
+    const event = (await listEventsAfter(database, scope, 0, 200)).items.find(
       (candidate) => candidate.kind === "decision.answered" && candidate.decisionId === raised.id,
     );
     expect(event?.data).toEqual({ question: "Name?", option: "Board" });
   });
 
   it("list the ones that wait first, newest first within each", async () => {
-    const all = await listDecisions(database, workspaceId, { limit: 100 });
+    const all = await listDecisions(database, scope, { limit: 100 });
     const waiting = all.filter((decision) => decision.answer === undefined);
     const done = all.filter((decision) => decision.answer !== undefined);
     expect(all.slice(0, waiting.length)).toEqual(waiting);
@@ -513,23 +558,23 @@ describe("decisions", () => {
         }
       }
     }
-    expect(await listDecisions(database, workspaceId, { open: true, limit: 100 })).toEqual(waiting);
+    expect(await listDecisions(database, scope, { open: true, limit: 100 })).toEqual(waiting);
   });
 });
 
 describe("events", () => {
   it("are read from a number on, a page at a time", async () => {
     const latest = await latestEventId(database, workspaceId);
-    const first = await listEventsAfter(database, workspaceId, 0, 3);
+    const first = await listEventsAfter(database, scope, 0, 3);
     expect(first.items).toHaveLength(3);
     expect(first.more).toBe(true);
     expect(first.items.map((event) => event.id)).toEqual(
       [...first.items.map((event) => event.id)].sort((a, b) => a - b),
     );
-    const rest = await listEventsAfter(database, workspaceId, first.items[2]?.id ?? 0, 1000);
+    const rest = await listEventsAfter(database, scope, first.items[2]?.id ?? 0, 1000);
     expect(rest.more).toBe(false);
     expect(rest.items.at(-1)?.id).toBe(latest);
-    expect((await listEventsAfter(database, workspaceId, latest, 10)).items).toEqual([]);
+    expect((await listEventsAfter(database, scope, latest, 10)).items).toEqual([]);
   });
 
   it("nudge whoever listens on the channel when one is written", async () => {
@@ -541,8 +586,8 @@ describe("events", () => {
         listener.once("notification", (message) => resolve(message.channel));
       });
       await createTask(database, {
-        workspaceId,
-        actorId: alice.id,
+        scope,
+        actor: alice,
         task: { title: "Wake the feed" },
         now: minutes(60),
       });
@@ -615,17 +660,166 @@ describe("tokens", () => {
   });
 });
 
+describe("projects", () => {
+  it("are made with their maker as owner, keyed once per workspace, and seen as each person may", async () => {
+    const made = await createProject(database, {
+      workspaceId,
+      actor: { id: bob.id },
+      person: bob,
+      project: {
+        key: "ops",
+        name: "Ops",
+        description: "What we run.",
+        skillsAddress: "/gh/acme/ops",
+      },
+      now: minutes(200),
+    });
+    expect(made).toMatchObject({
+      key: "ops",
+      name: "Ops",
+      description: "What we run.",
+      visibility: "private",
+      skillsAddress: "/gh/acme/ops",
+      role: "owner",
+      openDecisions: 0,
+      openRuns: 0,
+    });
+    await expect(
+      createProject(database, {
+        workspaceId,
+        actor: { id: bob.id },
+        person: bob,
+        project: { key: "ops", name: "Again" },
+        now: minutes(201),
+      }),
+    ).rejects.toMatchObject({ code: "project.key_taken" });
+    // Bob is listed; Alice is not, and a private project she is not in is not there for her.
+    expect(
+      (await listMembers(database, made.id)).map((member) => [member.person.id, member.role]),
+    ).toEqual([[bob.id, "owner"]]);
+    expect(await findProjectFor(database, workspaceId, "ops", alice)).toBeUndefined();
+    expect((await findProjectFor(database, workspaceId, "ops", bob))?.role).toBe("owner");
+    // The open project is everyone's, as a member; an administrator is an owner everywhere.
+    expect((await findProjectFor(database, workspaceId, "web", bob))?.role).toBe("member");
+    expect((await findProjectFor(database, workspaceId, "web", alice))?.role).toBe("owner");
+    const administrator = { ...bob, role: "admin" as const };
+    expect((await findProjectFor(database, workspaceId, "own", administrator))?.role).toBe("owner");
+    expect(
+      (await listProjectsFor(database, workspaceId, bob)).map((project) => project.key),
+    ).toEqual(["ops", "web"]);
+    expect(
+      (await listProjectsFor(database, workspaceId, alice)).map((project) => project.key),
+    ).toEqual(["own", "web"]);
+    expect(await findProjectFor(database, workspaceId, "nothing", administrator)).toBeUndefined();
+  });
+
+  it("list people with a role each, change them, and tell the board of all of it", async () => {
+    const ops = await findProjectFor(database, workspaceId, "ops", bob);
+    if (ops === undefined) {
+      throw new Error("ops is bob's");
+    }
+    const inOps = { workspaceId, projectId: ops.id };
+    const before = await latestEventId(database, workspaceId);
+    const added = await addMember(database, {
+      ...inOps,
+      actor: { id: bob.id },
+      personId: alice.id,
+      role: "member",
+      now: minutes(210),
+    });
+    expect(added).toMatchObject({ role: "member", addedAt: minutes(210) });
+    expect(added.person.id).toBe(alice.id);
+    expect((await findProjectFor(database, workspaceId, "ops", alice))?.role).toBe("member");
+    await expect(
+      addMember(database, {
+        ...inOps,
+        actor: { id: bob.id },
+        personId: alice.id,
+        role: "owner",
+        now: T0,
+      }),
+    ).rejects.toMatchObject({ code: "member.exists" });
+    await expect(
+      addMember(database, {
+        ...inOps,
+        actor: { id: bob.id },
+        personId: "0199c4d8-0000-7000-8000-000000000099",
+        role: "member",
+        now: T0,
+      }),
+    ).rejects.toMatchObject({ code: "member.invalid_person" });
+    const promoted = await updateMember(database, {
+      ...inOps,
+      actor: { id: bob.id },
+      personId: alice.id,
+      role: "owner",
+      now: minutes(211),
+    });
+    expect(promoted.role).toBe("owner");
+    // Said again, nothing is written.
+    await updateMember(database, {
+      ...inOps,
+      actor: { id: bob.id },
+      personId: alice.id,
+      role: "owner",
+      now: minutes(212),
+    });
+    await removeMember(database, {
+      ...inOps,
+      actor: { id: bob.id },
+      personId: alice.id,
+      now: minutes(213),
+    });
+    expect(await findProjectFor(database, workspaceId, "ops", alice)).toBeUndefined();
+    await expect(
+      removeMember(database, { ...inOps, actor: { id: bob.id }, personId: alice.id, now: T0 }),
+    ).rejects.toBeInstanceOf(ProjectError);
+    const renamed = await updateProject(database, {
+      projectId: ops.id,
+      actor: { id: bob.id, agent: "a script" },
+      person: bob,
+      patch: { name: "Operations", visibility: "workspace", skillsAddress: null },
+      now: minutes(214),
+    });
+    expect(renamed).toMatchObject({
+      name: "Operations",
+      visibility: "workspace",
+      skillsAddress: undefined,
+    });
+    expect((await findProjectFor(database, workspaceId, "ops", alice))?.role).toBe("member");
+    const { items } = await listEventsAfter(database, inOps, before, 100);
+    expect(items.map((event) => [event.kind, event.agent, event.data])).toEqual([
+      [
+        "project.member_added",
+        undefined,
+        { key: "ops", name: "Ops", login: "Alice", role: "member" },
+      ],
+      [
+        "project.member_changed",
+        undefined,
+        { key: "ops", name: "Ops", login: "Alice", role: "owner" },
+      ],
+      ["project.member_removed", undefined, { key: "ops", name: "Ops", login: "Alice" }],
+      [
+        "project.updated",
+        "a script",
+        { key: "ops", name: "Operations", fields: ["name", "visibility", "skillsAddress"] },
+      ],
+    ]);
+  });
+});
+
 describe("runs", () => {
   it("take a task for a person, one agent at a time, and not a closed one", async () => {
     const task = await createTask(database, {
-      workspaceId,
-      actorId: bob.id,
+      scope,
+      actor: bob,
       task: { title: "Index the docs", state: "ready" },
       now: minutes(100),
     });
     const run = await startRun(database, {
-      workspaceId,
-      actorId: alice.id,
+      scope,
+      actor: alice,
       tokenId: undefined,
       taskId: task.id,
       agent: "Codex",
@@ -633,13 +827,22 @@ describe("runs", () => {
     });
     expect(run).toMatchObject({ status: "running", agent: "Codex", reports: [], artifacts: [] });
     expect(run.person.id).toBe(alice.id);
-    const taken = await getTask(database, workspaceId, task.id);
+    const ofRun = (await listEventsAfter(database, { ...scope, runId: run.id }, 0, 100)).items;
+    expect(ofRun.map((event) => [event.kind, event.agent])).toEqual([["run.started", "Codex"]]);
+    const ofTask = (await listEventsAfter(database, { ...scope, taskId: task.id }, 0, 100)).items;
+    expect(ofTask.map((event) => [event.kind, event.agent])).toEqual([
+      ["task.created", undefined],
+      ["run.started", "Codex"],
+      ["task.moved", "Codex"],
+      ["task.updated", "Codex"],
+    ]);
+    const taken = await getTask(database, scope, task.id);
     expect(taken).toMatchObject({ state: "in_progress", openRuns: 1 });
     expect(taken?.assignee?.id).toBe(alice.id);
     await expect(
       startRun(database, {
-        workspaceId,
-        actorId: bob.id,
+        scope,
+        actor: bob,
         tokenId: undefined,
         taskId: task.id,
         agent: "another",
@@ -649,8 +852,8 @@ describe("runs", () => {
     // Only its person ends it, unless an administrator does; a finished run puts the task up for review.
     await expect(
       endRun(database, {
-        workspaceId,
-        actorId: bob.id,
+        scope,
+        actor: bob,
         runId: run.id,
         status: "finished",
         summary: undefined,
@@ -658,8 +861,8 @@ describe("runs", () => {
       }),
     ).rejects.toBeInstanceOf(RunError);
     const ended = await endRun(database, {
-      workspaceId,
-      actorId: bob.id,
+      scope,
+      actor: bob,
       runId: run.id,
       status: "abandoned",
       summary: undefined,
@@ -667,17 +870,17 @@ describe("runs", () => {
       now: minutes(103),
     });
     expect(ended).toMatchObject({ status: "abandoned", endedAt: minutes(103) });
-    expect((await getTask(database, workspaceId, task.id))?.openRuns).toBe(0);
+    expect((await getTask(database, scope, task.id))?.openRuns).toBe(0);
     const closed = await createTask(database, {
-      workspaceId,
-      actorId: bob.id,
+      scope,
+      actor: bob,
       task: { title: "Old", state: "done" },
       now: minutes(104),
     });
     await expect(
       startRun(database, {
-        workspaceId,
-        actorId: alice.id,
+        scope,
+        actor: alice,
         tokenId: undefined,
         taskId: closed.id,
         agent: "Codex",

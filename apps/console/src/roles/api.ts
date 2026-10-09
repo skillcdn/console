@@ -153,7 +153,6 @@ export function createApi(
 
   const feed = new LiveFeed({
     database,
-    workspaceId: async () => (await workspace()).id,
     pageLimit: EVENTS_PAGE_LIMIT,
     heartbeatMs: config.feed?.heartbeatMs ?? FEED_HEARTBEAT_MS,
     pollMs: config.feed?.pollMs ?? FEED_POLL_MS,
@@ -170,6 +169,7 @@ export function createApi(
         logger,
       }),
     clock,
+    logger,
   });
 
   const app = createApp({

@@ -2,15 +2,18 @@ import type { RestTaskLink, TaskPriority, TaskState } from "@skillcdn/console/ap
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
-import { decisions, people, runs, tasks, workspaces } from "../schema.js";
-import { recordEvent } from "./events.js";
+import { decisions, people, projects, runs, tasks } from "../schema.js";
+import { type Actor, recordEvent, type Scope } from "./events.js";
 import { assignees, owners, type PersonRecord, personColumns, toPerson } from "./people.js";
+import { mayWorkIn } from "./projects.js";
 
-// The work on the board. Every change is one transaction with the event that records it.
+// The work on the board of a project. Every change is one transaction with the event that
+// records it, and every read is scoped to the project: a task of another is not found.
 
 export interface TaskRecord {
   readonly id: string;
   readonly workspaceId: string;
+  readonly projectId: string;
   readonly number: number;
   readonly title: string;
   readonly body: string;
@@ -36,8 +39,8 @@ export class TaskError extends DomainError {
       code === "task.not_found"
         ? "the task was not found"
         : code === "task.invalid_assignee"
-          ? "the assignee is not a person of the workspace"
-          : "the parent is not a task of the workspace, or would make a loop",
+          ? "the assignee is not a person of the project"
+          : "the parent is not a task of the project, or would make a loop",
     );
   }
 }
@@ -64,6 +67,7 @@ const openRunsOf = sql<number>`(select count(*) from ${runs} where ${runs.taskId
 const taskColumns = {
   id: tasks.id,
   workspaceId: tasks.workspaceId,
+  projectId: tasks.projectId,
   number: tasks.number,
   title: tasks.title,
   body: tasks.body,
@@ -79,10 +83,11 @@ const taskColumns = {
   openRuns: openRunsOf.mapWith(Number),
 };
 
+type Handle = Transaction | ReturnType<typeof drizzleOf>;
 type TaskRow = Awaited<ReturnType<typeof selectTasks>>[number];
 
 /** For this file only: the select every read of a task shares. */
-function selectTasks(handle: Transaction | ReturnType<typeof drizzleOf>) {
+function selectTasks(handle: Handle) {
   return handle
     .select(taskColumns)
     .from(tasks)
@@ -94,6 +99,7 @@ function toTask(row: TaskRow): TaskRecord {
   return {
     id: row.id,
     workspaceId: row.workspaceId,
+    projectId: row.projectId,
     number: row.number,
     title: row.title,
     body: row.body,
@@ -111,20 +117,20 @@ function toTask(row: TaskRow): TaskRecord {
 }
 
 async function readTask(
-  handle: Transaction | ReturnType<typeof drizzleOf>,
-  workspaceId: string,
+  handle: Handle,
+  scope: Scope,
   taskId: string,
 ): Promise<TaskRecord | undefined> {
   const [row] = await selectTasks(handle)
-    .where(and(eq(tasks.workspaceId, workspaceId), eq(tasks.id, taskId)))
+    .where(and(eq(tasks.projectId, scope.projectId), eq(tasks.id, taskId)))
     .limit(1);
   return row === undefined ? undefined : toTask(row);
 }
 
-/** The assignee must be a person of this workspace; the foreign key alone says nothing of that. */
+/** The assignee must be a person of the workspace who may work in the project. */
 async function checkAssignee(
   tx: Transaction,
-  workspaceId: string,
+  scope: Scope,
   assigneeId: string | null | undefined,
 ): Promise<void> {
   if (assigneeId === undefined || assigneeId === null) {
@@ -133,7 +139,13 @@ async function checkAssignee(
   const [row] = await tx
     .select({ id: people.id })
     .from(people)
-    .where(and(eq(people.workspaceId, workspaceId), eq(people.id, assigneeId)))
+    .where(
+      and(
+        eq(people.workspaceId, scope.workspaceId),
+        eq(people.id, assigneeId),
+        mayWorkIn(scope.projectId, assigneeId),
+      ),
+    )
     .limit(1);
   if (row === undefined) {
     throw new TaskError("task.invalid_assignee");
@@ -141,12 +153,12 @@ async function checkAssignee(
 }
 
 /**
- * The parent must be a task of this workspace, and not the task itself or one of its own
+ * The parent must be a task of this project, and not the task itself or one of its own
  * descendants: a chain of parents has to end somewhere.
  */
 async function checkParent(
   tx: Transaction,
-  workspaceId: string,
+  scope: Scope,
   taskId: string | undefined,
   parentId: string | null | undefined,
 ): Promise<void> {
@@ -161,7 +173,7 @@ async function checkParent(
     const [row] = await tx
       .select({ parentId: tasks.parentId })
       .from(tasks)
-      .where(and(eq(tasks.workspaceId, workspaceId), eq(tasks.id, current)))
+      .where(and(eq(tasks.projectId, scope.projectId), eq(tasks.id, current)))
       .limit(1);
     if (row === undefined) {
       throw new TaskError("task.invalid_parent");
@@ -173,40 +185,41 @@ async function checkParent(
   }
 }
 
-/** Writes a task down, numbered after the last, owned by whoever wrote it, and tells the board. */
+/** Writes a task down, numbered after the project's last, owned by whoever wrote it, and tells the board. */
 export async function createTask(
   database: Database,
   input: {
-    readonly workspaceId: string;
-    readonly actorId: string;
+    readonly scope: Scope;
+    readonly actor: Actor;
     readonly task: TaskInput;
     readonly now: Date;
   },
 ): Promise<TaskRecord> {
-  const { workspaceId, actorId, task, now } = input;
+  const { scope, actor, task, now } = input;
   return drizzleOf(database).transaction(async (tx) => {
-    await checkAssignee(tx, workspaceId, task.assigneeId);
-    await checkParent(tx, workspaceId, undefined, task.parentId);
+    await checkAssignee(tx, scope, task.assigneeId);
+    await checkParent(tx, scope, undefined, task.parentId);
     // The counter is bumped under the row lock the update takes, so two tasks written at once
     // get two numbers.
     const [counter] = await tx
-      .update(workspaces)
-      .set({ nextTaskNumber: sql`${workspaces.nextTaskNumber} + 1` })
-      .where(eq(workspaces.id, workspaceId))
-      .returning({ number: sql<number>`${workspaces.nextTaskNumber} - 1`.mapWith(Number) });
+      .update(projects)
+      .set({ nextTaskNumber: sql`${projects.nextTaskNumber} + 1` })
+      .where(eq(projects.id, scope.projectId))
+      .returning({ number: sql<number>`${projects.nextTaskNumber} - 1`.mapWith(Number) });
     if (counter === undefined) {
-      throw new Error("the workspace was not found");
+      throw new Error("the project was not found");
     }
     const [inserted] = await tx
       .insert(tasks)
       .values({
-        workspaceId,
+        workspaceId: scope.workspaceId,
+        projectId: scope.projectId,
         number: counter.number,
         title: task.title,
         body: task.body ?? "",
         state: task.state ?? "idea",
         priority: task.priority ?? "normal",
-        ownerId: actorId,
+        ownerId: actor.id,
         assigneeId: task.assigneeId ?? null,
         parentId: task.parentId ?? null,
         links: [...(task.links ?? [])],
@@ -218,14 +231,14 @@ export async function createTask(
       throw new Error("task insert returned no row");
     }
     await recordEvent(tx, {
-      workspaceId,
+      ...scope,
       kind: "task.created",
-      actorId,
+      actor,
       taskId: inserted.id,
       data: { number: counter.number, title: task.title },
       now,
     });
-    const written = await readTask(tx, workspaceId, inserted.id);
+    const written = await readTask(tx, scope, inserted.id);
     if (written === undefined) {
       throw new Error("the task written was not found");
     }
@@ -243,8 +256,8 @@ export async function updateTask(database: Database, input: TaskUpdate): Promise
 }
 
 export interface TaskUpdate {
-  readonly workspaceId: string;
-  readonly actorId: string;
+  readonly scope: Scope;
+  readonly actor: Actor;
   readonly taskId: string;
   readonly patch: TaskPatch;
   readonly now: Date;
@@ -252,7 +265,7 @@ export interface TaskUpdate {
 
 /** {@link updateTask} inside a transaction of the caller's: a change that is part of a larger one. */
 export async function updateTaskIn(tx: Transaction, input: TaskUpdate): Promise<TaskRecord> {
-  const { workspaceId, actorId, taskId, patch, now } = input;
+  const { scope, actor, taskId, patch, now } = input;
   const [current] = await tx
     .select({
       title: tasks.title,
@@ -265,13 +278,13 @@ export async function updateTaskIn(tx: Transaction, input: TaskUpdate): Promise<
       number: tasks.number,
     })
     .from(tasks)
-    .where(and(eq(tasks.workspaceId, workspaceId), eq(tasks.id, taskId)))
+    .where(and(eq(tasks.projectId, scope.projectId), eq(tasks.id, taskId)))
     .for("update");
   if (current === undefined) {
     throw new TaskError("task.not_found");
   }
-  await checkAssignee(tx, workspaceId, patch.assigneeId);
-  await checkParent(tx, workspaceId, taskId, patch.parentId);
+  await checkAssignee(tx, scope, patch.assigneeId);
+  await checkParent(tx, scope, taskId, patch.parentId);
 
   const changed: string[] = [];
   const next = {
@@ -293,7 +306,7 @@ export async function updateTaskIn(tx: Transaction, input: TaskUpdate): Promise<
   }
   const moved = next.state !== current.state;
   if (changed.length === 0 && !moved) {
-    const unchanged = await readTask(tx, workspaceId, taskId);
+    const unchanged = await readTask(tx, scope, taskId);
     if (unchanged === undefined) {
       throw new TaskError("task.not_found");
     }
@@ -305,9 +318,9 @@ export async function updateTaskIn(tx: Transaction, input: TaskUpdate): Promise<
     .where(eq(tasks.id, taskId));
   if (moved) {
     await recordEvent(tx, {
-      workspaceId,
+      ...scope,
       kind: "task.moved",
-      actorId,
+      actor,
       taskId,
       data: { number: current.number, title: next.title, from: current.state, to: next.state },
       now,
@@ -315,51 +328,51 @@ export async function updateTaskIn(tx: Transaction, input: TaskUpdate): Promise<
   }
   if (changed.length > 0) {
     await recordEvent(tx, {
-      workspaceId,
+      ...scope,
       kind: "task.updated",
-      actorId,
+      actor,
       taskId,
       data: { number: current.number, title: next.title, fields: changed },
       now,
     });
   }
-  const written = await readTask(tx, workspaceId, taskId);
+  const written = await readTask(tx, scope, taskId);
   if (written === undefined) {
     throw new TaskError("task.not_found");
   }
   return written;
 }
 
-/** A task by the number people say out loud. */
+/** A task by the number people say out loud, within the project. */
 export async function findTaskByNumber(
   database: Database,
-  workspaceId: string,
+  scope: Scope,
   number: number,
 ): Promise<TaskRecord | undefined> {
   const [row] = await selectTasks(drizzleOf(database))
-    .where(and(eq(tasks.workspaceId, workspaceId), eq(tasks.number, number)))
+    .where(and(eq(tasks.projectId, scope.projectId), eq(tasks.number, number)))
     .limit(1);
   return row === undefined ? undefined : toTask(row);
 }
 
 export function getTask(
   database: Database,
-  workspaceId: string,
+  scope: Scope,
   taskId: string,
 ): Promise<TaskRecord | undefined> {
-  return readTask(drizzleOf(database), workspaceId, taskId);
+  return readTask(drizzleOf(database), scope, taskId);
 }
 
-/** The board, newest first, or one state of it. */
+/** The board of the project, newest first, or one state of it. */
 export async function listTasks(
   database: Database,
-  workspaceId: string,
+  scope: Scope,
   filter: { readonly state?: TaskState | undefined; readonly limit: number },
 ): Promise<TaskRecord[]> {
   const rows = await selectTasks(drizzleOf(database))
     .where(
       and(
-        eq(tasks.workspaceId, workspaceId),
+        eq(tasks.projectId, scope.projectId),
         filter.state === undefined ? undefined : eq(tasks.state, filter.state),
       ),
     )
@@ -371,14 +384,14 @@ export async function listTasks(
 /** The tasks that are part of one, oldest first. */
 export async function listSubtasks(
   database: Database,
-  workspaceId: string,
+  scope: Scope,
   parentId: string | null,
   limit: number,
 ): Promise<TaskRecord[]> {
   const rows = await selectTasks(drizzleOf(database))
     .where(
       and(
-        eq(tasks.workspaceId, workspaceId),
+        eq(tasks.projectId, scope.projectId),
         parentId === null ? isNull(tasks.parentId) : eq(tasks.parentId, parentId),
       ),
     )

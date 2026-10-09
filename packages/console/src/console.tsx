@@ -7,6 +7,10 @@ import {
   type RestAnswerInput,
   type RestDecision,
   type RestDecisionInput,
+  type RestEvent,
+  type RestProject,
+  type RestProjectInput,
+  type RestProjectPatch,
   type RestTask,
   type RestTaskInput,
   type RestTokenCreated,
@@ -17,6 +21,13 @@ import { DecisionForm } from "./components/decision-form.js";
 import { DecisionList, type DecisionListProps } from "./components/decision-list.js";
 import { EventFeed, type EventFeedProps } from "./components/event-feed.js";
 import { PeopleList, type PeopleListProps } from "./components/people.js";
+import {
+  MemberList,
+  type MemberListProps,
+  ProjectForm,
+  ProjectList,
+  type ProjectListProps,
+} from "./components/projects.js";
 import { Shell, type ShellProps } from "./components/shell.js";
 import { SignIn, type SignInProps } from "./components/sign-in.js";
 import { SkillList, type SkillListProps } from "./components/skills.js";
@@ -28,14 +39,17 @@ import { type ConsoleData, useConsoleData } from "./data.js";
 import {
   matchRoute,
   PATHS,
+  projectHref,
   type Route,
   signInFailureOf,
   taskHref,
   withoutSignInParam,
 } from "./router.js";
+import { projectPath } from "./routes.js";
 
 // The composition of the default console: the pages assembled from the components, with the
 // places a team may replace named. The UI the image serves is this, with the default config.
+// The front page is the projects; a project's pages are under its key (ADR-0008).
 
 /** The components a custom console may replace, each with the props the default one takes. */
 export interface ConsoleComponents {
@@ -48,6 +62,8 @@ export interface ConsoleComponents {
   readonly TokenList: ComponentType<TokenListProps>;
   readonly PeopleList: ComponentType<PeopleListProps>;
   readonly SkillList: ComponentType<SkillListProps>;
+  readonly ProjectList: ComponentType<ProjectListProps>;
+  readonly MemberList: ComponentType<MemberListProps>;
 }
 
 export const DEFAULT_COMPONENTS: ConsoleComponents = {
@@ -60,6 +76,8 @@ export const DEFAULT_COMPONENTS: ConsoleComponents = {
   TokenList,
   PeopleList,
   SkillList,
+  ProjectList,
+  MemberList,
 };
 
 export interface ConsoleConfig {
@@ -120,23 +138,10 @@ function errorWords(error: unknown): string {
   return "Something went wrong. Try again.";
 }
 
-function Page(props: {
-  readonly route: Route;
-  readonly data: ConsoleData;
-  readonly components: ConsoleComponents;
-  readonly navigate: (href: string) => void;
-}) {
-  const { route, data, components, navigate } = props;
-  const [writing, setWriting] = useState(false);
-  const [asking, setAsking] = useState(false);
-  const [making, setMaking] = useState(false);
-  const [fresh, setFresh] = useState<RestTokenCreated | undefined>(undefined);
+/** Runs a change, keeps what went wrong for the page, and says when it is busy. */
+function useAction() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
-  const tasksById = useMemo(() => new Map(data.tasks.map((task) => [task.id, task])), [data.tasks]);
-  const href = (task: RestTask) => taskHref(task.id);
-
-  /** Runs a change, shows what went wrong, and refreshes what it touched. */
   const act = async (work: () => Promise<unknown>) => {
     setBusy(true);
     setError(undefined);
@@ -148,23 +153,146 @@ function Page(props: {
       setBusy(false);
     }
   };
+  return { busy, error, act };
+}
+
+/** The key of the project a route is on, or nothing. */
+const projectOf = (route: Route): string | undefined =>
+  "project" in route ? route.project : undefined;
+
+function ProjectsPage(props: {
+  readonly data: ConsoleData;
+  readonly components: ConsoleComponents;
+  readonly navigate: (href: string) => void;
+}) {
+  const { data, components, navigate } = props;
+  const [making, setMaking] = useState(false);
+  const { busy, error, act } = useAction();
+  const href = (project: RestProject) => projectHref(project.key);
+  return (
+    <>
+      <div className="sc-page-head">
+        <h1 className="sc-page-title">Projects</h1>
+        <Button variant="primary" onClick={() => setMaking(true)} disabled={making}>
+          New project
+        </Button>
+      </div>
+      <p className="sc-lead">
+        A project holds its board, its skills and its people. What you may see and change is decided
+        per project: an owner configures it, a member works on it.
+      </p>
+      {error !== undefined && <Callout tone="danger">{error}</Callout>}
+      {making && (
+        <section className="sc-panel" aria-label="New project">
+          <ProjectForm
+            busy={busy}
+            onSubmit={(input) =>
+              void act(async () => {
+                const made = await data.actions.createProject(input as RestProjectInput);
+                setMaking(false);
+                navigate(projectHref(made.key));
+              })
+            }
+            onCancel={() => setMaking(false)}
+          />
+        </section>
+      )}
+      <components.ProjectList
+        projects={data.projects}
+        projectHref={href}
+        onOpen={(project) => navigate(href(project))}
+        empty={
+          <EmptyState
+            title="No projects yet"
+            body="Make the first one: what it is for, and who is in it. Or ask an owner to add you to theirs."
+            action={<Button onClick={() => setMaking(true)}>New project</Button>}
+          />
+        }
+      />
+    </>
+  );
+}
+
+function TaskPage(props: {
+  readonly project: RestProject;
+  readonly task: RestTask;
+  readonly data: ConsoleData;
+  readonly components: ConsoleComponents;
+  readonly busy: boolean;
+  readonly error: string | undefined;
+  readonly act: (work: () => Promise<unknown>) => Promise<void>;
+}) {
+  const { project, task, data, components, busy, error, act } = props;
+  const [history, setHistory] = useState<readonly RestEvent[] | undefined>(undefined);
+  const { taskHistory } = data.actions;
+  // Everything that happened to the task, asked for again whenever the project's feed grows.
+  const feedLength = data.events.length;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the feed's length is the trigger
+  useEffect(() => {
+    const controller = new AbortController();
+    taskHistory(task.id, controller.signal)
+      .then((events) => {
+        if (!controller.signal.aborted) {
+          setHistory(events);
+        }
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [task.id, taskHistory, feedLength]);
+  return (
+    <components.TaskView
+      task={task}
+      people={data.people}
+      tasks={data.tasks}
+      decisions={data.decisions}
+      runs={data.runs}
+      history={history}
+      taskHref={(candidate) => taskHref(project.key, candidate.id)}
+      decisionHref={() => projectHref(project.key, "decisions")}
+      fileHref={(artifact) => projectPath(project.key, "files", artifact.id)}
+      busy={busy}
+      error={error}
+      onChange={(target, patch) => void act(() => data.actions.updateTask(target.id, patch))}
+      onMove={(target, state) => void act(() => data.actions.updateTask(target.id, { state }))}
+      onRaiseDecision={(input) => void act(() => data.actions.raiseDecision(input))}
+      onAnswer={(decision, input) =>
+        void act(() => data.actions.answerDecision(decision.id, input))
+      }
+      onAbandonRun={(run) => void act(() => data.actions.abandonRun(run.id))}
+    />
+  );
+}
+
+function ProjectPage(props: {
+  readonly route: Route;
+  readonly project: RestProject;
+  readonly data: ConsoleData;
+  readonly components: ConsoleComponents;
+  readonly navigate: (href: string) => void;
+}) {
+  const { route, project, data, components, navigate } = props;
+  const [writing, setWriting] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const { busy, error, act } = useAction();
+  const tasksById = useMemo(() => new Map(data.tasks.map((task) => [task.id, task])), [data.tasks]);
+  const href = (task: RestTask) => taskHref(project.key, task.id);
+  const owner = project.role === "owner";
+
   const onMove = (task: RestTask, state: TaskState) =>
     void act(() => data.actions.updateTask(task.id, { state }));
-  const onChange = (task: RestTask, patch: RestTaskInput) =>
-    void act(() => data.actions.updateTask(task.id, patch));
   const onAnswer = (decision: RestDecision, input: RestAnswerInput) =>
     void act(() => data.actions.answerDecision(decision.id, input));
-  const onRaise = (input: RestDecisionInput) => void act(() => data.actions.raiseDecision(input));
 
   if (route.name === "board") {
     return (
       <>
         <div className="sc-page-head">
-          <h1 className="sc-page-title">Board</h1>
+          <h1 className="sc-page-title">{project.name}</h1>
           <Button variant="primary" onClick={() => setWriting(true)} disabled={writing}>
             Write a task
           </Button>
         </div>
+        {project.description.length > 0 && <p className="sc-lead">{project.description}</p>}
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
         {writing && (
           <section className="sc-panel" aria-label="Write a task">
@@ -172,7 +300,7 @@ function Page(props: {
               people={data.people}
               parents={data.tasks}
               busy={busy}
-              onSubmit={(input) =>
+              onSubmit={(input: RestTaskInput) =>
                 void act(async () => {
                   await data.actions.createTask(input);
                   setWriting(false);
@@ -206,26 +334,19 @@ function Page(props: {
       return (
         <EmptyState
           title="No such task"
-          body="It may have been written on another board, or the link is wrong."
+          body="It may belong to another project, or the link is wrong."
         />
       );
     }
     return (
-      <components.TaskView
+      <TaskPage
+        project={project}
         task={task}
-        people={data.people}
-        tasks={data.tasks}
-        decisions={data.decisions}
-        runs={data.runs}
-        taskHref={href}
-        decisionHref={() => PATHS.decisions}
+        data={data}
+        components={components}
         busy={busy}
         error={error}
-        onChange={onChange}
-        onMove={onMove}
-        onRaiseDecision={onRaise}
-        onAnswer={onAnswer}
-        onAbandonRun={(run) => void act(() => data.actions.abandonRun(run.id))}
+        act={act}
       />
     );
   }
@@ -244,7 +365,7 @@ function Page(props: {
             <DecisionForm
               tasks={data.tasks}
               busy={busy}
-              onSubmit={(input) =>
+              onSubmit={(input: RestDecisionInput) =>
                 void act(async () => {
                   await data.actions.raiseDecision(input);
                   setAsking(false);
@@ -278,7 +399,9 @@ function Page(props: {
         </div>
         <components.EventFeed
           events={data.events}
-          href={(event) => (event.taskId === null ? undefined : taskHref(event.taskId))}
+          href={(event) =>
+            event.taskId === null ? undefined : taskHref(project.key, event.taskId)
+          }
           empty={<EmptyState title="Nothing happened yet" />}
         />
       </>
@@ -294,6 +417,97 @@ function Page(props: {
       </>
     );
   }
+  if (route.name === "members") {
+    const me = data.me?.person ?? undefined;
+    return (
+      <>
+        <div className="sc-page-head">
+          <h1 className="sc-page-title">Members</h1>
+        </div>
+        <p className="sc-lead">
+          {project.visibility === "workspace"
+            ? "Everyone of the workspace is a member of this project; those listed here are its owners and the people named besides. "
+            : "Only those listed here are in this project. "}
+          An owner configures the project; a member works on it. A workspace administrator is an
+          owner of every project.
+        </p>
+        {error !== undefined && <Callout tone="danger">{error}</Callout>}
+        <components.MemberList
+          members={data.members}
+          people={data.people}
+          me={me}
+          busy={busy}
+          onAdd={owner ? (input) => void act(() => data.actions.addMember(input)) : undefined}
+          onChangeRole={
+            owner
+              ? (member, role) =>
+                  void act(() => data.actions.updateMember(member.person.id, { role }))
+              : undefined
+          }
+          onRemove={
+            owner
+              ? (member) => void act(() => data.actions.removeMember(member.person.id))
+              : undefined
+          }
+          empty={
+            <EmptyState
+              title="Nobody is listed"
+              body={
+                project.visibility === "workspace"
+                  ? "Everyone of the workspace is in; the administrators own it."
+                  : "The administrators own it until an owner is listed."
+              }
+            />
+          }
+        />
+      </>
+    );
+  }
+  if (route.name === "settings") {
+    if (!owner) {
+      return (
+        <EmptyState
+          title="Only an owner may change the project"
+          body="Ask one of its owners, or a workspace administrator."
+        />
+      );
+    }
+    return (
+      <>
+        <div className="sc-page-head">
+          <h1 className="sc-page-title">Settings</h1>
+        </div>
+        <p className="sc-lead">
+          The key, <code>{project.key}</code>, is what paths and the command say, and does not
+          change. The skills address names a repository served by SkillCDN; empty, the
+          organization's skills are shown.
+        </p>
+        {error !== undefined && <Callout tone="danger">{error}</Callout>}
+        <section className="sc-panel" aria-label="Project settings">
+          <ProjectForm
+            project={project}
+            busy={busy}
+            onSubmit={(input) =>
+              void act(() => data.actions.updateProject(input as RestProjectPatch))
+            }
+          />
+        </section>
+      </>
+    );
+  }
+  return <EmptyState title="There is nothing at this address" />;
+}
+
+function WorkspacePage(props: {
+  readonly route: Route;
+  readonly data: ConsoleData;
+  readonly components: ConsoleComponents;
+}) {
+  const { route, data, components } = props;
+  const [making, setMaking] = useState(false);
+  const [fresh, setFresh] = useState<RestTokenCreated | undefined>(undefined);
+  const { busy, error, act } = useAction();
+
   if (route.name === "people") {
     const me = data.me?.person ?? undefined;
     const administrator = me?.role === "admin";
@@ -303,8 +517,9 @@ function Page(props: {
           <h1 className="sc-page-title">People</h1>
         </div>
         <p className="sc-lead">
-          Everyone who has signed in. An administrator configures the board and says what each
-          person is; a member works on it. What a person may do, their agents may do.
+          Everyone who has signed in. An administrator configures the workspace and says what each
+          person is; a member works in the projects they are in. What a person may do, their agents
+          may do.
         </p>
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
         <components.PeopleList
@@ -368,11 +583,12 @@ function Page(props: {
           <h2 className="sc-section-title">Connecting an agent</h2>
           <p>
             An agent works this board with the <code>console</code> command, which comes with the{" "}
-            <code>@skillcdn/console</code> package. Install the package where the agent runs, then
-            sign the command in with a token made here:
+            <code>@skillcdn/console</code> package. Install the package where the agent runs, sign
+            the command in with a token made here, and say which project the directory works in:
           </p>
           <pre className="sc-code">
             npm install -g @skillcdn/console{"\n"}console login --url {origin}
+            {"\n"}console use {"<project key>"}
           </pre>
           <p>
             It asks for the token and keeps it in your home directory, and your agent is you from
@@ -394,16 +610,17 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
 
   function App(props: { readonly initialPath?: string | undefined }) {
     const { location, navigate } = useLocation(props.initialPath);
-    const data = useConsoleData(client);
     const route = useMemo(() => matchRoute(location.pathname), [location.pathname]);
+    const projectKey = projectOf(route);
+    const data = useConsoleData(client, projectKey);
     const failure = signInFailureOf(location.search);
     const title = data.me?.workspace.name ?? fallbackTitle;
 
     useEffect(() => {
       if (typeof document !== "undefined") {
-        document.title = title;
+        document.title = data.project === undefined ? title : `${data.project.name} · ${title}`;
       }
-    }, [title]);
+    }, [title, data.project]);
 
     if (data.me === undefined) {
       return (
@@ -432,40 +649,103 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
         />
       );
     }
+    const project = data.project;
     const waiting = data.decisions.filter((decision) => decision.answer === null).length;
-    const nav = [
-      {
-        href: PATHS.board,
-        label: "Board",
-        current: route.name === "board" || route.name === "task",
-      },
-      {
-        href: PATHS.decisions,
-        label: "Decisions",
-        current: route.name === "decisions",
-        count: waiting,
-      },
-      { href: PATHS.feed, label: "Feed", current: route.name === "feed" },
-      { href: PATHS.skills, label: "Skills", current: route.name === "skills" },
+    const nav =
+      projectKey === undefined
+        ? [{ href: PATHS.projects, label: "Projects", current: route.name === "projects" }]
+        : [
+            {
+              href: projectHref(projectKey),
+              label: "Board",
+              current: route.name === "board" || route.name === "task",
+            },
+            {
+              href: projectHref(projectKey, "decisions"),
+              label: "Decisions",
+              current: route.name === "decisions",
+              count: waiting,
+            },
+            {
+              href: projectHref(projectKey, "feed"),
+              label: "Feed",
+              current: route.name === "feed",
+            },
+            {
+              href: projectHref(projectKey, "skills"),
+              label: "Skills",
+              current: route.name === "skills",
+            },
+            {
+              href: projectHref(projectKey, "members"),
+              label: "Members",
+              current: route.name === "members",
+            },
+            ...(project?.role === "owner"
+              ? [
+                  {
+                    href: projectHref(projectKey, "settings"),
+                    label: "Settings",
+                    current: route.name === "settings",
+                  },
+                ]
+              : []),
+          ];
+    nav.push(
       { href: PATHS.people, label: "People", current: route.name === "people" },
       { href: PATHS.tokens, label: "Tokens", current: route.name === "tokens" },
-    ];
+    );
+    let page: React.ReactNode;
+    if (!data.loaded) {
+      page = (
+        <div className="sc-loading">
+          <Spinner label="Loading the workspace" />
+        </div>
+      );
+    } else if (route.name === "projects") {
+      page = <ProjectsPage data={data} components={components} navigate={navigate} />;
+    } else if (projectKey === undefined) {
+      page = <WorkspacePage route={route} data={data} components={components} />;
+    } else if (data.projectError !== undefined) {
+      page = (
+        <EmptyState
+          title="No such project"
+          body="It may not exist, or it is not yours to see. The projects you may work in are on the front page."
+          action={<Button onClick={() => navigate(PATHS.projects)}>Projects</Button>}
+        />
+      );
+    } else if (!data.projectLoaded || project === undefined) {
+      page = (
+        <div className="sc-loading">
+          <Spinner label="Loading the project" />
+        </div>
+      );
+    } else {
+      page = (
+        <ProjectPage
+          route={route}
+          project={project}
+          data={data}
+          components={components}
+          navigate={navigate}
+        />
+      );
+    }
     return (
       <components.Shell
         title={title}
+        project={
+          projectKey === undefined
+            ? undefined
+            : { name: project?.name ?? projectKey, href: projectHref(projectKey) }
+        }
         nav={nav}
         person={data.me.person}
-        live={data.live}
+        live={projectKey === undefined ? undefined : data.live}
         onNavigate={(href) => navigate(href)}
         onSignOut={() => void data.actions.signOut()}
       >
-        {data.loaded ? (
-          <Page route={route} data={data} components={components} navigate={navigate} />
-        ) : (
-          <div className="sc-loading">
-            <Spinner label="Loading the board" />
-          </div>
-        )}
+        {page}
       </components.Shell>
     );
   }

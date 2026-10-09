@@ -3,6 +3,7 @@ import {
   MAX_BODY_LENGTH,
   MAX_LINKS,
   MAX_OPTIONS,
+  MAX_PROJECT_KEY_LENGTH,
   MAX_TITLE_LENGTH,
   MAX_TOKEN_DAYS,
   MAX_TOKEN_NAME_LENGTH,
@@ -11,8 +12,12 @@ import {
   restAnswerInputSchema,
   restDecisionInputSchema,
   restEventSchema,
+  restMemberInputSchema,
   restPersonPatchSchema,
   restPersonSchema,
+  restProjectInputSchema,
+  restProjectPatchSchema,
+  restProjectSchema,
   restTaskInputSchema,
   restTaskPatchSchema,
   restTaskSchema,
@@ -141,16 +146,87 @@ describe("what the server answers", () => {
   });
 
   it("refuses an answer that is missing a key: absent values are null, never missing", () => {
+    const event = {
+      id: 1,
+      kind: "task.created",
+      actor: PERSON,
+      agent: null,
+      projectId: "0199c4d8-0000-7000-8000-000000000050",
+      taskId: null,
+      decisionId: null,
+      runId: null,
+      data: { number: 1, title: "Ship" },
+      createdAt: "2026-10-09T10:00:00.000Z",
+    };
+    expect(restEventSchema.safeParse(event).success).toBe(true);
+    const { agent: _agent, ...withoutAgent } = event;
+    expect(restEventSchema.safeParse(withoutAgent).success).toBe(false);
+    const { projectId: _projectId, ...withoutProject } = event;
+    expect(restEventSchema.safeParse(withoutProject).success).toBe(false);
+  });
+});
+
+describe("projects", () => {
+  it("take a key and a name, with the rest by default, and change everything but the key", () => {
+    expect(restProjectInputSchema.parse({ key: "web-2", name: "  The web app  " })).toEqual({
+      key: "web-2",
+      name: "The web app",
+    });
     expect(
-      restEventSchema.safeParse({
-        id: 1,
-        kind: "task.created",
-        actor: PERSON,
-        taskId: null,
-        data: { number: 1, title: "Ship" },
-        createdAt: "2026-10-09T10:00:00.000Z",
-      }).success,
-    ).toBe(false);
+      restProjectInputSchema.parse({
+        key: "ops",
+        name: "Ops",
+        description: "What we run.\nAnd keep.",
+        visibility: "workspace",
+        skillsAddress: "/gh/acme/skills",
+      }).visibility,
+    ).toBe("workspace");
+    expect(restProjectPatchSchema.parse({ skillsAddress: null })).toEqual({ skillsAddress: null });
+    expect(restProjectPatchSchema.safeParse({ key: "other" }).success).toBe(true);
+    expect(restProjectPatchSchema.parse({ key: "other" })).toEqual({});
+    expect(restMemberInputSchema.parse({ personId: PERSON.id })).toEqual({ personId: PERSON.id });
+  });
+
+  it.each([
+    ["an empty key", { key: "", name: "x" }],
+    ["a key with capitals", { key: "Web", name: "x" }],
+    ["a key with a space", { key: "the web", name: "x" }],
+    ["a key that ends in a hyphen", { key: "web-", name: "x" }],
+    ["a key that begins with a hyphen", { key: "-web", name: "x" }],
+    ["a key over the limit", { key: "k".repeat(MAX_PROJECT_KEY_LENGTH + 1), name: "x" }],
+    ["a key with a slash", { key: "a/b", name: "x" }],
+    ["no name", { key: "web" }],
+    ["a visibility that is not one", { key: "web", name: "x", visibility: "public" }],
+    [
+      "an address that hides a character",
+      { key: "web", name: "x", skillsAddress: `/gh/a${String.fromCodePoint(0x200b)}b/c` },
+    ],
+    ["a member role that is not one", { key: "web", name: "x", role: "viewer" }],
+  ])("refuse %s", (_, input) => {
+    expect(restProjectInputSchema.safeParse(input).success).toBe("role" in input);
+    if ("role" in input) {
+      expect(
+        restMemberInputSchema.safeParse({ personId: PERSON.id, role: input.role }).success,
+      ).toBe(false);
+    }
+  });
+
+  it("are read as the server answers them, with what the asker is in each", () => {
+    const project = restProjectSchema.parse({
+      id: "0199c4d8-0000-7000-8000-000000000050",
+      key: "web",
+      name: "The web app",
+      description: "",
+      visibility: "private",
+      skillsAddress: null,
+      role: "owner",
+      openDecisions: 0,
+      openRuns: 1,
+      createdAt: "2026-10-09T10:00:00.000Z",
+      updatedAt: "2026-10-09T10:00:00.000Z",
+    });
+    expect(project.role).toBe("owner");
+    expect(restProjectSchema.safeParse({ ...project, role: "admin" }).success).toBe(false);
   });
 });
 

@@ -11,7 +11,7 @@
   </p>
 </div>
 
-> **Status: pre-alpha.** The board runs, and agents work it: people sign in, write tasks, move them along, raise decisions and answer them, and see one board, live; an agent takes a task through the `console` command, reports, hands in links and files, asks, and finishes; the organization's skills show by address, served by SkillCDN. `@skillcdn/console` is on npm, and `npm install -g @skillcdn/console` is how a machine gets the command. Projects, documents and the console for everyone come next. [docs/roadmap.md](docs/roadmap.md) says what exists; [docs/architecture.md](docs/architecture.md) says how it fits together and what is still open.
+> **Status: pre-alpha.** The board runs, and agents work it: people sign in, make projects and say who is in each, write tasks, move them along, raise decisions and answer them, and see one board per project, live; an agent takes a task through the `console` command, reports, hands in links and files, asks, and finishes, named beside its person on everything it did; a project's skills show by address, served by SkillCDN. `@skillcdn/console` is on npm, and `npm install -g @skillcdn/console` is how a machine gets the command. Documents and the console for everyone come next. [docs/roadmap.md](docs/roadmap.md) says what exists; [docs/architecture.md](docs/architecture.md) says how it fits together and what is still open.
 
 The console holds the work to be done, which agent (Claude Code, Codex, any agent with a shell) is doing what right now, what each has done, and the decisions that wait for a person. People decide; agents work. One container image next to PostgreSQL; people sign in with the accounts they already have; each person's agent connects with the `console` command and works the board as that person. The organization's playbooks and skills live in git repositories and reach the agents through [SkillCDN](https://skillcdn.ai).
 
@@ -36,11 +36,12 @@ People sign in through GitHub, Google Workspace, or both ([deploy/README.md](dep
 ```sh
 npm install -g @skillcdn/console
 console login --url https://console.example.com       # asks for the token and keeps it in your home directory
+console use web                                       # the project this checkout works in: .skillcdn-console.json, committed
 ```
 
 ## Use
 
-A person writes a task on the board and tells their agent to take it. The agent works it through the command, as that person:
+A person writes a task on the project's board and tells their agent to take it. The agent works it through the command, as that person, in the project the directory names:
 
 ```sh
 console tasks                                         # the board: #7  ready  high  Fix the parser  (owner alice)
@@ -48,7 +49,7 @@ console take 7                                        # a run begins; the task i
 console report "Found the cause: the parser trusts its input."
 console hand-in https://github.com/acme/app/pull/3 --label "the fix"
 console hand-in ./report.md                           # a file, kept by the console and shown on the task
-console skills                                        # the organization's skills, served by SkillCDN, with the URI to load each by
+console skills                                        # the project's skills, served by SkillCDN, with the URI to load each by
 console ask "Keep the old behaviour?" --option "Keep it" --option "Change it"   # the run waits for a person's answer
 console finish --summary "Done: the parser refuses empty input."               # the task goes up for review
 console help                                          # the rest, written for an agent that meets the command for the first time
@@ -61,7 +62,7 @@ What to tell the agent is as short as: "Run `console help`, then take task #7 fr
 The first four steps are there today; the fifth is a later milestone of the roadmap.
 
 1. **Deploy it once.** One container image, one PostgreSQL, S3-compatible storage for what runs leave behind. Locally with compose; on a cloud, the same image next to a managed database and a bucket.
-2. **People sign in** through an identity provider the organization already uses (GitHub, Google Workspace), and each signs their own agent in with a token of their own (`console login`). Several people, each with their own agent, work on the same board. Nobody, person or agent, touches the database: every request goes through the API and is decided there.
+2. **People sign in** through an identity provider the organization already uses (GitHub, Google Workspace), make projects and say who is in each, and each signs their own agent in with a token of their own (`console login`). Several people, each with their own agent, work on the same board; what a person and their agent may see and change is decided per project. Nobody, person or agent, touches the database: every request goes through the API and is decided there.
 3. **Agents take work from the board**, report what they do, hand in what they made (branches, pull requests, documents, files), and raise a decision when one is needed. A person answers decisions from the board, or from wherever the console notifies them.
 4. **The board shows it all, live:** the tasks and their state, the runs in progress, the history, the decisions.
 5. **Teams build their own console** from the published package, [`@skillcdn/console`](packages/console/): the client of the console's API, the components, and the composition of the default console. A small repository with a configuration and a CI job then produces a custom console, as static files or as an image.

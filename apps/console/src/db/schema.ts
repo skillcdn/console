@@ -1,6 +1,8 @@
 import {
   ARTIFACT_KINDS,
   PERSON_ROLES,
+  PROJECT_ROLES,
+  PROJECT_VISIBILITIES,
   type RestDecisionOption,
   type RestEventData,
   type RestTaskLink,
@@ -18,6 +20,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -48,7 +51,11 @@ export const workspaces = pgTable(
     id: id(),
     key: text().notNull(),
     name: text().notNull(),
-    /** The number the next task gets: tasks are numbered per workspace, for people to say. */
+    /**
+     * Tasks were numbered per workspace until projects came (ADR-0008); the number is the
+     * project's now. The column stays until the next release, as the rollout contract asks
+     * (expand, then contract), and is dropped then.
+     */
     nextTaskNumber: integer().notNull().default(1),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -135,7 +142,64 @@ export const tokens = pgTable(
   ],
 );
 
-/** A unit of work on the board. */
+/**
+ * The unit of work and of permission (ADR-0008): a project holds its board, names its skills,
+ * and lists its people with a role each. Its key is what paths and the command say, and does
+ * not change.
+ */
+export const projects = pgTable(
+  "projects",
+  {
+    id: id(),
+    workspaceId: uuid()
+      .notNull()
+      .references(() => workspaces.id),
+    key: text().notNull(),
+    name: text().notNull(),
+    description: text().notNull().default(""),
+    /** Who is a member: every member of the workspace, or only those listed. */
+    visibility: text({ enum: PROJECT_VISIBILITIES }).notNull().default("private"),
+    /** The address of the project's skills at the SkillCDN deployment, canonical; null for the organization's. */
+    skillsAddress: text(),
+    /** The number the next task gets: tasks are numbered per project, for people to say. */
+    nextTaskNumber: integer().notNull().default(1),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex("projects_key_key").on(table.workspaceId, table.key),
+    check(
+      "projects_visibility_check",
+      sql`${table.visibility} in (${sql.raw(literals(PROJECT_VISIBILITIES))})`,
+    ),
+  ],
+);
+
+/** A person listed in a project, with what they are in it. Rows go with their project or their person. */
+export const projectMembers = pgTable(
+  "project_members",
+  {
+    projectId: uuid()
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    personId: uuid()
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    /** An owner configures the project, a member works on it. */
+    role: text({ enum: PROJECT_ROLES }).notNull().default("member"),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    primaryKey({ name: "project_members_pkey", columns: [table.projectId, table.personId] }),
+    index("project_members_person_idx").on(table.personId),
+    check(
+      "project_members_role_check",
+      sql`${table.role} in (${sql.raw(literals(PROJECT_ROLES))})`,
+    ),
+  ],
+);
+
+/** A unit of work on the board of a project. */
 export const tasks = pgTable(
   "tasks",
   {
@@ -143,6 +207,9 @@ export const tasks = pgTable(
     workspaceId: uuid()
       .notNull()
       .references(() => workspaces.id),
+    projectId: uuid()
+      .notNull()
+      .references(() => projects.id),
     number: integer().notNull(),
     title: text().notNull(),
     /** Markdown, bounded at the edge; shown as text, never as HTML. */
@@ -163,8 +230,8 @@ export const tasks = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
-    uniqueIndex("tasks_number_key").on(table.workspaceId, table.number),
-    index("tasks_state_idx").on(table.workspaceId, table.state),
+    uniqueIndex("tasks_project_number_key").on(table.projectId, table.number),
+    index("tasks_project_state_idx").on(table.projectId, table.state),
     index("tasks_parent_idx").on(table.parentId),
     check("tasks_state_check", sql`${table.state} in (${sql.raw(literals(TASK_STATES))})`),
     check(
@@ -186,6 +253,9 @@ export const runs = pgTable(
     workspaceId: uuid()
       .notNull()
       .references(() => workspaces.id),
+    projectId: uuid()
+      .notNull()
+      .references(() => projects.id),
     taskId: uuid()
       .notNull()
       .references(() => tasks.id),
@@ -207,7 +277,7 @@ export const runs = pgTable(
   },
   (table) => [
     index("runs_task_idx").on(table.taskId),
-    index("runs_status_idx").on(table.workspaceId, table.status),
+    index("runs_project_status_idx").on(table.projectId, table.status),
     check("runs_status_check", sql`${table.status} in (${sql.raw(literals(RUN_STATUSES))})`),
   ],
 );
@@ -280,6 +350,9 @@ export const decisions = pgTable(
     workspaceId: uuid()
       .notNull()
       .references(() => workspaces.id),
+    projectId: uuid()
+      .notNull()
+      .references(() => projects.id),
     /** The task the decision is about, when it is about one. */
     taskId: uuid().references(() => tasks.id),
     /** The run that raised it, when an agent asked; the run waits until the answer. */
@@ -301,7 +374,7 @@ export const decisions = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
-    index("decisions_open_idx").on(table.workspaceId, table.answeredAt),
+    index("decisions_project_open_idx").on(table.projectId, table.answeredAt),
     index("decisions_task_idx").on(table.taskId),
     index("decisions_run_idx").on(table.runId),
   ],
@@ -319,9 +392,13 @@ export const events = pgTable(
     workspaceId: uuid()
       .notNull()
       .references(() => workspaces.id),
+    /** The project it happened in; null for what happened to the workspace itself. */
+    projectId: uuid().references(() => projects.id),
     kind: text().notNull(),
     /** Who did it; nobody for the console itself. */
     actorId: uuid().references(() => people.id),
+    /** The agent the actor acted as, when they acted with a token: what it calls itself. */
+    agent: text(),
     taskId: uuid().references(() => tasks.id),
     decisionId: uuid().references(() => decisions.id),
     /** The run it is about, for what an agent did. */
@@ -330,5 +407,11 @@ export const events = pgTable(
     data: jsonb().$type<RestEventData>().notNull().default({}),
     createdAt: createdAt(),
   },
-  (table) => [index("events_workspace_idx").on(table.workspaceId, table.id)],
+  (table) => [
+    index("events_workspace_idx").on(table.workspaceId, table.id),
+    index("events_project_idx").on(table.projectId, table.id),
+    index("events_task_idx").on(table.taskId),
+    index("events_run_idx").on(table.runId),
+    index("events_decision_idx").on(table.decisionId),
+  ],
 );

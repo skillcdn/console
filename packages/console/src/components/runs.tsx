@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { type RestArtifact, type RestRun, type RunStatus, restPath } from "../api.js";
+import type { RestArtifact, RestRun, RunStatus } from "../api.js";
 import { Markdown } from "./markdown.js";
 import { Badge, Button, formatBytes, PersonChip, Time } from "./ui.js";
 
@@ -32,7 +32,7 @@ export interface RunCardProps {
   readonly run: RestRun;
   /** Where the decision the run waits for is answered, when the page knows. */
   readonly decisionHref?: ((decisionId: string) => string) | undefined;
-  /** Where a file handed in is read; the console's own path, on the page's origin, when left out. */
+  /** Where a file handed in is read: the project's path for it. Left out, a file is named and not linked. */
   readonly fileHref?: ((artifact: RestArtifact) => string) | undefined;
   /** Called to mark a run that will not come back as abandoned. Left out, it cannot be here. */
   readonly onAbandon?: ((run: RestRun) => void) | undefined;
@@ -119,11 +119,16 @@ function ArtifactLink(props: {
       </a>
     );
   }
+  const href = props.fileHref?.(artifact);
   return (
     <>
-      <a href={props.fileHref?.(artifact) ?? restPath("files", artifact.id)} rel="nofollow ugc">
-        {artifact.label ?? artifact.file.name}
-      </a>{" "}
+      {href === undefined ? (
+        <span>{artifact.label ?? artifact.file.name}</span>
+      ) : (
+        <a href={href} rel="nofollow ugc">
+          {artifact.label ?? artifact.file.name}
+        </a>
+      )}{" "}
       <span className="sc-muted">
         {artifact.label === null ? "" : `${artifact.file.name}, `}
         {formatBytes(artifact.file.size)}

@@ -38,3 +38,10 @@ export const MAX_TOKEN_DAYS = 365;
 export const DEFAULT_TOKEN_DAYS = 90;
 /** How many tokens one person may hold at a time. */
 export const MAX_TOKENS_PER_PERSON = 25;
+/** A project's key, what paths and the command say: lowercase letters, digits and hyphens. */
+export const MAX_PROJECT_KEY_LENGTH = 40;
+/** A project's name, one line, and its description, a paragraph. */
+export const MAX_PROJECT_NAME_LENGTH = 100;
+export const MAX_PROJECT_DESCRIPTION_LENGTH = 500;
+/** The address of a project's skills, as the standard spells one; the console checks it as one. */
+export const MAX_SKILLS_ADDRESS_LENGTH = 2048;

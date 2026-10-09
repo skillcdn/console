@@ -2,8 +2,9 @@ import type { ReactNode } from "react";
 import type { RestPerson } from "../api.js";
 import { Avatar, Button, cx } from "./ui.js";
 
-// The frame every page sits in: the name of the board, the way to each page, who is signed in
-// and the way out. Takes its data as props and nothing from the network.
+// The frame every page sits in: the name of the workspace, the project the page is on, the way
+// to each page, who is signed in and the way out. Takes its data as props and nothing from the
+// network.
 
 export interface NavItem {
   readonly href: string;
@@ -15,6 +16,8 @@ export interface NavItem {
 
 export interface ShellProps {
   readonly title: string;
+  /** The project the page is on, named after the workspace, or nothing on the workspace's own pages. */
+  readonly project?: { readonly name: string; readonly href: string } | undefined;
   readonly nav: readonly NavItem[];
   readonly person: RestPerson | undefined;
   /** Follows a link inside the app without loading a document. */
@@ -48,6 +51,20 @@ export function Shell(props: ShellProps) {
           <a className="sc-brand" href="/" onClick={follow("/")}>
             {props.title}
           </a>
+          {props.project !== undefined && (
+            <span className="sc-crumb">
+              <span className="sc-crumb-separator" aria-hidden="true">
+                /
+              </span>
+              <a
+                className="sc-crumb-link"
+                href={props.project.href}
+                onClick={follow(props.project.href)}
+              >
+                {props.project.name}
+              </a>
+            </span>
+          )}
           <nav className="sc-nav" aria-label="Pages">
             {props.nav.map((item) => (
               <a
