@@ -11,7 +11,9 @@ What exists, what is being built, what comes next. Update this file in the same 
 
 Goal: a person connects their agent to the console; the agent takes work from the board, reports what it does, hands in what it made, and raises a decision when one is needed; a person answers it from the board.
 
-- [ ] Tokens a person makes for their agent: scoped to that person, expiring, revocable, stored as hashes; a page to make and remove them.
+- [ ] Tokens a person makes for their agent: scoped to that person, expiring, revocable, stored as hashes; a page to make and remove them. The REST API and the feed take a token as well as a session, so that a script or a custom console acts as its person ([ADR-0004](adr/0004-people-and-agents-reach-the-board-only-through-the-api-with-a-credential-of-their-own.md)).
+- [ ] Roles: an administrator who configures, a member who works; kept in the database, applied to a person's agents as to the person ([ADR-0005](adr/0005-people-sign-in-through-an-identity-provider-and-membership-and-roles-are-the-consoles-own.md)).
+- [ ] The sign-in port generalized from the git host to an identity provider, and Google Workspace as the second adapter, with membership from the Workspace domain as a source the operator may choose.
 - [ ] The MCP endpoint and its tools (`list_tasks`, `take_task`, `report`, `hand_in`, `ask`, `finish`), one server per request, with what an agent sends parsed and bounded at the edge.
 - [ ] Runs with their reports and artifacts: the data model, the blob-store port with its PostgreSQL implementation, and the run on the task's page and in the feed.
 - [ ] A decision a run waits for, and the run resuming when it is answered.
@@ -20,9 +22,9 @@ Goal: a person connects their agent to the console; the agent takes work from th
 
 ## After milestone 2
 
-3. **Custom consoles from the package.** `@skillcdn/console` published: the first version by hand, then the release workflow copied from the main repository; the components and the composition documented; a template repository that builds a custom console in CI; the image serving a custom build.
+3. **Custom consoles from the package.** `@skillcdn/console` published: the first version by hand, then the release workflow copied from the main repository; the components and the composition documented; a template repository that builds a custom console in CI; the image serving a custom build; and a person's own console, built from the package and run for themselves against the organization's console (open question 9).
 4. **On a cloud.** The image deployed next to a managed PostgreSQL and a bucket, the S3 implementation of the blob-store port, and what a platform must provide written into `deploy/README.md`. The definitions of the deployment stay outside this repository.
 
 ## Later, undecided
 
-Unattended runs, where the console starts agents itself. Ideas and intake: from a thought to a task, with the questions a person is asked on the way. Rules for what an agent may decide alone. Notifications beyond the board. Several workspaces in one deployment. Languages of the UI. Hooks that report an agent's events without being asked.
+Unattended runs, where the console would start agents itself: not planned, since an agent is a person's own app or CLI under their own subscription, and the console calls no model API. Ideas and intake: from a thought to a task, with the questions a person is asked on the way. Rules for what an agent may decide alone. Notifications beyond the board. Several workspaces in one deployment. Languages of the UI. Hooks that report an agent's events without being asked.

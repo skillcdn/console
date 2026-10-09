@@ -26,6 +26,16 @@ Five properties shape everything else:
 - **One image, one database.** Local development and a cloud deployment run the same image against PostgreSQL and S3-compatible storage ([ADR-0002](adr/0002-one-image-one-database-and-the-main-repositorys-toolchain.md)). Nothing in the code names a cloud.
 - **What an agent sends is data.** A report, a file, a proposed decision: parsed at the edge, bounded, stored, shown as text; never executed, never rendered as HTML.
 
+## The operating model
+
+Whoever runs the console for an organization deploys the image once, configures how people sign in and who is a member, and keeps the organization's playbooks and skills in git repositories in the SkillCDN format. The people of the organization then work with the agents of their own choice: each runs their agent in their own app or CLI, on their own machine and under their own subscription, and connects it to the console. The board is where their work is written down, moved along, decided on and shared. Every organization has skills and a console of its own; the console in this repository is the reference, and what an organization builds from the package is theirs.
+
+Three consequences shape the design:
+
+- **The console calls no model API and starts no agent.** An agent is a person's own process, connected to the console as an MCP client with a token that person made ([ADR-0004](adr/0004-people-and-agents-reach-the-board-only-through-the-api-with-a-credential-of-their-own.md)). The console sees what the agent reports and hands in. Unattended runs, where the console would start agents itself, stay open ([open questions](#open-questions)).
+- **Nobody touches the database.** People hold sessions, agents hold tokens, both reach the board through the REST API and MCP, and every request is decided at the edge. The one database credential is the server's.
+- **Identity comes from a provider; membership and roles are the console's** ([ADR-0005](adr/0005-people-sign-in-through-an-identity-provider-and-membership-and-roles-are-the-consoles-own.md)): GitHub today, Google Workspace next, more as adapters. What a person may do, and what their agents may do, is kept here.
+
 ## Vocabulary
 
 These are the concepts the schema, the API and the UI are named after. The vocabulary in code is `@skillcdn/console/api`; the schema is in [`apps/console/README.md`](../apps/console/README.md#data-model). Runs, agents and artifacts arrive with the second milestone.
@@ -46,14 +56,16 @@ These are the concepts the schema, the API and the UI are named after. The vocab
 Proposed, to be settled by the second milestone:
 
 - **The console is an MCP server to agents.** An agent connects to the console's MCP endpoint with a token its person made, and gets a small set of tools, names provisional: `list_tasks`, `take_task`, `report` (progress on the run), `hand_in` (an artifact), `ask` (raise a decision; the call returns when it is answered or the run is marked waiting), `finish`. MCP is what Claude Code and Codex both speak, so this needs nothing installed on the agent's side, and it is the same shape the organization's skills arrive in.
-- **Attended first.** A person runs their agent on their own machine and connects it; the console sees what the agent reports. Unattended runs, where the worker starts agents itself, come later and need decisions of their own (where they run, with what credentials, within what limits).
+- **Attended, by design.** A person runs their agent in their own app or CLI, on their own machine, under their own subscription, and connects it; the console calls no model API and sees what the agent reports. Unattended runs, where the worker would start agents itself, are not planned for the board and need decisions of their own if they ever come (where they run, with what credentials, within what limits).
+- **An agent is its person, and no more.** Its token is made by one person, scoped to that person, expiring and revocable; what the person may do on the board is what the agent may do. Finer rules, what an agent may decide alone and what must wait for a person, come after the first agents are connected.
 - **Hooks later.** Where an agent can run a command on its own events, a small hook can report automatically what the agent would otherwise be asked to report. Optional, additive.
 
 ## Sign-in and permissions
 
 - People sign in through the git host the organization uses, GitHub first, as SkillCDN does: the console keeps a session and never a password of its own. The git host's token is used once, server-side, to ask who the person is, and then dropped: nothing of it is kept, since membership is decided here and not at the host.
 - Membership: the first version takes a configured list of allowed accounts (`MEMBERS`, logins at the git host), checked at sign-in and on every request after, so that a login taken off the list is out at once. Reading the git-host organization's membership instead is an open question.
-- An agent's token is made by a person on their own page, scoped to that person, expiring and revocable; it is stored as a hash. An agent can do what its person can do, and nothing on anyone else's behalf.
+- An agent's token is made by a person on their own page, scoped to that person, expiring and revocable; it is stored as a hash. An agent can do what its person can do, and nothing on anyone else's behalf. The same token lets a script or a custom console act as that person over the REST API ([ADR-0004](adr/0004-people-and-agents-reach-the-board-only-through-the-api-with-a-credential-of-their-own.md)).
+- Roles: an administrator, who configures the deployment, the members and the skills, and a member, who works. They are the console's own records, apply to a person's agents as to the person, and arrive with the second milestone; until then every member may do everything.
 - Requests that change something for a person come from the console's own pages: the session cookie does not travel with other sites' requests, and the origin is checked as well.
 - Permissions fail closed: no confirmed answer, no access.
 
@@ -78,6 +90,8 @@ A flag (`WORKER_IN_PROCESS`) lets `api` run the worker loop in-process for a sin
 3. **The composition:** `createConsole(config)`, the default console assembled from the components, with the places a team may replace named.
 
 The default UI the image serves is exactly that composition with the default configuration: `apps/console/web` is one page that calls `createConsole().mount(...)`, built with Vite into static files the `api` role serves from `WEB_ROOT`. A custom console is a small repository that depends on the package, holds a configuration and a CI job, and builds to static files served next to any console API, or into an image of its own. Nothing of the server is in the package.
+
+The package is meant for two kinds of custom console: the organization's, which replaces the default UI the image serves, and a person's own, which a member builds from the package and runs for themselves, against the organization's console, with pages and components of their choosing. The second needs the REST API to take a person's token as well as a session, and the live feed with it, which the second milestone brings with the tokens; how a personal console is served (by the console, from a build the person uploads, or from their own machine over an allowed origin) is an open question for the third.
 
 The pages route in the browser (`/`, `/tasks/<id>`, `/decisions`, `/feed`); every path that is not a file of the build is answered with the page, under a content security policy that runs nothing inline and loads nothing from elsewhere but pictures over https. The board is loaded whole, the feed from the beginning, and from then on the server's stream says when something changed: on every event the lists are loaded again.
 
@@ -122,7 +136,7 @@ Inherited from the main repository, unchanged ([ADR-0002](adr/0002-one-image-one
 
 Decided when the milestone that needs them starts; a decision with lasting consequences gets an ADR.
 
-1. Membership: a configured list of accounts, or the git-host organization's members, or both.
+1. Membership: a configured list of accounts, a provider's own answer (the Google Workspace domain, the git-host organization), or both; and whether an account at a second provider is a second person or the same one, linked.
 2. How a decision reaches a person away from the board: notifications are a port; which adapters come first.
 3. Unattended runs: where the agents the console starts would run, with what credentials, within what limits.
 4. What of a run is kept: reports only, or the agent's full transcript, with its size and what it may contain.
@@ -130,3 +144,4 @@ Decided when the milestone that needs them starts; a decision with lasting conse
 6. Whether the REST API is versioned from the first release, given that custom consoles are built against it.
 7. Languages of the UI: English only at first; the main repository's web UI has English and Korean.
 8. Whether this repository stays public. It is written as if it does; if it does not, infrastructure definitions could live under `deploy/`.
+9. How a person's own console reaches the organization's: served by the console from a build the person uploads, or run on their machine and allowed as an origin with their token.
