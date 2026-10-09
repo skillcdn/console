@@ -43,6 +43,6 @@ COPY --from=build --chown=node:node /repo/apps/console/web/dist ./web
 COPY --from=build --chown=node:node /repo/LICENSE.md ./
 ENV WEB_ROOT=/app/web
 USER node
-EXPOSE 11190
+EXPOSE 11199
 ENTRYPOINT ["node", "--enable-source-maps", "dist/main.js"]
 CMD ["api"]

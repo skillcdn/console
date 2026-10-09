@@ -25,7 +25,7 @@ describe("loadConfig", () => {
       logLevel: "info",
       http: {
         host: "0.0.0.0",
-        port: 11190,
+        port: 11199,
         shutdownGraceMs: 20_000,
         keepAliveMs: 65_000,
         requestTimeoutMs: 60_000,

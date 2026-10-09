@@ -17,7 +17,7 @@ One multi-stage image, non-root, production dependencies only, no secrets and no
 ```sh
 docker build -f deploy/Dockerfile -t skillcdn-console .    # from the repository root
 docker run --rm --env-file .env skillcdn-console migrate    # one-off role, before a new version rolls out
-docker run --rm -p 11190:11190 --env-file .env skillcdn-console api
+docker run --rm -p 11199:11199 --env-file .env skillcdn-console api
 docker run --rm --env-file .env skillcdn-console worker
 ```
 
@@ -29,7 +29,7 @@ The console is configured only through environment variables. [`.env.example`](.
 |---|---|---|---|---|
 | `NODE_ENV` | all | no | no | The image sets `production`. |
 | `LOG_LEVEL` | all | no | no | Default `info`. |
-| `HOST`, `PORT` | `api` | no | no | Defaults `0.0.0.0` and `11190`. |
+| `HOST`, `PORT` | `api` | no | no | Defaults `0.0.0.0` and `11199`. |
 | `SHUTDOWN_GRACE_SECONDS` | `api` | no | no | Default `20`. Keep the platform's stop timeout above it. |
 | `HTTP_KEEP_ALIVE_SECONDS`, `HTTP_REQUEST_TIMEOUT_SECONDS` | `api` | no | no | Defaults `65` and `60`. See [Behind a reverse proxy](#behind-a-reverse-proxy). |
 | `ACCESS_LOG` | `api` | no | no | Default `true`: one log line per request, probes excluded, with the client address and the user agent and never the query string. Keep the log only as long as your privacy policy says, or turn it off. |

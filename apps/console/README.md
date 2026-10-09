@@ -15,12 +15,12 @@ docker compose -f deploy/compose.dev.yaml up -d      # PostgreSQL 18 on 127.0.0.
 cp .env.example .env                                 # safe local defaults; set WEB_ROOT to serve the UI
 pnpm build                                           # the server, and the UI into web/dist
 pnpm --filter @skillcdn/console-app run start migrate
-pnpm --filter @skillcdn/console-app run dev          # the api, restarting on change: http://127.0.0.1:11190
+pnpm --filter @skillcdn/console-app run dev          # the api, restarting on change: http://127.0.0.1:11199
 ```
 
-To work on the UI with its own reloading, run `pnpm --filter @skillcdn/console-app run dev:web` next to the api: it serves the pages at `http://127.0.0.1:11191` and sends everything else to the api. Signing in belongs to the api, so the git host sends the browser back to `PUBLIC_URL`, which is the api's port.
+To work on the UI with its own reloading, run `pnpm --filter @skillcdn/console-app run dev:web` next to the api: it serves the pages at `http://127.0.0.1:11198` and sends everything else to the api. Signing in belongs to the api, so the git host sends the browser back to `PUBLIC_URL`, which is the api's port.
 
-The exit codes, the probes and what a signal does are the process contract in [`deploy/README.md`](../../deploy/README.md#process-contract). Signing in is off until it is configured, and nothing above needs it; to try it locally, register a GitHub OAuth app with `http://127.0.0.1:11190` as its homepage and `http://127.0.0.1:11190/auth/gh/callback` as its callback, and set its values, `AUTH_SECRET`, `PUBLIC_URL=http://127.0.0.1:11190` and `MEMBERS` in `.env` ([`deploy/README.md`](../../deploy/README.md#signing-in)). The tests need none of it: they sign people in through a fixture.
+The exit codes, the probes and what a signal does are the process contract in [`deploy/README.md`](../../deploy/README.md#process-contract). Signing in is off until it is configured, and nothing above needs it; to try it locally, register a GitHub OAuth app with `http://127.0.0.1:11199` as its homepage and `http://127.0.0.1:11199/auth/gh/callback` as its callback, and set its values, `AUTH_SECRET`, `PUBLIC_URL=http://127.0.0.1:11199` and `MEMBERS` in `.env` ([`deploy/README.md`](../../deploy/README.md#signing-in)). The tests need none of it: they sign people in through a fixture.
 
 ## Layout
 
