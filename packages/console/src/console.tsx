@@ -19,6 +19,7 @@ import { EventFeed, type EventFeedProps } from "./components/event-feed.js";
 import { PeopleList, type PeopleListProps } from "./components/people.js";
 import { Shell, type ShellProps } from "./components/shell.js";
 import { SignIn, type SignInProps } from "./components/sign-in.js";
+import { SkillList, type SkillListProps } from "./components/skills.js";
 import { TaskForm } from "./components/task-form.js";
 import { TaskView, type TaskViewProps } from "./components/task-view.js";
 import { NewToken, TokenForm, TokenList, type TokenListProps } from "./components/tokens.js";
@@ -46,6 +47,7 @@ export interface ConsoleComponents {
   readonly SignIn: ComponentType<SignInProps>;
   readonly TokenList: ComponentType<TokenListProps>;
   readonly PeopleList: ComponentType<PeopleListProps>;
+  readonly SkillList: ComponentType<SkillListProps>;
 }
 
 export const DEFAULT_COMPONENTS: ConsoleComponents = {
@@ -57,6 +59,7 @@ export const DEFAULT_COMPONENTS: ConsoleComponents = {
   SignIn,
   TokenList,
   PeopleList,
+  SkillList,
 };
 
 export interface ConsoleConfig {
@@ -281,6 +284,16 @@ function Page(props: {
       </>
     );
   }
+  if (route.name === "skills") {
+    return (
+      <>
+        <div className="sc-page-head">
+          <h1 className="sc-page-title">Skills</h1>
+        </div>
+        <components.SkillList skills={data.skills} />
+      </>
+    );
+  }
   if (route.name === "people") {
     const me = data.me?.person ?? undefined;
     const administrator = me?.role === "admin";
@@ -433,6 +446,7 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
         count: waiting,
       },
       { href: PATHS.feed, label: "Feed", current: route.name === "feed" },
+      { href: PATHS.skills, label: "Skills", current: route.name === "skills" },
       { href: PATHS.people, label: "People", current: route.name === "people" },
       { href: PATHS.tokens, label: "Tokens", current: route.name === "tokens" },
     ];

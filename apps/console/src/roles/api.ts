@@ -5,6 +5,7 @@ import type { Hono } from "hono";
 import { createGitHubProvider } from "../adapters/github-login.js";
 import { createGoogleProvider } from "../adapters/google-login.js";
 import { createPgBlobStore } from "../adapters/pg-blob-store.js";
+import { createSkillCdnSource } from "../adapters/skillcdn.js";
 import { systemClock } from "../adapters/system-clock.js";
 import { Login } from "../auth/login.js";
 import { Membership } from "../auth/membership.js";
@@ -27,6 +28,8 @@ import type { Logger } from "../logger.js";
 import type { BlobStore } from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
 import type { IdentityProvider } from "../ports/identity-provider.js";
+import type { SkillSource } from "../ports/skill-source.js";
+import { Skills, type SkillsConfig } from "../skills.js";
 import { APP_NAME, APP_VERSION } from "../version.js";
 
 /** How often what time has ended is removed, when this process does the worker's work. */
@@ -49,6 +52,8 @@ export interface ApiPorts {
   readonly web?: WebRoot | undefined;
   /** Where the bytes of files handed in are kept. Left out, in the database. */
   readonly blobs?: BlobStore | undefined;
+  /** The SkillCDN deployment's side of the organization's skills. Left out, read over HTTPS from the configured deployment. */
+  readonly skillSource?: SkillSource | undefined;
 }
 
 export type ApiConfig = Pick<Config, "workspace"> & {
@@ -63,6 +68,8 @@ export type ApiConfig = Pick<Config, "workspace"> & {
   readonly feed?: { readonly heartbeatMs?: number; readonly pollMs?: number } | undefined;
   /** How long a read of a decision may wait for its answer; the built-in value when left out. For tests. */
   readonly agents?: { readonly waitMs?: number } | undefined;
+  /** The organization's skills. Left out: no address, and the public deployment. */
+  readonly skills?: SkillsConfig | undefined;
 };
 
 /**
@@ -152,12 +159,26 @@ export function createApi(
     pollMs: config.feed?.pollMs ?? FEED_POLL_MS,
   });
 
+  const skillsConfig = config.skills ?? { source: "https://skillcdn.ai", address: undefined };
+  const skills = new Skills({
+    config: skillsConfig,
+    source:
+      ports.skillSource ??
+      createSkillCdnSource({
+        baseUrl: skillsConfig.source,
+        userAgent: `${APP_NAME}/${APP_VERSION}`,
+        logger,
+      }),
+    clock,
+  });
+
   const app = createApp({
     database,
     workspace,
     auth,
     feed,
     blobs: ports.blobs ?? createPgBlobStore(database),
+    skills,
     web: ports.web,
     clock,
     logger,

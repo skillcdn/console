@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { hasForbiddenCodePoint } from "@skillcdn/console/api";
+import { type Address, MAX_ADDRESS_LENGTH, parseAddress } from "@skillcdn/core";
 import * as z from "zod";
 import { domainOf } from "../auth/membership.js";
 import { type Cidr, parseCidr } from "../http/client-address.js";
@@ -156,6 +157,9 @@ const environmentSchema = z.object({
   SESSION_TTL_DAYS: integer(30, 1, 365),
 
   WEB_ROOT: z.string().min(1).optional(),
+
+  SKILLCDN_URL: origin.default("https://skillcdn.ai"),
+  SKILLS_ADDRESS: z.string().trim().min(1).max(MAX_ADDRESS_LENGTH).optional(),
 });
 
 export interface AuthConfig {
@@ -229,6 +233,11 @@ export interface Config {
   readonly web: {
     /** Directory of a build of the default UI to serve. Unset: there is no UI, API only. */
     readonly root: string | undefined;
+  };
+  /** The organization's skills: the SkillCDN deployment they are read through, and their address there, or none. */
+  readonly skills: {
+    readonly source: string;
+    readonly address: Address | undefined;
   };
 }
 
@@ -355,6 +364,19 @@ function authOf(
   };
 }
 
+/** The address of the organization's skills, as the standard reads one, or none. */
+function skillsAddressOf(value: string | undefined, problems: string[]): Address | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const parsed = parseAddress(value);
+  if (!parsed.ok) {
+    problems.push(`SKILLS_ADDRESS: ${parsed.error.message}`);
+    return undefined;
+  }
+  return parsed.value;
+}
+
 /**
  * Parses and validates the environment once, at boot. Problems name the variable and the rule,
  * never the value: a connection string or a secret must not end up in a log.
@@ -383,6 +405,7 @@ export function loadConfig(
   }
   const env = parsed.data;
   const auth = authOf(env, problems);
+  const address = skillsAddressOf(env.SKILLS_ADDRESS, problems);
   if (problems.length > 0) {
     throw new ConfigError(problems);
   }
@@ -405,5 +428,6 @@ export function loadConfig(
     worker: { inProcess: env.WORKER_IN_PROCESS },
     auth,
     web: { root: env.WEB_ROOT },
+    skills: { source: env.SKILLCDN_URL, address },
   };
 }

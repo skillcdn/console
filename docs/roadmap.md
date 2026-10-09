@@ -21,7 +21,7 @@ Goal: a person connects their agent to the console; the agent takes work from th
 - [x] The command line (2026-10-09): `console`, shipped with the package, the agent's side of the console: a person signs it in once with a token, and the agent takes, reports, hands in, asks and finishes with it ([specs/cli.md](specs/cli.md)).
 - [x] Claude Code working a task through the command (2026-10-09): an agent took a task, reported at each milestone, asked and was answered on the board, handed in and finished; the steps are in [specs/cli.md](specs/cli.md#running-an-agent-on-a-task). Development is verified with Claude Code; other agents, Codex first, are tried once the console is further along (milestone 6).
 - [x] Tokens that do not expire (2026-10-09), for a person who chooses so.
-- [ ] The organization's skills shown by address through `@skillcdn/core` and the REST API of a SkillCDN deployment. `@skillcdn/core` 0.1.1 was published on 2026-10-09; the release-age rule makes it installable from 2026-10-12, or sooner under `minimumReleaseAgeExclude` for that one install.
+- [x] The organization's skills shown by address (2026-10-10): `SKILLS_ADDRESS` names them at a SkillCDN deployment, and the Skills page and `console skills` list what it serves, read through `@skillcdn/core` 0.1.1 and the deployment's REST API. The address moves to the project with milestone 3.
 - [ ] `@skillcdn/console` 0.1.0 published by hand, so that `npm install -g @skillcdn/console` is how a machine gets the command; the release workflow follows with the custom-consoles milestone.
 
 ## After milestone 2

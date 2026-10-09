@@ -28,6 +28,7 @@ import {
   PROVIDER_KEYS,
   RUN_ENDINGS,
   RUN_STATUSES,
+  SKILLS_STATUSES,
   TASK_PRIORITIES,
   TASK_STATES,
 } from "./vocabulary.js";
@@ -372,6 +373,39 @@ export const restTokenCreatedSchema = z.object({
   secret: z.string(),
 });
 export type RestTokenCreated = z.infer<typeof restTokenCreatedSchema>;
+
+/** One of the organization's skills, as the SkillCDN deployment lists it at the console's address. */
+export const restSkillSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  /** The skill's folder in the repository (`""` for the root), and the path of its `SKILL.md`. */
+  directory: z.string(),
+  path: z.string(),
+  /** Where a person reads the skill: its page at the deployment. */
+  page: z.string(),
+  /** What an agent loads the skill by, through its own SkillCDN connection; `null` when the path is not one. */
+  uri: z.nullable(z.string()),
+  /** The title and the description in other languages, by language tag, as the repository gives them. */
+  translations: z.record(
+    z.string(),
+    z.object({ title: z.nullable(z.string()), description: z.nullable(z.string()) }),
+  ),
+});
+export type RestSkill = z.infer<typeof restSkillSchema>;
+
+/** `GET /api/v1/skills`: the organization's skills, read by address through SkillCDN. */
+export const restSkillsSchema = z.object({
+  /** The address, canonical, or `null` when the deployment has none configured. */
+  address: z.nullable(z.string()),
+  /** The origin of the SkillCDN deployment the skills are read through. */
+  source: z.string(),
+  /** Where a person browses the address, or `null` without one. */
+  page: z.nullable(z.string()),
+  status: z.enum(SKILLS_STATUSES),
+  /** The skills, when `ready`; empty otherwise. */
+  items: z.array(restSkillSchema),
+});
+export type RestSkills = z.infer<typeof restSkillsSchema>;
 
 export const restErrorSchema = z.object({
   error: z.object({

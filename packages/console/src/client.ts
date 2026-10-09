@@ -15,6 +15,7 @@ import {
   type RestRunEndInput,
   type RestRunInput,
   type RestRuns,
+  type RestSkills,
   type RestTask,
   type RestTaskInput,
   type RestTaskPatch,
@@ -31,6 +32,7 @@ import {
   restPersonSchema,
   restRunSchema,
   restRunsSchema,
+  restSkillsSchema,
   restTaskSchema,
   restTasksSchema,
   restTokenCreatedSchema,
@@ -131,6 +133,8 @@ export interface ConsoleClient {
   events(after: number, signal?: AbortSignal): Promise<RestEvents>;
   /** Where an `EventSource` subscribes to what happens after event number `after`. */
   eventStreamUrl(after: number): string;
+  /** The organization's skills, as SkillCDN serves them at the console's address. */
+  skills(signal?: AbortSignal): Promise<RestSkills>;
   /** The tokens of whoever asks. */
   tokens(signal?: AbortSignal): Promise<RestTokens>;
   /** Makes a token; the answer carries the secret, this once. */
@@ -299,6 +303,8 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
         signal,
       ),
     eventStreamUrl: (after) => withQuery(`${REST_ROUTES.events}/stream`, { after: String(after) }),
+    skills: (signal) =>
+      request("GET", `${base}${REST_ROUTES.skills}`, undefined, restSkillsSchema, signal),
     tokens: (signal) =>
       request("GET", `${base}${REST_ROUTES.tokens}`, undefined, restTokensSchema, signal),
     createToken: (input) =>

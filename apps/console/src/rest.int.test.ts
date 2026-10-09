@@ -13,6 +13,7 @@ import {
   restMeSchema,
   restPeopleSchema,
   restPersonSchema,
+  restSkillsSchema,
   restTaskSchema,
   restTasksSchema,
   restTokenCreatedSchema,
@@ -20,6 +21,7 @@ import {
 } from "@skillcdn/console/api";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "./db/testing.js";
+import type { SkillSource } from "./ports/skill-source.js";
 import { createFixtureProvider } from "./testing/fixture-provider.js";
 import { createHarness, type Harness, SIGN_IN_URL } from "./testing/harness.js";
 
@@ -66,6 +68,7 @@ describe("who may ask", () => {
       `${REST_ROUTES.tasks}/0199c4d8-0000-7000-8000-000000000010`,
       REST_ROUTES.decisions,
       REST_ROUTES.events,
+      REST_ROUTES.skills,
       `${REST_ROUTES.events}/stream`,
     ]) {
       const response = await h.request(path);
@@ -615,5 +618,70 @@ describe("roles", () => {
       await (await get(alice, `${REST_ROUTES.events}?after=${latest}`)).json(),
     );
     expect(after.items).toHaveLength(2);
+  });
+});
+
+describe("skills", () => {
+  it("are none without an address, and with one what the deployment serves, read once in a while", async () => {
+    const none = restSkillsSchema.parse(await (await get(alice, REST_ROUTES.skills)).json());
+    expect(none).toEqual({
+      address: null,
+      source: "https://skillcdn.ai",
+      page: null,
+      status: "none",
+      items: [],
+    });
+
+    let calls = 0;
+    const source: SkillSource = {
+      async list(address) {
+        calls += 1;
+        expect(address.owner).toBe("acme");
+        return {
+          status: "ready",
+          skills: [
+            {
+              name: "review",
+              description: "Reviews a change.",
+              directory: "review",
+              path: "review/SKILL.md",
+              translations: { ko: { title: "리뷰", description: null } },
+            },
+          ],
+        };
+      },
+    };
+    const served = createHarness(testDatabase, {
+      providers: [createFixtureProvider()],
+      skills: { address: "/gh/Acme/skills", source },
+    });
+    const cookie = await served.signIn("alice");
+    const read = async () =>
+      restSkillsSchema.parse(
+        await (await served.request(REST_ROUTES.skills, { headers: { cookie } })).json(),
+      );
+    const first = await read();
+    expect(first).toMatchObject({
+      address: "/gh/acme/skills",
+      source: "https://skillcdn.test",
+      page: "https://skillcdn.test/gh/acme/skills",
+      status: "ready",
+    });
+    expect(first.items).toEqual([
+      {
+        name: "review",
+        description: "Reviews a change.",
+        directory: "review",
+        path: "review/SKILL.md",
+        page: "https://skillcdn.test/gh/acme/skills?skill=review%2FSKILL.md",
+        uri: "skill://gh/acme/skills/review/SKILL.md",
+        translations: { ko: { title: "리뷰", description: null } },
+      },
+    ]);
+    // Held for a while: a second read asks the deployment nothing.
+    expect(await read()).toEqual(first);
+    expect(calls).toBe(1);
+    expect((await served.request(REST_ROUTES.skills)).status).toBe(401);
+    await served.close();
   });
 });

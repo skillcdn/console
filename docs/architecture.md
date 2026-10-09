@@ -1,6 +1,6 @@
 # Architecture
 
-> **Status:** the board (milestone 1) and agents at work (milestone 2) are implemented as described here, but for the organization's skills, which are the proposed shape. [roadmap.md](roadmap.md) tracks what exists. The decisions with lasting consequences are in [adr/](adr/); the rest of this document is kept current as the implementation lands: when they diverge, update this document in the same change. The open questions are at the end.
+> **Status:** the board (milestone 1) and agents at work (milestone 2) are implemented as described here. [roadmap.md](roadmap.md) tracks what exists. The decisions with lasting consequences are in [adr/](adr/); the rest of this document is kept current as the implementation lands: when they diverge, update this document in the same change. The open questions are at the end.
 
 ## Overview
 
@@ -10,7 +10,7 @@ person (browser)  ------------------------>  console, role api  -------->  Postg
 agent (Claude Code, Codex, any with a shell) |  and for agents' commands,     people, sessions, tokens; the job queue
   ---- the `console` command, over REST ---> |  sign-in through a provider
       |                                      |
-      |  MCP: the organization's skills      v
+      |  its own SkillCDN connection          v  the organization's skills, by address, for the board
       +---------------------------------->  a SkillCDN deployment (skillcdn.ai or self-hosted)
                                              read through its REST API and @skillcdn/core
 
@@ -54,6 +54,7 @@ These are the concepts the schema, the API and the UI are named after. The vocab
 ## How agents take part
 
 - **The console is a command to agents** ([specs/cli.md](specs/cli.md), [ADR-0006](adr/0006-agents-work-the-board-through-the-rest-api-and-the-command-line-not-an-mcp-server.md)). The package ships `console`, a thin client of the REST API with no logic of its own, which a person signs in once with a token they made. An agent takes a task (`console take`: a run begins; the task is the person's and in progress), reports (`console report`), hands in a link or a file (`console hand-in`), asks for a decision (`console ask`: the run waits, and the command waits a while for the answer) and ends the run (`console finish`, `fail` or `abandon`). Each is one or two requests of the REST API ([specs/rest.md](specs/rest.md)), the one surface of the console; the command costs an agent nothing until it is used, and an agent learns it from its help. The console is not an MCP server.
+- **The organization's skills are shown by address** (`SKILLS_ADDRESS`): the Skills page and `console skills` list what the SkillCDN deployment serves there, each with where a person reads it and the URI an agent loads it by through its own SkillCDN connection. The console reads the deployment's REST API with the contracts of `@skillcdn/core`, holds an answer for a minute, and keeps nothing of the skills ([specs/rest.md](specs/rest.md#get-apiv1skills)). The address moves to the project with milestone 3.
 - **Attended, by design.** A person runs their agent in their own app or CLI, on their own machine, under their own subscription, and connects it; the console calls no model API and sees what the agent reports. Unattended runs, where the worker would start agents itself, are not planned for the board and need decisions of their own if they ever come (where they run, with what credentials, within what limits).
 - **An agent is its person, and no more.** Its token is made by one person, scoped to that person, revocable, and expiring unless the person chose otherwise; what the person may do on the board is what the agent may do. Finer rules, what an agent may decide alone and what must wait for a person, come after the first agents are connected.
 - **A run is the record of the agent's work:** who started it, as which agent, on which task; its reports and what it handed in; the decision it waits for; how it ended. A run that asked waits until a person answers on the board, and is woken through the database's own channel, the same nudge the live feed runs on. A person may give up on a run that will not come back.
@@ -114,6 +115,7 @@ Inherited from the main repository, unchanged ([ADR-0002](adr/0002-one-image-one
 | HTTP | Hono on the Node.js adapter. |
 | Command line | Node.js and the package's own code, no dependencies; shipped as the package's `bin`, a thin client of the REST API. |
 | Validation | Zod at every boundary. |
+| Skills | `@skillcdn/core` for the address scheme and the REST contracts of a SkillCDN deployment, read on the server; the browser never calls the deployment. |
 | Database | PostgreSQL 18; Drizzle ORM on the `pg` driver; migrations are generated, reviewed SQL files that never leave the deployable. |
 | Jobs | pg-boss, adopted with the first job; until then the worker runs schedules on a timer. |
 | Blob storage | S3 API; PostgreSQL rows for the smallest install. |

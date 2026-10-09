@@ -18,6 +18,8 @@ export const REST_ROUTES = {
   runs: "/api/v1/runs",
   /** The bytes of a file a run handed in: `/api/v1/files/<artifact id>`. */
   files: "/api/v1/files",
+  /** The organization's skills, as SkillCDN serves them at the console's address. */
+  skills: "/api/v1/skills",
 } as const;
 
 /** Where a browser signs in and out. Signing in is per provider: `/auth/<provider>/...`. */

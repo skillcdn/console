@@ -208,6 +208,9 @@ importers:
       '@skillcdn/console':
         specifier: workspace:*
         version: link:../../packages/console
+      '@skillcdn/core':
+        specifier: ^0.1.1
+        version: 0.1.1
       drizzle-orm:
         specifier: ^0.45.3
         version: 0.45.3(@types/pg@8.23.1)(pg@8.23.1)
@@ -1019,6 +1022,10 @@ packages:
 
   '@rolldown/pluginutils@1.0.1':
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
+
+  '@skillcdn/core@0.1.1':
+    resolution: {integrity: sha512-h5frrWH5u4DSaF9yepREwwS+qoa5IpjcES4XHdu9D+RtZHyLYNhs/pO8yJDKIDFxwXt4xit6NUmEXwB1tUEQyA==}
+    engines: {node: '>=24'}
 
   '@turbo/darwin-64@2.11.7':
     resolution: {integrity: sha512-Z2LFOxwbiJueD1miByXJS/BrW21vv6YaQXZustty5jEX4vQYw6zyh101Sz1QO7WG0mqBzKagZ/DoAeeujI0/Sw==}
@@ -2706,6 +2713,11 @@ snapshots:
     optional: true
 
   '@rolldown/pluginutils@1.0.1': {}
+
+  '@skillcdn/core@0.1.1':
+    dependencies:
+      yaml: 2.9.1
+      zod: 4.6.5
 
   '@turbo/darwin-64@2.11.7':
     optional: true

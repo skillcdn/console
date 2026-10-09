@@ -51,6 +51,8 @@ The console is configured only through environment variables. [`.env.example`](.
 | `ADMINS` | `api` | no | no | Who configures the board: logins among `MEMBERS`, comma-separated. Made administrators when they sign in; an administrator may make or unmake others on the People page, and the board keeps at least one. Empty: nobody, until someone is listed. |
 | `SESSION_TTL_DAYS` | `api` | no | no | How long a browser stays signed in without being used. Default `30`. |
 | `WEB_ROOT` | `api` | no | no | Directory of a build of the default UI. The image sets `/app/web`; set it to an empty value to run without a UI. A directory without an `index.html` is a configuration error. |
+| `SKILLCDN_URL` | `api` | no | no | The origin of the SkillCDN deployment the organization's skills are read through. Default `https://skillcdn.ai`. |
+| `SKILLS_ADDRESS` | `api` | no | no | The address of the organization's skills at that deployment, as the standard spells one (`/gh/<owner>/<repo>`, with `@<ref>` and a path when needed). Unset: the Skills page says there is no address yet. The console asks as nobody, so a private repository shows only where the deployment serves it to anyone. |
 
 Every secret `NAME` may also be supplied as `NAME_FILE`, so container secret mounts work.
 
@@ -61,6 +63,7 @@ Written so that a cloud deployment is the image as containers, a managed Postgre
 - **Secrets at runtime**, as environment variables or mounted files; never as build arguments.
 - **A managed PostgreSQL** reachable from the containers; `migrate` runs once per rollout, before the new `api` and `worker` start, and migrations follow expand, then contract, across separate releases.
 - **Object storage with the S3 API** for what runs hand in, once the S3 implementation of the blob-store port lands; until then the bytes live in PostgreSQL.
+- **Outbound HTTPS** to the SkillCDN deployment (`SKILLCDN_URL`), for the organization's skills, and to the identity providers people sign in through.
 - **Health probes** on `GET /healthz` (liveness) and `GET /readyz` (readiness), and a stop timeout above the shutdown grace period, so that `SIGTERM` lets requests in flight finish.
 - **Logs from stdout**, JSON, one line per event; they never contain tokens or what an agent handed in.
 - **A reverse proxy or load balancer** that terminates TLS and limits requests per client; the image does neither.

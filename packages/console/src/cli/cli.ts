@@ -12,6 +12,7 @@ import {
   formatOptions,
   formatRun,
   formatRunLine,
+  formatSkills,
   formatTask,
   formatTaskLine,
 } from "./format.js";
@@ -348,6 +349,14 @@ const tasks: Command = async (args, io) => {
   return EXIT.ok;
 };
 
+const skills: Command = async (args, io) => {
+  const { values } = parse(args, {}, false);
+  const session = await open(io, values);
+  const found = await session.client.skills();
+  answer(io, session, found, () => formatSkills(found));
+  return EXIT.ok;
+};
+
 const newTask: Command = async (args, io) => {
   const { values, positionals } = parse(args, {
     body: { type: "string" },
@@ -647,6 +656,7 @@ const COMMANDS: Readonly<Record<string, Command>> = {
   whoami,
   tasks,
   task,
+  skills,
   take,
   report,
   "hand-in": handIn,

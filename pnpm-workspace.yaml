@@ -17,3 +17,9 @@ minimumReleaseAge: 4320
 # Dependency install scripts run only for packages approved here (`pnpm approve-builds`).
 allowBuilds:
   esbuild: true
+
+# @skillcdn/core 0.1.1 was published on 2026-10-09 and is adopted at once (docs/roadmap.md,
+# milestone 2). pnpm checks the lockfile against the policy on every install, frozen included,
+# so the exclusion stays until the release is three days old: take it out on 2026-10-12.
+minimumReleaseAgeExclude:
+  - "@skillcdn/core"

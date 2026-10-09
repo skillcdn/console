@@ -19,6 +19,7 @@ From then on the agent is that person on the board ([ADR-0004](../adr/0004-peopl
 | `tasks [--state <state>]` | `GET /api/v1/tasks` | one line per task: number, state, priority, title, owner, assignee, what waits on it |
 | `task <number\|id>` | `GET /api/v1/tasks/<ref>`, the decisions about it, the runs on it | the task in full |
 | `task new <title> [--body <markdown>\|--file <path>] [--state <state>] [--priority <priority>]` | `POST /api/v1/tasks` | the number and the id |
+| `skills` | `GET /api/v1/skills` | the organization's skills: each with its description and the URI an agent loads it by through its own SkillCDN connection; or why there are none to show |
 | `take <number\|id> [--agent <name>]` | `GET /api/v1/tasks/<ref>`, then `POST /api/v1/runs` | the run that began, the task in full, and what to do next |
 | `report <markdown>`, `report --file <path>`, `report -` | `POST /api/v1/runs/<id>/reports` | how many reports the run carries |
 | `hand-in <https url \| file path> [--label <words>]` | `POST /api/v1/runs/<id>/artifacts` for a link; `POST /api/v1/runs/<id>/files` for a file, sent as a form with its name and its media type by extension | how many artifacts |

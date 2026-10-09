@@ -7,6 +7,7 @@ export type Route =
   | { readonly name: "task"; readonly id: string }
   | { readonly name: "decisions" }
   | { readonly name: "feed" }
+  | { readonly name: "skills" }
   | { readonly name: "tokens" }
   | { readonly name: "people" }
   | { readonly name: "not-found" };
@@ -16,6 +17,8 @@ export const PATHS = {
   tasks: "/tasks",
   decisions: "/decisions",
   feed: "/feed",
+  /** The organization's skills, as SkillCDN serves them. */
+  skills: "/skills",
   /** The tokens of whoever is signed in: their own page. */
   tokens: "/tokens",
   people: "/people",
@@ -33,6 +36,9 @@ export function matchRoute(pathname: string): Route {
   }
   if (path === PATHS.feed) {
     return { name: "feed" };
+  }
+  if (path === PATHS.skills) {
+    return { name: "skills" };
   }
   if (path === PATHS.tokens) {
     return { name: "tokens" };

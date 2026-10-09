@@ -49,6 +49,21 @@ export const ARTIFACT_KINDS = ["link", "file"] as const;
 export type ArtifactKind = (typeof ARTIFACT_KINDS)[number];
 
 /**
+ * What the console says of the organization's skills: that it has no address for them, or what
+ * the SkillCDN deployment answered for the address.
+ */
+export const SKILLS_STATUSES = [
+  "none",
+  "ready",
+  "indexing",
+  "failed",
+  "not_found",
+  "unavailable",
+] as const;
+
+export type SkillsStatus = (typeof SKILLS_STATUSES)[number];
+
+/**
  * What can happen to the board. Every change of state is one of these, written down once with
  * who did it: the live feed shows them as they happen, and the audit trail keeps them.
  */

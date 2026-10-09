@@ -39,6 +39,7 @@ describe("loadConfig", () => {
       worker: { inProcess: false },
       auth: undefined,
       web: { root: undefined },
+      skills: { source: "https://skillcdn.ai", address: undefined },
     });
   });
 
@@ -143,6 +144,31 @@ describe("loadConfig", () => {
     const leak = problemsOf({ DATABASE_URL: "mysql://user:hunter2-secret@db/console" });
     expect(leak.message).not.toContain("hunter2-secret");
     expect(leak.message).toContain("DATABASE_URL");
+  });
+
+  it("names the organization's skills by address, canonical, and refuses what is not one", () => {
+    const { skills } = loadConfig(
+      {
+        DATABASE_URL,
+        SKILLCDN_URL: "https://skillcdn.example.test/",
+        SKILLS_ADDRESS: " /gh/Acme/Skills@v1/marketing ",
+      },
+      noFiles,
+    );
+    expect(skills.source).toBe("https://skillcdn.example.test");
+    expect(skills.address).toMatchObject({
+      host: "gh",
+      owner: "acme",
+      repo: "skills",
+      ref: { kind: "name", name: "v1" },
+      path: "marketing",
+    });
+    expect(problemsOf({ DATABASE_URL, SKILLS_ADDRESS: "gh/acme" }).problems[0]).toContain(
+      "SKILLS_ADDRESS",
+    );
+    expect(problemsOf({ DATABASE_URL, SKILLCDN_URL: "skillcdn.ai" }).problems[0]).toContain(
+      "SKILLCDN_URL",
+    );
   });
 });
 

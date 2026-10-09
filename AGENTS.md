@@ -44,7 +44,7 @@ docs/         architecture, roadmap, ADRs
 scripts/      checks that are part of `pnpm check`, and what packing needs
 ```
 
-Dependencies point inward only: `apps/console → packages/console`. `packages/console` imports `@skillcdn/core` and the other published packages from npm, by version, and nothing from the main repository's workspace. A workspace can only import what its own `package.json` declares, and only from another package's entry point. Changing these edges needs an ADR. Each workspace's `README.md` carries the rules for that subtree; read it before editing there.
+Dependencies point inward only: `apps/console → packages/console`. Both import `@skillcdn/core` and the other published packages from npm, by version, and nothing from the main repository's workspace. A workspace can only import what its own `package.json` declares, and only from another package's entry point. Changing these edges needs an ADR. Each workspace's `README.md` carries the rules for that subtree; read it before editing there.
 
 ## Commands
 
@@ -129,7 +129,7 @@ One topic, one file. Link to where something is documented instead of restating 
 
 - Add with `pnpm add --filter <package> <dep>`. Versions shared across workspaces go in the `catalog` in `pnpm-workspace.yaml`.
 - Justify every new runtime dependency in the commit message: why it is needed, maintenance health, install scripts, license. Permissive licenses only (MIT, Apache-2.0, BSD, ISC); we ship images, so no copyleft and no source-available dependencies. The one exception is the `@skillcdn/*` packages themselves, under the main repository's FSL-1.1-ALv2, which `pnpm check:licenses` allows by name and nothing else.
-- Releases younger than three days are not installable (`minimumReleaseAge`). That includes a fresh `@skillcdn/*` release: wait, or list it under `minimumReleaseAgeExclude` for that install and take it out again. Bypass otherwise only for a security fix, and say so in the commit message.
+- Releases younger than three days are not installable (`minimumReleaseAge`), and pnpm checks the lockfile against the rule on every install, frozen included. A fresh `@skillcdn/*` release that is needed now goes under `minimumReleaseAgeExclude` with the date it may come out again, three days after it was published, and comes out then. Bypass otherwise only for a security fix, and say so in the commit message.
 - Never hand-edit `pnpm-lock.yaml`; resolve conflicts by running `pnpm install`.
 
 ## Working alongside other agents

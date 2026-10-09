@@ -9,6 +9,7 @@ describe("matchRoute", () => {
     expect(matchRoute("/")).toEqual({ name: "board" });
     expect(matchRoute("/decisions/")).toEqual({ name: "decisions" });
     expect(matchRoute("/feed")).toEqual({ name: "feed" });
+    expect(matchRoute("/skills")).toEqual({ name: "skills" });
     expect(matchRoute("/tokens")).toEqual({ name: "tokens" });
     expect(matchRoute("/people")).toEqual({ name: "people" });
     expect(matchRoute(taskHref("0199c4d8-0000-7000-8000-000000000010"))).toEqual({
@@ -55,6 +56,7 @@ describe("createConsole", () => {
     endRun: never,
     events: never,
     eventStreamUrl: () => "/api/v1/events/stream",
+    skills: never,
     tokens: never,
     createToken: never,
     revokeToken: never,

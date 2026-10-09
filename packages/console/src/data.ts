@@ -11,6 +11,7 @@ import {
   type RestPerson,
   type RestPersonPatch,
   type RestRun,
+  type RestSkills,
   type RestTask,
   type RestTaskInput,
   type RestTaskPatch,
@@ -64,6 +65,8 @@ export interface ConsoleData {
   readonly events: readonly RestEvent[];
   /** The tokens of whoever is signed in, newest first. */
   readonly tokens: readonly RestToken[];
+  /** The organization's skills, as the console answered; `undefined` until it has. */
+  readonly skills: RestSkills | undefined;
   readonly actions: ConsoleActions;
   /** Asks everything again, from who is signed in on. */
   reload(): void;
@@ -95,6 +98,7 @@ export function useConsoleData(client: ConsoleClient): ConsoleData {
   const [runs, setRuns] = useState<readonly RestRun[]>([]);
   const [events, setEvents] = useState<readonly RestEvent[]>([]);
   const [tokens, setTokens] = useState<readonly RestToken[]>([]);
+  const [skills, setSkills] = useState<RestSkills | undefined>(undefined);
   const [generation, setGeneration] = useState(0);
   const lastEvent = useRef(0);
 
@@ -170,6 +174,16 @@ export function useConsoleData(client: ConsoleClient): ConsoleData {
         }
         return;
       }
+      // The skills are someone else's to serve: asked for on their own, so that the board
+      // stands without them.
+      client
+        .skills(signal)
+        .then((answer) => {
+          if (!signal.aborted) {
+            setSkills(answer);
+          }
+        })
+        .catch(() => undefined);
       if (typeof EventSource === "undefined") {
         return;
       }
@@ -265,6 +279,7 @@ export function useConsoleData(client: ConsoleClient): ConsoleData {
     runs,
     events,
     tokens,
+    skills,
     actions,
     reload,
   };

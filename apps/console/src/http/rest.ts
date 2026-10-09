@@ -10,6 +10,7 @@ import {
   type RestEvents,
   type RestPeople,
   type RestRuns,
+  type RestSkills,
   type RestTasks,
   type RestTokenCreated,
   type RestTokens,
@@ -71,6 +72,7 @@ import type { WorkspaceRecord } from "../db/queries/workspaces.js";
 import type { Logger } from "../logger.js";
 import type { BlobStore } from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
+import type { Skills } from "../skills.js";
 import { errorBody } from "./app.js";
 import {
   type Access,
@@ -99,6 +101,8 @@ export interface RestDependencies {
   readonly feed: LiveFeed;
   /** Where the bytes of files handed in are kept. */
   readonly blobs: BlobStore;
+  /** The organization's skills, read by address. */
+  readonly skills: Skills;
   readonly clock: Clock;
   readonly logger: Logger;
   readonly agents: {
@@ -190,7 +194,8 @@ function firstProblem(result: ParseResult<unknown>): string {
  * and nothing is answered to nobody.
  */
 export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies): void {
-  const { database, workspace, access, tokens, feed, blobs, clock, logger, agents } = dependencies;
+  const { database, workspace, access, tokens, feed, blobs, skills, clock, logger, agents } =
+    dependencies;
 
   /** Who is asking and with what, or the refusal to answer with. */
   const askingCaller = async (c: Context<AppEnv>): Promise<Caller | Response> =>
@@ -930,6 +935,16 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     } catch (error) {
       return failure(c, error);
     }
+  });
+
+  // The organization's skills, as the SkillCDN deployment serves them at the console's address.
+  app.get(REST_ROUTES.skills, async (c) => {
+    const person = await asking(c);
+    if (person instanceof Response) {
+      return person;
+    }
+    const body: RestSkills = await skills.read();
+    return c.json(body);
   });
 
   app.get(REST_ROUTES.events, async (c) => {

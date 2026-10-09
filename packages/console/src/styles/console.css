@@ -1259,6 +1259,44 @@ svg {
   font-size: var(--sc-text-sm);
 }
 
+/* Skills: the organization's, as SkillCDN serves them at the console's address. */
+
+.sc-skills {
+  display: grid;
+  gap: var(--sc-space-2);
+}
+
+.sc-skill {
+  padding: var(--sc-space-3) var(--sc-space-4);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-bg-subtle);
+}
+
+.sc-skill-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sc-space-3);
+  margin: 0;
+}
+
+.sc-skill-name {
+  font-weight: 600;
+}
+
+.sc-skill-description {
+  margin: var(--sc-space-2) 0 0;
+}
+
+.sc-skill-uri {
+  display: block;
+  margin-top: var(--sc-space-2);
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+  word-break: break-all;
+}
+
 .sc-sign-in-ways {
   display: flex;
   flex-wrap: wrap;

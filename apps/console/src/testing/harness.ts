@@ -1,4 +1,5 @@
 import { AUTH_ROUTES } from "@skillcdn/console/api";
+import { parseAddress } from "@skillcdn/core";
 import type { Hono } from "hono";
 import { pino } from "pino";
 import { type EventListener, startEventListener } from "../db/listener.js";
@@ -6,6 +7,7 @@ import type { TestDatabase } from "../db/testing.js";
 import type { LiveFeed } from "../http/live-feed.js";
 import type { AppEnv } from "../http/request-context.js";
 import type { Clock } from "../ports/clock.js";
+import type { SkillSource } from "../ports/skill-source.js";
 import { createApi } from "../roles/api.js";
 import type { FixtureProvider } from "./fixture-provider.js";
 
@@ -52,6 +54,20 @@ export interface HarnessOptions {
   readonly feed?: { readonly heartbeatMs?: number; readonly pollMs?: number };
   /** How long an agent's `ask` waits for an answer. */
   readonly agents?: { readonly waitMs?: number };
+  /** The organization's skills: their address, and the deployment's side of reading them. None when left out. */
+  readonly skills?: { readonly address: string; readonly source: SkillSource } | undefined;
+}
+
+/** The skills as the api role is configured with them, at a deployment of the tests' own. */
+function skillsOf(skills: HarnessOptions["skills"]) {
+  if (skills === undefined) {
+    return undefined;
+  }
+  const parsed = parseAddress(skills.address);
+  if (!parsed.ok) {
+    throw new Error(parsed.error.message);
+  }
+  return { source: "https://skillcdn.test", address: parsed.value };
 }
 
 /** The cookie a response set, as a Cookie header would carry it. */
@@ -85,6 +101,7 @@ export function createHarness(testDatabase: TestDatabase, options: HarnessOption
       },
       feed: options.feed,
       agents: options.agents,
+      skills: skillsOf(options.skills),
       ...(providers.length === 0
         ? {}
         : {
@@ -104,6 +121,7 @@ export function createHarness(testDatabase: TestDatabase, options: HarnessOption
       clock: options.clock ?? { now: () => new Date() },
       logger,
       isShuttingDown: () => false,
+      skillSource: options.skills?.source,
     },
   );
   const listener: EventListener | undefined =

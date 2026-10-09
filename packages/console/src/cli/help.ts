@@ -73,6 +73,11 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     limits: [`title: one line, up to ${MAX_TITLE_LENGTH} characters`, `body: ${MARKDOWN}`],
     refusals: ["task.not_found: no task has that number or id"],
   },
+  skills: {
+    usage: "skills",
+    about:
+      "The organization's skills, as SkillCDN serves them at the console's address: each with its description and the URI you load it by through your own SkillCDN connection. --json adds the page of each, for a person.",
+  },
   take: {
     usage: "take <number|id> [--agent <name>]",
     about:
@@ -187,7 +192,10 @@ $XDG_CONFIG_HOME/skillcdn-console/credentials.json (~/.config when XDG_CONFIG_HO
 
 const SECTIONS: readonly { readonly title: string; readonly commands: readonly string[] }[] = [
   { title: "Signing in, once, as a person", commands: ["login", "logout", "whoami"] },
-  { title: "The board", commands: ["tasks", "task", "decisions", "decision", "runs", "run"] },
+  {
+    title: "The board",
+    commands: ["tasks", "task", "decisions", "decision", "runs", "run", "skills"],
+  },
   { title: "Working", commands: ["take", "report", "hand-in", "ask", "finish", "fail", "abandon"] },
 ];
 

@@ -49,11 +49,15 @@ src/
                  (the only way to the data), listener.ts (a connection of its own on the events
                  channel, made again when lost), testing.ts (a database per test file; not compiled)
   jobs/          janitor.ts: the sweep of what time has ended, on a timer
+  skills.ts      the organization's skills as the board shows them: read by address through the
+                 skill source, each with its page and its URI, and held for a minute
   ports/         the interfaces the domain needs implemented: the clock, the identity provider's
-                 side of signing in, the blob store for the files runs hand in
+                 side of signing in, the blob store for the files runs hand in, the skill source
+                 for the organization's skills
   adapters/      their implementations: the system clock, the GitHub and Google providers and
-                 what those share (upstream.ts: a bounded request and its reply), and the blob
-                 store in PostgreSQL (pg-blob-store.ts)
+                 what those share (upstream.ts: a bounded request and its reply), the blob store
+                 in PostgreSQL (pg-blob-store.ts), and the SkillCDN deployment's side of the
+                 skill source (skillcdn.ts)
   testing/       test support: the providers' side of signing in for a handful of made-up people,
                  and the harness that wires the app for the integration tests (not compiled)
   errors.ts      the base class of errors that cross a boundary, with their stable code
@@ -88,7 +92,8 @@ Read the root [`AGENTS.md`](../../AGENTS.md) first. This workspace is the compos
 - `src/http/app.int.test.ts` runs the app of the `api` role against real PostgreSQL: the probes in every state, the id and the address every request gets, the access log and what it leaves out.
 - `src/auth.int.test.ts` covers signing in through fixture providers, a git host and a Workspace: the round trip, the sealed cookie, where a browser may be sent back, what did not complete and why, a login the operator did not list, who the operator names an administrator, sessions and their end (sign-out from the console's own pages only, time, removal from the list), and a deployment where nobody signs in.
 - `src/adapters/github-login.test.ts` and `google-login.test.ts` cover the adapters against a fake `fetch`: what each sends, what it reads, and what it refuses.
-- `src/rest.int.test.ts` covers the REST API and parses every answer with the package's schemas: who may ask and change, tasks and decisions through their whole life, what is refused and why, the feed's pages, and tokens: made and removed on the console's own pages only, presented as bearers with no origin needed, refused when they are nothing, removed, expired or no longer a member's, and bounded.
+- `src/adapters/skillcdn.test.ts` and `src/skills.test.ts` cover the organization's skills: the deployment's overview read as the contracts say, what each state and each failure becomes, and the answer held for a while and asked for again.
+- `src/rest.int.test.ts` covers the REST API and parses every answer with the package's schemas: who may ask and change, tasks and decisions through their whole life, what is refused and why, the feed's pages, and tokens: made and removed on the console's own pages only, presented as bearers with no origin needed, refused when they are nothing, removed, expired or no longer a member's, and bounded; and the skills: none without an address, with one what the source serves, read once in a while.
 - `src/runs.int.test.ts` covers an agent at work through the REST API with its token, as the command line drives it: taking a task by its number, reporting and handing in, asking and being answered while a read of the decision waits, finishing, what is listed as one's own, what is not its own, a person giving up on a run, and files handed in: kept once by their hash, read back by whoever may see the board with the headers that keep them from running, and refused when empty, a path, over the limit, on another's run or on one that is over.
 - `src/cli.int.test.ts` runs the package's `console` command against the app with no socket: the whole of an agent's work from taking a task to finishing it, with a person deciding meanwhile, and what the command refuses.
 - `src/live.int.test.ts` covers the feed as server-sent events, with a listener on the database's channel as a deployment has: what was there, what happens next, heartbeats, where a reconnecting browser starts, and that closing the feed ends every stream.

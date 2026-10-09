@@ -1,5 +1,5 @@
 import { restPath } from "../routes.js";
-import type { RestArtifact, RestDecision, RestRun, RestTask } from "../schemas.js";
+import type { RestArtifact, RestDecision, RestRun, RestSkills, RestTask } from "../schemas.js";
 
 // What the command prints: one line per thing in a list, a few lines for one thing in full.
 // Plain text, for an agent to read and a person to skim; ids are given, since the commands take
@@ -106,6 +106,36 @@ export function formatArtifact(artifact: RestArtifact): string {
       ? (artifact.url ?? "")
       : `${artifact.file.name} (${artifact.file.size} bytes, ${artifact.file.contentType}; read at ${restPath("files", artifact.id)})`;
   return artifact.label === null ? what : `${artifact.label}: ${what}`;
+}
+
+const SKILLS_WORDS: Readonly<Record<Exclude<RestSkills["status"], "none" | "ready">, string>> = {
+  indexing: "SkillCDN is still indexing the repository; ask again in a moment.",
+  failed: "SkillCDN could not index the repository.",
+  not_found: "SkillCDN does not serve this address to the console.",
+  unavailable: "SkillCDN could not be reached; ask again later.",
+};
+
+/** The organization's skills: where they are, and each with what an agent loads it by. */
+export function formatSkills(skills: RestSkills): string {
+  if (skills.status === "none" || skills.address === null) {
+    return "No skills address is configured on this console.";
+  }
+  const head = `skills at ${skills.address}, served by ${skills.source}: ${skills.status}`;
+  if (skills.status !== "ready") {
+    return `${head}\n${SKILLS_WORDS[skills.status]}`;
+  }
+  if (skills.items.length === 0) {
+    return `${head}\nNo skills at this address.`;
+  }
+  const lines = [head];
+  for (const skill of skills.items) {
+    lines.push(`${skill.name}  ${skill.description}`, `    ${skill.uri ?? skill.path}`);
+  }
+  lines.push(
+    "",
+    "Load a skill by its URI through your SkillCDN connection. --json adds the page of each, for a person.",
+  );
+  return lines.join("\n");
 }
 
 export function formatDecisionLine(decision: RestDecision): string {

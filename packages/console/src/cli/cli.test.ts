@@ -225,6 +225,53 @@ describe("the console command", () => {
     expect(words.out()).toBe("#7  ready  high  Fix the parser  (owner alice)\n");
   });
 
+  it("lists the organization's skills, each with what an agent loads it by", async () => {
+    const skills = {
+      address: "/gh/acme/skills",
+      source: "https://skillcdn.test",
+      page: "https://skillcdn.test/gh/acme/skills",
+      status: "ready",
+      items: [
+        {
+          name: "review",
+          description: "Reviews a change.",
+          directory: "review",
+          path: "review/SKILL.md",
+          page: "https://skillcdn.test/gh/acme/skills?skill=review%2FSKILL.md",
+          uri: "skill://gh/acme/skills/review/SKILL.md",
+          translations: {},
+        },
+      ],
+    };
+    const { fetch } = fakeConsole({ "GET /api/v1/skills": { body: skills } });
+    const h = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["skills"], h.io)).toBe(EXIT.ok);
+    expect(h.out()).toContain("skills at /gh/acme/skills, served by https://skillcdn.test: ready");
+    expect(h.out()).toContain(
+      "review  Reviews a change.\n    skill://gh/acme/skills/review/SKILL.md",
+    );
+    const none = fakeConsole({
+      "GET /api/v1/skills": {
+        body: {
+          address: null,
+          source: "https://skillcdn.ai",
+          page: null,
+          status: "none",
+          items: [],
+        },
+      },
+    });
+    const n = harness({ fetch: none.fetch, env: SIGNED_IN });
+    expect(await runCli(["skills"], n.io)).toBe(EXIT.ok);
+    expect(n.out()).toBe("No skills address is configured on this console.\n");
+    const down = fakeConsole({
+      "GET /api/v1/skills": { body: { ...skills, status: "unavailable", items: [] } },
+    });
+    const d = harness({ fetch: down.fetch, env: SIGNED_IN });
+    expect(await runCli(["skills"], d.io)).toBe(EXIT.ok);
+    expect(d.out()).toContain("could not be reached");
+  });
+
   it("takes a task by its number and says which run began", async () => {
     const { fetch, calls } = fakeConsole({
       "GET /api/v1/tasks/7": { body: TASK },

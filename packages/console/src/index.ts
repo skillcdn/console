@@ -25,6 +25,7 @@ export {
 } from "./components/runs.js";
 export { type NavItem, Shell, type ShellProps } from "./components/shell.js";
 export { SignIn, type SignInProps } from "./components/sign-in.js";
+export { SkillList, type SkillListProps } from "./components/skills.js";
 export { TaskForm, type TaskFormProps } from "./components/task-form.js";
 export { TaskView, type TaskViewProps } from "./components/task-view.js";
 export {

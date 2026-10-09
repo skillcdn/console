@@ -9,6 +9,7 @@ import { PeopleList } from "./people.js";
 import { RunList } from "./runs.js";
 import { Shell } from "./shell.js";
 import { SignIn } from "./sign-in.js";
+import { SkillList } from "./skills.js";
 import { TaskView } from "./task-view.js";
 import { NewToken, TokenForm, TokenList } from "./tokens.js";
 
@@ -497,5 +498,55 @@ describe("runs", () => {
       <Board tasks={[task({ openRuns: 1 })]} taskHref={href} onOpen={() => undefined} />,
     );
     expect(html).toContain("agent at work");
+  });
+});
+
+describe("skills", () => {
+  const served = {
+    address: "/gh/acme/skills",
+    source: "https://skillcdn.test",
+    page: "https://skillcdn.test/gh/acme/skills",
+    status: "ready" as const,
+    items: [
+      {
+        name: "review",
+        description: "Reviews a <change>.",
+        directory: "review",
+        path: "review/SKILL.md",
+        page: "https://skillcdn.test/gh/acme/skills?skill=review%2FSKILL.md",
+        uri: "skill://gh/acme/skills/review/SKILL.md",
+        translations: {},
+      },
+    ],
+  };
+
+  it("list what SkillCDN serves at the address, as text, with where each is read and loaded", () => {
+    const html = renderToStaticMarkup(<SkillList skills={served} />);
+    expect(html).toContain('href="https://skillcdn.test/gh/acme/skills"');
+    expect(html).toContain('href="https://skillcdn.test/gh/acme/skills?skill=review%2FSKILL.md"');
+    expect(html).toContain("Reviews a &lt;change&gt;.");
+    expect(html).toContain("skill://gh/acme/skills/review/SKILL.md");
+    expect(html).not.toContain("<change>");
+  });
+
+  it("say when there is no address, when the deployment is still indexing, and while loading", () => {
+    expect(renderToStaticMarkup(<SkillList skills={undefined} />)).toContain("Loading the skills");
+    const none = renderToStaticMarkup(
+      <SkillList
+        skills={{
+          address: null,
+          source: "https://skillcdn.ai",
+          page: null,
+          status: "none",
+          items: [],
+        }}
+      />,
+    );
+    expect(none).toContain("No skills address yet");
+    const indexing = renderToStaticMarkup(
+      <SkillList skills={{ ...served, status: "indexing", items: [] }} />,
+    );
+    expect(indexing).toContain("still indexing");
+    expect(indexing).toContain("/gh/acme/skills");
   });
 });

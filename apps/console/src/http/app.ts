@@ -5,6 +5,7 @@ import type { WorkspaceRecord } from "../db/queries/workspaces.js";
 import type { Logger } from "../logger.js";
 import type { BlobStore } from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
+import type { Skills } from "../skills.js";
 import { type AppAuth, createAccess, registerAuth } from "./auth.js";
 import type { ClientAddressResolver } from "./client-address.js";
 import type { LiveFeed } from "./live-feed.js";
@@ -26,6 +27,8 @@ export interface AppDependencies {
   readonly feed: LiveFeed;
   /** Where the bytes of files handed in are kept. */
   readonly blobs: BlobStore;
+  /** The organization's skills, read by address. */
+  readonly skills: Skills;
   /** A build of the default UI to serve. Left out, the server is API only. */
   readonly web: WebRoot | undefined;
   readonly clock: Clock;
@@ -56,7 +59,7 @@ export function errorBody(code: string, message: string) {
  * through, and what answers when nothing else does. The UI's files register on top.
  */
 export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
-  const { database, logger, isShuttingDown, auth, workspace, feed, blobs, clock, web } =
+  const { database, logger, isShuttingDown, auth, workspace, feed, blobs, skills, clock, web } =
     dependencies;
   const app = new Hono<AppEnv>();
   app.use(requestContext({ logger, ...dependencies.requests }));
@@ -99,6 +102,7 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
     tokens: auth?.tokens,
     feed,
     blobs,
+    skills,
     clock,
     logger,
     agents: dependencies.agents,
