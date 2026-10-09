@@ -166,11 +166,60 @@ describe("signing in", () => {
         webUrl: "https://github.com",
         apiUrl: "https://api.github.com",
       },
+      google: undefined,
       secret: "an-auth-secret-of-at-least-32-characters",
       members: ["alice", "Bob", "carol"],
       admins: [],
+      domains: [],
       sessionTtlMs: 30 * 86_400_000,
     });
+  });
+
+  it("takes Google as a provider, alone or beside GitHub, with a Workspace domain", () => {
+    const google = {
+      DATABASE_URL,
+      PUBLIC_URL: signIn.PUBLIC_URL,
+      AUTH_SECRET: signIn.AUTH_SECRET,
+      GOOGLE_CLIENT_ID: "123-example.apps.googleusercontent.com",
+      GOOGLE_CLIENT_SECRET: "client-secret-of-the-client",
+      GOOGLE_WORKSPACE_DOMAIN: " Acme.Test ",
+    };
+    const { auth } = loadConfig(google, noFiles);
+    expect(auth?.github).toBeUndefined();
+    expect(auth?.google).toEqual({
+      clientId: "123-example.apps.googleusercontent.com",
+      clientSecret: "client-secret-of-the-client",
+      domain: "acme.test",
+    });
+    expect(auth?.domains).toEqual(["acme.test"]);
+    expect(auth?.members).toEqual([]);
+    const both = loadConfig(
+      {
+        ...signIn,
+        GOOGLE_CLIENT_ID: google.GOOGLE_CLIENT_ID,
+        GOOGLE_CLIENT_SECRET: google.GOOGLE_CLIENT_SECRET,
+        MEMBERS: "alice, dave@acme.test",
+        ADMINS: "dave@acme.test",
+      },
+      noFiles,
+    ).auth;
+    expect(both?.github).toBeDefined();
+    expect(both?.google?.domain).toBeUndefined();
+    expect(both?.admins).toEqual(["dave@acme.test"]);
+    // An administrator of the domain need not be listed by address.
+    expect(loadConfig({ ...google, ADMINS: "erin@acme.test" }, noFiles).auth?.admins).toEqual([
+      "erin@acme.test",
+    ]);
+    expect(problemsOf({ ...google, GOOGLE_CLIENT_SECRET: undefined }).problems).toEqual([
+      "GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET: set both or neither",
+      "GOOGLE_WORKSPACE_DOMAIN: needs GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET",
+    ]);
+    expect(problemsOf({ ...signIn, GOOGLE_WORKSPACE_DOMAIN: "acme.test" }).problems).toEqual([
+      "GOOGLE_WORKSPACE_DOMAIN: needs GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET",
+    ]);
+    expect(problemsOf({ ...google, GOOGLE_WORKSPACE_DOMAIN: "not a domain" }).problems).toEqual([
+      "GOOGLE_WORKSPACE_DOMAIN: must be a domain such as example.com",
+    ]);
   });
 
   it("names administrators among the members, and only among them", () => {
@@ -179,7 +228,7 @@ describe("signing in", () => {
       "bob",
     ]);
     expect(problemsOf({ ...signIn, ADMINS: "dave" }).problems).toEqual([
-      "ADMINS: every administrator must be listed in MEMBERS",
+      "ADMINS: every administrator must be a member, by login or by domain",
     ]);
     expect(problemsOf({ DATABASE_URL, ADMINS: "alice" }).problems[0]).toContain(
       "ADMINS: names administrators",
@@ -211,8 +260,13 @@ describe("signing in", () => {
   it("wants all of it or none of it, and names what is missing", () => {
     const { GITHUB_CLIENT_SECRET: _secret, AUTH_SECRET: _auth, ...partial } = signIn;
     expect(problemsOf(partial).problems).toEqual([
-      "GITHUB_CLIENT_SECRET, AUTH_SECRET: required once any of PUBLIC_URL, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, AUTH_SECRET is set",
+      "AUTH_SECRET: required once signing in is configured",
+      "GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET: set both or neither",
     ]);
+    expect(
+      problemsOf({ DATABASE_URL, PUBLIC_URL: signIn.PUBLIC_URL, AUTH_SECRET: signIn.AUTH_SECRET })
+        .problems,
+    ).toEqual(["GITHUB_CLIENT_ID or GOOGLE_CLIENT_ID: signing in needs a provider"]);
     expect(problemsOf({ DATABASE_URL, MEMBERS: "alice" }).problems[0]).toContain(
       "MEMBERS: lists who may sign in",
     );
@@ -235,8 +289,11 @@ describe("signing in", () => {
     expect(short.problems).toEqual(["AUTH_SECRET: must be at least 32 characters"]);
     expect(short.message).not.toContain("hunter2");
     expect(problemsOf({ ...signIn, MEMBERS: "alice, not a login" }).problems).toEqual([
-      "MEMBERS: must be a list of logins",
+      "MEMBERS: must be a list of logins or email addresses",
     ]);
+    expect(
+      loadConfig({ ...signIn, MEMBERS: "alice, Dave@acme.test" }, noFiles).auth?.members,
+    ).toEqual(["alice", "Dave@acme.test"]);
     expect(loadConfig({ ...signIn, MEMBERS: "" }, noFiles).auth?.members).toEqual([]);
   });
 });

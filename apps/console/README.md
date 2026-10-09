@@ -49,11 +49,12 @@ src/
                  (the only way to the data), listener.ts (a connection of its own on the events
                  channel, made again when lost), testing.ts (a database per test file; not compiled)
   jobs/          janitor.ts: the sweep of what time has ended, on a timer
-  ports/         the interfaces the domain needs implemented: the clock, the git host's side of
-                 signing in
-  adapters/      their implementations: the system clock, the GitHub login
-  testing/       test support: the git host's side of signing in for three made-up people, and
-                 the harness that wires the app for the integration tests (not compiled)
+  ports/         the interfaces the domain needs implemented: the clock, the identity provider's
+                 side of signing in
+  adapters/      their implementations: the system clock, the GitHub and Google providers, and
+                 what those share (upstream.ts: a bounded request and its reply)
+  testing/       test support: the providers' side of signing in for a handful of made-up people,
+                 and the harness that wires the app for the integration tests (not compiled)
   errors.ts      the base class of errors that cross a boundary, with their stable code
   version.ts     what the process calls itself
 web/             the default UI: one page that mounts the package's composition, built by Vite into
@@ -84,8 +85,8 @@ Read the root [`AGENTS.md`](../../AGENTS.md) first. This workspace is the compos
 
 - Unit tests next to the code: the config module, the client address, the listener and its shutdown.
 - `src/http/app.int.test.ts` runs the app of the `api` role against real PostgreSQL: the probes in every state, the id and the address every request gets, the access log and what it leaves out.
-- `src/auth.int.test.ts` covers signing in through a fixture git host: the round trip, the sealed cookie, where a browser may be sent back, what did not complete and why, a login the operator did not list, who the operator names an administrator, sessions and their end (sign-out from the console's own pages only, time, removal from the list), and a deployment where nobody signs in.
-- `src/adapters/github-login.test.ts` covers the GitHub adapter against a fake `fetch`: what it sends, what it reads, and what it refuses.
+- `src/auth.int.test.ts` covers signing in through fixture providers, a git host and a Workspace: the round trip, the sealed cookie, where a browser may be sent back, what did not complete and why, a login the operator did not list, who the operator names an administrator, sessions and their end (sign-out from the console's own pages only, time, removal from the list), and a deployment where nobody signs in.
+- `src/adapters/github-login.test.ts` and `google-login.test.ts` cover the adapters against a fake `fetch`: what each sends, what it reads, and what it refuses.
 - `src/rest.int.test.ts` covers the REST API and parses every answer with the package's schemas: who may ask and change, tasks and decisions through their whole life, what is refused and why, the feed's pages, and tokens: made and removed on the console's own pages only, presented as bearers with no origin needed, refused when they are nothing, removed, expired or no longer a member's, and bounded.
 - `src/live.int.test.ts` covers the feed as server-sent events, with a listener on the database's channel as a deployment has: what was there, what happens next, heartbeats, where a reconnecting browser starts, and that closing the feed ends every stream.
 - `src/http/web.test.ts` covers serving a build: the files and their types, bundles as immutable, the page for every path of the app under its policy, the API's paths left alone, and that nothing outside the directory is ever served. It uses a small fake build, not `web/dist`.
@@ -110,7 +111,7 @@ Primary keys are `uuid DEFAULT uuidv7()` and timestamps are `timestamptz`, with 
 | Table | What a row is | Keys and indexes |
 |---|---|---|
 | `workspaces` | An organization's board. A deployment holds one, found by its `key` (`default`), made at boot by whichever role comes first and renamed from configuration since (`ensureWorkspace`). `next_task_number` is the number the next task gets. | unique `key` |
-| `people` | A person who signed in through the git host and was let in: the `host` and the host's immutable `host_account_id`, which is what a person is known by, so that a renamed account stays the same person; `login`, `name` and `avatar_url` as the host said at the last sign-in; `role`, `admin` or `member`, the console's own record; `last_login_at`. | unique `(workspace_id, host, host_account_id)` |
+| `people` | A person who signed in through an identity provider and was let in: the provider (`host`: `gh`, `google`) and its immutable `host_account_id`, which is what a person is known by, so that a renamed account stays the same person; `login` (a login at GitHub, an address at Google), `name` and `avatar_url` as the provider said at the last sign-in; `role`, `admin` or `member`, the console's own record; `last_login_at`. | unique `(workspace_id, host, host_account_id)` |
 | `sessions` | A browser a person is signed in on: the SHA-256 of the cookie's token (`token_hash`), never the token; `expires_at`, which moves while the session is used; `last_seen_at`. Rows go with their person (`on delete cascade`). | unique `token_hash`; `person_id`; `expires_at` |
 | `tokens` | A token a person made for an agent, a script or a console of their own: `name` (what they call it), the SHA-256 of the secret (`token_hash`), never the secret; `expires_at`, which does not move; `last_used_at`, noted at most hourly. Removing a token is deleting its row. Rows go with their person (`on delete cascade`). | unique `token_hash`; `person_id`; `expires_at` |
 | `tasks` | A unit of work: its `number` in the workspace, `title`, `body` in Markdown, `state` and `priority` (checked against the package's vocabulary), the `owner` (a person, whoever wrote it unless handed over), the `assignee` (a person, or nobody; an agent acting for a person arrives later), the `parent` for a breakdown (never itself or one of its own descendants), and `links`, the `https` URLs with a label that the API checked. | unique `(workspace_id, number)`; `(workspace_id, state)`; `parent_id` |

@@ -51,7 +51,7 @@ export const workspaces = pgTable(
   (table) => [uniqueIndex("workspaces_key_key").on(table.key)],
 );
 
-/** Someone who signed in through the git host and is a member of the workspace. */
+/** Someone who signed in through an identity provider and is a member of the workspace. */
 export const people = pgTable(
   "people",
   {
@@ -59,10 +59,10 @@ export const people = pgTable(
     workspaceId: uuid()
       .notNull()
       .references(() => workspaces.id),
-    /** The git host, and the host's immutable id of the account: what a person is known by. */
+    /** The identity provider (`gh`, `google`), and its immutable id of the account: what a person is known by. */
     host: text().notNull(),
     hostAccountId: text().notNull(),
-    /** As the host spells it now; a renamed account stays the same person. */
+    /** As the provider spells it now (a login, an address); a renamed account stays the same person. */
     login: text().notNull(),
     name: text(),
     /** The account's picture as the host serves it, an https URL. */

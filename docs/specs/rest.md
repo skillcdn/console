@@ -36,7 +36,7 @@ The API is the board as its members see it: the people, the tasks, the decisions
 
 ### `GET /api/v1/me`
 
-`{ "workspace": { "name" }, "person": ... | null, "signIn": "gh" | null }`: what the board is called, who the session cookie says is signed in (`id`, `login`, `name` or `null`, `avatar` or `null`), and the git host people sign in through, or `null` where nobody can. Nobody is an answer, not an error; the pages ask this once to decide what to show.
+`{ "workspace": { "name" }, "person": ... | null, "signIn": [{ "key", "label" }, ...] }`: what the board is called, who the session cookie says is signed in (`id`, `login`, `name` or `null`, `avatar` or `null`, `role`), and the identity providers people sign in through (`gh`, `google`, each with the label of its button), none where nobody can. Nobody is an answer, not an error; the pages ask this once to decide what to show.
 
 ### `GET /api/v1/people`
 
@@ -90,4 +90,4 @@ Takes one of the asker's tokens away, whoever holds it, and answers `204`. A tok
 
 ## Signing in
 
-Not part of the REST API, and described in [`deploy/README.md`](../../deploy/README.md#signing-in): `GET /auth/gh/login?return_to=`, `GET /auth/gh/callback`, and `POST /auth/logout` from the console's own pages. A page learns why a sign-in did not complete from `?sign_in=denied|expired|failed|refused` on the page it was for.
+Not part of the REST API, and described in [`deploy/README.md`](../../deploy/README.md#signing-in): `GET /auth/<provider>/login?return_to=` and `GET /auth/<provider>/callback` for each provider the deployment has (`gh`, `google`; any other is nothing), and `POST /auth/logout` from the console's own pages. A page learns why a sign-in did not complete from `?sign_in=denied|expired|failed|refused` on the page it was for.

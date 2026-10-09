@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { listEventsAfter } from "./db/queries/events.js";
 import { ensureWorkspace } from "./db/queries/workspaces.js";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "./db/testing.js";
-import { createFixtureLogin } from "./testing/fixture-login.js";
+import { createFixtureProvider, type FixtureProvider } from "./testing/fixture-provider.js";
 import {
   cookieOf,
   createHarness,
@@ -34,10 +34,10 @@ function movableClock() {
 }
 
 function harness(
-  options: HarnessOptions = {},
-): Harness & { login: ReturnType<typeof createFixtureLogin> } {
-  const login = options.login ?? createFixtureLogin();
-  return { login, ...createHarness(testDatabase, { login, ...options }) };
+  options: Omit<HarnessOptions, "providers"> & { readonly login?: FixtureProvider } = {},
+): Harness & { login: FixtureProvider } {
+  const { login = createFixtureProvider(), ...rest } = options;
+  return { login, ...createHarness(testDatabase, { providers: [login], ...rest }) };
 }
 
 const me = async (h: Harness, cookie?: string) =>
@@ -50,12 +50,14 @@ const me = async (h: Harness, cookie?: string) =>
 describe("signing in", () => {
   it("sends the browser to the git host with a state and a challenge, and remembers both", async () => {
     const { request } = harness();
-    const begun = await request(`${AUTH_ROUTES.login}?return_to=/tasks`);
+    const begun = await request(`${AUTH_ROUTES.login("gh")}?return_to=/tasks`);
     expect(begun.status).toBe(302);
     expect(begun.headers.get("cache-control")).toBe("no-store");
     const location = new URL(begun.headers.get("location") ?? "");
     expect(location.origin).toBe("https://git.test");
-    expect(location.searchParams.get("redirect_uri")).toBe(`${SIGN_IN_URL}${AUTH_ROUTES.callback}`);
+    expect(location.searchParams.get("redirect_uri")).toBe(
+      `${SIGN_IN_URL}${AUTH_ROUTES.callback("gh")}`,
+    );
     expect(location.searchParams.get("state")).toMatch(/^[\w-]{20,}$/);
     expect(location.searchParams.get("code_challenge")).toMatch(/^[\w-]{43}$/);
     const [cookie] = begun.headers.getSetCookie();
@@ -71,11 +73,11 @@ describe("signing in", () => {
   it("comes back signed in, to the page it left for, with a session only the server reads", async () => {
     const { request, login } = harness();
     const begun = await request(
-      `${AUTH_ROUTES.login}?return_to=${encodeURIComponent("/tasks/42?x=1")}`,
+      `${AUTH_ROUTES.login("gh")}?return_to=${encodeURIComponent("/tasks/42?x=1")}`,
     );
     const state = new URL(begun.headers.get("location") ?? "").searchParams.get("state") ?? "";
     const done = await request(
-      `${AUTH_ROUTES.callback}?code=${login.codeFor("alice", state)}&state=${state}`,
+      `${AUTH_ROUTES.callback("gh")}?code=${login.codeFor("alice", state)}&state=${state}`,
       { headers: { cookie: cookieOf(begun, "console_login") } },
     );
     expect(done.status).toBe(302);
@@ -102,9 +104,13 @@ describe("signing in", () => {
         avatar: "https://avatars.example/alice.png",
         role: "member",
       },
-      signIn: "gh",
+      signIn: [{ key: "gh", label: "GitHub" }],
     });
-    expect(await me(h)).toEqual({ workspace: { name: "Acme" }, person: null, signIn: "gh" });
+    expect(await me(h)).toEqual({
+      workspace: { name: "Acme" },
+      person: null,
+      signIn: [{ key: "gh", label: "GitHub" }],
+    });
   });
 
   it("keeps nothing of the git host's credential, and logs none of it", async () => {
@@ -145,10 +151,12 @@ describe("signing in", () => {
     ["/decisions?open=true#frag", "/decisions?open=true"],
   ])("only comes back to a page of its own: %s", async (returnTo, expected) => {
     const { request, login } = harness();
-    const begun = await request(`${AUTH_ROUTES.login}?return_to=${encodeURIComponent(returnTo)}`);
+    const begun = await request(
+      `${AUTH_ROUTES.login("gh")}?return_to=${encodeURIComponent(returnTo)}`,
+    );
     const state = new URL(begun.headers.get("location") ?? "").searchParams.get("state") ?? "";
     const done = await request(
-      `${AUTH_ROUTES.callback}?code=${login.codeFor("alice", state)}&state=${state}`,
+      `${AUTH_ROUTES.callback("gh")}?code=${login.codeFor("alice", state)}&state=${state}`,
       { headers: { cookie: cookieOf(begun, "console_login") } },
     );
     expect(done.headers.get("location")).toBe(expected);
@@ -156,22 +164,28 @@ describe("signing in", () => {
 
   it("does not finish a sign-in that this browser did not start, and says why", async () => {
     const { request, login } = harness();
-    const begun = await request(`${AUTH_ROUTES.login}?return_to=/tasks`);
+    const begun = await request(`${AUTH_ROUTES.login("gh")}?return_to=/tasks`);
     const state = new URL(begun.headers.get("location") ?? "").searchParams.get("state") ?? "";
     const cookie = cookieOf(begun, "console_login");
     const code = login.codeFor("alice", state);
 
-    const noCookie = await request(`${AUTH_ROUTES.callback}?code=${code}&state=${state}`);
+    const noCookie = await request(`${AUTH_ROUTES.callback("gh")}?code=${code}&state=${state}`);
     expect(noCookie.headers.get("location")).toBe("/?sign_in=expired");
-    const otherState = await request(`${AUTH_ROUTES.callback}?code=${code}&state=someone-elses`, {
-      headers: { cookie },
-    });
+    const otherState = await request(
+      `${AUTH_ROUTES.callback("gh")}?code=${code}&state=someone-elses`,
+      {
+        headers: { cookie },
+      },
+    );
     expect(otherState.headers.get("location")).toBe("/tasks?sign_in=failed");
-    const denied = await request(`${AUTH_ROUTES.callback}?error=access_denied&state=${state}`, {
-      headers: { cookie },
-    });
+    const denied = await request(
+      `${AUTH_ROUTES.callback("gh")}?error=access_denied&state=${state}`,
+      {
+        headers: { cookie },
+      },
+    );
     expect(denied.headers.get("location")).toBe("/tasks?sign_in=denied");
-    const badCode = await request(`${AUTH_ROUTES.callback}?code=not-a-code&state=${state}`, {
+    const badCode = await request(`${AUTH_ROUTES.callback("gh")}?code=not-a-code&state=${state}`, {
       headers: { cookie },
     });
     expect(badCode.headers.get("location")).toBe("/tasks?sign_in=failed");
@@ -181,7 +195,7 @@ describe("signing in", () => {
       );
     }
     login.unreachable(true);
-    const down = await request(`${AUTH_ROUTES.callback}?code=${code}&state=${state}`, {
+    const down = await request(`${AUTH_ROUTES.callback("gh")}?code=${code}&state=${state}`, {
       headers: { cookie },
     });
     expect(down.headers.get("location")).toBe("/tasks?sign_in=failed");
@@ -190,10 +204,10 @@ describe("signing in", () => {
 
   it("refuses someone the operator did not list, and writes nothing down about them", async () => {
     const { request, login } = harness({ members: ["alice"] });
-    const begun = await request(`${AUTH_ROUTES.login}?return_to=/tasks`);
+    const begun = await request(`${AUTH_ROUTES.login("gh")}?return_to=/tasks`);
     const state = new URL(begun.headers.get("location") ?? "").searchParams.get("state") ?? "";
     const done = await request(
-      `${AUTH_ROUTES.callback}?code=${login.codeFor("carol", state)}&state=${state}`,
+      `${AUTH_ROUTES.callback("gh")}?code=${login.codeFor("carol", state)}&state=${state}`,
       { headers: { cookie: cookieOf(begun, "console_login") } },
     );
     expect(done.headers.get("location")).toBe("/tasks?sign_in=refused");
@@ -208,16 +222,18 @@ describe("signing in", () => {
 
   it("is begun on the deployment's own pages, not followed from elsewhere", async () => {
     const { request } = harness();
-    const fromElsewhere = await request(`${AUTH_ROUTES.login}?return_to=/tasks`, {
+    const fromElsewhere = await request(`${AUTH_ROUTES.login("gh")}?return_to=/tasks`, {
       headers: { "sec-fetch-site": "cross-site" },
     });
     expect(fromElsewhere.status).toBe(302);
     expect(fromElsewhere.headers.get("location")).toBe("/tasks");
     expect(fromElsewhere.headers.getSetCookie()).toEqual([]);
-    const own = await request(`${AUTH_ROUTES.login}`, {
+    const own = await request(`${AUTH_ROUTES.login("gh")}`, {
       headers: { "sec-fetch-site": "same-origin" },
     });
     expect(own.headers.get("location")).toContain("git.test");
+    expect((await request(AUTH_ROUTES.login("google"))).status).toBe(404);
+    expect((await request("/auth/other/login")).status).toBe(404);
   });
 });
 
@@ -258,7 +274,7 @@ describe("a session", () => {
   });
 
   it("ends at once for a login taken off the list, and the cookie goes with the answer", async () => {
-    const login = createFixtureLogin();
+    const login = createFixtureProvider();
     const h = harness({ login, members: ["alice", "bob"] });
     const cookie = await h.signIn("bob");
     expect((await me(h, cookie)).person?.login).toBe("bob");
@@ -278,8 +294,62 @@ describe("a session", () => {
 describe("a deployment where nobody signs in", () => {
   it("has no sign-in routes, and says so", async () => {
     const h = createHarness(testDatabase);
-    expect(await me(h)).toEqual({ workspace: { name: "Acme" }, person: null, signIn: null });
-    expect((await h.request(AUTH_ROUTES.login)).status).toBe(404);
+    expect(await me(h)).toEqual({ workspace: { name: "Acme" }, person: null, signIn: [] });
+    expect((await h.request(AUTH_ROUTES.login("gh"))).status).toBe(404);
     expect((await h.request(AUTH_ROUTES.logout, { method: "POST" })).status).toBe(404);
+  });
+});
+
+describe("a Workspace as a second provider", () => {
+  it("lists both ways in, lets a named domain's accounts in, and refuses the rest", async () => {
+    const git = createFixtureProvider("gh");
+    const google = createFixtureProvider("google");
+    const h = createHarness(testDatabase, {
+      providers: [git, google],
+      members: ["alice"],
+      domains: ["acme.test"],
+    });
+    expect((await me(h)).signIn).toEqual([
+      { key: "gh", label: "GitHub" },
+      { key: "google", label: "Google" },
+    ]);
+    const dave = await h.signIn("dave");
+    expect((await me(h, dave)).person).toMatchObject({
+      login: "dave@acme.test",
+      name: "Dave Example",
+      role: "member",
+    });
+    // Erin's account is of no domain, and she is not listed.
+    const begun = await h.request(AUTH_ROUTES.login("google"));
+    const location = new URL(begun.headers.get("location") ?? "");
+    expect(location.origin).toBe("https://accounts.test");
+    const state = location.searchParams.get("state") ?? "";
+    const refused = await h.request(
+      `${AUTH_ROUTES.callback("google")}?code=${google.codeFor("erin", state)}&state=${state}`,
+      { headers: { cookie: cookieOf(begun, "console_login") } },
+    );
+    expect(refused.headers.get("location")).toBe("/?sign_in=refused");
+    // Listed by address, Erin is in.
+    const listed = createHarness(testDatabase, {
+      providers: [google],
+      members: ["Erin@mail.test"],
+    });
+    expect((await me(listed, await listed.signIn("erin"))).person?.login).toBe("erin@mail.test");
+    // The domain taken away, Dave is out at once.
+    const without = createHarness(testDatabase, { providers: [git, google], members: ["alice"] });
+    expect((await me(without, dave)).person).toBeNull();
+  });
+
+  it("finishes a sign-in only at the provider where it began", async () => {
+    const git = createFixtureProvider("gh");
+    const h = createHarness(testDatabase, { providers: [git, createFixtureProvider("google")] });
+    const begun = await h.request(`${AUTH_ROUTES.login("gh")}?return_to=/tasks`);
+    const state = new URL(begun.headers.get("location") ?? "").searchParams.get("state") ?? "";
+    const elsewhere = await h.request(
+      `${AUTH_ROUTES.callback("google")}?code=${git.codeFor("alice", state)}&state=${state}`,
+      { headers: { cookie: cookieOf(begun, "console_login") } },
+    );
+    expect(elsewhere.headers.get("location")).toBe("/tasks?sign_in=failed");
+    expect(git.calls.exchangeCode).toBe(0);
   });
 });

@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import process from "node:process";
 import { EVENTS_PAGE_LIMIT, MAX_TOKENS_PER_PERSON } from "@skillcdn/console/api";
 import type { Hono } from "hono";
-import { createGitHubLogin } from "../adapters/github-login.js";
+import { createGitHubProvider } from "../adapters/github-login.js";
+import { createGoogleProvider } from "../adapters/google-login.js";
 import { systemClock } from "../adapters/system-clock.js";
 import { Login } from "../auth/login.js";
 import { Membership } from "../auth/membership.js";
@@ -23,7 +24,7 @@ import { loadWebRoot, type WebRoot, WebRootError } from "../http/web.js";
 import { Janitor } from "../jobs/janitor.js";
 import type { Logger } from "../logger.js";
 import type { Clock } from "../ports/clock.js";
-import type { GitHostLogin } from "../ports/git-host-login.js";
+import type { IdentityProvider } from "../ports/identity-provider.js";
 import { APP_NAME, APP_VERSION } from "../version.js";
 
 /** How often what time has ended is removed, when this process does the worker's work. */
@@ -35,8 +36,8 @@ const FEED_POLL_MS = 15_000;
 
 export interface ApiPorts {
   readonly database: Database;
-  /** How people sign in through the git host. Needed, with `auth` configured, for anyone to. */
-  readonly login?: GitHostLogin | undefined;
+  /** The identity providers people sign in through. Needed, with `auth` configured, for anyone to. */
+  readonly providers?: readonly IdentityProvider[] | undefined;
   readonly clock: Clock;
   readonly logger: Logger;
   readonly isShuttingDown: () => boolean;
@@ -45,8 +46,8 @@ export interface ApiPorts {
 }
 
 export type ApiConfig = Pick<Config, "workspace"> & {
-  /** Left out, nobody signs in. What it needs of the git host arrives through the ports. */
-  readonly auth?: Omit<AuthConfig, "github"> | undefined;
+  /** Left out, nobody signs in. What it needs of the providers arrives through the ports. */
+  readonly auth?: Omit<AuthConfig, "github" | "google"> | undefined;
   /** Left out, no proxy is trusted and every request is logged. */
   readonly http?: Pick<
     Config["http"],
@@ -85,16 +86,21 @@ export function createApi(
   const { database, clock, logger } = ports;
   const workspace = workspaceResolver(database, clock, config.workspace.name);
 
-  // People sign in only where the deployment is configured for it and the git host can be
-  // asked who they are. Everything that follows from it hangs off this one value: without it
-  // there are no sessions, and the board is nobody's.
+  // People sign in only where the deployment is configured for it and a provider can be asked
+  // who they are. Everything that follows from it hangs off this one value: without it there
+  // are no sessions, and the board is nobody's.
   let auth: AppAuth | undefined;
-  if (config.auth !== undefined && ports.login !== undefined) {
+  const providers = ports.providers ?? [];
+  if (config.auth !== undefined && providers.length > 0) {
     const origin = config.auth.publicUrl;
     const secure = origin.startsWith("https://");
-    const membership = new Membership(config.auth.members, config.auth.admins);
-    if (membership.size === 0) {
-      logger.warn("MEMBERS is empty: signing in is configured, and nobody is let in");
+    const membership = new Membership({
+      logins: config.auth.members,
+      admins: config.auth.admins,
+      domains: config.auth.domains,
+    });
+    if (membership.empty) {
+      logger.warn("nobody is listed as a member: signing in is configured, and nobody is let in");
     }
     const sessions = new Sessions({
       database,
@@ -103,23 +109,30 @@ export function createApi(
       ttlMs: config.auth.sessionTtlMs,
       secure,
     });
+    const secrets = createSecrets(config.auth.secret);
     auth = {
       origin,
       sessions,
       tokens: new Tokens({ database, clock, logger, limit: MAX_TOKENS_PER_PERSON }),
       membership,
-      login: new Login({
-        database,
-        workspaceId: async () => (await workspace()).id,
-        host: ports.login,
-        membership,
-        sessions,
-        secrets: createSecrets(config.auth.secret),
-        clock,
-        logger,
-        origin,
-        secure,
-      }),
+      logins: new Map(
+        providers.map((provider) => [
+          provider.key,
+          new Login({
+            database,
+            workspaceId: async () => (await workspace()).id,
+            provider,
+            membership,
+            sessions,
+            secrets,
+            clock,
+            logger,
+            origin,
+            secure,
+          }),
+        ]),
+      ),
+      providers: providers.map((provider) => ({ key: provider.key, label: provider.label })),
     };
   }
 
@@ -172,16 +185,29 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
     maxConnections: config.database.poolMax,
     applicationName: `${APP_NAME}-api`,
   });
-  const login =
-    config.auth === undefined
-      ? undefined
-      : createGitHubLogin({
-          webUrl: config.auth.github.webUrl,
-          apiUrl: config.auth.github.apiUrl,
-          clientId: config.auth.github.clientId,
-          clientSecret: config.auth.github.clientSecret,
-          userAgent: `${APP_NAME}/${APP_VERSION}`,
-        });
+  const userAgent = `${APP_NAME}/${APP_VERSION}`;
+  const providers: IdentityProvider[] = [];
+  if (config.auth?.github !== undefined) {
+    providers.push(
+      createGitHubProvider({
+        webUrl: config.auth.github.webUrl,
+        apiUrl: config.auth.github.apiUrl,
+        clientId: config.auth.github.clientId,
+        clientSecret: config.auth.github.clientSecret,
+        userAgent,
+      }),
+    );
+  }
+  if (config.auth?.google !== undefined) {
+    providers.push(
+      createGoogleProvider({
+        clientId: config.auth.google.clientId,
+        clientSecret: config.auth.google.clientSecret,
+        domain: config.auth.google.domain,
+        userAgent,
+      }),
+    );
+  }
   let web: WebRoot | undefined;
   if (config.web.root !== undefined) {
     try {
@@ -198,7 +224,7 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
   let shuttingDown = false;
   const { app, feed } = createApi(config, {
     database,
-    login,
+    providers,
     clock: systemClock,
     logger,
     isShuttingDown: () => shuttingDown,
@@ -229,7 +255,7 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
       host: config.http.host,
       port: server.port,
       worker: config.worker.inProcess,
-      signIn: config.auth !== undefined,
+      signIn: providers.map((provider) => provider.key),
     },
     "api listening",
   );

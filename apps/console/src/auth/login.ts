@@ -1,29 +1,28 @@
 import { randomBytes } from "node:crypto";
-import { AUTH_ROUTES, type SignInFailure, signInPath } from "@skillcdn/console/api";
+import { AUTH_ROUTES, PROVIDER_KEYS, type SignInFailure, signInPath } from "@skillcdn/console/api";
 import * as z from "zod";
 import type { Database } from "../db/client.js";
 import { type PersonRecord, savePerson } from "../db/queries/people.js";
 import type { Logger } from "../logger.js";
 import type { Clock } from "../ports/clock.js";
-import { GitHostError, type GitHostLogin } from "../ports/git-host-login.js";
+import { type IdentityProvider, ProviderError } from "../ports/identity-provider.js";
 import type { Membership } from "./membership.js";
 import { openJson, pkceChallenge, type Secrets, sameSecret, sealJson } from "./secrets.js";
 import { readCookie, type Sessions, writeCookie } from "./sessions.js";
 
-// Signing in through the git host. The browser leaves for the host with a cookie that remembers
-// what it left for, and comes back with a code; the code becomes the host's credential, which is
-// used once to ask who the person is and then dropped, and a session, which is all the browser
-// gets. What did not complete goes back to the page it was for, which says so.
-
-/** The git host people sign in through. */
-export const LOGIN_HOST = "gh";
+// Signing in through an identity provider. The browser leaves for the provider with a cookie
+// that remembers what it left for, and comes back with a code; the code becomes the provider's
+// credential, which is used once to ask who the person is and then dropped, and a session,
+// which is all the browser gets. What did not complete goes back to the page it was for, which
+// says so. One of these per provider the deployment has.
 
 const LOGIN_COOKIE = "console_login";
-/** How long a person has to sign in at the host before the attempt is forgotten. */
+/** How long a person has to sign in at the provider before the attempt is forgotten. */
 const LOGIN_TTL_MS = 10 * 60_000;
 const MAX_RETURN_TO_LENGTH = 2048;
 
 const pendingSchema = z.object({
+  provider: z.enum(PROVIDER_KEYS),
   state: z.string().min(1),
   verifier: z.string().min(1),
   returnTo: z.string().min(1),
@@ -57,13 +56,14 @@ export function safeReturnTo(value: string | undefined, origin: string): string 
 export interface LoginOptions {
   readonly database: Database;
   readonly workspaceId: () => Promise<string>;
-  readonly host: GitHostLogin;
+  /** The provider this sign-in goes through. */
+  readonly provider: IdentityProvider;
   readonly membership: Membership;
   readonly sessions: Sessions;
   readonly secrets: Secrets;
   readonly clock: Clock;
   readonly logger: Logger;
-  /** The origin people use: where the git host sends them back to. */
+  /** The origin people use: where the provider sends them back to. */
   readonly origin: string;
   /** Whether that origin is served over TLS. */
   readonly secure: boolean;
@@ -84,14 +84,14 @@ export class Login {
   }
 
   get #redirectUri(): string {
-    return `${this.#options.origin}${AUTH_ROUTES.callback}`;
+    return `${this.#options.origin}${AUTH_ROUTES.callback(this.#options.provider.key)}`;
   }
 
   /**
    * Over TLS the cookie carries the `__Host-` prefix, so that only this very host can have set
    * it: a sign-in somebody else began cannot be planted in a browser from a neighbouring host
    * and finished there. The prefix needs the whole origin as its path; without TLS, which is
-   * development, only the callback's path gets the cookie.
+   * development, only the sign-in paths get the cookie.
    */
   get #cookieName(): string {
     return this.#options.secure ? `__Host-${LOGIN_COOKIE}` : LOGIN_COOKIE;
@@ -105,19 +105,19 @@ export class Login {
     });
   }
 
-  /** Sends the browser to the git host, remembering where it wanted to go afterwards. */
+  /** Sends the browser to the provider, remembering where it wanted to go afterwards. */
   begin(returnTo: string | undefined): LoginStep {
-    const { host, secrets, clock, origin } = this.#options;
+    const { provider, secrets, clock, origin } = this.#options;
     const state = randomBytes(24).toString("base64url");
     const verifier = randomBytes(32).toString("base64url");
     const pending = sealJson(
       secrets,
       "login",
-      { state, verifier, returnTo: safeReturnTo(returnTo, origin) },
+      { provider: provider.key, state, verifier, returnTo: safeReturnTo(returnTo, origin) },
       new Date(clock.now().getTime() + LOGIN_TTL_MS),
     );
     return {
-      redirect: host.authorizationUrl({
+      redirect: provider.authorizationUrl({
         state,
         redirectUri: this.#redirectUri,
         codeChallenge: pkceChallenge(verifier),
@@ -127,14 +127,14 @@ export class Login {
   }
 
   /**
-   * Finishes a sign-in with what the git host sent the browser back with. Whatever happens, the
+   * Finishes a sign-in with what the provider sent the browser back with. Whatever happens, the
    * browser is sent on to the page it left for: signed in, or told what went wrong.
    */
   async complete(
     query: { readonly code?: string; readonly state?: string; readonly error?: string },
     cookieHeader: string | null | undefined,
   ): Promise<LoginStep> {
-    const { secrets, clock, logger, origin, membership } = this.#options;
+    const { provider, secrets, clock, logger, origin, membership } = this.#options;
     const forget = this.#cookie("", 0);
     /** Back to the page this attempt was for, which says what happened: the front page, once
      * the browser no longer carries which that was. */
@@ -152,9 +152,13 @@ export class Login {
       return failed("expired");
     }
     const { returnTo } = pending.data;
-    // The answer has to be to the question this browser asked, or someone else's sign-in
-    // could be finished in it.
-    if (query.state === undefined || !sameSecret(query.state, pending.data.state)) {
+    // The answer has to be to the question this browser asked, at the provider it asked it of,
+    // or someone else's sign-in could be finished in it.
+    if (
+      pending.data.provider !== provider.key ||
+      query.state === undefined ||
+      !sameSecret(query.state, pending.data.state)
+    ) {
       return failed("failed", returnTo);
     }
     if (query.code === undefined) {
@@ -164,16 +168,19 @@ export class Login {
     try {
       person = await this.#signIn(query.code, pending.data.verifier);
     } catch (error) {
-      if (!(error instanceof GitHostError)) {
+      if (!(error instanceof ProviderError)) {
         throw error;
       }
-      logger.warn({ err: error, kind: error.kind }, "a sign-in did not complete");
+      logger.warn(
+        { err: error, kind: error.kind, provider: provider.key },
+        "a sign-in did not complete",
+      );
       return failed("failed", returnTo);
     }
     if (person === "refused") {
       return failed("refused", returnTo);
     }
-    if (!membership.allows(person.login)) {
+    if (!membership.allows(person)) {
       // Checked before the person was written down, and again here: nobody is let in on a
       // record alone.
       return failed("refused", returnTo);
@@ -188,30 +195,38 @@ export class Login {
 
   /**
    * The code becomes a credential, the credential says who the person is, and then it is
-   * dropped: membership is decided here and not at the host, so nothing of the host's is kept.
-   * Someone the operator did not list is `refused` and leaves nothing behind.
+   * dropped: membership is decided here and not at the provider, so nothing of the provider's
+   * is kept. Someone the operator did not let in is `refused` and leaves nothing behind.
    */
   async #signIn(code: string, verifier: string): Promise<PersonRecord | "refused"> {
-    const { database, host, membership, clock, logger } = this.#options;
-    const issued = await host.exchangeCode({
+    const { database, provider, membership, clock, logger } = this.#options;
+    const issued = await provider.exchangeCode({
       code,
       redirectUri: this.#redirectUri,
       codeVerifier: verifier,
     });
-    const account = await host.getAccount(issued.accessToken);
-    if (!membership.allows(account.login)) {
-      logger.info({ login: account.login }, "a sign-in was refused: not a member");
+    const account = await provider.getAccount(issued.accessToken);
+    if (!membership.admits(provider.key, account)) {
+      logger.info(
+        { login: account.login, provider: provider.key },
+        "a sign-in was refused: not a member",
+      );
       return "refused";
     }
     const { person, joined } = await savePerson(database, {
       workspaceId: await this.#options.workspaceId(),
-      host: LOGIN_HOST,
-      account,
+      host: provider.key,
+      account: {
+        hostAccountId: account.accountId,
+        login: account.login,
+        name: account.name,
+        avatarUrl: account.avatarUrl,
+      },
       // The operator's list makes administrators; what a person is otherwise is the board's record.
       role: membership.administers(account.login) ? "admin" : undefined,
       now: clock.now(),
     });
-    logger.info({ person: person.id, joined }, "a person signed in");
+    logger.info({ person: person.id, joined, provider: provider.key }, "a person signed in");
     return person;
   }
 }

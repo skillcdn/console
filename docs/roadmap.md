@@ -13,7 +13,7 @@ Goal: a person connects their agent to the console; the agent takes work from th
 
 - [x] Tokens a person makes for their agent (2026-10-09): scoped to that person, expiring, revocable, stored as hashes; a page to make and remove them. The REST API and the feed take a token as well as a session, so that a script or a custom console acts as its person ([ADR-0004](adr/0004-people-and-agents-reach-the-board-only-through-the-api-with-a-credential-of-their-own.md)).
 - [x] Roles (2026-10-09): an administrator who configures, a member who works; kept in the database, applied to a person's agents as to the person ([ADR-0005](adr/0005-people-sign-in-through-an-identity-provider-and-membership-and-roles-are-the-consoles-own.md)).
-- [ ] The sign-in port generalized from the git host to an identity provider, and Google Workspace as the second adapter, with membership from the Workspace domain as a source the operator may choose.
+- [x] The sign-in port generalized from the git host to an identity provider (2026-10-09), and Google Workspace as the second adapter, with membership from the Workspace domain as a source the operator may choose.
 - [ ] The MCP endpoint and its tools (`list_tasks`, `take_task`, `report`, `hand_in`, `ask`, `finish`), one server per request, with what an agent sends parsed and bounded at the edge.
 - [ ] Runs with their reports and artifacts: the data model, the blob-store port with its PostgreSQL implementation, and the run on the task's page and in the feed.
 - [ ] A decision a run waits for, and the run resuming when it is answered.

@@ -20,7 +20,7 @@ import {
 } from "@skillcdn/console/api";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "./db/testing.js";
-import { createFixtureLogin } from "./testing/fixture-login.js";
+import { createFixtureProvider } from "./testing/fixture-provider.js";
 import { createHarness, type Harness, SIGN_IN_URL } from "./testing/harness.js";
 
 let testDatabase: TestDatabase;
@@ -30,7 +30,7 @@ let bob: string;
 
 beforeAll(async () => {
   testDatabase = await createTestDatabase(process.env.TEST_DATABASE_URL ?? DEV_DATABASE_URL);
-  h = createHarness(testDatabase, { login: createFixtureLogin() });
+  h = createHarness(testDatabase, { providers: [createFixtureProvider()] });
   alice = await h.signIn("alice");
   bob = await h.signIn("bob");
 });
@@ -434,7 +434,7 @@ describe("tokens", () => {
     expect(gone.status).toBe(401);
 
     const clock = movableClock();
-    const later = createHarness(testDatabase, { login: createFixtureLogin(), clock });
+    const later = createHarness(testDatabase, { providers: [createFixtureProvider()], clock });
     const cookie = await later.signIn("alice");
     const made = await later.request(REST_ROUTES.tokens, {
       method: "POST",
@@ -453,7 +453,10 @@ describe("tokens", () => {
 
     // Membership is decided on every request, for a token as for a session.
     const { secret: whileListed } = await make(alice, { name: "while listed" });
-    const bobOnly = createHarness(testDatabase, { login: createFixtureLogin(), members: ["bob"] });
+    const bobOnly = createHarness(testDatabase, {
+      providers: [createFixtureProvider()],
+      members: ["bob"],
+    });
     const out = await bobOnly.request(REST_ROUTES.tasks, {
       headers: { authorization: `Bearer ${whileListed}` },
     });
@@ -515,7 +518,10 @@ describe("tokens", () => {
 
 describe("roles", () => {
   it("are changed by an administrator signed in, kept to at least one, and told to the board", async () => {
-    const named = createHarness(testDatabase, { login: createFixtureLogin(), admins: ["alice"] });
+    const named = createHarness(testDatabase, {
+      providers: [createFixtureProvider()],
+      admins: ["alice"],
+    });
     const admin = await named.signIn("alice");
     const change = (cookie: string, id: string, body: unknown) =>
       named.request(`${REST_ROUTES.people}/${id}`, {

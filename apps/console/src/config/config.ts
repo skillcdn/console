@@ -1,19 +1,25 @@
 import { readFileSync } from "node:fs";
 import { hasForbiddenCodePoint } from "@skillcdn/console/api";
 import * as z from "zod";
+import { domainOf } from "../auth/membership.js";
 import { type Cidr, parseCidr } from "../http/client-address.js";
 
 // The only module that reads the environment. Contract: .env.example and deploy/README.md.
 
 /** Variables that may arrive as `NAME_FILE`, so that container secret mounts work. */
-const SECRET_NAMES = ["DATABASE_URL", "GITHUB_CLIENT_SECRET", "AUTH_SECRET"] as const;
-/** What signing in needs, all of it or none of it. */
-const SIGN_IN_NAMES = [
-  "PUBLIC_URL",
-  "GITHUB_CLIENT_ID",
+const SECRET_NAMES = [
+  "DATABASE_URL",
   "GITHUB_CLIENT_SECRET",
+  "GOOGLE_CLIENT_SECRET",
   "AUTH_SECRET",
 ] as const;
+/** What signing in needs of itself, whichever providers there are. */
+const SIGN_IN_NAMES = ["PUBLIC_URL", "AUTH_SECRET"] as const;
+/** What each provider needs: both, or neither. */
+const PROVIDER_NAMES = {
+  gh: ["GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"],
+  google: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
+} as const;
 /** Shorter than this, a secret is guessable enough to be a mistake. */
 const MIN_SECRET_LENGTH = 32;
 
@@ -45,6 +51,16 @@ const origin = z
   }, "must be an origin such as https://console.example.com, without a path")
   .transform((value) => new URL(value).origin);
 
+/** A domain name, as a Workspace is known by: lowercase, without a dot at either end. */
+const domainName = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .regex(
+    /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/,
+    "must be a domain such as example.com",
+  );
+
 /** A comma-separated list of networks in CIDR notation; a bare address means just that address. */
 const cidrList = z
   .string()
@@ -65,7 +81,7 @@ const cidrList = z
     return networks;
   });
 
-/** A comma-separated list of logins at the git host, each as the host spells one. */
+/** A comma-separated list of logins at the git host, or of addresses at Google, as each spells one. */
 const loginList = z
   .string()
   .default("")
@@ -75,8 +91,11 @@ const loginList = z
       if (entry.length === 0) {
         continue;
       }
-      if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/.test(entry)) {
-        context.addIssue({ code: "custom", message: "must be a list of logins" });
+      if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$|^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(entry)) {
+        context.addIssue({
+          code: "custom",
+          message: "must be a list of logins or email addresses",
+        });
         return z.NEVER;
       }
       logins.push(entry);
@@ -122,6 +141,12 @@ const environmentSchema = z.object({
     .regex(/^[A-Za-z0-9._-]{1,64}$/, "must be the app's client id")
     .optional(),
   GITHUB_CLIENT_SECRET: z.string().min(1).optional(),
+  GOOGLE_CLIENT_ID: z
+    .string()
+    .regex(/^[A-Za-z0-9._-]{1,128}$/, "must be the client id")
+    .optional(),
+  GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
+  GOOGLE_WORKSPACE_DOMAIN: domainName.optional(),
   AUTH_SECRET: z
     .string()
     .min(MIN_SECRET_LENGTH, `must be at least ${MIN_SECRET_LENGTH} characters`)
@@ -134,23 +159,36 @@ const environmentSchema = z.object({
 });
 
 export interface AuthConfig {
-  /** The origin people use: where the git host sends them back, and what requests that change something come from. */
+  /** The origin people use: where a provider sends them back, and what requests that change something come from. */
   readonly publicUrl: string;
-  /** The app the operator registered at the git host. */
-  readonly github: {
-    readonly clientId: string;
-    readonly clientSecret: string;
-    /** Where people use the host in a browser. */
-    readonly webUrl: string;
-    /** Where the host's API is. */
-    readonly apiUrl: string;
-  };
+  /** The app the operator registered at the git host; nothing when people do not sign in there. */
+  readonly github:
+    | {
+        readonly clientId: string;
+        readonly clientSecret: string;
+        /** Where people use the host in a browser. */
+        readonly webUrl: string;
+        /** Where the host's API is. */
+        readonly apiUrl: string;
+      }
+    | undefined;
+  /** The client the operator registered at Google; nothing when people do not sign in there. */
+  readonly google:
+    | {
+        readonly clientId: string;
+        readonly clientSecret: string;
+        /** The Workspace domain offered at the account picker, and whose accounts are members. */
+        readonly domain: string | undefined;
+      }
+    | undefined;
   /** What travels through a browser between two requests is sealed with. */
   readonly secret: string;
-  /** The logins the operator lets in. Empty: nobody. */
+  /** The logins the operator lets in. Empty: nobody, unless a domain is. */
   readonly members: readonly string[];
   /** The logins among them that configure the board, made administrators when they sign in. */
   readonly admins: readonly string[];
+  /** The Workspace domains whose accounts are members, as their provider vouches for them. */
+  readonly domains: readonly string[];
   /** How long a browser stays signed in without being used. */
   readonly sessionTtlMs: number;
 }
@@ -186,7 +224,7 @@ export interface Config {
     /** Whether the `api` role runs the worker's loop as well, for a single-container install. */
     readonly inProcess: boolean;
   };
-  /** Signing in through the git host. Unset: nobody signs in, and the board is nobody's. */
+  /** Signing in through identity providers. Unset: nobody signs in, and the board is nobody's. */
   readonly auth: AuthConfig | undefined;
   readonly web: {
     /** Directory of a build of the default UI to serve. Unset: there is no UI, API only. */
@@ -233,9 +271,10 @@ function withSecretFiles(
 }
 
 /**
- * What signing in is configured with, or `undefined` when it is not. It takes the app's client
- * and the secret, and an origin that does not change with the request: the git host sends
- * people back to it, and the pages' own requests come from it.
+ * What signing in is configured with, or `undefined` when it is not. It takes an origin that
+ * does not change with the request (the providers send people back to it, and the pages' own
+ * requests come from it), the secret, and at least one provider with its client id and secret.
+ * Half of any of that is a mistake, not a setting.
  */
 function authOf(
   env: z.infer<typeof environmentSchema>,
@@ -243,53 +282,75 @@ function authOf(
 ): AuthConfig | undefined {
   const given = {
     PUBLIC_URL: env.PUBLIC_URL,
+    AUTH_SECRET: env.AUTH_SECRET,
     GITHUB_CLIENT_ID: env.GITHUB_CLIENT_ID,
     GITHUB_CLIENT_SECRET: env.GITHUB_CLIENT_SECRET,
-    AUTH_SECRET: env.AUTH_SECRET,
+    GOOGLE_CLIENT_ID: env.GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET: env.GOOGLE_CLIENT_SECRET,
+    GOOGLE_WORKSPACE_DOMAIN: env.GOOGLE_WORKSPACE_DOMAIN,
   };
   if (Object.values(given).every((value) => value === undefined)) {
     if (env.MEMBERS.length > 0) {
-      problems.push(
-        `MEMBERS: lists who may sign in, and is read only with ${SIGN_IN_NAMES.join(", ")}`,
-      );
+      problems.push("MEMBERS: lists who may sign in, and is read only with signing in configured");
     }
     if (env.ADMINS.length > 0) {
-      problems.push(
-        `ADMINS: names administrators, and is read only with ${SIGN_IN_NAMES.join(", ")}`,
-      );
+      problems.push("ADMINS: names administrators, and is read only with signing in configured");
     }
     return undefined;
   }
+  const before = problems.length;
   const missing = SIGN_IN_NAMES.filter((name) => given[name] === undefined);
   if (missing.length > 0) {
-    problems.push(`${missing.join(", ")}: required once any of ${SIGN_IN_NAMES.join(", ")} is set`);
+    problems.push(`${missing.join(", ")}: required once signing in is configured`);
+  }
+  for (const names of Object.values(PROVIDER_NAMES)) {
+    if (names.filter((name) => given[name] !== undefined).length === 1) {
+      problems.push(`${names.join(", ")}: set both or neither`);
+    }
+  }
+  const github =
+    env.GITHUB_CLIENT_ID !== undefined && env.GITHUB_CLIENT_SECRET !== undefined
+      ? {
+          clientId: env.GITHUB_CLIENT_ID,
+          clientSecret: env.GITHUB_CLIENT_SECRET,
+          webUrl: env.GITHUB_WEB_URL,
+          apiUrl: env.GITHUB_API_URL,
+        }
+      : undefined;
+  const google =
+    env.GOOGLE_CLIENT_ID !== undefined && env.GOOGLE_CLIENT_SECRET !== undefined
+      ? {
+          clientId: env.GOOGLE_CLIENT_ID,
+          clientSecret: env.GOOGLE_CLIENT_SECRET,
+          domain: env.GOOGLE_WORKSPACE_DOMAIN,
+        }
+      : undefined;
+  if (env.GOOGLE_WORKSPACE_DOMAIN !== undefined && google === undefined) {
+    problems.push("GOOGLE_WORKSPACE_DOMAIN: needs GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET");
+  }
+  if (github === undefined && google === undefined && problems.length === before) {
+    problems.push("GITHUB_CLIENT_ID or GOOGLE_CLIENT_ID: signing in needs a provider");
+  }
+  if (problems.length > before || env.PUBLIC_URL === undefined || env.AUTH_SECRET === undefined) {
     return undefined;
   }
-  if (
-    env.PUBLIC_URL === undefined ||
-    env.GITHUB_CLIENT_ID === undefined ||
-    env.GITHUB_CLIENT_SECRET === undefined ||
-    env.AUTH_SECRET === undefined
-  ) {
-    return undefined;
-  }
+  const domains = env.GOOGLE_WORKSPACE_DOMAIN === undefined ? [] : [env.GOOGLE_WORKSPACE_DOMAIN];
   // An administrator who cannot sign in is a mistake, not a setting.
   const members = new Set(env.MEMBERS.map((login) => login.toLowerCase()));
-  if (env.ADMINS.some((login) => !members.has(login.toLowerCase()))) {
-    problems.push("ADMINS: every administrator must be listed in MEMBERS");
+  const isMember = (login: string): boolean =>
+    members.has(login.toLowerCase()) || domains.includes(domainOf(login) ?? "");
+  if (env.ADMINS.some((login) => !isMember(login))) {
+    problems.push("ADMINS: every administrator must be a member, by login or by domain");
     return undefined;
   }
   return {
     publicUrl: env.PUBLIC_URL,
-    github: {
-      clientId: env.GITHUB_CLIENT_ID,
-      clientSecret: env.GITHUB_CLIENT_SECRET,
-      webUrl: env.GITHUB_WEB_URL,
-      apiUrl: env.GITHUB_API_URL,
-    },
+    github,
+    google,
     secret: env.AUTH_SECRET,
     members: env.MEMBERS,
     admins: env.ADMINS,
+    domains,
     sessionTtlMs: env.SESSION_TTL_DAYS * 86_400_000,
   };
 }

@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { isSignInFailure, loginPath, restPath, signInPath } from "./routes.js";
+import { AUTH_ROUTES, isSignInFailure, loginPath, restPath, signInPath } from "./routes.js";
 
 describe("routes", () => {
-  it("builds the way to the git host and back", () => {
-    expect(loginPath("/tasks/42?x=1")).toBe("/auth/gh/login?return_to=%2Ftasks%2F42%3Fx%3D1");
+  it("builds the way to a provider and back", () => {
+    expect(loginPath("gh", "/tasks/42?x=1")).toBe("/auth/gh/login?return_to=%2Ftasks%2F42%3Fx%3D1");
+    expect(AUTH_ROUTES.login("google")).toBe("/auth/google/login");
+    expect(AUTH_ROUTES.callback("google")).toBe("/auth/google/callback");
   });
 
   it("tells a page why a sign-in did not complete", () => {

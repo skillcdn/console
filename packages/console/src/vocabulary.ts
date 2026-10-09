@@ -19,6 +19,15 @@ export const TASK_PRIORITIES = ["low", "normal", "high", "urgent"] as const;
 
 export type TaskPriority = (typeof TASK_PRIORITIES)[number];
 
+/** The identity providers people may sign in through: the git host, and Google (Workspace). */
+export const PROVIDER_KEYS = ["gh", "google"] as const;
+
+export type ProviderKey = (typeof PROVIDER_KEYS)[number];
+
+export function isProviderKey(value: string | null | undefined): value is ProviderKey {
+  return (PROVIDER_KEYS as readonly string[]).includes(value ?? "");
+}
+
 /** What a person may do: an administrator configures the board, a member works on it. */
 export const PERSON_ROLES = ["admin", "member"] as const;
 

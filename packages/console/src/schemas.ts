@@ -18,7 +18,13 @@ import {
   MIN_OPTIONS,
 } from "./limits.js";
 import { hasForbiddenCodePoint } from "./text.js";
-import { EVENT_KINDS, PERSON_ROLES, TASK_PRIORITIES, TASK_STATES } from "./vocabulary.js";
+import {
+  EVENT_KINDS,
+  PERSON_ROLES,
+  PROVIDER_KEYS,
+  TASK_PRIORITIES,
+  TASK_STATES,
+} from "./vocabulary.js";
 
 /** A line of text a person wrote: trimmed, bounded, and free of characters that hide. */
 const line = (maxLength: number) =>
@@ -46,7 +52,7 @@ const count = z.int().check(z.nonnegative());
 /** A person of the workspace, as the pages show them. Nothing here is a secret. */
 export const restPersonSchema = z.object({
   id: uuid,
-  /** The login at the git host, as the host spells it. */
+  /** What the account is called at its provider: a login at the git host, an address at Google. */
   login: z.string(),
   /** The name the account goes by at the host, or `null`. */
   name: z.nullable(z.string()),
@@ -57,14 +63,22 @@ export const restPersonSchema = z.object({
 });
 export type RestPerson = z.infer<typeof restPersonSchema>;
 
+/** An identity provider people may sign in through, as the pages offer it. */
+export const restProviderSchema = z.object({
+  key: z.enum(PROVIDER_KEYS),
+  /** What people read on the button. */
+  label: z.string(),
+});
+export type RestProvider = z.infer<typeof restProviderSchema>;
+
 /**
  * `GET /api/v1/me`: the workspace, who the session cookie says is signed in (or `null`), and
- * the git host people sign in through, or `null` where nobody can.
+ * the identity providers people sign in through, none where nobody can.
  */
 export const restMeSchema = z.object({
   workspace: z.object({ name: z.string() }),
   person: z.nullable(restPersonSchema),
-  signIn: z.nullable(z.literal("gh")),
+  signIn: z.array(restProviderSchema),
 });
 export type RestMe = z.infer<typeof restMeSchema>;
 

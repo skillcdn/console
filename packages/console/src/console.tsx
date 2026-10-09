@@ -392,7 +392,7 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
       return (
         <components.SignIn
           title={title}
-          signIn={data.me.signIn ?? undefined}
+          providers={data.me.signIn}
           returnTo={withoutSignInParam(location.pathname, location.search)}
           failure={failure}
         />

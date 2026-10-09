@@ -1,4 +1,4 @@
-import type { PersonRole } from "@skillcdn/console/api";
+import type { PersonRole, ProviderKey } from "@skillcdn/console/api";
 import { and, asc, count, eq, sql } from "drizzle-orm";
 import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
 import { DomainError } from "../../errors.js";
@@ -6,16 +6,14 @@ import { type Database, drizzleOf } from "../client.js";
 import { people, workspaces } from "../schema.js";
 import { recordEvent } from "./events.js";
 
-// The people of the workspace: everyone who signed in through the git host and was let in.
+// The people of the workspace: everyone who signed in through an identity provider and was let in.
 // Identity data: every query names the person, or the workspace they are all in.
-
-/** The one git host there is; a second one arrives with its adapter and its key. */
-export type GitHostKey = "gh";
 
 export interface PersonRecord {
   readonly id: string;
   readonly workspaceId: string;
-  readonly host: GitHostKey;
+  /** The identity provider, and its immutable id of the account: what a person is known by. */
+  readonly host: ProviderKey;
   readonly hostAccountId: string;
   readonly login: string;
   readonly name: string | undefined;
@@ -36,7 +34,7 @@ export class PersonError extends DomainError {
   }
 }
 
-/** A person as the git host told it at sign-in: what is written down about them. */
+/** A person as their provider told it at sign-in: what is written down about them. */
 export interface HostAccount {
   readonly hostAccountId: string;
   readonly login: string;
@@ -84,7 +82,7 @@ type PersonRow = {
 export const toPerson = (row: PersonRow): PersonRecord => ({
   id: row.id,
   workspaceId: row.workspaceId,
-  host: row.host as GitHostKey,
+  host: row.host as ProviderKey,
   hostAccountId: row.hostAccountId,
   login: row.login,
   name: row.name ?? undefined,
@@ -100,8 +98,8 @@ export const answerers = alias(people, "answerers");
 export const actors = alias(people, "actors");
 
 /**
- * Records that a person signed in: keyed by the host's immutable id, so a renamed account stays
- * the same person, with the login, the name and the picture as the host says now. The first
+ * Records that a person signed in: keyed by the provider's immutable id, so a renamed account
+ * stays the same person, with the login, the name and the picture as the provider says now. The first
  * time is a joining, which the board is told about. A `role` given is written; left out, a
  * person keeps what they are, and a new one is a member.
  */
@@ -109,7 +107,7 @@ export async function savePerson(
   database: Database,
   login: {
     readonly workspaceId: string;
-    readonly host: GitHostKey;
+    readonly host: ProviderKey;
     readonly account: HostAccount;
     readonly role?: PersonRole | undefined;
     readonly now: Date;

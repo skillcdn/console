@@ -1,7 +1,7 @@
 import { REST_ROUTES, restEventSchema, restTokenCreatedSchema } from "@skillcdn/console/api";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "./db/testing.js";
-import { createFixtureLogin } from "./testing/fixture-login.js";
+import { createFixtureProvider } from "./testing/fixture-provider.js";
 import { createHarness, type Harness, SIGN_IN_URL } from "./testing/harness.js";
 
 let testDatabase: TestDatabase;
@@ -11,7 +11,7 @@ let alice: string;
 beforeAll(async () => {
   testDatabase = await createTestDatabase(process.env.TEST_DATABASE_URL ?? DEV_DATABASE_URL);
   h = createHarness(testDatabase, {
-    login: createFixtureLogin(),
+    providers: [createFixtureProvider()],
     live: true,
     feed: { heartbeatMs: 300, pollMs: 60_000 },
   });

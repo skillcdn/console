@@ -34,7 +34,11 @@ describe("createClient", () => {
   it("asks under the base URL, parses the answer, and sends the cookie along", async () => {
     const { send, calls } = fakeFetch({
       "GET https://console.test/api/v1/me": {
-        body: { workspace: { name: "Acme" }, person: PERSON, signIn: "gh" },
+        body: {
+          workspace: { name: "Acme" },
+          person: PERSON,
+          signIn: [{ key: "gh", label: "GitHub" }],
+        },
       },
     });
     const client = createClient({ baseUrl: "https://console.test/", fetch: send });

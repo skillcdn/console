@@ -1,4 +1,12 @@
-import { AUTH_ROUTES, REST_ROUTES, RETURN_TO_PARAM, type RestMe } from "@skillcdn/console/api";
+import {
+  AUTH_ROUTES,
+  isProviderKey,
+  type ProviderKey,
+  REST_ROUTES,
+  RETURN_TO_PARAM,
+  type RestMe,
+  type RestProvider,
+} from "@skillcdn/console/api";
 import type { Context, Hono } from "hono";
 import type { Login, LoginStep } from "../auth/login.js";
 import { safeReturnTo } from "../auth/login.js";
@@ -14,14 +22,21 @@ import { restPerson } from "./rest-shapes.js";
 
 /** What signing in is made of, on a deployment where people can. */
 export interface AppAuth {
-  /** The origin people use: where the git host sends people back, and where requests that change something come from. */
+  /** The origin people use: where a provider sends people back, and where requests that change something come from. */
   readonly origin: string;
   readonly sessions: Sessions;
   /** The tokens people made for their agents, scripts and consoles of their own. */
   readonly tokens: Tokens;
-  readonly login: Login;
+  /** Signing in, per provider the deployment has. */
+  readonly logins: ReadonlyMap<ProviderKey, Login>;
+  /** The providers, as the pages offer them. */
+  readonly providers: readonly RestProvider[];
   readonly membership: Membership;
 }
+
+// The sign-in paths of the package, with the provider as a parameter of the route.
+const LOGIN_PATTERN = "/auth/:provider/login";
+const CALLBACK_PATTERN = "/auth/:provider/callback";
 
 /**
  * Who a request is for, and whether it may change anything: what every route of the REST API
@@ -58,7 +73,7 @@ export function createAccess(auth: AppAuth | undefined): Access {
       if (authorization !== undefined) {
         const found = await auth.tokens.resolve(authorization);
         // Membership is decided on every request, for a token as for a session.
-        return found === undefined || !auth.membership.allows(found.person.login)
+        return found === undefined || !auth.membership.allows(found.person)
           ? undefined
           : found.person;
       }
@@ -67,7 +82,7 @@ export function createAccess(auth: AppAuth | undefined): Access {
         return undefined;
       }
       // A login taken off the list is out at once, and the browser's cookie goes with the answer.
-      if (!auth.membership.allows(person.login)) {
+      if (!auth.membership.allows(person)) {
         this.signedOut(c);
         return undefined;
       }
@@ -119,7 +134,8 @@ export interface AuthDependencies {
 
 /**
  * Signing in and out, and who is signed in. Signing in exists only on a deployment configured
- * for it; elsewhere its paths are nothing, and `me` says that nobody can sign in.
+ * for it, and only through the providers it has; elsewhere its paths are nothing, and `me`
+ * says that nobody can sign in.
  */
 export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies): void {
   const { auth, access, workspace } = dependencies;
@@ -131,7 +147,7 @@ export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies):
     const body: RestMe = {
       workspace: { name: found.name },
       person: person === undefined ? null : restPerson(person),
-      signIn: auth === undefined ? null : "gh",
+      signIn: auth === undefined ? [] : [...auth.providers],
     };
     return c.json(body);
   });
@@ -139,7 +155,7 @@ export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies):
   if (auth === undefined) {
     return;
   }
-  const { origin, sessions, login } = auth;
+  const { origin, sessions, logins } = auth;
 
   const follow = (c: Context<AppEnv>, step: LoginStep): Response => {
     for (const cookie of step.cookies) {
@@ -161,8 +177,18 @@ export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies):
     return site === undefined || site === "same-origin";
   };
 
+  /** The sign-in of the provider the path names, or nothing for one this deployment has not. */
+  const loginOf = (c: Context<AppEnv>): Login | undefined => {
+    const key = c.req.param("provider");
+    return isProviderKey(key) ? logins.get(key) : undefined;
+  };
+
   // Signing in and out. Navigations, so they answer with redirects; nothing here is cached.
-  app.get(AUTH_ROUTES.login, (c) => {
+  app.get(LOGIN_PATTERN, (c) => {
+    const login = loginOf(c);
+    if (login === undefined) {
+      return c.notFound();
+    }
     const returnTo = c.req.query(RETURN_TO_PARAM);
     if (!begunOnOwnPages(c)) {
       // To the page it was for, which offers it over itself: following a link signs nobody in.
@@ -172,7 +198,11 @@ export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies):
     return follow(c, login.begin(returnTo));
   });
 
-  app.get(AUTH_ROUTES.callback, async (c) => {
+  app.get(CALLBACK_PATTERN, async (c) => {
+    const login = loginOf(c);
+    if (login === undefined) {
+      return c.notFound();
+    }
     const { code, state, error } = c.req.query();
     return follow(
       c,

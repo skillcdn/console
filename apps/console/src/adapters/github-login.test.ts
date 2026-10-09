@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { GitHostError } from "../ports/git-host-login.js";
-import { createGitHubLogin, type FetchLike } from "./github-login.js";
+import { ProviderError } from "../ports/identity-provider.js";
+import { createGitHubProvider } from "./github-login.js";
+import type { FetchLike } from "./upstream.js";
 
 function login(answer: FetchLike) {
-  return createGitHubLogin({
+  return createGitHubProvider({
     webUrl: "https://github.example/",
     apiUrl: "https://github.example/api/v3",
     clientId: "Iv23liExample",
@@ -20,7 +21,7 @@ const json = (body: unknown, status = 200) =>
     headers: { "content-type": "application/json" },
   });
 
-describe("the GitHub login", () => {
+describe("the GitHub provider", () => {
   it("sends the browser to the host's authorize page with the challenge and the picker", () => {
     const url = new URL(
       login(async () => json({})).authorizationUrl({
@@ -94,7 +95,7 @@ describe("the GitHub login", () => {
       login(async () => {
         throw new TypeError("fetch failed");
       }).exchangeCode({ code: "x", redirectUri: "r", codeVerifier: "v" }),
-    ).rejects.toBeInstanceOf(GitHostError);
+    ).rejects.toBeInstanceOf(ProviderError);
   });
 
   it("asks who holds the credential, with the token in the header and nowhere else", async () => {
@@ -110,10 +111,11 @@ describe("the GitHub login", () => {
       });
     });
     expect(await host.getAccount("gho_token")).toEqual({
-      hostAccountId: "1001",
+      accountId: "1001",
       login: "Alice",
       name: "Alice Example",
       avatarUrl: "https://avatars.example/u/1001",
+      domain: undefined,
     });
     expect(sent[0]?.url).toBe("https://github.example/api/v3/user");
     expect(new Headers(sent[0]?.init.headers).get("authorization")).toBe("Bearer gho_token");

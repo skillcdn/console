@@ -8,7 +8,7 @@
 person (browser)  ------------------------>  console, role api  -------->  PostgreSQL
                                              |  REST for the UI,             the board: tasks, runs, decisions, events;
 agent (Claude Code, Codex,                   |  MCP for agents,               people, sessions, tokens; the job queue
-  any MCP client)  ---- MCP ---------------> |  sign-in through the git host
+  any MCP client)  ---- MCP ---------------> |  sign-in through a provider
       |                                      |
       |  MCP: the organization's skills      v
       +---------------------------------->  a SkillCDN deployment (skillcdn.ai or self-hosted)
@@ -43,7 +43,7 @@ These are the concepts the schema, the API and the UI are named after. The vocab
 | Concept | What it is |
 |---|---|
 | **Workspace** | An organization's board. A deployment holds one until a need for more appears (`WORKSPACE_NAME`). |
-| **Person** | Someone who signed in through the git host and is a member of the workspace. |
+| **Person** | Someone who signed in through an identity provider (GitHub, Google) and is a member of the workspace. |
 | **Agent** | An agent connected by a person: its kind (Claude Code, Codex, another MCP client), the token it holds, the person it acts for. An agent is that person for the board's purposes, and is shown as "agent for *person*". |
 | **Task** | A unit of work: title, body in Markdown, state, owner (a person), assignee (a person or their agent), priority, links (repositories, pull requests, documents), parent task for a breakdown. States: `idea`, `ready`, `in_progress`, `in_review`, `done`, `dropped`. |
 | **Run** | One agent working on one task: who started it, which agent, when; its status (`running`, `waiting` for a decision, `finished`, `failed`, `abandoned`); its reports; what it handed in. |
@@ -62,8 +62,8 @@ Proposed, to be settled by the second milestone:
 
 ## Sign-in and permissions
 
-- People sign in through the git host the organization uses, GitHub first, as SkillCDN does: the console keeps a session and never a password of its own. The git host's token is used once, server-side, to ask who the person is, and then dropped: nothing of it is kept, since membership is decided here and not at the host.
-- Membership: the first version takes a configured list of allowed accounts (`MEMBERS`, logins at the git host), checked at sign-in and on every request after, so that a login taken off the list is out at once. Reading the git-host organization's membership instead is an open question.
+- People sign in through an identity provider the organization already uses, GitHub or Google (Workspace), one or both ([ADR-0005](adr/0005-people-sign-in-through-an-identity-provider-and-membership-and-roles-are-the-consoles-own.md)): the console keeps a session and never a password of its own. The provider's token is used once, server-side, to ask who the person is, and then dropped: nothing of it is kept, since membership is decided here and not at the provider. A provider is an adapter of one port, `IdentityProvider`; a person is known by the provider and its immutable id of the account, and called by their login there (an address, at Google).
+- Membership: a configured list of accounts (`MEMBERS`: logins at GitHub, addresses at Google), and the accounts of a Google Workspace domain the operator names (`GOOGLE_WORKSPACE_DOMAIN`), which Google vouches for at sign-in; both checked at sign-in and on every request after, so that a login taken off the list, or a domain, is out at once. Reading the git-host organization's membership is still open (open question 1).
 - A token is made by a person on their Tokens page, for an agent, a script or a console of their own: scoped to that person, expiring, revocable, stored as a hash, and presented as `Authorization: Bearer` to the REST API and the feed, where it is the credential and needs no origin ([ADR-0004](adr/0004-people-and-agents-reach-the-board-only-through-the-api-with-a-credential-of-their-own.md)). A token can do what its person can do and nothing on anyone else's behalf; it cannot make, list or remove tokens, which only a person signed in does, on the console's own pages.
 - Roles: an administrator, who configures the board, and a member, who works on it; the console's own record on the person ([ADR-0005](adr/0005-people-sign-in-through-an-identity-provider-and-membership-and-roles-are-the-consoles-own.md)). `ADMINS` makes those logins administrators when they sign in; an administrator makes or unmakes others on the People page, and the board keeps at least one. A person's agents have their person's role on the board; configuring, which today is roles and later membership and skills, is done by a person signed in on the console's own pages, never with a token, as tokens themselves are.
 - Requests that change something for a person come from the console's own pages: the session cookie does not travel with other sites' requests, and the origin is checked as well.
@@ -136,7 +136,7 @@ Inherited from the main repository, unchanged ([ADR-0002](adr/0002-one-image-one
 
 Decided when the milestone that needs them starts; a decision with lasting consequences gets an ADR.
 
-1. Membership: a configured list of accounts, a provider's own answer (the Google Workspace domain, the git-host organization), or both; and whether an account at a second provider is a second person or the same one, linked.
+1. Membership from the git-host organization, as it comes from the Workspace domain now; and whether an account at a second provider is a second person or the same one, linked.
 2. How a decision reaches a person away from the board: notifications are a port; which adapters come first.
 3. Unattended runs: where the agents the console starts would run, with what credentials, within what limits.
 4. What of a run is kept: reports only, or the agent's full transcript, with its size and what it may contain.

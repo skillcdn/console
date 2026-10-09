@@ -1258,3 +1258,9 @@ svg {
   color: var(--sc-color-text-muted);
   font-size: var(--sc-text-sm);
 }
+
+.sc-sign-in-ways {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-3);
+}

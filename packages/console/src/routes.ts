@@ -1,5 +1,6 @@
 // Where the console answers (docs/architecture.md). The REST API is for the pages and for a
 // custom console; signing in and out are navigations and one form post, not part of it.
+import type { ProviderKey } from "./vocabulary.js";
 
 /** One prefix per resource; an id follows where one is needed. */
 export const REST_ROUTES = {
@@ -15,12 +16,12 @@ export const REST_ROUTES = {
   tokens: "/api/v1/tokens",
 } as const;
 
-/** Where a browser signs in and out. */
+/** Where a browser signs in and out. Signing in is per provider: `/auth/<provider>/...`. */
 export const AUTH_ROUTES = {
-  /** Sends the browser to the git host to sign in, and afterwards to `return_to`. */
-  login: "/auth/gh/login",
-  /** Where the git host sends the browser back to. */
-  callback: "/auth/gh/callback",
+  /** Sends the browser to the provider to sign in, and afterwards to `return_to`. */
+  login: (provider: ProviderKey): string => `/auth/${provider}/login`,
+  /** Where the provider sends the browser back to. */
+  callback: (provider: ProviderKey): string => `/auth/${provider}/callback`,
   /** A POST from the pages that ends the session. */
   logout: "/auth/logout",
 } as const;
@@ -30,8 +31,8 @@ export const RETURN_TO_PARAM = "return_to";
 
 /**
  * The parameter by which the server tells a page that a sign-in did not complete: the person
- * said no at the git host, the attempt was not finished in time or in the browser that began
- * it, the host did not confirm it, or the account is not a member of the workspace.
+ * said no at the provider, the attempt was not finished in time or in the browser that began
+ * it, the provider did not confirm it, or the account is not a member of the workspace.
  */
 export const SIGN_IN_PARAM = "sign_in";
 export const SIGN_IN_FAILURES = ["denied", "expired", "failed", "refused"] as const;
@@ -41,9 +42,9 @@ export function isSignInFailure(value: string | null | undefined): value is Sign
   return (SIGN_IN_FAILURES as readonly string[]).includes(value ?? "");
 }
 
-/** Where a browser leaves for the git host to sign in and come back to `returnTo`. */
-export function loginPath(returnTo: string): string {
-  return `${AUTH_ROUTES.login}?${RETURN_TO_PARAM}=${encodeURIComponent(returnTo)}`;
+/** Where a browser leaves for the provider to sign in and come back to `returnTo`. */
+export function loginPath(provider: ProviderKey, returnTo: string): string {
+  return `${AUTH_ROUTES.login(provider)}?${RETURN_TO_PARAM}=${encodeURIComponent(returnTo)}`;
 }
 
 /** A page of this origin, told why the sign-in it was waiting for did not complete. */

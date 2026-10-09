@@ -256,13 +256,23 @@ describe("the shell and signing in", () => {
     expect(html).toContain("sc-live-on");
   });
 
-  it("offers the way to the git host, and says why the last try did not complete", () => {
+  it("offers the way to each provider, and says why the last try did not complete", () => {
     const html = renderToStaticMarkup(
-      <SignIn title="Acme" signIn="gh" returnTo="/decisions" failure="refused" />,
+      <SignIn
+        title="Acme"
+        providers={[
+          { key: "gh", label: "GitHub" },
+          { key: "google", label: "Google" },
+        ]}
+        returnTo="/decisions"
+        failure="refused"
+      />,
     );
     expect(html).toContain('href="/auth/gh/login?return_to=%2Fdecisions"');
+    expect(html).toContain('href="/auth/google/login?return_to=%2Fdecisions"');
+    expect(html).toContain("Continue with Google");
     expect(html).toContain("not a member");
-    const nobody = renderToStaticMarkup(<SignIn title="Acme" signIn={undefined} returnTo="/" />);
+    const nobody = renderToStaticMarkup(<SignIn title="Acme" providers={[]} returnTo="/" />);
     expect(nobody).not.toContain("/auth/gh/login");
     expect(nobody).toContain("Nobody can sign in here yet");
   });

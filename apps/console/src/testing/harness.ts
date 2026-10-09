@@ -7,9 +7,9 @@ import type { LiveFeed } from "../http/live-feed.js";
 import type { AppEnv } from "../http/request-context.js";
 import type { Clock } from "../ports/clock.js";
 import { createApi } from "../roles/api.js";
-import type { FixtureLogin } from "./fixture-login.js";
+import type { FixtureProvider } from "./fixture-provider.js";
 
-// Test support: the `api` role wired to a test database, and to a fixture git host when people
+// Test support: the `api` role wired to a test database, and to fixture providers when people
 // are to sign in. Not compiled.
 
 /** The origin of a harness where nobody signs in. */
@@ -27,7 +27,7 @@ export interface Harness {
   readonly feed: LiveFeed;
   request(path: string, init?: RequestInit): Promise<Response>;
   /**
-   * Signs a person of the fixture login in as their browser would, and answers with the Cookie
+   * Signs a person of a fixture provider in as their browser would, and answers with the Cookie
    * header that carries the session.
    */
   signIn(person: string): Promise<string>;
@@ -36,8 +36,10 @@ export interface Harness {
 }
 
 export interface HarnessOptions {
-  /** The git host's side of signing in. Given, people can sign in; left out, nobody can. */
-  readonly login?: FixtureLogin;
+  /** The providers' side of signing in. Given, people can sign in; left out, nobody can. */
+  readonly providers?: readonly FixtureProvider[];
+  /** The Workspace domains the operator names. None when left out. */
+  readonly domains?: readonly string[];
   /** The logins the operator lists. Everyone of the fixture when left out. */
   readonly members?: readonly string[];
   /** The logins the operator names administrators. Nobody when left out. */
@@ -64,7 +66,8 @@ export function cookieOf(response: Response, name: string): string {
 
 export function createHarness(testDatabase: TestDatabase, options: HarnessOptions = {}): Harness {
   const logs: Record<string, unknown>[] = [];
-  const origin = options.login === undefined ? BASE_URL : SIGN_IN_URL;
+  const providers = options.providers ?? [];
+  const origin = providers.length === 0 ? BASE_URL : SIGN_IN_URL;
   const logger = pino(
     { level: "info" },
     { write: (line: string) => logs.push(JSON.parse(line) as Record<string, unknown>) },
@@ -79,7 +82,7 @@ export function createHarness(testDatabase: TestDatabase, options: HarnessOption
         accessLog: true,
       },
       feed: options.feed,
-      ...(options.login === undefined
+      ...(providers.length === 0
         ? {}
         : {
             auth: {
@@ -87,13 +90,14 @@ export function createHarness(testDatabase: TestDatabase, options: HarnessOption
               secret: "a secret for tests, long enough to be one",
               members: options.members ?? ["alice", "bob", "carol"],
               admins: options.admins ?? [],
+              domains: options.domains ?? [],
               sessionTtlMs: options.sessionTtlMs ?? 30 * 86_400_000,
             },
           }),
     },
     {
       database: testDatabase.database,
-      login: options.login,
+      providers,
       clock: options.clock ?? { now: () => new Date() },
       logger,
       isShuttingDown: () => false,
@@ -116,14 +120,14 @@ export function createHarness(testDatabase: TestDatabase, options: HarnessOption
     feed,
     request,
     async signIn(person) {
-      const { login } = options;
-      if (login === undefined) {
-        throw new Error("nobody can sign in on this harness");
+      const provider = providers.find((candidate) => candidate.people[person] !== undefined);
+      if (provider === undefined) {
+        throw new Error(`nobody called ${person} can sign in on this harness`);
       }
-      const begun = await request(AUTH_ROUTES.login);
+      const begun = await request(AUTH_ROUTES.login(provider.key));
       const state = new URL(begun.headers.get("location") ?? "").searchParams.get("state") ?? "";
       const done = await request(
-        `${AUTH_ROUTES.callback}?code=${login.codeFor(person, state)}&state=${state}`,
+        `${AUTH_ROUTES.callback(provider.key)}?code=${provider.codeFor(person, state)}&state=${state}`,
         { headers: { cookie: cookieOf(begun, "console_login") } },
       );
       return cookieOf(done, "console_session");
