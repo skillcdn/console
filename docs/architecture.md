@@ -122,7 +122,7 @@ Inherited from the main repository, unchanged ([ADR-0002](adr/0002-one-image-one
 | Logging | pino, JSON to stdout. |
 | Quality | Biome, Vitest, gitleaks. |
 | Web | Vite + React, plain CSS with design tokens. The default UI is the package's composition. |
-| Delivery | One multi-stage Dockerfile, non-root; CI builds and exercises the image on every change. Publishing and rollout happen outside this repository. |
+| Delivery | One multi-stage Dockerfile, non-root; CI builds and exercises the image on every change; images are published and rolled out outside this repository. The package is published by the release workflow through the registry's trusted publishing, versioned on the `@skillcdn/core` line ([ADR-0007](adr/0007-the-package-is-published-through-trusted-publishing-and-versioned-on-the-core-line.md)). |
 
 ## Security model
 

@@ -23,11 +23,12 @@
     "test": "turbo run test",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
-    "check": "biome ci . && node scripts/check-text-safety.mjs && node scripts/check-licenses.mjs && turbo run build typecheck test",
+    "check": "biome ci . && node scripts/check-text-safety.mjs && node scripts/check-licenses.mjs && node scripts/check-version-line.mjs && turbo run build typecheck test",
     "dev": "turbo run dev",
     "clean": "turbo run clean",
     "check:text": "node scripts/check-text-safety.mjs",
-    "check:licenses": "node scripts/check-licenses.mjs"
+    "check:licenses": "node scripts/check-licenses.mjs",
+    "check:version": "node scripts/check-version-line.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",

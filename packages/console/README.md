@@ -8,7 +8,7 @@
   <a href="https://github.com/skillcdn/console/blob/main/LICENSE.md"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-3a6dd4"></a>
 </p>
 
-**Not published yet.** The package exists so that the console's own UI and any custom console share one source; the first version is published when the third milestone of [the roadmap](https://github.com/skillcdn/console/blob/main/docs/roadmap.md) lands. All three layers are here, and the command: the contract of the REST API, the components, the composition of the default console, and `console`, what an agent works the board with.
+**Pre-1.0.** Published from `main` by the release workflow, from changesets, through the registry's trusted publishing; the version's major and minor are those of the `@skillcdn/core` line the console is built on, its patch the console's own, and the changelog says what each release changed ([ADR-0007](https://github.com/skillcdn/console/blob/main/docs/adr/0007-the-package-is-published-through-trusted-publishing-and-versioned-on-the-core-line.md)). All three layers are here, and the command: the contract of the REST API, the components, the composition of the default console, and `console`, what an agent works the board with.
 
 ## What it exports
 

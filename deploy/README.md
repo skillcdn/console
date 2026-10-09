@@ -7,8 +7,7 @@ Everything needed to build the image and hand it to whatever runs it. This repos
 | [`Dockerfile`](Dockerfile) | The one multi-stage image. Roles `api`, `worker` and `migrate` are selected by the container command. |
 | [`compose.dev.yaml`](compose.dev.yaml) | Local development dependencies (PostgreSQL 18 on `127.0.0.1:5433`, next to a SkillCDN development database on 5432). Not a production topology. |
 | [`../.github/workflows/ci.yml`](../.github/workflows/ci.yml) | Lint, build, typecheck, tests (integration tests run against a PostgreSQL service container), a secret scan, and an image build that is then exercised: exit codes, `migrate`, readiness, the page, non-root user, clean shutdown. It needs no secrets. |
-
-A release workflow for the package arrives with its first publish ([roadmap](../docs/roadmap.md)).
+| [`../.github/workflows/release.yml`](../.github/workflows/release.yml) | Versions and publishes `@skillcdn/console` from the pending changesets: a pull request that bumps the version and the changelog, and, once it is merged, a publish through the registry's trusted publishing, with provenance and no stored secret ([ADR-0007](../docs/adr/0007-the-package-is-published-through-trusted-publishing-and-versioned-on-the-core-line.md)). Images are not published from here. |
 
 ## The image
 
@@ -104,6 +103,17 @@ CI builds the image on every change and exercises it, but publishes nothing. A r
 4. Replace the `worker` the same way; a sweep it was in the middle of is the next one's work.
 
 The definitions of a particular deployment (accounts, networks, hostnames, sizes) are not in this repository and must not be added to it.
+
+## Repository settings checklist
+
+Set once in GitHub and on the registry; none of it can be expressed in files here.
+
+- Branch protection on `main` is intentionally off for now: maintainers push directly ([AGENTS.md](../AGENTS.md)). When the team moves to pull requests, require them together with the `CI` checks and a linear history.
+- Enable secret scanning with push protection, Dependabot alerts and private vulnerability reporting.
+- Actions: default `GITHUB_TOKEN` permission read-only; require approval before running workflows from first-time contributors. Allow GitHub Actions to create and approve pull requests (`Actions > General`): the release workflow opens its version pull request with that, and fails at that step without it.
+- On npm, `@skillcdn/console` has this repository registered as its trusted publisher, and then requires two-factor authentication with tokens disallowed. The publisher is GitHub Actions with organization `skillcdn`, repository `console`, workflow filename `release.yml` (the file name alone, not its path) and no environment name, and its allowed actions include `publish`. The four fields must match the run exactly: otherwise the registry answers the publish with `404 Not Found`. Without the `publish` action it answers `403 OIDC permission denied for this action`, since only staged publishes are allowed by default. Either way the Publish job fails within a second and nothing is published, so the run can be repeated once the publisher is right. A registration is pending until the workflow publishes through it once, and expires after two days unused: a package that saw no release in that time needs it registered again before its next one.
+- The first version of the package is published by a maintainer by hand, before the publisher can be registered ([ADR-0007](../docs/adr/0007-the-package-is-published-through-trusted-publishing-and-versioned-on-the-core-line.md)): from a clean checkout of the commit on `main` that the version pull request made, `pnpm install --frozen-lockfile`, `pnpm turbo run build --filter=@skillcdn/console`, then `pnpm --filter @skillcdn/console publish --access public` with the registry's one-time password. The Publish job of that commit fails, as expected, with `404`; register the publisher right after, and make the next release within two days so that the registration is used.
+- No cloud credentials, environments or deployment secrets belong to this repository. If a workflow here ever asks for one, that is a mistake.
 
 ## Gotchas
 

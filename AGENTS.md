@@ -59,6 +59,7 @@ Run everything from the repository root through pnpm. Do not use `npm`, `npx` or
 | Lint and format | `pnpm lint` · `pnpm lint:fix` |
 | Record what a change means to the published package | `pnpm changeset` (writes `.changeset/<name>.md`; a file written by hand does the same) |
 | No control or invisible characters in tracked files (part of `pnpm check`) | `pnpm check:text` |
+| The package's version follows the `@skillcdn/core` line (part of `pnpm check`) | `pnpm check:version` |
 | Local PostgreSQL (from the first milestone on) | `docker compose -f deploy/compose.dev.yaml up -d` |
 
 Packages compile to `dist/` and consume each other's compiled output. Going through `turbo` builds upstream packages first; calling a package script directly can test against a stale `dist/`.
@@ -85,7 +86,7 @@ Packages compile to `dist/` and consume each other's compiled output. Going thro
 - **For now, maintainers commit and push directly to `main`.** There is no pull-request gate and no branch protection yet. Do not create branches or open pull requests unless asked. Run `pnpm check` first, `git pull --rebase` before pushing, keep commits small, and treat a red CI run on `main` as the first thing to fix.
 - Never force-push or rewrite `main`, skip hooks with `--no-verify`, or commit build output.
 - Keep the `Co-Authored-By` trailer your agent adds, so AI-authored changes stay traceable.
-- **Releases.** `@skillcdn/console` is versioned from changesets and published through the registry's trusted publishing, as the main repository's packages are ([its ADR-0046](https://github.com/skillcdn/skillcdn/blob/main/docs/adr/0046-packages-are-published-to-npm-through-trusted-publishing.md)). Its first version is published by a maintainer by hand; the release workflow, a copy of the main repository's, is added right after. Until then nothing publishes anything.
+- **Releases.** `@skillcdn/console` is versioned from changesets and published by the release workflow through the registry's trusted publishing ([ADR-0007](docs/adr/0007-the-package-is-published-through-trusted-publishing-and-versioned-on-the-core-line.md)): pending changesets become one version pull request, and merging it publishes. The version's major and minor are those of the `@skillcdn/core` line the console is built on, so a change is a `patch` unless it adopts a new line, and `pnpm check` holds the rule. The first version is published by a maintainer by hand ([deploy/README.md](deploy/README.md#repository-settings-checklist)). Images are not published from here.
 
 ## Documentation protocol
 
