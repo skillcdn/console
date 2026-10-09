@@ -1,0 +1,39 @@
+{
+  "name": "skillcdn-console",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The SkillCDN Console: where an organization runs its work with AI agents.",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@12.4.2",
+  "engines": {
+    "node": ">=24",
+    "pnpm": ">=12.4.0"
+  },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "^24.11.0",
+      "onFail": "download"
+    }
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "check": "biome ci . && node scripts/check-text-safety.mjs && node scripts/check-licenses.mjs && turbo run build typecheck test",
+    "dev": "turbo run dev",
+    "clean": "turbo run clean",
+    "check:text": "node scripts/check-text-safety.mjs",
+    "check:licenses": "node scripts/check-licenses.mjs"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.15",
+    "@changesets/changelog-github": "^1.0.1",
+    "@changesets/cli": "^3.0.3",
+    "turbo": "^2.11.6",
+    "typescript": "catalog:"
+  }
+}

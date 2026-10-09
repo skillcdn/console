@@ -1,0 +1,23 @@
+{
+  "name": "@skillcdn/console-app",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The deployable console: the API people and agents talk to, the worker, the migrations, and the default UI. Roles: api | worker | migrate.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "start": "node dist/main.js",
+    "clean": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\""
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
