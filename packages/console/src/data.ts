@@ -10,6 +10,7 @@ import {
   type RestMe,
   type RestPerson,
   type RestPersonPatch,
+  type RestRun,
   type RestTask,
   type RestTaskInput,
   type RestTaskPatch,
@@ -37,6 +38,8 @@ export interface ConsoleActions {
   answerDecision(id: string, input: RestAnswerInput): Promise<RestDecision>;
   /** Changes what a person is; for an administrator. */
   updatePerson(id: string, patch: RestPersonPatch): Promise<RestPerson>;
+  /** Marks a run that will not come back as abandoned. */
+  abandonRun(id: string): Promise<RestRun>;
   /** Makes a token for whoever is signed in; the answer carries the secret, this once. */
   createToken(input: RestTokenInput): Promise<RestTokenCreated>;
   revokeToken(id: string): Promise<void>;
@@ -55,6 +58,8 @@ export interface ConsoleData {
   readonly tasks: readonly RestTask[];
   readonly decisions: readonly RestDecision[];
   readonly people: readonly RestPerson[];
+  /** The runs of the board, newest first. */
+  readonly runs: readonly RestRun[];
   /** Oldest first. */
   readonly events: readonly RestEvent[];
   /** The tokens of whoever is signed in, newest first. */
@@ -87,6 +92,7 @@ export function useConsoleData(client: ConsoleClient): ConsoleData {
   const [tasks, setTasks] = useState<readonly RestTask[]>([]);
   const [decisions, setDecisions] = useState<readonly RestDecision[]>([]);
   const [people, setPeople] = useState<readonly RestPerson[]>([]);
+  const [runs, setRuns] = useState<readonly RestRun[]>([]);
   const [events, setEvents] = useState<readonly RestEvent[]>([]);
   const [tokens, setTokens] = useState<readonly RestToken[]>([]);
   const [generation, setGeneration] = useState(0);
@@ -97,10 +103,11 @@ export function useConsoleData(client: ConsoleClient): ConsoleData {
   /** Loads the lists again. What fails stays as it was; the next event asks again. */
   const refreshLists = useCallback(
     async (signal?: AbortSignal) => {
-      const [nextTasks, nextDecisions, nextPeople] = await Promise.all([
+      const [nextTasks, nextDecisions, nextPeople, nextRuns] = await Promise.all([
         client.tasks(undefined, signal),
         client.decisions(undefined, signal),
         client.people(signal),
+        client.runs(undefined, signal),
       ]);
       if (signal?.aborted === true) {
         return;
@@ -108,6 +115,7 @@ export function useConsoleData(client: ConsoleClient): ConsoleData {
       setTasks(nextTasks.items);
       setDecisions(nextDecisions.items);
       setPeople(nextPeople.items);
+      setRuns(nextRuns.items);
     },
     [client],
   );
@@ -223,6 +231,11 @@ export function useConsoleData(client: ConsoleClient): ConsoleData {
         await refreshLists();
         return person;
       },
+      async abandonRun(id) {
+        const run = await client.abandonRun(id);
+        await refreshLists();
+        return run;
+      },
       async createToken(input) {
         const made = await client.createToken(input);
         setTokens((await client.tokens()).items);
@@ -241,5 +254,18 @@ export function useConsoleData(client: ConsoleClient): ConsoleData {
     [client, refreshLists],
   );
 
-  return { me, error, loaded, live, tasks, decisions, people, events, tokens, actions, reload };
+  return {
+    me,
+    error,
+    loaded,
+    live,
+    tasks,
+    decisions,
+    people,
+    runs,
+    events,
+    tokens,
+    actions,
+    reload,
+  };
 }

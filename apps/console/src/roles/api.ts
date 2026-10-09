@@ -33,6 +33,8 @@ const JANITOR_INTERVAL_MS = 15 * 60_000;
 const FEED_HEARTBEAT_MS = 25_000;
 /** How long a subscriber goes without asking, nudge or no nudge: a missed nudge costs this much. */
 const FEED_POLL_MS = 15_000;
+/** How long an agent's `ask` holds its request for a person's answer: under what proxies allow. */
+const DECISION_WAIT_MS = 50_000;
 
 export interface ApiPorts {
   readonly database: Database;
@@ -55,6 +57,8 @@ export type ApiConfig = Pick<Config, "workspace"> & {
   >;
   /** The timing of the live feed; the built-in values when left out. For tests. */
   readonly feed?: { readonly heartbeatMs?: number; readonly pollMs?: number } | undefined;
+  /** How long an agent's `ask` waits; the built-in value when left out. For tests. */
+  readonly agents?: { readonly waitMs?: number } | undefined;
 };
 
 /**
@@ -153,6 +157,7 @@ export function createApi(
     clock,
     logger,
     isShuttingDown: ports.isShuttingDown,
+    agents: { waitMs: config.agents?.waitMs ?? DECISION_WAIT_MS },
     requests: {
       addresses: createClientAddressResolver({
         trustedProxies: config.http?.trustedProxies ?? [],

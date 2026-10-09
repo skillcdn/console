@@ -21,6 +21,13 @@ export const MAX_NOTE_LENGTH = 2000;
 export const LIST_LIMIT = 500;
 /** How many events one page of the feed carries. */
 export const EVENTS_PAGE_LIMIT = 100;
+/** What an agent calls itself when it takes a task: its kind, where it runs. One line. */
+export const MAX_AGENT_LENGTH = 80;
+/** What an agent says when it ends a run. Markdown. */
+export const MAX_SUMMARY_LENGTH = 2000;
+/** How many reports, and how many artifacts, one run may carry. */
+export const MAX_REPORTS_PER_RUN = 500;
+export const MAX_ARTIFACTS_PER_RUN = 50;
 /** What a person calls a token: the agent it is for, where it runs. One line. */
 export const MAX_TOKEN_NAME_LENGTH = 80;
 /** How long a token may be good for, in days, and how long one is when nothing is said. */

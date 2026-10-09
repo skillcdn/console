@@ -11,6 +11,7 @@ import {
 } from "./queries/decisions.js";
 import { EVENTS_CHANNEL, latestEventId, listEventsAfter } from "./queries/events.js";
 import { findPerson, listPeople, type PersonRecord, savePerson } from "./queries/people.js";
+import { endRun, excerptOf, RunError, startRun } from "./queries/runs.js";
 import {
   createSession,
   deleteExpiredSessions,
@@ -599,5 +600,84 @@ describe("tokens", () => {
     expect(await deleteToken(database, bob.id, third.id)).toBe(false);
     // Alice's second and Bob's second have ended by now.
     expect(await deleteExpiredTokens(database, minutes(10))).toBe(2);
+  });
+});
+
+describe("runs", () => {
+  it("take a task for a person, one agent at a time, and not a closed one", async () => {
+    const task = await createTask(database, {
+      workspaceId,
+      actorId: bob.id,
+      task: { title: "Index the docs", state: "ready" },
+      now: minutes(100),
+    });
+    const run = await startRun(database, {
+      workspaceId,
+      actorId: alice.id,
+      tokenId: undefined,
+      taskId: task.id,
+      agent: "Codex",
+      now: minutes(101),
+    });
+    expect(run).toMatchObject({ status: "running", agent: "Codex", reports: [], artifacts: [] });
+    expect(run.person.id).toBe(alice.id);
+    const taken = await getTask(database, workspaceId, task.id);
+    expect(taken).toMatchObject({ state: "in_progress", openRuns: 1 });
+    expect(taken?.assignee?.id).toBe(alice.id);
+    await expect(
+      startRun(database, {
+        workspaceId,
+        actorId: bob.id,
+        tokenId: undefined,
+        taskId: task.id,
+        agent: "another",
+        now: minutes(102),
+      }),
+    ).rejects.toMatchObject({ code: "run.task_taken" });
+    // Only its person ends it, unless an administrator does; a finished run puts the task up for review.
+    await expect(
+      endRun(database, {
+        workspaceId,
+        actorId: bob.id,
+        runId: run.id,
+        status: "finished",
+        summary: undefined,
+        now: minutes(103),
+      }),
+    ).rejects.toBeInstanceOf(RunError);
+    const ended = await endRun(database, {
+      workspaceId,
+      actorId: bob.id,
+      runId: run.id,
+      status: "abandoned",
+      summary: undefined,
+      anyone: true,
+      now: minutes(103),
+    });
+    expect(ended).toMatchObject({ status: "abandoned", endedAt: minutes(103) });
+    expect((await getTask(database, workspaceId, task.id))?.openRuns).toBe(0);
+    const closed = await createTask(database, {
+      workspaceId,
+      actorId: bob.id,
+      task: { title: "Old", state: "done" },
+      now: minutes(104),
+    });
+    await expect(
+      startRun(database, {
+        workspaceId,
+        actorId: alice.id,
+        tokenId: undefined,
+        taskId: closed.id,
+        agent: "Codex",
+        now: minutes(105),
+      }),
+    ).rejects.toMatchObject({ code: "run.task_closed" });
+  });
+
+  it("say the first words of a report, in one line, bounded", () => {
+    expect(excerptOf("# Found it\n\nThe parser trusts its input.")).toBe("Found it");
+    expect(excerptOf("\n\n- first   point\nsecond")).toBe("first point");
+    expect(excerptOf("")).toBe("");
+    expect(excerptOf("x".repeat(300))).toHaveLength(140);
   });
 });

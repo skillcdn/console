@@ -60,6 +60,7 @@ describe("createClient", () => {
       parentId: null,
       links: [],
       openDecisions: 0,
+      openRuns: 0,
       createdAt: "2026-10-09T10:00:00.000Z",
       updatedAt: "2026-10-09T10:00:00.000Z",
     };

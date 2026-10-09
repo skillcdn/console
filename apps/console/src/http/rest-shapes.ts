@@ -2,12 +2,14 @@ import type {
   RestDecision,
   RestEvent,
   RestPerson,
+  RestRun,
   RestTask,
   RestToken,
 } from "@skillcdn/console/api";
 import type { DecisionRecord } from "../db/queries/decisions.js";
 import type { EventRecord } from "../db/queries/events.js";
 import type { PersonRecord } from "../db/queries/people.js";
+import type { RunRecord } from "../db/queries/runs.js";
 import type { TaskRecord } from "../db/queries/tasks.js";
 import type { TokenRecord } from "../db/queries/tokens.js";
 
@@ -38,6 +40,7 @@ export function restTask(task: TaskRecord): RestTask {
     parentId: task.parentId ?? null,
     links: task.links.map((link) => ({ url: link.url, label: link.label ?? null })),
     openDecisions: task.openDecisions,
+    openRuns: task.openRuns,
     createdAt: task.createdAt.toISOString(),
     updatedAt: task.updatedAt.toISOString(),
   };
@@ -51,6 +54,7 @@ export function restDecision(decision: DecisionRecord): RestDecision {
     options: decision.options.map((option) => ({ id: option.id, label: option.label })),
     taskId: decision.taskId ?? null,
     raisedBy: restPerson(decision.raisedBy),
+    run: decision.run === undefined ? null : { id: decision.run.id, agent: decision.run.agent },
     answer:
       decision.answer === undefined
         ? null
@@ -76,6 +80,31 @@ export function restToken(token: TokenRecord): RestToken {
   };
 }
 
+export function restRun(run: RunRecord): RestRun {
+  return {
+    id: run.id,
+    taskId: run.taskId,
+    person: restPerson(run.person),
+    agent: run.agent,
+    status: run.status,
+    startedAt: run.startedAt.toISOString(),
+    endedAt: run.endedAt?.toISOString() ?? null,
+    summary: run.summary ?? null,
+    reports: run.reports.map((report) => ({
+      id: report.id,
+      body: report.body,
+      createdAt: report.createdAt.toISOString(),
+    })),
+    artifacts: run.artifacts.map((artifact) => ({
+      id: artifact.id,
+      url: artifact.url,
+      label: artifact.label ?? null,
+      createdAt: artifact.createdAt.toISOString(),
+    })),
+    waitingFor: run.waitingFor ?? null,
+  };
+}
+
 export function restEvent(event: EventRecord): RestEvent {
   return {
     id: event.id,
@@ -83,6 +112,7 @@ export function restEvent(event: EventRecord): RestEvent {
     actor: event.actor === undefined ? null : restPerson(event.actor),
     taskId: event.taskId ?? null,
     decisionId: event.decisionId ?? null,
+    runId: event.runId ?? null,
     data: event.data,
     createdAt: event.createdAt.toISOString(),
   };

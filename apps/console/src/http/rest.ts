@@ -6,6 +6,7 @@ import {
   type RestDecisions,
   type RestEvents,
   type RestPeople,
+  type RestRuns,
   type RestTasks,
   type RestTokenCreated,
   type RestTokens,
@@ -37,6 +38,7 @@ import {
   type PersonRecord,
   updatePersonRole,
 } from "../db/queries/people.js";
+import { endRun, getRun, listRuns, RunError } from "../db/queries/runs.js";
 import { createTask, getTask, listTasks, TaskError, updateTask } from "../db/queries/tasks.js";
 import { TokenError } from "../db/queries/tokens.js";
 import type { WorkspaceRecord } from "../db/queries/workspaces.js";
@@ -52,7 +54,14 @@ import {
 } from "./auth.js";
 import type { LiveFeed } from "./live-feed.js";
 import type { AppEnv } from "./request-context.js";
-import { restDecision, restEvent, restPerson, restTask, restToken } from "./rest-shapes.js";
+import {
+  restDecision,
+  restEvent,
+  restPerson,
+  restRun,
+  restTask,
+  restToken,
+} from "./rest-shapes.js";
 
 export interface RestDependencies {
   readonly database: Database;
@@ -75,6 +84,7 @@ const decisionsQuery = z.object({
   open: z.enum(["true", "false"]).optional(),
   task: z.string().regex(UUID).optional(),
 });
+const runsQuery = z.object({ task: z.string().regex(UUID).optional() });
 const eventsQuery = z.object({
   after: z.coerce.number().int().min(0).default(0),
   limit: z.coerce.number().int().min(1).max(EVENTS_PAGE_LIMIT).default(EVENTS_PAGE_LIMIT),
@@ -181,6 +191,17 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         errorBody(error.code, error.message),
         error.code === "person.not_found" ? 404 : 409,
       );
+    }
+    if (error instanceof RunError) {
+      const status =
+        error.code === "run.not_found"
+          ? 404
+          : error.code === "run.not_yours"
+            ? 403
+            : error.code === "run.over" || error.code === "run.task_taken"
+              ? 409
+              : 400;
+      return c.json(errorBody(error.code, error.message), status);
     }
     if (error instanceof TokenError) {
       return c.json(
@@ -479,6 +500,66 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
     logger.info({ person: person.id, tokenId: id, requestId: c.get("requestId") }, "token removed");
     return c.body(null, 204);
+  });
+
+  // The runs: agents at work, and what they did. Written through the MCP endpoint; a person
+  // gives up on one from here.
+  app.get(REST_ROUTES.runs, async (c) => {
+    const query = runsQuery.safeParse(c.req.query());
+    if (!query.success) {
+      return invalid(c, firstProblem(query));
+    }
+    const person = await asking(c);
+    if (person instanceof Response) {
+      return person;
+    }
+    const items = await listRuns(database, person.workspaceId, {
+      taskId: query.data.task,
+      limit: LIST_LIMIT,
+    });
+    const body: RestRuns = { items: items.map(restRun) };
+    return c.json(body);
+  });
+
+  app.get(`${REST_ROUTES.runs}/:id`, async (c) => {
+    const person = await asking(c);
+    if (person instanceof Response) {
+      return person;
+    }
+    const id = c.req.param("id");
+    const run = UUID.test(id) ? await getRun(database, person.workspaceId, id) : undefined;
+    return run === undefined
+      ? c.json(errorBody("run.not_found", "The run was not found."), 404)
+      : c.json(restRun(run));
+  });
+
+  app.post(`${REST_ROUTES.runs}/:id/abandon`, async (c) => {
+    const person = await signedInOnOwnPages(c);
+    if (person instanceof Response) {
+      return person;
+    }
+    const id = c.req.param("id");
+    if (!UUID.test(id)) {
+      return c.json(errorBody("run.not_found", "The run was not found."), 404);
+    }
+    try {
+      const run = await endRun(database, {
+        workspaceId: person.workspaceId,
+        actorId: person.id,
+        runId: id,
+        status: "abandoned",
+        summary: undefined,
+        anyone: person.role === "admin",
+        now: clock.now(),
+      });
+      logger.info(
+        { person: person.id, run: run.id, requestId: c.get("requestId") },
+        "run abandoned",
+      );
+      return c.json(restRun(run));
+    } catch (error) {
+      return failure(c, error);
+    }
   });
 
   app.get(REST_ROUTES.events, async (c) => {

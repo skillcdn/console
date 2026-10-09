@@ -1,11 +1,12 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { RestDecision, RestEvent, RestPerson, RestTask, RestToken } from "../api.js";
+import type { RestDecision, RestEvent, RestPerson, RestRun, RestTask, RestToken } from "../api.js";
 import { Board } from "./board.js";
 import { DecisionList } from "./decision-list.js";
 import { describeEvent, EventFeed } from "./event-feed.js";
 import { Markdown } from "./markdown.js";
 import { PeopleList } from "./people.js";
+import { RunList } from "./runs.js";
 import { Shell } from "./shell.js";
 import { SignIn } from "./sign-in.js";
 import { TaskView } from "./task-view.js";
@@ -38,6 +39,7 @@ const task = (overrides: Partial<RestTask> = {}): RestTask => ({
   parentId: null,
   links: [],
   openDecisions: 1,
+  openRuns: 0,
   createdAt: "2026-10-09T10:00:00.000Z",
   updatedAt: "2026-10-09T11:00:00.000Z",
   ...overrides,
@@ -53,6 +55,7 @@ const decision = (overrides: Partial<RestDecision> = {}): RestDecision => ({
   ],
   taskId: "0199c4d8-0000-7000-8000-000000000010",
   raisedBy: alice,
+  run: null,
   answer: null,
   createdAt: "2026-10-09T10:00:00.000Z",
   updatedAt: "2026-10-09T10:00:00.000Z",
@@ -166,6 +169,7 @@ describe("the feed", () => {
     actor: alice,
     taskId: null,
     decisionId: null,
+    runId: null,
     data: {},
     createdAt: "2026-10-09T10:00:00.000Z",
     ...overrides,
@@ -346,6 +350,7 @@ describe("people", () => {
       actor: alice,
       taskId: null,
       decisionId: null,
+      runId: null,
       data: { login: "bob", role: "admin" },
       createdAt: "2026-10-09T10:00:00.000Z",
     };
@@ -353,5 +358,109 @@ describe("people", () => {
     expect(describeEvent({ ...event, data: { login: "bob", role: "member" } })).toBe(
       "made bob a member",
     );
+  });
+});
+
+describe("runs", () => {
+  const run: RestRun = {
+    id: "0199c4d8-0000-7000-8000-000000000040",
+    taskId: "0199c4d8-0000-7000-8000-000000000010",
+    person: alice,
+    agent: "Claude Code <on> the laptop",
+    status: "waiting",
+    startedAt: "2026-10-09T10:00:00.000Z",
+    endedAt: null,
+    summary: null,
+    reports: [
+      {
+        id: "0199c4d8-0000-7000-8000-000000000041",
+        body: "Found the cause in **the parser**.",
+        createdAt: "2026-10-09T10:05:00.000Z",
+      },
+    ],
+    artifacts: [
+      {
+        id: "0199c4d8-0000-7000-8000-000000000042",
+        url: "https://github.com/acme/app/pull/2",
+        label: "the fix",
+        createdAt: "2026-10-09T10:06:00.000Z",
+      },
+    ],
+    waitingFor: "0199c4d8-0000-7000-8000-000000000020",
+  };
+
+  it("shows an agent at work, what it reported and handed in, and what it waits for", () => {
+    const html = renderToStaticMarkup(
+      <RunList
+        runs={[run]}
+        decisionHref={(id) => `/decisions#${id}`}
+        onAbandon={() => undefined}
+      />,
+    );
+    expect(html).toContain("Claude Code &lt;on&gt; the laptop");
+    expect(html).toContain("Waiting for a decision");
+    expect(html).toContain("<strong>the parser</strong>");
+    expect(html).toContain('href="https://github.com/acme/app/pull/2"');
+    expect(html).toContain("the fix");
+    expect(html).toContain("Mark abandoned");
+    const over = renderToStaticMarkup(
+      <RunList
+        runs={[
+          {
+            ...run,
+            status: "finished",
+            endedAt: "2026-10-09T11:00:00.000Z",
+            summary: "Done.",
+            waitingFor: null,
+          },
+        ]}
+        onAbandon={() => undefined}
+      />,
+    );
+    expect(over).toContain("Finished");
+    expect(over).toContain("Done.");
+    expect(over).not.toContain("Mark abandoned");
+    expect(renderToStaticMarkup(<RunList runs={[]} empty={<p>none</p>} />)).toBe("<p>none</p>");
+  });
+
+  it("says in the feed what an agent did, as itself", () => {
+    const event: RestEvent = {
+      id: 10,
+      kind: "run.started",
+      actor: alice,
+      taskId: run.taskId,
+      decisionId: null,
+      runId: run.id,
+      data: { number: 7, title: "Ship", agent: "Claude Code" },
+      createdAt: "2026-10-09T10:00:00.000Z",
+    };
+    expect(describeEvent(event)).toBe("started on #7 Ship (as Claude Code)");
+    expect(
+      describeEvent({
+        ...event,
+        kind: "run.reported",
+        data: { ...event.data, excerpt: "Found it" },
+      }),
+    ).toBe("reported on #7 Ship (as Claude Code): Found it");
+    expect(
+      describeEvent({ ...event, kind: "run.handed_in", data: { ...event.data, label: "the fix" } }),
+    ).toBe("handed in the fix on #7 Ship (as Claude Code)");
+    expect(
+      describeEvent({ ...event, kind: "run.ended", data: { ...event.data, status: "abandoned" } }),
+    ).toBe("gave up on #7 Ship (as Claude Code)");
+    expect(
+      describeEvent({
+        ...event,
+        kind: "decision.raised",
+        data: { question: "Which?", agent: "Claude Code" },
+      }),
+    ).toBe("asked (as Claude Code): Which?");
+  });
+
+  it("marks a task an agent is at work on", () => {
+    const html = renderToStaticMarkup(
+      <Board tasks={[task({ openRuns: 1 })]} taskHref={href} onOpen={() => undefined} />,
+    );
+    expect(html).toContain("agent at work");
   });
 });

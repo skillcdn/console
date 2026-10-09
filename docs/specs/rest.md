@@ -21,15 +21,18 @@ The API is the board as its members see it: the people, the tasks, the decisions
 | 400 | `task.invalid_parent` | The parent is not a task of the workspace, is the task itself, or would make a loop. |
 | 400 | `decision.invalid_task` | The decision is about a task that is not one of the workspace's. |
 | 400 | `decision.no_such_option` | The answer names an option the decision does not have. |
+| 400 | `decision.invalid_run` | A decision raised from a run that is not the asker's, or is over. |
 | 401 | `auth.required` | Nobody is signed in, or the session has ended. The cookie is taken away when the operator no longer lists the login. |
 | 403 | `auth.forbidden_origin` | A request that changes something on a session did not come from the console's own pages. |
 | 403 | `auth.forbidden` | A member asked for what only an administrator may do. |
 | 403 | `auth.session_required` | A token asked for what only a person signed in may do: the tokens themselves, and configuring. |
-| 404 | `task.not_found`, `decision.not_found`, `token.not_found`, `person.not_found` | No such id in the workspace; for a token, none of the asker's. An id that is not a UUID is not found either. |
+| 403 | `run.not_yours` | The run is another person's. |
+| 404 | `task.not_found`, `decision.not_found`, `token.not_found`, `person.not_found`, `run.not_found` | No such id in the workspace; for a token, none of the asker's. An id that is not a UUID is not found either. |
 | 404 | `not_found` | Nothing at this path. |
 | 409 | `decision.answered` | The decision has an answer already. |
 | 409 | `token.too_many` | The person holds as many live tokens as one may (`MAX_TOKENS_PER_PERSON`). |
 | 409 | `person.last_admin` | The change would leave the board without an administrator. |
+| 409 | `run.over`, `run.task_taken` | The run has ended already; an agent is at work on the task already. |
 | 413 | `request.too_large` | The body is over the limit. |
 
 ## Endpoints
@@ -48,7 +51,7 @@ Takes `role` and answers the person. For an administrator signed in on the conso
 
 ### `GET /api/v1/tasks?state=`
 
-`{ "items": [task, ...] }`: the board, newest first, at most `LIST_LIMIT` tasks; `state` keeps one state of it. A task carries its `number` (the one people say out loud), `title`, `body` (Markdown, to be shown as text or rendered to elements, never as HTML), `state`, `priority`, `owner`, `assignee` (a person, or `null`), `parentId`, `links` (`url` and `label`), `openDecisions` (how many decisions about it wait for a person), `createdAt` and `updatedAt`.
+`{ "items": [task, ...] }`: the board, newest first, at most `LIST_LIMIT` tasks; `state` keeps one state of it. A task carries its `number` (the one people say out loud), `title`, `body` (Markdown, to be shown as text or rendered to elements, never as HTML), `state`, `priority`, `owner`, `assignee` (a person, or `null`), `parentId`, `links` (`url` and `label`), `openDecisions` (how many decisions about it wait for a person), `openRuns` (how many agents are at work on it, or waiting), `createdAt` and `updatedAt`.
 
 ### `POST /api/v1/tasks`
 
@@ -60,7 +63,7 @@ One task. A patch names only what changes, with the same fields as a creation; a
 
 ### `GET /api/v1/decisions?open=&task=`
 
-`{ "items": [decision, ...] }`: the ones that wait first, newest first within each; `open=true` keeps only those that wait, `task=<id>` only those about one task. A decision carries its `question`, `body` (Markdown), `options` (each an `id` and a `label`), `taskId` or `null`, `raisedBy`, and `answer`: `null` while it waits, else the chosen `option`, a `note` or `null`, `by` and `at`.
+`{ "items": [decision, ...] }`: the ones that wait first, newest first within each; `open=true` keeps only those that wait, `task=<id>` only those about one task. A decision carries its `question`, `body` (Markdown), `options` (each an `id` and a `label`), `taskId` or `null`, `raisedBy`, `run` (the `id` and `agent` of the run that raised it, when an agent asked, or `null`), and `answer`: `null` while it waits, else the chosen `option`, a `note` or `null`, `by` and `at`.
 
 ### `POST /api/v1/decisions`
 
@@ -70,9 +73,17 @@ Takes `question`, `options` (two to `MAX_OPTIONS` labels), and optionally `body`
 
 One decision, and its answer: `option` (the id of one of its options) and optionally a `note`. A decision is answered once; the answer records who gave it and when, and writes a `decision.answered` event with the label of the option.
 
+### `GET /api/v1/runs?task=` and `GET /api/v1/runs/<id>`
+
+`{ "items": [run, ...] }`: the runs, newest first, at most `LIST_LIMIT`; `task=<id>` keeps those on one task. A run is one agent at work on one task for one person ([mcp.md](mcp.md)): `taskId`, `person` (whom the agent acts for), `agent` (what it calls itself), `status` (`running`, `waiting` for a decision, `finished`, `failed`, `abandoned`), `startedAt`, `endedAt` or `null`, `summary` (Markdown, what the agent said at the end, or `null`), `reports` (each `id`, `body` in Markdown, `createdAt`; oldest first), `artifacts` (each `id`, an https `url`, `label` or `null`, `createdAt`), and `waitingFor`, the id of the decision the run waits for, or `null`. Runs are written through the MCP endpoint, never here.
+
+### `POST /api/v1/runs/<id>/abandon`
+
+Marks a run that will not come back as `abandoned`, with `run.ended` in the feed, and answers the run. For the person the run is for, or an administrator (`run.not_yours`); a run that is over is `run.over`. The task stays as it is.
+
 ### `GET /api/v1/events?after=&limit=`
 
-`{ "items": [event, ...], "more": boolean }`: what happened after event number `after` (`0` for the beginning), oldest first, at most `limit` (default and maximum `EVENTS_PAGE_LIMIT`); `more` says whether there is more after the last item. An event carries its `id` (the number), `kind` (one of `EVENT_KINDS`), the `actor` (a person, or `null` for the console itself), `taskId` and `decisionId` (or `null`), `data` (what a feed shows without asking for the subject: `number`, `title`, `fields`, `from`, `to`, `question`, `option`, `login`, `role`, each only when the kind has it), and `createdAt`.
+`{ "items": [event, ...], "more": boolean }`: what happened after event number `after` (`0` for the beginning), oldest first, at most `limit` (default and maximum `EVENTS_PAGE_LIMIT`); `more` says whether there is more after the last item. An event carries its `id` (the number), `kind` (one of `EVENT_KINDS`), the `actor` (a person, or, for what an agent did, the person it acts for), `taskId`, `decisionId` and `runId` (or `null`), `data` (what a feed shows without asking for the subject: `number`, `title`, `fields`, `from`, `to`, `question`, `option`, `login`, `role`, `agent`, `status`, `label`, `excerpt`, each only when the kind has it), and `createdAt`.
 
 ### `GET /api/v1/events/stream?after=`
 

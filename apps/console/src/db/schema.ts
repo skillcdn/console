@@ -3,6 +3,7 @@ import {
   type RestDecisionOption,
   type RestEventData,
   type RestTaskLink,
+  RUN_STATUSES,
   TASK_PRIORITIES,
   TASK_STATES,
 } from "@skillcdn/console/api";
@@ -169,6 +170,73 @@ export const tasks = pgTable(
 );
 
 /**
+ * One agent at work on one task for one person: begun when the agent takes the task, grown by
+ * what it reports and hands in, waiting while a decision it raised waits, and over when the
+ * agent says so or a person gives up on it.
+ */
+export const runs = pgTable(
+  "runs",
+  {
+    id: id(),
+    workspaceId: uuid()
+      .notNull()
+      .references(() => workspaces.id),
+    taskId: uuid()
+      .notNull()
+      .references(() => tasks.id),
+    /** The person the agent acts for. */
+    personId: uuid()
+      .notNull()
+      .references(() => people.id),
+    /** The token the agent presented, while it exists: which of the person's agents. */
+    tokenId: uuid().references(() => tokens.id, { onDelete: "set null" }),
+    /** What the agent calls itself. */
+    agent: text().notNull(),
+    status: text({ enum: RUN_STATUSES }).notNull().default("running"),
+    /** What the agent said when the run ended: Markdown. */
+    summary: text(),
+    startedAt: instant().notNull(),
+    endedAt: instant(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    index("runs_task_idx").on(table.taskId),
+    index("runs_status_idx").on(table.workspaceId, table.status),
+    check("runs_status_check", sql`${table.status} in (${sql.raw(literals(RUN_STATUSES))})`),
+  ],
+);
+
+/** What an agent reported while at work: Markdown, bounded at the edge. */
+export const reports = pgTable(
+  "reports",
+  {
+    id: id(),
+    runId: uuid()
+      .notNull()
+      .references(() => runs.id, { onDelete: "cascade" }),
+    body: text().notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [index("reports_run_idx").on(table.runId)],
+);
+
+/** What a run handed in: a link, as the API checked it. Files arrive with the blob store. */
+export const artifacts = pgTable(
+  "artifacts",
+  {
+    id: id(),
+    runId: uuid()
+      .notNull()
+      .references(() => runs.id, { onDelete: "cascade" }),
+    url: text().notNull(),
+    label: text(),
+    createdAt: createdAt(),
+  },
+  (table) => [index("artifacts_run_idx").on(table.runId)],
+);
+
+/**
  * A question that needs a person: the options, who raised it, and the answer with who gave it
  * and when. A decision without an answer waits; the index finds those.
  */
@@ -181,6 +249,8 @@ export const decisions = pgTable(
       .references(() => workspaces.id),
     /** The task the decision is about, when it is about one. */
     taskId: uuid().references(() => tasks.id),
+    /** The run that raised it, when an agent asked; the run waits until the answer. */
+    runId: uuid().references(() => runs.id),
     question: text().notNull(),
     /** Markdown: what a person needs to know to answer. */
     body: text().notNull().default(""),
@@ -200,6 +270,7 @@ export const decisions = pgTable(
   (table) => [
     index("decisions_open_idx").on(table.workspaceId, table.answeredAt),
     index("decisions_task_idx").on(table.taskId),
+    index("decisions_run_idx").on(table.runId),
   ],
 );
 
@@ -220,6 +291,8 @@ export const events = pgTable(
     actorId: uuid().references(() => people.id),
     taskId: uuid().references(() => tasks.id),
     decisionId: uuid().references(() => decisions.id),
+    /** The run it is about, for what an agent did. */
+    runId: uuid().references(() => runs.id),
     /** What a feed shows without asking for the subject, as the API describes it. */
     data: jsonb().$type<RestEventData>().notNull().default({}),
     createdAt: createdAt(),

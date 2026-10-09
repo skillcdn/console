@@ -22,6 +22,7 @@ import {
   EVENT_KINDS,
   PERSON_ROLES,
   PROVIDER_KEYS,
+  RUN_STATUSES,
   TASK_PRIORITIES,
   TASK_STATES,
 } from "./vocabulary.js";
@@ -112,6 +113,8 @@ export const restTaskSchema = z.object({
   links: z.array(restTaskLinkSchema),
   /** How many decisions about this task wait for a person. */
   openDecisions: count,
+  /** How many runs are at work on it, or waiting. */
+  openRuns: count,
   createdAt: instant,
   updatedAt: instant,
 });
@@ -166,6 +169,8 @@ export const restDecisionSchema = z.object({
   /** The task the decision is about, or `null`. */
   taskId: z.nullable(uuid),
   raisedBy: restPersonSchema,
+  /** The run that raised it, as the agent asked, or `null` when a person did. */
+  run: z.nullable(z.object({ id: uuid, agent: z.string() })),
   /** The answer, with who gave it and when; `null` while the decision waits. */
   answer: z.nullable(
     z.object({
@@ -229,6 +234,14 @@ export const restEventDataSchema = z.object({
   /** For `person.role_changed`: whose role, and what it became. */
   login: z.optional(z.string()),
   role: z.optional(z.enum(PERSON_ROLES)),
+  /** For what an agent did: what it calls itself. */
+  agent: z.optional(z.string()),
+  /** For `run.ended`: how. */
+  status: z.optional(z.enum(RUN_STATUSES)),
+  /** For `run.handed_in`: what the artifact is called. */
+  label: z.optional(z.string()),
+  /** For `run.reported`: the first words of the report. */
+  excerpt: z.optional(z.string()),
 });
 export type RestEventData = z.infer<typeof restEventDataSchema>;
 
@@ -240,10 +253,53 @@ export const restEventSchema = z.object({
   actor: z.nullable(restPersonSchema),
   taskId: z.nullable(uuid),
   decisionId: z.nullable(uuid),
+  runId: z.nullable(uuid),
   data: restEventDataSchema,
   createdAt: instant,
 });
 export type RestEvent = z.infer<typeof restEventSchema>;
+
+/** What an agent reported while at work: Markdown, shown as text or rendered to elements. */
+export const restReportSchema = z.object({
+  id: uuid,
+  body: z.string(),
+  createdAt: instant,
+});
+export type RestReport = z.infer<typeof restReportSchema>;
+
+/** What a run handed in: a link to a branch, a pull request, a page. */
+export const restArtifactSchema = z.object({
+  id: uuid,
+  url: z.string(),
+  label: z.nullable(z.string()),
+  createdAt: instant,
+});
+export type RestArtifact = z.infer<typeof restArtifactSchema>;
+
+/** One agent at work on one task for one person: what it did, and what it waits for. */
+export const restRunSchema = z.object({
+  id: uuid,
+  taskId: uuid,
+  /** The person the agent acts for. */
+  person: restPersonSchema,
+  /** What the agent calls itself. */
+  agent: z.string(),
+  status: z.enum(RUN_STATUSES),
+  startedAt: instant,
+  endedAt: z.nullable(instant),
+  /** What the agent said when the run ended, in Markdown, or `null`. */
+  summary: z.nullable(z.string()),
+  /** Oldest first. */
+  reports: z.array(restReportSchema),
+  artifacts: z.array(restArtifactSchema),
+  /** The id of the decision the run waits for, or `null`. */
+  waitingFor: z.nullable(uuid),
+});
+export type RestRun = z.infer<typeof restRunSchema>;
+
+/** `GET /api/v1/runs?task=`: the runs, newest first. */
+export const restRunsSchema = z.object({ items: z.array(restRunSchema) });
+export type RestRuns = z.infer<typeof restRunsSchema>;
 
 /** `GET /api/v1/events?after=`: what happened after that number, oldest first. */
 export const restEventsSchema = z.object({

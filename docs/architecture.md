@@ -38,7 +38,7 @@ Three consequences shape the design:
 
 ## Vocabulary
 
-These are the concepts the schema, the API and the UI are named after. The vocabulary in code is `@skillcdn/console/api`; the schema is in [`apps/console/README.md`](../apps/console/README.md#data-model). Runs, agents and artifacts arrive with the second milestone.
+These are the concepts the schema, the API and the UI are named after. The vocabulary in code is `@skillcdn/console/api`; the schema is in [`apps/console/README.md`](../apps/console/README.md#data-model). Artifacts are links until the blob store arrives.
 
 | Concept | What it is |
 |---|---|
@@ -53,11 +53,10 @@ These are the concepts the schema, the API and the UI are named after. The vocab
 
 ## How agents take part
 
-Proposed, to be settled by the second milestone:
-
-- **The console is an MCP server to agents.** An agent connects to the console's MCP endpoint with a token its person made, and gets a small set of tools, names provisional: `list_tasks`, `take_task`, `report` (progress on the run), `hand_in` (an artifact), `ask` (raise a decision; the call returns when it is answered or the run is marked waiting), `finish`. MCP is what Claude Code and Codex both speak, so this needs nothing installed on the agent's side, and it is the same shape the organization's skills arrive in.
+- **The console is an MCP server to agents** ([specs/mcp.md](specs/mcp.md)). An agent connects to `/mcp` over Streamable HTTP with a token its person made, and gets a small set of tools: `list_tasks`, `get_task`, `take_task` (a run begins; the task is the person's and in progress), `report` (progress on the run), `hand_in` (a link), `ask` (raise a decision; the run waits, and the call waits a while for the answer), `await_decision`, `finish`. One server per request, nothing kept between calls but what the database holds. MCP is what Claude Code and Codex both speak, so this needs nothing installed on the agent's side, and it is the same shape the organization's skills arrive in.
 - **Attended, by design.** A person runs their agent in their own app or CLI, on their own machine, under their own subscription, and connects it; the console calls no model API and sees what the agent reports. Unattended runs, where the worker would start agents itself, are not planned for the board and need decisions of their own if they ever come (where they run, with what credentials, within what limits).
 - **An agent is its person, and no more.** Its token is made by one person, scoped to that person, expiring and revocable; what the person may do on the board is what the agent may do. Finer rules, what an agent may decide alone and what must wait for a person, come after the first agents are connected.
+- **A run is the record of the agent's work:** who started it, as which agent, on which task; its reports and what it handed in; the decision it waits for; how it ended. A run that asked waits until a person answers on the board, and is woken through the database's own channel, the same nudge the live feed runs on. A person may give up on a run that will not come back.
 - **Hooks later.** Where an agent can run a command on its own events, a small hook can report automatically what the agent would otherwise be asked to report. Optional, additive.
 
 ## Sign-in and permissions

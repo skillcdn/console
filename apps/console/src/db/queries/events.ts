@@ -17,6 +17,7 @@ export interface EventRecord {
   readonly actor: PersonRecord | undefined;
   readonly taskId: string | undefined;
   readonly decisionId: string | undefined;
+  readonly runId: string | undefined;
   readonly data: RestEventData;
   readonly createdAt: Date;
 }
@@ -34,6 +35,7 @@ export async function recordEvent(
     readonly actorId: string | undefined;
     readonly taskId?: string | undefined;
     readonly decisionId?: string | undefined;
+    readonly runId?: string | undefined;
     readonly data: RestEventData;
     readonly now: Date;
   },
@@ -46,6 +48,7 @@ export async function recordEvent(
       actorId: event.actorId ?? null,
       taskId: event.taskId ?? null,
       decisionId: event.decisionId ?? null,
+      runId: event.runId ?? null,
       data: event.data,
       createdAt: event.now,
     })
@@ -75,6 +78,7 @@ export async function listEventsAfter(
       kind: events.kind,
       taskId: events.taskId,
       decisionId: events.decisionId,
+      runId: events.runId,
       data: events.data,
       createdAt: events.createdAt,
       actor: personColumns(actors),
@@ -93,6 +97,7 @@ export async function listEventsAfter(
       actor: row.actor === null ? undefined : toPerson(row.actor),
       taskId: row.taskId ?? undefined,
       decisionId: row.decisionId ?? undefined,
+      runId: row.runId ?? undefined,
       data: row.data,
       createdAt: row.createdAt,
     })),

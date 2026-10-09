@@ -2,7 +2,7 @@ import type { RestTaskLink, TaskPriority, TaskState } from "@skillcdn/console/ap
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
-import { decisions, people, tasks, workspaces } from "../schema.js";
+import { decisions, people, runs, tasks, workspaces } from "../schema.js";
 import { recordEvent } from "./events.js";
 import { assignees, owners, type PersonRecord, personColumns, toPerson } from "./people.js";
 
@@ -22,6 +22,8 @@ export interface TaskRecord {
   readonly links: readonly RestTaskLink[];
   /** How many decisions about the task wait for a person. */
   readonly openDecisions: number;
+  /** How many runs are at work on it, or waiting. */
+  readonly openRuns: number;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -57,6 +59,7 @@ export type TaskPatch = Partial<TaskInput>;
 const MAX_PARENT_DEPTH = 50;
 
 const openDecisionsOf = sql<number>`(select count(*) from ${decisions} where ${decisions.taskId} = ${tasks.id} and ${decisions.answeredAt} is null)`;
+const openRunsOf = sql<number>`(select count(*) from ${runs} where ${runs.taskId} = ${tasks.id} and ${runs.status} in ('running', 'waiting'))`;
 
 const taskColumns = {
   id: tasks.id,
@@ -73,6 +76,7 @@ const taskColumns = {
   owner: personColumns(owners),
   assignee: personColumns(assignees),
   openDecisions: openDecisionsOf.mapWith(Number),
+  openRuns: openRunsOf.mapWith(Number),
 };
 
 type TaskRow = Awaited<ReturnType<typeof selectTasks>>[number];
@@ -100,6 +104,7 @@ function toTask(row: TaskRow): TaskRecord {
     parentId: row.parentId ?? undefined,
     links: row.links,
     openDecisions: row.openDecisions,
+    openRuns: row.openRuns,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -233,94 +238,108 @@ export async function createTask(
  * another is an event of its own, the rest is one event naming the fields. A patch that changes
  * nothing is no event. Rejects with a {@link TaskError} for a task that is not there.
  */
-export async function updateTask(
-  database: Database,
-  input: {
-    readonly workspaceId: string;
-    readonly actorId: string;
-    readonly taskId: string;
-    readonly patch: TaskPatch;
-    readonly now: Date;
-  },
-): Promise<TaskRecord> {
-  const { workspaceId, actorId, taskId, patch, now } = input;
-  return drizzleOf(database).transaction(async (tx) => {
-    const [current] = await tx
-      .select({
-        title: tasks.title,
-        body: tasks.body,
-        state: tasks.state,
-        priority: tasks.priority,
-        assigneeId: tasks.assigneeId,
-        parentId: tasks.parentId,
-        links: tasks.links,
-        number: tasks.number,
-      })
-      .from(tasks)
-      .where(and(eq(tasks.workspaceId, workspaceId), eq(tasks.id, taskId)))
-      .for("update");
-    if (current === undefined) {
-      throw new TaskError("task.not_found");
-    }
-    await checkAssignee(tx, workspaceId, patch.assigneeId);
-    await checkParent(tx, workspaceId, taskId, patch.parentId);
+export async function updateTask(database: Database, input: TaskUpdate): Promise<TaskRecord> {
+  return drizzleOf(database).transaction((tx) => updateTaskIn(tx, input));
+}
 
-    const changed: string[] = [];
-    const next = {
-      title: patch.title ?? current.title,
-      body: patch.body ?? current.body,
-      state: patch.state ?? current.state,
-      priority: patch.priority ?? current.priority,
-      assigneeId: patch.assigneeId === undefined ? current.assigneeId : patch.assigneeId,
-      parentId: patch.parentId === undefined ? current.parentId : patch.parentId,
-      links: patch.links === undefined ? current.links : [...patch.links],
-    };
-    for (const field of ["title", "body", "priority", "assigneeId", "parentId"] as const) {
-      if (next[field] !== current[field]) {
-        changed.push(field);
-      }
+export interface TaskUpdate {
+  readonly workspaceId: string;
+  readonly actorId: string;
+  readonly taskId: string;
+  readonly patch: TaskPatch;
+  readonly now: Date;
+}
+
+/** {@link updateTask} inside a transaction of the caller's: a change that is part of a larger one. */
+export async function updateTaskIn(tx: Transaction, input: TaskUpdate): Promise<TaskRecord> {
+  const { workspaceId, actorId, taskId, patch, now } = input;
+  const [current] = await tx
+    .select({
+      title: tasks.title,
+      body: tasks.body,
+      state: tasks.state,
+      priority: tasks.priority,
+      assigneeId: tasks.assigneeId,
+      parentId: tasks.parentId,
+      links: tasks.links,
+      number: tasks.number,
+    })
+    .from(tasks)
+    .where(and(eq(tasks.workspaceId, workspaceId), eq(tasks.id, taskId)))
+    .for("update");
+  if (current === undefined) {
+    throw new TaskError("task.not_found");
+  }
+  await checkAssignee(tx, workspaceId, patch.assigneeId);
+  await checkParent(tx, workspaceId, taskId, patch.parentId);
+
+  const changed: string[] = [];
+  const next = {
+    title: patch.title ?? current.title,
+    body: patch.body ?? current.body,
+    state: patch.state ?? current.state,
+    priority: patch.priority ?? current.priority,
+    assigneeId: patch.assigneeId === undefined ? current.assigneeId : patch.assigneeId,
+    parentId: patch.parentId === undefined ? current.parentId : patch.parentId,
+    links: patch.links === undefined ? current.links : [...patch.links],
+  };
+  for (const field of ["title", "body", "priority", "assigneeId", "parentId"] as const) {
+    if (next[field] !== current[field]) {
+      changed.push(field);
     }
-    if (JSON.stringify(next.links) !== JSON.stringify(current.links)) {
-      changed.push("links");
-    }
-    const moved = next.state !== current.state;
-    if (changed.length === 0 && !moved) {
-      const unchanged = await readTask(tx, workspaceId, taskId);
-      if (unchanged === undefined) {
-        throw new TaskError("task.not_found");
-      }
-      return unchanged;
-    }
-    await tx
-      .update(tasks)
-      .set({ ...next, updatedAt: now })
-      .where(eq(tasks.id, taskId));
-    if (moved) {
-      await recordEvent(tx, {
-        workspaceId,
-        kind: "task.moved",
-        actorId,
-        taskId,
-        data: { number: current.number, title: next.title, from: current.state, to: next.state },
-        now,
-      });
-    }
-    if (changed.length > 0) {
-      await recordEvent(tx, {
-        workspaceId,
-        kind: "task.updated",
-        actorId,
-        taskId,
-        data: { number: current.number, title: next.title, fields: changed },
-        now,
-      });
-    }
-    const written = await readTask(tx, workspaceId, taskId);
-    if (written === undefined) {
+  }
+  if (JSON.stringify(next.links) !== JSON.stringify(current.links)) {
+    changed.push("links");
+  }
+  const moved = next.state !== current.state;
+  if (changed.length === 0 && !moved) {
+    const unchanged = await readTask(tx, workspaceId, taskId);
+    if (unchanged === undefined) {
       throw new TaskError("task.not_found");
     }
-    return written;
-  });
+    return unchanged;
+  }
+  await tx
+    .update(tasks)
+    .set({ ...next, updatedAt: now })
+    .where(eq(tasks.id, taskId));
+  if (moved) {
+    await recordEvent(tx, {
+      workspaceId,
+      kind: "task.moved",
+      actorId,
+      taskId,
+      data: { number: current.number, title: next.title, from: current.state, to: next.state },
+      now,
+    });
+  }
+  if (changed.length > 0) {
+    await recordEvent(tx, {
+      workspaceId,
+      kind: "task.updated",
+      actorId,
+      taskId,
+      data: { number: current.number, title: next.title, fields: changed },
+      now,
+    });
+  }
+  const written = await readTask(tx, workspaceId, taskId);
+  if (written === undefined) {
+    throw new TaskError("task.not_found");
+  }
+  return written;
+}
+
+/** A task by the number people say out loud. */
+export async function findTaskByNumber(
+  database: Database,
+  workspaceId: string,
+  number: number,
+): Promise<TaskRecord | undefined> {
+  const [row] = await selectTasks(drizzleOf(database))
+    .where(and(eq(tasks.workspaceId, workspaceId), eq(tasks.number, number)))
+    .limit(1);
+  return row === undefined ? undefined : toTask(row);
 }
 
 export function getTask(

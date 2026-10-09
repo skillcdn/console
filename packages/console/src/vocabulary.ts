@@ -38,6 +38,11 @@ export const RUN_STATUSES = ["running", "waiting", "finished", "failed", "abando
 
 export type RunStatus = (typeof RUN_STATUSES)[number];
 
+/** How a run is over, as the agent says: the work is done, it could not be, or it was left. */
+export const RUN_ENDINGS = ["finished", "failed", "abandoned"] as const;
+
+export type RunEnding = (typeof RUN_ENDINGS)[number];
+
 /**
  * What can happen to the board. Every change of state is one of these, written down once with
  * who did it: the live feed shows them as they happen, and the audit trail keeps them.
@@ -50,6 +55,10 @@ export const EVENT_KINDS = [
   "task.moved",
   "decision.raised",
   "decision.answered",
+  "run.started",
+  "run.reported",
+  "run.handed_in",
+  "run.ended",
 ] as const;
 
 export type EventKind = (typeof EVENT_KINDS)[number];

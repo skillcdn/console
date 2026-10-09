@@ -50,6 +50,8 @@ export interface HarnessOptions {
   /** Listen on the database's channel, so that the feed is woken as a deployment's is. */
   readonly live?: boolean;
   readonly feed?: { readonly heartbeatMs?: number; readonly pollMs?: number };
+  /** How long an agent's `ask` waits for an answer. */
+  readonly agents?: { readonly waitMs?: number };
 }
 
 /** The cookie a response set, as a Cookie header would carry it. */
@@ -82,6 +84,7 @@ export function createHarness(testDatabase: TestDatabase, options: HarnessOption
         accessLog: true,
       },
       feed: options.feed,
+      agents: options.agents,
       ...(providers.length === 0
         ? {}
         : {

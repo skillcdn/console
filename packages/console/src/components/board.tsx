@@ -44,6 +44,11 @@ export function TaskCard(props: {
             {task.openDecisions === 1 ? "1 decision" : `${task.openDecisions} decisions`}
           </Badge>
         )}
+        {task.openRuns > 0 && (
+          <Badge tone="accent" title="An agent is at work on it">
+            agent at work
+          </Badge>
+        )}
         {task.links.length > 0 && (
           <Badge tone="neutral">
             {task.links.length === 1 ? "1 link" : `${task.links.length} links`}

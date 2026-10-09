@@ -14,7 +14,12 @@ export const REST_ROUTES = {
   events: "/api/v1/events",
   /** The tokens of whoever asks: what their agents, scripts and consoles act as them with. */
   tokens: "/api/v1/tokens",
+  /** The runs: agents at work, and what they did. */
+  runs: "/api/v1/runs",
 } as const;
+
+/** Where an agent connects: the console as an MCP server, with a token as a bearer. */
+export const MCP_ROUTE = "/mcp";
 
 /** Where a browser signs in and out. Signing in is per provider: `/auth/<provider>/...`. */
 export const AUTH_ROUTES = {
@@ -52,9 +57,9 @@ export function signInPath(page: string, failure: SignInFailure): string {
   return `${page}${page.includes("?") ? "&" : "?"}${SIGN_IN_PARAM}=${failure}`;
 }
 
-/** The REST path of one task, one decision, one token, one person: the collection, then the id. */
+/** The REST path of one task, decision, token, person or run: the collection, then the id. */
 export function restPath(
-  collection: "tasks" | "decisions" | "tokens" | "people",
+  collection: "tasks" | "decisions" | "tokens" | "people" | "runs",
   id: string,
 ): string {
   return `${REST_ROUTES[collection]}/${encodeURIComponent(id)}`;

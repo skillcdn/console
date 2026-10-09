@@ -9,6 +9,8 @@ import {
   type RestPeople,
   type RestPerson,
   type RestPersonPatch,
+  type RestRun,
+  type RestRuns,
   type RestTask,
   type RestTaskInput,
   type RestTaskPatch,
@@ -23,6 +25,8 @@ import {
   restMeSchema,
   restPeopleSchema,
   restPersonSchema,
+  restRunSchema,
+  restRunsSchema,
   restTaskSchema,
   restTasksSchema,
   restTokenCreatedSchema,
@@ -85,6 +89,11 @@ export interface ConsoleClient {
   decision(id: string, signal?: AbortSignal): Promise<RestDecision>;
   raiseDecision(input: RestDecisionInput): Promise<RestDecision>;
   answerDecision(id: string, input: RestAnswerInput): Promise<RestDecision>;
+  /** The runs, newest first; or only those on one task. */
+  runs(filter?: { readonly task?: string }, signal?: AbortSignal): Promise<RestRuns>;
+  run(id: string, signal?: AbortSignal): Promise<RestRun>;
+  /** Marks a run that will not come back as abandoned: the person it is for, or an administrator. */
+  abandonRun(id: string): Promise<RestRun>;
   /** What happened after event number `after`; `0` for the beginning. */
   events(after: number, signal?: AbortSignal): Promise<RestEvents>;
   /** Where an `EventSource` subscribes to what happens after event number `after`. */
@@ -202,6 +211,18 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
       request("POST", `${base}${REST_ROUTES.decisions}`, input, restDecisionSchema),
     answerDecision: (id, input) =>
       request("POST", `${base}${restPath("decisions", id)}/answer`, input, restDecisionSchema),
+    runs: (filter = {}, signal) =>
+      request(
+        "GET",
+        withQuery(REST_ROUTES.runs, { task: filter.task }),
+        undefined,
+        restRunsSchema,
+        signal,
+      ),
+    run: (id, signal) =>
+      request("GET", `${base}${restPath("runs", id)}`, undefined, restRunSchema, signal),
+    abandonRun: (id) =>
+      request("POST", `${base}${restPath("runs", id)}/abandon`, undefined, restRunSchema),
     events: (after, signal) =>
       request(
         "GET",

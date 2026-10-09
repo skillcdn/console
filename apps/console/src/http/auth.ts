@@ -14,6 +14,7 @@ import type { Membership } from "../auth/membership.js";
 import type { Sessions } from "../auth/sessions.js";
 import type { Tokens } from "../auth/tokens.js";
 import type { PersonRecord } from "../db/queries/people.js";
+import type { TokenRecord } from "../db/queries/tokens.js";
 import type { WorkspaceRecord } from "../db/queries/workspaces.js";
 import type { Logger } from "../logger.js";
 import { errorBody } from "./app.js";
@@ -51,6 +52,15 @@ export interface Access {
    * so that a token that is nothing never stands in for a session.
    */
   person(c: Context<AppEnv>): Promise<PersonRecord | undefined>;
+  /**
+   * Who is asking and with what: the token when one is presented, so that an agent is told
+   * apart from its person's browser.
+   */
+  caller(
+    c: Context<AppEnv>,
+  ): Promise<
+    { readonly person: PersonRecord; readonly token: TokenRecord | undefined } | undefined
+  >;
   /** Whether the request presents a token, whatever the token is worth. */
   presentsToken(c: Context<AppEnv>): boolean;
   /** A session the operator no longer honours is taken away with the answer. */
@@ -65,7 +75,7 @@ export interface Access {
 
 export function createAccess(auth: AppAuth | undefined): Access {
   return {
-    async person(c) {
+    async caller(c) {
       if (auth === undefined) {
         return undefined;
       }
@@ -75,7 +85,7 @@ export function createAccess(auth: AppAuth | undefined): Access {
         // Membership is decided on every request, for a token as for a session.
         return found === undefined || !auth.membership.allows(found.person)
           ? undefined
-          : found.person;
+          : { person: found.person, token: found.token };
       }
       const person = await auth.sessions.resolve(c.req.header("cookie"));
       if (person === undefined) {
@@ -86,7 +96,10 @@ export function createAccess(auth: AppAuth | undefined): Access {
         this.signedOut(c);
         return undefined;
       }
-      return person;
+      return { person, token: undefined };
+    },
+    async person(c) {
+      return (await this.caller(c))?.person;
     },
     presentsToken(c) {
       return auth !== undefined && c.req.header("authorization") !== undefined;

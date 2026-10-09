@@ -4,6 +4,7 @@ import type {
   RestDecision,
   RestDecisionInput,
   RestPerson,
+  RestRun,
   RestTask,
   RestTaskInput,
   TaskState,
@@ -12,11 +13,13 @@ import { TASK_STATES } from "../vocabulary.js";
 import { DecisionForm } from "./decision-form.js";
 import { DecisionCard } from "./decision-list.js";
 import { Markdown } from "./markdown.js";
+import { RunList } from "./runs.js";
 import { TaskForm } from "./task-form.js";
 import { Button, PersonChip, PriorityBadge, STATE_LABELS, StateBadge, Time } from "./ui.js";
 
-// One task: what it is, who it is on, what it links to, the decisions about it, the tasks that
-// are part of it, and the ways to change it. Takes its data as props and nothing from the network.
+// One task: what it is, who it is on, what it links to, the agents at work on it, the decisions
+// about it, the tasks that are part of it, and the ways to change it. Takes its data as props
+// and nothing from the network.
 
 export interface TaskViewProps {
   readonly task: RestTask;
@@ -24,13 +27,18 @@ export interface TaskViewProps {
   /** Every task of the board, for the breakdown and for what this one may be part of. */
   readonly tasks: readonly RestTask[];
   readonly decisions: readonly RestDecision[];
+  /** The runs of the board, or of this task; the ones on this task are shown. */
+  readonly runs?: readonly RestRun[] | undefined;
   readonly taskHref: (task: RestTask) => string;
+  /** Where a decision is answered, for a run that waits for one. */
+  readonly decisionHref?: ((decisionId: string) => string) | undefined;
   readonly busy?: boolean | undefined;
   readonly error?: string | undefined;
   readonly onChange: (task: RestTask, patch: RestTaskInput) => void;
   readonly onMove: (task: RestTask, state: TaskState) => void;
   readonly onRaiseDecision: (input: RestDecisionInput) => void;
   readonly onAnswer: (decision: RestDecision, input: RestAnswerInput) => void;
+  readonly onAbandonRun?: ((run: RestRun) => void) | undefined;
 }
 
 export function TaskView(props: TaskViewProps) {
@@ -43,6 +51,7 @@ export function TaskView(props: TaskViewProps) {
       : props.tasks.find((candidate) => candidate.id === task.parentId);
   const subtasks = props.tasks.filter((candidate) => candidate.parentId === task.id);
   const about = props.decisions.filter((decision) => decision.taskId === task.id);
+  const runs = (props.runs ?? []).filter((run) => run.taskId === task.id);
   const tasksById = new Map(props.tasks.map((candidate) => [candidate.id, candidate]));
 
   if (editing) {
@@ -173,6 +182,17 @@ export function TaskView(props: TaskViewProps) {
               setAsking(false);
             }}
             onCancel={() => setAsking(false)}
+          />
+        </section>
+      )}
+      {runs.length > 0 && (
+        <section className="sc-task-section" aria-label="Runs">
+          <h2 className="sc-section-title">Agents at work</h2>
+          <RunList
+            runs={runs}
+            decisionHref={props.decisionHref}
+            onAbandon={props.onAbandonRun}
+            busy={props.busy}
           />
         </section>
       )}

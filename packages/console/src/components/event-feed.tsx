@@ -14,6 +14,9 @@ const FIELD_WORDS: Readonly<Record<string, string>> = {
   links: "the links",
 };
 
+/** "(as Claude Code)": what an agent did is said with what the agent calls itself. */
+const as = (agent: string | undefined): string => (agent === undefined ? "" : ` (as ${agent})`);
+
 /** What an event says, without its actor: the words after the name. */
 export function describeEvent(event: RestEvent): string {
   const { data } = event;
@@ -35,9 +38,17 @@ export function describeEvent(event: RestEvent): string {
       return `changed ${fields.length === 0 ? "something" : fields.join(", ")} of ${task}`;
     }
     case "decision.raised":
-      return `asked: ${data.question ?? "a question"}`;
+      return `asked${as(data.agent)}: ${data.question ?? "a question"}`;
     case "decision.answered":
       return `answered "${data.question ?? "a question"}": ${data.option ?? ""}`;
+    case "run.started":
+      return `started on ${task}${as(data.agent)}`;
+    case "run.reported":
+      return `reported on ${task}${as(data.agent)}${data.excerpt === undefined ? "" : `: ${data.excerpt}`}`;
+    case "run.handed_in":
+      return `handed in ${data.label ?? "something"} on ${task}${as(data.agent)}`;
+    case "run.ended":
+      return `${data.status === "finished" ? "finished" : data.status === "failed" ? "failed on" : "gave up on"} ${task}${as(data.agent)}`;
   }
 }
 

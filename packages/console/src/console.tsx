@@ -4,6 +4,7 @@ import {
   ApiError,
   type ConsoleClient,
   createClient,
+  MCP_ROUTE,
   type RestAnswerInput,
   type RestDecision,
   type RestDecisionInput,
@@ -213,13 +214,16 @@ function Page(props: {
         people={data.people}
         tasks={data.tasks}
         decisions={data.decisions}
+        runs={data.runs}
         taskHref={href}
+        decisionHref={() => PATHS.decisions}
         busy={busy}
         error={error}
         onChange={onChange}
         onMove={onMove}
         onRaiseDecision={onRaise}
         onAnswer={onAnswer}
+        onAbandonRun={(run) => void act(() => data.actions.abandonRun(run.id))}
       />
     );
   }
@@ -305,6 +309,7 @@ function Page(props: {
     );
   }
   if (route.name === "tokens") {
+    const origin = typeof window === "undefined" ? "" : window.location.origin;
     return (
       <>
         <div className="sc-page-head">
@@ -347,6 +352,27 @@ function Page(props: {
             />
           }
         />
+        <section className="sc-panel sc-connect" aria-label="Connecting an agent">
+          <h2 className="sc-section-title">Connecting an agent</h2>
+          <p>
+            An agent connects to this console as an MCP server at{" "}
+            <code>
+              {origin}
+              {MCP_ROUTE}
+            </code>
+            , with a token in the <code>Authorization</code> header. For Claude Code:
+          </p>
+          <pre className="sc-code">
+            claude mcp add --transport http console {origin}
+            {MCP_ROUTE} --header "Authorization: Bearer YOUR_TOKEN"
+          </pre>
+          <p>
+            Codex and any other MCP client take the same address and header. The tools:{" "}
+            <code>list_tasks</code>, <code>get_task</code>, <code>take_task</code>,{" "}
+            <code>report</code>, <code>hand_in</code>, <code>ask</code>, <code>await_decision</code>{" "}
+            and <code>finish</code>.
+          </p>
+        </section>
       </>
     );
   }

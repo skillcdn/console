@@ -17,7 +17,7 @@ describe("the vocabulary", () => {
     expect(TASK_PRIORITIES.at(-1)).toBe("urgent");
     expect(new Set(EVENT_KINDS).size).toBe(EVENT_KINDS.length);
     for (const kind of EVENT_KINDS) {
-      expect(kind).toMatch(/^(person|task|decision)\.[a-z_]+$/);
+      expect(kind).toMatch(/^(person|task|decision|run)\.[a-z_]+$/);
     }
   });
 });

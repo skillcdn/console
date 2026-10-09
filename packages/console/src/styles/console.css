@@ -1264,3 +1264,81 @@ svg {
   flex-wrap: wrap;
   gap: var(--sc-space-3);
 }
+
+/* Runs: an agent at work on a task, what it reported and handed in. */
+
+.sc-runs {
+  display: grid;
+  gap: var(--sc-space-3);
+}
+
+.sc-run {
+  display: grid;
+  gap: var(--sc-space-3);
+  padding: var(--sc-space-4);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-bg-subtle);
+}
+
+.sc-run-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
+}
+
+.sc-run-agent {
+  font-weight: var(--sc-weight-medium);
+}
+
+.sc-run-meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-1);
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-run-waiting {
+  color: var(--sc-color-warning);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-run-reports {
+  display: grid;
+  gap: var(--sc-space-3);
+  padding-left: 0;
+  list-style: none;
+}
+
+.sc-report {
+  display: grid;
+  gap: var(--sc-space-1);
+  padding-left: var(--sc-space-3);
+  border-left: 2px solid var(--sc-color-border-strong);
+}
+
+.sc-run-summary {
+  padding-top: var(--sc-space-2);
+  border-top: var(--sc-border);
+}
+
+.sc-connect {
+  display: grid;
+  gap: var(--sc-space-3);
+  margin-top: var(--sc-space-5);
+}
+
+.sc-code {
+  overflow-x: auto;
+  padding: var(--sc-space-3) var(--sc-space-4);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-sm);
+  background: var(--sc-color-bg-inset);
+  font-family: var(--sc-font-mono);
+  font-size: var(--sc-text-sm);
+  white-space: pre-wrap;
+  word-break: break-all;
+}

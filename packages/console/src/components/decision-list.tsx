@@ -29,7 +29,9 @@ export function DecisionCard(props: DecisionCardProps) {
       <header className="sc-decision-header">
         <h3 className="sc-decision-question">{decision.question}</h3>
         <p className="sc-decision-meta">
-          <PersonChip person={decision.raisedBy} /> asked <Time iso={decision.createdAt} />
+          <PersonChip person={decision.raisedBy} />{" "}
+          {decision.run === null ? "asked" : `asked through ${decision.run.agent}`}{" "}
+          <Time iso={decision.createdAt} />
           {task !== undefined && (
             <>
               {" "}
