@@ -153,6 +153,14 @@ describe("the console command", () => {
     const limits = harness({ fetch });
     expect(await runCli(["help", "finish"], limits.io)).toBe(EXIT.ok);
     expect(limits.out()).toContain(String(MAX_SUMMARY_LENGTH));
+    const version = harness({ fetch, version: "0.1.1" });
+    expect(await runCli(["--version"], version.io)).toBe(EXIT.ok);
+    expect(version.out()).toBe("console 0.1.1 (@skillcdn/console)\n");
+    expect(await runCli(["help"], version.io)).toBe(EXIT.ok);
+    expect(version.out()).toContain("console 0.1.1: the board");
+    const nameless = harness({ fetch });
+    expect(await runCli(["version"], nameless.io)).toBe(EXIT.ok);
+    expect(nameless.out()).toContain("version unknown");
     const flagged = harness({ fetch });
     expect(await runCli(["report", "--help"], flagged.io)).toBe(EXIT.ok);
     expect(flagged.out()).toContain("console report");

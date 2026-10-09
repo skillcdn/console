@@ -59,6 +59,8 @@ export interface CliIo {
   readonly store: CredentialStore;
   readonly sleep: (ms: number) => Promise<void>;
   readonly now: () => number;
+  /** The version of the package the command runs from, when the entry point knows it. */
+  readonly version?: string | undefined;
 }
 
 /** The command stops with an exit code and a word on stderr. */
@@ -672,7 +674,7 @@ const COMMANDS: Readonly<Record<string, Command>> = {
 
 function help(io: CliIo, name: string | undefined): number {
   if (name === undefined) {
-    io.stdout(usage());
+    io.stdout(usage(io.version));
     return EXIT.ok;
   }
   const found = helpFor(name);
@@ -699,6 +701,10 @@ function hintFor(error: ApiError): string {
 export async function runCli(argv: readonly string[], io: CliIo): Promise<number> {
   const [name, ...rest] = argv;
   try {
+    if (name === "--version" || name === "-v" || name === "version") {
+      io.stdout(`console ${io.version ?? "(version unknown)"} (@skillcdn/console)\n`);
+      return EXIT.ok;
+    }
     if (name === undefined || name === "help" || name === "--help" || name === "-h") {
       return help(io, rest[0]);
     }

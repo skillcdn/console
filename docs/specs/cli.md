@@ -31,6 +31,7 @@ From then on the agent is that person on the board ([ADR-0004](../adr/0004-peopl
 | `runs [--task <number\|id>] [--open] [--mine]` | `GET /api/v1/runs` | one line per run |
 | `run <id>` | `GET /api/v1/runs/<id>` | the run in full, with its reports and what it handed in |
 | `help [<command>]` | nothing | the usage, written for an agent that meets the command for the first time |
+| `--version` (also `version`, `-v`) | nothing | which version of the command this is |
 
 Everywhere: `--json` prints the console's own answer as JSON, in the shapes of `@skillcdn/console/api`; `--url <origin>` names another console for this one command. A Markdown body given as `-` is read from standard input. Every argument is bounded and checked by the console, as the REST API's schemas say; the command sends it as it was given.
 

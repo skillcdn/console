@@ -169,7 +169,9 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   },
 };
 
-const PREAMBLE = `console: the board of your organization's work with AI agents, from the command line.
+/** The first lines of the usage, with the version of the command when it is known. */
+const preamble = (version: string | undefined): string =>
+  `console${version === undefined ? "" : ` ${version}`}: the board of your organization's work with AI agents, from the command line.
 You act as the person whose token you hold; everything you send is shown to people as text.
 
 Usage: console <command> [arguments] [--json] [--url <origin>]
@@ -179,7 +181,7 @@ const CLOSING = `Options everywhere: --json answers with the console's own JSON;
 Commands on a run (report, hand-in, ask, finish, fail) act on your one open run; with several open,
 say which with --run <id>. A Markdown body given as - is read from standard input.
 console help <command> says what each command takes, the limits the console holds it to, and
-what it may refuse.
+what it may refuse. console --version says which version of the command this is.
 
 Exit codes: 0 done; 1 the console refused, or could not be reached (the reason is on stderr);
 2 the command was not understood; 3 the decision still waits for a person.
@@ -199,9 +201,9 @@ const SECTIONS: readonly { readonly title: string; readonly commands: readonly s
   { title: "Working", commands: ["take", "report", "hand-in", "ask", "finish", "fail", "abandon"] },
 ];
 
-/** The whole usage, as `console help` prints it. */
-export function usage(): string {
-  const parts = [PREAMBLE];
+/** The whole usage, as `console help` prints it, naming the version when it is known. */
+export function usage(version?: string): string {
+  const parts = [preamble(version)];
   for (const section of SECTIONS) {
     parts.push(`${section.title}`);
     for (const name of section.commands) {
