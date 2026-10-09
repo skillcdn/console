@@ -323,7 +323,8 @@ export const restTokenSchema = z.object({
   /** What the person calls it: the agent it is for, where it runs. */
   name: z.string(),
   createdAt: instant,
-  expiresAt: instant,
+  /** When it stops being good, or `null` for a token that does not expire. */
+  expiresAt: z.nullable(instant),
   /** When it was last presented, or `null` if never. */
   lastUsedAt: z.nullable(instant),
 });
@@ -336,7 +337,8 @@ export type RestTokens = z.infer<typeof restTokensSchema>;
 /** What `POST /api/v1/tokens` is sent: a name, and for how many days it is good. */
 export const restTokenInputSchema = z.object({
   name: line(MAX_TOKEN_NAME_LENGTH),
-  expiresInDays: z.optional(z.int().check(z.gte(1), z.lte(MAX_TOKEN_DAYS))),
+  /** Left out: `DEFAULT_TOKEN_DAYS`. `null`: the token does not expire. */
+  expiresInDays: z.optional(z.nullable(z.int().check(z.gte(1), z.lte(MAX_TOKEN_DAYS)))),
 });
 export type RestTokenInput = z.infer<typeof restTokenInputSchema>;
 

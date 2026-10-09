@@ -163,6 +163,10 @@ describe("tokens", () => {
       name: "ci",
       expiresInDays: 30,
     });
+    expect(restTokenInputSchema.parse({ name: "forever", expiresInDays: null })).toEqual({
+      name: "forever",
+      expiresInDays: null,
+    });
   });
 
   it.each([
@@ -173,6 +177,7 @@ describe("tokens", () => {
     ["more days than allowed", { name: "ok", expiresInDays: MAX_TOKEN_DAYS + 1 }],
     ["a fraction of a day", { name: "ok", expiresInDays: 1.5 }],
     ["days as a string", { name: "ok", expiresInDays: "30" }],
+    ["days as a word", { name: "ok", expiresInDays: "never" }],
     ["nothing", undefined],
   ])("refuse %s", (_, input) => {
     expect(restTokenInputSchema.safeParse(input).success).toBe(false);
@@ -189,6 +194,7 @@ describe("tokens", () => {
     expect(restTokensSchema.parse({ items: [token] }).items).toHaveLength(1);
     expect(restTokenCreatedSchema.parse({ token, secret: "cns_t_x" }).secret).toBe("cns_t_x");
     expect(restTokenSchema.safeParse({ ...token, lastUsedAt: undefined }).success).toBe(false);
+    expect(restTokenSchema.safeParse({ ...token, expiresAt: null }).success).toBe(true);
   });
 });
 

@@ -118,7 +118,8 @@ export const tokens = pgTable(
     /** What the person calls it: the agent it is for, where it runs. */
     name: text().notNull(),
     tokenHash: text().notNull(),
-    expiresAt: instant().notNull(),
+    /** When it stops being good; null for one that does not expire. */
+    expiresAt: instant(),
     /** When it was last presented; null until it is. */
     lastUsedAt: instant(),
     createdAt: createdAt(),

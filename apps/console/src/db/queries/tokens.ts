@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gt, lte } from "drizzle-orm";
+import { and, count, desc, eq, gt, isNull, lte, or } from "drizzle-orm";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf } from "../client.js";
 import { people, tokens } from "../schema.js";
@@ -6,7 +6,7 @@ import { type PersonRecord, personColumns, toPerson } from "./people.js";
 
 // The tokens people made for their agents, scripts and consoles of their own. The holder
 // presents the secret and the database holds its hash, as with sessions, so that any replica
-// answers any request. A token is its person until it expires or is taken away.
+// answers any request. A token is its person until it expires, if it does, or is taken away.
 
 export interface TokenRecord {
   readonly id: string;
@@ -14,7 +14,8 @@ export interface TokenRecord {
   /** What the person calls it: the agent it is for, where it runs. */
   readonly name: string;
   readonly createdAt: Date;
-  readonly expiresAt: Date;
+  /** When it stops being good; nothing for a token that does not expire. */
+  readonly expiresAt: Date | undefined;
   /** When it was last presented, if ever. */
   readonly lastUsedAt: Date | undefined;
 }
@@ -45,7 +46,7 @@ interface TokenRow {
   readonly personId: string;
   readonly name: string;
   readonly createdAt: Date;
-  readonly expiresAt: Date;
+  readonly expiresAt: Date | null;
   readonly lastUsedAt: Date | null;
 }
 
@@ -54,9 +55,12 @@ const toToken = (row: TokenRow): TokenRecord => ({
   personId: row.personId,
   name: row.name,
   createdAt: row.createdAt,
-  expiresAt: row.expiresAt,
+  expiresAt: row.expiresAt ?? undefined,
   lastUsedAt: row.lastUsedAt ?? undefined,
 });
+
+/** A token still good at `now`: one that does not expire, or one that has not yet. */
+const live = (now: Date) => or(isNull(tokens.expiresAt), gt(tokens.expiresAt, now));
 
 /**
  * Writes a token down for a person, unless they hold as many as one may. The count and the
@@ -69,7 +73,8 @@ export async function createToken(
     readonly personId: string;
     readonly name: string;
     readonly tokenHash: string;
-    readonly expiresAt: Date;
+    /** Left out, the token does not expire. */
+    readonly expiresAt: Date | undefined;
     readonly now: Date;
     /** How many live tokens the person may hold, this one included. */
     readonly limit: number;
@@ -87,7 +92,7 @@ export async function createToken(
     const [held] = await tx
       .select({ count: count() })
       .from(tokens)
-      .where(and(eq(tokens.personId, token.personId), gt(tokens.expiresAt, token.now)));
+      .where(and(eq(tokens.personId, token.personId), live(token.now)));
     if ((held?.count ?? 0) >= token.limit) {
       throw new TokenError("token.too_many");
     }
@@ -97,7 +102,7 @@ export async function createToken(
         personId: token.personId,
         name: token.name,
         tokenHash: token.tokenHash,
-        expiresAt: token.expiresAt,
+        expiresAt: token.expiresAt ?? null,
         createdAt: token.now,
       })
       .returning(tokenColumns);
@@ -108,7 +113,7 @@ export async function createToken(
   });
 }
 
-/** The token a hash names, with its person, while it has not expired. */
+/** The token a hash names, with its person, while it is good. */
 export async function findToken(
   database: Database,
   tokenHash: string,
@@ -118,7 +123,7 @@ export async function findToken(
     .select({ token: tokenColumns, person: personColumns(people) })
     .from(tokens)
     .innerJoin(people, eq(people.id, tokens.personId))
-    .where(and(eq(tokens.tokenHash, tokenHash), gt(tokens.expiresAt, now)))
+    .where(and(eq(tokens.tokenHash, tokenHash), live(now)))
     .limit(1);
   return row === undefined
     ? undefined
@@ -139,7 +144,7 @@ export async function listTokensOf(
   const rows = await drizzleOf(database)
     .select(tokenColumns)
     .from(tokens)
-    .where(and(eq(tokens.personId, personId), gt(tokens.expiresAt, now)))
+    .where(and(eq(tokens.personId, personId), live(now)))
     .orderBy(desc(tokens.createdAt), desc(tokens.id));
   return rows.map(toToken);
 }
@@ -157,7 +162,10 @@ export async function deleteToken(
   return rows.length > 0;
 }
 
-/** Removes what time has ended; every read checks the time itself, so this only keeps the table small. */
+/**
+ * Removes what time has ended; every read checks the time itself, so this only keeps the table
+ * small. A token that does not expire is never time's to end.
+ */
 export async function deleteExpiredTokens(database: Database, now: Date): Promise<number> {
   const rows = await drizzleOf(database)
     .delete(tokens)

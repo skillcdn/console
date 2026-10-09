@@ -11,8 +11,15 @@ import { Button, Callout, Time } from "./ui.js";
 // way to make one, and the one just made, whose secret is shown this once. Each takes its data
 // as props and nothing from the network.
 
-/** How long a token may be good for, as the form offers it. */
-const DAY_CHOICES = [30, 90, 180, 365] as const;
+/** How long a token may be good for, as the form offers it; `never` for one that does not expire. */
+const DAY_CHOICES = ["30", "90", "180", "365", "never"] as const;
+type DayChoice = (typeof DAY_CHOICES)[number];
+const DEFAULT_CHOICE: DayChoice =
+  DAY_CHOICES.find((choice) => choice === String(DEFAULT_TOKEN_DAYS)) ?? "90";
+const choiceOf = (value: string): DayChoice =>
+  DAY_CHOICES.find((choice) => choice === value) ?? DEFAULT_CHOICE;
+const choiceLabel = (choice: DayChoice): string =>
+  choice === "never" ? "Does not expire" : `${choice} days`;
 
 export interface TokenListProps {
   readonly tokens: readonly RestToken[];
@@ -37,7 +44,13 @@ export function TokenList(props: TokenListProps) {
                 Made <Time iso={token.createdAt} />
               </span>
               <span>
-                Good until <Time iso={token.expiresAt} />
+                {token.expiresAt === null ? (
+                  "Does not expire"
+                ) : (
+                  <>
+                    Good until <Time iso={token.expiresAt} />
+                  </>
+                )}
               </span>
               <span>
                 {token.lastUsedAt === null ? (
@@ -75,10 +88,13 @@ export interface TokenFormProps {
 
 export function TokenForm(props: TokenFormProps) {
   const [name, setName] = useState("");
-  const [days, setDays] = useState<number>(DEFAULT_TOKEN_DAYS);
+  const [choice, setChoice] = useState<DayChoice>(DEFAULT_CHOICE);
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    props.onSubmit({ name: name.trim(), expiresInDays: days });
+    props.onSubmit({
+      name: name.trim(),
+      expiresInDays: choice === "never" ? null : Number(choice),
+    });
   };
   return (
     <form className="sc-form" onSubmit={submit}>
@@ -98,12 +114,12 @@ export function TokenForm(props: TokenFormProps) {
           <span className="sc-field-label">Good for</span>
           <select
             className="sc-input"
-            value={days}
-            onChange={(event) => setDays(Number(event.target.value))}
+            value={choice}
+            onChange={(event) => setChoice(choiceOf(event.target.value))}
           >
-            {DAY_CHOICES.map((choice) => (
-              <option key={choice} value={choice}>
-                {choice} days
+            {DAY_CHOICES.map((option) => (
+              <option key={option} value={option}>
+                {choiceLabel(option)}
               </option>
             ))}
           </select>
@@ -169,9 +185,17 @@ export function NewToken(props: NewTokenProps) {
         </Button>
       </p>
       <p>
-        Present it as <code>Authorization: Bearer …</code> to the REST API, or give it to a console
-        or a script of your own. It is good until <Time iso={props.token.expiresAt} />, and you can
-        remove it here at any time.
+        Sign the <code>console</code> command in with it, present it as{" "}
+        <code>Authorization: Bearer …</code> to the REST API, or give it to a console or a script of
+        your own.{" "}
+        {props.token.expiresAt === null ? (
+          "It does not expire, so remove it here once it is no longer needed."
+        ) : (
+          <>
+            It is good until <Time iso={props.token.expiresAt} />, and you can remove it here at any
+            time.
+          </>
+        )}
       </p>
     </Callout>
   );

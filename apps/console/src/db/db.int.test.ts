@@ -572,6 +572,17 @@ describe("tokens", () => {
       now: minutes(1),
       limit: 3,
     });
+    // One without an expiry is good whenever.
+    const forever = await createToken(database, {
+      personId: alice.id,
+      name: "forever",
+      tokenHash: "tok-c",
+      expiresAt: undefined,
+      now: minutes(2),
+      limit: 3,
+    });
+    expect(forever.expiresAt).toBeUndefined();
+    expect((await findToken(database, "tok-c", minutes(100_000)))?.token.id).toBe(forever.id);
     const found = await findToken(database, "tok-a", minutes(30));
     expect(found?.person.id).toBe(alice.id);
     expect(found?.token.id).toBe(first.id);
@@ -582,9 +593,9 @@ describe("tokens", () => {
       minutes(30),
     );
     const live = await listTokensOf(database, alice.id, minutes(2));
-    expect(live.map((token) => token.id)).toEqual([second.id, first.id]);
+    expect(live.map((token) => token.id)).toEqual([forever.id, second.id, first.id]);
     const later = await listTokensOf(database, alice.id, minutes(10));
-    expect(later.map((token) => token.id)).toEqual([first.id]);
+    expect(later.map((token) => token.id)).toEqual([forever.id, first.id]);
   });
 
   it("are bounded per person, counting only what lasts, and go with time or on request", async () => {
@@ -598,8 +609,9 @@ describe("tokens", () => {
     expect(await deleteToken(database, alice.id, third.id)).toBe(false);
     expect(await deleteToken(database, bob.id, third.id)).toBe(true);
     expect(await deleteToken(database, bob.id, third.id)).toBe(false);
-    // Alice's second and Bob's second have ended by now.
+    // Alice's second and Bob's second have ended by now; the one without an expiry never does.
     expect(await deleteExpiredTokens(database, minutes(10))).toBe(2);
+    expect(await findToken(database, "tok-c", minutes(10))).toBeDefined();
   });
 });
 

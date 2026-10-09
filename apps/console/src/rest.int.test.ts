@@ -361,15 +361,17 @@ describe("tokens", () => {
     const { token, secret } = await make(alice, { name: "  Claude Code on the laptop  " });
     expect(secret).toMatch(/^cns_t_[\w-]{40,}$/);
     expect(token).toMatchObject({ name: "Claude Code on the laptop", lastUsedAt: null });
-    const lasts = new Date(token.expiresAt).getTime() - new Date(token.createdAt).getTime();
+    const lasts = new Date(token.expiresAt ?? 0).getTime() - new Date(token.createdAt).getTime();
     expect(lasts).toBe(DEFAULT_TOKEN_DAYS * DAY_MS);
     const second = await make(alice, { name: "ci", expiresInDays: 7 });
     expect(
-      new Date(second.token.expiresAt).getTime() - new Date(second.token.createdAt).getTime(),
+      new Date(second.token.expiresAt ?? 0).getTime() - new Date(second.token.createdAt).getTime(),
     ).toBe(7 * DAY_MS);
+    const forever = await make(alice, { name: "forever", expiresInDays: null });
+    expect(forever.token.expiresAt).toBeNull();
 
     const mine = await listed(alice);
-    expect(mine.map((item) => item.name)).toEqual(["ci", "Claude Code on the laptop"]);
+    expect(mine.map((item) => item.name)).toEqual(["forever", "ci", "Claude Code on the laptop"]);
     // The page sees names and dates, never a secret.
     expect(JSON.stringify(mine)).not.toContain("cns_t_");
     // Bob sees his own, which are none, and cannot take Alice's away.
@@ -379,7 +381,7 @@ describe("tokens", () => {
     expect((await remove(alice, second.token.id)).status).toBe(204);
     expect((await remove(alice, second.token.id)).status).toBe(404);
     expect((await remove(alice, "not-an-id")).status).toBe(404);
-    expect((await listed(alice)).map((item) => item.id)).toEqual([token.id]);
+    expect((await listed(alice)).map((item) => item.id)).toEqual([forever.token.id, token.id]);
     expect(JSON.stringify(h.logs)).not.toContain("cns_t_");
   });
 
@@ -450,6 +452,24 @@ describe("tokens", () => {
       await (await later.request(REST_ROUTES.tokens, { headers: { cookie } })).json(),
     );
     expect(left.items.some((item) => item.id === aDay.token.id)).toBe(false);
+    // One made without an expiry is good whenever.
+    const forever = restTokenCreatedSchema.parse(
+      await (
+        await later.request(REST_ROUTES.tokens, {
+          method: "POST",
+          headers: { cookie, origin: SIGN_IN_URL, "content-type": "application/json" },
+          body: JSON.stringify({ name: "forever", expiresInDays: null }),
+        })
+      ).json(),
+    );
+    clock.advance(3650 * DAY_MS);
+    expect(
+      (
+        await later.request(REST_ROUTES.tasks, {
+          headers: { authorization: `Bearer ${forever.secret}` },
+        })
+      ).status,
+    ).toBe(200);
 
     // Membership is decided on every request, for a token as for a session.
     const { secret: whileListed } = await make(alice, { name: "while listed" });
@@ -499,6 +519,7 @@ describe("tokens", () => {
       { name: `a${String.fromCodePoint(0x200b)}b` },
       { name: "ok", expiresInDays: 0 },
       { name: "ok", expiresInDays: MAX_TOKEN_DAYS + 1 },
+      { name: "ok", expiresInDays: "never" },
       {},
     ]) {
       const response = await send(alice, "POST", REST_ROUTES.tokens, body);

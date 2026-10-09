@@ -592,7 +592,11 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     try {
       const made = await tokens.issue(person, {
         name: input.name,
-        ttlMs: (input.expiresInDays ?? DEFAULT_TOKEN_DAYS) * DAY_MS,
+        // Left out, a token is good for the default; `null` is a token that does not expire.
+        ttlMs:
+          input.expiresInDays === null
+            ? undefined
+            : (input.expiresInDays ?? DEFAULT_TOKEN_DAYS) * DAY_MS,
       });
       // The id and the name, never the secret.
       logger.info(

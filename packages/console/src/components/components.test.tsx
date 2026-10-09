@@ -302,6 +302,12 @@ describe("tokens", () => {
             name: "ci",
             lastUsedAt: "2026-10-09T12:00:00.000Z",
           },
+          {
+            ...token,
+            id: "0199c4d8-0000-7000-8000-000000000032",
+            name: "forever",
+            expiresAt: null,
+          },
         ]}
         onRevoke={() => undefined}
       />,
@@ -309,7 +315,9 @@ describe("tokens", () => {
     expect(html).toContain("Claude Code &lt;on&gt; the laptop");
     expect(html).toContain("Never used");
     expect(html).toContain("Last used");
-    expect(html.match(/>Remove</g)).toHaveLength(2);
+    expect(html).toContain("Good until");
+    expect(html).toContain("Does not expire");
+    expect(html.match(/>Remove</g)).toHaveLength(3);
     const readOnly = renderToStaticMarkup(<TokenList tokens={[token]} />);
     expect(readOnly).not.toContain("Remove");
     expect(renderToStaticMarkup(<TokenList tokens={[]} empty={<p>none</p>} />)).toBe("<p>none</p>");
@@ -319,6 +327,7 @@ describe("tokens", () => {
     const form = renderToStaticMarkup(<TokenForm onSubmit={() => undefined} />);
     expect(form).toContain("Name");
     expect(form).toContain("90 days");
+    expect(form).toContain("Does not expire");
     expect(form).toContain("Make the token");
     const made = renderToStaticMarkup(
       <NewToken token={token} secret="cns_t_example-secret" onDone={() => undefined} />,
@@ -326,6 +335,11 @@ describe("tokens", () => {
     expect(made).toContain('<code class="sc-secret-value">cns_t_example-secret</code>');
     expect(made).toContain("shown this once");
     expect(made).toContain("Copy");
+    expect(made).toContain("good until");
+    const forever = renderToStaticMarkup(
+      <NewToken token={{ ...token, expiresAt: null }} secret="cns_t_x" onDone={() => undefined} />,
+    );
+    expect(forever).toContain("It does not expire");
   });
 });
 

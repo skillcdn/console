@@ -49,7 +49,11 @@ export class Tokens {
   /** Makes a token for the person and answers with it and the secret, this once. */
   async issue(
     person: PersonRecord,
-    input: { readonly name: string; readonly ttlMs: number },
+    input: {
+      readonly name: string;
+      /** How long it is good for. Left out, it does not expire. */
+      readonly ttlMs: number | undefined;
+    },
   ): Promise<{ readonly token: TokenRecord; readonly secret: string }> {
     const { database, clock, limit } = this.#options;
     const secret = newToken(AGENT_TOKEN_PREFIX);
@@ -58,7 +62,7 @@ export class Tokens {
       personId: person.id,
       name: input.name,
       tokenHash: hashToken(secret),
-      expiresAt: new Date(now.getTime() + input.ttlMs),
+      expiresAt: input.ttlMs === undefined ? undefined : new Date(now.getTime() + input.ttlMs),
       now,
       limit,
     });

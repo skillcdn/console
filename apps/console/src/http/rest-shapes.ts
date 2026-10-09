@@ -75,7 +75,7 @@ export function restToken(token: TokenRecord): RestToken {
     id: token.id,
     name: token.name,
     createdAt: token.createdAt.toISOString(),
-    expiresAt: token.expiresAt.toISOString(),
+    expiresAt: token.expiresAt?.toISOString() ?? null,
     lastUsedAt: token.lastUsedAt?.toISOString() ?? null,
   };
 }
