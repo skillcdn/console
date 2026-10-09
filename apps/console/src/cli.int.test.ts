@@ -87,6 +87,10 @@ async function console_(args: readonly string[], token = aliceToken) {
     readFile: async () => {
       throw new Error("no files here");
     },
+    readBytes: async (path) =>
+      path === "report.md"
+        ? new TextEncoder().encode("# The report\n\nAll of it.\n")
+        : Promise.reject(new Error("no such file")),
     store: {
       load: async () => undefined,
       save: async () => "nowhere",
@@ -133,6 +137,25 @@ describe("the command line", () => {
     const insecure = await console_(["hand-in", "http://insecure.test/x"]);
     expect(insecure.code).toBe(EXIT.failed);
     expect(insecure.err).toContain("request.invalid");
+    // A file is handed in as its bytes, and the console keeps it.
+    const file = await console_(["hand-in", "report.md", "--label", "the report"]);
+    expect(file.code, file.err).toBe(EXIT.ok);
+    expect(file.out).toMatch(/^Handed in the file report\.md \(\d+ bytes\) on run /);
+    expect(file.out).toContain("2 artifacts so far.");
+    const nowhere = await console_(["hand-in", "missing.bin"]);
+    expect(nowhere.code).toBe(EXIT.failed);
+    expect(nowhere.err).toContain("No file could be read at missing.bin");
+    const kept = (await readRun(bob, runId)).artifacts.find((artifact) => artifact.kind === "file");
+    expect(kept).toMatchObject({
+      url: null,
+      label: "the report",
+      file: { name: "report.md", contentType: "text/markdown" },
+    });
+    const bytes = await h.request(`${REST_ROUTES.files}/${kept?.id ?? ""}`, {
+      headers: { cookie: bob },
+    });
+    expect(bytes.status).toBe(200);
+    expect(await bytes.text()).toBe("# The report\n\nAll of it.\n");
 
     // Asking, and nobody answering in time: the run waits, and the command says so and exits 3.
     const asked = await console_([

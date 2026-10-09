@@ -28,6 +28,9 @@ export const MAX_SUMMARY_LENGTH = 2000;
 /** How many reports, and how many artifacts, one run may carry. */
 export const MAX_REPORTS_PER_RUN = 500;
 export const MAX_ARTIFACTS_PER_RUN = 50;
+/** A file a run hands in: how many bytes, and its name, one line without a path. */
+export const MAX_FILE_BYTES = 10 * 1024 * 1024;
+export const MAX_FILE_NAME_LENGTH = 200;
 /** What a person calls a token: the agent it is for, where it runs. One line. */
 export const MAX_TOKEN_NAME_LENGTH = 80;
 /** How long a token may be good for, in days, and how long one is when nothing is said. */

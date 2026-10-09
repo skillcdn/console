@@ -9,6 +9,7 @@ export {
   type ConsoleClient,
   createClient,
   type FetchLike,
+  type FileUpload,
 } from "./client.js";
 export {
   DEFAULT_TOKEN_DAYS,
@@ -17,6 +18,8 @@ export {
   MAX_AGENT_LENGTH,
   MAX_ARTIFACTS_PER_RUN,
   MAX_BODY_LENGTH,
+  MAX_FILE_BYTES,
+  MAX_FILE_NAME_LENGTH,
   MAX_LINK_LABEL_LENGTH,
   MAX_LINKS,
   MAX_NOTE_LENGTH,
@@ -56,6 +59,8 @@ export {
   type RestEvent,
   type RestEventData,
   type RestEvents,
+  type RestFile,
+  type RestFileInput,
   type RestMe,
   type RestPeople,
   type RestPerson,
@@ -87,6 +92,8 @@ export {
   restEventDataSchema,
   restEventSchema,
   restEventsSchema,
+  restFileInputSchema,
+  restFileSchema,
   restMeSchema,
   restPeopleSchema,
   restPersonPatchSchema,
@@ -110,6 +117,8 @@ export {
 } from "./schemas.js";
 export { hasForbiddenCodePoint } from "./text.js";
 export {
+  ARTIFACT_KINDS,
+  type ArtifactKind,
   EVENT_KINDS,
   type EventKind,
   isProviderKey,

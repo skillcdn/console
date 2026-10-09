@@ -1,4 +1,5 @@
-import type { RestDecision, RestRun, RestTask } from "../schemas.js";
+import { restPath } from "../routes.js";
+import type { RestArtifact, RestDecision, RestRun, RestTask } from "../schemas.js";
 
 // What the command prints: one line per thing in a list, a few lines for one thing in full.
 // Plain text, for an agent to read and a person to skim; ids are given, since the commands take
@@ -92,12 +93,19 @@ export function formatRun(run: RestRun): string {
   if (run.artifacts.length > 0) {
     lines.push("", "artifacts:");
     for (const artifact of run.artifacts) {
-      lines.push(
-        `  ${artifact.label === null ? artifact.url : `${artifact.label}: ${artifact.url}`}`,
-      );
+      lines.push(`  ${formatArtifact(artifact)}`);
     }
   }
   return lines.join("\n");
+}
+
+/** What was handed in: the link, or the file with its size and where its bytes are read. */
+export function formatArtifact(artifact: RestArtifact): string {
+  const what =
+    artifact.file === null
+      ? (artifact.url ?? "")
+      : `${artifact.file.name} (${artifact.file.size} bytes, ${artifact.file.contentType}; read at ${restPath("files", artifact.id)})`;
+  return artifact.label === null ? what : `${artifact.label}: ${what}`;
 }
 
 export function formatDecisionLine(decision: RestDecision): string {

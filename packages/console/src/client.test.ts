@@ -155,6 +155,62 @@ describe("createClient", () => {
     expect(calls[2]?.init?.method).toBe("DELETE");
   });
 
+  it("hands in a file as a form, named and typed, and says where its bytes are read", async () => {
+    const run = {
+      id: "0199c4d8-0000-7000-8000-000000000040",
+      taskId: "0199c4d8-0000-7000-8000-000000000010",
+      taskNumber: 1,
+      person: PERSON,
+      agent: "Claude Code",
+      status: "running",
+      startedAt: "2026-10-09T10:00:00.000Z",
+      endedAt: null,
+      summary: null,
+      reports: [],
+      artifacts: [
+        {
+          id: "0199c4d8-0000-7000-8000-000000000041",
+          kind: "file",
+          url: null,
+          label: null,
+          file: {
+            name: "report.md",
+            size: 5,
+            contentType: "text/markdown",
+            sha256: "ab".repeat(32),
+          },
+          createdAt: "2026-10-09T10:01:00.000Z",
+        },
+      ],
+      waitingFor: null,
+    };
+    const { send, calls } = fakeFetch({
+      [`POST https://console.test/api/v1/runs/${run.id}/files`]: { status: 201, body: run },
+    });
+    const client = createClient({ baseUrl: "https://console.test", fetch: send, token: "cns_t_x" });
+    const handed = await client.handInFile(run.id, {
+      name: "report.md",
+      bytes: new TextEncoder().encode("hello"),
+      contentType: "text/markdown",
+      label: "the report",
+    });
+    expect(handed.artifacts[0]?.file?.name).toBe("report.md");
+    const body = calls[0]?.init?.body;
+    expect(body).toBeInstanceOf(FormData);
+    const form = body as FormData;
+    const part = form.get("file");
+    expect(part).toBeInstanceOf(File);
+    expect((part as File).name).toBe("report.md");
+    expect((part as File).type).toBe("text/markdown");
+    expect(await (part as File).text()).toBe("hello");
+    expect(form.get("label")).toBe("the report");
+    // The form names its own type, with the boundary in it; nothing else is said.
+    expect(new Headers(calls[0]?.init?.headers).get("content-type")).toBeNull();
+    expect(client.fileUrl(run.artifacts[0]?.id ?? "")).toBe(
+      "https://console.test/api/v1/files/0199c4d8-0000-7000-8000-000000000041",
+    );
+  });
+
   it("names the person whose role changes", async () => {
     const { send, calls } = fakeFetch({
       [`PATCH /api/v1/people/${PERSON.id}`]: { body: { ...PERSON, role: "admin" } },

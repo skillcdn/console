@@ -397,9 +397,24 @@ describe("runs", () => {
     artifacts: [
       {
         id: "0199c4d8-0000-7000-8000-000000000042",
+        kind: "link",
         url: "https://github.com/acme/app/pull/2",
         label: "the fix",
+        file: null,
         createdAt: "2026-10-09T10:06:00.000Z",
+      },
+      {
+        id: "0199c4d8-0000-7000-8000-000000000043",
+        kind: "file",
+        url: null,
+        label: null,
+        file: {
+          name: "report <final>.md",
+          size: 3500,
+          contentType: "text/markdown",
+          sha256: "ab".repeat(32),
+        },
+        createdAt: "2026-10-09T10:07:00.000Z",
       },
     ],
     waitingFor: "0199c4d8-0000-7000-8000-000000000020",
@@ -418,6 +433,10 @@ describe("runs", () => {
     expect(html).toContain("<strong>the parser</strong>");
     expect(html).toContain('href="https://github.com/acme/app/pull/2"');
     expect(html).toContain("the fix");
+    // A file is read from the console, by the artifact's id, and shown by its name and size.
+    expect(html).toContain('href="/api/v1/files/0199c4d8-0000-7000-8000-000000000043"');
+    expect(html).toContain("report &lt;final&gt;.md");
+    expect(html).toContain("3.4 KB");
     expect(html).toContain("Mark abandoned");
     const over = renderToStaticMarkup(
       <RunList

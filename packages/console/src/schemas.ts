@@ -6,6 +6,7 @@ import * as z from "zod/mini";
 import {
   MAX_AGENT_LENGTH,
   MAX_BODY_LENGTH,
+  MAX_FILE_NAME_LENGTH,
   MAX_LINK_LABEL_LENGTH,
   MAX_LINKS,
   MAX_NOTE_LENGTH,
@@ -21,6 +22,7 @@ import {
 } from "./limits.js";
 import { hasForbiddenCodePoint } from "./text.js";
 import {
+  ARTIFACT_KINDS,
   EVENT_KINDS,
   PERSON_ROLES,
   PROVIDER_KEYS,
@@ -274,11 +276,28 @@ export const restReportSchema = z.object({
 });
 export type RestReport = z.infer<typeof restReportSchema>;
 
-/** What a run handed in: a link to a branch, a pull request, a page. */
+/** A file a run handed in, as the console keeps it; its bytes are at `restPath("files", <artifact id>)`. */
+export const restFileSchema = z.object({
+  /** What the agent called it: one line, without a path. */
+  name: z.string(),
+  /** In bytes. */
+  size: count,
+  /** The media type the agent said, or `application/octet-stream`. */
+  contentType: z.string(),
+  /** The SHA-256 of the bytes, in hex: what the console keeps them under. */
+  sha256: z.string(),
+});
+export type RestFile = z.infer<typeof restFileSchema>;
+
+/** What a run handed in: a link to a branch, a pull request, a page; or a file the console keeps. */
 export const restArtifactSchema = z.object({
   id: uuid,
-  url: z.string(),
+  kind: z.enum(ARTIFACT_KINDS),
+  /** The link, for a link; `null` for a file. */
+  url: z.nullable(z.string()),
   label: z.nullable(z.string()),
+  /** The file, for a file; `null` for a link. */
+  file: z.nullable(restFileSchema),
   createdAt: instant,
 });
 export type RestArtifact = z.infer<typeof restArtifactSchema>;
@@ -390,6 +409,32 @@ export const restArtifactInputSchema = z.object({
   label: z.optional(line(MAX_LINK_LABEL_LENGTH)),
 });
 export type RestArtifactInput = z.infer<typeof restArtifactInputSchema>;
+
+/** A media type as a client says one: `type/subtype`, lowercase, without parameters. */
+const mediaType = z
+  .string()
+  .check(
+    z.trim(),
+    z.toLowerCase(),
+    z.maxLength(120),
+    z.regex(/^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/, "must be a media type"),
+  );
+
+/**
+ * What `POST /api/v1/runs/<id>/files` is sent beside the bytes, as the parts of a form: the
+ * file's name and media type come with the `file` part, the `label` is a part of its own.
+ */
+export const restFileInputSchema = z.object({
+  name: line(MAX_FILE_NAME_LENGTH).check(
+    z.refine(
+      (value) => !/[\\/]/.test(value) && value !== "." && value !== "..",
+      "must be a file name, not a path",
+    ),
+  ),
+  contentType: z.optional(mediaType),
+  label: z.optional(line(MAX_LINK_LABEL_LENGTH)),
+});
+export type RestFileInput = z.infer<typeof restFileInputSchema>;
 
 /** What `POST /api/v1/runs/<id>/end` is sent: how the run ended, and what was done and left. */
 export const restRunEndInputSchema = z.object({

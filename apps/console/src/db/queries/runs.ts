@@ -1,4 +1,4 @@
-import type { RunEnding, RunStatus } from "@skillcdn/console/api";
+import type { ArtifactKind, RunEnding, RunStatus } from "@skillcdn/console/api";
 import { and, asc, count, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { DomainError } from "../../errors.js";
@@ -18,12 +18,30 @@ export interface ReportRecord {
   readonly createdAt: Date;
 }
 
+/** A file a run handed in, as the console keeps it: the bytes are in the blob store under the hash. */
+export interface FileRecord {
+  readonly name: string;
+  readonly size: number;
+  readonly contentType: string;
+  readonly sha256: string;
+}
+
+/** What a run handed in: a link to the web, or a file. */
 export interface ArtifactRecord {
   readonly id: string;
-  readonly url: string;
+  readonly kind: ArtifactKind;
+  /** The link, for a link. */
+  readonly url: string | undefined;
   readonly label: string | undefined;
+  /** The file, for a file. */
+  readonly file: FileRecord | undefined;
   readonly createdAt: Date;
 }
+
+/** What is handed in: a link, or a file whose bytes the blob store keeps already. */
+export type HandedIn =
+  | { readonly kind: "link"; readonly url: string }
+  | { readonly kind: "file"; readonly file: FileRecord };
 
 export interface RunRecord {
   readonly id: string;
@@ -101,8 +119,44 @@ const runColumns = {
   waitingFor: waitingForOf,
 };
 
+const artifactColumns = {
+  id: artifacts.id,
+  runId: artifacts.runId,
+  kind: artifacts.kind,
+  url: artifacts.url,
+  label: artifacts.label,
+  fileName: artifacts.fileName,
+  fileSize: artifacts.fileSize,
+  contentType: artifacts.contentType,
+  sha256: artifacts.sha256,
+  createdAt: artifacts.createdAt,
+};
+
 type Handle = Transaction | ReturnType<typeof drizzleOf>;
 type RunRow = Awaited<ReturnType<typeof selectRuns>>[number];
+type ArtifactRow = Awaited<ReturnType<typeof selectArtifacts>>[number];
+
+function selectArtifacts(handle: Handle) {
+  return handle.select(artifactColumns).from(artifacts);
+}
+
+function toArtifact(row: ArtifactRow): ArtifactRecord {
+  const file =
+    row.fileName !== null &&
+    row.fileSize !== null &&
+    row.contentType !== null &&
+    row.sha256 !== null
+      ? { name: row.fileName, size: row.fileSize, contentType: row.contentType, sha256: row.sha256 }
+      : undefined;
+  return {
+    id: row.id,
+    kind: row.kind,
+    url: row.url ?? undefined,
+    label: row.label ?? undefined,
+    file,
+    createdAt: row.createdAt,
+  };
+}
 
 function selectRuns(handle: Handle) {
   return handle
@@ -129,15 +183,7 @@ async function attach(handle: Handle, rows: readonly RunRow[]): Promise<RunRecor
             .from(reports)
             .where(inArray(reports.runId, ids))
             .orderBy(asc(reports.createdAt), asc(reports.id)),
-          handle
-            .select({
-              id: artifacts.id,
-              runId: artifacts.runId,
-              url: artifacts.url,
-              label: artifacts.label,
-              createdAt: artifacts.createdAt,
-            })
-            .from(artifacts)
+          selectArtifacts(handle)
             .where(inArray(artifacts.runId, ids))
             .orderBy(asc(artifacts.createdAt), asc(artifacts.id)),
         ]);
@@ -156,14 +202,7 @@ async function attach(handle: Handle, rows: readonly RunRow[]): Promise<RunRecor
     reports: reported
       .filter((report) => report.runId === row.id)
       .map((report) => ({ id: report.id, body: report.body, createdAt: report.createdAt })),
-    artifacts: handedIn
-      .filter((artifact) => artifact.runId === row.id)
-      .map((artifact) => ({
-        id: artifact.id,
-        url: artifact.url,
-        label: artifact.label ?? undefined,
-        createdAt: artifact.createdAt,
-      })),
+    artifacts: handedIn.filter((artifact) => artifact.runId === row.id).map(toArtifact),
     waitingFor: row.waitingFor ?? undefined,
   }));
 }
@@ -359,20 +398,23 @@ export async function addReport(
   });
 }
 
-/** The agent hands in a link: a branch, a pull request, a page. */
+/**
+ * The agent hands something in: a link (a branch, a pull request, a page), or a file, whose
+ * bytes the blob store keeps already under the hash given here.
+ */
 export async function addArtifact(
   database: Database,
   input: {
     readonly workspaceId: string;
     readonly actorId: string;
     readonly runId: string;
-    readonly url: string;
+    readonly handedIn: HandedIn;
     readonly label: string | undefined;
     readonly limit: number;
     readonly now: Date;
   },
 ): Promise<RunRecord> {
-  const { workspaceId, actorId, runId, url, label, limit, now } = input;
+  const { workspaceId, actorId, runId, handedIn, label, limit, now } = input;
   return drizzleOf(database).transaction(async (tx) => {
     const run = await lockRun(tx, workspaceId, runId, actorId);
     const [held] = await tx
@@ -382,7 +424,20 @@ export async function addArtifact(
     if ((held?.count ?? 0) >= limit) {
       throw new RunError("run.too_many_artifacts");
     }
-    await tx.insert(artifacts).values({ runId, url, label: label ?? null, createdAt: now });
+    await tx.insert(artifacts).values(
+      handedIn.kind === "link"
+        ? { runId, kind: "link", url: handedIn.url, label: label ?? null, createdAt: now }
+        : {
+            runId,
+            kind: "file",
+            label: label ?? null,
+            fileName: handedIn.file.name,
+            fileSize: handedIn.file.size,
+            contentType: handedIn.file.contentType,
+            sha256: handedIn.file.sha256,
+            createdAt: now,
+          },
+    );
     await tx.update(runs).set({ updatedAt: now }).where(eq(runs.id, runId));
     await recordEvent(tx, {
       workspaceId,
@@ -394,7 +449,7 @@ export async function addArtifact(
         number: run.task.number,
         title: run.task.title,
         agent: run.agent,
-        label: label ?? excerptOf(url),
+        label: label ?? (handedIn.kind === "link" ? excerptOf(handedIn.url) : handedIn.file.name),
       },
       now,
     });
@@ -462,6 +517,19 @@ export function getRun(
   runId: string,
 ): Promise<RunRecord | undefined> {
   return readRun(drizzleOf(database), workspaceId, runId);
+}
+
+/** One artifact of the workspace, by its id: how the bytes of a file handed in are found. */
+export async function findArtifact(
+  database: Database,
+  workspaceId: string,
+  artifactId: string,
+): Promise<ArtifactRecord | undefined> {
+  const [row] = await selectArtifacts(drizzleOf(database))
+    .innerJoin(runs, eq(runs.id, artifacts.runId))
+    .where(and(eq(runs.workspaceId, workspaceId), eq(artifacts.id, artifactId)))
+    .limit(1);
+  return row === undefined ? undefined : toArtifact(row);
 }
 
 /**

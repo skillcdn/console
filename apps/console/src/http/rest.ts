@@ -3,6 +3,7 @@ import {
   EVENTS_PAGE_LIMIT,
   LIST_LIMIT,
   MAX_ARTIFACTS_PER_RUN,
+  MAX_FILE_BYTES,
   MAX_REPORTS_PER_RUN,
   REST_ROUTES,
   type RestDecisions,
@@ -15,6 +16,7 @@ import {
   restAnswerInputSchema,
   restArtifactInputSchema,
   restDecisionInputSchema,
+  restFileInputSchema,
   restPersonPatchSchema,
   restReportInputSchema,
   restRunEndInputSchema,
@@ -49,8 +51,10 @@ import {
   addArtifact,
   addReport,
   endRun,
+  findArtifact,
   getRun,
   listRuns,
+  OPEN_RUN_STATUSES,
   RunError,
   startRun,
 } from "../db/queries/runs.js";
@@ -65,6 +69,7 @@ import {
 import { TokenError, type TokenRecord } from "../db/queries/tokens.js";
 import type { WorkspaceRecord } from "../db/queries/workspaces.js";
 import type { Logger } from "../logger.js";
+import type { BlobStore } from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
 import { errorBody } from "./app.js";
 import {
@@ -92,6 +97,8 @@ export interface RestDependencies {
   /** The tokens people make; left out where nobody signs in, and then nobody has one. */
   readonly tokens: Tokens | undefined;
   readonly feed: LiveFeed;
+  /** Where the bytes of files handed in are kept. */
+  readonly blobs: BlobStore;
   readonly clock: Clock;
   readonly logger: Logger;
   readonly agents: {
@@ -102,6 +109,19 @@ export interface RestDependencies {
 
 /** A task or a decision is a few fields and a body of bounded Markdown; this is far above both. */
 const MAX_BODY_BYTES = 256 * 1024;
+/** What a form carries besides the file: a label, the names of the parts, the boundaries. */
+const FORM_OVERHEAD_BYTES = 64 * 1024;
+/** Media types a browser may show in place; a file of any other kind is handed over as bytes. */
+const INLINE_TYPES: ReadonlySet<string> = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "text/plain",
+  "text/markdown",
+  "text/csv",
+  "application/json",
+]);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** A task's number in a path: what people say out loud, where the pages say the id. */
 const TASK_NUMBER = /^[1-9]\d{0,8}$/;
@@ -141,6 +161,19 @@ interface Caller {
   readonly token: TokenRecord | undefined;
 }
 
+/**
+ * `filename="..."; filename*=UTF-8''...`: the name for every browser, in what every one of them
+ * reads, and the exact one for those that read the second form.
+ */
+function filenameParameters(name: string): string {
+  const plain = name.replaceAll(/[^\x20-\x7e]/g, "_").replaceAll(/["\\]/g, "_");
+  const exact = encodeURIComponent(name).replaceAll(
+    /[!'()*]/g,
+    (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+  return `filename="${plain}"; filename*=UTF-8''${exact}`;
+}
+
 /** The first thing wrong with what was sent, for a person. */
 function firstProblem(result: ParseResult<unknown>): string {
   const issue = result.error?.issues[0];
@@ -157,7 +190,7 @@ function firstProblem(result: ParseResult<unknown>): string {
  * and nothing is answered to nobody.
  */
 export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies): void {
-  const { database, workspace, access, tokens, feed, clock, logger, agents } = dependencies;
+  const { database, workspace, access, tokens, feed, blobs, clock, logger, agents } = dependencies;
 
   /** Who is asking and with what, or the refusal to answer with. */
   const askingCaller = async (c: Context<AppEnv>): Promise<Caller | Response> =>
@@ -226,6 +259,12 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
   const tooLarge = bodyLimit({
     maxSize: MAX_BODY_BYTES,
     onError: (c) => c.json(errorBody("request.too_large", "The request body is too large."), 413),
+  });
+  const fileTooLarge = (c: Context<AppEnv>): Response =>
+    c.json(errorBody("request.too_large", `The file is over ${MAX_FILE_BYTES} bytes.`), 413);
+  const formTooLarge = bodyLimit({
+    maxSize: MAX_FILE_BYTES + FORM_OVERHEAD_BYTES,
+    onError: fileTooLarge,
   });
 
   /** What a task, a decision, a run or a person that could not be worked on answers with. */
@@ -733,7 +772,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         workspaceId: person.workspaceId,
         actorId: person.id,
         runId: id,
-        url: input.url,
+        handedIn: { kind: "link", url: input.url },
         label: input.label,
         limit: MAX_ARTIFACTS_PER_RUN,
         now: clock.now(),
@@ -742,6 +781,119 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     } catch (error) {
       return failure(c, error);
     }
+  });
+
+  // A file handed in, as the parts of a form: the bytes go to the blob store under their hash,
+  // the rest to the run. The run is looked at before the bytes are kept, so that a file sent to
+  // another's run or to one that is over costs nothing, and again under the lock.
+  app.post(`${REST_ROUTES.runs}/:id/files`, formTooLarge, async (c) => {
+    const person = await changing(c);
+    if (person instanceof Response) {
+      return person;
+    }
+    const id = c.req.param("id");
+    if (!UUID.test(id)) {
+      return noSuchRun(c);
+    }
+    let form: FormData;
+    try {
+      form = await c.req.formData();
+    } catch {
+      return invalid(c, "The request body is not a form with a file in it.");
+    }
+    const part = form.get("file");
+    if (!(part instanceof File)) {
+      return invalid(c, "file: the form needs a part called file.");
+    }
+    const label = form.get("label");
+    const type = part.type.split(";")[0]?.trim() ?? "";
+    const parsed = restFileInputSchema.safeParse({
+      name: part.name,
+      ...(type.length === 0 ? {} : { contentType: type }),
+      ...(typeof label === "string" ? { label } : {}),
+    });
+    if (!parsed.success || parsed.data === undefined) {
+      return invalid(c, firstProblem(parsed));
+    }
+    if (part.size === 0) {
+      return invalid(c, "file: the file is empty.");
+    }
+    if (part.size > MAX_FILE_BYTES) {
+      return fileTooLarge(c);
+    }
+    const run = await getRun(database, person.workspaceId, id);
+    if (run === undefined) {
+      return noSuchRun(c);
+    }
+    if (run.person.id !== person.id) {
+      return failure(c, new RunError("run.not_yours"));
+    }
+    if (!OPEN_RUN_STATUSES.includes(run.status)) {
+      return failure(c, new RunError("run.over"));
+    }
+    const kept = await blobs.put(new Uint8Array(await part.arrayBuffer()), clock.now());
+    try {
+      const written = await addArtifact(database, {
+        workspaceId: person.workspaceId,
+        actorId: person.id,
+        runId: id,
+        handedIn: {
+          kind: "file",
+          file: {
+            name: parsed.data.name,
+            size: kept.size,
+            contentType: parsed.data.contentType ?? "application/octet-stream",
+            sha256: kept.sha256,
+          },
+        },
+        label: parsed.data.label,
+        limit: MAX_ARTIFACTS_PER_RUN,
+        now: clock.now(),
+      });
+      return c.json(restRun(written), 201);
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
+  // The bytes of a file handed in, for whoever may see the board. A few kinds are shown in
+  // place; the rest are handed over as bytes. Never sniffed, never run: the file is an agent's.
+  app.get(`${REST_ROUTES.files}/:id`, async (c) => {
+    const person = await asking(c);
+    if (person instanceof Response) {
+      return person;
+    }
+    const id = c.req.param("id");
+    const artifact = UUID.test(id)
+      ? await findArtifact(database, person.workspaceId, id)
+      : undefined;
+    if (artifact?.file === undefined) {
+      return notFound(c, "file.not_found", "The file was not found.");
+    }
+    const bytes = await blobs.get(artifact.file.sha256);
+    if (bytes === undefined) {
+      logger.error(
+        { artifact: artifact.id, requestId: c.get("requestId") },
+        "the bytes of a file handed in are not in the blob store",
+      );
+      return notFound(c, "file.not_found", "The file was not found.");
+    }
+    const inline = INLINE_TYPES.has(artifact.file.contentType);
+    const type = inline ? artifact.file.contentType : "application/octet-stream";
+    c.header(
+      "content-type",
+      type.startsWith("text/") || type === "application/json" ? `${type}; charset=utf-8` : type,
+    );
+    c.header("content-length", String(bytes.byteLength));
+    c.header(
+      "content-disposition",
+      `${inline ? "inline" : "attachment"}; ${filenameParameters(artifact.file.name)}`,
+    );
+    c.header("x-content-type-options", "nosniff");
+    c.header("content-security-policy", "default-src 'none'; sandbox");
+    c.header("cross-origin-resource-policy", "same-origin");
+    // A copy of its own: what the driver hands over may be a view of a larger buffer.
+    return c.body(new Uint8Array(bytes).buffer);
   });
 
   app.post(`${REST_ROUTES.runs}/:id/end`, tooLarge, async (c) => {

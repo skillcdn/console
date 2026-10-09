@@ -11,7 +11,7 @@
   </p>
 </div>
 
-> **Status: pre-alpha.** The board runs, and agents work it: people sign in, write tasks, move them along, raise decisions and answer them, and see one board, live; an agent takes a task through the `console` command, reports, hands in, asks, and finishes. Files handed in and the organization's skills are next; `@skillcdn/console` is published to npm at the end of that milestone, and until then the command is built from a checkout. [docs/roadmap.md](docs/roadmap.md) says what exists; [docs/architecture.md](docs/architecture.md) says how it fits together and what is still open.
+> **Status: pre-alpha.** The board runs, and agents work it: people sign in, write tasks, move them along, raise decisions and answer them, and see one board, live; an agent takes a task through the `console` command, reports, hands in links and files, asks, and finishes. The organization's skills are next; `@skillcdn/console` is published to npm at the end of that milestone, and until then the command is built from a checkout. [docs/roadmap.md](docs/roadmap.md) says what exists; [docs/architecture.md](docs/architecture.md) says how it fits together and what is still open.
 
 The console holds the work to be done, which agent (Claude Code, Codex, any agent with a shell) is doing what right now, what each has done, and the decisions that wait for a person. People decide; agents work. One container image next to PostgreSQL; people sign in with the accounts they already have; each person's agent connects with the `console` command and works the board as that person. The organization's playbooks and skills live in git repositories and reach the agents through [SkillCDN](https://skillcdn.ai).
 
@@ -47,6 +47,7 @@ console tasks                                         # the board: #7  ready  hi
 console take 7                                        # a run begins; the task is in progress and the person's
 console report "Found the cause: the parser trusts its input."
 console hand-in https://github.com/acme/app/pull/3 --label "the fix"
+console hand-in ./report.md                           # a file, kept by the console and shown on the task
 console ask "Keep the old behaviour?" --option "Keep it" --option "Change it"   # the run waits for a person's answer
 console finish --summary "Done: the parser refuses empty input."               # the task goes up for review
 console help                                          # the rest, written for an agent that meets the command for the first time
@@ -56,11 +57,11 @@ What to tell the agent is as short as: "Run `console help`, then take task #7 fr
 
 ## How it works
 
-The first four steps are there today, but for files handed in; the fifth is the third milestone of the roadmap.
+The first four steps are there today; the fifth is a later milestone of the roadmap.
 
 1. **Deploy it once.** One container image, one PostgreSQL, S3-compatible storage for what runs leave behind. Locally with compose; on a cloud, the same image next to a managed database and a bucket.
 2. **People sign in** through an identity provider the organization already uses (GitHub, Google Workspace), and each signs their own agent in with a token of their own (`console login`). Several people, each with their own agent, work on the same board. Nobody, person or agent, touches the database: every request goes through the API and is decided there.
-3. **Agents take work from the board**, report what they do, hand in what they made (branches, pull requests, documents), and raise a decision when one is needed. A person answers decisions from the board, or from wherever the console notifies them.
+3. **Agents take work from the board**, report what they do, hand in what they made (branches, pull requests, documents, files), and raise a decision when one is needed. A person answers decisions from the board, or from wherever the console notifies them.
 4. **The board shows it all, live:** the tasks and their state, the runs in progress, the history, the decisions.
 5. **Teams build their own console** from the published package, [`@skillcdn/console`](packages/console/): the client of the console's API, the components, and the composition of the default console. A small repository with a configuration and a CI job then produces a custom console, as static files or as an image.
 

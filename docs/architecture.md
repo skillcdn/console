@@ -1,6 +1,6 @@
 # Architecture
 
-> **Status:** the board (milestone 1) and agents at work (milestone 2) are implemented as described here, but for files handed in and the organization's skills, which are the proposed shape. [roadmap.md](roadmap.md) tracks what exists. The decisions with lasting consequences are in [adr/](adr/); the rest of this document is kept current as the implementation lands: when they diverge, update this document in the same change. The open questions are at the end.
+> **Status:** the board (milestone 1) and agents at work (milestone 2) are implemented as described here, but for the organization's skills, which are the proposed shape. [roadmap.md](roadmap.md) tracks what exists. The decisions with lasting consequences are in [adr/](adr/); the rest of this document is kept current as the implementation lands: when they diverge, update this document in the same change. The open questions are at the end.
 
 ## Overview
 
@@ -15,7 +15,7 @@ agent (Claude Code, Codex, any with a shell) |  and for agents' commands,     pe
                                              read through its REST API and @skillcdn/core
 
 console, role worker      schedules, reminders, clean-up; later the runs the console starts itself
-blob store (S3 API)       what runs hand in: logs, files; keyed by content hash
+blob store                the files runs hand in, keyed by content hash: rows of PostgreSQL today, S3 later
 ```
 
 Five properties shape everything else:
@@ -38,7 +38,7 @@ Three consequences shape the design:
 
 ## Vocabulary
 
-These are the concepts the schema, the API and the UI are named after. The vocabulary in code is `@skillcdn/console/api`; the schema is in [`apps/console/README.md`](../apps/console/README.md#data-model). Artifacts are links until the blob store arrives.
+These are the concepts the schema, the API and the UI are named after. The vocabulary in code is `@skillcdn/console/api`; the schema is in [`apps/console/README.md`](../apps/console/README.md#data-model).
 
 | Concept | What it is |
 |---|---|
@@ -53,7 +53,7 @@ These are the concepts the schema, the API and the UI are named after. The vocab
 
 ## How agents take part
 
-- **The console is a command to agents** ([specs/cli.md](specs/cli.md), [ADR-0006](adr/0006-agents-work-the-board-through-the-rest-api-and-the-command-line-not-an-mcp-server.md)). The package ships `console`, a thin client of the REST API with no logic of its own, which a person signs in once with a token they made. An agent takes a task (`console take`: a run begins; the task is the person's and in progress), reports (`console report`), hands in a link (`console hand-in`), asks for a decision (`console ask`: the run waits, and the command waits a while for the answer) and ends the run (`console finish`, `fail` or `abandon`). Each is one or two requests of the REST API ([specs/rest.md](specs/rest.md)), the one surface of the console; the command costs an agent nothing until it is used, and an agent learns it from its help. The console is not an MCP server.
+- **The console is a command to agents** ([specs/cli.md](specs/cli.md), [ADR-0006](adr/0006-agents-work-the-board-through-the-rest-api-and-the-command-line-not-an-mcp-server.md)). The package ships `console`, a thin client of the REST API with no logic of its own, which a person signs in once with a token they made. An agent takes a task (`console take`: a run begins; the task is the person's and in progress), reports (`console report`), hands in a link or a file (`console hand-in`), asks for a decision (`console ask`: the run waits, and the command waits a while for the answer) and ends the run (`console finish`, `fail` or `abandon`). Each is one or two requests of the REST API ([specs/rest.md](specs/rest.md)), the one surface of the console; the command costs an agent nothing until it is used, and an agent learns it from its help. The console is not an MCP server.
 - **Attended, by design.** A person runs their agent in their own app or CLI, on their own machine, under their own subscription, and connects it; the console calls no model API and sees what the agent reports. Unattended runs, where the worker would start agents itself, are not planned for the board and need decisions of their own if they ever come (where they run, with what credentials, within what limits).
 - **An agent is its person, and no more.** Its token is made by one person, scoped to that person, revocable, and expiring unless the person chose otherwise; what the person may do on the board is what the agent may do. Finer rules, what an agent may decide alone and what must wait for a person, come after the first agents are connected.
 - **A run is the record of the agent's work:** who started it, as which agent, on which task; its reports and what it handed in; the decision it waits for; how it ended. A run that asked waits until a person answers on the board, and is woken through the database's own channel, the same nudge the live feed runs on. A person may give up on a run that will not come back.
@@ -124,7 +124,7 @@ Inherited from the main repository, unchanged ([ADR-0002](adr/0002-one-image-one
 
 ## Security model
 
-- **Untrusted input:** everything an agent sends, every request, and what SkillCDN serves of a repository. Parsed with schemas, bounded in size and depth, stored as data, shown as text or as Markdown rendered to elements, never as HTML, never executed.
+- **Untrusted input:** everything an agent sends, every request, and what SkillCDN serves of a repository. Parsed with schemas, bounded in size and depth, stored as data, shown as text or as Markdown rendered to elements, never as HTML, never executed. A file handed in is kept as bytes and handed back as bytes: shown in place only for the few kinds a browser cannot run, never sniffed, under a policy that runs nothing.
 - **Fail closed** on membership and on every token. Unknown and forbidden answer the same.
 - **Tokens:** git-host tokens used once to ask who a person is and never kept; sessions and agent tokens stored as hashes; nothing logged. The command keeps a token in the person's own configuration directory, never takes one on the command line, and never prints one.
 - **Nobody acts for someone else:** an agent is its person, and its person only.

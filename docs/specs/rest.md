@@ -29,12 +29,13 @@ The API is the board as its members see it: the people, the tasks, the runs, the
 | 403 | `auth.session_required` | A token asked for what only a person signed in may do: the tokens themselves, and configuring. |
 | 403 | `run.not_yours` | The run is another person's. |
 | 404 | `task.not_found`, `decision.not_found`, `token.not_found`, `person.not_found`, `run.not_found`, `run.task_not_found` | No such id in the workspace; for a token, none of the asker's. An id that is not a UUID is not found either, except a task's number. |
+| 404 | `file.not_found` | No file handed in has that id; a link handed in is not a file. |
 | 404 | `not_found` | Nothing at this path. |
 | 409 | `decision.answered` | The decision has an answer already. |
 | 409 | `token.too_many` | The person holds as many live tokens as one may (`MAX_TOKENS_PER_PERSON`). |
 | 409 | `person.last_admin` | The change would leave the board without an administrator. |
 | 409 | `run.over`, `run.task_taken`, `run.task_closed` | The run has ended already; an agent is at work on the task already; the task is done or dropped. |
-| 413 | `request.too_large` | The body is over the limit. |
+| 413 | `request.too_large` | The body is over the limit; for a file handed in, the file is over `MAX_FILE_BYTES`. |
 
 ## Endpoints
 
@@ -78,7 +79,7 @@ The answer takes `option` (the id of one of its options) and optionally a `note`
 
 ### `GET /api/v1/runs?task=&open=&mine=` and `GET /api/v1/runs/<id>`
 
-`{ "items": [run, ...] }`: the runs, newest first, at most `LIST_LIMIT`; `task=<id>` keeps those on one task, `open=true` those not over (`running` or `waiting`) and `open=false` those over, `mine=true` the asker's own: with a token, the runs begun with that token, which is one agent's; on a session, the runs for the person. A run is one agent at work on one task for one person: `taskId` and `taskNumber` (the one people say), `person` (whom the agent acts for), `agent` (what it calls itself), `status` (`running`, `waiting` for a decision, `finished`, `failed`, `abandoned`), `startedAt`, `endedAt` or `null`, `summary` (Markdown, what the agent said at the end, or `null`), `reports` (each `id`, `body` in Markdown, `createdAt`; oldest first), `artifacts` (each `id`, an https `url`, `label` or `null`, `createdAt`), and `waitingFor`, the id of the decision the run waits for, or `null`.
+`{ "items": [run, ...] }`: the runs, newest first, at most `LIST_LIMIT`; `task=<id>` keeps those on one task, `open=true` those not over (`running` or `waiting`) and `open=false` those over, `mine=true` the asker's own: with a token, the runs begun with that token, which is one agent's; on a session, the runs for the person. A run is one agent at work on one task for one person: `taskId` and `taskNumber` (the one people say), `person` (whom the agent acts for), `agent` (what it calls itself), `status` (`running`, `waiting` for a decision, `finished`, `failed`, `abandoned`), `startedAt`, `endedAt` or `null`, `summary` (Markdown, what the agent said at the end, or `null`), `reports` (each `id`, `body` in Markdown, `createdAt`; oldest first), `artifacts` (each `id`, `kind`, `url` for a link or `null`, `label` or `null`, `file` for a file or `null`, and `createdAt`; a file is its `name`, `size` in bytes, `contentType` and `sha256`), and `waitingFor`, the id of the decision the run waits for, or `null`.
 
 ### `POST /api/v1/runs`
 
@@ -86,7 +87,13 @@ Takes `taskId`, and optionally `agent` (what people see at work, `MAX_AGENT_LENG
 
 ### `POST /api/v1/runs/<id>/reports` and `POST /api/v1/runs/<id>/artifacts`
 
-How the work goes, and what was made. A report takes `body` (Markdown, `MAX_BODY_LENGTH`, not blank) and tells the board (`run.reported`, with the first words as `excerpt`); an artifact takes an https `url` and optionally a `label` (`run.handed_in`). Both answer `201` with the run. Only the run's person adds to it (`run.not_yours`), only while it is open (`run.over`), and only so many (`run.too_many_reports`, `run.too_many_artifacts`).
+How the work goes, and what was made. A report takes `body` (Markdown, `MAX_BODY_LENGTH`, not blank) and tells the board (`run.reported`, with the first words as `excerpt`); a link takes an https `url` and optionally a `label` (`run.handed_in`, with the label or the link's first words). Both answer `201` with the run. Only the run's person adds to it (`run.not_yours`), only while it is open (`run.over`), and only so many (`run.too_many_reports`, `run.too_many_artifacts`, counting links and files together).
+
+### `POST /api/v1/runs/<id>/files` and `GET /api/v1/files/<id>`
+
+A file handed in, as the parts of a form (`multipart/form-data`): the part `file` carries the bytes, with the file's name and its media type; the part `label` is optional. The name is one line without a path (`MAX_FILE_NAME_LENGTH`), the file is not empty and at most `MAX_FILE_BYTES` (`request.too_large`), and a media type that is not one, or none, is `application/octet-stream`. The bytes are kept under their SHA-256, so the same file handed in twice is kept once; the artifact on the run is `kind: "file"` with `file` filled in and `url` null. Answers `201` with the run and tells the board (`run.handed_in`, with the label or the file's name). The same rules as for a link: the run's person only, while the run is open, and only so many.
+
+The bytes are read back at `/api/v1/files/<artifact id>` by whoever may see the board, with a session or a token: `content-length` and `content-disposition` name the file, the few kinds a browser may show in place (pictures, plain text, Markdown, CSV, JSON) are answered with their type and `inline`, and every other kind as `application/octet-stream` and `attachment`, never sniffed (`x-content-type-options`) and under a policy that runs nothing (`sandbox`). An id that is a link's, or nothing, is `file.not_found`.
 
 ### `POST /api/v1/runs/<id>/end`
 

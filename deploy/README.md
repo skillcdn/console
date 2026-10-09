@@ -79,6 +79,8 @@ An agent works the board through the `console` command of `@skillcdn/console`, s
 
 A proxy in front reuses idle connections to the console. `HTTP_KEEP_ALIVE_SECONDS` must be longer than the proxy's own idle timeout, or the proxy now and then sends a request into a connection the console has just closed. `HTTP_REQUEST_TIMEOUT_SECONDS` bounds how long one request may take to arrive in full.
 
+A file handed in (`POST /api/v1/runs/<id>/files`) arrives in one request of up to 10 MiB and a little more, so the proxy's limit on a request body must allow it.
+
 The client address and the request id are read from the proxy's headers only when the proxy's address is in `TRUSTED_PROXIES`; from anyone else, the headers are ignored and the client is the peer. With `x-forwarded-for`, the chain is walked from the nearest proxy and the first address that is not a trusted proxy is the client.
 
 ## Process contract

@@ -127,6 +127,9 @@ function harness(overrides: Partial<CliIo> & { readonly fetch: CliIo["fetch"] })
     readFile: async () => {
       throw new Error("no files here");
     },
+    readBytes: async () => {
+      throw new Error("no files here");
+    },
     store: memoryStore().store,
     sleep: async () => undefined,
     now: () => 0,
@@ -267,6 +270,70 @@ describe("the console command", () => {
     const named = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["report", "named", "--run", RUN.id], named.io)).toBe(EXIT.ok);
     expect(calls.at(-1)?.key).toBe(`POST /api/v1/runs/${RUN.id}/reports`);
+  });
+
+  it("hands in a link as it is, and a file as its bytes, and says where the file is read", async () => {
+    const handedIn = {
+      ...RUN,
+      artifacts: [
+        {
+          id: "0199c4d8-0000-7000-8000-000000000022",
+          kind: "file",
+          url: null,
+          label: "the report",
+          file: {
+            name: "notes.md",
+            size: 10,
+            contentType: "text/markdown",
+            sha256: "ab".repeat(32),
+          },
+          createdAt: WHEN,
+        },
+      ],
+    };
+    const { fetch, calls } = fakeConsole({
+      [OPEN_RUNS]: { body: { items: [RUN] } },
+      [`POST /api/v1/runs/${RUN.id}/artifacts`]: { status: 201, body: RUN },
+      [`POST /api/v1/runs/${RUN.id}/files`]: { status: 201, body: handedIn },
+      [`GET /api/v1/runs/${RUN.id}`]: { body: handedIn },
+    });
+    const bytes = new TextEncoder().encode("# Notes\n\n");
+    const io = () =>
+      harness({
+        fetch,
+        env: SIGNED_IN,
+        readBytes: async (path) => {
+          if (path !== "out/notes.md") {
+            throw new Error("no such file");
+          }
+          return bytes;
+        },
+      });
+    const link = io();
+    expect(await runCli(["hand-in", "https://github.com/acme/app/pull/3"], link.io)).toBe(EXIT.ok);
+    expect(calls[1]?.body).toEqual({ url: "https://github.com/acme/app/pull/3" });
+    const file = io();
+    expect(await runCli(["hand-in", "out/notes.md", "--label", "the report"], file.io)).toBe(
+      EXIT.ok,
+    );
+    expect(file.out()).toBe(
+      `Handed in the file notes.md (${bytes.byteLength} bytes) on run ${RUN.id}: 1 artifact so far.\n`,
+    );
+    const form = calls[3]?.init?.body;
+    expect(form).toBeInstanceOf(FormData);
+    const part = (form as FormData).get("file");
+    expect(part).toBeInstanceOf(File);
+    expect((part as File).name).toBe("notes.md");
+    expect((part as File).type).toBe("text/markdown");
+    expect((form as FormData).get("label")).toBe("the report");
+    const missing = io();
+    expect(await runCli(["hand-in", "out/missing.bin"], missing.io)).toBe(EXIT.failed);
+    expect(missing.err()).toContain("No file could be read at out/missing.bin");
+    const shown = io();
+    expect(await runCli(["run", RUN.id], shown.io)).toBe(EXIT.ok);
+    expect(shown.out()).toContain(
+      "the report: notes.md (10 bytes, text/markdown; read at /api/v1/files/0199c4d8-0000-7000-8000-000000000022)",
+    );
   });
 
   it("reads a body from a file or from standard input", async () => {

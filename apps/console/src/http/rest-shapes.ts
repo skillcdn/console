@@ -99,8 +99,18 @@ export function restRun(run: RunRecord): RestRun {
     })),
     artifacts: run.artifacts.map((artifact) => ({
       id: artifact.id,
-      url: artifact.url,
+      kind: artifact.kind,
+      url: artifact.url ?? null,
       label: artifact.label ?? null,
+      file:
+        artifact.file === undefined
+          ? null
+          : {
+              name: artifact.file.name,
+              size: artifact.file.size,
+              contentType: artifact.file.contentType,
+              sha256: artifact.file.sha256,
+            },
       createdAt: artifact.createdAt.toISOString(),
     })),
     waitingFor: run.waitingFor ?? null,

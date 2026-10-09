@@ -50,6 +50,8 @@ describe("createConsole", () => {
     startRun: never,
     report: never,
     handIn: never,
+    handInFile: never,
+    fileUrl: (id) => `/api/v1/files/${id}`,
     endRun: never,
     events: never,
     eventStreamUrl: () => "/api/v1/events/stream",

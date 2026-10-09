@@ -4,6 +4,7 @@ import { EVENTS_PAGE_LIMIT, MAX_TOKENS_PER_PERSON } from "@skillcdn/console/api"
 import type { Hono } from "hono";
 import { createGitHubProvider } from "../adapters/github-login.js";
 import { createGoogleProvider } from "../adapters/google-login.js";
+import { createPgBlobStore } from "../adapters/pg-blob-store.js";
 import { systemClock } from "../adapters/system-clock.js";
 import { Login } from "../auth/login.js";
 import { Membership } from "../auth/membership.js";
@@ -23,6 +24,7 @@ import { startServer } from "../http/server.js";
 import { loadWebRoot, type WebRoot, WebRootError } from "../http/web.js";
 import { Janitor } from "../jobs/janitor.js";
 import type { Logger } from "../logger.js";
+import type { BlobStore } from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
 import type { IdentityProvider } from "../ports/identity-provider.js";
 import { APP_NAME, APP_VERSION } from "../version.js";
@@ -45,6 +47,8 @@ export interface ApiPorts {
   readonly isShuttingDown: () => boolean;
   /** A loaded build of the default UI. Left out, the server is API only. */
   readonly web?: WebRoot | undefined;
+  /** Where the bytes of files handed in are kept. Left out, in the database. */
+  readonly blobs?: BlobStore | undefined;
 }
 
 export type ApiConfig = Pick<Config, "workspace"> & {
@@ -153,6 +157,7 @@ export function createApi(
     workspace,
     auth,
     feed,
+    blobs: ports.blobs ?? createPgBlobStore(database),
     web: ports.web,
     clock,
     logger,

@@ -65,3 +65,8 @@ export async function readSecret(prompt: string): Promise<string> {
 export function readFileAt(path: string): Promise<string> {
   return readFile(path, "utf8");
 }
+
+/** A file named on the command line, as bytes: what is handed in. */
+export function readBytesAt(path: string): Promise<Uint8Array> {
+  return readFile(path);
+}

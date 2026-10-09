@@ -42,6 +42,7 @@ export {
   Callout,
   cx,
   EmptyState,
+  formatBytes,
   formatInstant,
   PersonChip,
   PRIORITY_LABELS,

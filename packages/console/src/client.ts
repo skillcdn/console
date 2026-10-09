@@ -45,6 +45,16 @@ import type { TaskState } from "./vocabulary.js";
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
+/** A file to hand in: its bytes, what to call it, and what it is. */
+export interface FileUpload {
+  /** The file's name, without a path. */
+  readonly name: string;
+  readonly bytes: Uint8Array | Blob;
+  /** The media type; `application/octet-stream` when left out. */
+  readonly contentType?: string | undefined;
+  readonly label?: string | undefined;
+}
+
 export interface ClientOptions {
   /** The origin of the console, without a path. Empty: the origin of the page. */
   readonly baseUrl?: string;
@@ -111,6 +121,10 @@ export interface ConsoleClient {
   report(runId: string, input: RestReportInput): Promise<RestRun>;
   /** Hands in a link, on a run of the asker's. */
   handIn(runId: string, input: RestArtifactInput): Promise<RestRun>;
+  /** Hands in a file, on a run of the asker's: the console keeps the bytes. */
+  handInFile(runId: string, input: FileUpload): Promise<RestRun>;
+  /** Where the bytes of a file handed in are read, by the artifact's id. */
+  fileUrl(artifactId: string): string;
   /** Ends a run: finished or failed by the agent; abandoned by the person it is for, or an administrator. */
   endRun(runId: string, input: RestRunEndInput): Promise<RestRun>;
   /** What happened after event number `after`; `0` for the beginning. */
@@ -159,6 +173,7 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
     schema: Schema<T> | undefined,
     signal?: AbortSignal,
   ): Promise<T> => {
+    const form = body instanceof FormData;
     let response: Response;
     try {
       response = await send(url, {
@@ -170,10 +185,11 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
         credentials: token === undefined ? "same-origin" : "omit",
         headers: {
           accept: "application/json",
-          ...(body === undefined ? {} : { "content-type": "application/json" }),
+          // A form names its own type, boundary included; everything else is JSON.
+          ...(body === undefined || form ? {} : { "content-type": "application/json" }),
           ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
         },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        ...(body === undefined ? {} : { body: form ? body : JSON.stringify(body) }),
       });
     } catch (error) {
       if (signal?.aborted === true) {
@@ -257,6 +273,21 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
       request("POST", `${base}${restPath("runs", runId)}/reports`, input, restRunSchema),
     handIn: (runId, input) =>
       request("POST", `${base}${restPath("runs", runId)}/artifacts`, input, restRunSchema),
+    handInFile: (runId, input) => {
+      const form = new FormData();
+      const bytes =
+        input.bytes instanceof Blob ? input.bytes : new Blob([Uint8Array.from(input.bytes)]);
+      form.set(
+        "file",
+        new File([bytes], input.name, { type: input.contentType ?? "application/octet-stream" }),
+        input.name,
+      );
+      if (input.label !== undefined) {
+        form.set("label", input.label);
+      }
+      return request("POST", `${base}${restPath("runs", runId)}/files`, form, restRunSchema);
+    },
+    fileUrl: (artifactId) => `${base}${restPath("files", artifactId)}`,
     endRun: (runId, input) =>
       request("POST", `${base}${restPath("runs", runId)}/end`, input, restRunSchema),
     events: (after, signal) =>

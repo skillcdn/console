@@ -1,3 +1,4 @@
+import { basename, extname } from "node:path";
 import { parseArgs } from "node:util";
 import { ApiError, type ConsoleClient, createClient, type FetchLike } from "../client.js";
 import { MAX_OPTIONS, MIN_OPTIONS } from "../limits.js";
@@ -52,6 +53,8 @@ export interface CliIo {
   readonly readSecret: (prompt: string) => Promise<string>;
   /** A file named with `--file`, as text. */
   readonly readFile: (path: string) => Promise<string>;
+  /** A file handed in, as bytes. */
+  readonly readBytes: (path: string) => Promise<Uint8Array>;
   readonly store: CredentialStore;
   readonly sleep: (ms: number) => Promise<void>;
   readonly now: () => number;
@@ -401,7 +404,7 @@ const take: Command = async (args, io) => {
       "",
       formatTask(found),
       "",
-      'Say how it goes: console report "<what you found or did>". Hand in what you make: console hand-in <https url>.',
+      'Say how it goes: console report "<what you found or did>". Hand in what you make: console hand-in <https url | file path>.',
       'Ask when a person must decide: console ask "<question>" --option "..." --option "...". End with: console finish --summary "<what was done, what is left>".',
     ].join("\n"),
   );
@@ -435,20 +438,67 @@ const report: Command = async (args, io) => {
   return EXIT.ok;
 };
 
+/** The media types of the kinds of file an agent hands in, by extension; the rest is bytes. */
+const CONTENT_TYPES: Readonly<Record<string, string>> = {
+  ".md": "text/markdown",
+  ".txt": "text/plain",
+  ".log": "text/plain",
+  ".csv": "text/csv",
+  ".json": "application/json",
+  ".yaml": "application/yaml",
+  ".yml": "application/yaml",
+  ".html": "text/html",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".svg": "image/svg+xml",
+  ".pdf": "application/pdf",
+  ".zip": "application/zip",
+};
+
+const soFar = (count: number): string => `${count} artifact${count === 1 ? "" : "s"} so far.`;
+
 const handIn: Command = async (args, io) => {
   const { values, positionals } = parse(args, {
     label: { type: "string" },
     run: { type: "string" },
   });
-  const url = theOne(
+  const what = theOne(
     positionals,
-    "Say what to hand in: console hand-in <https url> [--label <words>]",
+    "Say what to hand in: console hand-in <https url | file path> [--label <words>]",
   );
   const label = text(values, "label");
   const session = await open(io, values);
   const runId = await currentRun(session, values);
-  const run = await session.client.handIn(runId, {
-    url,
+  // A URL is handed in as a link, and the console says whether it takes it; anything else
+  // names a file on this machine.
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(what)) {
+    const run = await session.client.handIn(runId, {
+      url: what,
+      ...(label === undefined ? {} : { label }),
+    });
+    answer(
+      io,
+      session,
+      run,
+      () => `Handed in ${what} on run ${run.id}: ${soFar(run.artifacts.length)}`,
+    );
+    return EXIT.ok;
+  }
+  let bytes: Uint8Array;
+  try {
+    bytes = await io.readBytes(what);
+  } catch {
+    throw failed(`No file could be read at ${what}. Hand in an https link, or the path of a file.`);
+  }
+  const name = basename(what);
+  const contentType = CONTENT_TYPES[extname(name).toLowerCase()];
+  const run = await session.client.handInFile(runId, {
+    name,
+    bytes,
+    ...(contentType === undefined ? {} : { contentType }),
     ...(label === undefined ? {} : { label }),
   });
   answer(
@@ -456,7 +506,7 @@ const handIn: Command = async (args, io) => {
     session,
     run,
     () =>
-      `Handed in ${url} on run ${run.id}: ${run.artifacts.length} artifact${run.artifacts.length === 1 ? "" : "s"} so far.`,
+      `Handed in the file ${name} (${bytes.byteLength} bytes) on run ${run.id}: ${soFar(run.artifacts.length)}`,
   );
   return EXIT.ok;
 };

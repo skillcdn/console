@@ -1,4 +1,5 @@
 import {
+  ARTIFACT_KINDS,
   PERSON_ROLES,
   type RestDecisionOption,
   type RestEventData,
@@ -12,6 +13,7 @@ import {
   type AnyPgColumn,
   bigint,
   check,
+  customType,
   index,
   integer,
   jsonb,
@@ -29,6 +31,8 @@ const id = () => uuid().primaryKey().default(sql`uuidv7()`);
 const instant = () => timestamp({ withTimezone: true, mode: "date" });
 const createdAt = () => instant().notNull().defaultNow();
 const updatedAt = () => instant().notNull().defaultNow();
+/** Bytes as they are: the driver hands a `Buffer` in and out. */
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "bytea" });
 
 /** `'a', 'b'`: a list of constants for a check constraint. They are the package's, never input. */
 const literals = (values: readonly string[]): string =>
@@ -222,7 +226,11 @@ export const reports = pgTable(
   (table) => [index("reports_run_idx").on(table.runId)],
 );
 
-/** What a run handed in: a link, as the API checked it. Files arrive with the blob store. */
+/**
+ * What a run handed in: a link, as the API checked it, or a file the console keeps, whose bytes
+ * are in the blob store under their hash. A link has its `url`; a file has its name, its size,
+ * its media type and its hash, and nothing else.
+ */
 export const artifacts = pgTable(
   "artifacts",
   {
@@ -230,12 +238,36 @@ export const artifacts = pgTable(
     runId: uuid()
       .notNull()
       .references(() => runs.id, { onDelete: "cascade" }),
-    url: text().notNull(),
+    kind: text({ enum: ARTIFACT_KINDS }).notNull().default("link"),
+    url: text(),
     label: text(),
+    fileName: text(),
+    fileSize: integer(),
+    contentType: text(),
+    sha256: text(),
     createdAt: createdAt(),
   },
-  (table) => [index("artifacts_run_idx").on(table.runId)],
+  (table) => [
+    index("artifacts_run_idx").on(table.runId),
+    check("artifacts_kind_check", sql`${table.kind} in (${sql.raw(literals(ARTIFACT_KINDS))})`),
+    check(
+      "artifacts_shape_check",
+      sql`(${table.kind} = 'link' and ${table.url} is not null) or (${table.kind} = 'file' and ${table.fileName} is not null and ${table.fileSize} is not null and ${table.contentType} is not null and ${table.sha256} is not null)`,
+    ),
+  ],
 );
+
+/**
+ * The bytes of files handed in, under their SHA-256: the PostgreSQL implementation of the
+ * blob-store port, for the smallest install. The artifacts that name a hash are what refers to
+ * a row; the table is not the model, and the S3 implementation does without it.
+ */
+export const blobs = pgTable("blobs", {
+  sha256: text().primaryKey(),
+  size: integer().notNull(),
+  bytes: bytea().notNull(),
+  createdAt: createdAt(),
+});
 
 /**
  * A question that needs a person: the options, who raised it, and the answer with who gave it

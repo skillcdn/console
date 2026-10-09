@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto";
 import {
+  MAX_FILE_BYTES,
   REST_ROUTES,
   restDecisionSchema,
   restErrorSchema,
@@ -354,5 +356,149 @@ describe("runs", () => {
     });
     expect(byAdmin.status).toBe(200);
     await named.close();
+  });
+
+  it("carry files handed in, which the console keeps and whoever may see the board reads back", async () => {
+    const task = await writeTask(alice, { title: "Write the report" });
+    const run = await startRun(aliceToken, task.id);
+    const content = '# The report\n\nAll of it, <with> "quotes".\n';
+    const bytes = new TextEncoder().encode(content);
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    const upload = (
+      token: string,
+      runId: string,
+      file: { name: string; type?: string; bytes?: Uint8Array } | undefined,
+      label?: string,
+    ) => {
+      const form = new FormData();
+      if (file !== undefined) {
+        form.set(
+          "file",
+          new File([new Uint8Array(file.bytes ?? bytes)], file.name, { type: file.type ?? "" }),
+          file.name,
+        );
+      }
+      if (label !== undefined) {
+        form.set("label", label);
+      }
+      return h.request(`${REST_ROUTES.runs}/${runId}/files`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}` },
+        body: form,
+      });
+    };
+
+    // A file is handed in as the parts of a form: the bytes under their hash, the rest on the run.
+    const handed = await upload(
+      aliceToken,
+      run.id,
+      { name: "report <final>.md", type: "text/markdown; charset=utf-8" },
+      "the report",
+    );
+    expect(handed.status).toBe(201);
+    const [artifact] = restRunSchema.parse(await handed.json()).artifacts;
+    expect(artifact).toMatchObject({
+      kind: "file",
+      url: null,
+      label: "the report",
+      file: {
+        name: "report <final>.md",
+        size: bytes.byteLength,
+        contentType: "text/markdown",
+        sha256,
+      },
+    });
+    const id = artifact?.id ?? "";
+
+    // Read back by the agent and by any person of the board, as it was, shown in place for a
+    // kind a browser may show, and never sniffed.
+    const byAgent = await asAgent(aliceToken, "GET", `${REST_ROUTES.files}/${id}`);
+    expect(byAgent.status).toBe(200);
+    expect(await byAgent.text()).toBe(content);
+    expect(byAgent.headers.get("content-type")).toBe("text/markdown; charset=utf-8");
+    expect(byAgent.headers.get("content-length")).toBe(String(bytes.byteLength));
+    expect(byAgent.headers.get("content-disposition")).toBe(
+      "inline; filename=\"report <final>.md\"; filename*=UTF-8''report%20%3Cfinal%3E.md",
+    );
+    expect(byAgent.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(byAgent.headers.get("content-security-policy")).toContain("sandbox");
+    expect(byAgent.headers.get("cache-control")).toBe("no-store");
+    const byPerson = await h.request(`${REST_ROUTES.files}/${id}`, { headers: { cookie: bob } });
+    expect(byPerson.status).toBe(200);
+    expect(await byPerson.text()).toBe(content);
+    expect((await h.request(`${REST_ROUTES.files}/${id}`)).status).toBe(401);
+
+    // A kind a browser might run is handed over as bytes, to be saved; the same bytes handed in
+    // again are kept once; a file without a label is called by its name on the board.
+    const page = await upload(aliceToken, run.id, { name: "page.html", type: "text/html" });
+    expect(page.status).toBe(201);
+    const [, html] = restRunSchema.parse(await page.json()).artifacts;
+    expect(html?.file).toMatchObject({ contentType: "text/html", sha256 });
+    const asBytes = await asAgent(aliceToken, "GET", `${REST_ROUTES.files}/${html?.id ?? ""}`);
+    expect(asBytes.headers.get("content-type")).toBe("application/octet-stream");
+    expect(asBytes.headers.get("content-disposition")).toMatch(
+      /^attachment; filename="page\.html"/,
+    );
+    expect(await asBytes.text()).toBe(content);
+    const untyped = await upload(aliceToken, run.id, {
+      name: "data.bin",
+      bytes: new Uint8Array([0, 1, 2, 255]),
+    });
+    expect(restRunSchema.parse(await untyped.json()).artifacts[2]?.file).toMatchObject({
+      contentType: "application/octet-stream",
+      size: 4,
+    });
+    const events = restEventsSchema.parse(
+      await (await asPerson(bob, "GET", `${REST_ROUTES.events}?after=0`)).json(),
+    );
+    expect(
+      events.items
+        .filter((event) => event.runId === run.id && event.kind === "run.handed_in")
+        .map((event) => event.data.label),
+    ).toEqual(["the report", "page.html", "data.bin"]);
+
+    // What is refused: no file, an empty one, a name that is a path, one over the limit, a file
+    // on another's run, and a read of what is not a file.
+    const noFile = await upload(aliceToken, run.id, undefined, "nothing");
+    expect(noFile.status).toBe(400);
+    expect(await errorOf(noFile)).toBe("request.invalid");
+    const empty = await upload(aliceToken, run.id, { name: "empty.txt", bytes: new Uint8Array() });
+    expect(empty.status).toBe(400);
+    const path = await upload(aliceToken, run.id, { name: "../etc/passwd" });
+    expect(path.status).toBe(400);
+    expect(restErrorSchema.parse(await path.json()).error.message).toContain("name");
+    const huge = await upload(aliceToken, run.id, {
+      name: "huge.bin",
+      bytes: new Uint8Array(MAX_FILE_BYTES + 1),
+    });
+    expect(huge.status).toBe(413);
+    expect(await errorOf(huge)).toBe("request.too_large");
+    const bobToken = await tokenFor(h, bob, "Bob's agent");
+    const notYours = await upload(bobToken, run.id, { name: "mine.md" });
+    expect(notYours.status).toBe(403);
+    expect(await errorOf(notYours)).toBe("run.not_yours");
+    const link = await asAgent(aliceToken, "POST", `${REST_ROUTES.runs}/${run.id}/artifacts`, {
+      url: "https://github.com/acme/app/pull/4",
+    });
+    const linkId = restRunSchema.parse(await link.json()).artifacts.at(-1)?.id ?? "";
+    expect((await asAgent(aliceToken, "GET", `${REST_ROUTES.files}/${linkId}`)).status).toBe(404);
+    expect(
+      (
+        await asAgent(
+          aliceToken,
+          "GET",
+          `${REST_ROUTES.files}/0199c4d8-0000-7000-8000-0000000000ff`,
+        )
+      ).status,
+    ).toBe(404);
+    expect((await asAgent(aliceToken, "GET", `${REST_ROUTES.files}/not-an-id`)).status).toBe(404);
+    const ended = await asAgent(aliceToken, "POST", `${REST_ROUTES.runs}/${run.id}/end`, {
+      status: "finished",
+    });
+    expect(ended.status).toBe(200);
+    const late = await upload(aliceToken, run.id, { name: "late.md" });
+    expect(late.status).toBe(409);
+    expect(await errorOf(late)).toBe("run.over");
+    expect(JSON.stringify(h.logs)).not.toContain("All of it");
   });
 });

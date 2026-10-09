@@ -189,6 +189,19 @@ export function formatInstant(iso: string): string {
   });
 }
 
+/** A size in bytes as people read one: `12 B`, `3.4 KB`, `120 MB`. */
+export function formatBytes(size: number): string {
+  if (size < 1024) {
+    return `${size} B`;
+  }
+  const kb = size / 1024;
+  if (kb < 1024) {
+    return `${kb < 10 ? kb.toFixed(1) : Math.round(kb)} KB`;
+  }
+  const mb = kb / 1024;
+  return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
+}
+
 export function Time(props: { readonly iso: string }) {
   return (
     <time className="sc-time" dateTime={props.iso}>

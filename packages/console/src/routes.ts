@@ -16,6 +16,8 @@ export const REST_ROUTES = {
   tokens: "/api/v1/tokens",
   /** The runs: agents at work, and what they did. */
   runs: "/api/v1/runs",
+  /** The bytes of a file a run handed in: `/api/v1/files/<artifact id>`. */
+  files: "/api/v1/files",
 } as const;
 
 /** Where a browser signs in and out. Signing in is per provider: `/auth/<provider>/...`. */
@@ -54,9 +56,9 @@ export function signInPath(page: string, failure: SignInFailure): string {
   return `${page}${page.includes("?") ? "&" : "?"}${SIGN_IN_PARAM}=${failure}`;
 }
 
-/** The REST path of one task, decision, token, person or run: the collection, then the id. */
+/** The REST path of one task, decision, token, person, run or file: the collection, then the id. */
 export function restPath(
-  collection: "tasks" | "decisions" | "tokens" | "people" | "runs",
+  collection: "tasks" | "decisions" | "tokens" | "people" | "runs" | "files",
   id: string,
 ): string {
   return `${REST_ROUTES[collection]}/${encodeURIComponent(id)}`;

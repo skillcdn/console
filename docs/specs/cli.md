@@ -21,7 +21,7 @@ From then on the agent is that person on the board ([ADR-0004](../adr/0004-peopl
 | `task new <title> [--body <markdown>\|--file <path>] [--state <state>] [--priority <priority>]` | `POST /api/v1/tasks` | the number and the id |
 | `take <number\|id> [--agent <name>]` | `GET /api/v1/tasks/<ref>`, then `POST /api/v1/runs` | the run that began, the task in full, and what to do next |
 | `report <markdown>`, `report --file <path>`, `report -` | `POST /api/v1/runs/<id>/reports` | how many reports the run carries |
-| `hand-in <https url> [--label <words>]` | `POST /api/v1/runs/<id>/artifacts` | how many artifacts |
+| `hand-in <https url \| file path> [--label <words>]` | `POST /api/v1/runs/<id>/artifacts` for a link; `POST /api/v1/runs/<id>/files` for a file, sent as a form with its name and its media type by extension | how many artifacts |
 | `ask "<question>" --option "<label>" ... [--body <markdown>\|--file <path>] [--wait <seconds>]` | `POST /api/v1/decisions` with `runId`, then `GET /api/v1/decisions/<id>?wait=` | the decision raised, its options; then the answer, or that it still waits |
 | `decision <id> [--wait <seconds>]` | `GET /api/v1/decisions/<id>`, with `?wait=` while waiting | the decision; with a wait, the answer or that it still waits |
 | `decisions [--open]` | `GET /api/v1/decisions` | one line per decision |
@@ -66,4 +66,4 @@ What a person does, once the command is signed in where the agent runs; tried wi
 
 ## Not yet
 
-`hand-in` taking a file (the blob store), and hooks that report an agent's events without being asked ([roadmap](../roadmap.md)).
+Hooks that report an agent's events without being asked ([roadmap](../roadmap.md)).

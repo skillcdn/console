@@ -2,6 +2,7 @@ import {
   MAX_AGENT_LENGTH,
   MAX_ARTIFACTS_PER_RUN,
   MAX_BODY_LENGTH,
+  MAX_FILE_BYTES,
   MAX_LINK_LABEL_LENGTH,
   MAX_OPTION_LABEL_LENGTH,
   MAX_OPTIONS,
@@ -94,14 +95,20 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     refusals: [...RUN_REFUSALS, "run.too_many_reports: the run carries as many as one may"],
   },
   "hand-in": {
-    usage: "hand-in <https url> [--label <words>]",
-    about: "Hands in what was made, as a link: a branch, a pull request, a document, a page.",
+    usage: "hand-in <https url | file path> [--label <words>]",
+    about:
+      "Hands in what was made: a link (a branch, a pull request, a document, a page), or a file from this machine, which the console keeps and shows on the task.",
     limits: [
-      "the link: https only",
+      "a link: https only",
+      `a file: up to ${MAX_FILE_BYTES} bytes, not empty; it is called by its name, without the path`,
       `label: one line, up to ${MAX_LINK_LABEL_LENGTH} characters`,
-      `at most ${MAX_ARTIFACTS_PER_RUN} links on one run`,
+      `at most ${MAX_ARTIFACTS_PER_RUN} links and files on one run`,
     ],
-    refusals: [...RUN_REFUSALS, "run.too_many_artifacts: the run carries as many as one may"],
+    refusals: [
+      ...RUN_REFUSALS,
+      "run.too_many_artifacts: the run carries as many as one may",
+      "request.too_large: the file is over the limit",
+    ],
   },
   ask: {
     usage:

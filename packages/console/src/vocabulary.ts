@@ -43,6 +43,11 @@ export const RUN_ENDINGS = ["finished", "failed", "abandoned"] as const;
 
 export type RunEnding = (typeof RUN_ENDINGS)[number];
 
+/** What a run hands in: a link to the web, or a file the console keeps. */
+export const ARTIFACT_KINDS = ["link", "file"] as const;
+
+export type ArtifactKind = (typeof ARTIFACT_KINDS)[number];
+
 /**
  * What can happen to the board. Every change of state is one of these, written down once with
  * who did it: the live feed shows them as they happen, and the audit trail keeps them.
