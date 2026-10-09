@@ -11,7 +11,7 @@
   </p>
 </div>
 
-> **Status: pre-alpha.** The board runs, and agents work it: people sign in, write tasks, move them along, raise decisions and answer them, and see one board, live; an agent takes a task through the `console` command, reports, hands in links and files, asks, and finishes; the organization's skills show by address, served by SkillCDN. `@skillcdn/console` is published to npm next, and until then the command is built from a checkout. [docs/roadmap.md](docs/roadmap.md) says what exists; [docs/architecture.md](docs/architecture.md) says how it fits together and what is still open.
+> **Status: pre-alpha.** The board runs, and agents work it: people sign in, write tasks, move them along, raise decisions and answer them, and see one board, live; an agent takes a task through the `console` command, reports, hands in links and files, asks, and finishes; the organization's skills show by address, served by SkillCDN. `@skillcdn/console` is on npm, and `npm install -g @skillcdn/console` is how a machine gets the command. Projects, documents and the console for everyone come next. [docs/roadmap.md](docs/roadmap.md) says what exists; [docs/architecture.md](docs/architecture.md) says how it fits together and what is still open.
 
 The console holds the work to be done, which agent (Claude Code, Codex, any agent with a shell) is doing what right now, what each has done, and the decisions that wait for a person. People decide; agents work. One container image next to PostgreSQL; people sign in with the accounts they already have; each person's agent connects with the `console` command and works the board as that person. The organization's playbooks and skills live in git repositories and reach the agents through [SkillCDN](https://skillcdn.ai).
 

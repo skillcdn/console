@@ -7,9 +7,9 @@ What exists, what is being built, what comes next. Update this file in the same 
 - **Foundation (2026-10-09).** The repository laid out so that development can start: the working agreement ([AGENTS.md](../AGENTS.md)), what the console is and how it is built ([architecture.md](architecture.md), [ADR-0001](adr/0001-the-console-is-the-reference-console-built-on-the-published-packages.md), [ADR-0002](adr/0002-one-image-one-database-and-the-main-repositorys-toolchain.md), [ADR-0003](adr/0003-the-console-is-licensed-under-mit.md)), the toolchain and CI, the two workspaces as placeholders that build and test, the deployment contract, compose for the local database.
 - **Milestone 1, the board (2026-10-09).** A person opens the console, signs in through the git host (membership from configuration), writes a task, moves it along, raises a decision and answers one; several people see the same board, live. The data model and its migrations, the config module and the three roles with probes and clean shutdown, the [REST API](specs/rest.md) with its contract in `@skillcdn/console/api` and a feed of server-sent events woken through the database's own channel, the default UI from the package's components and composition, and the image with its job in CI. No agents yet.
 
-## Now: milestone 2, agents at work
+## Done: milestone 2, agents at work (2026-10-10)
 
-Goal: a person connects their agent to the console; the agent takes work from the board, reports what it does, hands in what it made, and raises a decision when one is needed; a person answers it from the board.
+Goal: a person connects their agent to the console; the agent takes work from the board, reports what it does, hands in what it made, and raises a decision when one is needed; a person answers it from the board. Every item below is in; the next milestone is chosen from the list after.
 
 - [x] Tokens a person makes for their agent (2026-10-09): scoped to that person, expiring, revocable, stored as hashes; a page to make and remove them. The REST API and the feed take a token as well as a session, so that a script or a custom console acts as its person ([ADR-0004](adr/0004-people-and-agents-reach-the-board-only-through-the-api-with-a-credential-of-their-own.md)).
 - [x] Roles (2026-10-09): an administrator who configures, a member who works; kept in the database, applied to a person's agents as to the person ([ADR-0005](adr/0005-people-sign-in-through-an-identity-provider-and-membership-and-roles-are-the-consoles-own.md)).
@@ -23,7 +23,7 @@ Goal: a person connects their agent to the console; the agent takes work from th
 - [x] Tokens that do not expire (2026-10-09), for a person who chooses so.
 - [x] The organization's skills shown by address (2026-10-10): `SKILLS_ADDRESS` names them at a SkillCDN deployment, and the Skills page and `console skills` list what it serves, read through `@skillcdn/core` 0.1.1 and the deployment's REST API. The address moves to the project with milestone 3.
 - [x] The release workflow (2026-10-10): pending changesets become one version pull request, and merging it publishes through the registry's trusted publishing; the version follows the `@skillcdn/core` line ([ADR-0007](adr/0007-the-package-is-published-through-trusted-publishing-and-versioned-on-the-core-line.md)).
-- [ ] `@skillcdn/console` 0.1.0 published by hand by a maintainer, and the trusted publisher registered ([deploy/README.md](../deploy/README.md#repository-settings-checklist)), so that `npm install -g @skillcdn/console` is how a machine gets the command.
+- [x] `@skillcdn/console` published (2026-10-10): 0.1.0 by hand by a maintainer, then the trusted publisher registered and 0.1.1 published by the workflow, so that `npm install -g @skillcdn/console` is how a machine gets the command.
 
 ## After milestone 2
 
