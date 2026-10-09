@@ -37,6 +37,7 @@ describe("loadConfig", () => {
       database: { url: DATABASE_URL, poolMax: 10 },
       workspace: { name: "Console" },
       worker: { inProcess: false },
+      auth: undefined,
     });
   });
 
@@ -140,5 +141,86 @@ describe("loadConfig", () => {
     const leak = problemsOf({ DATABASE_URL: "mysql://user:hunter2-secret@db/console" });
     expect(leak.message).not.toContain("hunter2-secret");
     expect(leak.message).toContain("DATABASE_URL");
+  });
+});
+
+describe("signing in", () => {
+  const signIn = {
+    DATABASE_URL,
+    PUBLIC_URL: "https://console.example.test",
+    GITHUB_CLIENT_ID: "Iv23liExampleClientId",
+    GITHUB_CLIENT_SECRET: "client-secret-of-the-app",
+    AUTH_SECRET: "an-auth-secret-of-at-least-32-characters",
+    MEMBERS: "alice, Bob,,carol",
+  };
+
+  it("is off until it is configured, and then has safe defaults", () => {
+    expect(loadConfig({ DATABASE_URL }, noFiles).auth).toBeUndefined();
+    expect(loadConfig(signIn, noFiles).auth).toEqual({
+      publicUrl: "https://console.example.test",
+      github: {
+        clientId: "Iv23liExampleClientId",
+        clientSecret: "client-secret-of-the-app",
+        webUrl: "https://github.com",
+        apiUrl: "https://api.github.com",
+      },
+      secret: "an-auth-secret-of-at-least-32-characters",
+      members: ["alice", "Bob", "carol"],
+      sessionTtlMs: 30 * 86_400_000,
+    });
+  });
+
+  it("reads where the git host is, the lifetime, and the secret from a file", () => {
+    const { auth } = loadConfig(
+      {
+        ...signIn,
+        GITHUB_CLIENT_SECRET: undefined,
+        GITHUB_CLIENT_SECRET_FILE: "/run/secrets/client",
+        GITHUB_WEB_URL: "https://github.example.test/",
+        GITHUB_API_URL: "https://github.example.test/api/v3/",
+        SESSION_TTL_DAYS: "7",
+      },
+      (path) => (path === "/run/secrets/client" ? "from-file\n" : noFiles()),
+    );
+    expect(auth).toMatchObject({
+      github: {
+        clientSecret: "from-file",
+        webUrl: "https://github.example.test",
+        apiUrl: "https://github.example.test/api/v3",
+      },
+      sessionTtlMs: 7 * 86_400_000,
+    });
+  });
+
+  it("wants all of it or none of it, and names what is missing", () => {
+    const { GITHUB_CLIENT_SECRET: _secret, AUTH_SECRET: _auth, ...partial } = signIn;
+    expect(problemsOf(partial).problems).toEqual([
+      "GITHUB_CLIENT_SECRET, AUTH_SECRET: required once any of PUBLIC_URL, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, AUTH_SECRET is set",
+    ]);
+    expect(problemsOf({ DATABASE_URL, MEMBERS: "alice" }).problems[0]).toContain(
+      "MEMBERS: lists who may sign in",
+    );
+  });
+
+  it("wants an origin, a secret that is not short, and logins that are logins", () => {
+    for (const value of [
+      "console.example.test",
+      "ftp://console.example.test",
+      "https://console.example.test/app",
+      "https://console.example.test/?x=1",
+      "https://user@console.example.test",
+    ]) {
+      expect(problemsOf({ ...signIn, PUBLIC_URL: value }).problems, value).toHaveLength(1);
+    }
+    expect(
+      loadConfig({ ...signIn, PUBLIC_URL: "https://Console.Example.test/" }, noFiles).auth,
+    )?.toMatchObject({ publicUrl: "https://console.example.test" });
+    const short = problemsOf({ ...signIn, AUTH_SECRET: "hunter2" });
+    expect(short.problems).toEqual(["AUTH_SECRET: must be at least 32 characters"]);
+    expect(short.message).not.toContain("hunter2");
+    expect(problemsOf({ ...signIn, MEMBERS: "alice, not a login" }).problems).toEqual([
+      "MEMBERS: must be a list of logins",
+    ]);
+    expect(loadConfig({ ...signIn, MEMBERS: "" }, noFiles).auth?.members).toEqual([]);
   });
 });

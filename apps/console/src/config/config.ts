@@ -6,7 +6,16 @@ import { type Cidr, parseCidr } from "../http/client-address.js";
 // The only module that reads the environment. Contract: .env.example and deploy/README.md.
 
 /** Variables that may arrive as `NAME_FILE`, so that container secret mounts work. */
-const SECRET_NAMES = ["DATABASE_URL"] as const;
+const SECRET_NAMES = ["DATABASE_URL", "GITHUB_CLIENT_SECRET", "AUTH_SECRET"] as const;
+/** What signing in needs, all of it or none of it. */
+const SIGN_IN_NAMES = [
+  "PUBLIC_URL",
+  "GITHUB_CLIENT_ID",
+  "GITHUB_CLIENT_SECRET",
+  "AUTH_SECRET",
+] as const;
+/** Shorter than this, a secret is guessable enough to be a mistake. */
+const MIN_SECRET_LENGTH = 32;
 
 const integer = (fallback: number, min: number, max: number) =>
   z.coerce.number().int().min(min).max(max).default(fallback);
@@ -23,6 +32,18 @@ const headerName = (fallback: string) =>
     .regex(/^[A-Za-z0-9-]{1,64}$/, "must be a header name")
     .default(fallback)
     .transform((value) => value.toLowerCase());
+
+const origin = z
+  .url({ protocol: /^https?$/ })
+  .refine((value) => {
+    // Checks run even when an earlier one failed. What is not a URL was reported already.
+    if (!URL.canParse(value)) {
+      return true;
+    }
+    const url = new URL(value);
+    return url.pathname === "/" && url.search === "" && url.hash === "" && url.username === "";
+  }, "must be an origin such as https://console.example.com, without a path")
+  .transform((value) => new URL(value).origin);
 
 /** A comma-separated list of networks in CIDR notation; a bare address means just that address. */
 const cidrList = z
@@ -42,6 +63,25 @@ const cidrList = z
       networks.push(parsed);
     }
     return networks;
+  });
+
+/** A comma-separated list of logins at the git host, each as the host spells one. */
+const loginList = z
+  .string()
+  .default("")
+  .transform((value, context) => {
+    const logins: string[] = [];
+    for (const entry of value.split(",").map((part) => part.trim())) {
+      if (entry.length === 0) {
+        continue;
+      }
+      if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/.test(entry)) {
+        context.addIssue({ code: "custom", message: "must be a list of logins" });
+        return z.NEVER;
+      }
+      logins.push(entry);
+    }
+    return logins;
   });
 
 const environmentSchema = z.object({
@@ -70,7 +110,45 @@ const environmentSchema = z.object({
     .refine((value) => !hasForbiddenCodePoint(value), "must not contain control characters")
     .default("Console"),
   WORKER_IN_PROCESS: flag(false),
+
+  PUBLIC_URL: origin.optional(),
+  GITHUB_WEB_URL: origin.default("https://github.com"),
+  GITHUB_API_URL: z
+    .url({ protocol: /^https?$/ })
+    .transform((value) => value.replace(/\/+$/, ""))
+    .default("https://api.github.com"),
+  GITHUB_CLIENT_ID: z
+    .string()
+    .regex(/^[A-Za-z0-9._-]{1,64}$/, "must be the app's client id")
+    .optional(),
+  GITHUB_CLIENT_SECRET: z.string().min(1).optional(),
+  AUTH_SECRET: z
+    .string()
+    .min(MIN_SECRET_LENGTH, `must be at least ${MIN_SECRET_LENGTH} characters`)
+    .optional(),
+  MEMBERS: loginList,
+  SESSION_TTL_DAYS: integer(30, 1, 365),
 });
+
+export interface AuthConfig {
+  /** The origin people use: where the git host sends them back, and what requests that change something come from. */
+  readonly publicUrl: string;
+  /** The app the operator registered at the git host. */
+  readonly github: {
+    readonly clientId: string;
+    readonly clientSecret: string;
+    /** Where people use the host in a browser. */
+    readonly webUrl: string;
+    /** Where the host's API is. */
+    readonly apiUrl: string;
+  };
+  /** What travels through a browser between two requests is sealed with. */
+  readonly secret: string;
+  /** The logins the operator lets in. Empty: nobody. */
+  readonly members: readonly string[];
+  /** How long a browser stays signed in without being used. */
+  readonly sessionTtlMs: number;
+}
 
 export interface Config {
   readonly environment: "development" | "test" | "production";
@@ -103,6 +181,8 @@ export interface Config {
     /** Whether the `api` role runs the worker's loop as well, for a single-container install. */
     readonly inProcess: boolean;
   };
+  /** Signing in through the git host. Unset: nobody signs in, and the board is nobody's. */
+  readonly auth: AuthConfig | undefined;
 }
 
 export class ConfigError extends Error {
@@ -144,6 +224,56 @@ function withSecretFiles(
 }
 
 /**
+ * What signing in is configured with, or `undefined` when it is not. It takes the app's client
+ * and the secret, and an origin that does not change with the request: the git host sends
+ * people back to it, and the pages' own requests come from it.
+ */
+function authOf(
+  env: z.infer<typeof environmentSchema>,
+  problems: string[],
+): AuthConfig | undefined {
+  const given = {
+    PUBLIC_URL: env.PUBLIC_URL,
+    GITHUB_CLIENT_ID: env.GITHUB_CLIENT_ID,
+    GITHUB_CLIENT_SECRET: env.GITHUB_CLIENT_SECRET,
+    AUTH_SECRET: env.AUTH_SECRET,
+  };
+  if (Object.values(given).every((value) => value === undefined)) {
+    if (env.MEMBERS.length > 0) {
+      problems.push(
+        `MEMBERS: lists who may sign in, and is read only with ${SIGN_IN_NAMES.join(", ")}`,
+      );
+    }
+    return undefined;
+  }
+  const missing = SIGN_IN_NAMES.filter((name) => given[name] === undefined);
+  if (missing.length > 0) {
+    problems.push(`${missing.join(", ")}: required once any of ${SIGN_IN_NAMES.join(", ")} is set`);
+    return undefined;
+  }
+  if (
+    env.PUBLIC_URL === undefined ||
+    env.GITHUB_CLIENT_ID === undefined ||
+    env.GITHUB_CLIENT_SECRET === undefined ||
+    env.AUTH_SECRET === undefined
+  ) {
+    return undefined;
+  }
+  return {
+    publicUrl: env.PUBLIC_URL,
+    github: {
+      clientId: env.GITHUB_CLIENT_ID,
+      clientSecret: env.GITHUB_CLIENT_SECRET,
+      webUrl: env.GITHUB_WEB_URL,
+      apiUrl: env.GITHUB_API_URL,
+    },
+    secret: env.AUTH_SECRET,
+    members: env.MEMBERS,
+    sessionTtlMs: env.SESSION_TTL_DAYS * 86_400_000,
+  };
+}
+
+/**
  * Parses and validates the environment once, at boot. Problems name the variable and the rule,
  * never the value: a connection string or a secret must not end up in a log.
  */
@@ -170,6 +300,10 @@ export function loadConfig(
     throw new ConfigError(problems);
   }
   const env = parsed.data;
+  const auth = authOf(env, problems);
+  if (problems.length > 0) {
+    throw new ConfigError(problems);
+  }
   return {
     environment: env.NODE_ENV,
     logLevel: env.LOG_LEVEL,
@@ -187,5 +321,6 @@ export function loadConfig(
     database: { url: env.DATABASE_URL, poolMax: env.DATABASE_POOL_MAX },
     workspace: { name: env.WORKSPACE_NAME },
     worker: { inProcess: env.WORKER_IN_PROCESS },
+    auth,
   };
 }

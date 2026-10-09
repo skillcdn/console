@@ -11,7 +11,7 @@
     "types": ["node"]
   },
   "include": ["src"],
-  "exclude": ["src/**/*.test.ts", "src/db/testing.ts"],
+  "exclude": ["src/**/*.test.ts", "src/db/testing.ts", "src/testing/**"],
   "references": [
     {
       "path": "../../packages/console/tsconfig.build.json"

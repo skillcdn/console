@@ -51,8 +51,8 @@ Proposed, to be settled by the second milestone:
 
 ## Sign-in and permissions
 
-- People sign in through the git host the organization uses, GitHub first, as SkillCDN does: the console keeps a session and never a password of its own. The git host's token stays server-side, encrypted, and is used only to ask who the person is.
-- Membership: the first version takes a configured list of allowed accounts. Reading the git-host organization's membership instead is an open question.
+- People sign in through the git host the organization uses, GitHub first, as SkillCDN does: the console keeps a session and never a password of its own. The git host's token is used once, server-side, to ask who the person is, and then dropped: nothing of it is kept, since membership is decided here and not at the host.
+- Membership: the first version takes a configured list of allowed accounts (`MEMBERS`, logins at the git host), checked at sign-in and on every request after, so that a login taken off the list is out at once. Reading the git-host organization's membership instead is an open question.
 - An agent's token is made by a person on their own page, scoped to that person, expiring and revocable; it is stored as a hash. An agent can do what its person can do, and nothing on anyone else's behalf.
 - Requests that change something for a person come from the console's own pages: the session cookie does not travel with other sites' requests, and the origin is checked as well.
 - Permissions fail closed: no confirmed answer, no access.
@@ -111,7 +111,7 @@ Inherited from the main repository, unchanged ([ADR-0002](adr/0002-one-image-one
 
 - **Untrusted input:** everything an agent sends, every request, and what SkillCDN serves of a repository. Parsed with schemas, bounded in size and depth, stored as data, shown as text or as Markdown rendered to elements, never as HTML, never executed.
 - **Fail closed** on membership and on every token. Unknown and forbidden answer the same.
-- **Tokens:** git-host tokens encrypted at rest and used only to ask; sessions and agent tokens stored as hashes; nothing logged.
+- **Tokens:** git-host tokens used once to ask who a person is and never kept; sessions and agent tokens stored as hashes; nothing logged.
 - **Nobody acts for someone else:** an agent is its person, and its person only.
 - **Outbound requests** go only to configured base URLs: the git host and the SkillCDN deployment. Never to a URL an agent sent.
 - **Supply chain:** lockfile with integrity hashes, a minimum release age, an allow-list for install scripts, actions pinned by commit, secret scanning.

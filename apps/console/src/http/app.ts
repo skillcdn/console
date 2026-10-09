@@ -3,6 +3,7 @@ import type { Database } from "../db/client.js";
 import { getSchemaStatus } from "../db/migrate.js";
 import type { WorkspaceRecord } from "../db/queries/workspaces.js";
 import type { Logger } from "../logger.js";
+import { type AppAuth, createAccess, registerAuth } from "./auth.js";
 import type { ClientAddressResolver } from "./client-address.js";
 import { type AppEnv, requestContext } from "./request-context.js";
 
@@ -14,6 +15,8 @@ export interface AppDependencies {
    * fails on its own instead of taking the process down.
    */
   readonly workspace: () => Promise<WorkspaceRecord>;
+  /** Signing in and what stands on it. Left out, nobody signs in and every request is nobody's. */
+  readonly auth: AppAuth | undefined;
   readonly logger: Logger;
   readonly requests: {
     readonly addresses: ClientAddressResolver;
@@ -32,11 +35,11 @@ export function errorBody(code: string, message: string) {
 
 /**
  * The HTTP surface of the `api` role: what every request gets (an id, a client address, an
- * access-log line), the probes a platform watches, and what answers when nothing else does.
- * The REST API, signing in and the UI's files register on top of this.
+ * access-log line), the probes a platform watches, signing in and who is signed in, and what
+ * answers when nothing else does. The REST API of the board and the UI's files register on top.
  */
 export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
-  const { database, logger, isShuttingDown } = dependencies;
+  const { database, logger, isShuttingDown, auth, workspace } = dependencies;
   const app = new Hono<AppEnv>();
   app.use(requestContext({ logger, ...dependencies.requests }));
 
@@ -55,13 +58,22 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
       return c.json({ status: "schema_behind", expected: schema.expected }, 503);
     }
     try {
-      await dependencies.workspace();
+      await workspace();
     } catch (error) {
       logger.warn({ err: error }, "the workspace could not be found");
       return c.json({ status: "workspace_unavailable" }, 503);
     }
     return c.json({ status: "ready" });
   });
+
+  // Nothing under /api is ever cached: it is one person's, or it changes.
+  app.use("/api/*", async (c, next) => {
+    await next();
+    c.header("cache-control", "no-store");
+  });
+
+  const access = createAccess(auth);
+  registerAuth(app, { auth, access, workspace, logger });
 
   app.notFound((c) => c.json(errorBody("not_found", "There is nothing at this path."), 404));
   app.onError((error, c) => {

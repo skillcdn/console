@@ -4,7 +4,7 @@ The single deployable of the console: the API people and agents talk to, the wor
 
 | Role | Command | Purpose | Status |
 |---|---|---|---|
-| `api` | `node dist/main.js api` | Serves HTTP: the probes, and with the milestone the REST API, sign-in and the UI's files. Stateless. | probes |
+| `api` | `node dist/main.js api` | Serves HTTP: the probes, signing in and who is signed in, and with the milestone the REST API of the board and the UI's files. Stateless. | probes, sign-in |
 | `worker` | `node dist/main.js worker` | The schedules: the sweep of what time has ended. The job queue arrives with the first job. | implemented |
 | `migrate` | `node dist/main.js migrate` | Applies pending migrations, then exits. | implemented |
 
@@ -18,7 +18,7 @@ node --env-file=.env apps/console/dist/main.js migrate
 node --env-file=.env apps/console/dist/main.js api   # http://127.0.0.1:11190/readyz
 ```
 
-The exit codes, the probes and what a signal does are the process contract in [`deploy/README.md`](../../deploy/README.md#process-contract).
+The exit codes, the probes and what a signal does are the process contract in [`deploy/README.md`](../../deploy/README.md#process-contract). Signing in is off until it is configured, and nothing above needs it; to try it locally, register a GitHub OAuth app with `http://127.0.0.1:11190` as its homepage and `http://127.0.0.1:11190/auth/gh/callback` as its callback, and set its values, `AUTH_SECRET`, `PUBLIC_URL=http://127.0.0.1:11190` and `MEMBERS` in `.env` ([`deploy/README.md`](../../deploy/README.md#signing-in)). The tests need none of it: they sign people in through a fixture.
 
 ## Layout
 
@@ -30,16 +30,24 @@ src/
                  schedules), migrate.ts; each loaded only when selected
   config/        the only reader of process.env: schema, defaults, validation, NAME_FILE secrets
   logger.ts      pino, JSON to stdout, with the second fence of redaction
-  http/          app.ts (the Hono app: probes, not found, errors; the REST API and sign-in register
-                 on it), server.ts (listening and the shutdown of the listener), request-context.ts
+  http/          app.ts (the Hono app: probes, not found, errors; everything else registers on it),
+                 auth.ts (signing in and out, who is signed in, and `Access`: who a request is for
+                 and whether it may change anything), rest-shapes.ts (records as they are on the
+                 wire), server.ts (listening and the shutdown of the listener), request-context.ts
                  (an id, a client address and an access-log line per request), client-address.ts
                  (trusted proxies and forwarding headers)
+  auth/          signing in and what follows from it: secrets.ts (sealing, token making and
+                 hashing), login.ts (the round trip to the git host), sessions.ts, membership.ts
+                 (the configured list of logins)
   db/            schema.ts (one file: drizzle-kit reads it), client.ts (the pool, opaque to the rest),
                  migrate.ts (applies migrations, reports whether the schema is current), queries/
                  (the only way to the data), testing.ts (a database per test file; not compiled)
   jobs/          janitor.ts: the sweep of what time has ended, on a timer
-  ports/         the interfaces the domain needs implemented: the clock, later the git host
-  adapters/      their implementations: the system clock
+  ports/         the interfaces the domain needs implemented: the clock, the git host's side of
+                 signing in
+  adapters/      their implementations: the system clock, the GitHub login
+  testing/       test support: the git host's side of signing in for three made-up people, and
+                 the harness that wires the app for the integration tests (not compiled)
   errors.ts      the base class of errors that cross a boundary, with their stable code
   version.ts     what the process calls itself
 migrations/      generated SQL and its journal, committed, shipped inside the image
@@ -53,7 +61,9 @@ Read the root [`AGENTS.md`](../../AGENTS.md) first. This workspace is the compos
 - **`api` is stateless.** No in-memory state that affects correctness; everything several replicas must agree on is in the database.
 - **Every handler runs in this order:** validate input with a schema, check who is asking and what they may do, then do the work. Unknown and forbidden answer the same.
 - **What an agent sends is data.** Bounded, stored, shown as text; never executed, never HTML.
-- **Tokens stop at the edge.** A session or an agent token becomes a person at the route that received it; nothing further in sees the credential. Nothing is ever logged that could be one.
+- **Tokens stop at the edge.** A session or an agent token becomes a person at the route that received it (`Access.person`); nothing further in sees the credential. The git host's token is used in `auth/login.ts` once, to ask who the person is, and dropped. Nothing is ever logged that could be one.
+- **A request that changes something for a person** checks that it comes from the console's own pages (`Access.fromOwnPages`: the browser's `origin` against `PUBLIC_URL`), in addition to the session.
+- **Membership is decided on every request.** `Access.person` answers nobody for a session whose login the operator no longer lists, and takes the cookie away with the answer.
 - **Jobs are idempotent and interruptible.** A job never assumes it runs exactly once; payloads stay readable by the previous release.
 - **Shutdown is part of the feature.** Anything long-running registers with the shutdown path, and tests cover it.
 - **The schemas of the API live in `packages/console`**, so that the default UI, a custom console and this server share one contract. This workspace imports them from `@skillcdn/console/api`; it never defines a second copy. The vocabulary there (the states, the priorities, the kinds of event) is what the database's constraints are made of.
@@ -64,6 +74,8 @@ Read the root [`AGENTS.md`](../../AGENTS.md) first. This workspace is the compos
 
 - Unit tests next to the code: the config module, the client address, the listener and its shutdown.
 - `src/http/app.int.test.ts` runs the app of the `api` role against real PostgreSQL: the probes in every state, the id and the address every request gets, the access log and what it leaves out.
+- `src/auth.int.test.ts` covers signing in through a fixture git host: the round trip, the sealed cookie, where a browser may be sent back, what did not complete and why, a login the operator did not list, sessions and their end (sign-out from the console's own pages only, time, removal from the list), and a deployment where nobody signs in.
+- `src/adapters/github-login.test.ts` covers the GitHub adapter against a fake `fetch`: what it sends, what it reads, and what it refuses.
 - `src/db/db.int.test.ts` covers the data model. Every test file has a database of its own; tests inside a file share it.
 
 ## Working on the schema

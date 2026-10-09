@@ -38,6 +38,13 @@ The console is configured only through environment variables. [`.env.example`](.
 | `DATABASE_POOL_MAX` | `api` | no | no | Default `10` connections per process. |
 | `WORKSPACE_NAME` | `api`, `worker` | no | no | What the board is called. Default `Console`. The workspace row is made at boot by whichever role comes first and renamed from here. |
 | `WORKER_IN_PROCESS` | `api` | no | no | Default `false`. `true` makes the `api` role carry the worker's work itself, for an install with one container and no `worker`. |
+| `PUBLIC_URL` | `api` | no | no | The origin people use, such as `https://console.example.com`, without a path. Required for signing in: it is where the git host sends people back, what the session cookie is bound to, and what requests that change something must come from. See [Signing in](#signing-in). |
+| `GITHUB_CLIENT_ID` | `api` | no | no | The client id of the GitHub OAuth app (or GitHub App) people sign in through. |
+| `GITHUB_CLIENT_SECRET` | `api` | no | **yes** | Its client secret. |
+| `AUTH_SECRET` | `api` | no | **yes** | What a sign-in in flight is sealed with. At least 32 characters, the same on every replica. Signing in exists only when this, `PUBLIC_URL`, `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` are all set; setting some of them is a configuration error. |
+| `MEMBERS` | `api` | no | no | Who may sign in: logins at the git host, comma-separated, compared without regard to case. Checked at sign-in and on every request after. Empty lets nobody in, and is logged at boot. |
+| `GITHUB_WEB_URL`, `GITHUB_API_URL` | `api` | no | no | Defaults `https://github.com` and `https://api.github.com`. GitHub Enterprise Server: `https://<host>` and `https://<host>/api/v3`. |
+| `SESSION_TTL_DAYS` | `api` | no | no | How long a browser stays signed in without being used. Default `30`. |
 
 Every secret `NAME` may also be supplied as `NAME_FILE`, so container secret mounts work.
 
@@ -51,6 +58,12 @@ Written so that a cloud deployment is the image as containers, a managed Postgre
 - **Health probes** on `GET /healthz` (liveness) and `GET /readyz` (readiness), and a stop timeout above the shutdown grace period, so that `SIGTERM` lets requests in flight finish.
 - **Logs from stdout**, JSON, one line per event; they never contain tokens or what an agent handed in.
 - **A reverse proxy or load balancer** that terminates TLS and limits requests per client; the image does neither.
+
+## Signing in
+
+People sign in through the git host, GitHub first. Register an OAuth app at the host (or use a GitHub App's own client id and secret): its homepage is `PUBLIC_URL`, and its authorization callback URL is `PUBLIC_URL/auth/gh/callback`. No scopes are needed: the console asks the host who the person is, once, and keeps nothing of the credential. Then set `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `AUTH_SECRET` (32 random characters or more), `PUBLIC_URL`, and `MEMBERS`, the logins of the people who may use the board.
+
+What the browser holds is a session cookie that scripts cannot read, bound to the host over TLS (`__Host-`); the database holds its hash. A request that changes something must come from the console's own pages: the browser names its origin, and the console compares it with `PUBLIC_URL`. A login taken out of `MEMBERS` is out on the next request.
 
 ## Behind a reverse proxy
 

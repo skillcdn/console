@@ -1,0 +1,162 @@
+import { AUTH_ROUTES, REST_ROUTES, RETURN_TO_PARAM, type RestMe } from "@skillcdn/console/api";
+import type { Context, Hono } from "hono";
+import type { Login, LoginStep } from "../auth/login.js";
+import { safeReturnTo } from "../auth/login.js";
+import type { Membership } from "../auth/membership.js";
+import type { Sessions } from "../auth/sessions.js";
+import type { PersonRecord } from "../db/queries/people.js";
+import type { WorkspaceRecord } from "../db/queries/workspaces.js";
+import type { Logger } from "../logger.js";
+import { errorBody } from "./app.js";
+import type { AppEnv } from "./request-context.js";
+import { restPerson } from "./rest-shapes.js";
+
+/** What signing in is made of, on a deployment where people can. */
+export interface AppAuth {
+  /** The origin people use: where the git host sends people back, and where requests that change something come from. */
+  readonly origin: string;
+  readonly sessions: Sessions;
+  readonly login: Login;
+  readonly membership: Membership;
+}
+
+/**
+ * Who a request is for, and whether it may change anything: what every route of the REST API
+ * asks before it does its work. On a deployment where nobody signs in, every request is nobody's.
+ */
+export interface Access {
+  /** The person the session cookie names, while the operator still lists them; else nobody. */
+  person(c: Context<AppEnv>): Promise<PersonRecord | undefined>;
+  /** A session the operator no longer honours is taken away with the answer. */
+  signedOut(c: Context<AppEnv>): void;
+  /**
+   * A request that changes something for the person signed in has to come from this
+   * deployment's own pages. The session cookie is not sent with another site's requests in the
+   * first place; this is the second fence, and browsers name the origin of every such request.
+   */
+  fromOwnPages(c: Context<AppEnv>): boolean;
+}
+
+export function createAccess(auth: AppAuth | undefined): Access {
+  return {
+    async person(c) {
+      if (auth === undefined) {
+        return undefined;
+      }
+      const person = await auth.sessions.resolve(c.req.header("cookie"));
+      if (person === undefined) {
+        return undefined;
+      }
+      // Membership is decided on every request: a login taken off the list is out at once.
+      if (!auth.membership.allows(person.login)) {
+        this.signedOut(c);
+        return undefined;
+      }
+      return person;
+    },
+    signedOut(c) {
+      if (auth !== undefined) {
+        c.header("set-cookie", auth.sessions.clear());
+      }
+    },
+    fromOwnPages(c) {
+      return auth !== undefined && c.req.header("origin") === auth.origin;
+    },
+  };
+}
+
+export const signInRequired = (c: Context<AppEnv>): Response =>
+  c.json(errorBody("auth.required", "Sign in to continue."), 401);
+
+export const foreignOrigin = (c: Context<AppEnv>): Response =>
+  c.json(
+    errorBody("auth.forbidden_origin", "This request must come from the console itself."),
+    403,
+  );
+
+export interface AuthDependencies {
+  readonly auth: AppAuth | undefined;
+  readonly access: Access;
+  readonly workspace: () => Promise<WorkspaceRecord>;
+  readonly logger: Logger;
+}
+
+/**
+ * Signing in and out, and who is signed in. Signing in exists only on a deployment configured
+ * for it; elsewhere its paths are nothing, and `me` says that nobody can sign in.
+ */
+export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies): void {
+  const { auth, access, workspace } = dependencies;
+
+  // Whoever is signed in, for the pages. Nobody is an answer too.
+  app.get(REST_ROUTES.me, async (c) => {
+    c.header("cache-control", "no-store");
+    const [found, person] = await Promise.all([workspace(), access.person(c)]);
+    const body: RestMe = {
+      workspace: { name: found.name },
+      person: person === undefined ? null : restPerson(person),
+      signIn: auth === undefined ? null : "gh",
+    };
+    return c.json(body);
+  });
+
+  if (auth === undefined) {
+    return;
+  }
+  const { origin, sessions, login } = auth;
+
+  const follow = (c: Context<AppEnv>, step: LoginStep): Response => {
+    for (const cookie of step.cookies) {
+      c.header("set-cookie", cookie, { append: true });
+    }
+    c.header("cache-control", "no-store");
+    return c.redirect(step.redirect, 302);
+  };
+
+  /**
+   * A sign-in begins on the deployment's own pages, where a person sees which host they
+   * continue with. A browser says where a navigation comes from, and one that comes from
+   * anywhere else, a link on another site or an address typed, is not a person pressing that
+   * button. A request that says nothing is from a browser too old to say, which could not sign
+   * in at all if silence were refused.
+   */
+  const begunOnOwnPages = (c: Context<AppEnv>): boolean => {
+    const site = c.req.header("sec-fetch-site");
+    return site === undefined || site === "same-origin";
+  };
+
+  // Signing in and out. Navigations, so they answer with redirects; nothing here is cached.
+  app.get(AUTH_ROUTES.login, (c) => {
+    const returnTo = c.req.query(RETURN_TO_PARAM);
+    if (!begunOnOwnPages(c)) {
+      // To the page it was for, which offers it over itself: following a link signs nobody in.
+      c.header("cache-control", "no-store");
+      return c.redirect(safeReturnTo(returnTo, origin), 302);
+    }
+    return follow(c, login.begin(returnTo));
+  });
+
+  app.get(AUTH_ROUTES.callback, async (c) => {
+    const { code, state, error } = c.req.query();
+    return follow(
+      c,
+      await login.complete(
+        {
+          ...(code === undefined ? {} : { code }),
+          ...(state === undefined ? {} : { state }),
+          ...(error === undefined ? {} : { error }),
+        },
+        c.req.header("cookie"),
+      ),
+    );
+  });
+
+  app.post(AUTH_ROUTES.logout, async (c) => {
+    if (!access.fromOwnPages(c)) {
+      return foreignOrigin(c);
+    }
+    c.header("set-cookie", await sessions.end(c.req.header("cookie")));
+    c.header("cache-control", "no-store");
+    return c.body(null, 204);
+  });
+}

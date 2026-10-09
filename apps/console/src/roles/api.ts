@@ -1,30 +1,41 @@
 import { randomUUID } from "node:crypto";
 import process from "node:process";
 import type { Hono } from "hono";
+import { createGitHubLogin } from "../adapters/github-login.js";
 import { systemClock } from "../adapters/system-clock.js";
-import type { Config } from "../config/config.js";
+import { Login } from "../auth/login.js";
+import { Membership } from "../auth/membership.js";
+import { createSecrets } from "../auth/secrets.js";
+import { Sessions } from "../auth/sessions.js";
+import type { AuthConfig, Config } from "../config/config.js";
 import { createDatabase, type Database } from "../db/client.js";
 import { ensureWorkspace, type WorkspaceRecord } from "../db/queries/workspaces.js";
 import { createApp } from "../http/app.js";
+import type { AppAuth } from "../http/auth.js";
 import { createClientAddressResolver } from "../http/client-address.js";
 import type { AppEnv } from "../http/request-context.js";
 import { startServer } from "../http/server.js";
 import { Janitor } from "../jobs/janitor.js";
 import type { Logger } from "../logger.js";
 import type { Clock } from "../ports/clock.js";
-import { APP_NAME } from "../version.js";
+import type { GitHostLogin } from "../ports/git-host-login.js";
+import { APP_NAME, APP_VERSION } from "../version.js";
 
 /** How often what time has ended is removed, when this process does the worker's work. */
 const JANITOR_INTERVAL_MS = 15 * 60_000;
 
 export interface ApiPorts {
   readonly database: Database;
+  /** How people sign in through the git host. Needed, with `auth` configured, for anyone to. */
+  readonly login?: GitHostLogin | undefined;
   readonly clock: Clock;
   readonly logger: Logger;
   readonly isShuttingDown: () => boolean;
 }
 
 export type ApiConfig = Pick<Config, "workspace"> & {
+  /** Left out, nobody signs in. What it needs of the git host arrives through the ports. */
+  readonly auth?: Omit<AuthConfig, "github"> | undefined;
   /** Left out, no proxy is trusted and every request is logged. */
   readonly http?: Pick<
     Config["http"],
@@ -54,11 +65,54 @@ export function workspaceResolver(
 }
 
 /** Wires the services of the `api` role to their ports. Tests call this with their own ports. */
-export function createApi(config: ApiConfig, ports: ApiPorts): { readonly app: Hono<AppEnv> } {
+export function createApi(
+  config: ApiConfig,
+  ports: ApiPorts,
+): { readonly app: Hono<AppEnv>; readonly auth: AppAuth | undefined } {
   const { database, clock, logger } = ports;
+  const workspace = workspaceResolver(database, clock, config.workspace.name);
+
+  // People sign in only where the deployment is configured for it and the git host can be
+  // asked who they are. Everything that follows from it hangs off this one value: without it
+  // there are no sessions, and the board is nobody's.
+  let auth: AppAuth | undefined;
+  if (config.auth !== undefined && ports.login !== undefined) {
+    const origin = config.auth.publicUrl;
+    const secure = origin.startsWith("https://");
+    const membership = new Membership(config.auth.members);
+    if (membership.size === 0) {
+      logger.warn("MEMBERS is empty: signing in is configured, and nobody is let in");
+    }
+    const sessions = new Sessions({
+      database,
+      clock,
+      logger,
+      ttlMs: config.auth.sessionTtlMs,
+      secure,
+    });
+    auth = {
+      origin,
+      sessions,
+      membership,
+      login: new Login({
+        database,
+        workspaceId: async () => (await workspace()).id,
+        host: ports.login,
+        membership,
+        sessions,
+        secrets: createSecrets(config.auth.secret),
+        clock,
+        logger,
+        origin,
+        secure,
+      }),
+    };
+  }
+
   const app = createApp({
     database,
-    workspace: workspaceResolver(database, clock, config.workspace.name),
+    workspace,
+    auth,
     logger,
     isShuttingDown: ports.isShuttingDown,
     requests: {
@@ -72,7 +126,7 @@ export function createApi(config: ApiConfig, ports: ApiPorts): { readonly app: H
       now: () => performance.now(),
     },
   });
-  return { app };
+  return { app, auth };
 }
 
 /** Resolves on the first of the signals a platform stops a container with. */
@@ -93,9 +147,20 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
     maxConnections: config.database.poolMax,
     applicationName: `${APP_NAME}-api`,
   });
+  const login =
+    config.auth === undefined
+      ? undefined
+      : createGitHubLogin({
+          webUrl: config.auth.github.webUrl,
+          apiUrl: config.auth.github.apiUrl,
+          clientId: config.auth.github.clientId,
+          clientSecret: config.auth.github.clientSecret,
+          userAgent: `${APP_NAME}/${APP_VERSION}`,
+        });
   let shuttingDown = false;
   const { app } = createApi(config, {
     database,
+    login,
     clock: systemClock,
     logger,
     isShuttingDown: () => shuttingDown,
@@ -115,7 +180,12 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
     logger,
   });
   logger.info(
-    { host: config.http.host, port: server.port, worker: config.worker.inProcess },
+    {
+      host: config.http.host,
+      port: server.port,
+      worker: config.worker.inProcess,
+      signIn: config.auth !== undefined,
+    },
     "api listening",
   );
 
