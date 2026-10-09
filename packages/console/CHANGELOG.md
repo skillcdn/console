@@ -1,5 +1,11 @@
 # @skillcdn/console
 
+## 0.1.1
+
+### Patch Changes
+
+- [`02ca098`](https://github.com/skillcdn/console/commit/02ca09805e01b04747921c3208d2cc2f7ac5c5f6) Thanks [@samo-lucid](https://github.com/samo-lucid)! - `console --version` (also `version` and `-v`) says which version of the package the command runs from, and `console help` names it in its first line. `CliIo` takes an optional `version` for a command run as a function.
+
 ## 0.1.0
 
 ### Minor Changes
