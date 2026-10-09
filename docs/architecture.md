@@ -139,8 +139,11 @@ Decided when the milestone that needs them starts; a decision with lasting conse
 2. How a decision reaches a person away from the board: notifications are a port; which adapters come first.
 3. Unattended runs: where the agents the console starts would run, with what credentials, within what limits.
 4. What of a run is kept: reports only, or the agent's full transcript, with its size and what it may contain.
-5. One workspace per deployment or several, and what a second one would share.
+5. Projects within a workspace ([roadmap](roadmap.md), milestone 3): what a project owns (its board, its documents, its people with a role each, its skills address) and what stays the workspace's; whether a second workspace is ever needed once projects exist.
 6. Whether the REST API is versioned from the first release, given that custom consoles are built against it.
-7. Languages of the UI: English only at first; the main repository's web UI has English and Korean.
+7. Languages of the UI ([roadmap](roadmap.md), milestone 5): how the packs ship with the package and how a custom console adds its own; English first, Korean next, as the main repository's web UI.
 8. Whether this repository stays public. It is written as if it does; if it does not, infrastructure definitions could live under `deploy/`.
 9. How a person's own console reaches the organization's: served by the console from a build the person uploads, or run on their machine and allowed as an origin with their token.
+10. How a token reaches an agent's machine without being copied ([roadmap](roadmap.md), milestone 5): the command's login approved in the browser with a short code, and what an organization may require of tokens: an expiry at most, a renewal, an administrator's sight of everyone's connected agents.
+11. Documents ([roadmap](roadmap.md), milestone 4): Markdown with versions; how a file from the blob store attaches; what of a decision becomes a document, and whether a document may be a decision's record.
+12. The default brand ([roadmap](roadmap.md), milestone 5): where SkillCDN's assets come from, a published package of the main repository, and under what notice they ship in a repository under MIT.
