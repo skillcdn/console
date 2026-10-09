@@ -98,6 +98,33 @@ export const sessions = pgTable(
   ],
 );
 
+/**
+ * A token a person made for an agent, a script or a console of their own: the SHA-256 of the
+ * secret, never the secret. It is its person for the board's purposes until it expires or is
+ * taken away, which is its row going.
+ */
+export const tokens = pgTable(
+  "tokens",
+  {
+    id: id(),
+    personId: uuid()
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    /** What the person calls it: the agent it is for, where it runs. */
+    name: text().notNull(),
+    tokenHash: text().notNull(),
+    expiresAt: instant().notNull(),
+    /** When it was last presented; null until it is. */
+    lastUsedAt: instant(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex("tokens_token_hash_key").on(table.tokenHash),
+    index("tokens_person_idx").on(table.personId),
+    index("tokens_expires_idx").on(table.expiresAt),
+  ],
+);
+
 /** A unit of work on the board. */
 export const tasks = pgTable(
   "tasks",

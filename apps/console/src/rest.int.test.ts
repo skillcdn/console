@@ -1,14 +1,21 @@
 import {
+  DEFAULT_TOKEN_DAYS,
   MAX_TITLE_LENGTH,
+  MAX_TOKEN_DAYS,
+  MAX_TOKEN_NAME_LENGTH,
+  MAX_TOKENS_PER_PERSON,
   REST_ROUTES,
   type RestTask,
   restDecisionSchema,
   restDecisionsSchema,
   restErrorSchema,
   restEventsSchema,
+  restMeSchema,
   restPeopleSchema,
   restTaskSchema,
   restTasksSchema,
+  restTokenCreatedSchema,
+  restTokensSchema,
 } from "@skillcdn/console/api";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "./db/testing.js";
@@ -320,5 +327,187 @@ describe("people and the feed", () => {
     expect(rest.more).toBe(false);
     expect((await get(alice, `${REST_ROUTES.events}?after=-1`)).status).toBe(400);
     expect((await get(alice, `${REST_ROUTES.events}?limit=1000`)).status).toBe(400);
+  });
+});
+
+/** A clock a test can move forward. */
+function movableClock() {
+  let offset = 0;
+  return {
+    now: () => new Date(Date.now() + offset),
+    advance(milliseconds: number) {
+      offset += milliseconds;
+    },
+  };
+}
+
+describe("tokens", () => {
+  const DAY_MS = 86_400_000;
+  const make = async (cookie: string, body: unknown) => {
+    const response = await send(cookie, "POST", REST_ROUTES.tokens, body);
+    expect(response.status).toBe(201);
+    return restTokenCreatedSchema.parse(await response.json());
+  };
+  const remove = (cookie: string, id: string) =>
+    h.request(`${REST_ROUTES.tokens}/${id}`, {
+      method: "DELETE",
+      headers: { cookie, origin: SIGN_IN_URL },
+    });
+  const listed = async (cookie: string) =>
+    restTokensSchema.parse(await (await get(cookie, REST_ROUTES.tokens)).json()).items;
+
+  it("are made on the console's own pages, listed newest first, and taken away", async () => {
+    const { token, secret } = await make(alice, { name: "  Claude Code on the laptop  " });
+    expect(secret).toMatch(/^cns_t_[\w-]{40,}$/);
+    expect(token).toMatchObject({ name: "Claude Code on the laptop", lastUsedAt: null });
+    const lasts = new Date(token.expiresAt).getTime() - new Date(token.createdAt).getTime();
+    expect(lasts).toBe(DEFAULT_TOKEN_DAYS * DAY_MS);
+    const second = await make(alice, { name: "ci", expiresInDays: 7 });
+    expect(
+      new Date(second.token.expiresAt).getTime() - new Date(second.token.createdAt).getTime(),
+    ).toBe(7 * DAY_MS);
+
+    const mine = await listed(alice);
+    expect(mine.map((item) => item.name)).toEqual(["ci", "Claude Code on the laptop"]);
+    // The page sees names and dates, never a secret.
+    expect(JSON.stringify(mine)).not.toContain("cns_t_");
+    // Bob sees his own, which are none, and cannot take Alice's away.
+    expect(await listed(bob)).toEqual([]);
+    expect((await remove(bob, token.id)).status).toBe(404);
+
+    expect((await remove(alice, second.token.id)).status).toBe(204);
+    expect((await remove(alice, second.token.id)).status).toBe(404);
+    expect((await remove(alice, "not-an-id")).status).toBe(404);
+    expect((await listed(alice)).map((item) => item.id)).toEqual([token.id]);
+    expect(JSON.stringify(h.logs)).not.toContain("cns_t_");
+  });
+
+  it("act as their person over the API, with no origin needed, and are noted as used", async () => {
+    const { token, secret } = await make(alice, { name: "a script" });
+    const auth = { authorization: `Bearer ${secret}` };
+    const me = restMeSchema.parse(
+      await (await h.request(REST_ROUTES.me, { headers: auth })).json(),
+    );
+    expect(me.person?.login).toBe("Alice");
+    const created = await h.request(REST_ROUTES.tasks, {
+      method: "POST",
+      headers: { ...auth, "content-type": "application/json" },
+      body: JSON.stringify({ title: "Written by a script" }),
+    });
+    expect(created.status).toBe(201);
+    const task = restTaskSchema.parse(await created.json());
+    expect(task.owner.login).toBe("Alice");
+    const events = restEventsSchema.parse(
+      await (await h.request(`${REST_ROUTES.events}?after=0`, { headers: auth })).json(),
+    );
+    expect(events.items.at(-1)).toMatchObject({ kind: "task.created", taskId: task.id });
+    expect(events.items.at(-1)?.actor?.login).toBe("Alice");
+    const used = (await listed(alice)).find((item) => item.id === token.id);
+    expect(used?.lastUsedAt).not.toBeNull();
+  });
+
+  it("are refused when they are nothing, taken away, expired, or no longer a member's", async () => {
+    for (const header of [
+      "Bearer cns_t_nonsense",
+      "Bearer",
+      "Basic Y25zX3RfeDp4",
+      "Bearer cns_s_not-a-token",
+      "Token cns_t_x",
+    ]) {
+      const response = await h.request(REST_ROUTES.tasks, { headers: { authorization: header } });
+      expect(response.status, header).toBe(401);
+      expect(await errorOf(response)).toBe("auth.required");
+    }
+    // A token that is nothing is refused beside a good session too: the token is the credential.
+    const beside = await h.request(REST_ROUTES.tasks, {
+      headers: { cookie: alice, authorization: "Bearer cns_t_nonsense" },
+    });
+    expect(beside.status).toBe(401);
+    expect(beside.headers.getSetCookie()).toEqual([]);
+
+    const { token, secret } = await make(alice, { name: "short-lived" });
+    expect((await remove(alice, token.id)).status).toBe(204);
+    const gone = await h.request(REST_ROUTES.tasks, {
+      headers: { authorization: `Bearer ${secret}` },
+    });
+    expect(gone.status).toBe(401);
+
+    const clock = movableClock();
+    const later = createHarness(testDatabase, { login: createFixtureLogin(), clock });
+    const cookie = await later.signIn("alice");
+    const made = await later.request(REST_ROUTES.tokens, {
+      method: "POST",
+      headers: { cookie, origin: SIGN_IN_URL, "content-type": "application/json" },
+      body: JSON.stringify({ name: "a day", expiresInDays: 1 }),
+    });
+    const aDay = restTokenCreatedSchema.parse(await made.json());
+    const bearer = { authorization: `Bearer ${aDay.secret}` };
+    expect((await later.request(REST_ROUTES.tasks, { headers: bearer })).status).toBe(200);
+    clock.advance(2 * DAY_MS);
+    expect((await later.request(REST_ROUTES.tasks, { headers: bearer })).status).toBe(401);
+    const left = restTokensSchema.parse(
+      await (await later.request(REST_ROUTES.tokens, { headers: { cookie } })).json(),
+    );
+    expect(left.items.some((item) => item.id === aDay.token.id)).toBe(false);
+
+    // Membership is decided on every request, for a token as for a session.
+    const { secret: whileListed } = await make(alice, { name: "while listed" });
+    const bobOnly = createHarness(testDatabase, { login: createFixtureLogin(), members: ["bob"] });
+    const out = await bobOnly.request(REST_ROUTES.tasks, {
+      headers: { authorization: `Bearer ${whileListed}` },
+    });
+    expect(out.status).toBe(401);
+  });
+
+  it("cannot be made, listed or taken away with a token, nor from elsewhere", async () => {
+    const { token, secret } = await make(alice, { name: "a leak" });
+    const auth = { authorization: `Bearer ${secret}` };
+    const list = await h.request(REST_ROUTES.tokens, { headers: auth });
+    expect(list.status).toBe(403);
+    expect(await errorOf(list)).toBe("auth.session_required");
+    const successor = await h.request(REST_ROUTES.tokens, {
+      method: "POST",
+      headers: { ...auth, "content-type": "application/json" },
+      body: JSON.stringify({ name: "a successor" }),
+    });
+    expect(successor.status).toBe(403);
+    const removal = await h.request(`${REST_ROUTES.tokens}/${token.id}`, {
+      method: "DELETE",
+      headers: auth,
+    });
+    expect(removal.status).toBe(403);
+    expect((await listed(alice)).some((item) => item.id === token.id)).toBe(true);
+
+    const elsewhere = await h.request(REST_ROUTES.tokens, {
+      method: "POST",
+      headers: { cookie: alice, origin: "https://evil.test", "content-type": "application/json" },
+      body: JSON.stringify({ name: "planted" }),
+    });
+    expect(elsewhere.status).toBe(403);
+    expect(await errorOf(elsewhere)).toBe("auth.forbidden_origin");
+    expect((await h.request(REST_ROUTES.tokens)).status).toBe(401);
+  });
+
+  it("are bounded in name, in days, and in how many a person holds", async () => {
+    for (const body of [
+      { name: " " },
+      { name: "n".repeat(MAX_TOKEN_NAME_LENGTH + 1) },
+      { name: `a${String.fromCodePoint(0x200b)}b` },
+      { name: "ok", expiresInDays: 0 },
+      { name: "ok", expiresInDays: MAX_TOKEN_DAYS + 1 },
+      {},
+    ]) {
+      const response = await send(alice, "POST", REST_ROUTES.tokens, body);
+      expect(response.status, JSON.stringify(body)).toBe(400);
+      expect(await errorOf(response)).toBe("request.invalid");
+    }
+    const carol = await h.signIn("carol");
+    for (let n = 0; n < MAX_TOKENS_PER_PERSON; n += 1) {
+      await make(carol, { name: `token ${n}` });
+    }
+    const oneMore = await send(carol, "POST", REST_ROUTES.tokens, { name: "one too many" });
+    expect(oneMore.status).toBe(409);
+    expect(await errorOf(oneMore)).toBe("token.too_many");
+    expect(await listed(carol)).toHaveLength(MAX_TOKENS_PER_PERSON);
   });
 });

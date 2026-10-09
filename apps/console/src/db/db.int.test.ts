@@ -27,6 +27,15 @@ import {
   TaskError,
   updateTask,
 } from "./queries/tasks.js";
+import {
+  createToken,
+  deleteExpiredTokens,
+  deleteToken,
+  findToken,
+  listTokensOf,
+  TokenError,
+  touchToken,
+} from "./queries/tokens.js";
 import { ensureWorkspace } from "./queries/workspaces.js";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "./testing.js";
 
@@ -74,9 +83,10 @@ describe("migrations", () => {
   it("are applied, idempotently, and readiness sees the schema as current", async () => {
     const first = await migrateDatabase(testDatabase.connectionString);
     const second = await migrateDatabase(testDatabase.connectionString);
-    expect(first.latest).toBe("0000_initial");
+    // The latest migration this build ships, whichever it is: the names change with the schema.
+    expect(first.latest).toMatch(/^\d{4}_\w+$/);
     expect(second.latest).toBe(first.latest);
-    expect(await getSchemaStatus(database)).toEqual({ current: true, expected: "0000_initial" });
+    expect(await getSchemaStatus(database)).toEqual({ current: true, expected: first.latest });
     expect(await database.ping()).toBe(true);
   });
 });
@@ -539,5 +549,55 @@ describe("events", () => {
     } finally {
       await listener.end();
     }
+  });
+});
+
+describe("tokens", () => {
+  it("are found by their hash while they last, noted when used, and listed newest first", async () => {
+    const first = await createToken(database, {
+      personId: alice.id,
+      name: "first",
+      tokenHash: "tok-a",
+      expiresAt: minutes(60),
+      now: T0,
+      limit: 3,
+    });
+    expect(first.lastUsedAt).toBeUndefined();
+    const second = await createToken(database, {
+      personId: alice.id,
+      name: "second",
+      tokenHash: "tok-b",
+      expiresAt: minutes(5),
+      now: minutes(1),
+      limit: 3,
+    });
+    const found = await findToken(database, "tok-a", minutes(30));
+    expect(found?.person.id).toBe(alice.id);
+    expect(found?.token.id).toBe(first.id);
+    expect(await findToken(database, "tok-a", minutes(60))).toBeUndefined();
+    expect(await findToken(database, "tok-nothing", T0)).toBeUndefined();
+    await touchToken(database, first.id, minutes(30));
+    expect((await findToken(database, "tok-a", minutes(31)))?.token.lastUsedAt).toEqual(
+      minutes(30),
+    );
+    const live = await listTokensOf(database, alice.id, minutes(2));
+    expect(live.map((token) => token.id)).toEqual([second.id, first.id]);
+    const later = await listTokensOf(database, alice.id, minutes(10));
+    expect(later.map((token) => token.id)).toEqual([first.id]);
+  });
+
+  it("are bounded per person, counting only what lasts, and go with time or on request", async () => {
+    const token = (name: string, hash: string, expiresAt: Date, now: Date) =>
+      createToken(database, { personId: bob.id, name, tokenHash: hash, expiresAt, now, limit: 2 });
+    await token("one", "tok-bob-1", minutes(60), T0);
+    await token("two", "tok-bob-2", minutes(5), T0);
+    await expect(token("three", "tok-bob-3", minutes(60), T0)).rejects.toBeInstanceOf(TokenError);
+    // Once the second has ended, there is room again.
+    const third = await token("three", "tok-bob-3", minutes(60), minutes(10));
+    expect(await deleteToken(database, alice.id, third.id)).toBe(false);
+    expect(await deleteToken(database, bob.id, third.id)).toBe(true);
+    expect(await deleteToken(database, bob.id, third.id)).toBe(false);
+    // Alice's second and Bob's second have ended by now.
+    expect(await deleteExpiredTokens(database, minutes(10))).toBe(2);
   });
 });

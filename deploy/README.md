@@ -67,6 +67,8 @@ People sign in through the git host, GitHub first. Register an OAuth app at the 
 
 What the browser holds is a session cookie that scripts cannot read, bound to the host over TLS (`__Host-`); the database holds its hash. A request that changes something must come from the console's own pages: the browser names its origin, and the console compares it with `PUBLIC_URL`. A login taken out of `MEMBERS` is out on the next request.
 
+An agent, a script or a console of a person's own holds a token instead, made by that person on the console's Tokens page and presented as `Authorization: Bearer`: it is that person for the board's purposes, needs no origin, expires (a year at most), and is removed on the same page. The database holds its hash; a token cannot make tokens; a person holds a bounded number of them. Nothing here needs configuring.
+
 ## Behind a reverse proxy
 
 A proxy in front reuses idle connections to the console. `HTTP_KEEP_ALIVE_SECONDS` must be longer than the proxy's own idle timeout, or the proxy now and then sends a request into a connection the console has just closed. `HTTP_REQUEST_TIMEOUT_SECONDS` bounds how long one request may take to arrive in full.

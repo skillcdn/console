@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import process from "node:process";
-import { EVENTS_PAGE_LIMIT } from "@skillcdn/console/api";
+import { EVENTS_PAGE_LIMIT, MAX_TOKENS_PER_PERSON } from "@skillcdn/console/api";
 import type { Hono } from "hono";
 import { createGitHubLogin } from "../adapters/github-login.js";
 import { systemClock } from "../adapters/system-clock.js";
@@ -8,6 +8,7 @@ import { Login } from "../auth/login.js";
 import { Membership } from "../auth/membership.js";
 import { createSecrets } from "../auth/secrets.js";
 import { Sessions } from "../auth/sessions.js";
+import { Tokens } from "../auth/tokens.js";
 import { type AuthConfig, type Config, ConfigError } from "../config/config.js";
 import { createDatabase, type Database } from "../db/client.js";
 import { startEventListener } from "../db/listener.js";
@@ -105,6 +106,7 @@ export function createApi(
     auth = {
       origin,
       sessions,
+      tokens: new Tokens({ database, clock, logger, limit: MAX_TOKENS_PER_PERSON }),
       membership,
       login: new Login({
         database,

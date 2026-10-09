@@ -1,4 +1,5 @@
 import {
+  DEFAULT_TOKEN_DAYS,
   EVENTS_PAGE_LIMIT,
   LIST_LIMIT,
   REST_ROUTES,
@@ -6,16 +7,20 @@ import {
   type RestEvents,
   type RestPeople,
   type RestTasks,
+  type RestTokenCreated,
+  type RestTokens,
   restAnswerInputSchema,
   restDecisionInputSchema,
   restTaskInputSchema,
   restTaskPatchSchema,
+  restTokenInputSchema,
   TASK_STATES,
 } from "@skillcdn/console/api";
 import type { Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { streamSSE } from "hono/streaming";
 import * as z from "zod";
+import type { Tokens } from "../auth/tokens.js";
 import type { Database } from "../db/client.js";
 import {
   answerDecision,
@@ -27,19 +32,22 @@ import {
 import { listEventsAfter } from "../db/queries/events.js";
 import { listPeople, type PersonRecord } from "../db/queries/people.js";
 import { createTask, getTask, listTasks, TaskError, updateTask } from "../db/queries/tasks.js";
+import { TokenError } from "../db/queries/tokens.js";
 import type { WorkspaceRecord } from "../db/queries/workspaces.js";
 import type { Logger } from "../logger.js";
 import type { Clock } from "../ports/clock.js";
 import { errorBody } from "./app.js";
-import { type Access, foreignOrigin, signInRequired } from "./auth.js";
+import { type Access, foreignOrigin, sessionRequired, signInRequired } from "./auth.js";
 import type { LiveFeed } from "./live-feed.js";
 import type { AppEnv } from "./request-context.js";
-import { restDecision, restEvent, restPerson, restTask } from "./rest-shapes.js";
+import { restDecision, restEvent, restPerson, restTask, restToken } from "./rest-shapes.js";
 
 export interface RestDependencies {
   readonly database: Database;
   readonly workspace: () => Promise<WorkspaceRecord>;
   readonly access: Access;
+  /** The tokens people make; left out where nobody signs in, and then nobody has one. */
+  readonly tokens: Tokens | undefined;
   readonly feed: LiveFeed;
   readonly clock: Clock;
   readonly logger: Logger;
@@ -48,6 +56,7 @@ export interface RestDependencies {
 /** A task or a decision is a few fields and a body of bounded Markdown; this is far above both. */
 const MAX_BODY_BYTES = 256 * 1024;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const DAY_MS = 86_400_000;
 
 const tasksQuery = z.object({ state: z.enum(TASK_STATES).optional() });
 const decisionsQuery = z.object({
@@ -83,18 +92,40 @@ function firstProblem(result: ParseResult<unknown>): string {
  * and nothing is answered to nobody.
  */
 export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies): void {
-  const { database, workspace, access, feed, clock, logger } = dependencies;
+  const { database, workspace, access, tokens, feed, clock, logger } = dependencies;
 
   /** The person asking, or the refusal to answer with. */
   const asking = async (c: Context<AppEnv>): Promise<PersonRecord | Response> =>
     (await access.person(c)) ?? signInRequired(c);
 
-  /** The person asking something that changes the board, or the refusal to answer with. */
+  /**
+   * The person asking something that changes the board, or the refusal to answer with. A
+   * session cookie travels with a browser's requests on its own, so a request on a session has
+   * to come from the console's own pages; a token is attached on purpose by whoever holds it.
+   */
   const changing = async (c: Context<AppEnv>): Promise<PersonRecord | Response> => {
-    if (!access.fromOwnPages(c)) {
+    if (!access.presentsToken(c) && !access.fromOwnPages(c)) {
       return foreignOrigin(c);
     }
     return asking(c);
+  };
+
+  /**
+   * The person signed in on the console's own pages, or the refusal to answer with: what the
+   * tokens themselves are managed by. A token cannot make, list or remove tokens, so that one
+   * which leaks cannot outlive its removal through tokens of its own.
+   */
+  const signedIn = async (c: Context<AppEnv>): Promise<PersonRecord | Response> => {
+    if (access.presentsToken(c)) {
+      return sessionRequired(c);
+    }
+    return asking(c);
+  };
+  const signedInOnOwnPages = async (c: Context<AppEnv>): Promise<PersonRecord | Response> => {
+    if (access.presentsToken(c)) {
+      return sessionRequired(c);
+    }
+    return changing(c);
   };
 
   const invalid = (c: Context<AppEnv>, message: string): Response =>
@@ -132,6 +163,12 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       const status =
         error.code === "decision.not_found" ? 404 : error.code === "decision.answered" ? 409 : 400;
       return c.json(errorBody(error.code, error.message), status);
+    }
+    if (error instanceof TokenError) {
+      return c.json(
+        errorBody(error.code, error.message),
+        error.code === "token.not_found" ? 404 : 409,
+      );
     }
     throw error;
   };
@@ -328,6 +365,61 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     } catch (error) {
       return failure(c, error);
     }
+  });
+
+  // The tokens of whoever is signed in: made and removed on the console's own pages only.
+  app.get(REST_ROUTES.tokens, async (c) => {
+    const person = await signedIn(c);
+    if (person instanceof Response) {
+      return person;
+    }
+    if (tokens === undefined) {
+      return signInRequired(c);
+    }
+    const body: RestTokens = { items: (await tokens.list(person)).map(restToken) };
+    return c.json(body);
+  });
+
+  app.post(REST_ROUTES.tokens, tooLarge, async (c) => {
+    const person = await signedInOnOwnPages(c);
+    if (person instanceof Response) {
+      return person;
+    }
+    const input = await bodyOf(c, restTokenInputSchema);
+    if (input instanceof Response) {
+      return input;
+    }
+    if (tokens === undefined) {
+      return signInRequired(c);
+    }
+    try {
+      const made = await tokens.issue(person, {
+        name: input.name,
+        ttlMs: (input.expiresInDays ?? DEFAULT_TOKEN_DAYS) * DAY_MS,
+      });
+      // The id and the name, never the secret.
+      logger.info(
+        { person: person.id, tokenId: made.token.id, requestId: c.get("requestId") },
+        "token made",
+      );
+      const body: RestTokenCreated = { token: restToken(made.token), secret: made.secret };
+      return c.json(body, 201);
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
+  app.delete(`${REST_ROUTES.tokens}/:id`, async (c) => {
+    const person = await signedInOnOwnPages(c);
+    if (person instanceof Response) {
+      return person;
+    }
+    const id = c.req.param("id");
+    if (tokens === undefined || !UUID.test(id) || !(await tokens.revoke(person, id))) {
+      return c.json(errorBody("token.not_found", "The token was not found."), 404);
+    }
+    logger.info({ person: person.id, tokenId: id, requestId: c.get("requestId") }, "token removed");
+    return c.body(null, 204);
   });
 
   app.get(REST_ROUTES.events, async (c) => {

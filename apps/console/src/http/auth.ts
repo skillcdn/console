@@ -4,6 +4,7 @@ import type { Login, LoginStep } from "../auth/login.js";
 import { safeReturnTo } from "../auth/login.js";
 import type { Membership } from "../auth/membership.js";
 import type { Sessions } from "../auth/sessions.js";
+import type { Tokens } from "../auth/tokens.js";
 import type { PersonRecord } from "../db/queries/people.js";
 import type { WorkspaceRecord } from "../db/queries/workspaces.js";
 import type { Logger } from "../logger.js";
@@ -16,17 +17,27 @@ export interface AppAuth {
   /** The origin people use: where the git host sends people back, and where requests that change something come from. */
   readonly origin: string;
   readonly sessions: Sessions;
+  /** The tokens people made for their agents, scripts and consoles of their own. */
+  readonly tokens: Tokens;
   readonly login: Login;
   readonly membership: Membership;
 }
 
 /**
  * Who a request is for, and whether it may change anything: what every route of the REST API
- * asks before it does its work. On a deployment where nobody signs in, every request is nobody's.
+ * asks before it does its work. A request carries a session cookie, which a browser attaches on
+ * its own, or a token in its authorization header, which whoever holds it attaches on purpose.
+ * On a deployment where nobody signs in, every request is nobody's.
  */
 export interface Access {
-  /** The person the session cookie names, while the operator still lists them; else nobody. */
+  /**
+   * The person the token or the session cookie names, while the operator still lists them;
+   * else nobody. A token presented is the credential, and a cookie beside it is not looked at,
+   * so that a token that is nothing never stands in for a session.
+   */
   person(c: Context<AppEnv>): Promise<PersonRecord | undefined>;
+  /** Whether the request presents a token, whatever the token is worth. */
+  presentsToken(c: Context<AppEnv>): boolean;
   /** A session the operator no longer honours is taken away with the answer. */
   signedOut(c: Context<AppEnv>): void;
   /**
@@ -43,16 +54,27 @@ export function createAccess(auth: AppAuth | undefined): Access {
       if (auth === undefined) {
         return undefined;
       }
+      const authorization = c.req.header("authorization");
+      if (authorization !== undefined) {
+        const found = await auth.tokens.resolve(authorization);
+        // Membership is decided on every request, for a token as for a session.
+        return found === undefined || !auth.membership.allows(found.person.login)
+          ? undefined
+          : found.person;
+      }
       const person = await auth.sessions.resolve(c.req.header("cookie"));
       if (person === undefined) {
         return undefined;
       }
-      // Membership is decided on every request: a login taken off the list is out at once.
+      // A login taken off the list is out at once, and the browser's cookie goes with the answer.
       if (!auth.membership.allows(person.login)) {
         this.signedOut(c);
         return undefined;
       }
       return person;
+    },
+    presentsToken(c) {
+      return auth !== undefined && c.req.header("authorization") !== undefined;
     },
     signedOut(c) {
       if (auth !== undefined) {
@@ -71,6 +93,16 @@ export const signInRequired = (c: Context<AppEnv>): Response =>
 export const foreignOrigin = (c: Context<AppEnv>): Response =>
   c.json(
     errorBody("auth.forbidden_origin", "This request must come from the console itself."),
+    403,
+  );
+
+/** What a token is answered when it asks for what only a person signed in may do. */
+export const sessionRequired = (c: Context<AppEnv>): Response =>
+  c.json(
+    errorBody(
+      "auth.session_required",
+      "This is done on the console's own pages, by a person signed in, not with a token.",
+    ),
     403,
   );
 

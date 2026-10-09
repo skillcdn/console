@@ -84,7 +84,7 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
 
   const access = createAccess(auth);
   registerAuth(app, { auth, access, workspace, logger });
-  registerRest(app, { database, workspace, access, feed, clock, logger });
+  registerRest(app, { database, workspace, access, tokens: auth?.tokens, feed, clock, logger });
 
   // After the API: a file of the build, or the page for every other path, which routes in the
   // browser. The API's own paths answer their own not-found.

@@ -1,10 +1,11 @@
 import type { Database } from "../db/client.js";
 import { deleteExpiredSessions } from "../db/queries/sessions.js";
+import { deleteExpiredTokens } from "../db/queries/tokens.js";
 import type { Logger } from "../logger.js";
 import type { Clock } from "../ports/clock.js";
 
 /**
- * Removes what time has ended: sessions past their end. None of it is needed for correctness,
+ * Removes what time has ended: sessions and tokens past their end. None of it is needed for correctness,
  * since every read checks the time itself; this only keeps the tables from growing. Every
  * process may run it: deleting twice deletes once. The worker runs it on a schedule, and so
  * does the `api` role when told to carry the worker's work itself.
@@ -30,9 +31,11 @@ export class Janitor {
   sweep(): Promise<void> {
     this.#running = this.#running.then(async () => {
       try {
-        const sessions = await deleteExpiredSessions(this.#database, this.#clock.now());
-        if (sessions > 0) {
-          this.#logger.info({ sessions }, "what time has ended was removed");
+        const now = this.#clock.now();
+        const sessions = await deleteExpiredSessions(this.#database, now);
+        const tokens = await deleteExpiredTokens(this.#database, now);
+        if (sessions > 0 || tokens > 0) {
+          this.#logger.info({ sessions, tokens }, "what time has ended was removed");
         }
       } catch (error) {
         this.#logger.warn({ err: error }, "what time has ended was not removed");

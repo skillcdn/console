@@ -1,4 +1,4 @@
-import { REST_ROUTES, restEventSchema } from "@skillcdn/console/api";
+import { REST_ROUTES, restEventSchema, restTokenCreatedSchema } from "@skillcdn/console/api";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "./db/testing.js";
 import { createFixtureLogin } from "./testing/fixture-login.js";
@@ -117,6 +117,24 @@ describe("the live feed", () => {
     const events = eventsOf(text);
     expect(events).toHaveLength(1);
     expect(events[0]?.id).toBeGreaterThan(latest);
+    await reading.cancel();
+  });
+
+  it("is read with a token as well as a session", async () => {
+    const made = await h.request(REST_ROUTES.tokens, {
+      method: "POST",
+      headers: { cookie: alice, origin: SIGN_IN_URL, "content-type": "application/json" },
+      body: JSON.stringify({ name: "a watcher" }),
+    });
+    expect(made.status).toBe(201);
+    const { secret } = restTokenCreatedSchema.parse(await made.json());
+    const stream = await h.request(`${REST_ROUTES.events}/stream?after=0`, {
+      headers: { authorization: `Bearer ${secret}`, accept: "text/event-stream" },
+    });
+    expect(stream.status).toBe(200);
+    const reading = tail(stream);
+    const text = await reading.until((seen) => seen.includes("person.joined"));
+    expect(eventsOf(text)[0]?.event.kind).toBe("person.joined");
     await reading.cancel();
   });
 

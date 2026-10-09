@@ -1,8 +1,15 @@
-import type { RestDecision, RestEvent, RestPerson, RestTask } from "@skillcdn/console/api";
+import type {
+  RestDecision,
+  RestEvent,
+  RestPerson,
+  RestTask,
+  RestToken,
+} from "@skillcdn/console/api";
 import type { DecisionRecord } from "../db/queries/decisions.js";
 import type { EventRecord } from "../db/queries/events.js";
 import type { PersonRecord } from "../db/queries/people.js";
 import type { TaskRecord } from "../db/queries/tasks.js";
+import type { TokenRecord } from "../db/queries/tokens.js";
 
 // What the records of the database are on the wire. The shapes are the package's; this is the
 // one place they are built, so that the server and its tests agree with the schemas. Absent
@@ -54,6 +61,17 @@ export function restDecision(decision: DecisionRecord): RestDecision {
           },
     createdAt: decision.createdAt.toISOString(),
     updatedAt: decision.updatedAt.toISOString(),
+  };
+}
+
+/** A token as its person's page lists it: never the secret, which is answered once and not kept. */
+export function restToken(token: TokenRecord): RestToken {
+  return {
+    id: token.id,
+    name: token.name,
+    createdAt: token.createdAt.toISOString(),
+    expiresAt: token.expiresAt.toISOString(),
+    lastUsedAt: token.lastUsedAt?.toISOString() ?? null,
   };
 }
 
