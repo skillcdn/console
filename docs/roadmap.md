@@ -10,7 +10,7 @@ What exists, what is being built, what comes next. Update this file in the same 
 
 Goal: a person opens the console, signs in, writes a task, moves it along, raises a decision and answers one; several people see the same board, live. No agents yet.
 
-- [ ] The data model in `apps/console`: workspace, people, sessions, tasks, decisions, events; migrations; the schema documented in the workspace's README.
+- [x] The data model in `apps/console`: workspace, people, sessions, tasks, decisions, events; migrations; the schema documented in the workspace's README.
 - [ ] The config module, the `api`, `worker` and `migrate` roles, health endpoints, graceful shutdown, structured logging.
 - [ ] The REST API, with its schemas in `packages/console` so that the contract has one source; integration tests against PostgreSQL. *The contract is in the package (`@skillcdn/console/api`: the vocabulary, the bounds, the routes, the schemas, the client); the server is next.*
 - [ ] Sign-in through the git host; membership from configuration; requests that change something checked against the console's own origin.
