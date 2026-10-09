@@ -11,7 +11,7 @@
   </p>
 </div>
 
-> **Status: pre-alpha. Nothing runs yet.** This README describes what is being built. [docs/roadmap.md](docs/roadmap.md) says what exists; [docs/architecture.md](docs/architecture.md) says how it fits together and what is still open. The repository was laid out on 2026-10-09 so that development can start from it.
+> **Status: pre-alpha.** The board runs: people sign in, write tasks, move them along, raise decisions and answer them, and see one board, live. No agents yet. [docs/roadmap.md](docs/roadmap.md) says what exists; [docs/architecture.md](docs/architecture.md) says how it fits together and what is still open.
 
 **What it is.** The console is the operations room of an organization that lets AI agents do its work. It holds the work to be done, which agent (Claude Code, Codex, any agent that speaks MCP) is doing what right now, what each has done, and the decisions that wait for a person. People decide; agents work. The organization's playbooks and skills live in git repositories and reach the agents through [SkillCDN](https://skillcdn.ai); the console shows those repositories, skills and addresses through the same published packages.
 
@@ -41,9 +41,15 @@ TypeScript monorepo: pnpm workspaces, Turborepo, Node.js 24, PostgreSQL 18, with
 ## Development
 
 ```sh
-pnpm install          # needs pnpm 12+; the Node.js runtime is pinned and fetched by pnpm
-pnpm check            # lint, build, typecheck, test
+pnpm install                                        # needs pnpm 12+; the Node.js runtime is pinned and fetched by pnpm
+docker compose -f deploy/compose.dev.yaml up -d     # PostgreSQL 18 on 127.0.0.1:5433
+pnpm check                                          # lint, build, typecheck, test (the integration tests need the database)
+cp .env.example .env                                # safe local defaults; set WEB_ROOT to serve the UI
+pnpm --filter @skillcdn/console-app run start migrate
+pnpm --filter @skillcdn/console-app run dev         # http://127.0.0.1:11190
 ```
+
+Signing in needs a GitHub OAuth app and a list of members ([deploy/README.md](deploy/README.md#signing-in)); without it the console says so and nobody is let in.
 
 The working agreement for people and AI agents alike is [AGENTS.md](AGENTS.md). Setup details and the contribution process are in [CONTRIBUTING.md](CONTRIBUTING.md). Secrets are never committed; `.env.example` holds example values only.
 

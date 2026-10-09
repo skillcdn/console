@@ -77,7 +77,9 @@ A flag (`WORKER_IN_PROCESS`) lets `api` run the worker loop in-process for a sin
 2. **The components:** the board, a task, a run, a decision, the live feed, each taking its data as props and nothing from the network.
 3. **The composition:** `createConsole(config)`, the default console assembled from the components, with the places a team may replace named.
 
-The default UI the image serves is exactly that composition with the default configuration. A custom console is a small repository that depends on the package, holds a configuration and a CI job, and builds to static files served next to any console API, or into an image of its own. Nothing of the server is in the package.
+The default UI the image serves is exactly that composition with the default configuration: `apps/console/web` is one page that calls `createConsole().mount(...)`, built with Vite into static files the `api` role serves from `WEB_ROOT`. A custom console is a small repository that depends on the package, holds a configuration and a CI job, and builds to static files served next to any console API, or into an image of its own. Nothing of the server is in the package.
+
+The pages route in the browser (`/`, `/tasks/<id>`, `/decisions`, `/feed`); every path that is not a file of the build is answered with the page, under a content security policy that runs nothing inline and loads nothing from elsewhere but pictures over https. The board is loaded whole, the feed from the beginning, and from then on the server's stream says when something changed: on every event the lists are loaded again.
 
 ## Data and storage
 

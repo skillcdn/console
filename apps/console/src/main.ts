@@ -36,6 +36,13 @@ async function run(role: Role): Promise<void> {
       await runMigrate(config, logger);
     }
   } catch (error) {
+    // Settings that only a role can check, such as a directory it is pointed at.
+    if (error instanceof ConfigError) {
+      process.stderr.write(`${error.message}
+`);
+      process.exitCode = EXIT_CONFIG;
+      return;
+    }
     logger.fatal({ err: error }, "fatal error");
     process.exitCode = EXIT_FAILURE;
   }

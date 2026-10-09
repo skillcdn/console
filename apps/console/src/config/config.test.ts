@@ -38,6 +38,7 @@ describe("loadConfig", () => {
       workspace: { name: "Console" },
       worker: { inProcess: false },
       auth: undefined,
+      web: { root: undefined },
     });
   });
 
@@ -60,6 +61,7 @@ describe("loadConfig", () => {
     expect(config.workspace.name).toBe("Acme");
     expect(config.worker.inProcess).toBe(true);
     expect(config.database.poolMax).toBe(4);
+    expect(loadConfig({ DATABASE_URL, WEB_ROOT: "/app/web" }, noFiles).web.root).toBe("/app/web");
   });
 
   it("reads the reverse-proxy settings, and trusts no proxy unless told to", () => {

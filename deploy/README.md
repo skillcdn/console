@@ -45,6 +45,7 @@ The console is configured only through environment variables. [`.env.example`](.
 | `MEMBERS` | `api` | no | no | Who may sign in: logins at the git host, comma-separated, compared without regard to case. Checked at sign-in and on every request after. Empty lets nobody in, and is logged at boot. |
 | `GITHUB_WEB_URL`, `GITHUB_API_URL` | `api` | no | no | Defaults `https://github.com` and `https://api.github.com`. GitHub Enterprise Server: `https://<host>` and `https://<host>/api/v3`. |
 | `SESSION_TTL_DAYS` | `api` | no | no | How long a browser stays signed in without being used. Default `30`. |
+| `WEB_ROOT` | `api` | no | no | Directory of a build of the default UI. The image sets `/app/web`; set it to an empty value to run without a UI. A directory without an `index.html` is a configuration error. |
 
 Every secret `NAME` may also be supplied as `NAME_FILE`, so container secret mounts work.
 

@@ -128,6 +128,8 @@ const environmentSchema = z.object({
     .optional(),
   MEMBERS: loginList,
   SESSION_TTL_DAYS: integer(30, 1, 365),
+
+  WEB_ROOT: z.string().min(1).optional(),
 });
 
 export interface AuthConfig {
@@ -183,6 +185,10 @@ export interface Config {
   };
   /** Signing in through the git host. Unset: nobody signs in, and the board is nobody's. */
   readonly auth: AuthConfig | undefined;
+  readonly web: {
+    /** Directory of a build of the default UI to serve. Unset: there is no UI, API only. */
+    readonly root: string | undefined;
+  };
 }
 
 export class ConfigError extends Error {
@@ -322,5 +328,6 @@ export function loadConfig(
     workspace: { name: env.WORKSPACE_NAME },
     worker: { inProcess: env.WORKER_IN_PROCESS },
     auth,
+    web: { root: env.WEB_ROOT },
   };
 }

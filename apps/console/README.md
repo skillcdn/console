@@ -4,7 +4,7 @@ The single deployable of the console: the API people and agents talk to, the wor
 
 | Role | Command | Purpose | Status |
 |---|---|---|---|
-| `api` | `node dist/main.js api` | Serves HTTP: the probes, signing in and who is signed in, the [REST API](../../docs/specs/rest.md) of the board with its live feed, and with the milestone the UI's files. Stateless. | probes, sign-in, REST, feed |
+| `api` | `node dist/main.js api` | Serves HTTP: the probes, signing in and who is signed in, the [REST API](../../docs/specs/rest.md) of the board with its live feed, and the default UI from `WEB_ROOT`. Stateless. | implemented |
 | `worker` | `node dist/main.js worker` | The schedules: the sweep of what time has ended. The job queue arrives with the first job. | implemented |
 | `migrate` | `node dist/main.js migrate` | Applies pending migrations, then exits. | implemented |
 
@@ -12,11 +12,13 @@ The single deployable of the console: the API people and agents talk to, the wor
 
 ```sh
 docker compose -f deploy/compose.dev.yaml up -d      # PostgreSQL 18 on 127.0.0.1:5433
-cp .env.example .env                                 # safe local defaults
-pnpm build
-node --env-file=.env apps/console/dist/main.js migrate
-node --env-file=.env apps/console/dist/main.js api   # http://127.0.0.1:11190/readyz
+cp .env.example .env                                 # safe local defaults; set WEB_ROOT to serve the UI
+pnpm build                                           # the server, and the UI into web/dist
+pnpm --filter @skillcdn/console-app run start migrate
+pnpm --filter @skillcdn/console-app run dev          # the api, restarting on change: http://127.0.0.1:11190
 ```
+
+To work on the UI with its own reloading, run `pnpm --filter @skillcdn/console-app run dev:web` next to the api: it serves the pages at `http://127.0.0.1:11191` and sends everything else to the api. Signing in belongs to the api, so the git host sends the browser back to `PUBLIC_URL`, which is the api's port.
 
 The exit codes, the probes and what a signal does are the process contract in [`deploy/README.md`](../../deploy/README.md#process-contract). Signing in is off until it is configured, and nothing above needs it; to try it locally, register a GitHub OAuth app with `http://127.0.0.1:11190` as its homepage and `http://127.0.0.1:11190/auth/gh/callback` as its callback, and set its values, `AUTH_SECRET`, `PUBLIC_URL=http://127.0.0.1:11190` and `MEMBERS` in `.env` ([`deploy/README.md`](../../deploy/README.md#signing-in)). The tests need none of it: they sign people in through a fixture.
 
@@ -53,6 +55,9 @@ src/
                  the harness that wires the app for the integration tests (not compiled)
   errors.ts      the base class of errors that cross a boundary, with their stable code
   version.ts     what the process calls itself
+web/             the default UI: one page that mounts the package's composition, built by Vite into
+                 web/dist, which the api role serves from WEB_ROOT (http/web.ts: the files of the
+                 build, and the page for every other path, under a content security policy)
 migrations/      generated SQL and its journal, committed, shipped inside the image
 ```
 
@@ -82,6 +87,7 @@ Read the root [`AGENTS.md`](../../AGENTS.md) first. This workspace is the compos
 - `src/adapters/github-login.test.ts` covers the GitHub adapter against a fake `fetch`: what it sends, what it reads, and what it refuses.
 - `src/rest.int.test.ts` covers the REST API and parses every answer with the package's schemas: who may ask and change, tasks and decisions through their whole life, what is refused and why, and the feed's pages.
 - `src/live.int.test.ts` covers the feed as server-sent events, with a listener on the database's channel as a deployment has: what was there, what happens next, heartbeats, where a reconnecting browser starts, and that closing the feed ends every stream.
+- `src/http/web.test.ts` covers serving a build: the files and their types, bundles as immutable, the page for every path of the app under its policy, the API's paths left alone, and that nothing outside the directory is ever served. It uses a small fake build, not `web/dist`.
 - `src/db/db.int.test.ts` covers the data model. Every test file has a database of its own; tests inside a file share it.
 
 ## Working on the schema

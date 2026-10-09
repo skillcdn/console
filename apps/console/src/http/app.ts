@@ -9,6 +9,7 @@ import type { ClientAddressResolver } from "./client-address.js";
 import type { LiveFeed } from "./live-feed.js";
 import { type AppEnv, requestContext } from "./request-context.js";
 import { registerRest } from "./rest.js";
+import type { WebRoot } from "./web.js";
 
 export interface AppDependencies {
   readonly database: Database;
@@ -22,6 +23,8 @@ export interface AppDependencies {
   readonly auth: AppAuth | undefined;
   /** The subscribers of the feed in this process. */
   readonly feed: LiveFeed;
+  /** A build of the default UI to serve. Left out, the server is API only. */
+  readonly web: WebRoot | undefined;
   readonly clock: Clock;
   readonly logger: Logger;
   readonly requests: {
@@ -46,7 +49,7 @@ export function errorBody(code: string, message: string) {
  * register on top.
  */
 export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
-  const { database, logger, isShuttingDown, auth, workspace, feed, clock } = dependencies;
+  const { database, logger, isShuttingDown, auth, workspace, feed, clock, web } = dependencies;
   const app = new Hono<AppEnv>();
   app.use(requestContext({ logger, ...dependencies.requests }));
 
@@ -82,6 +85,12 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
   const access = createAccess(auth);
   registerAuth(app, { auth, access, workspace, logger });
   registerRest(app, { database, workspace, access, feed, clock, logger });
+
+  // After the API: a file of the build, or the page for every other path, which routes in the
+  // browser. The API's own paths answer their own not-found.
+  if (web !== undefined) {
+    app.on(["GET", "HEAD"], "*", async (c) => (await web.respond(c.req.raw)) ?? c.notFound());
+  }
 
   app.notFound((c) => c.json(errorBody("not_found", "There is nothing at this path."), 404));
   app.onError((error, c) => {

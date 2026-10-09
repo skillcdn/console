@@ -8,7 +8,7 @@ import { Login } from "../auth/login.js";
 import { Membership } from "../auth/membership.js";
 import { createSecrets } from "../auth/secrets.js";
 import { Sessions } from "../auth/sessions.js";
-import type { AuthConfig, Config } from "../config/config.js";
+import { type AuthConfig, type Config, ConfigError } from "../config/config.js";
 import { createDatabase, type Database } from "../db/client.js";
 import { startEventListener } from "../db/listener.js";
 import { ensureWorkspace, type WorkspaceRecord } from "../db/queries/workspaces.js";
@@ -18,6 +18,7 @@ import { createClientAddressResolver } from "../http/client-address.js";
 import { LiveFeed } from "../http/live-feed.js";
 import type { AppEnv } from "../http/request-context.js";
 import { startServer } from "../http/server.js";
+import { loadWebRoot, type WebRoot, WebRootError } from "../http/web.js";
 import { Janitor } from "../jobs/janitor.js";
 import type { Logger } from "../logger.js";
 import type { Clock } from "../ports/clock.js";
@@ -38,6 +39,8 @@ export interface ApiPorts {
   readonly clock: Clock;
   readonly logger: Logger;
   readonly isShuttingDown: () => boolean;
+  /** A loaded build of the default UI. Left out, the server is API only. */
+  readonly web?: WebRoot | undefined;
 }
 
 export type ApiConfig = Pick<Config, "workspace"> & {
@@ -131,6 +134,7 @@ export function createApi(
     workspace,
     auth,
     feed,
+    web: ports.web,
     clock,
     logger,
     isShuttingDown: ports.isShuttingDown,
@@ -176,6 +180,19 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
           clientSecret: config.auth.github.clientSecret,
           userAgent: `${APP_NAME}/${APP_VERSION}`,
         });
+  let web: WebRoot | undefined;
+  if (config.web.root !== undefined) {
+    try {
+      web = await loadWebRoot(config.web.root);
+    } catch (error) {
+      if (error instanceof WebRootError) {
+        // A setting that points at the wrong place, not a failure of the process.
+        throw new ConfigError([`WEB_ROOT: ${error.message}`]);
+      }
+      throw error;
+    }
+    logger.info({ files: web.files }, "serving the UI");
+  }
   let shuttingDown = false;
   const { app, feed } = createApi(config, {
     database,
@@ -183,6 +200,7 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
     clock: systemClock,
     logger,
     isShuttingDown: () => shuttingDown,
+    web,
   });
   // What any process changes reaches this one's subscribers through the database's own channel.
   const listener = startEventListener({
