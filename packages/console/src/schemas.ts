@@ -12,6 +12,8 @@ import {
   MAX_OPTIONS,
   MAX_QUESTION_LENGTH,
   MAX_TITLE_LENGTH,
+  MAX_TOKEN_DAYS,
+  MAX_TOKEN_NAME_LENGTH,
   MAX_URL_LENGTH,
   MIN_OPTIONS,
 } from "./limits.js";
@@ -227,6 +229,40 @@ export const restEventsSchema = z.object({
   more: z.boolean(),
 });
 export type RestEvents = z.infer<typeof restEventsSchema>;
+
+/**
+ * A token a person made for an agent, a script or a console of their own, as their own page
+ * lists it. The secret itself is answered once, when the token is made, and never kept.
+ */
+export const restTokenSchema = z.object({
+  id: uuid,
+  /** What the person calls it: the agent it is for, where it runs. */
+  name: z.string(),
+  createdAt: instant,
+  expiresAt: instant,
+  /** When it was last presented, or `null` if never. */
+  lastUsedAt: z.nullable(instant),
+});
+export type RestToken = z.infer<typeof restTokenSchema>;
+
+/** `GET /api/v1/tokens`: the tokens of whoever asks, newest first. */
+export const restTokensSchema = z.object({ items: z.array(restTokenSchema) });
+export type RestTokens = z.infer<typeof restTokensSchema>;
+
+/** What `POST /api/v1/tokens` is sent: a name, and for how many days it is good. */
+export const restTokenInputSchema = z.object({
+  name: line(MAX_TOKEN_NAME_LENGTH),
+  expiresInDays: z.optional(z.int().check(z.gte(1), z.lte(MAX_TOKEN_DAYS))),
+});
+export type RestTokenInput = z.infer<typeof restTokenInputSchema>;
+
+/** What `POST /api/v1/tokens` answers: the token, and its secret, this once. */
+export const restTokenCreatedSchema = z.object({
+  token: restTokenSchema,
+  /** Presented as `Authorization: Bearer <secret>`. The server keeps its hash, and never shows it again. */
+  secret: z.string(),
+});
+export type RestTokenCreated = z.infer<typeof restTokenCreatedSchema>;
 
 export const restErrorSchema = z.object({
   error: z.object({

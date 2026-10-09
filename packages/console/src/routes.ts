@@ -11,6 +11,8 @@ export const REST_ROUTES = {
   decisions: "/api/v1/decisions",
   /** The feed, from a point on; and `/stream` under it, the same as it happens. */
   events: "/api/v1/events",
+  /** The tokens of whoever asks: what their agents, scripts and consoles act as them with. */
+  tokens: "/api/v1/tokens",
 } as const;
 
 /** Where a browser signs in and out. */
@@ -49,7 +51,7 @@ export function signInPath(page: string, failure: SignInFailure): string {
   return `${page}${page.includes("?") ? "&" : "?"}${SIGN_IN_PARAM}=${failure}`;
 }
 
-/** The REST path of one task, one decision: the collection, then the id. */
-export function restPath(collection: "tasks" | "decisions", id: string): string {
+/** The REST path of one task, one decision, one token: the collection, then the id. */
+export function restPath(collection: "tasks" | "decisions" | "tokens", id: string): string {
   return `${REST_ROUTES[collection]}/${encodeURIComponent(id)}`;
 }

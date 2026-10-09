@@ -17,5 +17,6 @@ describe("routes", () => {
   it("names a resource by its id, escaped", () => {
     expect(restPath("tasks", "a/b")).toBe("/api/v1/tasks/a%2Fb");
     expect(restPath("decisions", "d1")).toBe("/api/v1/decisions/d1");
+    expect(restPath("tokens", "t1")).toBe("/api/v1/tokens/t1");
   });
 });

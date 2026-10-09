@@ -1178,3 +1178,59 @@ svg {
     grid-template-columns: 1fr;
   }
 }
+
+/* Tokens: the ones a person holds, and the one just made, shown once. */
+
+.sc-lead {
+  max-width: var(--sc-width-prose);
+  margin-bottom: var(--sc-space-5);
+  color: var(--sc-color-text-muted);
+}
+
+.sc-token-list {
+  display: grid;
+  gap: var(--sc-space-3);
+}
+
+.sc-token {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sc-space-3);
+  padding: var(--sc-space-4);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-bg-subtle);
+}
+
+.sc-token-name {
+  font-weight: var(--sc-weight-medium);
+}
+
+.sc-token-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-3);
+  margin-top: var(--sc-space-1);
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-secret {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
+  margin: var(--sc-space-3) 0;
+}
+
+.sc-secret-value {
+  padding: var(--sc-space-2) var(--sc-space-3);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-sm);
+  background: var(--sc-color-bg-inset);
+  font-size: var(--sc-text-sm);
+  word-break: break-all;
+  user-select: all;
+}

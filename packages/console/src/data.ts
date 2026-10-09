@@ -11,6 +11,9 @@ import {
   type RestTask,
   type RestTaskInput,
   type RestTaskPatch,
+  type RestToken,
+  type RestTokenCreated,
+  type RestTokenInput,
   restEventSchema,
 } from "./api.js";
 
@@ -30,6 +33,9 @@ export interface ConsoleActions {
   updateTask(id: string, patch: RestTaskPatch): Promise<RestTask>;
   raiseDecision(input: RestDecisionInput): Promise<RestDecision>;
   answerDecision(id: string, input: RestAnswerInput): Promise<RestDecision>;
+  /** Makes a token for whoever is signed in; the answer carries the secret, this once. */
+  createToken(input: RestTokenInput): Promise<RestTokenCreated>;
+  revokeToken(id: string): Promise<void>;
   signOut(): Promise<void>;
 }
 
@@ -47,6 +53,8 @@ export interface ConsoleData {
   readonly people: readonly RestPerson[];
   /** Oldest first. */
   readonly events: readonly RestEvent[];
+  /** The tokens of whoever is signed in, newest first. */
+  readonly tokens: readonly RestToken[];
   readonly actions: ConsoleActions;
   /** Asks everything again, from who is signed in on. */
   reload(): void;
@@ -76,6 +84,7 @@ export function useConsoleData(client: ConsoleClient): ConsoleData {
   const [decisions, setDecisions] = useState<readonly RestDecision[]>([]);
   const [people, setPeople] = useState<readonly RestPerson[]>([]);
   const [events, setEvents] = useState<readonly RestEvent[]>([]);
+  const [tokens, setTokens] = useState<readonly RestToken[]>([]);
   const [generation, setGeneration] = useState(0);
   const lastEvent = useRef(0);
 
@@ -129,11 +138,16 @@ export function useConsoleData(client: ConsoleClient): ConsoleData {
         return;
       }
       try {
-        const [, feed] = await Promise.all([refreshLists(signal), readFeed(client, signal)]);
+        const [, feed, mine] = await Promise.all([
+          refreshLists(signal),
+          readFeed(client, signal),
+          client.tokens(signal),
+        ]);
         if (signal.aborted) {
           return;
         }
         setEvents(feed);
+        setTokens(mine.items);
         lastEvent.current = feed.at(-1)?.id ?? 0;
         setLoaded(true);
       } catch (failure) {
@@ -206,6 +220,15 @@ export function useConsoleData(client: ConsoleClient): ConsoleData {
         await refreshLists();
         return decision;
       },
+      async createToken(input) {
+        const made = await client.createToken(input);
+        setTokens((await client.tokens()).items);
+        return made;
+      },
+      async revokeToken(id) {
+        await client.revokeToken(id);
+        setTokens((current) => current.filter((token) => token.id !== id));
+      },
       async signOut() {
         await client.signOut();
         setMe((current) => (current === undefined ? undefined : { ...current, person: null }));
@@ -215,5 +238,5 @@ export function useConsoleData(client: ConsoleClient): ConsoleData {
     [client, refreshLists],
   );
 
-  return { me, error, loaded, live, tasks, decisions, people, events, actions, reload };
+  return { me, error, loaded, live, tasks, decisions, people, events, tokens, actions, reload };
 }

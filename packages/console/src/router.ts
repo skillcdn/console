@@ -7,6 +7,7 @@ export type Route =
   | { readonly name: "task"; readonly id: string }
   | { readonly name: "decisions" }
   | { readonly name: "feed" }
+  | { readonly name: "tokens" }
   | { readonly name: "not-found" };
 
 export const PATHS = {
@@ -14,6 +15,8 @@ export const PATHS = {
   tasks: "/tasks",
   decisions: "/decisions",
   feed: "/feed",
+  /** The tokens of whoever is signed in: their own page. */
+  tokens: "/tokens",
 } as const;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -28,6 +31,9 @@ export function matchRoute(pathname: string): Route {
   }
   if (path === PATHS.feed) {
     return { name: "feed" };
+  }
+  if (path === PATHS.tokens) {
+    return { name: "tokens" };
   }
   if (path.startsWith(`${PATHS.tasks}/`)) {
     const id = path.slice(PATHS.tasks.length + 1);

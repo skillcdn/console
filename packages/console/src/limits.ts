@@ -21,3 +21,10 @@ export const MAX_NOTE_LENGTH = 2000;
 export const LIST_LIMIT = 500;
 /** How many events one page of the feed carries. */
 export const EVENTS_PAGE_LIMIT = 100;
+/** What a person calls a token: the agent it is for, where it runs. One line. */
+export const MAX_TOKEN_NAME_LENGTH = 80;
+/** How long a token may be good for, in days, and how long one is when nothing is said. */
+export const MAX_TOKEN_DAYS = 365;
+export const DEFAULT_TOKEN_DAYS = 90;
+/** How many tokens one person may hold at a time. */
+export const MAX_TOKENS_PER_PERSON = 25;

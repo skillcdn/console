@@ -11,6 +11,9 @@ import {
   type RestTaskInput,
   type RestTaskPatch,
   type RestTasks,
+  type RestTokenCreated,
+  type RestTokenInput,
+  type RestTokens,
   restDecisionSchema,
   restDecisionsSchema,
   restErrorSchema,
@@ -19,12 +22,15 @@ import {
   restPeopleSchema,
   restTaskSchema,
   restTasksSchema,
+  restTokenCreatedSchema,
+  restTokensSchema,
 } from "./schemas.js";
 import type { TaskState } from "./vocabulary.js";
 
 // The client of the console's REST API: what the default console and a custom one talk to the
-// server with. It takes a `fetch` and a base URL and reads nothing else; every answer is parsed
-// with the schemas the server is tested against.
+// server with, and what a script or a console of a person's own talks to it with, holding a
+// token of theirs. It takes a `fetch` and a base URL and reads nothing else; every answer is
+// parsed with the schemas the server is tested against.
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -33,6 +39,12 @@ export interface ClientOptions {
   readonly baseUrl?: string;
   /** The platform's `fetch` when left out. Tests hand in one that never leaves the process. */
   readonly fetch?: FetchLike;
+  /**
+   * A token a person made, for a script or a console of their own: sent as `Authorization:
+   * Bearer`, and the browser's cookies left out. Left out, the session cookie of the page's own
+   * origin is what the console answers to.
+   */
+  readonly token?: string;
 }
 
 export class ApiError extends Error {
@@ -72,6 +84,12 @@ export interface ConsoleClient {
   events(after: number, signal?: AbortSignal): Promise<RestEvents>;
   /** Where an `EventSource` subscribes to what happens after event number `after`. */
   eventStreamUrl(after: number): string;
+  /** The tokens of whoever asks. */
+  tokens(signal?: AbortSignal): Promise<RestTokens>;
+  /** Makes a token; the answer carries the secret, this once. */
+  createToken(input: RestTokenInput): Promise<RestTokenCreated>;
+  /** Takes a token away, whoever holds it. */
+  revokeToken(id: string): Promise<void>;
   /** Ends the session on this browser. */
   signOut(): Promise<void>;
 }
@@ -81,6 +99,7 @@ const INVALID = "The server answered unexpectedly.";
 export function createClient(options: ClientOptions = {}): ConsoleClient {
   const base = (options.baseUrl ?? "").replace(/\/+$/, "");
   const send = options.fetch ?? ((input, init) => fetch(input, init));
+  const { token } = options;
 
   const withQuery = (path: string, params: Record<string, string | undefined>): string => {
     const query = new URLSearchParams();
@@ -101,7 +120,7 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
   };
 
   const request = async <T>(
-    method: "GET" | "POST" | "PATCH",
+    method: "GET" | "POST" | "PATCH" | "DELETE",
     url: string,
     body: unknown,
     schema: Schema<T> | undefined,
@@ -113,11 +132,13 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
         method,
         ...(signal === undefined ? {} : { signal }),
         // Same origin, so the session cookie goes with it; the browser names the origin of a
-        // request that changes something, which the server checks.
-        credentials: "same-origin",
+        // request that changes something, which the server checks. With a token, the token is
+        // the credential and no cookie travels.
+        credentials: token === undefined ? "same-origin" : "omit",
         headers: {
           accept: "application/json",
           ...(body === undefined ? {} : { "content-type": "application/json" }),
+          ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
@@ -183,6 +204,12 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
         signal,
       ),
     eventStreamUrl: (after) => withQuery(`${REST_ROUTES.events}/stream`, { after: String(after) }),
+    tokens: (signal) =>
+      request("GET", `${base}${REST_ROUTES.tokens}`, undefined, restTokensSchema, signal),
+    createToken: (input) =>
+      request("POST", `${base}${REST_ROUTES.tokens}`, input, restTokenCreatedSchema),
+    revokeToken: (id) =>
+      request("DELETE", `${base}${restPath("tokens", id)}`, undefined, undefined),
     signOut: () => request("POST", `${base}${AUTH_ROUTES.logout}`, undefined, undefined),
   };
 }

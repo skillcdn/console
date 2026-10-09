@@ -9,6 +9,7 @@ import {
   type RestDecisionInput,
   type RestTask,
   type RestTaskInput,
+  type RestTokenCreated,
   type TaskState,
 } from "./api.js";
 import { Board, type BoardProps } from "./components/board.js";
@@ -19,6 +20,7 @@ import { Shell, type ShellProps } from "./components/shell.js";
 import { SignIn, type SignInProps } from "./components/sign-in.js";
 import { TaskForm } from "./components/task-form.js";
 import { TaskView, type TaskViewProps } from "./components/task-view.js";
+import { NewToken, TokenForm, TokenList, type TokenListProps } from "./components/tokens.js";
 import { Button, Callout, EmptyState, Spinner } from "./components/ui.js";
 import { type ConsoleData, useConsoleData } from "./data.js";
 import {
@@ -41,6 +43,7 @@ export interface ConsoleComponents {
   readonly DecisionList: ComponentType<DecisionListProps>;
   readonly EventFeed: ComponentType<EventFeedProps>;
   readonly SignIn: ComponentType<SignInProps>;
+  readonly TokenList: ComponentType<TokenListProps>;
 }
 
 export const DEFAULT_COMPONENTS: ConsoleComponents = {
@@ -50,6 +53,7 @@ export const DEFAULT_COMPONENTS: ConsoleComponents = {
   DecisionList,
   EventFeed,
   SignIn,
+  TokenList,
 };
 
 export interface ConsoleConfig {
@@ -119,6 +123,8 @@ function Page(props: {
   const { route, data, components, navigate } = props;
   const [writing, setWriting] = useState(false);
   const [asking, setAsking] = useState(false);
+  const [making, setMaking] = useState(false);
+  const [fresh, setFresh] = useState<RestTokenCreated | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
   const tasksById = useMemo(() => new Map(data.tasks.map((task) => [task.id, task])), [data.tasks]);
@@ -269,6 +275,52 @@ function Page(props: {
       </>
     );
   }
+  if (route.name === "tokens") {
+    return (
+      <>
+        <div className="sc-page-head">
+          <h1 className="sc-page-title">Tokens</h1>
+          <Button variant="primary" onClick={() => setMaking(true)} disabled={making}>
+            Make a token
+          </Button>
+        </div>
+        <p className="sc-lead">
+          A token lets an agent, a script or a console of your own act as you on this board: what
+          you may do, it may do. Make one per agent, name it after where it runs, and remove it when
+          that is over.
+        </p>
+        {error !== undefined && <Callout tone="danger">{error}</Callout>}
+        {fresh !== undefined && (
+          <NewToken token={fresh.token} secret={fresh.secret} onDone={() => setFresh(undefined)} />
+        )}
+        {making && (
+          <section className="sc-panel" aria-label="Make a token">
+            <TokenForm
+              busy={busy}
+              onSubmit={(input) =>
+                void act(async () => {
+                  setFresh(await data.actions.createToken(input));
+                  setMaking(false);
+                })
+              }
+              onCancel={() => setMaking(false)}
+            />
+          </section>
+        )}
+        <components.TokenList
+          tokens={data.tokens}
+          busy={busy}
+          onRevoke={(token) => void act(() => data.actions.revokeToken(token.id))}
+          empty={
+            <EmptyState
+              title="No tokens yet"
+              body="Make one for your agent, and it can work on this board as you."
+            />
+          }
+        />
+      </>
+    );
+  }
   return <EmptyState title="There is nothing at this address" />;
 }
 
@@ -331,6 +383,7 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
         count: waiting,
       },
       { href: PATHS.feed, label: "Feed", current: route.name === "feed" },
+      { href: PATHS.tokens, label: "Tokens", current: route.name === "tokens" },
     ];
     return (
       <components.Shell

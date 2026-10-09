@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { MAX_BODY_LENGTH, MAX_LINKS, MAX_OPTIONS, MAX_TITLE_LENGTH } from "./limits.js";
+import {
+  MAX_BODY_LENGTH,
+  MAX_LINKS,
+  MAX_OPTIONS,
+  MAX_TITLE_LENGTH,
+  MAX_TOKEN_DAYS,
+  MAX_TOKEN_NAME_LENGTH,
+} from "./limits.js";
 import {
   restAnswerInputSchema,
   restDecisionInputSchema,
@@ -7,6 +14,10 @@ import {
   restTaskInputSchema,
   restTaskPatchSchema,
   restTaskSchema,
+  restTokenCreatedSchema,
+  restTokenInputSchema,
+  restTokenSchema,
+  restTokensSchema,
 } from "./schemas.js";
 
 const PERSON = {
@@ -136,5 +147,43 @@ describe("what the server answers", () => {
         createdAt: "2026-10-09T10:00:00.000Z",
       }).success,
     ).toBe(false);
+  });
+});
+
+describe("tokens", () => {
+  it("take a name alone, trimmed, and the days when said", () => {
+    expect(restTokenInputSchema.parse({ name: "  Claude Code on the laptop  " })).toEqual({
+      name: "Claude Code on the laptop",
+    });
+    expect(restTokenInputSchema.parse({ name: "ci", expiresInDays: 30 })).toEqual({
+      name: "ci",
+      expiresInDays: 30,
+    });
+  });
+
+  it.each([
+    ["an empty name", { name: " " }],
+    ["a name over the limit", { name: "n".repeat(MAX_TOKEN_NAME_LENGTH + 1) }],
+    ["a name with a hidden character", { name: `a${String.fromCodePoint(0x200b)}b` }],
+    ["no days at all", { name: "ok", expiresInDays: 0 }],
+    ["more days than allowed", { name: "ok", expiresInDays: MAX_TOKEN_DAYS + 1 }],
+    ["a fraction of a day", { name: "ok", expiresInDays: 1.5 }],
+    ["days as a string", { name: "ok", expiresInDays: "30" }],
+    ["nothing", undefined],
+  ])("refuse %s", (_, input) => {
+    expect(restTokenInputSchema.safeParse(input).success).toBe(false);
+  });
+
+  it("are read as the server answers them, with the secret once and never a missing key", () => {
+    const token = {
+      id: "0199c4d8-0000-7000-8000-000000000030",
+      name: "ci",
+      createdAt: "2026-10-09T10:00:00.000Z",
+      expiresAt: "2027-01-07T10:00:00.000Z",
+      lastUsedAt: null,
+    };
+    expect(restTokensSchema.parse({ items: [token] }).items).toHaveLength(1);
+    expect(restTokenCreatedSchema.parse({ token, secret: "cns_t_x" }).secret).toBe("cns_t_x");
+    expect(restTokenSchema.safeParse({ ...token, lastUsedAt: undefined }).success).toBe(false);
   });
 });

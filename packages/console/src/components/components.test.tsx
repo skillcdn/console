@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { RestDecision, RestEvent, RestPerson, RestTask } from "../api.js";
+import type { RestDecision, RestEvent, RestPerson, RestTask, RestToken } from "../api.js";
 import { Board } from "./board.js";
 import { DecisionList } from "./decision-list.js";
 import { describeEvent, EventFeed } from "./event-feed.js";
@@ -8,6 +8,7 @@ import { Markdown } from "./markdown.js";
 import { Shell } from "./shell.js";
 import { SignIn } from "./sign-in.js";
 import { TaskView } from "./task-view.js";
+import { NewToken, TokenForm, TokenList } from "./tokens.js";
 
 const alice: RestPerson = {
   id: "0199c4d8-0000-7000-8000-000000000001",
@@ -261,5 +262,52 @@ describe("the shell and signing in", () => {
     const nobody = renderToStaticMarkup(<SignIn title="Acme" signIn={undefined} returnTo="/" />);
     expect(nobody).not.toContain("/auth/gh/login");
     expect(nobody).toContain("Nobody can sign in here yet");
+  });
+});
+
+describe("tokens", () => {
+  const token: RestToken = {
+    id: "0199c4d8-0000-7000-8000-000000000030",
+    name: "Claude Code <on> the laptop",
+    createdAt: "2026-10-09T10:00:00.000Z",
+    expiresAt: "2027-01-07T10:00:00.000Z",
+    lastUsedAt: null,
+  };
+
+  it("lists what a person holds, as text, with the way to remove each when there is one", () => {
+    const html = renderToStaticMarkup(
+      <TokenList
+        tokens={[
+          token,
+          {
+            ...token,
+            id: "0199c4d8-0000-7000-8000-000000000031",
+            name: "ci",
+            lastUsedAt: "2026-10-09T12:00:00.000Z",
+          },
+        ]}
+        onRevoke={() => undefined}
+      />,
+    );
+    expect(html).toContain("Claude Code &lt;on&gt; the laptop");
+    expect(html).toContain("Never used");
+    expect(html).toContain("Last used");
+    expect(html.match(/>Remove</g)).toHaveLength(2);
+    const readOnly = renderToStaticMarkup(<TokenList tokens={[token]} />);
+    expect(readOnly).not.toContain("Remove");
+    expect(renderToStaticMarkup(<TokenList tokens={[]} empty={<p>none</p>} />)).toBe("<p>none</p>");
+  });
+
+  it("asks for a name and a span, and shows a new token's secret this once", () => {
+    const form = renderToStaticMarkup(<TokenForm onSubmit={() => undefined} />);
+    expect(form).toContain("Name");
+    expect(form).toContain("90 days");
+    expect(form).toContain("Make the token");
+    const made = renderToStaticMarkup(
+      <NewToken token={token} secret="cns_t_example-secret" onDone={() => undefined} />,
+    );
+    expect(made).toContain('<code class="sc-secret-value">cns_t_example-secret</code>');
+    expect(made).toContain("shown this once");
+    expect(made).toContain("Copy");
   });
 });

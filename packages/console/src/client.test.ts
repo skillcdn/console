@@ -114,4 +114,38 @@ describe("createClient", () => {
     });
     await expect(client.me(controller.signal)).rejects.toMatchObject({ name: "AbortError" });
   });
+
+  it("presents a token as a bearer, leaves the cookies at home, and manages tokens", async () => {
+    const token = {
+      id: "0199c4d8-0000-7000-8000-000000000030",
+      name: "ci",
+      createdAt: "2026-10-09T10:00:00.000Z",
+      expiresAt: "2027-01-07T10:00:00.000Z",
+      lastUsedAt: null,
+    };
+    const { send, calls } = fakeFetch({
+      "GET https://console.test/api/v1/tokens": { body: { items: [token] } },
+      "POST https://console.test/api/v1/tokens": {
+        status: 201,
+        body: { token, secret: "cns_t_secret" },
+      },
+      [`DELETE https://console.test/api/v1/tokens/${token.id}`]: { status: 204 },
+    });
+    const client = createClient({
+      baseUrl: "https://console.test",
+      fetch: send,
+      token: "cns_t_mine",
+    });
+    expect((await client.tokens()).items[0]?.name).toBe("ci");
+    expect((await client.createToken({ name: "ci", expiresInDays: 90 })).secret).toBe(
+      "cns_t_secret",
+    );
+    await client.revokeToken(token.id);
+    for (const call of calls) {
+      expect(new Headers(call.init?.headers).get("authorization")).toBe("Bearer cns_t_mine");
+      expect(call.init?.credentials).toBe("omit");
+    }
+    expect(calls[1]?.init?.body).toBe(JSON.stringify({ name: "ci", expiresInDays: 90 }));
+    expect(calls[2]?.init?.method).toBe("DELETE");
+  });
 });
