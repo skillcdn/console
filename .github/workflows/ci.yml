@@ -131,7 +131,7 @@ jobs:
           # under its policy; the API answers its own paths.
           curl -fsS -H 'accept: text/html' 'http://127.0.0.1:11199/' | grep -q '<div id="root">'
           curl -fsS -D - -o /dev/null 'http://127.0.0.1:11199/decisions' | grep -qi '^content-security-policy:'
-          curl -fsS 'http://127.0.0.1:11199/api/v1/me' | grep -q '"signIn":null'
+          curl -fsS 'http://127.0.0.1:11199/api/v1/me' | grep -qF '"signIn":[]'
           curl -sS -o /dev/null -w '%{http_code}' 'http://127.0.0.1:11199/api/v1/tasks' | grep -q '^401$'
           # The license ships with the image.
           docker run --rm --entrypoint sh skillcdn-console:ci -c 'test -s /app/LICENSE.md && test -d /app/migrations'
