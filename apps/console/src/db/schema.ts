@@ -1,4 +1,5 @@
 import {
+  PERSON_ROLES,
   type RestDecisionOption,
   type RestEventData,
   type RestTaskLink,
@@ -66,12 +67,15 @@ export const people = pgTable(
     name: text(),
     /** The account's picture as the host serves it, an https URL. */
     avatarUrl: text(),
+    /** An administrator configures the board, a member works on it: the console's own record. */
+    role: text({ enum: PERSON_ROLES }).notNull().default("member"),
     lastLoginAt: instant().notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (table) => [
     uniqueIndex("people_host_account_key").on(table.workspaceId, table.host, table.hostAccountId),
+    check("people_role_check", sql`${table.role} in (${sql.raw(literals(PERSON_ROLES))})`),
   ],
 );
 

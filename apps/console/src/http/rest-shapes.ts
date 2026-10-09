@@ -21,6 +21,7 @@ export function restPerson(person: PersonRecord): RestPerson {
     login: person.login,
     name: person.name ?? null,
     avatar: person.avatarUrl ?? null,
+    role: person.role,
   };
 }
 

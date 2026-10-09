@@ -40,6 +40,8 @@ export interface HarnessOptions {
   readonly login?: FixtureLogin;
   /** The logins the operator lists. Everyone of the fixture when left out. */
   readonly members?: readonly string[];
+  /** The logins the operator names administrators. Nobody when left out. */
+  readonly admins?: readonly string[];
   /** The time everything is told; the system's when left out. */
   readonly clock?: Clock;
   readonly sessionTtlMs?: number;
@@ -84,6 +86,7 @@ export function createHarness(testDatabase: TestDatabase, options: HarnessOption
               publicUrl: origin,
               secret: "a secret for tests, long enough to be one",
               members: options.members ?? ["alice", "bob", "carol"],
+              admins: options.admins ?? [],
               sessionTtlMs: options.sessionTtlMs ?? 30 * 86_400_000,
             },
           }),

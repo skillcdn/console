@@ -18,7 +18,7 @@ import {
   MIN_OPTIONS,
 } from "./limits.js";
 import { hasForbiddenCodePoint } from "./text.js";
-import { EVENT_KINDS, TASK_PRIORITIES, TASK_STATES } from "./vocabulary.js";
+import { EVENT_KINDS, PERSON_ROLES, TASK_PRIORITIES, TASK_STATES } from "./vocabulary.js";
 
 /** A line of text a person wrote: trimmed, bounded, and free of characters that hide. */
 const line = (maxLength: number) =>
@@ -52,6 +52,8 @@ export const restPersonSchema = z.object({
   name: z.nullable(z.string()),
   /** The account's picture as the host serves it: an https URL loaded by the browser, or `null`. */
   avatar: z.nullable(z.string()),
+  /** An administrator configures the board; a member works on it. */
+  role: z.enum(PERSON_ROLES),
 });
 export type RestPerson = z.infer<typeof restPersonSchema>;
 
@@ -69,6 +71,10 @@ export type RestMe = z.infer<typeof restMeSchema>;
 /** `GET /api/v1/people`: everyone who has signed in, by login. */
 export const restPeopleSchema = z.object({ items: z.array(restPersonSchema) });
 export type RestPeople = z.infer<typeof restPeopleSchema>;
+
+/** What `PATCH /api/v1/people/<id>` is sent, by an administrator: what the person is to be. */
+export const restPersonPatchSchema = z.object({ role: z.enum(PERSON_ROLES) });
+export type RestPersonPatch = z.infer<typeof restPersonPatchSchema>;
 
 export const restTaskLinkSchema = z.object({
   url: z.string(),
@@ -206,6 +212,9 @@ export const restEventDataSchema = z.object({
   question: z.optional(z.string()),
   /** For `decision.answered`: the label of the chosen option. */
   option: z.optional(z.string()),
+  /** For `person.role_changed`: whose role, and what it became. */
+  login: z.optional(z.string()),
+  role: z.optional(z.enum(PERSON_ROLES)),
 });
 export type RestEventData = z.infer<typeof restEventDataSchema>;
 

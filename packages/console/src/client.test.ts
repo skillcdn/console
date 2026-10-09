@@ -6,6 +6,7 @@ const PERSON = {
   login: "alice",
   name: null,
   avatar: null,
+  role: "member",
 };
 
 /** A fetch that answers from a table of routes and remembers what it was sent. */
@@ -147,5 +148,14 @@ describe("createClient", () => {
     }
     expect(calls[1]?.init?.body).toBe(JSON.stringify({ name: "ci", expiresInDays: 90 }));
     expect(calls[2]?.init?.method).toBe("DELETE");
+  });
+
+  it("names the person whose role changes", async () => {
+    const { send, calls } = fakeFetch({
+      [`PATCH /api/v1/people/${PERSON.id}`]: { body: { ...PERSON, role: "admin" } },
+    });
+    const client = createClient({ fetch: send });
+    expect((await client.updatePerson(PERSON.id, { role: "admin" })).role).toBe("admin");
+    expect(calls[0]?.init?.body).toBe(JSON.stringify({ role: "admin" }));
   });
 });

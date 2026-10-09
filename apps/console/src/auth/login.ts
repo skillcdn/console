@@ -207,6 +207,8 @@ export class Login {
       workspaceId: await this.#options.workspaceId(),
       host: LOGIN_HOST,
       account,
+      // The operator's list makes administrators; what a person is otherwise is the board's record.
+      role: membership.administers(account.login) ? "admin" : undefined,
       now: clock.now(),
     });
     logger.info({ person: person.id, joined }, "a person signed in");

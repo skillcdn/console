@@ -1,7 +1,9 @@
-import { and, asc, eq, sql } from "drizzle-orm";
+import type { PersonRole } from "@skillcdn/console/api";
+import { and, asc, count, eq, sql } from "drizzle-orm";
 import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
+import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf } from "../client.js";
-import { people } from "../schema.js";
+import { people, workspaces } from "../schema.js";
 import { recordEvent } from "./events.js";
 
 // The people of the workspace: everyone who signed in through the git host and was let in.
@@ -18,6 +20,20 @@ export interface PersonRecord {
   readonly login: string;
   readonly name: string | undefined;
   readonly avatarUrl: string | undefined;
+  /** An administrator configures the board, a member works on it. */
+  readonly role: PersonRole;
+}
+
+/** What is wrong with a change to a person. `code` is what the API answers with. */
+export class PersonError extends DomainError {
+  constructor(code: "person.not_found" | "person.last_admin") {
+    super(
+      code,
+      code === "person.not_found"
+        ? "the person was not found"
+        : "the board would be left without an administrator",
+    );
+  }
 }
 
 /** A person as the git host told it at sign-in: what is written down about them. */
@@ -37,6 +53,7 @@ interface PersonTable {
   readonly login: AnyPgColumn;
   readonly name: AnyPgColumn;
   readonly avatarUrl: AnyPgColumn;
+  readonly role: AnyPgColumn;
 }
 
 /** For this directory only: the columns a {@link PersonRecord} is made of, from `table`. */
@@ -50,6 +67,7 @@ export const personColumns = <T extends PersonTable>(
   login: table.login,
   name: table.name,
   avatarUrl: table.avatarUrl,
+  role: table.role,
 });
 
 type PersonRow = {
@@ -60,6 +78,7 @@ type PersonRow = {
   readonly login: string;
   readonly name: string | null;
   readonly avatarUrl: string | null;
+  readonly role: string;
 };
 
 export const toPerson = (row: PersonRow): PersonRecord => ({
@@ -70,6 +89,7 @@ export const toPerson = (row: PersonRow): PersonRecord => ({
   login: row.login,
   name: row.name ?? undefined,
   avatarUrl: row.avatarUrl ?? undefined,
+  role: row.role as PersonRole,
 });
 
 /** Tables joined for the owner and the assignee of a task, the raiser of a decision. */
@@ -82,7 +102,8 @@ export const actors = alias(people, "actors");
 /**
  * Records that a person signed in: keyed by the host's immutable id, so a renamed account stays
  * the same person, with the login, the name and the picture as the host says now. The first
- * time is a joining, which the board is told about.
+ * time is a joining, which the board is told about. A `role` given is written; left out, a
+ * person keeps what they are, and a new one is a member.
  */
 export async function savePerson(
   database: Database,
@@ -90,10 +111,11 @@ export async function savePerson(
     readonly workspaceId: string;
     readonly host: GitHostKey;
     readonly account: HostAccount;
+    readonly role?: PersonRole | undefined;
     readonly now: Date;
   },
 ): Promise<{ readonly person: PersonRecord; readonly joined: boolean }> {
-  const { workspaceId, host, account, now } = login;
+  const { workspaceId, host, account, role, now } = login;
   return drizzleOf(database).transaction(async (tx) => {
     const [row] = await tx
       .insert(people)
@@ -104,6 +126,7 @@ export async function savePerson(
         login: account.login,
         name: account.name ?? null,
         avatarUrl: account.avatarUrl ?? null,
+        role: role ?? "member",
         lastLoginAt: now,
         updatedAt: now,
       })
@@ -113,6 +136,7 @@ export async function savePerson(
           login: account.login,
           name: account.name ?? null,
           avatarUrl: account.avatarUrl ?? null,
+          ...(role === undefined ? {} : { role }),
           lastLoginAt: now,
           updatedAt: now,
         },
@@ -150,6 +174,68 @@ export async function findPerson(
     .where(and(eq(people.workspaceId, workspaceId), eq(people.id, personId)))
     .limit(1);
   return row === undefined ? undefined : toPerson(row);
+}
+
+/**
+ * Says what a person is and tells the board. The board keeps at least one administrator: the
+ * count is taken under the lock on the workspace row, so that two changes at once cannot both
+ * take the last one away. A change to what is already so writes nothing.
+ */
+export async function updatePersonRole(
+  database: Database,
+  input: {
+    readonly workspaceId: string;
+    readonly actorId: string;
+    readonly personId: string;
+    readonly role: PersonRole;
+    readonly now: Date;
+  },
+): Promise<PersonRecord> {
+  const { workspaceId, actorId, personId, role, now } = input;
+  return drizzleOf(database).transaction(async (tx) => {
+    await tx
+      .select({ id: workspaces.id })
+      .from(workspaces)
+      .where(eq(workspaces.id, workspaceId))
+      .for("update");
+    const [current] = await tx
+      .select(personColumns(people))
+      .from(people)
+      .where(and(eq(people.workspaceId, workspaceId), eq(people.id, personId)))
+      .limit(1);
+    if (current === undefined) {
+      throw new PersonError("person.not_found");
+    }
+    const person = toPerson(current);
+    if (person.role === role) {
+      return person;
+    }
+    if (person.role === "admin") {
+      const [admins] = await tx
+        .select({ count: count() })
+        .from(people)
+        .where(and(eq(people.workspaceId, workspaceId), eq(people.role, "admin")));
+      if ((admins?.count ?? 0) <= 1) {
+        throw new PersonError("person.last_admin");
+      }
+    }
+    const [row] = await tx
+      .update(people)
+      .set({ role, updatedAt: now })
+      .where(eq(people.id, personId))
+      .returning(personColumns(people));
+    if (row === undefined) {
+      throw new PersonError("person.not_found");
+    }
+    await recordEvent(tx, {
+      workspaceId,
+      kind: "person.role_changed",
+      actorId,
+      data: { login: person.login, role },
+      now,
+    });
+    return toPerson(row);
+  });
 }
 
 /** Everyone of the workspace, by login. */

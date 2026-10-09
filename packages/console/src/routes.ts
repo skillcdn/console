@@ -51,7 +51,10 @@ export function signInPath(page: string, failure: SignInFailure): string {
   return `${page}${page.includes("?") ? "&" : "?"}${SIGN_IN_PARAM}=${failure}`;
 }
 
-/** The REST path of one task, one decision, one token: the collection, then the id. */
-export function restPath(collection: "tasks" | "decisions" | "tokens", id: string): string {
+/** The REST path of one task, one decision, one token, one person: the collection, then the id. */
+export function restPath(
+  collection: "tasks" | "decisions" | "tokens" | "people",
+  id: string,
+): string {
   return `${REST_ROUTES[collection]}/${encodeURIComponent(id)}`;
 }

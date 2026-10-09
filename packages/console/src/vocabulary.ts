@@ -19,6 +19,11 @@ export const TASK_PRIORITIES = ["low", "normal", "high", "urgent"] as const;
 
 export type TaskPriority = (typeof TASK_PRIORITIES)[number];
 
+/** What a person may do: an administrator configures the board, a member works on it. */
+export const PERSON_ROLES = ["admin", "member"] as const;
+
+export type PersonRole = (typeof PERSON_ROLES)[number];
+
 /** What a run is doing: at work, waiting for a person's decision, or over in one of three ways. */
 export const RUN_STATUSES = ["running", "waiting", "finished", "failed", "abandoned"] as const;
 
@@ -30,6 +35,7 @@ export type RunStatus = (typeof RUN_STATUSES)[number];
  */
 export const EVENT_KINDS = [
   "person.joined",
+  "person.role_changed",
   "task.created",
   "task.updated",
   "task.moved",

@@ -2,12 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
   type ConsoleClient,
+  EVENT_KINDS,
   type RestAnswerInput,
   type RestDecision,
   type RestDecisionInput,
   type RestEvent,
   type RestMe,
   type RestPerson,
+  type RestPersonPatch,
   type RestTask,
   type RestTaskInput,
   type RestTaskPatch,
@@ -33,6 +35,8 @@ export interface ConsoleActions {
   updateTask(id: string, patch: RestTaskPatch): Promise<RestTask>;
   raiseDecision(input: RestDecisionInput): Promise<RestDecision>;
   answerDecision(id: string, input: RestAnswerInput): Promise<RestDecision>;
+  /** Changes what a person is; for an administrator. */
+  updatePerson(id: string, patch: RestPersonPatch): Promise<RestPerson>;
   /** Makes a token for whoever is signed in; the answer carries the secret, this once. */
   createToken(input: RestTokenInput): Promise<RestTokenCreated>;
   revokeToken(id: string): Promise<void>;
@@ -177,14 +181,7 @@ export function useConsoleData(client: ConsoleClient): ConsoleData {
           refreshLists(signal).catch(() => undefined);
         }, RELOAD_DELAY_MS);
       };
-      for (const kind of [
-        "person.joined",
-        "task.created",
-        "task.updated",
-        "task.moved",
-        "decision.raised",
-        "decision.answered",
-      ]) {
+      for (const kind of EVENT_KINDS) {
         source.addEventListener(kind, arrived);
       }
     };
@@ -219,6 +216,12 @@ export function useConsoleData(client: ConsoleClient): ConsoleData {
         const decision = await client.answerDecision(id, input);
         await refreshLists();
         return decision;
+      },
+      async updatePerson(id, patch) {
+        const person = await client.updatePerson(id, patch);
+        setMe((current) => (current?.person?.id === id ? { ...current, person } : current));
+        await refreshLists();
+        return person;
       },
       async createToken(input) {
         const made = await client.createToken(input);

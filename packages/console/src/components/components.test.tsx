@@ -5,6 +5,7 @@ import { Board } from "./board.js";
 import { DecisionList } from "./decision-list.js";
 import { describeEvent, EventFeed } from "./event-feed.js";
 import { Markdown } from "./markdown.js";
+import { PeopleList } from "./people.js";
 import { Shell } from "./shell.js";
 import { SignIn } from "./sign-in.js";
 import { TaskView } from "./task-view.js";
@@ -15,12 +16,14 @@ const alice: RestPerson = {
   login: "alice",
   name: "Alice Example",
   avatar: "https://avatars.example/alice.png",
+  role: "admin",
 };
 const bob: RestPerson = {
   id: "0199c4d8-0000-7000-8000-000000000002",
   login: "bob",
   name: null,
   avatar: null,
+  role: "member",
 };
 
 const task = (overrides: Partial<RestTask> = {}): RestTask => ({
@@ -309,5 +312,36 @@ describe("tokens", () => {
     expect(made).toContain('<code class="sc-secret-value">cns_t_example-secret</code>');
     expect(made).toContain("shown this once");
     expect(made).toContain("Copy");
+  });
+});
+
+describe("people", () => {
+  it("lists everyone with what they are, and lets an administrator change it", () => {
+    const read = renderToStaticMarkup(<PeopleList people={[alice, bob]} me={bob} />);
+    expect(read).toContain("Administrator");
+    expect(read).toContain("Member");
+    expect(read).toContain("(you)");
+    expect(read).not.toContain("<select");
+    const change = renderToStaticMarkup(
+      <PeopleList people={[alice, bob]} me={alice} onChangeRole={() => undefined} />,
+    );
+    expect(change.match(/<select/g)).toHaveLength(2);
+    expect(change).toContain('value="admin"');
+  });
+
+  it("says in the feed who was made what", () => {
+    const event: RestEvent = {
+      id: 9,
+      kind: "person.role_changed",
+      actor: alice,
+      taskId: null,
+      decisionId: null,
+      data: { login: "bob", role: "admin" },
+      createdAt: "2026-10-09T10:00:00.000Z",
+    };
+    expect(describeEvent(event)).toBe("made bob an administrator");
+    expect(describeEvent({ ...event, data: { login: "bob", role: "member" } })).toBe(
+      "made bob a member",
+    );
   });
 });

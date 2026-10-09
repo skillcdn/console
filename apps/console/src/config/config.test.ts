@@ -168,8 +168,22 @@ describe("signing in", () => {
       },
       secret: "an-auth-secret-of-at-least-32-characters",
       members: ["alice", "Bob", "carol"],
+      admins: [],
       sessionTtlMs: 30 * 86_400_000,
     });
+  });
+
+  it("names administrators among the members, and only among them", () => {
+    expect(loadConfig({ ...signIn, ADMINS: " Alice ,bob" }, noFiles).auth?.admins).toEqual([
+      "Alice",
+      "bob",
+    ]);
+    expect(problemsOf({ ...signIn, ADMINS: "dave" }).problems).toEqual([
+      "ADMINS: every administrator must be listed in MEMBERS",
+    ]);
+    expect(problemsOf({ DATABASE_URL, ADMINS: "alice" }).problems[0]).toContain(
+      "ADMINS: names administrators",
+    );
   });
 
   it("reads where the git host is, the lifetime, and the secret from a file", () => {

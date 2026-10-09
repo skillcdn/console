@@ -7,6 +7,8 @@ import {
   type RestEvents,
   type RestMe,
   type RestPeople,
+  type RestPerson,
+  type RestPersonPatch,
   type RestTask,
   type RestTaskInput,
   type RestTaskPatch,
@@ -20,6 +22,7 @@ import {
   restEventsSchema,
   restMeSchema,
   restPeopleSchema,
+  restPersonSchema,
   restTaskSchema,
   restTasksSchema,
   restTokenCreatedSchema,
@@ -68,6 +71,8 @@ interface Schema<T> {
 export interface ConsoleClient {
   me(signal?: AbortSignal): Promise<RestMe>;
   people(signal?: AbortSignal): Promise<RestPeople>;
+  /** Changes what a person is; for an administrator. */
+  updatePerson(id: string, patch: RestPersonPatch): Promise<RestPerson>;
   tasks(filter?: { readonly state?: TaskState }, signal?: AbortSignal): Promise<RestTasks>;
   task(id: string, signal?: AbortSignal): Promise<RestTask>;
   createTask(input: RestTaskInput): Promise<RestTask>;
@@ -165,6 +170,8 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
     me: (signal) => request("GET", `${base}${REST_ROUTES.me}`, undefined, restMeSchema, signal),
     people: (signal) =>
       request("GET", `${base}${REST_ROUTES.people}`, undefined, restPeopleSchema, signal),
+    updatePerson: (id, patch) =>
+      request("PATCH", `${base}${restPath("people", id)}`, patch, restPersonSchema),
     tasks: (filter = {}, signal) =>
       request(
         "GET",

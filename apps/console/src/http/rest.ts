@@ -11,6 +11,7 @@ import {
   type RestTokens,
   restAnswerInputSchema,
   restDecisionInputSchema,
+  restPersonPatchSchema,
   restTaskInputSchema,
   restTaskPatchSchema,
   restTokenInputSchema,
@@ -30,14 +31,25 @@ import {
   raiseDecision,
 } from "../db/queries/decisions.js";
 import { listEventsAfter } from "../db/queries/events.js";
-import { listPeople, type PersonRecord } from "../db/queries/people.js";
+import {
+  listPeople,
+  PersonError,
+  type PersonRecord,
+  updatePersonRole,
+} from "../db/queries/people.js";
 import { createTask, getTask, listTasks, TaskError, updateTask } from "../db/queries/tasks.js";
 import { TokenError } from "../db/queries/tokens.js";
 import type { WorkspaceRecord } from "../db/queries/workspaces.js";
 import type { Logger } from "../logger.js";
 import type { Clock } from "../ports/clock.js";
 import { errorBody } from "./app.js";
-import { type Access, foreignOrigin, sessionRequired, signInRequired } from "./auth.js";
+import {
+  type Access,
+  administratorRequired,
+  foreignOrigin,
+  sessionRequired,
+  signInRequired,
+} from "./auth.js";
 import type { LiveFeed } from "./live-feed.js";
 import type { AppEnv } from "./request-context.js";
 import { restDecision, restEvent, restPerson, restTask, restToken } from "./rest-shapes.js";
@@ -164,6 +176,12 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         error.code === "decision.not_found" ? 404 : error.code === "decision.answered" ? 409 : 400;
       return c.json(errorBody(error.code, error.message), status);
     }
+    if (error instanceof PersonError) {
+      return c.json(
+        errorBody(error.code, error.message),
+        error.code === "person.not_found" ? 404 : 409,
+      );
+    }
     if (error instanceof TokenError) {
       return c.json(
         errorBody(error.code, error.message),
@@ -182,6 +200,47 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       items: (await listPeople(database, person.workspaceId)).map(restPerson),
     };
     return c.json(body);
+  });
+
+  // What a person is: said by an administrator signed in on the console's own pages. An agent
+  // works as its person does; configuring is a person's own doing.
+  app.patch(`${REST_ROUTES.people}/:id`, tooLarge, async (c) => {
+    const person = await signedInOnOwnPages(c);
+    if (person instanceof Response) {
+      return person;
+    }
+    if (person.role !== "admin") {
+      return administratorRequired(c);
+    }
+    const patch = await bodyOf(c, restPersonPatchSchema);
+    if (patch instanceof Response) {
+      return patch;
+    }
+    const id = c.req.param("id");
+    if (!UUID.test(id)) {
+      return c.json(errorBody("person.not_found", "The person was not found."), 404);
+    }
+    try {
+      const changed = await updatePersonRole(database, {
+        workspaceId: person.workspaceId,
+        actorId: person.id,
+        personId: id,
+        role: patch.role,
+        now: clock.now(),
+      });
+      logger.info(
+        {
+          person: person.id,
+          subject: changed.id,
+          role: changed.role,
+          requestId: c.get("requestId"),
+        },
+        "role changed",
+      );
+      return c.json(restPerson(changed));
+    } catch (error) {
+      return failure(c, error);
+    }
   });
 
   app.get(REST_ROUTES.tasks, async (c) => {

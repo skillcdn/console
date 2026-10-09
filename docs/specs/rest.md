@@ -23,11 +23,13 @@ The API is the board as its members see it: the people, the tasks, the decisions
 | 400 | `decision.no_such_option` | The answer names an option the decision does not have. |
 | 401 | `auth.required` | Nobody is signed in, or the session has ended. The cookie is taken away when the operator no longer lists the login. |
 | 403 | `auth.forbidden_origin` | A request that changes something on a session did not come from the console's own pages. |
-| 403 | `auth.session_required` | A token asked for what only a person signed in may do: the tokens themselves. |
-| 404 | `task.not_found`, `decision.not_found`, `token.not_found` | No such id in the workspace; for a token, none of the asker's. An id that is not a UUID is not found either. |
+| 403 | `auth.forbidden` | A member asked for what only an administrator may do. |
+| 403 | `auth.session_required` | A token asked for what only a person signed in may do: the tokens themselves, and configuring. |
+| 404 | `task.not_found`, `decision.not_found`, `token.not_found`, `person.not_found` | No such id in the workspace; for a token, none of the asker's. An id that is not a UUID is not found either. |
 | 404 | `not_found` | Nothing at this path. |
 | 409 | `decision.answered` | The decision has an answer already. |
 | 409 | `token.too_many` | The person holds as many live tokens as one may (`MAX_TOKENS_PER_PERSON`). |
+| 409 | `person.last_admin` | The change would leave the board without an administrator. |
 | 413 | `request.too_large` | The body is over the limit. |
 
 ## Endpoints
@@ -38,7 +40,11 @@ The API is the board as its members see it: the people, the tasks, the decisions
 
 ### `GET /api/v1/people`
 
-`{ "items": [person, ...] }`: everyone who has signed in and is still listed, by login. What a picker of assignees is made of.
+`{ "items": [person, ...] }`: everyone who has signed in and is still listed, by login. What a picker of assignees is made of. A person carries their `role`: `admin`, who configures the board, or `member`, who works on it.
+
+### `PATCH /api/v1/people/<id>`
+
+Takes `role` and answers the person. For an administrator signed in on the console's own pages, never with a token: an agent works as its person does, and configuring is a person's own doing. The board keeps at least one administrator (`person.last_admin`). A change writes a `person.role_changed` event with `login` and `role`; a change to what is already so writes nothing.
 
 ### `GET /api/v1/tasks?state=`
 
@@ -66,7 +72,7 @@ One decision, and its answer: `option` (the id of one of its options) and option
 
 ### `GET /api/v1/events?after=&limit=`
 
-`{ "items": [event, ...], "more": boolean }`: what happened after event number `after` (`0` for the beginning), oldest first, at most `limit` (default and maximum `EVENTS_PAGE_LIMIT`); `more` says whether there is more after the last item. An event carries its `id` (the number), `kind` (one of `EVENT_KINDS`), the `actor` (a person, or `null` for the console itself), `taskId` and `decisionId` (or `null`), `data` (what a feed shows without asking for the subject: `number`, `title`, `fields`, `from`, `to`, `question`, `option`, each only when the kind has it), and `createdAt`.
+`{ "items": [event, ...], "more": boolean }`: what happened after event number `after` (`0` for the beginning), oldest first, at most `limit` (default and maximum `EVENTS_PAGE_LIMIT`); `more` says whether there is more after the last item. An event carries its `id` (the number), `kind` (one of `EVENT_KINDS`), the `actor` (a person, or `null` for the console itself), `taskId` and `decisionId` (or `null`), `data` (what a feed shows without asking for the subject: `number`, `title`, `fields`, `from`, `to`, `question`, `option`, `login`, `role`, each only when the kind has it), and `createdAt`.
 
 ### `GET /api/v1/events/stream?after=`
 

@@ -24,6 +24,8 @@ export function describeEvent(event: RestEvent): string {
   switch (event.kind) {
     case "person.joined":
       return "joined the board";
+    case "person.role_changed":
+      return `made ${data.login ?? "someone"} ${data.role === "admin" ? "an administrator" : "a member"}`;
     case "task.created":
       return `wrote ${task}`;
     case "task.moved":

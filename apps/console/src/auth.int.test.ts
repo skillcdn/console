@@ -100,6 +100,7 @@ describe("signing in", () => {
         login: "Alice",
         name: "Alice Example",
         avatar: "https://avatars.example/alice.png",
+        role: "member",
       },
       signIn: "gh",
     });
@@ -112,6 +113,15 @@ describe("signing in", () => {
     expect(JSON.stringify(await me(h, cookie))).not.toContain("ghu_");
     expect(JSON.stringify(h.logs)).not.toContain("ghu_");
     expect(JSON.stringify(h.logs)).not.toContain("cns_s_");
+  });
+
+  it("makes the logins the operator names administrators, and keeps what the board says since", async () => {
+    const named = harness({ admins: ["ALICE"] });
+    expect((await me(named, await named.signIn("alice"))).person?.role).toBe("admin");
+    expect((await me(named, await named.signIn("bob"))).person?.role).toBe("member");
+    // Taken off the list, an administrator stays one: the role is the board's record now.
+    const unnamed = harness();
+    expect((await me(unnamed, await unnamed.signIn("alice"))).person?.role).toBe("admin");
   });
 
   it("tells the board when a person joins, once", async () => {

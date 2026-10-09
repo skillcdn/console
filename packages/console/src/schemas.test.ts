@@ -11,6 +11,8 @@ import {
   restAnswerInputSchema,
   restDecisionInputSchema,
   restEventSchema,
+  restPersonPatchSchema,
+  restPersonSchema,
   restTaskInputSchema,
   restTaskPatchSchema,
   restTaskSchema,
@@ -25,6 +27,7 @@ const PERSON = {
   login: "alice",
   name: "Alice Example",
   avatar: "https://avatars.example/alice.png",
+  role: "member" as const,
 };
 
 describe("task input", () => {
@@ -185,5 +188,17 @@ describe("tokens", () => {
     expect(restTokensSchema.parse({ items: [token] }).items).toHaveLength(1);
     expect(restTokenCreatedSchema.parse({ token, secret: "cns_t_x" }).secret).toBe("cns_t_x");
     expect(restTokenSchema.safeParse({ ...token, lastUsedAt: undefined }).success).toBe(false);
+  });
+});
+
+describe("people", () => {
+  it("always say what a person is, and take a role that is one", () => {
+    expect(restPersonSchema.parse(PERSON).role).toBe("member");
+    const { role: _role, ...without } = PERSON;
+    expect(restPersonSchema.safeParse(without).success).toBe(false);
+    expect(restPersonSchema.safeParse({ ...PERSON, role: "owner" }).success).toBe(false);
+    expect(restPersonPatchSchema.parse({ role: "admin" })).toEqual({ role: "admin" });
+    expect(restPersonPatchSchema.safeParse({ role: "root" }).success).toBe(false);
+    expect(restPersonPatchSchema.safeParse({}).success).toBe(false);
   });
 });

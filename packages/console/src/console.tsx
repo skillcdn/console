@@ -16,6 +16,7 @@ import { Board, type BoardProps } from "./components/board.js";
 import { DecisionForm } from "./components/decision-form.js";
 import { DecisionList, type DecisionListProps } from "./components/decision-list.js";
 import { EventFeed, type EventFeedProps } from "./components/event-feed.js";
+import { PeopleList, type PeopleListProps } from "./components/people.js";
 import { Shell, type ShellProps } from "./components/shell.js";
 import { SignIn, type SignInProps } from "./components/sign-in.js";
 import { TaskForm } from "./components/task-form.js";
@@ -44,6 +45,7 @@ export interface ConsoleComponents {
   readonly EventFeed: ComponentType<EventFeedProps>;
   readonly SignIn: ComponentType<SignInProps>;
   readonly TokenList: ComponentType<TokenListProps>;
+  readonly PeopleList: ComponentType<PeopleListProps>;
 }
 
 export const DEFAULT_COMPONENTS: ConsoleComponents = {
@@ -54,6 +56,7 @@ export const DEFAULT_COMPONENTS: ConsoleComponents = {
   EventFeed,
   SignIn,
   TokenList,
+  PeopleList,
 };
 
 export interface ConsoleConfig {
@@ -275,6 +278,32 @@ function Page(props: {
       </>
     );
   }
+  if (route.name === "people") {
+    const me = data.me?.person ?? undefined;
+    const administrator = me?.role === "admin";
+    return (
+      <>
+        <div className="sc-page-head">
+          <h1 className="sc-page-title">People</h1>
+        </div>
+        <p className="sc-lead">
+          Everyone who has signed in. An administrator configures the board and says what each
+          person is; a member works on it. What a person may do, their agents may do.
+        </p>
+        {error !== undefined && <Callout tone="danger">{error}</Callout>}
+        <components.PeopleList
+          people={data.people}
+          me={me}
+          busy={busy}
+          onChangeRole={
+            administrator
+              ? (person, role) => void act(() => data.actions.updatePerson(person.id, { role }))
+              : undefined
+          }
+        />
+      </>
+    );
+  }
   if (route.name === "tokens") {
     return (
       <>
@@ -383,6 +412,7 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
         count: waiting,
       },
       { href: PATHS.feed, label: "Feed", current: route.name === "feed" },
+      { href: PATHS.people, label: "People", current: route.name === "people" },
       { href: PATHS.tokens, label: "Tokens", current: route.name === "tokens" },
     ];
     return (

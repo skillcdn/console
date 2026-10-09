@@ -92,7 +92,7 @@ export function createApi(
   if (config.auth !== undefined && ports.login !== undefined) {
     const origin = config.auth.publicUrl;
     const secure = origin.startsWith("https://");
-    const membership = new Membership(config.auth.members);
+    const membership = new Membership(config.auth.members, config.auth.admins);
     if (membership.size === 0) {
       logger.warn("MEMBERS is empty: signing in is configured, and nobody is let in");
     }

@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
-import type { RestPerson, TaskPriority, TaskState } from "../api.js";
+import type { PersonRole, RestPerson, TaskPriority, TaskState } from "../api.js";
 
 // Small building blocks. Each one is a class in styles/console.css and nothing more. Classes
 // are prefixed `sc-` so that a custom console's own styles never collide with them.
@@ -117,6 +117,17 @@ export const PRIORITY_LABELS: Readonly<Record<TaskPriority, string>> = {
   high: "High",
   urgent: "Urgent",
 };
+
+export const ROLE_LABELS: Readonly<Record<PersonRole, string>> = {
+  admin: "Administrator",
+  member: "Member",
+};
+
+export function RoleBadge(props: { readonly role: PersonRole }) {
+  return (
+    <Badge tone={props.role === "admin" ? "point" : "neutral"}>{ROLE_LABELS[props.role]}</Badge>
+  );
+}
 
 export function StateBadge(props: { readonly state: TaskState }) {
   const tone =

@@ -96,6 +96,10 @@ export const foreignOrigin = (c: Context<AppEnv>): Response =>
     403,
   );
 
+/** What a member is answered when they ask for what only an administrator may do. */
+export const administratorRequired = (c: Context<AppEnv>): Response =>
+  c.json(errorBody("auth.forbidden", "Only an administrator may do this."), 403);
+
 /** What a token is answered when it asks for what only a person signed in may do. */
 export const sessionRequired = (c: Context<AppEnv>): Response =>
   c.json(

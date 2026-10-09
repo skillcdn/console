@@ -45,6 +45,7 @@ The console is configured only through environment variables. [`.env.example`](.
 | `AUTH_SECRET` | `api` | no | **yes** | What a sign-in in flight is sealed with. At least 32 characters, the same on every replica. Signing in exists only when this, `PUBLIC_URL`, `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` are all set; setting some of them is a configuration error. |
 | `MEMBERS` | `api` | no | no | Who may sign in: logins at the git host, comma-separated, compared without regard to case. Checked at sign-in and on every request after. Empty lets nobody in, and is logged at boot. |
 | `GITHUB_WEB_URL`, `GITHUB_API_URL` | `api` | no | no | Defaults `https://github.com` and `https://api.github.com`. GitHub Enterprise Server: `https://<host>` and `https://<host>/api/v3`. |
+| `ADMINS` | `api` | no | no | Who configures the board: logins among `MEMBERS`, comma-separated. Made administrators when they sign in; an administrator may make or unmake others on the People page, and the board keeps at least one. Empty: nobody, until someone is listed. |
 | `SESSION_TTL_DAYS` | `api` | no | no | How long a browser stays signed in without being used. Default `30`. |
 | `WEB_ROOT` | `api` | no | no | Directory of a build of the default UI. The image sets `/app/web`; set it to an empty value to run without a UI. A directory without an `index.html` is a configuration error. |
 
@@ -63,7 +64,7 @@ Written so that a cloud deployment is the image as containers, a managed Postgre
 
 ## Signing in
 
-People sign in through the git host, GitHub first. Register an OAuth app at the host (or use a GitHub App's own client id and secret): its homepage is `PUBLIC_URL`, and its authorization callback URL is `PUBLIC_URL/auth/gh/callback`. No scopes are needed: the console asks the host who the person is, once, and keeps nothing of the credential. Then set `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `AUTH_SECRET` (32 random characters or more), `PUBLIC_URL`, and `MEMBERS`, the logins of the people who may use the board.
+People sign in through the git host, GitHub first. Register an OAuth app at the host (or use a GitHub App's own client id and secret): its homepage is `PUBLIC_URL`, and its authorization callback URL is `PUBLIC_URL/auth/gh/callback`. No scopes are needed: the console asks the host who the person is, once, and keeps nothing of the credential. Then set `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `AUTH_SECRET` (32 random characters or more), `PUBLIC_URL`, `MEMBERS`, the logins of the people who may use the board, and `ADMINS`, those among them who configure it.
 
 What the browser holds is a session cookie that scripts cannot read, bound to the host over TLS (`__Host-`); the database holds its hash. A request that changes something must come from the console's own pages: the browser names its origin, and the console compares it with `PUBLIC_URL`. A login taken out of `MEMBERS` is out on the next request.
 

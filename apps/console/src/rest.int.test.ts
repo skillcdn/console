@@ -12,6 +12,7 @@ import {
   restEventsSchema,
   restMeSchema,
   restPeopleSchema,
+  restPersonSchema,
   restTaskSchema,
   restTasksSchema,
   restTokenCreatedSchema,
@@ -509,5 +510,83 @@ describe("tokens", () => {
     expect(oneMore.status).toBe(409);
     expect(await errorOf(oneMore)).toBe("token.too_many");
     expect(await listed(carol)).toHaveLength(MAX_TOKENS_PER_PERSON);
+  });
+});
+
+describe("roles", () => {
+  it("are changed by an administrator signed in, kept to at least one, and told to the board", async () => {
+    const named = createHarness(testDatabase, { login: createFixtureLogin(), admins: ["alice"] });
+    const admin = await named.signIn("alice");
+    const change = (cookie: string, id: string, body: unknown) =>
+      named.request(`${REST_ROUTES.people}/${id}`, {
+        method: "PATCH",
+        headers: { cookie, origin: SIGN_IN_URL, "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    const people = restPeopleSchema.parse(await (await get(alice, REST_ROUTES.people)).json());
+    const aliceId = people.items.find((person) => person.login === "Alice")?.id ?? "";
+    const bobId = people.items.find((person) => person.login === "bob")?.id ?? "";
+
+    // A member may not, a token may not, and nobody may from elsewhere.
+    const byMember = await change(bob, aliceId, { role: "member" });
+    expect(byMember.status).toBe(403);
+    expect(await errorOf(byMember)).toBe("auth.forbidden");
+    const { secret } = restTokenCreatedSchema.parse(
+      await (
+        await named.request(REST_ROUTES.tokens, {
+          method: "POST",
+          headers: { cookie: admin, origin: SIGN_IN_URL, "content-type": "application/json" },
+          body: JSON.stringify({ name: "an administrator's agent" }),
+        })
+      ).json(),
+    );
+    const byToken = await named.request(`${REST_ROUTES.people}/${bobId}`, {
+      method: "PATCH",
+      headers: { authorization: `Bearer ${secret}`, "content-type": "application/json" },
+      body: JSON.stringify({ role: "admin" }),
+    });
+    expect(byToken.status).toBe(403);
+    expect(await errorOf(byToken)).toBe("auth.session_required");
+
+    // The last administrator stays one.
+    const last = await change(admin, aliceId, { role: "member" });
+    expect(last.status).toBe(409);
+    expect(await errorOf(last)).toBe("person.last_admin");
+
+    const before = restEventsSchema.parse(
+      await (await get(alice, `${REST_ROUTES.events}?after=0`)).json(),
+    );
+    const latest = before.items.at(-1)?.id ?? 0;
+    const promoted = await change(admin, bobId, { role: "admin" });
+    expect(promoted.status).toBe(200);
+    expect(restPersonSchema.parse(await promoted.json())).toMatchObject({
+      login: "bob",
+      role: "admin",
+    });
+    expect(
+      (await (await named.request(REST_ROUTES.me, { headers: { cookie: bob } })).json()) as {
+        person: { role: string };
+      },
+    ).toMatchObject({ person: { role: "admin" } });
+    // Now Alice may step down, and the board is told of both.
+    expect((await change(admin, aliceId, { role: "member" })).status).toBe(200);
+    const since = restEventsSchema.parse(
+      await (await get(alice, `${REST_ROUTES.events}?after=${latest}`)).json(),
+    );
+    expect(since.items.map((event) => [event.kind, event.actor?.login, event.data])).toEqual([
+      ["person.role_changed", "Alice", { login: "bob", role: "admin" }],
+      ["person.role_changed", "Alice", { login: "Alice", role: "member" }],
+    ]);
+    // Said again, nothing is written; and what is not a person is not found.
+    expect((await change(bob, aliceId, { role: "member" })).status).toBe(200);
+    expect(
+      (await change(bob, "0199c4d8-0000-7000-8000-000000000099", { role: "admin" })).status,
+    ).toBe(404);
+    expect((await change(bob, "nobody", { role: "admin" })).status).toBe(404);
+    expect((await change(bob, aliceId, { role: "owner" })).status).toBe(400);
+    const after = restEventsSchema.parse(
+      await (await get(alice, `${REST_ROUTES.events}?after=${latest}`)).json(),
+    );
+    expect(after.items).toHaveLength(2);
   });
 });

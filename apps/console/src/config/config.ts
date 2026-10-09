@@ -127,6 +127,7 @@ const environmentSchema = z.object({
     .min(MIN_SECRET_LENGTH, `must be at least ${MIN_SECRET_LENGTH} characters`)
     .optional(),
   MEMBERS: loginList,
+  ADMINS: loginList,
   SESSION_TTL_DAYS: integer(30, 1, 365),
 
   WEB_ROOT: z.string().min(1).optional(),
@@ -148,6 +149,8 @@ export interface AuthConfig {
   readonly secret: string;
   /** The logins the operator lets in. Empty: nobody. */
   readonly members: readonly string[];
+  /** The logins among them that configure the board, made administrators when they sign in. */
+  readonly admins: readonly string[];
   /** How long a browser stays signed in without being used. */
   readonly sessionTtlMs: number;
 }
@@ -250,6 +253,11 @@ function authOf(
         `MEMBERS: lists who may sign in, and is read only with ${SIGN_IN_NAMES.join(", ")}`,
       );
     }
+    if (env.ADMINS.length > 0) {
+      problems.push(
+        `ADMINS: names administrators, and is read only with ${SIGN_IN_NAMES.join(", ")}`,
+      );
+    }
     return undefined;
   }
   const missing = SIGN_IN_NAMES.filter((name) => given[name] === undefined);
@@ -265,6 +273,12 @@ function authOf(
   ) {
     return undefined;
   }
+  // An administrator who cannot sign in is a mistake, not a setting.
+  const members = new Set(env.MEMBERS.map((login) => login.toLowerCase()));
+  if (env.ADMINS.some((login) => !members.has(login.toLowerCase()))) {
+    problems.push("ADMINS: every administrator must be listed in MEMBERS");
+    return undefined;
+  }
   return {
     publicUrl: env.PUBLIC_URL,
     github: {
@@ -275,6 +289,7 @@ function authOf(
     },
     secret: env.AUTH_SECRET,
     members: env.MEMBERS,
+    admins: env.ADMINS,
     sessionTtlMs: env.SESSION_TTL_DAYS * 86_400_000,
   };
 }

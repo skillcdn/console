@@ -1234,3 +1234,27 @@ svg {
   word-break: break-all;
   user-select: all;
 }
+
+/* People: everyone of the board, with what each may do. */
+
+.sc-people {
+  display: grid;
+  gap: var(--sc-space-2);
+}
+
+.sc-person-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-3);
+  padding: var(--sc-space-3) var(--sc-space-4);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-bg-subtle);
+}
+
+.sc-person-name {
+  flex: 1;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
