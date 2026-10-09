@@ -12,7 +12,7 @@ Goal: a person opens the console, signs in, writes a task, moves it along, raise
 
 - [x] The data model in `apps/console`: workspace, people, sessions, tasks, decisions, events; migrations; the schema documented in the workspace's README.
 - [x] The config module, the `api`, `worker` and `migrate` roles, health endpoints, graceful shutdown, structured logging.
-- [ ] The REST API, with its schemas in `packages/console` so that the contract has one source; integration tests against PostgreSQL. *The contract is in the package (`@skillcdn/console/api`: the vocabulary, the bounds, the routes, the schemas, the client); the server is next.*
+- [x] The REST API, with its schemas in `packages/console` so that the contract has one source; integration tests against PostgreSQL. The contract is [docs/specs/rest.md](specs/rest.md); the feed is live, as server-sent events woken through the database's own channel.
 - [x] Sign-in through the git host; membership from configuration; requests that change something checked against the console's own origin.
 - [ ] The default UI from `packages/console`: the board, a task, the decisions, the live feed; served by the image.
 - [ ] The Dockerfile and the image job in CI; `deploy/README.md` filled in with the environment contract.

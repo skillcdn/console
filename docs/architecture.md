@@ -63,7 +63,7 @@ Proposed, to be settled by the second milestone:
 
 | Role | What it does | Scaling |
 |---|---|---|
-| `api` | Serves HTTP: the REST API for the UI, the MCP endpoint for agents, sign-in, the default UI's files. Holds no state another replica needs. | Any number of replicas. |
+| `api` | Serves HTTP: the REST API for the UI ([specs/rest.md](specs/rest.md)) with its live feed, the MCP endpoint for agents, sign-in, the default UI's files. Holds no state another replica needs: a change any replica makes reaches every replica's feed subscribers through the database's own notification channel. | Any number of replicas. |
 | `worker` | Runs schedules, and consumes the job queue once there are jobs: today the clean-up of expired sessions; later reminders for decisions that wait, and the runs the console starts itself. | Any number; interruptible. |
 | `migrate` | Applies pending migrations, then exits. | Once, before a new version rolls out. |
 
@@ -81,7 +81,7 @@ The default UI the image serves is exactly that composition with the default con
 
 ## Data and storage
 
-PostgreSQL holds the workspace, the people, their sessions and the agents' tokens (hashed), the tasks, the runs with their reports, the decisions, the events, and the job queue. Identifiers are UUIDv7; timestamps are `timestamptz`; events are append-only. Files a run hands in go to the blob store under their content hash; the first implementation of that port keeps the bytes in PostgreSQL, so that the smallest install has one dependency, and the S3 implementation takes over where the bytes do not belong in rows. The schema is documented in `apps/console/README.md` once it exists.
+PostgreSQL holds the workspace, the people, their sessions and the agents' tokens (hashed), the tasks, the runs with their reports, the decisions, the events, and the job queue. Identifiers are UUIDv7, except that events are numbered, since the feed is read from a point on; timestamps are `timestamptz`; events are append-only, written in the transaction of the change they record, and the commit notifies every process that listens (`pg_notify`), which is how the feed is live without any state outside the database. Files a run hands in go to the blob store under their content hash; the first implementation of that port keeps the bytes in PostgreSQL, so that the smallest install has one dependency, and the S3 implementation takes over where the bytes do not belong in rows. The schema is documented in [`apps/console/README.md`](../apps/console/README.md#data-model).
 
 ## Deployment
 

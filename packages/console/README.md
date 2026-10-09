@@ -29,7 +29,7 @@ const { items } = await client.tasks({ state: "ready" });
 
 - **The vocabulary:** `TASK_STATES`, `TASK_PRIORITIES`, `RUN_STATUSES`, `EVENT_KINDS`, with their types. One source for the database's constraints, the schemas and the board.
 - **The bounds** every input is held to (`MAX_TITLE_LENGTH`, `MAX_BODY_LENGTH`, `MAX_OPTIONS`, ...), so that a page can say so before a request is made.
-- **The routes:** `REST_ROUTES`, `AUTH_ROUTES`, and the helpers that build a path (`restPath`, `loginPath`, `signInPath`).
+- **The routes:** `REST_ROUTES`, `AUTH_ROUTES`, and the helpers that build a path (`restPath`, `loginPath`, `signInPath`). The API itself is described in [docs/specs/rest.md](https://github.com/skillcdn/console/blob/main/docs/specs/rest.md).
 - **The schemas,** in the mini build of zod, which runs in a browser: what the server answers (`restTaskSchema`, `restDecisionSchema`, `restEventSchema`, `restMeSchema`, ...) and what it is sent (`restTaskInputSchema`, `restTaskPatchSchema`, `restDecisionInputSchema`, `restAnswerInputSchema`). Absent values are `null` on the wire, never missing keys. The server validates with the input schemas and is tested against the others.
 - **The client:** `createClient({ baseUrl, fetch })` answers typed values parsed with those schemas, and throws an `ApiError` with the server's stable `code` (or `network`, `invalid_response`) for anything else. It takes a `fetch` and reads nothing else.
 

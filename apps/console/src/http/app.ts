@@ -3,9 +3,12 @@ import type { Database } from "../db/client.js";
 import { getSchemaStatus } from "../db/migrate.js";
 import type { WorkspaceRecord } from "../db/queries/workspaces.js";
 import type { Logger } from "../logger.js";
+import type { Clock } from "../ports/clock.js";
 import { type AppAuth, createAccess, registerAuth } from "./auth.js";
 import type { ClientAddressResolver } from "./client-address.js";
+import type { LiveFeed } from "./live-feed.js";
 import { type AppEnv, requestContext } from "./request-context.js";
+import { registerRest } from "./rest.js";
 
 export interface AppDependencies {
   readonly database: Database;
@@ -17,6 +20,9 @@ export interface AppDependencies {
   readonly workspace: () => Promise<WorkspaceRecord>;
   /** Signing in and what stands on it. Left out, nobody signs in and every request is nobody's. */
   readonly auth: AppAuth | undefined;
+  /** The subscribers of the feed in this process. */
+  readonly feed: LiveFeed;
+  readonly clock: Clock;
   readonly logger: Logger;
   readonly requests: {
     readonly addresses: ClientAddressResolver;
@@ -35,11 +41,12 @@ export function errorBody(code: string, message: string) {
 
 /**
  * The HTTP surface of the `api` role: what every request gets (an id, a client address, an
- * access-log line), the probes a platform watches, signing in and who is signed in, and what
- * answers when nothing else does. The REST API of the board and the UI's files register on top.
+ * access-log line), the probes a platform watches, signing in and who is signed in, the REST
+ * API of the board with its live feed, and what answers when nothing else does. The UI's files
+ * register on top.
  */
 export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
-  const { database, logger, isShuttingDown, auth, workspace } = dependencies;
+  const { database, logger, isShuttingDown, auth, workspace, feed, clock } = dependencies;
   const app = new Hono<AppEnv>();
   app.use(requestContext({ logger, ...dependencies.requests }));
 
@@ -74,6 +81,7 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
 
   const access = createAccess(auth);
   registerAuth(app, { auth, access, workspace, logger });
+  registerRest(app, { database, workspace, access, feed, clock, logger });
 
   app.notFound((c) => c.json(errorBody("not_found", "There is nothing at this path."), 404));
   app.onError((error, c) => {

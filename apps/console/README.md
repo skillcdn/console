@@ -4,7 +4,7 @@ The single deployable of the console: the API people and agents talk to, the wor
 
 | Role | Command | Purpose | Status |
 |---|---|---|---|
-| `api` | `node dist/main.js api` | Serves HTTP: the probes, signing in and who is signed in, and with the milestone the REST API of the board and the UI's files. Stateless. | probes, sign-in |
+| `api` | `node dist/main.js api` | Serves HTTP: the probes, signing in and who is signed in, the [REST API](../../docs/specs/rest.md) of the board with its live feed, and with the milestone the UI's files. Stateless. | probes, sign-in, REST, feed |
 | `worker` | `node dist/main.js worker` | The schedules: the sweep of what time has ended. The job queue arrives with the first job. | implemented |
 | `migrate` | `node dist/main.js migrate` | Applies pending migrations, then exits. | implemented |
 
@@ -32,16 +32,19 @@ src/
   logger.ts      pino, JSON to stdout, with the second fence of redaction
   http/          app.ts (the Hono app: probes, not found, errors; everything else registers on it),
                  auth.ts (signing in and out, who is signed in, and `Access`: who a request is for
-                 and whether it may change anything), rest-shapes.ts (records as they are on the
-                 wire), server.ts (listening and the shutdown of the listener), request-context.ts
-                 (an id, a client address and an access-log line per request), client-address.ts
-                 (trusted proxies and forwarding headers)
+                 and whether it may change anything), rest.ts (the REST API of the board, and the
+                 feed as server-sent events), live-feed.ts (the subscribers of the feed in this
+                 process: woken by a nudge, by a timer, and for a heartbeat), rest-shapes.ts
+                 (records as they are on the wire), server.ts (listening and the shutdown of the
+                 listener), request-context.ts (an id, a client address and an access-log line per
+                 request), client-address.ts (trusted proxies and forwarding headers)
   auth/          signing in and what follows from it: secrets.ts (sealing, token making and
                  hashing), login.ts (the round trip to the git host), sessions.ts, membership.ts
                  (the configured list of logins)
   db/            schema.ts (one file: drizzle-kit reads it), client.ts (the pool, opaque to the rest),
                  migrate.ts (applies migrations, reports whether the schema is current), queries/
-                 (the only way to the data), testing.ts (a database per test file; not compiled)
+                 (the only way to the data), listener.ts (a connection of its own on the events
+                 channel, made again when lost), testing.ts (a database per test file; not compiled)
   jobs/          janitor.ts: the sweep of what time has ended, on a timer
   ports/         the interfaces the domain needs implemented: the clock, the git host's side of
                  signing in
@@ -69,6 +72,7 @@ Read the root [`AGENTS.md`](../../AGENTS.md) first. This workspace is the compos
 - **The schemas of the API live in `packages/console`**, so that the default UI, a custom console and this server share one contract. This workspace imports them from `@skillcdn/console/api`; it never defines a second copy. The vocabulary there (the states, the priorities, the kinds of event) is what the database's constraints are made of.
 - **`src/db/` is the only place that sees the ORM or SQL.** The rest of the app holds an opaque `Database` and calls the functions under `src/db/queries/`. No string-built SQL, ever: the query builder, or a parameterized `sql` template. Time is passed in (`now: Date`), never read in SQL, so that what depends on it is testable.
 - **Every change to the board is one transaction with the event that records it** (`recordEvent`), which also nudges every process listening on the `console_events` channel. Nothing is recorded that did not happen, and nothing happens unrecorded.
+- **The feed is live without state outside the database.** A subscriber holds a cursor and is woken to ask for what is after it: by the nudge, which the listener connection delivers from any process; by a timer, in case a nudge was missed; and for a heartbeat. Shutdown closes the feed first, so that no stream holds the listener open.
 
 ## Tests
 
@@ -76,6 +80,8 @@ Read the root [`AGENTS.md`](../../AGENTS.md) first. This workspace is the compos
 - `src/http/app.int.test.ts` runs the app of the `api` role against real PostgreSQL: the probes in every state, the id and the address every request gets, the access log and what it leaves out.
 - `src/auth.int.test.ts` covers signing in through a fixture git host: the round trip, the sealed cookie, where a browser may be sent back, what did not complete and why, a login the operator did not list, sessions and their end (sign-out from the console's own pages only, time, removal from the list), and a deployment where nobody signs in.
 - `src/adapters/github-login.test.ts` covers the GitHub adapter against a fake `fetch`: what it sends, what it reads, and what it refuses.
+- `src/rest.int.test.ts` covers the REST API and parses every answer with the package's schemas: who may ask and change, tasks and decisions through their whole life, what is refused and why, and the feed's pages.
+- `src/live.int.test.ts` covers the feed as server-sent events, with a listener on the database's channel as a deployment has: what was there, what happens next, heartbeats, where a reconnecting browser starts, and that closing the feed ends every stream.
 - `src/db/db.int.test.ts` covers the data model. Every test file has a database of its own; tests inside a file share it.
 
 ## Working on the schema

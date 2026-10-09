@@ -60,7 +60,11 @@ export interface ConsoleClient {
   task(id: string, signal?: AbortSignal): Promise<RestTask>;
   createTask(input: RestTaskInput): Promise<RestTask>;
   updateTask(id: string, patch: RestTaskPatch): Promise<RestTask>;
-  decisions(filter?: { readonly open?: boolean }, signal?: AbortSignal): Promise<RestDecisions>;
+  /** The decisions, or only those that wait, or only those about one task. */
+  decisions(
+    filter?: { readonly open?: boolean; readonly task?: string },
+    signal?: AbortSignal,
+  ): Promise<RestDecisions>;
   decision(id: string, signal?: AbortSignal): Promise<RestDecision>;
   raiseDecision(input: RestDecisionInput): Promise<RestDecision>;
   answerDecision(id: string, input: RestAnswerInput): Promise<RestDecision>;
@@ -158,6 +162,7 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
         "GET",
         withQuery(REST_ROUTES.decisions, {
           open: filter.open === undefined ? undefined : String(filter.open),
+          task: filter.task,
         }),
         undefined,
         restDecisionsSchema,

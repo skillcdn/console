@@ -1,7 +1,9 @@
 import { AUTH_ROUTES } from "@skillcdn/console/api";
 import type { Hono } from "hono";
 import { pino } from "pino";
+import { type EventListener, startEventListener } from "../db/listener.js";
 import type { TestDatabase } from "../db/testing.js";
+import type { LiveFeed } from "../http/live-feed.js";
 import type { AppEnv } from "../http/request-context.js";
 import type { Clock } from "../ports/clock.js";
 import { createApi } from "../roles/api.js";
@@ -21,12 +23,16 @@ export interface Harness {
   readonly origin: string;
   /** Access-log lines and everything else the server logged, as parsed JSON. */
   readonly logs: Record<string, unknown>[];
+  /** The subscribers of the feed, for a test to close or count. */
+  readonly feed: LiveFeed;
   request(path: string, init?: RequestInit): Promise<Response>;
   /**
    * Signs a person of the fixture login in as their browser would, and answers with the Cookie
    * header that carries the session.
    */
   signIn(person: string): Promise<string>;
+  /** Ends the feed and the listener, for a harness that was given `live`. */
+  close(): Promise<void>;
 }
 
 export interface HarnessOptions {
@@ -37,6 +43,9 @@ export interface HarnessOptions {
   /** The time everything is told; the system's when left out. */
   readonly clock?: Clock;
   readonly sessionTtlMs?: number;
+  /** Listen on the database's channel, so that the feed is woken as a deployment's is. */
+  readonly live?: boolean;
+  readonly feed?: { readonly heartbeatMs?: number; readonly pollMs?: number };
 }
 
 /** The cookie a response set, as a Cookie header would carry it. */
@@ -54,7 +63,11 @@ export function cookieOf(response: Response, name: string): string {
 export function createHarness(testDatabase: TestDatabase, options: HarnessOptions = {}): Harness {
   const logs: Record<string, unknown>[] = [];
   const origin = options.login === undefined ? BASE_URL : SIGN_IN_URL;
-  const { app } = createApi(
+  const logger = pino(
+    { level: "info" },
+    { write: (line: string) => logs.push(JSON.parse(line) as Record<string, unknown>) },
+  );
+  const { app, feed } = createApi(
     {
       workspace: { name: "Acme" },
       http: {
@@ -63,6 +76,7 @@ export function createHarness(testDatabase: TestDatabase, options: HarnessOption
         requestIdHeader: "x-request-id",
         accessLog: true,
       },
+      feed: options.feed,
       ...(options.login === undefined
         ? {}
         : {
@@ -78,19 +92,25 @@ export function createHarness(testDatabase: TestDatabase, options: HarnessOption
       database: testDatabase.database,
       login: options.login,
       clock: options.clock ?? { now: () => new Date() },
-      logger: pino(
-        { level: "info" },
-        { write: (line: string) => logs.push(JSON.parse(line) as Record<string, unknown>) },
-      ),
+      logger,
       isShuttingDown: () => false,
     },
   );
+  const listener: EventListener | undefined =
+    options.live === true
+      ? startEventListener({
+          connectionString: testDatabase.connectionString,
+          logger,
+          onNudge: () => feed.nudge(),
+        })
+      : undefined;
   const request = async (path: string, init?: RequestInit) =>
     app.fetch(new Request(`${origin}${path}`, init));
   return {
     app,
     origin,
     logs,
+    feed,
     request,
     async signIn(person) {
       const { login } = options;
@@ -104,6 +124,10 @@ export function createHarness(testDatabase: TestDatabase, options: HarnessOption
         { headers: { cookie: cookieOf(begun, "console_login") } },
       );
       return cookieOf(done, "console_session");
+    },
+    async close() {
+      feed.close();
+      await listener?.close();
     },
   };
 }

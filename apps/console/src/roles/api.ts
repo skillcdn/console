@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import process from "node:process";
+import { EVENTS_PAGE_LIMIT } from "@skillcdn/console/api";
 import type { Hono } from "hono";
 import { createGitHubLogin } from "../adapters/github-login.js";
 import { systemClock } from "../adapters/system-clock.js";
@@ -9,10 +10,12 @@ import { createSecrets } from "../auth/secrets.js";
 import { Sessions } from "../auth/sessions.js";
 import type { AuthConfig, Config } from "../config/config.js";
 import { createDatabase, type Database } from "../db/client.js";
+import { startEventListener } from "../db/listener.js";
 import { ensureWorkspace, type WorkspaceRecord } from "../db/queries/workspaces.js";
 import { createApp } from "../http/app.js";
 import type { AppAuth } from "../http/auth.js";
 import { createClientAddressResolver } from "../http/client-address.js";
+import { LiveFeed } from "../http/live-feed.js";
 import type { AppEnv } from "../http/request-context.js";
 import { startServer } from "../http/server.js";
 import { Janitor } from "../jobs/janitor.js";
@@ -23,6 +26,10 @@ import { APP_NAME, APP_VERSION } from "../version.js";
 
 /** How often what time has ended is removed, when this process does the worker's work. */
 const JANITOR_INTERVAL_MS = 15 * 60_000;
+/** How long a feed subscriber waits in silence before a heartbeat: under what proxies allow idle. */
+const FEED_HEARTBEAT_MS = 25_000;
+/** How long a subscriber goes without asking, nudge or no nudge: a missed nudge costs this much. */
+const FEED_POLL_MS = 15_000;
 
 export interface ApiPorts {
   readonly database: Database;
@@ -41,6 +48,8 @@ export type ApiConfig = Pick<Config, "workspace"> & {
     Config["http"],
     "trustedProxies" | "clientIpHeader" | "requestIdHeader" | "accessLog"
   >;
+  /** The timing of the live feed; the built-in values when left out. For tests. */
+  readonly feed?: { readonly heartbeatMs?: number; readonly pollMs?: number } | undefined;
 };
 
 /**
@@ -68,7 +77,7 @@ export function workspaceResolver(
 export function createApi(
   config: ApiConfig,
   ports: ApiPorts,
-): { readonly app: Hono<AppEnv>; readonly auth: AppAuth | undefined } {
+): { readonly app: Hono<AppEnv>; readonly auth: AppAuth | undefined; readonly feed: LiveFeed } {
   const { database, clock, logger } = ports;
   const workspace = workspaceResolver(database, clock, config.workspace.name);
 
@@ -109,10 +118,20 @@ export function createApi(
     };
   }
 
+  const feed = new LiveFeed({
+    database,
+    workspaceId: async () => (await workspace()).id,
+    pageLimit: EVENTS_PAGE_LIMIT,
+    heartbeatMs: config.feed?.heartbeatMs ?? FEED_HEARTBEAT_MS,
+    pollMs: config.feed?.pollMs ?? FEED_POLL_MS,
+  });
+
   const app = createApp({
     database,
     workspace,
     auth,
+    feed,
+    clock,
     logger,
     isShuttingDown: ports.isShuttingDown,
     requests: {
@@ -126,7 +145,7 @@ export function createApi(
       now: () => performance.now(),
     },
   });
-  return { app, auth };
+  return { app, auth, feed };
 }
 
 /** Resolves on the first of the signals a platform stops a container with. */
@@ -158,12 +177,18 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
           userAgent: `${APP_NAME}/${APP_VERSION}`,
         });
   let shuttingDown = false;
-  const { app } = createApi(config, {
+  const { app, feed } = createApi(config, {
     database,
     login,
     clock: systemClock,
     logger,
     isShuttingDown: () => shuttingDown,
+  });
+  // What any process changes reaches this one's subscribers through the database's own channel.
+  const listener = startEventListener({
+    connectionString: config.database.url,
+    logger,
+    onNudge: () => feed.nudge(),
   });
   // A single-container install has no worker; the flag makes this process carry its work.
   const janitor = config.worker.inProcess
@@ -192,8 +217,11 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
   const signal = await shutdownSignal();
   shuttingDown = true;
   logger.info({ signal }, "shutting down");
-  // Readiness fails from here on; the listener stops accepting, requests in flight finish.
+  // Readiness fails from here on; the feed lets its streams go, the listener stops accepting,
+  // requests in flight finish.
+  feed.close();
   await server.close(config.http.shutdownGraceMs);
+  await listener.close();
   await janitor?.close();
   await database.close();
   logger.info("shutdown complete");
