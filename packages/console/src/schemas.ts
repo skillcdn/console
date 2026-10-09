@@ -4,6 +4,7 @@
 // Absent values are `null` on the wire, never missing keys. Changes within a version are additive.
 import * as z from "zod/mini";
 import {
+  MAX_AGENT_LENGTH,
   MAX_BODY_LENGTH,
   MAX_LINK_LABEL_LENGTH,
   MAX_LINKS,
@@ -11,6 +12,7 @@ import {
   MAX_OPTION_LABEL_LENGTH,
   MAX_OPTIONS,
   MAX_QUESTION_LENGTH,
+  MAX_SUMMARY_LENGTH,
   MAX_TITLE_LENGTH,
   MAX_TOKEN_DAYS,
   MAX_TOKEN_NAME_LENGTH,
@@ -22,6 +24,7 @@ import {
   EVENT_KINDS,
   PERSON_ROLES,
   PROVIDER_KEYS,
+  RUN_ENDINGS,
   RUN_STATUSES,
   TASK_PRIORITIES,
   TASK_STATES,
@@ -198,6 +201,8 @@ export const restDecisionInputSchema = z.object({
     .array(z.object({ label: line(MAX_OPTION_LABEL_LENGTH) }))
     .check(z.minLength(MIN_OPTIONS), z.maxLength(MAX_OPTIONS)),
   taskId: z.optional(z.nullable(uuid)),
+  /** The run that asks, when an agent does: the decision is about its task, and it waits for the answer. */
+  runId: z.optional(z.nullable(uuid)),
 });
 export type RestDecisionInput = z.infer<typeof restDecisionInputSchema>;
 
@@ -352,3 +357,37 @@ export const restErrorSchema = z.object({
   }),
 });
 export type RestError = z.infer<typeof restErrorSchema>;
+
+/** What an agent says when it ends a run: Markdown, bounded. */
+const summary = z.string().check(
+  z.maxLength(MAX_SUMMARY_LENGTH),
+  z.refine((value) => !hasForbiddenCodePoint(value, true), "must not contain control characters"),
+);
+
+/** What `POST /api/v1/runs` is sent: the task to take, and what the agent calls itself. */
+export const restRunInputSchema = z.object({
+  taskId: uuid,
+  /** Left out, the agent is called what its person called the token, or by the person's login. */
+  agent: z.optional(line(MAX_AGENT_LENGTH)),
+});
+export type RestRunInput = z.infer<typeof restRunInputSchema>;
+
+/** What `POST /api/v1/runs/<id>/reports` is sent: how the work goes, in Markdown. */
+export const restReportInputSchema = z.object({
+  body: body.check(z.refine((value) => value.trim().length > 0, "must say something")),
+});
+export type RestReportInput = z.infer<typeof restReportInputSchema>;
+
+/** What `POST /api/v1/runs/<id>/artifacts` is sent: a link to what was made. */
+export const restArtifactInputSchema = z.object({
+  url,
+  label: z.optional(line(MAX_LINK_LABEL_LENGTH)),
+});
+export type RestArtifactInput = z.infer<typeof restArtifactInputSchema>;
+
+/** What `POST /api/v1/runs/<id>/end` is sent: how the run ended, and what was done and left. */
+export const restRunEndInputSchema = z.object({
+  status: z.enum(RUN_ENDINGS),
+  summary: z.optional(summary),
+});
+export type RestRunEndInput = z.infer<typeof restRunEndInputSchema>;

@@ -232,7 +232,7 @@ export function useConsoleData(client: ConsoleClient): ConsoleData {
         return person;
       },
       async abandonRun(id) {
-        const run = await client.abandonRun(id);
+        const run = await client.endRun(id, { status: "abandoned" });
         await refreshLists();
         return run;
       },

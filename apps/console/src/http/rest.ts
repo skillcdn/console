@@ -2,6 +2,8 @@ import {
   DEFAULT_TOKEN_DAYS,
   EVENTS_PAGE_LIMIT,
   LIST_LIMIT,
+  MAX_ARTIFACTS_PER_RUN,
+  MAX_REPORTS_PER_RUN,
   REST_ROUTES,
   type RestDecisions,
   type RestEvents,
@@ -11,8 +13,12 @@ import {
   type RestTokenCreated,
   type RestTokens,
   restAnswerInputSchema,
+  restArtifactInputSchema,
   restDecisionInputSchema,
   restPersonPatchSchema,
+  restReportInputSchema,
+  restRunEndInputSchema,
+  restRunInputSchema,
   restTaskInputSchema,
   restTaskPatchSchema,
   restTokenInputSchema,
@@ -27,20 +33,36 @@ import type { Database } from "../db/client.js";
 import {
   answerDecision,
   DecisionError,
+  type DecisionRecord,
   getDecision,
   listDecisions,
   raiseDecision,
 } from "../db/queries/decisions.js";
-import { listEventsAfter } from "../db/queries/events.js";
+import { latestEventId, listEventsAfter } from "../db/queries/events.js";
 import {
   listPeople,
   PersonError,
   type PersonRecord,
   updatePersonRole,
 } from "../db/queries/people.js";
-import { endRun, getRun, listRuns, RunError } from "../db/queries/runs.js";
-import { createTask, getTask, listTasks, TaskError, updateTask } from "../db/queries/tasks.js";
-import { TokenError } from "../db/queries/tokens.js";
+import {
+  addArtifact,
+  addReport,
+  endRun,
+  getRun,
+  listRuns,
+  RunError,
+  startRun,
+} from "../db/queries/runs.js";
+import {
+  createTask,
+  findTaskByNumber,
+  getTask,
+  listTasks,
+  TaskError,
+  updateTask,
+} from "../db/queries/tasks.js";
+import { TokenError, type TokenRecord } from "../db/queries/tokens.js";
 import type { WorkspaceRecord } from "../db/queries/workspaces.js";
 import type { Logger } from "../logger.js";
 import type { Clock } from "../ports/clock.js";
@@ -72,11 +94,19 @@ export interface RestDependencies {
   readonly feed: LiveFeed;
   readonly clock: Clock;
   readonly logger: Logger;
+  readonly agents: {
+    /** How long a read of a decision may wait for its answer before answering that it still waits. */
+    readonly waitMs: number;
+  };
 }
 
 /** A task or a decision is a few fields and a body of bounded Markdown; this is far above both. */
 const MAX_BODY_BYTES = 256 * 1024;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** A task's number in a path: what people say out loud, where the pages say the id. */
+const TASK_NUMBER = /^[1-9]\d{0,8}$/;
+/** The most a read of a decision may ask to wait, in seconds; the server's own bound is lower. */
+const MAX_WAIT_SECONDS = 600;
 const DAY_MS = 86_400_000;
 
 const tasksQuery = z.object({ state: z.enum(TASK_STATES).optional() });
@@ -84,7 +114,14 @@ const decisionsQuery = z.object({
   open: z.enum(["true", "false"]).optional(),
   task: z.string().regex(UUID).optional(),
 });
-const runsQuery = z.object({ task: z.string().regex(UUID).optional() });
+const decisionQuery = z.object({
+  wait: z.coerce.number().int().min(0).max(MAX_WAIT_SECONDS).default(0),
+});
+const runsQuery = z.object({
+  task: z.string().regex(UUID).optional(),
+  open: z.enum(["true", "false"]).optional(),
+  mine: z.enum(["true", "false"]).optional(),
+});
 const eventsQuery = z.object({
   after: z.coerce.number().int().min(0).default(0),
   limit: z.coerce.number().int().min(1).max(EVENTS_PAGE_LIMIT).default(EVENTS_PAGE_LIMIT),
@@ -96,6 +133,12 @@ interface ParseResult<T> {
   readonly error?: {
     readonly issues: readonly { readonly path?: PropertyKey[]; readonly message: string }[];
   };
+}
+
+/** Who is asking, and with what: the token when one is presented. */
+interface Caller {
+  readonly person: PersonRecord;
+  readonly token: TokenRecord | undefined;
 }
 
 /** The first thing wrong with what was sent, for a person. */
@@ -114,22 +157,32 @@ function firstProblem(result: ParseResult<unknown>): string {
  * and nothing is answered to nobody.
  */
 export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies): void {
-  const { database, workspace, access, tokens, feed, clock, logger } = dependencies;
+  const { database, workspace, access, tokens, feed, clock, logger, agents } = dependencies;
+
+  /** Who is asking and with what, or the refusal to answer with. */
+  const askingCaller = async (c: Context<AppEnv>): Promise<Caller | Response> =>
+    (await access.caller(c)) ?? signInRequired(c);
 
   /** The person asking, or the refusal to answer with. */
-  const asking = async (c: Context<AppEnv>): Promise<PersonRecord | Response> =>
-    (await access.person(c)) ?? signInRequired(c);
+  const asking = async (c: Context<AppEnv>): Promise<PersonRecord | Response> => {
+    const caller = await askingCaller(c);
+    return caller instanceof Response ? caller : caller.person;
+  };
 
   /**
-   * The person asking something that changes the board, or the refusal to answer with. A
-   * session cookie travels with a browser's requests on its own, so a request on a session has
-   * to come from the console's own pages; a token is attached on purpose by whoever holds it.
+   * Who is asking something that changes the board, or the refusal to answer with. A session
+   * cookie travels with a browser's requests on its own, so a request on a session has to come
+   * from the console's own pages; a token is attached on purpose by whoever holds it.
    */
-  const changing = async (c: Context<AppEnv>): Promise<PersonRecord | Response> => {
+  const changingCaller = async (c: Context<AppEnv>): Promise<Caller | Response> => {
     if (!access.presentsToken(c) && !access.fromOwnPages(c)) {
       return foreignOrigin(c);
     }
-    return asking(c);
+    return askingCaller(c);
+  };
+  const changing = async (c: Context<AppEnv>): Promise<PersonRecord | Response> => {
+    const caller = await changingCaller(c);
+    return caller instanceof Response ? caller : caller.person;
   };
 
   /**
@@ -175,7 +228,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     onError: (c) => c.json(errorBody("request.too_large", "The request body is too large."), 413),
   });
 
-  /** What a task or a decision that could not be worked on answers with. */
+  /** What a task, a decision, a run or a person that could not be worked on answers with. */
   const failure = (c: Context<AppEnv>, error: unknown): Response => {
     if (error instanceof TaskError) {
       const status = error.code === "task.not_found" ? 404 : 400;
@@ -194,11 +247,13 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
     if (error instanceof RunError) {
       const status =
-        error.code === "run.not_found"
+        error.code === "run.not_found" || error.code === "run.task_not_found"
           ? 404
           : error.code === "run.not_yours"
             ? 403
-            : error.code === "run.over" || error.code === "run.task_taken"
+            : error.code === "run.over" ||
+                error.code === "run.task_taken" ||
+                error.code === "run.task_closed"
               ? 409
               : 400;
       return c.json(errorBody(error.code, error.message), status);
@@ -210,6 +265,46 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       );
     }
     throw error;
+  };
+
+  const notFound = (c: Context<AppEnv>, code: string, message: string): Response =>
+    c.json(errorBody(code, message), 404);
+  const noSuchRun = (c: Context<AppEnv>) => notFound(c, "run.not_found", "The run was not found.");
+  const noSuchDecision = (c: Context<AppEnv>) =>
+    notFound(c, "decision.not_found", "The decision was not found.");
+
+  /**
+   * The decision once answered, or as it stands when `waitMs` has passed: woken by the board's
+   * own nudge, so that an answer given on a page reaches whoever waits for it at once.
+   */
+  const waitForAnswer = async (
+    workspaceId: string,
+    decisionId: string,
+    waitMs: number,
+  ): Promise<DecisionRecord | undefined> => {
+    const after = await latestEventId(database, workspaceId);
+    const decision = await getDecision(database, workspaceId, decisionId);
+    if (decision === undefined || decision.answer !== undefined || waitMs <= 0) {
+      return decision;
+    }
+    const subscription = feed.subscribe(after);
+    const timer = setTimeout(() => subscription.end(), waitMs);
+    try {
+      for await (const message of subscription) {
+        if (
+          message.kind === "events" &&
+          message.items.some(
+            (event) => event.kind === "decision.answered" && event.decisionId === decisionId,
+          )
+        ) {
+          break;
+        }
+      }
+    } finally {
+      clearTimeout(timer);
+      subscription.end();
+    }
+    return getDecision(database, workspaceId, decisionId);
   };
 
   app.get(REST_ROUTES.people, async (c) => {
@@ -239,7 +334,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
     const id = c.req.param("id");
     if (!UUID.test(id)) {
-      return c.json(errorBody("person.not_found", "The person was not found."), 404);
+      return notFound(c, "person.not_found", "The person was not found.");
     }
     try {
       const changed = await updatePersonRole(database, {
@@ -310,15 +405,20 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
   });
 
+  // One task, by its id or by its number: the pages hold ids, people and their agents say numbers.
   app.get(`${REST_ROUTES.tasks}/:id`, async (c) => {
     const person = await asking(c);
     if (person instanceof Response) {
       return person;
     }
-    const id = c.req.param("id");
-    const task = UUID.test(id) ? await getTask(database, person.workspaceId, id) : undefined;
+    const ref = c.req.param("id");
+    const task = UUID.test(ref)
+      ? await getTask(database, person.workspaceId, ref)
+      : TASK_NUMBER.test(ref)
+        ? await findTaskByNumber(database, person.workspaceId, Number(ref))
+        : undefined;
     return task === undefined
-      ? c.json(errorBody("task.not_found", "The task was not found."), 404)
+      ? notFound(c, "task.not_found", "The task was not found.")
       : c.json(restTask(task));
   });
 
@@ -333,7 +433,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
     const id = c.req.param("id");
     if (!UUID.test(id)) {
-      return c.json(errorBody("task.not_found", "The task was not found."), 404);
+      return notFound(c, "task.not_found", "The task was not found.");
     }
     try {
       const task = await updateTask(database, {
@@ -379,6 +479,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     if (input instanceof Response) {
       return input;
     }
+    const fromRun = input.runId !== undefined && input.runId !== null;
     try {
       const decision = await raiseDecision(database, {
         workspaceId: person.workspaceId,
@@ -387,12 +488,19 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
           question: input.question,
           body: input.body,
           options: input.options.map((option) => option.label),
-          taskId: input.taskId,
+          // Raised from a run, the decision is about the run's task and nothing else.
+          taskId: fromRun ? undefined : input.taskId,
+          runId: fromRun ? (input.runId ?? undefined) : undefined,
         },
         now: clock.now(),
       });
       logger.info(
-        { person: person.id, decision: decision.id, requestId: c.get("requestId") },
+        {
+          person: person.id,
+          decision: decision.id,
+          run: decision.run?.id,
+          requestId: c.get("requestId"),
+        },
         "decision raised",
       );
       return c.json(restDecision(decision), 201);
@@ -401,18 +509,27 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
   });
 
+  // One decision; with `wait`, the request is held while the decision waits, up to what the
+  // server allows, so that an agent learns the answer without asking again and again.
   app.get(`${REST_ROUTES.decisions}/:id`, async (c) => {
+    const query = decisionQuery.safeParse(c.req.query());
+    if (!query.success) {
+      return invalid(c, firstProblem(query));
+    }
     const person = await asking(c);
     if (person instanceof Response) {
       return person;
     }
     const id = c.req.param("id");
-    const decision = UUID.test(id)
-      ? await getDecision(database, person.workspaceId, id)
-      : undefined;
-    return decision === undefined
-      ? c.json(errorBody("decision.not_found", "The decision was not found."), 404)
-      : c.json(restDecision(decision));
+    if (!UUID.test(id)) {
+      return noSuchDecision(c);
+    }
+    const decision = await waitForAnswer(
+      person.workspaceId,
+      id,
+      Math.min(query.data.wait * 1000, agents.waitMs),
+    );
+    return decision === undefined ? noSuchDecision(c) : c.json(restDecision(decision));
   });
 
   app.post(`${REST_ROUTES.decisions}/:id/answer`, tooLarge, async (c) => {
@@ -426,7 +543,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
     const id = c.req.param("id");
     if (!UUID.test(id)) {
-      return c.json(errorBody("decision.not_found", "The decision was not found."), 404);
+      return noSuchDecision(c);
     }
     try {
       const decision = await answerDecision(database, {
@@ -496,29 +613,64 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
     const id = c.req.param("id");
     if (tokens === undefined || !UUID.test(id) || !(await tokens.revoke(person, id))) {
-      return c.json(errorBody("token.not_found", "The token was not found."), 404);
+      return notFound(c, "token.not_found", "The token was not found.");
     }
     logger.info({ person: person.id, tokenId: id, requestId: c.get("requestId") }, "token removed");
     return c.body(null, 204);
   });
 
-  // The runs: agents at work, and what they did. Written through the MCP endpoint; a person
-  // gives up on one from here.
+  // The runs: agents at work, and what they did. An agent writes them as its person, with its
+  // token; a person reads them, and gives up on one that will not come back.
   app.get(REST_ROUTES.runs, async (c) => {
     const query = runsQuery.safeParse(c.req.query());
     if (!query.success) {
       return invalid(c, firstProblem(query));
     }
-    const person = await asking(c);
-    if (person instanceof Response) {
-      return person;
+    const caller = await askingCaller(c);
+    if (caller instanceof Response) {
+      return caller;
     }
-    const items = await listRuns(database, person.workspaceId, {
+    const mine = query.data.mine === "true";
+    const items = await listRuns(database, caller.person.workspaceId, {
       taskId: query.data.task,
+      open: query.data.open === undefined ? undefined : query.data.open === "true",
+      // An agent's own runs are the ones begun with its token; a person's, the ones for them.
+      tokenId: mine && caller.token !== undefined ? caller.token.id : undefined,
+      personId: mine && caller.token === undefined ? caller.person.id : undefined,
       limit: LIST_LIMIT,
     });
     const body: RestRuns = { items: items.map(restRun) };
     return c.json(body);
+  });
+
+  app.post(REST_ROUTES.runs, tooLarge, async (c) => {
+    const caller = await changingCaller(c);
+    if (caller instanceof Response) {
+      return caller;
+    }
+    const input = await bodyOf(c, restRunInputSchema);
+    if (input instanceof Response) {
+      return input;
+    }
+    const { person, token } = caller;
+    try {
+      const run = await startRun(database, {
+        workspaceId: person.workspaceId,
+        actorId: person.id,
+        tokenId: token?.id,
+        taskId: input.taskId,
+        // What people see at work: what the agent says it is, else what its person called the token.
+        agent: input.agent ?? token?.name ?? person.login,
+        now: clock.now(),
+      });
+      logger.info(
+        { person: person.id, run: run.id, task: run.taskId, requestId: c.get("requestId") },
+        "run started",
+      );
+      return c.json(restRun(run), 201);
+    } catch (error) {
+      return failure(c, error);
+    }
   });
 
   app.get(`${REST_ROUTES.runs}/:id`, async (c) => {
@@ -528,33 +680,95 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
     const id = c.req.param("id");
     const run = UUID.test(id) ? await getRun(database, person.workspaceId, id) : undefined;
-    return run === undefined
-      ? c.json(errorBody("run.not_found", "The run was not found."), 404)
-      : c.json(restRun(run));
+    return run === undefined ? noSuchRun(c) : c.json(restRun(run));
   });
 
-  app.post(`${REST_ROUTES.runs}/:id/abandon`, async (c) => {
-    const person = await signedInOnOwnPages(c);
+  app.post(`${REST_ROUTES.runs}/:id/reports`, tooLarge, async (c) => {
+    const person = await changing(c);
     if (person instanceof Response) {
       return person;
     }
+    const input = await bodyOf(c, restReportInputSchema);
+    if (input instanceof Response) {
+      return input;
+    }
     const id = c.req.param("id");
     if (!UUID.test(id)) {
-      return c.json(errorBody("run.not_found", "The run was not found."), 404);
+      return noSuchRun(c);
     }
+    try {
+      const run = await addReport(database, {
+        workspaceId: person.workspaceId,
+        actorId: person.id,
+        runId: id,
+        body: input.body,
+        limit: MAX_REPORTS_PER_RUN,
+        now: clock.now(),
+      });
+      return c.json(restRun(run), 201);
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
+  app.post(`${REST_ROUTES.runs}/:id/artifacts`, tooLarge, async (c) => {
+    const person = await changing(c);
+    if (person instanceof Response) {
+      return person;
+    }
+    const input = await bodyOf(c, restArtifactInputSchema);
+    if (input instanceof Response) {
+      return input;
+    }
+    const id = c.req.param("id");
+    if (!UUID.test(id)) {
+      return noSuchRun(c);
+    }
+    try {
+      const run = await addArtifact(database, {
+        workspaceId: person.workspaceId,
+        actorId: person.id,
+        runId: id,
+        url: input.url,
+        label: input.label,
+        limit: MAX_ARTIFACTS_PER_RUN,
+        now: clock.now(),
+      });
+      return c.json(restRun(run), 201);
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
+  app.post(`${REST_ROUTES.runs}/:id/end`, tooLarge, async (c) => {
+    const caller = await changingCaller(c);
+    if (caller instanceof Response) {
+      return caller;
+    }
+    const input = await bodyOf(c, restRunEndInputSchema);
+    if (input instanceof Response) {
+      return input;
+    }
+    const id = c.req.param("id");
+    if (!UUID.test(id)) {
+      return noSuchRun(c);
+    }
+    const { person, token } = caller;
     try {
       const run = await endRun(database, {
         workspaceId: person.workspaceId,
         actorId: person.id,
         runId: id,
-        status: "abandoned",
-        summary: undefined,
-        anyone: person.role === "admin",
+        status: input.status,
+        summary: input.summary,
+        // Giving up on anyone's run is an administrator's own doing, on the console's own pages;
+        // an agent, with a token, ends only the runs that are its person's.
+        anyone: input.status === "abandoned" && person.role === "admin" && token === undefined,
         now: clock.now(),
       });
       logger.info(
-        { person: person.id, run: run.id, requestId: c.get("requestId") },
-        "run abandoned",
+        { person: person.id, run: run.id, status: run.status, requestId: c.get("requestId") },
+        "run ended",
       );
       return c.json(restRun(run));
     } catch (error) {

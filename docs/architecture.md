@@ -1,14 +1,14 @@
 # Architecture
 
-> **Status:** the board (milestone 1) is implemented as described here; what agents do is the proposed shape for milestone 2. [roadmap.md](roadmap.md) tracks what exists. The decisions with lasting consequences are in [adr/](adr/); the rest of this document is kept current as the implementation lands: when they diverge, update this document in the same change. The open questions are at the end.
+> **Status:** the board (milestone 1) and agents at work (milestone 2) are implemented as described here, but for files handed in and the organization's skills, which are the proposed shape. [roadmap.md](roadmap.md) tracks what exists. The decisions with lasting consequences are in [adr/](adr/); the rest of this document is kept current as the implementation lands: when they diverge, update this document in the same change. The open questions are at the end.
 
 ## Overview
 
 ```
 person (browser)  ------------------------>  console, role api  -------->  PostgreSQL
-                                             |  REST for the UI,             the board: tasks, runs, decisions, events;
-agent (Claude Code, Codex,                   |  MCP for agents,               people, sessions, tokens; the job queue
-  any MCP client)  ---- MCP ---------------> |  sign-in through a provider
+                                             |  the REST API, for the UI     the board: tasks, runs, decisions, events;
+agent (Claude Code, Codex, any with a shell) |  and for agents' commands,     people, sessions, tokens; the job queue
+  ---- the `console` command, over REST ---> |  sign-in through a provider
       |                                      |
       |  MCP: the organization's skills      v
       +---------------------------------->  a SkillCDN deployment (skillcdn.ai or self-hosted)
@@ -32,8 +32,8 @@ Whoever runs the console for an organization deploys the image once, configures 
 
 Three consequences shape the design:
 
-- **The console calls no model API and starts no agent.** An agent is a person's own process, connected to the console as an MCP client with a token that person made ([ADR-0004](adr/0004-people-and-agents-reach-the-board-only-through-the-api-with-a-credential-of-their-own.md)). The console sees what the agent reports and hands in. Unattended runs, where the console would start agents itself, stay open ([open questions](#open-questions)).
-- **Nobody touches the database.** People hold sessions, agents hold tokens, both reach the board through the REST API and MCP, and every request is decided at the edge. The one database credential is the server's.
+- **The console calls no model API and starts no agent.** An agent is a person's own process, working the board through the `console` command with a token that person made ([ADR-0004](adr/0004-people-and-agents-reach-the-board-only-through-the-api-with-a-credential-of-their-own.md), [ADR-0006](adr/0006-agents-work-the-board-through-the-rest-api-and-the-command-line-not-an-mcp-server.md)). The console sees what the agent reports and hands in. Unattended runs, where the console would start agents itself, stay open ([open questions](#open-questions)).
+- **Nobody touches the database.** People hold sessions, agents hold tokens, both reach the board through the REST API, and every request is decided at the edge. The one database credential is the server's.
 - **Identity comes from a provider; membership and roles are the console's** ([ADR-0005](adr/0005-people-sign-in-through-an-identity-provider-and-membership-and-roles-are-the-consoles-own.md)): GitHub today, Google Workspace next, more as adapters. What a person may do, and what their agents may do, is kept here.
 
 ## Vocabulary
@@ -44,7 +44,7 @@ These are the concepts the schema, the API and the UI are named after. The vocab
 |---|---|
 | **Workspace** | An organization's board. A deployment holds one until a need for more appears (`WORKSPACE_NAME`). |
 | **Person** | Someone who signed in through an identity provider (GitHub, Google) and is a member of the workspace. |
-| **Agent** | An agent connected by a person: its kind (Claude Code, Codex, another MCP client), the token it holds, the person it acts for. An agent is that person for the board's purposes, and is shown as "agent for *person*". |
+| **Agent** | An agent connected by a person: its kind (Claude Code, Codex, any agent with a shell), the token it holds, the person it acts for. An agent is that person for the board's purposes, and is shown as "agent for *person*". |
 | **Task** | A unit of work: title, body in Markdown, state, owner (a person), assignee (a person or their agent), priority, links (repositories, pull requests, documents), parent task for a breakdown. States: `idea`, `ready`, `in_progress`, `in_review`, `done`, `dropped`. |
 | **Run** | One agent working on one task: who started it, which agent, when; its status (`running`, `waiting` for a decision, `finished`, `failed`, `abandoned`); its reports; what it handed in. |
 | **Decision** | A question that needs a person, raised from a run or by a person: the question, the options, who may answer, the answer with who gave it and when. A run that raised one waits for it. |
@@ -53,7 +53,7 @@ These are the concepts the schema, the API and the UI are named after. The vocab
 
 ## How agents take part
 
-- **The console is an MCP server to agents** ([specs/mcp.md](specs/mcp.md)). An agent connects to `/mcp` over Streamable HTTP with a token its person made, and gets a small set of tools: `list_tasks`, `get_task`, `take_task` (a run begins; the task is the person's and in progress), `report` (progress on the run), `hand_in` (a link), `ask` (raise a decision; the run waits, and the call waits a while for the answer), `await_decision`, `finish`. One server per request, nothing kept between calls but what the database holds. MCP is what Claude Code and Codex both speak, so this needs nothing installed on the agent's side, and it is the same shape the organization's skills arrive in.
+- **The console is a command to agents** ([specs/cli.md](specs/cli.md), [ADR-0006](adr/0006-agents-work-the-board-through-the-rest-api-and-the-command-line-not-an-mcp-server.md)). The package ships `console`, a thin client of the REST API with no logic of its own, which a person signs in once with a token they made. An agent takes a task (`console take`: a run begins; the task is the person's and in progress), reports (`console report`), hands in a link (`console hand-in`), asks for a decision (`console ask`: the run waits, and the command waits a while for the answer) and ends the run (`console finish`, `fail` or `abandon`). Each is one or two requests of the REST API ([specs/rest.md](specs/rest.md)), the one surface of the console; the command costs an agent nothing until it is used, and an agent learns it from its help. The console is not an MCP server.
 - **Attended, by design.** A person runs their agent in their own app or CLI, on their own machine, under their own subscription, and connects it; the console calls no model API and sees what the agent reports. Unattended runs, where the worker would start agents itself, are not planned for the board and need decisions of their own if they ever come (where they run, with what credentials, within what limits).
 - **An agent is its person, and no more.** Its token is made by one person, scoped to that person, expiring and revocable; what the person may do on the board is what the agent may do. Finer rules, what an agent may decide alone and what must wait for a person, come after the first agents are connected.
 - **A run is the record of the agent's work:** who started it, as which agent, on which task; its reports and what it handed in; the decision it waits for; how it ended. A run that asked waits until a person answers on the board, and is woken through the database's own channel, the same nudge the live feed runs on. A person may give up on a run that will not come back.
@@ -74,7 +74,7 @@ These are the concepts the schema, the API and the UI are named after. The vocab
 
 | Role | What it does | Scaling |
 |---|---|---|
-| `api` | Serves HTTP: the REST API for the UI ([specs/rest.md](specs/rest.md)) with its live feed, the MCP endpoint for agents, sign-in, the default UI's files. Holds no state another replica needs: a change any replica makes reaches every replica's feed subscribers through the database's own notification channel. | Any number of replicas. |
+| `api` | Serves HTTP: the REST API for the UI and for agents' commands ([specs/rest.md](specs/rest.md)) with its live feed, sign-in, the default UI's files. Holds no state another replica needs: a change any replica makes reaches every replica's feed subscribers through the database's own notification channel. | Any number of replicas. |
 | `worker` | Runs schedules, and consumes the job queue once there are jobs: today the clean-up of expired sessions; later reminders for decisions that wait, and the runs the console starts itself. | Any number; interruptible. |
 | `migrate` | Applies pending migrations, then exits. | Once, before a new version rolls out. |
 
@@ -112,7 +112,7 @@ Inherited from the main repository, unchanged ([ADR-0002](adr/0002-one-image-one
 | Runtime | Node.js 24 LTS, TypeScript 7, ESM only; pnpm pins itself and the runtime. |
 | Monorepo | pnpm workspaces with a catalog, Turborepo, project references; packages compile to `dist/`. |
 | HTTP | Hono on the Node.js adapter. |
-| MCP | The official MCP TypeScript SDK, over Streamable HTTP; one server instance per request. |
+| Command line | Node.js and the package's own code, no dependencies; shipped as the package's `bin`, a thin client of the REST API. |
 | Validation | Zod at every boundary. |
 | Database | PostgreSQL 18; Drizzle ORM on the `pg` driver; migrations are generated, reviewed SQL files that never leave the deployable. |
 | Jobs | pg-boss, adopted with the first job; until then the worker runs schedules on a timer. |
@@ -126,7 +126,7 @@ Inherited from the main repository, unchanged ([ADR-0002](adr/0002-one-image-one
 
 - **Untrusted input:** everything an agent sends, every request, and what SkillCDN serves of a repository. Parsed with schemas, bounded in size and depth, stored as data, shown as text or as Markdown rendered to elements, never as HTML, never executed.
 - **Fail closed** on membership and on every token. Unknown and forbidden answer the same.
-- **Tokens:** git-host tokens used once to ask who a person is and never kept; sessions and agent tokens stored as hashes; nothing logged.
+- **Tokens:** git-host tokens used once to ask who a person is and never kept; sessions and agent tokens stored as hashes; nothing logged. The command keeps a token in the person's own configuration directory, never takes one on the command line, and never prints one.
 - **Nobody acts for someone else:** an agent is its person, and its person only.
 - **Outbound requests** go only to configured base URLs: the git host and the SkillCDN deployment. Never to a URL an agent sent.
 - **Supply chain:** lockfile with integrity hashes, a minimum release age, an allow-list for install scripts, actions pinned by commit, secret scanning.

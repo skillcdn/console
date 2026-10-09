@@ -63,7 +63,12 @@
       }
     },
     {
-      "includes": ["apps/console/src/config/**", "**/*.int.test.ts", "scripts/**/*.mjs"],
+      "includes": [
+        "apps/console/src/config/**",
+        "packages/console/src/cli/main.ts",
+        "**/*.int.test.ts",
+        "scripts/**/*.mjs"
+      ],
       "linter": {
         "rules": {
           "style": {

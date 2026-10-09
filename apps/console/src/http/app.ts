@@ -7,7 +7,6 @@ import type { Clock } from "../ports/clock.js";
 import { type AppAuth, createAccess, registerAuth } from "./auth.js";
 import type { ClientAddressResolver } from "./client-address.js";
 import type { LiveFeed } from "./live-feed.js";
-import { registerMcp } from "./mcp.js";
 import { type AppEnv, requestContext } from "./request-context.js";
 import { registerRest } from "./rest.js";
 import type { WebRoot } from "./web.js";
@@ -38,7 +37,7 @@ export interface AppDependencies {
   /** True once shutdown has begun: readiness fails so that the platform stops sending traffic. */
   readonly isShuttingDown: () => boolean;
   readonly agents: {
-    /** How long an agent's `ask` waits for a person before answering that the decision still waits. */
+    /** How long a read of a decision may wait for its answer before answering that it still waits. */
     readonly waitMs: number;
   };
 }
@@ -50,8 +49,8 @@ export function errorBody(code: string, message: string) {
 /**
  * The HTTP surface of the `api` role: what every request gets (an id, a client address, an
  * access-log line), the probes a platform watches, signing in and who is signed in, the REST
- * API of the board with its live feed, the MCP endpoint agents work through, and what answers
- * when nothing else does. The UI's files register on top.
+ * API of the board with its live feed, which people's pages and agents' commands both work
+ * through, and what answers when nothing else does. The UI's files register on top.
  */
 export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
   const { database, logger, isShuttingDown, auth, workspace, feed, clock, web } = dependencies;
@@ -89,15 +88,15 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
 
   const access = createAccess(auth);
   registerAuth(app, { auth, access, workspace, logger });
-  registerRest(app, { database, workspace, access, tokens: auth?.tokens, feed, clock, logger });
-  registerMcp(app, {
+  registerRest(app, {
     database,
     workspace,
     access,
+    tokens: auth?.tokens,
     feed,
     clock,
     logger,
-    waitMs: dependencies.agents.waitMs,
+    agents: dependencies.agents,
   });
 
   // After the API: a file of the build, or the page for every other path, which routes in the

@@ -18,9 +18,6 @@ export const REST_ROUTES = {
   runs: "/api/v1/runs",
 } as const;
 
-/** Where an agent connects: the console as an MCP server, with a token as a bearer. */
-export const MCP_ROUTE = "/mcp";
-
 /** Where a browser signs in and out. Signing in is per provider: `/auth/<provider>/...`. */
 export const AUTH_ROUTES = {
   /** Sends the browser to the provider to sign in, and afterwards to `return_to`. */

@@ -1,5 +1,5 @@
 import type { RunEnding, RunStatus } from "@skillcdn/console/api";
-import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
@@ -456,11 +456,20 @@ export function getRun(
   return readRun(drizzleOf(database), workspaceId, runId);
 }
 
-/** The runs, newest first; or only those on one task. */
+/**
+ * The runs, newest first: all of them, those on one task, those that are open or over, those
+ * for one person, those begun with one token (which is one agent's own).
+ */
 export async function listRuns(
   database: Database,
   workspaceId: string,
-  filter: { readonly taskId?: string | undefined; readonly limit: number },
+  filter: {
+    readonly taskId?: string | undefined;
+    readonly open?: boolean | undefined;
+    readonly personId?: string | undefined;
+    readonly tokenId?: string | undefined;
+    readonly limit: number;
+  },
 ): Promise<RunRecord[]> {
   const handle = drizzleOf(database);
   const rows = await selectRuns(handle)
@@ -468,6 +477,13 @@ export async function listRuns(
       and(
         eq(runs.workspaceId, workspaceId),
         filter.taskId === undefined ? undefined : eq(runs.taskId, filter.taskId),
+        filter.open === undefined
+          ? undefined
+          : filter.open
+            ? inArray(runs.status, [...OPEN_RUN_STATUSES])
+            : notInArray(runs.status, [...OPEN_RUN_STATUSES]),
+        filter.personId === undefined ? undefined : eq(runs.personId, filter.personId),
+        filter.tokenId === undefined ? undefined : eq(runs.tokenId, filter.tokenId),
       ),
     )
     .orderBy(desc(runs.startedAt), desc(runs.id))

@@ -1,6 +1,7 @@
 import { AUTH_ROUTES, REST_ROUTES, restPath } from "./routes.js";
 import {
   type RestAnswerInput,
+  type RestArtifactInput,
   type RestDecision,
   type RestDecisionInput,
   type RestDecisions,
@@ -9,7 +10,10 @@ import {
   type RestPeople,
   type RestPerson,
   type RestPersonPatch,
+  type RestReportInput,
   type RestRun,
+  type RestRunEndInput,
+  type RestRunInput,
   type RestRuns,
   type RestTask,
   type RestTaskInput,
@@ -35,9 +39,9 @@ import {
 import type { TaskState } from "./vocabulary.js";
 
 // The client of the console's REST API: what the default console and a custom one talk to the
-// server with, and what a script or a console of a person's own talks to it with, holding a
-// token of theirs. It takes a `fetch` and a base URL and reads nothing else; every answer is
-// parsed with the schemas the server is tested against.
+// server with, and what the command line, a script or a console of a person's own talks to it
+// with, holding a token of theirs. It takes a `fetch` and a base URL and reads nothing else;
+// every answer is parsed with the schemas the server is tested against.
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -47,9 +51,9 @@ export interface ClientOptions {
   /** The platform's `fetch` when left out. Tests hand in one that never leaves the process. */
   readonly fetch?: FetchLike;
   /**
-   * A token a person made, for a script or a console of their own: sent as `Authorization:
-   * Bearer`, and the browser's cookies left out. Left out, the session cookie of the page's own
-   * origin is what the console answers to.
+   * A token a person made, for an agent, a script or a console of their own: sent as
+   * `Authorization: Bearer`, and the browser's cookies left out. Left out, the session cookie of
+   * the page's own origin is what the console answers to.
    */
   readonly token?: string;
 }
@@ -78,7 +82,8 @@ export interface ConsoleClient {
   /** Changes what a person is; for an administrator. */
   updatePerson(id: string, patch: RestPersonPatch): Promise<RestPerson>;
   tasks(filter?: { readonly state?: TaskState }, signal?: AbortSignal): Promise<RestTasks>;
-  task(id: string, signal?: AbortSignal): Promise<RestTask>;
+  /** One task, by its id or by its number. */
+  task(ref: string, signal?: AbortSignal): Promise<RestTask>;
   createTask(input: RestTaskInput): Promise<RestTask>;
   updateTask(id: string, patch: RestTaskPatch): Promise<RestTask>;
   /** The decisions, or only those that wait, or only those about one task. */
@@ -87,13 +92,27 @@ export interface ConsoleClient {
     signal?: AbortSignal,
   ): Promise<RestDecisions>;
   decision(id: string, signal?: AbortSignal): Promise<RestDecision>;
+  /**
+   * One decision, after waiting up to `waitSeconds` for its answer: the server holds the request
+   * while the decision waits, for as long as it allows, and answers the decision as it stands.
+   */
+  awaitDecision(id: string, waitSeconds: number, signal?: AbortSignal): Promise<RestDecision>;
   raiseDecision(input: RestDecisionInput): Promise<RestDecision>;
   answerDecision(id: string, input: RestAnswerInput): Promise<RestDecision>;
-  /** The runs, newest first; or only those on one task. */
-  runs(filter?: { readonly task?: string }, signal?: AbortSignal): Promise<RestRuns>;
+  /** The runs, newest first; or only those on one task, only the open ones, only the asker's own. */
+  runs(
+    filter?: { readonly task?: string; readonly open?: boolean; readonly mine?: boolean },
+    signal?: AbortSignal,
+  ): Promise<RestRuns>;
   run(id: string, signal?: AbortSignal): Promise<RestRun>;
-  /** Marks a run that will not come back as abandoned: the person it is for, or an administrator. */
-  abandonRun(id: string): Promise<RestRun>;
+  /** Takes a task: a run begins, for the person the asker is or acts for. */
+  startRun(input: RestRunInput): Promise<RestRun>;
+  /** Says how the work goes, on a run of the asker's. */
+  report(runId: string, input: RestReportInput): Promise<RestRun>;
+  /** Hands in a link, on a run of the asker's. */
+  handIn(runId: string, input: RestArtifactInput): Promise<RestRun>;
+  /** Ends a run: finished or failed by the agent; abandoned by the person it is for, or an administrator. */
+  endRun(runId: string, input: RestRunEndInput): Promise<RestRun>;
   /** What happened after event number `after`; `0` for the beginning. */
   events(after: number, signal?: AbortSignal): Promise<RestEvents>;
   /** Where an `EventSource` subscribes to what happens after event number `after`. */
@@ -175,6 +194,9 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
     return parsed.data;
   };
 
+  const flag = (value: boolean | undefined): string | undefined =>
+    value === undefined ? undefined : String(value);
+
   return {
     me: (signal) => request("GET", `${base}${REST_ROUTES.me}`, undefined, restMeSchema, signal),
     people: (signal) =>
@@ -189,24 +211,29 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
         restTasksSchema,
         signal,
       ),
-    task: (id, signal) =>
-      request("GET", `${base}${restPath("tasks", id)}`, undefined, restTaskSchema, signal),
+    task: (ref, signal) =>
+      request("GET", `${base}${restPath("tasks", ref)}`, undefined, restTaskSchema, signal),
     createTask: (input) => request("POST", `${base}${REST_ROUTES.tasks}`, input, restTaskSchema),
     updateTask: (id, patch) =>
       request("PATCH", `${base}${restPath("tasks", id)}`, patch, restTaskSchema),
     decisions: (filter = {}, signal) =>
       request(
         "GET",
-        withQuery(REST_ROUTES.decisions, {
-          open: filter.open === undefined ? undefined : String(filter.open),
-          task: filter.task,
-        }),
+        withQuery(REST_ROUTES.decisions, { open: flag(filter.open), task: filter.task }),
         undefined,
         restDecisionsSchema,
         signal,
       ),
     decision: (id, signal) =>
       request("GET", `${base}${restPath("decisions", id)}`, undefined, restDecisionSchema, signal),
+    awaitDecision: (id, waitSeconds, signal) =>
+      request(
+        "GET",
+        withQuery(restPath("decisions", id), { wait: String(waitSeconds) }),
+        undefined,
+        restDecisionSchema,
+        signal,
+      ),
     raiseDecision: (input) =>
       request("POST", `${base}${REST_ROUTES.decisions}`, input, restDecisionSchema),
     answerDecision: (id, input) =>
@@ -214,15 +241,24 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
     runs: (filter = {}, signal) =>
       request(
         "GET",
-        withQuery(REST_ROUTES.runs, { task: filter.task }),
+        withQuery(REST_ROUTES.runs, {
+          task: filter.task,
+          open: flag(filter.open),
+          mine: flag(filter.mine),
+        }),
         undefined,
         restRunsSchema,
         signal,
       ),
     run: (id, signal) =>
       request("GET", `${base}${restPath("runs", id)}`, undefined, restRunSchema, signal),
-    abandonRun: (id) =>
-      request("POST", `${base}${restPath("runs", id)}/abandon`, undefined, restRunSchema),
+    startRun: (input) => request("POST", `${base}${REST_ROUTES.runs}`, input, restRunSchema),
+    report: (runId, input) =>
+      request("POST", `${base}${restPath("runs", runId)}/reports`, input, restRunSchema),
+    handIn: (runId, input) =>
+      request("POST", `${base}${restPath("runs", runId)}/artifacts`, input, restRunSchema),
+    endRun: (runId, input) =>
+      request("POST", `${base}${restPath("runs", runId)}/end`, input, restRunSchema),
     events: (after, signal) =>
       request(
         "GET",

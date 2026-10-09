@@ -4,7 +4,7 @@ The single deployable of the console: the API people and agents talk to, the wor
 
 | Role | Command | Purpose | Status |
 |---|---|---|---|
-| `api` | `node dist/main.js api` | Serves HTTP: the probes, signing in and who is signed in, the [REST API](../../docs/specs/rest.md) of the board with its live feed, the [MCP endpoint](../../docs/specs/mcp.md) agents work through, and the default UI from `WEB_ROOT`. Stateless. | implemented |
+| `api` | `node dist/main.js api` | Serves HTTP: the probes, signing in and who is signed in, the [REST API](../../docs/specs/rest.md) of the board with its live feed, which people's pages and agents' commands both work through, and the default UI from `WEB_ROOT`. Stateless. | implemented |
 | `worker` | `node dist/main.js worker` | The schedules: the sweep of what time has ended. The job queue arrives with the first job. | implemented |
 | `migrate` | `node dist/main.js migrate` | Applies pending migrations, then exits. | implemented |
 
@@ -39,10 +39,7 @@ src/
                  process: woken by a nudge, by a timer, and for a heartbeat), rest-shapes.ts
                  (records as they are on the wire), server.ts (listening and the shutdown of the
                  listener), request-context.ts (an id, a client address and an access-log line per
-                 request), client-address.ts (trusted proxies and forwarding headers), mcp.ts (the
-                 MCP endpoint: a token, one server per request)
-  mcp/           server.ts: the console as an MCP server to an agent, the tools it works the board
-                 with, with what the agent sends parsed and bounded
+                 request), client-address.ts (trusted proxies and forwarding headers)
   auth/          signing in and what follows from it: secrets.ts (sealing, token making and
                  hashing), login.ts (the round trip to the git host), sessions.ts, tokens.ts (the
                  tokens people make for their agents, scripts and consoles of their own, presented
@@ -91,7 +88,8 @@ Read the root [`AGENTS.md`](../../AGENTS.md) first. This workspace is the compos
 - `src/auth.int.test.ts` covers signing in through fixture providers, a git host and a Workspace: the round trip, the sealed cookie, where a browser may be sent back, what did not complete and why, a login the operator did not list, who the operator names an administrator, sessions and their end (sign-out from the console's own pages only, time, removal from the list), and a deployment where nobody signs in.
 - `src/adapters/github-login.test.ts` and `google-login.test.ts` cover the adapters against a fake `fetch`: what each sends, what it reads, and what it refuses.
 - `src/rest.int.test.ts` covers the REST API and parses every answer with the package's schemas: who may ask and change, tasks and decisions through their whole life, what is refused and why, the feed's pages, and tokens: made and removed on the console's own pages only, presented as bearers with no origin needed, refused when they are nothing, removed, expired or no longer a member's, and bounded.
-- `src/mcp.int.test.ts` drives the MCP endpoint with the SDK's own client, through the app and no socket: what it takes (a token, POST), the tools, an agent working a task from taking it to finishing it, asking and being answered while it waits, what is not its own, and a person giving up on a run.
+- `src/runs.int.test.ts` covers an agent at work through the REST API with its token, as the command line drives it: taking a task by its number, reporting and handing in, asking and being answered while a read of the decision waits, finishing, what is listed as one's own, what is not its own, and a person giving up on a run.
+- `src/cli.int.test.ts` runs the package's `console` command against the app with no socket: the whole of an agent's work from taking a task to finishing it, with a person deciding meanwhile, and what the command refuses.
 - `src/live.int.test.ts` covers the feed as server-sent events, with a listener on the database's channel as a deployment has: what was there, what happens next, heartbeats, where a reconnecting browser starts, and that closing the feed ends every stream.
 - `src/http/web.test.ts` covers serving a build: the files and their types, bundles as immutable, the page for every path of the app under its policy, the API's paths left alone, and that nothing outside the directory is ever served. It uses a small fake build, not `web/dist`.
 - `src/db/db.int.test.ts` covers the data model. Every test file has a database of its own; tests inside a file share it.
@@ -129,8 +127,8 @@ How it behaves:
 
 - **Writing a task** bumps the workspace's counter under the row lock the update takes, so two tasks written at once get two numbers. The assignee must be a person of the workspace and the parent a task of it, with no loop (`checkParent` walks up the chain, at most 50 deep).
 - **Changing a task** is one transaction: a move from one state to another is a `task.moved` event with `from` and `to`; the rest is one `task.updated` event naming the `fields`. A patch that changes nothing writes nothing.
-- **Raising a decision** numbers its options from `1`. Raised from a run (`ask`), the decision is about the run's task and the run waits. **Answering** one takes the row for update, refuses a decision already answered (`decision.answered`) or an option not its own (`decision.no_such_option`), tells the board which label was chosen, and lets a run that waited go on, unless another decision of its still waits.
-- **A run** begins when an agent takes a task (`startRun`): the task is locked, must not be done or dropped (`run.task_closed`) or have an open run (`run.task_taken`), and becomes the person's and `in_progress` through `updateTaskIn`, in the same transaction, with the task's own events. Reports and artifacts are bounded per run; only the run's person adds them, and only while the run is open (`run.not_yours`, `run.over`). Ending a run (`endRun`) is the agent's `finish`, or a person giving up on it; a finished run puts a task that was `in_progress` up for review.
+- **Raising a decision** numbers its options from `1`. Raised from a run (`console ask`), the decision is about the run's task and the run waits. **Answering** one takes the row for update, refuses a decision already answered (`decision.answered`) or an option not its own (`decision.no_such_option`), tells the board which label was chosen, and lets a run that waited go on, unless another decision of its still waits.
+- **A run** begins when an agent takes a task (`startRun`): the task is locked, must not be done or dropped (`run.task_closed`) or have an open run (`run.task_taken`), and becomes the person's and `in_progress` through `updateTaskIn`, in the same transaction, with the task's own events. Reports and artifacts are bounded per run; only the run's person adds them, and only while the run is open (`run.not_yours`, `run.over`). Ending a run (`endRun`) is the agent's `finish` or `fail`, or a person giving up on it; a finished run puts a task that was `in_progress` up for review.
 - **Events** are written in the transaction of the change they record, and `pg_notify('console_events', '')` goes out with the commit: a process that listens asks for what is after the last number it saw, and the payload says nothing. `listEventsAfter` reads a page from a number on and says whether there is more.
 - **A role** is written at sign-in when the operator names the login in `ADMINS`, and otherwise kept; `updatePersonRole` changes it under the lock on the workspace row, refuses to take the last administrator away (`person.last_admin`), and tells the board (`person.role_changed`). Changing roles is a person's own doing, on the console's own pages: an administrator's token works as a member's does.
 - **A token is its person.** `Access.person` resolves `Authorization: Bearer` before it looks at a cookie, and a token that is nothing is refused whatever cookie travels with it; membership is checked the same way. A token cannot make, list or remove tokens (`auth.session_required`). A person holds at most `MAX_TOKENS_PER_PERSON` live tokens, counted under the lock on their row (`createToken`).

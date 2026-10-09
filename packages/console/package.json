@@ -1,7 +1,7 @@
 {
   "name": "@skillcdn/console",
   "version": "0.0.0",
-  "description": "What a custom SkillCDN console is built from: the API client and schemas, the components, and the composition of the default console.",
+  "description": "What a custom SkillCDN console is built from: the API client and schemas, the components, the composition of the default console, and the console command agents work the board with.",
   "license": "MIT",
   "homepage": "https://github.com/skillcdn/console#readme",
   "repository": {
@@ -14,10 +14,13 @@
     "skillcdn",
     "console",
     "agents",
-    "mcp"
+    "cli"
   ],
   "type": "module",
   "sideEffects": false,
+  "bin": {
+    "console": "./dist/cli/main.js"
+  },
   "engines": {
     "node": ">=24"
   },
@@ -29,6 +32,10 @@
     "./api": {
       "types": "./dist/api.d.ts",
       "default": "./dist/api.js"
+    },
+    "./cli": {
+      "types": "./dist/cli/cli.d.ts",
+      "default": "./dist/cli/cli.js"
     },
     "./console.css": "./dist/console.css"
   },
@@ -48,6 +55,7 @@
     "postpack": "node ../../scripts/pack-license.mjs remove"
   },
   "devDependencies": {
+    "@types/node": "catalog:",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "react": "^19.3.0",

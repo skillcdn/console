@@ -11,9 +11,9 @@
   </p>
 </div>
 
-> **Status: pre-alpha.** The board runs: people sign in, write tasks, move them along, raise decisions and answer them, and see one board, live. No agents yet. [docs/roadmap.md](docs/roadmap.md) says what exists; [docs/architecture.md](docs/architecture.md) says how it fits together and what is still open.
+> **Status: pre-alpha.** The board runs, and agents work it: people sign in, write tasks, move them along, raise decisions and answer them, and see one board, live; an agent takes a task through the `console` command, reports, hands in, asks, and finishes. Files handed in and the organization's skills are next. [docs/roadmap.md](docs/roadmap.md) says what exists; [docs/architecture.md](docs/architecture.md) says how it fits together and what is still open.
 
-**What it is.** The console is the operations room of an organization that lets AI agents do its work. It holds the work to be done, which agent (Claude Code, Codex, any agent that speaks MCP) is doing what right now, what each has done, and the decisions that wait for a person. People decide; agents work. The organization's playbooks and skills live in git repositories and reach the agents through [SkillCDN](https://skillcdn.ai); the console shows those repositories, skills and addresses through the same published packages.
+**What it is.** The console is the operations room of an organization that lets AI agents do its work. It holds the work to be done, which agent (Claude Code, Codex, any agent with a shell) is doing what right now, what each has done, and the decisions that wait for a person. People decide; agents work. The organization's playbooks and skills live in git repositories and reach the agents through [SkillCDN](https://skillcdn.ai); the console shows those repositories, skills and addresses through the same published packages.
 
 **How an organization uses it.** Whoever runs it deploys the image once, sets up how people sign in and who is a member, and keeps the organization's skills in git. Each member works with the agent of their choice, in their own app or CLI under their own subscription, connected to the console; the console calls no model API and starts no agent. The board is where the work is written down, moved along, decided on and shared, and each organization builds its own console, and each member their own view of it, from the published package.
 
@@ -21,10 +21,10 @@
 
 ## How it works
 
-The first two steps and the board are there today; agents arrive with the second milestone of the roadmap.
+The first four steps are there today, but for files handed in; the fifth is the third milestone of the roadmap.
 
 1. **Deploy it once.** One container image, one PostgreSQL, S3-compatible storage for what runs leave behind. Locally with compose; on a cloud, the same image next to a managed database and a bucket.
-2. **People sign in** through an identity provider the organization already uses (GitHub today, Google Workspace next), and each connects their own agent to the console's MCP endpoint with a token of their own. Several people, each with their own agent, work on the same board. Nobody, person or agent, touches the database: every request goes through the API and is decided there.
+2. **People sign in** through an identity provider the organization already uses (GitHub today, Google Workspace next), and each signs their own agent in with a token of their own: `console login`, from the published package. Several people, each with their own agent, work on the same board. Nobody, person or agent, touches the database: every request goes through the API and is decided there.
 3. **Agents take work from the board**, report what they do, hand in what they made (branches, pull requests, documents), and raise a decision when one is needed. A person answers decisions from the board, or from wherever the console notifies them.
 4. **The board shows it all, live:** the tasks and their state, the runs in progress, the history, the decisions.
 5. **Teams build their own console** from the published package, [`@skillcdn/console`](packages/console/): the client of the console's API, the components, and the composition of the default console. A small repository with a configuration and a CI job then produces a custom console, as static files or as an image.

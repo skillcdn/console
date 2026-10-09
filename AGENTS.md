@@ -29,7 +29,7 @@ Product shape
 Public repository hygiene
 
 8. **This repository is public; operations are not.** Never commit cloud account ids, ARNs, hostnames, IPs, DNS or CDN configuration, capacity or cost figures, production tuning values, the organization's own tasks, decisions, people, customers or incidents, and do not say where any of that is kept. Fixtures are invented. Code ships generic defaults; real values arrive through environment configuration.
-9. **Do not name other products** as inspiration or comparison in code, docs, commits or PRs. Naming what we interoperate with (a git host, an agent such as Claude Code or Codex, the MCP specification) is fine.
+9. **Do not name other products** as inspiration or comparison in code, docs, commits or PRs. Naming what we interoperate with (a git host, an agent such as Claude Code or Codex) is fine.
 10. **Everything committed is in English** (code, comments, docs, commit messages, PR text), whatever language the conversation is in. The one exception, when the UI gets language packs: what users read in their own language.
 
 ## Repository map
@@ -93,7 +93,7 @@ Documentation is part of the change, not a follow-up. A future session starts wi
 
 | When you change... | Update in the same change |
 |---|---|
-| What the console does for people or agents: the board, the MCP tools, the REST API | `docs/architecture.md`; a spec under `docs/specs/` once one exists; the root `README.md` if the overview changes |
+| What the console does for people or agents: the board, the REST API, the command line | `docs/architecture.md`; a spec under `docs/specs/` once one exists; the root `README.md` if the overview changes |
 | What the published package does or exports | a changeset in `.changeset/`, which becomes the package's changelog; `packages/console/README.md` when its usage changes |
 | Workspaces, boundaries, runtime components, data flow, security model | `docs/architecture.md`; the repository map above; an ADR |
 | A decision future contributors might reasonably undo | new ADR in `docs/adr/` (never edit an accepted ADR; supersede it) |
@@ -109,10 +109,10 @@ One topic, one file. Link to where something is documented instead of restating 
 ## Conventions
 
 - **TypeScript:** strict, ESM, `.js` extensions in relative imports, erasable syntax only (no `enum`, `namespace` or parameter properties). Named exports only. No `any`; take `unknown` and narrow.
-- **Boundaries validate, interiors trust.** Parse every external input once at the edge (HTTP, MCP arguments, env, what an agent sends, JSON columns) with a schema; pass typed values inward.
-- **Configuration:** `process.env` is read only in `apps/console/src/config/` (lint enforces it). Everything else receives typed config as an argument. Every tunable has a safe default.
+- **Boundaries validate, interiors trust.** Parse every external input once at the edge (HTTP, the command line's arguments, env, what an agent sends, JSON columns) with a schema; pass typed values inward.
+- **Configuration:** `process.env` is read only in `apps/console/src/config/`, and by the command line only in `packages/console/src/cli/main.ts` (lint enforces both). Everything else receives typed config as an argument. Every tunable has a safe default.
 - **Ports and adapters:** the domain defines interfaces (git host, blob store, clock, ids, notifications); adapters implement them; `apps/console` wires them together. Do not import an SDK outside its adapter.
-- **Errors:** throw `Error` subclasses with a stable `code`. Translate to HTTP or MCP errors only at the edge, and never leak internals or the existence of what a caller may not see.
+- **Errors:** throw `Error` subclasses with a stable `code`. Translate to HTTP errors, or to the command line's words and exit codes, only at the edge, and never leak internals or the existence of what a caller may not see.
 - **Logging:** structured logger only, no `console` (lint enforces it). Never log tokens, authorization headers or what an agent handed in.
 - **Determinism:** inject time, randomness and ids so the domain stays pure and tests stay stable.
 - **Naming:** kebab-case file names; tests next to the code as `*.test.ts`; integration tests as `*.int.test.ts`.

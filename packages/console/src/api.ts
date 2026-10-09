@@ -1,7 +1,7 @@
 // The first layer of @skillcdn/console (docs/architecture.md, "The package and custom
 // consoles"): the vocabulary, the schemas and the client of the console's REST API, so that a
 // custom UI talks to any console with types, and so that the contract has one source. No React
-// here: the server imports this entry point, and nothing of the pages.
+// here: the server and the command line import this entry point, and nothing of the pages.
 
 export {
   ApiError,
@@ -36,7 +36,6 @@ export {
   AUTH_ROUTES,
   isSignInFailure,
   loginPath,
-  MCP_ROUTE,
   REST_ROUTES,
   RETURN_TO_PARAM,
   restPath,
@@ -48,6 +47,7 @@ export {
 export {
   type RestAnswerInput,
   type RestArtifact,
+  type RestArtifactInput,
   type RestDecision,
   type RestDecisionInput,
   type RestDecisionOption,
@@ -62,7 +62,10 @@ export {
   type RestPersonPatch,
   type RestProvider,
   type RestReport,
+  type RestReportInput,
   type RestRun,
+  type RestRunEndInput,
+  type RestRunInput,
   type RestRuns,
   type RestTask,
   type RestTaskInput,
@@ -74,6 +77,7 @@ export {
   type RestTokenInput,
   type RestTokens,
   restAnswerInputSchema,
+  restArtifactInputSchema,
   restArtifactSchema,
   restDecisionInputSchema,
   restDecisionOptionSchema,
@@ -88,7 +92,10 @@ export {
   restPersonPatchSchema,
   restPersonSchema,
   restProviderSchema,
+  restReportInputSchema,
   restReportSchema,
+  restRunEndInputSchema,
+  restRunInputSchema,
   restRunSchema,
   restRunsSchema,
   restTaskInputSchema,

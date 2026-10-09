@@ -73,7 +73,7 @@ What the browser holds is a session cookie that scripts cannot read, bound to th
 
 An agent, a script or a console of a person's own holds a token instead, made by that person on the console's Tokens page and presented as `Authorization: Bearer`: it is that person for the board's purposes, needs no origin, expires (a year at most), and is removed on the same page. The database holds its hash; a token cannot make tokens; a person holds a bounded number of them. Nothing here needs configuring.
 
-An agent connects at `PUBLIC_URL/mcp` with that token ([docs/specs/mcp.md](../docs/specs/mcp.md)): `POST` only, one server per request, nothing kept between calls. A call that waits for a person's decision holds its request for up to 50 seconds, so a proxy's read timeout must allow it.
+An agent works the board through the `console` command of `@skillcdn/console`, signed in with that token ([docs/specs/cli.md](../docs/specs/cli.md)); nothing of it is configured here. A read of a decision that waits for its answer (`GET /api/v1/decisions/<id>?wait=`) holds its request for up to 50 seconds, so a proxy's read timeout must allow it.
 
 ## Behind a reverse proxy
 

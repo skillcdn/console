@@ -2,6 +2,7 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "types": ["node"],
     "composite": true,
     "declaration": true,
     "declarationMap": true,

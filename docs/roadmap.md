@@ -14,11 +14,12 @@ Goal: a person connects their agent to the console; the agent takes work from th
 - [x] Tokens a person makes for their agent (2026-10-09): scoped to that person, expiring, revocable, stored as hashes; a page to make and remove them. The REST API and the feed take a token as well as a session, so that a script or a custom console acts as its person ([ADR-0004](adr/0004-people-and-agents-reach-the-board-only-through-the-api-with-a-credential-of-their-own.md)).
 - [x] Roles (2026-10-09): an administrator who configures, a member who works; kept in the database, applied to a person's agents as to the person ([ADR-0005](adr/0005-people-sign-in-through-an-identity-provider-and-membership-and-roles-are-the-consoles-own.md)).
 - [x] The sign-in port generalized from the git host to an identity provider (2026-10-09), and Google Workspace as the second adapter, with membership from the Workspace domain as a source the operator may choose.
-- [x] The MCP endpoint and its tools (2026-10-09): `list_tasks`, `get_task`, `take_task`, `report`, `hand_in`, `ask`, `await_decision`, `finish`, one server per request, with what an agent sends parsed and bounded at the edge ([specs/mcp.md](specs/mcp.md)).
+- [x] An agent's work in the REST API (2026-10-09): taking a task, reporting, handing in, ending a run; a decision raised from a run, and a read of it that waits for the answer; a task by its number ([specs/rest.md](specs/rest.md)). The MCP endpoint built the same day was replaced by it and removed ([ADR-0006](adr/0006-agents-work-the-board-through-the-rest-api-and-the-command-line-not-an-mcp-server.md)).
 - [x] Runs with their reports and artifacts (2026-10-09): the data model, and the run on the task's page and in the feed. Artifacts are links; files come next.
-- [ ] Files handed in: the blob-store port with its PostgreSQL implementation, and `hand_in` taking a file.
+- [ ] Files handed in: the blob-store port with its PostgreSQL implementation, and `console hand-in` taking a file.
 - [x] A decision a run waits for, and the run resuming when it is answered (2026-10-09).
-- [ ] Claude Code and Codex connected by hand, with the steps written down.
+- [x] The command line (2026-10-09): `console`, shipped with the package, the agent's side of the console: a person signs it in once with a token, and the agent takes, reports, hands in, asks and finishes with it ([specs/cli.md](specs/cli.md)).
+- [ ] Claude Code and Codex working a task by hand through the command, with the steps written down.
 - [ ] The organization's skills shown by address through `@skillcdn/core` and the REST API of a SkillCDN deployment. `@skillcdn/core` 0.1.1 was published on 2026-10-09; the release-age rule makes it installable from 2026-10-12, or sooner under `minimumReleaseAgeExclude` for that one install.
 
 ## After milestone 2

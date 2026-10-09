@@ -1,6 +1,6 @@
 # ADR-0004: People and agents reach the board only through the API, each with a credential of their own
 
-- Status: Accepted
+- Status: Accepted; the MCP endpoint named in point 3 and in the consequences was replaced by the command line ([ADR-0006](0006-agents-work-the-board-through-the-rest-api-and-the-command-line-not-an-mcp-server.md))
 - Date: 2026-10-09
 
 ## Context

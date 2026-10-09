@@ -4,7 +4,6 @@ import {
   ApiError,
   type ConsoleClient,
   createClient,
-  MCP_ROUTE,
   type RestAnswerInput,
   type RestDecision,
   type RestDecisionInput,
@@ -355,22 +354,18 @@ function Page(props: {
         <section className="sc-panel sc-connect" aria-label="Connecting an agent">
           <h2 className="sc-section-title">Connecting an agent</h2>
           <p>
-            An agent connects to this console as an MCP server at{" "}
-            <code>
-              {origin}
-              {MCP_ROUTE}
-            </code>
-            , with a token in the <code>Authorization</code> header. For Claude Code:
+            An agent works this board with the <code>console</code> command, which comes with the{" "}
+            <code>@skillcdn/console</code> package. Install the package where the agent runs, then
+            sign the command in with a token made here:
           </p>
           <pre className="sc-code">
-            claude mcp add --transport http console {origin}
-            {MCP_ROUTE} --header "Authorization: Bearer YOUR_TOKEN"
+            npm install -g @skillcdn/console{"\n"}console login --url {origin}
           </pre>
           <p>
-            Codex and any other MCP client take the same address and header. The tools:{" "}
-            <code>list_tasks</code>, <code>get_task</code>, <code>take_task</code>,{" "}
-            <code>report</code>, <code>hand_in</code>, <code>ask</code>, <code>await_decision</code>{" "}
-            and <code>finish</code>.
+            It asks for the token and keeps it in your home directory, and your agent is you from
+            then on: <code>console take</code> starts work on a task, <code>console report</code>,{" "}
+            <code>console hand-in</code> and <code>console ask</code> say how it goes, and{" "}
+            <code>console finish</code> ends the run. <code>console help</code> says the rest.
           </p>
         </section>
       </>
