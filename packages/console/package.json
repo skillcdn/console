@@ -29,7 +29,8 @@
     "./api": {
       "types": "./dist/api.d.ts",
       "default": "./dist/api.js"
-    }
+    },
+    "./console.css": "./dist/console.css"
   },
   "files": [
     "dist",
@@ -39,7 +40,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsc -b tsconfig.build.json",
+    "build": "tsc -b tsconfig.build.json && node -e \"fs.mkdirSync('dist',{recursive:true});fs.copyFileSync('src/styles/console.css','dist/console.css')\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --passWithNoTests",
     "clean": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\"",
@@ -47,10 +48,20 @@
     "postpack": "node ../../scripts/pack-license.mjs remove"
   },
   "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "dependencies": {
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "zod": "catalog:"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   }
 }

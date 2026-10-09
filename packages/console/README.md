@@ -8,15 +8,15 @@
   <a href="https://github.com/skillcdn/console/blob/main/LICENSE.md"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-3a6dd4"></a>
 </p>
 
-**Not published yet.** The package exists so that the console's own UI and any custom console share one source; its layers arrive with the milestones of [the roadmap](https://github.com/skillcdn/console/blob/main/docs/roadmap.md), and the first version is published when the third one lands. What it exports today is the first layer: the contract of the console's REST API.
+**Not published yet.** The package exists so that the console's own UI and any custom console share one source; the first version is published when the third milestone of [the roadmap](https://github.com/skillcdn/console/blob/main/docs/roadmap.md) lands. All three layers are here: the contract of the REST API, the components, and the composition of the default console.
 
 ## What it exports
 
 | Layer | What it is for | Status |
 |---|---|---|
 | The schemas and the client of the console's REST API | A custom UI talks to any console with types, and the contract has one source, shared with the server in `apps/console`. Also on its own at `@skillcdn/console/api`, which brings no React with it. | exported |
-| The components: the board, a task, a run, a decision, the live feed | Each takes its data as props and nothing from the network. | not yet |
-| `createConsole(config)` | The default console assembled from the components, with the places a team may replace named. The UI the image serves is this, with the default configuration. | not yet |
+| The components: the board, a task, a decision, the live feed | Each takes its data as props and nothing from the network. A run arrives with the second milestone. | exported |
+| `createConsole(config)` | The default console assembled from the components, with the places a team may replace named. The UI the image serves is this, with the default configuration. | exported |
 
 ### The API layer
 
@@ -32,6 +32,23 @@ const { items } = await client.tasks({ state: "ready" });
 - **The routes:** `REST_ROUTES`, `AUTH_ROUTES`, and the helpers that build a path (`restPath`, `loginPath`, `signInPath`). The API itself is described in [docs/specs/rest.md](https://github.com/skillcdn/console/blob/main/docs/specs/rest.md).
 - **The schemas,** in the mini build of zod, which runs in a browser: what the server answers (`restTaskSchema`, `restDecisionSchema`, `restEventSchema`, `restMeSchema`, ...) and what it is sent (`restTaskInputSchema`, `restTaskPatchSchema`, `restDecisionInputSchema`, `restAnswerInputSchema`). Absent values are `null` on the wire, never missing keys. The server validates with the input schemas and is tested against the others.
 - **The client:** `createClient({ baseUrl, fetch })` answers typed values parsed with those schemas, and throws an `ApiError` with the server's stable `code` (or `network`, `invalid_response`) for anything else. It takes a `fetch` and reads nothing else.
+
+### The components and the composition
+
+```tsx
+import { createConsole } from "@skillcdn/console";
+import "@skillcdn/console/console.css";
+
+createConsole({
+  title: "Acme", // until the server says what the board is called
+  components: { SignIn: MySignIn }, // any of Shell, Board, TaskView, DecisionList, EventFeed, SignIn
+}).mount(document.getElementById("root"));
+```
+
+- **The components** take their data as props and nothing from the network: `Board` (one column per state), `TaskCard`, `TaskView` (one task with its decisions and its parts), `TaskForm`, `DecisionList` and `DecisionCard` (the waiting first, each with the way to answer), `DecisionForm`, `EventFeed` (a sentence per event, newest first; `describeEvent` makes the sentence), `Shell` (the header with the pages and the person), `SignIn`, and `Markdown`, which renders what people and agents wrote as elements, never as HTML, with links to the web only and pictures over https only. The small blocks (`Button`, `Badge`, `Avatar`, `PersonChip`, `Callout`, `EmptyState`, `Spinner`, `Time`) and the words of the vocabulary (`STATE_LABELS`, `PRIORITY_LABELS`) are exported too.
+- **The composition:** `createConsole(config)` returns `{ App, mount }`. `App` is the whole console as one component; `mount(container)` renders it and returns the way to take it down. `config.baseUrl` is the origin of the API (the page's own when left out), `config.components` the pieces to replace (`ConsoleComponents` names them with the props each takes), `config.client` a client of your own, for tests. The pages route in the browser (`matchRoute`, `PATHS`, `taskHref`); the data is loaded whole and kept current by the server's stream (`useConsoleData`, for a composition of your own).
+- **The styles** are one file, `@skillcdn/console/console.css`: the tokens (`--sc-*`), a small reset, and one class per block, all prefixed `sc-`. Re-skinning starts and mostly ends with the tokens.
+- React 19 is a peer dependency; `react-markdown` and `remark-gfm` are the package's own.
 
 A custom console is a small repository that depends on this package, holds a configuration and a CI job, and builds to static files served next to any console API, or into an image of its own. Nothing of the server is in the package.
 
