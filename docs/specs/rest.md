@@ -64,7 +64,7 @@ One task, by its id or by its number (`/api/v1/tasks/7`): the pages hold ids, pe
 
 ### `GET /api/v1/decisions?open=&task=`
 
-`{ "items": [decision, ...] }`: the ones that wait first, newest first within each; `open=true` keeps only those that wait, `task=<id>` only those about one task. A decision carries its `question`, `body` (Markdown), `options` (each an `id` and a `label`), `taskId` or `null`, `raisedBy`, `run` (the `id` and `agent` of the run that raised it, when an agent asked, or `null`), and `answer`: `null` while it waits, else the chosen `option`, a `note` or `null`, `by` and `at`.
+`{ "items": [decision, ...] }`: the ones that wait first, newest first within each; `open=true` keeps only those that wait, `task=<id>` only those about one task. A decision carries its `question`, `body` (Markdown), `options` (each an `id` and a `label`), `taskId` and `taskNumber` (or `null`), `raisedBy`, `run` (the `id` and `agent` of the run that raised it, when an agent asked, or `null`), and `answer`: `null` while it waits, else the chosen `option`, a `note` or `null`, `by` and `at`.
 
 ### `POST /api/v1/decisions`
 
@@ -78,7 +78,7 @@ The answer takes `option` (the id of one of its options) and optionally a `note`
 
 ### `GET /api/v1/runs?task=&open=&mine=` and `GET /api/v1/runs/<id>`
 
-`{ "items": [run, ...] }`: the runs, newest first, at most `LIST_LIMIT`; `task=<id>` keeps those on one task, `open=true` those not over (`running` or `waiting`) and `open=false` those over, `mine=true` the asker's own: with a token, the runs begun with that token, which is one agent's; on a session, the runs for the person. A run is one agent at work on one task for one person: `taskId`, `person` (whom the agent acts for), `agent` (what it calls itself), `status` (`running`, `waiting` for a decision, `finished`, `failed`, `abandoned`), `startedAt`, `endedAt` or `null`, `summary` (Markdown, what the agent said at the end, or `null`), `reports` (each `id`, `body` in Markdown, `createdAt`; oldest first), `artifacts` (each `id`, an https `url`, `label` or `null`, `createdAt`), and `waitingFor`, the id of the decision the run waits for, or `null`.
+`{ "items": [run, ...] }`: the runs, newest first, at most `LIST_LIMIT`; `task=<id>` keeps those on one task, `open=true` those not over (`running` or `waiting`) and `open=false` those over, `mine=true` the asker's own: with a token, the runs begun with that token, which is one agent's; on a session, the runs for the person. A run is one agent at work on one task for one person: `taskId` and `taskNumber` (the one people say), `person` (whom the agent acts for), `agent` (what it calls itself), `status` (`running`, `waiting` for a decision, `finished`, `failed`, `abandoned`), `startedAt`, `endedAt` or `null`, `summary` (Markdown, what the agent said at the end, or `null`), `reports` (each `id`, `body` in Markdown, `createdAt`; oldest first), `artifacts` (each `id`, an https `url`, `label` or `null`, `createdAt`), and `waitingFor`, the id of the decision the run waits for, or `null`.
 
 ### `POST /api/v1/runs`
 

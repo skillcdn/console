@@ -19,7 +19,7 @@ Goal: a person connects their agent to the console; the agent takes work from th
 - [ ] Files handed in: the blob-store port with its PostgreSQL implementation, and `console hand-in` taking a file.
 - [x] A decision a run waits for, and the run resuming when it is answered (2026-10-09).
 - [x] The command line (2026-10-09): `console`, shipped with the package, the agent's side of the console: a person signs it in once with a token, and the agent takes, reports, hands in, asks and finishes with it ([specs/cli.md](specs/cli.md)).
-- [ ] Claude Code and Codex working a task by hand through the command, with the steps written down.
+- [x] Claude Code working a task through the command (2026-10-09): an agent took a task, reported at each milestone, asked and was answered on the board, handed in and finished; the steps are in [specs/cli.md](specs/cli.md#running-an-agent-on-a-task). Codex is still to be tried.
 - [ ] The organization's skills shown by address through `@skillcdn/core` and the REST API of a SkillCDN deployment. `@skillcdn/core` 0.1.1 was published on 2026-10-09; the release-age rule makes it installable from 2026-10-12, or sooner under `minimumReleaseAgeExclude` for that one install.
 
 ## After milestone 2

@@ -13,6 +13,8 @@ export interface DecisionRecord {
   readonly id: string;
   readonly workspaceId: string;
   readonly taskId: string | undefined;
+  /** The task's number, as people say it, when there is a task. */
+  readonly taskNumber: number | undefined;
   readonly question: string;
   readonly body: string;
   readonly options: readonly RestDecisionOption[];
@@ -60,6 +62,7 @@ const decisionColumns = {
   id: decisions.id,
   workspaceId: decisions.workspaceId,
   taskId: decisions.taskId,
+  taskNumber: tasks.number,
   question: decisions.question,
   body: decisions.body,
   options: decisions.options,
@@ -82,7 +85,8 @@ function selectDecisions(handle: Transaction | ReturnType<typeof drizzleOf>) {
     .from(decisions)
     .innerJoin(raisers, eq(raisers.id, decisions.raisedById))
     .leftJoin(answerers, eq(answerers.id, decisions.answeredById))
-    .leftJoin(runs, eq(runs.id, decisions.runId));
+    .leftJoin(runs, eq(runs.id, decisions.runId))
+    .leftJoin(tasks, eq(tasks.id, decisions.taskId));
 }
 
 function toDecision(row: DecisionRow): DecisionRecord {
@@ -99,6 +103,7 @@ function toDecision(row: DecisionRow): DecisionRecord {
     id: row.id,
     workspaceId: row.workspaceId,
     taskId: row.taskId ?? undefined,
+    taskNumber: row.taskNumber ?? undefined,
     question: row.question,
     body: row.body,
     options: row.options,

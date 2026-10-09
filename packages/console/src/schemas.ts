@@ -171,6 +171,8 @@ export const restDecisionSchema = z.object({
   options: z.array(restDecisionOptionSchema),
   /** The task the decision is about, or `null`. */
   taskId: z.nullable(uuid),
+  /** The task's number, when there is a task, or `null`. */
+  taskNumber: z.nullable(z.int()),
   raisedBy: restPersonSchema,
   /** The run that raised it, as the agent asked, or `null` when a person did. */
   run: z.nullable(z.object({ id: uuid, agent: z.string() })),
@@ -285,6 +287,8 @@ export type RestArtifact = z.infer<typeof restArtifactSchema>;
 export const restRunSchema = z.object({
   id: uuid,
   taskId: uuid,
+  /** The task's number, as people say it. */
+  taskNumber: z.int().check(z.positive()),
   /** The person the agent acts for. */
   person: restPersonSchema,
   /** What the agent calls itself. */

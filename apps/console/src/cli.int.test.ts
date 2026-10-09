@@ -188,6 +188,7 @@ describe("the command line", () => {
     });
     const mine = await console_(["runs", "--mine", "--task", String(task.number)]);
     expect(mine.out).toContain(`${runId}  finished`);
+    expect(mine.out).toContain(`task #${task.number}`);
   });
 
   it("keeps an agent to its person's runs, and says when a token is nothing", async () => {

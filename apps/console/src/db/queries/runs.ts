@@ -29,6 +29,8 @@ export interface RunRecord {
   readonly id: string;
   readonly workspaceId: string;
   readonly taskId: string;
+  /** The task's number, as people say it. */
+  readonly taskNumber: number;
   /** The person the agent acts for. */
   readonly person: PersonRecord;
   /** The token the agent presented, while it exists. */
@@ -88,6 +90,7 @@ const runColumns = {
   id: runs.id,
   workspaceId: runs.workspaceId,
   taskId: runs.taskId,
+  taskNumber: tasks.number,
   tokenId: runs.tokenId,
   agent: runs.agent,
   status: runs.status,
@@ -102,7 +105,11 @@ type Handle = Transaction | ReturnType<typeof drizzleOf>;
 type RunRow = Awaited<ReturnType<typeof selectRuns>>[number];
 
 function selectRuns(handle: Handle) {
-  return handle.select(runColumns).from(runs).innerJoin(runners, eq(runners.id, runs.personId));
+  return handle
+    .select(runColumns)
+    .from(runs)
+    .innerJoin(runners, eq(runners.id, runs.personId))
+    .innerJoin(tasks, eq(tasks.id, runs.taskId));
 }
 
 /** The rows as records, with what each run reported and handed in, oldest first. */
@@ -138,6 +145,7 @@ async function attach(handle: Handle, rows: readonly RunRow[]): Promise<RunRecor
     id: row.id,
     workspaceId: row.workspaceId,
     taskId: row.taskId,
+    taskNumber: row.taskNumber,
     person: toPerson(row.person),
     tokenId: row.tokenId ?? undefined,
     agent: row.agent,

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MAX_SUMMARY_LENGTH } from "../limits.js";
 import { type CliIo, EXIT, runCli } from "./cli.js";
 import type { CredentialStore, Credentials } from "./credentials.js";
 
@@ -29,6 +30,7 @@ const TASK = {
 const RUN = {
   id: "0199c4d8-0000-7000-8000-000000000020",
   taskId: TASK.id,
+  taskNumber: TASK.number,
   person: PERSON,
   agent: "Claude Code",
   status: "running",
@@ -48,6 +50,7 @@ const DECISION = {
     { id: "2", label: "Change it" },
   ],
   taskId: TASK.id,
+  taskNumber: TASK.number,
   raisedBy: PERSON,
   run: { id: RUN.id, agent: "Claude Code" },
   answer: null,
@@ -142,6 +145,11 @@ describe("the console command", () => {
     const one = harness({ fetch });
     expect(await runCli(["help", "ask"], one.io)).toBe(EXIT.ok);
     expect(one.out()).toContain("--option");
+    expect(one.out()).toContain("Limits:");
+    expect(one.out()).toContain("decision.invalid_run");
+    const limits = harness({ fetch });
+    expect(await runCli(["help", "finish"], limits.io)).toBe(EXIT.ok);
+    expect(limits.out()).toContain(String(MAX_SUMMARY_LENGTH));
     const flagged = harness({ fetch });
     expect(await runCli(["report", "--help"], flagged.io)).toBe(EXIT.ok);
     expect(flagged.out()).toContain("console report");
@@ -250,7 +258,7 @@ describe("the console command", () => {
       },
     });
     const s = harness({ fetch: several.fetch, env: SIGNED_IN });
-    expect(await runCli(["report", "which?"], s.io)).toBe(EXIT.usage);
+    expect(await runCli(["report", "which?"], s.io)).toBe(EXIT.failed);
     expect(s.err()).toContain("--run <id>");
     const none = fakeConsole({ [OPEN_RUNS]: { body: { items: [] } } });
     const n = harness({ fetch: none.fetch, env: SIGNED_IN });
@@ -307,8 +315,18 @@ describe("the console command", () => {
     expect(
       await runCli(["ask", "Which?", "--option", "a", "--option", "b", "--wait", "0"], u.io),
     ).toBe(EXIT.waiting);
-    expect(u.out()).toContain(`console decision ${DECISION.id} --wait 600`);
+    expect(u.out()).toContain(`console decision ${DECISION.id} --wait 100`);
     expect(unanswered.calls.map((call) => call.key)).toEqual([OPEN_RUNS, "POST /api/v1/decisions"]);
+
+    // On --json the decision is printed as soon as it is raised, so a wait cut short loses no id.
+    const asJson = harness({ fetch: unanswered.fetch, env: SIGNED_IN });
+    expect(
+      await runCli(
+        ["ask", "Which?", "--option", "a", "--option", "b", "--wait", "0", "--json"],
+        asJson.io,
+      ),
+    ).toBe(EXIT.waiting);
+    expect(JSON.parse(asJson.out()).id).toBe(DECISION.id);
 
     const few = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["ask", "Alone?", "--option", "a"], few.io)).toBe(EXIT.usage);

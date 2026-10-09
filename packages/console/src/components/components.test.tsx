@@ -54,6 +54,7 @@ const decision = (overrides: Partial<RestDecision> = {}): RestDecision => ({
     { id: "2", label: "The second" },
   ],
   taskId: "0199c4d8-0000-7000-8000-000000000010",
+  taskNumber: 1,
   raisedBy: alice,
   run: null,
   answer: null,
@@ -379,6 +380,7 @@ describe("runs", () => {
   const run: RestRun = {
     id: "0199c4d8-0000-7000-8000-000000000040",
     taskId: "0199c4d8-0000-7000-8000-000000000010",
+    taskNumber: 1,
     person: alice,
     agent: "Claude Code <on> the laptop",
     status: "waiting",

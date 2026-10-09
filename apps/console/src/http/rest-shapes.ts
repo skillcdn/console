@@ -53,6 +53,7 @@ export function restDecision(decision: DecisionRecord): RestDecision {
     body: decision.body,
     options: decision.options.map((option) => ({ id: option.id, label: option.label })),
     taskId: decision.taskId ?? null,
+    taskNumber: decision.taskNumber ?? null,
     raisedBy: restPerson(decision.raisedBy),
     run: decision.run === undefined ? null : { id: decision.run.id, agent: decision.run.agent },
     answer:
@@ -84,6 +85,7 @@ export function restRun(run: RunRecord): RestRun {
   return {
     id: run.id,
     taskId: run.taskId,
+    taskNumber: run.taskNumber,
     person: restPerson(run.person),
     agent: run.agent,
     status: run.status,

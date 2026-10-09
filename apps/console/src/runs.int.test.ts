@@ -113,6 +113,7 @@ describe("runs", () => {
       status: "running",
       agent: "Claude Code on the laptop",
       taskId: task.id,
+      taskNumber: task.number,
       reports: [],
       artifacts: [],
       waitingFor: null,
@@ -164,6 +165,7 @@ describe("runs", () => {
     const decision = restDecisionSchema.parse(await asked.json());
     expect(decision).toMatchObject({
       taskId: task.id,
+      taskNumber: task.number,
       run: { id: run.id, agent: "Claude Code on the laptop" },
       answer: null,
     });

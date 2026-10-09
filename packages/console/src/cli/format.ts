@@ -72,7 +72,7 @@ export function formatRunLine(run: RestRun): string {
   if (run.waitingFor !== null) {
     notes.push(`waiting for decision ${run.waitingFor}`);
   }
-  return `${run.id}  ${run.status}  ${run.agent} for ${run.person.login}  task ${run.taskId}  (${notes.join(", ")})`;
+  return `${run.id}  ${run.status}  ${run.agent} for ${run.person.login}  task #${run.taskNumber}  (${notes.join(", ")})`;
 }
 
 export function formatRun(run: RestRun): string {
@@ -128,7 +128,7 @@ export function formatAnswer(decision: RestDecision): string {
 export function formatDecision(decision: RestDecision): string {
   const lines = [
     `decision ${decision.id}: ${decision.question}`,
-    `asked by ${asker(decision)}${decision.taskId === null ? "" : `, about task ${decision.taskId}`}`,
+    `asked by ${asker(decision)}${decision.taskNumber === null ? "" : `, about task #${decision.taskNumber}`}`,
   ];
   if (decision.body.trim().length > 0) {
     lines.push("", decision.body.trimEnd());

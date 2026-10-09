@@ -35,11 +35,11 @@ Everywhere: `--json` prints the console's own answer as JSON, in the shapes of `
 
 ## The run a command means
 
-`report`, `hand-in`, `ask`, `finish` and `fail` act on a run. Named with `--run <id>`, that one; else the one open run begun with this token (`GET /api/v1/runs?open=true&mine=true`). None open: the command exits with `1` and says to take a task first; several open: it exits with `2` and lists them, so that an agent working two tasks at once says which.
+`report`, `hand-in`, `ask`, `finish` and `fail` act on a run. Named with `--run <id>`, that one; else the one open run begun with this token (`GET /api/v1/runs?open=true&mine=true`). None open, or several: the command exits with `1` and says so, listing the open ones, so that an agent working two tasks at once says which.
 
 ## Waiting for a decision
 
-`ask` waits 60 seconds for the answer unless `--wait` says otherwise, within what an agent's shell gives one command; `decision <id> --wait <seconds>` waits as long as it is told, a day at most. The command asks the console to hold each request for up to 50 seconds (`?wait=`), the server's own bound, and repeats while the time lasts, with a breath between requests; the answer arrives as soon as a person gives it, since the console is woken through the database's own channel. A decision that still waits when the time is up is exit code `3`: the agent then goes on with other work, or waits again.
+`ask` waits 60 seconds for the answer unless `--wait` says otherwise, within what an agent's shell gives one command; `decision <id> --wait <seconds>` waits as long as it is told, a day at most. The command asks the console to hold each request for up to 50 seconds (`?wait=`), the server's own bound, and repeats while the time lasts, with a breath between requests; the answer arrives as soon as a person gives it, since the console is woken through the database's own channel. A decision that still waits when the time is up is exit code `3`: the run waits with it, so the agent keeps waiting with `console decision <id> --wait 100`, within what its shell gives one command, and goes on meanwhile only with work that does not depend on the answer. `ask` prints the decision's id as soon as it is raised, before any waiting, so that a wait cut short loses nothing; with `--json` it prints the decision then, and again with its answer when that comes.
 
 ## Output and exit codes
 
@@ -54,7 +54,15 @@ Plain text on standard output: one line per thing in a list, a few lines for one
 
 ## What an agent is told
 
-`console help` says what the board is, that the agent acts as the person whose token it holds and that everything it sends is shown to people as text, and what each command does: take a task, report at the milestones of the work, hand in what was made, ask when a person must decide, finish when done. An organization's own skill for working with its console says the rest: which tasks to take, what to report, when to ask ([roadmap](../roadmap.md)).
+`console help` says what the board is, that the agent acts as the person whose token it holds and that everything it sends is shown to people as text, what each command does (take a task, report at the milestones of the work, hand in what was made, ask when a person must decide, finish when done), and the refusals any command may meet. `console help <command>` adds what the command takes, the limits the console holds it to (how long a report, a summary, a question or an option may be; how many options, reports and links) and the refusals it may meet, by code, so that an agent learns them before it runs into them. An organization's own skill for working with its console says the rest: which tasks to take, what to report, when to ask ([roadmap](../roadmap.md)).
+
+## Running an agent on a task
+
+What a person does, once the command is signed in where the agent runs; tried with Claude Code on 2026-10-09, with an agent that took a task, reported at each milestone, raised a decision, acted on the answer, handed in and finished, and a person who answered on the board.
+
+1. Write the task on the board, with its body as the work order: what to make, where, the milestones, what to ask.
+2. Start the agent in the directory it is to work in, and tell it, in its own words, what this amounts to: run `console help`; take the task with `console take <number>` and follow its body; report at the milestones with `console report`; ask with `console ask` when a person must decide, and keep waiting with `console decision <id> --wait 100` until the answer comes; hand in with `console hand-in`; finish with `console finish --summary`. Say that the command is signed in already and that it must never look for or print a token.
+3. Follow the run on the board, and answer the decisions it raises. The agent's reports, what it handed in and its summary are the run's record on the task's page.
 
 ## Not yet
 

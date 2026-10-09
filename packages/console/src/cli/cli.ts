@@ -147,7 +147,7 @@ async function currentRun(session: Session, values: Values): Promise<string> {
   if (items.length === 0) {
     throw failed("No run of yours is open. Take a task first: console take <number>");
   }
-  throw misuse(
+  throw failed(
     `Several runs of yours are open; say which with --run <id>:\n${items.map((run) => `  ${formatRunLine(run)}`).join("\n")}`,
   );
 }
@@ -250,22 +250,31 @@ async function waitForAnswer(
   }
 }
 
-/** Waits for the answer and says what it is, or that it is still to come. */
+const stillWaiting = (id: string): string =>
+  `Decision ${id} still waits for a person; the run waits with it. Keep waiting with: console decision ${id} --wait 100, as often as needed. Meanwhile, go on only with work that does not depend on the answer.`;
+
+/**
+ * Waits for the answer and says what it is, or that it is still to come. On `--json`, a decision
+ * printed already as it was raised (`shown`) is printed again only with its answer.
+ */
 async function settle(
   io: CliIo,
   session: Session,
   decision: RestDecision,
   seconds: number,
+  shown = false,
 ): Promise<number> {
   const outcome =
     decision.answer === null && seconds > 0
       ? await waitForAnswer(io, session.client, decision, seconds)
       : decision;
-  answer(io, session, outcome, () =>
-    outcome.answer === null
-      ? `Decision ${outcome.id} still waits for a person. Keep waiting with: console decision ${outcome.id} --wait 600; or go on with other work and come back to it.`
-      : formatAnswer(outcome),
-  );
+  if (session.json) {
+    if (!shown || outcome.answer !== null) {
+      io.stdout(`${JSON.stringify(outcome, null, 2)}\n`);
+    }
+  } else {
+    io.stdout(`${outcome.answer === null ? stillWaiting(outcome.id) : formatAnswer(outcome)}\n`);
+  }
   return outcome.answer === null ? EXIT.waiting : EXIT.ok;
 }
 
@@ -478,12 +487,13 @@ const ask: Command = async (args, io) => {
     runId,
     ...(body === undefined ? {} : { body }),
   });
-  if (!session.json) {
-    io.stdout(
-      `Decision ${raised.id} raised on run ${runId}; the run waits for a person.\n${formatOptions(raised)}\n`,
-    );
-  }
-  return settle(io, session, raised, seconds);
+  // The id is printed before any waiting, so that a wait cut short loses nothing.
+  io.stdout(
+    session.json
+      ? `${JSON.stringify(raised, null, 2)}\n`
+      : `Decision ${raised.id} raised on run ${runId}; the run waits for a person.\n${formatOptions(raised)}\n`,
+  );
+  return settle(io, session, raised, seconds, true);
 };
 
 const decision: Command = async (args, io) => {
