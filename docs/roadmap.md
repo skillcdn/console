@@ -19,7 +19,7 @@ Goal: a person connects their agent to the console; the agent takes work from th
 - [ ] Files handed in: the blob-store port with its PostgreSQL implementation, and `hand_in` taking a file.
 - [x] A decision a run waits for, and the run resuming when it is answered (2026-10-09).
 - [ ] Claude Code and Codex connected by hand, with the steps written down.
-- [ ] The organization's skills shown by address through `@skillcdn/core` and the REST API of a SkillCDN deployment.
+- [ ] The organization's skills shown by address through `@skillcdn/core` and the REST API of a SkillCDN deployment. `@skillcdn/core` 0.1.1 was published on 2026-10-09; the release-age rule makes it installable from 2026-10-12, or sooner under `minimumReleaseAgeExclude` for that one install.
 
 ## After milestone 2
 
