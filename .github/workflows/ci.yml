@@ -130,9 +130,16 @@ jobs:
           # The default UI ships in the image: the page for the board and for any path of the app,
           # under its policy; the API answers its own paths.
           curl -fsS -H 'accept: text/html' 'http://127.0.0.1:11199/' | grep -q '<div id="root">'
-          curl -fsS -D - -o /dev/null 'http://127.0.0.1:11199/decisions' | grep -qi '^content-security-policy:'
+          curl -fsS -D - -o /dev/null 'http://127.0.0.1:11199/p/general/decisions' | grep -qi '^content-security-policy:'
           curl -fsS 'http://127.0.0.1:11199/api/v1/me' | grep -qF '"signIn":[]'
-          curl -sS -o /dev/null -w '%{http_code}' 'http://127.0.0.1:11199/api/v1/tasks' | grep -q '^401$'
+          curl -sS -o /dev/null -w '%{http_code}' 'http://127.0.0.1:11199/api/v1/projects' | grep -q '^401
+          # The license ships with the image.
+          docker run --rm --entrypoint sh skillcdn-console:ci -c 'test -s /app/LICENSE.md && test -d /app/migrations'
+          docker stop --time 30 api
+          test "$(docker inspect --format '{{.State.ExitCode}}' api)" -eq 0
+          docker logs api 2>&1 | grep -q 'shutdown complete'
+          docker logs api
+
           # The license ships with the image.
           docker run --rm --entrypoint sh skillcdn-console:ci -c 'test -s /app/LICENSE.md && test -d /app/migrations'
           docker stop --time 30 api
