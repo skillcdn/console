@@ -2,27 +2,46 @@
 
 The single deployable of the console: the API people and agents talk to, the worker, the migrations, and the default UI, in one image whose container command selects the role, `api`, `worker` or `migrate` ([ADR-0002](../../docs/adr/0002-one-image-one-database-and-the-main-repositorys-toolchain.md)). What it does and how its parts fit together is in [docs/architecture.md](../../docs/architecture.md); what to build next is in [docs/roadmap.md](../../docs/roadmap.md).
 
-**Nothing runs yet.** `src/main.ts` selects the role and says that it is not implemented; the first milestone fills it in, and its data model is here already. Until then:
+| Role | Command | Purpose | Status |
+|---|---|---|---|
+| `api` | `node dist/main.js api` | Serves HTTP: the probes, and with the milestone the REST API, sign-in and the UI's files. Stateless. | probes |
+| `worker` | `node dist/main.js worker` | The schedules: the sweep of what time has ended. The job queue arrives with the first job. | implemented |
+| `migrate` | `node dist/main.js migrate` | Applies pending migrations, then exits. | implemented |
+
+## Running locally
 
 ```sh
-pnpm turbo run build --filter=@skillcdn/console-app
-node apps/console/dist/main.js api      # says so, exits 70; without a role or with an unknown one, exits 64
+docker compose -f deploy/compose.dev.yaml up -d      # PostgreSQL 18 on 127.0.0.1:5433
+cp .env.example .env                                 # safe local defaults
+pnpm build
+node --env-file=.env apps/console/dist/main.js migrate
+node --env-file=.env apps/console/dist/main.js api   # http://127.0.0.1:11190/readyz
 ```
+
+The exit codes, the probes and what a signal does are the process contract in [`deploy/README.md`](../../deploy/README.md#process-contract).
 
 ## Layout
 
 ```
 src/
-  main.ts        the entry point: role selection, then the role module
-  roles/         one module per role, loaded only when selected                       (not yet)
-  config/        the only reader of process.env: schema, defaults, validation           (not yet)
-  http/          the REST API for the UI, the MCP endpoint for agents, sign-in, the UI's files (not yet)
+  main.ts        role dispatch and exit codes; nothing else
+  roles.ts       the list of roles
+  roles/         api.ts (the composition root: wiring, the server, shutdown), worker.ts (the
+                 schedules), migrate.ts; each loaded only when selected
+  config/        the only reader of process.env: schema, defaults, validation, NAME_FILE secrets
+  logger.ts      pino, JSON to stdout, with the second fence of redaction
+  http/          app.ts (the Hono app: probes, not found, errors; the REST API and sign-in register
+                 on it), server.ts (listening and the shutdown of the listener), request-context.ts
+                 (an id, a client address and an access-log line per request), client-address.ts
+                 (trusted proxies and forwarding headers)
   db/            schema.ts (one file: drizzle-kit reads it), client.ts (the pool, opaque to the rest),
                  migrate.ts (applies migrations, reports whether the schema is current), queries/
                  (the only way to the data), testing.ts (a database per test file; not compiled)
+  jobs/          janitor.ts: the sweep of what time has ended, on a timer
+  ports/         the interfaces the domain needs implemented: the clock, later the git host
+  adapters/      their implementations: the system clock
   errors.ts      the base class of errors that cross a boundary, with their stable code
-  jobs/          what the worker runs                                                  (not yet)
-  adapters/      the git host, the blob store, the clock, notifications                (not yet)
+  version.ts     what the process calls itself
 migrations/      generated SQL and its journal, committed, shipped inside the image
 ```
 
@@ -40,6 +59,12 @@ Read the root [`AGENTS.md`](../../AGENTS.md) first. This workspace is the compos
 - **The schemas of the API live in `packages/console`**, so that the default UI, a custom console and this server share one contract. This workspace imports them from `@skillcdn/console/api`; it never defines a second copy. The vocabulary there (the states, the priorities, the kinds of event) is what the database's constraints are made of.
 - **`src/db/` is the only place that sees the ORM or SQL.** The rest of the app holds an opaque `Database` and calls the functions under `src/db/queries/`. No string-built SQL, ever: the query builder, or a parameterized `sql` template. Time is passed in (`now: Date`), never read in SQL, so that what depends on it is testable.
 - **Every change to the board is one transaction with the event that records it** (`recordEvent`), which also nudges every process listening on the `console_events` channel. Nothing is recorded that did not happen, and nothing happens unrecorded.
+
+## Tests
+
+- Unit tests next to the code: the config module, the client address, the listener and its shutdown.
+- `src/http/app.int.test.ts` runs the app of the `api` role against real PostgreSQL: the probes in every state, the id and the address every request gets, the access log and what it leaves out.
+- `src/db/db.int.test.ts` covers the data model. Every test file has a database of its own; tests inside a file share it.
 
 ## Working on the schema
 
@@ -72,6 +97,7 @@ How it behaves:
 - **Changing a task** is one transaction: a move from one state to another is a `task.moved` event with `from` and `to`; the rest is one `task.updated` event naming the `fields`. A patch that changes nothing writes nothing.
 - **Raising a decision** numbers its options from `1`. **Answering** one takes the row for update, refuses a decision already answered (`decision.answered`) or an option not its own (`decision.no_such_option`), and tells the board which label was chosen.
 - **Events** are written in the transaction of the change they record, and `pg_notify('console_events', '')` goes out with the commit: a process that listens asks for what is after the last number it saw, and the payload says nothing. `listEventsAfter` reads a page from a number on and says whether there is more.
-- **Expired sessions** are removed by the worker's sweep (`deleteExpiredSessions`); every read checks the time itself, so the sweep only keeps the table small.
+- **Expired sessions** are removed by the worker's sweep (`deleteExpiredSessions`, every fifteen minutes; the `api` role does it too with `WORKER_IN_PROCESS`); every read checks the time itself, so the sweep only keeps the table small.
+- **The workspace** is found when first needed, by any role, and kept; a failure to find it is not kept, so a request that comes before the database is reachable fails on its own and the next asks again.
 
 Not here yet: agents and their tokens, runs with their reports and artifacts, and the blob store (milestone 2); the job queue's own schema, which arrives with the first job.

@@ -22,14 +22,22 @@ docker run --rm --env-file .env skillcdn-console worker
 
 ## Environment contract
 
-The console is configured only through environment variables. [`.env.example`](../.env.example) is the source of truth; this table adds what operators need to know. Both are updated in the same change as the config module. Nothing reads these yet.
+The console is configured only through environment variables. [`.env.example`](../.env.example) is the source of truth; this table adds what operators need to know. Both are updated in the same change as the config module. A variable that is set to an empty value counts as unset; a value that does not parse stops the process at boot with exit code `78` and the names of the variables at fault, never their values.
 
 | Variable | Roles | Required | Secret | Notes |
 |---|---|---|---|---|
 | `NODE_ENV` | all | no | no | The image sets `production`. |
 | `LOG_LEVEL` | all | no | no | Default `info`. |
 | `HOST`, `PORT` | `api` | no | no | Defaults `0.0.0.0` and `11190`. |
+| `SHUTDOWN_GRACE_SECONDS` | `api` | no | no | Default `20`. Keep the platform's stop timeout above it. |
+| `HTTP_KEEP_ALIVE_SECONDS`, `HTTP_REQUEST_TIMEOUT_SECONDS` | `api` | no | no | Defaults `65` and `60`. See [Behind a reverse proxy](#behind-a-reverse-proxy). |
+| `ACCESS_LOG` | `api` | no | no | Default `true`: one log line per request, probes excluded, with the client address and the user agent and never the query string. Keep the log only as long as your privacy policy says, or turn it off. |
+| `TRUSTED_PROXIES` | `api` | no | no | Addresses or CIDR networks whose forwarding headers are believed. Default: none. |
+| `CLIENT_IP_HEADER`, `REQUEST_ID_HEADER` | `api` | no | no | Defaults `x-forwarded-for` and `x-request-id`. Read only from trusted proxies. |
 | `DATABASE_URL` | all | yes | **yes** | PostgreSQL connection string. |
+| `DATABASE_POOL_MAX` | `api` | no | no | Default `10` connections per process. |
+| `WORKSPACE_NAME` | `api`, `worker` | no | no | What the board is called. Default `Console`. The workspace row is made at boot by whichever role comes first and renamed from here. |
+| `WORKER_IN_PROCESS` | `api` | no | no | Default `false`. `true` makes the `api` role carry the worker's work itself, for an install with one container and no `worker`. |
 
 Every secret `NAME` may also be supplied as `NAME_FILE`, so container secret mounts work.
 
@@ -43,5 +51,17 @@ Written so that a cloud deployment is the image as containers, a managed Postgre
 - **Health probes** on `GET /healthz` (liveness) and `GET /readyz` (readiness), and a stop timeout above the shutdown grace period, so that `SIGTERM` lets requests in flight finish.
 - **Logs from stdout**, JSON, one line per event; they never contain tokens or what an agent handed in.
 - **A reverse proxy or load balancer** that terminates TLS and limits requests per client; the image does neither.
+
+## Behind a reverse proxy
+
+A proxy in front reuses idle connections to the console. `HTTP_KEEP_ALIVE_SECONDS` must be longer than the proxy's own idle timeout, or the proxy now and then sends a request into a connection the console has just closed. `HTTP_REQUEST_TIMEOUT_SECONDS` bounds how long one request may take to arrive in full.
+
+The client address and the request id are read from the proxy's headers only when the proxy's address is in `TRUSTED_PROXIES`; from anyone else, the headers are ignored and the client is the peer. With `x-forwarded-for`, the chain is walked from the nearest proxy and the first address that is not a trusted proxy is the client.
+
+## Process contract
+
+- Exit codes: `64` for a usage error (no role, or an unknown one), `78` for invalid configuration, `70` for a failure the process could not recover from.
+- `GET /healthz` is liveness. `GET /readyz` is readiness: the database reachable, the schema at least at the version this build ships, the workspace found, and not shutting down.
+- `SIGTERM` or `SIGINT`: readiness fails, the listener stops accepting, requests in flight finish, idle connections close, and the process exits within `SHUTDOWN_GRACE_SECONDS`; what is still open then is cut off.
 
 The definitions of a particular deployment (accounts, networks, hostnames, sizes) are not in this repository and must not be added to it.

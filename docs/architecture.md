@@ -64,10 +64,10 @@ Proposed, to be settled by the second milestone:
 | Role | What it does | Scaling |
 |---|---|---|
 | `api` | Serves HTTP: the REST API for the UI, the MCP endpoint for agents, sign-in, the default UI's files. Holds no state another replica needs. | Any number of replicas. |
-| `worker` | Consumes the job queue and runs schedules: reminders for decisions that wait, clean-up of expired tokens and sessions, and later the runs the console starts itself. | Any number; interruptible. |
+| `worker` | Runs schedules, and consumes the job queue once there are jobs: today the clean-up of expired sessions; later reminders for decisions that wait, and the runs the console starts itself. | Any number; interruptible. |
 | `migrate` | Applies pending migrations, then exits. | Once, before a new version rolls out. |
 
-A flag lets `api` run the worker loop in-process for a single-container install. `GET /healthz` reports liveness and `GET /readyz` readiness (database reachable, schema at the expected version). On `SIGTERM` the process stops accepting work, drains what is in flight and exits within the grace period.
+A flag (`WORKER_IN_PROCESS`) lets `api` run the worker loop in-process for a single-container install. `GET /healthz` reports liveness and `GET /readyz` readiness (database reachable, schema at the expected version, workspace found). On `SIGTERM` the process stops accepting work, drains what is in flight and exits within the grace period. The exit codes and the probes are the process contract in [`deploy/README.md`](../deploy/README.md#process-contract).
 
 ## The package and custom consoles
 
@@ -100,7 +100,7 @@ Inherited from the main repository, unchanged ([ADR-0002](adr/0002-one-image-one
 | MCP | The official MCP TypeScript SDK, over Streamable HTTP; one server instance per request. |
 | Validation | Zod at every boundary. |
 | Database | PostgreSQL 18; Drizzle ORM on the `pg` driver; migrations are generated, reviewed SQL files that never leave the deployable. |
-| Jobs | pg-boss. |
+| Jobs | pg-boss, adopted with the first job; until then the worker runs schedules on a timer. |
 | Blob storage | S3 API; PostgreSQL rows for the smallest install. |
 | Logging | pino, JSON to stdout. |
 | Quality | Biome, Vitest, gitleaks. |
