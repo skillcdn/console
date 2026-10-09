@@ -13,3 +13,7 @@ catalog:
 # For an urgent security fix, or a fresh @skillcdn/* release that is needed now, list the package
 # under minimumReleaseAgeExclude in the same change and take it out again afterwards.
 minimumReleaseAge: 4320
+
+# Dependency install scripts run only for packages approved here (`pnpm approve-builds`).
+allowBuilds:
+  esbuild: true

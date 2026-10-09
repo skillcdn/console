@@ -1,0 +1,23 @@
+// How much of anything the console takes in. Every text a person or an agent writes is bounded
+// at the edge (AGENTS.md, rule 2); these are the bounds, shared by the server that enforces them
+// and the pages that say so before a request is made.
+
+/** A task's title, a decision's question: one line. */
+export const MAX_TITLE_LENGTH = 200;
+export const MAX_QUESTION_LENGTH = 500;
+/** A body in Markdown: a task's, or the context of a decision. */
+export const MAX_BODY_LENGTH = 20_000;
+/** The links of a task: a repository, a pull request, a document. */
+export const MAX_LINKS = 20;
+export const MAX_LINK_LABEL_LENGTH = 120;
+export const MAX_URL_LENGTH = 2048;
+/** The options of a decision, and how a person words each. */
+export const MIN_OPTIONS = 2;
+export const MAX_OPTIONS = 10;
+export const MAX_OPTION_LABEL_LENGTH = 120;
+/** What a person adds to an answer. */
+export const MAX_NOTE_LENGTH = 2000;
+/** How many tasks or decisions one listing answers with. A board is read whole, for now. */
+export const LIST_LIMIT = 500;
+/** How many events one page of the feed carries. */
+export const EVENTS_PAGE_LIMIT = 100;

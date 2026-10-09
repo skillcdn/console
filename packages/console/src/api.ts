@@ -1,0 +1,85 @@
+// The first layer of @skillcdn/console (docs/architecture.md, "The package and custom
+// consoles"): the vocabulary, the schemas and the client of the console's REST API, so that a
+// custom UI talks to any console with types, and so that the contract has one source. No React
+// here: the server imports this entry point, and nothing of the pages.
+
+export {
+  ApiError,
+  type ClientOptions,
+  type ConsoleClient,
+  createClient,
+  type FetchLike,
+} from "./client.js";
+export {
+  EVENTS_PAGE_LIMIT,
+  LIST_LIMIT,
+  MAX_BODY_LENGTH,
+  MAX_LINK_LABEL_LENGTH,
+  MAX_LINKS,
+  MAX_NOTE_LENGTH,
+  MAX_OPTION_LABEL_LENGTH,
+  MAX_OPTIONS,
+  MAX_QUESTION_LENGTH,
+  MAX_TITLE_LENGTH,
+  MAX_URL_LENGTH,
+  MIN_OPTIONS,
+} from "./limits.js";
+export {
+  AUTH_ROUTES,
+  isSignInFailure,
+  loginPath,
+  REST_ROUTES,
+  RETURN_TO_PARAM,
+  restPath,
+  SIGN_IN_FAILURES,
+  SIGN_IN_PARAM,
+  type SignInFailure,
+  signInPath,
+} from "./routes.js";
+export {
+  type RestAnswerInput,
+  type RestDecision,
+  type RestDecisionInput,
+  type RestDecisionOption,
+  type RestDecisions,
+  type RestError,
+  type RestEvent,
+  type RestEventData,
+  type RestEvents,
+  type RestMe,
+  type RestPeople,
+  type RestPerson,
+  type RestTask,
+  type RestTaskInput,
+  type RestTaskLink,
+  type RestTaskPatch,
+  type RestTasks,
+  restAnswerInputSchema,
+  restDecisionInputSchema,
+  restDecisionOptionSchema,
+  restDecisionSchema,
+  restDecisionsSchema,
+  restErrorSchema,
+  restEventDataSchema,
+  restEventSchema,
+  restEventsSchema,
+  restMeSchema,
+  restPeopleSchema,
+  restPersonSchema,
+  restTaskInputSchema,
+  restTaskLinkSchema,
+  restTaskPatchSchema,
+  restTaskSchema,
+  restTasksSchema,
+} from "./schemas.js";
+export { hasForbiddenCodePoint } from "./text.js";
+export {
+  EVENT_KINDS,
+  type EventKind,
+  RUN_STATUSES,
+  type RunStatus,
+  TASK_PRIORITIES,
+  TASK_STATES,
+  type TaskPriority,
+  type TaskState,
+} from "./vocabulary.js";
