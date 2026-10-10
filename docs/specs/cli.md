@@ -1,6 +1,6 @@
 # Spec: the command line
 
-- Status: **Draft.** Version 1 is what an agent works the board with (Claude Code, Codex, any agent with a shell), and what a person's own scripts and hooks use.
+- Status: **Draft.** Version 1 is what an agent works the board with (Claude Code, Codex, any agent with a shell), what a person's own scripts and hooks use, and what serves a console of a person's own ([ADR-0014](../adr/0014-a-persons-own-console-is-served-from-their-machine-by-the-command.md)).
 - The command is `console`, the `bin` of `@skillcdn/console` (`packages/console/src/cli/`): a thin client of the [REST API](rest.md) with no logic of its own ([ADR-0006](../adr/0006-agents-work-the-board-through-the-rest-api-and-the-command-line-not-an-mcp-server.md)). `@skillcdn/console/cli` exports `runCli(argv, io)`, the command as a function; the integration tests run it against the app with no socket.
 
 ## Signing in
@@ -42,6 +42,7 @@ The board is a project's ([ADR-0008](../adr/0008-a-workspace-holds-projects-and-
 | `write <path> [--title <title>] --body <markdown>\|--file <path> [--base <version>]` | `GET .../docs/<path>` for the title when none is said, then `PUT .../docs/<path>` | the path, the title and the version written, and what the page refers to |
 | `attach <path> <file> [--label <words>]` | `POST .../docs/<path>/files`, as a form | how many files the page carries |
 | `archive <path>`, `restore <path>` | `POST .../docs/<path>/archive`, `.../restore` | that the page is put away, or back |
+| `serve [<dir>] [--port <n>]` | `GET /api/v1/me` once; then every request of the pages under `/api/`, carried with the token | where it serves and as whom; then nothing until stopped ([a console of one's own](#a-console-of-ones-own)) |
 | `help [<command>]` | nothing | the usage, written for an agent that meets the command for the first time |
 | `--version` (also `version`, `-v`) | nothing | which version of the command this is |
 
@@ -58,6 +59,10 @@ A project's pages of Markdown ([ADR-0009](../adr/0009-documents-are-pages-of-mar
 ## Waiting for a decision
 
 `ask` waits 60 seconds for the answer unless `--wait` says otherwise, within what an agent's shell gives one command; `decision <id> --wait <seconds>` waits as long as it is told, a day at most. The command asks the console to hold each request for up to 50 seconds (`?wait=`), the server's own bound, and repeats while the time lasts, with a breath between requests; the answer arrives as soon as a person gives it, since the console is woken through the database's own channel. A decision that still waits when the time is up is exit code `3`: the run waits with it, so the agent keeps waiting with `console decision <id> --wait 100`, within what its shell gives one command, and goes on meanwhile only with work that does not depend on the answer. `ask` prints the decision's id as soon as it is raised, before any waiting, so that a wait cut short loses nothing; with `--json` it prints the decision then, and again with its answer when that comes.
+
+## A console of one's own
+
+`console serve [<dir>] [--port <n>]` serves a console a person built from the package, for themselves ([ADR-0014](../adr/0014-a-persons-own-console-is-served-from-their-machine-by-the-command.md)): the build in `<dir>` (its `index.html` and files) at `http://127.0.0.1:11197/`, or the port given (`0` for one the system picks), and everything under `/api/` carried to the console the command is signed in to, with its token as `Authorization: Bearer`, so that the pages never hold the token and the organization's console allows no other origin. The command listens on the loopback only and answers no request whose host is not it; a request to the API that the browser says comes from another site's page (`Sec-Fetch-Site`) is refused, as is one from a browser that does not say and names another origin. What is the browser's does not travel: cookies, the page's origin and referrer, the browser's own metadata; what comes back travels decoded, without a cookie. The feed's stream passes through as it streams, and a file handed in as a form. Without a directory only the API is served, for a development server to send its `/api/` requests to with the loopback's host, so that a console is built with its reloading against the real board. The command checks the token against the console first (`GET /api/v1/me`), says where it serves and as whom, and runs until stopped. The pages learn from the same answer that they hold a token (`agent`) and offer nothing a token cannot do. How a console is built from the package is in the [package's README](../../packages/console/README.md#a-console-of-your-own).
 
 ## Output and exit codes
 

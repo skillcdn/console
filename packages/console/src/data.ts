@@ -245,7 +245,11 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
         return;
       }
       try {
-        const [, mine] = await Promise.all([refreshWorkspace(signal), client.tokens(signal)]);
+        const [, mine] = await Promise.all([
+          refreshWorkspace(signal),
+          // A token cannot list tokens: a console that holds one has none to show.
+          answer.agent === null ? client.tokens(signal) : Promise.resolve({ items: [] }),
+        ]);
         if (signal.aborted) {
           return;
         }

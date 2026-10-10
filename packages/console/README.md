@@ -18,6 +18,7 @@
 | The `console` command | The agent's side of the console: a thin client of the REST API, shipped as the package's `bin`, which a person signs in once with a token. Also as a function at `@skillcdn/console/cli`. | exported |
 | The components: the board, a task, a run, a decision, the live feed | Each takes its data as props and nothing from the network. | exported |
 | `createConsole(config)` | The default console assembled from the components, with the places a team may replace named. The UI the image serves is this, with the default configuration. | exported |
+| The serving of a build | `@skillcdn/console/web`: the files of a build, the page for every other path, under one policy. What the image serves the default UI with, and what `console serve` serves a console of your own with. Node only. | exported |
 
 ### The API layer
 
@@ -48,12 +49,14 @@ console ask "Keep the old behaviour?" --option "Keep it" --option "Change it"
 console write notes/parser --title "The parser" --file notes.md   # a page of the project's documents, by path
 console doc guides/onboarding                     # a page in full, with what refers to it
 console finish --summary "Done: the parser refuses empty input."
+console serve dist                                # a console of your own, built from this package, served for you
 ```
 
 - **`console`** is the agent's side of the console ([docs/specs/cli.md](https://github.com/skillcdn/console/blob/main/docs/specs/cli.md)): a thin client of the REST API with no logic of its own, no dependencies beyond the package's, and no cost to an agent until it is used. `console help` says everything an agent needs and `console --version` which version this is; `--json` answers with the console's own JSON; the exit code says whether the console did it (`0`), refused or could not be reached (`1`), did not understand (`2`), or a decision still waits (`3`).
 - **A person signs it in once:** `login` checks the token against the console and keeps it, with the console's address, in `$XDG_CONFIG_HOME/skillcdn-console/credentials.json` (`~/.config` when unset). `CONSOLE_URL` and `CONSOLE_TOKEN` in the environment win over the file, for a hook or a job. A token is never taken on the command line.
 - **The project's documents** are the agent's to read and write: `docs`, `doc`, `write`, `attach`, `archive` and `restore`, by path; a link in a body to a page's path refers to the page.
 - **Every command on the board works in one project:** `--project <key>`, else `CONSOLE_PROJECT`, else what `console use <key>` wrote to `.skillcdn-console.json` in the working directory or one above it, a file meant to be committed. `console projects` lists the projects the person may work in.
+- **`console serve [<dir>] [--port <n>]`** is for a person: it serves [a console of your own](#a-console-of-your-own) from your machine, the build in `<dir>` at `http://127.0.0.1:11197/`, and carries everything under `/api/` to the console the command is signed in to, with your token, which the pages never see ([ADR-0014](https://github.com/skillcdn/console/blob/main/docs/adr/0014-a-persons-own-console-is-served-from-their-machine-by-the-command.md)). The loopback only; a request from another site's page is refused. Without a directory only the API is served, for a development server.
 - **`@skillcdn/console/cli`** exports `runCli(argv, io)`, the command as a function that takes its environment, its streams, its `fetch` and its credential store: what the integration tests run against the app with no socket, and what a console of a person's own could embed.
 
 ### The components and the composition
@@ -69,12 +72,53 @@ createConsole({
 ```
 
 - **The components** take their data as props and nothing from the network: `Board` (one column per state), `TaskCard`, `TaskView` (one task with its decisions and its parts), `TaskForm`, `DecisionList` and `DecisionCard` (the waiting first, each with the way to answer), `DecisionForm`, `EventFeed` (a sentence per event, newest first; `describeEvent` makes the sentence), `Shell` (the header with the workspace, the project, the tabs of the pages and the person's menu), `SignIn` (one button per provider the deployment offers), `TokenList`, `TokenForm` and `NewToken` (the agents a person connected, as the tokens they hold, the way to make one by hand, and the one just made with its secret shown once), `ConnectCodeForm`, `ConnectApproval` and `ConnectWords` (an agent connecting with a code: where the code is typed, what asks under it with the way to approve or refuse it, and what to tell the agent; `ConnectPage` composes the first two for a code), `PeopleList` (everyone, with what each is, and the way for an administrator to change it), `ProjectList`, `ProjectForm` and `MemberList` (the projects a person may see with what they are in each, the way to make or change one, and those listed in a project with the way for an owner to add, change and remove them; `ProjectRoleBadge`, `PROJECT_ROLE_LABELS`, `VISIBILITY_LABELS` and `keyOf` with them), `SkillList` (a project's skills as SkillCDN serves them at its address, each with where a person reads it and what an agent loads it by), `FolderView`, `DocumentList`, `DocumentSearch`, `DocumentView`, `DocumentForm`, `DocumentFiles` and `DocumentCrumbs` (a project's documents: a folder's folders and pages, the way to find pages by their words, one page with its versions, what it links to, what refers to it and its files, and the forms to write and attach; `DocsPage` composes them for a path), `RunList` and `RunCard` (an agent at work on a task: what it reported, what it handed in, links and files alike, what it waits for; `RunStatusBadge` and `RUN_STATUS_LABELS` with them, and `fileHref` for where a file is read), and `Markdown`, which renders what people and agents wrote as elements, never as HTML, with links to the web only and pictures over https only, and, given `docHref`, a link to a page's path as a link to the page. `DecisionCard` reads as a record, with the context, the rationale and what followed, which `onUpdate` lets a person write. The small blocks (`Button`, `Badge`, `Avatar`, `PersonChip`, `Callout`, `EmptyState`, `Spinner`, `Time`) and the words of the vocabulary (`STATE_LABELS`, `PRIORITY_LABELS`, `ROLE_LABELS`, with `RoleBadge`) are exported too.
-- **The composition:** `createConsole(config)` returns `{ App, mount }`. `App` is the whole console as one component; `mount(container)` renders it and returns the way to take it down. `config.baseUrl` is the origin of the API (the page's own when left out), `config.components` the pieces to replace (`ConsoleComponents` names them with the props each takes), `config.languages` the packs the pages speak, `config.brand` the addresses of a symbol and a wordmark to show beside the name (ADR-0013; the default console passes those of `@skillcdn/brand`, the main repository's package of its marks), `config.client` a client of your own, for tests. The SkillCDN name and marks are trademarks of KDX Labs under the main repository's trademark policy, not under this package's MIT license; a custom console brings its own marks through the same slot. The pages route in the browser and every form has an address (ADR-0010): the projects at `/`, a project's pages under `/projects/<key>`, a task by its number, a decision by its id, a document by its path, and the query for how a page is shown (`matchRoute(pathname, search)`, `PATHS`, `projectHref`, `taskHref`, `decisionHref`, `docHref`, `newTaskHref`, `newDecisionHref`, and `movedFrom` for the addresses of before); every link to one of them is followed in place, with one history entry per step; the workspace is loaded once and the project the page is on whole, kept current by the project's stream (`useConsoleData(client, projectKey)`, for a composition of your own).
+- **The composition:** `createConsole(config)` returns `{ App, mount }`. `App` is the whole console as one component; `mount(container)` renders it and returns the way to take it down. `config.baseUrl` is the origin of the API (the page's own when left out), `config.components` the pieces to replace (`ConsoleComponents` names them with the props each takes), `config.languages` the packs the pages speak, `config.brand` the addresses of a symbol and a wordmark to show beside the name (ADR-0013; the default console passes those of `@skillcdn/brand`, the main repository's package of its marks), `config.client` a client of your own, for tests. The SkillCDN name and marks are trademarks of KDX Labs under the main repository's trademark policy, not under this package's MIT license; a custom console brings its own marks through the same slot. A console that holds a token rather than a session (one of your own, served by `console serve`) is told so by the API (`me.agent`, the token's name) and offers nothing a token cannot do: no agents page, no new project, no settings, no changes to members or roles, no sign-out; it keeps the choice of language in the browser. The pages route in the browser and every form has an address (ADR-0010): the projects at `/`, a project's pages under `/projects/<key>`, a task by its number, a decision by its id, a document by its path, and the query for how a page is shown (`matchRoute(pathname, search)`, `PATHS`, `projectHref`, `taskHref`, `decisionHref`, `docHref`, `newTaskHref`, `newDecisionHref`, and `movedFrom` for the addresses of before); every link to one of them is followed in place, with one history entry per step; the workspace is loaded once and the project the page is on whole, kept current by the project's stream (`useConsoleData(client, projectKey)`, for a composition of your own).
 - **The languages:** every word the pages show is in a pack (`Messages`, keyed as `en` is), English and Korean ship (`ENGLISH`, `KOREAN`, `DEFAULT_LANGUAGES`), and a component takes its words from the language above it (`useWords`, `useLanguage`, `LanguageContext`), English where there is none. The person's choice is kept on them (`client.updateMe({ language })`) and the browser's languages decide before one (`chooseLanguage`, `packFor`). `createConsole({ languages })` replaces the packs the default console speaks, so that a custom console adds a language of its own; a pack is complete by type.
 - **The styles** are one file, `@skillcdn/console/console.css`: the tokens (`--sc-*`), a small reset, and one class per block, all prefixed `sc-`. The look is SkillCDN's own: dark only, one accent, the page a dark field with a light in it (the shell, `sc-shell`, paints it) and the surfaces panes of glass over it (`--sc-glass-*`). Re-skinning starts and mostly ends with the tokens; a custom console that wants a flat page sets the field's colours to one and the glass to none. The faces are the page's to provide: the stylesheet names Pretendard first for the Korean and falls through to the system's faces, and the default console loads it; a custom console loads what it likes.
 - React 19 is a peer dependency; `react-markdown` and `remark-gfm` are the package's own.
 
-A custom console is a small repository that depends on this package, holds a configuration and a CI job, and builds to static files served next to any console API, or into an image of its own. Nothing of the server is in the package.
+A custom console is a small repository that depends on this package, holds a configuration and a CI job, and builds to static files: the organization's, served by the image from `WEB_ROOT` in place of the default UI, or your own, served by `console serve` on your machine. Nothing of the server is in the package but the serving of a build, `@skillcdn/console/web`, which the image and the command share.
+
+### A console of your own
+
+A console you build from this package and run for yourself, against your organization's console, with the pages and components of your choosing ([ADR-0014](https://github.com/skillcdn/console/blob/main/docs/adr/0014-a-persons-own-console-is-served-from-their-machine-by-the-command.md)). It is a small repository of your own, in the shape of the default console (`apps/console/web` in the console's repository: one page, one script, one build):
+
+```sh
+npm install @skillcdn/console react react-dom
+npm install --save-dev vite @vitejs/plugin-react typescript
+```
+
+```tsx
+// src/main.tsx: the composition, with a configuration of your own
+import { createConsole } from "@skillcdn/console";
+import "@skillcdn/console/console.css";
+
+const container = document.getElementById("root");
+if (container === null) {
+  throw new Error("the page has no #root element");
+}
+createConsole({ title: "Mine" }).mount(container);
+```
+
+```ts
+// vite.config.ts: while building, the development server sends the API to console serve
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  plugins: [react()],
+  server: { proxy: { "/api": { target: "http://127.0.0.1:11197", changeOrigin: true } } },
+});
+```
+
+```sh
+console login --url https://console.example      # once: the token an agent of yours would hold serves your console too
+console serve                                    # the API alone, at http://127.0.0.1:11197/api/, for the development server
+npx vite                                         # your pages, reloading as you build them
+npx vite build && console serve dist             # the build served whole, at http://127.0.0.1:11197/
+```
+
+The pages run on your token: what you may do on the board, they may do, and no more. The token never reaches the browser; the command adds it on the way, on the loopback only, and refuses a request from another site's page. The tokens themselves and configuring are done on the organization's console, signed in, and the pages say so where it matters. Replace a component, pass your own language pack or your own marks, or compose pages of your own from the components and `useConsoleData`: the sections above say what each piece takes.
 
 ## Rules
 

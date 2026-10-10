@@ -244,6 +244,12 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     about: "Brings an archived page back.",
     refusals: DOCUMENT_REFUSALS,
   },
+  serve: {
+    usage: "serve [<dir>] [--port <n>]",
+    about:
+      "For a person: serves a console of your own from this machine, for you. The build in <dir> (its index.html and files) is served at http://127.0.0.1:11197/, and everything under /api/ is carried to the console you are signed in to with your token, which the pages never see. Without a directory only the API is served there, for a development server to send its /api/ requests to. The loopback only; a request from another site's page is refused. Stop it with Ctrl+C.",
+    refusals: ["not a build to serve: the directory holds no index.html"],
+  },
 };
 
 /** The first lines of the usage, with the version of the command when it is known. */

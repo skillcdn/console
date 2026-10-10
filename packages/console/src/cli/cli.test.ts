@@ -3,6 +3,7 @@ import { MAX_SUMMARY_LENGTH } from "../limits.js";
 import { type CliIo, EXIT, runCli } from "./cli.js";
 import type { CredentialStore, Credentials } from "./credentials.js";
 import type { DirectorySettings, DirectoryStore } from "./directory.js";
+import type { Listen, ServeHandler } from "./serve.js";
 
 const WHEN = "2026-10-09T10:00:00.000Z";
 const PERSON = {
@@ -363,6 +364,59 @@ describe("the console command", () => {
     });
     expect(await runCli(["whoami"], who.io)).toBe(EXIT.ok);
     expect(who.out()).toBe(`alice (member) at Acme, ${ORIGIN}; project web\n`);
+  });
+
+  it("serves a console of one's own: the API carried with the token, from the page's origin only", async () => {
+    const { fetch, calls } = fakeConsole({
+      "GET /api/v1/me": { body: ME },
+      [`GET ${IN}/tasks`]: { body: { items: [TASK] } },
+    });
+    let close: () => void = () => undefined;
+    let ready: (handler: ServeHandler) => void = () => undefined;
+    const handler = new Promise<ServeHandler>((resolve) => {
+      ready = resolve;
+    });
+    const listen: Listen = async (handlerFor, port) => {
+      ready(handlerFor(port));
+      return {
+        url: `http://127.0.0.1:${port}/`,
+        closed: new Promise<void>((done) => {
+          close = done;
+        }),
+        close: async () => close(),
+      };
+    };
+    const h = harness({ fetch, env: SIGNED_IN, listen });
+    const running = runCli(["serve", "--port", "4100"], h.io);
+    const serve = await handler;
+    const at = `http://127.0.0.1:4100${IN}/tasks`;
+    const tasks = await serve(
+      new Request(at, {
+        headers: { "sec-fetch-site": "same-origin", cookie: "console_session=x" },
+      }),
+    );
+    expect(tasks.status).toBe(200);
+    expect(await tasks.json()).toEqual({ items: [TASK] });
+    const carried = new Headers(
+      calls.find((call) => call.key === `GET ${IN}/tasks`)?.init?.headers,
+    );
+    expect(carried.get("authorization")).toBe("Bearer cns_t_secret");
+    expect(carried.get("cookie")).toBeNull();
+    // Another site's page, with the person's standing: refused. Nothing but the API without a build.
+    expect(
+      (await serve(new Request(at, { headers: { "sec-fetch-site": "cross-site" } }))).status,
+    ).toBe(403);
+    expect((await serve(new Request("http://127.0.0.1:4100/"))).status).toBe(404);
+    close();
+    expect(await running).toBe(EXIT.ok);
+    expect(h.out()).toContain("http://127.0.0.1:4100/api/");
+    expect(h.out()).toContain("as alice");
+    expect(h.out()).not.toContain("cns_t_");
+    // Where the command cannot listen, it says so instead of serving.
+    const nowhere = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["serve"], nowhere.io)).toBe(EXIT.failed);
+    expect(nowhere.err()).toContain("not possible here");
+    expect(await runCli(["serve", "--port", "x"], nowhere.io)).toBe(EXIT.usage);
   });
 
   it("takes the token from the environment over what was kept, and answers JSON on demand", async () => {

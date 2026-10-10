@@ -6,6 +6,7 @@ import * as z from "zod/mini";
 import { runCli } from "./cli.js";
 import { createFileStore, defaultConfigDir } from "./credentials.js";
 import { createDirectoryStore } from "./directory.js";
+import { listenOn } from "./serve.js";
 import { readBytesAt, readFileAt, readStdin } from "./terminal.js";
 
 // The `console` command: the only place the command reads the process. Everything it does is in
@@ -34,4 +35,5 @@ process.exitCode = await runCli(process.argv.slice(2), {
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   now: () => Date.now(),
   version: manifest.success ? manifest.data.version : undefined,
+  listen: listenOn,
 });

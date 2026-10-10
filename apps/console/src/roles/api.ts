@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import process from "node:process";
 import { EVENTS_PAGE_LIMIT, MAX_TOKENS_PER_PERSON } from "@skillcdn/console/api";
+import { loadWebRoot, type WebRoot, WebRootError } from "@skillcdn/console/web";
 import type { Hono } from "hono";
 import { createGitHubProvider } from "../adapters/github-login.js";
 import { createGoogleProvider } from "../adapters/google-login.js";
@@ -23,7 +24,6 @@ import { createClientAddressResolver } from "../http/client-address.js";
 import { LiveFeed } from "../http/live-feed.js";
 import type { AppEnv } from "../http/request-context.js";
 import { startServer } from "../http/server.js";
-import { loadWebRoot, type WebRoot, WebRootError } from "../http/web.js";
 import { Janitor } from "../jobs/janitor.js";
 import type { Logger } from "../logger.js";
 import type { BlobStore } from "../ports/blob-store.js";

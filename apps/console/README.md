@@ -65,8 +65,9 @@ src/
   errors.ts      the base class of errors that cross a boundary, with their stable code
   version.ts     what the process calls itself
 web/             the default UI: one page that mounts the package's composition, built by Vite into
-                 web/dist, which the api role serves from WEB_ROOT (http/web.ts: the files of the
-                 build, and the page for every other path, under a content security policy); its
+                 web/dist, which the api role serves from WEB_ROOT with the package's
+                 @skillcdn/console/web (the files of the build, and the page for every other path,
+                 under a content security policy; what console serve serves a person's own with); its
                  marks and icons come from @skillcdn/brand, SkillCDN's trademarks under the main
                  repository's trademark policy and not under MIT (ADR-0013), and its Korean face
                  from the pretendard package, bundled by the build in subsets
@@ -102,7 +103,6 @@ Read the root [`AGENTS.md`](../../AGENTS.md) first. This workspace is the compos
 - `src/runs.int.test.ts` covers an agent at work through the REST API with its token, as the command line drives it, in a project: taking a task by its number, reporting and handing in, asking and being answered while a read of the decision waits, finishing, what is listed as one's own, what is not its own, what another project does not find, the task's history naming the agent on everything the run did to it, a person giving up on a run as themselves, and files handed in: kept once by their hash, read back by whoever may see the project with the headers that keep them from running, and refused when empty, a path, over the limit, on another's run, on another project's or on one that is over.
 - `src/cli.int.test.ts` runs the package's `console` command against the app with no socket: the whole of an agent's work from taking a task to finishing it, with a person deciding meanwhile; the project named by the environment or the directory, listed, and refused when it is not the person's to see; the command connecting with a code a person approves; and what the command refuses.
 - `src/live.int.test.ts` covers a project's feed as server-sent events, with a listener on the database's channel as a deployment has: what was there, what happens next, heartbeats, where a reconnecting browser starts, that a project the person may not see has no stream, and that closing the feed ends every stream.
-- `src/http/web.test.ts` covers serving a build: the files and their types, bundles as immutable, the page for every path of the app under its policy, the API's paths left alone, and that nothing outside the directory is ever served. It uses a small fake build, not `web/dist`.
 - `src/db/db.int.test.ts` covers the data model. Every test file has a database of its own; tests inside a file share it.
 
 ## Working on the schema

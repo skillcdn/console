@@ -10,6 +10,7 @@ import {
 import { MAX_OPTIONS, MIN_OPTIONS } from "../limits.js";
 import type { RestClaim, RestDecision } from "../schemas.js";
 import { TASK_PRIORITIES, TASK_STATES, type TaskPriority, type TaskState } from "../vocabulary.js";
+import { loadWebRoot, type WebRoot, WebRootError } from "../web.js";
 import type { CredentialStore } from "./credentials.js";
 import type { DirectoryStore } from "./directory.js";
 import {
@@ -29,6 +30,7 @@ import {
   formatVersionLine,
 } from "./format.js";
 import { COMMAND_HELP, helpFor, usage } from "./help.js";
+import { createServeHandler, DEFAULT_SERVE_PORT, type Listen } from "./serve.js";
 
 // The `console` command (docs/specs/cli.md): the agent's side of the console. A thin client of
 // the REST API with no logic of its own: every command is one or two requests and the words to
@@ -76,6 +78,8 @@ export interface CliIo {
   readonly now: () => number;
   /** The version of the package the command runs from, when the entry point knows it. */
   readonly version?: string | undefined;
+  /** How `serve` listens on the loopback (ADR-0014); left out, the command cannot serve. */
+  readonly listen?: Listen | undefined;
 }
 
 /** The command stops with an exit code and a word on stderr. */
@@ -133,6 +137,8 @@ const texts = (values: Values, name: string): string[] => {
 interface Session {
   readonly client: ConsoleClient;
   readonly url: string;
+  /** The token the client holds: what `serve` carries the page's requests with. */
+  readonly token: string;
   readonly json: boolean;
   /** The project the command works in: named by `--project`, the environment, or the working directory. */
   project(): Promise<ProjectClient>;
@@ -159,6 +165,7 @@ async function open(io: CliIo, values: Values): Promise<Session> {
   return {
     client,
     url,
+    token,
     json: on(values, "json"),
     projectKey,
     async project() {
@@ -944,10 +951,77 @@ const run: Command = async (args, io) => {
   return EXIT.ok;
 };
 
+/** A port for `serve`: the default, or what was said; 0 for one the system picks. */
+function portOf(value: string | undefined): number {
+  if (value === undefined) {
+    return DEFAULT_SERVE_PORT;
+  }
+  const port = Number(value);
+  if (!Number.isInteger(port) || port < 0 || port > 65535) {
+    throw misuse(`Not a port: ${value}`);
+  }
+  return port;
+}
+
+/**
+ * A console of the person's own, served from this machine (ADR-0014): the build's pages here,
+ * and everything under /api/ carried to the console with the token, which the pages never see.
+ */
+const serve: Command = async (args, io) => {
+  const { values, positionals } = parse(args, { port: { type: "string" } });
+  if (positionals.length > 1) {
+    throw misuse("Say at most one directory: console serve [<dir>] [--port <n>]");
+  }
+  const [dir] = positionals;
+  const port = portOf(text(values, "port"));
+  const listen = io.listen;
+  if (listen === undefined) {
+    throw failed("Serving is not possible here.");
+  }
+  const session = await open(io, values);
+  const me = await session.client.me();
+  const person = me.person;
+  if (person === null) {
+    throw failed("The console does not know this token. Sign in again: console login");
+  }
+  let web: WebRoot | undefined;
+  if (dir !== undefined) {
+    try {
+      web = await loadWebRoot(dir);
+    } catch (error) {
+      if (error instanceof WebRootError) {
+        throw failed(
+          `Not a build to serve: ${error.message}. Build your console first, and name the directory that holds its index.html: console serve <dir>`,
+        );
+      }
+      throw error;
+    }
+  }
+  const listening = await listen(
+    (bound) =>
+      createServeHandler({
+        upstream: session.url,
+        token: session.token,
+        fetch: io.fetch,
+        port: bound,
+        web,
+      }),
+    port,
+  );
+  io.stdout(
+    web === undefined
+      ? `Serving the API of ${me.workspace.name} (${session.url}) at ${listening.url}api/ as ${person.login}, for a development server to send its /api/ requests to. Stop with Ctrl+C.\n`
+      : `Serving ${dir} at ${listening.url} as ${person.login}: the pages are there, and everything under /api/ goes to ${me.workspace.name} (${session.url}) with your token, which the pages never see. Stop with Ctrl+C.\n`,
+  );
+  await listening.closed;
+  return EXIT.ok;
+};
+
 const COMMANDS: Readonly<Record<string, Command>> = {
   login,
   logout,
   whoami,
+  serve,
   projects,
   use,
   tasks,

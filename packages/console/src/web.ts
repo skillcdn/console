@@ -2,9 +2,11 @@ import { createHash } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { extname, join, relative, sep } from "node:path";
 
-// Serves a build of the default UI: static files, and the one page for every path that is
-// not a file, since the pages route in the browser. The server knows nothing of the UI but
-// the directory. A deployment without one is API only.
+// Serves a build of a console: static files, and the one page for every path that is not a
+// file, since the pages route in the browser. What the image serves the default UI with, from
+// WEB_ROOT, and what `console serve` serves a person's own build with (ADR-0014): one
+// policy for both. Nothing here knows the UI but the directory; a deployment without one is
+// API only. Node only: `@skillcdn/console/web`.
 
 const MAX_FILES = 5000;
 const HTML = "text/html; charset=utf-8";

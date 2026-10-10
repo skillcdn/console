@@ -50,11 +50,25 @@ The console is configured only through environment variables. [`.env.example`](.
 | `ADMINS` | `api` | no | no | Who configures the board: logins among `MEMBERS`, comma-separated. Made administrators when they sign in; an administrator may make or unmake others on the People page, and the board keeps at least one. Empty: nobody, until someone is listed. |
 | `SESSION_TTL_DAYS` | `api` | no | no | How long a browser stays signed in without being used. Default `30`. |
 | `TOKEN_DAYS_AT_MOST` | `api` | no | no | The most days a token for an agent may be good for, when the organization requires an expiry: a token that would not expire, or would outlast it, is refused wherever one is made, and the pages offer only what is allowed. Unset: a person chooses, up to a year or never. |
-| `WEB_ROOT` | `api` | no | no | Directory of a build of the default UI. The image sets `/app/web`; set it to an empty value to run without a UI. A directory without an `index.html` is a configuration error. |
+| `WEB_ROOT` | `api` | no | no | Directory of a build of the UI: the default one, or [the organization's own](#a-custom-console-in-the-image). The image sets `/app/web`; set it to an empty value to run without a UI. A directory without an `index.html` is a configuration error. |
 | `SKILLCDN_URL` | `api` | no | no | The origin of the SkillCDN deployment the organization's skills are read through. Default `https://skillcdn.ai`. |
 | `SKILLS_ADDRESS` | `api` | no | no | The address of the organization's skills at that deployment, as the standard spells one (`/gh/<owner>/<repo>`, with `@<ref>` and a path when needed): what a project shows when it names no address of its own on its Settings page. Unset: such a project's Skills page says there is no address yet. The console asks as nobody, so a private repository shows only where the deployment serves it to anyone. |
 
 Every secret `NAME` may also be supplied as `NAME_FILE`, so container secret mounts work.
+
+## A custom console in the image
+
+The default UI is a build of the package's composition with the default configuration, and the `api` role serves whatever build `WEB_ROOT` names: its files, and its page for every path that is not a file or the API's, under the same policy ([ADR-0014](../docs/adr/0014-a-persons-own-console-is-served-from-their-machine-by-the-command.md)). An organization's own console, built from `@skillcdn/console` in a repository of its own ([the package's README](../packages/console/README.md#the-components-and-the-composition)), replaces the default UI by taking its place:
+
+```dockerfile
+# From the console image the organization builds (see "Building a release"), with the build of
+# its own console in place of the default UI.
+ARG CONSOLE_IMAGE=skillcdn-console
+FROM ${CONSOLE_IMAGE}
+COPY --chown=node:node dist/ /app/web/
+```
+
+A volume mounted over `/app/web`, or `WEB_ROOT` pointing at a mounted directory, does the same without a second image. The build is static files that the `api` role reads once at boot: a new build means a new container. A person's own console is not the deployment's concern: a member serves one from their own machine with `console serve`, which carries its requests to this console with the member's token.
 
 ## What a platform must provide
 

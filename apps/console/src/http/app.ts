@@ -1,3 +1,4 @@
+import type { WebRoot } from "@skillcdn/console/web";
 import { Hono } from "hono";
 import type { Database } from "../db/client.js";
 import { getSchemaStatus } from "../db/migrate.js";
@@ -11,7 +12,6 @@ import type { ClientAddressResolver } from "./client-address.js";
 import type { LiveFeed } from "./live-feed.js";
 import { type AppEnv, requestContext } from "./request-context.js";
 import { registerRest } from "./rest.js";
-import type { WebRoot } from "./web.js";
 
 export interface AppDependencies {
   readonly database: Database;
