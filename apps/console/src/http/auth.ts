@@ -161,12 +161,19 @@ export interface AuthDependencies {
 export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies): void {
   const { auth, access, workspace, database, clock } = dependencies;
 
-  /** What the pages are told about who asks: the workspace, the person, their language, the ways in. */
-  const meOf = async (person: PersonRecord | undefined): Promise<RestMe> => {
+  /**
+   * What the pages are told about who asks: the workspace, the person, with what (a token's
+   * name, so that a console of a person's own knows it holds one), their language, the ways in.
+   */
+  const meOf = async (
+    caller: { readonly person: PersonRecord; readonly token: TokenRecord | undefined } | undefined,
+  ): Promise<RestMe> => {
     const found = await workspace();
+    const person = caller?.person;
     return {
       workspace: { name: found.name, tokenDaysAtMost: auth?.tokens.daysAtMost ?? null },
       person: person === undefined ? null : restPerson(person),
+      agent: caller?.token?.name ?? null,
       language: person === undefined ? null : ((await languageOf(database, person.id)) ?? null),
       signIn: auth === undefined ? [] : [...auth.providers],
     };
@@ -175,7 +182,7 @@ export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies):
   // Whoever is signed in, for the pages. Nobody is an answer too.
   app.get(REST_ROUTES.me, async (c) => {
     c.header("cache-control", "no-store");
-    return c.json(await meOf(await access.person(c)));
+    return c.json(await meOf(await access.caller(c)));
   });
 
   // The person's own choice of language (ADR-0012): theirs to keep, from the console's own pages.
@@ -202,7 +209,7 @@ export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies):
       return c.json(errorBody("request.invalid", "The language is not a language tag."), 400);
     }
     await setLanguage(database, person.id, parsed.data.language ?? undefined, clock.now());
-    return c.json(await meOf(person));
+    return c.json(await meOf({ person, token: undefined }));
   });
 
   if (auth === undefined) {

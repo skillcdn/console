@@ -69,6 +69,10 @@ export const en = {
       title: "No such project",
       body: "It may not exist, or it is not yours to see. The projects you may work in are on the front page.",
     },
+    notWithToken: {
+      title: "Done on the console's own pages",
+      body: "This console holds a token, which acts as you on the board. Connecting agents, configuring projects and people, and keeping a language are done on the organization's console, signed in.",
+    },
     you: "(you)",
     nobody: "Nobody",
     nothing: "Nothing",

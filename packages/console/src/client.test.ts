@@ -52,6 +52,7 @@ describe("createClient", () => {
           workspace: { name: "Acme", tokenDaysAtMost: null },
           language: null,
           person: PERSON,
+          agent: null,
           signIn: [{ key: "gh", label: "GitHub" }],
         },
       },

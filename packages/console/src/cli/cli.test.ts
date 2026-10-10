@@ -66,6 +66,7 @@ const ANSWERED = {
 const ME = {
   workspace: { name: "Acme", tokenDaysAtMost: null },
   person: PERSON,
+  agent: "Claude Code on laptop",
   language: null,
   signIn: [],
 };

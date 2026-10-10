@@ -98,6 +98,7 @@ describe("signing in", () => {
     expect(restMeSchema.parse(await answer.json())).toEqual({
       workspace: { name: "Acme", tokenDaysAtMost: null },
       language: null,
+      agent: null,
       person: {
         id: expect.stringMatching(/^[0-9a-f-]{36}$/),
         login: "Alice",
@@ -110,6 +111,7 @@ describe("signing in", () => {
     expect(await me(h)).toEqual({
       workspace: { name: "Acme", tokenDaysAtMost: null },
       language: null,
+      agent: null,
       person: null,
       signIn: [{ key: "gh", label: "GitHub" }],
     });
@@ -309,6 +311,7 @@ describe("a deployment where nobody signs in", () => {
     expect(await me(h)).toEqual({
       workspace: { name: "Acme", tokenDaysAtMost: null },
       language: null,
+      agent: null,
       person: null,
       signIn: [],
     });

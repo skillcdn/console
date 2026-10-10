@@ -118,6 +118,11 @@ export const restMeSchema = z.object({
     tokenDaysAtMost: z.nullable(z.int().check(z.positive())),
   }),
   person: z.nullable(restPersonSchema),
+  /**
+   * What the token asking is called by its person, when a token asks: how a console of a
+   * person's own knows it holds one. `null` on a session, and for nobody.
+   */
+  agent: z.nullable(z.string()),
   /** The language the person chose for the pages (ADR-0012), or `null` for the browser's. */
   language: z.nullable(languageTag),
   signIn: z.array(restProviderSchema),

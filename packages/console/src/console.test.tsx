@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { ConsoleClient, ProjectClient } from "./api.js";
-import { createConsole, DEFAULT_COMPONENTS } from "./console.js";
+import { createConsole, DEFAULT_COMPONENTS, onlyOnOwnPages } from "./console.js";
 import {
   connectHref,
   decisionHref,
@@ -229,5 +229,24 @@ describe("createConsole", () => {
     });
     expect(typeof custom.App).toBe("function");
     expect(typeof custom.mount).toBe("function");
+  });
+
+  it("knows which pages a console that holds a token does not offer", () => {
+    // Configuring and the tokens themselves are a person's own doing on the console's own pages.
+    for (const path of ["/projects/new", "/projects/web/settings", "/agents", "/agents/new"]) {
+      expect(onlyOnOwnPages(matchRoute(path)), path).toBe(true);
+    }
+    expect(onlyOnOwnPages(matchRoute(`/people/${ID}/agents`))).toBe(true);
+    expect(onlyOnOwnPages(matchRoute("/connect/abcd-efgh"))).toBe(true);
+    // The board and everything on it is the token's to work, as its person.
+    for (const path of [
+      "/",
+      "/people",
+      "/projects/web",
+      "/projects/web/tasks/new",
+      "/projects/web/members",
+    ]) {
+      expect(onlyOnOwnPages(matchRoute(path)), path).toBe(false);
+    }
   });
 });

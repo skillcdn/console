@@ -69,10 +69,18 @@ Goal: the default UI reworked for people, in the visual language of SkillCDN's o
 - [x] The Korean face of the site, Pretendard, in the default UI (2026-10-10), in the subsets a browser fetches as it needs them; a custom console provides its own faces.
 - [x] Judged by eye and confirmed (2026-10-10): the lockup made smaller; on a phone the tabs wrap instead of running off the edge, and a task's facts come before its text.
 
-## After milestone 6
+## Milestone 7, custom consoles from the package
 
-An order proposed on 2026-10-09 and changed on 2026-10-10: the pages are made good to use before custom consoles are built from them, since a custom console starts from what the default one looks like.
-7. **Custom consoles from the package.** The command tried by hand with other agents, Codex first, and the differences written down; the components and the composition documented; a template repository that builds a custom console in CI; the image serving a custom build; and a person's own console, built from the package and run for themselves against the organization's console (open question 9).
+Goal: a console of one's own, built from the package and run against the organization's console, and what an agent needs in order to build one or to work the board, in the format agents already read. Decided on 2026-10-10: no template repository and no example beside the default console, which is the example; the knowledge goes into skills in the SkillCDN Format, in this repository, next to the code they describe, so that an agent gets them from the same kind of address as the organization's other skills and in step with the package's version. The pieces, in order: (a) the API says with what a request acts, so that a console holding a token offers nothing a token cannot do; (b) `console serve`, the command serving a person's own build from their machine and carrying its requests to the organization's console with the token the command holds (open question 9); (c) the organization's custom console, a build the image serves from `WEB_ROOT`, written down for operators; (d) the skills, checked as the indexer reads them and carried by the package with its sources and the specs they include. The command tried by hand with other agents, Codex first, waits for a machine that has them.
+
+- [x] The API says the agent a token acts through (`me.agent`), and the pages offer nothing a token cannot do (2026-10-10).
+- [ ] `console serve` (ADR-0014): a build served from the person's machine, loopback only, the API carried to the organization's console with the token.
+- [ ] A custom build in the image, from `WEB_ROOT`, in `deploy/README.md`.
+- [ ] The skills (ADR-0015): `SKILLCDN.md`, `skills/working-the-board`, `skills/building-a-console`, checked by `skillcdn check` in `pnpm check`, carried by the package with its sources and the specs.
+- [ ] The command tried with other agents, Codex first, and the differences written down: waits for a machine with them.
+
+## After milestone 7
+
 8. **On a cloud.** The image deployed next to a managed PostgreSQL and a bucket, the S3 implementation of the blob-store port, and what a platform must provide written into `deploy/README.md`. The definitions of the deployment stay outside this repository.
 
 ## Later, undecided

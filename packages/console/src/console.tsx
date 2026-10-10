@@ -243,6 +243,56 @@ function Ground(props: { readonly children: React.ReactNode }) {
   );
 }
 
+/**
+ * Whether the console holds a token rather than a session: a person's own console, served from
+ * their machine with the token the command keeps (ADR-0014). The API says so with `me.agent`.
+ */
+function holdsToken(data: ConsoleData): boolean {
+  return data.me !== undefined && data.me.agent !== null;
+}
+
+/**
+ * The pages a console that holds a token does not offer: the tokens themselves and
+ * configuring, which are a person's own doing on the console's own pages, signed in.
+ */
+export function onlyOnOwnPages(route: Route): boolean {
+  return (
+    route.name === "new-project" ||
+    route.name === "settings" ||
+    route.name === "agents" ||
+    route.name === "new-token" ||
+    route.name === "person-agents" ||
+    route.name === "connect"
+  );
+}
+
+function NotWithToken() {
+  const words = useWords().common.notWithToken;
+  return <EmptyState title={words.title} body={words.body} />;
+}
+
+/**
+ * Where a console that holds a token keeps the person's choice of language: the browser's own
+ * storage, which may be absent or refuse, and then the browser's languages decide.
+ */
+const LANGUAGE_KEY = "sc-language";
+
+function storedLanguage(): string | undefined {
+  try {
+    return globalThis.localStorage?.getItem(LANGUAGE_KEY) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function storeLanguage(tag: string): void {
+  try {
+    globalThis.localStorage?.setItem(LANGUAGE_KEY, tag);
+  } catch {
+    // A browser that keeps nothing: the choice holds for this page.
+  }
+}
+
 /** A link that reads as a button: where a form is, for instance. */
 function LinkButton(props: {
   readonly href: string;
@@ -267,11 +317,12 @@ function ProjectsPage(props: {
   const { data, components, navigation, making } = props;
   const { busy, error, act } = useAction();
   const href = (project: RestProject) => projectHref(project.key);
+  const configures = !holdsToken(data);
   return (
     <>
       <div className="sc-page-head">
         <h1 className="sc-page-title">{words.title}</h1>
-        {!making && (
+        {!making && configures && (
           <LinkButton href={PATHS.newProject} variant="primary">
             {words.newProject}
           </LinkButton>
@@ -301,7 +352,11 @@ function ProjectsPage(props: {
           <EmptyState
             title={words.empty.title}
             body={words.empty.body}
-            action={<LinkButton href={PATHS.newProject}>{words.newProject}</LinkButton>}
+            action={
+              configures ? (
+                <LinkButton href={PATHS.newProject}>{words.newProject}</LinkButton>
+              ) : undefined
+            }
           />
         }
       />
@@ -614,6 +669,7 @@ function ProjectPage(props: {
   }
   if (route.name === "members") {
     const me = data.me?.person ?? undefined;
+    const configures = owner && !holdsToken(data);
     const members = words.projects.members;
     return (
       <>
@@ -630,15 +686,15 @@ function ProjectPage(props: {
           people={data.people}
           me={me}
           busy={busy}
-          onAdd={owner ? (input) => void act(() => data.actions.addMember(input)) : undefined}
+          onAdd={configures ? (input) => void act(() => data.actions.addMember(input)) : undefined}
           onChangeRole={
-            owner
+            configures
               ? (member, role) =>
                   void act(() => data.actions.updateMember(member.person.id, { role }))
               : undefined
           }
           onRemove={
-            owner
+            configures
               ? (member) => void act(() => data.actions.removeMember(member.person.id))
               : undefined
           }
@@ -779,7 +835,7 @@ function WorkspacePage(props: {
 
   if (route.name === "people") {
     const me = data.me?.person ?? undefined;
-    const administrator = me?.role === "admin";
+    const administrator = me?.role === "admin" && !holdsToken(data);
     return (
       <>
         <div className="sc-page-head">
@@ -871,8 +927,12 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
     const data = useConsoleData(client, projectKey);
     const failure = signInFailureOf(location.search);
     const title = data.me?.workspace.name ?? fallbackTitle;
+    const viaToken = holdsToken(data);
     // The language: the person's choice, else the browser's, else the first the console speaks.
-    const chosen = data.me?.language;
+    // A console that holds a token cannot keep the choice on the person, and keeps it in the
+    // browser instead.
+    const [ownChoice, setOwnChoice] = useState<string | undefined>(storedLanguage);
+    const chosen = viaToken ? (ownChoice ?? data.me?.language) : data.me?.language;
     const pack = useMemo(
       () =>
         chooseLanguage(
@@ -943,11 +1003,15 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
           label: words.nav.people,
           current: route.name === "people" || route.name === "person-agents",
         },
-        {
-          href: PATHS.agents,
-          label: words.nav.agents,
-          current: route.name === "agents" || route.name === "new-token",
-        },
+        ...(viaToken
+          ? []
+          : [
+              {
+                href: PATHS.agents,
+                label: words.nav.agents,
+                current: route.name === "agents" || route.name === "new-token",
+              },
+            ]),
       ];
       const nav: NavItem[] =
         projectKey === undefined
@@ -988,7 +1052,7 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
                 label: words.nav.members,
                 current: route.name === "members",
               },
-              ...(project?.role === "owner"
+              ...(project?.role === "owner" && !viaToken
                 ? [
                     {
                       href: projectHref(projectKey, "settings"),
@@ -1005,6 +1069,8 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
             <Spinner label={words.common.loadingWorkspace} />
           </div>
         );
+      } else if (viaToken && onlyOnOwnPages(route)) {
+        page = <NotWithToken />;
       } else if (route.name === "projects" || route.name === "new-project") {
         page = (
           <ProjectsPage
@@ -1064,12 +1130,19 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
             label: candidate.label,
             current: candidate.tag === pack.tag,
           }))}
-          onLanguage={(tag) => void data.actions.updateMe({ language: tag }).catch(() => undefined)}
+          onLanguage={(tag) => {
+            if (viaToken) {
+              storeLanguage(tag);
+              setOwnChoice(tag);
+            } else {
+              void data.actions.updateMe({ language: tag }).catch(() => undefined);
+            }
+          }}
           person={data.me.person}
           live={projectKey === undefined ? undefined : data.live}
           wide={route.name === "board"}
           onNavigate={(href) => navigation.go(href)}
-          onSignOut={() => void data.actions.signOut()}
+          onSignOut={viaToken ? undefined : () => void data.actions.signOut()}
         >
           {page}
         </components.Shell>

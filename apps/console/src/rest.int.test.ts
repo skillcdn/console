@@ -984,6 +984,8 @@ describe("tokens", () => {
       await (await h.request(REST_ROUTES.me, { headers: auth })).json(),
     );
     expect(me.person?.login).toBe("Alice");
+    // With what: the token's name, so that a console of a person's own knows it holds one.
+    expect(me.agent).toBe("a script");
     const created = await h.request(`${IN}/tasks`, {
       method: "POST",
       headers: { ...auth, "content-type": "application/json" },
@@ -1195,7 +1197,10 @@ describe("connecting an agent", () => {
     const me = await h.request(REST_ROUTES.me, {
       headers: { authorization: `Bearer ${result.secret}` },
     });
-    expect(restMeSchema.parse(await me.json()).person?.login).toBe("bob");
+    expect(restMeSchema.parse(await me.json())).toMatchObject({
+      person: { login: "bob" },
+      agent: result.token.name,
+    });
     // Bob's token goes again, so that the tokens' own tests find what they expect.
     expect((await send(bob, "DELETE", `${REST_ROUTES.tokens}/${result.token.id}`)).status).toBe(
       204,
