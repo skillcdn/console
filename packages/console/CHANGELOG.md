@@ -1,5 +1,15 @@
 # @skillcdn/console
 
+## 0.1.7
+
+### Patch Changes
+
+- [`1a8bc35`](https://github.com/skillcdn/console/commit/1a8bc3515db3f131d38a2baf72292010984562a0) Thanks [@samo-lucid](https://github.com/samo-lucid)! - `console serve [<dir>] [--port <n>]` serves a console of your own from your machine ([ADR-0014](https://github.com/skillcdn/console/blob/main/docs/adr/0014-a-persons-own-console-is-served-from-their-machine-by-the-command.md)): the build in `<dir>` at `http://127.0.0.1:11197/`, and everything under `/api/` carried to the console the command is signed in to with your token, which the pages never see. The loopback only; a request whose host is not it, or that the browser says comes from another site's page, is refused. Without a directory only the API is served, for a development server to send its `/api/` requests to. The serving of a build is now the package's, at `@skillcdn/console/web` (`loadWebRoot`, `WebRoot`, `WebRootError`; Node only), which the image uses for the default UI. The README says how a console of your own is built.
+
+- [`8dca22b`](https://github.com/skillcdn/console/commit/8dca22b97549f8c6b4e94796d2b6e07510e0e1a7) Thanks [@samo-lucid](https://github.com/samo-lucid)! - `GET /api/v1/me` says with what a request acts: `agent` is the name of the token when a token asks, as its person called it, and `null` on a session (`restMeSchema`). The default console, when it holds a token rather than a session (a person's own console, served from their machine), offers nothing a token cannot do: no agents page, no new project, no settings, no changes to members or roles, no sign-out, and the choice of language kept in the browser instead of on the person. The language packs gained `common.notWithToken`.
+
+- [`c4cb88b`](https://github.com/skillcdn/console/commit/c4cb88b1f78855a3ee977217f54bc7517393c58d) Thanks [@samo-lucid](https://github.com/samo-lucid)! - The package carries the console's skills in the SkillCDN Format (`skills/working-the-board`, `skills/building-a-console`, with their manifest `SKILLCDN.md`), the specifications they point to (`docs/specs/rest.md`, `docs/specs/cli.md`) and its sources under `src/` without the tests, so that an agent that installed it reads from `node_modules` how the board is worked and how a console is built, at the version installed ([ADR-0015](https://github.com/skillcdn/console/blob/main/docs/adr/0015-the-consoles-skills-live-in-this-repository-in-the-skillcdn-format-and-the-package-carries-them.md)). The same skills are served by SkillCDN at `skillcdn.ai/gh/skillcdn/console`.
+
 ## 0.1.6
 
 ### Patch Changes
