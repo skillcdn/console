@@ -66,7 +66,9 @@ src/
   version.ts     what the process calls itself
 web/             the default UI: one page that mounts the package's composition, built by Vite into
                  web/dist, which the api role serves from WEB_ROOT (http/web.ts: the files of the
-                 build, and the page for every other path, under a content security policy)
+                 build, and the page for every other path, under a content security policy); its
+                 marks and icons come from @skillcdn/brand, SkillCDN's trademarks under the main
+                 repository's trademark policy and not under MIT (ADR-0013)
 migrations/      generated SQL and its journal, committed, shipped inside the image
 ```
 

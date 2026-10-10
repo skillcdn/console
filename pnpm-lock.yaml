@@ -205,6 +205,9 @@ importers:
       '@hono/node-server':
         specifier: ^2.1.3
         version: 2.1.3(hono@4.13.13)
+      '@skillcdn/brand':
+        specifier: ^0.1.0
+        version: 0.1.0
       '@skillcdn/console':
         specifier: workspace:*
         version: link:../../packages/console
@@ -1022,6 +1025,9 @@ packages:
 
   '@rolldown/pluginutils@1.0.1':
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
+
+  '@skillcdn/brand@0.1.0':
+    resolution: {integrity: sha512-aB3o2M6wS9k8eBYUn2wqmDiBkukDjFrpl4V+PogawEDHAHXM5R6iePeoSX6RUsLAHAYB7UZ/1XeTA9el6XzJvA==}
 
   '@skillcdn/core@0.1.1':
     resolution: {integrity: sha512-h5frrWH5u4DSaF9yepREwwS+qoa5IpjcES4XHdu9D+RtZHyLYNhs/pO8yJDKIDFxwXt4xit6NUmEXwB1tUEQyA==}
@@ -2713,6 +2719,8 @@ snapshots:
     optional: true
 
   '@rolldown/pluginutils@1.0.1': {}
+
+  '@skillcdn/brand@0.1.0': {}
 
   '@skillcdn/core@0.1.1':
     dependencies:

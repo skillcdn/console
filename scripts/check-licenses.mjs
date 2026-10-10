@@ -1,9 +1,13 @@
 // Every production dependency ships in the image or the web build, so its license must allow
 // that: permissive only, no copyleft and nothing source-available (AGENTS.md, Dependencies). The
-// one exception is the main repository's own packages, @skillcdn/*, which come under its license,
-// FSL-1.1-ALv2, and are what the console is built on (ADR-0003).
+// exceptions are the main repository's own packages: @skillcdn/*, which come under its license,
+// FSL-1.1-ALv2, and are what the console is built on (ADR-0003), and @skillcdn/brand, the marks
+// of SkillCDN as files, which are trademarks under its trademark policy and not open source at
+// all; the default console shows them from that package and never from a copy (ADR-0013).
 // Part of `pnpm check`. Reads what pnpm knows about the installed packages; no network.
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import process from "node:process";
 
 /** SPDX identifiers that permit bundling and redistribution without conditions we cannot meet. */
@@ -26,6 +30,21 @@ const ALLOWED = new Set([
 /** The packages allowed under the main repository's license, by the prefix of their name. */
 const SKILLCDN_PACKAGES = "@skillcdn/";
 const SKILLCDN_LICENSE = "FSL-1.1-ALv2";
+
+/**
+ * The one package allowed by name: the brand's files, whose manifest points at the trademark
+ * terms instead of naming a license, which pnpm reports as unknown. The manifest is read to make
+ * sure it is still that package under those terms, and nothing else that happens to be unknown.
+ */
+const BRAND_PACKAGE = "@skillcdn/brand";
+const BRAND_LICENSE = "SEE LICENSE IN LICENSE.md";
+
+function manifestLicense(found) {
+  const dir = found.paths?.[0];
+  if (dir === undefined) return undefined;
+  const manifest = JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8"));
+  return typeof manifest.license === "string" ? manifest.license : undefined;
+}
 
 /** `(MIT OR Apache-2.0)` is fine when one side is; `MIT AND X` only when both are. */
 function allowed(expression) {
@@ -62,7 +81,8 @@ for (const [license, packages] of Object.entries(byLicense)) {
   for (const found of packages) {
     count += 1;
     const own = found.name.startsWith(SKILLCDN_PACKAGES) && license.trim() === SKILLCDN_LICENSE;
-    if (!own && !allowed(license)) {
+    const brand = found.name === BRAND_PACKAGE && manifestLicense(found) === BRAND_LICENSE;
+    if (!own && !brand && !allowed(license)) {
       offenders.push(`${found.name}@${found.versions.join(", ")}: ${license}`);
     }
   }
