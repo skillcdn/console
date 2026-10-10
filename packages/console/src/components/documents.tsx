@@ -16,6 +16,7 @@ import {
   type RestVersion,
   type RestVersionSummary,
 } from "../api.js";
+import { useWords } from "../i18n/index.js";
 import { Markdown } from "./markdown.js";
 import { Badge, Button, cx, formatBytes, PersonChip, Time } from "./ui.js";
 
@@ -31,11 +32,12 @@ export function DocumentCrumbs(props: {
   /** The last crumb is a link too, when the page is on something below it. */
   readonly last?: boolean | undefined;
 }) {
+  const words = useWords();
   const folders = props.path === "" ? [] : foldersAbove(props.path);
   const name = props.path === "" ? undefined : nameOf(props.path);
   return (
-    <nav className="sc-doc-crumbs" aria-label="Folders">
-      <a href={props.folderHref("")}>Docs</a>
+    <nav className="sc-doc-crumbs" aria-label={words.docs.folders}>
+      <a href={props.folderHref("")}>{words.docs.title}</a>
       {folders.map((folder) => (
         <span key={folder}>
           <span className="sc-crumb-separator" aria-hidden="true">
@@ -61,12 +63,13 @@ function Writer(props: {
   readonly by: RestDocumentSummary["updatedBy"];
   readonly agent: string | null;
 }) {
+  const words = useWords();
   return (
     <>
       <PersonChip person={props.by} />
       {props.agent !== null && (
-        <span className="sc-feed-agent" title="The agent the person wrote it through">
-          as {props.agent}
+        <span className="sc-feed-agent" title={words.docs.asAgentTitle}>
+          {words.feed.as(props.agent)}
         </span>
       )}
     </>
@@ -82,20 +85,21 @@ export interface DocumentListProps {
 
 /** The pages of a folder, or found by a search: each with its title, its path, and who wrote it last. */
 export function DocumentList(props: DocumentListProps) {
+  const words = useWords().docs;
   if (props.items.length === 0) {
     return <>{props.empty ?? null}</>;
   }
   return (
-    <ul className="sc-docs" aria-label="Pages">
+    <ul className="sc-docs" aria-label={words.pages}>
       {props.items.map((document) => (
         <li key={document.id} className="sc-doc-row">
           <a className="sc-doc-title" href={props.docHref(document.path)}>
             {document.title}
           </a>
-          {document.archivedAt !== null && <Badge tone="neutral">Archived</Badge>}
+          {document.archivedAt !== null && <Badge tone="neutral">{words.archived}</Badge>}
           <span className="sc-doc-meta">
-            <code className="sc-doc-path">{document.path}</code> · v{document.version} ·{" "}
-            <Writer by={document.updatedBy} agent={document.agent} />{" "}
+            <code className="sc-doc-path">{document.path}</code> · {words.version(document.version)}{" "}
+            · <Writer by={document.updatedBy} agent={document.agent} />{" "}
             <Time iso={document.updatedAt} />
           </span>
         </li>
@@ -114,11 +118,12 @@ export interface FolderViewProps {
 
 /** A folder: its folders, then its pages. */
 export function FolderView(props: FolderViewProps) {
+  const words = useWords().docs;
   const { listing } = props;
   return (
     <div className="sc-folder">
       {listing.folders.length > 0 && (
-        <ul className="sc-folders" aria-label="Folders">
+        <ul className="sc-folders" aria-label={words.folders}>
           {listing.folders.map((folder) => (
             <li key={folder}>
               <a className="sc-folder-link" href={props.folderHref(folder)}>
@@ -146,11 +151,12 @@ export interface DocumentSearchProps {
 
 /** The way to find pages by their words. An empty search goes back to the folders. */
 export function DocumentSearch(props: DocumentSearchProps) {
+  const words = useWords().docs;
   const [query, setQuery] = useState(props.query ?? "");
   return (
     <form
       className="sc-doc-search"
-      aria-label="Find pages"
+      aria-label={words.searchLabel}
       onSubmit={(event) => {
         event.preventDefault();
         props.onSearch(query.trim());
@@ -159,14 +165,14 @@ export function DocumentSearch(props: DocumentSearchProps) {
       <input
         className="sc-input"
         type="search"
-        placeholder="Find pages by their words"
-        aria-label="Find pages"
+        placeholder={words.searchPlaceholder}
+        aria-label={words.searchLabel}
         maxLength={MAX_SEARCH_LENGTH}
         value={query}
         onChange={(event) => setQuery(event.target.value)}
       />
       <Button type="submit" size="sm" disabled={props.busy === true}>
-        Find
+        {words.find}
       </Button>
     </form>
   );
@@ -190,6 +196,8 @@ export interface DocumentFormProps {
 
 /** Writing a page: its path (once), its title, and its body in Markdown. */
 export function DocumentForm(props: DocumentFormProps) {
+  const words = useWords();
+  const form = words.docs.form;
   const existing = props.document;
   const [path, setPath] = useState(
     existing?.path ?? (props.folder === undefined || props.folder === "" ? "" : `${props.folder}/`),
@@ -214,7 +222,7 @@ export function DocumentForm(props: DocumentFormProps) {
   return (
     <form className="sc-form" onSubmit={submit}>
       <label className="sc-field">
-        <span className="sc-field-label">Path</span>
+        <span className="sc-field-label">{form.path}</span>
         <input
           className="sc-input"
           value={path}
@@ -224,15 +232,10 @@ export function DocumentForm(props: DocumentFormProps) {
           placeholder="guides/onboarding"
           onChange={(event) => setPath(event.target.value.trim().toLowerCase())}
         />
-        {existing === undefined && (
-          <span className="sc-muted">
-            Lowercase letters, digits and hyphens, with slashes between folders. It does not change
-            once written.
-          </span>
-        )}
+        {existing === undefined && <span className="sc-muted">{form.pathHint}</span>}
       </label>
       <label className="sc-field">
-        <span className="sc-field-label">Title</span>
+        <span className="sc-field-label">{form.title}</span>
         <input
           className="sc-input"
           value={title}
@@ -242,13 +245,13 @@ export function DocumentForm(props: DocumentFormProps) {
         />
       </label>
       <label className="sc-field">
-        <span className="sc-field-label">Body</span>
+        <span className="sc-field-label">{form.body}</span>
         <textarea
           className="sc-input sc-textarea sc-doc-editor"
           value={body}
           maxLength={MAX_DOCUMENT_LENGTH}
           rows={16}
-          placeholder="Markdown. A link to another page's path, such as guides/onboarding, refers to that page."
+          placeholder={form.bodyPlaceholder}
           onChange={(event) => setBody(event.target.value)}
         />
       </label>
@@ -259,11 +262,11 @@ export function DocumentForm(props: DocumentFormProps) {
       )}
       <div className="sc-form-actions">
         <Button type="submit" variant="primary" disabled={props.busy === true || !ready}>
-          {existing === undefined ? "Write the page" : "Write a new version"}
+          {existing === undefined ? form.write : form.writeVersion}
         </Button>
         {props.onCancel !== undefined && (
           <Button variant="ghost" onClick={props.onCancel}>
-            Cancel
+            {words.common.cancel}
           </Button>
         )}
       </div>
@@ -278,6 +281,7 @@ function BacklinkItem(props: {
   readonly taskHref?: ((backlink: RestBacklink) => string) | undefined;
   readonly decisionHref?: ((decisionId: string) => string) | undefined;
 }) {
+  const words = useWords().docs;
   const { backlink } = props;
   if (backlink.kind === "document") {
     return (
@@ -287,22 +291,27 @@ function BacklinkItem(props: {
     );
   }
   if (backlink.kind === "task") {
-    const words = (
+    const said = (
       <>
         <span className="sc-card-number">#{backlink.number}</span> {backlink.title}
       </>
     );
     return props.taskHref === undefined ? (
-      <span>{words}</span>
+      <span>{said}</span>
     ) : (
-      <a href={props.taskHref(backlink)}>{words}</a>
+      <a href={props.taskHref(backlink)}>{said}</a>
     );
   }
-  const words = <>Decision: {backlink.title}</>;
+  const said = (
+    <>
+      {words.decisionPrefix}
+      {backlink.title}
+    </>
+  );
   return props.decisionHref === undefined ? (
-    <span>{words}</span>
+    <span>{said}</span>
   ) : (
-    <a href={props.decisionHref(backlink.id)}>{words}</a>
+    <a href={props.decisionHref(backlink.id)}>{said}</a>
   );
 }
 
@@ -317,11 +326,12 @@ export interface DocumentFilesProps {
 
 /** The files attached to a page, and the way to attach one. */
 export function DocumentFiles(props: DocumentFilesProps) {
+  const words = useWords().docs;
   const [label, setLabel] = useState("");
   const [chosen, setChosen] = useState<File | undefined>(undefined);
   return (
-    <section className="sc-task-section" aria-label="Files">
-      <h2 className="sc-section-title">Files</h2>
+    <section className="sc-task-section" aria-label={words.files}>
+      <h2 className="sc-section-title">{words.files}</h2>
       {props.files.length > 0 && (
         <ul className="sc-link-list">
           {props.files.map((attached) => (
@@ -331,7 +341,7 @@ export function DocumentFiles(props: DocumentFilesProps) {
               </a>{" "}
               <span className="sc-muted">
                 {attached.label === null ? "" : `${attached.file.name}, `}
-                {formatBytes(attached.file.size)}, by{" "}
+                {formatBytes(attached.file.size)}, {words.by}{" "}
               </span>
               <Writer by={attached.addedBy} agent={attached.agent} />{" "}
               <Time iso={attached.createdAt} />
@@ -354,18 +364,18 @@ export function DocumentFiles(props: DocumentFilesProps) {
           <input
             className="sc-input"
             type="file"
-            aria-label="A file to attach"
+            aria-label={words.fileToAttach}
             onChange={(event) => setChosen(event.target.files?.[0] ?? undefined)}
           />
           <input
             className="sc-input"
-            placeholder="What to call it, if not its name"
+            placeholder={words.labelPlaceholder}
             maxLength={MAX_LINK_LABEL_LENGTH}
             value={label}
             onChange={(event) => setLabel(event.target.value)}
           />
           <Button type="submit" size="sm" disabled={chosen === undefined || props.busy === true}>
-            Attach
+            {words.attach}
           </Button>
         </form>
       )}
@@ -399,6 +409,8 @@ export interface DocumentViewProps {
 
 /** One page: its latest version or an earlier one, its links both ways, its files, its versions. */
 export function DocumentView(props: DocumentViewProps) {
+  const words = useWords();
+  const docs = words.docs;
   const { document, version } = props;
   const archived = document.archivedAt !== null;
   const shown = version ?? {
@@ -415,46 +427,41 @@ export function DocumentView(props: DocumentViewProps) {
       <header className="sc-task-header">
         <h1 className="sc-task-title">{shown.title}</h1>
         <div className="sc-task-badges">
-          {archived && <Badge tone="neutral">Archived</Badge>}
+          {archived && <Badge tone="neutral">{docs.archived}</Badge>}
           {version !== undefined && version.number !== document.version && (
-            <Badge tone="warning">
-              Version {version.number} of {document.version}
-            </Badge>
+            <Badge tone="warning">{docs.versionOf(version.number, document.version)}</Badge>
           )}
         </div>
       </header>
       <p className="sc-doc-meta">
-        <code className="sc-doc-path">{document.path}</code> · version {shown.number}, written by{" "}
-        <Writer by={shown.author} agent={shown.agent} /> <Time iso={shown.createdAt} />
+        <code className="sc-doc-path">{document.path}</code> · {docs.versionWord} {shown.number},{" "}
+        {docs.writtenBy} <Writer by={shown.author} agent={shown.agent} />{" "}
+        <Time iso={shown.createdAt} />
         {version !== undefined && props.versionHref !== undefined && (
           <>
             {" "}
-            · <a href={props.versionHref(undefined)}>Show the latest</a>
+            · <a href={props.versionHref(undefined)}>{docs.showLatest}</a>
           </>
         )}
       </p>
-      {archived && (
-        <p className="sc-doc-notice">
-          This page is archived: out of the folders and the search, and not written to.
-        </p>
-      )}
+      {archived && <p className="sc-doc-notice">{docs.archivedNotice}</p>}
       {(props.editHref !== undefined ||
         props.onArchive !== undefined ||
         props.onRestore !== undefined) && (
         <div className="sc-task-actions">
           {!archived && props.editHref !== undefined && (
             <a className="sc-button sc-button-secondary" href={props.editHref}>
-              Edit
+              {words.common.edit}
             </a>
           )}
           {!archived && props.onArchive !== undefined && (
             <Button variant="ghost" onClick={props.onArchive} disabled={props.busy === true}>
-              Archive
+              {docs.archive}
             </Button>
           )}
           {archived && props.onRestore !== undefined && (
             <Button onClick={props.onRestore} disabled={props.busy === true}>
-              Restore
+              {docs.restore}
             </Button>
           )}
         </div>
@@ -467,17 +474,17 @@ export function DocumentView(props: DocumentViewProps) {
       {shown.body.trim().length > 0 ? (
         <Markdown source={shown.body} docHref={props.docHref} />
       ) : (
-        <p className="sc-muted">Nothing is written on this page yet.</p>
+        <p className="sc-muted">{docs.nothingOnPage}</p>
       )}
       {document.links.length > 0 && (
-        <section className="sc-task-section" aria-label="Refers to">
-          <h2 className="sc-section-title">Refers to</h2>
+        <section className="sc-task-section" aria-label={docs.refersTo}>
+          <h2 className="sc-section-title">{docs.refersTo}</h2>
           <ul className="sc-link-list">
             {document.links.map((link) => (
               <li key={link.path}>
                 <a href={props.docHref(link.path)}>{link.title ?? link.path}</a>{" "}
                 {link.title === null ? (
-                  <span className="sc-muted">no page there yet</span>
+                  <span className="sc-muted">{docs.noPageThereYet}</span>
                 ) : (
                   <code className="sc-doc-path">{link.path}</code>
                 )}
@@ -487,8 +494,8 @@ export function DocumentView(props: DocumentViewProps) {
         </section>
       )}
       {document.backlinks.length > 0 && (
-        <section className="sc-task-section" aria-label="Referred to by">
-          <h2 className="sc-section-title">Referred to by</h2>
+        <section className="sc-task-section" aria-label={docs.referredToBy}>
+          <h2 className="sc-section-title">{docs.referredToBy}</h2>
           <ul className="sc-link-list">
             {document.backlinks.map((backlink) => (
               <li key={`${backlink.kind}-${backlink.id}`}>
@@ -512,13 +519,13 @@ export function DocumentView(props: DocumentViewProps) {
         />
       )}
       {props.versions !== undefined && props.versions.length > 0 && (
-        <section className="sc-task-section" aria-label="Versions">
-          <h2 className="sc-section-title">Versions</h2>
+        <section className="sc-task-section" aria-label={docs.versions}>
+          <h2 className="sc-section-title">{docs.versions}</h2>
           <ol className="sc-versions">
             {props.versions.map((entry) => (
               <li key={entry.number} className="sc-version">
                 {props.versionHref === undefined || entry.number === shown.number ? (
-                  <span className="sc-version-number">v{entry.number}</span>
+                  <span className="sc-version-number">{docs.version(entry.number)}</span>
                 ) : (
                   <a
                     className="sc-version-number"
@@ -526,7 +533,7 @@ export function DocumentView(props: DocumentViewProps) {
                       entry.number === document.version ? undefined : entry.number,
                     )}
                   >
-                    v{entry.number}
+                    {docs.version(entry.number)}
                   </a>
                 )}{" "}
                 {entry.title} · <Writer by={entry.author} agent={entry.agent} />{" "}

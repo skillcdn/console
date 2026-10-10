@@ -15,12 +15,14 @@ import {
   type RestProjectInput,
   type RestProjectPatch,
 } from "../api.js";
+import { useWords } from "../i18n/index.js";
 import { Badge, Button, PersonChip, Time } from "./ui.js";
 
 // The projects of the workspace (ADR-0008): the list a person may see, the way to make one,
 // a project's settings for its owners, and those listed in it. Each takes its data as props
 // and nothing from the network; what people wrote is shown as text, never as HTML.
 
+/** The words of a project's roles and visibilities in English: the default pack's. */
 export const PROJECT_ROLE_LABELS: Readonly<Record<ProjectRole, string>> = {
   owner: "Owner",
   member: "Member",
@@ -32,9 +34,10 @@ export const VISIBILITY_LABELS: Readonly<Record<ProjectVisibility, string>> = {
 };
 
 export function ProjectRoleBadge(props: { readonly role: ProjectRole }) {
+  const words = useWords();
   return (
     <Badge tone={props.role === "owner" ? "point" : "neutral"}>
-      {PROJECT_ROLE_LABELS[props.role]}
+      {words.vocabulary.projectRole[props.role]}
     </Badge>
   );
 }
@@ -48,11 +51,12 @@ export interface ProjectListProps {
 }
 
 export function ProjectList(props: ProjectListProps) {
+  const words = useWords().projects;
   if (props.projects.length === 0) {
     return <>{props.empty ?? null}</>;
   }
   return (
-    <ul className="sc-projects" aria-label="Projects">
+    <ul className="sc-projects" aria-label={words.list}>
       {props.projects.map((project) => (
         <li key={project.id} className="sc-project">
           <div className="sc-project-head">
@@ -70,23 +74,17 @@ export function ProjectList(props: ProjectListProps) {
             </a>
             <code className="sc-project-key">{project.key}</code>
             <ProjectRoleBadge role={project.role} />
-            {project.visibility === "private" && <Badge tone="neutral">Private</Badge>}
+            {project.visibility === "private" && <Badge tone="neutral">{words.private}</Badge>}
           </div>
           {project.description.length > 0 && (
             <p className="sc-project-description">{project.description}</p>
           )}
           <p className="sc-project-meta">
             {project.openDecisions > 0 && (
-              <Badge tone="warning">
-                {project.openDecisions === 1
-                  ? "1 decision waiting"
-                  : `${project.openDecisions} decisions waiting`}
-              </Badge>
+              <Badge tone="warning">{words.decisionsWaiting(project.openDecisions)}</Badge>
             )}
             {project.openRuns > 0 && (
-              <Badge tone="accent">
-                {project.openRuns === 1 ? "1 agent at work" : `${project.openRuns} agents at work`}
-              </Badge>
+              <Badge tone="accent">{words.agentsAtWork(project.openRuns)}</Badge>
             )}
           </p>
         </li>
@@ -114,6 +112,8 @@ export function keyOf(name: string): string {
 }
 
 export function ProjectForm(props: ProjectFormProps) {
+  const words = useWords();
+  const form = words.projects.form;
   const { project } = props;
   const [name, setName] = useState(project?.name ?? "");
   const [key, setKey] = useState(project?.key ?? "");
@@ -139,7 +139,7 @@ export function ProjectForm(props: ProjectFormProps) {
     <form className="sc-form" onSubmit={submit}>
       <div className="sc-field-row">
         <label className="sc-field">
-          <span className="sc-field-label">Name</span>
+          <span className="sc-field-label">{form.name}</span>
           <input
             className="sc-input"
             value={name}
@@ -154,7 +154,7 @@ export function ProjectForm(props: ProjectFormProps) {
           />
         </label>
         <label className="sc-field">
-          <span className="sc-field-label">Key</span>
+          <span className="sc-field-label">{form.key}</span>
           <input
             className="sc-input"
             value={key}
@@ -162,7 +162,7 @@ export function ProjectForm(props: ProjectFormProps) {
             pattern="[a-z0-9]([a-z0-9-]*[a-z0-9])?"
             required
             disabled={project !== undefined}
-            title="Lowercase letters, digits and hyphens: what paths and the command say. It does not change."
+            title={form.keyHint}
             onChange={(event) => {
               setKeyTouched(true);
               setKey(event.target.value);
@@ -171,19 +171,19 @@ export function ProjectForm(props: ProjectFormProps) {
         </label>
       </div>
       <label className="sc-field">
-        <span className="sc-field-label">Description</span>
+        <span className="sc-field-label">{form.description}</span>
         <textarea
           className="sc-input sc-textarea"
           value={description}
           maxLength={MAX_PROJECT_DESCRIPTION_LENGTH}
           rows={2}
-          placeholder="What the project is for, in a sentence or two."
+          placeholder={form.descriptionPlaceholder}
           onChange={(event) => setDescription(event.target.value)}
         />
       </label>
       <div className="sc-field-row">
         <label className="sc-field">
-          <span className="sc-field-label">Who is a member</span>
+          <span className="sc-field-label">{form.whoIsMember}</span>
           <select
             className="sc-input"
             value={visibility}
@@ -191,18 +191,18 @@ export function ProjectForm(props: ProjectFormProps) {
           >
             {PROJECT_VISIBILITIES.map((candidate) => (
               <option key={candidate} value={candidate}>
-                {VISIBILITY_LABELS[candidate]}
+                {words.vocabulary.visibility[candidate]}
               </option>
             ))}
           </select>
         </label>
         <label className="sc-field">
-          <span className="sc-field-label">Skills address</span>
+          <span className="sc-field-label">{form.skillsAddress}</span>
           <input
             className="sc-input"
             value={skillsAddress}
             maxLength={MAX_SKILLS_ADDRESS_LENGTH}
-            placeholder="/gh/<owner>/<repo>, or empty for the organization's"
+            placeholder={form.skillsAddressPlaceholder}
             onChange={(event) => setSkillsAddress(event.target.value)}
           />
         </label>
@@ -218,11 +218,11 @@ export function ProjectForm(props: ProjectFormProps) {
           variant="primary"
           disabled={props.busy === true || name.trim() === "" || key.trim() === ""}
         >
-          {project === undefined ? "Make the project" : "Save"}
+          {project === undefined ? form.make : words.common.save}
         </Button>
         {props.onCancel !== undefined && (
           <Button variant="ghost" onClick={props.onCancel}>
-            Cancel
+            {words.common.cancel}
           </Button>
         )}
       </div>
@@ -245,6 +245,8 @@ export interface MemberListProps {
 }
 
 export function MemberList(props: MemberListProps) {
+  const words = useWords();
+  const members = words.projects.members;
   const listed = new Set(props.members.map((member) => member.person.id));
   const candidates = props.people.filter((person) => !listed.has(person.id));
   const [personId, setPersonId] = useState("");
@@ -254,23 +256,25 @@ export function MemberList(props: MemberListProps) {
       {props.members.length === 0 ? (
         (props.empty ?? null)
       ) : (
-        <ul className="sc-people" aria-label="Members">
+        <ul className="sc-people" aria-label={members.list}>
           {props.members.map((member) => (
             <li key={member.person.id} className="sc-person-row">
               <PersonChip person={member.person} size="md" />
               <span className="sc-person-name">
                 {member.person.name ?? ""}
-                {props.me?.id === member.person.id && <span className="sc-muted"> (you)</span>}
+                {props.me?.id === member.person.id && (
+                  <span className="sc-muted"> {words.common.you}</span>
+                )}
                 <span className="sc-muted">
                   {" "}
-                  since <Time iso={member.addedAt} />
+                  {members.since} <Time iso={member.addedAt} />
                 </span>
               </span>
               {props.onChangeRole === undefined ? (
                 <ProjectRoleBadge role={member.role} />
               ) : (
                 <label className="sc-field sc-field-inline">
-                  <span className="sc-visually-hidden">Role of {member.person.login}</span>
+                  <span className="sc-visually-hidden">{members.roleOf(member.person.login)}</span>
                   <select
                     className="sc-input"
                     value={member.role}
@@ -281,7 +285,7 @@ export function MemberList(props: MemberListProps) {
                   >
                     {PROJECT_ROLES.map((candidate) => (
                       <option key={candidate} value={candidate}>
-                        {PROJECT_ROLE_LABELS[candidate]}
+                        {words.vocabulary.projectRole[candidate]}
                       </option>
                     ))}
                   </select>
@@ -294,7 +298,7 @@ export function MemberList(props: MemberListProps) {
                   disabled={props.busy === true}
                   onClick={() => props.onRemove?.(member)}
                 >
-                  Remove
+                  {words.common.remove}
                 </Button>
               )}
             </li>
@@ -304,7 +308,7 @@ export function MemberList(props: MemberListProps) {
       {props.onAdd !== undefined && candidates.length > 0 && (
         <form
           className="sc-form sc-member-form"
-          aria-label="Add a member"
+          aria-label={members.addAria}
           onSubmit={(event) => {
             event.preventDefault();
             if (personId !== "") {
@@ -315,13 +319,13 @@ export function MemberList(props: MemberListProps) {
         >
           <div className="sc-field-row">
             <label className="sc-field">
-              <span className="sc-field-label">Person</span>
+              <span className="sc-field-label">{members.person}</span>
               <select
                 className="sc-input"
                 value={personId}
                 onChange={(event) => setPersonId(event.target.value)}
               >
-                <option value="">Choose someone</option>
+                <option value="">{members.chooseSomeone}</option>
                 {candidates.map((person) => (
                   <option key={person.id} value={person.id}>
                     {person.login}
@@ -330,7 +334,7 @@ export function MemberList(props: MemberListProps) {
               </select>
             </label>
             <label className="sc-field">
-              <span className="sc-field-label">As</span>
+              <span className="sc-field-label">{members.as}</span>
               <select
                 className="sc-input"
                 value={role}
@@ -338,7 +342,7 @@ export function MemberList(props: MemberListProps) {
               >
                 {PROJECT_ROLES.map((candidate) => (
                   <option key={candidate} value={candidate}>
-                    {PROJECT_ROLE_LABELS[candidate]}
+                    {words.vocabulary.projectRole[candidate]}
                   </option>
                 ))}
               </select>
@@ -349,7 +353,7 @@ export function MemberList(props: MemberListProps) {
                 variant="primary"
                 disabled={props.busy === true || personId === ""}
               >
-                Add
+                {members.add}
               </Button>
             </div>
           </div>

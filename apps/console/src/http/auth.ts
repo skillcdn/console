@@ -6,6 +6,7 @@ import {
   RETURN_TO_PARAM,
   type RestMe,
   type RestProvider,
+  restMePatchSchema,
 } from "@skillcdn/console/api";
 import type { Context, Hono } from "hono";
 import type { Connections } from "../auth/connect.js";
@@ -14,10 +15,12 @@ import { safeReturnTo } from "../auth/login.js";
 import type { Membership } from "../auth/membership.js";
 import type { Sessions } from "../auth/sessions.js";
 import type { Tokens } from "../auth/tokens.js";
-import type { PersonRecord } from "../db/queries/people.js";
+import type { Database } from "../db/client.js";
+import { languageOf, type PersonRecord, setLanguage } from "../db/queries/people.js";
 import type { TokenRecord } from "../db/queries/tokens.js";
 import type { WorkspaceRecord } from "../db/queries/workspaces.js";
 import type { Logger } from "../logger.js";
+import type { Clock } from "../ports/clock.js";
 import { errorBody } from "./app.js";
 import type { AppEnv } from "./request-context.js";
 import { restPerson } from "./rest-shapes.js";
@@ -145,6 +148,8 @@ export interface AuthDependencies {
   readonly auth: AppAuth | undefined;
   readonly access: Access;
   readonly workspace: () => Promise<WorkspaceRecord>;
+  readonly database: Database;
+  readonly clock: Clock;
   readonly logger: Logger;
 }
 
@@ -154,18 +159,50 @@ export interface AuthDependencies {
  * says that nobody can sign in.
  */
 export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies): void {
-  const { auth, access, workspace } = dependencies;
+  const { auth, access, workspace, database, clock } = dependencies;
+
+  /** What the pages are told about who asks: the workspace, the person, their language, the ways in. */
+  const meOf = async (person: PersonRecord | undefined): Promise<RestMe> => {
+    const found = await workspace();
+    return {
+      workspace: { name: found.name, tokenDaysAtMost: auth?.tokens.daysAtMost ?? null },
+      person: person === undefined ? null : restPerson(person),
+      language: person === undefined ? null : ((await languageOf(database, person.id)) ?? null),
+      signIn: auth === undefined ? [] : [...auth.providers],
+    };
+  };
 
   // Whoever is signed in, for the pages. Nobody is an answer too.
   app.get(REST_ROUTES.me, async (c) => {
     c.header("cache-control", "no-store");
-    const [found, person] = await Promise.all([workspace(), access.person(c)]);
-    const body: RestMe = {
-      workspace: { name: found.name, tokenDaysAtMost: auth?.tokens.daysAtMost ?? null },
-      person: person === undefined ? null : restPerson(person),
-      signIn: auth === undefined ? [] : [...auth.providers],
-    };
-    return c.json(body);
+    return c.json(await meOf(await access.person(c)));
+  });
+
+  // The person's own choice of language (ADR-0012): theirs to keep, from the console's own pages.
+  app.patch(REST_ROUTES.me, async (c) => {
+    c.header("cache-control", "no-store");
+    if (access.presentsToken(c)) {
+      return sessionRequired(c);
+    }
+    if (!access.fromOwnPages(c)) {
+      return foreignOrigin(c);
+    }
+    const person = await access.person(c);
+    if (person === undefined) {
+      return signInRequired(c);
+    }
+    let json: unknown;
+    try {
+      json = await c.req.json();
+    } catch {
+      return c.json(errorBody("request.invalid", "The request body is not readable JSON."), 400);
+    }
+    const parsed = restMePatchSchema.safeParse(json);
+    if (!parsed.success) {
+      return c.json(errorBody("request.invalid", "The language is not a language tag."), 400);
+    }
+    await setLanguage(database, person.id, parsed.data.language ?? undefined, clock.now());
+    return c.json(await meOf(person));
   });
 
   if (auth === undefined) {

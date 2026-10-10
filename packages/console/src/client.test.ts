@@ -50,6 +50,7 @@ describe("createClient", () => {
       "GET https://console.test/api/v1/me": {
         body: {
           workspace: { name: "Acme", tokenDaysAtMost: null },
+          language: null,
           person: PERSON,
           signIn: [{ key: "gh", label: "GitHub" }],
         },

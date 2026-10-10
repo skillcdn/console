@@ -18,6 +18,7 @@ import {
   type RestMember,
   type RestMemberInput,
   type RestMemberPatch,
+  type RestMePatch,
   type RestPerson,
   type RestPersonPatch,
   type RestProject,
@@ -74,6 +75,8 @@ export interface ConsoleActions {
   attachDocumentFile(path: string, input: FileUpload): Promise<RestDocument>;
   /** Changes what a person is; for an administrator. */
   updatePerson(id: string, patch: RestPersonPatch): Promise<RestPerson>;
+  /** Keeps the person's own choice of language (ADR-0012). */
+  updateMe(patch: RestMePatch): Promise<RestMe>;
   /** Marks a run that will not come back as abandoned. */
   abandonRun(id: string): Promise<RestRun>;
   /** Everything that happened to one task of the project, oldest first. */
@@ -417,6 +420,11 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
         setMe((current) => (current?.person?.id === id ? { ...current, person } : current));
         await refreshWorkspace();
         return person;
+      },
+      async updateMe(patch) {
+        const answer = await client.updateMe(patch);
+        setMe(answer);
+        return answer;
       },
       async abandonRun(id) {
         const run = await scope().endRun(id, { status: "abandoned" });

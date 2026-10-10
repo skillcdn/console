@@ -6,6 +6,7 @@ import {
   type RestAnswerInput,
   type RestDecision,
   type RestDecisionInput,
+  type RestDecisionPatch,
   type RestEvent,
   type RestProject,
   type RestProjectInput,
@@ -40,6 +41,13 @@ import { ConnectPage } from "./connect-page.js";
 import { type ConsoleData, useConsoleData } from "./data.js";
 import { DocsPage } from "./docs-page.js";
 import {
+  chooseLanguage,
+  DEFAULT_LANGUAGES,
+  LanguageContext,
+  type LanguagePack,
+  useWords,
+} from "./i18n/index.js";
+import {
   decisionHref,
   docHref,
   matchRoute,
@@ -60,7 +68,8 @@ import { useAction } from "./use-action.js";
 // The composition of the default console: the pages assembled from the components, with the
 // places a team may replace named. The UI the image serves is this, with the default config.
 // The front page is the projects; a project's pages are under its key, every form has an
-// address, and the history is one entry per step (ADR-0010).
+// address, and the history is one entry per step (ADR-0010). The pages speak the person's
+// language, from the packs the console is given (ADR-0012).
 
 /** The components a custom console may replace, each with the props the default one takes. */
 export interface ConsoleComponents {
@@ -98,6 +107,8 @@ export interface ConsoleConfig {
   readonly title?: string | undefined;
   /** The components to use in place of the default ones. */
   readonly components?: Partial<ConsoleComponents> | undefined;
+  /** The languages the pages speak, the first being the one spoken when nothing else decides; the package's when left out. */
+  readonly languages?: readonly LanguagePack[] | undefined;
   /** The client to talk to the server with; made from `baseUrl` when left out. For tests. */
   readonly client?: ConsoleClient | undefined;
 }
@@ -235,26 +246,24 @@ function ProjectsPage(props: {
   /** Whether the form for a new project is open: the page is at its address. */
   readonly making: boolean;
 }) {
+  const words = useWords().projects;
   const { data, components, navigation, making } = props;
   const { busy, error, act } = useAction();
   const href = (project: RestProject) => projectHref(project.key);
   return (
     <>
       <div className="sc-page-head">
-        <h1 className="sc-page-title">Projects</h1>
+        <h1 className="sc-page-title">{words.title}</h1>
         {!making && (
           <LinkButton href={PATHS.newProject} variant="primary">
-            New project
+            {words.newProject}
           </LinkButton>
         )}
       </div>
-      <p className="sc-lead">
-        A project holds its board, its documents, its skills and its people. What you may see and
-        change is decided per project: an owner configures it, a member works on it.
-      </p>
+      <p className="sc-lead">{words.lead}</p>
       {error !== undefined && <Callout tone="danger">{error}</Callout>}
       {making && (
-        <section className="sc-panel" aria-label="New project">
+        <section className="sc-panel" aria-label={words.form.aria}>
           <ProjectForm
             busy={busy}
             onSubmit={(input) =>
@@ -273,9 +282,9 @@ function ProjectsPage(props: {
         onOpen={(project) => navigation.go(href(project))}
         empty={
           <EmptyState
-            title="No projects yet"
-            body="Make the first one: what it is for, and who is in it. Or ask an owner to add you to theirs."
-            action={<LinkButton href={PATHS.newProject}>New project</LinkButton>}
+            title={words.empty.title}
+            body={words.empty.body}
+            action={<LinkButton href={PATHS.newProject}>{words.newProject}</LinkButton>}
           />
         }
       />
@@ -293,6 +302,7 @@ function TaskPage(props: {
   readonly error: string | undefined;
   readonly act: (work: () => Promise<unknown>) => Promise<void>;
 }) {
+  const words = useWords();
   const { route, project, data, components, navigation, busy, error, act } = props;
   const key = project.key;
   const task =
@@ -329,9 +339,9 @@ function TaskPage(props: {
   if (task === undefined) {
     return (
       <EmptyState
-        title="No such task"
-        body="It may belong to another project, or the link is wrong."
-        action={<LinkButton href={projectHref(key)}>Board</LinkButton>}
+        title={words.task.noSuch.title}
+        body={words.task.noSuch.body}
+        action={<LinkButton href={projectHref(key)}>{words.nav.board}</LinkButton>}
       />
     );
   }
@@ -384,6 +394,7 @@ function ProjectPage(props: {
   readonly components: ConsoleComponents;
   readonly navigation: Navigation;
 }) {
+  const words = useWords();
   const { route, project, data, components, navigation } = props;
   const { busy, error, act } = useAction();
   const tasksById = useMemo(() => new Map(data.tasks.map((task) => [task.id, task])), [data.tasks]);
@@ -396,10 +407,8 @@ function ProjectPage(props: {
     void act(() => data.actions.updateTask(task.id, { state }));
   const onAnswer = (decision: RestDecision, input: RestAnswerInput) =>
     void act(() => data.actions.answerDecision(decision.id, input));
-  const onUpdate = (
-    decision: RestDecision,
-    patch: Parameters<typeof data.actions.updateDecision>[1],
-  ) => void act(() => data.actions.updateDecision(decision.id, patch));
+  const onUpdate = (decision: RestDecision, patch: RestDecisionPatch) =>
+    void act(() => data.actions.updateDecision(decision.id, patch));
 
   if (route.name === "board") {
     return (
@@ -407,7 +416,7 @@ function ProjectPage(props: {
         <div className="sc-page-head">
           <h1 className="sc-page-title">{project.name}</h1>
           <LinkButton href={newTaskHref(key)} variant="primary">
-            Write a task
+            {words.board.writeTask}
           </LinkButton>
         </div>
         {project.description.length > 0 && <p className="sc-lead">{project.description}</p>}
@@ -420,9 +429,9 @@ function ProjectPage(props: {
           empty={
             data.tasks.length === 0 ? (
               <EmptyState
-                title="Nothing on the board yet"
-                body="Write the first task: what is to be done, and for whom."
-                action={<LinkButton href={newTaskHref(key)}>Write a task</LinkButton>}
+                title={words.board.empty.title}
+                body={words.board.empty.body}
+                action={<LinkButton href={newTaskHref(key)}>{words.board.writeTask}</LinkButton>}
               />
             ) : undefined
           }
@@ -434,10 +443,10 @@ function ProjectPage(props: {
     return (
       <>
         <div className="sc-page-head">
-          <h1 className="sc-page-title">Write a task</h1>
+          <h1 className="sc-page-title">{words.task.newTitle}</h1>
         </div>
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
-        <section className="sc-panel" aria-label="Write a task">
+        <section className="sc-panel" aria-label={words.task.newAria}>
           <TaskForm
             people={data.people}
             parents={data.tasks}
@@ -483,9 +492,9 @@ function ProjectPage(props: {
     return (
       <>
         <div className="sc-page-head">
-          <h1 className="sc-page-title">Decisions</h1>
+          <h1 className="sc-page-title">{words.decisions.title}</h1>
           <LinkButton href={newDecisionHref(key)} variant="primary">
-            Raise a decision
+            {words.decisions.raise}
           </LinkButton>
         </div>
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
@@ -499,10 +508,7 @@ function ProjectPage(props: {
           onUpdate={onUpdate}
           busy={busy}
           empty={
-            <EmptyState
-              title="Nothing waits for a person"
-              body="A decision raised from a task, or from here, shows up on this page."
-            />
+            <EmptyState title={words.decisions.empty.title} body={words.decisions.empty.body} />
           }
         />
       </>
@@ -512,10 +518,10 @@ function ProjectPage(props: {
     return (
       <>
         <div className="sc-page-head">
-          <h1 className="sc-page-title">Raise a decision</h1>
+          <h1 className="sc-page-title">{words.decisions.raise}</h1>
         </div>
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
-        <section className="sc-panel" aria-label="Raise a decision">
+        <section className="sc-panel" aria-label={words.decisions.raiseAria}>
           <DecisionForm
             tasks={data.tasks}
             busy={busy}
@@ -536,15 +542,12 @@ function ProjectPage(props: {
     return (
       <>
         <div className="sc-page-head">
-          <h1 className="sc-page-title">Decision</h1>
-          <LinkButton href={projectHref(key, "decisions")}>All decisions</LinkButton>
+          <h1 className="sc-page-title">{words.decisions.one}</h1>
+          <LinkButton href={projectHref(key, "decisions")}>{words.decisions.all}</LinkButton>
         </div>
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
         {decision === undefined ? (
-          <EmptyState
-            title="No such decision"
-            body="It may belong to another project, or the link is wrong."
-          />
+          <EmptyState title={words.decisions.noSuch.title} body={words.decisions.noSuch.body} />
         ) : (
           <DecisionCard
             decision={decision}
@@ -563,7 +566,7 @@ function ProjectPage(props: {
     return (
       <>
         <div className="sc-page-head">
-          <h1 className="sc-page-title">What happened</h1>
+          <h1 className="sc-page-title">{words.feed.title}</h1>
         </div>
         <components.EventFeed
           events={data.events}
@@ -577,7 +580,7 @@ function ProjectPage(props: {
             }
             return event.data.path === undefined ? undefined : toDoc(event.data.path);
           }}
-          empty={<EmptyState title="Nothing happened yet" />}
+          empty={<EmptyState title={words.feed.empty} />}
         />
       </>
     );
@@ -586,7 +589,7 @@ function ProjectPage(props: {
     return (
       <>
         <div className="sc-page-head">
-          <h1 className="sc-page-title">Skills</h1>
+          <h1 className="sc-page-title">{words.nav.skills}</h1>
         </div>
         <components.SkillList skills={data.skills} />
       </>
@@ -594,17 +597,15 @@ function ProjectPage(props: {
   }
   if (route.name === "members") {
     const me = data.me?.person ?? undefined;
+    const members = words.projects.members;
     return (
       <>
         <div className="sc-page-head">
-          <h1 className="sc-page-title">Members</h1>
+          <h1 className="sc-page-title">{members.title}</h1>
         </div>
         <p className="sc-lead">
-          {project.visibility === "workspace"
-            ? "Everyone of the workspace is a member of this project; those listed here are its owners and the people named besides. "
-            : "Only those listed here are in this project. "}
-          An owner configures the project; a member works on it. A workspace administrator is an
-          owner of every project.
+          {project.visibility === "workspace" ? members.leadWorkspace : members.leadPrivate}{" "}
+          {members.leadRoles}
         </p>
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
         <components.MemberList
@@ -626,11 +627,9 @@ function ProjectPage(props: {
           }
           empty={
             <EmptyState
-              title="Nobody is listed"
+              title={members.empty.title}
               body={
-                project.visibility === "workspace"
-                  ? "Everyone of the workspace is in; the administrators own it."
-                  : "The administrators own it until an owner is listed."
+                project.visibility === "workspace" ? members.empty.workspace : members.empty.private
               }
             />
           }
@@ -639,26 +638,22 @@ function ProjectPage(props: {
     );
   }
   if (route.name === "settings") {
+    const settings = words.projects.settings;
     if (!owner) {
-      return (
-        <EmptyState
-          title="Only an owner may change the project"
-          body="Ask one of its owners, or a workspace administrator."
-        />
-      );
+      return <EmptyState title={settings.onlyOwner.title} body={settings.onlyOwner.body} />;
     }
     return (
       <>
         <div className="sc-page-head">
-          <h1 className="sc-page-title">Settings</h1>
+          <h1 className="sc-page-title">{settings.title}</h1>
         </div>
         <p className="sc-lead">
-          The key, <code>{project.key}</code>, is what addresses and the command say, and does not
-          change. The skills address names a repository served by SkillCDN; empty, the
-          organization's skills are shown.
+          {settings.leadBefore}
+          <code>{project.key}</code>
+          {settings.leadAfter}
         </p>
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
-        <section className="sc-panel" aria-label="Project settings">
+        <section className="sc-panel" aria-label={settings.aria}>
           <ProjectForm
             project={project}
             busy={busy}
@@ -674,11 +669,12 @@ function ProjectPage(props: {
 }
 
 function NothingHere() {
+  const words = useWords();
   return (
     <EmptyState
-      title="There is nothing at this address"
-      body="The link may be wrong, or what it led to is gone."
-      action={<LinkButton href={PATHS.projects}>Projects</LinkButton>}
+      title={words.common.nothingHere.title}
+      body={words.common.nothingHere.body}
+      action={<LinkButton href={PATHS.projects}>{words.nav.projects}</LinkButton>}
     />
   );
 }
@@ -689,6 +685,7 @@ function PersonAgentsPage(props: {
   readonly data: ConsoleData;
   readonly components: ConsoleComponents;
 }) {
+  const words = useWords();
   const { id, data, components } = props;
   const me = data.me?.person ?? undefined;
   const administrator = me?.role === "admin";
@@ -715,26 +712,25 @@ function PersonAgentsPage(props: {
   if (!administrator) {
     return (
       <EmptyState
-        title="Only an administrator sees another person's agents"
-        body="Your own are on your Agents page."
-        action={<LinkButton href={PATHS.agents}>Agents</LinkButton>}
+        title={words.people.onlyAdmin.title}
+        body={words.people.onlyAdmin.body}
+        action={<LinkButton href={PATHS.agents}>{words.nav.agents}</LinkButton>}
       />
     );
   }
   return (
     <>
       <div className="sc-page-head">
-        <h1 className="sc-page-title">Agents of {person?.login ?? "someone"}</h1>
-        <LinkButton href={PATHS.people}>People</LinkButton>
+        <h1 className="sc-page-title">{words.people.agentsOf(person?.login ?? "?")}</h1>
+        <LinkButton href={PATHS.people}>{words.nav.people}</LinkButton>
       </div>
       <p className="sc-lead">
-        What works here as {person?.name ?? person?.login ?? "this person"}, each with a token of
-        its own. Disconnecting one takes its token away at once.
+        {words.people.agentsLead(person?.name ?? person?.login ?? words.feed.someone)}
       </p>
       {error !== undefined && <Callout tone="danger">{error}</Callout>}
       {tokens === undefined ? (
         <div className="sc-loading">
-          <Spinner label="Loading the agents" />
+          <Spinner label={words.people.loadingAgents} />
         </div>
       ) : (
         <components.TokenList
@@ -746,7 +742,7 @@ function PersonAgentsPage(props: {
               setGeneration((current) => current + 1);
             })
           }
-          empty={<EmptyState title="No agent is connected" />}
+          empty={<EmptyState title={words.people.noAgent} />}
         />
       )}
     </>
@@ -759,6 +755,7 @@ function WorkspacePage(props: {
   readonly components: ConsoleComponents;
   readonly navigation: Navigation;
 }) {
+  const words = useWords();
   const { route, data, components, navigation } = props;
   const [fresh, setFresh] = useState<RestTokenCreated | undefined>(undefined);
   const { busy, error, act } = useAction();
@@ -769,13 +766,9 @@ function WorkspacePage(props: {
     return (
       <>
         <div className="sc-page-head">
-          <h1 className="sc-page-title">People</h1>
+          <h1 className="sc-page-title">{words.people.title}</h1>
         </div>
-        <p className="sc-lead">
-          Everyone who has signed in. An administrator configures the workspace and says what each
-          person is; a member works in the projects they are in. What a person may do, their agents
-          may do.
-        </p>
+        <p className="sc-lead">{words.people.lead}</p>
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
         <components.PeopleList
           people={data.people}
@@ -798,29 +791,26 @@ function WorkspacePage(props: {
     return <ConnectPage code={route.code} data={data} navigation={navigation} />;
   }
   if (route.name === "agents" || route.name === "new-token") {
+    const agents = words.agents;
     const making = route.name === "new-token";
     const origin = typeof window === "undefined" ? "" : window.location.origin;
     return (
       <>
         <div className="sc-page-head">
-          <h1 className="sc-page-title">Agents</h1>
+          <h1 className="sc-page-title">{agents.title}</h1>
           {!making && (
             <LinkButton href={PATHS.newToken} variant="primary">
-              Make a token by hand
+              {agents.makeByHand}
             </LinkButton>
           )}
         </div>
-        <p className="sc-lead">
-          What works here as you: each agent you connected, with a token of its own that nobody
-          sees. What you may do, it may do; disconnect it here when that is over. A script or a
-          console of your own holds a token the same way, made by hand.
-        </p>
+        <p className="sc-lead">{agents.lead}</p>
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
         {fresh !== undefined && (
           <NewToken token={fresh.token} secret={fresh.secret} onDone={() => setFresh(undefined)} />
         )}
         {making && (
-          <section className="sc-panel" aria-label="Make a token">
+          <section className="sc-panel" aria-label={agents.makeAria}>
             <TokenForm
               daysAtMost={data.me?.workspace.tokenDaysAtMost}
               busy={busy}
@@ -838,12 +828,7 @@ function WorkspacePage(props: {
           tokens={data.tokens}
           busy={busy}
           onRevoke={(token) => void act(() => data.actions.revokeToken(token.id))}
-          empty={
-            <EmptyState
-              title="No agent is connected yet"
-              body="Tell your agent to connect to this console, as below, and it shows up here."
-            />
-          }
+          empty={<EmptyState title={agents.empty.title} body={agents.empty.body} />}
         />
         <ConnectWords origin={origin} />
       </>
@@ -856,6 +841,7 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
   const components: ConsoleComponents = { ...DEFAULT_COMPONENTS, ...config.components };
   const client = config.client ?? createClient({ baseUrl: config.baseUrl ?? "" });
   const fallbackTitle = config.title ?? "Console";
+  const languages = config.languages ?? DEFAULT_LANGUAGES;
 
   function App(props: { readonly initialPath?: string | undefined }) {
     const { location, navigation } = useNavigation(props.initialPath);
@@ -868,6 +854,18 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
     const data = useConsoleData(client, projectKey);
     const failure = signInFailureOf(location.search);
     const title = data.me?.workspace.name ?? fallbackTitle;
+    // The language: the person's choice, else the browser's, else the first the console speaks.
+    const chosen = data.me?.language;
+    const pack = useMemo(
+      () =>
+        chooseLanguage(
+          chosen,
+          typeof navigator === "undefined" ? [] : navigator.languages,
+          languages,
+        ),
+      [chosen],
+    );
+    const words = pack.messages;
 
     // An address that moved is shown at its new one, in its place.
     useEffect(() => {
@@ -879,28 +877,29 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
     useEffect(() => {
       if (typeof document !== "undefined") {
         document.title = data.project === undefined ? title : `${data.project.name} · ${title}`;
+        document.documentElement.lang = pack.tag;
       }
-    }, [title, data.project]);
+    }, [title, data.project, pack.tag]);
 
+    let content: React.ReactNode;
     if (data.me === undefined) {
-      return (
+      content = (
         <div className="sc-loading">
           {data.error === undefined ? (
-            <Spinner label="Loading" />
+            <Spinner label={words.common.loading} />
           ) : (
             <Callout
               tone="danger"
-              title="The console could not be reached"
-              action={<Button onClick={data.reload}>Try again</Button>}
+              title={words.common.couldNotReach}
+              action={<Button onClick={data.reload}>{words.common.tryAgain}</Button>}
             >
               {data.error}
             </Callout>
           )}
         </div>
       );
-    }
-    if (data.me.person === null) {
-      return (
+    } else if (data.me.person === null) {
+      content = (
         <components.SignIn
           title={title}
           providers={data.me.signIn}
@@ -908,137 +907,151 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
           failure={failure}
         />
       );
-    }
-    const project = data.project;
-    const waiting = data.decisions.filter((decision) => decision.answer === null).length;
-    const workspaceNav: NavItem[] = [
-      {
-        href: PATHS.projects,
-        label: "Projects",
-        current: route.name === "projects" || route.name === "new-project",
-      },
-      {
-        href: PATHS.people,
-        label: "People",
-        current: route.name === "people" || route.name === "person-agents",
-      },
-      {
-        href: PATHS.agents,
-        label: "Agents",
-        current: route.name === "agents" || route.name === "new-token",
-      },
-    ];
-    const nav: NavItem[] =
-      projectKey === undefined
-        ? workspaceNav
-        : [
-            {
-              href: projectHref(projectKey),
-              label: "Board",
-              current: route.name === "board" || route.name === "task" || route.name === "new-task",
-            },
-            {
-              href: projectHref(projectKey, "docs"),
-              label: "Docs",
-              current: route.name === "docs",
-            },
-            {
-              href: projectHref(projectKey, "decisions"),
-              label: "Decisions",
-              current:
-                route.name === "decisions" ||
-                route.name === "decision" ||
-                route.name === "new-decision",
-              count: waiting,
-            },
-            {
-              href: projectHref(projectKey, "feed"),
-              label: "Feed",
-              current: route.name === "feed",
-            },
-            {
-              href: projectHref(projectKey, "skills"),
-              label: "Skills",
-              current: route.name === "skills",
-            },
-            {
-              href: projectHref(projectKey, "members"),
-              label: "Members",
-              current: route.name === "members",
-            },
-            ...(project?.role === "owner"
-              ? [
-                  {
-                    href: projectHref(projectKey, "settings"),
-                    label: "Settings",
-                    current: route.name === "settings",
-                  },
-                ]
-              : []),
-          ];
-    let page: React.ReactNode;
-    if (!data.loaded || route.name === "moved") {
-      page = (
-        <div className="sc-loading">
-          <Spinner label="Loading the workspace" />
-        </div>
-      );
-    } else if (route.name === "projects" || route.name === "new-project") {
-      page = (
-        <ProjectsPage
-          data={data}
-          components={components}
-          navigation={navigation}
-          making={route.name === "new-project"}
-        />
-      );
-    } else if (projectKey === undefined) {
-      page = (
-        <WorkspacePage route={route} data={data} components={components} navigation={navigation} />
-      );
-    } else if (data.projectError !== undefined) {
-      page = (
-        <EmptyState
-          title="No such project"
-          body="It may not exist, or it is not yours to see. The projects you may work in are on the front page."
-          action={<LinkButton href={PATHS.projects}>Projects</LinkButton>}
-        />
-      );
-    } else if (!data.projectLoaded || project === undefined) {
-      page = (
-        <div className="sc-loading">
-          <Spinner label="Loading the project" />
-        </div>
-      );
     } else {
-      page = (
-        <ProjectPage
-          route={route}
-          project={project}
-          data={data}
-          components={components}
-          navigation={navigation}
-        />
+      const project = data.project;
+      const waiting = data.decisions.filter((decision) => decision.answer === null).length;
+      const workspaceNav: NavItem[] = [
+        {
+          href: PATHS.projects,
+          label: words.nav.projects,
+          current: route.name === "projects" || route.name === "new-project",
+        },
+        {
+          href: PATHS.people,
+          label: words.nav.people,
+          current: route.name === "people" || route.name === "person-agents",
+        },
+        {
+          href: PATHS.agents,
+          label: words.nav.agents,
+          current: route.name === "agents" || route.name === "new-token",
+        },
+      ];
+      const nav: NavItem[] =
+        projectKey === undefined
+          ? workspaceNav
+          : [
+              {
+                href: projectHref(projectKey),
+                label: words.nav.board,
+                current:
+                  route.name === "board" || route.name === "task" || route.name === "new-task",
+              },
+              {
+                href: projectHref(projectKey, "docs"),
+                label: words.nav.docs,
+                current: route.name === "docs",
+              },
+              {
+                href: projectHref(projectKey, "decisions"),
+                label: words.nav.decisions,
+                current:
+                  route.name === "decisions" ||
+                  route.name === "decision" ||
+                  route.name === "new-decision",
+                count: waiting,
+              },
+              {
+                href: projectHref(projectKey, "feed"),
+                label: words.nav.feed,
+                current: route.name === "feed",
+              },
+              {
+                href: projectHref(projectKey, "skills"),
+                label: words.nav.skills,
+                current: route.name === "skills",
+              },
+              {
+                href: projectHref(projectKey, "members"),
+                label: words.nav.members,
+                current: route.name === "members",
+              },
+              ...(project?.role === "owner"
+                ? [
+                    {
+                      href: projectHref(projectKey, "settings"),
+                      label: words.nav.settings,
+                      current: route.name === "settings",
+                    },
+                  ]
+                : []),
+            ];
+      let page: React.ReactNode;
+      if (!data.loaded || route.name === "moved") {
+        page = (
+          <div className="sc-loading">
+            <Spinner label={words.common.loadingWorkspace} />
+          </div>
+        );
+      } else if (route.name === "projects" || route.name === "new-project") {
+        page = (
+          <ProjectsPage
+            data={data}
+            components={components}
+            navigation={navigation}
+            making={route.name === "new-project"}
+          />
+        );
+      } else if (projectKey === undefined) {
+        page = (
+          <WorkspacePage
+            route={route}
+            data={data}
+            components={components}
+            navigation={navigation}
+          />
+        );
+      } else if (data.projectError !== undefined) {
+        page = (
+          <EmptyState
+            title={words.common.noSuchProject.title}
+            body={words.common.noSuchProject.body}
+            action={<LinkButton href={PATHS.projects}>{words.nav.projects}</LinkButton>}
+          />
+        );
+      } else if (!data.projectLoaded || project === undefined) {
+        page = (
+          <div className="sc-loading">
+            <Spinner label={words.common.loadingProject} />
+          </div>
+        );
+      } else {
+        page = (
+          <ProjectPage
+            route={route}
+            project={project}
+            data={data}
+            components={components}
+            navigation={navigation}
+          />
+        );
+      }
+      content = (
+        <components.Shell
+          title={title}
+          project={
+            projectKey === undefined
+              ? undefined
+              : { name: project?.name ?? projectKey, href: projectHref(projectKey) }
+          }
+          nav={nav}
+          menu={workspaceNav}
+          languages={languages.map((candidate) => ({
+            tag: candidate.tag,
+            label: candidate.label,
+            current: candidate.tag === pack.tag,
+          }))}
+          onLanguage={(tag) => void data.actions.updateMe({ language: tag }).catch(() => undefined)}
+          person={data.me.person}
+          live={projectKey === undefined ? undefined : data.live}
+          onNavigate={(href) => navigation.go(href)}
+          onSignOut={() => void data.actions.signOut()}
+        >
+          {page}
+        </components.Shell>
       );
     }
-    return (
-      <components.Shell
-        title={title}
-        project={
-          projectKey === undefined
-            ? undefined
-            : { name: project?.name ?? projectKey, href: projectHref(projectKey) }
-        }
-        nav={nav}
-        menu={workspaceNav}
-        person={data.me.person}
-        live={projectKey === undefined ? undefined : data.live}
-        onNavigate={(href) => navigation.go(href)}
-        onSignOut={() => void data.actions.signOut()}
-      >
-        {page}
-      </components.Shell>
-    );
+    return <LanguageContext.Provider value={pack}>{content}</LanguageContext.Provider>;
   }
 
   return {

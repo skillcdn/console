@@ -63,7 +63,12 @@ const ANSWERED = {
   ...DECISION,
   answer: { option: "2", note: "Carefully.", by: { ...PERSON, login: "bob" }, at: WHEN },
 };
-const ME = { workspace: { name: "Acme", tokenDaysAtMost: null }, person: PERSON, signIn: [] };
+const ME = {
+  workspace: { name: "Acme", tokenDaysAtMost: null },
+  person: PERSON,
+  language: null,
+  signIn: [],
+};
 const TOKEN = {
   id: "0199c4d8-0000-7000-8000-000000000030",
   name: "Claude Code on laptop",

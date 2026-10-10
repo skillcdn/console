@@ -1,11 +1,13 @@
 import type { ReactNode } from "react";
 import type { RestArtifact, RestRun, RunStatus } from "../api.js";
+import { useWords } from "../i18n/index.js";
 import { Markdown } from "./markdown.js";
 import { Badge, Button, formatBytes, PersonChip, Time } from "./ui.js";
 
 // A run: one agent at work on one task for one person, with what it reported, what it handed
 // in, and what it waits for. Takes its data as props and nothing from the network.
 
+/** The words of a run's status in English: the default pack's. */
 export const RUN_STATUS_LABELS: Readonly<Record<RunStatus, string>> = {
   running: "At work",
   waiting: "Waiting for a decision",
@@ -15,6 +17,7 @@ export const RUN_STATUS_LABELS: Readonly<Record<RunStatus, string>> = {
 };
 
 export function RunStatusBadge(props: { readonly status: RunStatus }) {
+  const words = useWords();
   const tone =
     props.status === "running"
       ? "accent"
@@ -25,7 +28,7 @@ export function RunStatusBadge(props: { readonly status: RunStatus }) {
           : props.status === "failed"
             ? "danger"
             : "neutral";
-  return <Badge tone={tone}>{RUN_STATUS_LABELS[props.status]}</Badge>;
+  return <Badge tone={tone}>{words.vocabulary.runStatus[props.status]}</Badge>;
 }
 
 export interface RunCardProps {
@@ -42,19 +45,20 @@ export interface RunCardProps {
 }
 
 export function RunCard(props: RunCardProps) {
+  const words = useWords().runs;
   const { run } = props;
   const open = run.status === "running" || run.status === "waiting";
   return (
-    <article className="sc-run" aria-label={`${run.agent} for ${run.person.login}`}>
+    <article className="sc-run" aria-label={words.label(run.agent, run.person.login)}>
       <header className="sc-run-header">
         <span className="sc-run-agent">{run.agent}</span>
         <RunStatusBadge status={run.status} />
         <span className="sc-run-meta">
-          for <PersonChip person={run.person} /> since <Time iso={run.startedAt} />
+          {words.for} <PersonChip person={run.person} /> {words.since} <Time iso={run.startedAt} />
           {run.endedAt !== null && (
             <>
               {" "}
-              until <Time iso={run.endedAt} />
+              {words.until} <Time iso={run.endedAt} />
             </>
           )}
         </span>
@@ -65,23 +69,23 @@ export function RunCard(props: RunCardProps) {
             disabled={props.busy === true}
             onClick={() => props.onAbandon?.(run)}
           >
-            Mark abandoned
+            {words.markAbandoned}
           </Button>
         )}
       </header>
       {run.waitingFor !== null && (
         <p className="sc-run-waiting">
-          Waiting for a decision
+          {words.waitingForDecision}
           {props.decisionHref !== undefined && (
             <>
-              : <a href={props.decisionHref(run.waitingFor)}>answer it</a>
+              : <a href={props.decisionHref(run.waitingFor)}>{words.answerIt}</a>
             </>
           )}
           .
         </p>
       )}
       {run.reports.length > 0 && (
-        <ol className="sc-run-reports" aria-label="Reports">
+        <ol className="sc-run-reports" aria-label={words.reports}>
           {run.reports.map((report) => (
             <li key={report.id} className="sc-report">
               <Time iso={report.createdAt} />
@@ -91,7 +95,7 @@ export function RunCard(props: RunCardProps) {
         </ol>
       )}
       {run.artifacts.length > 0 && (
-        <ul className="sc-link-list" aria-label="Handed in">
+        <ul className="sc-link-list" aria-label={words.handedIn}>
           {run.artifacts.map((artifact) => (
             <li key={artifact.id}>
               <ArtifactLink artifact={artifact} fileHref={props.fileHref} />

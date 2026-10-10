@@ -20,6 +20,7 @@ import {
 } from "./components/documents.js";
 import { Callout, EmptyState, Spinner } from "./components/ui.js";
 import type { ConsoleData } from "./data.js";
+import { useWords } from "./i18n/index.js";
 import {
   type DocsView,
   decisionHref,
@@ -50,6 +51,7 @@ export interface DocsPageProps {
 type Found = RestDocument | null | undefined;
 
 export function DocsPage(props: DocsPageProps) {
+  const words = useWords().docs;
   const { project, path, view, data, navigation } = props;
   const [listing, setListing] = useState<RestDocuments | undefined>(undefined);
   const [document, setDocument] = useState<Found>(undefined);
@@ -103,9 +105,7 @@ export function DocsPage(props: DocsPageProps) {
     };
     load().catch((failure: unknown) => {
       if (!signal.aborted) {
-        setProblem(
-          failure instanceof ApiError ? failure.message : "The documents could not be loaded.",
-        );
+        setProblem(failure instanceof ApiError ? failure.message : words.couldNotLoad);
       }
     });
     return () => controller.abort();
@@ -145,11 +145,11 @@ export function DocsPage(props: DocsPageProps) {
       })
       .catch((failure: unknown) => {
         if (!controller.signal.aborted) {
-          setProblem(failure instanceof ApiError ? failure.message : "The search did not go.");
+          setProblem(failure instanceof ApiError ? failure.message : words.searchFailed);
         }
       });
     return () => controller.abort();
-  }, [actions, query]);
+  }, [actions, query, words]);
 
   const toDoc = (target: string) => docHref(key, target);
   const toFolder = (folder: string) => docHref(key, folder);
@@ -163,16 +163,16 @@ export function DocsPage(props: DocsPageProps) {
   /** The folder a new page goes in: this one, or the one the page shown is in. */
   const folder = page === undefined ? path : folderOf(path);
 
-  const search = (words: string) =>
-    navigation.go(words === "" ? here : docHref(key, path, { kind: "search", q: words }));
+  const search = (typed: string) =>
+    navigation.go(typed === "" ? here : docHref(key, path, { kind: "search", q: typed }));
 
   const head = (
     <>
       <div className="sc-page-head">
-        <h1 className="sc-page-title">Docs</h1>
+        <h1 className="sc-page-title">{words.title}</h1>
         {view.kind !== "new" && (
           <a className="sc-button sc-button-primary" href={docHref(key, folder, { kind: "new" })}>
-            New page
+            {words.newPage}
           </a>
         )}
       </div>
@@ -186,17 +186,17 @@ export function DocsPage(props: DocsPageProps) {
     return (
       <>
         {head}
-        <section aria-label="Pages found">
-          <h2 className="sc-section-title">Pages with "{view.q}"</h2>
+        <section aria-label={words.found}>
+          <h2 className="sc-section-title">{words.pagesWith(view.q)}</h2>
           {results === undefined ? (
             <div className="sc-loading">
-              <Spinner label="Searching" />
+              <Spinner label={words.searching} />
             </div>
           ) : (
             <DocumentList
               items={results.items}
               docHref={toDoc}
-              empty={<EmptyState title="No page has these words" />}
+              empty={<EmptyState title={words.noPageHasWords} />}
             />
           )}
         </section>
@@ -208,7 +208,7 @@ export function DocsPage(props: DocsPageProps) {
     return (
       <>
         {head}
-        <section className="sc-panel" aria-label="New page">
+        <section className="sc-panel" aria-label={words.newPageAria}>
           <DocumentForm
             folder={folder}
             busy={busy}
@@ -233,7 +233,7 @@ export function DocsPage(props: DocsPageProps) {
       <>
         {head}
         <div className="sc-loading">
-          <Spinner label="Loading the documents" />
+          <Spinner label={words.loading} />
         </div>
       </>
     );
@@ -244,7 +244,7 @@ export function DocsPage(props: DocsPageProps) {
       return (
         <>
           {head}
-          <section className="sc-panel" aria-label="Edit the page">
+          <section className="sc-panel" aria-label={words.editPageAria}>
             <DocumentForm
               document={page}
               busy={busy}
@@ -315,7 +315,7 @@ export function DocsPage(props: DocsPageProps) {
     listing !== undefined && (listing.folders.length > 0 || listing.items.length > 0);
   const write = (
     <a className="sc-button sc-button-secondary" href={docHref(key, path, { kind: "new" })}>
-      {path === "" ? "New page" : "Write it"}
+      {path === "" ? words.newPage : words.writeIt}
     </a>
   );
   return (
@@ -325,17 +325,9 @@ export function DocsPage(props: DocsPageProps) {
       {something && listing !== undefined ? (
         <FolderView listing={listing} docHref={toDoc} folderHref={toFolder} />
       ) : path === "" ? (
-        <EmptyState
-          title="No pages yet"
-          body="Write the first one: what the project rests on, in Markdown, at a path of its own."
-          action={write}
-        />
+        <EmptyState title={words.emptyRoot.title} body={words.emptyRoot.body} action={write} />
       ) : (
-        <EmptyState
-          title="No page at this path"
-          body="Nothing is written here yet, and no folder of that name holds a page."
-          action={write}
-        />
+        <EmptyState title={words.emptyPath.title} body={words.emptyPath.body} action={write} />
       )}
     </>
   );

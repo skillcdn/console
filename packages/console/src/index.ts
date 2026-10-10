@@ -58,7 +58,13 @@ export {
   type RunListProps,
   RunStatusBadge,
 } from "./components/runs.js";
-export { isPlainClick, type NavItem, Shell, type ShellProps } from "./components/shell.js";
+export {
+  isPlainClick,
+  type LanguageChoice,
+  type NavItem,
+  Shell,
+  type ShellProps,
+} from "./components/shell.js";
 export { SignIn, type SignInProps } from "./components/sign-in.js";
 export { SkillList, type SkillListProps } from "./components/skills.js";
 export { TaskForm, type TaskFormProps } from "./components/task-form.js";
@@ -100,6 +106,18 @@ export {
 } from "./console.js";
 export { type ConsoleActions, type ConsoleData, useConsoleData } from "./data.js";
 export { DocsPage, type DocsPageProps } from "./docs-page.js";
+export {
+  chooseLanguage,
+  DEFAULT_LANGUAGES,
+  ENGLISH,
+  KOREAN,
+  LanguageContext,
+  type LanguagePack,
+  type Messages,
+  packFor,
+  useLanguage,
+  useWords,
+} from "./i18n/index.js";
 export {
   connectHref,
   type DocsView,

@@ -57,7 +57,7 @@ The API is the board as its members see it: the people, the projects, and in eac
 
 ### `GET /api/v1/me`
 
-`{ "workspace": { "name", "tokenDaysAtMost" }, "person": ... | null, "signIn": [{ "key", "label" }, ...] }`: what the board is called and the most days a token may be good for here (or `null` where a person chooses), who the session cookie or the token says is asking (`id`, `login`, `name` or `null`, `avatar` or `null`, `role`), and the identity providers people sign in through (`gh`, `google`, each with the label of its button), none where nobody can. Nobody is an answer, not an error; the pages ask this once to decide what to show, and the command once, at `login`, to see that the console knows the token.
+`{ "workspace": { "name", "tokenDaysAtMost" }, "person": ... | null, "signIn": [{ "key", "label" }, ...] }`: what the board is called and the most days a token may be good for here (or `null` where a person chooses), the language the person chose for the pages (`language`, a tag, or `null` for the browser's), who the session cookie or the token says is asking (`id`, `login`, `name` or `null`, `avatar` or `null`, `role`), and the identity providers people sign in through (`gh`, `google`, each with the label of its button), none where nobody can. Nobody is an answer, not an error; the pages ask this once to decide what to show, and the command once, at `login`, to see that the console knows the token.
 
 ### `GET /api/v1/people`
 
@@ -78,6 +78,10 @@ Takes `key` and `name`, and optionally `description`, `visibility` (default `pri
 ### `GET /api/v1/events?after=&limit=`
 
 The workspace's own events, the ones about no project: who joined (`person.joined`), who was made what (`person.role_changed`). The same shape and parameters as a project's feed below, without the filters.
+
+### `PATCH /api/v1/me`
+
+Keeps the person's own choice of language for the pages ([ADR-0012](../adr/0012-the-pages-speak-the-persons-language-from-packs-that-ship-with-the-package.md)): `{ "language": "ko" }`, a language tag as a browser sends one, or `null` to choose none and let the browser's languages decide; answers what `GET` answers. A person's own doing, from the console's own pages: never with a token.
 
 ### `GET /api/v1/tokens` and `POST /api/v1/tokens`
 

@@ -1,8 +1,10 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import type { PersonRole, RestPerson, TaskPriority, TaskState } from "../api.js";
+import { useLanguage, useWords } from "../i18n/index.js";
 
 // Small building blocks. Each one is a class in styles/console.css and nothing more. Classes
-// are prefixed `sc-` so that a custom console's own styles never collide with them.
+// are prefixed `sc-` so that a custom console's own styles never collide with them. The words
+// come from the language the page is in (ADR-0012).
 
 export function cx(...names: (string | false | undefined)[]): string {
   return names.filter(Boolean).join(" ");
@@ -101,7 +103,7 @@ export function PersonChip(props: { readonly person: RestPerson; readonly size?:
   );
 }
 
-/** The words of the vocabulary as people read them. */
+/** The words of the vocabulary as people read them, in English: the default pack's. */
 export const STATE_LABELS: Readonly<Record<TaskState, string>> = {
   idea: "Idea",
   ready: "Ready",
@@ -124,12 +126,16 @@ export const ROLE_LABELS: Readonly<Record<PersonRole, string>> = {
 };
 
 export function RoleBadge(props: { readonly role: PersonRole }) {
+  const words = useWords();
   return (
-    <Badge tone={props.role === "admin" ? "point" : "neutral"}>{ROLE_LABELS[props.role]}</Badge>
+    <Badge tone={props.role === "admin" ? "point" : "neutral"}>
+      {words.vocabulary.role[props.role]}
+    </Badge>
   );
 }
 
 export function StateBadge(props: { readonly state: TaskState }) {
+  const words = useWords();
   const tone =
     props.state === "done"
       ? "success"
@@ -138,16 +144,17 @@ export function StateBadge(props: { readonly state: TaskState }) {
         : props.state === "in_progress" || props.state === "in_review"
           ? "accent"
           : "neutral";
-  return <Badge tone={tone}>{STATE_LABELS[props.state]}</Badge>;
+  return <Badge tone={tone}>{words.vocabulary.state[props.state]}</Badge>;
 }
 
 export function PriorityBadge(props: { readonly priority: TaskPriority }) {
+  const words = useWords();
   if (props.priority === "normal") {
     return null;
   }
   const tone =
     props.priority === "urgent" ? "danger" : props.priority === "high" ? "point" : "neutral";
-  return <Badge tone={tone}>{PRIORITY_LABELS[props.priority]}</Badge>;
+  return <Badge tone={tone}>{words.vocabulary.priority[props.priority]}</Badge>;
 }
 
 export function Spinner(props: { readonly label: string }) {
@@ -174,13 +181,13 @@ export function EmptyState(props: {
   );
 }
 
-/** An instant as people read one: the date, and the time of day. */
-export function formatInstant(iso: string): string {
+/** An instant as people read one in a language: the date, and the time of day. */
+export function formatInstant(iso: string, language?: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) {
     return iso;
   }
-  return date.toLocaleString(undefined, {
+  return date.toLocaleString(language, {
     year: "numeric",
     month: "short",
     day: "numeric",
@@ -203,9 +210,10 @@ export function formatBytes(size: number): string {
 }
 
 export function Time(props: { readonly iso: string }) {
+  const { tag } = useLanguage();
   return (
     <time className="sc-time" dateTime={props.iso}>
-      {formatInstant(props.iso)}
+      {formatInstant(props.iso, tag)}
     </time>
   );
 }

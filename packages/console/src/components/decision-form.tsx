@@ -8,6 +8,7 @@ import {
   type RestDecisionInput,
   type RestTask,
 } from "../api.js";
+import { useWords } from "../i18n/index.js";
 import { Button } from "./ui.js";
 
 // Raising a decision: the question, what a person needs to know, and the options to choose from.
@@ -24,6 +25,8 @@ export interface DecisionFormProps {
 }
 
 export function DecisionForm(props: DecisionFormProps) {
+  const words = useWords();
+  const form = words.decisions.form;
   const [question, setQuestion] = useState("");
   const [body, setBody] = useState("");
   const [taskId, setTaskId] = useState(props.taskId ?? "");
@@ -45,7 +48,7 @@ export function DecisionForm(props: DecisionFormProps) {
   return (
     <form className="sc-form" onSubmit={submit}>
       <label className="sc-field">
-        <span className="sc-field-label">Question</span>
+        <span className="sc-field-label">{form.question}</span>
         <input
           className="sc-input"
           value={question}
@@ -55,25 +58,25 @@ export function DecisionForm(props: DecisionFormProps) {
         />
       </label>
       <label className="sc-field">
-        <span className="sc-field-label">Context</span>
+        <span className="sc-field-label">{form.context}</span>
         <textarea
           className="sc-input sc-textarea"
           value={body}
           maxLength={MAX_BODY_LENGTH}
           rows={4}
-          placeholder="What a person needs to know to answer, in Markdown."
+          placeholder={form.contextPlaceholder}
           onChange={(event) => setBody(event.target.value)}
         />
       </label>
       {props.taskId === undefined && props.tasks.length > 0 && (
         <label className="sc-field">
-          <span className="sc-field-label">About</span>
+          <span className="sc-field-label">{form.about}</span>
           <select
             className="sc-input"
             value={taskId}
             onChange={(event) => setTaskId(event.target.value)}
           >
-            <option value="">No task in particular</option>
+            <option value="">{form.noTask}</option>
             {props.tasks.map((task) => (
               <option key={task.id} value={task.id}>
                 #{task.number} {task.title}
@@ -83,7 +86,7 @@ export function DecisionForm(props: DecisionFormProps) {
         </label>
       )}
       <fieldset className="sc-field sc-options">
-        <legend className="sc-field-label">Options</legend>
+        <legend className="sc-field-label">{form.options}</legend>
         {options.map((option, index) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: ordered drafts without ids
           <div key={index} className="sc-link-row">
@@ -91,7 +94,7 @@ export function DecisionForm(props: DecisionFormProps) {
               className="sc-input"
               value={option}
               maxLength={MAX_OPTION_LABEL_LENGTH}
-              placeholder={`Option ${index + 1}`}
+              placeholder={form.option(index + 1)}
               onChange={(event) =>
                 setOptions(options.map((entry, at) => (at === index ? event.target.value : entry)))
               }
@@ -102,14 +105,14 @@ export function DecisionForm(props: DecisionFormProps) {
                 size="sm"
                 onClick={() => setOptions(options.filter((_, at) => at !== index))}
               >
-                Remove
+                {words.common.remove}
               </Button>
             )}
           </div>
         ))}
         {options.length < MAX_OPTIONS && (
           <Button variant="ghost" size="sm" onClick={() => setOptions([...options, ""])}>
-            Add an option
+            {form.addOption}
           </Button>
         )}
       </fieldset>
@@ -120,11 +123,11 @@ export function DecisionForm(props: DecisionFormProps) {
       )}
       <div className="sc-form-actions">
         <Button type="submit" variant="primary" disabled={props.busy === true || !ready}>
-          Raise the decision
+          {form.raise}
         </Button>
         {props.onCancel !== undefined && (
           <Button variant="ghost" onClick={props.onCancel}>
-            Cancel
+            {words.common.cancel}
           </Button>
         )}
       </div>

@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useRef } from "react";
 import type { RestPerson } from "../api.js";
+import { useWords } from "../i18n/index.js";
 import { Avatar, cx } from "./ui.js";
 
 // The frame every page sits in (ADR-0010): a header that names the workspace and the project the
@@ -14,6 +15,13 @@ export interface NavItem {
   readonly count?: number | undefined;
 }
 
+/** A language the person may switch to, as the menu offers it (ADR-0012). */
+export interface LanguageChoice {
+  readonly tag: string;
+  readonly label: string;
+  readonly current: boolean;
+}
+
 export interface ShellProps {
   readonly title: string;
   /** The project the page is on, named after the workspace, or nothing on the workspace's own pages. */
@@ -22,6 +30,9 @@ export interface ShellProps {
   readonly nav: readonly NavItem[];
   /** The workspace's pages, reached from anywhere through the person's menu. */
   readonly menu?: readonly NavItem[] | undefined;
+  /** The languages the pages speak, for the menu to switch between. */
+  readonly languages?: readonly LanguageChoice[] | undefined;
+  readonly onLanguage?: ((tag: string) => void) | undefined;
   readonly person: RestPerson | undefined;
   /** Follows a link inside the app without loading a document. */
   readonly onNavigate: (href: string) => void;
@@ -42,13 +53,16 @@ export function isPlainClick(event: {
   return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
 }
 
-/** The person's menu: who they are, the workspace's pages, and the way out. Closes once used. */
+/** The person's menu: who they are, the workspace's pages, the languages, and the way out. Closes once used. */
 function PersonMenu(props: {
   readonly person: RestPerson;
   readonly items: readonly NavItem[];
+  readonly languages: readonly LanguageChoice[];
+  readonly onLanguage: ((tag: string) => void) | undefined;
   readonly onNavigate: (href: string) => void;
   readonly onSignOut: (() => void) | undefined;
 }) {
+  const words = useWords();
   const details = useRef<HTMLDetailsElement>(null);
   const close = () => {
     if (details.current !== null) {
@@ -81,7 +95,7 @@ function PersonMenu(props: {
   const { person } = props;
   return (
     <details className="sc-menu" ref={details}>
-      <summary className="sc-menu-summary" aria-label={`${person.login}: menu`}>
+      <summary className="sc-menu-summary" aria-label={words.shell.menu(person.login)}>
         <Avatar person={person} size="sm" />
         <span className="sc-person-login">{person.login}</span>
       </summary>
@@ -90,7 +104,7 @@ function PersonMenu(props: {
           <span>{person.name ?? person.login}</span>
           {person.name !== null && <span className="sc-muted">{person.login}</span>}
         </p>
-        <nav className="sc-menu-list" aria-label="Workspace">
+        <nav className="sc-menu-list" aria-label={words.shell.workspace}>
           {props.items.map((item) => (
             <a
               key={item.href}
@@ -109,6 +123,26 @@ function PersonMenu(props: {
             </a>
           ))}
         </nav>
+        {props.languages.length > 1 && props.onLanguage !== undefined && (
+          <fieldset className="sc-menu-languages">
+            <legend className="sc-menu-heading">{words.common.language}</legend>
+            {props.languages.map((language) => (
+              <button
+                key={language.tag}
+                type="button"
+                lang={language.tag}
+                className={cx("sc-menu-link", language.current && "sc-menu-chosen")}
+                aria-pressed={language.current}
+                onClick={() => {
+                  close();
+                  props.onLanguage?.(language.tag);
+                }}
+              >
+                {language.label}
+              </button>
+            ))}
+          </fieldset>
+        )}
         {props.onSignOut !== undefined && (
           <button
             type="button"
@@ -118,7 +152,7 @@ function PersonMenu(props: {
               props.onSignOut?.();
             }}
           >
-            Sign out
+            {words.shell.signOut}
           </button>
         )}
       </div>
@@ -127,6 +161,7 @@ function PersonMenu(props: {
 }
 
 export function Shell(props: ShellProps) {
+  const words = useWords();
   const follow = (href: string) => (event: React.MouseEvent) => {
     if (isPlainClick(event)) {
       event.preventDefault();
@@ -136,7 +171,7 @@ export function Shell(props: ShellProps) {
   return (
     <div className="sc-shell">
       <a className="sc-skip" href="#sc-content">
-        Skip to content
+        {words.shell.skipToContent}
       </a>
       <header className="sc-header">
         <div className="sc-header-inner">
@@ -161,15 +196,19 @@ export function Shell(props: ShellProps) {
             {props.live !== undefined && (
               <span
                 className={cx("sc-live", props.live && "sc-live-on")}
-                title={props.live ? "Live" : "Reconnecting"}
+                title={props.live ? words.shell.live : words.shell.reconnecting}
               >
-                <span className="sc-visually-hidden">{props.live ? "Live" : "Reconnecting"}</span>
+                <span className="sc-visually-hidden">
+                  {props.live ? words.shell.live : words.shell.reconnecting}
+                </span>
               </span>
             )}
             {props.person !== undefined && (
               <PersonMenu
                 person={props.person}
                 items={props.menu ?? []}
+                languages={props.languages ?? []}
+                onLanguage={props.onLanguage}
                 onNavigate={props.onNavigate}
                 onSignOut={props.onSignOut}
               />
@@ -177,7 +216,7 @@ export function Shell(props: ShellProps) {
           </div>
         </div>
         {props.nav.length > 0 && (
-          <nav className="sc-tabs" aria-label="Pages">
+          <nav className="sc-tabs" aria-label={words.shell.pages}>
             <div className="sc-tabs-inner">
               {props.nav.map((item) => (
                 <a

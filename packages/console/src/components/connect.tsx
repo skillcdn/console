@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { normalizeConnectCode, type RestConnectRequest, type RestTokenInput } from "../api.js";
+import { useWords } from "../i18n/index.js";
 import { TokenForm } from "./tokens.js";
 import { Button, Callout, Time } from "./ui.js";
 
@@ -15,12 +16,13 @@ export interface ConnectCodeFormProps {
 
 /** Where a person types the code their agent showed. */
 export function ConnectCodeForm(props: ConnectCodeFormProps) {
+  const words = useWords().connect;
   const [text, setText] = useState("");
   const code = normalizeConnectCode(text);
   return (
     <form
       className="sc-form sc-connect-code"
-      aria-label="The code"
+      aria-label={words.codeAria}
       onSubmit={(event) => {
         event.preventDefault();
         if (code !== undefined) {
@@ -29,7 +31,7 @@ export function ConnectCodeForm(props: ConnectCodeFormProps) {
       }}
     >
       <label className="sc-field">
-        <span className="sc-field-label">The code your agent showed</span>
+        <span className="sc-field-label">{words.codeLabel}</span>
         <input
           className="sc-input sc-code-input"
           value={text}
@@ -46,7 +48,7 @@ export function ConnectCodeForm(props: ConnectCodeFormProps) {
           variant="primary"
           disabled={code === undefined || props.busy === true}
         >
-          Continue
+          {words.continue}
         </Button>
       </div>
     </form>
@@ -67,21 +69,22 @@ export interface ConnectApprovalProps {
 
 /** What asks to connect under a code, and the way to let it, as the person it will act as. */
 export function ConnectApproval(props: ConnectApprovalProps) {
+  const words = useWords().connect;
   const { request } = props;
   return (
     <div className="sc-approval">
-      <Callout tone="warning" title="An agent asks to connect as you">
+      <Callout tone="warning" title={words.asks.title}>
         <p>
-          It calls itself <strong>{request.agent}</strong>, and it showed the code{" "}
-          <code className="sc-code-shown">{request.code}</code>. If that is not the code on your
-          screen, or you did not ask for this, say that it is not yours.
+          {words.asks.callsItself} <strong>{request.agent}</strong>
         </p>
         <p>
-          Approved, it works here as you, within what you may do, until you disconnect it on your
-          Agents page. It gets a token of its own, which nobody sees, you included.
+          {words.asks.showedCode} <code className="sc-code-shown">{request.code}</code>
         </p>
+        <p>{words.asks.ifNot}</p>
+        <p>{words.asks.approvedMeans}</p>
         <p className="sc-muted">
-          Asked <Time iso={request.createdAt} />; good until <Time iso={request.expiresAt} />.
+          {words.asks.asked} <Time iso={request.createdAt} />; {words.asks.goodUntil}{" "}
+          <Time iso={request.expiresAt} />.
         </p>
       </Callout>
       <TokenForm
@@ -89,8 +92,8 @@ export function ConnectApproval(props: ConnectApprovalProps) {
         daysAtMost={props.daysAtMost}
         busy={props.busy}
         error={props.error}
-        submitLabel="Approve"
-        cancelLabel="Not mine"
+        submitLabel={words.approve}
+        cancelLabel={words.notMine}
         onSubmit={props.onApprove}
         onCancel={props.onDeny}
       />
@@ -105,22 +108,15 @@ export interface ConnectWordsProps {
 
 /** What a person says to their agent to connect it, in words for someone who is not a developer. */
 export function ConnectWords(props: ConnectWordsProps) {
+  const words = useWords().connect.words;
   return (
-    <section className="sc-panel sc-connect" aria-label="Connecting an agent">
-      <h2 className="sc-section-title">Connecting an agent</h2>
+    <section className="sc-panel sc-connect" aria-label={words.title}>
+      <h2 className="sc-section-title">{words.title}</h2>
       <p>
-        Tell your agent, in its own chat:{" "}
-        <q>Install the console command and connect to {props.origin}.</q> An agent that can run
-        commands does the rest: it installs <code>@skillcdn/console</code>, runs{" "}
-        <code>console login --url {props.origin}</code>, and shows you an address with a code.
+        {words.tellYourAgent} <q>{words.quote(props.origin)}</q> {words.doesTheRest}
       </p>
-      <p>
-        Open the address, signed in here, check that the page shows the same code, give the agent a
-        name, and approve. From then on the agent works here as you, within what you may do;
-        disconnect it on this page when that is over. The token it holds is never shown to anyone,
-        you included.
-      </p>
-      <p>By hand, where no agent runs the command for you:</p>
+      <p>{words.thenApprove}</p>
+      <p>{words.byHand}</p>
       <pre className="sc-code">
         npm install -g @skillcdn/console{"\n"}console login --url {props.origin}
         {"\n"}console use {"<project key>"}

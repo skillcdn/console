@@ -1,0 +1,531 @@
+import type { SignInFailure } from "../routes.js";
+import type {
+  PersonRole,
+  ProjectRole,
+  ProjectVisibility,
+  RunStatus,
+  TaskPriority,
+  TaskState,
+} from "../vocabulary.js";
+
+// Every word the default console shows, in English: the source of the keys every other pack
+// carries (ADR-0012). Sentences with parts are functions of their parts, so that another
+// language orders them its own way. Nothing here is HTML: the components place the words.
+
+/** How many of something, said in words: the count and the noun, one or many. */
+const count = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
+
+export const en = {
+  tag: "en",
+  label: "English",
+
+  vocabulary: {
+    state: {
+      idea: "Idea",
+      ready: "Ready",
+      in_progress: "In progress",
+      in_review: "In review",
+      done: "Done",
+      dropped: "Dropped",
+    } satisfies Record<TaskState, string>,
+    priority: {
+      low: "Low",
+      normal: "Normal",
+      high: "High",
+      urgent: "Urgent",
+    } satisfies Record<TaskPriority, string>,
+    role: { admin: "Administrator", member: "Member" } satisfies Record<PersonRole, string>,
+    projectRole: { owner: "Owner", member: "Member" } satisfies Record<ProjectRole, string>,
+    visibility: {
+      workspace: "Everyone of the workspace",
+      private: "Only those listed",
+    } satisfies Record<ProjectVisibility, string>,
+    runStatus: {
+      running: "At work",
+      waiting: "Waiting for a decision",
+      finished: "Finished",
+      failed: "Failed",
+      abandoned: "Abandoned",
+    } satisfies Record<RunStatus, string>,
+  },
+
+  common: {
+    cancel: "Cancel",
+    save: "Save",
+    remove: "Remove",
+    edit: "Edit",
+    done: "Done",
+    loading: "Loading",
+    tryAgain: "Try again",
+    somethingWentWrong: "Something went wrong. Try again.",
+    couldNotReach: "The console could not be reached",
+    loadingWorkspace: "Loading the workspace",
+    loadingProject: "Loading the project",
+    nothingHere: {
+      title: "There is nothing at this address",
+      body: "The link may be wrong, or what it led to is gone.",
+    },
+    noSuchProject: {
+      title: "No such project",
+      body: "It may not exist, or it is not yours to see. The projects you may work in are on the front page.",
+    },
+    you: "(you)",
+    nobody: "Nobody",
+    nothing: "Nothing",
+    language: "Language",
+  },
+
+  nav: {
+    projects: "Projects",
+    people: "People",
+    agents: "Agents",
+    board: "Board",
+    docs: "Docs",
+    decisions: "Decisions",
+    feed: "Feed",
+    skills: "Skills",
+    members: "Members",
+    settings: "Settings",
+  },
+
+  shell: {
+    skipToContent: "Skip to content",
+    pages: "Pages",
+    workspace: "Workspace",
+    live: "Live",
+    reconnecting: "Reconnecting",
+    signOut: "Sign out",
+    menu: (login: string) => `${login}: menu`,
+  },
+
+  signIn: {
+    lead: "The board of the work, the agents at it, what they did, and the decisions that wait for a person.",
+    continueWith: (provider: string) => `Continue with ${provider}`,
+    nobody: {
+      title: "Nobody can sign in here yet",
+      body: "Signing in is not configured on this console. Whoever runs it sets it up as deploy/README.md describes.",
+    },
+    failure: {
+      denied: "The provider did not confirm the sign-in: you said no, or it did.",
+      expired: "The sign-in took too long or was finished in another browser. Try again.",
+      failed: "The sign-in did not complete. Try again in a moment.",
+      refused: "This account is not a member of the board. Ask whoever runs it to add you.",
+    } satisfies Record<SignInFailure, string>,
+  },
+
+  projects: {
+    title: "Projects",
+    newProject: "New project",
+    lead: "A project holds its board, its documents, its skills and its people. What you may see and change is decided per project: an owner configures it, a member works on it.",
+    empty: {
+      title: "No projects yet",
+      body: "Make the first one: what it is for, and who is in it. Or ask an owner to add you to theirs.",
+    },
+    list: "Projects",
+    private: "Private",
+    decisionsWaiting: (n: number) => `${count(n, "decision", "decisions")} waiting`,
+    agentsAtWork: (n: number) => `${count(n, "agent", "agents")} at work`,
+    form: {
+      aria: "New project",
+      name: "Name",
+      key: "Key",
+      keyHint:
+        "Lowercase letters, digits and hyphens: what addresses and the command say. It does not change.",
+      description: "Description",
+      descriptionPlaceholder: "What the project is for, in a sentence or two.",
+      whoIsMember: "Who is a member",
+      skillsAddress: "Skills address",
+      skillsAddressPlaceholder: "/gh/<owner>/<repo>, or empty for the organization's",
+      make: "Make the project",
+    },
+    members: {
+      title: "Members",
+      list: "Members",
+      leadWorkspace:
+        "Everyone of the workspace is a member of this project; those listed here are its owners and the people named besides.",
+      leadPrivate: "Only those listed here are in this project.",
+      leadRoles:
+        "An owner configures the project; a member works on it. A workspace administrator is an owner of every project.",
+      since: "since",
+      roleOf: (login: string) => `Role of ${login}`,
+      addAria: "Add a member",
+      person: "Person",
+      chooseSomeone: "Choose someone",
+      as: "As",
+      add: "Add",
+      empty: {
+        title: "Nobody is listed",
+        workspace: "Everyone of the workspace is in; the administrators own it.",
+        private: "The administrators own it until an owner is listed.",
+      },
+    },
+    settings: {
+      title: "Settings",
+      aria: "Project settings",
+      leadBefore: "The key, ",
+      leadAfter:
+        ", is what addresses and the command say, and does not change. The skills address names a repository served by SkillCDN; empty, the organization's skills are shown.",
+      onlyOwner: {
+        title: "Only an owner may change the project",
+        body: "Ask one of its owners, or a workspace administrator.",
+      },
+    },
+  },
+
+  board: {
+    writeTask: "Write a task",
+    empty: {
+      title: "Nothing on the board yet",
+      body: "Write the first task: what is to be done, and for whom.",
+    },
+    moveTo: "Move to",
+    decisions: (n: number) => count(n, "decision", "decisions"),
+    decisionsTitle: "Decisions waiting for a person",
+    agentAtWork: "agent at work",
+    agentAtWorkTitle: "An agent is at work on it",
+    links: (n: number) => count(n, "link", "links"),
+  },
+
+  task: {
+    newTitle: "Write a task",
+    newAria: "Write a task",
+    noSuch: {
+      title: "No such task",
+      body: "It may belong to another project, or the link is wrong.",
+    },
+    partOf: "Part of",
+    owner: "Owner",
+    assignee: "Assignee",
+    written: "Written",
+    changed: "Changed",
+    state: "State",
+    raiseDecision: "Raise a decision",
+    nothingMore: "Nothing more was written about it.",
+    links: "Links",
+    agentsAtWork: "Agents at work",
+    runs: "Runs",
+    decisions: "Decisions",
+    history: "What happened",
+    subtasks: "Subtasks",
+    partOfIt: "Part of it",
+    form: {
+      title: "Title",
+      body: "Body",
+      bodyPlaceholder: "What is to be done, in Markdown.",
+      state: "State",
+      priority: "Priority",
+      assignee: "Assignee",
+      partOf: "Part of",
+      links: "Links",
+      label: "Label",
+      addLink: "Add a link",
+      write: "Write the task",
+    },
+  },
+
+  decisions: {
+    title: "Decisions",
+    raise: "Raise a decision",
+    raiseAria: "Raise a decision",
+    one: "Decision",
+    all: "All decisions",
+    noSuch: {
+      title: "No such decision",
+      body: "It may belong to another project, or the link is wrong.",
+    },
+    empty: {
+      title: "Nothing waits for a person",
+      body: "A decision raised from a task, or from here, shows up on this page.",
+    },
+    waiting: "Waiting",
+    answered: "Answered",
+    waitingForPerson: "Waiting for a person.",
+    options: "Options",
+    notePlaceholder: "A word about it, if any",
+    answer: "Answer",
+    asked: "asked",
+    askedThrough: (agent: string) => `asked through ${agent}`,
+    about: "about",
+    answeredBy: "answered",
+    context: "Context",
+    whatFollowed: "What followed",
+    nothingWritten: "Nothing written yet.",
+    outcomePlaceholder: "What was done with the answer, and what came of it, in Markdown.",
+    writeWhatFollowed: "Write what followed",
+    changeIt: "Change it",
+    form: {
+      question: "Question",
+      context: "Context",
+      contextPlaceholder: "What a person needs to know to answer, in Markdown.",
+      about: "About",
+      noTask: "No task in particular",
+      options: "Options",
+      option: (n: number) => `Option ${n}`,
+      addOption: "Add an option",
+      raise: "Raise the decision",
+    },
+  },
+
+  feed: {
+    title: "What happened",
+    list: "What happened",
+    empty: "Nothing happened yet",
+    console: "The console",
+    as: (agent: string) => `as ${agent}`,
+    asTitle: "The agent the person acted through",
+    aTask: "a task",
+    aProject: "a project",
+    someone: "someone",
+    something: "something",
+    aQuestion: "a question",
+    aFile: "a file",
+    thePage: (name: string) => `the page ${name}`.trimEnd(),
+    role: {
+      admin: "an administrator",
+      owner: "an owner",
+      member: "a member",
+      other: "something",
+    },
+    field: {
+      title: "the title",
+      body: "the body",
+      priority: "the priority",
+      assigneeId: "the assignee",
+      parentId: "what it is part of",
+      links: "the links",
+      name: "the name",
+      description: "the description",
+      visibility: "who is a member",
+      skillsAddress: "the skills address",
+      outcome: "what followed",
+    } as Readonly<Record<string, string>>,
+    event: {
+      personJoined: () => "joined the board",
+      roleChanged: (login: string, role: string) => `made ${login} ${role}`,
+      projectCreated: (project: string) => `made the project ${project}`,
+      projectUpdated: (fields: string, project: string) =>
+        `changed ${fields} of the project ${project}`,
+      memberAdded: (login: string, project: string, role: string) =>
+        `added ${login} to ${project} as ${role}`,
+      memberChanged: (login: string, role: string, project: string) =>
+        `made ${login} ${role} of ${project}`,
+      memberRemoved: (login: string, project: string) => `removed ${login} from ${project}`,
+      taskCreated: (task: string) => `wrote ${task}`,
+      taskMoved: (task: string, from: string, to: string) => `moved ${task} from ${from} to ${to}`,
+      taskUpdated: (fields: string, task: string) => `changed ${fields} of ${task}`,
+      decisionRaised: (question: string) => `asked: ${question}`,
+      decisionAnswered: (question: string, option: string) => `answered "${question}": ${option}`,
+      decisionUpdated: (fields: string, question: string) =>
+        `wrote ${fields} of the decision "${question}"`,
+      runStarted: (task: string) => `started on ${task}`,
+      runReported: (task: string, excerpt: string | undefined) =>
+        `reported on ${task}${excerpt === undefined ? "" : `: ${excerpt}`}`,
+      runHandedIn: (label: string, task: string) => `handed in ${label} on ${task}`,
+      runFinished: (task: string) => `finished ${task}`,
+      runFailed: (task: string) => `failed on ${task}`,
+      runAbandoned: (task: string) => `gave up on ${task}`,
+      documentWritten: (page: string, version: number | undefined) =>
+        `wrote ${page}${version === undefined ? "" : `, version ${version}`}`,
+      documentArchived: (page: string) => `archived ${page}`,
+      documentRestored: (page: string) => `restored ${page}`,
+      fileAttached: (label: string, page: string) => `attached ${label} to ${page}`,
+    },
+  },
+
+  runs: {
+    for: "for",
+    since: "since",
+    until: "until",
+    markAbandoned: "Mark abandoned",
+    waitingForDecision: "Waiting for a decision",
+    answerIt: "answer it",
+    reports: "Reports",
+    handedIn: "Handed in",
+    label: (agent: string, login: string) => `${agent} for ${login}`,
+  },
+
+  skills: {
+    loading: "Loading the skills",
+    list: "Skills",
+    noAddress: {
+      title: "No skills address yet",
+      body: "This console has no address for the organization's skills. Whoever runs it names a repository served by SkillCDN in its configuration.",
+    },
+    servedBy: "The organization's skills, served by",
+    at: "at",
+    howLoaded:
+      ". An agent loads one through its SkillCDN connection; a person reads it at its page.",
+    status: {
+      indexing: "SkillCDN is still indexing the repository. Look again in a moment.",
+      failed: "SkillCDN could not index the repository. What it found is on the address's page.",
+      not_found:
+        "SkillCDN does not serve this address, or serves it only to someone signed in there. The address's page says which.",
+      unavailable: "SkillCDN could not be reached. The skills are as they were; look again later.",
+    },
+    none: {
+      title: "No skills at this address",
+      body: "The repository is served, and SkillCDN found no skill in it.",
+    },
+  },
+
+  docs: {
+    title: "Docs",
+    newPage: "New page",
+    newPageAria: "New page",
+    editPageAria: "Edit the page",
+    writeIt: "Write it",
+    found: "Pages found",
+    searchLabel: "Find pages",
+    searchPlaceholder: "Find pages by their words",
+    find: "Find",
+    searching: "Searching",
+    loading: "Loading the documents",
+    pagesWith: (words: string) => `Pages with "${words}"`,
+    noPageHasWords: "No page has these words",
+    couldNotLoad: "The documents could not be loaded.",
+    searchFailed: "The search did not go.",
+    emptyRoot: {
+      title: "No pages yet",
+      body: "Write the first one: what the project rests on, in Markdown, at a path of its own.",
+    },
+    emptyPath: {
+      title: "No page at this path",
+      body: "Nothing is written here yet, and no folder of that name holds a page.",
+    },
+    folders: "Folders",
+    pages: "Pages",
+    archived: "Archived",
+    version: (n: number) => `v${n}`,
+    versionWord: "version",
+    writtenBy: "written by",
+    versionOf: (n: number, of: number) => `Version ${n} of ${of}`,
+    showLatest: "Show the latest",
+    archivedNotice: "This page is archived: out of the folders and the search, and not written to.",
+    archive: "Archive",
+    restore: "Restore",
+    nothingOnPage: "Nothing is written on this page yet.",
+    refersTo: "Refers to",
+    noPageThereYet: "no page there yet",
+    referredToBy: "Referred to by",
+    decisionPrefix: "Decision: ",
+    files: "Files",
+    fileToAttach: "A file to attach",
+    labelPlaceholder: "What to call it, if not its name",
+    attach: "Attach",
+    by: "by",
+    versions: "Versions",
+    asAgentTitle: "The agent the person wrote it through",
+    form: {
+      path: "Path",
+      pathHint:
+        "Lowercase letters, digits and hyphens, with slashes between folders. It does not change once written.",
+      title: "Title",
+      body: "Body",
+      bodyPlaceholder:
+        "Markdown. A link to another page's path, such as guides/onboarding, refers to that page.",
+      write: "Write the page",
+      writeVersion: "Write a new version",
+    },
+  },
+
+  people: {
+    title: "People",
+    list: "People",
+    lead: "Everyone who has signed in. An administrator configures the workspace and says what each person is; a member works in the projects they are in. What a person may do, their agents may do.",
+    roleOf: (login: string) => `Role of ${login}`,
+    agents: "Agents",
+    agentsOf: (login: string) => `Agents of ${login}`,
+    agentsLead: (name: string) =>
+      `What works here as ${name}, each with a token of its own. Disconnecting one takes its token away at once.`,
+    loadingAgents: "Loading the agents",
+    noAgent: "No agent is connected",
+    onlyAdmin: {
+      title: "Only an administrator sees another person's agents",
+      body: "Your own are on your Agents page.",
+    },
+  },
+
+  agents: {
+    title: "Agents",
+    makeByHand: "Make a token by hand",
+    makeAria: "Make a token",
+    lead: "What works here as you: each agent you connected, with a token of its own that nobody sees. What you may do, it may do; disconnect it here when that is over. A script or a console of your own holds a token the same way, made by hand.",
+    empty: {
+      title: "No agent is connected yet",
+      body: "Tell your agent to connect to this console, as below, and it shows up here.",
+    },
+    list: "Agents",
+    connected: "Connected",
+    doesNotExpire: "Does not expire",
+    goodUntil: "Good until",
+    notActive: "Not active yet",
+    lastActive: "Last active",
+    disconnect: "Disconnect",
+    form: {
+      name: "Name",
+      namePlaceholder: "The agent it is for, and where it runs",
+      goodFor: "Good for",
+      days: (n: string) => `${n} days`,
+      make: "Make the token",
+    },
+    fresh: {
+      ready: (name: string) => `The token "${name}" is ready`,
+      copyNow: "Copy it now: it is shown this once, and the console keeps only its hash.",
+      copy: "Copy",
+      copied: "Copied",
+      useIt:
+        "Sign the console command in with it, present it as a bearer token to the REST API, or give it to a console or a script of your own.",
+      removeWhenDone: "It does not expire, so remove it here once it is no longer needed.",
+      goodUntilBefore: "It is good until",
+      goodUntilAfter: ", and you can remove it here at any time.",
+    },
+  },
+
+  connect: {
+    title: "Connect an agent",
+    aria: "Connect",
+    lead: "Your agent showed you a code when it was told to connect to this console. Type it here, and say whether the agent may work as you.",
+    codeAria: "The code",
+    codeLabel: "The code your agent showed",
+    continue: "Continue",
+    lookingUp: "Looking the code up",
+    notACode: "That is not a code: eight letters and digits, in two groups.",
+    noSuchCode:
+      "No agent asks to connect with this code. A code is good for ten minutes and for one approval; ask your agent for a new one.",
+    couldNotAsk: "The console could not be asked.",
+    asks: {
+      title: "An agent asks to connect as you",
+      callsItself: "It calls itself:",
+      showedCode: "The code it showed:",
+      ifNot:
+        "If that is not the code on your screen, or you did not ask for this, say that it is not yours.",
+      approvedMeans:
+        "Approved, it works here as you, within what you may do, until you disconnect it on your Agents page. It gets a token of its own, which nobody sees, you included.",
+      asked: "Asked",
+      goodUntil: "good until",
+    },
+    approve: "Approve",
+    notMine: "Not mine",
+    approved: {
+      title: (agent: string) => `"${agent}" is connected as you`,
+      body: "The agent gets its token on its own; there is nothing to copy. You can close this page, or see what is connected on your Agents page.",
+      agentsPage: "Agents page",
+    },
+    denied: {
+      title: "Nothing was connected",
+      body: "The code is spent. An agent that should connect shows a new one when told again.",
+    },
+    words: {
+      title: "Connecting an agent",
+      tellYourAgent: "Tell your agent, in its own chat:",
+      quote: (origin: string) => `Install the console command and connect to ${origin}.`,
+      doesTheRest:
+        "An agent that can run commands does the rest: it installs the command, connects, and shows you an address with a code.",
+      thenApprove:
+        "Open the address, signed in here, check that the page shows the same code, give the agent a name, and approve. From then on the agent works here as you, within what you may do; disconnect it on this page when that is over. The token it holds is never shown to anyone, you included.",
+      byHand: "By hand, where no agent runs the command for you:",
+    },
+  },
+};
+
+export type Messages = typeof en;

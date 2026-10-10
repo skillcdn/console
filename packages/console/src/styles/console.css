@@ -384,6 +384,27 @@ svg {
   font-weight: var(--sc-weight-medium);
 }
 
+.sc-menu-languages {
+  margin: var(--sc-space-1) 0 0;
+  padding: var(--sc-space-1) 0 0;
+  border: 0;
+  border-top: var(--sc-border);
+}
+
+.sc-menu-heading {
+  display: block;
+  padding: var(--sc-space-1) var(--sc-space-3);
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sc-menu-chosen {
+  color: var(--sc-color-accent);
+  font-weight: var(--sc-weight-medium);
+}
+
 .sc-menu-out {
   margin-top: var(--sc-space-1);
   border-top: var(--sc-border);

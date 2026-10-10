@@ -84,6 +84,8 @@ export const people = pgTable(
     avatarUrl: text(),
     /** An administrator configures the board, a member works on it: the console's own record. */
     role: text({ enum: PERSON_ROLES }).notNull().default("member"),
+    /** The language the person chose for the pages (ADR-0012), a tag; null for the browser's. */
+    language: text(),
     lastLoginAt: instant().notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),

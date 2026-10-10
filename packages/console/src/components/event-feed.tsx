@@ -1,88 +1,86 @@
 import type { ReactNode } from "react";
 import type { RestEvent } from "../api.js";
-import { PersonChip, STATE_LABELS, Time } from "./ui.js";
+import { en, type Messages } from "../i18n/en.js";
+import { useWords } from "../i18n/index.js";
+import { PersonChip, Time } from "./ui.js";
 
 // The feed: one line per event, newest first, as a sentence a person reads at a glance: who,
 // as which agent when through one, and what. It takes its data as props and nothing from the
-// network.
+// network; the sentence is the language's (ADR-0012).
 
-const FIELD_WORDS: Readonly<Record<string, string>> = {
-  title: "the title",
-  body: "the body",
-  priority: "the priority",
-  assigneeId: "the assignee",
-  parentId: "what it is part of",
-  links: "the links",
-  name: "the name",
-  description: "the description",
-  visibility: "who is a member",
-  skillsAddress: "the skills address",
-  outcome: "what followed",
-};
-
-const roleWords = (role: string | undefined): string =>
-  role === "admin"
-    ? "an administrator"
-    : role === "owner"
-      ? "an owner"
-      : role === "member"
-        ? "a member"
-        : "something";
-
-/** What an event says, without its actor: the words after the name. */
-export function describeEvent(event: RestEvent): string {
+/** What an event says, without its actor: the words after the name, in the words given. */
+export function describeEvent(event: RestEvent, words: Messages = en): string {
   const { data } = event;
+  const { feed, vocabulary } = words;
   const task =
     data.number === undefined
-      ? "a task"
+      ? feed.aTask
       : `#${data.number}${data.title === undefined ? "" : ` ${data.title}`}`;
-  const project = data.name ?? data.key ?? "a project";
-  const fields = (data.fields ?? []).map((field) => FIELD_WORDS[field] ?? field);
-  const page =
-    data.title === undefined ? `the page ${data.path ?? ""}`.trimEnd() : `the page ${data.title}`;
+  const project = data.name ?? data.key ?? feed.aProject;
+  const changed = (data.fields ?? []).map((field) => feed.field[field] ?? field);
+  const fields = changed.length === 0 ? feed.something : changed.join(", ");
+  const page = feed.thePage(data.title ?? data.path ?? "");
+  const role = (value: string | undefined): string =>
+    value === "admin"
+      ? feed.role.admin
+      : value === "owner"
+        ? feed.role.owner
+        : value === "member"
+          ? feed.role.member
+          : feed.role.other;
+  const login = data.login ?? feed.someone;
+  const question = data.question ?? feed.aQuestion;
   switch (event.kind) {
     case "person.joined":
-      return "joined the board";
+      return feed.event.personJoined();
     case "person.role_changed":
-      return `made ${data.login ?? "someone"} ${roleWords(data.role)}`;
+      return feed.event.roleChanged(login, role(data.role));
     case "project.created":
-      return `made the project ${project}`;
+      return feed.event.projectCreated(project);
     case "project.updated":
-      return `changed ${fields.length === 0 ? "something" : fields.join(", ")} of the project ${project}`;
+      return feed.event.projectUpdated(fields, project);
     case "project.member_added":
-      return `added ${data.login ?? "someone"} to ${project} as ${roleWords(data.role)}`;
+      return feed.event.memberAdded(login, project, role(data.role));
     case "project.member_changed":
-      return `made ${data.login ?? "someone"} ${roleWords(data.role)} of ${project}`;
+      return feed.event.memberChanged(login, role(data.role), project);
     case "project.member_removed":
-      return `removed ${data.login ?? "someone"} from ${project}`;
+      return feed.event.memberRemoved(login, project);
     case "task.created":
-      return `wrote ${task}`;
+      return feed.event.taskCreated(task);
     case "task.moved":
-      return `moved ${task} from ${STATE_LABELS[data.from ?? "idea"]} to ${STATE_LABELS[data.to ?? "idea"]}`;
+      return feed.event.taskMoved(
+        task,
+        vocabulary.state[data.from ?? "idea"],
+        vocabulary.state[data.to ?? "idea"],
+      );
     case "task.updated":
-      return `changed ${fields.length === 0 ? "something" : fields.join(", ")} of ${task}`;
+      return feed.event.taskUpdated(fields, task);
     case "decision.raised":
-      return `asked: ${data.question ?? "a question"}`;
+      return feed.event.decisionRaised(question);
     case "decision.answered":
-      return `answered "${data.question ?? "a question"}": ${data.option ?? ""}`;
+      return feed.event.decisionAnswered(question, data.option ?? "");
     case "decision.updated":
-      return `wrote ${fields.length === 0 ? "something" : fields.join(", ")} of the decision "${data.question ?? ""}"`;
+      return feed.event.decisionUpdated(fields, data.question ?? "");
     case "run.started":
-      return `started on ${task}`;
+      return feed.event.runStarted(task);
     case "run.reported":
-      return `reported on ${task}${data.excerpt === undefined ? "" : `: ${data.excerpt}`}`;
+      return feed.event.runReported(task, data.excerpt);
     case "run.handed_in":
-      return `handed in ${data.label ?? "something"} on ${task}`;
+      return feed.event.runHandedIn(data.label ?? feed.something, task);
     case "run.ended":
-      return `${data.status === "finished" ? "finished" : data.status === "failed" ? "failed on" : "gave up on"} ${task}`;
+      return data.status === "finished"
+        ? feed.event.runFinished(task)
+        : data.status === "failed"
+          ? feed.event.runFailed(task)
+          : feed.event.runAbandoned(task);
     case "document.written":
-      return `wrote ${page}${data.version === undefined ? "" : `, version ${data.version}`}`;
+      return feed.event.documentWritten(page, data.version);
     case "document.archived":
-      return `archived ${page}`;
+      return feed.event.documentArchived(page);
     case "document.restored":
-      return `restored ${page}`;
+      return feed.event.documentRestored(page);
     case "document.file_attached":
-      return `attached ${data.label ?? "a file"} to ${page}`;
+      return feed.event.fileAttached(data.label ?? feed.aFile, page);
   }
 }
 
@@ -95,31 +93,32 @@ export interface EventFeedProps {
 }
 
 export function EventFeed(props: EventFeedProps) {
+  const words = useWords();
   if (props.events.length === 0) {
     return <div className="sc-feed">{props.empty ?? null}</div>;
   }
   const newestFirst = [...props.events].reverse();
   return (
-    <ol className="sc-feed" aria-label="What happened">
+    <ol className="sc-feed" aria-label={words.feed.list}>
       {newestFirst.map((event) => {
         const href = props.href?.(event);
-        const words = describeEvent(event);
+        const said = describeEvent(event, words);
         return (
           <li key={event.id} className="sc-feed-item">
             <span className="sc-feed-actor">
               {event.actor === null ? (
-                <span className="sc-person-login">The console</span>
+                <span className="sc-person-login">{words.feed.console}</span>
               ) : (
                 <PersonChip person={event.actor} />
               )}
               {event.agent !== null && (
-                <span className="sc-feed-agent" title="The agent the person acted through">
-                  as {event.agent}
+                <span className="sc-feed-agent" title={words.feed.asTitle}>
+                  {words.feed.as(event.agent)}
                 </span>
               )}
             </span>
             <span className="sc-feed-words">
-              {href === undefined ? words : <a href={href}>{words}</a>}
+              {href === undefined ? said : <a href={href}>{said}</a>}
             </span>
             <Time iso={event.createdAt} />
           </li>

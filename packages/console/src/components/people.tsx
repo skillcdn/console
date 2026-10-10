@@ -1,6 +1,7 @@
 import type { PersonRole, RestPerson } from "../api.js";
+import { useWords } from "../i18n/index.js";
 import { PERSON_ROLES } from "../vocabulary.js";
-import { PersonChip, ROLE_LABELS, RoleBadge } from "./ui.js";
+import { PersonChip, RoleBadge } from "./ui.js";
 
 // The people of the board, with what each may do. An administrator changes roles here; a
 // member reads. Takes its data as props and nothing from the network.
@@ -17,20 +18,21 @@ export interface PeopleListProps {
 }
 
 export function PeopleList(props: PeopleListProps) {
+  const words = useWords();
   return (
-    <ul className="sc-people" aria-label="People">
+    <ul className="sc-people" aria-label={words.people.list}>
       {props.people.map((person) => (
         <li key={person.id} className="sc-person-row">
           <PersonChip person={person} size="md" />
           <span className="sc-person-name">
             {person.name ?? ""}
-            {props.me?.id === person.id && <span className="sc-muted"> (you)</span>}
+            {props.me?.id === person.id && <span className="sc-muted"> {words.common.you}</span>}
           </span>
           {props.onChangeRole === undefined ? (
             <RoleBadge role={person.role} />
           ) : (
             <label className="sc-field sc-field-inline">
-              <span className="sc-visually-hidden">Role of {person.login}</span>
+              <span className="sc-visually-hidden">{words.people.roleOf(person.login)}</span>
               <select
                 className="sc-input"
                 value={person.role}
@@ -39,7 +41,7 @@ export function PeopleList(props: PeopleListProps) {
               >
                 {PERSON_ROLES.map((role) => (
                   <option key={role} value={role}>
-                    {ROLE_LABELS[role]}
+                    {words.vocabulary.role[role]}
                   </option>
                 ))}
               </select>
@@ -47,7 +49,7 @@ export function PeopleList(props: PeopleListProps) {
           )}
           {props.agentsHref !== undefined && (
             <a className="sc-button sc-button-ghost sc-button-sm" href={props.agentsHref(person)}>
-              Agents
+              {words.people.agents}
             </a>
           )}
         </li>

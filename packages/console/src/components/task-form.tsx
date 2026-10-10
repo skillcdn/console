@@ -11,7 +11,8 @@ import {
   TASK_PRIORITIES,
   TASK_STATES,
 } from "../api.js";
-import { Button, PRIORITY_LABELS, STATE_LABELS } from "./ui.js";
+import { useWords } from "../i18n/index.js";
+import { Button } from "./ui.js";
 
 // Writing a task, or changing one. The bounds are the package's, said before a request is made.
 
@@ -33,6 +34,8 @@ interface LinkDraft {
 }
 
 export function TaskForm(props: TaskFormProps) {
+  const words = useWords();
+  const form = words.task.form;
   const { task } = props;
   const [title, setTitle] = useState(task?.title ?? "");
   const [body, setBody] = useState(task?.body ?? "");
@@ -67,7 +70,7 @@ export function TaskForm(props: TaskFormProps) {
   return (
     <form className="sc-form" onSubmit={submit}>
       <label className="sc-field">
-        <span className="sc-field-label">Title</span>
+        <span className="sc-field-label">{form.title}</span>
         <input
           className="sc-input"
           value={title}
@@ -77,19 +80,19 @@ export function TaskForm(props: TaskFormProps) {
         />
       </label>
       <label className="sc-field">
-        <span className="sc-field-label">Body</span>
+        <span className="sc-field-label">{form.body}</span>
         <textarea
           className="sc-input sc-textarea"
           value={body}
           maxLength={MAX_BODY_LENGTH}
           rows={6}
-          placeholder="What is to be done, in Markdown."
+          placeholder={form.bodyPlaceholder}
           onChange={(event) => setBody(event.target.value)}
         />
       </label>
       <div className="sc-field-row">
         <label className="sc-field">
-          <span className="sc-field-label">State</span>
+          <span className="sc-field-label">{form.state}</span>
           <select
             className="sc-input"
             value={state}
@@ -97,13 +100,13 @@ export function TaskForm(props: TaskFormProps) {
           >
             {TASK_STATES.map((candidate) => (
               <option key={candidate} value={candidate}>
-                {STATE_LABELS[candidate]}
+                {words.vocabulary.state[candidate]}
               </option>
             ))}
           </select>
         </label>
         <label className="sc-field">
-          <span className="sc-field-label">Priority</span>
+          <span className="sc-field-label">{form.priority}</span>
           <select
             className="sc-input"
             value={priority}
@@ -111,19 +114,19 @@ export function TaskForm(props: TaskFormProps) {
           >
             {TASK_PRIORITIES.map((candidate) => (
               <option key={candidate} value={candidate}>
-                {PRIORITY_LABELS[candidate]}
+                {words.vocabulary.priority[candidate]}
               </option>
             ))}
           </select>
         </label>
         <label className="sc-field">
-          <span className="sc-field-label">Assignee</span>
+          <span className="sc-field-label">{form.assignee}</span>
           <select
             className="sc-input"
             value={assigneeId}
             onChange={(event) => setAssigneeId(event.target.value)}
           >
-            <option value="">Nobody</option>
+            <option value="">{words.common.nobody}</option>
             {props.people.map((person) => (
               <option key={person.id} value={person.id}>
                 {person.login}
@@ -133,13 +136,13 @@ export function TaskForm(props: TaskFormProps) {
         </label>
         {parents.length > 0 && (
           <label className="sc-field">
-            <span className="sc-field-label">Part of</span>
+            <span className="sc-field-label">{form.partOf}</span>
             <select
               className="sc-input"
               value={parentId}
               onChange={(event) => setParentId(event.target.value)}
             >
-              <option value="">Nothing</option>
+              <option value="">{words.common.nothing}</option>
               {parents.map((candidate) => (
                 <option key={candidate.id} value={candidate.id}>
                   #{candidate.number} {candidate.title}
@@ -150,7 +153,7 @@ export function TaskForm(props: TaskFormProps) {
         )}
       </div>
       <fieldset className="sc-field sc-links">
-        <legend className="sc-field-label">Links</legend>
+        <legend className="sc-field-label">{form.links}</legend>
         {links.map((link, index) => (
           // Drafts have no identity of their own; their position is what tells them apart.
           // biome-ignore lint/suspicious/noArrayIndexKey: ordered drafts without ids
@@ -172,7 +175,7 @@ export function TaskForm(props: TaskFormProps) {
             />
             <input
               className="sc-input"
-              placeholder="Label"
+              placeholder={form.label}
               maxLength={MAX_LINK_LABEL_LENGTH}
               value={link.label}
               onChange={(event) =>
@@ -188,7 +191,7 @@ export function TaskForm(props: TaskFormProps) {
               size="sm"
               onClick={() => setLinks(links.filter((_, at) => at !== index))}
             >
-              Remove
+              {words.common.remove}
             </Button>
           </div>
         ))}
@@ -198,7 +201,7 @@ export function TaskForm(props: TaskFormProps) {
             size="sm"
             onClick={() => setLinks([...links, { url: "", label: "" }])}
           >
-            Add a link
+            {form.addLink}
           </Button>
         )}
       </fieldset>
@@ -213,11 +216,11 @@ export function TaskForm(props: TaskFormProps) {
           variant="primary"
           disabled={props.busy === true || title.trim() === ""}
         >
-          {task === undefined ? "Write the task" : "Save"}
+          {task === undefined ? form.write : words.common.save}
         </Button>
         {props.onCancel !== undefined && (
           <Button variant="ghost" onClick={props.onCancel}>
-            Cancel
+            {words.common.cancel}
           </Button>
         )}
       </div>

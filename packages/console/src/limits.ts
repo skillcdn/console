@@ -40,6 +40,8 @@ export const DEFAULT_TOKEN_DAYS = 90;
 export const MAX_TOKENS_PER_PERSON = 25;
 /** How long a secret a client presents in a body may be: a token or a connection's secret is far shorter. */
 export const MAX_SECRET_LENGTH = 200;
+/** How long a language tag may be: the longest a browser sends is far shorter. */
+export const MAX_LANGUAGE_TAG_LENGTH = 35;
 /** A project's key, what paths and the command say: lowercase letters, digits and hyphens. */
 export const MAX_PROJECT_KEY_LENGTH = 40;
 /** A project's name, one line, and its description, a paragraph. */

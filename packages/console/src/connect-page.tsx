@@ -8,6 +8,7 @@ import {
 import { ConnectApproval, ConnectCodeForm } from "./components/connect.js";
 import { Callout, Spinner } from "./components/ui.js";
 import type { ConsoleData } from "./data.js";
+import { useWords } from "./i18n/index.js";
 import { connectHref, type Navigation, PATHS } from "./router.js";
 import { useAction } from "./use-action.js";
 
@@ -22,10 +23,8 @@ export interface ConnectPageProps {
   readonly navigation: Navigation;
 }
 
-const NO_SUCH_CODE =
-  "No agent asks to connect with this code. A code is good for ten minutes and for one approval; ask your agent for a new one.";
-
 export function ConnectPage(props: ConnectPageProps) {
+  const words = useWords().connect;
   const { data, navigation } = props;
   const code = props.code === undefined ? undefined : normalizeConnectCode(props.code);
   const [request, setRequest] = useState<RestConnectRequest | undefined>(undefined);
@@ -55,27 +54,24 @@ export function ConnectPage(props: ConnectPageProps) {
         }
         setProblem(
           failure instanceof ApiError && failure.code === "connect.not_found"
-            ? NO_SUCH_CODE
+            ? words.noSuchCode
             : failure instanceof ApiError
               ? failure.message
-              : "The console could not be asked.",
+              : words.couldNotAsk,
         );
       });
     return () => controller.abort();
-  }, [code, connectRequest]);
+  }, [code, connectRequest, words]);
 
   const head = (
     <div className="sc-page-head">
-      <h1 className="sc-page-title">Connect an agent</h1>
+      <h1 className="sc-page-title">{words.title}</h1>
     </div>
   );
   const ask = (
     <>
-      <p className="sc-lead">
-        Your agent showed you a code when it was told to connect to this console. Type it here, and
-        say whether the agent may work as you.
-      </p>
-      <section className="sc-panel" aria-label="Connect">
+      <p className="sc-lead">{words.lead}</p>
+      <section className="sc-panel" aria-label={words.aria}>
         <ConnectCodeForm busy={busy} onSubmit={(typed) => navigation.go(connectHref(typed))} />
       </section>
     </>
@@ -85,10 +81,9 @@ export function ConnectPage(props: ConnectPageProps) {
     return (
       <>
         {head}
-        <Callout tone="info" title={`"${request.agent}" is connected as you`}>
+        <Callout tone="info" title={words.approved.title(request.agent)}>
           <p>
-            The agent gets its token on its own; there is nothing to copy. You can close this page,
-            or see what is connected on your <a href={PATHS.agents}>Agents page</a>.
+            {words.approved.body} <a href={PATHS.agents}>{words.approved.agentsPage}</a>
           </p>
         </Callout>
       </>
@@ -98,8 +93,8 @@ export function ConnectPage(props: ConnectPageProps) {
     return (
       <>
         {head}
-        <Callout tone="info" title="Nothing was connected">
-          <p>The code is spent. An agent that should connect shows a new one when told again.</p>
+        <Callout tone="info" title={words.denied.title}>
+          <p>{words.denied.body}</p>
         </Callout>
         {ask}
       </>
@@ -110,9 +105,7 @@ export function ConnectPage(props: ConnectPageProps) {
       <>
         {head}
         {props.code !== undefined && code === undefined && (
-          <Callout tone="warning">
-            That is not a code: eight letters and digits, in two groups.
-          </Callout>
+          <Callout tone="warning">{words.notACode}</Callout>
         )}
         {problem !== undefined && <Callout tone="warning">{problem}</Callout>}
         {ask}
@@ -124,7 +117,7 @@ export function ConnectPage(props: ConnectPageProps) {
       <>
         {head}
         <div className="sc-loading">
-          <Spinner label="Looking the code up" />
+          <Spinner label={words.lookingUp} />
         </div>
       </>
     );

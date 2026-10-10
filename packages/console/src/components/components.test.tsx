@@ -12,6 +12,7 @@ import type {
   RestTask,
   RestToken,
 } from "../api.js";
+import { KOREAN, LanguageContext } from "../i18n/index.js";
 import { Board } from "./board.js";
 import { ConnectApproval, ConnectCodeForm, ConnectWords } from "./connect.js";
 import { DecisionCard, DecisionList } from "./decision-list.js";
@@ -80,6 +81,41 @@ const decision = (overrides: Partial<RestDecision> = {}): RestDecision => ({
 });
 
 const href = (item: RestTask) => `/projects/web/tasks/${item.number}`;
+
+describe("the language", () => {
+  it("is the one above a component, and English where there is none", () => {
+    const korean = renderToStaticMarkup(
+      <LanguageContext.Provider value={KOREAN}>
+        <Board tasks={[task()]} taskHref={href} onOpen={() => undefined} />
+      </LanguageContext.Provider>,
+    );
+    expect(korean).toContain('aria-label="아이디어"');
+    expect(korean).toContain("결정 1건");
+    expect(korean).not.toContain("Idea");
+    const english = renderToStaticMarkup(
+      <Board tasks={[task()]} taskHref={href} onOpen={() => undefined} />,
+    );
+    expect(english).toContain('aria-label="Idea"');
+    expect(
+      describeEvent(
+        {
+          id: 1,
+          kind: "task.moved",
+          actor: bob,
+          agent: null,
+          projectId: null,
+          taskId: null,
+          decisionId: null,
+          runId: null,
+          documentId: null,
+          data: { number: 7, title: "Ship", from: "ready", to: "in_progress" },
+          createdAt: "2026-10-09T10:00:00.000Z",
+        },
+        KOREAN.messages,
+      ),
+    ).toBe("#7 Ship을(를) 준비됨에서 진행 중(으)로 옮겼습니다");
+  });
+});
 
 describe("the board", () => {
   it("has a column per state, with each task in its own, as text and never as HTML", () => {
@@ -159,7 +195,7 @@ describe("one task", () => {
     );
     expect(html).toContain("Part of");
     // Everything that happened to it, with the agent a person acted through.
-    expect(html).toContain('aria-label="History"');
+    expect(html).toContain('aria-label="What happened"');
     expect(html).toContain("moved #7 Ship from Ready to In progress");
     expect(html).toContain("as Claude Code");
     expect(html).toContain("#1");
@@ -574,6 +610,11 @@ describe("the shell and signing in", () => {
           { href: "/projects/web/decisions", label: "Decisions", current: false, count: 2 },
         ]}
         menu={[{ href: "/agents", label: "Agents", current: false }]}
+        languages={[
+          { tag: "en", label: "English", current: true },
+          { tag: "ko", label: "한국어", current: false },
+        ]}
+        onLanguage={() => undefined}
         person={alice}
         live={true}
         onNavigate={() => undefined}
@@ -585,6 +626,9 @@ describe("the shell and signing in", () => {
     expect(html).toContain("Acme");
     expect(html).toContain('class="sc-tab sc-tab-current"');
     expect(html).toContain('class="sc-menu"');
+    expect(html).toContain('lang="ko"');
+    expect(html).toContain("한국어");
+    expect(html).toContain('aria-pressed="true"');
     expect(html).toContain('href="/agents"');
     expect(html).toContain('class="sc-crumb-link" href="/projects/web"');
     expect(html).toContain("The web app");

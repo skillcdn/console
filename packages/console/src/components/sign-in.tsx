@@ -1,15 +1,9 @@
 import { loginPath, type RestProvider, type SignInFailure } from "../api.js";
+import { useWords } from "../i18n/index.js";
 import { Callout } from "./ui.js";
 
 // The page a person sees before they are anyone: the way to each provider the deployment has,
 // and what went wrong the last time, when something did.
-
-const FAILURE_WORDS: Readonly<Record<SignInFailure, string>> = {
-  denied: "The provider did not confirm the sign-in: you said no, or it did.",
-  expired: "The sign-in took too long or was finished in another browser. Try again.",
-  failed: "The sign-in did not complete. Try again in a moment.",
-  refused: "This account is not a member of the board. Ask whoever runs it to add you.",
-};
 
 export interface SignInProps {
   readonly title: string;
@@ -21,22 +15,19 @@ export interface SignInProps {
 }
 
 export function SignIn(props: SignInProps) {
+  const words = useWords().signIn;
   return (
     <div className="sc-sign-in">
       <h1 className="sc-sign-in-title">{props.title}</h1>
-      <p className="sc-sign-in-lead">
-        The board of the work, the agents at it, what they did, and the decisions that wait for a
-        person.
-      </p>
+      <p className="sc-sign-in-lead">{words.lead}</p>
       {props.failure !== undefined && (
         <Callout tone={props.failure === "refused" ? "warning" : "info"}>
-          {FAILURE_WORDS[props.failure]}
+          {words.failure[props.failure]}
         </Callout>
       )}
       {props.providers.length === 0 ? (
-        <Callout tone="warning" title="Nobody can sign in here yet">
-          Signing in is not configured on this console. Whoever runs it sets it up as{" "}
-          <code>deploy/README.md</code> describes.
+        <Callout tone="warning" title={words.nobody.title}>
+          {words.nobody.body}
         </Callout>
       ) : (
         <div className="sc-sign-in-ways">
@@ -47,7 +38,7 @@ export function SignIn(props: SignInProps) {
               className="sc-button sc-button-primary sc-sign-in-button"
               href={loginPath(provider.key, props.returnTo)}
             >
-              Continue with {provider.label}
+              {words.continueWith(provider.label)}
             </a>
           ))}
         </div>

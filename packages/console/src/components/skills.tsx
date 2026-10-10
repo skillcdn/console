@@ -1,4 +1,5 @@
 import type { RestSkills } from "../api.js";
+import { useWords } from "../i18n/index.js";
 import { Callout, EmptyState, Spinner } from "./ui.js";
 
 // The organization's skills, as SkillCDN serves them at the console's address: where a person
@@ -10,38 +11,26 @@ export interface SkillListProps {
   readonly skills: RestSkills | undefined;
 }
 
-const STATUS_WORDS: Readonly<Record<Exclude<RestSkills["status"], "none" | "ready">, string>> = {
-  indexing: "SkillCDN is still indexing the repository. Look again in a moment.",
-  failed: "SkillCDN could not index the repository. What it found is on the address's page.",
-  not_found:
-    "SkillCDN does not serve this address, or serves it only to someone signed in there. The address's page says which.",
-  unavailable: "SkillCDN could not be reached. The skills are as they were; look again later.",
-};
-
 export function SkillList(props: SkillListProps) {
+  const words = useWords().skills;
   const { skills } = props;
   if (skills === undefined) {
-    return <Spinner label="Loading the skills" />;
+    return <Spinner label={words.loading} />;
   }
   if (skills.status === "none" || skills.address === null || skills.page === null) {
-    return (
-      <EmptyState
-        title="No skills address yet"
-        body="This console has no address for the organization's skills. Whoever runs it names a repository served by SkillCDN in its configuration."
-      />
-    );
+    return <EmptyState title={words.noAddress.title} body={words.noAddress.body} />;
   }
   const where = (
     <p className="sc-lead">
-      The organization's skills, served by{" "}
+      {words.servedBy}{" "}
       <a href={skills.source} target="_blank" rel="noopener noreferrer">
         SkillCDN
       </a>{" "}
-      at{" "}
+      {words.at}{" "}
       <a href={skills.page} target="_blank" rel="noopener noreferrer">
         <code>{skills.address}</code>
       </a>
-      . An agent loads one through its SkillCDN connection; a person reads it at its page.
+      {words.howLoaded}
     </p>
   );
   if (skills.status !== "ready") {
@@ -49,7 +38,7 @@ export function SkillList(props: SkillListProps) {
       <>
         {where}
         <Callout tone={skills.status === "indexing" ? "info" : "warning"}>
-          {STATUS_WORDS[skills.status]}
+          {words.status[skills.status]}
         </Callout>
       </>
     );
@@ -58,17 +47,14 @@ export function SkillList(props: SkillListProps) {
     return (
       <>
         {where}
-        <EmptyState
-          title="No skills at this address"
-          body="The repository is served, and SkillCDN found no skill in it."
-        />
+        <EmptyState title={words.none.title} body={words.none.body} />
       </>
     );
   }
   return (
     <>
       {where}
-      <ul className="sc-skills" aria-label="Skills">
+      <ul className="sc-skills" aria-label={words.list}>
         {skills.items.map((skill) => (
           <li key={skill.path} className="sc-skill">
             <p className="sc-skill-head">

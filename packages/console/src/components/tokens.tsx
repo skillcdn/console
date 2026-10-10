@@ -5,6 +5,7 @@ import {
   type RestToken,
   type RestTokenInput,
 } from "../api.js";
+import { useWords } from "../i18n/index.js";
 import { Button, Callout, Time } from "./ui.js";
 
 // The tokens a person holds for their agents, scripts and consoles of their own, shown as the
@@ -16,8 +17,6 @@ const DAY_CHOICES = ["30", "90", "180", "365", "never"] as const;
 type DayChoice = (typeof DAY_CHOICES)[number];
 const DEFAULT_CHOICE: DayChoice =
   DAY_CHOICES.find((choice) => choice === String(DEFAULT_TOKEN_DAYS)) ?? "90";
-const choiceLabel = (choice: string): string =>
-  choice === "never" ? "Does not expire" : `${choice} days`;
 
 /**
  * The spans a form offers: the usual ones, within the most days the workspace allows when it
@@ -40,34 +39,35 @@ export interface TokenListProps {
 }
 
 export function TokenList(props: TokenListProps) {
+  const words = useWords().agents;
   if (props.tokens.length === 0) {
     return <>{props.empty ?? null}</>;
   }
   return (
-    <ul className="sc-token-list" aria-label="Agents">
+    <ul className="sc-token-list" aria-label={words.list}>
       {props.tokens.map((token) => (
         <li key={token.id} className="sc-token">
           <div>
             <p className="sc-token-name">{token.name}</p>
             <p className="sc-token-meta">
               <span>
-                Connected <Time iso={token.createdAt} />
+                {words.connected} <Time iso={token.createdAt} />
               </span>
               <span>
                 {token.expiresAt === null ? (
-                  "Does not expire"
+                  words.doesNotExpire
                 ) : (
                   <>
-                    Good until <Time iso={token.expiresAt} />
+                    {words.goodUntil} <Time iso={token.expiresAt} />
                   </>
                 )}
               </span>
               <span>
                 {token.lastUsedAt === null ? (
-                  "Not active yet"
+                  words.notActive
                 ) : (
                   <>
-                    Last active <Time iso={token.lastUsedAt} />
+                    {words.lastActive} <Time iso={token.lastUsedAt} />
                   </>
                 )}
               </span>
@@ -80,7 +80,7 @@ export function TokenList(props: TokenListProps) {
               disabled={props.busy === true}
               onClick={() => props.onRevoke?.(token)}
             >
-              Disconnect
+              {words.disconnect}
             </Button>
           )}
         </li>
@@ -104,6 +104,7 @@ export interface TokenFormProps {
 }
 
 export function TokenForm(props: TokenFormProps) {
+  const words = useWords();
   const choices = dayChoices(props.daysAtMost);
   const [name, setName] = useState(props.name ?? "");
   const [choice, setChoice] = useState<string>(
@@ -120,18 +121,18 @@ export function TokenForm(props: TokenFormProps) {
     <form className="sc-form" onSubmit={submit}>
       <div className="sc-field-row">
         <label className="sc-field">
-          <span className="sc-field-label">Name</span>
+          <span className="sc-field-label">{words.agents.form.name}</span>
           <input
             className="sc-input"
             value={name}
             maxLength={MAX_TOKEN_NAME_LENGTH}
             required
-            placeholder="The agent it is for, and where it runs"
+            placeholder={words.agents.form.namePlaceholder}
             onChange={(event) => setName(event.target.value)}
           />
         </label>
         <label className="sc-field">
-          <span className="sc-field-label">Good for</span>
+          <span className="sc-field-label">{words.agents.form.goodFor}</span>
           <select
             className="sc-input"
             value={choice}
@@ -139,7 +140,7 @@ export function TokenForm(props: TokenFormProps) {
           >
             {choices.map((option) => (
               <option key={option} value={option}>
-                {choiceLabel(option)}
+                {option === "never" ? words.agents.doesNotExpire : words.agents.form.days(option)}
               </option>
             ))}
           </select>
@@ -156,11 +157,11 @@ export function TokenForm(props: TokenFormProps) {
           variant="primary"
           disabled={props.busy === true || name.trim() === ""}
         >
-          {props.submitLabel ?? "Make the token"}
+          {props.submitLabel ?? words.agents.form.make}
         </Button>
         {props.onCancel !== undefined && (
           <Button variant="ghost" onClick={props.onCancel} disabled={props.busy === true}>
-            {props.cancelLabel ?? "Cancel"}
+            {props.cancelLabel ?? words.common.cancel}
           </Button>
         )}
       </div>
@@ -177,6 +178,8 @@ export interface NewTokenProps {
 
 /** The token just made, with its secret shown this once and the way to copy it. */
 export function NewToken(props: NewTokenProps) {
+  const words = useWords();
+  const fresh = words.agents.fresh;
   const [copied, setCopied] = useState(false);
   const copy = () => {
     if (typeof navigator === "undefined" || navigator.clipboard === undefined) {
@@ -190,30 +193,28 @@ export function NewToken(props: NewTokenProps) {
   return (
     <Callout
       tone="warning"
-      title={`The token "${props.token.name}" is ready`}
+      title={fresh.ready(props.token.name)}
       action={
         <Button size="sm" variant="ghost" onClick={props.onDone}>
-          Done
+          {words.common.done}
         </Button>
       }
     >
-      <p>Copy it now: it is shown this once, and the console keeps only its hash.</p>
+      <p>{fresh.copyNow}</p>
       <p className="sc-secret">
         <code className="sc-secret-value">{props.secret}</code>
         <Button size="sm" onClick={copy}>
-          {copied ? "Copied" : "Copy"}
+          {copied ? fresh.copied : fresh.copy}
         </Button>
       </p>
       <p>
-        Sign the <code>console</code> command in with it, present it as{" "}
-        <code>Authorization: Bearer …</code> to the REST API, or give it to a console or a script of
-        your own.{" "}
+        {fresh.useIt}{" "}
         {props.token.expiresAt === null ? (
-          "It does not expire, so remove it here once it is no longer needed."
+          fresh.removeWhenDone
         ) : (
           <>
-            It is good until <Time iso={props.token.expiresAt} />, and you can remove it here at any
-            time.
+            {fresh.goodUntilBefore} <Time iso={props.token.expiresAt} />
+            {fresh.goodUntilAfter}
           </>
         )}
       </p>

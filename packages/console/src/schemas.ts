@@ -10,6 +10,7 @@ import {
   MAX_DOCUMENT_LENGTH,
   MAX_DOCUMENT_PATH_LENGTH,
   MAX_FILE_NAME_LENGTH,
+  MAX_LANGUAGE_TAG_LENGTH,
   MAX_LINK_LABEL_LENGTH,
   MAX_LINKS,
   MAX_NOTE_LENGTH,
@@ -93,9 +94,22 @@ export const restProviderSchema = z.object({
 });
 export type RestProvider = z.infer<typeof restProviderSchema>;
 
+/** A language tag as a browser sends one (`en`, `ko-KR`): what the pages speak, by the person's choice. */
+const languageTag = z
+  .string()
+  .check(
+    z.maxLength(MAX_LANGUAGE_TAG_LENGTH),
+    z.regex(/^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/, "must be a language tag"),
+  );
+
+/** What `PATCH /api/v1/me` is sent: the language the person chose, or `null` to choose none. */
+export const restMePatchSchema = z.object({ language: z.nullable(languageTag) });
+export type RestMePatch = z.infer<typeof restMePatchSchema>;
+
 /**
- * `GET /api/v1/me`: the workspace, who the session cookie says is signed in (or `null`), and
- * the identity providers people sign in through, none where nobody can.
+ * `GET /api/v1/me`: the workspace, who the session cookie says is signed in (or `null`), the
+ * language they chose (or `null`), and the identity providers people sign in through, none
+ * where nobody can.
  */
 export const restMeSchema = z.object({
   workspace: z.object({
@@ -104,6 +118,8 @@ export const restMeSchema = z.object({
     tokenDaysAtMost: z.nullable(z.int().check(z.positive())),
   }),
   person: z.nullable(restPersonSchema),
+  /** The language the person chose for the pages (ADR-0012), or `null` for the browser's. */
+  language: z.nullable(languageTag),
   signIn: z.array(restProviderSchema),
 });
 export type RestMe = z.infer<typeof restMeSchema>;

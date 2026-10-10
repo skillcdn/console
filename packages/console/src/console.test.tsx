@@ -197,6 +197,7 @@ describe("createConsole", () => {
   });
   const client: ConsoleClient = {
     me: never,
+    updateMe: never,
     people: never,
     updatePerson: never,
     projects: never,

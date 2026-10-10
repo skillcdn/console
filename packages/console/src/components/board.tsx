@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { type RestTask, TASK_STATES, type TaskState } from "../api.js";
-import { Avatar, Badge, cx, PriorityBadge, STATE_LABELS } from "./ui.js";
+import { useWords } from "../i18n/index.js";
+import { Avatar, Badge, cx, PriorityBadge } from "./ui.js";
 
 // The board: one column per state, the tasks in it, newest first. It takes its data as props
 // and nothing from the network; what it is told on a click goes back up.
@@ -22,6 +23,7 @@ export function TaskCard(props: {
   readonly onOpen: (task: RestTask) => void;
   readonly onMove?: ((task: RestTask, state: TaskState) => void) | undefined;
 }) {
+  const words = useWords();
   const { task } = props;
   return (
     <article className="sc-card" aria-label={`#${task.number} ${task.title}`}>
@@ -40,33 +42,31 @@ export function TaskCard(props: {
       <div className="sc-card-meta">
         <PriorityBadge priority={task.priority} />
         {task.openDecisions > 0 && (
-          <Badge tone="warning" title="Decisions waiting for a person">
-            {task.openDecisions === 1 ? "1 decision" : `${task.openDecisions} decisions`}
+          <Badge tone="warning" title={words.board.decisionsTitle}>
+            {words.board.decisions(task.openDecisions)}
           </Badge>
         )}
         {task.openRuns > 0 && (
-          <Badge tone="accent" title="An agent is at work on it">
-            agent at work
+          <Badge tone="accent" title={words.board.agentAtWorkTitle}>
+            {words.board.agentAtWork}
           </Badge>
         )}
         {task.links.length > 0 && (
-          <Badge tone="neutral">
-            {task.links.length === 1 ? "1 link" : `${task.links.length} links`}
-          </Badge>
+          <Badge tone="neutral">{words.board.links(task.links.length)}</Badge>
         )}
         <span className="sc-card-spacer" />
         {task.assignee !== null && <Avatar person={task.assignee} size="sm" />}
       </div>
       {props.onMove !== undefined && (
         <label className="sc-card-move">
-          <span className="sc-visually-hidden">Move to</span>
+          <span className="sc-visually-hidden">{words.board.moveTo}</span>
           <select
             value={task.state}
             onChange={(event) => props.onMove?.(task, event.target.value as TaskState)}
           >
             {TASK_STATES.map((state) => (
               <option key={state} value={state}>
-                {STATE_LABELS[state]}
+                {words.vocabulary.state[state]}
               </option>
             ))}
           </select>
@@ -77,6 +77,7 @@ export function TaskCard(props: {
 }
 
 export function Board(props: BoardProps) {
+  const words = useWords();
   return (
     <div className="sc-board">
       {TASK_STATES.map((state) => {
@@ -85,10 +86,10 @@ export function Board(props: BoardProps) {
           <section
             key={state}
             className={cx("sc-column", `sc-column-${state}`)}
-            aria-label={STATE_LABELS[state]}
+            aria-label={words.vocabulary.state[state]}
           >
             <header className="sc-column-header">
-              <h2 className="sc-column-title">{STATE_LABELS[state]}</h2>
+              <h2 className="sc-column-title">{words.vocabulary.state[state]}</h2>
               <span className="sc-column-count">{tasks.length}</span>
             </header>
             <div className="sc-column-body">

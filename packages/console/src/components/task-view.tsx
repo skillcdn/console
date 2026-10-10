@@ -11,6 +11,7 @@ import type {
   RestTaskInput,
   TaskState,
 } from "../api.js";
+import { useWords } from "../i18n/index.js";
 import type { TaskFormKind } from "../router.js";
 import { TASK_STATES } from "../vocabulary.js";
 import { DecisionForm } from "./decision-form.js";
@@ -19,7 +20,7 @@ import { EventFeed } from "./event-feed.js";
 import { Markdown } from "./markdown.js";
 import { RunList } from "./runs.js";
 import { TaskForm } from "./task-form.js";
-import { PersonChip, PriorityBadge, STATE_LABELS, StateBadge, Time } from "./ui.js";
+import { PersonChip, PriorityBadge, StateBadge, Time } from "./ui.js";
 
 // One task: what it is, who it is on, what it links to, the agents at work on it, the decisions
 // about it, the tasks that are part of it, everything that happened to it, and the ways to
@@ -63,6 +64,7 @@ export interface TaskViewProps {
 }
 
 export function TaskView(props: TaskViewProps) {
+  const words = useWords();
   const { task } = props;
   const parent =
     task.parentId === null
@@ -97,7 +99,7 @@ export function TaskView(props: TaskViewProps) {
       <header className="sc-task-header">
         {parent !== undefined && (
           <p className="sc-task-parent">
-            Part of{" "}
+            {words.task.partOf}{" "}
             <a href={props.taskHref(parent)}>
               #{parent.number} {parent.title}
             </a>
@@ -113,29 +115,29 @@ export function TaskView(props: TaskViewProps) {
       </header>
       <dl className="sc-facts">
         <div>
-          <dt>Owner</dt>
+          <dt>{words.task.owner}</dt>
           <dd>
             <PersonChip person={task.owner} />
           </dd>
         </div>
         <div>
-          <dt>Assignee</dt>
+          <dt>{words.task.assignee}</dt>
           <dd>
             {task.assignee === null ? (
-              <span className="sc-muted">Nobody</span>
+              <span className="sc-muted">{words.common.nobody}</span>
             ) : (
               <PersonChip person={task.assignee} />
             )}
           </dd>
         </div>
         <div>
-          <dt>Written</dt>
+          <dt>{words.task.written}</dt>
           <dd>
             <Time iso={task.createdAt} />
           </dd>
         </div>
         <div>
-          <dt>Changed</dt>
+          <dt>{words.task.changed}</dt>
           <dd>
             <Time iso={task.updatedAt} />
           </dd>
@@ -143,7 +145,7 @@ export function TaskView(props: TaskViewProps) {
       </dl>
       <div className="sc-task-actions">
         <label className="sc-field sc-field-inline">
-          <span className="sc-field-label">State</span>
+          <span className="sc-field-label">{words.task.state}</span>
           <select
             className="sc-input"
             value={task.state}
@@ -152,7 +154,7 @@ export function TaskView(props: TaskViewProps) {
           >
             {TASK_STATES.map((state) => (
               <option key={state} value={state}>
-                {STATE_LABELS[state]}
+                {words.vocabulary.state[state]}
               </option>
             ))}
           </select>
@@ -160,10 +162,10 @@ export function TaskView(props: TaskViewProps) {
         {props.formHref !== undefined && (
           <>
             <a className="sc-button sc-button-secondary" href={props.formHref("edit")}>
-              Edit
+              {words.common.edit}
             </a>
             <a className="sc-button sc-button-secondary" href={props.formHref("ask")}>
-              Raise a decision
+              {words.task.raiseDecision}
             </a>
           </>
         )}
@@ -176,11 +178,11 @@ export function TaskView(props: TaskViewProps) {
       {task.body.length > 0 ? (
         <Markdown source={task.body} docHref={props.docHref} />
       ) : (
-        <p className="sc-muted">Nothing more was written about it.</p>
+        <p className="sc-muted">{words.task.nothingMore}</p>
       )}
       {task.links.length > 0 && (
-        <section className="sc-task-section" aria-label="Links">
-          <h2 className="sc-section-title">Links</h2>
+        <section className="sc-task-section" aria-label={words.task.links}>
+          <h2 className="sc-section-title">{words.task.links}</h2>
           <ul className="sc-link-list">
             {task.links.map((link) => (
               <li key={link.url}>
@@ -193,8 +195,8 @@ export function TaskView(props: TaskViewProps) {
         </section>
       )}
       {props.form === "ask" && (
-        <section className="sc-task-section" aria-label="Raise a decision">
-          <h2 className="sc-section-title">Raise a decision</h2>
+        <section className="sc-task-section" aria-label={words.task.raiseDecision}>
+          <h2 className="sc-section-title">{words.task.raiseDecision}</h2>
           <DecisionForm
             tasks={props.tasks}
             taskId={task.id}
@@ -205,8 +207,8 @@ export function TaskView(props: TaskViewProps) {
         </section>
       )}
       {runs.length > 0 && (
-        <section className="sc-task-section" aria-label="Runs">
-          <h2 className="sc-section-title">Agents at work</h2>
+        <section className="sc-task-section" aria-label={words.task.runs}>
+          <h2 className="sc-section-title">{words.task.agentsAtWork}</h2>
           <RunList
             runs={runs}
             decisionHref={props.decisionHref}
@@ -218,8 +220,8 @@ export function TaskView(props: TaskViewProps) {
         </section>
       )}
       {about.length > 0 && (
-        <section className="sc-task-section" aria-label="Decisions">
-          <h2 className="sc-section-title">Decisions</h2>
+        <section className="sc-task-section" aria-label={words.task.decisions}>
+          <h2 className="sc-section-title">{words.task.decisions}</h2>
           {about.map((decision) => (
             <DecisionCard
               key={decision.id}
@@ -234,14 +236,14 @@ export function TaskView(props: TaskViewProps) {
         </section>
       )}
       {props.history !== undefined && props.history.length > 0 && (
-        <section className="sc-task-section" aria-label="History">
-          <h2 className="sc-section-title">What happened</h2>
+        <section className="sc-task-section" aria-label={words.task.history}>
+          <h2 className="sc-section-title">{words.task.history}</h2>
           <EventFeed events={props.history} />
         </section>
       )}
       {subtasks.length > 0 && (
-        <section className="sc-task-section" aria-label="Subtasks">
-          <h2 className="sc-section-title">Part of it</h2>
+        <section className="sc-task-section" aria-label={words.task.subtasks}>
+          <h2 className="sc-section-title">{words.task.partOfIt}</h2>
           <ul className="sc-subtasks">
             {subtasks.map((subtask) => (
               <li key={subtask.id}>

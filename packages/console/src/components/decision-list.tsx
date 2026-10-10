@@ -7,6 +7,7 @@ import {
   type RestDecisionPatch,
   type RestTask,
 } from "../api.js";
+import { useWords } from "../i18n/index.js";
 import { Markdown } from "./markdown.js";
 import { Button, cx, PersonChip, Time } from "./ui.js";
 
@@ -37,6 +38,7 @@ function Outcome(props: {
   readonly onUpdate: ((decision: RestDecision, patch: RestDecisionPatch) => void) | undefined;
   readonly busy: boolean | undefined;
 }) {
+  const words = useWords();
   const { decision } = props;
   const [writing, setWriting] = useState(false);
   const [draft, setDraft] = useState(decision.outcome ?? "");
@@ -44,8 +46,8 @@ function Outcome(props: {
     return null;
   }
   return (
-    <section className="sc-decision-section" aria-label="What followed">
-      <h4 className="sc-decision-label">What followed</h4>
+    <section className="sc-decision-section" aria-label={words.decisions.whatFollowed}>
+      <h4 className="sc-decision-label">{words.decisions.whatFollowed}</h4>
       {writing ? (
         <form
           className="sc-outcome-form"
@@ -60,22 +62,22 @@ function Outcome(props: {
             value={draft}
             maxLength={MAX_BODY_LENGTH}
             rows={4}
-            placeholder="What was done with the answer, and what came of it, in Markdown."
+            placeholder={words.decisions.outcomePlaceholder}
             onChange={(event) => setDraft(event.target.value)}
           />
           <div className="sc-form-actions">
             <Button type="submit" variant="primary" size="sm" disabled={props.busy === true}>
-              Save
+              {words.common.save}
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setWriting(false)}>
-              Cancel
+              {words.common.cancel}
             </Button>
           </div>
         </form>
       ) : (
         <>
           {decision.outcome === null ? (
-            <p className="sc-muted">Nothing written yet.</p>
+            <p className="sc-muted">{words.decisions.nothingWritten}</p>
           ) : (
             <Markdown source={decision.outcome} docHref={props.docHref} />
           )}
@@ -89,7 +91,9 @@ function Outcome(props: {
                 setWriting(true);
               }}
             >
-              {decision.outcome === null ? "Write what followed" : "Change it"}
+              {decision.outcome === null
+                ? words.decisions.writeWhatFollowed
+                : words.decisions.changeIt}
             </Button>
           )}
         </>
@@ -99,6 +103,7 @@ function Outcome(props: {
 }
 
 export function DecisionCard(props: DecisionCardProps) {
+  const words = useWords();
   const { decision, task } = props;
   const [chosen, setChosen] = useState<string | undefined>(undefined);
   const [note, setNote] = useState("");
@@ -118,12 +123,14 @@ export function DecisionCard(props: DecisionCardProps) {
         </h3>
         <p className="sc-decision-meta">
           <PersonChip person={decision.raisedBy} />{" "}
-          {decision.run === null ? "asked" : `asked through ${decision.run.agent}`}{" "}
+          {decision.run === null
+            ? words.decisions.asked
+            : words.decisions.askedThrough(decision.run.agent)}{" "}
           <Time iso={decision.createdAt} />
           {task !== undefined && (
             <>
               {" "}
-              about{" "}
+              {words.decisions.about}{" "}
               {props.taskHref === undefined ? (
                 <span>
                   #{task.number} {task.title}
@@ -138,8 +145,8 @@ export function DecisionCard(props: DecisionCardProps) {
         </p>
       </header>
       {decision.body.length > 0 && (
-        <section className="sc-decision-section" aria-label="Context">
-          <h4 className="sc-decision-label">Context</h4>
+        <section className="sc-decision-section" aria-label={words.decisions.context}>
+          <h4 className="sc-decision-label">{words.decisions.context}</h4>
           <Markdown source={decision.body} docHref={props.docHref} />
         </section>
       )}
@@ -152,11 +159,12 @@ export function DecisionCard(props: DecisionCardProps) {
             </div>
           )}
           <p className="sc-decision-meta">
-            <PersonChip person={decision.answer.by} /> answered <Time iso={decision.answer.at} />
+            <PersonChip person={decision.answer.by} /> {words.decisions.answeredBy}{" "}
+            <Time iso={decision.answer.at} />
           </p>
         </div>
       ) : props.onAnswer === undefined ? (
-        <p className="sc-decision-waiting">Waiting for a person.</p>
+        <p className="sc-decision-waiting">{words.decisions.waitingForPerson}</p>
       ) : (
         <form
           className="sc-answer-form"
@@ -170,7 +178,7 @@ export function DecisionCard(props: DecisionCardProps) {
             }
           }}
         >
-          <div className="sc-options-list" role="radiogroup" aria-label="Options">
+          <div className="sc-options-list" role="radiogroup" aria-label={words.decisions.options}>
             {decision.options.map((option) => (
               <label
                 key={option.id}
@@ -189,7 +197,7 @@ export function DecisionCard(props: DecisionCardProps) {
           </div>
           <input
             className="sc-input"
-            placeholder="A word about it, if any"
+            placeholder={words.decisions.notePlaceholder}
             maxLength={MAX_NOTE_LENGTH}
             value={note}
             onChange={(event) => setNote(event.target.value)}
@@ -201,7 +209,7 @@ export function DecisionCard(props: DecisionCardProps) {
               size="sm"
               disabled={chosen === undefined || props.busy === true}
             >
-              Answer
+              {words.decisions.answer}
             </Button>
           </div>
         </form>
@@ -233,6 +241,7 @@ export interface DecisionListProps {
 }
 
 export function DecisionList(props: DecisionListProps) {
+  const words = useWords();
   const waiting = props.decisions.filter((decision) => decision.answer === null);
   const answered = props.decisions.filter((decision) => decision.answer !== null);
   const card = (decision: RestDecision) => (
@@ -250,16 +259,16 @@ export function DecisionList(props: DecisionListProps) {
   );
   return (
     <div className="sc-decisions">
-      <section aria-label="Waiting">
+      <section aria-label={words.decisions.waiting}>
         <h2 className="sc-section-title">
-          Waiting <span className="sc-column-count">{waiting.length}</span>
+          {words.decisions.waiting} <span className="sc-column-count">{waiting.length}</span>
         </h2>
         {waiting.length === 0 ? (props.empty ?? null) : waiting.map(card)}
       </section>
       {answered.length > 0 && (
-        <section aria-label="Answered">
+        <section aria-label={words.decisions.answered}>
           <h2 className="sc-section-title">
-            Answered <span className="sc-column-count">{answered.length}</span>
+            {words.decisions.answered} <span className="sc-column-count">{answered.length}</span>
           </h2>
           {answered.map(card)}
         </section>

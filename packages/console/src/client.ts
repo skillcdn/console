@@ -27,6 +27,7 @@ import {
   type RestMemberInput,
   type RestMemberPatch,
   type RestMembers,
+  type RestMePatch,
   type RestPeople,
   type RestPerson,
   type RestPersonPatch,
@@ -224,6 +225,8 @@ export interface ProjectClient {
 
 export interface ConsoleClient {
   me(signal?: AbortSignal): Promise<RestMe>;
+  /** Keeps the person's choice of language, or none; for a person signed in. */
+  updateMe(patch: RestMePatch): Promise<RestMe>;
   people(signal?: AbortSignal): Promise<RestPeople>;
   /** Changes what a person is; for an administrator. */
   updatePerson(id: string, patch: RestPersonPatch): Promise<RestPerson>;
@@ -510,6 +513,7 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
       request("POST", `${base}${REST_ROUTES.tokens}`, input, restTokenCreatedSchema),
     revokeToken: (id) =>
       request("DELETE", `${base}${restPath("tokens", id)}`, undefined, undefined),
+    updateMe: (patch) => request("PATCH", `${base}${REST_ROUTES.me}`, patch, restMeSchema),
     personTokens: (personId, signal) =>
       request("GET", `${base}${personTokensPath(personId)}`, undefined, restTokensSchema, signal),
     revokePersonToken: (personId, tokenId) =>

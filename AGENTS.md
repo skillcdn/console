@@ -30,7 +30,7 @@ Public repository hygiene
 
 8. **This repository is public; operations are not.** Never commit cloud account ids, ARNs, hostnames, IPs, DNS or CDN configuration, capacity or cost figures, production tuning values, the organization's own tasks, decisions, people, customers or incidents, and do not say where any of that is kept. Fixtures are invented. Code ships generic defaults; real values arrive through environment configuration.
 9. **Do not name other products** as inspiration or comparison in code, docs, commits or PRs. Naming what we interoperate with (a git host, an agent such as Claude Code or Codex) is fine.
-10. **Everything committed is in English** (code, comments, docs, commit messages, PR text), whatever language the conversation is in. The one exception, when the UI gets language packs: what users read in their own language.
+10. **Everything committed is in English** (code, comments, docs, commit messages, PR text), whatever language the conversation is in. The one exception: the language packs in `packages/console/src/i18n/`, what users read in their own language ([ADR-0012](docs/adr/0012-the-pages-speak-the-persons-language-from-packs-that-ship-with-the-package.md)); a word added to the English pack is added to every other pack in the same change.
 
 ## Repository map
 

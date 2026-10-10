@@ -237,6 +237,32 @@ export async function updatePersonRole(
 }
 
 /** Everyone of the workspace, by login. */
+/** The language the person chose for the pages, or nothing. */
+export async function languageOf(
+  database: Database,
+  personId: string,
+): Promise<string | undefined> {
+  const [row] = await drizzleOf(database)
+    .select({ language: people.language })
+    .from(people)
+    .where(eq(people.id, personId))
+    .limit(1);
+  return row?.language ?? undefined;
+}
+
+/** Keeps the person's choice of language, or none. */
+export async function setLanguage(
+  database: Database,
+  personId: string,
+  language: string | undefined,
+  now: Date,
+): Promise<void> {
+  await drizzleOf(database)
+    .update(people)
+    .set({ language: language ?? null, updatedAt: now })
+    .where(eq(people.id, personId));
+}
+
 export async function listPeople(database: Database, workspaceId: string): Promise<PersonRecord[]> {
   const rows = await drizzleOf(database)
     .select(personColumns(people))
