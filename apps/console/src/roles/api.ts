@@ -7,6 +7,7 @@ import { createGoogleProvider } from "../adapters/google-login.js";
 import { createPgBlobStore } from "../adapters/pg-blob-store.js";
 import { createSkillCdnSource } from "../adapters/skillcdn.js";
 import { systemClock } from "../adapters/system-clock.js";
+import { Connections } from "../auth/connect.js";
 import { Login } from "../auth/login.js";
 import { Membership } from "../auth/membership.js";
 import { createSecrets } from "../auth/secrets.js";
@@ -125,10 +126,26 @@ export function createApi(
       secure,
     });
     const secrets = createSecrets(config.auth.secret);
+    const tokens = new Tokens({
+      database,
+      clock,
+      logger,
+      limit: MAX_TOKENS_PER_PERSON,
+      daysAtMost: config.auth.tokenDaysAtMost,
+    });
     auth = {
       origin,
       sessions,
-      tokens: new Tokens({ database, clock, logger, limit: MAX_TOKENS_PER_PERSON }),
+      tokens,
+      connections: new Connections({
+        database,
+        clock,
+        logger,
+        tokens,
+        workspaceId: async () => (await workspace()).id,
+        // The page of the default UI for a code (ADR-0010); a custom console serves it where it likes.
+        pageFor: (code) => `${origin}/connect/${code}`,
+      }),
       membership,
       logins: new Map(
         providers.map((provider) => [

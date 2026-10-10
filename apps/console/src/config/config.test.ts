@@ -270,6 +270,7 @@ describe("signing in", () => {
         GITHUB_WEB_URL: "https://github.example.test/",
         GITHUB_API_URL: "https://github.example.test/api/v3/",
         SESSION_TTL_DAYS: "7",
+        TOKEN_DAYS_AT_MOST: "30",
       },
       (path) => (path === "/run/secrets/client" ? "from-file\n" : noFiles()),
     );
@@ -280,6 +281,7 @@ describe("signing in", () => {
         apiUrl: "https://github.example.test/api/v3",
       },
       sessionTtlMs: 7 * 86_400_000,
+      tokenDaysAtMost: 30,
     });
   });
 

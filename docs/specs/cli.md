@@ -5,7 +5,7 @@
 
 ## Signing in
 
-A person installs the package where the agent runs and signs the command in once: `console login --url <origin>` asks for a token made on the console's Agents page (or reads it from standard input with `--token-stdin`), checks it against the console (`GET /api/v1/me` must know the person), and keeps it with the address in `$XDG_CONFIG_HOME/skillcdn-console/credentials.json` (`~/.config/skillcdn-console/credentials.json` when `XDG_CONFIG_HOME` is unset), readable by the person alone where the system can say so. `CONSOLE_URL` and `CONSOLE_TOKEN` in the environment win over the file, for a hook or a job; `--url <origin>` names another console for one command. `logout` forgets the file; the token itself is removed on the Agents page. A token is never taken on the command line, and never printed.
+A person installs the package where the agent runs, or has the agent install it, and the command connects once ([ADR-0011](../adr/0011-an-agent-connects-with-a-short-code-a-person-approves-and-the-token-is-never-shown.md)): `console login --url <origin>` asks the console to connect, prints the address of the console's own page and a code of eight characters, and waits; the person opens the address signed in, checks that the page shows the same code, names the agent and approves; and the command receives a token of its own, which it never prints. An agent that can run commands does this itself and relays the address and the code to its person; `--agent <name>` says what it calls itself, shown to the person with the machine's name. A token made by hand on the Agents page is read from standard input with `--token-stdin` instead, for a script or a job, and checked against the console (`GET /api/v1/me` must know the person). Either way the command keeps the token with the address in `$XDG_CONFIG_HOME/skillcdn-console/credentials.json` (`~/.config/skillcdn-console/credentials.json` when `XDG_CONFIG_HOME` is unset), readable by the person alone where the system can say so. `CONSOLE_URL` and `CONSOLE_TOKEN` in the environment win over the file, for a hook or a job; `--url <origin>` names another console for one command. `logout` forgets the file; the token itself is removed on the Agents page, by its person or by an administrator. A token is never taken on the command line, never typed, and never printed.
 
 From then on the agent is that person on the board ([ADR-0004](../adr/0004-people-and-agents-reach-the-board-only-through-the-api-with-a-credential-of-their-own.md)): what it does is attributed to the person and shown as done by the agent, called what the person called the token unless `take --agent` says otherwise.
 
@@ -17,7 +17,7 @@ The board is a project's ([ADR-0008](../adr/0008-a-workspace-holds-projects-and-
 
 | Command | Asks the console | Says |
 |---|---|---|
-| `login --url <origin> [--token-stdin]` | `GET /api/v1/me`, with the token | who the token is; keeps the credentials |
+| `login --url <origin> [--agent <name>] [--token-stdin]` | `POST /api/v1/connect`, then `POST /api/v1/connect/claim` until a person approved, then `GET /api/v1/me` with the token | the address and the code for a person; then who the token is; keeps the credentials |
 | `logout` | nothing | that they are forgotten |
 | `whoami` | `GET /api/v1/me` | the login, the role, the workspace, the address, and the project this directory works in |
 | `projects` | `GET /api/v1/projects` | one line per project: key, name, what the person is in it, what waits in it |

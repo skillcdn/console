@@ -49,7 +49,7 @@ describe("createClient", () => {
     const { send, calls } = fakeFetch({
       "GET https://console.test/api/v1/me": {
         body: {
-          workspace: { name: "Acme" },
+          workspace: { name: "Acme", tokenDaysAtMost: null },
           person: PERSON,
           signIn: [{ key: "gh", label: "GitHub" }],
         },
@@ -237,6 +237,54 @@ describe("createClient", () => {
     }
     expect(calls[1]?.init?.body).toBe(JSON.stringify({ name: "ci", expiresInDays: 90 }));
     expect(calls[2]?.init?.method).toBe("DELETE");
+  });
+
+  it("connects an agent: begins as nobody, shows and settles a code, claims with the secret, and sees another's tokens", async () => {
+    const connection = {
+      code: "ABCD-EFGH",
+      url: "https://console.test/connect/ABCD-EFGH",
+      secret: "cns_c_secret",
+      expiresAt: "2026-10-10T10:10:00.000Z",
+      interval: 3,
+    };
+    const request = {
+      code: "ABCD-EFGH",
+      agent: "Claude Code on laptop",
+      createdAt: "2026-10-10T10:00:00.000Z",
+      expiresAt: connection.expiresAt,
+      approved: false,
+    };
+    const tokenId = "0199c4d8-0000-7000-8000-000000000030";
+    const { send, calls } = fakeFetch({
+      "POST https://console.test/api/v1/connect": { status: 201, body: connection },
+      "GET https://console.test/api/v1/connect/ABCD-EFGH": { body: request },
+      "POST https://console.test/api/v1/connect/ABCD-EFGH/approve": {
+        body: { ...request, approved: true },
+      },
+      "POST https://console.test/api/v1/connect/ABCD-EFGH/deny": { status: 204 },
+      "POST https://console.test/api/v1/connect/claim": {
+        status: 202,
+        body: { status: "pending", expiresAt: connection.expiresAt },
+      },
+      [`GET https://console.test/api/v1/people/${PERSON.id}/tokens`]: { body: { items: [] } },
+      [`DELETE https://console.test/api/v1/people/${PERSON.id}/tokens/${tokenId}`]: { status: 204 },
+    });
+    const client = createClient({ baseUrl: "https://console.test", fetch: send });
+    expect((await client.connect({ agent: "Claude Code on laptop" })).secret).toBe("cns_c_secret");
+    expect((await client.connectRequest("ABCD-EFGH")).approved).toBe(false);
+    expect(
+      (await client.approveConnection("ABCD-EFGH", { name: "Claude Code", expiresInDays: 30 }))
+        .approved,
+    ).toBe(true);
+    await client.denyConnection("ABCD-EFGH");
+    expect(await client.claimConnection("cns_c_secret")).toEqual({
+      status: "pending",
+      expiresAt: connection.expiresAt,
+    });
+    expect(calls[4]?.init?.body).toBe(JSON.stringify({ secret: "cns_c_secret" }));
+    expect((await client.personTokens(PERSON.id)).items).toEqual([]);
+    await client.revokePersonToken(PERSON.id, tokenId);
+    expect(calls).toHaveLength(7);
   });
 
   it("hands in a file as a form, named and typed, and says where its bytes are read", async () => {

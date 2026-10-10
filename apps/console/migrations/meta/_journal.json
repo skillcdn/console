@@ -57,6 +57,13 @@
       "when": 1791602883671,
       "tag": "0007_documents",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791607578285,
+      "tag": "0008_connect",
+      "breakpoints": true
     }
   ]
 }

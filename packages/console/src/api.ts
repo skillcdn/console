@@ -15,6 +15,12 @@ export {
   type ProjectClient,
 } from "./client.js";
 export {
+  CONNECT_CODE_ALPHABET,
+  CONNECT_CODE_LENGTH,
+  isConnectCode,
+  normalizeConnectCode,
+} from "./connect.js";
+export {
   DOCUMENT_PATH,
   documentPathsIn,
   folderOf,
@@ -47,6 +53,7 @@ export {
   MAX_QUESTION_LENGTH,
   MAX_REPORTS_PER_RUN,
   MAX_SEARCH_LENGTH,
+  MAX_SECRET_LENGTH,
   MAX_SKILLS_ADDRESS_LENGTH,
   MAX_SUMMARY_LENGTH,
   MAX_TITLE_LENGTH,
@@ -59,10 +66,13 @@ export {
 } from "./limits.js";
 export {
   AUTH_ROUTES,
+  CLAIM_PATH,
+  connectPath,
   isSignInFailure,
   loginPath,
   PROJECT_COLLECTIONS,
   type ProjectCollection,
+  personTokensPath,
   projectPath,
   REST_ROUTES,
   RETURN_TO_PARAM,
@@ -77,6 +87,11 @@ export {
   type RestArtifact,
   type RestArtifactInput,
   type RestBacklink,
+  type RestClaim,
+  type RestClaimInput,
+  type RestConnectInput,
+  type RestConnection,
+  type RestConnectRequest,
   type RestDecision,
   type RestDecisionInput,
   type RestDecisionOption,
@@ -131,6 +146,11 @@ export {
   restArtifactInputSchema,
   restArtifactSchema,
   restBacklinkSchema,
+  restClaimInputSchema,
+  restClaimSchema,
+  restConnectInputSchema,
+  restConnectionSchema,
+  restConnectRequestSchema,
   restDecisionInputSchema,
   restDecisionOptionSchema,
   restDecisionPatchSchema,

@@ -63,7 +63,21 @@ const ANSWERED = {
   ...DECISION,
   answer: { option: "2", note: "Carefully.", by: { ...PERSON, login: "bob" }, at: WHEN },
 };
-const ME = { workspace: { name: "Acme" }, person: PERSON, signIn: [] };
+const ME = { workspace: { name: "Acme", tokenDaysAtMost: null }, person: PERSON, signIn: [] };
+const TOKEN = {
+  id: "0199c4d8-0000-7000-8000-000000000030",
+  name: "Claude Code on laptop",
+  createdAt: WHEN,
+  expiresAt: null,
+  lastUsedAt: null,
+};
+const CONNECTION = {
+  code: "ABCD-EFGH",
+  url: `${"https://console.test"}/connect/ABCD-EFGH`,
+  secret: "cns_c_secret",
+  expiresAt: WHEN,
+  interval: 1,
+};
 const PROJECT = {
   id: "0199c4d8-0000-7000-8000-000000000050",
   key: "web",
@@ -153,7 +167,6 @@ function harness(overrides: Partial<CliIo> & { readonly fetch: CliIo["fetch"] })
       err.push(text);
     },
     readStdin: async () => "",
-    readSecret: async () => "",
     readFile: async () => {
       throw new Error("no files here");
     },
@@ -235,9 +248,11 @@ describe("the console command", () => {
     const r = harness({
       fetch: refused.fetch,
       store: empty.store,
-      readSecret: async () => "cns_t_nothing",
+      readStdin: async () => "cns_t_nothing\n",
     });
-    expect(await runCli(["login", "--url", "https://console.test"], r.io)).toBe(EXIT.failed);
+    expect(await runCli(["login", "--url", "https://console.test", "--token-stdin"], r.io)).toBe(
+      EXIT.failed,
+    );
     expect(r.err()).toContain("does not know this token");
     expect(empty.kept()).toBeUndefined();
 
@@ -246,6 +261,42 @@ describe("the console command", () => {
       EXIT.usage,
     );
     expect(path.err()).toContain("Not an origin");
+  });
+
+  it("connects with a code a person approves, and keeps the token it is then handed, never shown", async () => {
+    const { fetch, calls } = fakeConsole({
+      "POST /api/v1/connect": { status: 201, body: CONNECTION },
+      "POST /api/v1/connect/claim": [
+        { status: 202, body: { status: "pending", expiresAt: WHEN } },
+        { body: { status: "connected", token: TOKEN, secret: "cns_t_handed" } },
+      ],
+      "GET /api/v1/me": { body: ME },
+    });
+    const memory = memoryStore();
+    const h = harness({ fetch, store: memory.store, hostname: "laptop" });
+    expect(await runCli(["login", "--url", ORIGIN, "--agent", "Claude Code"], h.io)).toBe(EXIT.ok);
+    expect(calls[0]?.body).toEqual({ agent: "Claude Code on laptop" });
+    expect(h.out()).toContain("https://console.test/connect/ABCD-EFGH");
+    expect(h.out()).toContain("code ABCD-EFGH");
+    expect(h.out()).toContain('Connected as "Claude Code on laptop" to Acme');
+    expect(memory.kept()).toEqual({ url: ORIGIN, token: "cns_t_handed" });
+    expect(
+      calls.filter((call) => call.key === "POST /api/v1/connect/claim").map((call) => call.body),
+    ).toEqual([{ secret: "cns_c_secret" }, { secret: "cns_c_secret" }]);
+    expect(h.out()).not.toContain("cns_");
+    expect(h.err()).not.toContain("cns_");
+
+    const late = fakeConsole({
+      "POST /api/v1/connect": { status: 201, body: CONNECTION },
+      "POST /api/v1/connect/claim": {
+        status: 404,
+        body: { error: { code: "connect.not_found", message: "Gone." } },
+      },
+    });
+    const l = harness({ fetch: late.fetch });
+    expect(await runCli(["login", "--url", ORIGIN], l.io)).toBe(EXIT.failed);
+    expect(l.err()).toContain("not approved in time");
+    expect(late.calls[0]?.body).toEqual({ agent: "The console command" });
   });
 
   it("works in the project the flag, the environment or the directory names, and says so when none does", async () => {

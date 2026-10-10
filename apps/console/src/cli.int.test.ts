@@ -1,9 +1,11 @@
 import {
+  connectPath,
   projectPath,
   REST_ROUTES,
   restRunSchema,
   restTaskSchema,
   restTokenCreatedSchema,
+  restTokensSchema,
 } from "@skillcdn/console/api";
 import { type CliIo, EXIT, runCli } from "@skillcdn/console/cli";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -113,7 +115,6 @@ async function console_(
     },
     fetch: async (url, init) => h.app.fetch(new Request(url, init)),
     readStdin: async () => "",
-    readSecret: async () => "",
     readFile: async () => {
       throw new Error("no files here");
     },
@@ -135,6 +136,70 @@ async function console_(
 }
 
 describe("the command line", () => {
+  it("connects with a code a person approves, and holds the token from then on", async () => {
+    const out: string[] = [];
+    let kept: { url: string; token: string } | undefined;
+    const io: CliIo = {
+      env: {},
+      stdout: (text) => {
+        out.push(text);
+      },
+      stderr: () => undefined,
+      fetch: async (url, init) => h.app.fetch(new Request(url, init)),
+      readStdin: async () => "",
+      hostname: "laptop",
+      readFile: async () => {
+        throw new Error("no files here");
+      },
+      readBytes: async () => {
+        throw new Error("no files here");
+      },
+      store: {
+        load: async () => kept,
+        save: async (credentials) => {
+          kept = credentials;
+          return "nowhere";
+        },
+        clear: async () => undefined,
+      },
+      directory: memoryDirectory().store,
+      sleep,
+      now: () => Date.now(),
+    };
+    // The command waits for the approval; the person gives it meanwhile, from the pages.
+    const login = runCli(["login", "--url", SIGN_IN_URL, "--agent", "Claude Code"], io);
+    let code: string | undefined;
+    for (let tries = 0; code === undefined && tries < 50; tries += 1) {
+      await sleep(20);
+      code = out.join("").match(/code ([A-Z2-9]{4}-[A-Z2-9]{4})/)?.[1];
+    }
+    if (code === undefined) {
+      throw new Error("the command showed no code");
+    }
+    expect(out.join("")).toContain(`${SIGN_IN_URL}/connect/${code}`);
+    const approved = await h.request(connectPath(code, "approve"), {
+      method: "POST",
+      headers: { cookie: bob, ...JSON_HEADERS },
+      body: JSON.stringify({ name: "Claude Code for Bob", expiresInDays: 30 }),
+    });
+    expect(approved.status).toBe(200);
+    expect(await login).toBe(EXIT.ok);
+    expect(out.join("")).toContain('Connected as "Claude Code for Bob" to');
+    expect(out.join("")).toContain("as bob (");
+    expect(out.join("")).not.toContain("cns_");
+    expect(kept?.token).toMatch(/^cns_t_/);
+    // The token works as Bob's: his agents list it, and he takes it away again.
+    const listed = await h.request(REST_ROUTES.tokens, { headers: { cookie: bob } });
+    const mine = restTokensSchema.parse(await listed.json()).items;
+    const held = mine.find((token) => token.name === "Claude Code for Bob");
+    expect(held).toBeDefined();
+    const removed = await h.request(`${REST_ROUTES.tokens}/${held?.id}`, {
+      method: "DELETE",
+      headers: { cookie: bob, origin: SIGN_IN_URL },
+    });
+    expect(removed.status).toBe(204);
+  });
+
   it("works a task from taking it to finishing it, as its person, with a person deciding meanwhile", async () => {
     expect((await console_(["tasks"])).out).toBe("No tasks.\n");
     const task = await writeTask(bob, {

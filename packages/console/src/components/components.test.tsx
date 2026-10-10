@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type {
+  RestConnectRequest,
   RestDecision,
   RestDocument,
   RestEvent,
@@ -12,6 +13,7 @@ import type {
   RestToken,
 } from "../api.js";
 import { Board } from "./board.js";
+import { ConnectApproval, ConnectCodeForm, ConnectWords } from "./connect.js";
 import { DecisionCard, DecisionList } from "./decision-list.js";
 import { DocumentForm, DocumentList, DocumentView, FolderView } from "./documents.js";
 import { describeEvent, EventFeed } from "./event-feed.js";
@@ -645,13 +647,13 @@ describe("tokens", () => {
       />,
     );
     expect(html).toContain("Claude Code &lt;on&gt; the laptop");
-    expect(html).toContain("Never used");
-    expect(html).toContain("Last used");
+    expect(html).toContain("Not active yet");
+    expect(html).toContain("Last active");
     expect(html).toContain("Good until");
     expect(html).toContain("Does not expire");
-    expect(html.match(/>Remove</g)).toHaveLength(3);
+    expect(html.match(/>Disconnect</g)).toHaveLength(3);
     const readOnly = renderToStaticMarkup(<TokenList tokens={[token]} />);
-    expect(readOnly).not.toContain("Remove");
+    expect(readOnly).not.toContain("Disconnect");
     expect(renderToStaticMarkup(<TokenList tokens={[]} empty={<p>none</p>} />)).toBe("<p>none</p>");
   });
 
@@ -661,6 +663,12 @@ describe("tokens", () => {
     expect(form).toContain("90 days");
     expect(form).toContain("Does not expire");
     expect(form).toContain("Make the token");
+    // Where the organization requires an expiry, the form offers no more than it allows.
+    const bounded = renderToStaticMarkup(<TokenForm daysAtMost={45} onSubmit={() => undefined} />);
+    expect(bounded).toContain("30 days");
+    expect(bounded).toContain("45 days");
+    expect(bounded).not.toContain("90 days");
+    expect(bounded).not.toContain("Does not expire");
     const made = renderToStaticMarkup(
       <NewToken token={token} secret="cns_t_example-secret" onDone={() => undefined} />,
     );
@@ -675,10 +683,49 @@ describe("tokens", () => {
   });
 });
 
+describe("connecting an agent", () => {
+  const request: RestConnectRequest = {
+    code: "ABCD-EFGH",
+    agent: "Claude Code on <the> laptop",
+    createdAt: "2026-10-10T10:00:00.000Z",
+    expiresAt: "2026-10-10T10:10:00.000Z",
+    approved: false,
+  };
+
+  it("asks for the code, shows what asks with the way to approve or refuse it, and says what to tell the agent", () => {
+    const form = renderToStaticMarkup(<ConnectCodeForm onSubmit={() => undefined} />);
+    expect(form).toContain('placeholder="ABCD-EFGH"');
+    const approval = renderToStaticMarkup(
+      <ConnectApproval
+        request={request}
+        daysAtMost={30}
+        onApprove={() => undefined}
+        onDeny={() => undefined}
+      />,
+    );
+    expect(approval).toContain("Claude Code on &lt;the&gt; laptop");
+    expect(approval).not.toContain("<the>");
+    expect(approval).toContain("ABCD-EFGH");
+    expect(approval).toContain(">Approve<");
+    expect(approval).toContain(">Not mine<");
+    expect(approval).toContain('value="Claude Code on &lt;the&gt; laptop"');
+    expect(approval).toContain("30 days");
+    expect(approval).not.toContain("Does not expire");
+    const words = renderToStaticMarkup(<ConnectWords origin="https://console.test" />);
+    expect(words).toContain("console login --url https://console.test");
+    expect(words).toContain("Tell your agent");
+  });
+});
+
 describe("people", () => {
   it("lists everyone with what they are, and lets an administrator change it", () => {
     const read = renderToStaticMarkup(<PeopleList people={[alice, bob]} me={bob} />);
     expect(read).toContain("Administrator");
+    const seen = renderToStaticMarkup(
+      <PeopleList people={[alice]} agentsHref={(person) => `/people/${person.id}/agents`} />,
+    );
+    expect(seen).toContain(`href="/people/${alice.id}/agents"`);
+    expect(read).not.toContain("/agents");
     expect(read).toContain("Member");
     expect(read).toContain("(you)");
     expect(read).not.toContain("<select");

@@ -7,19 +7,29 @@ import {
 } from "../api.js";
 import { Button, Callout, Time } from "./ui.js";
 
-// The tokens a person holds for their agents, scripts and consoles of their own: the list, the
-// way to make one, and the one just made, whose secret is shown this once. Each takes its data
-// as props and nothing from the network.
+// The tokens a person holds for their agents, scripts and consoles of their own, shown as the
+// agents that hold them: the list, the way to make one by hand, and the one just made, whose
+// secret is shown this once. Each takes its data as props and nothing from the network.
 
 /** How long a token may be good for, as the form offers it; `never` for one that does not expire. */
 const DAY_CHOICES = ["30", "90", "180", "365", "never"] as const;
 type DayChoice = (typeof DAY_CHOICES)[number];
 const DEFAULT_CHOICE: DayChoice =
   DAY_CHOICES.find((choice) => choice === String(DEFAULT_TOKEN_DAYS)) ?? "90";
-const choiceOf = (value: string): DayChoice =>
-  DAY_CHOICES.find((choice) => choice === value) ?? DEFAULT_CHOICE;
-const choiceLabel = (choice: DayChoice): string =>
+const choiceLabel = (choice: string): string =>
   choice === "never" ? "Does not expire" : `${choice} days`;
+
+/**
+ * The spans a form offers: the usual ones, within the most days the workspace allows when it
+ * names some, and that limit itself; with a limit there is no "never".
+ */
+export function dayChoices(daysAtMost: number | null | undefined): readonly string[] {
+  if (daysAtMost === null || daysAtMost === undefined) {
+    return DAY_CHOICES;
+  }
+  const within = DAY_CHOICES.filter((choice) => choice !== "never" && Number(choice) < daysAtMost);
+  return [...within, String(daysAtMost)];
+}
 
 export interface TokenListProps {
   readonly tokens: readonly RestToken[];
@@ -34,14 +44,14 @@ export function TokenList(props: TokenListProps) {
     return <>{props.empty ?? null}</>;
   }
   return (
-    <ul className="sc-token-list" aria-label="Tokens">
+    <ul className="sc-token-list" aria-label="Agents">
       {props.tokens.map((token) => (
         <li key={token.id} className="sc-token">
           <div>
             <p className="sc-token-name">{token.name}</p>
             <p className="sc-token-meta">
               <span>
-                Made <Time iso={token.createdAt} />
+                Connected <Time iso={token.createdAt} />
               </span>
               <span>
                 {token.expiresAt === null ? (
@@ -54,10 +64,10 @@ export function TokenList(props: TokenListProps) {
               </span>
               <span>
                 {token.lastUsedAt === null ? (
-                  "Never used"
+                  "Not active yet"
                 ) : (
                   <>
-                    Last used <Time iso={token.lastUsedAt} />
+                    Last active <Time iso={token.lastUsedAt} />
                   </>
                 )}
               </span>
@@ -70,7 +80,7 @@ export function TokenList(props: TokenListProps) {
               disabled={props.busy === true}
               onClick={() => props.onRevoke?.(token)}
             >
-              Remove
+              Disconnect
             </Button>
           )}
         </li>
@@ -80,15 +90,25 @@ export function TokenList(props: TokenListProps) {
 }
 
 export interface TokenFormProps {
+  /** What the token is called to begin with: what the agent calls itself, for one connecting. */
+  readonly name?: string | undefined;
+  /** The most days a token may be good for here, or nothing when a person chooses. */
+  readonly daysAtMost?: number | null | undefined;
   readonly busy?: boolean | undefined;
   readonly error?: string | undefined;
+  /** What the button says; "Make the token" when left out. */
+  readonly submitLabel?: string | undefined;
+  readonly cancelLabel?: string | undefined;
   readonly onSubmit: (input: RestTokenInput) => void;
   readonly onCancel?: (() => void) | undefined;
 }
 
 export function TokenForm(props: TokenFormProps) {
-  const [name, setName] = useState("");
-  const [choice, setChoice] = useState<DayChoice>(DEFAULT_CHOICE);
+  const choices = dayChoices(props.daysAtMost);
+  const [name, setName] = useState(props.name ?? "");
+  const [choice, setChoice] = useState<string>(
+    choices.includes(DEFAULT_CHOICE) ? DEFAULT_CHOICE : (choices.at(-1) ?? DEFAULT_CHOICE),
+  );
   const submit = (event: FormEvent) => {
     event.preventDefault();
     props.onSubmit({
@@ -115,9 +135,9 @@ export function TokenForm(props: TokenFormProps) {
           <select
             className="sc-input"
             value={choice}
-            onChange={(event) => setChoice(choiceOf(event.target.value))}
+            onChange={(event) => setChoice(event.target.value)}
           >
-            {DAY_CHOICES.map((option) => (
+            {choices.map((option) => (
               <option key={option} value={option}>
                 {choiceLabel(option)}
               </option>
@@ -136,11 +156,11 @@ export function TokenForm(props: TokenFormProps) {
           variant="primary"
           disabled={props.busy === true || name.trim() === ""}
         >
-          Make the token
+          {props.submitLabel ?? "Make the token"}
         </Button>
         {props.onCancel !== undefined && (
-          <Button variant="ghost" onClick={props.onCancel}>
-            Cancel
+          <Button variant="ghost" onClick={props.onCancel} disabled={props.busy === true}>
+            {props.cancelLabel ?? "Cancel"}
           </Button>
         )}
       </div>

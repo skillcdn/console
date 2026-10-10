@@ -505,6 +505,37 @@ export const documentFiles = pgTable(
 );
 
 /**
+ * An agent asking to connect (ADR-0011): the `code` a person approves, the SHA-256 of the
+ * secret the command claims the token with (`secret_hash`), what the agent calls itself, and
+ * the approval once given: who, what the token is to be called, and for how many days (null,
+ * once approved, for a token that does not expire). The row goes when the token is claimed or
+ * the request expires; the token itself is never here.
+ */
+export const connectRequests = pgTable(
+  "connect_requests",
+  {
+    id: id(),
+    workspaceId: uuid()
+      .notNull()
+      .references(() => workspaces.id),
+    code: text().notNull(),
+    secretHash: text().notNull(),
+    agent: text().notNull(),
+    approvedById: uuid().references(() => people.id, { onDelete: "cascade" }),
+    name: text(),
+    tokenDays: integer(),
+    approvedAt: instant(),
+    expiresAt: instant().notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex("connect_requests_code_key").on(table.workspaceId, table.code),
+    uniqueIndex("connect_requests_secret_hash_key").on(table.secretHash),
+    index("connect_requests_expires_idx").on(table.expiresAt),
+  ],
+);
+
+/**
  * Everything that happened to the board, in order: the live feed and the audit trail. Append
  * only. Numbered rather than keyed by uuid, since the feed is read from a point on and a number
  * says where; the row's own time is kept for people.

@@ -12,10 +12,12 @@ import {
   type RestProjectPatch,
   type RestTask,
   type RestTaskInput,
+  type RestToken,
   type RestTokenCreated,
   type TaskState,
 } from "./api.js";
 import { Board, type BoardProps } from "./components/board.js";
+import { ConnectWords } from "./components/connect.js";
 import { DecisionForm } from "./components/decision-form.js";
 import { DecisionCard, DecisionList, type DecisionListProps } from "./components/decision-list.js";
 import { EventFeed, type EventFeedProps } from "./components/event-feed.js";
@@ -34,6 +36,7 @@ import { TaskForm } from "./components/task-form.js";
 import { TaskView, type TaskViewProps } from "./components/task-view.js";
 import { NewToken, TokenForm, TokenList, type TokenListProps } from "./components/tokens.js";
 import { Button, Callout, EmptyState, Spinner } from "./components/ui.js";
+import { ConnectPage } from "./connect-page.js";
 import { type ConsoleData, useConsoleData } from "./data.js";
 import { DocsPage } from "./docs-page.js";
 import {
@@ -44,6 +47,7 @@ import {
   newDecisionHref,
   newTaskHref,
   PATHS,
+  personAgentsHref,
   projectHref,
   type Route,
   signInFailureOf,
@@ -679,6 +683,76 @@ function NothingHere() {
   );
 }
 
+/** One person's agents, for an administrator: read on their own, and taken away from here. */
+function PersonAgentsPage(props: {
+  readonly id: string;
+  readonly data: ConsoleData;
+  readonly components: ConsoleComponents;
+}) {
+  const { id, data, components } = props;
+  const me = data.me?.person ?? undefined;
+  const administrator = me?.role === "admin";
+  const person = data.people.find((candidate) => candidate.id === id);
+  const [tokens, setTokens] = useState<readonly RestToken[] | undefined>(undefined);
+  const [generation, setGeneration] = useState(0);
+  const { busy, error, act } = useAction();
+  const { personTokens } = data.actions;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `generation` is the trigger
+  useEffect(() => {
+    if (!administrator) {
+      return;
+    }
+    const controller = new AbortController();
+    personTokens(id, controller.signal)
+      .then((answer) => {
+        if (!controller.signal.aborted) {
+          setTokens(answer.items);
+        }
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [id, administrator, personTokens, generation]);
+  if (!administrator) {
+    return (
+      <EmptyState
+        title="Only an administrator sees another person's agents"
+        body="Your own are on your Agents page."
+        action={<LinkButton href={PATHS.agents}>Agents</LinkButton>}
+      />
+    );
+  }
+  return (
+    <>
+      <div className="sc-page-head">
+        <h1 className="sc-page-title">Agents of {person?.login ?? "someone"}</h1>
+        <LinkButton href={PATHS.people}>People</LinkButton>
+      </div>
+      <p className="sc-lead">
+        What works here as {person?.name ?? person?.login ?? "this person"}, each with a token of
+        its own. Disconnecting one takes its token away at once.
+      </p>
+      {error !== undefined && <Callout tone="danger">{error}</Callout>}
+      {tokens === undefined ? (
+        <div className="sc-loading">
+          <Spinner label="Loading the agents" />
+        </div>
+      ) : (
+        <components.TokenList
+          tokens={tokens}
+          busy={busy}
+          onRevoke={(token) =>
+            void act(async () => {
+              await data.actions.revokePersonToken(id, token.id);
+              setGeneration((current) => current + 1);
+            })
+          }
+          empty={<EmptyState title="No agent is connected" />}
+        />
+      )}
+    </>
+  );
+}
+
 function WorkspacePage(props: {
   readonly route: Route;
   readonly data: ConsoleData;
@@ -712,9 +786,16 @@ function WorkspacePage(props: {
               ? (person, role) => void act(() => data.actions.updatePerson(person.id, { role }))
               : undefined
           }
+          agentsHref={administrator ? (person) => personAgentsHref(person.id) : undefined}
         />
       </>
     );
+  }
+  if (route.name === "person-agents") {
+    return <PersonAgentsPage id={route.id} data={data} components={components} />;
+  }
+  if (route.name === "connect") {
+    return <ConnectPage code={route.code} data={data} navigation={navigation} />;
   }
   if (route.name === "agents" || route.name === "new-token") {
     const making = route.name === "new-token";
@@ -725,14 +806,14 @@ function WorkspacePage(props: {
           <h1 className="sc-page-title">Agents</h1>
           {!making && (
             <LinkButton href={PATHS.newToken} variant="primary">
-              Make a token
+              Make a token by hand
             </LinkButton>
           )}
         </div>
         <p className="sc-lead">
-          An agent you connect works this console as you: what you may do, it may do. Each holds a
-          token of its own, made here, named after where it runs, and removed here when that is
-          over. A script or a console of your own holds one the same way.
+          What works here as you: each agent you connected, with a token of its own that nobody
+          sees. What you may do, it may do; disconnect it here when that is over. A script or a
+          console of your own holds a token the same way, made by hand.
         </p>
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
         {fresh !== undefined && (
@@ -741,6 +822,7 @@ function WorkspacePage(props: {
         {making && (
           <section className="sc-panel" aria-label="Make a token">
             <TokenForm
+              daysAtMost={data.me?.workspace.tokenDaysAtMost}
               busy={busy}
               onSubmit={(input) =>
                 void act(async () => {
@@ -759,28 +841,11 @@ function WorkspacePage(props: {
           empty={
             <EmptyState
               title="No agent is connected yet"
-              body="Make a token for your agent, and it can work on this board as you."
+              body="Tell your agent to connect to this console, as below, and it shows up here."
             />
           }
         />
-        <section className="sc-panel sc-connect" aria-label="Connecting an agent">
-          <h2 className="sc-section-title">Connecting an agent</h2>
-          <p>
-            An agent works this board with the <code>console</code> command, which comes with the{" "}
-            <code>@skillcdn/console</code> package. Install the package where the agent runs, sign
-            the command in with a token made here, and say which project the directory works in:
-          </p>
-          <pre className="sc-code">
-            npm install -g @skillcdn/console{"\n"}console login --url {origin}
-            {"\n"}console use {"<project key>"}
-          </pre>
-          <p>
-            It asks for the token and keeps it in your home directory, and your agent is you from
-            then on: <code>console take</code> starts work on a task, <code>console report</code>,{" "}
-            <code>console hand-in</code> and <code>console ask</code> say how it goes, and{" "}
-            <code>console finish</code> ends the run. <code>console help</code> says the rest.
-          </p>
-        </section>
+        <ConnectWords origin={origin} />
       </>
     );
   }
@@ -852,7 +917,11 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
         label: "Projects",
         current: route.name === "projects" || route.name === "new-project",
       },
-      { href: PATHS.people, label: "People", current: route.name === "people" },
+      {
+        href: PATHS.people,
+        label: "People",
+        current: route.name === "people" || route.name === "person-agents",
+      },
       {
         href: PATHS.agents,
         label: "Agents",

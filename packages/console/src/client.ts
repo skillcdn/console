@@ -1,7 +1,19 @@
-import { AUTH_ROUTES, projectPath, REST_ROUTES, restPath } from "./routes.js";
+import {
+  AUTH_ROUTES,
+  CLAIM_PATH,
+  connectPath,
+  personTokensPath,
+  projectPath,
+  REST_ROUTES,
+  restPath,
+} from "./routes.js";
 import {
   type RestAnswerInput,
   type RestArtifactInput,
+  type RestClaim,
+  type RestConnectInput,
+  type RestConnection,
+  type RestConnectRequest,
   type RestDecision,
   type RestDecisionInput,
   type RestDecisionPatch,
@@ -37,6 +49,9 @@ import {
   type RestTokens,
   type RestVersion,
   type RestVersions,
+  restClaimSchema,
+  restConnectionSchema,
+  restConnectRequestSchema,
   restDecisionSchema,
   restDecisionsSchema,
   restDocumentSchema,
@@ -222,6 +237,23 @@ export interface ConsoleClient {
   events(after: number, signal?: AbortSignal): Promise<RestEvents>;
   /** The tokens of whoever asks. */
   tokens(signal?: AbortSignal): Promise<RestTokens>;
+  /** The tokens of another person: for an administrator. */
+  personTokens(personId: string, signal?: AbortSignal): Promise<RestTokens>;
+  /** Takes another person's token away: for an administrator. */
+  revokePersonToken(personId: string, tokenId: string): Promise<void>;
+  /**
+   * Begins connecting an agent (ADR-0011), as nobody: answered with a code for a person to
+   * approve and a secret for the command to claim the token with.
+   */
+  connect(input: RestConnectInput): Promise<RestConnection>;
+  /** What asks to connect under a code, for the person who approves it. */
+  connectRequest(code: string, signal?: AbortSignal): Promise<RestConnectRequest>;
+  /** Approves a connection as oneself: the agent's name, and for how long its token is good. */
+  approveConnection(code: string, input: RestTokenInput): Promise<RestConnectRequest>;
+  /** Says the connection is not one's own: it goes. */
+  denyConnection(code: string): Promise<void>;
+  /** Claims the token of a connection with its secret: pending until approved, then the token this once. */
+  claimConnection(secret: string): Promise<RestClaim>;
   /** Makes a token; the answer carries the secret, this once. */
   createToken(input: RestTokenInput): Promise<RestTokenCreated>;
   /** Takes a token away, whoever holds it. */
@@ -478,6 +510,20 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
       request("POST", `${base}${REST_ROUTES.tokens}`, input, restTokenCreatedSchema),
     revokeToken: (id) =>
       request("DELETE", `${base}${restPath("tokens", id)}`, undefined, undefined),
+    personTokens: (personId, signal) =>
+      request("GET", `${base}${personTokensPath(personId)}`, undefined, restTokensSchema, signal),
+    revokePersonToken: (personId, tokenId) =>
+      request("DELETE", `${base}${personTokensPath(personId, tokenId)}`, undefined, undefined),
+    connect: (input) =>
+      request("POST", `${base}${REST_ROUTES.connect}`, input, restConnectionSchema),
+    connectRequest: (code, signal) =>
+      request("GET", `${base}${connectPath(code)}`, undefined, restConnectRequestSchema, signal),
+    approveConnection: (code, input) =>
+      request("POST", `${base}${connectPath(code, "approve")}`, input, restConnectRequestSchema),
+    denyConnection: (code) =>
+      request("POST", `${base}${connectPath(code, "deny")}`, undefined, undefined),
+    claimConnection: (secret) =>
+      request("POST", `${base}${CLAIM_PATH}`, { secret }, restClaimSchema),
     signOut: () => request("POST", `${base}${AUTH_ROUTES.logout}`, undefined, undefined),
   };
 }

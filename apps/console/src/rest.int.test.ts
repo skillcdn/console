@@ -1,12 +1,18 @@
 import {
+  CLAIM_PATH,
+  connectPath,
   DEFAULT_TOKEN_DAYS,
   MAX_TITLE_LENGTH,
   MAX_TOKEN_DAYS,
   MAX_TOKEN_NAME_LENGTH,
   MAX_TOKENS_PER_PERSON,
+  personTokensPath,
   projectPath,
   REST_ROUTES,
   type RestTask,
+  restClaimSchema,
+  restConnectionSchema,
+  restConnectRequestSchema,
   restDecisionSchema,
   restDecisionsSchema,
   restDocumentSchema,
@@ -1125,6 +1131,226 @@ describe("tokens", () => {
     expect(oneMore.status).toBe(409);
     expect(await errorOf(oneMore)).toBe("token.too_many");
     expect(await listed(carol)).toHaveLength(MAX_TOKENS_PER_PERSON);
+  });
+});
+
+describe("connecting an agent", () => {
+  const JSON_ONLY = { "content-type": "application/json" };
+  const begin = async (agent: string) => {
+    const response = await h.request(REST_ROUTES.connect, {
+      method: "POST",
+      headers: JSON_ONLY,
+      body: JSON.stringify({ agent }),
+    });
+    expect(response.status).toBe(201);
+    return restConnectionSchema.parse(await response.json());
+  };
+  const claim = (secret: string) =>
+    h.request(CLAIM_PATH, { method: "POST", headers: JSON_ONLY, body: JSON.stringify({ secret }) });
+
+  it("is begun by nobody, approved by a person signed in, claimed once with the secret, and acts as the approver", async () => {
+    const connection = await begin("  Claude Code on the laptop  ");
+    expect(connection.code).toMatch(/^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/);
+    expect(connection.url).toBe(`${SIGN_IN_URL}/connect/${connection.code}`);
+    expect(connection.secret).toMatch(/^cns_c_[\w-]{40,}$/);
+    expect(connection.interval).toBeGreaterThan(0);
+    expect(new Date(connection.expiresAt).getTime()).toBeGreaterThan(Date.now());
+    // Nobody approved yet: the command waits.
+    const waiting = await claim(connection.secret);
+    expect(waiting.status).toBe(202);
+    expect(restClaimSchema.parse(await waiting.json())).toMatchObject({ status: "pending" });
+    // The page shows what asks to a person signed in, however they typed the code; nobody else.
+    expect((await h.request(connectPath(connection.code))).status).toBe(401);
+    const seen = await get(bob, connectPath(connection.code.toLowerCase().replace("-", "")));
+    expect(seen.status).toBe(200);
+    expect(restConnectRequestSchema.parse(await seen.json())).toMatchObject({
+      code: connection.code,
+      agent: "Claude Code on the laptop",
+      approved: false,
+    });
+    const approved = await send(bob, "POST", connectPath(connection.code, "approve"), {
+      name: "Claude Code",
+      expiresInDays: 7,
+    });
+    expect(approved.status).toBe(200);
+    expect(restConnectRequestSchema.parse(await approved.json()).approved).toBe(true);
+    const again = await send(bob, "POST", connectPath(connection.code, "approve"), {
+      name: "Again",
+    });
+    expect(await errorOf(again)).toBe("connect.approved");
+    // The claim gets the token once, made now for Bob; then nothing is left to find.
+    const handed = await claim(connection.secret);
+    expect(handed.status).toBe(200);
+    const result = restClaimSchema.parse(await handed.json());
+    if (result.status !== "connected") {
+      throw new Error("expected the token");
+    }
+    expect(result.token.name).toBe("Claude Code");
+    expect(result.secret).toMatch(/^cns_t_/);
+    expect(
+      new Date(result.token.expiresAt ?? 0).getTime() - new Date(result.token.createdAt).getTime(),
+    ).toBe(7 * 86_400_000);
+    expect((await claim(connection.secret)).status).toBe(404);
+    expect((await get(bob, connectPath(connection.code))).status).toBe(404);
+    const me = await h.request(REST_ROUTES.me, {
+      headers: { authorization: `Bearer ${result.secret}` },
+    });
+    expect(restMeSchema.parse(await me.json()).person?.login).toBe("bob");
+    // Bob's token goes again, so that the tokens' own tests find what they expect.
+    expect((await send(bob, "DELETE", `${REST_ROUTES.tokens}/${result.token.id}`)).status).toBe(
+      204,
+    );
+  });
+
+  it("is denied by the person, refused with a token or from elsewhere, and not found when it is nothing", async () => {
+    const denied = await begin("Codex on a server");
+    expect((await send(alice, "POST", connectPath(denied.code, "deny"))).status).toBe(204);
+    expect(await errorOf(await claim(denied.secret))).toBe("connect.not_found");
+    expect(await errorOf(await get(alice, connectPath("ZZZZ-ZZZZ")))).toBe("connect.not_found");
+    expect(await errorOf(await get(alice, connectPath("not-a-code")))).toBe("connect.not_found");
+    expect(await errorOf(await claim("cns_c_nothing"))).toBe("connect.not_found");
+    expect(await errorOf(await claim("cns_t_wrong-kind"))).toBe("connect.not_found");
+    const unnamed = await h.request(REST_ROUTES.connect, {
+      method: "POST",
+      headers: JSON_ONLY,
+      body: JSON.stringify({ agent: "" }),
+    });
+    expect(unnamed.status).toBe(400);
+    // Approving is a person's own doing: never with a token, never from elsewhere.
+    const pending = await begin("Claude Code elsewhere");
+    const made = restTokenCreatedSchema.parse(
+      await (await send(alice, "POST", REST_ROUTES.tokens, { name: "a connecting agent" })).json(),
+    );
+    const byToken = await h.request(connectPath(pending.code, "approve"), {
+      method: "POST",
+      headers: { authorization: `Bearer ${made.secret}`, ...JSON_ONLY },
+      body: JSON.stringify({ name: "x" }),
+    });
+    expect(await errorOf(byToken)).toBe("auth.session_required");
+    const elsewhere = await h.request(connectPath(pending.code, "approve"), {
+      method: "POST",
+      headers: { cookie: alice, origin: "https://evil.test", ...JSON_ONLY },
+      body: JSON.stringify({ name: "x" }),
+    });
+    expect(await errorOf(elsewhere)).toBe("auth.forbidden_origin");
+    expect((await send(alice, "POST", connectPath(pending.code, "deny"))).status).toBe(204);
+    expect((await send(alice, "DELETE", `${REST_ROUTES.tokens}/${made.token.id}`)).status).toBe(
+      204,
+    );
+  });
+
+  it("lets an administrator see and disconnect anyone's agents, and nobody else", async () => {
+    const named = createHarness(testDatabase, {
+      providers: [createFixtureProvider()],
+      admins: ["alice"],
+    });
+    const admin = await named.signIn("alice");
+    const member = await named.signIn("bob");
+    const bobId = restMeSchema.parse(
+      await (await named.request(REST_ROUTES.me, { headers: { cookie: member } })).json(),
+    ).person?.id;
+    const aliceId = restMeSchema.parse(
+      await (await named.request(REST_ROUTES.me, { headers: { cookie: admin } })).json(),
+    ).person?.id;
+    if (bobId === undefined || aliceId === undefined) {
+      throw new Error("expected both people");
+    }
+    const made = restTokenCreatedSchema.parse(
+      await (
+        await named.request(REST_ROUTES.tokens, {
+          method: "POST",
+          headers: { cookie: member, origin: SIGN_IN_URL, ...JSON_ONLY },
+          body: JSON.stringify({ name: "Bob's agent" }),
+        })
+      ).json(),
+    );
+    const seen = await named.request(personTokensPath(bobId), { headers: { cookie: admin } });
+    expect(seen.status).toBe(200);
+    expect(restTokensSchema.parse(await seen.json()).items.map((item) => item.id)).toContain(
+      made.token.id,
+    );
+    const byMember = await named.request(personTokensPath(aliceId), {
+      headers: { cookie: member },
+    });
+    expect(await errorOf(byMember)).toBe("auth.forbidden");
+    const nobody = await named.request(personTokensPath("0199c4d8-0000-7000-8000-00000000dead"), {
+      headers: { cookie: admin },
+    });
+    expect(await errorOf(nobody)).toBe("person.not_found");
+    const removed = await named.request(personTokensPath(bobId, made.token.id), {
+      method: "DELETE",
+      headers: { cookie: admin, origin: SIGN_IN_URL },
+    });
+    expect(removed.status).toBe(204);
+    const after = await named.request(personTokensPath(bobId), { headers: { cookie: admin } });
+    expect(restTokensSchema.parse(await after.json()).items.map((item) => item.id)).not.toContain(
+      made.token.id,
+    );
+    // Bob's token is gone for Bob too; the agent that held it is nobody.
+    const gone = await named.request(REST_ROUTES.me, {
+      headers: { authorization: `Bearer ${made.secret}` },
+    });
+    expect(restMeSchema.parse(await gone.json()).person).toBeNull();
+  });
+
+  it("gives tokens that expire within what the organization requires, wherever one is made", async () => {
+    const bounded = createHarness(testDatabase, {
+      providers: [createFixtureProvider()],
+      tokenDaysAtMost: 30,
+    });
+    const cookie = await bounded.signIn("alice");
+    const me = restMeSchema.parse(
+      await (await bounded.request(REST_ROUTES.me, { headers: { cookie } })).json(),
+    );
+    expect(me.workspace.tokenDaysAtMost).toBe(30);
+    const make = (body: unknown) =>
+      bounded.request(REST_ROUTES.tokens, {
+        method: "POST",
+        headers: { cookie, origin: SIGN_IN_URL, ...JSON_ONLY },
+        body: JSON.stringify(body),
+      });
+    expect(await errorOf(await make({ name: "forever", expiresInDays: null }))).toBe(
+      "token.expiry_at_most",
+    );
+    expect(await errorOf(await make({ name: "long", expiresInDays: 60 }))).toBe(
+      "token.expiry_at_most",
+    );
+    expect(await errorOf(await make({ name: "the default" }))).toBe("token.expiry_at_most");
+    const made = await make({ name: "fits", expiresInDays: 30 });
+    expect(made.status).toBe(201);
+    const token = restTokenCreatedSchema.parse(await made.json());
+    expect(
+      (
+        await bounded.request(`${REST_ROUTES.tokens}/${token.token.id}`, {
+          method: "DELETE",
+          headers: { cookie, origin: SIGN_IN_URL },
+        })
+      ).status,
+    ).toBe(204);
+    // Approving a connection is bounded the same way.
+    const begun = restConnectionSchema.parse(
+      await (
+        await bounded.request(REST_ROUTES.connect, {
+          method: "POST",
+          headers: JSON_ONLY,
+          body: JSON.stringify({ agent: "an agent" }),
+        })
+      ).json(),
+    );
+    const approve = await bounded.request(connectPath(begun.code, "approve"), {
+      method: "POST",
+      headers: { cookie, origin: SIGN_IN_URL, ...JSON_ONLY },
+      body: JSON.stringify({ name: "an agent", expiresInDays: null }),
+    });
+    expect(await errorOf(approve)).toBe("token.expiry_at_most");
+    expect(
+      (
+        await bounded.request(connectPath(begun.code, "deny"), {
+          method: "POST",
+          headers: { cookie, origin: SIGN_IN_URL },
+        })
+      ).status,
+    ).toBe(204);
   });
 });
 

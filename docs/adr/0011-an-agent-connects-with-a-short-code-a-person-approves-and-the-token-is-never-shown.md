@@ -1,0 +1,26 @@
+# ADR-0011: An agent connects with a short code a person approves, and the token is never shown
+
+- Status: Accepted
+- Date: 2026-10-10
+
+## Context
+
+Until now a person connected their agent by making a token on their own page, copying it, and pasting it where the agent runs: a secret shown on a screen, carried through a clipboard, sometimes through a chat. A person who is not a developer should not have to see a token at all; they should tell their agent to connect, and say yes once, on the console's own pages, as the person the agent will act as. The roadmap's milestone 5 asks for this, and for the Agents page to say in plain words what to tell the agent; for an administrator to see and disconnect anyone's agents; and for an organization to require of tokens an expiry at most. This is open question 10 of [architecture.md](../architecture.md). [ADR-0004](0004-people-and-agents-reach-the-board-only-through-the-api-with-a-credential-of-their-own.md) stands: the token is still the agent's credential, scoped to its person; this decides only how it reaches the agent.
+
+## Decision
+
+1. **The command asks to connect, as nobody.** `console login --url <origin>` sends the console what the agent calls itself and where it runs (`POST /api/v1/connect`) and gets back three things: a short code for a person to read, eight characters from an alphabet without look-alikes in two groups of four; the address of the console's own page for that code; and a secret of its own, shown nowhere, with which it claims the token. The request lasts ten minutes, and a deployment holds a bounded number of them at once. The command prints the address and the code, and an agent running the command relays them to its person.
+2. **A person approves on the console's own pages, signed in.** The page for the code (`/connect/<code>`) says what asks to connect and that it will act as the person; the person gives the agent a name and says for how long its token is good, and approves, or says that it is not theirs. The code is what ties the two together, so the page says it, and the person checks that it is the one their agent showed. Approving is a person's own doing, from the console's own pages, never with a token, as making a token is.
+3. **The token is made when the command claims it, and handed over once.** The command asks every few seconds with its secret (`POST /api/v1/connect/claim`) and is told to wait, or is given the token. Nothing secret rests in the database meanwhile: the request holds the hash of the command's secret, the code, what the agent calls itself, and once approved the person, the name and the expiry. On the claim the token is made for the approver as any token is, the request goes, and the token's secret is answered to the command, which keeps it where `login` always kept it. A request that expired, was denied or was claimed already is not found, whatever is asked of it.
+4. **The Agents page is the page of connected agents**, and says what to tell the agent: install the command, connect to this console, and what the connection is, in words for someone who is not a developer. The tokens are still what the agents hold; a token made by hand, for a script or a console of one's own, is still made there, at an address of its own.
+5. **An administrator sees and disconnects anyone's agents**: the tokens of any person, listed and removed on the console's own pages (`GET /api/v1/people/<id>/tokens`, `DELETE .../tokens/<token id>`).
+6. **An organization may require of tokens an expiry at most**: `TOKEN_DAYS_AT_MOST` names the most days a token may be good for; set, a token that would not expire, or would outlast it, is refused wherever a token is made, and the pages offer only what is allowed. Unset, a person chooses, as before.
+7. **The paste stays for scripts.** `console login --token-stdin` still takes a token from standard input, for a job or a hook that holds one; the terminal no longer asks for one to be typed.
+
+## Consequences
+
+- A person never sees a token unless they ask for one by hand; an agent never shows one; the clipboard and the chat carry a code that is good for ten minutes and for nothing but saying yes.
+- Whoever approves a code gives their own standing to whoever holds the matching secret, which is the point and the risk: the page says so plainly, names what asks, and shows the code to compare; the code expires soon, and a request is answered once.
+- The command needs nothing of the person but the address; a deployment where nobody signs in has no connections either.
+- A new table, `connect_requests`, swept with the sessions and the tokens; three new routes under `/api/v1/connect`, two under `/api/v1/people/<id>/tokens`; the package's client, schemas and command follow, and the pages gain `/connect` and `/connect/<code>`.
+- Rejected: the token made at approval and stored until claimed, encrypted or not, which puts a secret at rest for the whole wait; the code typed into the terminal instead of the token, which still has a person type at a terminal; the secret in the page's address, which a browser's history would keep; a long-lived code, which widens the window in which a code shown to the wrong person is approved.

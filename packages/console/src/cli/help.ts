@@ -53,10 +53,13 @@ const DOCUMENT_REFUSALS = ["document.not_found: no page has that path in this pr
 
 export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   login: {
-    usage: "login --url <origin> [--token-stdin]",
+    usage: "login --url <origin> [--agent <name>] [--token-stdin]",
     about:
-      "A person signs the command in: it asks for a token made on the console's Agents page and keeps it, with the console's address, in your home directory. --token-stdin reads the token from standard input instead.",
-    refusals: ["the console does not know the token: make one on the Agents page and try again"],
+      "Connects this agent to the console: shows an address and a code, which a person opens signed in, names the agent and approves; the command then receives a token of its own and keeps it, with the console's address, in your home directory, never showing it. An agent running the command relays the address and the code to its person and waits. --agent says what the agent calls itself. --token-stdin reads a token made by hand from standard input instead, for a script or a job.",
+    refusals: [
+      "connect.not_found: the code was not approved in time, or the person said it was not theirs; run login again",
+      "the console does not know the token given: make one on the Agents page and try again",
+    ],
   },
   logout: {
     usage: "logout",

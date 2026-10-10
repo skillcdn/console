@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { hasForbiddenCodePoint } from "@skillcdn/console/api";
+import { hasForbiddenCodePoint, MAX_TOKEN_DAYS } from "@skillcdn/console/api";
 import { type Address, MAX_ADDRESS_LENGTH, parseAddress } from "@skillcdn/core";
 import * as z from "zod";
 import { domainOf } from "../auth/membership.js";
@@ -155,6 +155,7 @@ const environmentSchema = z.object({
   MEMBERS: loginList,
   ADMINS: loginList,
   SESSION_TTL_DAYS: integer(30, 1, 365),
+  TOKEN_DAYS_AT_MOST: z.coerce.number().int().min(1).max(MAX_TOKEN_DAYS).optional(),
 
   WEB_ROOT: z.string().min(1).optional(),
 
@@ -195,6 +196,8 @@ export interface AuthConfig {
   readonly domains: readonly string[];
   /** How long a browser stays signed in without being used. */
   readonly sessionTtlMs: number;
+  /** The most days a token may be good for, when the organization requires an expiry. */
+  readonly tokenDaysAtMost?: number | undefined;
 }
 
 export interface Config {
@@ -361,6 +364,7 @@ function authOf(
     admins: env.ADMINS,
     domains,
     sessionTtlMs: env.SESSION_TTL_DAYS * 86_400_000,
+    tokenDaysAtMost: env.TOKEN_DAYS_AT_MOST,
   };
 }
 

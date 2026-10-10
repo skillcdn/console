@@ -15,7 +15,24 @@ export const REST_ROUTES = {
   events: "/api/v1/events",
   /** The tokens of whoever asks: what their agents, scripts and consoles act as them with. */
   tokens: "/api/v1/tokens",
+  /** Connecting an agent (ADR-0011): begun as nobody, approved by a person, claimed by the command. */
+  connect: "/api/v1/connect",
 } as const;
+
+/** Where the command claims the token of a connection, with its secret. */
+export const CLAIM_PATH = `${REST_ROUTES.connect}/claim`;
+
+/** The REST path of one connection, by its code, or of approving or denying it. */
+export function connectPath(code: string, action?: "approve" | "deny"): string {
+  const base = `${REST_ROUTES.connect}/${encodeURIComponent(code)}`;
+  return action === undefined ? base : `${base}/${action}`;
+}
+
+/** The REST path of a person's tokens, or of one of them: for an administrator. */
+export function personTokensPath(personId: string, tokenId?: string): string {
+  const base = `${restPath("people", personId)}/tokens`;
+  return tokenId === undefined ? base : `${base}/${encodeURIComponent(tokenId)}`;
+}
 
 /** What a project holds, each under `/api/v1/projects/<key>/<collection>`. */
 export const PROJECT_COLLECTIONS = [

@@ -19,6 +19,7 @@ import {
   MAX_PROJECT_KEY_LENGTH,
   MAX_PROJECT_NAME_LENGTH,
   MAX_QUESTION_LENGTH,
+  MAX_SECRET_LENGTH,
   MAX_SKILLS_ADDRESS_LENGTH,
   MAX_SUMMARY_LENGTH,
   MAX_TITLE_LENGTH,
@@ -97,7 +98,11 @@ export type RestProvider = z.infer<typeof restProviderSchema>;
  * the identity providers people sign in through, none where nobody can.
  */
 export const restMeSchema = z.object({
-  workspace: z.object({ name: z.string() }),
+  workspace: z.object({
+    name: z.string(),
+    /** The most days a token may be good for here, or `null` when a person chooses. */
+    tokenDaysAtMost: z.nullable(z.int().check(z.positive())),
+  }),
   person: z.nullable(restPersonSchema),
   signIn: z.array(restProviderSchema),
 });
@@ -489,6 +494,48 @@ export const restTokenCreatedSchema = z.object({
   secret: z.string(),
 });
 export type RestTokenCreated = z.infer<typeof restTokenCreatedSchema>;
+
+/** What `POST /api/v1/connect` is sent by the command: what the agent calls itself, and where it runs. */
+export const restConnectInputSchema = z.object({ agent: line(MAX_TOKEN_NAME_LENGTH) });
+export type RestConnectInput = z.infer<typeof restConnectInputSchema>;
+
+/**
+ * What `POST /api/v1/connect` answers (ADR-0011): the code a person approves, the address of the
+ * console's own page for it, and the secret the command claims the token with, shown nowhere.
+ */
+export const restConnectionSchema = z.object({
+  code: z.string(),
+  url: z.string(),
+  secret: z.string(),
+  expiresAt: instant,
+  /** How many seconds the command waits between claims. */
+  interval: z.int().check(z.positive()),
+});
+export type RestConnection = z.infer<typeof restConnectionSchema>;
+
+/** `GET /api/v1/connect/<code>`: what asks to connect, for the person who approves it. */
+export const restConnectRequestSchema = z.object({
+  code: z.string(),
+  /** What the agent calls itself, and where it runs. */
+  agent: z.string(),
+  createdAt: instant,
+  expiresAt: instant,
+  approved: z.boolean(),
+});
+export type RestConnectRequest = z.infer<typeof restConnectRequestSchema>;
+
+/** What `POST /api/v1/connect/claim` is sent: the secret the connection began with. */
+export const restClaimInputSchema = z.object({
+  secret: z.string().check(z.minLength(1), z.maxLength(MAX_SECRET_LENGTH)),
+});
+export type RestClaimInput = z.infer<typeof restClaimInputSchema>;
+
+/** What the claim answers: wait, or the token this once, with its secret. */
+export const restClaimSchema = z.union([
+  z.object({ status: z.literal("pending"), expiresAt: instant }),
+  z.object({ status: z.literal("connected"), token: restTokenSchema, secret: z.string() }),
+]);
+export type RestClaim = z.infer<typeof restClaimSchema>;
 
 /** One of the project's skills, as the SkillCDN deployment lists it at the project's address. */
 export const restSkillSchema = z.object({

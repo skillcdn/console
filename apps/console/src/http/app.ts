@@ -100,6 +100,7 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
     workspace,
     access,
     tokens: auth?.tokens,
+    connections: auth?.connections,
     feed,
     blobs,
     skills,

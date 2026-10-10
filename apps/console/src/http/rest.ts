@@ -1,5 +1,5 @@
 import {
-  DEFAULT_TOKEN_DAYS,
+  CLAIM_PATH,
   EVENTS_PAGE_LIMIT,
   isDocumentPath,
   isFolderPath,
@@ -12,7 +12,11 @@ import {
   MAX_REPORTS_PER_RUN,
   MAX_SEARCH_LENGTH,
   MAX_VERSIONS_PER_DOCUMENT,
+  normalizeConnectCode,
   REST_ROUTES,
+  type RestClaim,
+  type RestConnection,
+  type RestConnectRequest,
   type RestDecisions,
   type RestDocuments,
   type RestEvents,
@@ -27,6 +31,8 @@ import {
   type RestVersions,
   restAnswerInputSchema,
   restArtifactInputSchema,
+  restClaimInputSchema,
+  restConnectInputSchema,
   restDecisionInputSchema,
   restDecisionPatchSchema,
   restDocumentInputSchema,
@@ -49,8 +55,10 @@ import type { Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { streamSSE } from "hono/streaming";
 import * as z from "zod";
+import type { Connections } from "../auth/connect.js";
 import type { Tokens } from "../auth/tokens.js";
 import type { Database } from "../db/client.js";
+import { ConnectError, type ConnectRequestRecord } from "../db/queries/connect.js";
 import {
   answerDecision,
   DecisionError,
@@ -75,6 +83,7 @@ import {
 } from "../db/queries/documents.js";
 import { type Actor, latestEventId, listEventsAfter, type Scope } from "../db/queries/events.js";
 import {
+  findPerson,
   listPeople,
   PersonError,
   type PersonRecord,
@@ -148,6 +157,8 @@ export interface RestDependencies {
   readonly access: Access;
   /** The tokens people make; left out where nobody signs in, and then nobody has one. */
   readonly tokens: Tokens | undefined;
+  /** Agents connecting with a code (ADR-0011); left out where nobody signs in. */
+  readonly connections: Connections | undefined;
   readonly feed: LiveFeed;
   /** Where the bytes of files handed in are kept. */
   readonly blobs: BlobStore;
@@ -282,8 +293,19 @@ const actorOf = (caller: Caller): Actor =>
  * nobody.
  */
 export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies): void {
-  const { database, workspace, access, tokens, feed, blobs, skills, clock, logger, agents } =
-    dependencies;
+  const {
+    database,
+    workspace,
+    access,
+    tokens,
+    connections,
+    feed,
+    blobs,
+    skills,
+    clock,
+    logger,
+    agents,
+  } = dependencies;
 
   /** Who is asking and with what, or the refusal to answer with. */
   const askingCaller = async (c: Context<AppEnv>): Promise<Caller | Response> =>
@@ -484,7 +506,13 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     if (error instanceof TokenError) {
       return c.json(
         errorBody(error.code, error.message),
-        error.code === "token.not_found" ? 404 : 409,
+        error.code === "token.not_found" ? 404 : error.code === "token.expiry_at_most" ? 400 : 409,
+      );
+    }
+    if (error instanceof ConnectError) {
+      return c.json(
+        errorBody(error.code, error.message),
+        error.code === "connect.not_found" ? 404 : error.code === "connect.too_many" ? 429 : 409,
       );
     }
     if (error instanceof DocumentError) {
@@ -754,13 +782,12 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       return signInRequired(c);
     }
     try {
+      // Left out, a token is good for the default; `null` is a token that does not expire,
+      // where the organization allows one.
+      const days = tokens.daysOf(input.expiresInDays);
       const made = await tokens.issue(person, {
         name: input.name,
-        // Left out, a token is good for the default; `null` is a token that does not expire.
-        ttlMs:
-          input.expiresInDays === null
-            ? undefined
-            : (input.expiresInDays ?? DEFAULT_TOKEN_DAYS) * DAY_MS,
+        ttlMs: days === undefined ? undefined : days * DAY_MS,
       });
       // The id and the name, never the secret.
       logger.info(
@@ -784,6 +811,184 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       return notFound(c, "token.not_found", "The token was not found.");
     }
     logger.info({ person: person.id, tokenId: id, requestId: c.get("requestId") }, "token removed");
+    return c.body(null, 204);
+  });
+
+  // An administrator's sight of everyone's agents: another person's tokens, listed and taken
+  // away on the console's own pages (ADR-0011).
+  const administering = async (
+    c: Context<AppEnv>,
+    changing: boolean,
+  ): Promise<{ readonly admin: PersonRecord; readonly subject: PersonRecord } | Response> => {
+    const admin = changing ? await signedInOnOwnPages(c) : await signedIn(c);
+    if (admin instanceof Response) {
+      return admin;
+    }
+    if (admin.role !== "admin") {
+      return administratorRequired(c);
+    }
+    const id = c.req.param("id") ?? "";
+    const subject = UUID.test(id) ? await findPerson(database, admin.workspaceId, id) : undefined;
+    return subject === undefined
+      ? notFound(c, "person.not_found", "The person was not found.")
+      : { admin, subject };
+  };
+
+  app.get(`${REST_ROUTES.people}/:id/tokens`, async (c) => {
+    const found = await administering(c, false);
+    if (found instanceof Response) {
+      return found;
+    }
+    if (tokens === undefined) {
+      return signInRequired(c);
+    }
+    const body: RestTokens = { items: (await tokens.list(found.subject)).map(restToken) };
+    return c.json(body);
+  });
+
+  app.delete(`${REST_ROUTES.people}/:id/tokens/:tokenId`, async (c) => {
+    const found = await administering(c, true);
+    if (found instanceof Response) {
+      return found;
+    }
+    const tokenId = c.req.param("tokenId") ?? "";
+    if (
+      tokens === undefined ||
+      !UUID.test(tokenId) ||
+      !(await tokens.revoke(found.subject, tokenId))
+    ) {
+      return notFound(c, "token.not_found", "The token was not found.");
+    }
+    logger.info(
+      {
+        person: found.admin.id,
+        subject: found.subject.id,
+        tokenId,
+        requestId: c.get("requestId"),
+      },
+      "token removed by an administrator",
+    );
+    return c.body(null, 204);
+  });
+
+  // Connecting an agent (ADR-0011): the command asks as nobody, a person approves signed in on
+  // the console's own pages, and the command claims the token with its secret.
+  const noSuchConnection = (c: Context<AppEnv>) =>
+    notFound(
+      c,
+      "connect.not_found",
+      "No agent asks to connect under this code: it was never asked, it expired, the person said no, or the token was handed over already.",
+    );
+  const restConnectRequest = (request: ConnectRequestRecord): RestConnectRequest => ({
+    code: request.code,
+    agent: request.agent,
+    createdAt: request.createdAt.toISOString(),
+    expiresAt: request.expiresAt.toISOString(),
+    approved: request.approvedAt !== undefined,
+  });
+  /** The code in the path, as it is written, or nothing for text that is not one. */
+  const codeOf = (c: Context<AppEnv>): string | undefined =>
+    normalizeConnectCode(c.req.param("code") ?? "");
+
+  app.post(REST_ROUTES.connect, tooLarge, async (c) => {
+    if (connections === undefined) {
+      return signInRequired(c);
+    }
+    const input = await bodyOf(c, restConnectInputSchema);
+    if (input instanceof Response) {
+      return input;
+    }
+    try {
+      const begun = await connections.begin(input.agent);
+      logger.info({ code: begun.code, requestId: c.get("requestId") }, "an agent asked to connect");
+      const body: RestConnection = {
+        code: begun.code,
+        url: begun.url,
+        secret: begun.secret,
+        expiresAt: begun.expiresAt.toISOString(),
+        interval: begun.interval,
+      };
+      return c.json(body, 201);
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
+  app.post(CLAIM_PATH, tooLarge, async (c) => {
+    if (connections === undefined) {
+      return signInRequired(c);
+    }
+    const input = await bodyOf(c, restClaimInputSchema);
+    if (input instanceof Response) {
+      return input;
+    }
+    try {
+      const claim = await connections.claim(input.secret);
+      if (claim === undefined) {
+        return noSuchConnection(c);
+      }
+      if (claim.status === "pending") {
+        const body: RestClaim = { status: "pending", expiresAt: claim.expiresAt.toISOString() };
+        return c.json(body, 202);
+      }
+      const body: RestClaim = {
+        status: "connected",
+        token: restToken(claim.token),
+        secret: claim.secret,
+      };
+      return c.json(body);
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
+  app.get(`${REST_ROUTES.connect}/:code`, async (c) => {
+    const person = await signedIn(c);
+    if (person instanceof Response) {
+      return person;
+    }
+    const code = codeOf(c);
+    const found = code === undefined ? undefined : await connections?.look(code);
+    return found === undefined ? noSuchConnection(c) : c.json(restConnectRequest(found));
+  });
+
+  app.post(`${REST_ROUTES.connect}/:code/approve`, tooLarge, async (c) => {
+    const person = await signedInOnOwnPages(c);
+    if (person instanceof Response) {
+      return person;
+    }
+    const input = await bodyOf(c, restTokenInputSchema);
+    if (input instanceof Response) {
+      return input;
+    }
+    const code = codeOf(c);
+    if (code === undefined || connections === undefined || tokens === undefined) {
+      return noSuchConnection(c);
+    }
+    try {
+      const approved = await connections.approve(code, person, {
+        name: input.name,
+        days: tokens.daysOf(input.expiresInDays),
+      });
+      return approved === undefined ? noSuchConnection(c) : c.json(restConnectRequest(approved));
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
+  app.post(`${REST_ROUTES.connect}/:code/deny`, async (c) => {
+    const person = await signedInOnOwnPages(c);
+    if (person instanceof Response) {
+      return person;
+    }
+    const code = codeOf(c);
+    if (code === undefined || connections === undefined || !(await connections.deny(code))) {
+      return noSuchConnection(c);
+    }
+    logger.info(
+      { person: person.id, code, requestId: c.get("requestId") },
+      "a connection was denied",
+    );
     return c.body(null, 204);
   });
 

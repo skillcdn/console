@@ -22,12 +22,14 @@ export interface TokenRecord {
 
 /** What is wrong with a token a person asked for. `code` is what the API answers with. */
 export class TokenError extends DomainError {
-  constructor(code: "token.not_found" | "token.too_many") {
+  constructor(code: "token.not_found" | "token.too_many" | "token.expiry_at_most", days?: number) {
     super(
       code,
       code === "token.not_found"
         ? "the token was not found"
-        : "the person holds as many tokens as one may",
+        : code === "token.too_many"
+          ? "the person holds as many tokens as one may"
+          : `a token must expire within ${days ?? 0} days here`,
     );
   }
 }

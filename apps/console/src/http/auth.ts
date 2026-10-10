@@ -8,6 +8,7 @@ import {
   type RestProvider,
 } from "@skillcdn/console/api";
 import type { Context, Hono } from "hono";
+import type { Connections } from "../auth/connect.js";
 import type { Login, LoginStep } from "../auth/login.js";
 import { safeReturnTo } from "../auth/login.js";
 import type { Membership } from "../auth/membership.js";
@@ -28,6 +29,8 @@ export interface AppAuth {
   readonly sessions: Sessions;
   /** The tokens people made for their agents, scripts and consoles of their own. */
   readonly tokens: Tokens;
+  /** Agents connecting with a code a person approves (ADR-0011). */
+  readonly connections: Connections;
   /** Signing in, per provider the deployment has. */
   readonly logins: ReadonlyMap<ProviderKey, Login>;
   /** The providers, as the pages offer them. */
@@ -158,7 +161,7 @@ export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies):
     c.header("cache-control", "no-store");
     const [found, person] = await Promise.all([workspace(), access.person(c)]);
     const body: RestMe = {
-      workspace: { name: found.name },
+      workspace: { name: found.name, tokenDaysAtMost: auth?.tokens.daysAtMost ?? null },
       person: person === undefined ? null : restPerson(person),
       signIn: auth === undefined ? [] : [...auth.providers],
     };

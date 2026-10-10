@@ -3,12 +3,14 @@ import { describe, expect, it } from "vitest";
 import type { ConsoleClient, ProjectClient } from "./api.js";
 import { createConsole, DEFAULT_COMPONENTS } from "./console.js";
 import {
+  connectHref,
   decisionHref,
   docHref,
   matchRoute,
   movedFrom,
   newDecisionHref,
   newTaskHref,
+  personAgentsHref,
   projectHref,
   signInFailureOf,
   taskHref,
@@ -33,7 +35,16 @@ describe("matchRoute", () => {
     expect(matchRoute("/projects/web/settings")).toEqual({ name: "settings", project: "web" });
     expect(projectHref("web")).toBe("/projects/web");
     expect(projectHref("web", "feed")).toBe("/projects/web/feed");
+    expect(matchRoute("/connect")).toEqual({ name: "connect", code: undefined });
+    expect(matchRoute("/connect/abcd-efgh")).toEqual({ name: "connect", code: "abcd-efgh" });
+    expect(connectHref("ABCD-EFGH")).toBe("/connect/ABCD-EFGH");
+    expect(matchRoute(`/people/${ID}/agents`)).toEqual({ name: "person-agents", id: ID });
+    expect(personAgentsHref(ID)).toBe(`/people/${ID}/agents`);
     for (const path of [
+      "/connect/a/b",
+      "/connect/not-a-code-at-all-too-long",
+      "/people/x/agents",
+      `/people/${ID}`,
       "/projects/Web",
       "/projects/-web",
       "/projects/web/tasks",
@@ -195,6 +206,13 @@ describe("createConsole", () => {
     tokens: never,
     createToken: never,
     revokeToken: never,
+    personTokens: never,
+    revokePersonToken: never,
+    connect: never,
+    connectRequest: never,
+    approveConnection: never,
+    denyConnection: never,
+    claimConnection: never,
     signOut: never,
   };
 

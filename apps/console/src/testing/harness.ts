@@ -60,6 +60,8 @@ export interface HarnessOptions {
   /** The time everything is told; the system's when left out. */
   readonly clock?: Clock;
   readonly sessionTtlMs?: number;
+  /** The most days a token may be good for, when the organization requires an expiry. */
+  readonly tokenDaysAtMost?: number;
   /** Listen on the database's channel, so that the feed is woken as a deployment's is. */
   readonly live?: boolean;
   readonly feed?: { readonly heartbeatMs?: number; readonly pollMs?: number };
@@ -123,6 +125,7 @@ export function createHarness(testDatabase: TestDatabase, options: HarnessOption
               admins: options.admins ?? [],
               domains: options.domains ?? [],
               sessionTtlMs: options.sessionTtlMs ?? 30 * 86_400_000,
+              tokenDaysAtMost: options.tokenDaysAtMost,
             },
           }),
     },

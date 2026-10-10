@@ -6,6 +6,7 @@ import {
   EVENT_KINDS,
   type FileUpload,
   type RestAnswerInput,
+  type RestConnectRequest,
   type RestDecision,
   type RestDecisionInput,
   type RestDecisionPatch,
@@ -30,6 +31,7 @@ import {
   type RestToken,
   type RestTokenCreated,
   type RestTokenInput,
+  type RestTokens,
   type RestVersion,
   type RestVersions,
   restEventSchema,
@@ -79,6 +81,13 @@ export interface ConsoleActions {
   /** Makes a token for whoever is signed in; the answer carries the secret, this once. */
   createToken(input: RestTokenInput): Promise<RestTokenCreated>;
   revokeToken(id: string): Promise<void>;
+  /** What asks to connect under a code (ADR-0011), for the person who approves it. */
+  connectRequest(code: string, signal?: AbortSignal): Promise<RestConnectRequest>;
+  approveConnection(code: string, input: RestTokenInput): Promise<RestConnectRequest>;
+  denyConnection(code: string): Promise<void>;
+  /** The tokens of another person, and the way to take one away: for an administrator. */
+  personTokens(personId: string, signal?: AbortSignal): Promise<RestTokens>;
+  revokePersonToken(personId: string, tokenId: string): Promise<void>;
   signOut(): Promise<void>;
 }
 
@@ -436,6 +445,11 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
         await client.revokeToken(id);
         setTokens((current) => current.filter((token) => token.id !== id));
       },
+      connectRequest: (code, signal) => client.connectRequest(code, signal),
+      approveConnection: (code, input) => client.approveConnection(code, input),
+      denyConnection: (code) => client.denyConnection(code),
+      personTokens: (personId, signal) => client.personTokens(personId, signal),
+      revokePersonToken: (personId, tokenId) => client.revokePersonToken(personId, tokenId),
       async signOut() {
         await client.signOut();
         setMe((current) => (current === undefined ? undefined : { ...current, person: null }));

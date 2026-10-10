@@ -1,3 +1,4 @@
+import { DEFAULT_TOKEN_DAYS } from "@skillcdn/console/api";
 import type { Database } from "../db/client.js";
 import type { PersonRecord } from "../db/queries/people.js";
 import {
@@ -5,6 +6,7 @@ import {
   deleteToken,
   findToken,
   listTokensOf,
+  TokenError,
   type TokenRecord,
   touchToken,
 } from "../db/queries/tokens.js";
@@ -21,6 +23,7 @@ import { hashToken, newToken } from "./secrets.js";
 export const AGENT_TOKEN_PREFIX = "cns_t_";
 /** How often a token in use is noted as used: not on every request. */
 const TOUCH_INTERVAL_MS = 60 * 60_000;
+const DAY_MS = 86_400_000;
 
 /** The token of a `Bearer` authorization header, or nothing. */
 export function readBearer(header: string | null | undefined): string | undefined {
@@ -37,6 +40,8 @@ export interface TokensOptions {
   readonly logger: Logger;
   /** How many live tokens one person may hold. */
   readonly limit: number;
+  /** The most days a token may be good for, when the organization requires an expiry; else nothing. */
+  readonly daysAtMost?: number | undefined;
 }
 
 export class Tokens {
@@ -44,6 +49,24 @@ export class Tokens {
 
   constructor(options: TokensOptions) {
     this.#options = options;
+  }
+
+  /** The most days a token may be good for here, or nothing when a person chooses. */
+  get daysAtMost(): number | undefined {
+    return this.#options.daysAtMost;
+  }
+
+  /**
+   * How many days a token asked for is good: the default when nothing is said, none for
+   * `null`, within what the organization requires, or refused.
+   */
+  daysOf(expiresInDays: number | null | undefined): number | undefined {
+    const days = expiresInDays === null ? undefined : (expiresInDays ?? DEFAULT_TOKEN_DAYS);
+    const atMost = this.#options.daysAtMost;
+    if (atMost !== undefined && (days === undefined || days > atMost)) {
+      throw new TokenError("token.expiry_at_most", atMost);
+    }
+    return days;
   }
 
   /** Makes a token for the person and answers with it and the secret, this once. */
@@ -55,7 +78,13 @@ export class Tokens {
       readonly ttlMs: number | undefined;
     },
   ): Promise<{ readonly token: TokenRecord; readonly secret: string }> {
-    const { database, clock, limit } = this.#options;
+    const { database, clock, limit, daysAtMost } = this.#options;
+    if (
+      daysAtMost !== undefined &&
+      (input.ttlMs === undefined || input.ttlMs > daysAtMost * DAY_MS)
+    ) {
+      throw new TokenError("token.expiry_at_most", daysAtMost);
+    }
     const secret = newToken(AGENT_TOKEN_PREFIX);
     const now = clock.now();
     const token = await createToken(database, {

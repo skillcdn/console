@@ -8,7 +8,7 @@ import {
   type ProjectClient,
 } from "../client.js";
 import { MAX_OPTIONS, MIN_OPTIONS } from "../limits.js";
-import type { RestDecision } from "../schemas.js";
+import type { RestClaim, RestDecision } from "../schemas.js";
 import { TASK_PRIORITIES, TASK_STATES, type TaskPriority, type TaskState } from "../vocabulary.js";
 import type { CredentialStore } from "./credentials.js";
 import type { DirectoryStore } from "./directory.js";
@@ -61,10 +61,10 @@ export interface CliIo {
   readonly stdout: (text: string) => void;
   readonly stderr: (text: string) => void;
   readonly fetch: FetchLike;
-  /** All of standard input, for a body given as `-`. */
+  /** All of standard input, for a body given as `-`, or a token given to login. */
   readonly readStdin: () => Promise<string>;
-  /** A secret typed at the terminal without echo, or read from standard input. */
-  readonly readSecret: (prompt: string) => Promise<string>;
+  /** The name of the machine, for the agent to say where it runs; nothing when unknown. */
+  readonly hostname?: string | undefined;
   /** A file named with `--file`, as text. */
   readonly readFile: (path: string) => Promise<string>;
   /** A file handed in, as bytes. */
@@ -326,22 +326,8 @@ async function settle(
 
 type Command = (args: readonly string[], io: CliIo) => Promise<number>;
 
-const login: Command = async (args, io) => {
-  const { values } = parse(args, { "token-stdin": { type: "boolean" } }, false);
-  const stored = await io.store.load();
-  const wanted = text(values, "url") ?? io.env.CONSOLE_URL ?? stored?.url;
-  if (wanted === undefined) {
-    throw misuse("Say where the console is: console login --url https://console.example.com");
-  }
-  const url = originOf(wanted);
-  const token = (
-    on(values, "token-stdin")
-      ? await io.readStdin()
-      : await io.readSecret(`Paste a token made at ${url}/agents/new: `)
-  ).trim();
-  if (token.length === 0) {
-    throw failed("No token was given.");
-  }
+/** Checks a token against the console, keeps it with the address, and says who it is. */
+async function keep(io: CliIo, url: string, token: string, agent?: string): Promise<number> {
   const me = await createClient({ baseUrl: url, token, fetch: io.fetch }).me();
   const person = me.person;
   if (person === null) {
@@ -351,9 +337,57 @@ const login: Command = async (args, io) => {
   }
   const kept = await io.store.save({ url, token });
   io.stdout(
-    `Signed in to ${me.workspace.name} at ${url} as ${person.login} (${person.role}). The token is kept in ${kept}.\nNext, say which project this directory works in: console use <key> (console projects lists them).\n`,
+    `${agent === undefined ? "Signed in" : `Connected as "${agent}"`} to ${me.workspace.name} at ${url} as ${person.login} (${person.role}). The token is kept in ${kept}.\nNext, say which project this directory works in: console use <key> (console projects lists them).\n`,
   );
   return EXIT.ok;
+}
+
+const login: Command = async (args, io) => {
+  const { values } = parse(
+    args,
+    { "token-stdin": { type: "boolean" }, agent: { type: "string" } },
+    false,
+  );
+  const stored = await io.store.load();
+  const wanted = text(values, "url") ?? io.env.CONSOLE_URL ?? stored?.url;
+  if (wanted === undefined) {
+    throw misuse("Say where the console is: console login --url https://console.example.com");
+  }
+  const url = originOf(wanted);
+  if (on(values, "token-stdin")) {
+    const token = (await io.readStdin()).trim();
+    if (token.length === 0) {
+      throw failed("No token was given.");
+    }
+    return keep(io, url, token);
+  }
+  // A connection (ADR-0011): a code a person approves on the console's own pages, and the token
+  // handed over here once, never shown.
+  const client = createClient({ baseUrl: url, fetch: io.fetch });
+  const agent = text(values, "agent") ?? "The console command";
+  const begun = await client.connect({
+    agent: io.hostname === undefined ? agent : `${agent} on ${io.hostname}`,
+  });
+  io.stdout(
+    `To connect this agent, a person opens ${begun.url} signed in, checks that the page shows the code ${begun.code}, names the agent and approves.\nWaiting for that, until ${begun.expiresAt}.\n`,
+  );
+  for (;;) {
+    await io.sleep(begun.interval * 1000);
+    let claim: RestClaim;
+    try {
+      claim = await client.claimConnection(begun.secret);
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "connect.not_found") {
+        throw failed(
+          "The connection was not approved in time, or the person said it was not theirs. Run console login again for a new code.",
+        );
+      }
+      throw error;
+    }
+    if (claim.status === "connected") {
+      return keep(io, url, claim.secret, claim.token.name);
+    }
+  }
 };
 
 const logout: Command = async (args, io) => {
@@ -964,6 +998,8 @@ function hintFor(error: ApiError): string {
       return "The page has moved on since the version you started from. Read it again, and write from there.\n";
     case "document.archived":
       return "The page is archived. console restore <path> brings it back first.\n";
+    case "connect.too_many":
+      return "The console holds as many connections as it may at once. Try again in a few minutes.\n";
     case "network":
       return "Is the console's address right? console whoami --url <origin> says what the command uses.\n";
     default:

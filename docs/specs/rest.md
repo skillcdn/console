@@ -12,6 +12,7 @@ The API is the board as its members see it: the people, the projects, and in eac
 - A request that changes something (`POST`, `PATCH`, `DELETE`) on a session must carry the session cookie **and** come from the console's own pages: the browser's `origin` header must be `PUBLIC_URL`. The cookie is `SameSite=Lax`, so another site's request does not carry it in the first place; the origin is the second fence.
 - A token ([`POST /api/v1/tokens`](#get-apiv1tokens-and-post-apiv1tokens)) is presented as `Authorization: Bearer <secret>` on any route, by an agent, a script or a console of a person's own. It is then the credential: a cookie beside it is not looked at, and no origin is needed, since nothing attaches a token but whoever holds it. A token that is nothing is refused, whatever cookie travels with it. What a token does is attributed to its person, and the event names the agent: the token's name, or what the agent called itself on its run.
 - Configuring is a person's own doing, signed in on the console's own pages, never with a token: the tokens themselves, roles, projects and their members.
+- An agent connects without anyone copying a token ([ADR-0011](../adr/0011-an-agent-connects-with-a-short-code-a-person-approves-and-the-token-is-never-shown.md)): [`POST /api/v1/connect`](#connecting-an-agent) is nobody's, the approval is a person's own doing on the console's own pages, and the claim is the command's, with the secret it was given.
 - Request bodies are JSON, at most 256 KiB, and parsed once with the package's input schema. Text is trimmed where it is a line, bounded everywhere (`MAX_TITLE_LENGTH` and the rest of `@skillcdn/console/api`), and refused when it carries control or invisible characters. Links are `https` URLs only.
 - Errors have `{ "error": { "code": "...", "message": "..." } }`. The code is stable; the message is for a person, in English.
 
@@ -25,6 +26,7 @@ The API is the board as its members see it: the people, the projects, and in eac
 | 400 | `decision.invalid_task` | The decision is about a task that is not one of the project's. |
 | 400 | `decision.no_such_option` | The answer names an option the decision does not have. |
 | 400 | `decision.invalid_run` | A decision raised from a run that is not the asker's, or is over. |
+| 400 | `token.expiry_at_most` | A token that would not expire, or would outlast `TOKEN_DAYS_AT_MOST`, where the organization requires an expiry. |
 | 400 | `document.invalid_path` | The path a page is written at is not one: segments of lowercase letters, digits and hyphens, separated by slashes. |
 | 400 | `run.too_many_reports`, `run.too_many_artifacts` | The run carries as many as one may (`MAX_REPORTS_PER_RUN`, `MAX_ARTIFACTS_PER_RUN`). |
 | 401 | `auth.required` | Nobody is signed in, or the session has ended, or the token is nothing. The cookie is taken away when the operator no longer lists the login. |
@@ -36,6 +38,7 @@ The API is the board as its members see it: the people, the projects, and in eac
 | 404 | `task.not_found`, `decision.not_found`, `token.not_found`, `person.not_found`, `run.not_found`, `run.task_not_found`, `member.not_found` | No such id in the project (or in the workspace, for a token, a person); for a token, none of the asker's. An id that is not a UUID is not found either, except a task's number. |
 | 404 | `file.not_found` | No file handed in, or attached to the page, has that id in the project; a link handed in is not a file. |
 | 404 | `document.not_found`, `document.version_not_found` | No page has that path in the project, or the page has no such version. A path that is not one is not found either. |
+| 404 | `connect.not_found` | No agent asks to connect under this code or secret: it was never asked, it expired, the person said no, or the token was handed over already. |
 | 404 | `not_found` | Nothing at this path. |
 | 409 | `project.key_taken` | A project of the workspace has that key already. |
 | 409 | `member.exists` | The person is listed in the project already. |
@@ -44,6 +47,8 @@ The API is the board as its members see it: the people, the projects, and in eac
 | 409 | `document.archived` | The page is archived: restore it before writing to it or attaching to it. |
 | 409 | `document.too_many_versions`, `document.too_many_files` | The page carries as many versions, or files, as one may (`MAX_VERSIONS_PER_DOCUMENT`, `MAX_FILES_PER_DOCUMENT`). |
 | 409 | `token.too_many` | The person holds as many live tokens as one may (`MAX_TOKENS_PER_PERSON`). |
+| 409 | `connect.approved` | The connection was approved already; the command claims its token. |
+| 429 | `connect.too_many` | As many agents ask to connect as the console holds at once; try again in a few minutes. |
 | 409 | `person.last_admin` | The change would leave the board without an administrator. |
 | 409 | `run.over`, `run.task_taken`, `run.task_closed` | The run has ended already; an agent is at work on the task already; the task is done or dropped. |
 | 413 | `request.too_large` | The body is over the limit; for a file handed in or attached, the file is over `MAX_FILE_BYTES`. |
@@ -52,7 +57,7 @@ The API is the board as its members see it: the people, the projects, and in eac
 
 ### `GET /api/v1/me`
 
-`{ "workspace": { "name" }, "person": ... | null, "signIn": [{ "key", "label" }, ...] }`: what the board is called, who the session cookie or the token says is asking (`id`, `login`, `name` or `null`, `avatar` or `null`, `role`), and the identity providers people sign in through (`gh`, `google`, each with the label of its button), none where nobody can. Nobody is an answer, not an error; the pages ask this once to decide what to show, and the command once, at `login`, to see that the console knows the token.
+`{ "workspace": { "name", "tokenDaysAtMost" }, "person": ... | null, "signIn": [{ "key", "label" }, ...] }`: what the board is called and the most days a token may be good for here (or `null` where a person chooses), who the session cookie or the token says is asking (`id`, `login`, `name` or `null`, `avatar` or `null`, `role`), and the identity providers people sign in through (`gh`, `google`, each with the label of its button), none where nobody can. Nobody is an answer, not an error; the pages ask this once to decide what to show, and the command once, at `login`, to see that the console knows the token.
 
 ### `GET /api/v1/people`
 
@@ -76,11 +81,25 @@ The workspace's own events, the ones about no project: who joined (`person.joine
 
 ### `GET /api/v1/tokens` and `POST /api/v1/tokens`
 
-The tokens of whoever is signed in, for their agents, scripts and consoles of their own: managed by a person signed in on the console's own pages, never with a token, so that a token which leaks cannot outlive its removal through tokens of its own. `GET` answers `{ "items": [token, ...] }`, the live ones newest first: `id`, `name`, `createdAt`, `expiresAt` (or `null` for a token that does not expire), `lastUsedAt` (or `null`; noted at most hourly), and never a secret. `POST` takes `name` (what the person calls it: the agent it is for, where it runs; what the board shows at work unless the agent says otherwise, and what an event names as the agent) and optionally `expiresInDays` (`1` to `MAX_TOKEN_DAYS`; `DEFAULT_TOKEN_DAYS` when left out; `null` for a token that does not expire) and answers `201` with `{ "token": token, "secret": "cns_t_..." }`: the secret this once, which the server keeps only as a hash.
+The tokens of whoever is signed in, for their agents, scripts and consoles of their own: managed by a person signed in on the console's own pages, never with a token, so that a token which leaks cannot outlive its removal through tokens of its own. `GET` answers `{ "items": [token, ...] }`, the live ones newest first: `id`, `name`, `createdAt`, `expiresAt` (or `null` for a token that does not expire), `lastUsedAt` (or `null`; noted at most hourly), and never a secret. `POST` takes `name` (what the person calls it: the agent it is for, where it runs; what the board shows at work unless the agent says otherwise, and what an event names as the agent) and optionally `expiresInDays` (`1` to `MAX_TOKEN_DAYS`; `DEFAULT_TOKEN_DAYS` when left out; `null` for a token that does not expire, where the organization allows one; `token.expiry_at_most` otherwise) and answers `201` with `{ "token": token, "secret": "cns_t_..." }`: the secret this once, which the server keeps only as a hash.
 
 ### `DELETE /api/v1/tokens/<id>`
 
 Takes one of the asker's tokens away, whoever holds it, and answers `204`. A token that is not the asker's is `token.not_found`.
+
+### `GET /api/v1/people/<id>/tokens` and `DELETE /api/v1/people/<id>/tokens/<token id>`
+
+An administrator's sight of everyone's agents ([ADR-0011](../adr/0011-an-agent-connects-with-a-short-code-a-person-approves-and-the-token-is-never-shown.md)): the live tokens of any person, as `GET /api/v1/tokens` lists one's own, and the way to take one away, from the console's own pages; `auth.forbidden` for a member, `person.not_found` for an id that is nobody's, `token.not_found` for a token that is not that person's.
+
+### Connecting an agent
+
+`POST /api/v1/connect`, `GET /api/v1/connect/<code>`, `POST /api/v1/connect/<code>/approve`, `POST /api/v1/connect/<code>/deny` and `POST /api/v1/connect/claim`: how an agent gets its token without anyone copying one ([ADR-0011](../adr/0011-an-agent-connects-with-a-short-code-a-person-approves-and-the-token-is-never-shown.md)).
+
+`POST /api/v1/connect` is nobody's: the command sends `{ "agent" }` (what the agent calls itself and where it runs, a line up to `MAX_TOKEN_NAME_LENGTH`) and is answered `201` with `{ "code", "url", "secret", "expiresAt", "interval" }`: a code of eight characters in two groups (`ABCD-EFGH`, from an alphabet without look-alikes) for a person to approve, the console's own page for it, a secret (`cns_c_...`) the command claims with and shows nowhere, when the request expires (ten minutes after it began), and how many seconds the command waits between claims. A deployment holds a bounded number of requests at once (`connect.too_many`).
+
+`GET /api/v1/connect/<code>`, for a person signed in, answers what asks: `{ "code", "agent", "createdAt", "expiresAt", "approved" }`. A code is read as a person types it: any case, with or without the hyphen. `POST .../approve`, from the console's own pages, takes what `POST /api/v1/tokens` takes (`name`, `expiresInDays`) and answers the request, approved; `POST .../deny` takes the request away and answers `204`.
+
+`POST /api/v1/connect/claim` takes `{ "secret" }` and answers `202` with `{ "status": "pending", "expiresAt" }` while nobody approved, or `200` with `{ "status": "connected", "token", "secret" }` once: the token is made then, for the approver, as any token of theirs is, and the request goes with it, so that a second claim is `connect.not_found`. Nothing secret rests in the database meanwhile: the hash of the command's secret, and never a token.
 
 ## A project
 

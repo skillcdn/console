@@ -43,8 +43,12 @@ export type Route =
   | { readonly name: "members"; readonly project: string }
   | { readonly name: "settings"; readonly project: string }
   | { readonly name: "people" }
+  /** The agents of one person, for an administrator. */
+  | { readonly name: "person-agents"; readonly id: string }
   | { readonly name: "agents" }
   | { readonly name: "new-token" }
+  /** Where a person approves an agent's connection, by the code it showed, or types one. */
+  | { readonly name: "connect"; readonly code: string | undefined }
   /** An address that moved: the page takes the person to `to` in its place. */
   | { readonly name: "moved"; readonly to: string }
   | { readonly name: "not-found" };
@@ -63,11 +67,15 @@ export const PATHS = {
   agents: "/agents",
   /** The form for a token made by hand, for a script or a console of one's own. */
   newToken: "/agents/new",
+  /** Where an agent's connection is approved (ADR-0011): `/connect/<code>`, or the code typed. */
+  connect: "/connect",
 } as const;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PROJECT_KEY = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 const NUMBER = /^[1-9][0-9]{0,8}$/;
+/** A code as it may be typed into an address: checked for what it is by the page. */
+const CODE_TEXT = /^[A-Za-z0-9-]{1,16}$/;
 /** The pages of a project that take nothing after their name. */
 const PLAIN_PAGES: readonly Exclude<ProjectPage, "docs">[] = [
   "decisions",
@@ -138,6 +146,19 @@ export function matchRoute(pathname: string, search = ""): Route {
   if (path === PATHS.newToken) {
     return { name: "new-token" };
   }
+  if (path === PATHS.connect) {
+    return { name: "connect", code: undefined };
+  }
+  if (path.startsWith(`${PATHS.connect}/`)) {
+    const code = path.slice(PATHS.connect.length + 1);
+    return CODE_TEXT.test(code) ? { name: "connect", code } : NOT_FOUND;
+  }
+  if (path.startsWith(`${PATHS.people}/`)) {
+    const [id, page, ...more] = path.slice(PATHS.people.length + 1).split("/");
+    return id !== undefined && UUID.test(id) && page === "agents" && more.length === 0
+      ? { name: "person-agents", id }
+      : NOT_FOUND;
+  }
   if (!path.startsWith(`${PATHS.project}/`)) {
     return NOT_FOUND;
   }
@@ -189,6 +210,16 @@ export function matchRoute(pathname: string, search = ""): Route {
   }
   const found = PLAIN_PAGES.find((candidate) => candidate === page);
   return found === undefined ? NOT_FOUND : { name: found, project };
+}
+
+/** Where a person approves an agent's connection by its code, or types one. */
+export function connectHref(code?: string): string {
+  return code === undefined ? PATHS.connect : `${PATHS.connect}/${encodeURIComponent(code)}`;
+}
+
+/** Where an administrator sees one person's agents. */
+export function personAgentsHref(personId: string): string {
+  return `${PATHS.people}/${personId}/agents`;
 }
 
 /** Where a project's board is, or one of its pages. */

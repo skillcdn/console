@@ -5,6 +5,14 @@
 
 export * from "./api.js";
 export { Board, type BoardProps, TaskCard } from "./components/board.js";
+export {
+  ConnectApproval,
+  type ConnectApprovalProps,
+  ConnectCodeForm,
+  type ConnectCodeFormProps,
+  ConnectWords,
+  type ConnectWordsProps,
+} from "./components/connect.js";
 export { DecisionForm, type DecisionFormProps } from "./components/decision-form.js";
 export {
   DecisionCard,
@@ -82,6 +90,7 @@ export {
   StateBadge,
   Time,
 } from "./components/ui.js";
+export { ConnectPage, type ConnectPageProps } from "./connect-page.js";
 export {
   type ConsoleApp,
   type ConsoleComponents,
@@ -92,6 +101,7 @@ export {
 export { type ConsoleActions, type ConsoleData, useConsoleData } from "./data.js";
 export { DocsPage, type DocsPageProps } from "./docs-page.js";
 export {
+  connectHref,
   type DocsView,
   decisionHref,
   docHref,
@@ -102,6 +112,7 @@ export {
   newTaskHref,
   PATHS,
   type ProjectPage,
+  personAgentsHref,
   projectHref,
   type Route,
   signInFailureOf,

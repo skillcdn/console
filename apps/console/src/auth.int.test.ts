@@ -96,7 +96,7 @@ describe("signing in", () => {
     });
     expect(answer.headers.get("cache-control")).toBe("no-store");
     expect(restMeSchema.parse(await answer.json())).toEqual({
-      workspace: { name: "Acme" },
+      workspace: { name: "Acme", tokenDaysAtMost: null },
       person: {
         id: expect.stringMatching(/^[0-9a-f-]{36}$/),
         login: "Alice",
@@ -107,7 +107,7 @@ describe("signing in", () => {
       signIn: [{ key: "gh", label: "GitHub" }],
     });
     expect(await me(h)).toEqual({
-      workspace: { name: "Acme" },
+      workspace: { name: "Acme", tokenDaysAtMost: null },
       person: null,
       signIn: [{ key: "gh", label: "GitHub" }],
     });
@@ -304,7 +304,11 @@ describe("a session", () => {
 describe("a deployment where nobody signs in", () => {
   it("has no sign-in routes, and says so", async () => {
     const h = createHarness(testDatabase);
-    expect(await me(h)).toEqual({ workspace: { name: "Acme" }, person: null, signIn: [] });
+    expect(await me(h)).toEqual({
+      workspace: { name: "Acme", tokenDaysAtMost: null },
+      person: null,
+      signIn: [],
+    });
     expect((await h.request(AUTH_ROUTES.login("gh"))).status).toBe(404);
     expect((await h.request(AUTH_ROUTES.logout, { method: "POST" })).status).toBe(404);
   });
