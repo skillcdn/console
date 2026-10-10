@@ -433,116 +433,137 @@ export function DocumentView(props: DocumentViewProps) {
           )}
         </div>
       </header>
-      <p className="sc-doc-meta">
-        <code className="sc-doc-path">{document.path}</code> · {docs.versionWord} {shown.number},{" "}
-        {docs.writtenBy} <Writer by={shown.author} agent={shown.agent} />{" "}
-        <Time iso={shown.createdAt} />
-        {version !== undefined && props.versionHref !== undefined && (
-          <>
-            {" "}
-            · <a href={props.versionHref(undefined)}>{docs.showLatest}</a>
-          </>
-        )}
-      </p>
-      {archived && <p className="sc-doc-notice">{docs.archivedNotice}</p>}
-      {(props.editHref !== undefined ||
-        props.onArchive !== undefined ||
-        props.onRestore !== undefined) && (
-        <div className="sc-task-actions">
-          {!archived && props.editHref !== undefined && (
-            <a className="sc-button sc-button-secondary" href={props.editHref}>
-              {words.common.edit}
-            </a>
+      <div className="sc-task-body">
+        <div className="sc-task-main">
+          {archived && <p className="sc-doc-notice">{docs.archivedNotice}</p>}
+          {props.error !== undefined && (
+            <p className="sc-form-error" role="alert">
+              {props.error}
+            </p>
           )}
-          {!archived && props.onArchive !== undefined && (
-            <Button variant="ghost" onClick={props.onArchive} disabled={props.busy === true}>
-              {docs.archive}
-            </Button>
-          )}
-          {archived && props.onRestore !== undefined && (
-            <Button onClick={props.onRestore} disabled={props.busy === true}>
-              {docs.restore}
-            </Button>
+          {shown.body.trim().length > 0 ? (
+            <Markdown source={shown.body} docHref={props.docHref} />
+          ) : (
+            <p className="sc-muted">{docs.nothingOnPage}</p>
           )}
         </div>
-      )}
-      {props.error !== undefined && (
-        <p className="sc-form-error" role="alert">
-          {props.error}
-        </p>
-      )}
-      {shown.body.trim().length > 0 ? (
-        <Markdown source={shown.body} docHref={props.docHref} />
-      ) : (
-        <p className="sc-muted">{docs.nothingOnPage}</p>
-      )}
-      {document.links.length > 0 && (
-        <section className="sc-task-section" aria-label={docs.refersTo}>
-          <h2 className="sc-section-title">{docs.refersTo}</h2>
-          <ul className="sc-link-list">
-            {document.links.map((link) => (
-              <li key={link.path}>
-                <a href={props.docHref(link.path)}>{link.title ?? link.path}</a>{" "}
-                {link.title === null ? (
-                  <span className="sc-muted">{docs.noPageThereYet}</span>
-                ) : (
-                  <code className="sc-doc-path">{link.path}</code>
+        <aside className="sc-task-aside" aria-label={docs.facts}>
+          <dl className="sc-facts">
+            <div>
+              <dt>{docs.form.path}</dt>
+              <dd>
+                <code className="sc-doc-path">{document.path}</code>
+              </dd>
+            </div>
+            <div>
+              <dt>{docs.versions}</dt>
+              <dd>
+                {docs.version(shown.number)}
+                {version !== undefined && props.versionHref !== undefined && (
+                  <>
+                    {" "}
+                    · <a href={props.versionHref(undefined)}>{docs.showLatest}</a>
+                  </>
                 )}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-      {document.backlinks.length > 0 && (
-        <section className="sc-task-section" aria-label={docs.referredToBy}>
-          <h2 className="sc-section-title">{docs.referredToBy}</h2>
-          <ul className="sc-link-list">
-            {document.backlinks.map((backlink) => (
-              <li key={`${backlink.kind}-${backlink.id}`}>
-                <BacklinkItem
-                  backlink={backlink}
-                  docHref={props.docHref}
-                  taskHref={props.taskHref}
-                  decisionHref={props.decisionHref}
-                />
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-      {(document.files.length > 0 || (!archived && props.onAttach !== undefined)) && (
-        <DocumentFiles
-          files={document.files}
-          fileHref={props.fileHref}
-          onAttach={archived ? undefined : props.onAttach}
-          busy={props.busy}
-        />
-      )}
-      {props.versions !== undefined && props.versions.length > 0 && (
-        <section className="sc-task-section" aria-label={docs.versions}>
-          <h2 className="sc-section-title">{docs.versions}</h2>
-          <ol className="sc-versions">
-            {props.versions.map((entry) => (
-              <li key={entry.number} className="sc-version">
-                {props.versionHref === undefined || entry.number === shown.number ? (
-                  <span className="sc-version-number">{docs.version(entry.number)}</span>
-                ) : (
-                  <a
-                    className="sc-version-number"
-                    href={props.versionHref(
-                      entry.number === document.version ? undefined : entry.number,
+              </dd>
+            </div>
+            <div>
+              <dt>{docs.writtenBy}</dt>
+              <dd>
+                <Writer by={shown.author} agent={shown.agent} /> <Time iso={shown.createdAt} />
+              </dd>
+            </div>
+          </dl>
+          {(props.editHref !== undefined ||
+            props.onArchive !== undefined ||
+            props.onRestore !== undefined) && (
+            <div className="sc-task-actions">
+              {!archived && props.editHref !== undefined && (
+                <a className="sc-button sc-button-secondary" href={props.editHref}>
+                  {words.common.edit}
+                </a>
+              )}
+              {!archived && props.onArchive !== undefined && (
+                <Button variant="ghost" onClick={props.onArchive} disabled={props.busy === true}>
+                  {docs.archive}
+                </Button>
+              )}
+              {archived && props.onRestore !== undefined && (
+                <Button onClick={props.onRestore} disabled={props.busy === true}>
+                  {docs.restore}
+                </Button>
+              )}
+            </div>
+          )}
+          {document.links.length > 0 && (
+            <section className="sc-task-section" aria-label={docs.refersTo}>
+              <h2 className="sc-section-title">{docs.refersTo}</h2>
+              <ul className="sc-link-list">
+                {document.links.map((link) => (
+                  <li key={link.path}>
+                    <a href={props.docHref(link.path)}>{link.title ?? link.path}</a>{" "}
+                    {link.title === null ? (
+                      <span className="sc-muted">{docs.noPageThereYet}</span>
+                    ) : (
+                      <code className="sc-doc-path">{link.path}</code>
                     )}
-                  >
-                    {docs.version(entry.number)}
-                  </a>
-                )}{" "}
-                {entry.title} · <Writer by={entry.author} agent={entry.agent} />{" "}
-                <Time iso={entry.createdAt} />
-              </li>
-            ))}
-          </ol>
-        </section>
-      )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+          {document.backlinks.length > 0 && (
+            <section className="sc-task-section" aria-label={docs.referredToBy}>
+              <h2 className="sc-section-title">{docs.referredToBy}</h2>
+              <ul className="sc-link-list">
+                {document.backlinks.map((backlink) => (
+                  <li key={`${backlink.kind}-${backlink.id}`}>
+                    <BacklinkItem
+                      backlink={backlink}
+                      docHref={props.docHref}
+                      taskHref={props.taskHref}
+                      decisionHref={props.decisionHref}
+                    />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+          {(document.files.length > 0 || (!archived && props.onAttach !== undefined)) && (
+            <DocumentFiles
+              files={document.files}
+              fileHref={props.fileHref}
+              onAttach={archived ? undefined : props.onAttach}
+              busy={props.busy}
+            />
+          )}
+          {props.versions !== undefined && props.versions.length > 0 && (
+            <section className="sc-task-section" aria-label={docs.versions}>
+              <h2 className="sc-section-title">{docs.versions}</h2>
+              <ol className="sc-versions">
+                {props.versions.map((entry) => (
+                  <li key={entry.number} className="sc-version">
+                    {props.versionHref === undefined || entry.number === shown.number ? (
+                      <span className="sc-version-number">{docs.version(entry.number)}</span>
+                    ) : (
+                      <a
+                        className="sc-version-number"
+                        href={props.versionHref(
+                          entry.number === document.version ? undefined : entry.number,
+                        )}
+                      >
+                        {docs.version(entry.number)}
+                      </a>
+                    )}{" "}
+                    {entry.title} · <Writer by={entry.author} agent={entry.agent} />{" "}
+                    <Time iso={entry.createdAt} />
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
+        </aside>
+      </div>
     </article>
   );
 }

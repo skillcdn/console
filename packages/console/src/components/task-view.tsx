@@ -77,7 +77,7 @@ export function TaskView(props: TaskViewProps) {
 
   if (props.form === "edit") {
     return (
-      <div className="sc-task">
+      <div className="sc-task sc-task-editing">
         <h1 className="sc-task-title">
           <span className="sc-card-number">#{task.number}</span> {task.title}
         </h1>
@@ -113,149 +113,160 @@ export function TaskView(props: TaskViewProps) {
           <PriorityBadge priority={task.priority} />
         </div>
       </header>
-      <dl className="sc-facts">
-        <div>
-          <dt>{words.task.owner}</dt>
-          <dd>
-            <PersonChip person={task.owner} />
-          </dd>
+      <div className="sc-task-body">
+        <div className="sc-task-main">
+          {props.error !== undefined && (
+            <p className="sc-form-error" role="alert">
+              {props.error}
+            </p>
+          )}
+          {task.body.length > 0 ? (
+            <Markdown source={task.body} docHref={props.docHref} />
+          ) : (
+            <p className="sc-muted">{words.task.nothingMore}</p>
+          )}
+          {task.links.length > 0 && (
+            <section className="sc-task-section" aria-label={words.task.links}>
+              <h2 className="sc-section-title">{words.task.links}</h2>
+              <ul className="sc-link-list">
+                {task.links.map((link) => (
+                  <li key={link.url}>
+                    <a href={link.url} target="_blank" rel="noopener noreferrer nofollow">
+                      {link.label ?? link.url}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+          {props.form === "ask" && (
+            <section className="sc-task-section" aria-label={words.task.raiseDecision}>
+              <h2 className="sc-section-title">{words.task.raiseDecision}</h2>
+              <DecisionForm
+                tasks={props.tasks}
+                taskId={task.id}
+                busy={props.busy}
+                onSubmit={props.onRaiseDecision}
+                onCancel={props.onCancel}
+              />
+            </section>
+          )}
+          {runs.length > 0 && (
+            <section className="sc-task-section" aria-label={words.task.runs}>
+              <h2 className="sc-section-title">{words.task.agentsAtWork}</h2>
+              <RunList
+                runs={runs}
+                decisionHref={props.decisionHref}
+                fileHref={props.fileHref}
+                docHref={props.docHref}
+                onAbandon={props.onAbandonRun}
+                busy={props.busy}
+              />
+            </section>
+          )}
+          {about.length > 0 && (
+            <section className="sc-task-section" aria-label={words.task.decisions}>
+              <h2 className="sc-section-title">{words.task.decisions}</h2>
+              {about.map((decision) => (
+                <DecisionCard
+                  key={decision.id}
+                  decision={decision}
+                  task={decision.taskId === null ? undefined : tasksById.get(decision.taskId)}
+                  docHref={props.docHref}
+                  onAnswer={props.onAnswer}
+                  onUpdate={props.onUpdateDecision}
+                  busy={props.busy}
+                />
+              ))}
+            </section>
+          )}
+          {props.history !== undefined && props.history.length > 0 && (
+            <section className="sc-task-section" aria-label={words.task.history}>
+              <h2 className="sc-section-title">{words.task.history}</h2>
+              <EventFeed events={props.history} />
+            </section>
+          )}
+          {subtasks.length > 0 && (
+            <section className="sc-task-section" aria-label={words.task.subtasks}>
+              <h2 className="sc-section-title">{words.task.partOfIt}</h2>
+              <ul className="sc-subtasks">
+                {subtasks.map((subtask) => (
+                  <li key={subtask.id}>
+                    <a href={props.taskHref(subtask)}>
+                      <span className="sc-card-number">#{subtask.number}</span> {subtask.title}
+                    </a>{" "}
+                    <StateBadge state={subtask.state} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
         </div>
-        <div>
-          <dt>{words.task.assignee}</dt>
-          <dd>
-            {task.assignee === null ? (
-              <span className="sc-muted">{words.common.nobody}</span>
-            ) : (
-              <PersonChip person={task.assignee} />
-            )}
-          </dd>
-        </div>
-        <div>
-          <dt>{words.task.written}</dt>
-          <dd>
-            <Time iso={task.createdAt} />
-          </dd>
-        </div>
-        <div>
-          <dt>{words.task.changed}</dt>
-          <dd>
-            <Time iso={task.updatedAt} />
-          </dd>
-        </div>
-      </dl>
-      <div className="sc-task-actions">
-        <label className="sc-field sc-field-inline">
-          <span className="sc-field-label">{words.task.state}</span>
-          <select
-            className="sc-input"
-            value={task.state}
-            disabled={props.busy === true}
-            onChange={(event) => props.onMove(task, event.target.value as TaskState)}
-          >
-            {TASK_STATES.map((state) => (
-              <option key={state} value={state}>
-                {words.vocabulary.state[state]}
-              </option>
-            ))}
-          </select>
-        </label>
-        {props.formHref !== undefined && (
-          <>
-            <a className="sc-button sc-button-secondary" href={props.formHref("edit")}>
-              {words.common.edit}
-            </a>
-            <a className="sc-button sc-button-secondary" href={props.formHref("ask")}>
-              {words.task.raiseDecision}
-            </a>
-          </>
-        )}
+        <aside className="sc-task-aside" aria-label={words.task.facts}>
+          <dl className="sc-facts">
+            <div>
+              <dt>{words.task.state}</dt>
+              <dd>
+                <select
+                  className="sc-input"
+                  aria-label={words.task.state}
+                  value={task.state}
+                  disabled={props.busy === true}
+                  onChange={(event) => props.onMove(task, event.target.value as TaskState)}
+                >
+                  {TASK_STATES.map((state) => (
+                    <option key={state} value={state}>
+                      {words.vocabulary.state[state]}
+                    </option>
+                  ))}
+                </select>
+              </dd>
+            </div>
+            <div>
+              <dt>{words.task.form.priority}</dt>
+              <dd>{words.vocabulary.priority[task.priority]}</dd>
+            </div>
+            <div>
+              <dt>{words.task.owner}</dt>
+              <dd>
+                <PersonChip person={task.owner} />
+              </dd>
+            </div>
+            <div>
+              <dt>{words.task.assignee}</dt>
+              <dd>
+                {task.assignee === null ? (
+                  <span className="sc-muted">{words.common.nobody}</span>
+                ) : (
+                  <PersonChip person={task.assignee} />
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>{words.task.written}</dt>
+              <dd>
+                <Time iso={task.createdAt} />
+              </dd>
+            </div>
+            <div>
+              <dt>{words.task.changed}</dt>
+              <dd>
+                <Time iso={task.updatedAt} />
+              </dd>
+            </div>
+          </dl>
+          {props.formHref !== undefined && (
+            <div className="sc-task-actions">
+              <a className="sc-button sc-button-secondary" href={props.formHref("edit")}>
+                {words.common.edit}
+              </a>
+              <a className="sc-button sc-button-secondary" href={props.formHref("ask")}>
+                {words.task.raiseDecision}
+              </a>
+            </div>
+          )}
+        </aside>
       </div>
-      {props.error !== undefined && (
-        <p className="sc-form-error" role="alert">
-          {props.error}
-        </p>
-      )}
-      {task.body.length > 0 ? (
-        <Markdown source={task.body} docHref={props.docHref} />
-      ) : (
-        <p className="sc-muted">{words.task.nothingMore}</p>
-      )}
-      {task.links.length > 0 && (
-        <section className="sc-task-section" aria-label={words.task.links}>
-          <h2 className="sc-section-title">{words.task.links}</h2>
-          <ul className="sc-link-list">
-            {task.links.map((link) => (
-              <li key={link.url}>
-                <a href={link.url} target="_blank" rel="noopener noreferrer nofollow">
-                  {link.label ?? link.url}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-      {props.form === "ask" && (
-        <section className="sc-task-section" aria-label={words.task.raiseDecision}>
-          <h2 className="sc-section-title">{words.task.raiseDecision}</h2>
-          <DecisionForm
-            tasks={props.tasks}
-            taskId={task.id}
-            busy={props.busy}
-            onSubmit={props.onRaiseDecision}
-            onCancel={props.onCancel}
-          />
-        </section>
-      )}
-      {runs.length > 0 && (
-        <section className="sc-task-section" aria-label={words.task.runs}>
-          <h2 className="sc-section-title">{words.task.agentsAtWork}</h2>
-          <RunList
-            runs={runs}
-            decisionHref={props.decisionHref}
-            fileHref={props.fileHref}
-            docHref={props.docHref}
-            onAbandon={props.onAbandonRun}
-            busy={props.busy}
-          />
-        </section>
-      )}
-      {about.length > 0 && (
-        <section className="sc-task-section" aria-label={words.task.decisions}>
-          <h2 className="sc-section-title">{words.task.decisions}</h2>
-          {about.map((decision) => (
-            <DecisionCard
-              key={decision.id}
-              decision={decision}
-              task={decision.taskId === null ? undefined : tasksById.get(decision.taskId)}
-              docHref={props.docHref}
-              onAnswer={props.onAnswer}
-              onUpdate={props.onUpdateDecision}
-              busy={props.busy}
-            />
-          ))}
-        </section>
-      )}
-      {props.history !== undefined && props.history.length > 0 && (
-        <section className="sc-task-section" aria-label={words.task.history}>
-          <h2 className="sc-section-title">{words.task.history}</h2>
-          <EventFeed events={props.history} />
-        </section>
-      )}
-      {subtasks.length > 0 && (
-        <section className="sc-task-section" aria-label={words.task.subtasks}>
-          <h2 className="sc-section-title">{words.task.partOfIt}</h2>
-          <ul className="sc-subtasks">
-            {subtasks.map((subtask) => (
-              <li key={subtask.id}>
-                <a href={props.taskHref(subtask)}>
-                  <span className="sc-card-number">#{subtask.number}</span> {subtask.title}
-                </a>{" "}
-                <StateBadge state={subtask.state} />
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
     </div>
   );
 }

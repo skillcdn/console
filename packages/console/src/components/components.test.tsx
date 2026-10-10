@@ -194,6 +194,8 @@ describe("one task", () => {
       />,
     );
     expect(html).toContain("Part of");
+    // The facts stand beside the text, in a column of their own.
+    expect(html).toContain('<aside class="sc-task-aside" aria-label="At a glance">');
     // Everything that happened to it, with the agent a person acted through.
     expect(html).toContain('aria-label="What happened"');
     expect(html).toContain("moved #7 Ship from Ready to In progress");
@@ -553,6 +555,7 @@ describe("documents", () => {
     expect(html).toContain("v2");
     expect(html).toContain("Archive");
     expect(html).toContain(">Docs</a>");
+    expect(html).toContain('<aside class="sc-task-aside" aria-label="About this page">');
     const archived = renderToStaticMarkup(
       <DocumentView
         document={document({ archivedAt: "2026-10-10T12:00:00.000Z" })}

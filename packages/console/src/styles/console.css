@@ -1310,12 +1310,49 @@ table {
   color: var(--sc-color-text);
 }
 
-/* One task */
+/* One task, and a page of the documents: the text in a column for reading, the facts beside it
+   where the window is wide enough, under it where it is not. */
 
 .sc-task {
   display: grid;
   gap: var(--sc-space-5);
+}
+
+.sc-task-editing {
   max-width: var(--sc-width-prose);
+}
+
+.sc-task-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sc-space-5);
+  align-items: start;
+}
+
+.sc-task-main {
+  display: grid;
+  gap: var(--sc-space-5);
+  min-width: 0;
+  max-width: var(--sc-width-prose);
+}
+
+.sc-task-aside {
+  display: grid;
+  gap: var(--sc-space-4);
+  min-width: 0;
+  font-size: var(--sc-text-sm);
+}
+
+@media (min-width: 64rem) {
+  .sc-task-body {
+    grid-template-columns: minmax(0, 1fr) var(--sc-width-aside);
+    gap: var(--sc-space-7);
+  }
+
+  .sc-task-aside {
+    position: sticky;
+    top: calc(var(--sc-header-height) + 2.75rem + var(--sc-space-5));
+  }
 }
 
 .sc-task-header {
@@ -2059,10 +2096,20 @@ table {
 
 /* Documents: a folder's pages, one page with its versions, its links both ways and its files. */
 
+.sc-doc {
+  display: grid;
+  gap: var(--sc-space-5);
+}
+
 .sc-doc-crumbs {
   margin-bottom: var(--sc-space-3);
   color: var(--sc-color-text-muted);
   font-size: var(--sc-text-sm);
+}
+
+/* On a page the crumbs sit close to the title. */
+.sc-doc > .sc-doc-crumbs {
+  margin-bottom: calc(-1 * var(--sc-space-3));
 }
 
 .sc-doc-crumbs a {
@@ -2207,6 +2254,30 @@ table {
   min-width: 2.5rem;
   font-family: var(--sc-font-mono);
   font-size: var(--sc-text-sm);
+}
+
+/* In the aside of a task or a page, the facts stack and the sections are small. */
+
+.sc-task-aside .sc-facts {
+  grid-template-columns: 1fr;
+}
+
+.sc-task-aside .sc-section-title {
+  margin-bottom: var(--sc-space-1);
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-xs);
+  font-weight: var(--sc-weight-medium);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sc-task-aside .sc-task-section {
+  gap: var(--sc-space-1);
+}
+
+.sc-task-aside .sc-link-list li + li,
+.sc-task-aside .sc-version + .sc-version {
+  margin-top: var(--sc-space-1);
 }
 
 /* A decision as a record: its context, its answer, and what followed. */

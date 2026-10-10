@@ -168,6 +168,7 @@ export const ko: Messages = {
   task: {
     newTitle: "작업 쓰기",
     newAria: "작업 쓰기",
+    facts: "한눈에 보기",
     noSuch: {
       title: "그런 작업이 없습니다",
       body: "다른 프로젝트의 것이거나, 링크가 잘못됐습니다.",
@@ -350,6 +351,7 @@ export const ko: Messages = {
     title: "문서",
     newPage: "새 페이지",
     newPageAria: "새 페이지",
+    facts: "이 페이지에 대해",
     editPageAria: "페이지 편집",
     writeIt: "쓰기",
     found: "찾은 페이지",

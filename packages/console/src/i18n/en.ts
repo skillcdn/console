@@ -189,6 +189,7 @@ export const en = {
   task: {
     newTitle: "Write a task",
     newAria: "Write a task",
+    facts: "At a glance",
     noSuch: {
       title: "No such task",
       body: "It may belong to another project, or the link is wrong.",
@@ -372,6 +373,7 @@ export const en = {
     title: "Docs",
     newPage: "New page",
     newPageAria: "New page",
+    facts: "About this page",
     editPageAria: "Edit the page",
     writeIt: "Write it",
     found: "Pages found",
