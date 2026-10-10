@@ -55,6 +55,7 @@ const DECISION = {
   raisedBy: PERSON,
   run: { id: RUN.id, agent: "Claude Code" },
   answer: null,
+  outcome: null,
   createdAt: WHEN,
   updatedAt: WHEN,
 };
@@ -580,6 +581,158 @@ describe("the console command", () => {
     expect(await runCli(["abandon", RUN.id], harness({ fetch, env: SIGNED_IN }).io)).toBe(EXIT.ok);
     expect(calls[4]?.key).toBe(`POST ${IN}/runs/${RUN.id}/end`);
     expect(calls[4]?.body).toEqual({ status: "abandoned" });
+  });
+
+  it("lists, reads, writes, attaches to, archives and restores the project's pages", async () => {
+    const page = {
+      id: "0199c4d8-0000-7000-8000-000000000060",
+      path: "guides/onboarding",
+      title: "Onboarding",
+      version: 1,
+      updatedBy: PERSON,
+      agent: "Claude Code",
+      archivedAt: null,
+      createdAt: WHEN,
+      updatedAt: WHEN,
+      body: "# Welcome\n\nSee [the plan](plan).",
+      createdBy: PERSON,
+      links: [{ path: "plan", title: null }],
+      backlinks: [{ kind: "task", id: TASK.id, path: null, number: 7, title: "Fix the parser" }],
+      files: [],
+    };
+    const attached = {
+      ...page,
+      files: [
+        {
+          id: "0199c4d8-0000-7000-8000-000000000070",
+          label: "the report",
+          file: { name: "report.md", size: 12, contentType: "text/markdown", sha256: "ab" },
+          addedBy: PERSON,
+          agent: "Claude Code",
+          createdAt: WHEN,
+        },
+      ],
+    };
+    const { fetch, calls } = fakeConsole({
+      [`GET ${IN}/docs`]: { body: { folder: "", folders: ["guides"], items: [] } },
+      [`GET ${IN}/docs?folder=guides`]: { body: { folder: "guides", folders: [], items: [page] } },
+      [`GET ${IN}/docs?q=welcome&archived=true`]: {
+        body: { folder: "", folders: [], items: [page] },
+      },
+      [`GET ${IN}/docs/guides%2Fonboarding`]: { body: page },
+      [`GET ${IN}/docs/guides%2Fnew-page`]: {
+        status: 404,
+        body: { error: { code: "document.not_found", message: "The page was not found." } },
+      },
+      [`GET ${IN}/docs/guides%2Fonboarding/versions`]: {
+        body: {
+          items: [
+            {
+              number: 1,
+              title: "Onboarding",
+              author: PERSON,
+              agent: "Claude Code",
+              createdAt: WHEN,
+            },
+          ],
+        },
+      },
+      [`GET ${IN}/docs/guides%2Fonboarding/versions/1`]: {
+        body: {
+          number: 1,
+          title: "Onboarding",
+          author: PERSON,
+          agent: null,
+          createdAt: WHEN,
+          body: "# Old",
+        },
+      },
+      [`PUT ${IN}/docs/guides%2Fonboarding`]: { status: 201, body: page },
+      [`POST ${IN}/docs/guides%2Fonboarding/files`]: { status: 201, body: attached },
+      [`POST ${IN}/docs/guides%2Fonboarding/archive`]: { body: { ...page, archivedAt: WHEN } },
+      [`POST ${IN}/docs/guides%2Fonboarding/restore`]: { body: page },
+    });
+    const h = harness({
+      fetch,
+      env: SIGNED_IN,
+      readBytes: async () => new TextEncoder().encode("# The report"),
+    });
+    expect(await runCli(["docs"], h.io)).toBe(EXIT.ok);
+    expect(h.out()).toBe("guides/\n");
+    expect(await runCli(["docs", "guides"], h.io)).toBe(EXIT.ok);
+    expect(h.out()).toContain("guides/onboarding  Onboarding  (v1, by Claude Code for alice;");
+    expect(await runCli(["docs", "--search", "welcome", "--archived"], h.io)).toBe(EXIT.ok);
+    expect(await runCli(["doc", "guides/onboarding"], h.io)).toBe(EXIT.ok);
+    expect(h.out()).toContain(
+      "guides/onboarding: Onboarding\nversion 1, by Claude Code for alice at",
+    );
+    expect(h.out()).toContain("# Welcome");
+    expect(h.out()).toContain("refers to:\n  plan  (no page there yet)");
+    expect(h.out()).toContain("referred to by:\n  task #7  Fix the parser");
+    expect(await runCli(["doc", "guides/onboarding", "--versions"], h.io)).toBe(EXIT.ok);
+    expect(h.out()).toContain("v1  Onboarding  (by Claude Code for alice;");
+    expect(await runCli(["doc", "guides/onboarding", "--version", "1"], h.io)).toBe(EXIT.ok);
+    expect(h.out()).toContain("# Old");
+    expect(await runCli(["doc", "guides/onboarding", "--version", "x"], h.io)).toBe(EXIT.usage);
+
+    expect(
+      await runCli(
+        [
+          "write",
+          "guides/onboarding",
+          "--title",
+          "Onboarding",
+          "--body",
+          "# Welcome",
+          "--base",
+          "1",
+        ],
+        h.io,
+      ),
+    ).toBe(EXIT.ok);
+    expect(h.out()).toContain("Wrote guides/onboarding (Onboarding), version 1; refers to plan");
+    expect(calls.find((call) => call.key === `PUT ${IN}/docs/guides%2Fonboarding`)?.body).toEqual({
+      title: "Onboarding",
+      body: "# Welcome",
+      baseVersion: 1,
+    });
+    // Without a title, the page keeps its own; a page that is not there yet needs one.
+    expect(await runCli(["write", "guides/onboarding", "--body", "# Again"], h.io)).toBe(EXIT.ok);
+    expect(await runCli(["write", "guides/new-page", "--body", "# New"], h.io)).toBe(EXIT.usage);
+    expect(h.err()).toContain("Say its title");
+    expect(await runCli(["write", "guides/onboarding"], h.io)).toBe(EXIT.usage);
+
+    expect(
+      await runCli(["attach", "guides/onboarding", "./report.md", "--label", "the report"], h.io),
+    ).toBe(EXIT.ok);
+    expect(h.out()).toContain(
+      "Attached report.md (12 bytes) to guides/onboarding: 1 file on the page.",
+    );
+    expect(await runCli(["archive", "guides/onboarding"], h.io)).toBe(EXIT.ok);
+    expect(h.out()).toContain("Archived guides/onboarding (Onboarding)");
+    expect(await runCli(["restore", "guides/onboarding"], h.io)).toBe(EXIT.ok);
+    expect(h.out()).toContain("Restored guides/onboarding (Onboarding).");
+  });
+
+  it("writes what followed a decision, and reads the record", async () => {
+    const grown = { ...ANSWERED, outcome: "We changed it; see [the change](changes/parser)." };
+    const { fetch, calls } = fakeConsole({
+      [`PATCH ${IN}/decisions/${DECISION.id}`]: { body: grown },
+      [`GET ${IN}/decisions/${DECISION.id}`]: { body: grown },
+    });
+    const h = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(
+        ["decision", DECISION.id, "--outcome", "We changed it; see [the change](changes/parser)."],
+        h.io,
+      ),
+    ).toBe(EXIT.ok);
+    expect(calls[0]?.body).toEqual({ outcome: "We changed it; see [the change](changes/parser)." });
+    expect(h.out()).toContain(
+      "what followed:\n    We changed it; see [the change](changes/parser).",
+    );
+    expect(await runCli(["decision", DECISION.id], h.io)).toBe(EXIT.ok);
+    expect(h.out()).toContain("what followed:");
   });
 
   it("says what the console refused, with its code, and hints at what to do", async () => {

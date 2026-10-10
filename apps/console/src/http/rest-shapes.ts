@@ -1,5 +1,8 @@
 import type {
   RestDecision,
+  RestDocument,
+  RestDocumentFile,
+  RestDocumentSummary,
   RestEvent,
   RestMember,
   RestPerson,
@@ -7,8 +10,17 @@ import type {
   RestRun,
   RestTask,
   RestToken,
+  RestVersion,
+  RestVersionSummary,
 } from "@skillcdn/console/api";
 import type { DecisionRecord } from "../db/queries/decisions.js";
+import type {
+  DocumentFileRecord,
+  DocumentRecord,
+  DocumentSummary,
+  VersionRecord,
+  VersionSummary,
+} from "../db/queries/documents.js";
 import type { EventRecord } from "../db/queries/events.js";
 import type { PersonRecord } from "../db/queries/people.js";
 import type { MemberRecord, ProjectView } from "../db/queries/projects.js";
@@ -93,6 +105,7 @@ export function restDecision(decision: DecisionRecord): RestDecision {
             by: restPerson(decision.answer.by),
             at: decision.answer.at.toISOString(),
           },
+    outcome: decision.outcome ?? null,
     createdAt: decision.createdAt.toISOString(),
     updatedAt: decision.updatedAt.toISOString(),
   };
@@ -155,7 +168,69 @@ export function restEvent(event: EventRecord): RestEvent {
     taskId: event.taskId ?? null,
     decisionId: event.decisionId ?? null,
     runId: event.runId ?? null,
+    documentId: event.documentId ?? null,
     data: event.data,
     createdAt: event.createdAt.toISOString(),
   };
+}
+
+export function restDocumentSummary(document: DocumentSummary): RestDocumentSummary {
+  return {
+    id: document.id,
+    path: document.path,
+    title: document.title,
+    version: document.version,
+    updatedBy: restPerson(document.updatedBy),
+    agent: document.agent ?? null,
+    archivedAt: document.archivedAt?.toISOString() ?? null,
+    createdAt: document.createdAt.toISOString(),
+    updatedAt: document.updatedAt.toISOString(),
+  };
+}
+
+export function restDocumentFile(file: DocumentFileRecord): RestDocumentFile {
+  return {
+    id: file.id,
+    label: file.label ?? null,
+    file: {
+      name: file.file.name,
+      size: file.file.size,
+      contentType: file.file.contentType,
+      sha256: file.file.sha256,
+    },
+    addedBy: restPerson(file.addedBy),
+    agent: file.agent ?? null,
+    createdAt: file.createdAt.toISOString(),
+  };
+}
+
+export function restDocument(document: DocumentRecord): RestDocument {
+  return {
+    ...restDocumentSummary(document),
+    body: document.body,
+    createdBy: restPerson(document.createdBy),
+    links: document.links.map((link) => ({ path: link.path, title: link.title ?? null })),
+    backlinks: document.backlinks.map((backlink) => ({
+      kind: backlink.kind,
+      id: backlink.id,
+      path: backlink.path ?? null,
+      number: backlink.number ?? null,
+      title: backlink.title,
+    })),
+    files: document.files.map(restDocumentFile),
+  };
+}
+
+export function restVersionSummary(version: VersionSummary): RestVersionSummary {
+  return {
+    number: version.number,
+    title: version.title,
+    author: restPerson(version.author),
+    agent: version.agent ?? null,
+    createdAt: version.createdAt.toISOString(),
+  };
+}
+
+export function restVersion(version: VersionRecord): RestVersion {
+  return { ...restVersionSummary(version), body: version.body };
 }

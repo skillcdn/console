@@ -3,6 +3,7 @@ import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
 import { decisions, runs, tasks } from "../schema.js";
+import { recordLinks } from "./documents.js";
 import { type Actor, recordEvent, type Scope } from "./events.js";
 import { answerers, type PersonRecord, personColumns, raisers, toPerson } from "./people.js";
 
@@ -25,11 +26,14 @@ export interface DecisionRecord {
   readonly answer:
     | {
         readonly option: string;
+        /** The rationale given with the answer. */
         readonly note: string | undefined;
         readonly by: PersonRecord;
         readonly at: Date;
       }
     | undefined;
+  /** What followed the decision, written afterwards; nothing until someone does. */
+  readonly outcome: string | undefined;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -71,6 +75,7 @@ const decisionColumns = {
   answer: decisions.answer,
   answerNote: decisions.answerNote,
   answeredAt: decisions.answeredAt,
+  outcome: decisions.outcome,
   createdAt: decisions.createdAt,
   updatedAt: decisions.updatedAt,
   raisedBy: personColumns(raisers),
@@ -117,6 +122,7 @@ function toDecision(row: DecisionRow): DecisionRecord {
         ? { id: row.runId, agent: row.runAgent }
         : undefined,
     answer: answered,
+    outcome: row.outcome ?? undefined,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -216,6 +222,7 @@ export async function raiseDecision(
     if (inserted === undefined) {
       throw new Error("decision insert returned no row");
     }
+    await recordLinks(tx, scope, { kind: "decision", id: inserted.id }, [decision.body ?? ""], now);
     await recordEvent(tx, {
       ...scope,
       kind: "decision.raised",
@@ -256,10 +263,12 @@ export async function answerDecision(
     const [current] = await tx
       .select({
         question: decisions.question,
+        body: decisions.body,
         options: decisions.options,
         answeredAt: decisions.answeredAt,
         taskId: decisions.taskId,
         runId: decisions.runId,
+        outcome: decisions.outcome,
       })
       .from(decisions)
       .where(and(eq(decisions.projectId, scope.projectId), eq(decisions.id, decisionId)))
@@ -284,6 +293,13 @@ export async function answerDecision(
         updatedAt: now,
       })
       .where(eq(decisions.id, decisionId));
+    await recordLinks(
+      tx,
+      scope,
+      { kind: "decision", id: decisionId },
+      [current.body, note ?? "", current.outcome ?? ""],
+      now,
+    );
     await recordEvent(tx, {
       ...scope,
       kind: "decision.answered",
@@ -306,6 +322,88 @@ export async function answerDecision(
             sql`not exists (select 1 from ${decisions} where ${decisions.runId} = ${runs.id} and ${decisions.answeredAt} is null)`,
           ),
         );
+    }
+    const written = await readDecision(tx, scope, decisionId);
+    if (written === undefined) {
+      throw new DecisionError("decision.not_found");
+    }
+    return written;
+  });
+}
+
+/** Only what changes; a key that is absent leaves the field as it is. */
+export interface DecisionPatch {
+  readonly body?: string | undefined;
+  /** What followed; empty clears it. */
+  readonly outcome?: string | undefined;
+}
+
+/**
+ * Grows the record of a decision (ADR-0009): its context, or what followed, and tells the
+ * board which. The links its texts make are kept both ways. A patch that changes nothing
+ * writes nothing.
+ */
+export async function updateDecision(
+  database: Database,
+  input: {
+    readonly scope: Scope;
+    readonly actor: Actor;
+    readonly decisionId: string;
+    readonly patch: DecisionPatch;
+    readonly now: Date;
+  },
+): Promise<DecisionRecord> {
+  const { scope, actor, decisionId, patch, now } = input;
+  return drizzleOf(database).transaction(async (tx) => {
+    const [current] = await tx
+      .select({
+        question: decisions.question,
+        body: decisions.body,
+        answerNote: decisions.answerNote,
+        outcome: decisions.outcome,
+        taskId: decisions.taskId,
+        runId: decisions.runId,
+      })
+      .from(decisions)
+      .where(and(eq(decisions.projectId, scope.projectId), eq(decisions.id, decisionId)))
+      .for("update");
+    if (current === undefined) {
+      throw new DecisionError("decision.not_found");
+    }
+    const next = {
+      body: patch.body ?? current.body,
+      outcome:
+        patch.outcome === undefined
+          ? current.outcome
+          : patch.outcome.trim().length === 0
+            ? null
+            : patch.outcome,
+    };
+    const changed = (["body", "outcome"] as const).filter(
+      (field) => next[field] !== current[field],
+    );
+    if (changed.length > 0) {
+      await tx
+        .update(decisions)
+        .set({ ...next, updatedAt: now })
+        .where(eq(decisions.id, decisionId));
+      await recordLinks(
+        tx,
+        scope,
+        { kind: "decision", id: decisionId },
+        [next.body, current.answerNote ?? "", next.outcome ?? ""],
+        now,
+      );
+      await recordEvent(tx, {
+        ...scope,
+        kind: "decision.updated",
+        actor,
+        taskId: current.taskId ?? undefined,
+        decisionId,
+        runId: current.runId ?? undefined,
+        data: { question: current.question, fields: changed },
+        now,
+      });
     }
     const written = await readDecision(tx, scope, decisionId);
     if (written === undefined) {

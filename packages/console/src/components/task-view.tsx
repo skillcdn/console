@@ -4,6 +4,7 @@ import type {
   RestArtifact,
   RestDecision,
   RestDecisionInput,
+  RestDecisionPatch,
   RestEvent,
   RestPerson,
   RestRun,
@@ -39,12 +40,18 @@ export interface TaskViewProps {
   readonly decisionHref?: ((decisionId: string) => string) | undefined;
   /** Where a file a run handed in is read. */
   readonly fileHref?: ((artifact: RestArtifact) => string) | undefined;
+  /** Where a document of the project is read, by its path, for the links in what was written. */
+  readonly docHref?: ((path: string) => string) | undefined;
   readonly busy?: boolean | undefined;
   readonly error?: string | undefined;
   readonly onChange: (task: RestTask, patch: RestTaskInput) => void;
   readonly onMove: (task: RestTask, state: TaskState) => void;
   readonly onRaiseDecision: (input: RestDecisionInput) => void;
   readonly onAnswer: (decision: RestDecision, input: RestAnswerInput) => void;
+  /** Called to grow a decision's record with what followed. */
+  readonly onUpdateDecision?:
+    | ((decision: RestDecision, patch: RestDecisionPatch) => void)
+    | undefined;
   readonly onAbandonRun?: ((run: RestRun) => void) | undefined;
 }
 
@@ -159,7 +166,7 @@ export function TaskView(props: TaskViewProps) {
         </p>
       )}
       {task.body.length > 0 ? (
-        <Markdown source={task.body} />
+        <Markdown source={task.body} docHref={props.docHref} />
       ) : (
         <p className="sc-muted">Nothing more was written about it.</p>
       )}
@@ -199,6 +206,7 @@ export function TaskView(props: TaskViewProps) {
             runs={runs}
             decisionHref={props.decisionHref}
             fileHref={props.fileHref}
+            docHref={props.docHref}
             onAbandon={props.onAbandonRun}
             busy={props.busy}
           />
@@ -212,7 +220,9 @@ export function TaskView(props: TaskViewProps) {
               key={decision.id}
               decision={decision}
               task={decision.taskId === null ? undefined : tasksById.get(decision.taskId)}
+              docHref={props.docHref}
               onAnswer={props.onAnswer}
+              onUpdate={props.onUpdateDecision}
               busy={props.busy}
             />
           ))}

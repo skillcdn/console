@@ -11,7 +11,7 @@
   </p>
 </div>
 
-> **Status: pre-alpha.** The board runs, and agents work it: people sign in, make projects and say who is in each, write tasks, move them along, raise decisions and answer them, and see one board per project, live; an agent takes a task through the `console` command, reports, hands in links and files, asks, and finishes, named beside its person on everything it did; a project's skills show by address, served by SkillCDN. `@skillcdn/console` is on npm, and `npm install -g @skillcdn/console` is how a machine gets the command. Documents and the console for everyone come next. [docs/roadmap.md](docs/roadmap.md) says what exists; [docs/architecture.md](docs/architecture.md) says how it fits together and what is still open.
+> **Status: pre-alpha.** The board runs, and agents work it: people sign in, make projects and say who is in each, write tasks, move them along, raise decisions and answer them, and see one board per project, live; an agent takes a task through the `console` command, reports, hands in links and files, asks, and finishes, named beside its person on everything it did; a project's skills show by address, served by SkillCDN; a project's documents, pages of Markdown by path with every version kept, are written by people and agents, link to each other and to the tasks and decisions both ways, and are found by their words. `@skillcdn/console` is on npm, and `npm install -g @skillcdn/console` is how a machine gets the command. The console for everyone comes next. [docs/roadmap.md](docs/roadmap.md) says what exists; [docs/architecture.md](docs/architecture.md) says how it fits together and what is still open.
 
 The console holds the work to be done, which agent (Claude Code, Codex, any agent with a shell) is doing what right now, what each has done, and the decisions that wait for a person. People decide; agents work. One container image next to PostgreSQL; people sign in with the accounts they already have; each person's agent connects with the `console` command and works the board as that person. The organization's playbooks and skills live in git repositories and reach the agents through [SkillCDN](https://skillcdn.ai).
 
@@ -45,6 +45,7 @@ A person writes a task on the project's board and tells their agent to take it. 
 
 ```sh
 console tasks                                         # the board: #7  ready  high  Fix the parser  (owner alice)
+console doc guides/onboarding                         # a page of the project's documents, with what refers to it
 console take 7                                        # a run begins; the task is in progress and the person's
 console report "Found the cause: the parser trusts its input."
 console hand-in https://github.com/acme/app/pull/3 --label "the fix"

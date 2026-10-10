@@ -272,6 +272,70 @@ describe("the command line", () => {
     expect(who.out).toBe(`Alice (member) at Acme, ${SIGN_IN_URL}; project web\n`);
   });
 
+  it("writes, reads, attaches to, archives and restores the project's pages as its person", async () => {
+    const written = await console_([
+      "write",
+      "guides/onboarding",
+      "--title",
+      "Onboarding",
+      "--body",
+      "# Welcome\n\nSee [the plan](plan).",
+    ]);
+    expect(written.code, written.err).toBe(EXIT.ok);
+    expect(written.out).toBe("Wrote guides/onboarding (Onboarding), version 1; refers to plan\n");
+    const again = await console_(["write", "guides/onboarding", "--body", "# Welcome back"]);
+    expect(again.code, again.err).toBe(EXIT.ok);
+    expect(again.out).toBe("Wrote guides/onboarding (Onboarding), version 2\n");
+    const stale = await console_(["write", "guides/onboarding", "--body", "older", "--base", "1"]);
+    expect(stale.code).toBe(EXIT.failed);
+    expect(stale.err).toContain("document.conflict");
+    expect(stale.err).toContain("Read it again");
+    const root = await console_(["docs"]);
+    expect(root.out).toBe("guides/\n");
+    const guides = await console_(["docs", "guides"]);
+    expect(guides.out).toContain(
+      "guides/onboarding  Onboarding  (v2, by Claude Code on the laptop for Alice;",
+    );
+    const found = await console_(["docs", "--search", "welcome"]);
+    expect(found.out).toContain("guides/onboarding");
+    const page = await console_(["doc", "guides/onboarding"]);
+    expect(page.out).toContain(
+      "guides/onboarding: Onboarding\nversion 2, by Claude Code on the laptop for Alice at",
+    );
+    expect(page.out).toContain("# Welcome back");
+    const versions = await console_(["doc", "guides/onboarding", "--versions"]);
+    expect(versions.out).toMatch(/^v2 {2}Onboarding .*\nv1 {2}Onboarding /);
+    const attached = await console_([
+      "attach",
+      "guides/onboarding",
+      "report.md",
+      "--label",
+      "the report",
+    ]);
+    expect(attached.code, attached.err).toBe(EXIT.ok);
+    expect(attached.out).toContain("Attached report.md (");
+    const withFile = await console_(["doc", "guides/onboarding"]);
+    expect(withFile.out).toContain("files:\n  the report: report.md (");
+    expect(withFile.out).toContain(`read at ${SIGN_IN_URL}${IN}/docs/guides%2Fonboarding/files/`);
+    expect((await console_(["archive", "guides/onboarding"])).out).toContain(
+      "Archived guides/onboarding",
+    );
+    expect((await console_(["docs", "guides"])).out).toBe("No pages here.\n");
+    const archived = await console_(["write", "guides/onboarding", "--body", "while archived"]);
+    expect(archived.code).toBe(EXIT.failed);
+    expect(archived.err).toContain("console restore");
+    expect((await console_(["restore", "guides/onboarding"])).out).toBe(
+      "Restored guides/onboarding (Onboarding).\n",
+    );
+    const missing = await console_(["doc", "nowhere"]);
+    expect(missing.code).toBe(EXIT.failed);
+    expect(missing.err).toContain("document.not_found");
+    expect(missing.err).toContain("console write");
+    const untitled = await console_(["write", "nowhere", "--body", "x"]);
+    expect(untitled.code).toBe(EXIT.usage);
+    expect(untitled.err).toContain("Say its title");
+  });
+
   it("keeps an agent to its person's runs, and says when a token is nothing", async () => {
     const nobody = await console_(["tasks"], "cns_t_nonsense");
     expect(nobody.code).toBe(EXIT.failed);

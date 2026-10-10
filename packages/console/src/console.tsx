@@ -1,7 +1,6 @@
 import { type ComponentType, StrictMode, useCallback, useEffect, useMemo, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import {
-  ApiError,
   type ConsoleClient,
   createClient,
   type RestAnswerInput,
@@ -36,7 +35,9 @@ import { TaskView, type TaskViewProps } from "./components/task-view.js";
 import { NewToken, TokenForm, TokenList, type TokenListProps } from "./components/tokens.js";
 import { Button, Callout, EmptyState, Spinner } from "./components/ui.js";
 import { type ConsoleData, useConsoleData } from "./data.js";
+import { DocsPage } from "./docs-page.js";
 import {
+  docHref,
   matchRoute,
   PATHS,
   projectHref,
@@ -46,6 +47,7 @@ import {
   withoutSignInParam,
 } from "./router.js";
 import { projectPath } from "./routes.js";
+import { useAction } from "./use-action.js";
 
 // The composition of the default console: the pages assembled from the components, with the
 // places a team may replace named. The UI the image serves is this, with the default config.
@@ -129,31 +131,6 @@ function useLocation(initialPath: string | undefined) {
     [read],
   );
   return { location, navigate };
-}
-
-function errorWords(error: unknown): string {
-  if (error instanceof ApiError) {
-    return error.message;
-  }
-  return "Something went wrong. Try again.";
-}
-
-/** Runs a change, keeps what went wrong for the page, and says when it is busy. */
-function useAction() {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | undefined>(undefined);
-  const act = async (work: () => Promise<unknown>) => {
-    setBusy(true);
-    setError(undefined);
-    try {
-      await work();
-    } catch (failure) {
-      setError(errorWords(failure));
-    } finally {
-      setBusy(false);
-    }
-  };
-  return { busy, error, act };
 }
 
 /** The key of the project a route is on, or nothing. */
@@ -250,6 +227,7 @@ function TaskPage(props: {
       taskHref={(candidate) => taskHref(project.key, candidate.id)}
       decisionHref={() => projectHref(project.key, "decisions")}
       fileHref={(artifact) => projectPath(project.key, "files", artifact.id)}
+      docHref={(path) => docHref(project.key, path)}
       busy={busy}
       error={error}
       onChange={(target, patch) => void act(() => data.actions.updateTask(target.id, patch))}
@@ -257,6 +235,9 @@ function TaskPage(props: {
       onRaiseDecision={(input) => void act(() => data.actions.raiseDecision(input))}
       onAnswer={(decision, input) =>
         void act(() => data.actions.answerDecision(decision.id, input))
+      }
+      onUpdateDecision={(decision, patch) =>
+        void act(() => data.actions.updateDecision(decision.id, patch))
       }
       onAbandonRun={(run) => void act(() => data.actions.abandonRun(run.id))}
     />
@@ -350,6 +331,9 @@ function ProjectPage(props: {
       />
     );
   }
+  if (route.name === "docs") {
+    return <DocsPage project={project} path={route.path} data={data} navigate={navigate} />;
+  }
   if (route.name === "decisions") {
     return (
       <>
@@ -379,7 +363,11 @@ function ProjectPage(props: {
           decisions={data.decisions}
           tasks={tasksById}
           taskHref={href}
+          docHref={(path) => docHref(project.key, path)}
           onAnswer={onAnswer}
+          onUpdate={(decision, patch) =>
+            void act(() => data.actions.updateDecision(decision.id, patch))
+          }
           busy={busy}
           empty={
             <EmptyState
@@ -400,7 +388,11 @@ function ProjectPage(props: {
         <components.EventFeed
           events={data.events}
           href={(event) =>
-            event.taskId === null ? undefined : taskHref(project.key, event.taskId)
+            event.taskId !== null
+              ? taskHref(project.key, event.taskId)
+              : event.data.path !== undefined
+                ? docHref(project.key, event.data.path)
+                : undefined
           }
           empty={<EmptyState title="Nothing happened yet" />}
         />
@@ -659,6 +651,11 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
               href: projectHref(projectKey),
               label: "Board",
               current: route.name === "board" || route.name === "task",
+            },
+            {
+              href: projectHref(projectKey, "docs"),
+              label: "Docs",
+              current: route.name === "docs",
             },
             {
               href: projectHref(projectKey, "decisions"),

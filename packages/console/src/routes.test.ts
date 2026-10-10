@@ -33,5 +33,9 @@ describe("routes", () => {
     expect(projectPath("web", "tasks")).toBe("/api/v1/projects/web/tasks");
     expect(projectPath("web", "tasks", "7")).toBe("/api/v1/projects/web/tasks/7");
     expect(projectPath("a b", "files", "x/y")).toBe("/api/v1/projects/a%20b/files/x%2Fy");
+    // A document's path is one segment of the URL, its slashes encoded.
+    expect(projectPath("web", "docs", "guides/onboarding")).toBe(
+      "/api/v1/projects/web/docs/guides%2Fonboarding",
+    );
   });
 });

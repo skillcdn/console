@@ -1,5 +1,6 @@
 import {
   ARTIFACT_KINDS,
+  LINK_SOURCES,
   PERSON_ROLES,
   PROJECT_ROLES,
   PROJECT_VISIBILITIES,
@@ -36,6 +37,8 @@ const createdAt = () => instant().notNull().defaultNow();
 const updatedAt = () => instant().notNull().defaultNow();
 /** Bytes as they are: the driver hands a `Buffer` in and out. */
 const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "bytea" });
+/** The database's own text-search vector, which it fills in itself from the columns it is made of. */
+const tsvector = customType<{ data: string; driverData: string }>({ dataType: () => "tsvector" });
 
 /** `'a', 'b'`: a list of constants for a check constraint. They are the package's, never input. */
 const literals = (values: readonly string[]): string =>
@@ -368,8 +371,11 @@ export const decisions = pgTable(
     answeredById: uuid().references(() => people.id),
     /** The id of the chosen option. */
     answer: text(),
+    /** The rationale given with the answer: Markdown. */
     answerNote: text(),
     answeredAt: instant(),
+    /** What followed the decision, written afterwards: Markdown; null until someone writes it (ADR-0009). */
+    outcome: text(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -378,6 +384,124 @@ export const decisions = pgTable(
     index("decisions_task_idx").on(table.taskId),
     index("decisions_run_idx").on(table.runId),
   ],
+);
+
+/**
+ * A page of Markdown in a project (ADR-0009), under a path that is its address and does not
+ * change. The row is the latest version, kept here so that a folder and a search read one
+ * table; every version is in `document_versions`. Archived rather than deleted.
+ */
+export const documents = pgTable(
+  "documents",
+  {
+    id: id(),
+    workspaceId: uuid()
+      .notNull()
+      .references(() => workspaces.id),
+    projectId: uuid()
+      .notNull()
+      .references(() => projects.id),
+    /** Segments of lowercase letters, digits and hyphens, separated by slashes, as the package checks them. */
+    path: text().notNull(),
+    title: text().notNull(),
+    /** Markdown, bounded at the edge; shown as text or rendered to elements, never as HTML. */
+    body: text().notNull().default(""),
+    /** The number of the latest version, from 1. */
+    version: integer().notNull().default(1),
+    createdById: uuid()
+      .notNull()
+      .references(() => people.id),
+    /** Who wrote the latest version, and the agent they wrote it through, or null. */
+    updatedById: uuid()
+      .notNull()
+      .references(() => people.id),
+    agent: text(),
+    /** When the page was archived; null while it is current. */
+    archivedAt: instant(),
+    /** The words of the title and the body, for the database's own search; the database keeps it. */
+    search: tsvector()
+      .notNull()
+      .generatedAlwaysAs(sql`to_tsvector('simple', "title" || ' ' || "body")`),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex("documents_path_key").on(table.projectId, table.path),
+    index("documents_project_archived_idx").on(table.projectId, table.archivedAt),
+    index("documents_search_idx").using("gin", table.search),
+  ],
+);
+
+/** Every version of a page: the title and the body as they were, who wrote them, through which agent, when. */
+export const documentVersions = pgTable(
+  "document_versions",
+  {
+    id: id(),
+    documentId: uuid()
+      .notNull()
+      .references(() => documents.id, { onDelete: "cascade" }),
+    number: integer().notNull(),
+    title: text().notNull(),
+    body: text().notNull(),
+    authorId: uuid()
+      .notNull()
+      .references(() => people.id),
+    agent: text(),
+    createdAt: createdAt(),
+  },
+  (table) => [uniqueIndex("document_versions_number_key").on(table.documentId, table.number)],
+);
+
+/**
+ * A link to a page by its path, as a document, a task or a decision of the project made it in
+ * its text: kept both ways, so that a page says what refers to it. The target is a path and
+ * not a row, since a link may name a page that is not written yet. Rows are replaced whenever
+ * the source's text is written.
+ */
+export const documentLinks = pgTable(
+  "document_links",
+  {
+    projectId: uuid()
+      .notNull()
+      .references(() => projects.id),
+    sourceKind: text({ enum: LINK_SOURCES }).notNull(),
+    sourceId: uuid().notNull(),
+    targetPath: text().notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    primaryKey({
+      name: "document_links_pkey",
+      columns: [table.projectId, table.sourceKind, table.sourceId, table.targetPath],
+    }),
+    index("document_links_target_idx").on(table.projectId, table.targetPath),
+    check(
+      "document_links_source_check",
+      sql`${table.sourceKind} in (${sql.raw(literals(LINK_SOURCES))})`,
+    ),
+  ],
+);
+
+/** A file attached to a page, as a run hands one in: its name, size and type, and the hash its bytes are kept under. */
+export const documentFiles = pgTable(
+  "document_files",
+  {
+    id: id(),
+    documentId: uuid()
+      .notNull()
+      .references(() => documents.id, { onDelete: "cascade" }),
+    label: text(),
+    fileName: text().notNull(),
+    fileSize: integer().notNull(),
+    contentType: text().notNull(),
+    sha256: text().notNull(),
+    addedById: uuid()
+      .notNull()
+      .references(() => people.id),
+    agent: text(),
+    createdAt: createdAt(),
+  },
+  (table) => [index("document_files_document_idx").on(table.documentId)],
 );
 
 /**
@@ -403,6 +527,8 @@ export const events = pgTable(
     decisionId: uuid().references(() => decisions.id),
     /** The run it is about, for what an agent did. */
     runId: uuid().references(() => runs.id),
+    /** The document it is about. */
+    documentId: uuid().references(() => documents.id),
     /** What a feed shows without asking for the subject, as the API describes it. */
     data: jsonb().$type<RestEventData>().notNull().default({}),
     createdAt: createdAt(),
@@ -413,5 +539,6 @@ export const events = pgTable(
     index("events_task_idx").on(table.taskId),
     index("events_run_idx").on(table.runId),
     index("events_decision_idx").on(table.decisionId),
+    index("events_document_idx").on(table.documentId),
   ],
 );

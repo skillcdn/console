@@ -2,10 +2,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
   type ConsoleClient,
+  type DocumentFilter,
   EVENT_KINDS,
+  type FileUpload,
   type RestAnswerInput,
   type RestDecision,
   type RestDecisionInput,
+  type RestDecisionPatch,
+  type RestDocument,
+  type RestDocumentInput,
+  type RestDocuments,
   type RestEvent,
   type RestMe,
   type RestMember,
@@ -24,6 +30,8 @@ import {
   type RestToken,
   type RestTokenCreated,
   type RestTokenInput,
+  type RestVersion,
+  type RestVersions,
   restEventSchema,
 } from "./api.js";
 
@@ -51,6 +59,17 @@ export interface ConsoleActions {
   updateTask(id: string, patch: RestTaskPatch): Promise<RestTask>;
   raiseDecision(input: RestDecisionInput): Promise<RestDecision>;
   answerDecision(id: string, input: RestAnswerInput): Promise<RestDecision>;
+  /** Grows a decision's record: its context, or what followed. */
+  updateDecision(id: string, patch: RestDecisionPatch): Promise<RestDecision>;
+  /** A folder's pages and folders, or the pages a search finds, in the project the page is on. */
+  documents(filter?: DocumentFilter, signal?: AbortSignal): Promise<RestDocuments>;
+  document(path: string, signal?: AbortSignal): Promise<RestDocument>;
+  writeDocument(path: string, input: RestDocumentInput): Promise<RestDocument>;
+  archiveDocument(path: string): Promise<RestDocument>;
+  restoreDocument(path: string): Promise<RestDocument>;
+  documentVersions(path: string, signal?: AbortSignal): Promise<RestVersions>;
+  documentVersion(path: string, number: number, signal?: AbortSignal): Promise<RestVersion>;
+  attachDocumentFile(path: string, input: FileUpload): Promise<RestDocument>;
   /** Changes what a person is; for an administrator. */
   updatePerson(id: string, patch: RestPersonPatch): Promise<RestPerson>;
   /** Marks a run that will not come back as abandoned. */
@@ -369,6 +388,21 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
         await refreshProject();
         return decision;
       },
+      async updateDecision(id, patch) {
+        const decision = await scope().updateDecision(id, patch);
+        setDecisions((current) =>
+          current.map((candidate) => (candidate.id === id ? decision : candidate)),
+        );
+        return decision;
+      },
+      documents: (filter, signal) => scope().documents(filter, signal),
+      document: (path, signal) => scope().document(path, signal),
+      writeDocument: (path, input) => scope().writeDocument(path, input),
+      archiveDocument: (path) => scope().archiveDocument(path),
+      restoreDocument: (path) => scope().restoreDocument(path),
+      documentVersions: (path, signal) => scope().documentVersions(path, signal),
+      documentVersion: (path, number, signal) => scope().documentVersion(path, number, signal),
+      attachDocumentFile: (path, input) => scope().attachFile(path, input),
       async updatePerson(id, patch) {
         const person = await client.updatePerson(id, patch);
         setMe((current) => (current?.person?.id === id ? { ...current, person } : current));

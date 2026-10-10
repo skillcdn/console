@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type {
   RestDecision,
+  RestDocument,
   RestEvent,
   RestMember,
   RestPerson,
@@ -11,7 +12,8 @@ import type {
   RestToken,
 } from "../api.js";
 import { Board } from "./board.js";
-import { DecisionList } from "./decision-list.js";
+import { DecisionCard, DecisionList } from "./decision-list.js";
+import { DocumentForm, DocumentList, DocumentView, FolderView } from "./documents.js";
 import { describeEvent, EventFeed } from "./event-feed.js";
 import { Markdown } from "./markdown.js";
 import { PeopleList } from "./people.js";
@@ -69,6 +71,7 @@ const decision = (overrides: Partial<RestDecision> = {}): RestDecision => ({
   raisedBy: alice,
   run: null,
   answer: null,
+  outcome: null,
   createdAt: "2026-10-09T10:00:00.000Z",
   updatedAt: "2026-10-09T10:00:00.000Z",
   ...overrides,
@@ -140,6 +143,7 @@ describe("one task", () => {
             taskId: "0199c4d8-0000-7000-8000-000000000010",
             decisionId: null,
             runId: null,
+            documentId: null,
             data: { number: 7, title: "Ship", from: "ready", to: "in_progress" },
             createdAt: "2026-10-09T10:00:00.000Z",
           },
@@ -190,6 +194,41 @@ describe("decisions", () => {
     expect(html).toContain("answered");
     expect(html).toContain("#7");
   });
+
+  it("read as a record: the context, the rationale, and what followed, with the way to write it", () => {
+    const answered = decision({
+      body: "It rests on [the plan](plan).",
+      answer: {
+        option: "2",
+        note: "Because of [the numbers](numbers).",
+        by: bob,
+        at: "2026-10-09T12:00:00.000Z",
+      },
+      outcome: "We shipped it; see [what came of it](outcomes/ship).",
+    });
+    const html = renderToStaticMarkup(
+      <DecisionCard
+        decision={answered}
+        docHref={(path) => `/p/web/docs/${path}`}
+        onUpdate={() => undefined}
+      />,
+    );
+    expect(html).toContain(`id="${answered.id}"`);
+    expect(html).toContain("Context");
+    expect(html).toContain('href="/p/web/docs/plan"');
+    expect(html).toContain('href="/p/web/docs/numbers"');
+    expect(html).toContain("What followed");
+    expect(html).toContain('href="/p/web/docs/outcomes/ship"');
+    expect(html).toContain("Change it");
+    const bare = renderToStaticMarkup(
+      <DecisionCard decision={decision({ answer: answered.answer })} />,
+    );
+    expect(bare).not.toContain("What followed");
+    const writable = renderToStaticMarkup(
+      <DecisionCard decision={decision({ answer: answered.answer })} onUpdate={() => undefined} />,
+    );
+    expect(writable).toContain("Write what followed");
+  });
 });
 
 describe("the feed", () => {
@@ -198,6 +237,7 @@ describe("the feed", () => {
     kind: "task.created",
     actor: alice,
     agent: null,
+    documentId: null,
     projectId: null,
     taskId: null,
     decisionId: null,
@@ -205,6 +245,30 @@ describe("the feed", () => {
     data: {},
     createdAt: "2026-10-09T10:00:00.000Z",
     ...overrides,
+  });
+
+  it("says what happened to a page, and to a decision's record", () => {
+    const written = event({
+      kind: "document.written",
+      data: { path: "guides/onboarding", title: "Onboarding", version: 2 },
+    });
+    expect(describeEvent(written)).toBe("wrote the page Onboarding, version 2");
+    expect(describeEvent(event({ kind: "document.archived", data: { path: "plan" } }))).toBe(
+      "archived the page plan",
+    );
+    expect(
+      describeEvent(
+        event({
+          kind: "document.file_attached",
+          data: { path: "plan", title: "The plan", label: "the report" },
+        }),
+      ),
+    ).toBe("attached the report to the page The plan");
+    expect(
+      describeEvent(
+        event({ kind: "decision.updated", data: { question: "Which one?", fields: ["outcome"] } }),
+      ),
+    ).toBe('wrote what followed of the decision "Which one?"');
   });
 
   it("says what happened in a sentence, per kind", () => {
@@ -300,6 +364,163 @@ describe("Markdown", () => {
     expect(html).not.toContain("http://insecure");
     expect(html).toContain('src="https://img.example/x.png"');
     expect(html.toLowerCase()).toContain('referrerpolicy="no-referrer"');
+  });
+
+  it("leads a link to a page's path to the page, when it knows where, and leaves it text otherwise", () => {
+    const source = "See [onboarding](guides/onboarding#setup) and [nothing](Guides/x).";
+    const linked = renderToStaticMarkup(
+      <Markdown source={source} docHref={(path) => `/p/web/docs/${path}`} />,
+    );
+    expect(linked).toContain('<a href="/p/web/docs/guides/onboarding#setup">onboarding</a>');
+    expect(linked).toContain("<span>nothing</span>");
+    const unlinked = renderToStaticMarkup(<Markdown source={source} />);
+    expect(unlinked).toContain("<span>onboarding</span>");
+  });
+});
+
+describe("documents", () => {
+  const document = (overrides: Partial<RestDocument> = {}): RestDocument => ({
+    id: "0199c4d8-0000-7000-8000-000000000060",
+    path: "guides/onboarding",
+    title: "Onboarding <new>",
+    version: 3,
+    updatedBy: bob,
+    agent: "Claude Code",
+    archivedAt: null,
+    createdAt: "2026-10-10T10:00:00.000Z",
+    updatedAt: "2026-10-10T11:00:00.000Z",
+    body: "# Welcome\n\nRead [the plan](plan) first.",
+    createdBy: alice,
+    links: [
+      { path: "plan", title: "The plan" },
+      { path: "guides/setup", title: null },
+    ],
+    backlinks: [
+      {
+        kind: "document",
+        id: "0199c4d8-0000-7000-8000-000000000061",
+        path: "plan",
+        number: null,
+        title: "The plan",
+      },
+      {
+        kind: "task",
+        id: "0199c4d8-0000-7000-8000-000000000010",
+        path: null,
+        number: 7,
+        title: "Ship",
+      },
+      {
+        kind: "decision",
+        id: "0199c4d8-0000-7000-8000-000000000020",
+        path: null,
+        number: null,
+        title: "Which one?",
+      },
+    ],
+    files: [
+      {
+        id: "0199c4d8-0000-7000-8000-000000000070",
+        label: "the report",
+        file: { name: "report.pdf", size: 2048, contentType: "application/pdf", sha256: "ab" },
+        addedBy: alice,
+        agent: null,
+        createdAt: "2026-10-10T11:00:00.000Z",
+      },
+    ],
+    ...overrides,
+  });
+  const docHref = (path: string) => `/p/web/docs/${path}`;
+  const folderHref = (folder: string) => (folder === "" ? "/p/web/docs" : `/p/web/docs/${folder}`);
+
+  it("show a page with its links both ways, its files and its versions, as text and never as HTML", () => {
+    const html = renderToStaticMarkup(
+      <DocumentView
+        document={document()}
+        versions={[
+          {
+            number: 3,
+            title: "Onboarding <new>",
+            author: bob,
+            agent: "Claude Code",
+            createdAt: "2026-10-10T11:00:00.000Z",
+          },
+          {
+            number: 2,
+            title: "Onboarding",
+            author: alice,
+            agent: null,
+            createdAt: "2026-10-10T10:30:00.000Z",
+          },
+        ]}
+        docHref={docHref}
+        folderHref={folderHref}
+        fileHref={(file) => `/api/v1/projects/web/docs/guides%2Fonboarding/files/${file.id}`}
+        taskHref={(id) => `/p/web/tasks/${id}`}
+        decisionHref={(id) => `/p/web/decisions#${id}`}
+        onEdit={() => undefined}
+        onArchive={() => undefined}
+        onShowVersion={() => undefined}
+      />,
+    );
+    expect(html).toContain("Onboarding &lt;new&gt;");
+    expect(html).not.toContain("<new>");
+    expect(html).toContain("<h1>Welcome</h1>");
+    expect(html).toContain('href="/p/web/docs/plan"');
+    expect(html).toContain("no page there yet");
+    expect(html).toContain("Referred to by");
+    expect(html).toContain('href="/p/web/tasks/0199c4d8-0000-7000-8000-000000000010"');
+    expect(html).toContain('href="/p/web/decisions#0199c4d8-0000-7000-8000-000000000020"');
+    expect(html).toContain("Decision: Which one?");
+    expect(html).toContain("the report");
+    expect(html).toContain("2.0 KB");
+    expect(html).toContain("as Claude Code");
+    expect(html).toContain("v2");
+    expect(html).toContain("Archive");
+    expect(html).toContain(">Docs</a>");
+    const archived = renderToStaticMarkup(
+      <DocumentView
+        document={document({ archivedAt: "2026-10-10T12:00:00.000Z" })}
+        docHref={docHref}
+        folderHref={folderHref}
+        fileHref={() => "#"}
+        onEdit={() => undefined}
+        onRestore={() => undefined}
+      />,
+    );
+    expect(archived).toContain("Archived");
+    expect(archived).toContain("Restore");
+    expect(archived).not.toContain(">Edit<");
+  });
+
+  it("list a folder's folders and pages, and ask for a path, a title and a body when writing", () => {
+    const folder = renderToStaticMarkup(
+      <FolderView
+        listing={{
+          folder: "guides",
+          folders: ["guides/setup"],
+          items: [document({ archivedAt: "2026-10-10T12:00:00.000Z" })],
+        }}
+        docHref={docHref}
+        folderHref={folderHref}
+      />,
+    );
+    expect(folder).toContain('href="/p/web/docs/guides/setup"');
+    expect(folder).toContain("setup/");
+    expect(folder).toContain('href="/p/web/docs/guides/onboarding"');
+    expect(folder).toContain("Archived");
+    const empty = renderToStaticMarkup(
+      <DocumentList items={[]} docHref={docHref} empty={<p>Nothing</p>} />,
+    );
+    expect(empty).toContain("Nothing");
+    const fresh = renderToStaticMarkup(<DocumentForm folder="guides" onSubmit={() => undefined} />);
+    expect(fresh).toContain('value="guides/"');
+    expect(fresh).toContain("Write the page");
+    const again = renderToStaticMarkup(
+      <DocumentForm document={document()} onSubmit={() => undefined} />,
+    );
+    expect(again).toMatch(/<input[^>]*disabled[^>]*value="guides\/onboarding"/);
+    expect(again).toContain("Write a new version");
   });
 });
 
@@ -437,6 +658,7 @@ describe("people", () => {
       taskId: null,
       decisionId: null,
       runId: null,
+      documentId: null,
       data: { login: "bob", role: "admin" },
       createdAt: "2026-10-09T10:00:00.000Z",
     };
@@ -546,6 +768,7 @@ describe("runs", () => {
       taskId: run.taskId,
       decisionId: null,
       runId: run.id,
+      documentId: null,
       data: { number: 7, title: "Ship", agent: "Claude Code" },
       createdAt: "2026-10-09T10:00:00.000Z",
     };

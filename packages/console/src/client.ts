@@ -4,7 +4,11 @@ import {
   type RestArtifactInput,
   type RestDecision,
   type RestDecisionInput,
+  type RestDecisionPatch,
   type RestDecisions,
+  type RestDocument,
+  type RestDocumentInput,
+  type RestDocuments,
   type RestEvents,
   type RestMe,
   type RestMember,
@@ -31,8 +35,12 @@ import {
   type RestTokenCreated,
   type RestTokenInput,
   type RestTokens,
+  type RestVersion,
+  type RestVersions,
   restDecisionSchema,
   restDecisionsSchema,
+  restDocumentSchema,
+  restDocumentsSchema,
   restErrorSchema,
   restEventsSchema,
   restMemberSchema,
@@ -49,6 +57,8 @@ import {
   restTasksSchema,
   restTokenCreatedSchema,
   restTokensSchema,
+  restVersionSchema,
+  restVersionsSchema,
 } from "./schemas.js";
 import type { TaskState } from "./vocabulary.js";
 
@@ -101,11 +111,22 @@ interface Schema<T> {
   readonly safeParse: (data: unknown) => { success: true; data: T } | { success: false };
 }
 
-/** What the events of a project are filtered by: those about one task, one run or one decision. */
+/** What the events of a project are filtered by: those about one task, one run, one decision or one document. */
 export interface EventFilter {
   readonly task?: string | undefined;
   readonly run?: string | undefined;
   readonly decision?: string | undefined;
+  readonly document?: string | undefined;
+}
+
+/** What a folder's listing, or a search, of the documents is narrowed to. */
+export interface DocumentFilter {
+  /** The folder to list, `""` or left out for the root. */
+  readonly folder?: string | undefined;
+  /** Words to find pages by; given, the folder is not looked at. */
+  readonly q?: string | undefined;
+  /** Whether archived pages are listed too. */
+  readonly archived?: boolean | undefined;
 }
 
 /** The board of one project, as the asker may see and change it. */
@@ -140,6 +161,8 @@ export interface ProjectClient {
   awaitDecision(id: string, waitSeconds: number, signal?: AbortSignal): Promise<RestDecision>;
   raiseDecision(input: RestDecisionInput): Promise<RestDecision>;
   answerDecision(id: string, input: RestAnswerInput): Promise<RestDecision>;
+  /** Grows a decision's record: its context, or what followed. */
+  updateDecision(id: string, patch: RestDecisionPatch): Promise<RestDecision>;
   /** The runs, newest first; or only those on one task, only the open ones, only the asker's own. */
   runs(
     filter?: { readonly task?: string; readonly open?: boolean; readonly mine?: boolean },
@@ -164,6 +187,24 @@ export interface ProjectClient {
   eventStreamUrl(after: number): string;
   /** The project's skills, as SkillCDN serves them at its address, or the organization's. */
   skills(signal?: AbortSignal): Promise<RestSkills>;
+  /** A folder's pages and folders, or the pages a search finds. */
+  documents(filter?: DocumentFilter, signal?: AbortSignal): Promise<RestDocuments>;
+  /** One document, by its path: its latest version, its links both ways, its files. */
+  document(path: string, signal?: AbortSignal): Promise<RestDocument>;
+  /** Writes a document at its path, as a new version, or the first one. */
+  writeDocument(path: string, input: RestDocumentInput): Promise<RestDocument>;
+  /** Puts a document away: kept out of the folders and the search, readable, not written to. */
+  archiveDocument(path: string): Promise<RestDocument>;
+  /** Brings an archived document back. */
+  restoreDocument(path: string): Promise<RestDocument>;
+  /** The versions of a document, newest first, each with who wrote it and when. */
+  documentVersions(path: string, signal?: AbortSignal): Promise<RestVersions>;
+  /** One version of a document, with its body as it was. */
+  documentVersion(path: string, number: number, signal?: AbortSignal): Promise<RestVersion>;
+  /** Attaches a file to a document: the console keeps the bytes. */
+  attachFile(path: string, input: FileUpload): Promise<RestDocument>;
+  /** Where the bytes of a file attached to a document are read, by the file's id. */
+  documentFileUrl(path: string, fileId: string): string;
 }
 
 export interface ConsoleClient {
@@ -215,7 +256,7 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
   };
 
   const request = async <T>(
-    method: "GET" | "POST" | "PATCH" | "DELETE",
+    method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
     url: string,
     body: unknown,
     schema: Schema<T> | undefined,
@@ -260,6 +301,22 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
 
   const flag = (value: boolean | undefined): string | undefined =>
     value === undefined ? undefined : String(value);
+
+  /** A file as the parts of a form: the bytes with their name and type, and the label. */
+  const formOf = (input: FileUpload): FormData => {
+    const form = new FormData();
+    const bytes =
+      input.bytes instanceof Blob ? input.bytes : new Blob([Uint8Array.from(input.bytes)]);
+    form.set(
+      "file",
+      new File([bytes], input.name, { type: input.contentType ?? "application/octet-stream" }),
+      input.name,
+    );
+    if (input.label !== undefined) {
+      form.set("label", input.label);
+    }
+    return form;
+  };
 
   const projectClient = (key: string): ProjectClient => {
     const at = (collection?: Parameters<typeof projectPath>[1], id?: string) =>
@@ -310,6 +367,8 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
         request("POST", `${base}${at("decisions")}`, input, restDecisionSchema),
       answerDecision: (id, input) =>
         request("POST", `${base}${at("decisions", id)}/answer`, input, restDecisionSchema),
+      updateDecision: (id, patch) =>
+        request("PATCH", `${base}${at("decisions", id)}`, patch, restDecisionSchema),
       runs: (filter = {}, signal) =>
         request(
           "GET",
@@ -329,20 +388,8 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
         request("POST", `${base}${at("runs", runId)}/reports`, input, restRunSchema),
       handIn: (runId, input) =>
         request("POST", `${base}${at("runs", runId)}/artifacts`, input, restRunSchema),
-      handInFile: (runId, input) => {
-        const form = new FormData();
-        const bytes =
-          input.bytes instanceof Blob ? input.bytes : new Blob([Uint8Array.from(input.bytes)]);
-        form.set(
-          "file",
-          new File([bytes], input.name, { type: input.contentType ?? "application/octet-stream" }),
-          input.name,
-        );
-        if (input.label !== undefined) {
-          form.set("label", input.label);
-        }
-        return request("POST", `${base}${at("runs", runId)}/files`, form, restRunSchema);
-      },
+      handInFile: (runId, input) =>
+        request("POST", `${base}${at("runs", runId)}/files`, formOf(input), restRunSchema),
       fileUrl: (artifactId) => `${base}${at("files", artifactId)}`,
       endRun: (runId, input) =>
         request("POST", `${base}${at("runs", runId)}/end`, input, restRunSchema),
@@ -354,6 +401,7 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
             task: filter.task,
             run: filter.run,
             decision: filter.decision,
+            document: filter.document,
           }),
           undefined,
           restEventsSchema,
@@ -362,6 +410,46 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
       eventStreamUrl: (after) => withQuery(`${at("events")}/stream`, { after: String(after) }),
       skills: (signal) =>
         request("GET", `${base}${at("skills")}`, undefined, restSkillsSchema, signal),
+      documents: (filter = {}, signal) =>
+        request(
+          "GET",
+          withQuery(at("docs"), {
+            folder: filter.q === undefined ? filter.folder : undefined,
+            q: filter.q,
+            archived: flag(filter.archived),
+          }),
+          undefined,
+          restDocumentsSchema,
+          signal,
+        ),
+      document: (path, signal) =>
+        request("GET", `${base}${at("docs", path)}`, undefined, restDocumentSchema, signal),
+      writeDocument: (path, input) =>
+        request("PUT", `${base}${at("docs", path)}`, input, restDocumentSchema),
+      archiveDocument: (path) =>
+        request("POST", `${base}${at("docs", path)}/archive`, undefined, restDocumentSchema),
+      restoreDocument: (path) =>
+        request("POST", `${base}${at("docs", path)}/restore`, undefined, restDocumentSchema),
+      documentVersions: (path, signal) =>
+        request(
+          "GET",
+          `${base}${at("docs", path)}/versions`,
+          undefined,
+          restVersionsSchema,
+          signal,
+        ),
+      documentVersion: (path, number, signal) =>
+        request(
+          "GET",
+          `${base}${at("docs", path)}/versions/${number}`,
+          undefined,
+          restVersionSchema,
+          signal,
+        ),
+      attachFile: (path, input) =>
+        request("POST", `${base}${at("docs", path)}/files`, formOf(input), restDocumentSchema),
+      documentFileUrl: (path, fileId) =>
+        `${base}${at("docs", path)}/files/${encodeURIComponent(fileId)}`,
     };
   };
 

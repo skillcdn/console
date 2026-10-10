@@ -12,8 +12,23 @@ export {
   DecisionList,
   type DecisionListProps,
 } from "./components/decision-list.js";
+export {
+  DocumentCrumbs,
+  DocumentFiles,
+  type DocumentFilesProps,
+  DocumentForm,
+  type DocumentFormProps,
+  DocumentList,
+  type DocumentListProps,
+  DocumentSearch,
+  type DocumentSearchProps,
+  DocumentView,
+  type DocumentViewProps,
+  FolderView,
+  type FolderViewProps,
+} from "./components/documents.js";
 export { describeEvent, EventFeed, type EventFeedProps } from "./components/event-feed.js";
-export { Markdown } from "./components/markdown.js";
+export { Markdown, type MarkdownProps } from "./components/markdown.js";
 export { PeopleList, type PeopleListProps } from "./components/people.js";
 export {
   keyOf,
@@ -75,7 +90,9 @@ export {
   DEFAULT_COMPONENTS,
 } from "./console.js";
 export { type ConsoleActions, type ConsoleData, useConsoleData } from "./data.js";
+export { DocsPage, type DocsPageProps } from "./docs-page.js";
 export {
+  docHref,
   matchRoute,
   PATHS,
   type ProjectPage,
@@ -85,3 +102,4 @@ export {
   taskHref,
   withoutSignInParam,
 } from "./router.js";
+export { errorWords, useAction } from "./use-action.js";

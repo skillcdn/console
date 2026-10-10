@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   MAX_BODY_LENGTH,
+  MAX_DOCUMENT_LENGTH,
   MAX_LINKS,
   MAX_OPTIONS,
   MAX_PROJECT_KEY_LENGTH,
@@ -11,6 +12,10 @@ import {
 import {
   restAnswerInputSchema,
   restDecisionInputSchema,
+  restDecisionPatchSchema,
+  restDocumentInputSchema,
+  restDocumentSchema,
+  restDocumentsSchema,
   restEventSchema,
   restMemberInputSchema,
   restPersonPatchSchema,
@@ -155,6 +160,7 @@ describe("what the server answers", () => {
       taskId: null,
       decisionId: null,
       runId: null,
+      documentId: null,
       data: { number: 1, title: "Ship" },
       createdAt: "2026-10-09T10:00:00.000Z",
     };
@@ -283,5 +289,65 @@ describe("people", () => {
     expect(restPersonPatchSchema.parse({ role: "admin" })).toEqual({ role: "admin" });
     expect(restPersonPatchSchema.safeParse({ role: "root" }).success).toBe(false);
     expect(restPersonPatchSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe("documents", () => {
+  const summary = {
+    id: "0199c4d8-0000-7000-8000-000000000060",
+    path: "guides/onboarding",
+    title: "Onboarding",
+    version: 2,
+    updatedBy: PERSON,
+    agent: "Claude Code",
+    archivedAt: null,
+    createdAt: "2026-10-10T10:00:00.000Z",
+    updatedAt: "2026-10-10T11:00:00.000Z",
+  };
+
+  it("take a title and a body at a path, trimmed and bounded, with the version started from", () => {
+    expect(restDocumentInputSchema.parse({ title: "  Onboarding  ", body: "# Hi\n" })).toEqual({
+      title: "Onboarding",
+      body: "# Hi\n",
+    });
+    expect(
+      restDocumentInputSchema.parse({ title: "x", body: "", baseVersion: 3 }).baseVersion,
+    ).toBe(3);
+    expect(
+      restDocumentInputSchema.safeParse({ title: "x", body: "a".repeat(MAX_DOCUMENT_LENGTH + 1) })
+        .success,
+    ).toBe(false);
+    expect(
+      restDocumentInputSchema.safeParse({ title: "x", body: "ok", baseVersion: 0 }).success,
+    ).toBe(false);
+    expect(restDocumentInputSchema.safeParse({ title: "", body: "ok" }).success).toBe(false);
+    expect(restDecisionPatchSchema.parse({ outcome: "Done." })).toEqual({ outcome: "Done." });
+    expect(restDecisionPatchSchema.parse({})).toEqual({});
+  });
+
+  it("are read as the server answers them, with the links both ways and the files, and refuse a path that is not one", () => {
+    const document = {
+      ...summary,
+      body: "See [the plan](plan).",
+      createdBy: PERSON,
+      links: [{ path: "plan", title: null }],
+      backlinks: [
+        {
+          kind: "task",
+          id: "0199c4d8-0000-7000-8000-000000000010",
+          path: null,
+          number: 7,
+          title: "Ship",
+        },
+      ],
+      files: [],
+    };
+    expect(restDocumentSchema.parse(document)).toEqual(document);
+    expect(restDocumentSchema.safeParse({ ...document, path: "Guides/x" }).success).toBe(false);
+    expect(restDocumentSchema.safeParse({ ...document, links: undefined }).success).toBe(false);
+    expect(
+      restDocumentsSchema.parse({ folder: "guides", folders: ["guides/setup"], items: [summary] })
+        .items[0]?.path,
+    ).toBe("guides/onboarding");
   });
 });

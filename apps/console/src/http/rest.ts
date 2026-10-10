@@ -1,13 +1,20 @@
 import {
   DEFAULT_TOKEN_DAYS,
   EVENTS_PAGE_LIMIT,
+  isDocumentPath,
+  isFolderPath,
   LIST_LIMIT,
   MAX_ARTIFACTS_PER_RUN,
+  MAX_DOCUMENT_PATH_LENGTH,
   MAX_FILE_BYTES,
+  MAX_FILES_PER_DOCUMENT,
   MAX_PROJECT_KEY_LENGTH,
   MAX_REPORTS_PER_RUN,
+  MAX_SEARCH_LENGTH,
+  MAX_VERSIONS_PER_DOCUMENT,
   REST_ROUTES,
   type RestDecisions,
+  type RestDocuments,
   type RestEvents,
   type RestMembers,
   type RestPeople,
@@ -17,9 +24,12 @@ import {
   type RestTasks,
   type RestTokenCreated,
   type RestTokens,
+  type RestVersions,
   restAnswerInputSchema,
   restArtifactInputSchema,
   restDecisionInputSchema,
+  restDecisionPatchSchema,
+  restDocumentInputSchema,
   restFileInputSchema,
   restMemberInputSchema,
   restMemberPatchSchema,
@@ -48,7 +58,21 @@ import {
   getDecision,
   listDecisions,
   raiseDecision,
+  updateDecision,
 } from "../db/queries/decisions.js";
+import {
+  attachFile,
+  DocumentError,
+  findDocumentFile,
+  findDocumentId,
+  getDocument,
+  getVersion,
+  listDocuments,
+  listVersions,
+  searchDocuments,
+  setArchived,
+  writeDocument,
+} from "../db/queries/documents.js";
 import { type Actor, latestEventId, listEventsAfter, type Scope } from "../db/queries/events.js";
 import {
   listPeople,
@@ -105,6 +129,8 @@ import type { LiveFeed } from "./live-feed.js";
 import type { AppEnv } from "./request-context.js";
 import {
   restDecision,
+  restDocument,
+  restDocumentSummary,
   restEvent,
   restMember,
   restPerson,
@@ -112,6 +138,8 @@ import {
   restRun,
   restTask,
   restToken,
+  restVersion,
+  restVersionSummary,
 } from "./rest-shapes.js";
 
 export interface RestDependencies {
@@ -135,6 +163,8 @@ export interface RestDependencies {
 
 /** A task or a decision is a few fields and a body of bounded Markdown; this is far above both. */
 const MAX_BODY_BYTES = 256 * 1024;
+/** A page of Markdown as JSON, with room for every character to take several bytes. */
+const MAX_DOCUMENT_BYTES = 1024 * 1024;
 /** What a form carries besides the file: a label, the names of the parts, the boundaries. */
 const FORM_OVERHEAD_BYTES = 64 * 1024;
 /** Media types a browser may show in place; a file of any other kind is handed over as bytes. */
@@ -153,6 +183,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TASK_NUMBER = /^[1-9]\d{0,8}$/;
 /** A project's key in a path, as the package's schema has it; anything else is not found. */
 const PROJECT_KEY = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
+/** A version's number in a path. */
+const VERSION_NUMBER = /^[1-9]\d{0,8}$/;
 /** The most a read of a decision may ask to wait, in seconds; the server's own bound is lower. */
 const MAX_WAIT_SECONDS = 600;
 const DAY_MS = 86_400_000;
@@ -179,6 +211,16 @@ const eventsQuery = z.object({
   task: z.string().regex(UUID).optional(),
   run: z.string().regex(UUID).optional(),
   decision: z.string().regex(UUID).optional(),
+  document: z.string().regex(UUID).optional(),
+});
+const documentsQuery = z.object({
+  folder: z
+    .string()
+    .max(MAX_DOCUMENT_PATH_LENGTH)
+    .refine(isFolderPath, "must be a folder's path, or empty for the root")
+    .default(""),
+  q: z.string().trim().min(1).max(MAX_SEARCH_LENGTH).optional(),
+  archived: z.enum(["true", "false"]).optional(),
 });
 
 interface ParseResult<T> {
@@ -297,6 +339,15 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     notFound(c, "decision.not_found", "The decision was not found.");
   const noSuchTask = (c: Context<AppEnv>) =>
     notFound(c, "task.not_found", "The task was not found.");
+  const noSuchDocument = (c: Context<AppEnv>) =>
+    notFound(c, "document.not_found", "The page was not found.");
+  const noSuchFile = (c: Context<AppEnv>) =>
+    notFound(c, "file.not_found", "The file was not found.");
+  /** The document's path in the URL, decoded: one segment, its slashes encoded. */
+  const documentPathOf = (c: Context<AppEnv>): string | undefined => {
+    const path = c.req.param("path") ?? "";
+    return isDocumentPath(path) ? path : undefined;
+  };
   const ownerRequired = (c: Context<AppEnv>): Response =>
     c.json(errorBody("auth.forbidden", "Only an owner of the project may do this."), 403);
 
@@ -380,6 +431,10 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     maxSize: MAX_BODY_BYTES,
     onError: (c) => c.json(errorBody("request.too_large", "The request body is too large."), 413),
   });
+  const documentTooLarge = bodyLimit({
+    maxSize: MAX_DOCUMENT_BYTES,
+    onError: (c) => c.json(errorBody("request.too_large", "The page is too large."), 413),
+  });
   const fileTooLarge = (c: Context<AppEnv>): Response =>
     c.json(errorBody("request.too_large", `The file is over ${MAX_FILE_BYTES} bytes.`), 413);
   const formTooLarge = bodyLimit({
@@ -432,7 +487,96 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         error.code === "token.not_found" ? 404 : 409,
       );
     }
+    if (error instanceof DocumentError) {
+      const status =
+        error.code === "document.not_found" || error.code === "document.version_not_found"
+          ? 404
+          : 409;
+      return c.json(errorBody(error.code, error.message), status);
+    }
     throw error;
+  };
+
+  /** A file as the parts of a form: the part `file` with its name and type, and a `label`; or the refusal. */
+  const filePartOf = async (
+    c: Context<AppEnv>,
+  ): Promise<
+    | {
+        readonly part: File;
+        readonly name: string;
+        readonly contentType: string;
+        readonly label: string | undefined;
+      }
+    | Response
+  > => {
+    let form: FormData;
+    try {
+      form = await c.req.formData();
+    } catch {
+      return invalid(c, "The request body is not a form with a file in it.");
+    }
+    const part = form.get("file");
+    if (!(part instanceof File)) {
+      return invalid(c, "file: the form needs a part called file.");
+    }
+    const label = form.get("label");
+    const type = part.type.split(";")[0]?.trim() ?? "";
+    const parsed = restFileInputSchema.safeParse({
+      name: part.name,
+      ...(type.length === 0 ? {} : { contentType: type }),
+      ...(typeof label === "string" ? { label } : {}),
+    });
+    if (!parsed.success || parsed.data === undefined) {
+      return invalid(c, firstProblem(parsed));
+    }
+    if (part.size === 0) {
+      return invalid(c, "file: the file is empty.");
+    }
+    if (part.size > MAX_FILE_BYTES) {
+      return fileTooLarge(c);
+    }
+    return {
+      part,
+      name: parsed.data.name,
+      contentType: parsed.data.contentType ?? "application/octet-stream",
+      label: parsed.data.label,
+    };
+  };
+
+  /**
+   * The bytes of a file the console keeps, for whoever may see the project. A few kinds are
+   * shown in place; the rest are handed over as bytes. Never sniffed, never run: the file is
+   * an agent's, or a person's.
+   */
+  const serveFile = async (
+    c: Context<AppEnv>,
+    file: { readonly name: string; readonly contentType: string; readonly sha256: string },
+    about: Record<string, unknown>,
+  ): Promise<Response> => {
+    const bytes = await blobs.get(file.sha256);
+    if (bytes === undefined) {
+      logger.error(
+        { ...about, requestId: c.get("requestId") },
+        "the bytes of a file the console keeps are not in the blob store",
+      );
+      return noSuchFile(c);
+    }
+    const inline = INLINE_TYPES.has(file.contentType);
+    const type = inline ? file.contentType : "application/octet-stream";
+    c.header(
+      "content-type",
+      type.startsWith("text/") || type === "application/json" ? `${type}; charset=utf-8` : type,
+    );
+    c.header("content-length", String(bytes.byteLength));
+    c.header(
+      "content-disposition",
+      `${inline ? "inline" : "attachment"}; ${filenameParameters(file.name)}`,
+    );
+    c.header("x-content-type-options", "nosniff");
+    c.header("content-security-policy", "default-src 'none'; sandbox");
+    c.header("cross-origin-resource-policy", "same-origin");
+    // A copy of its own: what the driver hands over may be a view of a larger buffer.
+    return c.body(new Uint8Array(bytes).buffer);
   };
 
   /**
@@ -952,6 +1096,34 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     return decision === undefined ? noSuchDecision(c) : c.json(restDecision(decision));
   });
 
+  // The record of a decision grows: its context, or what followed, by anyone who works in the project.
+  app.patch(`${PROJECT}/decisions/:id`, tooLarge, async (c) => {
+    const found = await changing(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    const patch = await bodyOf(c, restDecisionPatchSchema);
+    if (patch instanceof Response) {
+      return patch;
+    }
+    const id = c.req.param("id");
+    if (!UUID.test(id)) {
+      return noSuchDecision(c);
+    }
+    try {
+      const decision = await updateDecision(database, {
+        scope: found.scope,
+        actor: found.actor,
+        decisionId: id,
+        patch,
+        now: clock.now(),
+      });
+      return c.json(restDecision(decision));
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
   app.post(`${PROJECT}/decisions/:id/answer`, tooLarge, async (c) => {
     const found = await changing(c);
     if (found instanceof Response) {
@@ -1117,31 +1289,9 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     if (!UUID.test(id)) {
       return noSuchRun(c);
     }
-    let form: FormData;
-    try {
-      form = await c.req.formData();
-    } catch {
-      return invalid(c, "The request body is not a form with a file in it.");
-    }
-    const part = form.get("file");
-    if (!(part instanceof File)) {
-      return invalid(c, "file: the form needs a part called file.");
-    }
-    const label = form.get("label");
-    const type = part.type.split(";")[0]?.trim() ?? "";
-    const parsed = restFileInputSchema.safeParse({
-      name: part.name,
-      ...(type.length === 0 ? {} : { contentType: type }),
-      ...(typeof label === "string" ? { label } : {}),
-    });
-    if (!parsed.success || parsed.data === undefined) {
-      return invalid(c, firstProblem(parsed));
-    }
-    if (part.size === 0) {
-      return invalid(c, "file: the file is empty.");
-    }
-    if (part.size > MAX_FILE_BYTES) {
-      return fileTooLarge(c);
+    const sent = await filePartOf(c);
+    if (sent instanceof Response) {
+      return sent;
     }
     const run = await getRun(database, found.scope, id);
     if (run === undefined) {
@@ -1153,7 +1303,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     if (!OPEN_RUN_STATUSES.includes(run.status)) {
       return failure(c, new RunError("run.over"));
     }
-    const kept = await blobs.put(new Uint8Array(await part.arrayBuffer()), clock.now());
+    const kept = await blobs.put(new Uint8Array(await sent.part.arrayBuffer()), clock.now());
     try {
       const written = await addArtifact(database, {
         scope: found.scope,
@@ -1162,13 +1312,13 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         handedIn: {
           kind: "file",
           file: {
-            name: parsed.data.name,
+            name: sent.name,
             size: kept.size,
-            contentType: parsed.data.contentType ?? "application/octet-stream",
+            contentType: sent.contentType,
             sha256: kept.sha256,
           },
         },
-        label: parsed.data.label,
+        label: sent.label,
         limit: MAX_ARTIFACTS_PER_RUN,
         now: clock.now(),
       });
@@ -1178,8 +1328,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
   });
 
-  // The bytes of a file handed in, for whoever may see the project. A few kinds are shown in
-  // place; the rest are handed over as bytes. Never sniffed, never run: the file is an agent's.
+  // The bytes of a file handed in, for whoever may see the project.
   app.get(`${PROJECT}/files/:id`, async (c) => {
     const found = await reading(c);
     if (found instanceof Response) {
@@ -1188,32 +1337,9 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     const id = c.req.param("id");
     const artifact = UUID.test(id) ? await findArtifact(database, found.scope, id) : undefined;
     if (artifact?.file === undefined) {
-      return notFound(c, "file.not_found", "The file was not found.");
+      return noSuchFile(c);
     }
-    const bytes = await blobs.get(artifact.file.sha256);
-    if (bytes === undefined) {
-      logger.error(
-        { artifact: artifact.id, requestId: c.get("requestId") },
-        "the bytes of a file handed in are not in the blob store",
-      );
-      return notFound(c, "file.not_found", "The file was not found.");
-    }
-    const inline = INLINE_TYPES.has(artifact.file.contentType);
-    const type = inline ? artifact.file.contentType : "application/octet-stream";
-    c.header(
-      "content-type",
-      type.startsWith("text/") || type === "application/json" ? `${type}; charset=utf-8` : type,
-    );
-    c.header("content-length", String(bytes.byteLength));
-    c.header(
-      "content-disposition",
-      `${inline ? "inline" : "attachment"}; ${filenameParameters(artifact.file.name)}`,
-    );
-    c.header("x-content-type-options", "nosniff");
-    c.header("content-security-policy", "default-src 'none'; sandbox");
-    c.header("cross-origin-resource-policy", "same-origin");
-    // A copy of its own: what the driver hands over may be a view of a larger buffer.
-    return c.body(new Uint8Array(bytes).buffer);
+    return serveFile(c, artifact.file, { artifact: artifact.id });
   });
 
   app.post(`${PROJECT}/runs/:id/end`, tooLarge, async (c) => {
@@ -1263,6 +1389,231 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     return c.json(body);
   });
 
+  // The documents of the project (ADR-0009): pages under a path, read by whoever may see the
+  // project, written by whoever may work in it, a person as an agent. The path is one segment
+  // of the URL, its slashes encoded.
+
+  app.get(`${PROJECT}/docs`, async (c) => {
+    const query = documentsQuery.safeParse(c.req.query());
+    if (!query.success) {
+      return invalid(c, firstProblem(query));
+    }
+    const found = await reading(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    const archived = query.data.archived === "true";
+    if (query.data.q !== undefined) {
+      const items = await searchDocuments(database, found.scope, {
+        query: query.data.q,
+        archived,
+        limit: LIST_LIMIT,
+      });
+      const body: RestDocuments = {
+        folder: "",
+        folders: [],
+        items: items.map(restDocumentSummary),
+      };
+      return c.json(body);
+    }
+    const listing = await listDocuments(database, found.scope, {
+      folder: query.data.folder,
+      archived,
+      limit: LIST_LIMIT,
+    });
+    const body: RestDocuments = {
+      folder: query.data.folder,
+      folders: listing.folders,
+      items: listing.items.map(restDocumentSummary),
+    };
+    return c.json(body);
+  });
+
+  app.get(`${PROJECT}/docs/:path`, async (c) => {
+    const found = await reading(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    const path = documentPathOf(c);
+    const document =
+      path === undefined ? undefined : await getDocument(database, found.scope, path);
+    return document === undefined ? noSuchDocument(c) : c.json(restDocument(document));
+  });
+
+  // Writing a page: the first version at a new path (201), or the next version of the page there.
+  app.put(`${PROJECT}/docs/:path`, documentTooLarge, async (c) => {
+    const found = await changing(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    const path = documentPathOf(c);
+    if (path === undefined) {
+      return c.json(
+        errorBody(
+          "document.invalid_path",
+          "The path must be segments of lowercase letters, digits and hyphens, separated by slashes.",
+        ),
+        400,
+      );
+    }
+    const input = await bodyOf(c, restDocumentInputSchema);
+    if (input instanceof Response) {
+      return input;
+    }
+    try {
+      const { document, created } = await writeDocument(database, {
+        scope: found.scope,
+        actor: found.actor,
+        path,
+        title: input.title,
+        body: input.body,
+        baseVersion: input.baseVersion,
+        maxVersions: MAX_VERSIONS_PER_DOCUMENT,
+        now: clock.now(),
+      });
+      logger.info(
+        {
+          person: found.person.id,
+          document: document.id,
+          version: document.version,
+          requestId: c.get("requestId"),
+        },
+        "document written",
+      );
+      return c.json(restDocument(document), created ? 201 : 200);
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
+  for (const [action, archived] of [
+    ["archive", true],
+    ["restore", false],
+  ] as const) {
+    app.post(`${PROJECT}/docs/:path/${action}`, async (c) => {
+      const found = await changing(c);
+      if (found instanceof Response) {
+        return found;
+      }
+      const path = documentPathOf(c);
+      if (path === undefined) {
+        return noSuchDocument(c);
+      }
+      try {
+        const document = await setArchived(database, {
+          scope: found.scope,
+          actor: found.actor,
+          path,
+          archived,
+          now: clock.now(),
+        });
+        return c.json(restDocument(document));
+      } catch (error) {
+        return failure(c, error);
+      }
+    });
+  }
+
+  app.get(`${PROJECT}/docs/:path/versions`, async (c) => {
+    const found = await reading(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    const path = documentPathOf(c);
+    const versions =
+      path === undefined ? undefined : await listVersions(database, found.scope, path, LIST_LIMIT);
+    if (versions === undefined) {
+      return noSuchDocument(c);
+    }
+    const body: RestVersions = { items: versions.map(restVersionSummary) };
+    return c.json(body);
+  });
+
+  app.get(`${PROJECT}/docs/:path/versions/:number`, async (c) => {
+    const found = await reading(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    const path = documentPathOf(c);
+    const ref = c.req.param("number");
+    if (path === undefined) {
+      return noSuchDocument(c);
+    }
+    const version = VERSION_NUMBER.test(ref)
+      ? await getVersion(database, found.scope, path, Number(ref))
+      : undefined;
+    if (version !== undefined) {
+      return c.json(restVersion(version));
+    }
+    return (await findDocumentId(database, found.scope, path)) === undefined
+      ? noSuchDocument(c)
+      : notFound(c, "document.version_not_found", "The page has no such version.");
+  });
+
+  // A file attached to a page, as the parts of a form: the bytes go to the blob store under
+  // their hash, the rest to the page. The page is looked at before the bytes are kept.
+  app.post(`${PROJECT}/docs/:path/files`, formTooLarge, async (c) => {
+    const found = await changing(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    const path = documentPathOf(c);
+    if (path === undefined) {
+      return noSuchDocument(c);
+    }
+    const sent = await filePartOf(c);
+    if (sent instanceof Response) {
+      return sent;
+    }
+    const document = await getDocument(database, found.scope, path);
+    if (document === undefined) {
+      return noSuchDocument(c);
+    }
+    if (document.archivedAt !== undefined) {
+      return failure(c, new DocumentError("document.archived"));
+    }
+    if (document.files.length >= MAX_FILES_PER_DOCUMENT) {
+      return failure(c, new DocumentError("document.too_many_files"));
+    }
+    const kept = await blobs.put(new Uint8Array(await sent.part.arrayBuffer()), clock.now());
+    try {
+      const written = await attachFile(database, {
+        scope: found.scope,
+        actor: found.actor,
+        path,
+        file: {
+          name: sent.name,
+          size: kept.size,
+          contentType: sent.contentType,
+          sha256: kept.sha256,
+        },
+        label: sent.label,
+        limit: MAX_FILES_PER_DOCUMENT,
+        now: clock.now(),
+      });
+      return c.json(restDocument(written), 201);
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
+  app.get(`${PROJECT}/docs/:path/files/:id`, async (c) => {
+    const found = await reading(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    const path = documentPathOf(c);
+    const id = c.req.param("id");
+    const file =
+      path === undefined || !UUID.test(id)
+        ? undefined
+        : await findDocumentFile(database, found.scope, path, id);
+    if (file === undefined) {
+      return noSuchFile(c);
+    }
+    return serveFile(c, file.file, { documentFile: file.id });
+  });
+
   app.get(`${PROJECT}/events`, async (c) => {
     const query = eventsQuery.safeParse(c.req.query());
     if (!query.success) {
@@ -1279,6 +1630,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         taskId: query.data.task,
         runId: query.data.run,
         decisionId: query.data.decision,
+        documentId: query.data.document,
       },
       query.data.after,
       query.data.limit,

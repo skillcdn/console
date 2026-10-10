@@ -16,6 +16,8 @@ import {
   formatAnswer,
   formatDecision,
   formatDecisionLine,
+  formatDocument,
+  formatDocuments,
   formatOptions,
   formatProjectLine,
   formatRun,
@@ -23,6 +25,8 @@ import {
   formatSkills,
   formatTask,
   formatTaskLine,
+  formatVersion,
+  formatVersionLine,
 } from "./format.js";
 import { COMMAND_HELP, helpFor, usage } from "./help.js";
 
@@ -632,17 +636,191 @@ const ask: Command = async (args, io) => {
 };
 
 const decision: Command = async (args, io) => {
-  const { values, positionals } = parse(args, { wait: { type: "string" } });
-  const id = theOne(positionals, "Say which decision: console decision <id> [--wait <seconds>]");
+  const { values, positionals } = parse(args, {
+    wait: { type: "string" },
+    outcome: { type: "string" },
+    file: { type: "string" },
+  });
+  const id = theOne(
+    positionals,
+    "Say which decision: console decision <id> [--wait <seconds>] [--outcome <markdown>|--file <path>]",
+  );
   const seconds = secondsOf(text(values, "wait"), 0);
+  const outcome = await bodyOf(io, values, text(values, "outcome"));
   const session = await open(io, values);
   const project = await session.project();
+  if (outcome !== undefined) {
+    // What followed the decision: the record grows, and is printed as it stands.
+    const grown = await project.updateDecision(id, { outcome });
+    answer(io, session, grown, () => formatDecision(grown));
+    return EXIT.ok;
+  }
   const found = await project.decision(id);
   if (seconds === 0) {
     answer(io, session, found, () => formatDecision(found));
     return EXIT.ok;
   }
   return settle(io, session, project, found, seconds);
+};
+
+const docs: Command = async (args, io) => {
+  const { values, positionals } = parse(args, {
+    search: { type: "string" },
+    archived: { type: "boolean" },
+  });
+  if (positionals.length > 1) {
+    throw misuse("Say one folder: console docs [<folder>] [--search <words>] [--archived]");
+  }
+  const search = text(values, "search");
+  const session = await open(io, values);
+  const project = await session.project();
+  const found = await project.documents({
+    ...(positionals[0] === undefined ? {} : { folder: positionals[0] }),
+    ...(search === undefined ? {} : { q: search }),
+    ...(on(values, "archived") ? { archived: true } : {}),
+  });
+  answer(io, session, found, () => formatDocuments(found));
+  return EXIT.ok;
+};
+
+const doc: Command = async (args, io) => {
+  const { values, positionals } = parse(args, {
+    version: { type: "string" },
+    versions: { type: "boolean" },
+  });
+  const path = theOne(positionals, "Say which page: console doc <path> [--version <n>|--versions]");
+  const session = await open(io, values);
+  const project = await session.project();
+  if (on(values, "versions")) {
+    const found = await project.documentVersions(path);
+    answer(io, session, found, () => found.items.map(formatVersionLine).join("\n"));
+    return EXIT.ok;
+  }
+  const wanted = text(values, "version");
+  if (wanted !== undefined) {
+    const number = Number(wanted);
+    if (!Number.isInteger(number) || number < 1) {
+      throw misuse(`Not a version number: ${wanted}`);
+    }
+    const found = await project.documentVersion(path, number);
+    answer(io, session, found, () => formatVersion(path, found));
+    return EXIT.ok;
+  }
+  const found = await project.document(path);
+  answer(io, session, found, () =>
+    formatDocument(found, (fileId) => project.documentFileUrl(path, fileId)),
+  );
+  return EXIT.ok;
+};
+
+const write: Command = async (args, io) => {
+  const { values, positionals } = parse(args, {
+    title: { type: "string" },
+    body: { type: "string" },
+    file: { type: "string" },
+    base: { type: "string" },
+  });
+  const path = theOne(
+    positionals,
+    'Say which page: console write <path> --title "<title>" --body <markdown>|--file <path>',
+  );
+  const body = await bodyOf(io, values, text(values, "body"));
+  if (body === undefined) {
+    throw misuse(
+      "Say what the page is to say: --body <markdown>, --file <path>, or --body - to read standard input.",
+    );
+  }
+  const base = text(values, "base");
+  const baseVersion = base === undefined ? undefined : Number(base);
+  if (baseVersion !== undefined && (!Number.isInteger(baseVersion) || baseVersion < 1)) {
+    throw misuse(`Not a version number: ${base}`);
+  }
+  const session = await open(io, values);
+  const project = await session.project();
+  let title = text(values, "title");
+  if (title === undefined) {
+    // Without a title, the page keeps the one it has; a new page needs one.
+    try {
+      title = (await project.document(path)).title;
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "document.not_found") {
+        throw misuse(`No page at ${path} yet. Say its title: --title "<title>"`);
+      }
+      throw error;
+    }
+  }
+  const written = await project.writeDocument(path, {
+    title,
+    body,
+    ...(baseVersion === undefined ? {} : { baseVersion }),
+  });
+  answer(
+    io,
+    session,
+    written,
+    () =>
+      `Wrote ${written.path} (${written.title}), version ${written.version}${written.links.length === 0 ? "" : `; refers to ${written.links.map((link) => link.path).join(", ")}`}`,
+  );
+  return EXIT.ok;
+};
+
+const attach: Command = async (args, io) => {
+  const { values, positionals } = parse(args, { label: { type: "string" } });
+  const [path, file] = positionals;
+  if (path === undefined || file === undefined || positionals.length > 2) {
+    throw misuse("Say the page and the file: console attach <path> <file> [--label <words>]");
+  }
+  const label = text(values, "label");
+  const session = await open(io, values);
+  const project = await session.project();
+  let bytes: Uint8Array;
+  try {
+    bytes = await io.readBytes(file);
+  } catch {
+    throw failed(`No file could be read at ${file}.`);
+  }
+  const name = basename(file);
+  const contentType = CONTENT_TYPES[extname(name).toLowerCase()];
+  const written = await project.attachFile(path, {
+    name,
+    bytes,
+    ...(contentType === undefined ? {} : { contentType }),
+    ...(label === undefined ? {} : { label }),
+  });
+  answer(
+    io,
+    session,
+    written,
+    () =>
+      `Attached ${name} (${bytes.byteLength} bytes) to ${written.path}: ${written.files.length} file${written.files.length === 1 ? "" : "s"} on the page.`,
+  );
+  return EXIT.ok;
+};
+
+const archive: Command = async (args, io) => {
+  const { values, positionals } = parse(args, {});
+  const path = theOne(positionals, "Say which page: console archive <path>");
+  const session = await open(io, values);
+  const project = await session.project();
+  const put = await project.archiveDocument(path);
+  answer(
+    io,
+    session,
+    put,
+    () =>
+      `Archived ${put.path} (${put.title}): out of the folders and the search, still readable here.`,
+  );
+  return EXIT.ok;
+};
+
+const restore: Command = async (args, io) => {
+  const { values, positionals } = parse(args, {});
+  const path = theOne(positionals, "Say which page: console restore <path>");
+  const session = await open(io, values);
+  const project = await session.project();
+  const back = await project.restoreDocument(path);
+  answer(io, session, back, () => `Restored ${back.path} (${back.title}).`);
+  return EXIT.ok;
 };
 
 const decisions: Command = async (args, io) => {
@@ -752,6 +930,12 @@ const COMMANDS: Readonly<Record<string, Command>> = {
   abandon,
   runs,
   run,
+  docs,
+  doc,
+  write,
+  attach,
+  archive,
+  restore,
 };
 
 function help(io: CliIo, name: string | undefined): number {
@@ -774,6 +958,12 @@ function hintFor(error: ApiError): string {
       return "The token is not one the console knows, any more or at all. A person signs the command in again: console login\n";
     case "project.not_found":
       return "No project has this key, or it is not yours to see. console projects lists the projects you may work in.\n";
+    case "document.not_found":
+      return "No page has this path, in this project. console docs lists the pages of a folder; console write <path> writes one.\n";
+    case "document.conflict":
+      return "The page has moved on since the version you started from. Read it again, and write from there.\n";
+    case "document.archived":
+      return "The page is archived. console restore <path> brings it back first.\n";
     case "network":
       return "Is the console's address right? console whoami --url <origin> says what the command uses.\n";
     default:

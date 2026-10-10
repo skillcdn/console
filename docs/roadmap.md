@@ -38,15 +38,15 @@ Goal: a workspace holds projects; a project owns its board, its skills address a
 - [x] The default UI (2026-10-10): the projects page, a project's pages under `/p/<key>`, its members and settings for an owner, the task's history, and the agent named in the feed.
 - [x] Traceability (2026-10-10): every event names the agent the person acted through, on a task edited as on a run.
 
-## Milestone 4, documents (started 2026-10-10)
+## Done: milestone 4, documents (2026-10-10)
 
 Goal: the organization's knowledge next to its tasks. A document is a page of Markdown in a project, kept in a tree of folders with its path as its address, as a repository keeps files; written by people and by agents, with versions saying who wrote each and when ([ADR-0009](adr/0009-documents-are-pages-of-markdown-in-a-project-addressed-by-path-versioned-and-linked-both-ways.md)). Documents refer to each other by path, tasks and decisions link to them, and every link is kept both ways, so that a page says what refers to it. Built for many: each folder lists its pages, a search finds them, and what is no longer current is archived rather than deleted. Files from the blob store attach to a document. A decision grows with it: the context it rests on, the rationale of its answer, and what followed, so that a decision reads as a record and not only as a vote. Not a wiki engine: Markdown rendered to elements, as today, never HTML, no plugins.
 
 - [x] The decision (2026-10-10): what a document is, its path, its versions, its links, what archiving means, how files attach, and what of a decision becomes a record ([ADR-0009](adr/0009-documents-are-pages-of-markdown-in-a-project-addressed-by-path-versioned-and-linked-both-ways.md)).
-- [ ] The data model: documents with their versions, the links kept both ways, the files attached, the events about documents, and the decision's outcome; the migration.
-- [ ] The REST API: a folder's pages and folders, a search, a document with what it refers to and what refers to it, its versions, writing, archiving and restoring, files attached and read back; the decision's record ([specs/rest.md](specs/rest.md)).
-- [ ] The command: `docs`, `doc`, `write`, `attach`, `archive` and `restore` ([specs/cli.md](specs/cli.md)).
-- [ ] The default UI: a project's Docs page with its folders and its search, a document's page with its versions, its links both ways and its files, writing and archiving from it; links to documents in every body; the decision as a record.
+- [x] The data model (2026-10-10): documents with their versions, the links kept both ways, the files attached, the events about documents, and the decision's outcome; migration 0007.
+- [x] The REST API (2026-10-10): a folder's pages and folders, a search, a document with what it refers to and what refers to it, its versions, writing, archiving and restoring, files attached and read back; the decision's record ([specs/rest.md](specs/rest.md)).
+- [x] The command (2026-10-10): `docs`, `doc`, `write`, `attach`, `archive` and `restore`, and `decision --outcome` ([specs/cli.md](specs/cli.md)).
+- [x] The default UI (2026-10-10): a project's Docs page with its folders and its search, a document's page with its versions, its links both ways and its files, writing and archiving from it; links to documents in every body; the decision as a record.
 
 ## After milestone 4
 

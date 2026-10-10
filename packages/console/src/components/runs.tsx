@@ -34,6 +34,8 @@ export interface RunCardProps {
   readonly decisionHref?: ((decisionId: string) => string) | undefined;
   /** Where a file handed in is read: the project's path for it. Left out, a file is named and not linked. */
   readonly fileHref?: ((artifact: RestArtifact) => string) | undefined;
+  /** Where a document of the project is read, by its path, for the links in what the agent wrote. */
+  readonly docHref?: ((path: string) => string) | undefined;
   /** Called to mark a run that will not come back as abandoned. Left out, it cannot be here. */
   readonly onAbandon?: ((run: RestRun) => void) | undefined;
   readonly busy?: boolean | undefined;
@@ -83,7 +85,7 @@ export function RunCard(props: RunCardProps) {
           {run.reports.map((report) => (
             <li key={report.id} className="sc-report">
               <Time iso={report.createdAt} />
-              <Markdown source={report.body} />
+              <Markdown source={report.body} docHref={props.docHref} />
             </li>
           ))}
         </ol>
@@ -99,7 +101,7 @@ export function RunCard(props: RunCardProps) {
       )}
       {run.summary !== null && (
         <div className="sc-run-summary">
-          <Markdown source={run.summary} />
+          <Markdown source={run.summary} docHref={props.docHref} />
         </div>
       )}
     </article>
@@ -141,6 +143,7 @@ export interface RunListProps {
   readonly runs: readonly RestRun[];
   readonly decisionHref?: ((decisionId: string) => string) | undefined;
   readonly fileHref?: ((artifact: RestArtifact) => string) | undefined;
+  readonly docHref?: ((path: string) => string) | undefined;
   readonly onAbandon?: ((run: RestRun) => void) | undefined;
   readonly busy?: boolean | undefined;
   readonly empty?: ReactNode;
@@ -158,6 +161,7 @@ export function RunList(props: RunListProps) {
           run={run}
           decisionHref={props.decisionHref}
           fileHref={props.fileHref}
+          docHref={props.docHref}
           onAbandon={props.onAbandon}
           busy={props.busy}
         />

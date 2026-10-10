@@ -3,7 +3,7 @@
 - Status: **Draft.** Version 1 serves the default UI, the `console` command ([cli.md](cli.md)), and a custom console built from `@skillcdn/console`. It changes until 1.0; the package's changelog says when.
 - The schemas live in `packages/console` (`@skillcdn/console/api`); the handlers in `apps/console/src/http/rest.ts`. The integration tests parse every answer with the package's schemas, which is what the pages and the command parse with.
 
-The API is the board as its members see it: the people, the projects, and in each project the tasks, the runs, the decisions, and everything that happened. It is the one surface of the console ([ADR-0006](../adr/0006-agents-work-the-board-through-the-rest-api-and-the-command-line-not-an-mcp-server.md)): the pages, the command and a custom console are all its clients. Every route but `GET /api/v1/me` is for whoever is signed in, or for whoever presents a token a person made; nobody is answered with a refusal, never with less. The one workspace of the deployment is implied: there is no workspace in any path until a second one exists. The board is a project's ([ADR-0008](../adr/0008-a-workspace-holds-projects-and-what-a-person-may-see-and-change-is-decided-per-project.md)): what belongs to one is under `/api/v1/projects/<key>`, and a project the asker may not see is not found, whatever is asked under it.
+The API is the board as its members see it: the people, the projects, and in each project the tasks, the runs, the decisions, the documents, and everything that happened. It is the one surface of the console ([ADR-0006](../adr/0006-agents-work-the-board-through-the-rest-api-and-the-command-line-not-an-mcp-server.md)): the pages, the command and a custom console are all its clients. Every route but `GET /api/v1/me` is for whoever is signed in, or for whoever presents a token a person made; nobody is answered with a refusal, never with less. The one workspace of the deployment is implied: there is no workspace in any path until a second one exists. The board is a project's ([ADR-0008](../adr/0008-a-workspace-holds-projects-and-what-a-person-may-see-and-change-is-decided-per-project.md)): what belongs to one is under `/api/v1/projects/<key>`, and a project the asker may not see is not found, whatever is asked under it.
 
 ## Conventions
 
@@ -25,6 +25,7 @@ The API is the board as its members see it: the people, the projects, and in eac
 | 400 | `decision.invalid_task` | The decision is about a task that is not one of the project's. |
 | 400 | `decision.no_such_option` | The answer names an option the decision does not have. |
 | 400 | `decision.invalid_run` | A decision raised from a run that is not the asker's, or is over. |
+| 400 | `document.invalid_path` | The path a page is written at is not one: segments of lowercase letters, digits and hyphens, separated by slashes. |
 | 400 | `run.too_many_reports`, `run.too_many_artifacts` | The run carries as many as one may (`MAX_REPORTS_PER_RUN`, `MAX_ARTIFACTS_PER_RUN`). |
 | 401 | `auth.required` | Nobody is signed in, or the session has ended, or the token is nothing. The cookie is taken away when the operator no longer lists the login. |
 | 403 | `auth.forbidden_origin` | A request that changes something on a session did not come from the console's own pages. |
@@ -33,15 +34,19 @@ The API is the board as its members see it: the people, the projects, and in eac
 | 403 | `run.not_yours` | The run is another person's. |
 | 404 | `project.not_found` | No project has that key, or it is not the asker's to see: the two are one answer. The key is checked before anything is asked. |
 | 404 | `task.not_found`, `decision.not_found`, `token.not_found`, `person.not_found`, `run.not_found`, `run.task_not_found`, `member.not_found` | No such id in the project (or in the workspace, for a token, a person); for a token, none of the asker's. An id that is not a UUID is not found either, except a task's number. |
-| 404 | `file.not_found` | No file handed in has that id in the project; a link handed in is not a file. |
+| 404 | `file.not_found` | No file handed in, or attached to the page, has that id in the project; a link handed in is not a file. |
+| 404 | `document.not_found`, `document.version_not_found` | No page has that path in the project, or the page has no such version. A path that is not one is not found either. |
 | 404 | `not_found` | Nothing at this path. |
 | 409 | `project.key_taken` | A project of the workspace has that key already. |
 | 409 | `member.exists` | The person is listed in the project already. |
 | 409 | `decision.answered` | The decision has an answer already. |
+| 409 | `document.conflict` | The page has moved on since the version the write started from (`baseVersion`), or was written at that path by someone else first. |
+| 409 | `document.archived` | The page is archived: restore it before writing to it or attaching to it. |
+| 409 | `document.too_many_versions`, `document.too_many_files` | The page carries as many versions, or files, as one may (`MAX_VERSIONS_PER_DOCUMENT`, `MAX_FILES_PER_DOCUMENT`). |
 | 409 | `token.too_many` | The person holds as many live tokens as one may (`MAX_TOKENS_PER_PERSON`). |
 | 409 | `person.last_admin` | The change would leave the board without an administrator. |
 | 409 | `run.over`, `run.task_taken`, `run.task_closed` | The run has ended already; an agent is at work on the task already; the task is done or dropped. |
-| 413 | `request.too_large` | The body is over the limit; for a file handed in, the file is over `MAX_FILE_BYTES`. |
+| 413 | `request.too_large` | The body is over the limit; for a file handed in or attached, the file is over `MAX_FILE_BYTES`. |
 
 ## The workspace
 
@@ -107,7 +112,7 @@ One task, by its id or by its number in the project (`/tasks/7`): the pages hold
 
 ### `GET /api/v1/projects/<key>/decisions?open=&task=`
 
-`{ "items": [decision, ...] }`: the project's, the ones that wait first, newest first within each; `open=true` keeps only those that wait, `task=<id>` only those about one task. A decision carries its `question`, `body` (Markdown), `options` (each an `id` and a `label`), `taskId` and `taskNumber` (or `null`), `raisedBy`, `run` (the `id` and `agent` of the run that raised it, when an agent asked, or `null`), and `answer`: `null` while it waits, else the chosen `option`, a `note` or `null`, `by` and `at`.
+`{ "items": [decision, ...] }`: the project's, the ones that wait first, newest first within each; `open=true` keeps only those that wait, `task=<id>` only those about one task. A decision carries its `question`, `body` (Markdown: the context it rests on), `options` (each an `id` and a `label`), `taskId` and `taskNumber` (or `null`), `raisedBy`, `run` (the `id` and `agent` of the run that raised it, when an agent asked, or `null`), `answer`: `null` while it waits, else the chosen `option`, a `note` or `null` (the rationale given with it), `by` and `at`; and `outcome`, what followed, in Markdown, or `null` until someone writes it. Context, rationale and outcome make the decision a record ([ADR-0009](../adr/0009-documents-are-pages-of-markdown-in-a-project-addressed-by-path-versioned-and-linked-both-ways.md)); a link in any of them to a document's path is kept both ways, so that the document says the decision refers to it.
 
 ### `POST /api/v1/projects/<key>/decisions`
 
@@ -118,6 +123,10 @@ Takes `question`, `options` (two to `MAX_OPTIONS` labels), and optionally `body`
 One decision. With `wait=<seconds>` (`0` to `600`) the request is held while the decision waits, up to the server's own bound (50 seconds), and answers the decision as it stands then: how an agent learns the answer at once, woken through the database's own channel, without asking again and again. A decision answered already, or a wait of `0`, answers at once.
 
 The answer takes `option` (the id of one of its options) and optionally a `note`. A decision is answered once; the answer records who gave it and when, writes a `decision.answered` event with the label of the option, and lets a run that waited go on (`status: running`), unless another decision of its still waits.
+
+### `PATCH /api/v1/projects/<key>/decisions/<id>`
+
+Grows the record: takes any of `body` (the context) and `outcome` (what followed; empty clears it), for anyone who may work in the project, with a session from the console's own pages or a token, answered or not. Writes a `decision.updated` event naming the `fields`; a patch that changes nothing writes nothing.
 
 ### `GET /api/v1/projects/<key>/runs?task=&open=&mine=` and `GET .../runs/<id>`
 
@@ -145,9 +154,37 @@ Takes `status` (`finished`, `failed` or `abandoned`) and optionally a `summary` 
 
 The project's skills, as the SkillCDN deployment serves them at the project's address, or at the organization's (`SKILLS_ADDRESS`) when the project names none, read through `SKILLCDN_URL`: `{ "address", "source", "page", "status", "items" }`. `address` is canonical, or `null` with `status: "none"` when neither names one; `source` is the deployment's origin and `page` where a person browses the address. `status` is `ready`, or why `items` is empty: `indexing` and `failed` as the deployment says of the repository, `not_found` when it does not serve the address to the console (which asks as nobody, so a private repository is not read), `unavailable` when it could not be reached or read. An item is one skill: `name`, `description`, `directory` and `path` (of its `SKILL.md`, from the repository's root), `page` (the skill at the deployment, for a person), `uri` (what an agent loads it by through its own SkillCDN connection, `skill://gh/<owner>/<repo>/<path>`, or `null`), and `translations` (the title and the description by language tag, as the repository gives them). The console keeps nothing of the skills: one answer per address stands for a minute, then the deployment is asked again.
 
-### `GET /api/v1/projects/<key>/events?after=&limit=&task=&run=&decision=`
+### The documents
 
-`{ "items": [event, ...], "more": boolean }`: what happened in the project after event number `after` (`0` for the beginning), oldest first, at most `limit` (default and maximum `EVENTS_PAGE_LIMIT`); `more` says whether there is more after the last item. `task=<id>`, `run=<id>` or `decision=<id>` keeps the events about one of them: how a page shows everything that happened to a task, a run or a decision. An event carries its `id` (the number), `kind` (one of `EVENT_KINDS`), the `actor` (a person, or, for what an agent did, the person it acts for), `agent` (what the person acted through: the run's agent for what a run did, else the name of the token presented; `null` when a person acted themselves), `projectId`, `taskId`, `decisionId` and `runId` (or `null`), `data` (what a feed shows without asking for the subject: `number`, `title`, `fields`, `from`, `to`, `question`, `option`, `login`, `role`, `key`, `name`, `agent`, `status`, `label`, `excerpt`, each only when the kind has it), and `createdAt`.
+The project's pages of Markdown ([ADR-0009](../adr/0009-documents-are-pages-of-markdown-in-a-project-addressed-by-path-versioned-and-linked-both-ways.md)): each under a path of lowercase segments separated by slashes (`guides/onboarding`), which is its address and does not change; the folders are what the paths say. In every path below, the document's path is **one segment of the URL, its slashes encoded** (`/docs/guides%2Fonboarding`), which is what `projectPath(key, "docs", path)` builds. Whoever may see the project reads them; whoever may work in it writes them, with a session or a token.
+
+#### `GET /api/v1/projects/<key>/docs?folder=&q=&archived=`
+
+`{ "folder", "folders": [path, ...], "items": [document, ...] }`: the pages of a folder (`folder=guides`; the root when left out or empty), by title, and the folders in it, as paths, by name; at most `LIST_LIMIT` of each. With `q=<words>` (`MAX_SEARCH_LENGTH`), the pages found by their words in the title or the body, the best first, through the database's own text search and the title and the path by substring; `folder` is not looked at then, and `folders` is empty. Archived pages are left out unless `archived=true`. A page here is everything but its body: `id`, `path`, `title`, `version` (the number of the latest version, from 1), `updatedBy` and `agent` (who wrote the latest version, and the agent they wrote it through, or `null`), `archivedAt` (or `null`), `createdAt` and `updatedAt`.
+
+#### `GET /api/v1/projects/<key>/docs/<path>`
+
+The page in full: the fields above, `body` (Markdown, rendered to elements, never as HTML), `createdBy`, `links` (the documents it links to, each a `path` and the `title` of the page there, or `null` while none is written yet), `backlinks` (what links to it: each a `kind`, `document`, `task` or `decision`, its `id`, the document's `path` or the task's `number` or `null`, and a `title`: the document's, the task's, or the decision's question), and `files` (each an `id`, a `label` or `null`, the `file` as a run hands one in, `addedBy`, `agent` or `null`, and `createdAt`). A path that is not one, or has no page, or is in a project the asker may not see, is not found.
+
+#### `PUT /api/v1/projects/<key>/docs/<path>`
+
+Writes the page: takes `title`, `body` (Markdown, `MAX_DOCUMENT_LENGTH`) and optionally `baseVersion`, the version the writer started from. The first write at a path answers `201` with the page at version 1; the next ones answer `200` with the next version, each kept with who wrote it, through which agent, and when. A write that changes nothing is no version and no event. The write is refused when the page has moved on since `baseVersion` (`document.conflict`), when the page is archived (`document.archived`), and when it carries as many versions as one may (`document.too_many_versions`). Every link in the body whose destination is a document path (`guides/onboarding`, from the project's root, with or without a `#fragment`) is recorded, and the page it names, written or not yet, says so. Writes a `document.written` event with `path`, `title` and `version`.
+
+#### `POST .../docs/<path>/archive` and `POST .../docs/<path>/restore`
+
+Put the page away, and bring it back: archived, it is kept out of the folders and the search, readable at its path, and not written to; nothing is deleted. Each answers the page and writes `document.archived` or `document.restored`; what is already so writes nothing.
+
+#### `GET .../docs/<path>/versions` and `GET .../docs/<path>/versions/<number>`
+
+`{ "items": [version, ...] }`, newest first: each a `number`, the `title` as it was, the `author`, the `agent` or `null`, and `createdAt`. One version adds its `body` as it was. A page without that version is `document.version_not_found`.
+
+#### `POST .../docs/<path>/files` and `GET .../docs/<path>/files/<id>`
+
+A file attached to the page, sent and read back exactly as a run hands one in ([above](#post-runsidfiles-and-get-apiv1projectskeyfilesid)): the parts `file` and `label` of a form, kept under the SHA-256 of the bytes, at most `MAX_FILE_BYTES`, at most `MAX_FILES_PER_DOCUMENT` on one page (`document.too_many_files`), and none on an archived page. Answers `201` with the page and writes `document.file_attached` with the label or the file's name. The bytes are read back at the file's `id`, with the same headers and the same policy as a run's file.
+
+### `GET /api/v1/projects/<key>/events?after=&limit=&task=&run=&decision=&document=`
+
+`{ "items": [event, ...], "more": boolean }`: what happened in the project after event number `after` (`0` for the beginning), oldest first, at most `limit` (default and maximum `EVENTS_PAGE_LIMIT`); `more` says whether there is more after the last item. `task=<id>`, `run=<id>`, `decision=<id>` or `document=<id>` keeps the events about one of them: how a page shows everything that happened to a task, a run, a decision or a document. An event carries its `id` (the number), `kind` (one of `EVENT_KINDS`), the `actor` (a person, or, for what an agent did, the person it acts for), `agent` (what the person acted through: the run's agent for what a run did, else the name of the token presented; `null` when a person acted themselves), `projectId`, `taskId`, `decisionId`, `runId` and `documentId` (or `null`), `data` (what a feed shows without asking for the subject: `number`, `title`, `fields`, `from`, `to`, `question`, `option`, `login`, `role`, `key`, `name`, `agent`, `status`, `label`, `excerpt`, `path`, `version`, each only when the kind has it), and `createdAt`.
 
 ### `GET /api/v1/projects/<key>/events/stream?after=`
 

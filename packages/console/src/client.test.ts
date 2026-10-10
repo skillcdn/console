@@ -137,6 +137,63 @@ describe("createClient", () => {
     ]);
   });
 
+  it("names a document by its path as one segment of the URL, with the ways to its versions and files", async () => {
+    const document = {
+      id: "0199c4d8-0000-7000-8000-000000000060",
+      path: "guides/onboarding",
+      title: "Onboarding",
+      version: 1,
+      updatedBy: PERSON,
+      agent: null,
+      archivedAt: "2026-10-10T10:00:00.000Z",
+      createdAt: "2026-10-10T10:00:00.000Z",
+      updatedAt: "2026-10-10T10:00:00.000Z",
+      body: "",
+      createdBy: PERSON,
+      links: [],
+      backlinks: [],
+      files: [],
+    };
+    const { send, calls } = fakeFetch({
+      "GET /api/v1/projects/web/docs?folder=guides": {
+        body: { folder: "guides", folders: [], items: [] },
+      },
+      "GET /api/v1/projects/web/docs?q=onboarding&archived=true": {
+        body: { folder: "", folders: [], items: [] },
+      },
+      "GET /api/v1/projects/web/docs/guides%2Fonboarding/versions/2": {
+        body: {
+          number: 2,
+          title: "Onboarding",
+          author: PERSON,
+          agent: null,
+          createdAt: "2026-10-10T10:00:00.000Z",
+          body: "# Hi",
+        },
+      },
+      "POST /api/v1/projects/web/docs/guides%2Fonboarding/archive": { body: document },
+      "PUT /api/v1/projects/web/docs/plan": { status: 201, body: { ...document, path: "plan" } },
+    });
+    const project = createClient({ fetch: send }).project("web");
+    await project.documents({ folder: "guides" });
+    // Words given, the folder is not looked at.
+    await project.documents({ q: "onboarding", archived: true, folder: "guides" });
+    expect((await project.documentVersion("guides/onboarding", 2)).body).toBe("# Hi");
+    expect((await project.archiveDocument("guides/onboarding")).archivedAt).not.toBeNull();
+    await project.writeDocument("plan", { title: "The plan", body: "" });
+    expect(calls.map((call) => call.url)).toEqual([
+      "/api/v1/projects/web/docs?folder=guides",
+      "/api/v1/projects/web/docs?q=onboarding&archived=true",
+      "/api/v1/projects/web/docs/guides%2Fonboarding/versions/2",
+      "/api/v1/projects/web/docs/guides%2Fonboarding/archive",
+      "/api/v1/projects/web/docs/plan",
+    ]);
+    expect(calls[4]?.init?.method).toBe("PUT");
+    expect(project.documentFileUrl("guides/onboarding", "f1")).toBe(
+      "/api/v1/projects/web/docs/guides%2Fonboarding/files/f1",
+    );
+  });
+
   it("lets an abort through as it is", async () => {
     const controller = new AbortController();
     const client = createClient({

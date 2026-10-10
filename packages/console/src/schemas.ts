@@ -3,9 +3,12 @@
 // and builds the output shapes; the pages and a custom console parse answers with the rest.
 // Absent values are `null` on the wire, never missing keys. Changes within a version are additive.
 import * as z from "zod/mini";
+import { isDocumentPath } from "./documents.js";
 import {
   MAX_AGENT_LENGTH,
   MAX_BODY_LENGTH,
+  MAX_DOCUMENT_LENGTH,
+  MAX_DOCUMENT_PATH_LENGTH,
   MAX_FILE_NAME_LENGTH,
   MAX_LINK_LABEL_LENGTH,
   MAX_LINKS,
@@ -28,6 +31,7 @@ import { hasForbiddenCodePoint } from "./text.js";
 import {
   ARTIFACT_KINDS,
   EVENT_KINDS,
+  LINK_SOURCES,
   PERSON_ROLES,
   PROJECT_ROLES,
   PROJECT_VISIBILITIES,
@@ -278,11 +282,14 @@ export const restDecisionSchema = z.object({
     z.object({
       /** The id of the chosen option. */
       option: z.string(),
+      /** The rationale given with the answer, or `null`. */
       note: z.nullable(z.string()),
       by: restPersonSchema,
       at: instant,
     }),
   ),
+  /** What followed the decision, in Markdown, written afterwards; `null` until someone does. */
+  outcome: z.nullable(z.string()),
   createdAt: instant,
   updatedAt: instant,
 });
@@ -305,6 +312,14 @@ export const restDecisionInputSchema = z.object({
 });
 export type RestDecisionInput = z.infer<typeof restDecisionInputSchema>;
 
+/** What `PATCH .../decisions/<id>` is sent: the record growing, its context or what followed; only what changes. */
+export const restDecisionPatchSchema = z.object({
+  body: z.optional(body),
+  /** What followed the decision; empty clears it. */
+  outcome: z.optional(body),
+});
+export type RestDecisionPatch = z.infer<typeof restDecisionPatchSchema>;
+
 /** What `POST .../decisions/<id>/answer` is sent: an option, and a word about it. */
 export const restAnswerInputSchema = z.object({
   option: z.string().check(z.minLength(1), z.maxLength(64)),
@@ -319,8 +334,11 @@ export type RestAnswerInput = z.infer<typeof restAnswerInputSchema>;
 export const restEventDataSchema = z.object({
   number: z.optional(z.int()),
   title: z.optional(z.string()),
-  /** For `task.updated` and `project.updated`: which fields changed. */
+  /** For `task.updated`, `project.updated` and `decision.updated`: which fields changed. */
   fields: z.optional(z.array(z.string())),
+  /** For the events about a document: its path, and the version written. */
+  path: z.optional(z.string()),
+  version: z.optional(z.int()),
   /** For `task.moved`. */
   from: z.optional(z.enum(TASK_STATES)),
   to: z.optional(z.enum(TASK_STATES)),
@@ -357,6 +375,8 @@ export const restEventSchema = z.object({
   taskId: z.nullable(uuid),
   decisionId: z.nullable(uuid),
   runId: z.nullable(uuid),
+  /** The document it is about, or `null`. */
+  documentId: z.nullable(uuid),
   data: restEventDataSchema,
   createdAt: instant,
 });
@@ -499,6 +519,123 @@ export const restSkillsSchema = z.object({
   items: z.array(restSkillSchema),
 });
 export type RestSkills = z.infer<typeof restSkillsSchema>;
+
+/**
+ * A document's path (ADR-0009): segments of lowercase letters, digits and hyphens, separated
+ * by slashes, as a repository keeps files; the document's address, which does not change.
+ */
+const documentPath = z
+  .string()
+  .check(
+    z.maxLength(MAX_DOCUMENT_PATH_LENGTH),
+    z.refine(
+      isDocumentPath,
+      "must be segments of lowercase letters, digits and hyphens, separated by slashes",
+    ),
+  );
+
+/** A document as a folder or a search lists it: everything but the body. */
+export const restDocumentSummarySchema = z.object({
+  id: uuid,
+  path: documentPath,
+  title: z.string(),
+  /** The number of the latest version, from 1. */
+  version: z.int().check(z.positive()),
+  /** Who wrote the latest version, and the agent they wrote it through, or `null`. */
+  updatedBy: restPersonSchema,
+  agent: z.nullable(z.string()),
+  /** When the document was archived, or `null` while it is current. */
+  archivedAt: z.nullable(instant),
+  createdAt: instant,
+  updatedAt: instant,
+});
+export type RestDocumentSummary = z.infer<typeof restDocumentSummarySchema>;
+
+/** `GET /api/v1/projects/<key>/docs?folder=`: a folder's pages and folders; with `q=`, the pages found. */
+export const restDocumentsSchema = z.object({
+  /** The folder listed, `""` for the root; `""` for a search. */
+  folder: z.string(),
+  /** The folders in it, as paths, by name; none for a search. */
+  folders: z.array(z.string()),
+  /** The pages in it, by title; or the pages found, the best first. */
+  items: z.array(restDocumentSummarySchema),
+});
+export type RestDocuments = z.infer<typeof restDocumentsSchema>;
+
+/** A document the document links to: its path, and its title when there is a document there yet. */
+export const restDocumentLinkSchema = z.object({
+  path: z.string(),
+  title: z.nullable(z.string()),
+});
+export type RestDocumentLink = z.infer<typeof restDocumentLinkSchema>;
+
+/** What refers to the document: another document, a task, or a decision, each by what people call it. */
+export const restBacklinkSchema = z.object({
+  kind: z.enum(LINK_SOURCES),
+  id: uuid,
+  /** The document's path, for a document. */
+  path: z.nullable(z.string()),
+  /** The task's number, for a task. */
+  number: z.nullable(z.int()),
+  /** The document's title, the task's title, or the decision's question. */
+  title: z.string(),
+});
+export type RestBacklink = z.infer<typeof restBacklinkSchema>;
+
+/** A file attached to a document; its bytes are at `projectPath(key, "docs", path)/files/<id>`. */
+export const restDocumentFileSchema = z.object({
+  id: uuid,
+  label: z.nullable(z.string()),
+  file: restFileSchema,
+  addedBy: restPersonSchema,
+  agent: z.nullable(z.string()),
+  createdAt: instant,
+});
+export type RestDocumentFile = z.infer<typeof restDocumentFileSchema>;
+
+/** A document in full: its latest version, what it links to, what refers to it, and its files. */
+export const restDocumentSchema = z.object({
+  ...restDocumentSummarySchema.shape,
+  /** Markdown. Shown as text or rendered to elements, never as HTML. */
+  body: z.string(),
+  createdBy: restPersonSchema,
+  /** The documents it links to, by path. */
+  links: z.array(restDocumentLinkSchema),
+  /** What links to it. */
+  backlinks: z.array(restBacklinkSchema),
+  files: z.array(restDocumentFileSchema),
+});
+export type RestDocument = z.infer<typeof restDocumentSchema>;
+
+/** What `PUT /api/v1/projects/<key>/docs/<path>` is sent: the page as it is to be. */
+export const restDocumentInputSchema = z.object({
+  title: line(MAX_TITLE_LENGTH),
+  body: paragraphs(MAX_DOCUMENT_LENGTH),
+  /** The version the writer started from; the write is refused when the document has moved on. */
+  baseVersion: z.optional(z.int().check(z.positive())),
+});
+export type RestDocumentInput = z.infer<typeof restDocumentInputSchema>;
+
+/** One version of a document, as the list of them says it: who wrote it, through which agent, when. */
+export const restVersionSummarySchema = z.object({
+  number: z.int().check(z.positive()),
+  title: z.string(),
+  author: restPersonSchema,
+  agent: z.nullable(z.string()),
+  createdAt: instant,
+});
+export type RestVersionSummary = z.infer<typeof restVersionSummarySchema>;
+
+/** `GET .../docs/<path>/versions`: newest first. */
+export const restVersionsSchema = z.object({ items: z.array(restVersionSummarySchema) });
+export type RestVersions = z.infer<typeof restVersionsSchema>;
+
+/** `GET .../docs/<path>/versions/<number>`: the version with its body. */
+export const restVersionSchema = z.object({
+  ...restVersionSummarySchema.shape,
+  body: z.string(),
+});
+export type RestVersion = z.infer<typeof restVersionSchema>;
 
 export const restErrorSchema = z.object({
   error: z.object({

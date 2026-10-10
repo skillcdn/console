@@ -26,6 +26,7 @@ export const PROJECT_COLLECTIONS = [
   "events",
   "skills",
   "members",
+  "docs",
 ] as const;
 
 export type ProjectCollection = (typeof PROJECT_COLLECTIONS)[number];
@@ -74,6 +75,8 @@ export function restPath(collection: "people" | "tokens" | "projects", id: strin
 /**
  * The REST path of a project, of one of its collections, or of one item in it: the tasks of
  * `web` are at `projectPath("web", "tasks")`, task 7 at `projectPath("web", "tasks", "7")`.
+ * A document's path is one segment of the URL, its slashes encoded: `projectPath("web",
+ * "docs", "guides/onboarding")` is `/api/v1/projects/web/docs/guides%2Fonboarding`.
  */
 export function projectPath(key: string, collection?: ProjectCollection, id?: string): string {
   const base = restPath("projects", key);

@@ -26,7 +26,7 @@ export interface Scope {
 /**
  * What a read of the feed is narrowed to: the events of one project, or the workspace's own
  * (`projectId: null`, the ones about no project); and, within a project, those about one
- * task, one run or one decision.
+ * task, one run, one decision or one document.
  */
 export interface EventScope {
   readonly workspaceId: string;
@@ -34,6 +34,7 @@ export interface EventScope {
   readonly taskId?: string | undefined;
   readonly runId?: string | undefined;
   readonly decisionId?: string | undefined;
+  readonly documentId?: string | undefined;
 }
 
 export interface EventRecord {
@@ -47,6 +48,7 @@ export interface EventRecord {
   readonly taskId: string | undefined;
   readonly decisionId: string | undefined;
   readonly runId: string | undefined;
+  readonly documentId: string | undefined;
   readonly data: RestEventData;
   readonly createdAt: Date;
 }
@@ -68,6 +70,7 @@ export async function recordEvent(
     readonly taskId?: string | undefined;
     readonly decisionId?: string | undefined;
     readonly runId?: string | undefined;
+    readonly documentId?: string | undefined;
     readonly data: RestEventData;
     readonly now: Date;
   },
@@ -83,6 +86,7 @@ export async function recordEvent(
       taskId: event.taskId ?? null,
       decisionId: event.decisionId ?? null,
       runId: event.runId ?? null,
+      documentId: event.documentId ?? null,
       data: event.data,
       createdAt: event.now,
     })
@@ -115,6 +119,7 @@ export async function listEventsAfter(
       taskId: events.taskId,
       decisionId: events.decisionId,
       runId: events.runId,
+      documentId: events.documentId,
       data: events.data,
       createdAt: events.createdAt,
       actor: personColumns(actors),
@@ -128,6 +133,7 @@ export async function listEventsAfter(
         scope.taskId === undefined ? undefined : eq(events.taskId, scope.taskId),
         scope.runId === undefined ? undefined : eq(events.runId, scope.runId),
         scope.decisionId === undefined ? undefined : eq(events.decisionId, scope.decisionId),
+        scope.documentId === undefined ? undefined : eq(events.documentId, scope.documentId),
         gt(events.id, after),
       ),
     )
@@ -145,6 +151,7 @@ export async function listEventsAfter(
       taskId: row.taskId ?? undefined,
       decisionId: row.decisionId ?? undefined,
       runId: row.runId ?? undefined,
+      documentId: row.documentId ?? undefined,
       data: row.data,
       createdAt: row.createdAt,
     })),

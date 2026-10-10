@@ -9,6 +9,8 @@ import {
   type RestTask,
   restDecisionSchema,
   restDecisionsSchema,
+  restDocumentSchema,
+  restDocumentsSchema,
   restErrorSchema,
   restEventsSchema,
   restMemberSchema,
@@ -23,6 +25,8 @@ import {
   restTasksSchema,
   restTokenCreatedSchema,
   restTokensSchema,
+  restVersionSchema,
+  restVersionsSchema,
 } from "@skillcdn/console/api";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "./db/testing.js";
@@ -551,6 +555,321 @@ describe("decisions", () => {
         })
       ).status,
     ).toBe(404);
+  });
+});
+
+describe("documents", () => {
+  const DOC = `${IN}/docs`;
+  const at = (path: string) => `${DOC}/${encodeURIComponent(path)}`;
+  const write = async (cookie: string, path: string, body: unknown, status = 201) => {
+    const response = await h.request(at(path), {
+      method: "PUT",
+      headers: { cookie, origin: SIGN_IN_URL, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    expect(response.status, await response.clone().text()).toBe(status);
+    return restDocumentSchema.parse(await response.json());
+  };
+  const read = async (cookie: string, path: string) =>
+    restDocumentSchema.parse(await (await get(cookie, at(path))).json());
+  const listing = async (cookie: string, query = "") =>
+    restDocumentsSchema.parse(await (await get(cookie, `${DOC}${query}`)).json());
+
+  it("are written at a path, versioned on every write, listed by folder, found by words, and read as the schema says", async () => {
+    const first = await write(alice, "guides/onboarding", {
+      title: "  Onboarding  ",
+      body: "# Welcome\n\nSee [the setup](guides/setup) and [the plan](plan).",
+    });
+    expect(first).toMatchObject({
+      path: "guides/onboarding",
+      title: "Onboarding",
+      version: 1,
+      agent: null,
+      archivedAt: null,
+      links: [
+        { path: "guides/setup", title: null },
+        { path: "plan", title: null },
+      ],
+      backlinks: [],
+      files: [],
+    });
+    expect(first.updatedBy.login).toBe("Alice");
+    expect(first.createdBy.login).toBe("Alice");
+    // The same page written again is no version.
+    const same = await write(
+      alice,
+      "guides/onboarding",
+      { title: "Onboarding", body: first.body },
+      200,
+    );
+    expect(same.version).toBe(1);
+    // A member of the workspace writes the next version; the links follow the text.
+    const second = await write(
+      bob,
+      "guides/onboarding",
+      { title: "Onboarding", body: "# Welcome\n\nSee [the plan](plan) only.", baseVersion: 1 },
+      200,
+    );
+    expect(second.version).toBe(2);
+    expect(second.updatedBy.login).toBe("bob");
+    expect(second.links).toEqual([{ path: "plan", title: null }]);
+    // A write from a version the page has moved on from is refused.
+    const stale = await h.request(at("guides/onboarding"), {
+      method: "PUT",
+      headers: { cookie: alice, origin: SIGN_IN_URL, "content-type": "application/json" },
+      body: JSON.stringify({ title: "Onboarding", body: "older", baseVersion: 1 }),
+    });
+    expect(stale.status).toBe(409);
+    expect(await errorOf(stale)).toBe("document.conflict");
+    // The plan links back: both pages say so.
+    const plan = await write(alice, "plan", {
+      title: "The plan",
+      body: "Start with [onboarding](guides/onboarding).",
+    });
+    expect(plan.backlinks).toEqual([
+      {
+        kind: "document",
+        id: first.id,
+        path: "guides/onboarding",
+        number: null,
+        title: "Onboarding",
+      },
+    ]);
+    const onboarding = await read(bob, "guides/onboarding");
+    expect(onboarding.links).toEqual([{ path: "plan", title: "The plan" }]);
+    expect(onboarding.backlinks).toEqual([
+      { kind: "document", id: plan.id, path: "plan", number: null, title: "The plan" },
+    ]);
+    // The folders: the root has the plan and the guides; the guides hold the onboarding.
+    const root = await listing(bob);
+    expect(root.folder).toBe("");
+    expect(root.folders).toEqual(["guides"]);
+    expect(root.items.map((item) => item.path)).toEqual(["plan"]);
+    expect(root.items[0]).toMatchObject({ title: "The plan", version: 1 });
+    expect(JSON.stringify(root)).not.toContain("Start with");
+    const guides = await listing(bob, "?folder=guides");
+    expect(guides.folders).toEqual([]);
+    expect(guides.items.map((item) => item.path)).toEqual(["guides/onboarding"]);
+    expect((await listing(bob, "?folder=nowhere")).items).toEqual([]);
+    expect((await get(bob, `${DOC}?folder=/bad`)).status).toBe(400);
+    // The words find the page; the folder is not looked at then.
+    const found = await listing(bob, "?q=welcome&folder=nowhere");
+    expect(found.items.map((item) => item.path)).toEqual(["guides/onboarding"]);
+    expect((await listing(bob, "?q=onboard")).items.map((item) => item.path)).toEqual([
+      "guides/onboarding",
+    ]);
+    expect((await listing(bob, "?q=nothing-of-the-sort")).items).toEqual([]);
+    // The versions, newest first, each as it was.
+    const versions = restVersionsSchema.parse(
+      await (await get(bob, `${at("guides/onboarding")}/versions`)).json(),
+    );
+    expect(versions.items.map((version) => version.number)).toEqual([2, 1]);
+    expect(versions.items[1]?.author.login).toBe("Alice");
+    const original = restVersionSchema.parse(
+      await (await get(bob, `${at("guides/onboarding")}/versions/1`)).json(),
+    );
+    expect(original.body).toContain("guides/setup");
+    const missing = await get(bob, `${at("guides/onboarding")}/versions/9`);
+    expect(missing.status).toBe(404);
+    expect(await errorOf(missing)).toBe("document.version_not_found");
+    const nowhere = await get(bob, `${at("nowhere/here")}/versions`);
+    expect(await errorOf(nowhere)).toBe("document.not_found");
+    // Everything that happened to the page.
+    const history = restEventsSchema.parse(
+      await (await get(bob, `${IN}/events?document=${first.id}`)).json(),
+    );
+    expect(history.items.map((event) => event.kind)).toEqual([
+      "document.written",
+      "document.written",
+    ]);
+    expect(history.items[1]).toMatchObject({
+      documentId: first.id,
+      data: { path: "guides/onboarding", title: "Onboarding", version: 2 },
+    });
+    expect(history.items[1]?.actor?.login).toBe("bob");
+  });
+
+  it("link both ways from tasks and decisions, and grow a decision into a record", async () => {
+    const task = await createTask(alice, {
+      title: "Read the guide",
+      body: "Start with [onboarding](guides/onboarding).",
+    });
+    expect((await read(alice, "guides/onboarding")).backlinks).toContainEqual({
+      kind: "task",
+      id: task.id,
+      path: null,
+      number: task.number,
+      title: "Read the guide",
+    });
+    const raised = await send(alice, "POST", `${IN}/decisions`, {
+      question: "Keep the guide?",
+      body: "It is at [onboarding](guides/onboarding).",
+      options: [{ label: "Keep it" }, { label: "Drop it" }],
+    });
+    expect(raised.status).toBe(201);
+    const decision = restDecisionSchema.parse(await raised.json());
+    expect(decision.outcome).toBeNull();
+    expect((await read(alice, "guides/onboarding")).backlinks).toContainEqual({
+      kind: "decision",
+      id: decision.id,
+      path: null,
+      number: null,
+      title: "Keep the guide?",
+    });
+    // The record grows: what followed, by anyone who works in the project, with its links.
+    const grown = await send(bob, "PATCH", `${IN}/decisions/${decision.id}`, {
+      outcome: "We kept it and wrote [the plan](plan) down.",
+    });
+    expect(grown.status).toBe(200);
+    expect(restDecisionSchema.parse(await grown.json()).outcome).toBe(
+      "We kept it and wrote [the plan](plan) down.",
+    );
+    expect((await read(alice, "plan")).backlinks).toContainEqual({
+      kind: "decision",
+      id: decision.id,
+      path: null,
+      number: null,
+      title: "Keep the guide?",
+    });
+    const nothing = await send(bob, "PATCH", `${IN}/decisions/${decision.id}`, {});
+    expect(nothing.status).toBe(200);
+    const record = restEventsSchema.parse(
+      await (await get(bob, `${IN}/events?decision=${decision.id}`)).json(),
+    );
+    expect(record.items.map((event) => event.kind)).toEqual([
+      "decision.raised",
+      "decision.updated",
+    ]);
+    expect(record.items[1]?.data).toMatchObject({
+      question: "Keep the guide?",
+      fields: ["outcome"],
+    });
+    // A link taken out of a task's body is gone from the page.
+    const changed = await send(alice, "PATCH", `${IN}/tasks/${task.id}`, { body: "No links now." });
+    expect(changed.status).toBe(200);
+    expect(
+      (await read(alice, "guides/onboarding")).backlinks.some(
+        (backlink) => backlink.kind === "task",
+      ),
+    ).toBe(false);
+  });
+
+  it("are archived rather than deleted, kept out of the folders and the search, readable, and restored", async () => {
+    const put = await send(alice, "POST", `${at("plan")}/archive`);
+    expect(put.status).toBe(200);
+    const archived = restDocumentSchema.parse(await put.json());
+    expect(archived.archivedAt).not.toBeNull();
+    expect((await listing(bob)).items.map((item) => item.path)).toEqual([]);
+    expect((await listing(bob, "?archived=true")).items.map((item) => item.path)).toEqual(["plan"]);
+    expect((await listing(bob, "?q=onboarding")).items.map((item) => item.path)).toEqual([
+      "guides/onboarding",
+    ]);
+    expect((await read(bob, "plan")).archivedAt).not.toBeNull();
+    const refused = await h.request(at("plan"), {
+      method: "PUT",
+      headers: { cookie: alice, origin: SIGN_IN_URL, "content-type": "application/json" },
+      body: JSON.stringify({ title: "The plan", body: "changed" }),
+    });
+    expect(refused.status).toBe(409);
+    expect(await errorOf(refused)).toBe("document.archived");
+    // The link to an archived page still says where it leads.
+    expect((await read(bob, "guides/onboarding")).links).toEqual([
+      { path: "plan", title: "The plan" },
+    ]);
+    const again = await send(alice, "POST", `${at("plan")}/archive`);
+    expect(restDocumentSchema.parse(await again.json()).archivedAt).toEqual(archived.archivedAt);
+    const back = await send(bob, "POST", `${at("plan")}/restore`);
+    expect(restDocumentSchema.parse(await back.json()).archivedAt).toBeNull();
+    expect((await listing(bob)).items.map((item) => item.path)).toEqual(["plan"]);
+    const history = restEventsSchema.parse(
+      await (await get(bob, `${IN}/events?document=${archived.id}`)).json(),
+    );
+    expect(history.items.map((event) => event.kind)).toEqual([
+      "document.written",
+      "document.archived",
+      "document.restored",
+    ]);
+  });
+
+  it("take files, kept under their hash and read back under a policy that runs nothing", async () => {
+    const form = new FormData();
+    form.set("file", new File(["# Notes\n"], "notes.md", { type: "text/markdown" }), "notes.md");
+    form.set("label", "the notes");
+    const attached = await h.request(`${at("plan")}/files`, {
+      method: "POST",
+      headers: { cookie: alice, origin: SIGN_IN_URL },
+      body: form,
+    });
+    expect(attached.status, await attached.clone().text()).toBe(201);
+    const document = restDocumentSchema.parse(await attached.json());
+    expect(document.files).toHaveLength(1);
+    const [file] = document.files;
+    expect(file).toMatchObject({
+      label: "the notes",
+      file: { name: "notes.md", size: 8, contentType: "text/markdown" },
+      agent: null,
+    });
+    expect(file?.addedBy.login).toBe("Alice");
+    const bytes = await get(bob, `${at("plan")}/files/${file?.id}`);
+    expect(bytes.status).toBe(200);
+    expect(bytes.headers.get("content-type")).toBe("text/markdown; charset=utf-8");
+    expect(bytes.headers.get("content-disposition")).toContain("inline");
+    expect(bytes.headers.get("content-security-policy")).toBe("default-src 'none'; sandbox");
+    expect(await bytes.text()).toBe("# Notes\n");
+    const wrong = await get(bob, `${at("guides/onboarding")}/files/${file?.id}`);
+    expect(wrong.status).toBe(404);
+    expect(await errorOf(wrong)).toBe("file.not_found");
+    const nowhere = await h.request(`${at("nowhere")}/files`, {
+      method: "POST",
+      headers: { cookie: alice, origin: SIGN_IN_URL },
+      body: form,
+    });
+    expect(nowhere.status).toBe(404);
+    const history = restEventsSchema.parse(
+      await (await get(bob, `${IN}/events?document=${document.id}`)).json(),
+    );
+    expect(history.items.at(-1)).toMatchObject({
+      kind: "document.file_attached",
+      data: { path: "plan", title: "The plan", label: "the notes" },
+    });
+  });
+
+  it("refuse a path that is not one, are not found where the project is not, and name the agent that wrote", async () => {
+    const odd = await h.request(`${DOC}/Bad%20Path`, {
+      method: "PUT",
+      headers: { cookie: alice, origin: SIGN_IN_URL, "content-type": "application/json" },
+      body: JSON.stringify({ title: "Odd", body: "" }),
+    });
+    expect(odd.status).toBe(400);
+    expect(await errorOf(odd)).toBe("document.invalid_path");
+    expect((await get(alice, `${DOC}/Bad`)).status).toBe(404);
+    expect((await get(alice, at("nowhere/at/all"))).status).toBe(404);
+    expect((await h.request(at("plan"))).status).toBe(401);
+    // Bob may not see Alice's private project: its pages are not found, whatever is asked.
+    expect((await get(bob, `${projectPath("docs")}/docs`)).status).toBe(404);
+    expect(await errorOf(await get(bob, `${projectPath("docs")}/docs`))).toBe("project.not_found");
+    // An agent writes as its person, and the page and the feed name it.
+    const made = await send(alice, "POST", REST_ROUTES.tokens, { name: "the writer" });
+    const { token, secret } = restTokenCreatedSchema.parse(await made.json());
+    const written = await h.request(at("notes/from-the-agent"), {
+      method: "PUT",
+      headers: { authorization: `Bearer ${secret}`, "content-type": "application/json" },
+      body: JSON.stringify({ title: "From the agent", body: "Written mid-run." }),
+    });
+    expect(written.status).toBe(201);
+    const page = restDocumentSchema.parse(await written.json());
+    expect(page.agent).toBe("the writer");
+    expect(page.updatedBy.login).toBe("Alice");
+    const history = restEventsSchema.parse(
+      await (await get(alice, `${IN}/events?document=${page.id}`)).json(),
+    );
+    expect(history.items[0]).toMatchObject({ kind: "document.written", agent: "the writer" });
+    // The token goes, so that the tokens' own tests find what they expect.
+    const gone = await h.request(`${REST_ROUTES.tokens}/${token.id}`, {
+      method: "DELETE",
+      headers: { cookie: alice, origin: SIGN_IN_URL },
+    });
+    expect(gone.status).toBe(204);
   });
 });
 

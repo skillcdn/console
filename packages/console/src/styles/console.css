@@ -1470,3 +1470,165 @@ svg {
   white-space: pre-wrap;
   word-break: break-all;
 }
+
+/* Documents: a folder's pages, one page with its versions, its links both ways and its files. */
+
+.sc-doc-crumbs {
+  margin-bottom: var(--sc-space-3);
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-doc-crumbs a {
+  color: var(--sc-color-text-muted);
+  text-decoration: none;
+}
+
+.sc-doc-crumbs a:hover {
+  color: var(--sc-color-accent);
+}
+
+.sc-doc-search {
+  display: flex;
+  gap: var(--sc-space-2);
+  margin-bottom: var(--sc-space-4);
+}
+
+.sc-doc-search .sc-input {
+  flex: 1;
+  max-width: 32rem;
+}
+
+.sc-folder {
+  display: grid;
+  gap: var(--sc-space-3);
+}
+
+.sc-folders {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sc-folder-link {
+  display: inline-block;
+  padding: var(--sc-space-1) var(--sc-space-3);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-bg-subtle);
+  color: var(--sc-color-text);
+  font-family: var(--sc-font-mono);
+  font-size: var(--sc-text-sm);
+  text-decoration: none;
+}
+
+.sc-folder-link:hover {
+  border-color: var(--sc-color-border-strong);
+  color: var(--sc-color-accent);
+}
+
+.sc-docs {
+  display: grid;
+  gap: var(--sc-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sc-doc-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sc-space-2) var(--sc-space-3);
+  padding: var(--sc-space-3) var(--sc-space-4);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-bg-subtle);
+}
+
+.sc-doc-title {
+  color: var(--sc-color-text);
+  font-weight: var(--sc-weight-medium);
+  text-decoration: none;
+}
+
+.sc-doc-title:hover {
+  color: var(--sc-color-accent);
+}
+
+.sc-doc-meta {
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-doc-path {
+  font-family: var(--sc-font-mono);
+  font-size: var(--sc-text-xs);
+  color: var(--sc-color-text-faint);
+}
+
+.sc-doc-editor {
+  min-height: 20rem;
+  font-family: var(--sc-font-mono);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-doc-notice {
+  margin-bottom: var(--sc-space-4);
+  padding: var(--sc-space-3) var(--sc-space-4);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-bg-inset);
+  color: var(--sc-color-text-muted);
+}
+
+.sc-doc-archived .sc-prose {
+  opacity: 0.85;
+}
+
+.sc-doc-attach {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-2);
+  margin-top: var(--sc-space-3);
+}
+
+.sc-versions {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sc-version + .sc-version {
+  margin-top: var(--sc-space-2);
+}
+
+.sc-version-number {
+  display: inline-block;
+  min-width: 2.5rem;
+  font-family: var(--sc-font-mono);
+  font-size: var(--sc-text-sm);
+}
+
+/* A decision as a record: its context, its answer, and what followed. */
+
+.sc-decision-section {
+  margin-top: var(--sc-space-3);
+}
+
+.sc-decision-label {
+  margin: 0 0 var(--sc-space-1);
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-xs);
+  font-weight: var(--sc-weight-medium);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sc-outcome-form {
+  display: grid;
+  gap: var(--sc-space-2);
+}

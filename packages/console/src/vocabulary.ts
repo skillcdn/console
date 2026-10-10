@@ -53,6 +53,11 @@ export const RUN_ENDINGS = ["finished", "failed", "abandoned"] as const;
 
 export type RunEnding = (typeof RUN_ENDINGS)[number];
 
+/** What links to a document by its path: another document, a task, or a decision. */
+export const LINK_SOURCES = ["document", "task", "decision"] as const;
+
+export type LinkSource = (typeof LINK_SOURCES)[number];
+
 /** What a run hands in: a link to the web, or a file the console keeps. */
 export const ARTIFACT_KINDS = ["link", "file"] as const;
 
@@ -90,10 +95,15 @@ export const EVENT_KINDS = [
   "task.moved",
   "decision.raised",
   "decision.answered",
+  "decision.updated",
   "run.started",
   "run.reported",
   "run.handed_in",
   "run.ended",
+  "document.written",
+  "document.archived",
+  "document.restored",
+  "document.file_attached",
 ] as const;
 
 export type EventKind = (typeof EVENT_KINDS)[number];

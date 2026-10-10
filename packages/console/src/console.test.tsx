@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { ConsoleClient, ProjectClient } from "./api.js";
 import { createConsole, DEFAULT_COMPONENTS } from "./console.js";
 import {
+  docHref,
   matchRoute,
   projectHref,
   signInFailureOf,
@@ -29,6 +30,15 @@ describe("matchRoute", () => {
     });
     expect(projectHref("web")).toBe("/p/web");
     expect(projectHref("web", "feed")).toBe("/p/web/feed");
+    expect(matchRoute("/p/web/docs")).toEqual({ name: "docs", project: "web", path: "" });
+    expect(matchRoute("/p/web/docs/guides/onboarding/")).toEqual({
+      name: "docs",
+      project: "web",
+      path: "guides/onboarding",
+    });
+    expect(matchRoute("/p/web/docs/Guides")).toEqual({ name: "not-found" });
+    expect(docHref("web", "")).toBe("/p/web/docs");
+    expect(docHref("web", "guides/onboarding")).toBe("/p/web/docs/guides/onboarding");
     for (const path of [
       "/p",
       "/p/",
@@ -87,6 +97,17 @@ describe("createConsole", () => {
     events: never,
     eventStreamUrl: () => `/api/v1/projects/${key}/events/stream`,
     skills: never,
+    updateDecision: never,
+    documents: never,
+    document: never,
+    writeDocument: never,
+    archiveDocument: never,
+    restoreDocument: never,
+    documentVersions: never,
+    documentVersion: never,
+    attachFile: never,
+    documentFileUrl: (path: string, id: string) =>
+      `/api/v1/projects/${key}/docs/${encodeURIComponent(path)}/files/${id}`,
   });
   const client: ConsoleClient = {
     me: never,

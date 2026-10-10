@@ -1,14 +1,22 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { isDocumentPath } from "../documents.js";
 
 // What people and agents write is untrusted. It is rendered as React elements, never as HTML:
 // raw HTML in the source stays text, links are limited to a few schemes and open elsewhere,
-// and pictures come over https only, lazily and without a referrer.
+// and pictures come over https only, lazily and without a referrer. A link whose destination
+// is a document's path (ADR-0009) leads to the document's page, when the page knows where.
 
 const SAFE_LINK = /^(https?:|mailto:)/i;
 const SAFE_IMAGE = /^https:\/\//i;
 
-export function Markdown(props: { readonly source: string }) {
+export interface MarkdownProps {
+  readonly source: string;
+  /** Where a document of the project is read, by its path; left out, such links stay text. */
+  readonly docHref?: ((path: string) => string) | undefined;
+}
+
+export function Markdown(props: MarkdownProps) {
   return (
     <div className="sc-prose">
       <ReactMarkdown
@@ -22,6 +30,13 @@ export function Markdown(props: { readonly source: string }) {
             }
             if (href.startsWith("#")) {
               return <a href={href}>{children}</a>;
+            }
+            const hash = href.indexOf("#");
+            const path = hash < 0 ? href : href.slice(0, hash);
+            if (props.docHref !== undefined && isDocumentPath(path)) {
+              return (
+                <a href={`${props.docHref(path)}${hash < 0 ? "" : href.slice(hash)}`}>{children}</a>
+              );
             }
             if (SAFE_LINK.test(href)) {
               return (

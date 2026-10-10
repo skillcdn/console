@@ -36,10 +36,20 @@ The board is a project's ([ADR-0008](../adr/0008-a-workspace-holds-projects-and-
 | `abandon [<run id>] [--summary <markdown>]` | `POST .../runs/<id>/end`, as `abandoned` | the same |
 | `runs [--task <number\|id>] [--open] [--mine]` | `GET .../runs` | one line per run |
 | `run <id>` | `GET .../runs/<id>` | the run in full, with its reports, what it handed in and where each file is read |
+| `decision <id> --outcome <markdown>\|--file <path>` | `PATCH .../decisions/<id>` | the decision as a record, with what followed written down |
+| `docs [<folder>] [--search <words>] [--archived]` | `GET .../docs?folder=` or `?q=` | the folders and the pages of a folder, or the pages found by words: one line per page |
+| `doc <path> [--version <n>\|--versions]` | `GET .../docs/<path>`, `.../versions`, `.../versions/<n>` | the page in full: its body, what it refers to, what refers to it, its files; or its versions; or one as it was |
+| `write <path> [--title <title>] --body <markdown>\|--file <path> [--base <version>]` | `GET .../docs/<path>` for the title when none is said, then `PUT .../docs/<path>` | the path, the title and the version written, and what the page refers to |
+| `attach <path> <file> [--label <words>]` | `POST .../docs/<path>/files`, as a form | how many files the page carries |
+| `archive <path>`, `restore <path>` | `POST .../docs/<path>/archive`, `.../restore` | that the page is put away, or back |
 | `help [<command>]` | nothing | the usage, written for an agent that meets the command for the first time |
 | `--version` (also `version`, `-v`) | nothing | which version of the command this is |
 
 `...` is `/api/v1/projects/<key>`, the project the command works in. Everywhere: `--json` prints the console's own answer as JSON, in the shapes of `@skillcdn/console/api`; `--url <origin>` names another console for this one command; `--project <key>` the project. A Markdown body given as `-` is read from standard input. Every argument is bounded and checked by the console, as the REST API's schemas say; the command sends it as it was given.
+
+## The documents
+
+A project's pages of Markdown ([ADR-0009](../adr/0009-documents-are-pages-of-markdown-in-a-project-addressed-by-path-versioned-and-linked-both-ways.md)), by path (`guides/onboarding`): `console docs` lists a folder, `console doc` reads a page, `console write` writes one, the first version or the next, keeping the title when none is said, `console attach` adds a file from the machine, `console archive` and `console restore` put a page away and bring it back. A link in a body whose destination is a page's path refers to that page, and `console doc` says what refers to a page in return. An agent writes down what it learned where the next agent will read it, and refers to it from its reports and in what it asks.
 
 ## The run a command means
 
@@ -62,7 +72,7 @@ Plain text on standard output: one line per thing in a list, a few lines for one
 
 ## What an agent is told
 
-`console help` says what the board is, that the agent acts as the person whose token it holds and that everything it sends is shown to people as text, which project the commands work in and how it is named, what each command does (take a task, report at the milestones of the work, hand in what was made, ask when a person must decide, finish when done), and the refusals any command may meet. `console help <command>` adds what the command takes, the limits the console holds it to (how long a report, a summary, a question or an option may be; how many options, reports and links) and the refusals it may meet, by code, so that an agent learns them before it runs into them. An organization's own skill for working with its console says the rest: which tasks to take, what to report, when to ask ([roadmap](../roadmap.md)).
+`console help` says what the board is, that the agent acts as the person whose token it holds and that everything it sends is shown to people as text, which project the commands work in and how it is named, what each command does (take a task, report at the milestones of the work, hand in what was made, ask when a person must decide, finish when done, write and read the project's pages), and the refusals any command may meet. `console help <command>` adds what the command takes, the limits the console holds it to (how long a report, a summary, a question or an option may be; how many options, reports and links) and the refusals it may meet, by code, so that an agent learns them before it runs into them. An organization's own skill for working with its console says the rest: which tasks to take, what to report, when to ask ([roadmap](../roadmap.md)).
 
 ## Running an agent on a task
 

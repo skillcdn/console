@@ -17,6 +17,7 @@ const FIELD_WORDS: Readonly<Record<string, string>> = {
   description: "the description",
   visibility: "who is a member",
   skillsAddress: "the skills address",
+  outcome: "what followed",
 };
 
 const roleWords = (role: string | undefined): string =>
@@ -37,6 +38,8 @@ export function describeEvent(event: RestEvent): string {
       : `#${data.number}${data.title === undefined ? "" : ` ${data.title}`}`;
   const project = data.name ?? data.key ?? "a project";
   const fields = (data.fields ?? []).map((field) => FIELD_WORDS[field] ?? field);
+  const page =
+    data.title === undefined ? `the page ${data.path ?? ""}`.trimEnd() : `the page ${data.title}`;
   switch (event.kind) {
     case "person.joined":
       return "joined the board";
@@ -62,6 +65,8 @@ export function describeEvent(event: RestEvent): string {
       return `asked: ${data.question ?? "a question"}`;
     case "decision.answered":
       return `answered "${data.question ?? "a question"}": ${data.option ?? ""}`;
+    case "decision.updated":
+      return `wrote ${fields.length === 0 ? "something" : fields.join(", ")} of the decision "${data.question ?? ""}"`;
     case "run.started":
       return `started on ${task}`;
     case "run.reported":
@@ -70,6 +75,14 @@ export function describeEvent(event: RestEvent): string {
       return `handed in ${data.label ?? "something"} on ${task}`;
     case "run.ended":
       return `${data.status === "finished" ? "finished" : data.status === "failed" ? "failed on" : "gave up on"} ${task}`;
+    case "document.written":
+      return `wrote ${page}${data.version === undefined ? "" : `, version ${data.version}`}`;
+    case "document.archived":
+      return `archived ${page}`;
+    case "document.restored":
+      return `restored ${page}`;
+    case "document.file_attached":
+      return `attached ${data.label ?? "a file"} to ${page}`;
   }
 }
 

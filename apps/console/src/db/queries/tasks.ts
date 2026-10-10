@@ -3,6 +3,7 @@ import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
 import { decisions, people, projects, runs, tasks } from "../schema.js";
+import { recordLinks } from "./documents.js";
 import { type Actor, recordEvent, type Scope } from "./events.js";
 import { assignees, owners, type PersonRecord, personColumns, toPerson } from "./people.js";
 import { mayWorkIn } from "./projects.js";
@@ -230,6 +231,7 @@ export async function createTask(
     if (inserted === undefined) {
       throw new Error("task insert returned no row");
     }
+    await recordLinks(tx, scope, { kind: "task", id: inserted.id }, [task.body ?? ""], now);
     await recordEvent(tx, {
       ...scope,
       kind: "task.created",
@@ -316,6 +318,9 @@ export async function updateTaskIn(tx: Transaction, input: TaskUpdate): Promise<
     .update(tasks)
     .set({ ...next, updatedAt: now })
     .where(eq(tasks.id, taskId));
+  if (changed.includes("body")) {
+    await recordLinks(tx, scope, { kind: "task", id: taskId }, [next.body], now);
+  }
   if (moved) {
     await recordEvent(tx, {
       ...scope,

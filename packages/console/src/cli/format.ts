@@ -1,10 +1,15 @@
 import type {
   RestArtifact,
   RestDecision,
+  RestDocument,
+  RestDocumentSummary,
+  RestDocuments,
   RestProject,
   RestRun,
   RestSkills,
   RestTask,
+  RestVersion,
+  RestVersionSummary,
 } from "../schemas.js";
 
 // What the command prints: one line per thing in a list, a few lines for one thing in full.
@@ -194,5 +199,86 @@ export function formatDecision(decision: RestDecision): string {
     lines.push("", decision.body.trimEnd());
   }
   lines.push("", "options:", formatOptions(decision), "", formatAnswer(decision));
+  if (decision.outcome !== null && decision.outcome.trim().length > 0) {
+    lines.push("", "what followed:", indent(decision.outcome));
+  }
+  return lines.join("\n");
+}
+
+/** Who wrote a version, and through which agent. */
+const writer = (by: { readonly login: string }, agent: string | null): string =>
+  agent === null ? by.login : `${agent} for ${by.login}`;
+
+/** One document in a list: its path, its title, its version, who wrote it last and when. */
+export function formatDocumentLine(document: RestDocumentSummary): string {
+  const notes = [`v${document.version}`, `by ${writer(document.updatedBy, document.agent)}`];
+  if (document.archivedAt !== null) {
+    notes.push("archived");
+  }
+  return `${document.path}  ${document.title}  (${notes.join(", ")}; ${document.updatedAt})`;
+}
+
+/** A folder's folders and pages, or the pages a search found. */
+export function formatDocuments(listing: RestDocuments): string {
+  if (listing.folders.length === 0 && listing.items.length === 0) {
+    return "No pages here.";
+  }
+  const lines = listing.folders.map((folder) => `${folder}/`);
+  for (const document of listing.items) {
+    lines.push(formatDocumentLine(document));
+  }
+  return lines.join("\n");
+}
+
+/** One document in full: its latest version, what it links to, what refers to it, and its files. */
+export function formatDocument(
+  document: RestDocument,
+  fileUrl?: (fileId: string) => string,
+): string {
+  const lines = [
+    `${document.path}: ${document.title}`,
+    `version ${document.version}, by ${writer(document.updatedBy, document.agent)} at ${document.updatedAt}${document.archivedAt === null ? "" : `; archived ${document.archivedAt}`}`,
+    `id: ${document.id}`,
+  ];
+  if (document.body.trim().length > 0) {
+    lines.push("", document.body.trimEnd());
+  }
+  if (document.links.length > 0) {
+    lines.push("", "refers to:");
+    for (const link of document.links) {
+      lines.push(
+        `  ${link.path}${link.title === null ? "  (no page there yet)" : `  ${link.title}`}`,
+      );
+    }
+  }
+  if (document.backlinks.length > 0) {
+    lines.push("", "referred to by:");
+    for (const backlink of document.backlinks) {
+      lines.push(
+        `  ${backlink.kind} ${backlink.kind === "task" ? `#${backlink.number ?? "?"}` : (backlink.path ?? backlink.id)}  ${backlink.title}`,
+      );
+    }
+  }
+  if (document.files.length > 0) {
+    lines.push("", "files:");
+    for (const attached of document.files) {
+      const where = fileUrl === undefined ? "" : `; read at ${fileUrl(attached.id)}`;
+      const what = `${attached.file.name} (${attached.file.size} bytes, ${attached.file.contentType}${where})`;
+      lines.push(`  ${attached.label === null ? what : `${attached.label}: ${what}`}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+export function formatVersionLine(version: RestVersionSummary): string {
+  return `v${version.number}  ${version.title}  (by ${writer(version.author, version.agent)}; ${version.createdAt})`;
+}
+
+/** One version of a document, with its body as it was. */
+export function formatVersion(path: string, version: RestVersion): string {
+  const lines = [`${path}: ${version.title}`, formatVersionLine(version)];
+  if (version.body.trim().length > 0) {
+    lines.push("", version.body.trimEnd());
+  }
   return lines.join("\n");
 }

@@ -45,3 +45,13 @@ export const MAX_PROJECT_NAME_LENGTH = 100;
 export const MAX_PROJECT_DESCRIPTION_LENGTH = 500;
 /** The address of a project's skills, as the standard spells one; the console checks it as one. */
 export const MAX_SKILLS_ADDRESS_LENGTH = 2048;
+/** A document's path: segments of lowercase letters, digits and hyphens, separated by slashes. */
+export const MAX_DOCUMENT_PATH_LENGTH = 200;
+export const MAX_DOCUMENT_SEGMENT_LENGTH = 64;
+/** A document's body: a page of Markdown. */
+export const MAX_DOCUMENT_LENGTH = 64_000;
+/** How many versions one document keeps, and how many files attach to one. */
+export const MAX_VERSIONS_PER_DOCUMENT = 500;
+export const MAX_FILES_PER_DOCUMENT = 50;
+/** The words a search of the documents takes. */
+export const MAX_SEARCH_LENGTH = 200;

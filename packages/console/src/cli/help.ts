@@ -2,7 +2,10 @@ import {
   MAX_AGENT_LENGTH,
   MAX_ARTIFACTS_PER_RUN,
   MAX_BODY_LENGTH,
+  MAX_DOCUMENT_LENGTH,
+  MAX_DOCUMENT_PATH_LENGTH,
   MAX_FILE_BYTES,
+  MAX_FILES_PER_DOCUMENT,
   MAX_LINK_LABEL_LENGTH,
   MAX_OPTION_LABEL_LENGTH,
   MAX_OPTIONS,
@@ -10,6 +13,7 @@ import {
   MAX_REPORTS_PER_RUN,
   MAX_SUMMARY_LENGTH,
   MAX_TITLE_LENGTH,
+  MAX_VERSIONS_PER_DOCUMENT,
   MIN_OPTIONS,
 } from "../limits.js";
 
@@ -43,6 +47,9 @@ const RUN_REFUSALS = [
 ];
 
 const MARKDOWN = `Markdown, up to ${MAX_BODY_LENGTH} characters`;
+
+const DOCUMENT_PATH = `a path of lowercase letters, digits and hyphens, with slashes between its folders (guides/onboarding), up to ${MAX_DOCUMENT_PATH_LENGTH} characters; it does not change once written`;
+const DOCUMENT_REFUSALS = ["document.not_found: no page has that path in this project"];
 
 export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   login: {
@@ -140,9 +147,10 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     refusals: ["decision.invalid_run: the run is not yours, or is over"],
   },
   decision: {
-    usage: "decision <id> [--wait <seconds>]",
+    usage: "decision <id> [--wait <seconds>]  |  decision <id> --outcome <markdown>|--file <path>",
     about:
-      "One decision, with its options and its answer. With --wait, holds on for the answer that long, and exits with 3 if it is still to come.",
+      "One decision, with its context, its options, its answer and what followed. With --wait, holds on for the answer that long, and exits with 3 if it is still to come. With --outcome, writes down what followed the decision, so that it reads as a record.",
+    limits: [`outcome: ${MARKDOWN}`],
     refusals: ["decision.not_found: no decision has that id"],
   },
   decisions: {
@@ -178,6 +186,60 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     usage: "run <id>",
     about: "One run in full: its reports, what it handed in, what it waits for, how it ended.",
     refusals: ["run.not_found: no run has that id"],
+  },
+  docs: {
+    usage: "docs [<folder>] [--search <words>] [--archived]",
+    about:
+      "The pages of the project's documents: those in a folder, with the folders in it (the root when none is named), or those found by words in their title or body. Archived pages are left out unless --archived.",
+  },
+  doc: {
+    usage: "doc <path> [--version <n>|--versions]",
+    about:
+      "One page in full: its title, its body in Markdown, what it links to, what refers to it (pages, tasks, decisions), and its files. --versions lists its versions, who wrote each and when; --version <n> prints one as it was.",
+    refusals: [...DOCUMENT_REFUSALS, "document.version_not_found: the page has no such version"],
+  },
+  write: {
+    usage: 'write <path> [--title "<title>"] --body <markdown>|--file <path> [--base <version>]',
+    about:
+      "Writes a page: the first version at a new path, or a new version of the page there. A link in the body whose destination is a page's path (guides/onboarding) refers to that page, and the page says what refers to it. Without --title the page keeps its title. With --base, the write is refused if the page has moved on since that version.",
+    limits: [
+      `path: ${DOCUMENT_PATH}`,
+      `title: one line, up to ${MAX_TITLE_LENGTH} characters`,
+      `body: Markdown, up to ${MAX_DOCUMENT_LENGTH} characters`,
+      `at most ${MAX_VERSIONS_PER_DOCUMENT} versions of one page`,
+    ],
+    refusals: [
+      "document.invalid_path: the path is not one",
+      "document.conflict: the page has moved on since --base; read it again",
+      "document.archived: the page is archived; restore it first",
+      "document.too_many_versions: the page carries as many versions as one may; write a new page",
+    ],
+  },
+  attach: {
+    usage: "attach <path> <file> [--label <words>]",
+    about:
+      "Attaches a file from this machine to a page: the console keeps it, and the page shows it.",
+    limits: [
+      `a file: up to ${MAX_FILE_BYTES} bytes, not empty; it is called by its name, without the path`,
+      `at most ${MAX_FILES_PER_DOCUMENT} files on one page`,
+    ],
+    refusals: [
+      ...DOCUMENT_REFUSALS,
+      "document.archived: the page is archived; restore it first",
+      "document.too_many_files: the page carries as many files as one may",
+      "request.too_large: the file is over the limit",
+    ],
+  },
+  archive: {
+    usage: "archive <path>",
+    about:
+      "Puts a page away: out of the folders and the search, still readable at its path, not written to until restored. Nothing is deleted.",
+    refusals: DOCUMENT_REFUSALS,
+  },
+  restore: {
+    usage: "restore <path>",
+    about: "Brings an archived page back.",
+    refusals: DOCUMENT_REFUSALS,
   },
 };
 
@@ -215,6 +277,10 @@ const SECTIONS: readonly { readonly title: string; readonly commands: readonly s
     commands: ["tasks", "task", "decisions", "decision", "runs", "run", "skills"],
   },
   { title: "Working", commands: ["take", "report", "hand-in", "ask", "finish", "fail", "abandon"] },
+  {
+    title: "The documents: the project's pages of Markdown, in folders, by path",
+    commands: ["docs", "doc", "write", "attach", "archive", "restore"],
+  },
 ];
 
 /** The whole usage, as `console help` prints it, naming the version when it is known. */
