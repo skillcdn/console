@@ -144,7 +144,7 @@
   --sc-width-page: 84rem;
   --sc-width-prose: 46rem;
   --sc-width-aside: 18rem;
-  --sc-column-width: 17rem;
+  --sc-column-width: 13.5rem;
   --sc-header-height: 3.75rem;
   --sc-brand-size: 1.25rem;
   --sc-brand-size-compact: 1.125rem;
@@ -652,12 +652,22 @@ table {
 
 /* The page. */
 
+/* The page is a column of blocks that fills the window below the header, so that a block which
+   wants the rest of the height, the board, can take it. */
 .sc-main {
+  display: flex;
   flex: 1;
+  flex-direction: column;
   width: 100%;
   max-width: var(--sc-width-page);
   margin-inline: auto;
   padding: var(--sc-space-6) var(--sc-space-5) var(--sc-space-8);
+}
+
+/* A page as wide as the window: the board, whose columns want every bit of it. */
+.sc-main-wide {
+  max-width: none;
+  padding: var(--sc-space-5) var(--sc-space-4) var(--sc-space-4);
 }
 
 .sc-page-head {
@@ -678,6 +688,16 @@ table {
   max-width: var(--sc-width-prose);
   margin-bottom: var(--sc-space-5);
   color: var(--sc-color-text-muted);
+}
+
+/* On the wide page the head and the lead keep out of the board's way. */
+.sc-main-wide .sc-page-head {
+  margin-bottom: var(--sc-space-3);
+}
+
+.sc-main-wide .sc-lead {
+  margin-bottom: var(--sc-space-4);
+  font-size: var(--sc-text-sm);
 }
 
 .sc-section-title {
@@ -1134,22 +1154,27 @@ table {
   font-size: var(--sc-text-sm);
 }
 
-/* The board: one pane per state, the tasks in it as cards. */
+/* The board: one pane per state, the tasks in it as cards. It takes the height the page has left
+   and the width the window has, the columns share the width while it is enough for them and
+   scroll sideways when it is not, and each column scrolls within itself. */
 
 .sc-board {
   display: grid;
+  flex: 1 1 0;
   grid-auto-flow: column;
-  grid-auto-columns: var(--sc-column-width);
-  gap: var(--sc-space-4);
+  grid-auto-columns: minmax(var(--sc-column-width), 1fr);
+  gap: var(--sc-space-3);
+  min-height: 24rem;
   overflow-x: auto;
-  padding-bottom: var(--sc-space-4);
   scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sc-color-border-strong) transparent;
 }
 
 .sc-column {
   display: flex;
   flex-direction: column;
-  min-height: 20rem;
+  min-height: 0;
   border-radius: var(--sc-radius-xl);
   scroll-snap-align: start;
 }
@@ -1199,14 +1224,19 @@ table {
 
 .sc-column-body {
   display: grid;
+  flex: 1;
   align-content: start;
   gap: var(--sc-space-2);
+  min-height: 0;
   padding: var(--sc-space-2);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sc-color-border-strong) transparent;
 }
 
 .sc-card {
   display: grid;
-  gap: var(--sc-space-2);
+  gap: var(--sc-space-1);
   padding: var(--sc-space-3);
   border-radius: var(--sc-radius-lg);
   transition:
@@ -1247,6 +1277,7 @@ table {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--sc-space-1);
+  margin-top: var(--sc-space-1);
 }
 
 .sc-card-meta:empty {

@@ -1067,6 +1067,7 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
           onLanguage={(tag) => void data.actions.updateMe({ language: tag }).catch(() => undefined)}
           person={data.me.person}
           live={projectKey === undefined ? undefined : data.live}
+          wide={route.name === "board"}
           onNavigate={(href) => navigation.go(href)}
           onSignOut={() => void data.actions.signOut()}
         >
