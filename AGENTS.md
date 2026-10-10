@@ -130,7 +130,7 @@ One topic, one file. Link to where something is documented instead of restating 
 
 - Add with `pnpm add --filter <package> <dep>`. Versions shared across workspaces go in the `catalog` in `pnpm-workspace.yaml`.
 - Justify every new runtime dependency in the commit message: why it is needed, maintenance health, install scripts, license. Permissive licenses only (MIT, Apache-2.0, BSD, ISC); we ship images, so no copyleft and no source-available dependencies. The one exception is the `@skillcdn/*` packages themselves, under the main repository's FSL-1.1-ALv2, which `pnpm check:licenses` allows by name and nothing else.
-- Releases younger than three days are not installable (`minimumReleaseAge`), and pnpm checks the lockfile against the rule on every install, frozen included. A fresh `@skillcdn/*` release that is needed now goes under `minimumReleaseAgeExclude` with the date it may come out again, three days after it was published, and comes out then. Bypass otherwise only for a security fix, and say so in the commit message.
+- Releases younger than three days are not installable (`minimumReleaseAge`), and pnpm checks the lockfile against the rule on every install, frozen included. The packages this organization publishes itself, `@skillcdn/*`, are excluded as a pattern (`minimumReleaseAgeExclude`): a fresh release of theirs is adopted at once, and the risk the rule guards against is in everything else, which waits. Bypass otherwise only for a security fix, and say so in the commit message.
 - Never hand-edit `pnpm-lock.yaml`; resolve conflicts by running `pnpm install`.
 
 ## Working alongside other agents

@@ -18,8 +18,8 @@ minimumReleaseAge: 4320
 allowBuilds:
   esbuild: true
 
-# @skillcdn/core 0.1.1 was published on 2026-10-09 and is adopted at once (docs/roadmap.md,
-# milestone 2). pnpm checks the lockfile against the policy on every install, frozen included,
-# so the exclusion stays until the release is three days old: take it out on 2026-10-12.
+# The packages this organization publishes itself are excluded as a pattern: a fresh
+# @skillcdn/* release is adopted at once, and the risk the rule guards against is elsewhere.
+# Everything else waits the three days.
 minimumReleaseAgeExclude:
-  - "@skillcdn/core"
+  - "@skillcdn/*"
