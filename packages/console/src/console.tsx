@@ -234,6 +234,15 @@ function useFollowLinks(navigation: Navigation): void {
 const projectOf = (route: Route): string | undefined =>
   "project" in route ? route.project : undefined;
 
+/** The field the pages lie on, for a page without the shell: signing in, and the wait before it. */
+function Ground(props: { readonly children: React.ReactNode }) {
+  return (
+    <div className="sc-shell">
+      <main className="sc-main">{props.children}</main>
+    </div>
+  );
+}
+
 /** A link that reads as a button: where a form is, for instance. */
 function LinkButton(props: {
   readonly href: string;
@@ -892,29 +901,33 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
     let content: React.ReactNode;
     if (data.me === undefined) {
       content = (
-        <div className="sc-loading">
-          {data.error === undefined ? (
-            <Spinner label={words.common.loading} />
-          ) : (
-            <Callout
-              tone="danger"
-              title={words.common.couldNotReach}
-              action={<Button onClick={data.reload}>{words.common.tryAgain}</Button>}
-            >
-              {data.error}
-            </Callout>
-          )}
-        </div>
+        <Ground>
+          <div className="sc-loading">
+            {data.error === undefined ? (
+              <Spinner label={words.common.loading} />
+            ) : (
+              <Callout
+                tone="danger"
+                title={words.common.couldNotReach}
+                action={<Button onClick={data.reload}>{words.common.tryAgain}</Button>}
+              >
+                {data.error}
+              </Callout>
+            )}
+          </div>
+        </Ground>
       );
     } else if (data.me.person === null) {
       content = (
-        <components.SignIn
-          title={title}
-          brand={config.brand}
-          providers={data.me.signIn}
-          returnTo={withoutSignInParam(location.pathname, location.search)}
-          failure={failure}
-        />
+        <Ground>
+          <components.SignIn
+            title={title}
+            brand={config.brand}
+            providers={data.me.signIn}
+            returnTo={withoutSignInParam(location.pathname, location.search)}
+            failure={failure}
+          />
+        </Ground>
       );
     } else {
       const project = data.project;

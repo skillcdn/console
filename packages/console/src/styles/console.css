@@ -1,42 +1,109 @@
 /*
  * The styles of the default console: the design tokens, the reset the pages need, and one class
  * per building block, all prefixed `sc-` so that a custom console's own styles never collide
- * with them. Re-skinning starts and mostly ends with the tokens. Dark, with one accent.
+ * with them. Re-skinning starts and mostly ends with the tokens.
+ *
+ * The look is SkillCDN's own: dark only, one blue accent and one warm point colour, the page a
+ * dark field with a soft light high in it, and the surfaces panes of glass over that field, so
+ * that the console reads as part of the same product as the site it is built for.
  */
 
 :root {
   color-scheme: dark;
 
-  --sc-color-bg: #0c1118;
-  --sc-color-bg-subtle: #111823;
-  --sc-color-bg-inset: #18202c;
-  --sc-color-bg-raised: #1d2735;
-  --sc-color-border: #263142;
-  --sc-color-border-strong: #3a4859;
-  --sc-color-text: #e7ebf0;
-  --sc-color-text-muted: #9ba6b4;
-  --sc-color-text-faint: #76829a;
+  /* Surfaces: the page's own dark, and the steps above it. */
+  --sc-color-bg: #0b1019;
+  --sc-color-bg-subtle: #0f1520;
+  --sc-color-bg-inset: #151d2b;
+  --sc-color-bg-raised: #192232;
+  --sc-color-border: #263042;
+  --sc-color-border-strong: #3b4960;
+
+  /* Text. */
+  --sc-color-text: #e8ebf0;
+  --sc-color-text-muted: #9aa4b2;
+  --sc-color-text-faint: #8b97a9;
+
+  /* The one accent: the blue that text and lines are drawn in, and the deeper blue a surface
+     is filled with so that a white label reads on it. */
   --sc-color-accent: #6ea1ff;
   --sc-color-accent-hover: #8fb6ff;
   --sc-color-accent-solid: #3b6fd4;
-  --sc-color-accent-solid-hover: #4a7ce0;
+  --sc-color-accent-solid-hover: #4171d8;
   --sc-color-accent-contrast: #ffffff;
-  --sc-color-accent-subtle: #13203a;
+  --sc-color-accent-subtle: #111a2b;
+  /* The point: the only warm colour, for what should be looked at first, never for a control. */
   --sc-color-point: #ffb13a;
-  --sc-color-point-subtle: #2a1d0b;
-  --sc-color-success: #4cc38a;
-  --sc-color-success-subtle: #0d1f16;
-  --sc-color-warning: #e3b341;
-  --sc-color-warning-subtle: #241c0a;
-  --sc-color-danger: #ff7b85;
-  --sc-color-danger-subtle: #2a1014;
-  --sc-color-selection: rgba(59, 111, 212, 0.6);
+  --sc-color-point-subtle: #2a1a0e;
+  --sc-color-selection: color-mix(in srgb, var(--sc-color-accent-solid) 60%, transparent);
 
+  /* Status. */
+  --sc-color-success: #4cc38a;
+  --sc-color-success-subtle: #0d1a13;
+  --sc-color-warning: #e3b341;
+  --sc-color-warning-subtle: #201a0c;
+  --sc-color-danger: #ff7b85;
+  --sc-color-danger-subtle: #230f12;
+
+  /* The ground: a dark field with two lights in it, a far one low and wide and a near one high
+     and soft, and the corners taken down, so the field has distance in it. The default UI
+     provides the field's face (the shell); a custom console may paint its own. */
+  --sc-color-sky: #0d1730;
+  --sc-color-far: #2b4d9455;
+  --sc-color-far-turn: #3c3f8e3d;
+  --sc-color-vignette: #04071199;
+  --sc-color-light-core: #dbe7ff;
+  --sc-color-light-body: #93b4f2;
+  --sc-color-light-mid: #7f7ae8b8;
+  --sc-color-light-halo: #3a5fd488;
+  --sc-light-strength: 0.3;
+  --sc-light-top: -18rem;
+  --sc-light-height: 34rem;
+  --sc-light-inset: 8%;
+  --sc-light-blur: 4rem;
+
+  /* Glass: what a pane over the field is made of. A wide blur with the colour behind pushed, an
+     even veil of the page's own dark, a thin lit edge, and a soft stand-off from the field. */
+  --sc-glass-backdrop: blur(24px) saturate(1.8);
+  --sc-color-glass: #111a2e66;
+  --sc-color-glass-hover: #18243f73;
+  --sc-color-glass-edge: #ffffff1c;
+  --sc-glass-surface: linear-gradient(var(--sc-color-glass), var(--sc-color-glass)) padding-box;
+  --sc-glass-surface-hover: linear-gradient(
+      var(--sc-color-glass-hover),
+      var(--sc-color-glass-hover)
+    )
+    padding-box;
+  --sc-glass-sheen: inset 0 1px 0 #ffffff4d, inset 0 0 0 1px #ffffff10, inset 0 3px 6px #ffffff12;
+  --sc-glass-lift: 0 0.75rem 2rem -0.75rem #00000059;
+  --sc-glass-lens: blur(4px) brightness(1.4) saturate(1.5) hue-rotate(-6deg);
+  --sc-glass-lens-width: 2px;
+  --sc-glass-lens-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  /* A surface inside a pane: no blur of its own, a little of the page's dark let through. */
+  --sc-color-sheet: color-mix(in srgb, var(--sc-color-bg) 72%, transparent);
+  --sc-color-sheet-hover: color-mix(in srgb, var(--sc-color-bg-raised) 80%, transparent);
+  --sc-color-field: color-mix(in srgb, var(--sc-color-bg) 78%, transparent);
+
+  /* Light falls from above: a lit thing spills downward, in the accent's own colour, in layers
+     that fall off the way brightness does. */
+  --sc-glow:
+    0 0.125rem 0.5rem -0.25rem color-mix(in srgb, var(--sc-color-accent-hover) 38%, transparent),
+    0 0.5rem 1.25rem -0.5rem color-mix(in srgb, var(--sc-color-accent) 22%, transparent),
+    0 1.25rem 3rem -1rem color-mix(in srgb, var(--sc-color-accent) 11%, transparent);
+  --sc-glow-bright:
+    0 0.125rem 0.5rem -0.25rem color-mix(in srgb, var(--sc-color-accent-hover) 70%, transparent),
+    0 0.5rem 1.25rem -0.5rem color-mix(in srgb, var(--sc-color-accent) 45%, transparent),
+    0 1.25rem 3rem -1rem color-mix(in srgb, var(--sc-color-accent) 24%, transparent);
+  --sc-shadow-stage: 0 1.5rem 5rem #00000033;
+
+  /* Type. The Korean face comes first where the page provides it; the Latin stays with the
+     system's faces. */
   --sc-font-sans:
-    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "Apple SD Gothic Neo",
-    "Malgun Gothic", "Noto Sans KR", Arial, sans-serif;
+    "Pretendard Variable", system-ui, -apple-system, "Segoe UI", Roboto, "Apple SD Gothic Neo",
+    "Malgun Gothic", "Noto Sans KR", "Helvetica Neue", Arial, sans-serif;
   --sc-font-mono:
-    ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", "D2Coding",
+    monospace;
 
   --sc-text-xs: 0.75rem;
   --sc-text-sm: 0.875rem;
@@ -44,11 +111,18 @@
   --sc-text-lg: 1.125rem;
   --sc-text-xl: 1.375rem;
   --sc-text-2xl: 1.75rem;
-  --sc-leading-tight: 1.25;
-  --sc-leading-normal: 1.55;
+  --sc-leading-tight: 1.2;
+  --sc-leading-normal: 1.6;
+  --sc-leading-code: 1.7;
+  --sc-weight-normal: 400;
   --sc-weight-medium: 500;
   --sc-weight-bold: 650;
+  /* Every face leaves more room above a line than below it, so a one-line label centred in a
+     box lands low; a box that centres a label takes this off the top and gives it to the
+     bottom. Not for anything that can wrap. */
+  --sc-label-lift: 0.067em;
 
+  /* Space: a 4px grid. */
   --sc-space-1: 0.25rem;
   --sc-space-2: 0.5rem;
   --sc-space-3: 0.75rem;
@@ -56,19 +130,27 @@
   --sc-space-5: 1.5rem;
   --sc-space-6: 2rem;
   --sc-space-7: 3rem;
+  --sc-space-8: 4.5rem;
 
+  /* Shape. */
   --sc-radius-sm: 4px;
   --sc-radius-md: 8px;
   --sc-radius-lg: 12px;
+  --sc-radius-xl: 20px;
   --sc-radius-full: 999px;
   --sc-border: 1px solid var(--sc-color-border);
 
+  /* Layout. */
   --sc-width-page: 84rem;
   --sc-width-prose: 46rem;
+  --sc-width-aside: 18rem;
   --sc-column-width: 17rem;
+  --sc-header-height: 3.75rem;
+  --sc-brand-size: 1.25rem;
+  --sc-brand-size-compact: 1.125rem;
+  --sc-control-size: 2.5rem;
   --sc-focus-ring: 2px solid var(--sc-color-accent);
   --sc-transition: 120ms ease-out;
-  --sc-shadow: 0 0.5rem 1.5rem -0.75rem rgba(0, 0, 0, 0.6);
 }
 
 /* Reset: only what the pages need. */
@@ -82,6 +164,7 @@
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  scroll-padding-top: calc(var(--sc-header-height) + var(--sc-space-6));
 }
 
 body {
@@ -93,8 +176,10 @@ body {
   font-size: var(--sc-text-md);
   line-height: var(--sc-leading-normal);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
+/* Korean breaks between any two syllables by default; keeping words whole reads much better. */
 :lang(ko) {
   word-break: keep-all;
   overflow-wrap: anywhere;
@@ -121,6 +206,7 @@ h4 {
   line-height: var(--sc-leading-tight);
   font-weight: var(--sc-weight-bold);
   letter-spacing: -0.01em;
+  text-wrap: balance;
 }
 
 ul,
@@ -171,6 +257,10 @@ svg {
   max-width: 100%;
 }
 
+table {
+  border-collapse: collapse;
+}
+
 ::selection {
   background: var(--sc-color-selection);
   color: var(--sc-color-accent-contrast);
@@ -192,12 +282,64 @@ svg {
   color: var(--sc-color-text-muted);
 }
 
-/* The shell: a header with the workspace, the project and the person, the tabs under it, and the page below (ADR-0010). */
+/*
+ * The shell (ADR-0010): the field the pages lie on, a header that names the product, the
+ * workspace and the project with the person's menu at its end, the tabs of the level the
+ * person is on, and the page below.
+ */
 
 .sc-shell {
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   min-height: 100dvh;
+  overflow-x: clip;
+  background-color: var(--sc-color-sky);
+  /* The far light: low, wide and vague, which is what distance does to a light. */
+  background-image: radial-gradient(
+    ellipse 120% 64% at 50% 92%,
+    var(--sc-color-far),
+    var(--sc-color-far-turn) 48%,
+    transparent 72%
+  );
+  background-attachment: fixed;
+}
+
+/* The near light, high behind the header: an ellipse that is blurred rather than a gradient,
+   because a blur falls off the way light does. Fixed to the window, so that the page travels
+   through the light and the light stays where it is. */
+.sc-shell::before {
+  content: "";
+  position: fixed;
+  z-index: -1;
+  top: var(--sc-light-top);
+  left: var(--sc-light-inset);
+  right: var(--sc-light-inset);
+  height: var(--sc-light-height);
+  background: radial-gradient(
+    ellipse closest-side,
+    var(--sc-color-light-core) 0%,
+    var(--sc-color-light-body) 14%,
+    var(--sc-color-light-mid) 42%,
+    var(--sc-color-light-halo) 70%,
+    transparent 100%
+  );
+  filter: blur(var(--sc-light-blur));
+  opacity: var(--sc-light-strength);
+  pointer-events: none;
+}
+
+/* The air over both lights: the corners and the foot of the window taken down. */
+.sc-shell::after {
+  content: "";
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  background-image:
+    linear-gradient(to bottom, transparent 60%, var(--sc-color-vignette)),
+    radial-gradient(ellipse 130% 110% at 50% 30%, transparent 36%, var(--sc-color-vignette) 100%);
+  pointer-events: none;
 }
 
 .sc-skip {
@@ -222,21 +364,28 @@ svg {
   top: 0;
   z-index: 10;
   border-bottom: var(--sc-border);
-  background: color-mix(in srgb, var(--sc-color-bg) 88%, transparent);
-  backdrop-filter: blur(12px);
+  background: color-mix(in srgb, var(--sc-color-bg) 82%, transparent);
+  backdrop-filter: blur(12px) saturate(1.4);
 }
 
 .sc-header-inner {
   display: flex;
   align-items: center;
-  gap: var(--sc-space-5);
+  gap: var(--sc-space-4);
+  width: 100%;
   max-width: var(--sc-width-page);
-  min-height: 3.5rem;
+  height: var(--sc-header-height);
   margin-inline: auto;
   padding-inline: var(--sc-space-5);
 }
 
+/* The brand: the lockup of the symbol and the wordmark where the console has marks, the name
+   of the workspace where it has none. The lockup stands as tall as the words beside it. */
 .sc-brand {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sc-space-2);
   color: var(--sc-color-text);
   font-weight: var(--sc-weight-bold);
   letter-spacing: -0.01em;
@@ -244,18 +393,22 @@ svg {
   white-space: nowrap;
 }
 
-.sc-brand-symbol {
-  width: 1.5rem;
-  height: 1.5rem;
-  margin-right: var(--sc-space-2);
-  vertical-align: middle;
+.sc-brand:hover {
+  color: var(--sc-color-text);
 }
 
-.sc-sign-in-wordmark {
-  display: block;
-  max-width: 14rem;
-  height: 2rem;
-  margin-bottom: var(--sc-space-4);
+.sc-brand-symbol {
+  width: var(--sc-brand-size);
+  height: var(--sc-brand-size);
+}
+
+.sc-brand-wordmark {
+  width: auto;
+  height: var(--sc-brand-size);
+}
+
+.sc-brand-name {
+  font-size: var(--sc-text-md);
 }
 
 .sc-crumb {
@@ -263,25 +416,37 @@ svg {
   align-items: center;
   gap: var(--sc-space-2);
   min-width: 0;
+  font-size: var(--sc-text-sm);
   white-space: nowrap;
 }
 
 .sc-crumb-separator {
-  color: var(--sc-color-text-faint);
+  color: var(--sc-color-border-strong);
 }
 
 .sc-crumb-link {
   overflow: hidden;
   max-width: 14rem;
-  color: var(--sc-color-text);
+  color: var(--sc-color-text-muted);
   font-weight: var(--sc-weight-medium);
   text-decoration: none;
   text-overflow: ellipsis;
+  transition: color var(--sc-transition);
+}
+
+.sc-crumb-link:hover {
+  color: var(--sc-color-text);
+}
+
+/* The last crumb is where the page is. */
+.sc-crumb:last-of-type .sc-crumb-link {
+  color: var(--sc-color-text);
 }
 
 /* The tabs: the pages of the level the person is on, under the header's first row. */
 
 .sc-tabs {
+  width: 100%;
   max-width: var(--sc-width-page);
   margin-inline: auto;
   padding-inline: var(--sc-space-5);
@@ -291,14 +456,14 @@ svg {
 
 .sc-tabs-inner {
   display: flex;
-  gap: var(--sc-space-1);
+  gap: var(--sc-space-5);
 }
 
 .sc-tab {
   display: inline-flex;
   align-items: center;
   gap: var(--sc-space-2);
-  padding: var(--sc-space-2) var(--sc-space-3);
+  padding: var(--sc-space-2) 0 var(--sc-space-3);
   margin-bottom: -1px;
   border-bottom: 2px solid transparent;
   color: var(--sc-color-text-muted);
@@ -320,112 +485,7 @@ svg {
   color: var(--sc-color-text);
 }
 
-/* The person's menu: a disclosure at the end of the header, with the workspace's pages. */
-
-.sc-menu {
-  position: relative;
-}
-
-.sc-menu-summary {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sc-space-2);
-  padding: var(--sc-space-1) var(--sc-space-2);
-  border-radius: var(--sc-radius-md);
-  list-style: none;
-  cursor: pointer;
-  transition: background var(--sc-transition);
-}
-
-.sc-menu-summary::-webkit-details-marker {
-  display: none;
-}
-
-.sc-menu-summary:hover,
-.sc-menu[open] > .sc-menu-summary {
-  background: var(--sc-color-bg-inset);
-}
-
-.sc-menu-panel {
-  position: absolute;
-  top: calc(100% + var(--sc-space-1));
-  right: 0;
-  z-index: 20;
-  min-width: 14rem;
-  padding: var(--sc-space-2);
-  border: var(--sc-border);
-  border-radius: var(--sc-radius-lg);
-  background: var(--sc-color-bg-raised);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
-}
-
-.sc-menu-who {
-  display: flex;
-  flex-direction: column;
-  padding: var(--sc-space-2) var(--sc-space-3) var(--sc-space-3);
-  margin-bottom: var(--sc-space-1);
-  border-bottom: var(--sc-border);
-  font-size: var(--sc-text-sm);
-  font-weight: var(--sc-weight-medium);
-}
-
-.sc-menu-list {
-  display: flex;
-  flex-direction: column;
-}
-
-.sc-menu-link {
-  display: block;
-  width: 100%;
-  padding: var(--sc-space-2) var(--sc-space-3);
-  border: 0;
-  border-radius: var(--sc-radius-md);
-  background: none;
-  color: var(--sc-color-text);
-  font: inherit;
-  font-size: var(--sc-text-sm);
-  text-align: left;
-  text-decoration: none;
-  cursor: pointer;
-}
-
-.sc-menu-link:hover {
-  background: var(--sc-color-bg-inset);
-}
-
-.sc-menu-link[aria-current="page"] {
-  color: var(--sc-color-accent);
-  font-weight: var(--sc-weight-medium);
-}
-
-.sc-menu-languages {
-  margin: var(--sc-space-1) 0 0;
-  padding: var(--sc-space-1) 0 0;
-  border: 0;
-  border-top: var(--sc-border);
-}
-
-.sc-menu-heading {
-  display: block;
-  padding: var(--sc-space-1) var(--sc-space-3);
-  color: var(--sc-color-text-muted);
-  font-size: var(--sc-text-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.sc-menu-chosen {
-  color: var(--sc-color-accent);
-  font-weight: var(--sc-weight-medium);
-}
-
-.sc-menu-out {
-  margin-top: var(--sc-space-1);
-  border-top: var(--sc-border);
-  border-radius: 0;
-  color: var(--sc-color-text-muted);
-}
-
+/* What waits, beside a tab's name: a count in the point colour, so it reads before the words. */
 .sc-nav-count {
   display: inline-flex;
   align-items: center;
@@ -439,11 +499,143 @@ svg {
   line-height: 1.25rem;
 }
 
+/* The person's menu: a quiet label at the end of the header that opens a short list. */
+
 .sc-header-end {
   display: flex;
+  flex: none;
   align-items: center;
   gap: var(--sc-space-3);
   margin-left: auto;
+}
+
+.sc-menu {
+  position: relative;
+  font-size: var(--sc-text-sm);
+}
+
+.sc-menu-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-space-2);
+  min-height: var(--sc-control-size);
+  padding-inline: var(--sc-space-2);
+  border-radius: var(--sc-radius-md);
+  color: var(--sc-color-text-muted);
+  list-style: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--sc-transition),
+    color var(--sc-transition);
+}
+
+.sc-menu-summary::-webkit-details-marker {
+  display: none;
+}
+
+.sc-menu-summary:hover,
+.sc-menu[open] > .sc-menu-summary {
+  background: var(--sc-color-bg-raised);
+  color: var(--sc-color-text);
+}
+
+.sc-menu-caret {
+  flex: none;
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.sc-menu-panel {
+  position: absolute;
+  top: calc(100% + var(--sc-space-2));
+  right: 0;
+  z-index: 20;
+  width: max-content;
+  min-width: 13rem;
+  padding: var(--sc-space-1);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-lg);
+  background: var(--sc-color-bg-inset);
+  box-shadow: var(--sc-shadow-stage);
+}
+
+.sc-menu-who {
+  display: flex;
+  flex-direction: column;
+  padding: var(--sc-space-2) var(--sc-space-3) var(--sc-space-3);
+  margin-bottom: var(--sc-space-1);
+  border-bottom: var(--sc-border);
+  font-weight: var(--sc-weight-medium);
+}
+
+.sc-menu-who .sc-muted {
+  font-weight: var(--sc-weight-normal);
+  font-size: var(--sc-text-xs);
+}
+
+.sc-menu-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.sc-menu-link {
+  display: block;
+  width: 100%;
+  padding-inline: var(--sc-space-3);
+  padding-block: calc(var(--sc-space-2) - var(--sc-label-lift))
+    calc(var(--sc-space-2) + var(--sc-label-lift));
+  border: 0;
+  border-radius: var(--sc-radius-md);
+  background: none;
+  color: var(--sc-color-text-muted);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background var(--sc-transition),
+    color var(--sc-transition);
+}
+
+.sc-menu-link:hover {
+  background: var(--sc-color-bg-raised);
+  color: var(--sc-color-text);
+}
+
+.sc-menu-link[aria-current="page"] {
+  color: var(--sc-color-text);
+  font-weight: var(--sc-weight-medium);
+}
+
+.sc-menu-languages {
+  margin: var(--sc-space-1) 0 0;
+  padding: var(--sc-space-1) 0 0;
+  border: 0;
+  border-top: var(--sc-border);
+}
+
+.sc-menu-heading {
+  display: block;
+  padding: var(--sc-space-1) var(--sc-space-3);
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-xs);
+  font-weight: var(--sc-weight-medium);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sc-menu-chosen {
+  color: var(--sc-color-accent);
+  font-weight: var(--sc-weight-medium);
+}
+
+/* Leaving is apart from the pages one goes to. */
+.sc-menu-out {
+  margin-top: var(--sc-space-1);
+  padding-top: calc(var(--sc-space-2) + var(--sc-space-1) - var(--sc-label-lift));
+  border-top: var(--sc-border);
+  border-radius: 0 0 var(--sc-radius-md) var(--sc-radius-md);
 }
 
 .sc-live {
@@ -455,15 +647,17 @@ svg {
 
 .sc-live-on {
   background: var(--sc-color-success);
-  box-shadow: 0 0 0 3px var(--sc-color-success-subtle);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--sc-color-success) 25%, transparent);
 }
+
+/* The page. */
 
 .sc-main {
   flex: 1;
   width: 100%;
   max-width: var(--sc-width-page);
   margin-inline: auto;
-  padding: var(--sc-space-6) var(--sc-space-5) var(--sc-space-7);
+  padding: var(--sc-space-6) var(--sc-space-5) var(--sc-space-8);
 }
 
 .sc-page-head {
@@ -472,11 +666,18 @@ svg {
   align-items: center;
   justify-content: space-between;
   gap: var(--sc-space-3);
-  margin-bottom: var(--sc-space-5);
+  margin-bottom: var(--sc-space-4);
 }
 
 .sc-page-title {
   font-size: var(--sc-text-2xl);
+  letter-spacing: -0.02em;
+}
+
+.sc-lead {
+  max-width: var(--sc-width-prose);
+  margin-bottom: var(--sc-space-5);
+  color: var(--sc-color-text-muted);
 }
 
 .sc-section-title {
@@ -487,12 +688,66 @@ svg {
   font-size: var(--sc-text-lg);
 }
 
+/*
+ * Panes: the surfaces of the page are glass over the field. A pane is a veil of the page's own
+ * dark over a blur of what is behind it, with a thin lit edge; two panes differ only in what
+ * each has behind it. The rim is a ring with a filter of its own, under the content, so that
+ * what draws the edge of a pane is the field behind that edge, bent.
+ */
+
+.sc-panel,
+.sc-column,
+.sc-project,
+.sc-decision,
+.sc-run,
+.sc-sign-in,
+.sc-facts {
+  position: relative;
+  isolation: isolate;
+  border: 1px solid transparent;
+  background: var(--sc-glass-surface);
+  backdrop-filter: var(--sc-glass-backdrop);
+  box-shadow: var(--sc-glass-sheen), var(--sc-glass-lift);
+}
+
+.sc-panel::before,
+.sc-column::before,
+.sc-project::before,
+.sc-decision::before,
+.sc-run::before,
+.sc-sign-in::before,
+.sc-facts::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  padding: var(--sc-glass-lens-width);
+  border-radius: inherit;
+  background: var(--sc-color-glass-edge);
+  backdrop-filter: var(--sc-glass-lens);
+  mask: var(--sc-glass-lens-mask);
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
 .sc-panel {
   margin-bottom: var(--sc-space-5);
   padding: var(--sc-space-5);
+  border-radius: var(--sc-radius-xl);
+}
+
+/* A sheet: a surface inside a pane, or a row of a list, with no blur of its own. */
+.sc-token,
+.sc-person-row,
+.sc-skill,
+.sc-doc-row,
+.sc-feed-item,
+.sc-card,
+.sc-option,
+.sc-answer,
+.sc-report-list {
   border: var(--sc-border);
-  border-radius: var(--sc-radius-lg);
-  background: var(--sc-color-bg-subtle);
+  background: var(--sc-color-sheet);
 }
 
 .sc-loading {
@@ -509,7 +764,7 @@ svg {
   align-items: center;
   justify-content: center;
   gap: var(--sc-space-2);
-  min-height: 2.5rem;
+  min-height: var(--sc-control-size);
   padding: 0 var(--sc-space-4);
   border: 1px solid transparent;
   border-radius: var(--sc-radius-md);
@@ -521,6 +776,7 @@ svg {
   transition:
     background var(--sc-transition),
     border-color var(--sc-transition),
+    box-shadow var(--sc-transition),
     color var(--sc-transition);
 }
 
@@ -538,21 +794,24 @@ svg {
 .sc-button-primary {
   background: var(--sc-color-accent-solid);
   color: var(--sc-color-accent-contrast);
+  box-shadow: var(--sc-glow);
 }
 
 .sc-button-primary:hover:not(:disabled) {
   background: var(--sc-color-accent-solid-hover);
   color: var(--sc-color-accent-contrast);
+  box-shadow: var(--sc-glow-bright);
 }
 
 .sc-button-secondary {
-  background: var(--sc-color-bg);
+  background: var(--sc-color-field);
   border-color: var(--sc-color-border-strong);
   color: var(--sc-color-text);
 }
 
 .sc-button-secondary:hover:not(:disabled) {
-  background: var(--sc-color-bg-subtle);
+  background: var(--sc-color-bg-raised);
+  color: var(--sc-color-text);
 }
 
 .sc-button-ghost {
@@ -566,23 +825,30 @@ svg {
 }
 
 .sc-button-danger {
-  background: var(--sc-color-danger-subtle);
-  border-color: var(--sc-color-danger);
+  background: transparent;
+  border-color: var(--sc-color-border-strong);
   color: var(--sc-color-danger);
 }
 
-/* Badges */
+.sc-button-danger:hover:not(:disabled) {
+  background: var(--sc-color-danger-subtle);
+  border-color: var(--sc-color-danger);
+}
+
+/* Badges: a pill on the grid, its label lifted to the middle of it. */
 
 .sc-badge {
   display: inline-flex;
   align-items: center;
   gap: var(--sc-space-1);
-  padding: var(--sc-space-1) var(--sc-space-2);
+  padding-inline: var(--sc-space-2);
+  padding-block: calc(var(--sc-space-1) - var(--sc-label-lift))
+    calc(var(--sc-space-1) + var(--sc-label-lift));
   border: 1px solid var(--sc-color-border);
   border-radius: var(--sc-radius-full);
   font-size: var(--sc-text-xs);
   font-weight: var(--sc-weight-medium);
-  line-height: 1.2;
+  line-height: 1.25;
   white-space: nowrap;
 }
 
@@ -597,6 +863,7 @@ svg {
   color: var(--sc-color-accent);
 }
 
+/* The point: a count, or that a thing is someone's; the one filled warm pill on a page. */
 .sc-badge-point {
   background: var(--sc-color-point-subtle);
   border-color: transparent;
@@ -609,9 +876,10 @@ svg {
   color: var(--sc-color-success);
 }
 
+/* A state and not a fill: the warm colour is on the words and the line stays a line. */
 .sc-badge-warning {
-  background: var(--sc-color-warning-subtle);
-  border-color: transparent;
+  background: var(--sc-color-bg-subtle);
+  border-color: var(--sc-color-border-strong);
   color: var(--sc-color-warning);
 }
 
@@ -667,6 +935,13 @@ svg {
   font-weight: var(--sc-weight-medium);
 }
 
+/* In the menu's label a long name gives way before the header runs out of room. */
+.sc-menu-summary .sc-person-login {
+  max-width: 11rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Callouts, empty states, spinner */
 
 .sc-callout {
@@ -678,7 +953,7 @@ svg {
   padding: var(--sc-space-4);
   border: 1px solid var(--sc-color-border-strong);
   border-radius: var(--sc-radius-md);
-  background: var(--sc-color-bg-subtle);
+  background: var(--sc-color-sheet);
   font-size: var(--sc-text-sm);
 }
 
@@ -704,8 +979,12 @@ svg {
   margin-top: var(--sc-space-1);
 }
 
+.sc-callout-body p + p {
+  margin-top: var(--sc-space-2);
+}
+
 .sc-empty {
-  padding: var(--sc-space-6) var(--sc-space-5);
+  padding: var(--sc-space-7) var(--sc-space-5);
   border: 1px dashed var(--sc-color-border-strong);
   border-radius: var(--sc-radius-lg);
   text-align: center;
@@ -794,13 +1073,24 @@ svg {
 
 .sc-input {
   width: 100%;
-  min-height: 2.5rem;
+  min-height: var(--sc-control-size);
   padding: var(--sc-space-2) var(--sc-space-3);
   border: 1px solid var(--sc-color-border-strong);
   border-radius: var(--sc-radius-md);
-  background: var(--sc-color-bg);
+  background: var(--sc-color-field);
   color: var(--sc-color-text);
   font-size: var(--sc-text-sm);
+  transition:
+    border-color var(--sc-transition),
+    background var(--sc-transition);
+}
+
+.sc-input::placeholder {
+  color: var(--sc-color-text-faint);
+}
+
+.sc-input:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--sc-color-border-strong) 60%, var(--sc-color-accent));
 }
 
 .sc-input:focus {
@@ -809,11 +1099,16 @@ svg {
   border-color: var(--sc-color-accent);
 }
 
+.sc-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .sc-textarea {
   min-height: 6rem;
   resize: vertical;
   font-family: var(--sc-font-mono);
-  line-height: 1.6;
+  line-height: var(--sc-leading-code);
 }
 
 .sc-link-row {
@@ -839,7 +1134,7 @@ svg {
   font-size: var(--sc-text-sm);
 }
 
-/* The board */
+/* The board: one pane per state, the tasks in it as cards. */
 
 .sc-board {
   display: grid;
@@ -855,9 +1150,7 @@ svg {
   display: flex;
   flex-direction: column;
   min-height: 20rem;
-  border: var(--sc-border);
-  border-radius: var(--sc-radius-lg);
-  background: var(--sc-color-bg-subtle);
+  border-radius: var(--sc-radius-xl);
   scroll-snap-align: start;
 }
 
@@ -865,14 +1158,15 @@ svg {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--sc-space-2);
   padding: var(--sc-space-3) var(--sc-space-4);
   border-bottom: var(--sc-border);
 }
 
 .sc-column-header h2 {
-  font-size: var(--sc-text-sm);
+  font-size: var(--sc-text-xs);
   font-weight: var(--sc-weight-bold);
-  letter-spacing: 0.02em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
@@ -890,6 +1184,11 @@ svg {
   line-height: 1.5rem;
 }
 
+.sc-column-in_progress .sc-column-title,
+.sc-column-in_review .sc-column-title {
+  color: var(--sc-color-accent);
+}
+
 .sc-column-done .sc-column-title {
   color: var(--sc-color-success);
 }
@@ -901,43 +1200,46 @@ svg {
 .sc-column-body {
   display: grid;
   align-content: start;
-  gap: var(--sc-space-3);
-  padding: var(--sc-space-3);
+  gap: var(--sc-space-2);
+  padding: var(--sc-space-2);
 }
 
 .sc-card {
   display: grid;
   gap: var(--sc-space-2);
   padding: var(--sc-space-3);
-  border: var(--sc-border);
-  border-radius: var(--sc-radius-md);
-  background: var(--sc-color-bg);
+  border-radius: var(--sc-radius-lg);
   transition:
     border-color var(--sc-transition),
-    background var(--sc-transition);
+    background var(--sc-transition),
+    box-shadow var(--sc-transition);
 }
 
-.sc-card:hover {
-  border-color: var(--sc-color-border-strong);
-  background: var(--sc-color-bg-raised);
+.sc-card:hover,
+.sc-card:focus-within {
+  border-color: var(--sc-color-accent);
+  background: var(--sc-color-sheet-hover);
+  box-shadow: var(--sc-glow);
 }
 
 .sc-card-title {
   color: var(--sc-color-text);
   font-size: var(--sc-text-sm);
   font-weight: var(--sc-weight-medium);
+  line-height: 1.4;
   text-decoration: none;
   overflow-wrap: anywhere;
 }
 
 .sc-card-title:hover {
-  color: var(--sc-color-accent);
+  color: var(--sc-color-text);
 }
 
 .sc-card-number {
   color: var(--sc-color-text-faint);
   font-family: var(--sc-font-mono);
   font-size: 0.9em;
+  font-weight: var(--sc-weight-normal);
 }
 
 .sc-card-meta {
@@ -947,19 +1249,34 @@ svg {
   gap: var(--sc-space-1);
 }
 
+.sc-card-meta:empty {
+  display: none;
+}
+
 .sc-card-spacer {
   flex: 1;
 }
 
+/* Moving a task from its card: a quiet control, as wide as the card. */
 .sc-card-move select {
   width: 100%;
   min-height: 1.75rem;
   padding: 0 var(--sc-space-2);
-  border: 1px solid var(--sc-color-border);
+  border: 1px solid transparent;
   border-radius: var(--sc-radius-sm);
-  background: var(--sc-color-bg-subtle);
-  color: var(--sc-color-text-muted);
+  background: transparent;
+  color: var(--sc-color-text-faint);
   font-size: var(--sc-text-xs);
+  transition:
+    border-color var(--sc-transition),
+    color var(--sc-transition);
+}
+
+.sc-card-move select:hover,
+.sc-card-move select:focus {
+  border-color: var(--sc-color-border-strong);
+  background: var(--sc-color-field);
+  color: var(--sc-color-text);
 }
 
 /* One task */
@@ -982,7 +1299,12 @@ svg {
 
 .sc-task-title {
   font-size: var(--sc-text-2xl);
+  letter-spacing: -0.02em;
   overflow-wrap: anywhere;
+}
+
+.sc-task-title .sc-card-number {
+  font-size: 0.8em;
 }
 
 .sc-task-badges {
@@ -991,14 +1313,13 @@ svg {
   gap: var(--sc-space-1);
 }
 
+/* The facts of a thing, each under its name. */
 .sc-facts {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
   gap: var(--sc-space-3);
   padding: var(--sc-space-4);
-  border: var(--sc-border);
-  border-radius: var(--sc-radius-md);
-  background: var(--sc-color-bg-subtle);
+  border-radius: var(--sc-radius-lg);
   font-size: var(--sc-text-sm);
 }
 
@@ -1040,7 +1361,7 @@ svg {
   color: var(--sc-color-accent);
 }
 
-/* Decisions */
+/* Decisions: each a pane, the ones that wait marked in the point colour. */
 
 .sc-decisions {
   display: grid;
@@ -1051,23 +1372,39 @@ svg {
 .sc-decision {
   display: grid;
   gap: var(--sc-space-3);
-  padding: var(--sc-space-4);
-  border: 1px solid var(--sc-color-warning);
-  border-radius: var(--sc-radius-lg);
-  background: var(--sc-color-bg-subtle);
+  padding: var(--sc-space-5);
+  border-radius: var(--sc-radius-xl);
 }
 
 .sc-decision + .sc-decision {
   margin-top: var(--sc-space-3);
 }
 
-.sc-decision-answered {
-  border-color: var(--sc-color-border);
-}
-
 .sc-decision-question {
   font-size: var(--sc-text-lg);
   overflow-wrap: anywhere;
+}
+
+.sc-decision-question a {
+  color: var(--sc-color-text);
+  text-decoration: none;
+}
+
+.sc-decision-question a:hover {
+  color: var(--sc-color-accent);
+}
+
+/* A waiting decision has a warm mark before its question: the one thing on the page to look at. */
+.sc-decision:not(.sc-decision-answered) .sc-decision-question::before {
+  content: "";
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-right: var(--sc-space-2);
+  border-radius: 50%;
+  background: var(--sc-color-point);
+  box-shadow: 0 0 0.75rem color-mix(in srgb, var(--sc-color-point) 60%, transparent);
+  vertical-align: 0.1em;
 }
 
 .sc-decision-meta {
@@ -1090,7 +1427,6 @@ svg {
   gap: var(--sc-space-1);
   padding: var(--sc-space-3) var(--sc-space-4);
   border-left: 3px solid var(--sc-color-success);
-  background: var(--sc-color-bg);
   border-radius: 0 var(--sc-radius-md) var(--sc-radius-md) 0;
 }
 
@@ -1119,9 +1455,8 @@ svg {
   align-items: center;
   gap: var(--sc-space-3);
   padding: var(--sc-space-2) var(--sc-space-3);
-  border: 1px solid var(--sc-color-border-strong);
+  border-color: var(--sc-color-border-strong);
   border-radius: var(--sc-radius-md);
-  background: var(--sc-color-bg);
   cursor: pointer;
   transition:
     border-color var(--sc-transition),
@@ -1129,7 +1464,7 @@ svg {
 }
 
 .sc-option:hover {
-  background: var(--sc-color-bg-raised);
+  background: var(--sc-color-sheet-hover);
 }
 
 .sc-option-chosen {
@@ -1142,7 +1477,7 @@ svg {
   accent-color: var(--sc-color-accent);
 }
 
-/* The feed */
+/* The feed: a line per event, newest first. */
 
 .sc-feed {
   display: grid;
@@ -1156,9 +1491,7 @@ svg {
   align-items: center;
   gap: var(--sc-space-3);
   padding: var(--sc-space-2) var(--sc-space-3);
-  border: var(--sc-border);
   border-radius: var(--sc-radius-md);
-  background: var(--sc-color-bg-subtle);
   font-size: var(--sc-text-sm);
 }
 
@@ -1174,30 +1507,119 @@ svg {
   color: var(--sc-color-accent);
 }
 
-/* Signing in */
+.sc-feed-agent {
+  margin-left: var(--sc-space-2);
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+/* Signing in: one pane in the light, with the mark on a small stage of its own. */
 
 .sc-sign-in {
   display: grid;
   gap: var(--sc-space-4);
-  max-width: 28rem;
-  margin: 12dvh auto 0;
-  padding: var(--sc-space-6);
-  border: var(--sc-border);
-  border-radius: var(--sc-radius-lg);
-  background: var(--sc-color-bg-subtle);
-  box-shadow: var(--sc-shadow);
+  max-width: 26rem;
+  margin: 10dvh auto 0;
+  padding: var(--sc-space-7) var(--sc-space-6) var(--sc-space-6);
+  border-radius: var(--sc-radius-xl);
+  text-align: center;
+}
+
+.sc-sign-in-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 7rem;
+}
+
+/* The light behind the mark, and the rings that leave it. */
+.sc-sign-in-stage::before {
+  content: "";
+  position: absolute;
+  width: 14rem;
+  height: 14rem;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--sc-color-accent) 35%, transparent),
+    transparent 70%
+  );
+  pointer-events: none;
+}
+
+.sc-sign-in-badge {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 4rem;
+  height: 4rem;
+  border: 1px solid var(--sc-color-border-strong);
+  border-radius: 28%;
+  background: var(--sc-color-bg);
+  box-shadow: 0 0.5rem 2rem -0.25rem color-mix(in srgb, var(--sc-color-accent) 55%, transparent);
+}
+
+.sc-sign-in-badge::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--sc-color-accent);
+  border-radius: inherit;
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sc-sign-in-badge::after {
+    animation: sc-ring 3.6s ease-out infinite;
+  }
+}
+
+@keyframes sc-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+.sc-sign-in-symbol {
+  width: 2.25rem;
+  height: 2.25rem;
+}
+
+.sc-sign-in-wordmark {
+  display: block;
+  max-width: 12rem;
+  height: 1.5rem;
+  margin-inline: auto;
 }
 
 .sc-sign-in-title {
-  font-size: var(--sc-text-2xl);
+  font-size: var(--sc-text-xl);
 }
 
 .sc-sign-in-lead {
   color: var(--sc-color-text-muted);
 }
 
+.sc-sign-in .sc-callout {
+  margin-bottom: 0;
+  text-align: left;
+}
+
+.sc-sign-in-ways {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sc-space-3);
+}
+
 .sc-sign-in-button {
-  justify-self: start;
+  justify-self: center;
 }
 
 /* Prose: what people and agents write, rendered from Markdown. Element selectors on purpose. */
@@ -1208,14 +1630,18 @@ svg {
 }
 
 .sc-prose > * + * {
-  margin-top: var(--sc-space-3);
+  margin-top: var(--sc-space-4);
 }
 
 .sc-prose h1,
 .sc-prose h2,
 .sc-prose h3,
 .sc-prose h4 {
-  margin-top: var(--sc-space-5);
+  margin-top: var(--sc-space-6);
+}
+
+.sc-prose > :first-child {
+  margin-top: 0;
 }
 
 .sc-prose h1 {
@@ -1223,6 +1649,8 @@ svg {
 }
 
 .sc-prose h2 {
+  padding-bottom: var(--sc-space-2);
+  border-bottom: var(--sc-border);
   font-size: var(--sc-text-lg);
 }
 
@@ -1250,7 +1678,7 @@ svg {
 
 .sc-prose blockquote {
   padding-left: var(--sc-space-4);
-  border-left: 2px solid var(--sc-color-border-strong);
+  border-left: 2px solid var(--sc-color-accent);
   color: var(--sc-color-text-muted);
 }
 
@@ -1264,9 +1692,9 @@ svg {
   padding: var(--sc-space-4);
   border: var(--sc-border);
   border-radius: var(--sc-radius-md);
-  background: var(--sc-color-bg-inset);
+  background: var(--sc-color-sheet);
   font-size: var(--sc-text-sm);
-  line-height: 1.6;
+  line-height: var(--sc-leading-code);
   white-space: pre-wrap;
 }
 
@@ -1293,7 +1721,7 @@ svg {
 }
 
 .sc-prose th {
-  background: var(--sc-color-bg-subtle);
+  background: var(--sc-color-sheet);
 }
 
 .sc-prose img {
@@ -1312,40 +1740,7 @@ svg {
   margin-right: var(--sc-space-2);
 }
 
-@media (max-width: 40rem) {
-  .sc-header-inner {
-    gap: var(--sc-space-3);
-    padding-inline: var(--sc-space-4);
-  }
-
-  .sc-tabs {
-    padding-inline: var(--sc-space-4);
-  }
-
-  .sc-menu-summary .sc-person-login {
-    display: none;
-  }
-
-  .sc-main {
-    padding-inline: var(--sc-space-4);
-  }
-
-  .sc-board {
-    grid-auto-columns: min(var(--sc-column-width), 85vw);
-  }
-
-  .sc-feed-item {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* Tokens: the ones a person holds, and the one just made, shown once. */
-
-.sc-lead {
-  max-width: var(--sc-width-prose);
-  margin-bottom: var(--sc-space-5);
-  color: var(--sc-color-text-muted);
-}
+/* Agents: the tokens a person holds, and the one just made, shown once. */
 
 .sc-token-list {
   display: grid;
@@ -1359,9 +1754,7 @@ svg {
   justify-content: space-between;
   gap: var(--sc-space-3);
   padding: var(--sc-space-4);
-  border: var(--sc-border);
-  border-radius: var(--sc-radius-md);
-  background: var(--sc-color-bg-subtle);
+  border-radius: var(--sc-radius-lg);
 }
 
 .sc-token-name {
@@ -1408,9 +1801,7 @@ svg {
   align-items: center;
   gap: var(--sc-space-3);
   padding: var(--sc-space-3) var(--sc-space-4);
-  border: var(--sc-border);
-  border-radius: var(--sc-radius-md);
-  background: var(--sc-color-bg-subtle);
+  border-radius: var(--sc-radius-lg);
 }
 
 .sc-person-name {
@@ -1423,23 +1814,37 @@ svg {
 
 .sc-projects {
   display: grid;
-  gap: var(--sc-space-3);
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  gap: var(--sc-space-4);
 }
 
 .sc-project {
-  padding: var(--sc-space-4);
-  border: var(--sc-border);
-  border-radius: var(--sc-radius-md);
-  background: var(--sc-color-bg-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sc-space-2);
+  padding: var(--sc-space-5);
+  border-radius: var(--sc-radius-xl);
+  transition:
+    border-color var(--sc-transition),
+    background var(--sc-transition),
+    box-shadow var(--sc-transition);
+}
+
+.sc-project:hover,
+.sc-project:focus-within {
+  border-color: var(--sc-color-accent);
+  background: var(--sc-glass-surface-hover);
+  box-shadow: var(--sc-glass-sheen), var(--sc-glass-lift), var(--sc-glow);
 }
 
 .sc-project-head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--sc-space-3);
+  gap: var(--sc-space-2) var(--sc-space-3);
 }
 
+/* The whole pane is the way in: the name's link stretches over it. */
 .sc-project-name {
   color: var(--sc-color-text);
   font-size: var(--sc-text-lg);
@@ -1447,25 +1852,36 @@ svg {
   text-decoration: none;
 }
 
+.sc-project-name::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
 .sc-project-name:hover {
-  text-decoration: underline;
+  color: var(--sc-color-text);
+}
+
+.sc-project-name:focus-visible {
+  outline: none;
 }
 
 .sc-project-key {
-  color: var(--sc-color-text-muted);
-  font-size: var(--sc-text-sm);
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-xs);
 }
 
 .sc-project-description {
-  margin: var(--sc-space-2) 0 0;
   color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
 }
 
 .sc-project-meta {
   display: flex;
   flex-wrap: wrap;
   gap: var(--sc-space-2);
-  margin: var(--sc-space-2) 0 0;
+  margin-top: auto;
+  padding-top: var(--sc-space-2);
 }
 
 .sc-project-meta:empty {
@@ -1481,12 +1897,6 @@ svg {
   align-items: end;
 }
 
-.sc-feed-agent {
-  margin-left: var(--sc-space-2);
-  color: var(--sc-color-text-muted);
-  font-size: var(--sc-text-sm);
-}
-
 /* Skills: the project's, or the organization's, as SkillCDN serves them at the address. */
 
 .sc-skills {
@@ -1496,9 +1906,7 @@ svg {
 
 .sc-skill {
   padding: var(--sc-space-3) var(--sc-space-4);
-  border: var(--sc-border);
-  border-radius: var(--sc-radius-md);
-  background: var(--sc-color-bg-subtle);
+  border-radius: var(--sc-radius-lg);
 }
 
 .sc-skill-head {
@@ -1510,25 +1918,21 @@ svg {
 }
 
 .sc-skill-name {
-  font-weight: 600;
+  font-weight: var(--sc-weight-medium);
 }
 
 .sc-skill-description {
   margin: var(--sc-space-2) 0 0;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
 }
 
 .sc-skill-uri {
   display: block;
   margin-top: var(--sc-space-2);
-  color: var(--sc-color-text-muted);
-  font-size: var(--sc-text-sm);
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-xs);
   word-break: break-all;
-}
-
-.sc-sign-in-ways {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sc-space-3);
 }
 
 /* Runs: an agent at work on a task, what it reported and handed in. */
@@ -1541,10 +1945,8 @@ svg {
 .sc-run {
   display: grid;
   gap: var(--sc-space-3);
-  padding: var(--sc-space-4);
-  border: var(--sc-border);
-  border-radius: var(--sc-radius-md);
-  background: var(--sc-color-bg-subtle);
+  padding: var(--sc-space-4) var(--sc-space-5);
+  border-radius: var(--sc-radius-lg);
 }
 
 .sc-run-header {
@@ -1584,10 +1986,11 @@ svg {
   gap: var(--sc-space-1);
   padding-left: var(--sc-space-3);
   border-left: 2px solid var(--sc-color-border-strong);
+  font-size: var(--sc-text-sm);
 }
 
 .sc-run-summary {
-  padding-top: var(--sc-space-2);
+  padding-top: var(--sc-space-3);
   border-top: var(--sc-border);
 }
 
@@ -1601,12 +2004,26 @@ svg {
   overflow-x: auto;
   padding: var(--sc-space-3) var(--sc-space-4);
   border: var(--sc-border);
-  border-radius: var(--sc-radius-sm);
-  background: var(--sc-color-bg-inset);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-field);
   font-family: var(--sc-font-mono);
   font-size: var(--sc-text-sm);
+  line-height: var(--sc-leading-code);
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+.sc-code-input {
+  max-width: 12rem;
+  font-family: var(--sc-font-mono);
+  font-size: var(--sc-text-lg);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.sc-code-shown {
+  font-size: var(--sc-text-md);
+  letter-spacing: 0.1em;
 }
 
 /* Documents: a folder's pages, one page with its versions, its links both ways and its files. */
@@ -1624,6 +2041,10 @@ svg {
 
 .sc-doc-crumbs a:hover {
   color: var(--sc-color-accent);
+}
+
+.sc-doc-crumbs .sc-crumb-separator {
+  margin-inline: var(--sc-space-2);
 }
 
 .sc-doc-search {
@@ -1655,16 +2076,19 @@ svg {
   display: inline-block;
   padding: var(--sc-space-1) var(--sc-space-3);
   border: var(--sc-border);
-  border-radius: var(--sc-radius-md);
-  background: var(--sc-color-bg-subtle);
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-color-sheet);
   color: var(--sc-color-text);
   font-family: var(--sc-font-mono);
   font-size: var(--sc-text-sm);
   text-decoration: none;
+  transition:
+    border-color var(--sc-transition),
+    color var(--sc-transition);
 }
 
 .sc-folder-link:hover {
-  border-color: var(--sc-color-border-strong);
+  border-color: var(--sc-color-accent);
   color: var(--sc-color-accent);
 }
 
@@ -1682,9 +2106,12 @@ svg {
   align-items: baseline;
   gap: var(--sc-space-2) var(--sc-space-3);
   padding: var(--sc-space-3) var(--sc-space-4);
-  border: var(--sc-border);
-  border-radius: var(--sc-radius-md);
-  background: var(--sc-color-bg-subtle);
+  border-radius: var(--sc-radius-lg);
+  transition: border-color var(--sc-transition);
+}
+
+.sc-doc-row:hover {
+  border-color: var(--sc-color-border-strong);
 }
 
 .sc-doc-title {
@@ -1719,7 +2146,7 @@ svg {
   padding: var(--sc-space-3) var(--sc-space-4);
   border: var(--sc-border);
   border-radius: var(--sc-radius-md);
-  background: var(--sc-color-bg-inset);
+  background: var(--sc-color-sheet);
   color: var(--sc-color-text-muted);
 }
 
@@ -1769,4 +2196,80 @@ svg {
 .sc-outcome-form {
   display: grid;
   gap: var(--sc-space-2);
+}
+
+/* Small screens. */
+
+@media (max-width: 40rem) {
+  .sc-header-inner {
+    gap: var(--sc-space-3);
+    padding-inline: var(--sc-space-4);
+  }
+
+  .sc-brand-symbol,
+  .sc-brand-wordmark {
+    height: var(--sc-brand-size-compact);
+  }
+
+  .sc-brand-symbol {
+    width: var(--sc-brand-size-compact);
+  }
+
+  .sc-crumb-link {
+    max-width: 8rem;
+  }
+
+  /* A narrow bar holds the lockup and where the page is; the crumbs above that give way. */
+  .sc-crumb:not(:last-of-type) {
+    display: none;
+  }
+
+  .sc-tabs {
+    padding-inline: var(--sc-space-4);
+  }
+
+  .sc-tabs-inner {
+    gap: var(--sc-space-4);
+  }
+
+  .sc-menu-summary .sc-person-login {
+    display: none;
+  }
+
+  .sc-main {
+    padding: var(--sc-space-5) var(--sc-space-4) var(--sc-space-7);
+  }
+
+  .sc-page-title {
+    font-size: var(--sc-text-xl);
+  }
+
+  .sc-panel {
+    padding: var(--sc-space-4);
+    border-radius: var(--sc-radius-lg);
+  }
+
+  .sc-board {
+    grid-auto-columns: min(var(--sc-column-width), 85vw);
+  }
+
+  .sc-feed-item {
+    grid-template-columns: 1fr;
+    gap: var(--sc-space-1);
+  }
+
+  .sc-sign-in {
+    margin-top: var(--sc-space-6);
+    padding: var(--sc-space-6) var(--sc-space-5) var(--sc-space-5);
+  }
+
+  .sc-link-row {
+    grid-template-columns: 1fr;
+  }
+
+  .sc-decision,
+  .sc-project {
+    padding: var(--sc-space-4);
+    border-radius: var(--sc-radius-lg);
+  }
 }

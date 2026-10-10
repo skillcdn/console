@@ -58,10 +58,19 @@ Goal: what a person who is not a developer needs, in the order they meet it. The
 - [x] The default brand (2026-10-10): the slot, `createConsole({ brand })`, with the note on the marks ([ADR-0013](adr/0013-the-default-brand-comes-from-a-published-package-of-the-main-repository-through-a-slot-in-the-console.md)); the default UI depends on `@skillcdn/brand`, the main repository's package of its marks, passes its symbol and wordmark to the slot and links its icons from the page.
 - [x] Languages (2026-10-10): every word of the pages in a pack, English and Korean in the package, the choice from the browser's languages, switched from the person's menu and kept on the person; a custom console passes its own packs ([ADR-0012](adr/0012-the-pages-speak-the-persons-language-from-packs-that-ship-with-the-package.md)).
 
-## After milestone 5
+## Milestone 6, the pages good to use (started 2026-10-10)
+
+Goal: the default UI reworked for people, in the visual language of SkillCDN's own web UI, its type, color, spacing, radius and components, so that the console reads as part of the same product and not as a second one. The board uses the height it has: columns as tall as the page, scrolling within, cards denser and readable at a glance. The task page, a decision and a document laid out for reading, with the facts beside the text instead of above it. The forms and the empty states made for someone who is not a developer. Small screens. Done when it is good to use, judged by eye on the development server, with the components' tests kept green and the classes kept `sc-`-prefixed and documented for custom consoles.
+
+- [x] The visual language (2026-10-10): the site's tokens, its type, color, spacing and radius; the page a dark field with a light in it and the surfaces panes of glass over it; the header with the brand's lockup, the workspace and the project as crumbs, the tabs and the person's menu as the site has them; the buttons, badges, callouts, forms, lists and the sign-in page in the same language.
+- [ ] The board uses the height it has: columns as tall as the page, scrolling within, as wide as the page allows; cards denser and readable at a glance.
+- [ ] The task page, a decision and a document laid out for reading, with the facts beside the text.
+- [ ] The forms and the empty states made for someone who is not a developer; small screens.
+- [ ] The Korean face of the site in the default UI, for the Korean pages.
+
+## After milestone 6
 
 An order proposed on 2026-10-09 and changed on 2026-10-10: the pages are made good to use before custom consoles are built from them, since a custom console starts from what the default one looks like.
-6. **The pages, good to use (next).** The default UI reworked for people, in the visual language of SkillCDN's own web UI, its type, color, spacing, radius and components, so that the console reads as part of the same product and not as a second one. The board uses the height it has: columns as tall as the page, scrolling within, cards denser and readable at a glance. The task page, a decision and a document laid out for reading, with the facts beside the text instead of above it. The forms and the empty states made for someone who is not a developer. Small screens. Done when it is good to use, judged by eye on the development server, with the components' tests kept green and the classes kept `sc-`-prefixed and documented for custom consoles.
 7. **Custom consoles from the package.** The command tried by hand with other agents, Codex first, and the differences written down; the components and the composition documented; a template repository that builds a custom console in CI; the image serving a custom build; and a person's own console, built from the package and run for themselves against the organization's console (open question 9).
 8. **On a cloud.** The image deployed next to a managed PostgreSQL and a bucket, the S3 implementation of the blob-store port, and what a platform must provide written into `deploy/README.md`. The definitions of the deployment stay outside this repository.
 

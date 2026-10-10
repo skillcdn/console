@@ -108,6 +108,16 @@ function PersonMenu(props: {
       <summary className="sc-menu-summary" aria-label={words.shell.menu(person.login)}>
         <Avatar person={person} size="sm" />
         <span className="sc-person-login">{person.login}</span>
+        <svg className="sc-menu-caret" viewBox="0 0 16 16" aria-hidden="true">
+          <path
+            d="M4 6l4 4 4-4"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
       </summary>
       <div className="sc-menu-panel">
         <p className="sc-menu-who">
@@ -185,12 +195,27 @@ export function Shell(props: ShellProps) {
       </a>
       <header className="sc-header">
         <div className="sc-header-inner">
-          <a className="sc-brand" href="/" onClick={follow("/")}>
+          <a className="sc-brand" href="/" onClick={follow("/")} aria-label={props.title}>
             {props.brand?.symbol !== undefined && (
               <img className="sc-brand-symbol" src={props.brand.symbol} alt="" />
             )}
-            {props.title}
+            {props.brand?.wordmark !== undefined ? (
+              <img className="sc-brand-wordmark" src={props.brand.wordmark} alt="" />
+            ) : (
+              <span className="sc-brand-name">{props.title}</span>
+            )}
           </a>
+          {props.brand?.wordmark !== undefined && (
+            // With the marks in the brand's place, the workspace is named after them, as a crumb.
+            <span className="sc-crumb">
+              <span className="sc-crumb-separator" aria-hidden="true">
+                /
+              </span>
+              <a className="sc-crumb-link" href="/" onClick={follow("/")}>
+                {props.title}
+              </a>
+            </span>
+          )}
           {props.project !== undefined && (
             <span className="sc-crumb">
               <span className="sc-crumb-separator" aria-hidden="true">

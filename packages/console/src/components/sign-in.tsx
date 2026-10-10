@@ -21,6 +21,13 @@ export function SignIn(props: SignInProps) {
   const words = useWords().signIn;
   return (
     <div className="sc-sign-in">
+      {props.brand?.symbol !== undefined && (
+        <div className="sc-sign-in-stage" aria-hidden="true">
+          <span className="sc-sign-in-badge">
+            <img className="sc-sign-in-symbol" src={props.brand.symbol} alt="" />
+          </span>
+        </div>
+      )}
       {props.brand?.wordmark !== undefined && (
         <img className="sc-sign-in-wordmark" src={props.brand.wordmark} alt="" />
       )}
