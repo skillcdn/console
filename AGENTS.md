@@ -6,7 +6,7 @@ The working agreement for this repository. It applies to AI agents and humans al
 
 The SkillCDN Console is where an organization runs its work with AI agents: the work to do, the agents at it, what they did, and the decisions that wait for a person. People decide; agents work. [README.md](README.md) says what it is, [docs/architecture.md](docs/architecture.md) how it is built and what is still open, [docs/roadmap.md](docs/roadmap.md) what exists and what is next.
 
-- **Status:** pre-alpha. The board runs per project, with its documents; agents work it, connected with a code a person approves; the pages speak English and Korean; `@skillcdn/console` is on npm. The pages are good to use; the next milestone is custom consoles from the package. Start from the roadmap.
+- **Status:** pre-alpha. The board runs per project, with its documents; agents work it, connected with a code a person approves; the pages speak English and Korean; `@skillcdn/console` is on npm. A console of one's own is built from the package and served from a member's machine, and the console's skills, in the SkillCDN Format, say how an agent works the board and builds a console; what is left of milestone 7 waits for a machine with other agents, and the next milestone is a cloud. Start from the roadmap.
 - **Shape:** TypeScript monorepo (pnpm + Turborepo), one image with several roles, PostgreSQL as the only stateful dependency, and one published package that custom consoles are built from.
 - **Relationship to SkillCDN:** the reference console, as `skillcdn/skills` is the reference skill repository: an example that follows the standard and is meant for real use, packaged so that anyone can start from it, and not a second standard ([ADR-0001](docs/adr/0001-the-console-is-the-reference-console-built-on-the-published-packages.md)). It consumes the published `@skillcdn/*` packages and the REST API of a SkillCDN deployment, and nothing else of the main repository, [`skillcdn/skillcdn`](https://github.com/skillcdn/skillcdn). Nothing about SkillCDN is defined here.
 - **License:** MIT ([ADR-0003](docs/adr/0003-the-console-is-licensed-under-mit.md)). The protection of the product lies in the main repository, which is source-available; the console is open to anyone. The `@skillcdn/*` packages it depends on keep the main repository's license. KDX Labs runs the console for its own work; the same image is self-hostable.
@@ -40,7 +40,8 @@ apps/
 packages/
   console/    @skillcdn/console: the API client and schemas, the components, the composition of the default console   on npm, once it exists
 deploy/       the contract for whoever operates the image, compose for local development
-docs/         architecture, roadmap, ADRs
+docs/         architecture, roadmap, specs, ADRs; served with the skills
+skills/       the console's skills in the SkillCDN Format, for an agent working the board or building a console; SKILLCDN.md at the root is their manifest
 scripts/      checks that are part of `pnpm check`, and what packing needs
 ```
 
@@ -59,6 +60,7 @@ Run everything from the repository root through pnpm. Do not use `npm`, `npx` or
 | Lint and format | `pnpm lint` · `pnpm lint:fix` |
 | Record what a change means to the published package | `pnpm changeset` (writes `.changeset/<name>.md`; a file written by hand does the same) |
 | No control or invisible characters in tracked files, new files included (part of `pnpm check`) | `pnpm check:text` |
+| The skills and the manifest are in the SkillCDN Format as the indexer reads it, and name commands, routes and files that exist (part of `pnpm check`) | `pnpm check:skills` |
 | The package's version follows the `@skillcdn/core` line (part of `pnpm check`) | `pnpm check:version` |
 | Local PostgreSQL (from the first milestone on) | `docker compose -f deploy/compose.dev.yaml up -d` |
 
@@ -94,8 +96,9 @@ Documentation is part of the change, not a follow-up. A future session starts wi
 
 | When you change... | Update in the same change |
 |---|---|
-| What the console does for people or agents: the board, the REST API, the command line | `docs/architecture.md`; a spec under `docs/specs/` once one exists; the root `README.md` if the overview changes |
-| What the published package does or exports | a changeset in `.changeset/`, which becomes the package's changelog; `packages/console/README.md` when its usage changes |
+| What the console does for people or agents: the board, the REST API, the command line | `docs/architecture.md`; the spec under `docs/specs/`; the root `README.md` if the overview changes; and the skills under `skills/` that name what changed, read again by hand: `pnpm check:skills` catches a command, a route or a file that is gone, never a meaning that changed |
+| What the published package does or exports | a changeset in `.changeset/`, which becomes the package's changelog; `packages/console/README.md` when its usage changes; `skills/building-a-console/SKILL.md` where it says how a console is built |
+| A skill or the manifest (`skills/`, `SKILLCDN.md`) | `pnpm check:skills` passes; a word for people in `skillcdn.translations` in every language the manifest has; the package carries them as they are ([ADR-0015](docs/adr/0015-the-consoles-skills-live-in-this-repository-in-the-skillcdn-format-and-the-package-carries-them.md)) |
 | Workspaces, boundaries, runtime components, data flow, security model | `docs/architecture.md`; the repository map above; an ADR |
 | A decision future contributors might reasonably undo | new ADR in `docs/adr/` (never edit an accepted ADR; supersede it) |
 | Environment variables or configuration | the config module, `.env.example`, the table in `deploy/README.md` |
@@ -146,3 +149,4 @@ One topic, one file. Link to where something is documented instead of restating 
 - pnpm older than 12.4 is rejected (`ERR_PNPM_UNSUPPORTED_ENGINE`). Upgrade with `npm install -g pnpm@latest`; inside the repo pnpm then switches to the exact version in `packageManager`. A corepack shim from Node.js 22 cannot start pnpm 12; upgrade corepack (`npm install -g corepack`) or install pnpm globally.
 - Turborepo adds a block of its own to `AGENTS.md` whenever it finds that an AI agent is running it. `"agentGuidance": false` in `turbo.json` turns that off; keep it off.
 - If a tool writes source files for you, check what became of escape sequences: some tools decode them on the way, and an invisible character in a source file is exactly what `pnpm check:text` exists to catch. In tests, build such characters with `String.fromCodePoint`.
+- The front-matter of a `SKILL.md` or of `SKILLCDN.md` is YAML: a plain value with `: ` in it, or one that starts with `[`, `{`, `&`, `*`, `!`, `%`, `@` or a backtick, reads as something else, and the skill is skipped or served with half its description. Quote such a value. `skillcdn check` says so before a push.

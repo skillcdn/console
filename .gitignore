@@ -33,8 +33,11 @@ tmp/
 # Logs
 *.log
 
-# The license copied next to the package while it is packed (scripts/pack-license.mjs)
+# What is copied next to the package while it is packed (scripts/pack-files.mjs)
 packages/*/LICENSE.md
+packages/*/SKILLCDN.md
+packages/*/skills/
+packages/*/docs/
 
 # Editors and OS
 .DS_Store

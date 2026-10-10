@@ -120,6 +120,10 @@ npx vite build && console serve dist             # the build served whole, at ht
 
 The pages run on your token: what you may do on the board, they may do, and no more. The token never reaches the browser; the command adds it on the way, on the loopback only, and refuses a request from another site's page. The tokens themselves and configuring are done on the organization's console, signed in, and the pages say so where it matters. Replace a component, pass your own language pack or your own marks, or compose pages of your own from the components and `useConsoleData`: the sections above say what each piece takes.
 
+### The skills, for an agent
+
+What an agent reads to work the board or to build a console is in the console's repository as skills in the SkillCDN Format ([ADR-0015](https://github.com/skillcdn/console/blob/main/docs/adr/0015-the-consoles-skills-live-in-this-repository-in-the-skillcdn-format-and-the-package-carries-them.md)), served by SkillCDN at `skillcdn.ai/gh/skillcdn/console` with the architecture, the decisions and the specifications, and shipped in this package: `skills/working-the-board/SKILL.md`, `skills/building-a-console/SKILL.md`, their manifest `SKILLCDN.md` with the rules they share, the specifications they point to under `docs/specs/` (`rest.md`, `cli.md`), and the sources under `src/` without the tests, so that `npm install` brings what an agent needs to read, at the version installed. Point an agent at them in `node_modules/@skillcdn/console/`, or copy a skill's folder into the agent's own skills. A project of a console may name that address as its skills address, and an organization's own skill for its console adds its rules and links these. The skills are maps: what they name, this README, the types and the specifications say in full.
+
 ## Rules
 
 Read the root [`AGENTS.md`](../../AGENTS.md) first. This package is what other people install; it is their contract.

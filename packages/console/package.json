@@ -14,7 +14,8 @@
     "skillcdn",
     "console",
     "agents",
-    "cli"
+    "cli",
+    "skills"
   ],
   "type": "module",
   "sideEffects": false,
@@ -45,7 +46,13 @@
   },
   "files": [
     "dist",
-    "!dist/**/*.tsbuildinfo"
+    "!dist/**/*.tsbuildinfo",
+    "src",
+    "!src/**/*.test.ts",
+    "!src/**/*.test.tsx",
+    "skills",
+    "docs",
+    "SKILLCDN.md"
   ],
   "publishConfig": {
     "access": "public"
@@ -55,8 +62,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --passWithNoTests",
     "clean": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\"",
-    "prepack": "node ../../scripts/pack-license.mjs copy",
-    "postpack": "node ../../scripts/pack-license.mjs remove"
+    "prepack": "node ../../scripts/pack-files.mjs copy",
+    "postpack": "node ../../scripts/pack-files.mjs remove"
   },
   "devDependencies": {
     "@types/node": "catalog:",

@@ -76,7 +76,7 @@ Goal: a console of one's own, built from the package and run against the organiz
 - [x] The API says the agent a token acts through (`me.agent`), and the pages offer nothing a token cannot do (2026-10-10).
 - [x] `console serve` (2026-10-10, [ADR-0014](adr/0014-a-persons-own-console-is-served-from-their-machine-by-the-command.md)): a build served from the person's machine, loopback only, the API carried to the organization's console with the token; the serving of a build moved into the package, where the image and the command share it.
 - [x] A custom build in the image, from `WEB_ROOT`, in `deploy/README.md` (2026-10-10).
-- [ ] The skills (ADR-0015): `SKILLCDN.md`, `skills/working-the-board`, `skills/building-a-console`, checked by `skillcdn check` in `pnpm check`, carried by the package with its sources and the specs.
+- [x] The skills (2026-10-10, [ADR-0015](adr/0015-the-consoles-skills-live-in-this-repository-in-the-skillcdn-format-and-the-package-carries-them.md)): `SKILLCDN.md`, `skills/working-the-board`, `skills/building-a-console`, checked by `skillcdn check` and the repository's own check in `pnpm check`, carried by the package with its sources and the specs.
 - [ ] The command tried with other agents, Codex first, and the differences written down: waits for a machine with them.
 
 ## After milestone 7
