@@ -1,5 +1,19 @@
 # @skillcdn/console
 
+## 0.1.5
+
+### Patch Changes
+
+- [`e06dfe6`](https://github.com/skillcdn/console/commit/e06dfe69fde8655c7458cd1c00da339c9f8259b4) Thanks [@samo-lucid](https://github.com/samo-lucid)! - The README links the symbol where the main repository keeps its marks now, `packages/brand/symbol.svg`, and says that the default console passes the marks of `@skillcdn/brand` to `config.brand`.
+
+- [`67d9c1a`](https://github.com/skillcdn/console/commit/67d9c1a2f78afd9a99b4fc70821cfc7b0e45b345) Thanks [@samo-lucid](https://github.com/samo-lucid)! - The forms and the narrow windows: a panel that holds a form is as wide as a form is comfortable to fill in and no wider (`sc-panel-form`, which the default console's form pages set); the boxes people write in are set in the page's own face instead of the code face; the way to add one more link or option stands at the start of its lines; and on a narrow window nothing widens the page, since every block laid out as a grid lets its children shrink and what is wider, a table or a long address, scrolls within its own box.
+
+- [`6b02161`](https://github.com/skillcdn/console/commit/6b02161d76a96b626a70e479e133c331386b201b) Thanks [@samo-lucid](https://github.com/samo-lucid)! - The board uses the height and the width it has: the page below the header is a column of blocks that fills the window (`sc-main`), the board takes what is left of it, each column scrolls within itself, and on the board the page is as wide as the window (`Shell` takes `wide`, which sets `sc-main-wide`). The columns share the width while it is enough for them, from `--sc-column-width` up, and scroll sideways when it is not; the cards are denser.
+
+- [`1035ea8`](https://github.com/skillcdn/console/commit/1035ea86c186a40cc49ec52515fda46d97df643c) Thanks [@samo-lucid](https://github.com/samo-lucid)! - The task page and a document are laid out for reading: the text in a column of its own and the facts beside it (`sc-task-body`, `sc-task-main`, `sc-task-aside`), under it on a narrow window. On a task the state, the priority, who owns it and who it is on, when it was written and changed, and the ways to edit it and to raise a decision are in the aside; on a document the path, the version, who wrote it, the ways to change it, what it refers to and what refers to it, its files and its versions. The language packs gained `task.facts` and `docs.facts`.
+
+- [`6e0607c`](https://github.com/skillcdn/console/commit/6e0607cfe889fc9d4f3ca6923fd0c29ae1389b32) Thanks [@samo-lucid](https://github.com/samo-lucid)! - The pages in SkillCDN's own visual language: the site's tokens for type, color, spacing and radius; the page a dark field with a light in it, which the shell paints, and the surfaces panes of glass over it; the header with the brand's lockup where the console has marks, the workspace and the project as crumbs after it, the tabs and the person's menu as the site has them; the buttons, badges, callouts, forms, lists and the sign-in page in the same language. Every class keeps its name; `sc-brand-wordmark`, `sc-brand-name`, `sc-menu-caret`, `sc-sign-in-stage`, `sc-sign-in-badge` and `sc-sign-in-symbol` are new, and the tokens gained the field's and the glass's (`--sc-color-sky`, `--sc-glass-*`, `--sc-glow`).
+
 ## 0.1.4
 
 ### Patch Changes
