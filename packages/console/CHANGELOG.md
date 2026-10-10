@@ -1,5 +1,16 @@
 # @skillcdn/console
 
+## 0.1.3
+
+### Patch Changes
+
+- [`507bdc1`](https://github.com/skillcdn/console/commit/507bdc1f09b5f62cecb83bcef10af42754516e29) Thanks [@samo-lucid](https://github.com/samo-lucid)! - The project's documents ([ADR-0009](https://github.com/skillcdn/console/blob/main/docs/adr/0009-documents-are-pages-of-markdown-in-a-project-addressed-by-path-versioned-and-linked-both-ways.md)): pages of Markdown under a path that is their address, versioned on every write, linked both ways by path from documents, tasks and decisions, archived rather than deleted, with files attached; and the decision as a record, with what followed. Additive, apart from two fields every answer now carries.
+  
+  - **The API client.** `client.project(key)` gained `documents(filter)` (a folder's pages and folders, or the pages a search finds), `document(path)`, `writeDocument(path, input)`, `archiveDocument`, `restoreDocument`, `documentVersions`, `documentVersion`, `attachFile` and `documentFileUrl`, and `updateDecision(id, patch)`; `events()` takes a `document` filter. `PROJECT_COLLECTIONS` gained `docs`, and `projectPath(key, "docs", path)` encodes the path as one segment.
+  - **The schemas.** `restDocumentSchema`, `restDocumentSummarySchema`, `restDocumentsSchema`, `restDocumentInputSchema`, `restDocumentLinkSchema`, `restBacklinkSchema`, `restDocumentFileSchema`, `restVersionSchema`, `restVersionsSchema`, `restVersionSummarySchema` and `restDecisionPatchSchema` are new; a decision carries `outcome` and an event `documentId` (both nullable, so a page parsing with the old schemas sees them as unknown keys and goes on), and an event's `data` may carry `path` and `version`. New bounds: `MAX_DOCUMENT_PATH_LENGTH`, `MAX_DOCUMENT_SEGMENT_LENGTH`, `MAX_DOCUMENT_LENGTH`, `MAX_VERSIONS_PER_DOCUMENT`, `MAX_FILES_PER_DOCUMENT`, `MAX_SEARCH_LENGTH`. `EVENT_KINDS` gained `decision.updated` and the `document.*` kinds; `LINK_SOURCES` names what links to a page. The rule of a path and of the links a text makes is exported: `isDocumentPath`, `isFolderPath`, `documentPathsIn`, `folderOf`, `nameOf`, `foldersAbove`, `DOCUMENT_PATH`.
+  - **The command.** `console docs`, `doc`, `write`, `attach`, `archive` and `restore`, and `console decision <id> --outcome`.
+  - **The default UI.** A project's Docs page under `/p/<key>/docs/<path>` (`matchRoute`, `docHref`), composed by the new `DocsPage` from the new components `FolderView`, `DocumentList`, `DocumentSearch`, `DocumentView`, `DocumentForm`, `DocumentFiles` and `DocumentCrumbs`. `Markdown` takes `docHref` and turns a link to a page's path into a link to the page; `TaskView`, `RunCard`, `RunList`, `DecisionCard` and `DecisionList` pass it on. `DecisionCard` reads as a record and takes `onUpdate`; `TaskView` takes `onUpdateDecision`. `useConsoleData` gained the actions on documents and `updateDecision`. `useAction` and `errorWords` are exported for a composition of your own.
+
 ## 0.1.2
 
 ### Patch Changes
