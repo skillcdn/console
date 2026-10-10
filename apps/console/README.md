@@ -68,7 +68,8 @@ web/             the default UI: one page that mounts the package's composition,
                  web/dist, which the api role serves from WEB_ROOT (http/web.ts: the files of the
                  build, and the page for every other path, under a content security policy); its
                  marks and icons come from @skillcdn/brand, SkillCDN's trademarks under the main
-                 repository's trademark policy and not under MIT (ADR-0013)
+                 repository's trademark policy and not under MIT (ADR-0013), and its Korean face
+                 from the pretendard package, bundled by the build in subsets
 migrations/      generated SQL and its journal, committed, shipped inside the image
 ```
 
