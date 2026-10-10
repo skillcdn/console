@@ -1,5 +1,11 @@
 # @skillcdn/console
 
+## 0.1.6
+
+### Patch Changes
+
+- [`460568a`](https://github.com/skillcdn/console/commit/460568a4c3e97cd02c305f17d89b15954b8b6abd) Thanks [@samo-lucid](https://github.com/samo-lucid)! - The look confirmed, with three things set right: the brand's lockup in the header is smaller (`--sc-brand-size`, 1rem), and the mark on the sign-in page with it; on a phone the tabs wrap instead of running off the edge; and under the wide layout a task's facts come before its text, two to a row, so that its state and its forms are at hand.
+
 ## 0.1.5
 
 ### Patch Changes
