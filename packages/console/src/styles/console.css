@@ -146,8 +146,8 @@
   --sc-width-aside: 18rem;
   --sc-column-width: 13.5rem;
   --sc-header-height: 3.75rem;
-  --sc-brand-size: 1.25rem;
-  --sc-brand-size-compact: 1.125rem;
+  --sc-brand-size: 1rem;
+  --sc-brand-size-compact: 0.875rem;
   --sc-control-size: 2.5rem;
   --sc-focus-ring: 2px solid var(--sc-color-accent);
   --sc-transition: 120ms ease-out;
@@ -1631,7 +1631,7 @@ table {
   position: relative;
   display: grid;
   place-items: center;
-  height: 7rem;
+  height: 6.5rem;
 }
 
 /* The light behind the mark, and the rings that leave it. */
@@ -1653,8 +1653,8 @@ table {
   position: relative;
   display: grid;
   place-items: center;
-  width: 4rem;
-  height: 4rem;
+  width: 3.5rem;
+  height: 3.5rem;
   border: 1px solid var(--sc-color-border-strong);
   border-radius: 28%;
   background: var(--sc-color-bg);
@@ -1689,14 +1689,14 @@ table {
 }
 
 .sc-sign-in-symbol {
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 2rem;
+  height: 2rem;
 }
 
 .sc-sign-in-wordmark {
   display: block;
   max-width: 12rem;
-  height: 1.5rem;
+  height: 1.25rem;
   margin-inline: auto;
 }
 
@@ -2332,6 +2332,25 @@ table {
   gap: var(--sc-space-2);
 }
 
+/* Under the wide layout a task's facts come first: changing its state and reaching its forms is
+   what a phone is opened for, and two to a row they stay short. A document keeps its text first. */
+@media (max-width: 63.99rem) {
+  .sc-task .sc-task-aside {
+    order: -1;
+  }
+
+  .sc-task .sc-task-aside .sc-facts {
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  }
+}
+
+/* Where there is no pointer to hover with, the control on a card is as tall as a finger needs. */
+@media (hover: none) {
+  .sc-card-move select {
+    min-height: 2rem;
+  }
+}
+
 /* Small screens. */
 
 @media (max-width: 40rem) {
@@ -2358,12 +2377,15 @@ table {
     display: none;
   }
 
+  /* Tabs that do not fit wrap, so that none is hidden off the edge. */
   .sc-tabs {
     padding-inline: var(--sc-space-4);
+    overflow: visible;
   }
 
   .sc-tabs-inner {
-    gap: var(--sc-space-4);
+    flex-wrap: wrap;
+    gap: 0 var(--sc-space-4);
   }
 
   .sc-menu-summary .sc-person-login {
@@ -2374,7 +2396,8 @@ table {
     padding: var(--sc-space-5) var(--sc-space-4) var(--sc-space-7);
   }
 
-  .sc-page-title {
+  .sc-page-title,
+  .sc-task-title {
     font-size: var(--sc-text-xl);
   }
 

@@ -1,6 +1,6 @@
 # Architecture
 
-> **Status:** the board (milestone 1), agents at work (milestone 2), projects (milestone 3), documents (milestone 4) and the console for everyone (milestone 5) are implemented as described here. [roadmap.md](roadmap.md) tracks what exists. The decisions with lasting consequences are in [adr/](adr/); the rest of this document is kept current as the implementation lands: when they diverge, update this document in the same change. The open questions are at the end.
+> **Status:** the board (milestone 1), agents at work (milestone 2), projects (milestone 3), documents (milestone 4) the console for everyone (milestone 5) and the pages good to use (milestone 6) are implemented as described here. [roadmap.md](roadmap.md) tracks what exists. The decisions with lasting consequences are in [adr/](adr/); the rest of this document is kept current as the implementation lands: when they diverge, update this document in the same change. The open questions are at the end.
 
 ## Overview
 

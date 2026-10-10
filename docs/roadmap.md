@@ -58,7 +58,7 @@ Goal: what a person who is not a developer needs, in the order they meet it. The
 - [x] The default brand (2026-10-10): the slot, `createConsole({ brand })`, with the note on the marks ([ADR-0013](adr/0013-the-default-brand-comes-from-a-published-package-of-the-main-repository-through-a-slot-in-the-console.md)); the default UI depends on `@skillcdn/brand`, the main repository's package of its marks, passes its symbol and wordmark to the slot and links its icons from the page.
 - [x] Languages (2026-10-10): every word of the pages in a pack, English and Korean in the package, the choice from the browser's languages, switched from the person's menu and kept on the person; a custom console passes its own packs ([ADR-0012](adr/0012-the-pages-speak-the-persons-language-from-packs-that-ship-with-the-package.md)).
 
-## Milestone 6, the pages good to use (started 2026-10-10)
+## Done: milestone 6, the pages good to use (2026-10-10)
 
 Goal: the default UI reworked for people, in the visual language of SkillCDN's own web UI, its type, color, spacing, radius and components, so that the console reads as part of the same product and not as a second one. The board uses the height it has: columns as tall as the page, scrolling within, cards denser and readable at a glance. The task page, a decision and a document laid out for reading, with the facts beside the text instead of above it. The forms and the empty states made for someone who is not a developer. Small screens. Done when it is good to use, judged by eye on the development server, with the components' tests kept green and the classes kept `sc-`-prefixed and documented for custom consoles.
 
@@ -67,6 +67,7 @@ Goal: the default UI reworked for people, in the visual language of SkillCDN's o
 - [x] The task page and a document laid out for reading (2026-10-10), the text in a column and the facts beside it; a decision reads as a record already.
 - [x] The forms and small screens (2026-10-10): a form in a panel as wide as it is comfortable to fill in, the writing boxes in the page's face, nothing widening the page on a narrow window, the header and the board made for a phone. The empty states and the words of the forms were written for someone who is not a developer in milestone 5 and stay.
 - [x] The Korean face of the site, Pretendard, in the default UI (2026-10-10), in the subsets a browser fetches as it needs them; a custom console provides its own faces.
+- [x] Judged by eye and confirmed (2026-10-10): the lockup made smaller; on a phone the tabs wrap instead of running off the edge, and a task's facts come before its text.
 
 ## After milestone 6
 
