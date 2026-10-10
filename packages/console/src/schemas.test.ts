@@ -201,6 +201,7 @@ describe("projects", () => {
     ["a key that begins with a hyphen", { key: "-web", name: "x" }],
     ["a key over the limit", { key: "k".repeat(MAX_PROJECT_KEY_LENGTH + 1), name: "x" }],
     ["a key with a slash", { key: "a/b", name: "x" }],
+    ["a key the pages reserve", { key: "new", name: "x" }],
     ["no name", { key: "web" }],
     ["a visibility that is not one", { key: "web", name: "x", visibility: "public" }],
     [

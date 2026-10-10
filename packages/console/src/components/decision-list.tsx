@@ -21,6 +21,8 @@ export interface DecisionCardProps {
   readonly taskHref?: ((task: RestTask) => string) | undefined;
   /** Where a document the decision links to is read, by its path. */
   readonly docHref?: ((path: string) => string) | undefined;
+  /** Where the decision's own page is; given, the question leads to it. */
+  readonly href?: string | undefined;
   /** Called with the person's answer. Left out, a waiting decision cannot be answered here. */
   readonly onAnswer?: ((decision: RestDecision, input: RestAnswerInput) => void) | undefined;
   /** Called to grow the record, with what followed. Left out, it cannot be written here. */
@@ -107,7 +109,13 @@ export function DecisionCard(props: DecisionCardProps) {
   return (
     <article id={decision.id} className={cx("sc-decision", answered && "sc-decision-answered")}>
       <header className="sc-decision-header">
-        <h3 className="sc-decision-question">{decision.question}</h3>
+        <h3 className="sc-decision-question">
+          {props.href === undefined ? (
+            decision.question
+          ) : (
+            <a href={props.href}>{decision.question}</a>
+          )}
+        </h3>
         <p className="sc-decision-meta">
           <PersonChip person={decision.raisedBy} />{" "}
           {decision.run === null ? "asked" : `asked through ${decision.run.agent}`}{" "}
@@ -216,6 +224,8 @@ export interface DecisionListProps {
   readonly tasks: ReadonlyMap<string, RestTask>;
   readonly taskHref?: ((task: RestTask) => string) | undefined;
   readonly docHref?: ((path: string) => string) | undefined;
+  /** Where each decision's own page is. */
+  readonly decisionHref?: ((decision: RestDecision) => string) | undefined;
   readonly onAnswer?: ((decision: RestDecision, input: RestAnswerInput) => void) | undefined;
   readonly onUpdate?: ((decision: RestDecision, patch: RestDecisionPatch) => void) | undefined;
   readonly busy?: boolean | undefined;
@@ -232,6 +242,7 @@ export function DecisionList(props: DecisionListProps) {
       task={decision.taskId === null ? undefined : props.tasks.get(decision.taskId)}
       taskHref={props.taskHref}
       docHref={props.docHref}
+      href={props.decisionHref?.(decision)}
       onAnswer={props.onAnswer}
       onUpdate={props.onUpdate}
       busy={props.busy}

@@ -1,0 +1,7 @@
+---
+"@skillcdn/console": patch
+---
+
+The default console's addresses name what they show, and every page and form has one (ADR-0010). A project's pages are under `/projects/<key>`; a task is addressed by its number and a decision by its id; the forms are at `/projects/new`, `.../tasks/new`, `.../decisions/new` and `/agents/new`, and `?edit`, `?ask`, `?new`, `?version=` and `?q=` say how a task or the documents are shown. The navigation has two levels: the tabs of the level the person is on, and the person's menu with the workspace's pages, which is the way out of a project. Every link to one of the console's addresses is followed in place, and the history is one entry per step. The addresses of before (`/p/<key>`, `/tokens`) lead to the new ones.
+
+Breaking for a composition of your own: `matchRoute(pathname, search)` reads the query and answers more kinds of route; `taskHref(key, number, form?)` takes the task's number; `TaskView` is told which form is open (`form`, `formHref`, `onCancel`) instead of deciding it; `DocumentView` takes `editHref` and `versionHref` in place of `onEdit` and `onShowVersion`, and its `taskHref` takes the backlink; `DocsPage` takes `view` and `navigation`; `Shell` takes a `menu`; `DecisionList` and `DecisionCard` take where a decision's page is. The key `new` is reserved for the form and refused for a project. The command names the Agents page where it named the Tokens page.

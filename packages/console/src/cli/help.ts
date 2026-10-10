@@ -55,13 +55,13 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   login: {
     usage: "login --url <origin> [--token-stdin]",
     about:
-      "A person signs the command in: it asks for a token made on the console's Tokens page and keeps it, with the console's address, in your home directory. --token-stdin reads the token from standard input instead.",
-    refusals: ["the console does not know the token: make one on the Tokens page and try again"],
+      "A person signs the command in: it asks for a token made on the console's Agents page and keeps it, with the console's address, in your home directory. --token-stdin reads the token from standard input instead.",
+    refusals: ["the console does not know the token: make one on the Agents page and try again"],
   },
   logout: {
     usage: "logout",
     about:
-      "Forgets the address and the token kept here. The token itself is removed on the Tokens page.",
+      "Forgets the address and the token kept here. The token itself is removed on the Agents page.",
   },
   whoami: {
     usage: "whoami",

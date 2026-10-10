@@ -337,7 +337,7 @@ const login: Command = async (args, io) => {
   const token = (
     on(values, "token-stdin")
       ? await io.readStdin()
-      : await io.readSecret(`Paste a token made at ${url}/tokens: `)
+      : await io.readSecret(`Paste a token made at ${url}/agents/new: `)
   ).trim();
   if (token.length === 0) {
     throw failed("No token was given.");
@@ -346,7 +346,7 @@ const login: Command = async (args, io) => {
   const person = me.person;
   if (person === null) {
     throw failed(
-      "The console does not know this token. Make one on your Tokens page and try again.",
+      "The console does not know this token. Make one on your Agents page and try again.",
     );
   }
   const kept = await io.store.save({ url, token });
@@ -359,7 +359,7 @@ const login: Command = async (args, io) => {
 const logout: Command = async (args, io) => {
   parse(args, {}, false);
   await io.store.clear();
-  io.stdout("Signed out here. The token itself is removed on your Tokens page.\n");
+  io.stdout("Signed out here. The token itself is removed on your Agents page.\n");
   return EXIT.ok;
 };
 

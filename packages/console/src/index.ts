@@ -50,7 +50,7 @@ export {
   type RunListProps,
   RunStatusBadge,
 } from "./components/runs.js";
-export { type NavItem, Shell, type ShellProps } from "./components/shell.js";
+export { isPlainClick, type NavItem, Shell, type ShellProps } from "./components/shell.js";
 export { SignIn, type SignInProps } from "./components/sign-in.js";
 export { SkillList, type SkillListProps } from "./components/skills.js";
 export { TaskForm, type TaskFormProps } from "./components/task-form.js";
@@ -92,13 +92,20 @@ export {
 export { type ConsoleActions, type ConsoleData, useConsoleData } from "./data.js";
 export { DocsPage, type DocsPageProps } from "./docs-page.js";
 export {
+  type DocsView,
+  decisionHref,
   docHref,
   matchRoute,
+  movedFrom,
+  type Navigation,
+  newDecisionHref,
+  newTaskHref,
   PATHS,
   type ProjectPage,
   projectHref,
   type Route,
   signInFailureOf,
+  type TaskFormKind,
   taskHref,
   withoutSignInParam,
 } from "./router.js";

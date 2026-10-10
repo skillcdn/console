@@ -73,7 +73,7 @@ People sign in through an identity provider the organization already uses: GitHu
 
 What the browser holds is a session cookie that scripts cannot read, bound to the host over TLS (`__Host-`); the database holds its hash. A request that changes something must come from the console's own pages: the browser names its origin, and the console compares it with `PUBLIC_URL`. A login taken out of `MEMBERS`, or a domain out of `GOOGLE_WORKSPACE_DOMAIN`, is out on the next request.
 
-An agent, a script or a console of a person's own holds a token instead, made by that person on the console's Tokens page and presented as `Authorization: Bearer`: it is that person for the board's purposes, needs no origin, expires after at most a year or never, as the person chooses, and is removed on the same page. The database holds its hash; a token cannot make tokens; a person holds a bounded number of them. Nothing here needs configuring.
+An agent, a script or a console of a person's own holds a token instead, made by that person on the console's Agents page and presented as `Authorization: Bearer`: it is that person for the board's purposes, needs no origin, expires after at most a year or never, as the person chooses, and is removed on the same page. The database holds its hash; a token cannot make tokens; a person holds a bounded number of them. Nothing here needs configuring.
 
 An agent works the board through the `console` command of `@skillcdn/console`, signed in with that token ([docs/specs/cli.md](../docs/specs/cli.md)); nothing of it is configured here. A read of a decision that waits for its answer (`GET /api/v1/decisions/<id>?wait=`) holds its request for up to 50 seconds, so a proxy's read timeout must allow it.
 

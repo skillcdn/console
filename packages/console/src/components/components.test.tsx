@@ -77,7 +77,7 @@ const decision = (overrides: Partial<RestDecision> = {}): RestDecision => ({
   ...overrides,
 });
 
-const href = (item: RestTask) => `/p/web/tasks/${item.id}`;
+const href = (item: RestTask) => `/projects/web/tasks/${item.number}`;
 
 describe("the board", () => {
   it("has a column per state, with each task in its own, as text and never as HTML", () => {
@@ -98,7 +98,7 @@ describe("the board", () => {
     expect(html).not.toContain("<b>now</b>");
     expect(html).toContain("1 decision");
     expect(html).toContain("High");
-    expect(html).toContain('href="/p/web/tasks/0199c4d8-0000-7000-8000-000000000010"');
+    expect(html).toContain('href="/projects/web/tasks/7"');
     // The second task's column, with its count, and no move control without a handler.
     expect(html).toContain('class="sc-column sc-column-done"');
     expect(html).not.toContain("sc-card-move");
@@ -169,6 +169,36 @@ describe("one task", () => {
     expect(html).toContain("alice");
     expect(html).toContain("bob");
   });
+
+  it("opens the form the page says, each at an address of its own", () => {
+    const render = (form: "edit" | "ask" | undefined) =>
+      renderToStaticMarkup(
+        <TaskView
+          task={task()}
+          people={[alice, bob]}
+          tasks={[task()]}
+          decisions={[]}
+          taskHref={href}
+          form={form}
+          formHref={(wanted) => `/projects/web/tasks/7?${wanted}`}
+          onCancel={() => undefined}
+          onChange={() => undefined}
+          onMove={() => undefined}
+          onRaiseDecision={() => undefined}
+          onAnswer={() => undefined}
+        />,
+      );
+    const plain = render(undefined);
+    expect(plain).toContain('href="/projects/web/tasks/7?edit"');
+    expect(plain).toContain('href="/projects/web/tasks/7?ask"');
+    expect(plain).not.toContain('aria-label="Raise a decision"');
+    const asking = render("ask");
+    expect(asking).toContain('aria-label="Raise a decision"');
+    expect(asking).toContain("Cancel");
+    const editing = render("edit");
+    expect(editing).toContain("<form");
+    expect(editing).not.toContain('href="/projects/web/tasks/7?edit"');
+  });
 });
 
 describe("decisions", () => {
@@ -209,16 +239,16 @@ describe("decisions", () => {
     const html = renderToStaticMarkup(
       <DecisionCard
         decision={answered}
-        docHref={(path) => `/p/web/docs/${path}`}
+        docHref={(path) => `/projects/web/docs/${path}`}
         onUpdate={() => undefined}
       />,
     );
     expect(html).toContain(`id="${answered.id}"`);
     expect(html).toContain("Context");
-    expect(html).toContain('href="/p/web/docs/plan"');
-    expect(html).toContain('href="/p/web/docs/numbers"');
+    expect(html).toContain('href="/projects/web/docs/plan"');
+    expect(html).toContain('href="/projects/web/docs/numbers"');
     expect(html).toContain("What followed");
-    expect(html).toContain('href="/p/web/docs/outcomes/ship"');
+    expect(html).toContain('href="/projects/web/docs/outcomes/ship"');
     expect(html).toContain("Change it");
     const bare = renderToStaticMarkup(
       <DecisionCard decision={decision({ answer: answered.answer })} />,
@@ -309,7 +339,7 @@ describe("the feed", () => {
             data: { number: 2, title: "Second" },
           }),
         ]}
-        href={() => "/p/web/tasks/x"}
+        href={() => "/projects/web/tasks/x"}
       />,
     );
     expect(html.indexOf("joined the board")).toBeLessThan(html.indexOf("wrote #1 First"));
@@ -369,9 +399,9 @@ describe("Markdown", () => {
   it("leads a link to a page's path to the page, when it knows where, and leaves it text otherwise", () => {
     const source = "See [onboarding](guides/onboarding#setup) and [nothing](Guides/x).";
     const linked = renderToStaticMarkup(
-      <Markdown source={source} docHref={(path) => `/p/web/docs/${path}`} />,
+      <Markdown source={source} docHref={(path) => `/projects/web/docs/${path}`} />,
     );
-    expect(linked).toContain('<a href="/p/web/docs/guides/onboarding#setup">onboarding</a>');
+    expect(linked).toContain('<a href="/projects/web/docs/guides/onboarding#setup">onboarding</a>');
     expect(linked).toContain("<span>nothing</span>");
     const unlinked = renderToStaticMarkup(<Markdown source={source} />);
     expect(unlinked).toContain("<span>onboarding</span>");
@@ -430,8 +460,9 @@ describe("documents", () => {
     ],
     ...overrides,
   });
-  const docHref = (path: string) => `/p/web/docs/${path}`;
-  const folderHref = (folder: string) => (folder === "" ? "/p/web/docs" : `/p/web/docs/${folder}`);
+  const docHref = (path: string) => `/projects/web/docs/${path}`;
+  const folderHref = (folder: string) =>
+    folder === "" ? "/projects/web/docs" : `/projects/web/docs/${folder}`;
 
   it("show a page with its links both ways, its files and its versions, as text and never as HTML", () => {
     const html = renderToStaticMarkup(
@@ -456,21 +487,27 @@ describe("documents", () => {
         docHref={docHref}
         folderHref={folderHref}
         fileHref={(file) => `/api/v1/projects/web/docs/guides%2Fonboarding/files/${file.id}`}
-        taskHref={(id) => `/p/web/tasks/${id}`}
-        decisionHref={(id) => `/p/web/decisions#${id}`}
-        onEdit={() => undefined}
+        taskHref={(backlink) => `/projects/web/tasks/${backlink.number}`}
+        decisionHref={(id) => `/projects/web/decisions/${id}`}
+        editHref="/projects/web/docs/guides/onboarding?edit"
         onArchive={() => undefined}
-        onShowVersion={() => undefined}
+        versionHref={(number) =>
+          number === undefined
+            ? "/projects/web/docs/guides/onboarding"
+            : `/projects/web/docs/guides/onboarding?version=${number}`
+        }
       />,
     );
     expect(html).toContain("Onboarding &lt;new&gt;");
     expect(html).not.toContain("<new>");
     expect(html).toContain("<h1>Welcome</h1>");
-    expect(html).toContain('href="/p/web/docs/plan"');
+    expect(html).toContain('href="/projects/web/docs/plan"');
     expect(html).toContain("no page there yet");
     expect(html).toContain("Referred to by");
-    expect(html).toContain('href="/p/web/tasks/0199c4d8-0000-7000-8000-000000000010"');
-    expect(html).toContain('href="/p/web/decisions#0199c4d8-0000-7000-8000-000000000020"');
+    expect(html).toContain('href="/projects/web/tasks/7"');
+    expect(html).toContain('href="/projects/web/decisions/0199c4d8-0000-7000-8000-000000000020"');
+    expect(html).toContain('href="/projects/web/docs/guides/onboarding?edit"');
+    expect(html).toContain('href="/projects/web/docs/guides/onboarding?version=2"');
     expect(html).toContain("Decision: Which one?");
     expect(html).toContain("the report");
     expect(html).toContain("2.0 KB");
@@ -484,7 +521,7 @@ describe("documents", () => {
         docHref={docHref}
         folderHref={folderHref}
         fileHref={() => "#"}
-        onEdit={() => undefined}
+        editHref="/projects/web/docs/guides/onboarding?edit"
         onRestore={() => undefined}
       />,
     );
@@ -505,9 +542,9 @@ describe("documents", () => {
         folderHref={folderHref}
       />,
     );
-    expect(folder).toContain('href="/p/web/docs/guides/setup"');
+    expect(folder).toContain('href="/projects/web/docs/guides/setup"');
     expect(folder).toContain("setup/");
-    expect(folder).toContain('href="/p/web/docs/guides/onboarding"');
+    expect(folder).toContain('href="/projects/web/docs/guides/onboarding"');
     expect(folder).toContain("Archived");
     const empty = renderToStaticMarkup(
       <DocumentList items={[]} docHref={docHref} empty={<p>Nothing</p>} />,
@@ -529,11 +566,12 @@ describe("the shell and signing in", () => {
     const html = renderToStaticMarkup(
       <Shell
         title="Acme"
-        project={{ name: "The web app", href: "/p/web" }}
+        project={{ name: "The web app", href: "/projects/web" }}
         nav={[
-          { href: "/p/web", label: "Board", current: true },
-          { href: "/p/web/decisions", label: "Decisions", current: false, count: 2 },
+          { href: "/projects/web", label: "Board", current: true },
+          { href: "/projects/web/decisions", label: "Decisions", current: false, count: 2 },
         ]}
+        menu={[{ href: "/agents", label: "Agents", current: false }]}
         person={alice}
         live={true}
         onNavigate={() => undefined}
@@ -543,7 +581,10 @@ describe("the shell and signing in", () => {
       </Shell>,
     );
     expect(html).toContain("Acme");
-    expect(html).toContain('class="sc-crumb-link" href="/p/web"');
+    expect(html).toContain('class="sc-tab sc-tab-current"');
+    expect(html).toContain('class="sc-menu"');
+    expect(html).toContain('href="/agents"');
+    expect(html).toContain('class="sc-crumb-link" href="/projects/web"');
     expect(html).toContain("The web app");
     expect(html).toContain('aria-current="page"');
     expect(html).toContain('class="sc-nav-count">2<');
@@ -717,7 +758,7 @@ describe("runs", () => {
     const html = renderToStaticMarkup(
       <RunList
         runs={[run]}
-        decisionHref={(id) => `/p/web/decisions#${id}`}
+        decisionHref={(id) => `/projects/web/decisions#${id}`}
         fileHref={(artifact) => `/api/v1/projects/web/files/${artifact.id}`}
         onAbandon={() => undefined}
       />,
@@ -838,11 +879,11 @@ describe("projects", () => {
             openRuns: 0,
           }),
         ]}
-        projectHref={(item) => `/p/${item.key}`}
+        projectHref={(item) => `/projects/${item.key}`}
         onOpen={() => undefined}
       />,
     );
-    expect(html).toContain('href="/p/web"');
+    expect(html).toContain('href="/projects/web"');
     expect(html).toContain("The web &lt;app&gt;");
     expect(html).not.toContain("<app>");
     expect(html).toContain("What we ship.");

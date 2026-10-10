@@ -111,16 +111,19 @@ export type RestPeople = z.infer<typeof restPeopleSchema>;
 export const restPersonPatchSchema = z.object({ role: z.enum(PERSON_ROLES) });
 export type RestPersonPatch = z.infer<typeof restPersonPatchSchema>;
 
+/** The words under `/projects/` that are the pages' own, which no project may be called. */
+export const RESERVED_PROJECT_KEYS: readonly string[] = ["new"];
+
 /**
- * A project's key: what its paths and the command say. Lowercase letters, digits and hyphens,
- * beginning and ending with a letter or a digit; immutable once the project is made.
+ * A project's key: what its addresses and the command say. Lowercase letters, digits and
+ * hyphens, beginning and ending with a letter or a digit, not a word the pages reserve;
+ * immutable once the project is made.
  */
-const projectKey = z
-  .string()
-  .check(
-    z.maxLength(MAX_PROJECT_KEY_LENGTH),
-    z.regex(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/, "must be lowercase letters, digits and hyphens"),
-  );
+const projectKey = z.string().check(
+  z.maxLength(MAX_PROJECT_KEY_LENGTH),
+  z.regex(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/, "must be lowercase letters, digits and hyphens"),
+  z.refine((key) => !RESERVED_PROJECT_KEYS.includes(key), "is a word the pages reserve"),
+);
 
 /** The address of a project's skills, as the standard spells one; the console checks it as one. */
 const skillsAddress = line(MAX_SKILLS_ADDRESS_LENGTH);

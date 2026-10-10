@@ -31,7 +31,7 @@ pnpm --filter @skillcdn/console-app run start api     # http://127.0.0.1:11199
 
 People sign in through GitHub, Google Workspace, or both ([deploy/README.md](deploy/README.md#signing-in)); until that is configured the console says so and nobody is let in.
 
-**The command, where an agent runs.** `@skillcdn/console` ships `console`, the agent's side of the console: a thin client of the REST API, which a person signs in once with a token from their Tokens page.
+**The command, where an agent runs.** `@skillcdn/console` ships `console`, the agent's side of the console: a thin client of the REST API, which a person signs in once with a token from their Agents page.
 
 ```sh
 npm install -g @skillcdn/console

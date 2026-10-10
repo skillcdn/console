@@ -1,4 +1,3 @@
-import { useState } from "react";
 import type {
   RestAnswerInput,
   RestArtifact,
@@ -12,6 +11,7 @@ import type {
   RestTaskInput,
   TaskState,
 } from "../api.js";
+import type { TaskFormKind } from "../router.js";
 import { TASK_STATES } from "../vocabulary.js";
 import { DecisionForm } from "./decision-form.js";
 import { DecisionCard } from "./decision-list.js";
@@ -19,11 +19,12 @@ import { EventFeed } from "./event-feed.js";
 import { Markdown } from "./markdown.js";
 import { RunList } from "./runs.js";
 import { TaskForm } from "./task-form.js";
-import { Button, PersonChip, PriorityBadge, STATE_LABELS, StateBadge, Time } from "./ui.js";
+import { PersonChip, PriorityBadge, STATE_LABELS, StateBadge, Time } from "./ui.js";
 
 // One task: what it is, who it is on, what it links to, the agents at work on it, the decisions
 // about it, the tasks that are part of it, everything that happened to it, and the ways to
-// change it. Takes its data as props and nothing from the network.
+// change it. Takes its data as props and nothing from the network; which of its forms is open
+// is told by the page, since each form has an address of its own (ADR-0010).
 
 export interface TaskViewProps {
   readonly task: RestTask;
@@ -42,6 +43,12 @@ export interface TaskViewProps {
   readonly fileHref?: ((artifact: RestArtifact) => string) | undefined;
   /** Where a document of the project is read, by its path, for the links in what was written. */
   readonly docHref?: ((path: string) => string) | undefined;
+  /** The form open on the page, if one: the task edited, or a decision raised about it. */
+  readonly form?: TaskFormKind | undefined;
+  /** Where each form is opened; left out, the forms cannot be opened from here. */
+  readonly formHref?: ((form: TaskFormKind) => string) | undefined;
+  /** Called when a form is cancelled. */
+  readonly onCancel?: (() => void) | undefined;
   readonly busy?: boolean | undefined;
   readonly error?: string | undefined;
   readonly onChange: (task: RestTask, patch: RestTaskInput) => void;
@@ -57,8 +64,6 @@ export interface TaskViewProps {
 
 export function TaskView(props: TaskViewProps) {
   const { task } = props;
-  const [editing, setEditing] = useState(false);
-  const [asking, setAsking] = useState(false);
   const parent =
     task.parentId === null
       ? undefined
@@ -68,7 +73,7 @@ export function TaskView(props: TaskViewProps) {
   const runs = (props.runs ?? []).filter((run) => run.taskId === task.id);
   const tasksById = new Map(props.tasks.map((candidate) => [candidate.id, candidate]));
 
-  if (editing) {
+  if (props.form === "edit") {
     return (
       <div className="sc-task">
         <h1 className="sc-task-title">
@@ -80,11 +85,8 @@ export function TaskView(props: TaskViewProps) {
           parents={props.tasks}
           busy={props.busy}
           error={props.error}
-          onSubmit={(input) => {
-            props.onChange(task, input);
-            setEditing(false);
-          }}
-          onCancel={() => setEditing(false)}
+          onSubmit={(input) => props.onChange(task, input)}
+          onCancel={props.onCancel}
         />
       </div>
     );
@@ -155,10 +157,16 @@ export function TaskView(props: TaskViewProps) {
             ))}
           </select>
         </label>
-        <Button onClick={() => setEditing(true)}>Edit</Button>
-        <Button onClick={() => setAsking(true)} disabled={asking}>
-          Raise a decision
-        </Button>
+        {props.formHref !== undefined && (
+          <>
+            <a className="sc-button sc-button-secondary" href={props.formHref("edit")}>
+              Edit
+            </a>
+            <a className="sc-button sc-button-secondary" href={props.formHref("ask")}>
+              Raise a decision
+            </a>
+          </>
+        )}
       </div>
       {props.error !== undefined && (
         <p className="sc-form-error" role="alert">
@@ -184,18 +192,15 @@ export function TaskView(props: TaskViewProps) {
           </ul>
         </section>
       )}
-      {asking && (
+      {props.form === "ask" && (
         <section className="sc-task-section" aria-label="Raise a decision">
           <h2 className="sc-section-title">Raise a decision</h2>
           <DecisionForm
             tasks={props.tasks}
             taskId={task.id}
             busy={props.busy}
-            onSubmit={(input) => {
-              props.onRaiseDecision(input);
-              setAsking(false);
-            }}
-            onCancel={() => setAsking(false)}
+            onSubmit={props.onRaiseDecision}
+            onCancel={props.onCancel}
           />
         </section>
       )}

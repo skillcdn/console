@@ -192,7 +192,7 @@ svg {
   color: var(--sc-color-text-muted);
 }
 
-/* The shell: a header with the name, the pages and the person; the page below it. */
+/* The shell: a header with the workspace, the project and the person, the tabs under it, and the page below (ADR-0010). */
 
 .sc-shell {
   display: flex;
@@ -265,35 +265,130 @@ svg {
   text-overflow: ellipsis;
 }
 
-.sc-nav {
+/* The tabs: the pages of the level the person is on, under the header's first row. */
+
+.sc-tabs {
+  max-width: var(--sc-width-page);
+  margin-inline: auto;
+  padding-inline: var(--sc-space-5);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.sc-tabs-inner {
   display: flex;
-  flex-wrap: wrap;
   gap: var(--sc-space-1);
 }
 
-.sc-nav-link {
+.sc-tab {
   display: inline-flex;
   align-items: center;
   gap: var(--sc-space-2);
-  padding: var(--sc-space-1) var(--sc-space-3);
-  border-radius: var(--sc-radius-md);
+  padding: var(--sc-space-2) var(--sc-space-3);
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
   color: var(--sc-color-text-muted);
   font-size: var(--sc-text-sm);
   font-weight: var(--sc-weight-medium);
   text-decoration: none;
+  white-space: nowrap;
   transition:
-    background var(--sc-transition),
+    border-color var(--sc-transition),
     color var(--sc-transition);
 }
 
-.sc-nav-link:hover {
-  background: var(--sc-color-bg-inset);
+.sc-tab:hover {
   color: var(--sc-color-text);
 }
 
-.sc-nav-current {
-  background: var(--sc-color-bg-inset);
+.sc-tab-current {
+  border-bottom-color: var(--sc-color-accent);
   color: var(--sc-color-text);
+}
+
+/* The person's menu: a disclosure at the end of the header, with the workspace's pages. */
+
+.sc-menu {
+  position: relative;
+}
+
+.sc-menu-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sc-space-2);
+  padding: var(--sc-space-1) var(--sc-space-2);
+  border-radius: var(--sc-radius-md);
+  list-style: none;
+  cursor: pointer;
+  transition: background var(--sc-transition);
+}
+
+.sc-menu-summary::-webkit-details-marker {
+  display: none;
+}
+
+.sc-menu-summary:hover,
+.sc-menu[open] > .sc-menu-summary {
+  background: var(--sc-color-bg-inset);
+}
+
+.sc-menu-panel {
+  position: absolute;
+  top: calc(100% + var(--sc-space-1));
+  right: 0;
+  z-index: 20;
+  min-width: 14rem;
+  padding: var(--sc-space-2);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-lg);
+  background: var(--sc-color-bg-raised);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+
+.sc-menu-who {
+  display: flex;
+  flex-direction: column;
+  padding: var(--sc-space-2) var(--sc-space-3) var(--sc-space-3);
+  margin-bottom: var(--sc-space-1);
+  border-bottom: var(--sc-border);
+  font-size: var(--sc-text-sm);
+  font-weight: var(--sc-weight-medium);
+}
+
+.sc-menu-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.sc-menu-link {
+  display: block;
+  width: 100%;
+  padding: var(--sc-space-2) var(--sc-space-3);
+  border: 0;
+  border-radius: var(--sc-radius-md);
+  background: none;
+  color: var(--sc-color-text);
+  font: inherit;
+  font-size: var(--sc-text-sm);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.sc-menu-link:hover {
+  background: var(--sc-color-bg-inset);
+}
+
+.sc-menu-link[aria-current="page"] {
+  color: var(--sc-color-accent);
+  font-weight: var(--sc-weight-medium);
+}
+
+.sc-menu-out {
+  margin-top: var(--sc-space-1);
+  border-top: var(--sc-border);
+  border-radius: 0;
+  color: var(--sc-color-text-muted);
 }
 
 .sc-nav-count {
@@ -1186,6 +1281,14 @@ svg {
   .sc-header-inner {
     gap: var(--sc-space-3);
     padding-inline: var(--sc-space-4);
+  }
+
+  .sc-tabs {
+    padding-inline: var(--sc-space-4);
+  }
+
+  .sc-menu-summary .sc-person-login {
+    display: none;
   }
 
   .sc-main {

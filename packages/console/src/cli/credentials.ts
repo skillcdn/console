@@ -10,7 +10,7 @@ import * as z from "zod/mini";
 export interface Credentials {
   /** The origin of the console, without a path. */
   readonly url: string;
-  /** A token made on the console's Tokens page. */
+  /** A token made on the console's Agents page. */
   readonly token: string;
 }
 

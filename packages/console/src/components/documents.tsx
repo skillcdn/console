@@ -275,7 +275,7 @@ export function DocumentForm(props: DocumentFormProps) {
 function BacklinkItem(props: {
   readonly backlink: RestBacklink;
   readonly docHref: (path: string) => string;
-  readonly taskHref?: ((taskId: string) => string) | undefined;
+  readonly taskHref?: ((backlink: RestBacklink) => string) | undefined;
   readonly decisionHref?: ((decisionId: string) => string) | undefined;
 }) {
   const { backlink } = props;
@@ -295,7 +295,7 @@ function BacklinkItem(props: {
     return props.taskHref === undefined ? (
       <span>{words}</span>
     ) : (
-      <a href={props.taskHref(backlink.id)}>{words}</a>
+      <a href={props.taskHref(backlink)}>{words}</a>
     );
   }
   const words = <>Decision: {backlink.title}</>;
@@ -382,17 +382,19 @@ export interface DocumentViewProps {
   readonly docHref: (path: string) => string;
   readonly folderHref: (folder: string) => string;
   readonly fileHref: (file: RestDocumentFile) => string;
-  readonly taskHref?: ((taskId: string) => string) | undefined;
+  /** Where a task that refers to the page is read. */
+  readonly taskHref?: ((backlink: RestBacklink) => string) | undefined;
   readonly decisionHref?: ((decisionId: string) => string) | undefined;
   readonly busy?: boolean | undefined;
   readonly error?: string | undefined;
+  /** Where the page is edited; left out where the person may not, or the page is archived. */
+  readonly editHref?: string | undefined;
+  /** Where a version of the page is read, by its number, or the latest again with nothing. */
+  readonly versionHref?: ((number: number | undefined) => string) | undefined;
   /** The ways to change the page; each left out where the person may not. */
-  readonly onEdit?: (() => void) | undefined;
   readonly onArchive?: (() => void) | undefined;
   readonly onRestore?: (() => void) | undefined;
   readonly onAttach?: ((file: File, label: string | undefined) => void) | undefined;
-  /** Called with a version's number to show it, or with nothing to show the latest again. */
-  readonly onShowVersion?: ((number: number | undefined) => void) | undefined;
 }
 
 /** One page: its latest version or an earlier one, its links both ways, its files, its versions. */
@@ -424,13 +426,10 @@ export function DocumentView(props: DocumentViewProps) {
       <p className="sc-doc-meta">
         <code className="sc-doc-path">{document.path}</code> · version {shown.number}, written by{" "}
         <Writer by={shown.author} agent={shown.agent} /> <Time iso={shown.createdAt} />
-        {version !== undefined && props.onShowVersion !== undefined && (
+        {version !== undefined && props.versionHref !== undefined && (
           <>
             {" "}
-            ·{" "}
-            <Button variant="ghost" size="sm" onClick={() => props.onShowVersion?.(undefined)}>
-              Show the latest
-            </Button>
+            · <a href={props.versionHref(undefined)}>Show the latest</a>
           </>
         )}
       </p>
@@ -439,14 +438,14 @@ export function DocumentView(props: DocumentViewProps) {
           This page is archived: out of the folders and the search, and not written to.
         </p>
       )}
-      {(props.onEdit !== undefined ||
+      {(props.editHref !== undefined ||
         props.onArchive !== undefined ||
         props.onRestore !== undefined) && (
         <div className="sc-task-actions">
-          {!archived && props.onEdit !== undefined && (
-            <Button onClick={props.onEdit} disabled={props.busy === true}>
+          {!archived && props.editHref !== undefined && (
+            <a className="sc-button sc-button-secondary" href={props.editHref}>
               Edit
-            </Button>
+            </a>
           )}
           {!archived && props.onArchive !== undefined && (
             <Button variant="ghost" onClick={props.onArchive} disabled={props.busy === true}>
@@ -518,20 +517,17 @@ export function DocumentView(props: DocumentViewProps) {
           <ol className="sc-versions">
             {props.versions.map((entry) => (
               <li key={entry.number} className="sc-version">
-                {props.onShowVersion === undefined || entry.number === shown.number ? (
+                {props.versionHref === undefined || entry.number === shown.number ? (
                   <span className="sc-version-number">v{entry.number}</span>
                 ) : (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      props.onShowVersion?.(
-                        entry.number === document.version ? undefined : entry.number,
-                      )
-                    }
+                  <a
+                    className="sc-version-number"
+                    href={props.versionHref(
+                      entry.number === document.version ? undefined : entry.number,
+                    )}
                   >
                     v{entry.number}
-                  </Button>
+                  </a>
                 )}{" "}
                 {entry.title} · <Writer by={entry.author} agent={entry.agent} />{" "}
                 <Time iso={entry.createdAt} />

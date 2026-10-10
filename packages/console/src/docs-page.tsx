@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   ApiError,
   folderOf,
+  type RestBacklink,
   type RestDocument,
   type RestDocumentFile,
   type RestDocuments,
@@ -17,43 +18,52 @@ import {
   DocumentView,
   FolderView,
 } from "./components/documents.js";
-import { Button, Callout, EmptyState, Spinner } from "./components/ui.js";
+import { Callout, EmptyState, Spinner } from "./components/ui.js";
 import type { ConsoleData } from "./data.js";
-import { docHref, projectHref, taskHref } from "./router.js";
+import {
+  type DocsView,
+  decisionHref,
+  docHref,
+  type Navigation,
+  projectHref,
+  taskHref,
+} from "./router.js";
 import { projectPath } from "./routes.js";
 import { useAction } from "./use-action.js";
 
 // The Docs page of a project (ADR-0009): the folder or the page the path names, read on its
-// own since the tree may be large, and read again whenever the project's feed grows; a search
-// over the pages; and the ways to write, archive, restore and attach. Part of the default
-// composition; a custom console composes the same components its own way.
+// own since the tree may be large, and read again whenever the project's feed grows; and the
+// view the address asks for (ADR-0010): a search, a form, an earlier version. Part of the
+// default composition; a custom console composes the same components its own way.
 
 export interface DocsPageProps {
   readonly project: RestProject;
   /** The path the page is on: a folder, a page, or `""` for the root. */
   readonly path: string;
+  /** How the address says the path is shown. */
+  readonly view: DocsView;
   readonly data: ConsoleData;
-  readonly navigate: (href: string) => void;
+  readonly navigation: Navigation;
 }
 
 /** A document the server has no page for, as the page remembers it. */
 type Found = RestDocument | null | undefined;
 
 export function DocsPage(props: DocsPageProps) {
-  const { project, path, data, navigate } = props;
+  const { project, path, view, data, navigation } = props;
   const [listing, setListing] = useState<RestDocuments | undefined>(undefined);
   const [document, setDocument] = useState<Found>(undefined);
   const [versions, setVersions] = useState<readonly RestVersionSummary[] | undefined>(undefined);
   const [version, setVersion] = useState<RestVersion | undefined>(undefined);
-  const [query, setQuery] = useState("");
   const [results, setResults] = useState<RestDocuments | undefined>(undefined);
   const [problem, setProblem] = useState<string | undefined>(undefined);
-  const [writing, setWriting] = useState(false);
-  const [editing, setEditing] = useState(false);
   const { busy, error, act } = useAction();
   const { actions } = data;
   const key = project.key;
   const feedLength = data.events.length;
+  const wanted = view.kind === "read" ? view.version : undefined;
+  const query = view.kind === "search" ? view.q : undefined;
+  const latest = document?.version;
 
   // The folder and the page at the path, asked for again whenever the project's feed grows.
   // biome-ignore lint/correctness/useExhaustiveDependencies: the feed's length is the trigger
@@ -101,77 +111,106 @@ export function DocsPage(props: DocsPageProps) {
     return () => controller.abort();
   }, [actions, path, feedLength]);
 
-  // Another path starts over: no version shown, no form open, no search.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the path is the trigger
+  // The earlier version the address asks for, once the page is known.
   useEffect(() => {
-    setVersion(undefined);
-    setEditing(false);
-    setWriting(false);
-    setResults(undefined);
-    setQuery("");
-  }, [path]);
+    if (wanted === undefined || latest === undefined) {
+      setVersion(undefined);
+      return;
+    }
+    const controller = new AbortController();
+    actions
+      .documentVersion(path, wanted, controller.signal)
+      .then((answer) => {
+        if (!controller.signal.aborted) {
+          setVersion(answer);
+        }
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [actions, path, wanted, latest]);
+
+  // The search the address asks for, over all the project's pages.
+  useEffect(() => {
+    if (query === undefined) {
+      setResults(undefined);
+      return;
+    }
+    const controller = new AbortController();
+    actions
+      .documents({ q: query }, controller.signal)
+      .then((answer) => {
+        if (!controller.signal.aborted) {
+          setResults(answer);
+        }
+      })
+      .catch((failure: unknown) => {
+        if (!controller.signal.aborted) {
+          setProblem(failure instanceof ApiError ? failure.message : "The search did not go.");
+        }
+      });
+    return () => controller.abort();
+  }, [actions, query]);
 
   const toDoc = (target: string) => docHref(key, target);
   const toFolder = (folder: string) => docHref(key, folder);
   const toFile = (file: RestDocumentFile) => `${projectPath(key, "docs", path)}/files/${file.id}`;
-  const toTask = (taskId: string) => taskHref(key, taskId);
-  const toDecision = (decisionId: string) => `${projectHref(key, "decisions")}#${decisionId}`;
+  const toTask = (backlink: RestBacklink) =>
+    backlink.number === null ? projectHref(key) : taskHref(key, backlink.number);
+  const toDecision = (decisionId: string) => decisionHref(key, decisionId);
+  /** The plain address of what the page is on. */
+  const here = toDoc(path);
+  const page = document !== null && document !== undefined ? document : undefined;
+  /** The folder a new page goes in: this one, or the one the page shown is in. */
+  const folder = page === undefined ? path : folderOf(path);
 
-  const search = (words: string) => {
-    setQuery(words);
-    if (words === "") {
-      setResults(undefined);
-      return;
-    }
-    void act(async () => {
-      setResults(await actions.documents({ q: words }));
-    });
-  };
+  const search = (words: string) =>
+    navigation.go(words === "" ? here : docHref(key, path, { kind: "search", q: words }));
 
   const head = (
     <>
       <div className="sc-page-head">
         <h1 className="sc-page-title">Docs</h1>
-        <Button
-          variant="primary"
-          onClick={() => {
-            setWriting(true);
-            setEditing(false);
-          }}
-          disabled={writing}
-        >
-          New page
-        </Button>
+        {view.kind !== "new" && (
+          <a className="sc-button sc-button-primary" href={docHref(key, folder, { kind: "new" })}>
+            New page
+          </a>
+        )}
       </div>
-      <DocumentSearch query={query} busy={busy} onSearch={search} />
+      <DocumentSearch key={query ?? ""} query={query} busy={busy} onSearch={search} />
       {problem !== undefined && <Callout tone="danger">{problem}</Callout>}
       {error !== undefined && <Callout tone="danger">{error}</Callout>}
     </>
   );
 
-  if (results !== undefined) {
+  if (view.kind === "search") {
     return (
       <>
         {head}
         <section aria-label="Pages found">
-          <h2 className="sc-section-title">Pages with "{query}"</h2>
-          <DocumentList
-            items={results.items}
-            docHref={toDoc}
-            empty={<EmptyState title="No page has these words" />}
-          />
+          <h2 className="sc-section-title">Pages with "{view.q}"</h2>
+          {results === undefined ? (
+            <div className="sc-loading">
+              <Spinner label="Searching" />
+            </div>
+          ) : (
+            <DocumentList
+              items={results.items}
+              docHref={toDoc}
+              empty={<EmptyState title="No page has these words" />}
+            />
+          )}
         </section>
       </>
     );
   }
 
-  if (writing) {
+  if (view.kind === "new") {
     return (
       <>
         {head}
         <section className="sc-panel" aria-label="New page">
           <DocumentForm
-            folder={document === null || document === undefined ? path : folderOf(path)}
+            folder={folder}
             busy={busy}
             onSubmit={(input) =>
               void act(async () => {
@@ -179,11 +218,10 @@ export function DocsPage(props: DocsPageProps) {
                   title: input.title,
                   body: input.body,
                 });
-                setWriting(false);
-                navigate(toDoc(written.path));
+                navigation.replace(toDoc(written.path));
               })
             }
-            onCancel={() => setWriting(false)}
+            onCancel={() => navigation.back(here)}
           />
         </section>
       </>
@@ -201,39 +239,39 @@ export function DocsPage(props: DocsPageProps) {
     );
   }
 
-  if (document !== null && document !== undefined) {
-    if (editing) {
+  if (page !== undefined) {
+    if (view.kind === "edit") {
       return (
         <>
           {head}
           <section className="sc-panel" aria-label="Edit the page">
             <DocumentForm
-              document={document}
+              document={page}
               busy={busy}
               onSubmit={(input) =>
                 void act(async () => {
-                  const written = await actions.writeDocument(document.path, {
+                  const written = await actions.writeDocument(page.path, {
                     title: input.title,
                     body: input.body,
                     ...(input.baseVersion === undefined ? {} : { baseVersion: input.baseVersion }),
                   });
                   setDocument(written);
-                  setVersion(undefined);
-                  setEditing(false);
+                  navigation.replace(here);
                 })
               }
-              onCancel={() => setEditing(false)}
+              onCancel={() => navigation.back(here)}
             />
           </section>
         </>
       );
     }
+    const archived = page.archivedAt !== null;
     return (
       <>
         {head}
         <DocumentView
-          document={document}
-          version={version}
+          document={page}
+          version={wanted !== undefined && version?.number === wanted ? version : undefined}
           versions={versions}
           docHref={toDoc}
           folderHref={toFolder}
@@ -241,36 +279,30 @@ export function DocsPage(props: DocsPageProps) {
           taskHref={toTask}
           decisionHref={toDecision}
           busy={busy}
-          onEdit={() => setEditing(true)}
+          editHref={archived ? undefined : docHref(key, path, { kind: "edit" })}
+          versionHref={(number) =>
+            number === undefined ? here : docHref(key, path, { kind: "read", version: number })
+          }
           onArchive={() =>
             void act(async () => {
-              setDocument(await actions.archiveDocument(document.path));
+              setDocument(await actions.archiveDocument(page.path));
             })
           }
           onRestore={() =>
             void act(async () => {
-              setDocument(await actions.restoreDocument(document.path));
+              setDocument(await actions.restoreDocument(page.path));
             })
           }
           onAttach={(file, label) =>
             void act(async () => {
               const bytes = new Uint8Array(await file.arrayBuffer());
               setDocument(
-                await actions.attachDocumentFile(document.path, {
+                await actions.attachDocumentFile(page.path, {
                   name: file.name,
                   bytes,
                   ...(file.type === "" ? {} : { contentType: file.type }),
                   ...(label === undefined ? {} : { label }),
                 }),
-              );
-            })
-          }
-          onShowVersion={(number) =>
-            void act(async () => {
-              setVersion(
-                number === undefined
-                  ? undefined
-                  : await actions.documentVersion(document.path, number),
               );
             })
           }
@@ -281,6 +313,11 @@ export function DocsPage(props: DocsPageProps) {
 
   const something =
     listing !== undefined && (listing.folders.length > 0 || listing.items.length > 0);
+  const write = (
+    <a className="sc-button sc-button-secondary" href={docHref(key, path, { kind: "new" })}>
+      {path === "" ? "New page" : "Write it"}
+    </a>
+  );
   return (
     <>
       {head}
@@ -291,13 +328,13 @@ export function DocsPage(props: DocsPageProps) {
         <EmptyState
           title="No pages yet"
           body="Write the first one: what the project rests on, in Markdown, at a path of its own."
-          action={<Button onClick={() => setWriting(true)}>New page</Button>}
+          action={write}
         />
       ) : (
         <EmptyState
           title="No page at this path"
           body="Nothing is written here yet, and no folder of that name holds a page."
-          action={<Button onClick={() => setWriting(true)}>Write it</Button>}
+          action={write}
         />
       )}
     </>
