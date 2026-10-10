@@ -1,5 +1,6 @@
 import { loginPath, type RestProvider, type SignInFailure } from "../api.js";
 import { useWords } from "../i18n/index.js";
+import type { Brand } from "./shell.js";
 import { Callout } from "./ui.js";
 
 // The page a person sees before they are anyone: the way to each provider the deployment has,
@@ -7,6 +8,8 @@ import { Callout } from "./ui.js";
 
 export interface SignInProps {
   readonly title: string;
+  /** The marks to show above the name; none shows the name alone (ADR-0013). */
+  readonly brand?: Brand | undefined;
   /** The identity providers people sign in through; none where nobody can. */
   readonly providers: readonly RestProvider[];
   /** The page to come back to, signed in: a path of this origin. */
@@ -18,6 +21,9 @@ export function SignIn(props: SignInProps) {
   const words = useWords().signIn;
   return (
     <div className="sc-sign-in">
+      {props.brand?.wordmark !== undefined && (
+        <img className="sc-sign-in-wordmark" src={props.brand.wordmark} alt="" />
+      )}
       <h1 className="sc-sign-in-title">{props.title}</h1>
       <p className="sc-sign-in-lead">{words.lead}</p>
       {props.failure !== undefined && (

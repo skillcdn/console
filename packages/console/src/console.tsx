@@ -30,7 +30,13 @@ import {
   ProjectList,
   type ProjectListProps,
 } from "./components/projects.js";
-import { isPlainClick, type NavItem, Shell, type ShellProps } from "./components/shell.js";
+import {
+  type Brand,
+  isPlainClick,
+  type NavItem,
+  Shell,
+  type ShellProps,
+} from "./components/shell.js";
 import { SignIn, type SignInProps } from "./components/sign-in.js";
 import { SkillList, type SkillListProps } from "./components/skills.js";
 import { TaskForm } from "./components/task-form.js";
@@ -109,6 +115,8 @@ export interface ConsoleConfig {
   readonly components?: Partial<ConsoleComponents> | undefined;
   /** The languages the pages speak, the first being the one spoken when nothing else decides; the package's when left out. */
   readonly languages?: readonly LanguagePack[] | undefined;
+  /** The marks beside the name (ADR-0013); none shows the name alone. A custom console brings its own. */
+  readonly brand?: Brand | undefined;
   /** The client to talk to the server with; made from `baseUrl` when left out. For tests. */
   readonly client?: ConsoleClient | undefined;
 }
@@ -902,6 +910,7 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
       content = (
         <components.SignIn
           title={title}
+          brand={config.brand}
           providers={data.me.signIn}
           returnTo={withoutSignInParam(location.pathname, location.search)}
           failure={failure}
@@ -1029,6 +1038,7 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
       content = (
         <components.Shell
           title={title}
+          brand={config.brand}
           project={
             projectKey === undefined
               ? undefined

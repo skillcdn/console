@@ -244,6 +244,20 @@ svg {
   white-space: nowrap;
 }
 
+.sc-brand-symbol {
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-right: var(--sc-space-2);
+  vertical-align: middle;
+}
+
+.sc-sign-in-wordmark {
+  display: block;
+  max-width: 14rem;
+  height: 2rem;
+  margin-bottom: var(--sc-space-4);
+}
+
 .sc-crumb {
   display: inline-flex;
   align-items: center;

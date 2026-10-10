@@ -15,6 +15,14 @@ export interface NavItem {
   readonly count?: number | undefined;
 }
 
+/** The addresses of a brand's marks (ADR-0013): shown beside the workspace's name, and above it when signing in. */
+export interface Brand {
+  /** A small square mark, as an image the browser loads. */
+  readonly symbol?: string | undefined;
+  /** The name as a mark, as an image the browser loads. */
+  readonly wordmark?: string | undefined;
+}
+
 /** A language the person may switch to, as the menu offers it (ADR-0012). */
 export interface LanguageChoice {
   readonly tag: string;
@@ -24,6 +32,8 @@ export interface LanguageChoice {
 
 export interface ShellProps {
   readonly title: string;
+  /** The marks to show beside the name; none shows the name alone. */
+  readonly brand?: Brand | undefined;
   /** The project the page is on, named after the workspace, or nothing on the workspace's own pages. */
   readonly project?: { readonly name: string; readonly href: string } | undefined;
   /** The pages of the level the person is on, as tabs: the project's, or the workspace's. */
@@ -176,6 +186,9 @@ export function Shell(props: ShellProps) {
       <header className="sc-header">
         <div className="sc-header-inner">
           <a className="sc-brand" href="/" onClick={follow("/")}>
+            {props.brand?.symbol !== undefined && (
+              <img className="sc-brand-symbol" src={props.brand.symbol} alt="" />
+            )}
             {props.title}
           </a>
           {props.project !== undefined && (

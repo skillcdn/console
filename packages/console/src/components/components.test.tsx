@@ -624,6 +624,19 @@ describe("the shell and signing in", () => {
       </Shell>,
     );
     expect(html).toContain("Acme");
+    expect(html).not.toContain("sc-brand-symbol");
+    const branded = renderToStaticMarkup(
+      <Shell
+        title="Acme"
+        brand={{ symbol: "/brand/symbol.svg" }}
+        nav={[]}
+        person={undefined}
+        onNavigate={() => undefined}
+      >
+        <p>content</p>
+      </Shell>,
+    );
+    expect(branded).toContain('class="sc-brand-symbol" src="/brand/symbol.svg"');
     expect(html).toContain('class="sc-tab sc-tab-current"');
     expect(html).toContain('class="sc-menu"');
     expect(html).toContain('lang="ko"');
@@ -654,6 +667,15 @@ describe("the shell and signing in", () => {
     expect(html).toContain('href="/auth/google/login?return_to=%2Fdecisions"');
     expect(html).toContain("Continue with Google");
     expect(html).toContain("not a member");
+    const marked = renderToStaticMarkup(
+      <SignIn
+        title="Acme"
+        brand={{ wordmark: "/brand/wordmark.svg" }}
+        providers={[]}
+        returnTo="/"
+      />,
+    );
+    expect(marked).toContain('class="sc-sign-in-wordmark" src="/brand/wordmark.svg"');
     const nobody = renderToStaticMarkup(<SignIn title="Acme" providers={[]} returnTo="/" />);
     expect(nobody).not.toContain("/auth/gh/login");
     expect(nobody).toContain("Nobody can sign in here yet");

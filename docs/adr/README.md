@@ -27,3 +27,4 @@ One short file per decision that has lasting consequences and that a future cont
 | [0010](0010-the-default-uis-addresses-name-what-they-show-and-every-page-and-form-has-one.md) | The default UI's addresses name what they show, and every page and form has one | Accepted | 2026-10-10 |
 | [0011](0011-an-agent-connects-with-a-short-code-a-person-approves-and-the-token-is-never-shown.md) | An agent connects with a short code a person approves, and the token is never shown | Accepted | 2026-10-10 |
 | [0012](0012-the-pages-speak-the-persons-language-from-packs-that-ship-with-the-package.md) | The pages speak the person's language, from packs that ship with the package | Accepted | 2026-10-10 |
+| [0013](0013-the-default-brand-comes-from-a-published-package-of-the-main-repository-through-a-slot-in-the-console.md) | The default brand comes from a published package of the main repository, through a slot in the console | Accepted | 2026-10-10 |
