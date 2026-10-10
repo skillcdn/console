@@ -6,7 +6,7 @@ import type { BlobStore } from "../ports/blob-store.js";
 /**
  * The blob store in PostgreSQL: the bytes in a row under their hash, next to everything else,
  * so that the smallest install needs nothing but the database. Where the bytes outgrow rows,
- * the S3 implementation of the port takes over (docs/roadmap.md, milestone 7).
+ * the bucket takes over (s3-blob-store.ts, ADR-0016) and reads from here what was kept before.
  */
 export function createPgBlobStore(database: Database): BlobStore {
   return {

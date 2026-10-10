@@ -1,6 +1,6 @@
 # Architecture
 
-> **Status:** the board (milestone 1), agents at work (milestone 2), projects (milestone 3), documents (milestone 4) the console for everyone (milestone 5), the pages good to use (milestone 6) and custom consoles from the package (milestone 7) are implemented as described here. [roadmap.md](roadmap.md) tracks what exists. The decisions with lasting consequences are in [adr/](adr/); the rest of this document is kept current as the implementation lands: when they diverge, update this document in the same change. The open questions are at the end.
+> **Status:** the board (milestone 1), agents at work (milestone 2), projects (milestone 3), documents (milestone 4) the console for everyone (milestone 5), the pages good to use (milestone 6), custom consoles from the package (milestone 7) and the bucket a cloud deployment keeps files in (milestone 8) are implemented as described here. [roadmap.md](roadmap.md) tracks what exists. The decisions with lasting consequences are in [adr/](adr/); the rest of this document is kept current as the implementation lands: when they diverge, update this document in the same change. The open questions are at the end.
 
 ## Overview
 
@@ -16,7 +16,7 @@ agent (Claude Code, Codex, any with a shell) |  and for agents' commands,     de
                                              read through its REST API and @skillcdn/core
 
 console, role worker      schedules, reminders, clean-up; later the runs the console starts itself
-blob store                the files runs hand in and people attach to documents, keyed by content hash: rows of PostgreSQL today, S3 later
+blob store                the files runs hand in and people attach to documents, keyed by content hash: rows of PostgreSQL, or a bucket through the S3 API
 ```
 
 Five properties shape everything else:
@@ -104,12 +104,12 @@ The pages route in the browser, and the addresses name what they show ([ADR-0010
 
 ## Data and storage
 
-PostgreSQL holds the workspace, the people, their sessions and the agents' tokens (hashed), the projects with their members, the tasks, the runs with their reports, the decisions, the documents with their versions, the links between documents, tasks and decisions, the events, and the job queue. The search over the documents is the database's own text search, on a column it keeps itself. Identifiers are UUIDv7, except that events are numbered, since the feed is read from a point on; timestamps are `timestamptz`; events are append-only, written in the transaction of the change they record, and the commit notifies every process that listens (`pg_notify`), which is how the feed is live without any state outside the database. Files a run hands in, and files attached to a document, go to the blob store under their content hash; the first implementation of that port keeps the bytes in PostgreSQL, so that the smallest install has one dependency, and the S3 implementation takes over where the bytes do not belong in rows. The schema is documented in [`apps/console/README.md`](../apps/console/README.md#data-model).
+PostgreSQL holds the workspace, the people, their sessions and the agents' tokens (hashed), the projects with their members, the tasks, the runs with their reports, the decisions, the documents with their versions, the links between documents, tasks and decisions, the events, and the job queue. The search over the documents is the database's own text search, on a column it keeps itself. Identifiers are UUIDv7, except that events are numbered, since the feed is read from a point on; timestamps are `timestamptz`; events are append-only, written in the transaction of the change they record, and the commit notifies every process that listens (`pg_notify`), which is how the feed is live without any state outside the database. Files a run hands in, and files attached to a document, go to the blob store under their content hash; one implementation of that port keeps the bytes in PostgreSQL, so that the smallest install has one dependency, and the other in a bucket through the S3 API, which the console signs its own requests to with one pair of keys from configuration, and which reads from the rows what was kept there before the bucket ([ADR-0016](adr/0016-the-bucket-is-reached-through-the-s3-api-with-the-consoles-own-signing-and-reads-what-the-rows-kept-before-it.md)). The schema is documented in [`apps/console/README.md`](../apps/console/README.md#data-model).
 
 ## Deployment
 
 - **Locally:** `deploy/compose.dev.yaml` runs PostgreSQL; the console runs from the built output (`apps/console/README.md`). The image is built from `deploy/Dockerfile`, and CI builds and exercises it on every change.
-- **On a cloud:** the same image as containers, a managed PostgreSQL and a bucket. [`deploy/README.md`](../deploy/README.md) is the contract: the roles, the environment variables, what a platform must provide (secrets at runtime, health probes, a stop timeout above the grace period, logs from stdout). The definitions of a particular deployment live outside this repository ([AGENTS.md](../AGENTS.md), rule 8).
+- **On a cloud:** the same image as containers, a managed PostgreSQL and a bucket with the S3 API. [`deploy/README.md`](../deploy/README.md) is the contract: the roles, the environment variables, the bucket and its keys, what a platform must provide (secrets at runtime, health probes, a stop timeout above the grace period, logs from stdout). The definitions of a particular deployment live outside this repository ([AGENTS.md](../AGENTS.md), rule 8).
 
 ## Stack
 
@@ -125,7 +125,7 @@ Inherited from the main repository, unchanged ([ADR-0002](adr/0002-one-image-one
 | Skills | `@skillcdn/core` for the address scheme and the REST contracts of a SkillCDN deployment, read on the server; the browser never calls the deployment. |
 | Database | PostgreSQL 18; Drizzle ORM on the `pg` driver; migrations are generated, reviewed SQL files that never leave the deployable. |
 | Jobs | pg-boss, adopted with the first job; until then the worker runs schedules on a timer. |
-| Blob storage | S3 API; PostgreSQL rows for the smallest install. |
+| Blob storage | The S3 API, with the console signing its own requests and no SDK ([ADR-0016](adr/0016-the-bucket-is-reached-through-the-s3-api-with-the-consoles-own-signing-and-reads-what-the-rows-kept-before-it.md)); PostgreSQL rows for the smallest install. |
 | Logging | pino, JSON to stdout. |
 | Quality | Biome, Vitest, gitleaks. |
 | Web | Vite + React, plain CSS with design tokens. The default UI is the package's composition. |
@@ -137,7 +137,7 @@ Inherited from the main repository, unchanged ([ADR-0002](adr/0002-one-image-one
 - **Fail closed** on membership, on every token, and on every project: what a person may not see is not found. Unknown and forbidden answer the same.
 - **Tokens:** git-host tokens used once to ask who a person is and never kept; sessions and agent tokens stored as hashes; nothing logged. The command keeps a token in the person's own configuration directory, never takes one on the command line, and never prints one.
 - **Nobody acts for someone else:** an agent is its person, and its person only.
-- **Outbound requests** go only to configured base URLs: the git host and the SkillCDN deployment. Never to a URL an agent sent.
+- **Outbound requests** go only to configured base URLs: the identity providers, the SkillCDN deployment and the bucket's endpoint. Never to a URL an agent sent.
 - **Supply chain:** lockfile with integrity hashes, a minimum release age, an allow-list for install scripts, actions pinned by commit, secret scanning.
 
 ## Open questions
@@ -156,3 +156,4 @@ Decided when the milestone that needs them starts; a decision with lasting conse
 10. Decided: an agent connects with a short code a person approves, and the token is never shown ([ADR-0011](adr/0011-an-agent-connects-with-a-short-code-a-person-approves-and-the-token-is-never-shown.md)); an organization may require of tokens an expiry at most, and an administrator sees and disconnects anyone's agents. What stays open is a token's renewal.
 11. Decided: documents ([ADR-0009](adr/0009-documents-are-pages-of-markdown-in-a-project-addressed-by-path-versioned-and-linked-both-ways.md)): a tree of folders per project with a document's path as its address, Markdown with versions, links by path kept both ways, files attached from the blob store, and a decision's record kept on the decision. What stays open is moving a page, with its links rewritten.
 12. Decided: the default brand comes from a published package of the main repository, through a slot in the console ([ADR-0013](adr/0013-the-default-brand-comes-from-a-published-package-of-the-main-repository-through-a-slot-in-the-console.md)): `createConsole({ brand })` takes the addresses of a symbol and a wordmark, and the default UI passes those of `@skillcdn/brand`, the main repository's package of its marks, and links its icons from the page.
+13. Decided: the bucket is reached through the S3 API with the console's own signing, on one pair of keys from configuration ([ADR-0016](adr/0016-the-bucket-is-reached-through-the-s3-api-with-the-consoles-own-signing-and-reads-what-the-rows-kept-before-it.md)). What stays open is reading the credentials a platform hands a container itself (a role, a metadata service), which would be an adapter of a port of its own; and a sweep of files nothing refers to, in the rows as in the bucket.

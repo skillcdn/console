@@ -40,6 +40,7 @@ describe("loadConfig", () => {
       auth: undefined,
       web: { root: undefined },
       skills: { source: "https://skillcdn.ai", address: undefined },
+      blobs: { bucket: undefined },
     });
   });
 
@@ -323,5 +324,84 @@ describe("signing in", () => {
       loadConfig({ ...signIn, MEMBERS: "alice, Dave@acme.test" }, noFiles).auth?.members,
     ).toEqual(["alice", "Dave@acme.test"]);
     expect(loadConfig({ ...signIn, MEMBERS: "" }, noFiles).auth?.members).toEqual([]);
+  });
+});
+
+describe("a bucket", () => {
+  const bucket = {
+    DATABASE_URL,
+    S3_ENDPOINT: "https://s3.example.test",
+    S3_BUCKET: "console-files",
+    S3_ACCESS_KEY_ID: "AKIAEXAMPLE",
+    S3_SECRET_ACCESS_KEY: "the-secret-of-the-example-keys",
+  };
+
+  it("is off until it is configured, and then has safe defaults", () => {
+    expect(loadConfig({ DATABASE_URL }, noFiles).blobs.bucket).toBeUndefined();
+    expect(loadConfig(bucket, noFiles).blobs.bucket).toEqual({
+      endpoint: "https://s3.example.test",
+      bucket: "console-files",
+      region: "us-east-1",
+      accessKeyId: "AKIAEXAMPLE",
+      secretAccessKey: "the-secret-of-the-example-keys",
+      sessionToken: undefined,
+      keyPrefix: "",
+      pathStyle: true,
+    });
+  });
+
+  it("reads the rest with it, the secret from a file, and ends the prefix with a slash", () => {
+    const { blobs } = loadConfig(
+      {
+        ...bucket,
+        S3_SECRET_ACCESS_KEY: undefined,
+        S3_SECRET_ACCESS_KEY_FILE: "/run/secrets/bucket",
+        S3_REGION: "eu-west-1",
+        S3_SESSION_TOKEN: "a-temporary-token",
+        S3_KEY_PREFIX: "console/files",
+        S3_PATH_STYLE: "false",
+      },
+      (path) => (path === "/run/secrets/bucket" ? "from-file\n" : noFiles()),
+    );
+    expect(blobs.bucket).toMatchObject({
+      region: "eu-west-1",
+      secretAccessKey: "from-file",
+      sessionToken: "a-temporary-token",
+      keyPrefix: "console/files/",
+      pathStyle: false,
+    });
+    expect(
+      loadConfig({ ...bucket, S3_KEY_PREFIX: "files/" }, noFiles).blobs.bucket?.keyPrefix,
+    ).toBe("files/");
+  });
+
+  it("wants all of it or none of it, and names what is missing or misplaced", () => {
+    const { S3_SECRET_ACCESS_KEY: _secret, S3_BUCKET: _bucket, ...partial } = bucket;
+    expect(problemsOf(partial).problems).toEqual([
+      "S3_BUCKET, S3_SECRET_ACCESS_KEY: required once a bucket is configured",
+    ]);
+    expect(
+      problemsOf({ DATABASE_URL, S3_REGION: "eu-west-1", S3_PATH_STYLE: "false" }).problems,
+    ).toEqual([
+      "S3_REGION, S3_PATH_STYLE: read only with S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY set",
+    ]);
+  });
+
+  it("refuses what is not a bucket name, a region, an origin or a prefix, without echoing a secret", () => {
+    for (const [name, value] of [
+      ["S3_BUCKET", "Console Files"],
+      ["S3_REGION", "EU West"],
+      ["S3_ENDPOINT", "s3.example.test"],
+      ["S3_ENDPOINT", "https://s3.example.test/path"],
+      ["S3_KEY_PREFIX", "/console/"],
+      ["S3_KEY_PREFIX", "con sole/"],
+      ["S3_PATH_STYLE", "yes"],
+      ["S3_ACCESS_KEY_ID", "has a space"],
+    ] as const) {
+      const error = problemsOf({ ...bucket, [name]: value });
+      expect(error.problems, `${name}=${value}`).toHaveLength(1);
+      expect(error.problems[0]).toContain(name);
+      expect(error.message).not.toContain("the-secret-of-the-example-keys");
+    }
   });
 });

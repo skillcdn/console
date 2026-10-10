@@ -53,6 +53,14 @@ The console is configured only through environment variables. [`.env.example`](.
 | `WEB_ROOT` | `api` | no | no | Directory of a build of the UI: the default one, or [the organization's own](#a-custom-console-in-the-image). The image sets `/app/web`; set it to an empty value to run without a UI. A directory without an `index.html` is a configuration error. |
 | `SKILLCDN_URL` | `api` | no | no | The origin of the SkillCDN deployment the organization's skills are read through. Default `https://skillcdn.ai`. |
 | `SKILLS_ADDRESS` | `api` | no | no | The address of the organization's skills at that deployment, as the standard spells one (`/gh/<owner>/<repo>`, with `@<ref>` and a path when needed): what a project shows when it names no address of its own on its Settings page. Unset: such a project's Skills page says there is no address yet. The console asks as nobody, so a private repository shows only where the deployment serves it to anyone. |
+| `S3_ENDPOINT` | `api` | no | no | The origin of the store with the S3 API that files go to, such as `https://s3.us-east-1.amazonaws.com`. With `S3_BUCKET`, `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY`: all four or none. Unset: the bytes of files are kept in PostgreSQL. See [The bucket](#the-bucket). |
+| `S3_BUCKET` | `api` | no | no | The bucket, which must exist: the console makes none, and refuses to start when it is not there. |
+| `S3_ACCESS_KEY_ID` | `api` | no | no | The access key id of the pair the console signs with. |
+| `S3_SECRET_ACCESS_KEY` | `api` | no | **yes** | Its secret. |
+| `S3_REGION` | `api` | no | no | The region the signature names. Default `us-east-1`, which a store without regions accepts. |
+| `S3_SESSION_TOKEN` | `api` | no | **yes** | The token that comes with temporary credentials, when the pair is one. The console does not renew it. |
+| `S3_KEY_PREFIX` | `api` | no | no | What every key begins with: folders ending with a slash, such as `console/`, for a bucket shared with something else. Default: nothing. |
+| `S3_PATH_STYLE` | `api` | no | no | Default `true`: the bucket in the path (`endpoint/bucket/key`), which every store accepts. `false` puts it in the host (`bucket.endpoint`), as some require. |
 
 Every secret `NAME` may also be supplied as `NAME_FILE`, so container secret mounts work.
 
@@ -75,9 +83,9 @@ A volume mounted over `/app/web`, or `WEB_ROOT` pointing at a mounted directory,
 Written so that a cloud deployment is the image as containers, a managed PostgreSQL and a bucket, and nothing else:
 
 - **Secrets at runtime**, as environment variables or mounted files; never as build arguments.
-- **A managed PostgreSQL** reachable from the containers; `migrate` runs once per rollout, before the new `api` and `worker` start, and migrations follow expand, then contract, across separate releases.
-- **Object storage with the S3 API** for what runs hand in, once the S3 implementation of the blob-store port lands; until then the bytes live in PostgreSQL.
-- **Outbound HTTPS** to the SkillCDN deployment (`SKILLCDN_URL`), for the organization's skills, and to the identity providers people sign in through.
+- **A managed PostgreSQL** reachable from the containers, over TLS: `DATABASE_URL` takes the driver's parameters, `?sslmode=verify-full`, with `&sslrootcert=/path/to/ca.pem` where the platform's certificate authority is its own. `migrate` runs once per rollout, before the new `api` and `worker` start, and migrations follow expand, then contract, across separate releases.
+- **A bucket with the S3 API** for the files runs hand in and people attach, and a pair of keys that may read and write objects in it ([The bucket](#the-bucket)). Without one the bytes live in PostgreSQL, which the smallest install is fine with.
+- **Outbound HTTPS** to the SkillCDN deployment (`SKILLCDN_URL`), for the organization's skills, to the identity providers people sign in through, and to the bucket's endpoint.
 - **Health probes** on `GET /healthz` (liveness) and `GET /readyz` (readiness), and a stop timeout above the shutdown grace period, so that `SIGTERM` lets requests in flight finish.
 - **Logs from stdout**, JSON, one line per event; they never contain tokens or what an agent handed in.
 - **A reverse proxy or load balancer** that terminates TLS and limits requests per client; the image does neither.
@@ -91,6 +99,14 @@ What the browser holds is a session cookie that scripts cannot read, bound to th
 An agent, a script or a console of a person's own holds a token instead, made by that person on the console's Agents page and presented as `Authorization: Bearer`: it is that person for the board's purposes, needs no origin, expires after at most a year or never, as the person chooses within what `TOKEN_DAYS_AT_MOST` allows, and is removed on the same page, by the person or by an administrator. An agent gets its token without anyone copying one: its command shows a short code and an address, and the person approves on the console's own pages ([ADR-0011](../docs/adr/0011-an-agent-connects-with-a-short-code-a-person-approves-and-the-token-is-never-shown.md)). The database holds its hash; a token cannot make tokens; a person holds a bounded number of them. Nothing here needs configuring.
 
 An agent works the board through the `console` command of `@skillcdn/console`, signed in with that token ([docs/specs/cli.md](../docs/specs/cli.md)); nothing of it is configured here. A read of a decision that waits for its answer (`GET /api/v1/decisions/<id>?wait=`) holds its request for up to 50 seconds, so a proxy's read timeout must allow it.
+
+## The bucket
+
+The files runs hand in and people attach to documents go to a bucket with the S3 API when one is configured, and to rows of PostgreSQL otherwise ([ADR-0016](../docs/adr/0016-the-bucket-is-reached-through-the-s3-api-with-the-consoles-own-signing-and-reads-what-the-rows-kept-before-it.md)). Any store that speaks the API serves: a cloud's object storage, or a self-hosted one. Make the bucket, private, with no versioning, lifecycle rules or public access needed; make a pair of keys that may read and write objects in it and nothing else; and set `S3_ENDPOINT` (the store's origin), `S3_BUCKET`, `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY`. `S3_REGION` where the store has regions and the bucket is not in `us-east-1`; `S3_KEY_PREFIX` when the bucket is shared with something else; `S3_PATH_STYLE=false` where the store wants the bucket in the host name. The console signs every request itself: no credentials file, role or metadata service of a platform is read, the keys come from the environment as the database's password does, and are rotated the same way.
+
+Every file is one object under the SHA-256 of its bytes, below the prefix: the console keeps nothing it did not receive whole, and reads back nothing that is not the bytes of its hash. At start the `api` role asks the bucket whether it is there: a bucket that does not exist, or is served from another endpoint or region, stops the process with exit code `78` and the variable at fault; one that does not answer, or refuses to say whether it exists (keys that may not list it), is logged and tried with the first file. While the bucket is away, handing in a file and reading one back answer `503 file.store_unavailable` with `retry-after`, and the board goes on without them.
+
+A console that kept files in PostgreSQL before it was given a bucket loses none of them: what the bucket has nothing under is read from the rows, which are never written again, and nothing is copied. Locally, `deploy/compose.dev.yaml` runs a store with the S3 API on `127.0.0.1:7070`, where the integration tests make the bucket `console`; [`.env.example`](../.env.example) shows how to point the api at it.
 
 ## Behind a reverse proxy
 

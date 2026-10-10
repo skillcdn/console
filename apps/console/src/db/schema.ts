@@ -335,7 +335,8 @@ export const artifacts = pgTable(
 /**
  * The bytes of files handed in, under their SHA-256: the PostgreSQL implementation of the
  * blob-store port, for the smallest install. The artifacts that name a hash are what refers to
- * a row; the table is not the model, and the S3 implementation does without it.
+ * a row; the table is not the model, and the bucket writes nothing here, reading only what was
+ * kept before it (ADR-0016).
  */
 export const blobs = pgTable("blobs", {
   sha256: text().primaryKey(),

@@ -123,7 +123,7 @@ import {
 import { TokenError, type TokenRecord } from "../db/queries/tokens.js";
 import type { WorkspaceRecord } from "../db/queries/workspaces.js";
 import type { Logger } from "../logger.js";
-import type { BlobStore } from "../ports/blob-store.js";
+import { type BlobStore, BlobStoreError } from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
 import type { Skills } from "../skills.js";
 import { errorBody } from "./app.js";
@@ -522,6 +522,18 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
           : 409;
       return c.json(errorBody(error.code, error.message), status);
     }
+    if (error instanceof BlobStoreError) {
+      // The store is the deployment's to fix; a client can only try again later.
+      logger.error({ err: error, requestId: c.get("requestId") }, "the blob store failed");
+      c.header("retry-after", "30");
+      return c.json(
+        errorBody(
+          "file.store_unavailable",
+          "The files of the console could not be reached. Try again later.",
+        ),
+        503,
+      );
+    }
     throw error;
   };
 
@@ -581,7 +593,12 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     file: { readonly name: string; readonly contentType: string; readonly sha256: string },
     about: Record<string, unknown>,
   ): Promise<Response> => {
-    const bytes = await blobs.get(file.sha256);
+    let bytes: Uint8Array | undefined;
+    try {
+      bytes = await blobs.get(file.sha256);
+    } catch (error) {
+      return failure(c, error);
+    }
     if (bytes === undefined) {
       logger.error(
         { ...about, requestId: c.get("requestId") },
@@ -1508,8 +1525,8 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     if (!OPEN_RUN_STATUSES.includes(run.status)) {
       return failure(c, new RunError("run.over"));
     }
-    const kept = await blobs.put(new Uint8Array(await sent.part.arrayBuffer()), clock.now());
     try {
+      const kept = await blobs.put(new Uint8Array(await sent.part.arrayBuffer()), clock.now());
       const written = await addArtifact(database, {
         scope: found.scope,
         actor: found.actor,
@@ -1780,8 +1797,8 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     if (document.files.length >= MAX_FILES_PER_DOCUMENT) {
       return failure(c, new DocumentError("document.too_many_files"));
     }
-    const kept = await blobs.put(new Uint8Array(await sent.part.arrayBuffer()), clock.now());
     try {
+      const kept = await blobs.put(new Uint8Array(await sent.part.arrayBuffer()), clock.now());
       const written = await attachFile(database, {
         scope: found.scope,
         actor: found.actor,

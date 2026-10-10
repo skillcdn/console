@@ -6,6 +6,7 @@ import type { Hono } from "hono";
 import { createGitHubProvider } from "../adapters/github-login.js";
 import { createGoogleProvider } from "../adapters/google-login.js";
 import { createPgBlobStore } from "../adapters/pg-blob-store.js";
+import { createS3BlobStore } from "../adapters/s3-blob-store.js";
 import { createSkillCdnSource } from "../adapters/skillcdn.js";
 import { systemClock } from "../adapters/system-clock.js";
 import { Connections } from "../auth/connect.js";
@@ -26,7 +27,7 @@ import type { AppEnv } from "../http/request-context.js";
 import { startServer } from "../http/server.js";
 import { Janitor } from "../jobs/janitor.js";
 import type { Logger } from "../logger.js";
-import type { BlobStore } from "../ports/blob-store.js";
+import { type BlobStore, BlobStoreError } from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
 import type { IdentityProvider } from "../ports/identity-provider.js";
 import type { SkillSource } from "../ports/skill-source.js";
@@ -215,6 +216,57 @@ export function createApi(
   return { app, auth, feed };
 }
 
+/**
+ * Where the bytes of files go: the bucket when one is configured, with the rows of the database
+ * behind it for what was kept there before; else the rows. A bucket that is not there, or is
+ * served from elsewhere, is a setting to fix before anything else runs; one that does not
+ * answer is reported, and tried again with the first file.
+ */
+async function blobStoreOf(
+  config: Config,
+  database: Database,
+  logger: Logger,
+  userAgent: string,
+): Promise<BlobStore> {
+  const rows = createPgBlobStore(database);
+  const bucket = config.blobs.bucket;
+  if (bucket === undefined) {
+    return rows;
+  }
+  const store = createS3BlobStore({
+    endpoint: bucket.endpoint,
+    bucket: bucket.bucket,
+    region: bucket.region,
+    credentials: {
+      accessKeyId: bucket.accessKeyId,
+      secretAccessKey: bucket.secretAccessKey,
+      sessionToken: bucket.sessionToken,
+    },
+    keyPrefix: bucket.keyPrefix,
+    pathStyle: bucket.pathStyle,
+    clock: systemClock,
+    logger,
+    userAgent,
+    before: rows,
+  });
+  try {
+    await store.probe();
+    logger.info({ bucket: bucket.bucket, endpoint: bucket.endpoint }, "files go to the bucket");
+  } catch (error) {
+    if (
+      error instanceof BlobStoreError &&
+      (error.kind === "bucket_not_found" || error.kind === "misplaced")
+    ) {
+      throw new ConfigError([`S3_BUCKET: ${error.message}`]);
+    }
+    logger.warn(
+      { err: error, bucket: bucket.bucket },
+      "the bucket did not answer at start; files go to it once it does",
+    );
+  }
+  return store;
+}
+
 /** Resolves on the first of the signals a platform stops a container with. */
 export function shutdownSignal(): Promise<string> {
   return new Promise((resolve) => {
@@ -269,6 +321,7 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
     }
     logger.info({ files: web.files }, "serving the UI");
   }
+  const blobs = await blobStoreOf(config, database, logger, userAgent);
   let shuttingDown = false;
   const { app, feed } = createApi(config, {
     database,
@@ -277,6 +330,7 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
     logger,
     isShuttingDown: () => shuttingDown,
     web,
+    blobs,
   });
   // What any process changes reaches this one's subscribers through the database's own channel.
   const listener = startEventListener({

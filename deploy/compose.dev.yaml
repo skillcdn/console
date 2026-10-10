@@ -3,8 +3,10 @@
 #   docker compose -f deploy/compose.dev.yaml up -d
 #
 # Ports bind to 127.0.0.1 so nothing is reachable from the network. The port is 5433 so that
-# this database can run next to a SkillCDN development database on 5432.
-# The credentials below are throwaway values for a local database and must never be reused.
+# this database can run next to a SkillCDN development database on 5432. The bucket is a store
+# with the S3 API on 7070, for the integration tests of the blob store and for trying the api
+# against one; the tests make the bucket `console` in it on their first run.
+# The credentials below are throwaway values for local services and must never be reused.
 name: skillcdn-console-dev
 
 services:
@@ -24,5 +26,17 @@ services:
       timeout: 3s
       retries: 10
 
+  bucket:
+    image: versity/versitygw:v1.8.0
+    command: ["posix", "/data"]
+    environment:
+      ROOT_ACCESS_KEY: console
+      ROOT_SECRET_KEY: console-dev-only
+    ports:
+      - "127.0.0.1:7070:7070"
+    volumes:
+      - bucket-data:/data
+
 volumes:
   postgres-data:
+  bucket-data:

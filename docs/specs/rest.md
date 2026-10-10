@@ -52,6 +52,7 @@ The API is the board as its members see it: the people, the projects, and in eac
 | 409 | `person.last_admin` | The change would leave the board without an administrator. |
 | 409 | `run.over`, `run.task_taken`, `run.task_closed` | The run has ended already; an agent is at work on the task already; the task is done or dropped. |
 | 413 | `request.too_large` | The body is over the limit; for a file handed in or attached, the file is over `MAX_FILE_BYTES`. |
+| 503 | `file.store_unavailable` | The bytes of files are kept in a bucket, and it did not answer or refused the console; `retry-after` says when to try again. Nothing was written on the run or the page. |
 
 ## The workspace
 

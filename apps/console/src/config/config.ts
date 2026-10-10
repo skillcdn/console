@@ -13,6 +13,8 @@ const SECRET_NAMES = [
   "GITHUB_CLIENT_SECRET",
   "GOOGLE_CLIENT_SECRET",
   "AUTH_SECRET",
+  "S3_SECRET_ACCESS_KEY",
+  "S3_SESSION_TOKEN",
 ] as const;
 /** What signing in needs of itself, whichever providers there are. */
 const SIGN_IN_NAMES = ["PUBLIC_URL", "AUTH_SECRET"] as const;
@@ -21,6 +23,15 @@ const PROVIDER_NAMES = {
   gh: ["GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"],
   google: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
 } as const;
+/** What a bucket needs: all of these, or none. */
+const BUCKET_NAMES = [
+  "S3_ENDPOINT",
+  "S3_BUCKET",
+  "S3_ACCESS_KEY_ID",
+  "S3_SECRET_ACCESS_KEY",
+] as const;
+/** What is read only with a bucket configured. */
+const BUCKET_EXTRAS = ["S3_REGION", "S3_SESSION_TOKEN", "S3_KEY_PREFIX", "S3_PATH_STYLE"] as const;
 /** Shorter than this, a secret is guessable enough to be a mistake. */
 const MIN_SECRET_LENGTH = 32;
 
@@ -161,6 +172,37 @@ const environmentSchema = z.object({
 
   SKILLCDN_URL: origin.default("https://skillcdn.ai"),
   SKILLS_ADDRESS: z.string().trim().min(1).max(MAX_ADDRESS_LENGTH).optional(),
+
+  S3_ENDPOINT: origin.optional(),
+  S3_BUCKET: z
+    .string()
+    .regex(
+      /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/,
+      "must be a bucket name: lowercase letters, digits, dots and hyphens",
+    )
+    .optional(),
+  S3_REGION: z
+    .string()
+    .regex(/^[a-z0-9-]{1,64}$/, "must be a region name such as us-east-1")
+    .optional(),
+  S3_ACCESS_KEY_ID: z
+    .string()
+    .regex(/^\S{1,128}$/, "must be an access key id")
+    .optional(),
+  S3_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+  S3_SESSION_TOKEN: z.string().min(1).optional(),
+  S3_KEY_PREFIX: z
+    .string()
+    .regex(
+      /^(?:[A-Za-z0-9._-]+\/)*(?:[A-Za-z0-9._-]+)?$/,
+      "must be folders such as console/, of letters, digits, dots, hyphens and underscores",
+    )
+    .transform((value) => (value.length === 0 || value.endsWith("/") ? value : `${value}/`))
+    .optional(),
+  S3_PATH_STYLE: z
+    .enum(["true", "false"])
+    .transform((value) => value === "true")
+    .optional(),
 });
 
 export interface AuthConfig {
@@ -198,6 +240,23 @@ export interface AuthConfig {
   readonly sessionTtlMs: number;
   /** The most days a token may be good for, when the organization requires an expiry. */
   readonly tokenDaysAtMost?: number | undefined;
+}
+
+/** The bucket files are kept in, through the S3 API (ADR-0016). */
+export interface BucketConfig {
+  /** The origin of the store, such as `https://s3.us-east-1.amazonaws.com`. */
+  readonly endpoint: string;
+  readonly bucket: string;
+  /** The region the signature names; `us-east-1` where the store has none. */
+  readonly region: string;
+  readonly accessKeyId: string;
+  readonly secretAccessKey: string;
+  /** With temporary credentials, the token that comes with them. */
+  readonly sessionToken: string | undefined;
+  /** What every key begins with: empty, or folders ending with a slash. */
+  readonly keyPrefix: string;
+  /** The bucket in the path (`endpoint/bucket/key`), or in the host (`bucket.endpoint/key`). */
+  readonly pathStyle: boolean;
 }
 
 export interface Config {
@@ -241,6 +300,10 @@ export interface Config {
   readonly skills: {
     readonly source: string;
     readonly address: Address | undefined;
+  };
+  readonly blobs: {
+    /** Where the bytes of files go. Unset: the rows of the database. */
+    readonly bucket: BucketConfig | undefined;
   };
 }
 
@@ -382,6 +445,45 @@ function skillsAddressOf(value: string | undefined, problems: string[]): Address
 }
 
 /**
+ * The bucket files are kept in, or none for the rows of the database. The endpoint, the bucket
+ * and the pair of keys come together, and the rest is read only with them: some of it is a
+ * mistake, not a setting.
+ */
+function bucketOf(
+  env: z.infer<typeof environmentSchema>,
+  problems: string[],
+): BucketConfig | undefined {
+  const missing = BUCKET_NAMES.filter((name) => env[name] === undefined);
+  if (missing.length === BUCKET_NAMES.length) {
+    const extras = BUCKET_EXTRAS.filter((name) => env[name] !== undefined);
+    if (extras.length > 0) {
+      problems.push(`${extras.join(", ")}: read only with ${BUCKET_NAMES.join(", ")} set`);
+    }
+    return undefined;
+  }
+  if (
+    env.S3_ENDPOINT === undefined ||
+    env.S3_BUCKET === undefined ||
+    env.S3_ACCESS_KEY_ID === undefined ||
+    env.S3_SECRET_ACCESS_KEY === undefined
+  ) {
+    problems.push(`${missing.join(", ")}: required once a bucket is configured`);
+    return undefined;
+  }
+  const prefix = env.S3_KEY_PREFIX ?? "";
+  return {
+    endpoint: env.S3_ENDPOINT,
+    bucket: env.S3_BUCKET,
+    region: env.S3_REGION ?? "us-east-1",
+    accessKeyId: env.S3_ACCESS_KEY_ID,
+    secretAccessKey: env.S3_SECRET_ACCESS_KEY,
+    sessionToken: env.S3_SESSION_TOKEN,
+    keyPrefix: prefix,
+    pathStyle: env.S3_PATH_STYLE ?? true,
+  };
+}
+
+/**
  * Parses and validates the environment once, at boot. Problems name the variable and the rule,
  * never the value: a connection string or a secret must not end up in a log.
  */
@@ -410,6 +512,7 @@ export function loadConfig(
   const env = parsed.data;
   const auth = authOf(env, problems);
   const address = skillsAddressOf(env.SKILLS_ADDRESS, problems);
+  const bucket = bucketOf(env, problems);
   if (problems.length > 0) {
     throw new ConfigError(problems);
   }
@@ -433,5 +536,6 @@ export function loadConfig(
     auth,
     web: { root: env.WEB_ROOT },
     skills: { source: env.SKILLCDN_URL, address },
+    blobs: { bucket },
   };
 }

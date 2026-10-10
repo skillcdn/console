@@ -6,7 +6,7 @@ The working agreement for this repository. It applies to AI agents and humans al
 
 The SkillCDN Console is where an organization runs its work with AI agents: the work to do, the agents at it, what they did, and the decisions that wait for a person. People decide; agents work. [README.md](README.md) says what it is, [docs/architecture.md](docs/architecture.md) how it is built and what is still open, [docs/roadmap.md](docs/roadmap.md) what exists and what is next.
 
-- **Status:** pre-alpha. The board runs per project, with its documents; agents work it, connected with a code a person approves; the pages speak English and Korean; `@skillcdn/console` is on npm. A console of one's own is built from the package and served from a member's machine, and the console's skills, in the SkillCDN Format, say how an agent works the board and builds a console; what is left of milestone 7 waits for a machine with other agents, and the next milestone is a cloud. Start from the roadmap.
+- **Status:** pre-alpha. The board runs per project, with its documents; agents work it, connected with a code a person approves; the pages speak English and Korean; `@skillcdn/console` is on npm. A console of one's own is built from the package and served from a member's machine, and the console's skills, in the SkillCDN Format, say how an agent works the board and builds a console; what is left of milestone 7 waits for a machine with other agents. Where the deployment has a bucket, the files go there through the S3 API; what is left of milestone 8 is the deployment itself, outside this repository. Start from the roadmap.
 - **Shape:** TypeScript monorepo (pnpm + Turborepo), one image with several roles, PostgreSQL as the only stateful dependency, and one published package that custom consoles are built from.
 - **Relationship to SkillCDN:** the reference console, as `skillcdn/skills` is the reference skill repository: an example that follows the standard and is meant for real use, packaged so that anyone can start from it, and not a second standard ([ADR-0001](docs/adr/0001-the-console-is-the-reference-console-built-on-the-published-packages.md)). It consumes the published `@skillcdn/*` packages and the REST API of a SkillCDN deployment, and nothing else of the main repository, [`skillcdn/skillcdn`](https://github.com/skillcdn/skillcdn). Nothing about SkillCDN is defined here.
 - **License:** MIT ([ADR-0003](docs/adr/0003-the-console-is-licensed-under-mit.md)). The protection of the product lies in the main repository, which is source-available; the console is open to anyone. The `@skillcdn/*` packages it depends on keep the main repository's license. KDX Labs runs the console for its own work; the same image is self-hostable.
@@ -62,7 +62,7 @@ Run everything from the repository root through pnpm. Do not use `npm`, `npx` or
 | No control or invisible characters in tracked files, new files included (part of `pnpm check`) | `pnpm check:text` |
 | The skills and the manifest are in the SkillCDN Format as the indexer reads it, and name commands, routes and files that exist (part of `pnpm check`) | `pnpm check:skills` |
 | The package's version follows the `@skillcdn/core` line (part of `pnpm check`) | `pnpm check:version` |
-| Local PostgreSQL (from the first milestone on) | `docker compose -f deploy/compose.dev.yaml up -d` |
+| Local PostgreSQL, and a bucket with the S3 API for the tests of the blob store | `docker compose -f deploy/compose.dev.yaml up -d` |
 
 Packages compile to `dist/` and consume each other's compiled output. Going through `turbo` builds upstream packages first; calling a package script directly can test against a stale `dist/`.
 
@@ -125,7 +125,7 @@ One topic, one file. Link to where something is documented instead of restating 
 ## Testing
 
 - Vitest. Unit tests use no network and no database, and must be fast.
-- Integration tests run against real PostgreSQL (`deploy/compose.dev.yaml`, or wherever `TEST_DATABASE_URL` points). Never mock the database and never swap in another engine. Without a server these tests fail; they do not skip.
+- Integration tests run against real PostgreSQL (`deploy/compose.dev.yaml`, or wherever `TEST_DATABASE_URL` points) and, for the blob store, against a real store with the S3 API (the same compose file, or wherever `TEST_S3_URL` points). Never mock the database and never swap in another engine. Without a server these tests fail; they do not skip.
 - Agents and git hosts are tested against recorded or invented fixtures. CI makes no live calls to third parties.
 - Every parser needs hostile-input cases: oversized input, deep nesting, malformed encodings, and what an agent could send on purpose.
 

@@ -12,6 +12,7 @@ import { type EventListener, startEventListener } from "../db/listener.js";
 import type { TestDatabase } from "../db/testing.js";
 import type { LiveFeed } from "../http/live-feed.js";
 import type { AppEnv } from "../http/request-context.js";
+import type { BlobStore } from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
 import type { SkillSource } from "../ports/skill-source.js";
 import { createApi } from "../roles/api.js";
@@ -69,6 +70,8 @@ export interface HarnessOptions {
   readonly agents?: { readonly waitMs?: number };
   /** The organization's skills: their address, and the deployment's side of reading them. None when left out. */
   readonly skills?: { readonly address: string; readonly source: SkillSource } | undefined;
+  /** Where the bytes of files go. The database when left out. */
+  readonly blobs?: BlobStore | undefined;
 }
 
 /** The skills as the api role is configured with them, at a deployment of the tests' own. */
@@ -136,6 +139,7 @@ export function createHarness(testDatabase: TestDatabase, options: HarnessOption
       logger,
       isShuttingDown: () => false,
       skillSource: options.skills?.source,
+      blobs: options.blobs,
     },
   );
   const listener: EventListener | undefined =

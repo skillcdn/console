@@ -79,9 +79,17 @@ Goal: a console of one's own, built from the package and run against the organiz
 - [x] The skills (2026-10-10, [ADR-0015](adr/0015-the-consoles-skills-live-in-this-repository-in-the-skillcdn-format-and-the-package-carries-them.md)): `SKILLCDN.md`, `skills/working-the-board`, `skills/building-a-console`, checked by `skillcdn check` and the repository's own check in `pnpm check`, carried by the package with its sources and the specs.
 - [ ] The command tried with other agents, Codex first, and the differences written down: waits for a machine with them.
 
-## After milestone 7
+## Milestone 8, on a cloud
 
-8. **On a cloud.** The image deployed next to a managed PostgreSQL and a bucket, the S3 implementation of the blob-store port, and what a platform must provide written into `deploy/README.md`. The definitions of the deployment stay outside this repository.
+Goal: the console deployed as the image next to a managed PostgreSQL and a bucket, with nothing in this repository naming the cloud ([ADR-0002](adr/0002-one-image-one-database-and-the-main-repositorys-toolchain.md)). What this repository owes a deployment: the S3 implementation of the blob-store port, the variables it is configured with, and what a platform must provide, written into [deploy/README.md](../deploy/README.md). The definitions of the deployment stay outside it ([AGENTS.md](../AGENTS.md), rule 8).
+
+- [x] The bucket (2026-10-11, [ADR-0016](adr/0016-the-bucket-is-reached-through-the-s3-api-with-the-consoles-own-signing-and-reads-what-the-rows-kept-before-it.md)): the S3 implementation of the blob-store port, signing its own requests on one pair of keys from configuration (`S3_*`), checked against the published examples and against a real store in the tests and in CI; what the rows kept before the bucket stays readable; a wrong bucket stops the boot, and a bucket that is away answers `503`.
+- [x] What a platform must provide, written down (2026-10-11): the bucket and its keys beside the database's, the managed database over TLS, the probes, the stop timeout, the logs and the proxy, in [deploy/README.md](../deploy/README.md#what-a-platform-must-provide).
+- [ ] The deployment itself, outside this repository: the image built from a commit of `main`, the database and the bucket made by the platform, the variables from its secret store, and a file handed in and read back there. Waits for the platform.
+
+## After milestone 8
+
+Nothing is chosen yet; the list below is where the next milestone comes from.
 
 ## Later, undecided
 
