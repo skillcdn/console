@@ -58,7 +58,7 @@ Run everything from the repository root through pnpm. Do not use `npm`, `npx` or
 | One workspace | `pnpm turbo run test --filter=@skillcdn/console` |
 | Lint and format | `pnpm lint` · `pnpm lint:fix` |
 | Record what a change means to the published package | `pnpm changeset` (writes `.changeset/<name>.md`; a file written by hand does the same) |
-| No control or invisible characters in tracked files (part of `pnpm check`) | `pnpm check:text` |
+| No control or invisible characters in tracked files, new files included (part of `pnpm check`) | `pnpm check:text` |
 | The package's version follows the `@skillcdn/core` line (part of `pnpm check`) | `pnpm check:version` |
 | Local PostgreSQL (from the first milestone on) | `docker compose -f deploy/compose.dev.yaml up -d` |
 

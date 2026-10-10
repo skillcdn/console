@@ -1,6 +1,8 @@
-// Fails when a tracked text file contains a control character or an invisible one (zero-width,
-// bidirectional override, byte order mark). Such characters make source read differently from
-// what it does, and tools that write files sometimes decode an escape sequence into one.
+// Fails when a tracked text file, or a new one not ignored, contains a control character or an
+// invisible one (zero-width, bidirectional override, byte order mark). Such characters make
+// source read differently from what it does, and tools that write files sometimes decode an
+// escape sequence into one. New files are read too, so that the check catches one before the
+// commit that would make it tracked.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
@@ -18,7 +20,11 @@ function isForbidden(codePoint) {
   );
 }
 
-const files = execFileSync("git", ["ls-files", "-z"], { encoding: "utf8" })
+const files = execFileSync(
+  "git",
+  ["ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+  { encoding: "utf8" },
+)
   .split("\0")
   .filter((file) => file.length > 0 && !BINARY.test(file));
 

@@ -27,7 +27,7 @@ describe("a document's path", () => {
       "a b",
       "a/../b",
       "../a",
-      "a​",
+      `a${String.fromCodePoint(0x200b)}`,
     ]) {
       expect(isDocumentPath(path), path).toBe(false);
     }
