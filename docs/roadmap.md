@@ -65,7 +65,7 @@ Goal: the default UI reworked for people, in the visual language of SkillCDN's o
 - [x] The visual language (2026-10-10): the site's tokens, its type, color, spacing and radius; the page a dark field with a light in it and the surfaces panes of glass over it; the header with the brand's lockup, the workspace and the project as crumbs, the tabs and the person's menu as the site has them; the buttons, badges, callouts, forms, lists and the sign-in page in the same language.
 - [x] The board uses the height it has (2026-10-10): the page fills the window and the board takes what is left of it, the columns scroll within and share the window's whole width; the cards are denser.
 - [x] The task page and a document laid out for reading (2026-10-10), the text in a column and the facts beside it; a decision reads as a record already.
-- [ ] The forms and the empty states made for someone who is not a developer; small screens.
+- [x] The forms and small screens (2026-10-10): a form in a panel as wide as it is comfortable to fill in, the writing boxes in the page's face, nothing widening the page on a narrow window, the header and the board made for a phone. The empty states and the words of the forms were written for someone who is not a developer in milestone 5 and stay.
 - [ ] The Korean face of the site in the default UI, for the Korean pages.
 
 ## After milestone 6

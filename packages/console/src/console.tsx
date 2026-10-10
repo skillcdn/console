@@ -280,7 +280,7 @@ function ProjectsPage(props: {
       <p className="sc-lead">{words.lead}</p>
       {error !== undefined && <Callout tone="danger">{error}</Callout>}
       {making && (
-        <section className="sc-panel" aria-label={words.form.aria}>
+        <section className="sc-panel sc-panel-form" aria-label={words.form.aria}>
           <ProjectForm
             busy={busy}
             onSubmit={(input) =>
@@ -463,7 +463,7 @@ function ProjectPage(props: {
           <h1 className="sc-page-title">{words.task.newTitle}</h1>
         </div>
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
-        <section className="sc-panel" aria-label={words.task.newAria}>
+        <section className="sc-panel sc-panel-form" aria-label={words.task.newAria}>
           <TaskForm
             people={data.people}
             parents={data.tasks}
@@ -538,7 +538,7 @@ function ProjectPage(props: {
           <h1 className="sc-page-title">{words.decisions.raise}</h1>
         </div>
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
-        <section className="sc-panel" aria-label={words.decisions.raiseAria}>
+        <section className="sc-panel sc-panel-form" aria-label={words.decisions.raiseAria}>
           <DecisionForm
             tasks={data.tasks}
             busy={busy}
@@ -670,7 +670,7 @@ function ProjectPage(props: {
           {settings.leadAfter}
         </p>
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
-        <section className="sc-panel" aria-label={settings.aria}>
+        <section className="sc-panel sc-panel-form" aria-label={settings.aria}>
           <ProjectForm
             project={project}
             busy={busy}
@@ -827,7 +827,7 @@ function WorkspacePage(props: {
           <NewToken token={fresh.token} secret={fresh.secret} onDone={() => setFresh(undefined)} />
         )}
         {making && (
-          <section className="sc-panel" aria-label={agents.makeAria}>
+          <section className="sc-panel sc-panel-form" aria-label={agents.makeAria}>
             <TokenForm
               daysAtMost={data.me?.workspace.tokenDaysAtMost}
               busy={busy}

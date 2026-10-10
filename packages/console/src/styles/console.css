@@ -282,6 +282,29 @@ table {
   color: var(--sc-color-text-muted);
 }
 
+/* A block that lays its children out as a grid lets each of them shrink to the room there is,
+   so that what is wider than the window, a table or a long address, scrolls within its own box
+   instead of widening the page. */
+.sc-task-main > *,
+.sc-task-aside > *,
+.sc-task-section > *,
+.sc-decisions > *,
+.sc-decision > *,
+.sc-decision-section > *,
+.sc-answer > *,
+.sc-answer-form > *,
+.sc-run > *,
+.sc-report > *,
+.sc-feed > *,
+.sc-card > *,
+.sc-form > *,
+.sc-field > *,
+.sc-folder > *,
+.sc-docs > *,
+.sc-column-body > * {
+  min-width: 0;
+}
+
 /*
  * The shell (ADR-0010): the field the pages lie on, a header that names the product, the
  * workspace and the project with the person's menu at its end, the tabs of the level the
@@ -756,6 +779,11 @@ table {
   border-radius: var(--sc-radius-xl);
 }
 
+/* A panel that holds a form: as wide as a form is comfortable to fill in, and no wider. */
+.sc-panel-form {
+  max-width: 56rem;
+}
+
 /* A sheet: a surface inside a pane, or a row of a list, with no blur of its own. */
 .sc-token,
 .sc-person-row,
@@ -1124,11 +1152,11 @@ table {
   cursor: not-allowed;
 }
 
+/* What people write is prose first, so the box they write in is set in the page's own face. */
 .sc-textarea {
   min-height: 6rem;
   resize: vertical;
-  font-family: var(--sc-font-mono);
-  line-height: var(--sc-leading-code);
+  line-height: var(--sc-leading-normal);
 }
 
 .sc-link-row {
@@ -1141,6 +1169,12 @@ table {
 .sc-links,
 .sc-options {
   gap: var(--sc-space-2);
+}
+
+/* The way to add one more line stands at the start, as wide as its words. */
+.sc-links > .sc-button,
+.sc-options > .sc-button {
+  justify-self: start;
 }
 
 .sc-form-actions {
@@ -2214,9 +2248,7 @@ table {
 }
 
 .sc-doc-editor {
-  min-height: 20rem;
-  font-family: var(--sc-font-mono);
-  font-size: var(--sc-text-sm);
+  min-height: 24rem;
 }
 
 .sc-doc-notice {
