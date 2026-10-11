@@ -1,5 +1,0 @@
----
-"@skillcdn/console": patch
----
-
-The skills, after the first deployment of a console on an organization's own accounts. `deploying-a-console` (1.1) reaches the bucket as the task's own role and keeps no key for the files, names the token's permissions as the dashboard names them today, adds the console's hostname to a zone the organization's site already uses without touching the site, points the connector at the loopback's address and mirrors its image into the organization's repository, waits on the rollout's state rather than the service's, pins the release tag that the organization's own console shares, and says what to do when Git Bash, a token with Read or the connector's warnings get in the way; `migrate` inside the task is offered for a deployment without a pipeline. `building-a-console` (1.2) asks for a square symbol, keeps pictures and fonts as files under the policy, and pins the same release as the deployment. The server behind them takes `S3_CREDENTIALS=platform` for the credentials a platform hands the container (ADR-0018).
