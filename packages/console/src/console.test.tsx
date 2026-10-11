@@ -1,11 +1,18 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { ConsoleClient, ProjectClient } from "./api.js";
-import { createConsole, DEFAULT_COMPONENTS, onlyOnOwnPages } from "./console.js";
+import {
+  type CustomPage,
+  createConsole,
+  customPageLabel,
+  DEFAULT_COMPONENTS,
+  onlyOnOwnPages,
+} from "./console.js";
 import {
   boardHref,
   calendarHref,
   connectHref,
+  customPageHref,
   decisionHref,
   docHref,
   goalHref,
@@ -201,6 +208,36 @@ describe("matchRoute", () => {
       id: ID,
       form: "edit",
     });
+  });
+
+  it("knows the pages a console adds of its own, on the workspace and on a project, and the words of their tabs", () => {
+    expect(matchRoute("/pages/reports")).toEqual({
+      name: "custom",
+      level: "workspace",
+      page: "reports",
+    });
+    expect(matchRoute("/projects/web/pages/reports")).toEqual({
+      name: "custom",
+      level: "project",
+      project: "web",
+      page: "reports",
+    });
+    expect(matchRoute("/pages/Not-A-Key")).toEqual({ name: "not-found" });
+    expect(matchRoute("/pages/reports/more")).toEqual({ name: "not-found" });
+    expect(matchRoute("/projects/web/pages")).toEqual({ name: "not-found" });
+    expect(customPageHref("reports")).toBe("/pages/reports");
+    expect(customPageHref("reports", "web")).toBe("/projects/web/pages/reports");
+    const page: CustomPage = {
+      key: "reports",
+      label: { en: "Reports", fr: "Rapports" },
+      level: "workspace",
+      render: () => null,
+    };
+    expect(customPageLabel(page, "fr-CA")).toBe("Rapports");
+    expect(customPageLabel(page, "ko")).toBe("Reports");
+    expect(customPageLabel({ ...page, label: "Reports" }, "fr")).toBe("Reports");
+    expect(customPageLabel({ ...page, label: { de: "Berichte" } }, "fr")).toBe("Berichte");
+    expect(customPageLabel({ ...page, label: {} }, "fr")).toBe("reports");
   });
 
   it("takes the addresses of the line before to the new ones", () => {

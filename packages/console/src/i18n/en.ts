@@ -122,7 +122,7 @@ export const en = {
     live: "Live",
     reconnecting: "Reconnecting",
     signOut: "Sign out",
-    menu: (login: string) => `${login}: menu`,
+    menu: (name: string) => `${name}: menu`,
   },
 
   signIn: {
@@ -178,7 +178,7 @@ export const en = {
       leadRoles:
         "An owner configures the project; a member works on it. A workspace administrator is an owner of every project.",
       since: "since",
-      roleOf: (login: string) => `Role of ${login}`,
+      roleOf: (name: string) => `Role of ${name}`,
       addAria: "Add a member",
       person: "Person",
       chooseSomeone: "Choose someone",
@@ -533,7 +533,7 @@ export const en = {
     answerIt: "answer it",
     reports: "Reports",
     handedIn: "Handed in",
-    label: (agent: string, login: string) => `${agent} for ${login}`,
+    label: (agent: string, name: string) => `${agent} for ${name}`,
   },
 
   skills: {
@@ -625,9 +625,9 @@ export const en = {
     title: "People",
     list: "People",
     lead: "Everyone who has signed in. An administrator configures the workspace and says what each person is; a member works in the projects they are in. What a person may do, their agents may do.",
-    roleOf: (login: string) => `Role of ${login}`,
+    roleOf: (name: string) => `Role of ${name}`,
     agents: "Agents",
-    agentsOf: (login: string) => `Agents of ${login}`,
+    agentsOf: (name: string) => `Agents of ${name}`,
     agentsLead: (name: string) =>
       `What works here as ${name}, each with a token of its own. Disconnecting one takes its token away at once.`,
     loadingAgents: "Loading the agents",
@@ -711,7 +711,8 @@ export const en = {
     words: {
       title: "Connecting an agent",
       tellYourAgent: "Tell your agent, in its own chat:",
-      quote: (origin: string) => `Install the console command and connect to ${origin}.`,
+      quote: (origin: string) =>
+        `Install @skillcdn/console from npm, run console login --url ${origin}, and tell me the address and the code it shows.`,
       doesTheRest:
         "An agent that can run commands does the rest: it installs the command, connects, and shows you an address with a code.",
       thenApprove:

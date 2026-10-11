@@ -74,13 +74,22 @@ export function Callout(props: {
   );
 }
 
+/** What a person is called on the pages: the name the host gives, or the login where there is none. */
+export function personName(person: {
+  readonly login: string;
+  readonly name: string | null;
+}): string {
+  const name = person.name?.trim() ?? "";
+  return name === "" ? person.login : name;
+}
+
 /**
  * A person's picture as the git host serves it: loaded lazily, without a referrer, and gone as
- * a whole when there is none or it cannot be loaded, leaving the initial of the login instead.
+ * a whole when there is none or it cannot be loaded, leaving the initial of the name instead.
  */
 export function Avatar(props: { readonly person: RestPerson; readonly size?: "sm" | "md" | "lg" }) {
   const size = props.size ?? "md";
-  const initial = props.person.login.slice(0, 1).toUpperCase();
+  const initial = personName(props.person).slice(0, 1).toUpperCase();
   if (props.person.avatar === null) {
     return (
       <span
@@ -103,12 +112,12 @@ export function Avatar(props: { readonly person: RestPerson; readonly size?: "sm
   );
 }
 
-/** A person, as a picture and a name, wherever one is named. */
+/** A person, as a picture and their name, wherever one is named; the login is there on hover. */
 export function PersonChip(props: { readonly person: RestPerson; readonly size?: "sm" | "md" }) {
   return (
-    <span className="sc-person" title={props.person.name ?? props.person.login}>
+    <span className="sc-person" title={props.person.login}>
       <Avatar person={props.person} size={props.size ?? "sm"} />
-      <span className="sc-person-login">{props.person.login}</span>
+      <span className="sc-person-login">{personName(props.person)}</span>
     </span>
   );
 }

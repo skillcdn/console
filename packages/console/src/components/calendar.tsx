@@ -12,7 +12,7 @@ import {
   weekdays,
 } from "../dates.js";
 import { useLanguage, useWords } from "../i18n/index.js";
-import { cx, PersonChip } from "./ui.js";
+import { cx, PersonChip, personName } from "./ui.js";
 
 // The calendar of a project (ADR-0019): the month as a grid. A task planned from a start to a
 // due day lies across its days as a bar, in a lane of its own within each week so that the bars
@@ -313,7 +313,7 @@ export function workloadOf(tasks: readonly RestTask[], today: string): WorkloadR
       if (b.person === undefined) {
         return -1;
       }
-      return a.person.login.localeCompare(b.person.login);
+      return personName(a.person).localeCompare(personName(b.person));
     });
 }
 

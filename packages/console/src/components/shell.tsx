@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useRef } from "react";
 import type { RestPerson } from "../api.js";
 import { useWords } from "../i18n/index.js";
-import { Avatar, cx } from "./ui.js";
+import { Avatar, cx, personName } from "./ui.js";
 
 // The frame every page sits in (ADR-0010): a header that names the workspace and the project the
 // page is on, with the person's menu at its end; a row of tabs below it with the pages of the
@@ -109,9 +109,9 @@ function PersonMenu(props: {
   const { person } = props;
   return (
     <details className="sc-menu" ref={details}>
-      <summary className="sc-menu-summary" aria-label={words.shell.menu(person.login)}>
+      <summary className="sc-menu-summary" aria-label={words.shell.menu(personName(person))}>
         <Avatar person={person} size="sm" />
-        <span className="sc-person-login">{person.login}</span>
+        <span className="sc-person-login">{personName(person)}</span>
         <svg className="sc-menu-caret" viewBox="0 0 16 16" aria-hidden="true">
           <path
             d="M4 6l4 4 4-4"

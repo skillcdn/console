@@ -95,7 +95,7 @@ export const ko: Messages = {
     live: "실시간",
     reconnecting: "다시 연결하는 중",
     signOut: "로그아웃",
-    menu: (login) => `${login}: 메뉴`,
+    menu: (name) => `${name}: 메뉴`,
   },
 
   signIn: {
@@ -150,7 +150,7 @@ export const ko: Messages = {
       leadRoles:
         "소유자는 프로젝트를 설정하고, 멤버는 프로젝트에서 일합니다. 워크스페이스 관리자는 모든 프로젝트의 소유자입니다.",
       since: "부터",
-      roleOf: (login) => `${login}의 역할`,
+      roleOf: (name) => `${name}의 역할`,
       addAria: "멤버 추가",
       person: "사람",
       chooseSomeone: "선택하세요",
@@ -501,7 +501,7 @@ export const ko: Messages = {
     answerIt: "답변하기",
     reports: "보고",
     handedIn: "제출물",
-    label: (agent, login) => `${login}을(를) 위한 ${agent}`,
+    label: (agent, name) => `${name}을(를) 위한 ${agent}`,
   },
 
   skills: {
@@ -593,9 +593,9 @@ export const ko: Messages = {
     title: "사람들",
     list: "사람들",
     lead: "로그인한 모든 사람. 관리자는 워크스페이스를 설정하고 각 사람의 역할을 정합니다. 멤버는 속한 프로젝트에서 일합니다. 사람이 할 수 있는 일은 그 사람의 에이전트도 할 수 있습니다.",
-    roleOf: (login) => `${login}의 역할`,
+    roleOf: (name) => `${name}의 역할`,
     agents: "에이전트",
-    agentsOf: (login) => `${login}의 에이전트`,
+    agentsOf: (name) => `${name}의 에이전트`,
     agentsLead: (name) =>
       `${name}(으)로 여기서 일하는 것들입니다. 각각 고유한 토큰을 가집니다. 연결을 끊으면 토큰이 즉시 사라집니다.`,
     loadingAgents: "에이전트를 불러오는 중",
@@ -678,7 +678,8 @@ export const ko: Messages = {
     words: {
       title: "에이전트 연결하기",
       tellYourAgent: "에이전트의 대화창에서 이렇게 말하세요:",
-      quote: (origin) => `콘솔 명령을 설치하고 ${origin}에 연결해.`,
+      quote: (origin) =>
+        `npm으로 @skillcdn/console을 설치하고, console login --url ${origin} 을 실행한 뒤 나오는 주소와 코드를 알려줘.`,
       doesTheRest:
         "명령을 실행할 수 있는 에이전트는 나머지를 알아서 합니다. 명령을 설치하고, 연결하고, 코드가 있는 주소를 보여 줍니다.",
       thenApprove:

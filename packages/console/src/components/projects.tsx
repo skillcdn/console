@@ -23,7 +23,7 @@ import {
   type RestProjectPatch,
 } from "../api.js";
 import { useWords } from "../i18n/index.js";
-import { Badge, Button, cx, PersonChip, Time } from "./ui.js";
+import { Badge, Button, cx, PersonChip, personName, Time } from "./ui.js";
 
 /** A project's mark: its symbol on its colour, so that projects tell apart at a glance. */
 export function ProjectMark(props: {
@@ -392,7 +392,9 @@ export function MemberList(props: MemberListProps) {
                 <ProjectRoleBadge role={member.role} />
               ) : (
                 <label className="sc-field sc-field-inline">
-                  <span className="sc-visually-hidden">{members.roleOf(member.person.login)}</span>
+                  <span className="sc-visually-hidden">
+                    {members.roleOf(personName(member.person))}
+                  </span>
                   <select
                     className="sc-input"
                     value={member.role}
@@ -446,7 +448,7 @@ export function MemberList(props: MemberListProps) {
                 <option value="">{members.chooseSomeone}</option>
                 {candidates.map((person) => (
                   <option key={person.id} value={person.id}>
-                    {person.login}
+                    {personName(person)}
                   </option>
                 ))}
               </select>

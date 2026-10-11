@@ -34,6 +34,7 @@ import { SkillList } from "./skills.js";
 import { TaskList } from "./task-list.js";
 import { TaskView } from "./task-view.js";
 import { NewToken, TokenForm, TokenList } from "./tokens.js";
+import { Avatar, PersonChip, personName } from "./ui.js";
 import { WorkList } from "./work.js";
 
 const alice: RestPerson = {
@@ -1753,5 +1754,19 @@ describe("a run and the feed, a page at a time", () => {
     expect(renderToStaticMarkup(<ProjectMark project={{ ...marked, icon: null }} />)).not.toContain(
       "<img",
     );
+  });
+});
+
+describe("a person's name", () => {
+  it("is shown where the host gave one, with the login on hover, and the login where there is none", () => {
+    const chip = renderToStaticMarkup(<PersonChip person={alice} />);
+    expect(chip).toContain('title="alice"');
+    expect(chip).toContain(">Alice Example</span>");
+    expect(chip).not.toContain(">alice</span>");
+    expect(renderToStaticMarkup(<PersonChip person={{ ...alice, name: null }} />)).toContain(
+      ">alice</span>",
+    );
+    expect(personName({ login: "carol", name: "  " })).toBe("carol");
+    expect(renderToStaticMarkup(<Avatar person={{ ...alice, avatar: null }} />)).toContain(">A<");
   });
 });

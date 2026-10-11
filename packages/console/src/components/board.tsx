@@ -9,7 +9,16 @@ import {
 } from "../api.js";
 import { useWords } from "../i18n/index.js";
 import type { BoardFilter } from "../router.js";
-import { Avatar, Badge, Button, CategoryBadge, cx, DueBadge, PriorityBadge } from "./ui.js";
+import {
+  Avatar,
+  Badge,
+  Button,
+  CategoryBadge,
+  cx,
+  DueBadge,
+  PriorityBadge,
+  personName,
+} from "./ui.js";
 
 // The board: one column per state, the tasks in it, the sooner due first and the newest after.
 // A card says what a person needs at a glance and nothing more: the number and the title, the
@@ -256,7 +265,7 @@ export function BoardFilters(props: BoardFiltersProps) {
             .filter((person) => person.id !== props.me?.id)
             .map((person) => (
               <option key={person.id} value={person.id}>
-                {person.login}
+                {personName(person)}
               </option>
             ))}
         </select>

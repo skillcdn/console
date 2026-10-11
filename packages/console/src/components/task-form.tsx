@@ -14,7 +14,7 @@ import {
   TASK_STATES,
 } from "../api.js";
 import { useWords } from "../i18n/index.js";
-import { Button } from "./ui.js";
+import { Button, personName } from "./ui.js";
 
 // Writing a task, or changing one. The bounds are the package's, said before a request is made.
 // The plan is two days (ADR-0019); what happened to the task is the board's to keep, not a
@@ -151,7 +151,7 @@ export function TaskForm(props: TaskFormProps) {
             <option value="">{words.common.nobody}</option>
             {props.people.map((person) => (
               <option key={person.id} value={person.id}>
-                {person.login}
+                {personName(person)}
               </option>
             ))}
           </select>

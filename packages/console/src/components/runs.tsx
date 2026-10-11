@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type { RestArtifact, RestRun, RunStatus } from "../api.js";
 import { useWords } from "../i18n/index.js";
 import { Markdown } from "./markdown.js";
-import { Badge, Button, formatBytes, PersonChip, Time } from "./ui.js";
+import { Badge, Button, formatBytes, PersonChip, personName, Time } from "./ui.js";
 
 // A run: one agent at work on one task for one person, with what it reported, what it handed
 // in, and what it waits for. Takes its data as props and nothing from the network.
@@ -49,7 +49,7 @@ export function RunCard(props: RunCardProps) {
   const { run } = props;
   const open = run.status === "running" || run.status === "waiting";
   return (
-    <article className="sc-run" aria-label={words.label(run.agent, run.person.login)}>
+    <article className="sc-run" aria-label={words.label(run.agent, personName(run.person))}>
       <header className="sc-run-header">
         <span className="sc-run-agent">{run.agent}</span>
         <RunStatusBadge status={run.status} />

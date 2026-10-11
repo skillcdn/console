@@ -84,6 +84,14 @@ export type Route =
   | { readonly name: "connect"; readonly code: string | undefined }
   /** An address that moved: the page takes the person to `to` in its place. */
   | { readonly name: "moved"; readonly to: string }
+  /** A page a console adds of its own (`createConsole({ pages })`): on the workspace, or on a project. */
+  | { readonly name: "custom"; readonly level: "workspace"; readonly page: string }
+  | {
+      readonly name: "custom";
+      readonly level: "project";
+      readonly project: string;
+      readonly page: string;
+    }
   | { readonly name: "not-found" };
 
 /** The pages of a project, after its key. */
@@ -112,6 +120,8 @@ export const PATHS = {
   newToken: "/agents/new",
   /** The categories tasks are sorted into, kept by an administrator. */
   categories: "/categories",
+  /** Where the pages a console adds of its own are: `/pages/<key>`, and `/projects/<key>/pages/<page>` on a project. */
+  pages: "/pages",
   /** Where an agent's connection is approved (ADR-0011): `/connect/<code>`, or the code typed. */
   connect: "/connect",
 } as const;
@@ -223,6 +233,12 @@ export function matchRoute(pathname: string, search = ""): Route {
       ? { name: "person-agents", id }
       : NOT_FOUND;
   }
+  if (path.startsWith(`${PATHS.pages}/`)) {
+    const [page, ...more] = path.slice(PATHS.pages.length + 1).split("/");
+    return page !== undefined && PROJECT_KEY.test(page) && more.length === 0
+      ? { name: "custom", level: "workspace", page }
+      : NOT_FOUND;
+  }
   if (!path.startsWith(`${PATHS.project}/`)) {
     return NOT_FOUND;
   }
@@ -241,6 +257,11 @@ export function matchRoute(pathname: string, search = ""): Route {
     }
     const view = docsViewOf(params, docPath);
     return view === undefined ? NOT_FOUND : { name: "docs", project, path: docPath, view };
+  }
+  if (page === "pages") {
+    return third !== undefined && PROJECT_KEY.test(third) && rest.length === 0
+      ? { name: "custom", level: "project", project, page: third }
+      : NOT_FOUND;
   }
   if (rest.length > 0) {
     return NOT_FOUND;
@@ -361,6 +382,11 @@ export function calendarHref(key: string, month?: string, filter: BoardFilter = 
   const base = projectHref(key, "calendar");
   const parts = [...(month === undefined ? [] : [`month=${month}`]), ...filterParts(filter)];
   return parts.length === 0 ? base : `${base}?${parts.join("&")}`;
+}
+
+/** Where a page a console adds of its own is: on the workspace, or on a project when its key is given. */
+export function customPageHref(page: string, project?: string): string {
+  return project === undefined ? `${PATHS.pages}/${page}` : `${projectHref(project)}/pages/${page}`;
 }
 
 /** Where a goal is set: the form. */

@@ -1,7 +1,7 @@
 import type { PersonRole, RestPerson } from "../api.js";
 import { useWords } from "../i18n/index.js";
 import { PERSON_ROLES } from "../vocabulary.js";
-import { PersonChip, RoleBadge } from "./ui.js";
+import { PersonChip, personName, RoleBadge } from "./ui.js";
 
 // The people of the board, with what each may do. An administrator changes roles here; a
 // member reads. Takes its data as props and nothing from the network.
@@ -24,15 +24,15 @@ export function PeopleList(props: PeopleListProps) {
       {props.people.map((person) => (
         <li key={person.id} className="sc-person-row">
           <PersonChip person={person} size="md" />
-          <span className="sc-person-name">
-            {person.name ?? ""}
-            {props.me?.id === person.id && <span className="sc-muted"> {words.common.you}</span>}
+          <span className="sc-person-name sc-muted">
+            {person.name === null ? "" : person.login}
+            {props.me?.id === person.id && <span> {words.common.you}</span>}
           </span>
           {props.onChangeRole === undefined ? (
             <RoleBadge role={person.role} />
           ) : (
             <label className="sc-field sc-field-inline">
-              <span className="sc-visually-hidden">{words.people.roleOf(person.login)}</span>
+              <span className="sc-visually-hidden">{words.people.roleOf(personName(person))}</span>
               <select
                 className="sc-input"
                 value={person.role}

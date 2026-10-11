@@ -1,4 +1,12 @@
-import { type ComponentType, StrictMode, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  type ComponentType,
+  type ReactNode,
+  StrictMode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { createRoot, type Root } from "react-dom/client";
 import {
   type ConsoleClient,
@@ -50,7 +58,7 @@ import { TaskForm } from "./components/task-form.js";
 import { TaskList } from "./components/task-list.js";
 import { TaskView, type TaskViewProps } from "./components/task-view.js";
 import { NewToken, TokenForm, TokenList, type TokenListProps } from "./components/tokens.js";
-import { Button, Callout, EmptyState, Spinner } from "./components/ui.js";
+import { Button, Callout, EmptyState, personName, Spinner } from "./components/ui.js";
 import { WorkList, type WorkListProps } from "./components/work.js";
 import { ConnectPage } from "./connect-page.js";
 import { type ConsoleData, useConsoleData } from "./data.js";
@@ -61,11 +69,13 @@ import {
   DEFAULT_LANGUAGES,
   LanguageContext,
   type LanguagePack,
+  type Messages,
   useWords,
 } from "./i18n/index.js";
 import {
   boardHref,
   calendarHref,
+  customPageHref,
   decisionHref,
   docHref,
   goalHref,
@@ -128,6 +138,52 @@ export const DEFAULT_COMPONENTS: ConsoleComponents = {
   CategoryList,
 };
 
+/**
+ * A page a console adds of its own, shown as a tab beside the console's: on the workspace, or
+ * on every project. The address is `/pages/<key>`, or `/projects/<project>/pages/<key>`.
+ */
+export interface CustomPage {
+  /** What the address says, and what tells the page apart: lowercase letters, digits and hyphens. */
+  readonly key: string;
+  /** What the tab says: one word for every language, or a word by language tag, `en` standing in for a tag without one. */
+  readonly label: string | Readonly<Record<string, string>>;
+  /** Where the tab is: among the workspace's pages, or among each project's. */
+  readonly level: "workspace" | "project";
+  /** Whether the page takes the whole width of the window, as the board does. */
+  readonly wide?: boolean | undefined;
+  /** What the page shows, given what the default pages are given. */
+  readonly render: (context: CustomPageContext) => ReactNode;
+}
+
+/** What a page of a console's own is given: the data the default pages read, and the means they use. */
+export interface CustomPageContext {
+  /** The workspace and, on a project, the project the page is on, kept current; with the actions. */
+  readonly data: ConsoleData;
+  /** The project the page is on, or nothing on the workspace. */
+  readonly project: RestProject | undefined;
+  /** The client, for what the data does not carry. */
+  readonly client: ConsoleClient;
+  readonly navigation: Navigation;
+  /** The words of the language the pages speak, and its tag. */
+  readonly words: Messages;
+  readonly language: string;
+}
+
+/** What the tab of a page of one's own says in a language: its word for the tag, for the language alone, for English, or the first it has. */
+export function customPageLabel(page: CustomPage, tag: string): string {
+  if (typeof page.label === "string") {
+    return page.label;
+  }
+  const language = tag.split("-")[0] ?? tag;
+  return (
+    page.label[tag] ??
+    page.label[language] ??
+    page.label.en ??
+    Object.values(page.label)[0] ??
+    page.key
+  );
+}
+
 export interface ConsoleConfig {
   /** The origin of the console's API. Left out, the page's own origin. */
   readonly baseUrl?: string | undefined;
@@ -141,6 +197,8 @@ export interface ConsoleConfig {
   readonly brand?: Brand | undefined;
   /** The client to talk to the server with; made from `baseUrl` when left out. For tests. */
   readonly client?: ConsoleClient | undefined;
+  /** Pages of the console's own, as tabs beside the default ones. */
+  readonly pages?: readonly CustomPage[] | undefined;
 }
 
 export interface ConsoleApp {
@@ -1047,7 +1105,9 @@ function PersonAgentsPage(props: {
   return (
     <>
       <div className="sc-page-head">
-        <h1 className="sc-page-title">{words.people.agentsOf(person?.login ?? "?")}</h1>
+        <h1 className="sc-page-title">
+          {words.people.agentsOf(person === undefined ? "?" : personName(person))}
+        </h1>
         <LinkButton href={PATHS.people}>{words.nav.people}</LinkButton>
       </div>
       <p className="sc-lead">
@@ -1259,6 +1319,7 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
   const client = config.client ?? createClient({ baseUrl: config.baseUrl ?? "" });
   const fallbackTitle = config.title ?? "Console";
   const languages = config.languages ?? DEFAULT_LANGUAGES;
+  const pages = config.pages ?? [];
 
   function App(props: { readonly initialPath?: string | undefined }) {
     const { location, navigation } = useNavigation(props.initialPath);
@@ -1363,6 +1424,16 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
           label: words.nav.categories,
           current: route.name === "categories",
         },
+        ...pages
+          .filter((candidate) => candidate.level === "workspace")
+          .map((candidate) => ({
+            href: customPageHref(candidate.key),
+            label: customPageLabel(candidate, pack.tag),
+            current:
+              route.name === "custom" &&
+              route.level === "workspace" &&
+              route.page === candidate.key,
+          })),
       ];
       const nav: NavItem[] =
         projectKey === undefined
@@ -1423,8 +1494,27 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
                     },
                   ]
                 : []),
+              ...pages
+                .filter((candidate) => candidate.level === "project")
+                .map((candidate) => ({
+                  href: customPageHref(candidate.key, projectKey),
+                  label: customPageLabel(candidate, pack.tag),
+                  current:
+                    route.name === "custom" &&
+                    route.level === "project" &&
+                    route.page === candidate.key,
+                })),
             ];
-      let page: React.ReactNode;
+      /** A page of the console's own at the address, or nothing there. */
+      const customPageOf = (key: string, level: CustomPage["level"]): ReactNode => {
+        const found = pages.find((candidate) => candidate.key === key && candidate.level === level);
+        return found === undefined ? (
+          <NothingHere />
+        ) : (
+          found.render({ data, project, client, navigation, words, language: pack.tag })
+        );
+      };
+      let page: ReactNode;
       if (!data.loaded || route.name === "moved") {
         page = (
           <div className="sc-loading">
@@ -1442,6 +1532,8 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
             making={route.name === "new-project"}
           />
         );
+      } else if (route.name === "custom" && route.level === "workspace") {
+        page = customPageOf(route.page, "workspace");
       } else if (projectKey === undefined) {
         page = (
           <WorkspacePage
@@ -1465,6 +1557,8 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
             <Spinner label={words.common.loadingProject} />
           </div>
         );
+      } else if (route.name === "custom") {
+        page = customPageOf(route.page, "project");
       } else {
         page = (
           <ProjectPage
@@ -1507,7 +1601,12 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
           }}
           person={data.me.person}
           live={projectKey === undefined ? undefined : data.live}
-          wide={route.name === "board" || route.name === "calendar"}
+          wide={
+            route.name === "board" ||
+            route.name === "calendar" ||
+            (route.name === "custom" &&
+              pages.some((candidate) => candidate.key === route.page && candidate.wide === true))
+          }
           onNavigate={(href) => navigation.go(href)}
           onSignOut={viaToken ? undefined : () => void data.actions.signOut()}
         >

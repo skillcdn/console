@@ -127,6 +127,7 @@ export {
   PRIORITY_LABELS,
   PriorityBadge,
   ProgressBar,
+  personName,
   ROLE_LABELS,
   RoleBadge,
   Spinner,
@@ -140,7 +141,10 @@ export {
   type ConsoleApp,
   type ConsoleComponents,
   type ConsoleConfig,
+  type CustomPage,
+  type CustomPageContext,
   createConsole,
+  customPageLabel,
   DEFAULT_COMPONENTS,
 } from "./console.js";
 export { type ConsoleActions, type ConsoleData, useConsoleData } from "./data.js";
@@ -180,6 +184,7 @@ export {
   boardHref,
   calendarHref,
   connectHref,
+  customPageHref,
   type DocsView,
   decisionHref,
   docHref,
