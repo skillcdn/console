@@ -516,9 +516,12 @@ export async function endRun(
       .update(runs)
       .set({ status, summary: summary ?? null, endedAt: now, updatedAt: now })
       .where(eq(runs.id, runId));
-    // A person who gives up on a run does so themselves; the agent ends its own as itself.
+    // A person who gives up on a run does so themselves, and an owner's agent on another's run
+    // as that agent (ADR-0021); an agent ends its own run as itself, by the name the run gave it.
     const ender =
-      status === "abandoned" && actor.agent === undefined ? actor : asAgent(actor, run.agent);
+      status === "abandoned" && (actor.agent === undefined || run.personId !== actor.id)
+        ? actor
+        : asAgent(actor, run.agent);
     await recordEvent(tx, {
       ...scope,
       kind: "run.ended",

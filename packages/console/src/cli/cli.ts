@@ -9,10 +9,18 @@ import {
 } from "../client.js";
 import { addDays, dayOf as dayOfDate, isDay } from "../dates.js";
 import { DEFAULT_PAGE_LIMIT, LIST_LIMIT, MAX_OPTIONS, MIN_OPTIONS } from "../limits.js";
-import type { RestClaim, RestDecision, RestTaskPatch } from "../schemas.js";
+import type { RestClaim, RestDecision, RestPerson, RestTaskPatch } from "../schemas.js";
 import {
+  COLOR_NAMES,
+  type ColorName,
   GOAL_STATES,
   type GoalState,
+  PERSON_ROLES,
+  type PersonRole,
+  PROJECT_ROLES,
+  PROJECT_VISIBILITIES,
+  type ProjectRole,
+  type ProjectVisibility,
   TASK_PRIORITIES,
   TASK_STATES,
   type TaskPriority,
@@ -30,8 +38,11 @@ import {
   formatDocuments,
   formatGoal,
   formatGoalLine,
+  formatMemberLine,
   formatMore,
   formatOptions,
+  formatPersonLine,
+  formatProject,
   formatProjectLine,
   formatRun,
   formatRunLine,
@@ -331,15 +342,40 @@ async function personIdOf(
     }
     return me.person.id;
   }
+  return (await personOf(session, value)).id;
+}
+
+/** The person a login names, among the workspace's; the logins are as people sign in. */
+async function personOf(session: Session, login: string): Promise<RestPerson> {
   const { items } = await session.client.people();
-  const found = items.find((person) => person.login.toLowerCase() === value.toLowerCase());
+  const found = items.find((person) => person.login.toLowerCase() === login.toLowerCase());
   if (found === undefined) {
     throw misuse(
-      `Nobody of the workspace is called ${value}. console people is not a command; the logins are as people sign in.`,
+      `Nobody of the workspace is called ${login}. console people lists everyone, by login.`,
     );
   }
-  return found.id;
+  return found;
 }
+
+/** One word of a vocabulary, or the refusal to understand. */
+function wordOf<T extends string>(value: string, words: readonly T[], what: string): T {
+  const found = words.find((word) => word === value);
+  if (found === undefined) {
+    throw misuse(`Not ${what}: ${value}. One of ${words.join(", ")}`);
+  }
+  return found;
+}
+
+const personRoleOf = (value: string): PersonRole =>
+  wordOf(value, PERSON_ROLES, "a role in the workspace");
+const projectRoleOf = (value: string): ProjectRole =>
+  wordOf(value, PROJECT_ROLES, "a role in a project");
+const visibilityOf = (value: string): ProjectVisibility =>
+  wordOf(value, PROJECT_VISIBILITIES, "a visibility");
+const colorOf = (value: string): ColorName => wordOf(value, COLOR_NAMES, "a colour");
+/** A colour, or `none` for the one the pages choose, which is `null` on the wire. */
+const colorOrNoneOf = (value: string | undefined): ColorName | null | undefined =>
+  value === undefined ? undefined : value === "none" ? null : colorOf(value);
 
 function secondsOf(value: string | undefined, fallback: number): number {
   if (value === undefined) {
@@ -379,6 +415,15 @@ function theOne(positionals: readonly string[], ask: string): string {
     throw misuse(ask);
   }
   return first;
+}
+
+/** Exactly two words, for a command on a thing and a value. */
+function theTwo(positionals: readonly string[], ask: string): readonly [string, string] {
+  const [first, second] = positionals;
+  if (first === undefined || second === undefined || positionals.length > 2) {
+    throw misuse(ask);
+  }
+  return [first, second];
 }
 
 /**
@@ -535,7 +580,7 @@ const projects: Command = async (args, io) => {
   const found = await session.client.projects();
   answer(io, session, found, () =>
     found.items.length === 0
-      ? "No projects you may work in. A person makes one on the console's Projects page."
+      ? 'No projects you may work in. Make one: console project new <key> "<name>"'
       : found.items.map(formatProjectLine).join("\n"),
   );
   return EXIT.ok;
@@ -1349,6 +1394,263 @@ const serve: Command = async (args, io) => {
   return EXIT.ok;
 };
 
+// Configuring, as the person (ADR-0021): what an administrator or an owner does on the pages,
+// their agent does here, attributed to them as the agent. The console decides on every request
+// with the same roles; what the person may not, the agent may not (auth.forbidden). The tokens
+// themselves have no command, by design.
+
+const people: Command = async (args, io) => {
+  const { values } = parse(args, {}, false);
+  const session = await open(io, values);
+  const found = await session.client.people();
+  answer(io, session, found, () => found.items.map(formatPersonLine).join("\n"));
+  return EXIT.ok;
+};
+
+const person: Command = async (args, io) => {
+  if (args[0] !== "role") {
+    throw misuse("Say what to do: console person role <login> <admin|member>");
+  }
+  const { values, positionals } = parse(args.slice(1), {});
+  const [login, role] = theTwo(
+    positionals,
+    "Say whom and what: console person role <login> <admin|member>",
+  );
+  const wanted = personRoleOf(role);
+  const session = await open(io, values);
+  const found = await personOf(session, login);
+  const changed = await session.client.updatePerson(found.id, { role: wanted });
+  answer(io, session, changed, () => formatPersonLine(changed));
+  return EXIT.ok;
+};
+
+/** The flags that set what a project is, shared by making one and changing one. */
+const PROJECT_FIELDS: OptionSpec = {
+  description: { type: "string" },
+  file: { type: "string" },
+  visibility: { type: "string" },
+  skills: { type: "string" },
+  color: { type: "string" },
+  symbol: { type: "string" },
+};
+
+/** What the flags say of a project; `none` clears what may be cleared. */
+async function projectFieldsOf(io: CliIo, values: Values) {
+  const description = await bodyOf(io, values, text(values, "description"));
+  const visibility = text(values, "visibility");
+  const skills = orNone(text(values, "skills"));
+  const color = colorOrNoneOf(text(values, "color"));
+  const symbol = orNone(text(values, "symbol"));
+  return {
+    ...(description === undefined
+      ? {}
+      : { description: description === "none" ? "" : description }),
+    ...(visibility === undefined ? {} : { visibility: visibilityOf(visibility) }),
+    ...(skills === undefined ? {} : { skillsAddress: skills }),
+    ...(color === undefined ? {} : { color }),
+    ...(symbol === undefined ? {} : { symbol }),
+  };
+}
+
+const newProject: Command = async (args, io) => {
+  const { values, positionals } = parse(args, PROJECT_FIELDS);
+  const [key, name] = theTwo(
+    positionals,
+    'Say the key and the name: console project new <key> "<name>" [--visibility workspace|private]',
+  );
+  const fields = await projectFieldsOf(io, values);
+  const session = await open(io, values);
+  const made = await session.client.createProject({ key, name, ...fields });
+  answer(
+    io,
+    session,
+    made,
+    () =>
+      `Project made: ${made.name} (${made.key}), with you as its owner.\nTo work in it from this directory: console use ${made.key}`,
+  );
+  return EXIT.ok;
+};
+
+const editProject: Command = async (args, io) => {
+  const { values, positionals } = parse(args, { ...PROJECT_FIELDS, name: { type: "string" } });
+  const key = theOne(
+    positionals,
+    "Say which project: console project edit <key> --name <name> ...",
+  );
+  const name = text(values, "name");
+  const patch = { ...(name === undefined ? {} : { name }), ...(await projectFieldsOf(io, values)) };
+  if (Object.keys(patch).length === 0) {
+    throw misuse(
+      "Say what to change: --name, --description, --visibility, --skills, --color or --symbol; none clears the description, the skills address, the colour or the symbol.",
+    );
+  }
+  const session = await open(io, values);
+  const changed = await session.client.project(key).update(patch);
+  answer(io, session, changed, () => formatProject(changed));
+  return EXIT.ok;
+};
+
+const projectIcon: Command = async (args, io) => {
+  const { values, positionals } = parse(args, { remove: { type: "boolean" } });
+  const [key, file] = positionals;
+  const removing = on(values, "remove");
+  if (key === undefined || positionals.length > 2 || (file === undefined) !== removing) {
+    throw misuse(
+      "Say which project and which image: console project icon <key> <file>, or console project icon <key> --remove",
+    );
+  }
+  const session = await open(io, values);
+  const project = session.client.project(key);
+  const changed =
+    file === undefined
+      ? await project.removeIcon()
+      : await project.setIcon({
+          name: basename(file),
+          bytes: await io.readBytes(file),
+          contentType: CONTENT_TYPES[extname(file).toLowerCase()] ?? "application/octet-stream",
+        });
+  answer(io, session, changed, () => formatProject(changed));
+  return EXIT.ok;
+};
+
+const project: Command = async (args, io) => {
+  if (args[0] === "new") {
+    return newProject(args.slice(1), io);
+  }
+  if (args[0] === "edit") {
+    return editProject(args.slice(1), io);
+  }
+  if (args[0] === "icon") {
+    return projectIcon(args.slice(1), io);
+  }
+  const { values, positionals } = parse(args, {});
+  const key = theOne(
+    positionals,
+    "Say which project: console project <key>; or console project new, edit or icon",
+  );
+  const session = await open(io, values);
+  const found = await session.client.project(key).get();
+  answer(io, session, found, () => formatProject(found));
+  return EXIT.ok;
+};
+
+const members: Command = async (args, io) => {
+  const { values } = parse(args, {}, false);
+  const session = await open(io, values);
+  const project = await session.project();
+  const found = await project.members();
+  answer(io, session, found, () =>
+    found.items.length === 0
+      ? "Nobody is listed in the project."
+      : found.items.map(formatMemberLine).join("\n"),
+  );
+  return EXIT.ok;
+};
+
+const member: Command = async (args, io) => {
+  const [verb, ...rest] = args;
+  if (verb === "add") {
+    const { values, positionals } = parse(rest, { role: { type: "string" } });
+    const login = theOne(positionals, "Say whom: console member add <login> [--role owner|member]");
+    const role = text(values, "role");
+    const session = await open(io, values);
+    const project = await session.project();
+    const added = await project.addMember({
+      personId: (await personOf(session, login)).id,
+      ...(role === undefined ? {} : { role: projectRoleOf(role) }),
+    });
+    answer(io, session, added, () => formatMemberLine(added));
+    return EXIT.ok;
+  }
+  if (verb === "role") {
+    const { values, positionals } = parse(rest, {});
+    const [login, role] = theTwo(
+      positionals,
+      "Say whom and what: console member role <login> <owner|member>",
+    );
+    const wanted = projectRoleOf(role);
+    const session = await open(io, values);
+    const project = await session.project();
+    const changed = await project.updateMember((await personOf(session, login)).id, {
+      role: wanted,
+    });
+    answer(io, session, changed, () => formatMemberLine(changed));
+    return EXIT.ok;
+  }
+  if (verb === "remove") {
+    const { values, positionals } = parse(rest, {});
+    const login = theOne(positionals, "Say whom: console member remove <login>");
+    const session = await open(io, values);
+    const project = await session.project();
+    const found = await personOf(session, login);
+    await project.removeMember(found.id);
+    answer(
+      io,
+      session,
+      { removed: found.login },
+      () => `${found.login} is no longer listed in the project.`,
+    );
+    return EXIT.ok;
+  }
+  throw misuse(
+    "Say what to do: console member add <login> [--role owner|member], console member role <login> <owner|member>, or console member remove <login>",
+  );
+};
+
+const category: Command = async (args, io) => {
+  const [verb, ...rest] = args;
+  if (verb === "new") {
+    const { values, positionals } = parse(rest, { color: { type: "string" } });
+    const [key, name] = theTwo(
+      positionals,
+      'Say the key and the name: console category new <key> "<name>" [--color <name>]',
+    );
+    const color = text(values, "color");
+    const session = await open(io, values);
+    const made = await session.client.createCategory({
+      key,
+      name,
+      ...(color === undefined ? {} : { color: colorOf(color) }),
+    });
+    answer(io, session, made, () => formatCategoryLine(made));
+    return EXIT.ok;
+  }
+  if (verb === "edit") {
+    const { values, positionals } = parse(rest, {
+      name: { type: "string" },
+      color: { type: "string" },
+    });
+    const key = theOne(
+      positionals,
+      "Say which category: console category edit <key> [--name <name>] [--color <name>]",
+    );
+    const name = text(values, "name");
+    const color = text(values, "color");
+    const patch = {
+      ...(name === undefined ? {} : { name }),
+      ...(color === undefined ? {} : { color: colorOf(color) }),
+    };
+    if (Object.keys(patch).length === 0) {
+      throw misuse("Say what to change: --name or --color.");
+    }
+    const session = await open(io, values);
+    const changed = await session.client.updateCategory(key, patch);
+    answer(io, session, changed, () => formatCategoryLine(changed));
+    return EXIT.ok;
+  }
+  if (verb === "remove") {
+    const { values, positionals } = parse(rest, {});
+    const key = theOne(positionals, "Say which category: console category remove <key>");
+    const session = await open(io, values);
+    await session.client.removeCategory(key);
+    answer(io, session, { removed: key }, () => `Category ${key} removed.`);
+    return EXIT.ok;
+  }
+  throw misuse(
+    'Say what to do: console category new <key> "<name>" [--color <name>], console category edit <key> [--name <name>] [--color <name>], or console category remove <key>',
+  );
+};
+
 const COMMANDS: Readonly<Record<string, Command>> = {
   login,
   logout,
@@ -1363,6 +1665,12 @@ const COMMANDS: Readonly<Record<string, Command>> = {
   goal,
   categories,
   skills,
+  people,
+  person,
+  project,
+  members,
+  member,
+  category,
   take,
   report,
   "hand-in": handIn,
@@ -1416,6 +1724,26 @@ function hintFor(error: ApiError): string {
       return "The due day is before the start. Say a due day on or after it.\n";
     case "goal.not_found":
       return "No goal of this project has that id. console goals lists them.\n";
+    case "auth.forbidden":
+      return "What was asked is an administrator's, or an owner's of the project, and the person this token acts as is not one here. Hand the step to them.\n";
+    case "project.key_taken":
+      return "A project has that key already. console projects lists them.\n";
+    case "project.invalid_address":
+      return "The skills address is not one as SkillCDN spells it; none makes the organization's skills the project's.\n";
+    case "project.invalid_icon":
+      return "The image must be a PNG, a JPEG, a GIF or a WebP, known by its bytes.\n";
+    case "member.exists":
+      return "The person is listed already. console member role <login> <owner|member> changes what they are.\n";
+    case "member.not_found":
+      return "The person is not listed in the project. console members lists those who are.\n";
+    case "category.key_taken":
+      return "A category has that key already. console categories lists them.\n";
+    case "category.not_found":
+      return "No category has that key. console categories lists them.\n";
+    case "category.in_use":
+      return "Tasks are sorted into the category. Move them out first: console task edit <number> --category <other|none>\n";
+    case "person.last_admin":
+      return "The board keeps at least one administrator. Make another one first.\n";
     case "connect.too_many":
       return "The console holds as many connections as it may at once. Try again in a few minutes.\n";
     case "network":

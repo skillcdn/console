@@ -3,6 +3,9 @@ import {
   MAX_AGENT_LENGTH,
   MAX_ARTIFACTS_PER_RUN,
   MAX_BODY_LENGTH,
+  MAX_CATEGORIES,
+  MAX_CATEGORY_KEY_LENGTH,
+  MAX_CATEGORY_NAME_LENGTH,
   MAX_DOCUMENT_LENGTH,
   MAX_DOCUMENT_PATH_LENGTH,
   MAX_FILE_BYTES,
@@ -10,6 +13,11 @@ import {
   MAX_LINK_LABEL_LENGTH,
   MAX_OPTION_LABEL_LENGTH,
   MAX_OPTIONS,
+  MAX_PROJECT_DESCRIPTION_LENGTH,
+  MAX_PROJECT_ICON_BYTES,
+  MAX_PROJECT_KEY_LENGTH,
+  MAX_PROJECT_NAME_LENGTH,
+  MAX_PROJECT_SYMBOL_LENGTH,
   MAX_QUESTION_LENGTH,
   MAX_REPORTS_PER_RUN,
   MAX_SUMMARY_LENGTH,
@@ -17,6 +25,7 @@ import {
   MAX_VERSIONS_PER_DOCUMENT,
   MIN_OPTIONS,
 } from "../limits.js";
+import { COLOR_NAMES } from "../vocabulary.js";
 
 // What the command says about itself: for an agent that meets it for the first time, and for a
 // person. One table for every command, from which the usage and each command's help are made:
@@ -53,6 +62,8 @@ const DOCUMENT_PATH = `a path of lowercase letters, digits and hyphens, with sla
 const DOCUMENT_REFUSALS = ["document.not_found: no page has that path in this project"];
 
 const DAY = "a day as 2026-10-24, today, tomorrow, or +7 for seven days from today";
+const COLORS = `one of ${COLOR_NAMES.join(", ")}`;
+const KEY = "lowercase letters, digits and hyphens";
 const TASK_FIELD_FLAGS =
   "[--state <state>] [--priority <priority>] [--category <key>] [--goal <id>] [--starts <day>] [--due <day>] [--assignee <login|me>] [--parent <number|id>]";
 const TASK_FIELD_LIMITS = [
@@ -143,7 +154,76 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   categories: {
     usage: "categories",
     about:
-      "The categories tasks are sorted into, the same in every project: each with its key, which --category takes, its name and its colour. An administrator keeps them on the console's Categories page.",
+      "The categories tasks are sorted into, the same in every project: each with its key, which --category takes, its name and its colour. An administrator keeps them: console category, or the Categories page.",
+  },
+  people: {
+    usage: "people",
+    about:
+      "Everyone of the workspace, by login, with their name where the host gives one and what they are in it: admin, who configures the workspace, or member, who works in the projects they are in. The logins are what --assignee, member and person role take.",
+  },
+  person: {
+    usage: "person role <login> <admin|member>",
+    about:
+      "Says what a person is in the workspace, for an administrator: the person themselves on the People page, or their agent here, named on it. The board keeps at least one administrator.",
+    refusals: [
+      "auth.forbidden: only an administrator says what a person is",
+      "person.last_admin: the board keeps at least one administrator; make another one first",
+    ],
+  },
+  project: {
+    usage:
+      'project <key>  |  project new <key> "<name>" [--description <markdown>|--file <path>] [--visibility workspace|private] [--skills <address>|none] [--color <name>] [--symbol <text>]  |  project edit <key> [--name "<name>"] [the same flags; none clears]  |  project icon <key> <file>  |  project icon <key> --remove',
+    about:
+      "One project in full; or a project made, with you as its owner, private unless --visibility workspace says everyone of the workspace works in it; or one changed, only in what the flags say, for an owner; or its image for its mark, set from a file of this machine or taken away. The organization's skills are the project's unless --skills names an address of its own.",
+    limits: [
+      `key: ${KEY}, up to ${MAX_PROJECT_KEY_LENGTH} characters; it does not change once made`,
+      `name: one line, up to ${MAX_PROJECT_NAME_LENGTH} characters; description: up to ${MAX_PROJECT_DESCRIPTION_LENGTH}`,
+      `color: ${COLORS}; symbol: up to ${MAX_PROJECT_SYMBOL_LENGTH} characters without spaces, shown on the colour; left out, the pages choose both from the key and the name`,
+      `image: a PNG, a JPEG, a GIF or a WebP of at most ${MAX_PROJECT_ICON_BYTES} bytes`,
+    ],
+    refusals: [
+      "project.not_found: no project has that key, or it is not yours to see",
+      "auth.forbidden: only an owner of the project changes it",
+      "project.key_taken: a project has that key already",
+      "project.invalid_address: the skills address is not one as SkillCDN spells it",
+      "project.invalid_icon: the file is not an image of those kinds, by its bytes",
+      "request.too_large: the image is over the limit",
+    ],
+  },
+  members: {
+    usage: "members",
+    about:
+      "Those listed in the project, by login, with what each is in it (owner, who configures it; member, who works on it) and since when. A project open to the workspace has everyone of it as a member besides, and an administrator owns every project.",
+  },
+  member: {
+    usage:
+      "member add <login> [--role owner|member]  |  member role <login> <owner|member>  |  member remove <login>",
+    about:
+      "Lists a person of the workspace in the project, as a member unless --role says owner; changes what they are in it; or takes them off the list. For an owner of the project.",
+    refusals: [
+      "auth.forbidden: only an owner of the project lists its members",
+      "member.invalid_person: the person is not of the workspace",
+      "member.exists: the person is listed already; member role changes what they are",
+      "member.not_found: the person is not listed in the project",
+    ],
+  },
+  category: {
+    usage:
+      'category new <key> "<name>" [--color <name>]  |  category edit <key> [--name "<name>"] [--color <name>]  |  category remove <key>',
+    about:
+      "Makes a category tasks are sorted into, the same in every project; changes its name or its colour; or removes one no task is sorted into. For an administrator.",
+    limits: [
+      `key: ${KEY}, up to ${MAX_CATEGORY_KEY_LENGTH} characters; it does not change once made`,
+      `name: one line, up to ${MAX_CATEGORY_NAME_LENGTH} characters; color: ${COLORS}, gray when left out`,
+      `at most ${MAX_CATEGORIES} categories in the workspace`,
+    ],
+    refusals: [
+      "auth.forbidden: only an administrator keeps the categories",
+      "category.key_taken: a category has that key already",
+      "category.not_found: no category has that key",
+      "category.in_use: tasks are sorted into it; move them out first (console task edit <number> --category <other|none>)",
+      "category.too_many: the workspace holds as many categories as one may",
+    ],
   },
   skills: {
     usage: "skills",
@@ -351,6 +431,11 @@ const SECTIONS: readonly { readonly title: string; readonly commands: readonly s
   {
     title: "The documents: the project's pages of Markdown, in folders, by path",
     commands: ["docs", "doc", "write", "attach", "archive", "restore"],
+  },
+  {
+    title:
+      "Configuring, as the person: what an administrator or an owner does on the pages, their agent does here, named on it",
+    commands: ["people", "person", "project", "members", "member", "category"],
   },
 ];
 

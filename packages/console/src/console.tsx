@@ -332,13 +332,12 @@ function holdsToken(data: ConsoleData): boolean {
 }
 
 /**
- * The pages a console that holds a token does not offer: the tokens themselves and
- * configuring, which are a person's own doing on the console's own pages, signed in.
+ * The pages a console that holds a token does not offer: the tokens themselves, and the
+ * approval of an agent's connection, which makes one; a person's own doing on the console's
+ * own pages, signed in. Everything else a person may do, their agent may (ADR-0021).
  */
 export function onlyOnOwnPages(route: Route): boolean {
   return (
-    route.name === "new-project" ||
-    route.name === "settings" ||
     route.name === "agents" ||
     route.name === "new-token" ||
     route.name === "person-agents" ||
@@ -349,28 +348,6 @@ export function onlyOnOwnPages(route: Route): boolean {
 function NotWithToken() {
   const words = useWords().common.notWithToken;
   return <EmptyState title={words.title} body={words.body} />;
-}
-
-/**
- * Where a console that holds a token keeps the person's choice of language: the browser's own
- * storage, which may be absent or refuse, and then the browser's languages decide.
- */
-const LANGUAGE_KEY = "sc-language";
-
-function storedLanguage(): string | undefined {
-  try {
-    return globalThis.localStorage?.getItem(LANGUAGE_KEY) ?? undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function storeLanguage(tag: string): void {
-  try {
-    globalThis.localStorage?.setItem(LANGUAGE_KEY, tag);
-  } catch {
-    // A browser that keeps nothing: the choice holds for this page.
-  }
 }
 
 /** A link that reads as a button: where a form is, for instance. */
@@ -397,12 +374,11 @@ function ProjectsPage(props: {
   const { data, components, navigation, making } = props;
   const { busy, error, act } = useAction();
   const href = (project: RestProject) => projectHref(project.key);
-  const configures = !holdsToken(data);
   return (
     <>
       <div className="sc-page-head">
         <h1 className="sc-page-title">{words.title}</h1>
-        {!making && configures && (
+        {!making && (
           <LinkButton href={PATHS.newProject} variant="primary">
             {words.newProject}
           </LinkButton>
@@ -435,11 +411,7 @@ function ProjectsPage(props: {
           <EmptyState
             title={words.empty.title}
             body={words.empty.body}
-            action={
-              configures ? (
-                <LinkButton href={PATHS.newProject}>{words.newProject}</LinkButton>
-              ) : undefined
-            }
+            action={<LinkButton href={PATHS.newProject}>{words.newProject}</LinkButton>}
           />
         }
       />
@@ -966,7 +938,7 @@ function ProjectPage(props: {
   }
   if (route.name === "members") {
     const me = data.me?.person ?? undefined;
-    const configures = owner && !holdsToken(data);
+    const configures = owner;
     const members = words.projects.members;
     return (
       <>
@@ -1200,7 +1172,7 @@ function WorkspacePage(props: {
   }
   if (route.name === "categories") {
     const me = data.me?.person ?? undefined;
-    const administrator = me?.role === "admin" && !holdsToken(data);
+    const administrator = me?.role === "admin";
     const categories = words.categories;
     return (
       <>
@@ -1239,7 +1211,7 @@ function WorkspacePage(props: {
 
   if (route.name === "people") {
     const me = data.me?.person ?? undefined;
-    const administrator = me?.role === "admin" && !holdsToken(data);
+    const administrator = me?.role === "admin";
     return (
       <>
         <div className="sc-page-head">
@@ -1334,10 +1306,7 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
     const title = data.me?.workspace.name ?? fallbackTitle;
     const viaToken = holdsToken(data);
     // The language: the person's choice, else the browser's, else the first the console speaks.
-    // A console that holds a token cannot keep the choice on the person, and keeps it in the
-    // browser instead.
-    const [ownChoice, setOwnChoice] = useState<string | undefined>(storedLanguage);
-    const chosen = viaToken ? (ownChoice ?? data.me?.language) : data.me?.language;
+    const chosen = data.me?.language;
     const pack = useMemo(
       () =>
         chooseLanguage(
@@ -1485,7 +1454,7 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
                 label: words.nav.members,
                 current: route.name === "members",
               },
-              ...(project?.role === "owner" && !viaToken
+              ...(project?.role === "owner"
                 ? [
                     {
                       href: projectHref(projectKey, "settings"),
@@ -1591,14 +1560,7 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
             label: candidate.label,
             current: candidate.tag === pack.tag,
           }))}
-          onLanguage={(tag) => {
-            if (viaToken) {
-              storeLanguage(tag);
-              setOwnChoice(tag);
-            } else {
-              void data.actions.updateMe({ language: tag }).catch(() => undefined);
-            }
-          }}
+          onLanguage={(tag) => void data.actions.updateMe({ language: tag }).catch(() => undefined)}
           person={data.me.person}
           live={projectKey === undefined ? undefined : data.live}
           wide={

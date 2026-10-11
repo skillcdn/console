@@ -11,7 +11,7 @@ The API is the board as its members see it: the people, the projects, and in eac
 - Every answer is `cache-control: no-store`: it is one person's, or it changes.
 - A request that changes something (`POST`, `PATCH`, `DELETE`) on a session must carry the session cookie **and** come from the console's own pages: the browser's `origin` header must be `PUBLIC_URL`. The cookie is `SameSite=Lax`, so another site's request does not carry it in the first place; the origin is the second fence.
 - A token ([`POST /api/v1/tokens`](#get-apiv1tokens-and-post-apiv1tokens)) is presented as `Authorization: Bearer <secret>` on any route, by an agent, a script or a console of a person's own. It is then the credential: a cookie beside it is not looked at, and no origin is needed, since nothing attaches a token but whoever holds it. A token that is nothing is refused, whatever cookie travels with it. What a token does is attributed to its person, and the event names the agent: the token's name, or what the agent called itself on its run.
-- Configuring is a person's own doing, signed in on the console's own pages, never with a token: the tokens themselves, roles, projects and their members.
+- A token configures as its person does ([ADR-0021](../adr/0021-a-token-configures-as-its-person-does.md)): every request a session may make, a token may make, within the same roles, except the tokens themselves and the approval of a connection, which stay a person's own doing, signed in on the console's own pages.
 - An agent connects without anyone copying a token ([ADR-0011](../adr/0011-an-agent-connects-with-a-short-code-a-person-approves-and-the-token-is-never-shown.md)): [`POST /api/v1/connect`](#connecting-an-agent) is nobody's, the approval is a person's own doing on the console's own pages, and the claim is the command's, with the secret it was given.
 - Request bodies are JSON, at most 256 KiB, and parsed once with the package's input schema. Text is trimmed where it is a line, bounded everywhere (`MAX_TITLE_LENGTH` and the rest of `@skillcdn/console/api`), and refused when it carries control or invisible characters. Links are `https` URLs only.
 - Errors have `{ "error": { "code": "...", "message": "..." } }`. The code is stable; the message is for a person, in English.
@@ -37,7 +37,7 @@ The API is the board as its members see it: the people, the projects, and in eac
 | 401 | `auth.required` | Nobody is signed in, or the session has ended, or the token is nothing. The cookie is taken away when the operator no longer lists the login. |
 | 403 | `auth.forbidden_origin` | A request that changes something on a session did not come from the console's own pages. |
 | 403 | `auth.forbidden` | A member asked for what only an administrator, or only an owner of the project, may do. |
-| 403 | `auth.session_required` | A token asked for what only a person signed in may do: the tokens themselves, and configuring. |
+| 403 | `auth.session_required` | A token asked for what only a person signed in may do: the tokens themselves, and the approval of an agent's connection, which makes one. |
 | 403 | `run.not_yours` | The run is another person's. |
 | 404 | `project.not_found` | No project has that key, or it is not the asker's to see: the two are one answer. The key is checked before anything is asked. |
 | 404 | `task.not_found`, `decision.not_found`, `goal.not_found`, `token.not_found`, `person.not_found`, `run.not_found`, `run.task_not_found`, `member.not_found` | No such id in the project (or in the workspace, for a token, a person); for a token, none of the asker's. An id that is not a UUID is not found either, except a task's number. |
@@ -69,11 +69,11 @@ The API is the board as its members see it: the people, the projects, and in eac
 
 ### `GET /api/v1/people`
 
-`{ "items": [person, ...] }`: everyone who has signed in and is still listed, by login. What a picker of assignees and of members is made of. A person carries their `role` in the workspace: `admin`, who configures it, or `member`, who works in the projects they are in.
+`{ "items": [person, ...] }`: everyone who has signed in and is still listed, by login. What a picker of assignees and of members is made of. A person carries their `role` in the workspace: `admin`, who configures it, or `member`, who works in the projects they are in. A token reads it as its person does: what the command's `--assignee`, `member` and `person role` take a login from.
 
 ### `PATCH /api/v1/people/<id>`
 
-Takes `role` and answers the person. For an administrator signed in on the console's own pages, never with a token: an agent works as its person does, and configuring is a person's own doing. The board keeps at least one administrator (`person.last_admin`). A change writes a `person.role_changed` event with `login` and `role`; a change to what is already so writes nothing.
+Takes `role` and answers the person. For an administrator, signed in or through their agent's token ([ADR-0021](../adr/0021-a-token-configures-as-its-person-does.md)). The board keeps at least one administrator (`person.last_admin`). A change writes a `person.role_changed` event with `login` and `role`; a change to what is already so writes nothing.
 
 ### `GET /api/v1/projects`
 
@@ -81,7 +81,7 @@ Takes `role` and answers the person. For an administrator signed in on the conso
 
 ### `POST /api/v1/projects`
 
-Takes `key` and `name`, and optionally `description`, `visibility` (default `private`), `skillsAddress` (checked as the standard spells one, kept canonical; `project.invalid_address`), `color` and `symbol`. For whoever is signed in on the console's own pages, never with a token; they become the project's owner. Answers `201` with the project and writes a `project.created` event in it, with `key` and `name`. A key taken is `project.key_taken`.
+Takes `key` and `name`, and optionally `description`, `visibility` (default `private`), `skillsAddress` (checked as the standard spells one, kept canonical; `project.invalid_address`), `color` and `symbol`. For whoever is signed in, or their agent with their token; they become the project's owner. Answers `201` with the project and writes a `project.created` event in it, with `key` and `name`. A key taken is `project.key_taken`.
 
 ### `GET /api/v1/events?after=&limit=`
 
@@ -89,7 +89,7 @@ The workspace's own events, the ones about no project: who joined (`person.joine
 
 ### `PATCH /api/v1/me`
 
-Keeps the person's own choice of language for the pages ([ADR-0012](../adr/0012-the-pages-speak-the-persons-language-from-packs-that-ship-with-the-package.md)): `{ "language": "ko" }`, a language tag as a browser sends one, or `null` to choose none and let the browser's languages decide; answers what `GET` answers. A person's own doing, from the console's own pages: never with a token.
+Keeps the person's own choice of language for the pages ([ADR-0012](../adr/0012-the-pages-speak-the-persons-language-from-packs-that-ship-with-the-package.md)): `{ "language": "ko" }`, a language tag as a browser sends one, or `null` to choose none and let the browser's languages decide; answers what `GET` answers. From the console's own pages, or with a token: a console of a person's own keeps the choice on the person too.
 
 ### `GET /api/v1/categories`
 
@@ -97,7 +97,7 @@ Keeps the person's own choice of language for the pages ([ADR-0012](../adr/0012-
 
 ### `POST /api/v1/categories`, `PATCH /api/v1/categories/<key>` and `DELETE /api/v1/categories/<key>`
 
-Kept by an administrator signed in on the console's own pages, never with a token, as the rest of configuring is. `POST` takes `key`, `name` and optionally `color` (default `gray`), answers `201` with the category and writes a `category.created` event in the workspace's own feed with `key` and `name`; a key taken is `category.key_taken`, and the workspace holds at most `MAX_CATEGORIES` (`category.too_many`). `PATCH` takes any of `name` and `color`, answers the category and writes `category.updated` naming the `fields`; what is already so writes nothing; the key does not change. `DELETE` answers `204` and writes `category.removed`; a category tasks are sorted into is `category.in_use` until they are moved out of it.
+Kept by an administrator, signed in or through their agent's token. `POST` takes `key`, `name` and optionally `color` (default `gray`), answers `201` with the category and writes a `category.created` event in the workspace's own feed with `key` and `name`; a key taken is `category.key_taken`, and the workspace holds at most `MAX_CATEGORIES` (`category.too_many`). `PATCH` takes any of `name` and `color`, answers the category and writes `category.updated` naming the `fields`; what is already so writes nothing; the key does not change. `DELETE` answers `204` and writes `category.removed`; a category tasks are sorted into is `category.in_use` until they are moved out of it.
 
 ### `GET /api/v1/work`
 
@@ -119,7 +119,7 @@ An administrator's sight of everyone's agents ([ADR-0011](../adr/0011-an-agent-c
 
 `POST /api/v1/connect`, `GET /api/v1/connect/<code>`, `POST /api/v1/connect/<code>/approve`, `POST /api/v1/connect/<code>/deny` and `POST /api/v1/connect/claim`: how an agent gets its token without anyone copying one ([ADR-0011](../adr/0011-an-agent-connects-with-a-short-code-a-person-approves-and-the-token-is-never-shown.md)).
 
-`POST /api/v1/connect` is nobody's: the command sends `{ "agent" }` (what the agent calls itself and where it runs, a line up to `MAX_TOKEN_NAME_LENGTH`) and is answered `201` with `{ "code", "url", "secret", "expiresAt", "interval" }`: a code of eight characters in two groups (`ABCD-EFGH`, from an alphabet without look-alikes) for a person to approve, the console's own page for it, a secret (`cns_c_...`) the command claims with and shows nowhere, when the request expires (ten minutes after it began), and how many seconds the command waits between claims. A deployment holds a bounded number of requests at once (`connect.too_many`).
+`POST /api/v1/connect` is nobody's: the command sends `{ "agent" }` (what the agent calls itself and where it runs, a line up to `MAX_TOKEN_NAME_LENGTH`) and is answered `201` with `{ "code", "url", "secret", "expiresAt", "interval" }`: a code of eight characters in two groups (`ABCD-EFGH`, from an alphabet without look-alikes) for a person to approve, the console's own page for it, a secret (`cns_c_...`) the command claims with and shows nowhere, when the request expires (thirty minutes after it began), and how many seconds the command waits between claims. A deployment holds a bounded number of requests at once (`connect.too_many`).
 
 `GET /api/v1/connect/<code>`, for a person signed in, answers what asks: `{ "code", "agent", "createdAt", "expiresAt", "approved" }`. A code is read as a person types it: any case, with or without the hyphen. `POST .../approve`, from the console's own pages, takes what `POST /api/v1/tokens` takes (`name`, `expiresInDays`) and answers the request, approved; `POST .../deny` takes the request away and answers `204`.
 
@@ -131,19 +131,19 @@ Everything below is under `/api/v1/projects/<key>`, for whoever may see the proj
 
 ### `GET /api/v1/projects/<key>` and `PATCH /api/v1/projects/<key>`
 
-The project, as the asker sees it. A patch, for an owner signed in, takes any of `name`, `description`, `visibility`, `skillsAddress` (`null` for the organization's), `color` and `symbol` (`null` for none), and writes a `project.updated` event naming the `fields`; what is already so writes nothing. The key does not change.
+The project, as the asker sees it. A patch, for an owner, signed in or with a token, takes any of `name`, `description`, `visibility`, `skillsAddress` (`null` for the organization's), `color` and `symbol` (`null` for none), and writes a `project.updated` event naming the `fields`; what is already so writes nothing. The key does not change.
 
 ### `POST /api/v1/projects/<key>/icon`, `DELETE .../icon` and `GET .../icon`
 
-The project's own image for its mark, in place of the symbol on the colour. `POST`, for an owner signed in on the console's own pages, takes a form with a part called `file`: a PNG, a JPEG, a GIF or a WebP of at most `MAX_PROJECT_ICON_BYTES`, known by its first bytes and never by what the form says of it (`project.invalid_icon`; `request.too_large`). The bytes are kept by their hash, the project is answered with its `icon`, and the board hears `project.updated` with `fields: ["icon"]`; the same image again writes nothing. `DELETE` takes the image away and answers the project. `GET`, for whoever may see the project, answers the bytes with their type, the hash as `ETag` and `Cache-Control: private, max-age=86400`, or `304` to a matching `If-None-Match`; a project without an image is `project.no_icon`. The pages read it at `projectIconPath(key, icon)`, which carries the hash as a version.
+The project's own image for its mark, in place of the symbol on the colour. `POST`, for an owner, takes a form with a part called `file`: a PNG, a JPEG, a GIF or a WebP of at most `MAX_PROJECT_ICON_BYTES`, known by its first bytes and never by what the form says of it (`project.invalid_icon`; `request.too_large`). The bytes are kept by their hash, the project is answered with its `icon`, and the board hears `project.updated` with `fields: ["icon"]`; the same image again writes nothing. `DELETE` takes the image away and answers the project. `GET`, for whoever may see the project, answers the bytes with their type, the hash as `ETag` and `Cache-Control: private, max-age=86400`, or `304` to a matching `If-None-Match`; a project without an image is `project.no_icon`. The pages read it at `projectIconPath(key, icon)`, which carries the hash as a version.
 
 ### `GET /api/v1/projects/<key>/members` and `POST /api/v1/projects/<key>/members`
 
-`{ "items": [member, ...] }`: those listed in the project, by login, each a `person`, their `role` in it (`owner`, `member`) and `addedAt`. A project open to the workspace has everyone of it as a member besides; an administrator is an owner of every project, listed or not. `POST`, for an owner signed in, takes `personId` (a person of the workspace; `member.invalid_person`) and optionally `role` (default `member`), answers `201` with the member and writes `project.member_added` with `login` and `role`. A person listed already is `member.exists`.
+`{ "items": [member, ...] }`: those listed in the project, by login, each a `person`, their `role` in it (`owner`, `member`) and `addedAt`. A project open to the workspace has everyone of it as a member besides; an administrator is an owner of every project, listed or not. `POST`, for an owner, takes `personId` (a person of the workspace; `member.invalid_person`) and optionally `role` (default `member`), answers `201` with the member and writes `project.member_added` with `login` and `role`. A person listed already is `member.exists`.
 
 ### `PATCH /api/v1/projects/<key>/members/<person id>` and `DELETE .../members/<person id>`
 
-For an owner signed in. The patch takes `role` and writes `project.member_changed`; the removal answers `204` and writes `project.member_removed`. A person not listed is `member.not_found`. A project may be left without an owner listed; the administrators own it then.
+For an owner, signed in or with a token. The patch takes `role` and writes `project.member_changed`; the removal answers `204` and writes `project.member_removed`. A person not listed is `member.not_found`. A project may be left without an owner listed; the administrators own it then.
 
 ### `GET /api/v1/projects/<key>/tasks?state=&open=&category=&goal=&assignee=&dueBy=&limit=&offset=`
 
@@ -203,7 +203,7 @@ The bytes are read back at `/api/v1/projects/<key>/files/<artifact id>` by whoev
 
 ### `POST .../runs/<id>/end`
 
-Takes `status` (`finished`, `failed` or `abandoned`) and optionally a `summary` (Markdown, `MAX_SUMMARY_LENGTH`: what was done and what is left), ends the run (`run.ended`), and answers it. A finished run puts a task that was `in_progress` up for review (`in_review`); the rest leave the task as it is. The run's person ends it, as `finished` or `failed` from their agent; `abandoned` is a person giving up on a run that will not come back: their own, or anyone's as an owner of the project signed in on the console's own pages, never with a token (`run.not_yours`). A run that is over is `run.over`.
+Takes `status` (`finished`, `failed` or `abandoned`) and optionally a `summary` (Markdown, `MAX_SUMMARY_LENGTH`: what was done and what is left), ends the run (`run.ended`), and answers it. A finished run puts a task that was `in_progress` up for review (`in_review`); the rest leave the task as it is. The run's person ends it, as `finished` or `failed` from their agent; `abandoned` is a person giving up on a run that will not come back: their own, or anyone's as an owner of the project, signed in or through their agent (`run.not_yours` otherwise). A run that is over is `run.over`.
 
 ### `GET /api/v1/projects/<key>/skills`
 

@@ -192,7 +192,7 @@ describe("projects", () => {
     });
   });
 
-  it("carry an image for their mark: set and taken away by an owner on the console's own pages, served to whoever may see the project, and never believed to be what it says", async () => {
+  it("carry an image for their mark: set and taken away by an owner, served to whoever may see the project, and never believed to be what it says", async () => {
     const png = Uint8Array.from([
       0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52,
     ]);
@@ -330,6 +330,8 @@ describe("projects", () => {
     const byMember = await send(bob, "PATCH", projectPath("docs"), { name: "Mine" });
     expect(byMember.status).toBe(403);
     expect(await errorOf(byMember)).toBe("auth.forbidden");
+    // An owner's agent configures as its owner does (ADR-0021), named on what it did; a
+    // member's agent is a member.
     const { secret } = restTokenCreatedSchema.parse(
       await (await send(alice, "POST", REST_ROUTES.tokens, { name: "an owner's agent" })).json(),
     );
@@ -339,15 +341,42 @@ describe("projects", () => {
       headers: auth,
       body: JSON.stringify({ name: "Mine" }),
     });
-    expect(byToken.status).toBe(403);
-    expect(await errorOf(byToken)).toBe("auth.session_required");
+    expect(byToken.status).toBe(200);
+    expect(restProjectSchema.parse(await byToken.json()).name).toBe("Mine");
+    const renamed = restEventsSchema
+      .parse(await (await get(alice, `${projectPath("docs")}/events?after=0`)).json())
+      .items.at(-1);
+    expect(renamed).toMatchObject({ kind: "project.updated", agent: "an owner's agent" });
+    expect(renamed?.actor?.login).toBe("Alice");
+    expect(
+      (await send(alice, "PATCH", projectPath("docs"), { name: "Documentation" })).status,
+    ).toBe(200);
     const madeByToken = await h.request(REST_ROUTES.projects, {
       method: "POST",
       headers: auth,
-      body: JSON.stringify({ key: "agents", name: "Agents' own" }),
+      body: JSON.stringify({ key: "by-agent", name: "Made by an agent" }),
     });
-    expect(madeByToken.status).toBe(403);
-    expect(await errorOf(madeByToken)).toBe("auth.session_required");
+    expect(madeByToken.status).toBe(201);
+    expect(restProjectSchema.parse(await madeByToken.json())).toMatchObject({
+      key: "by-agent",
+      role: "owner",
+    });
+    const made = restEventsSchema.parse(
+      await (await get(alice, `${projectPath("by-agent")}/events?after=0`)).json(),
+    ).items;
+    expect(made).toHaveLength(1);
+    expect(made[0]).toMatchObject({ kind: "project.created", agent: "an owner's agent" });
+    const bobs = restTokenCreatedSchema.parse(
+      await (await send(bob, "POST", REST_ROUTES.tokens, { name: "a member's agent" })).json(),
+    );
+    const byMembersToken = await h.request(projectPath("docs"), {
+      method: "PATCH",
+      headers: { authorization: `Bearer ${bobs.secret}`, "content-type": "application/json" },
+      body: JSON.stringify({ name: "Mine" }),
+    });
+    expect(byMembersToken.status).toBe(403);
+    expect(await errorOf(byMembersToken)).toBe("auth.forbidden");
+    expect((await send(bob, "DELETE", `${REST_ROUTES.tokens}/${bobs.token.id}`)).status).toBe(204);
     const badAddress = await send(alice, "PATCH", projectPath("docs"), {
       skillsAddress: "nothing",
     });
@@ -432,6 +461,7 @@ describe("projects", () => {
     );
     expect(all.items.map((project) => [project.key, project.role])).toEqual([
       ["docs", "owner"],
+      ["by-agent", "owner"],
       ["web", "owner"],
     ]);
     const renamed = await named.request(projectPath("docs"), {
@@ -1151,7 +1181,7 @@ describe("tokens", () => {
     const projects = restProjectsSchema.parse(
       await (await h.request(REST_ROUTES.projects, { headers: auth })).json(),
     );
-    expect(projects.items.map((project) => project.key)).toEqual(["docs", "web"]);
+    expect(projects.items.map((project) => project.key)).toEqual(["docs", "by-agent", "web"]);
   });
 
   it("are refused when they are nothing, taken away, expired, or no longer a member's", async () => {
@@ -1536,13 +1566,41 @@ describe("roles", () => {
         })
       ).json(),
     );
+    // An administrator's agent says what a person is, as the administrator does (ADR-0021),
+    // and is named on it; a member's agent may not.
     const byToken = await named.request(`${REST_ROUTES.people}/${bobId}`, {
       method: "PATCH",
       headers: { authorization: `Bearer ${secret}`, "content-type": "application/json" },
       body: JSON.stringify({ role: "admin" }),
     });
-    expect(byToken.status).toBe(403);
-    expect(await errorOf(byToken)).toBe("auth.session_required");
+    expect(byToken.status).toBe(200);
+    expect(restPersonSchema.parse(await byToken.json()).role).toBe("admin");
+    const saidByAgent = restEventsSchema
+      .parse(await (await get(alice, `${REST_ROUTES.events}?after=0`)).json())
+      .items.at(-1);
+    expect(saidByAgent).toMatchObject({
+      kind: "person.role_changed",
+      agent: "an administrator's agent",
+      data: { login: "bob", role: "admin" },
+    });
+    expect(saidByAgent?.actor?.login).toBe("Alice");
+    expect((await change(admin, bobId, { role: "member" })).status).toBe(200);
+    const bobsSecret = restTokenCreatedSchema.parse(
+      await (
+        await named.request(REST_ROUTES.tokens, {
+          method: "POST",
+          headers: { cookie: bob, origin: SIGN_IN_URL, "content-type": "application/json" },
+          body: JSON.stringify({ name: "a member's agent" }),
+        })
+      ).json(),
+    ).secret;
+    const byMembersToken = await named.request(`${REST_ROUTES.people}/${bobId}`, {
+      method: "PATCH",
+      headers: { authorization: `Bearer ${bobsSecret}`, "content-type": "application/json" },
+      body: JSON.stringify({ role: "admin" }),
+    });
+    expect(byMembersToken.status).toBe(403);
+    expect(await errorOf(byMembersToken)).toBe("auth.forbidden");
 
     // The last administrator stays one.
     const last = await change(admin, aliceId, { role: "member" });
@@ -1855,7 +1913,7 @@ describe("the schedule and the roadmap", () => {
 });
 
 describe("categories", () => {
-  it("are read by anyone, and made, changed and removed by an administrator on the console's own pages", async () => {
+  it("are read by anyone, and made, changed and removed by an administrator, themselves or through their agent", async () => {
     const named = createHarness(testDatabase, {
       providers: [createFixtureProvider()],
       admins: ["alice"],
@@ -1914,13 +1972,42 @@ describe("categories", () => {
         await asAdmin("POST", REST_ROUTES.tokens, { name: "an administrator's agent" })
       ).json(),
     );
+    // An administrator's agent keeps them as the administrator does (ADR-0021).
     const byToken = await named.request(REST_ROUTES.categories, {
       method: "POST",
       headers: { authorization: `Bearer ${secret}`, "content-type": "application/json" },
+      body: JSON.stringify({ key: "by-agent", name: "By an agent" }),
+    });
+    expect(byToken.status).toBe(201);
+    const byAgent = restEventsSchema
+      .parse(await (await get(alice, `${REST_ROUTES.events}?after=0`)).json())
+      .items.at(-1);
+    expect(byAgent).toMatchObject({
+      kind: "category.created",
+      agent: "an administrator's agent",
+      data: { key: "by-agent", name: "By an agent" },
+    });
+    const removedByToken = await named.request(`${REST_ROUTES.categories}/by-agent`, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${secret}` },
+    });
+    expect(removedByToken.status).toBe(204);
+    const bobsSecret = restTokenCreatedSchema.parse(
+      await (
+        await named.request(REST_ROUTES.tokens, {
+          method: "POST",
+          headers: { cookie: bob, origin: SIGN_IN_URL, "content-type": "application/json" },
+          body: JSON.stringify({ name: "a member's agent" }),
+        })
+      ).json(),
+    ).secret;
+    const byMembersToken = await named.request(REST_ROUTES.categories, {
+      method: "POST",
+      headers: { authorization: `Bearer ${bobsSecret}`, "content-type": "application/json" },
       body: JSON.stringify({ key: "ops", name: "Ops" }),
     });
-    expect(byToken.status).toBe(403);
-    expect(await errorOf(byToken)).toBe("auth.session_required");
+    expect(byMembersToken.status).toBe(403);
+    expect(await errorOf(byMembersToken)).toBe("auth.forbidden");
     expect(
       (
         await named.request(REST_ROUTES.categories, {
@@ -1961,6 +2048,8 @@ describe("categories", () => {
     );
     expect(since.items.map((event) => [event.kind, event.data])).toEqual([
       ["category.created", { key: "research", name: "Research" }],
+      ["category.created", { key: "by-agent", name: "By an agent" }],
+      ["category.removed", { key: "by-agent", name: "By an agent" }],
       ["category.updated", { key: "research", name: "Research and insight", fields: ["name"] }],
       ["category.removed", { key: "research", name: "Research and insight" }],
     ]);

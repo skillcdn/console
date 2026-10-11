@@ -185,13 +185,11 @@ export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies):
     return c.json(await meOf(await access.caller(c)));
   });
 
-  // The person's own choice of language (ADR-0012): theirs to keep, from the console's own pages.
+  // The person's own choice of language (ADR-0012): theirs to keep, from the console's own
+  // pages or through their token (ADR-0021).
   app.patch(REST_ROUTES.me, async (c) => {
     c.header("cache-control", "no-store");
-    if (access.presentsToken(c)) {
-      return sessionRequired(c);
-    }
-    if (!access.fromOwnPages(c)) {
+    if (!access.presentsToken(c) && !access.fromOwnPages(c)) {
       return foreignOrigin(c);
     }
     const person = await access.person(c);

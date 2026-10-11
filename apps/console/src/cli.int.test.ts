@@ -2,6 +2,8 @@ import {
   connectPath,
   projectPath,
   REST_ROUTES,
+  restErrorSchema,
+  restEventsSchema,
   restRunSchema,
   restTaskSchema,
   restTokenCreatedSchema,
@@ -24,6 +26,10 @@ let bob: string;
 let aliceToken: string;
 /** The project the tests work in, under its key. */
 const IN = projectPath("web");
+/** The first bytes of a PNG, which is all the console reads of an image's kind. */
+const PNG = Uint8Array.from([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52,
+]);
 
 const JSON_HEADERS = { origin: SIGN_IN_URL, "content-type": "application/json" };
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -96,6 +102,8 @@ async function console_(
   options: {
     readonly project?: string | undefined;
     readonly directory?: ReturnType<typeof memoryDirectory>;
+    /** The console to run against; the shared one when left out. */
+    readonly harness?: Harness | undefined;
   } = {},
 ) {
   const out: string[] = [];
@@ -113,7 +121,7 @@ async function console_(
     stderr: (text) => {
       err.push(text);
     },
-    fetch: async (url, init) => h.app.fetch(new Request(url, init)),
+    fetch: async (url, init) => (options.harness ?? h).app.fetch(new Request(url, init)),
     readStdin: async () => "",
     readFile: async () => {
       throw new Error("no files here");
@@ -121,7 +129,9 @@ async function console_(
     readBytes: async (path) =>
       path === "report.md"
         ? new TextEncoder().encode("# The report\n\nAll of it.\n")
-        : Promise.reject(new Error("no such file")),
+        : path === "mark.png"
+          ? PNG
+          : Promise.reject(new Error("no such file")),
     store: {
       load: async () => undefined,
       save: async () => "nowhere",
@@ -498,5 +508,145 @@ describe("the command line", () => {
     const noSuchCategory = await console_(["task", "new", "x", "--category", "nothing"]);
     expect(noSuchCategory.err).toContain("task.invalid_category");
     expect(noSuchCategory.err).toContain("console categories");
+  });
+
+  it("configures as its person: a project set up, its members, the categories and a role, with a token; refused as a member; never the tokens", async () => {
+    // An administrator's agent, on a console that names her one (ADR-0021).
+    const named = createHarness(testDatabase, {
+      providers: [createFixtureProvider()],
+      admins: ["alice"],
+    });
+    const admin = await named.signIn("alice");
+    const agent = restTokenCreatedSchema.parse(
+      await (
+        await named.request(REST_ROUTES.tokens, {
+          method: "POST",
+          headers: { cookie: admin, ...JSON_HEADERS },
+          body: JSON.stringify({ name: "Claude Code setting up" }),
+        })
+      ).json(),
+    ).secret;
+    const as = (args: readonly string[], token = agent, project: string | undefined = "ops") =>
+      console_(args, token, { harness: named, project });
+    const made = await as([
+      "project",
+      "new",
+      "ops",
+      "Operations",
+      "--description",
+      "Runs the place.",
+      "--visibility",
+      "private",
+      "--color",
+      "teal",
+      "--symbol",
+      "OP",
+    ]);
+    expect(made.code, made.err).toBe(EXIT.ok);
+    expect(made.out).toContain("Project made: Operations (ops)");
+    const shown = await as(["project", "ops"]);
+    expect(shown.out).toContain("visibility: private  role: owner  skills: the organization's");
+    expect(shown.out).toContain("color: teal  symbol: OP  image: none");
+    expect(shown.out).toContain("Runs the place.");
+    const edited = await as(["project", "edit", "ops", "--name", "Ops", "--symbol", "none"]);
+    expect(edited.code, edited.err).toBe(EXIT.ok);
+    expect(edited.out).toContain("project ops: Ops");
+    expect(edited.out).toContain("symbol: none");
+    const pictured = await as(["project", "icon", "ops", "mark.png"]);
+    expect(pictured.code, pictured.err).toBe(EXIT.ok);
+    expect(pictured.out).toContain("image: image/png");
+    expect((await as(["project", "icon", "ops", "--remove"])).out).toContain("image: none");
+    // The members: Bob listed, made an owner, taken off the list.
+    expect((await as(["members"])).out).toMatch(
+      /^Alice {2}owner {2}\(since \d{4}-\d{2}-\d{2}\)\n$/,
+    );
+    const added = await as(["member", "add", "bob"]);
+    expect(added.code, added.err).toBe(EXIT.ok);
+    expect(added.out).toContain("bob  member  (since ");
+    expect((await as(["member", "role", "bob", "owner"])).out).toContain("bob  owner  (since ");
+    expect((await as(["members"])).out).toContain("bob  owner");
+    expect((await as(["member", "remove", "bob"])).out).toBe(
+      "bob is no longer listed in the project.\n",
+    );
+    // The people, and what one is; the categories.
+    const people = await as(["people"], agent, undefined);
+    expect(people.code, people.err).toBe(EXIT.ok);
+    expect(people.out).toMatch(/^Alice .*\(admin\)$/m);
+    expect(people.out).toMatch(/^bob .*\(member\)$/m);
+    const promoted = await as(["person", "role", "bob", "admin"], agent, undefined);
+    expect(promoted.code, promoted.err).toBe(EXIT.ok);
+    expect(promoted.out).toMatch(/^bob .*\(admin\)\n$/);
+    expect((await as(["person", "role", "bob", "member"], agent, undefined)).out).toMatch(
+      /\(member\)\n$/,
+    );
+    const category = await as(
+      ["category", "new", "research", "Research", "--color", "yellow"],
+      agent,
+      undefined,
+    );
+    expect(category.code, category.err).toBe(EXIT.ok);
+    expect(category.out).toBe("research  Research  (yellow)\n");
+    expect(
+      (await as(["category", "edit", "research", "--name", "R and D"], agent, undefined)).out,
+    ).toBe("research  R and D  (yellow)\n");
+    expect((await as(["categories"], agent, undefined)).out).toContain(
+      "research  R and D  (yellow)",
+    );
+    expect((await as(["category", "remove", "research"], agent, undefined)).out).toBe(
+      "Category research removed.\n",
+    );
+    // Every one of these names the agent beside the person.
+    const inProject = restEventsSchema.parse(
+      await (
+        await named.request(`${projectPath("ops")}/events?after=0`, {
+          headers: { cookie: admin },
+        })
+      ).json(),
+    ).items;
+    expect(inProject.map((event) => event.kind)).toEqual(
+      expect.arrayContaining([
+        "project.created",
+        "project.updated",
+        "project.member_added",
+        "project.member_changed",
+        "project.member_removed",
+      ]),
+    );
+    for (const event of inProject) {
+      expect(event.agent, event.kind).toBe("Claude Code setting up");
+      expect(event.actor?.login, event.kind).toBe("Alice");
+    }
+    const inWorkspace = restEventsSchema
+      .parse(
+        await (
+          await named.request(`${REST_ROUTES.events}?after=0`, { headers: { cookie: admin } })
+        ).json(),
+      )
+      .items.filter((event) => event.agent === "Claude Code setting up")
+      .map((event) => event.kind);
+    expect(inWorkspace).toEqual([
+      "person.role_changed",
+      "person.role_changed",
+      "category.created",
+      "category.updated",
+      "category.removed",
+    ]);
+    // A member's agent is refused what a member is; and the tokens are refused to any token.
+    const bobToken = await tokenFor(bob, "Codex for Bob");
+    for (const args of [
+      ["project", "edit", "web", "--name", "Mine"],
+      ["member", "add", "bob"],
+      ["category", "new", "ops", "Ops"],
+      ["person", "role", "Alice", "member"],
+    ]) {
+      const refused = await as(args, bobToken, "web");
+      expect(refused.code, args.join(" ")).toBe(EXIT.failed);
+      expect(refused.err, args.join(" ")).toContain("auth.forbidden");
+    }
+    const tokens = await named.request(REST_ROUTES.tokens, {
+      headers: { authorization: `Bearer ${agent}` },
+    });
+    expect(tokens.status).toBe(403);
+    expect(restErrorSchema.parse(await tokens.json()).error.code).toBe("auth.session_required");
   });
 });

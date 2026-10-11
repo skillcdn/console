@@ -355,8 +355,9 @@ describe("createConsole", () => {
   });
 
   it("knows which pages a console that holds a token does not offer", () => {
-    // Configuring and the tokens themselves are a person's own doing on the console's own pages.
-    for (const path of ["/projects/new", "/projects/web/settings", "/agents", "/agents/new"]) {
+    // The tokens themselves, and an agent's approval, are a person's own doing on the console's
+    // own pages; configuring is the token's too, as its person's (ADR-0021).
+    for (const path of ["/agents", "/agents/new"]) {
       expect(onlyOnOwnPages(matchRoute(path)), path).toBe(true);
     }
     expect(onlyOnOwnPages(matchRoute(`/people/${ID}/agents`))).toBe(true);
@@ -372,6 +373,8 @@ describe("createConsole", () => {
       "/projects/web/members",
       "/projects/web/roadmap",
       "/projects/web/calendar",
+      "/projects/new",
+      "/projects/web/settings",
     ]) {
       expect(onlyOnOwnPages(matchRoute(path)), path).toBe(false);
     }

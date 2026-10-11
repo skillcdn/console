@@ -5,7 +5,7 @@ license: MIT
 compatibility: Needs a shell with the console command on the PATH (npm install -g @skillcdn/console, Node.js 24 or newer), signed in by a person. Nothing else; the command needs no key of its own and the agent never sees a token.
 metadata:
   author: skillcdn
-  version: "1.2"
+  version: "1.3"
 skillcdn:
   translations:
     ko:
@@ -72,6 +72,10 @@ What was learned and will be needed again (how a thing is set up, why a choice w
 ### Phase 7: Finish
 
 After the last report, `console finish --summary "<what was done, and what is left>"`: the task goes up for review. `console fail --summary "<why, and what is left>"` when it could not be done. A run is never left open.
+
+## Setting up, when told to
+
+A task or a person may ask for the project itself rather than work in it: a project made or changed (`console project new <key> "<name>"`, `console project edit <key>`), its mark (`console project icon <key> <file>`), its members (`console member add <login>`, `console member role`, `console member remove`), the workspace's categories (`console category new <key> "<name>"`, `console category edit`, `console category remove`), what a person is (`console person role <login> <admin|member>`), and its goals (`console goal new`). The agent does these as its person may, an owner of the project or an administrator of the workspace ([ADR-0021](/docs/adr/0021-a-token-configures-as-its-person-does.md)); the feed names the agent beside the person on each. What the person may not, the console refuses (`auth.forbidden`): that step goes back to the person in the report, never worked around. `console people` and `console members` say who is who, by login.
 
 ## Hard rules
 

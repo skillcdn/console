@@ -101,7 +101,15 @@ Goal: the board for an organization that runs on it, seen three ways without gro
 - [x] The skill (2026-10-11): `working-the-board` reads the plan and narrows the board.
 - [x] The second pass (2026-10-11, [ADR-0020](adr/0020-the-console-does-not-claim-an-agent-is-at-work-a-run-says-when-it-was-last-heard-from-and-a-new-run-takes-over.md)): no claim that an agent is at work; a run says when it was last heard from, and a run begun on a task takes over the one open on it; a task planned across days is a bar on the calendar, with a legend of the marks and of the categories' colours; the tasks, the decisions, the runs and the feed a page at a time, on the command and on the pages; a project's mark, an image of its own or a symbol on a colour, chosen from its key and its name where none is set; the calendar narrowed as the board is, with the categories' colours as its legend; the Categories page for every member; the board without the blank below it, since its columns clip and the board itself never scrolls.
 
-## After milestone 9
+## Done: milestone 10, the first organization on it (2026-10-11)
+
+Goal: what the first organization running on a deployment of its own found on its first day, folded in. An agent sent to set up a workspace stopped at everything that was a person's own doing on the pages and handed the person a list of clicks; a code shown by `console login` expired while the person was away; the command ran on a Node.js the package did not state.
+
+- [x] A token configures as its person does (2026-10-11, [ADR-0021](adr/0021-a-token-configures-as-its-person-does.md)): every request a session may make, a token may make, within the same roles, except the tokens themselves and the approval of a connection; the event names the agent; `console people`, `person role`, `project new`, `project edit`, `project icon`, `members`, `member add`, `member role`, `member remove`, `category new`, `category edit` and `category remove`, under "Configuring, as the person" in the help ([specs/rest.md](specs/rest.md), [specs/cli.md](specs/cli.md)); the pages of a console of one's own offer the same, the Agents pages excepted, and keep the language on the person.
+- [x] The code `console login` shows is good for thirty minutes (2026-10-11).
+- [x] Node.js 22 runs the command today, said in the package's README; 24 stays the floor the package states and is tested on (2026-10-11).
+
+## After milestone 10
 
 Nothing is chosen yet; the list below is where the next milestone comes from. Left open by milestone 9: whether the board should end a run not heard from for a long while itself ([ADR-0020](adr/0020-the-console-does-not-claim-an-agent-is-at-work-a-run-says-when-it-was-last-heard-from-and-a-new-run-takes-over.md)); a roadmap across projects.
 

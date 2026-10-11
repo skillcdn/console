@@ -89,7 +89,7 @@ export const en = {
     },
     notWithToken: {
       title: "Done on the console's own pages",
-      body: "This console holds a token, which acts as you on the board. Connecting agents, configuring projects and people, and keeping a language are done on the organization's console, signed in.",
+      body: "This console holds a token, which acts as you on the board, configuring included. Agents are connected, and tokens made and removed, on the organization's console, signed in.",
     },
     you: "(you)",
     nobody: "Nobody",
@@ -684,7 +684,7 @@ export const en = {
     lookingUp: "Looking the code up",
     notACode: "That is not a code: eight letters and digits, in two groups.",
     noSuchCode:
-      "No agent asks to connect with this code. A code is good for ten minutes and for one approval; ask your agent for a new one.",
+      "No agent asks to connect with this code. A code is good for thirty minutes and for one approval; ask your agent for a new one.",
     couldNotAsk: "The console could not be asked.",
     asks: {
       title: "An agent asks to connect as you",

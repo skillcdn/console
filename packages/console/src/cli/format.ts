@@ -6,6 +6,8 @@ import type {
   RestDocumentSummary,
   RestDocuments,
   RestGoal,
+  RestMember,
+  RestPerson,
   RestProject,
   RestRun,
   RestSkills,
@@ -40,6 +42,31 @@ export function formatProjectLine(project: RestProject): string {
     notes.push(`${plural(project.openDecisions, "decision")} waiting`);
   }
   return `${project.key}  ${project.name}  (${notes.join("; ")})`;
+}
+
+/** One project in full: what it is, how it is marked, and what the person is in it. */
+export function formatProject(project: RestProject): string {
+  const lines = [
+    `project ${project.key}: ${project.name}`,
+    `visibility: ${project.visibility}  role: ${project.role}  skills: ${project.skillsAddress ?? "the organization's"}`,
+    `color: ${project.color ?? "none"}  symbol: ${project.symbol ?? "none"}  image: ${project.icon === null ? "none" : project.icon.contentType}`,
+  ];
+  if (project.description.trim().length > 0) {
+    lines.push("", project.description.trimEnd());
+  }
+  return lines.join("\n");
+}
+
+/** One person: their login, their name where the host gives one, and what they are in the workspace. */
+export function formatPersonLine(person: RestPerson): string {
+  return person.name === null
+    ? `${person.login}  (${person.role})`
+    : `${person.login}  ${person.name}  (${person.role})`;
+}
+
+/** One member of a project: their login, what they are in it, and since when. */
+export function formatMemberLine(member: RestMember): string {
+  return `${member.person.login}  ${member.role}  (since ${member.addedAt.slice(0, 10)})`;
 }
 
 /** The line under a page of a listing that has more after it: how to ask for the next page. */

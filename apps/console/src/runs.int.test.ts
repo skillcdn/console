@@ -349,8 +349,8 @@ describe("runs", () => {
       (await asAgent(aliceToken, "POST", `${IN}/runs/not-a-run/reports`, { body: "x" })).status,
     ).toBe(404);
 
-    // A person gives up on a run that will not come back: the one it is for, or an owner of the
-    // project on the console's own pages; an agent, with a token, never on another's.
+    // A person gives up on a run that will not come back: the one it is for, or anyone's as an
+    // owner of the project, signed in or through their agent (ADR-0021); a member never on another's.
     const giveUp = (cookie: string, id: string) =>
       asPerson(cookie, "POST", `${IN}/runs/${id}/end`, { status: "abandoned" });
     const byBob = await giveUp(bob, run.id);
@@ -371,7 +371,8 @@ describe("runs", () => {
     expect(ended).toMatchObject({ agent: null, data: { status: "abandoned" } });
     expect(ended?.actor?.login).toBe("Alice");
 
-    // An administrator owns every project, and so may give up on anyone's run there, signed in.
+    // An administrator owns every project, and so may give up on anyone's run there: signed in,
+    // or through their agent, which is then named on it.
     const named = createHarness(testDatabase, {
       providers: [createFixtureProvider()],
       admins: ["carol"],
@@ -382,8 +383,14 @@ describe("runs", () => {
     const byAdminToken = await asAgent(carolToken, "POST", `${IN}/runs/${second.id}/end`, {
       status: "abandoned",
     });
-    expect(byAdminToken.status).toBe(403);
-    const byAdmin = await named.request(`${IN}/runs/${second.id}/end`, {
+    expect(byAdminToken.status).toBe(200);
+    expect(restRunSchema.parse(await byAdminToken.json()).status).toBe("abandoned");
+    const takenOver = restEventsSchema
+      .parse(await (await asPerson(bob, "GET", `${IN}/events?run=${second.id}`)).json())
+      .items.find((event) => event.kind === "run.ended");
+    expect(takenOver).toMatchObject({ agent: "Carol's agent", data: { status: "abandoned" } });
+    const third = await startRun(aliceToken, task.id);
+    const byAdmin = await named.request(`${IN}/runs/${third.id}/end`, {
       method: "POST",
       headers: { cookie: carol, origin: SIGN_IN_URL, ...JSON_HEADERS },
       body: JSON.stringify({ status: "abandoned" }),

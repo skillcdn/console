@@ -23,8 +23,8 @@ import type { Tokens } from "./tokens.js";
 
 /** What the command's secret begins with, so that whoever finds one knows what it found. */
 export const CONNECT_SECRET_PREFIX = "cns_c_";
-/** How long a person has to approve. */
-const REQUEST_TTL_MS = 10 * 60_000;
+/** How long a person has to approve: enough for one who is away from their desk for a while. */
+const REQUEST_TTL_MS = 30 * 60_000;
 /** How many seconds the command waits between claims. */
 const CLAIM_INTERVAL_SECONDS = 3;
 /** How many requests a workspace holds at once: an unauthenticated route is bounded. */

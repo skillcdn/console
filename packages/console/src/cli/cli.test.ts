@@ -1099,3 +1099,217 @@ describe("a page at a time", () => {
     expect(bad.err()).toContain("Not a number of items");
   });
 });
+
+describe("configuring, as the person", () => {
+  const BOB = {
+    ...PERSON,
+    id: "0199c4d8-0000-7000-8000-000000000002",
+    login: "bob",
+    name: "Bob Example",
+  };
+  const OPS = {
+    ...PROJECT,
+    id: "0199c4d8-0000-7000-8000-000000000051",
+    key: "ops",
+    name: "Operations",
+    description: "Runs the place.",
+    color: "teal",
+    symbol: "OP",
+    role: "owner",
+    openDecisions: 0,
+  };
+  const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+  it("lists the people and says what one is", async () => {
+    const { fetch, calls } = fakeConsole({
+      "GET /api/v1/people": { body: { items: [PERSON, BOB] } },
+      [`PATCH /api/v1/people/${BOB.id}`]: { body: { ...BOB, role: "admin" } },
+    });
+    const list = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["people"], list.io)).toBe(EXIT.ok);
+    expect(list.out()).toBe("alice  (member)\nbob  Bob Example  (member)\n");
+    const role = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["person", "role", "Bob", "admin"], role.io)).toBe(EXIT.ok);
+    expect(calls.find((call) => call.key === `PATCH /api/v1/people/${BOB.id}`)?.body).toEqual({
+      role: "admin",
+    });
+    expect(role.out()).toBe("bob  Bob Example  (admin)\n");
+    const wrong = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["person", "role", "bob", "boss"], wrong.io)).toBe(EXIT.usage);
+    expect(wrong.err()).toContain("Not a role in the workspace");
+    const nobody = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["person", "role", "carol", "admin"], nobody.io)).toBe(EXIT.usage);
+    expect(nobody.err()).toContain("console people");
+    expect(await runCli(["person"], harness({ fetch, env: SIGNED_IN }).io)).toBe(EXIT.usage);
+  });
+
+  it("makes a project, reads it, changes it, and gives it an image or takes it away", async () => {
+    const { fetch, calls } = fakeConsole({
+      "POST /api/v1/projects": { status: 201, body: OPS },
+      "GET /api/v1/projects/ops": { body: OPS },
+      "PATCH /api/v1/projects/ops": { body: { ...OPS, name: "Ops", symbol: null } },
+      "POST /api/v1/projects/ops/icon": {
+        body: { ...OPS, icon: { sha256: "a".repeat(64), contentType: "image/png" } },
+      },
+      "DELETE /api/v1/projects/ops/icon": { body: OPS },
+    });
+    const made = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(
+        [
+          "project",
+          "new",
+          "ops",
+          "Operations",
+          "--description",
+          "Runs the place.",
+          "--visibility",
+          "private",
+          "--skills",
+          "none",
+          "--color",
+          "teal",
+          "--symbol",
+          "OP",
+        ],
+        made.io,
+      ),
+    ).toBe(EXIT.ok);
+    expect(calls.find((call) => call.key === "POST /api/v1/projects")?.body).toEqual({
+      key: "ops",
+      name: "Operations",
+      description: "Runs the place.",
+      visibility: "private",
+      skillsAddress: null,
+      color: "teal",
+      symbol: "OP",
+    });
+    expect(made.out()).toContain("Project made: Operations (ops)");
+    expect(made.out()).toContain("console use ops");
+    const one = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["project", "ops"], one.io)).toBe(EXIT.ok);
+    expect(one.out()).toContain("project ops: Operations");
+    expect(one.out()).toContain("visibility: private  role: owner  skills: the organization's");
+    expect(one.out()).toContain("color: teal  symbol: OP  image: none");
+    expect(one.out()).toContain("Runs the place.");
+    const changed = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(["project", "edit", "ops", "--name", "Ops", "--symbol", "none"], changed.io),
+    ).toBe(EXIT.ok);
+    expect(calls.find((call) => call.key === "PATCH /api/v1/projects/ops")?.body).toEqual({
+      name: "Ops",
+      symbol: null,
+    });
+    expect(changed.out()).toContain("project ops: Ops");
+    expect(changed.out()).toContain("symbol: none");
+    const pictured = harness({
+      fetch,
+      env: SIGNED_IN,
+      readBytes: async (path) =>
+        path === "mark.png" ? PNG : Promise.reject(new Error("no such file")),
+    });
+    expect(await runCli(["project", "icon", "ops", "mark.png"], pictured.io)).toBe(EXIT.ok);
+    expect(
+      calls.find((call) => call.key === "POST /api/v1/projects/ops/icon")?.init?.body,
+    ).toBeInstanceOf(FormData);
+    expect(pictured.out()).toContain("image: image/png");
+    const bare = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["project", "icon", "ops", "--remove"], bare.io)).toBe(EXIT.ok);
+    expect(bare.out()).toContain("image: none");
+    for (const args of [
+      ["project", "new", "ops"],
+      ["project", "edit", "ops"],
+      ["project", "icon", "ops"],
+      ["project", "icon", "ops", "mark.png", "--remove"],
+      ["project", "new", "ops", "Operations", "--color", "crimson"],
+      ["project", "new", "ops", "Operations", "--visibility", "secret"],
+    ]) {
+      const wrong = harness({ fetch, env: SIGNED_IN });
+      expect(await runCli(args, wrong.io), args.join(" ")).toBe(EXIT.usage);
+    }
+  });
+
+  it("lists the members, adds one, changes what they are, and takes them off the list", async () => {
+    const { fetch, calls } = fakeConsole({
+      "GET /api/v1/people": { body: { items: [PERSON, BOB] } },
+      [`GET ${IN}/members`]: {
+        body: { items: [{ person: PERSON, role: "owner", addedAt: WHEN }] },
+      },
+      [`POST ${IN}/members`]: {
+        status: 201,
+        body: { person: BOB, role: "member", addedAt: WHEN },
+      },
+      [`PATCH ${IN}/members/${BOB.id}`]: { body: { person: BOB, role: "owner", addedAt: WHEN } },
+      [`DELETE ${IN}/members/${BOB.id}`]: { status: 204 },
+    });
+    const list = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["members"], list.io)).toBe(EXIT.ok);
+    expect(list.out()).toBe("alice  owner  (since 2026-10-09)\n");
+    const added = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["member", "add", "bob"], added.io)).toBe(EXIT.ok);
+    expect(calls.find((call) => call.key === `POST ${IN}/members`)?.body).toEqual({
+      personId: BOB.id,
+    });
+    expect(added.out()).toBe("bob  member  (since 2026-10-09)\n");
+    const owner = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["member", "role", "bob", "owner"], owner.io)).toBe(EXIT.ok);
+    expect(calls.find((call) => call.key === `PATCH ${IN}/members/${BOB.id}`)?.body).toEqual({
+      role: "owner",
+    });
+    expect(owner.out()).toBe("bob  owner  (since 2026-10-09)\n");
+    const gone = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["member", "remove", "bob"], gone.io)).toBe(EXIT.ok);
+    expect(gone.out()).toBe("bob is no longer listed in the project.\n");
+    const nobody = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["member", "add", "carol"], nobody.io)).toBe(EXIT.usage);
+    expect(nobody.err()).toContain("Nobody of the workspace is called carol");
+    const wrong = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["member", "role", "bob", "boss"], wrong.io)).toBe(EXIT.usage);
+    expect(await runCli(["member"], harness({ fetch, env: SIGNED_IN }).io)).toBe(EXIT.usage);
+  });
+
+  it("makes, changes and removes a category", async () => {
+    const { fetch, calls } = fakeConsole({
+      "POST /api/v1/categories": { status: 201, body: CATEGORY },
+      "PATCH /api/v1/categories/engineering": { body: { ...CATEGORY, name: "Eng" } },
+      "DELETE /api/v1/categories/engineering": { status: 204 },
+    });
+    const made = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(["category", "new", "engineering", "Engineering", "--color", "blue"], made.io),
+    ).toBe(EXIT.ok);
+    expect(calls.find((call) => call.key === "POST /api/v1/categories")?.body).toEqual({
+      key: "engineering",
+      name: "Engineering",
+      color: "blue",
+    });
+    expect(made.out()).toBe("engineering  Engineering  (blue)\n");
+    const changed = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["category", "edit", "engineering", "--name", "Eng"], changed.io)).toBe(
+      EXIT.ok,
+    );
+    expect(calls.find((call) => call.key === "PATCH /api/v1/categories/engineering")?.body).toEqual(
+      { name: "Eng" },
+    );
+    expect(changed.out()).toBe("engineering  Eng  (blue)\n");
+    const gone = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["category", "remove", "engineering"], gone.io)).toBe(EXIT.ok);
+    expect(gone.out()).toBe("Category engineering removed.\n");
+    for (const args of [
+      ["category"],
+      ["category", "edit", "engineering"],
+      ["category", "new", "ops"],
+      ["category", "new", "ops", "Ops", "--color", "crimson"],
+    ]) {
+      const wrong = harness({ fetch, env: SIGNED_IN });
+      expect(await runCli(args, wrong.io), args.join(" ")).toBe(EXIT.usage);
+    }
+    const help = harness({ fetch });
+    expect(await runCli(["help", "category"], help.io)).toBe(EXIT.ok);
+    expect(help.out()).toContain("category.in_use");
+    const whole = harness({ fetch });
+    expect(await runCli(["help"], whole.io)).toBe(EXIT.ok);
+    expect(whole.out()).toContain("Configuring, as the person");
+    expect(whole.out()).toContain('project new <key> "<name>"');
+  });
+});

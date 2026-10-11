@@ -404,10 +404,10 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
   };
 
   /**
-   * The person signed in on the console's own pages, or the refusal to answer with: what the
-   * tokens themselves are managed by, and what configuring is done by. A token cannot make,
-   * list or remove tokens, so that one which leaks cannot outlive its removal through tokens
-   * of its own; and an agent works as its person does, but configuring is a person's own doing.
+   * The person signed in, or the refusal to answer with: what the tokens themselves are managed
+   * by, and what an agent's connection is approved by, which makes one. A token cannot make,
+   * list or remove tokens, so that one which leaks cannot outlive its removal through tokens of
+   * its own; everything else a person may do, their agent may do with their token (ADR-0021).
    */
   const signedIn = async (c: Context<AppEnv>): Promise<PersonRecord | Response> => {
     if (access.presentsToken(c)) {
@@ -484,23 +484,11 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
   /** Changing something in it: anyone who may see it, from the console's own pages or with a token. */
   const changing = async (c: Context<AppEnv>) => inProject(c, await changingCaller(c));
   /**
-   * Setting its roadmap: an owner, from the console's own pages or with a token, since a goal
-   * is content an owner's agent may be told to write, not configuration.
+   * Configuring it, and setting its roadmap: an owner, from the console's own pages or with a
+   * token, since an owner's agent configures as its owner does (ADR-0021).
    */
   const owning = async (c: Context<AppEnv>): Promise<InProject | Response> => {
     const found = await changing(c);
-    if (found instanceof Response) {
-      return found;
-    }
-    return found.project.role === "owner" ? found : ownerRequired(c);
-  };
-  /** Configuring it: an owner, signed in on the console's own pages. */
-  const configuring = async (c: Context<AppEnv>): Promise<InProject | Response> => {
-    const person = await signedInOnOwnPages(c);
-    const found = await inProject(
-      c,
-      person instanceof Response ? person : { person, token: undefined },
-    );
     if (found instanceof Response) {
       return found;
     }
@@ -774,13 +762,13 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     return c.json(body);
   });
 
-  // What a person is: said by an administrator signed in on the console's own pages. An agent
-  // works as its person does; configuring is a person's own doing.
+  // What a person is: said by an administrator, themselves or through their agent (ADR-0021).
   app.patch(`${REST_ROUTES.people}/:id`, tooLarge, async (c) => {
-    const person = await signedInOnOwnPages(c);
-    if (person instanceof Response) {
-      return person;
+    const caller = await changingCaller(c);
+    if (caller instanceof Response) {
+      return caller;
     }
+    const { person } = caller;
     if (person.role !== "admin") {
       return administratorRequired(c);
     }
@@ -795,7 +783,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     try {
       const changed = await updatePersonRole(database, {
         workspaceId: person.workspaceId,
-        actor: { id: person.id },
+        actor: actorOf(caller),
         personId: id,
         role: patch.role,
         now: clock.now(),
@@ -826,12 +814,13 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     return c.json(body);
   });
 
-  // A project is made by a person signed in on the console's own pages, who becomes its owner.
+  // A project is made by a person, themselves or through their agent, who becomes its owner.
   app.post(REST_ROUTES.projects, tooLarge, async (c) => {
-    const person = await signedInOnOwnPages(c);
-    if (person instanceof Response) {
-      return person;
+    const caller = await changingCaller(c);
+    if (caller instanceof Response) {
+      return caller;
     }
+    const { person } = caller;
     const input = await bodyOf(c, restProjectInputSchema);
     if (input instanceof Response) {
       return input;
@@ -843,7 +832,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     try {
       const project = await createProject(database, {
         workspaceId: person.workspaceId,
-        actor: { id: person.id },
+        actor: actorOf(caller),
         person,
         project: { ...input, skillsAddress: skillsAddress ?? null },
         now: clock.now(),
@@ -858,8 +847,8 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
   });
 
-  // The categories tasks are sorted into (ADR-0019): read by anyone, kept by an administrator
-  // signed in on the console's own pages, as the rest of configuring is.
+  // The categories tasks are sorted into (ADR-0019): read by anyone, kept by an administrator,
+  // themselves or through their agent (ADR-0021).
   app.get(REST_ROUTES.categories, async (c) => {
     const person = await asking(c);
     if (person instanceof Response) {
@@ -872,10 +861,11 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
   });
 
   app.post(REST_ROUTES.categories, tooLarge, async (c) => {
-    const person = await signedInOnOwnPages(c);
-    if (person instanceof Response) {
-      return person;
+    const caller = await changingCaller(c);
+    if (caller instanceof Response) {
+      return caller;
     }
+    const { person } = caller;
     if (person.role !== "admin") {
       return administratorRequired(c);
     }
@@ -886,7 +876,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     try {
       const category = await createCategory(database, {
         workspaceId: person.workspaceId,
-        actor: { id: person.id },
+        actor: actorOf(caller),
         category: input,
         now: clock.now(),
       });
@@ -907,10 +897,11 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
   };
 
   app.patch(`${REST_ROUTES.categories}/:key`, tooLarge, async (c) => {
-    const person = await signedInOnOwnPages(c);
-    if (person instanceof Response) {
-      return person;
+    const caller = await changingCaller(c);
+    if (caller instanceof Response) {
+      return caller;
     }
+    const { person } = caller;
     if (person.role !== "admin") {
       return administratorRequired(c);
     }
@@ -925,7 +916,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     try {
       const category = await updateCategory(database, {
         workspaceId: person.workspaceId,
-        actor: { id: person.id },
+        actor: actorOf(caller),
         key,
         patch,
         now: clock.now(),
@@ -937,10 +928,11 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
   });
 
   app.delete(`${REST_ROUTES.categories}/:key`, async (c) => {
-    const person = await signedInOnOwnPages(c);
-    if (person instanceof Response) {
-      return person;
+    const caller = await changingCaller(c);
+    if (caller instanceof Response) {
+      return caller;
     }
+    const { person } = caller;
     if (person.role !== "admin") {
       return administratorRequired(c);
     }
@@ -951,7 +943,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     try {
       await removeCategory(database, {
         workspaceId: person.workspaceId,
-        actor: { id: person.id },
+        actor: actorOf(caller),
         key,
         now: clock.now(),
       });
@@ -1267,7 +1259,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
   });
 
   app.patch(PROJECT, tooLarge, async (c) => {
-    const found = await configuring(c);
+    const found = await owning(c);
     if (found instanceof Response) {
       return found;
     }
@@ -1293,10 +1285,10 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
   });
 
-  // The project's own image for its mark: set and taken away by an owner on the console's own
-  // pages, as the rest of configuring is; read by whoever may see the project.
+  // The project's own image for its mark: set and taken away by an owner; read by whoever may
+  // see the project.
   app.post(`${PROJECT}/icon`, iconFormTooLarge, async (c) => {
-    const found = await configuring(c);
+    const found = await owning(c);
     if (found instanceof Response) {
       return found;
     }
@@ -1334,7 +1326,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
   });
 
   app.delete(`${PROJECT}/icon`, async (c) => {
-    const found = await configuring(c);
+    const found = await owning(c);
     if (found instanceof Response) {
       return found;
     }
@@ -1391,7 +1383,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
   });
 
   app.post(`${PROJECT}/members`, tooLarge, async (c) => {
-    const found = await configuring(c);
+    const found = await owning(c);
     if (found instanceof Response) {
       return found;
     }
@@ -1424,7 +1416,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
   });
 
   app.patch(`${PROJECT}/members/:personId`, tooLarge, async (c) => {
-    const found = await configuring(c);
+    const found = await owning(c);
     if (found instanceof Response) {
       return found;
     }
@@ -1451,7 +1443,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
   });
 
   app.delete(`${PROJECT}/members/:personId`, async (c) => {
-    const found = await configuring(c);
+    const found = await owning(c);
     if (found instanceof Response) {
       return found;
     }
@@ -1921,7 +1913,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     if (!UUID.test(id)) {
       return noSuchRun(c);
     }
-    const { person, token } = found;
+    const { person } = found;
     try {
       const run = await endRun(database, {
         scope: found.scope,
@@ -1929,10 +1921,9 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         runId: id,
         status: input.status,
         summary: input.summary,
-        // Giving up on anyone's run is an owner's own doing, on the console's own pages; an
-        // agent, with a token, ends only the runs that are its person's.
-        anyone:
-          input.status === "abandoned" && found.project.role === "owner" && token === undefined,
+        // Giving up on anyone's run is an owner's doing, themselves or through their agent;
+        // a run is finished or failed only by its own person.
+        anyone: input.status === "abandoned" && found.project.role === "owner",
         now: clock.now(),
       });
       logger.info(
