@@ -24,15 +24,28 @@ const PROVIDER_NAMES = {
   gh: ["GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"],
   google: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
 } as const;
-/** What a bucket needs: all of these, or none. */
-const BUCKET_NAMES = [
-  "S3_ENDPOINT",
-  "S3_BUCKET",
-  "S3_ACCESS_KEY_ID",
-  "S3_SECRET_ACCESS_KEY",
-] as const;
+/** What a bucket needs: both, or neither. */
+const BUCKET_NAMES = ["S3_ENDPOINT", "S3_BUCKET"] as const;
+/** The pair of keys, where the credentials are keys: both, or neither. */
+const KEY_NAMES = ["S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"] as const;
 /** What is read only with a bucket configured. */
-const BUCKET_EXTRAS = ["S3_REGION", "S3_SESSION_TOKEN", "S3_KEY_PREFIX", "S3_PATH_STYLE"] as const;
+const BUCKET_EXTRAS = [
+  "S3_CREDENTIALS",
+  "S3_REGION",
+  "S3_SESSION_TOKEN",
+  "S3_KEY_PREFIX",
+  "S3_PATH_STYLE",
+] as const;
+/**
+ * Where the platform says it hands the container its credentials (ADR-0018): the variables are
+ * the platform's own, read only with `S3_CREDENTIALS=platform`, the relative one at the
+ * platform's fixed address.
+ */
+const PLATFORM_URI_NAMES = [
+  "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
+  "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+] as const;
+const PLATFORM_CREDENTIALS_ORIGIN = "http://169.254.170.2";
 /** Shorter than this, a secret is guessable enough to be a mistake. */
 const MIN_SECRET_LENGTH = 32;
 
@@ -211,6 +224,13 @@ const environmentSchema = z.object({
     .enum(["true", "false"])
     .transform((value) => value === "true")
     .optional(),
+  S3_CREDENTIALS: z.enum(["keys", "platform"]).optional(),
+  // The platform's own, checked only when they are read: a platform sets them for its own
+  // reasons, and a console on keys must not mind their shape.
+  AWS_CONTAINER_CREDENTIALS_RELATIVE_URI: z.string().optional(),
+  AWS_CONTAINER_CREDENTIALS_FULL_URI: z.string().optional(),
+  AWS_CONTAINER_AUTHORIZATION_TOKEN: z.string().optional(),
+  AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE: z.string().optional(),
 });
 
 export interface AuthConfig {
@@ -250,6 +270,27 @@ export interface AuthConfig {
   readonly tokenDaysAtMost?: number | undefined;
 }
 
+/**
+ * What requests to the bucket are signed with: the pair from configuration, or the credentials
+ * the platform hands the container at an endpoint of its own, renewed by it (ADR-0018).
+ */
+export type BucketCredentialsConfig =
+  | {
+      readonly kind: "keys";
+      readonly accessKeyId: string;
+      readonly secretAccessKey: string;
+      /** With temporary credentials, the token that comes with them. */
+      readonly sessionToken: string | undefined;
+    }
+  | {
+      readonly kind: "platform";
+      /** Where the platform answers. */
+      readonly url: string;
+      /** What the request carries as `Authorization`, where the platform wants one; or the file it is read from each time. */
+      readonly authorization: string | undefined;
+      readonly authorizationFile: string | undefined;
+    };
+
 /** The bucket files are kept in, through the S3 API (ADR-0016). */
 export interface BucketConfig {
   /** The origin of the store, such as `https://s3.us-east-1.amazonaws.com`. */
@@ -257,10 +298,7 @@ export interface BucketConfig {
   readonly bucket: string;
   /** The region the signature names; `us-east-1` where the store has none. */
   readonly region: string;
-  readonly accessKeyId: string;
-  readonly secretAccessKey: string;
-  /** With temporary credentials, the token that comes with them. */
-  readonly sessionToken: string | undefined;
+  readonly credentials: BucketCredentialsConfig;
   /** What every key begins with: empty, or folders ending with a slash. */
   readonly keyPrefix: string;
   /** The bucket in the path (`endpoint/bucket/key`), or in the host (`bucket.endpoint/key`). */
@@ -481,29 +519,109 @@ function skillsAddressOf(value: string | undefined, problems: string[]): Address
 }
 
 /**
- * The bucket files are kept in, or none for the rows of the database. The endpoint, the bucket
- * and the pair of keys come together, and the rest is read only with them: some of it is a
- * mistake, not a setting.
+ * Where the platform hands the container its credentials, from the platform's own variables:
+ * the relative address at the platform's fixed origin, else the full one, which is `https`, or
+ * `http` to the loopback or the platform's own link-local addresses and nowhere else.
+ */
+function platformEndpointOf(
+  env: z.infer<typeof environmentSchema>,
+  problems: string[],
+): string | undefined {
+  const relative = env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI;
+  if (relative !== undefined) {
+    if (!/^\/\S*$/.test(relative)) {
+      problems.push("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI: must be a path");
+      return undefined;
+    }
+    return `${PLATFORM_CREDENTIALS_ORIGIN}${relative}`;
+  }
+  const full = env.AWS_CONTAINER_CREDENTIALS_FULL_URI;
+  if (full === undefined) {
+    problems.push(
+      `S3_CREDENTIALS: the platform hands this container no credentials (neither ${PLATFORM_URI_NAMES.join(" nor ")} is set); run it with a role, or set the keys`,
+    );
+    return undefined;
+  }
+  const url = URL.canParse(full) ? new URL(full) : undefined;
+  const local =
+    url !== undefined &&
+    (url.hostname === "localhost" ||
+      /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(url.hostname) ||
+      ["[::1]", "169.254.170.2", "169.254.170.23", "[fd00:ec2::23]"].includes(url.hostname));
+  if (url === undefined || !(url.protocol === "https:" || (url.protocol === "http:" && local))) {
+    problems.push(
+      "AWS_CONTAINER_CREDENTIALS_FULL_URI: must be an https URL, or http to the loopback or the platform's own address",
+    );
+    return undefined;
+  }
+  return url.href;
+}
+
+/**
+ * The bucket files are kept in, or none for the rows of the database. The endpoint and the
+ * bucket come together, with the pair of keys unless the credentials are the platform's, and
+ * the rest is read only with them: some of it is a mistake, not a setting.
  */
 function bucketOf(
   env: z.infer<typeof environmentSchema>,
   problems: string[],
 ): BucketConfig | undefined {
   const missing = BUCKET_NAMES.filter((name) => env[name] === undefined);
-  if (missing.length === BUCKET_NAMES.length) {
+  const keys = KEY_NAMES.filter((name) => env[name] !== undefined);
+  if (missing.length === BUCKET_NAMES.length && keys.length === 0) {
     const extras = BUCKET_EXTRAS.filter((name) => env[name] !== undefined);
     if (extras.length > 0) {
       problems.push(`${extras.join(", ")}: read only with ${BUCKET_NAMES.join(", ")} set`);
     }
     return undefined;
   }
-  if (
-    env.S3_ENDPOINT === undefined ||
-    env.S3_BUCKET === undefined ||
-    env.S3_ACCESS_KEY_ID === undefined ||
-    env.S3_SECRET_ACCESS_KEY === undefined
-  ) {
+  const kind = env.S3_CREDENTIALS ?? "keys";
+  let credentials: BucketCredentialsConfig | undefined;
+  if (kind === "keys") {
+    const missingKeys = KEY_NAMES.filter((name) => env[name] === undefined);
+    if (missingKeys.length > 0) {
+      problems.push(
+        `${[...missing, ...missingKeys].join(", ")}: required once a bucket is configured`,
+      );
+      return undefined;
+    }
+    if (env.S3_ACCESS_KEY_ID !== undefined && env.S3_SECRET_ACCESS_KEY !== undefined) {
+      credentials = {
+        kind,
+        accessKeyId: env.S3_ACCESS_KEY_ID,
+        secretAccessKey: env.S3_SECRET_ACCESS_KEY,
+        sessionToken: env.S3_SESSION_TOKEN,
+      };
+    }
+  } else {
+    const given = [...keys, ...(env.S3_SESSION_TOKEN === undefined ? [] : ["S3_SESSION_TOKEN"])];
+    if (given.length > 0) {
+      problems.push(
+        `${given.join(", ")}: not read with S3_CREDENTIALS=platform; the keys or the platform, not both`,
+      );
+    }
+    if (
+      env.AWS_CONTAINER_AUTHORIZATION_TOKEN !== undefined &&
+      env.AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE !== undefined
+    ) {
+      problems.push(
+        "AWS_CONTAINER_AUTHORIZATION_TOKEN and AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE are both set; use one",
+      );
+    }
+    const url = platformEndpointOf(env, problems);
+    if (url !== undefined) {
+      credentials = {
+        kind,
+        url,
+        authorization: env.AWS_CONTAINER_AUTHORIZATION_TOKEN,
+        authorizationFile: env.AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE,
+      };
+    }
+  }
+  if (missing.length > 0) {
     problems.push(`${missing.join(", ")}: required once a bucket is configured`);
+  }
+  if (env.S3_ENDPOINT === undefined || env.S3_BUCKET === undefined || credentials === undefined) {
     return undefined;
   }
   const prefix = env.S3_KEY_PREFIX ?? "";
@@ -511,9 +629,7 @@ function bucketOf(
     endpoint: env.S3_ENDPOINT,
     bucket: env.S3_BUCKET,
     region: env.S3_REGION ?? "us-east-1",
-    accessKeyId: env.S3_ACCESS_KEY_ID,
-    secretAccessKey: env.S3_SECRET_ACCESS_KEY,
-    sessionToken: env.S3_SESSION_TOKEN,
+    credentials,
     keyPrefix: prefix,
     pathStyle: env.S3_PATH_STYLE ?? true,
   };

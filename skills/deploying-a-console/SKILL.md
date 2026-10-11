@@ -5,7 +5,7 @@ license: MIT
 compatibility: Needs a shell with Node.js 24 or newer, git, curl, jq and the AWS CLI v2, the gh command signed in or an empty repository the person made, network access to AWS, Cloudflare, GitHub and npm, an AWS account and a domain on Cloudflare the person can create a key and a token for, and a browser on any device for the few steps only a signed-in person can take. Works in any agent that can run a shell and write files; on Windows, in Git Bash with path conversion off.
 metadata:
   author: skillcdn
-  version: "1.0"
+  version: "1.1"
 skillcdn:
   translations:
     ko:
@@ -44,7 +44,7 @@ Check these before the first message. Without the AWS CLI, offer to install it (
 |---|---|
 | How many people | Asked: "How many people will use the console within a year: just you, up to 10, up to 30, or up to 100?" The answer picks the size ([sizing.md](references/sizing.md)). |
 | The board's name | Asked, with the organization's name as the suggestion when the request gives one: "What should the board be called? Usually the organization's name." |
-| The web address | Asked: "Which web address should the console have? A domain you already own, and where it is registered (I set it up on Cloudflare; you change its nameservers there once, and I give you the steps), or should I find one to buy (I show the price before buying)? I suggest `console.<domain>`." A domain is needed: the tunnel has no free hostname. |
+| The web address | Asked: "Which web address should the console have? A domain you already own, and where it is registered (I set it up on Cloudflare; you change its nameservers there once, and I give you the steps), or should I find one to buy (I show the price before buying)? I suggest `console.<domain>`." A domain is needed: the tunnel has no free hostname. A domain that already serves the organization's site is fine: only the console's hostname is added to its zone, and nothing of the site is touched (resources.md "A zone that serves other hosts"). |
 | How people sign in, and who | Asked: "How should people sign in: with GitHub, with Google (Workspace), or both? Who is in: everyone's GitHub login or Google address, and who among them configures the console (you, at least)? With a Google Workspace, everyone of the domain can be in." |
 | The organization's skills | Asked: "Where are your organization's skills on SkillCDN, if anywhere yet? An address like `/gh/<owner>/<repo>`." Default: none; a project names one later on its Settings page. |
 | The AWS account | Asked: "Do you have an AWS account for this, or should the console get an account of its own (the simplest to run and to read the bill of)?" A new account is made by the person, on the paid plan, with the order of cost already in front of them (the second message). |
@@ -52,8 +52,8 @@ Check these before the first message. Without the AWS CLI, offer to install it (
 | The run's folder | Asked with a suggestion: "Which folder should the deployment live in on this machine? I suggest `console-deploy` under your home folder." It is made at once and becomes the deployment repository. |
 | The deployment repository | Asked: "Where should the deployment's files live on GitHub: a private repository under your account, or under an organization you name?" Its name is the folder's. |
 | Where alerts go | Asked: "Which email should the cost alert go to?" |
-| The console's version | Derived: the current commit of `main` of the console's repository (`git ls-remote https://github.com/skillcdn/console main`), pinned in the deployment repository; an update is a new commit there. |
-| Everything else | Derived and shown in the plan: the size's numbers, the names (`console` for the cluster and the database, `api` and `worker` for the services, `console-files-<account id>` for the bucket), the generated secrets (`AUTH_SECRET`, the database password), the variables of [deploy/README.md](/deploy/README.md) with the tunnel's settings (`TRUSTED_PROXIES=127.0.0.1`, `CLIENT_IP_HEADER=cf-connecting-ip`, `HTTP_KEEP_ALIVE_SECONDS=100`), the estimate of this size and the next, the budget alert at one and a half times the estimate, the rate limiting rule on the sign-in paths, and what the person does once. |
+| The console's version | Derived: the latest release of the console, the tag `@skillcdn/console@<version>` of its repository: the last line of `git ls-remote --tags https://github.com/skillcdn/console 'refs/tags/@skillcdn/console@*' \| sort -t@ -k3 -V` is the highest version, and its first column the commit (an annotated tag lists its commit on a `^{}` line, which sorts last the same way), pinned in the deployment repository as `CONSOLE_REF`. An organization's own console (building-a-console) depends on the package at that same version, so that the pages and the server are one release. An update is the next tag, a new commit there. |
+| Everything else | Derived and shown in the plan: the size's numbers, the names (`console` for the cluster and the database, `api` and `worker` for the services, `console-files-<account id>` for the bucket), the generated secrets (`AUTH_SECRET`, the database password), the variables of [deploy/README.md](/deploy/README.md) with the tunnel's settings (`TRUSTED_PROXIES=127.0.0.1,::1`, `CLIENT_IP_HEADER=cf-connecting-ip`, `HTTP_KEEP_ALIVE_SECONDS=100`) and the bucket read and written as the task's own role (`S3_CREDENTIALS=platform`), so that no key exists for it; the connector's image, mirrored into the organization's image repository; the estimate of this size and the next, the budget alert at one and a half times the estimate, the rate limiting rule on the sign-in paths, and what the person does once. |
 
 ## Workflow
 
@@ -61,7 +61,7 @@ Each phase produces a named artifact and ends with one line to the person. The p
 
 ### Phase 1: Access
 
-Produces the **access record**: the account id, the region, the default VPC and its subnets, the Cloudflare account and the zone of the domain (or none yet), the git host owner. Make the run's folder with its `scratch/` subfolder and `.gitignore`; install the `console` command and copy this skill's scripts into `scratch/`; import the key into the profile `console` and read the token from its file, as access.md says, and verify each with the harmless calls there; report a missing permission now, with the row to add, not at the step that fails.
+Produces the **access record**: the account id, the region, the default VPC and its subnets, the Cloudflare account and the zone of the domain (or none yet; or one that serves the organization's site already), the git host owner. Make the run's folder with its `scratch/` subfolder and `.gitignore`; install the `console` command and copy this skill's scripts into `scratch/`; import the key into the profile `console` and read the token from its file, as access.md says, and verify each with the harmless calls there. What a harmless call can show, report now with the row to add: an action the deployer's policy lacks. A Cloudflare token's permissions show only at the first creation, since Read lists what Edit makes, so the step that fails names the row (resources.md "When a step fails").
 
 ### Phase 2: Plan and estimate
 
@@ -69,7 +69,7 @@ Produces the **plan**, shown at the checkpoint. From the answers: the size and w
 
 ### Phase 3: Foundation
 
-Produces the **resource record**: each resource with its name and id. In this order: the zone at Cloudflare, so that nameservers propagate meanwhile; the network and its two security groups; the database, started, and waited for while the rest is made; the bucket and its keys; the image repository, the log group, the roles, the cluster; the tunnel, the hostname, always-HTTPS and the rate limiting rule; the parameters, generated and derived, from the secrets file. Then, the hostname being known, the message for each secret the person holds (access.md "The OAuth app", "The OAuth client"): "Save it in the secrets file as the line I show, or say `later` and that way of signing in stays off until it is set." A value the person pastes into the chat instead is written into the file by the agent's file tool, never repeated, and the person is told to generate a new one once the run is over, since the chat kept a copy; the new one goes in as "a secret rotated" of the record.
+Produces the **resource record**: each resource with its name and id. In this order: the zone at Cloudflare, with the records the domain serves already found by Cloudflare's scan and checked by the person against their registrar's DNS page, so that nameservers propagate meanwhile; the network and its two security groups; the database, started, and waited for while the rest is made; the bucket; the image repository, the log group, the roles, the task's with the bucket's policy, the cluster; the tunnel, the hostname, always-HTTPS for the hostname and the rate limiting rule; the parameters, generated and derived, from the secrets file. Then, the hostname being known, the message for each secret the person holds (access.md "The OAuth app", "The OAuth client"): "Save it in the secrets file as the line I show, or say `later` and that way of signing in stays off until it is set." A value the person pastes into the chat instead is written into the file by the agent's file tool, never repeated, and the person is told to generate a new one once the run is over, since the chat kept a copy; the new one goes in as "a secret rotated" of the record.
 
 ### Phase 4: The deployment repository
 
@@ -77,7 +77,7 @@ Produces the **repository**: `deploy/console.env`, the task definitions `deploy/
 
 ### Phase 5: Live
 
-Produces the **live address**. The zone is active (else the wait of "How the person is involved"); `https://<hostname>/readyz` answers `200` through Cloudflare; the page shows the sign-in buttons of the providers set (none set: the stop of "How the person is involved"); the tunnel shows a connector; the log says `api listening`; the services are stable. Create the budget alert. Report the address.
+Produces the **live address**. The zone is active (else the wait of "How the person is involved"); `https://<hostname>/readyz` answers `200` through Cloudflare; the page shows the sign-in buttons of the providers set (none set: the stop of "How the person is involved"); the tunnel shows a connector; the log says `api listening` and `files go to the bucket`; the rollout is complete. Create the budget alert. Report the address.
 
 ### Phase 6: The first people
 
@@ -85,7 +85,7 @@ Produces the **first administrator and the first project**. Tell the person: "Op
 
 ### Phase 7: Proof
 
-Produces the **proof**: `console task new "Deployment check"` with a body that says what this run deployed, `console take <number>` (the number and the run's id come from the two commands' `--json` answers), `console hand-in ./deployment-check.md --label "the check"` with a small file written for it, `console run <id> --json` showing the file with its hash, the object under that hash in the bucket (`aws s3api head-object`), and `console finish --summary "<what was deployed, and what is owed>"`. The task stays on the board as the first record of the deployment.
+Produces the **proof**: `console task new "Deployment check"` with a body that says what this run deployed, `console take <number>` (`task new --json` answers the task, whose `.number` this is; `take --json` answers the run and the task, and the run's id is `.run.id`), `console hand-in scratch/deployment-check.md --label "the check"` with a small file written for it, `console run <id> --json` showing the file with its hash, the object under that hash in the bucket (`aws s3api head-object`), and `console finish --summary "<what was deployed, and what is owed>"`. The task stays on the board as the first record of the deployment.
 
 ### Phase 8: Record and delivery
 
@@ -93,7 +93,7 @@ Produces **`DEPLOY.md`** in the repository, from the template in resources.md: w
 
 ### Running it again
 
-The same skill, from phase 2, with the plan naming only what changes: a new version (the commit in `deploy/console.env`, a push), the next size (the numbers in the task definitions and a push; the database's class with one command, as sizing.md "Growing" says), a member added or removed (`MEMBERS` and `ADMINS` in `deploy/api.task.json`, a push), a secret rotated (the parameter overwritten, the service rolled), the console paused or removed (resources.md "Removing"). Each is confirmed at the plan, and the record is updated with it.
+The same skill, from phase 2, with the plan naming only what changes: a new version (the next release tag's commit as `CONSOLE_REF` in `deploy/console.env`, with `console-ui/` moved to the same version of the package when there is one, a push), a new connector (`CLOUDFLARED_VERSION` there, a push), the next size (the numbers in the task definitions and a push; the database's class with one command, as sizing.md "Growing" says), a member added or removed (`MEMBERS` and `ADMINS` in `deploy/api.task.json`, a push), a secret rotated (the parameter overwritten, the service rolled), the console paused or removed (resources.md "Removing"). Each is confirmed at the plan, and the record is updated with it.
 
 ### Verdicts
 
@@ -113,7 +113,7 @@ The same skill, from phase 2, with the plan naming only what changes: a new vers
 5. Nothing of the deployment listens on the internet: the tasks' security group has no inbound rule, the database is not publicly accessible, the bucket blocks public access, and the hostname reaches the console only through the tunnel.
 6. Names and ids go into the repository and the record; a value a secret scanner would flag never does, and `scratch/`, the key file and the token file never enter git. Every file the repository gets is shown before it is pushed.
 7. What was created is kept and recorded, never silently deleted; removing the deployment is a run of its own, asked for, and confirmed resource by resource.
-8. The console's contract holds on every rollout: `migrate` runs and exits `0` before the new `api` and `worker` start, the stop timeout stays above the shutdown grace period, and no secret is a build argument.
+8. The console's contract holds on every rollout: `migrate` runs and exits `0` before the new `api` and `worker` start, as the one-off task of the workflow, or, without a pipeline, as a container of every task of both roles that its own container waits on (resources.md "Without a pipeline"); the stop timeout stays above the shutdown grace period, and no secret is a build argument.
 
 ## Terms
 
@@ -121,6 +121,7 @@ The same skill, from phase 2, with the plan naming only what changes: a new vers
 |---|---|
 | Size | `small`, `medium` or `large`: the numbers of sizing.md, chosen by how many people. |
 | The deployer | The IAM user whose key the agent acts with, as the profile `console` of the AWS CLI. |
+| The task's role | The role the containers run as, `console-task`, whose credentials the platform hands them and renews: it may read and write the bucket, and nothing else; no key exists for the files. |
 | The run's folder | The folder the person chose, which becomes the deployment repository; `scratch/`, the key file and the token file in it never enter git; the secrets file is beside it, in the folder above. |
 | The tunnel | The Cloudflare Tunnel whose connector runs beside the `api` container; the hostname's traffic comes in through it and nothing else does. |
 | Task, service | On ECS, a task is the containers of one role running together; a service keeps the wanted number of tasks running and rolls them to a new definition. |

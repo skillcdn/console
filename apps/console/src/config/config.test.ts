@@ -342,9 +342,12 @@ describe("a bucket", () => {
       endpoint: "https://s3.example.test",
       bucket: "console-files",
       region: "us-east-1",
-      accessKeyId: "AKIAEXAMPLE",
-      secretAccessKey: "the-secret-of-the-example-keys",
-      sessionToken: undefined,
+      credentials: {
+        kind: "keys",
+        accessKeyId: "AKIAEXAMPLE",
+        secretAccessKey: "the-secret-of-the-example-keys",
+        sessionToken: undefined,
+      },
       keyPrefix: "",
       pathStyle: true,
     });
@@ -365,8 +368,7 @@ describe("a bucket", () => {
     );
     expect(blobs.bucket).toMatchObject({
       region: "eu-west-1",
-      secretAccessKey: "from-file",
-      sessionToken: "a-temporary-token",
+      credentials: { secretAccessKey: "from-file", sessionToken: "a-temporary-token" },
       keyPrefix: "console/files/",
       pathStyle: false,
     });
@@ -382,9 +384,124 @@ describe("a bucket", () => {
     ]);
     expect(
       problemsOf({ DATABASE_URL, S3_REGION: "eu-west-1", S3_PATH_STYLE: "false" }).problems,
-    ).toEqual([
-      "S3_REGION, S3_PATH_STYLE: read only with S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY set",
+    ).toEqual(["S3_REGION, S3_PATH_STYLE: read only with S3_ENDPOINT, S3_BUCKET set"]);
+    expect(problemsOf({ DATABASE_URL, S3_CREDENTIALS: "platform" }).problems).toEqual([
+      "S3_CREDENTIALS: read only with S3_ENDPOINT, S3_BUCKET set",
     ]);
+  });
+
+  it("takes the platform's credentials instead of keys, from the platform's own variables", () => {
+    const {
+      S3_SECRET_ACCESS_KEY: _secret,
+      S3_ACCESS_KEY_ID: _id,
+      ...platform
+    } = {
+      ...bucket,
+      S3_CREDENTIALS: "platform",
+    };
+    expect(
+      loadConfig(
+        { ...platform, AWS_CONTAINER_CREDENTIALS_RELATIVE_URI: "/v2/credentials/abc-123" },
+        noFiles,
+      ).blobs.bucket?.credentials,
+    ).toEqual({
+      kind: "platform",
+      url: "http://169.254.170.2/v2/credentials/abc-123",
+      authorization: undefined,
+      authorizationFile: undefined,
+    });
+    expect(
+      loadConfig(
+        {
+          ...platform,
+          AWS_CONTAINER_CREDENTIALS_FULL_URI: "http://169.254.170.23/v1/credentials",
+          AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE: "/var/run/credentials/token",
+        },
+        noFiles,
+      ).blobs.bucket?.credentials,
+    ).toEqual({
+      kind: "platform",
+      url: "http://169.254.170.23/v1/credentials",
+      authorization: undefined,
+      authorizationFile: "/var/run/credentials/token",
+    });
+    expect(
+      loadConfig(
+        {
+          ...platform,
+          AWS_CONTAINER_CREDENTIALS_FULL_URI: "https://credentials.example.test/task",
+          AWS_CONTAINER_AUTHORIZATION_TOKEN: "a-bearer-token",
+        },
+        noFiles,
+      ).blobs.bucket?.credentials,
+    ).toMatchObject({
+      url: "https://credentials.example.test/task",
+      authorization: "a-bearer-token",
+    });
+    // The relative address wins, as the platform's own tools have it.
+    expect(
+      loadConfig(
+        {
+          ...platform,
+          AWS_CONTAINER_CREDENTIALS_RELATIVE_URI: "/v2/credentials/abc-123",
+          AWS_CONTAINER_CREDENTIALS_FULL_URI: "http://localhost:8080/creds",
+        },
+        noFiles,
+      ).blobs.bucket?.credentials,
+    ).toMatchObject({ url: "http://169.254.170.2/v2/credentials/abc-123" });
+    // A console on keys does not mind the platform's variables, whatever they hold.
+    expect(
+      loadConfig({ ...bucket, AWS_CONTAINER_CREDENTIALS_FULL_URI: "not a url" }, noFiles).blobs
+        .bucket?.credentials,
+    ).toMatchObject({ kind: "keys" });
+  });
+
+  it("refuses half of the platform's address, keys beside it, and an address that is not the platform's", () => {
+    const {
+      S3_SECRET_ACCESS_KEY: _secret,
+      S3_ACCESS_KEY_ID: _id,
+      ...platform
+    } = {
+      ...bucket,
+      S3_CREDENTIALS: "platform",
+    };
+    expect(problemsOf(platform).problems).toEqual([
+      "S3_CREDENTIALS: the platform hands this container no credentials (neither AWS_CONTAINER_CREDENTIALS_RELATIVE_URI nor AWS_CONTAINER_CREDENTIALS_FULL_URI is set); run it with a role, or set the keys",
+    ]);
+    expect(
+      problemsOf({ ...platform, AWS_CONTAINER_CREDENTIALS_RELATIVE_URI: "v2/credentials" })
+        .problems,
+    ).toEqual(["AWS_CONTAINER_CREDENTIALS_RELATIVE_URI: must be a path"]);
+    for (const full of [
+      "not a url",
+      "http://credentials.example.test/task",
+      "http://169.254.169.254/latest/meta-data",
+      "ftp://127.0.0.1/creds",
+    ]) {
+      expect(
+        problemsOf({ ...platform, AWS_CONTAINER_CREDENTIALS_FULL_URI: full }).problems,
+        full,
+      ).toEqual([
+        "AWS_CONTAINER_CREDENTIALS_FULL_URI: must be an https URL, or http to the loopback or the platform's own address",
+      ]);
+    }
+    const error = problemsOf({
+      ...bucket,
+      S3_CREDENTIALS: "platform",
+      S3_SESSION_TOKEN: "a-temporary-token",
+      AWS_CONTAINER_CREDENTIALS_RELATIVE_URI: "/v2/credentials/abc-123",
+      AWS_CONTAINER_AUTHORIZATION_TOKEN: "a-bearer-token",
+      AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE: "/var/run/credentials/token",
+    });
+    expect(error.problems).toEqual([
+      "S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_SESSION_TOKEN: not read with S3_CREDENTIALS=platform; the keys or the platform, not both",
+      "AWS_CONTAINER_AUTHORIZATION_TOKEN and AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE are both set; use one",
+    ]);
+    expect(error.message).not.toContain("the-secret-of-the-example-keys");
+    expect(error.message).not.toContain("a-bearer-token");
+    expect(problemsOf({ ...bucket, S3_CREDENTIALS: "role" }).problems[0]).toContain(
+      "S3_CREDENTIALS",
+    );
   });
 
   it("refuses what is not a bucket name, a region, an origin or a prefix, without echoing a secret", () => {

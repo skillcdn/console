@@ -3,6 +3,7 @@ import process from "node:process";
 import { EVENTS_PAGE_LIMIT, MAX_TOKENS_PER_PERSON } from "@skillcdn/console/api";
 import { loadWebRoot, type WebRoot, WebRootError } from "@skillcdn/console/web";
 import type { Hono } from "hono";
+import { createContainerCredentials } from "../adapters/container-credentials.js";
 import { createGitHubProvider } from "../adapters/github-login.js";
 import { createGoogleProvider } from "../adapters/google-login.js";
 import { createPgBlobStore } from "../adapters/pg-blob-store.js";
@@ -29,6 +30,7 @@ import { Janitor } from "../jobs/janitor.js";
 import type { Logger } from "../logger.js";
 import { type BlobStore, BlobStoreError } from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
+import { fixedCredentials } from "../ports/credentials.js";
 import type { IdentityProvider } from "../ports/identity-provider.js";
 import type { SkillSource } from "../ports/skill-source.js";
 import { Skills, type SkillsConfig } from "../skills.js";
@@ -233,15 +235,25 @@ async function blobStoreOf(
   if (bucket === undefined) {
     return rows;
   }
+  const credentials =
+    bucket.credentials.kind === "keys"
+      ? fixedCredentials({
+          accessKeyId: bucket.credentials.accessKeyId,
+          secretAccessKey: bucket.credentials.secretAccessKey,
+          sessionToken: bucket.credentials.sessionToken,
+        })
+      : createContainerCredentials({
+          url: bucket.credentials.url,
+          authorization: bucket.credentials.authorization,
+          authorizationFile: bucket.credentials.authorizationFile,
+          clock: systemClock,
+          logger,
+        });
   const store = createS3BlobStore({
     endpoint: bucket.endpoint,
     bucket: bucket.bucket,
     region: bucket.region,
-    credentials: {
-      accessKeyId: bucket.accessKeyId,
-      secretAccessKey: bucket.secretAccessKey,
-      sessionToken: bucket.sessionToken,
-    },
+    credentials,
     keyPrefix: bucket.keyPrefix,
     pathStyle: bucket.pathStyle,
     clock: systemClock,
@@ -251,7 +263,10 @@ async function blobStoreOf(
   });
   try {
     await store.probe();
-    logger.info({ bucket: bucket.bucket, endpoint: bucket.endpoint }, "files go to the bucket");
+    logger.info(
+      { bucket: bucket.bucket, endpoint: bucket.endpoint, credentials: bucket.credentials.kind },
+      "files go to the bucket",
+    );
   } catch (error) {
     if (
       error instanceof BlobStoreError &&

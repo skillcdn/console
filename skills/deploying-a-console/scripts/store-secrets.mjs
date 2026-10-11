@@ -5,7 +5,6 @@
 //   node store-secrets.mjs set <file> <NAME>                  the value is standard input
 //   node store-secrets.mjs derive <file> <NAME> <template>    {{OTHER}} in the template is replaced
 //   node store-secrets.mjs render <file> <in> <out>           a JSON file with {{NAME}} placeholders filled
-//   node store-secrets.mjs key <file> <iam user>              creates an access key for the user and stores both halves
 //   node store-secrets.mjs store <file> <prefix>              every value as a SecureString parameter <prefix>/<NAME>
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -15,7 +14,7 @@ import process from "node:process";
 
 const [mode, file, ...rest] = process.argv.slice(2);
 const usage = () => {
-  process.stderr.write("usage: node store-secrets.mjs set|derive|render|key|store <file> ...\n");
+  process.stderr.write("usage: node store-secrets.mjs set|derive|render|store <file> ...\n");
   process.exit(2);
 };
 if (mode === undefined || file === undefined) {
@@ -71,19 +70,6 @@ switch (mode) {
       usage();
     }
     writeFileSync(output, fill(read(), readFileSync(input, "utf8")), { mode: 0o600 });
-    break;
-  }
-  case "key": {
-    const [user] = rest;
-    if (user === undefined) {
-      usage();
-    }
-    const answer = JSON.parse(aws(["iam", "create-access-key"], { UserName: user }));
-    write({
-      ...read(),
-      S3_ACCESS_KEY_ID: answer.AccessKey.AccessKeyId,
-      S3_SECRET_ACCESS_KEY: answer.AccessKey.SecretAccessKey,
-    });
     break;
   }
   case "store": {

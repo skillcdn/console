@@ -69,7 +69,7 @@
       "Resource": "*"
     },
     {
-      "Sid": "RolesAndUsersOfTheConsole",
+      "Sid": "RolesOfTheConsole",
       "Effect": "Allow",
       "Action": [
         "iam:CreateRole",
@@ -83,18 +83,9 @@
         "iam:ListAttachedRolePolicies",
         "iam:ListRolePolicies",
         "iam:PassRole",
-        "iam:TagRole",
-        "iam:CreateUser",
-        "iam:DeleteUser",
-        "iam:GetUser",
-        "iam:PutUserPolicy",
-        "iam:DeleteUserPolicy",
-        "iam:CreateAccessKey",
-        "iam:DeleteAccessKey",
-        "iam:ListAccessKeys",
-        "iam:TagUser"
+        "iam:TagRole"
       ],
-      "Resource": ["arn:aws:iam::*:role/console-*", "arn:aws:iam::*:user/console-*"]
+      "Resource": "arn:aws:iam::*:role/console-*"
     },
     {
       "Sid": "ServiceLinkedRolesAndTheGitHostProvider",
@@ -105,6 +96,16 @@
         "iam:GetOpenIDConnectProvider",
         "iam:ListOpenIDConnectProviders",
         "iam:TagOpenIDConnectProvider"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "Gauges",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:GetMetricData",
+        "cloudwatch:GetMetricStatistics",
+        "cloudwatch:ListMetrics"
       ],
       "Resource": "*"
     },

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { pino } from "pino";
 import { describe, expect, it } from "vitest";
 import { type BlobStore, BlobStoreError } from "../ports/blob-store.js";
+import { CredentialsError, fixedCredentials } from "../ports/credentials.js";
 import { amzDate, createS3BlobStore, type S3Options, signS3Request } from "./s3-blob-store.js";
 
 // The signing against the examples Amazon publishes for Signature Version 4 with the S3 API
@@ -207,7 +208,7 @@ function storeOn(
     endpoint: "https://store.test",
     bucket: "files",
     region: "us-east-1",
-    credentials: CREDENTIALS,
+    credentials: fixedCredentials(CREDENTIALS),
     keyPrefix: "console/",
     pathStyle: true,
     clock: { now: () => new Date("2026-10-11T10:00:00Z") },
@@ -255,7 +256,11 @@ describe("the blob store in a bucket", () => {
   it("puts the bucket in the host when told to, and signs a session token with the rest", async () => {
     const credentials = { ...CREDENTIALS, sessionToken: "a-temporary-token" };
     const bucket = createBucket({ bucket: "files", credentials, pathStyle: false });
-    const store = storeOn(bucket, { credentials, pathStyle: false, keyPrefix: "" });
+    const store = storeOn(bucket, {
+      credentials: fixedCredentials(credentials),
+      pathStyle: false,
+      keyPrefix: "",
+    });
     await store.put(bytes, new Date());
     expect(bucket.requests[0]).toMatchObject({ url: `https://files.store.test/${hash}` });
     expect(bucket.requests[0]?.headers.authorization).toContain(
@@ -290,7 +295,7 @@ describe("the blob store in a bucket", () => {
   it("names what a refusal says about the settings, and never throws anything else", async () => {
     const bucket = createBucket({ bucket: "files", credentials: CREDENTIALS });
     const wrongKeys = storeOn(bucket, {
-      credentials: { accessKeyId: "console", secretAccessKey: "not-the-secret" },
+      credentials: fixedCredentials({ accessKeyId: "console", secretAccessKey: "not-the-secret" }),
     });
     await expect(wrongKeys.put(bytes, new Date())).rejects.toMatchObject({
       code: "blob_store.forbidden",
@@ -325,5 +330,30 @@ describe("the blob store in a bucket", () => {
     expect(unreachable).toBeInstanceOf(BlobStoreError);
     expect(unreachable).toMatchObject({ code: "blob_store.unavailable" });
     expect((unreachable as BlobStoreError).cause).toBeInstanceOf(TypeError);
+  });
+
+  it("signs each request with what its source answers now, and is unavailable while the source is", async () => {
+    const bucket = createBucket({ bucket: "files", credentials: CREDENTIALS });
+    let answer: () => Promise<typeof CREDENTIALS> = () =>
+      Promise.reject(
+        new CredentialsError("the platform's credentials endpoint could not be reached"),
+      );
+    const store = storeOn(bucket, { credentials: { credentials: () => answer() } });
+    const away = await store.put(bytes, new Date()).catch((error: unknown) => error);
+    expect(away).toMatchObject({
+      code: "blob_store.unavailable",
+      message: "the credentials for the bucket could not be read",
+    });
+    expect((away as BlobStoreError).cause).toBeInstanceOf(CredentialsError);
+    expect(bucket.requests).toHaveLength(0);
+
+    answer = () => Promise.resolve({ ...CREDENTIALS, sessionToken: "the-first-token" });
+    await store.put(bytes, new Date());
+    answer = () => Promise.resolve({ ...CREDENTIALS, sessionToken: "the-second-token" });
+    expect(await store.get(hash)).toEqual(bytes);
+    expect(bucket.requests.map((request) => request.headers["x-amz-security-token"])).toEqual([
+      "the-first-token",
+      "the-second-token",
+    ]);
   });
 });

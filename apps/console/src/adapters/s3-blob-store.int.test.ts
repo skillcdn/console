@@ -11,15 +11,10 @@ import { pino } from "pino";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "../db/testing.js";
 import type { BlobStore } from "../ports/blob-store.js";
+import { type Credentials, fixedCredentials } from "../ports/credentials.js";
 import { createFixtureProvider } from "../testing/fixture-provider.js";
 import { createHarness, type Harness, SIGN_IN_URL } from "../testing/harness.js";
-import {
-  amzDate,
-  createS3BlobStore,
-  type S3Credentials,
-  type S3Options,
-  signS3Request,
-} from "./s3-blob-store.js";
+import { amzDate, createS3BlobStore, type S3Options, signS3Request } from "./s3-blob-store.js";
 
 // The store against a real bucket with the S3 API: the one `deploy/compose.dev.yaml` runs, or
 // wherever TEST_S3_URL points, as `http://<access key>:<secret>@<host>:<port>/<bucket>`. The
@@ -36,7 +31,7 @@ const sha256 = (bytes: Uint8Array | string) => createHash("sha256").update(bytes
 interface Bucket {
   readonly endpoint: string;
   readonly bucket: string;
-  readonly credentials: S3Credentials;
+  readonly credentials: Credentials;
 }
 
 function bucketOf(url: string): Bucket {
@@ -104,7 +99,7 @@ const storeOn = (overrides: Partial<S3Options> = {}) =>
     endpoint: at.endpoint,
     bucket: at.bucket,
     region: "us-east-1",
-    credentials: at.credentials,
+    credentials: fixedCredentials(at.credentials),
     keyPrefix: prefix,
     pathStyle: true,
     clock: { now: () => new Date() },
@@ -156,7 +151,10 @@ describe("the blob store on a bucket with the S3 API", () => {
 
   it("says what a refusal means: the keys, the bucket, or the way to it", async () => {
     const wrongKeys = storeOn({
-      credentials: { accessKeyId: at.credentials.accessKeyId, secretAccessKey: "not-the-secret" },
+      credentials: fixedCredentials({
+        accessKeyId: at.credentials.accessKeyId,
+        secretAccessKey: "not-the-secret",
+      }),
     });
     await expect(wrongKeys.put(bytes, new Date())).rejects.toMatchObject({
       code: "blob_store.forbidden",
@@ -249,7 +247,10 @@ describe("a file handed in through the REST API", () => {
     const refused = createHarness(testDatabase, {
       providers: [createFixtureProvider()],
       blobs: storeOn({
-        credentials: { accessKeyId: at.credentials.accessKeyId, secretAccessKey: "wrong" },
+        credentials: fixedCredentials({
+          accessKeyId: at.credentials.accessKeyId,
+          secretAccessKey: "wrong",
+        }),
       }),
     });
     const again = await refused.signIn("alice");

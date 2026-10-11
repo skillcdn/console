@@ -3,14 +3,15 @@ import { MAX_FILE_BYTES } from "@skillcdn/console/api";
 import type { Logger } from "../logger.js";
 import { type BlobStore, BlobStoreError, type StoredBlob } from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
+import type { Credentials, CredentialsSource } from "../ports/credentials.js";
 import { type FetchLike, readBody } from "./upstream.js";
 
 // The blob store in a bucket, through the S3 API (ADR-0016): one object per file, under the
 // SHA-256 of its bytes, with a prefix the operator chooses. The console signs its own requests
-// (Signature Version 4, the way every store with the S3 API checks them) with the one pair of
-// keys it is configured with, so that nothing here names a cloud and no SDK comes along. What
-// the bucket answers is bounded and checked: the bytes read back must be the bytes of the hash
-// they were asked by.
+// (Signature Version 4, the way every store with the S3 API checks them) with the credentials
+// its source answers, the one pair it is configured with or the platform's own (ADR-0018), so
+// that nothing here names a cloud and no SDK comes along. What the bucket answers is bounded
+// and checked: the bytes read back must be the bytes of the hash they were asked by.
 
 /** The SHA-256 of nothing, which a request without a body is signed with. */
 const EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
@@ -19,20 +20,14 @@ const DEFAULT_TIMEOUT_MS = 60_000;
 /** An error from the bucket is a short XML document; this bounds what is read of one for the log. */
 const MAX_ERROR_BYTES = 4096;
 
-export interface S3Credentials {
-  readonly accessKeyId: string;
-  readonly secretAccessKey: string;
-  /** With temporary credentials, the token that comes with them. */
-  readonly sessionToken?: string | undefined;
-}
-
 export interface S3Options {
   /** The origin of the store, such as `https://s3.us-east-1.amazonaws.com` or `http://127.0.0.1:7070`. */
   readonly endpoint: string;
   readonly bucket: string;
   /** The region the signature names; `us-east-1` where the store has none. */
   readonly region: string;
-  readonly credentials: S3Credentials;
+  /** Where the credentials of each request come from: asked before every request, kept by nobody here. */
+  readonly credentials: CredentialsSource;
   /** What every key begins with: empty, or folders ending with a slash. */
   readonly keyPrefix: string;
   /** The bucket in the path (`endpoint/bucket/key`), or in the host (`bucket.endpoint/key`). */
@@ -64,7 +59,7 @@ export interface SigningInput {
   /** The SHA-256 of the body, in hex, as `x-amz-content-sha256` carries it. */
   readonly payloadHash: string;
   readonly now: Date;
-  readonly credentials: S3Credentials;
+  readonly credentials: Credentials;
   readonly region: string;
 }
 
@@ -155,7 +150,7 @@ async function errorCodeOf(response: Response): Promise<string | undefined> {
 }
 
 export function createS3BlobStore(options: S3Options): S3BlobStore {
-  const { logger, clock, credentials, region } = options;
+  const { logger, clock, region } = options;
   const send = options.fetch ?? ((input, init) => fetch(input, init));
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
@@ -182,6 +177,14 @@ export function createS3BlobStore(options: S3Options): S3BlobStore {
     payloadHash: string,
   ): Promise<Response> => {
     const url = urlOf(key);
+    let credentials: Credentials;
+    try {
+      credentials = await options.credentials.credentials();
+    } catch (error) {
+      throw new BlobStoreError("unavailable", "the credentials for the bucket could not be read", {
+        cause: error,
+      });
+    }
     const now = clock.now();
     const signed: Record<string, string> = {
       host: url.host,
