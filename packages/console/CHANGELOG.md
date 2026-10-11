@@ -1,5 +1,19 @@
 # @skillcdn/console
 
+## 0.1.13
+
+### Patch Changes
+
+- [`b4c2f7b`](https://github.com/skillcdn/console/commit/b4c2f7b54d8bc4f1d488ea3eb376b1c14f594f96) Thanks [@samo-lucid](https://github.com/samo-lucid)! - The code `console login` shows is good for thirty minutes rather than ten, so that an agent waiting for a person who is away from their desk does not lose it; the pages say so.
+
+- [`b4c2f7b`](https://github.com/skillcdn/console/commit/b4c2f7b54d8bc4f1d488ea3eb376b1c14f594f96) Thanks [@samo-lucid](https://github.com/samo-lucid)! - A token configures as its person does ([ADR-0021](https://github.com/skillcdn/console/blob/main/docs/adr/0021-a-token-configures-as-its-person-does.md)).
+  
+  - **The command.** Six commands for what an administrator or an owner does on the pages, so that an agent sets up what it is told to instead of handing its person a list of clicks: `people` and `person role <login> <admin|member>`; `project <key>`, `project new <key> "<name>"`, `project edit <key>` and `project icon <key> <file>|--remove`; `members`, `member add|role|remove <login>`; `category new|edit|remove <key>`. `console help` lists them under "Configuring, as the person", each with its limits and its refusals by code; the console decides with the same roles as on the pages, and refuses with `auth.forbidden` where the person may not. The tokens themselves have no command, by design.
+  - **The client.** Every call a session may make, a token may make, within the person's roles: `createProject`, `updatePerson`, a project's `update`, `setIcon`, `addMember`, `updateMember` and `removeMember`, `createCategory`, `updateCategory`, `removeCategory`, and `updateMe` for the language; what they write names the agent beside the person. Only the tokens themselves, and the approval of a connection, stay a session's (`auth.session_required`).
+  - **The default UI.** A console of a person's own, served on a token, offers the new project, the settings, the members, the categories and the people's roles as the organization's console does, and keeps the choice of language on the person rather than in the browser; only the Agents pages stay on the organization's console, signed in.
+
+- [`b4c2f7b`](https://github.com/skillcdn/console/commit/b4c2f7b54d8bc4f1d488ea3eb376b1c14f594f96) Thanks [@samo-lucid](https://github.com/samo-lucid)! - The README says that the command runs on Node.js 22 today, checked by hand on each release; the package keeps 24 as the floor it states and is tested on.
+
 ## 0.1.12
 
 ### Patch Changes
