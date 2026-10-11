@@ -7,6 +7,8 @@ import { isDocumentPath } from "./documents.js";
 import {
   MAX_AGENT_LENGTH,
   MAX_BODY_LENGTH,
+  MAX_CATEGORY_KEY_LENGTH,
+  MAX_CATEGORY_NAME_LENGTH,
   MAX_DOCUMENT_LENGTH,
   MAX_DOCUMENT_PATH_LENGTH,
   MAX_FILE_NAME_LENGTH,
@@ -32,7 +34,9 @@ import {
 import { hasForbiddenCodePoint } from "./text.js";
 import {
   ARTIFACT_KINDS,
+  CATEGORY_COLORS,
   EVENT_KINDS,
+  GOAL_STATES,
   LINK_SOURCES,
   PERSON_ROLES,
   PROJECT_ROLES,
@@ -70,6 +74,8 @@ const url = z.string().check(z.trim(), z.maxLength(MAX_URL_LENGTH), z.url({ prot
 const uuid = z.uuid();
 /** An ISO 8601 instant, as the server writes it. */
 const instant = z.iso.datetime();
+/** A calendar day (`2026-10-20`): a plan is made in days, wherever the people are (ADR-0019). */
+const day = z.iso.date();
 const count = z.int().check(z.nonnegative());
 
 /** A person of the workspace, as the pages show them. Nothing here is a secret. */
@@ -230,6 +236,48 @@ export const restTaskLinkSchema = z.object({
 });
 export type RestTaskLink = z.infer<typeof restTaskLinkSchema>;
 
+/**
+ * A category's key: what the command and the filters say, as a project's key is. Lowercase
+ * letters, digits and hyphens; immutable once the category is made.
+ */
+const categoryKey = z
+  .string()
+  .check(
+    z.maxLength(MAX_CATEGORY_KEY_LENGTH),
+    z.regex(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/, "must be lowercase letters, digits and hyphens"),
+  );
+
+/** A category tasks are sorted into (ADR-0019): the workspace's own word for a kind of work. */
+export const restCategorySchema = z.object({
+  key: categoryKey,
+  name: z.string(),
+  /** One of the names the pages paint a category in. */
+  color: z.enum(CATEGORY_COLORS),
+  createdAt: instant,
+  updatedAt: instant,
+});
+export type RestCategory = z.infer<typeof restCategorySchema>;
+
+/** `GET /api/v1/categories`: the workspace's categories, by name. */
+export const restCategoriesSchema = z.object({ items: z.array(restCategorySchema) });
+export type RestCategories = z.infer<typeof restCategoriesSchema>;
+
+/** What `POST /api/v1/categories` is sent, by an administrator: the key, the name, and a colour or the plain one. */
+export const restCategoryInputSchema = z.object({
+  key: categoryKey,
+  name: line(MAX_CATEGORY_NAME_LENGTH),
+  /** Left out: `gray`. */
+  color: z.optional(z.enum(CATEGORY_COLORS)),
+});
+export type RestCategoryInput = z.infer<typeof restCategoryInputSchema>;
+
+/** What `PATCH /api/v1/categories/<key>` is sent: only what changes; the key does not. */
+export const restCategoryPatchSchema = z.object({
+  name: z.optional(line(MAX_CATEGORY_NAME_LENGTH)),
+  color: z.optional(z.enum(CATEGORY_COLORS)),
+});
+export type RestCategoryPatch = z.infer<typeof restCategoryPatchSchema>;
+
 export const restTaskSchema = z.object({
   id: uuid,
   /** The task's number in its project, the one people say out loud. */
@@ -243,6 +291,18 @@ export const restTaskSchema = z.object({
   assignee: z.nullable(restPersonSchema),
   /** The task this one is part of, or `null`. */
   parentId: z.nullable(uuid),
+  /** The category the task is sorted into, as the workspace keeps it, or `null`. */
+  category: z.nullable(
+    z.object({ key: z.string(), name: z.string(), color: z.enum(CATEGORY_COLORS) }),
+  ),
+  /** The goal of the project's roadmap the task works towards, or `null`. */
+  goalId: z.nullable(uuid),
+  /** The plan (ADR-0019): the day the work is meant to begin, and the day it is due, each or `null`. */
+  startsOn: z.nullable(day),
+  dueOn: z.nullable(day),
+  /** What happened: when the task was first moved past ready, and when it was moved to done; each or `null`. The board keeps both. */
+  startedAt: z.nullable(instant),
+  doneAt: z.nullable(instant),
   links: z.array(restTaskLinkSchema),
   /** How many decisions about this task wait for a person. */
   openDecisions: count,
@@ -270,6 +330,13 @@ export const restTaskInputSchema = z.object({
   priority: z.optional(z.enum(TASK_PRIORITIES)),
   assigneeId: z.optional(z.nullable(uuid)),
   parentId: z.optional(z.nullable(uuid)),
+  /** The key of a category of the workspace, or `null` for none. */
+  category: z.optional(z.nullable(categoryKey)),
+  /** A goal of the project, or `null` for none. */
+  goalId: z.optional(z.nullable(uuid)),
+  /** The plan, in days; the due day is not before the start. */
+  startsOn: z.optional(z.nullable(day)),
+  dueOn: z.optional(z.nullable(day)),
   links: z.optional(z.array(taskLinkInput).check(z.maxLength(MAX_LINKS))),
 });
 export type RestTaskInput = z.infer<typeof restTaskInputSchema>;
@@ -282,9 +349,67 @@ export const restTaskPatchSchema = z.object({
   priority: z.optional(z.enum(TASK_PRIORITIES)),
   assigneeId: z.optional(z.nullable(uuid)),
   parentId: z.optional(z.nullable(uuid)),
+  category: z.optional(z.nullable(categoryKey)),
+  goalId: z.optional(z.nullable(uuid)),
+  startsOn: z.optional(z.nullable(day)),
+  dueOn: z.optional(z.nullable(day)),
   links: z.optional(z.array(taskLinkInput).check(z.maxLength(MAX_LINKS))),
 });
 export type RestTaskPatch = z.infer<typeof restTaskPatchSchema>;
+
+/** How many tasks a goal has in each state: what its progress is read from, live. */
+export const restTaskCountsSchema = z.object({
+  idea: count,
+  ready: count,
+  in_progress: count,
+  in_review: count,
+  done: count,
+  dropped: count,
+});
+export type RestTaskCounts = z.infer<typeof restTaskCountsSchema>;
+
+/**
+ * A goal of a project's roadmap (ADR-0019): what the project works towards, with the day it is
+ * meant to be reached by, and how far the tasks under it are.
+ */
+export const restGoalSchema = z.object({
+  id: uuid,
+  title: z.string(),
+  /** Markdown: what reaching the goal means. Shown as text or rendered to elements, never as HTML. */
+  body: z.string(),
+  state: z.enum(GOAL_STATES),
+  /** The day the goal is meant to be reached by, or `null`. */
+  dueOn: z.nullable(day),
+  createdBy: restPersonSchema,
+  /** The tasks that work towards it, counted by state. */
+  taskCounts: restTaskCountsSchema,
+  createdAt: instant,
+  updatedAt: instant,
+});
+export type RestGoal = z.infer<typeof restGoalSchema>;
+
+/** `GET /api/v1/projects/<key>/goals`: the roadmap, the active goals first. */
+export const restGoalsSchema = z.object({ items: z.array(restGoalSchema) });
+export type RestGoals = z.infer<typeof restGoalsSchema>;
+
+/** What `POST /api/v1/projects/<key>/goals` is sent: the title, and the rest with defaults. */
+export const restGoalInputSchema = z.object({
+  title: line(MAX_TITLE_LENGTH),
+  body: z.optional(body),
+  /** Left out: `planned`. */
+  state: z.optional(z.enum(GOAL_STATES)),
+  dueOn: z.optional(z.nullable(day)),
+});
+export type RestGoalInput = z.infer<typeof restGoalInputSchema>;
+
+/** What `PATCH /api/v1/projects/<key>/goals/<id>` is sent: only what changes. */
+export const restGoalPatchSchema = z.object({
+  title: z.optional(line(MAX_TITLE_LENGTH)),
+  body: z.optional(body),
+  state: z.optional(z.enum(GOAL_STATES)),
+  dueOn: z.optional(z.nullable(day)),
+});
+export type RestGoalPatch = z.infer<typeof restGoalPatchSchema>;
 
 export const restDecisionOptionSchema = z.object({
   /** What an answer names: stable for the life of the decision. */
@@ -328,6 +453,19 @@ export type RestDecision = z.infer<typeof restDecisionSchema>;
 export const restDecisionsSchema = z.object({ items: z.array(restDecisionSchema) });
 export type RestDecisions = z.infer<typeof restDecisionsSchema>;
 
+/** The project a thing on a person's plate belongs to, named for the page to say and link it. */
+const projectRef = z.object({ key: projectKey, name: z.string() });
+
+/**
+ * `GET /api/v1/work`: what is on the asker's plate across the projects they may see (ADR-0019):
+ * the open tasks assigned to them, and the decisions that wait for a person, each with its project.
+ */
+export const restWorkSchema = z.object({
+  tasks: z.array(z.object({ project: projectRef, task: restTaskSchema })),
+  decisions: z.array(z.object({ project: projectRef, decision: restDecisionSchema })),
+});
+export type RestWork = z.infer<typeof restWorkSchema>;
+
 /** What `POST /api/v1/projects/<key>/decisions` is sent: the question, its context, and the options. */
 export const restDecisionInputSchema = z.object({
   question: line(MAX_QUESTION_LENGTH),
@@ -363,7 +501,7 @@ export type RestAnswerInput = z.infer<typeof restAnswerInputSchema>;
 export const restEventDataSchema = z.object({
   number: z.optional(z.int()),
   title: z.optional(z.string()),
-  /** For `task.updated`, `project.updated` and `decision.updated`: which fields changed. */
+  /** For `task.updated`, `project.updated`, `goal.updated` and `decision.updated`: which fields changed. */
   fields: z.optional(z.array(z.string())),
   /** For the events about a document: its path, and the version written. */
   path: z.optional(z.string()),
@@ -406,6 +544,8 @@ export const restEventSchema = z.object({
   runId: z.nullable(uuid),
   /** The document it is about, or `null`. */
   documentId: z.nullable(uuid),
+  /** The goal it is about, or `null`. */
+  goalId: z.nullable(uuid),
   data: restEventDataSchema,
   createdAt: instant,
 });

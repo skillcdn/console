@@ -10,6 +10,8 @@ import {
   projectPath,
   REST_ROUTES,
   type RestTask,
+  restCategoriesSchema,
+  restCategorySchema,
   restClaimSchema,
   restConnectionSchema,
   restConnectRequestSchema,
@@ -19,6 +21,8 @@ import {
   restDocumentsSchema,
   restErrorSchema,
   restEventsSchema,
+  restGoalSchema,
+  restGoalsSchema,
   restMemberSchema,
   restMembersSchema,
   restMeSchema,
@@ -33,6 +37,7 @@ import {
   restTokensSchema,
   restVersionSchema,
   restVersionsSchema,
+  restWorkSchema,
 } from "@skillcdn/console/api";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "./db/testing.js";
@@ -1522,5 +1527,304 @@ describe("skills", () => {
     expect(asked).toEqual(["/gh/acme/skills", "/gh/acme/writing"]);
     expect((await served.request(`${IN}/skills`)).status).toBe(401);
     await served.close();
+  });
+});
+
+describe("the schedule and the roadmap", () => {
+  const personId = async (login: string) =>
+    restPeopleSchema
+      .parse(await (await get(alice, REST_ROUTES.people)).json())
+      .items.find((person) => person.login === login)?.id ?? "";
+
+  it("keep a task's plan in days and its moments on the board, and narrow the board by them", async () => {
+    const planned = await createTask(alice, {
+      title: "Plan the launch",
+      startsOn: "2026-10-20",
+      dueOn: "2026-10-24",
+      category: "engineering",
+    });
+    expect(planned).toMatchObject({
+      startsOn: "2026-10-20",
+      dueOn: "2026-10-24",
+      startedAt: null,
+      doneAt: null,
+      goalId: null,
+      category: { key: "engineering", name: "Engineering", color: "blue" },
+    });
+    const bobId = await personId("bob");
+    const started = restTaskSchema.parse(
+      await (
+        await send(bob, "PATCH", `${IN}/tasks/${planned.id}`, {
+          state: "in_progress",
+          assigneeId: bobId,
+        })
+      ).json(),
+    );
+    expect(started.startedAt).not.toBeNull();
+    expect(started.doneAt).toBeNull();
+    const done = restTaskSchema.parse(
+      await (await send(bob, "PATCH", `${IN}/tasks/${planned.id}`, { state: "done" })).json(),
+    );
+    expect(done.doneAt).not.toBeNull();
+    expect(done.startedAt).toBe(started.startedAt);
+
+    const ids = async (query: string) =>
+      restTasksSchema
+        .parse(await (await get(bob, `${IN}/tasks?${query}`)).json())
+        .items.map((task) => task.id);
+    expect(await ids("category=engineering")).toContain(planned.id);
+    expect(await ids("category=design")).not.toContain(planned.id);
+    expect(await ids("dueBy=2026-10-24")).toContain(planned.id);
+    expect(await ids("dueBy=2026-10-23")).not.toContain(planned.id);
+    expect(await ids("open=false")).toContain(planned.id);
+    expect(await ids("open=true")).not.toContain(planned.id);
+    expect(await ids(`assignee=${bobId}`)).toContain(planned.id);
+
+    for (const [body, code] of [
+      [{ title: "x", startsOn: "2026-10-24", dueOn: "2026-10-20" }, "task.invalid_dates"],
+      [{ title: "x", dueOn: "next week" }, "request.invalid"],
+      [{ title: "x", dueOn: "2026-10-24T10:00:00Z" }, "request.invalid"],
+      [{ title: "x", category: "nothing" }, "task.invalid_category"],
+      [{ title: "x", category: "Not A Key" }, "request.invalid"],
+      [{ title: "x", goalId: "0199c4d8-0000-7000-8000-000000000099" }, "task.invalid_goal"],
+    ] as const) {
+      const response = await send(alice, "POST", `${IN}/tasks`, body);
+      expect(response.status, JSON.stringify(body)).toBe(400);
+      expect(await errorOf(response)).toBe(code);
+    }
+    for (const query of ["dueBy=soon", "goal=7", "assignee=bob", "category=Not%20A%20Key"]) {
+      const response = await get(alice, `${IN}/tasks?${query}`);
+      expect(response.status, query).toBe(400);
+      expect(await errorOf(response)).toBe("request.invalid");
+    }
+  });
+
+  it("set goals by an owner, count their tasks live, and refuse a member", async () => {
+    const set = await send(alice, "POST", `${IN}/goals`, {
+      title: "Ship v1",
+      body: "What it means.",
+      state: "active",
+      dueOn: "2026-11-15",
+    });
+    expect(set.status).toBe(201);
+    const goal = restGoalSchema.parse(await set.json());
+    expect(goal).toMatchObject({
+      title: "Ship v1",
+      state: "active",
+      dueOn: "2026-11-15",
+      taskCounts: { done: 0, in_progress: 0 },
+    });
+    expect(goal.createdBy.login).toBe("Alice");
+    // Bob works in the project and may not set its roadmap.
+    const byMember = await send(bob, "POST", `${IN}/goals`, { title: "Bob's" });
+    expect(byMember.status).toBe(403);
+    expect(await errorOf(byMember)).toBe("auth.forbidden");
+    const part = await createTask(bob, { title: "Part of it", goalId: goal.id, state: "done" });
+    expect(part.goalId).toBe(goal.id);
+    const listed = restGoalsSchema.parse(await (await get(bob, `${IN}/goals`)).json());
+    expect(listed.items.find((item) => item.id === goal.id)?.taskCounts.done).toBe(1);
+    expect(
+      restGoalSchema.parse(await (await get(bob, `${IN}/goals/${goal.id}`)).json()).taskCounts.done,
+    ).toBe(1);
+    const latest = await latestEventIn(alice);
+    const reached = await send(alice, "PATCH", `${IN}/goals/${goal.id}`, { state: "done" });
+    expect(reached.status).toBe(200);
+    expect(restGoalSchema.parse(await reached.json()).state).toBe("done");
+    expect((await send(bob, "PATCH", `${IN}/goals/${goal.id}`, { state: "active" })).status).toBe(
+      403,
+    );
+    const since = restEventsSchema.parse(
+      await (await get(alice, `${IN}/events?after=${latest}`)).json(),
+    );
+    expect(since.items.map((event) => [event.kind, event.goalId, event.data])).toEqual([
+      ["goal.updated", goal.id, { title: "Ship v1", fields: ["state"] }],
+    ]);
+    const history = restEventsSchema.parse(
+      await (await get(alice, `${IN}/events?goal=${goal.id}`)).json(),
+    );
+    expect(history.items.map((event) => event.kind)).toEqual(["goal.created", "goal.updated"]);
+    for (const id of ["not-an-id", "0199c4d8-0000-7000-8000-000000000099"]) {
+      const response = await get(alice, `${IN}/goals/${id}`);
+      expect(response.status, id).toBe(404);
+      expect(await errorOf(response)).toBe("goal.not_found");
+    }
+    // A goal of another project is not one of this one.
+    const elsewhere = restGoalSchema.parse(
+      await (
+        await send(alice, "POST", `${projectPath("docs")}/goals`, { title: "The docs' own" })
+      ).json(),
+    );
+    const across = await send(alice, "POST", `${IN}/tasks`, { title: "x", goalId: elsewhere.id });
+    expect(across.status).toBe(400);
+    expect(await errorOf(across)).toBe("task.invalid_goal");
+  });
+
+  it("list what is on a person's plate across the projects they may see", async () => {
+    const aliceId = await personId("Alice");
+    const bobId = await personId("bob");
+    const later = await createTask(alice, {
+      title: "Mine, later",
+      assigneeId: aliceId,
+      dueOn: "2026-12-01",
+    });
+    const sooner = await createTask(alice, {
+      title: "Mine, sooner",
+      assigneeId: aliceId,
+      dueOn: "2026-10-01",
+    });
+    const undated = await createTask(alice, { title: "Mine, some day", assigneeId: aliceId });
+    const inDocs = await createTask(
+      alice,
+      { title: "Mine in the docs", assigneeId: aliceId },
+      projectPath("docs"),
+    );
+    const bobs = await createTask(alice, { title: "Bob's", assigneeId: bobId });
+    const finished = await createTask(alice, {
+      title: "Mine, done",
+      assigneeId: aliceId,
+      state: "done",
+    });
+    const raised = restDecisionSchema.parse(
+      await (
+        await send(bob, "POST", `${IN}/decisions`, {
+          question: "On whose plate?",
+          options: [{ label: "Mine" }, { label: "Yours" }],
+        })
+      ).json(),
+    );
+    const work = restWorkSchema.parse(await (await get(alice, REST_ROUTES.work)).json());
+    const titles = work.tasks.map((item) => [item.project.key, item.task.title]);
+    expect(titles).toContainEqual(["web", "Mine, sooner"]);
+    expect(titles).toContainEqual(["docs", "Mine in the docs"]);
+    expect(titles).not.toContainEqual(["web", "Bob's"]);
+    expect(titles).not.toContainEqual(["web", "Mine, done"]);
+    // The sooner due first, and what has no day after everything that has one.
+    const order = work.tasks.map((item) => item.task.id);
+    expect(order.indexOf(sooner.id)).toBeLessThan(order.indexOf(later.id));
+    expect(order.indexOf(later.id)).toBeLessThan(order.indexOf(undated.id));
+    expect(
+      work.decisions.some((item) => item.decision.id === raised.id && item.project.key === "web"),
+    ).toBe(true);
+    expect(work.decisions.every((item) => item.decision.answer === null)).toBe(true);
+    // Bob sees his own, and nothing of the docs project, which is not his to see.
+    const bobWork = restWorkSchema.parse(await (await get(bob, REST_ROUTES.work)).json());
+    expect(bobWork.tasks.map((item) => item.task.id)).toEqual([bobs.id]);
+    expect(bobWork.tasks.some((item) => item.task.id === inDocs.id)).toBe(false);
+    expect(bobWork.decisions.some((item) => item.decision.id === raised.id)).toBe(true);
+    expect(finished.state).toBe("done");
+  });
+});
+
+describe("categories", () => {
+  it("are read by anyone, and made, changed and removed by an administrator on the console's own pages", async () => {
+    const named = createHarness(testDatabase, {
+      providers: [createFixtureProvider()],
+      admins: ["alice"],
+    });
+    const admin = await named.signIn("alice");
+    const asAdmin = (method: "POST" | "PATCH" | "DELETE", path: string, body?: unknown) =>
+      named.request(path, {
+        method,
+        headers: {
+          cookie: admin,
+          origin: SIGN_IN_URL,
+          ...(body === undefined ? {} : { "content-type": "application/json" }),
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+    const listed = restCategoriesSchema.parse(
+      await (await get(bob, REST_ROUTES.categories)).json(),
+    );
+    expect(listed.items.map((category) => category.key)).toEqual(
+      expect.arrayContaining(["engineering", "product", "design"]),
+    );
+    const latest =
+      restEventsSchema
+        .parse(await (await get(alice, `${REST_ROUTES.events}?after=0`)).json())
+        .items.at(-1)?.id ?? 0;
+
+    const made = await asAdmin("POST", REST_ROUTES.categories, {
+      key: "research",
+      name: "Research",
+      color: "yellow",
+    });
+    expect(made.status).toBe(201);
+    expect(restCategorySchema.parse(await made.json())).toMatchObject({
+      key: "research",
+      name: "Research",
+      color: "yellow",
+    });
+    const taken = await asAdmin("POST", REST_ROUTES.categories, { key: "research", name: "x" });
+    expect(taken.status).toBe(409);
+    expect(await errorOf(taken)).toBe("category.key_taken");
+    for (const body of [
+      { key: "Research!", name: "x" },
+      { key: "research", name: "" },
+      { key: "ok", name: "x", color: "#ff0000" },
+    ]) {
+      const response = await asAdmin("POST", REST_ROUTES.categories, body);
+      expect(response.status, JSON.stringify(body)).toBe(400);
+      expect(await errorOf(response)).toBe("request.invalid");
+    }
+    // A member may not, a token may not, and nobody may from elsewhere.
+    const byMember = await send(bob, "POST", REST_ROUTES.categories, { key: "ops", name: "Ops" });
+    expect(byMember.status).toBe(403);
+    expect(await errorOf(byMember)).toBe("auth.forbidden");
+    const { secret } = restTokenCreatedSchema.parse(
+      await (
+        await asAdmin("POST", REST_ROUTES.tokens, { name: "an administrator's agent" })
+      ).json(),
+    );
+    const byToken = await named.request(REST_ROUTES.categories, {
+      method: "POST",
+      headers: { authorization: `Bearer ${secret}`, "content-type": "application/json" },
+      body: JSON.stringify({ key: "ops", name: "Ops" }),
+    });
+    expect(byToken.status).toBe(403);
+    expect(await errorOf(byToken)).toBe("auth.session_required");
+    expect(
+      (
+        await named.request(REST_ROUTES.categories, {
+          method: "POST",
+          headers: { cookie: admin, "content-type": "application/json" },
+          body: JSON.stringify({ key: "ops", name: "Ops" }),
+        })
+      ).status,
+    ).toBe(403);
+
+    const changed = await asAdmin("PATCH", `${REST_ROUTES.categories}/research`, {
+      name: "Research and insight",
+    });
+    expect(changed.status).toBe(200);
+    expect(restCategorySchema.parse(await changed.json()).name).toBe("Research and insight");
+    // In use, it stays; moved out of, it goes; gone, it is not found.
+    const task = await createTask(alice, { title: "Interview users", category: "research" });
+    expect(task.category?.name).toBe("Research and insight");
+    const inUse = await asAdmin("DELETE", `${REST_ROUTES.categories}/research`);
+    expect(inUse.status).toBe(409);
+    expect(await errorOf(inUse)).toBe("category.in_use");
+    expect((await send(alice, "PATCH", `${IN}/tasks/${task.id}`, { category: null })).status).toBe(
+      200,
+    );
+    expect((await asAdmin("DELETE", `${REST_ROUTES.categories}/research`)).status).toBe(204);
+    expect(
+      restCategoriesSchema
+        .parse(await (await get(bob, REST_ROUTES.categories)).json())
+        .items.some((category) => category.key === "research"),
+    ).toBe(false);
+    for (const key of ["research", "Not-A-Key", "nothing"]) {
+      const response = await asAdmin("PATCH", `${REST_ROUTES.categories}/${key}`, { name: "x" });
+      expect(response.status, key).toBe(404);
+      expect(await errorOf(response)).toBe("category.not_found");
+    }
+    const since = restEventsSchema.parse(
+      await (await get(alice, `${REST_ROUTES.events}?after=${latest}`)).json(),
+    );
+    expect(since.items.map((event) => [event.kind, event.data])).toEqual([
+      ["category.created", { key: "research", name: "Research" }],
+      ["category.updated", { key: "research", name: "Research and insight", fields: ["name"] }],
+      ["category.removed", { key: "research", name: "Research and insight" }],
+    ]);
+    await named.close();
   });
 });

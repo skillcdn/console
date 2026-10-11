@@ -11,9 +11,11 @@ import { useWords } from "../i18n/index.js";
 import { Markdown } from "./markdown.js";
 import { Button, cx, PersonChip, Time } from "./ui.js";
 
-// The decisions: the ones that wait, with the way to answer each, and the ones answered, with
-// who answered and when; each a record (ADR-0009) of its context, its answer with the
-// rationale, and what followed. Each takes its data as props and nothing from the network.
+// The decisions: the ones that wait, each a card with the way to answer it, since they are what
+// a person came for; and the ones answered, the record, a row each, since they are read back
+// rarely and looked up by what was asked. Each decision is a record (ADR-0009) of its context,
+// its answer with the rationale, and what followed, read on its own page. Each component takes
+// its data as props and nothing from the network.
 
 export interface DecisionCardProps {
   readonly decision: RestDecision;
@@ -240,6 +242,55 @@ export interface DecisionListProps {
   readonly empty?: React.ReactNode;
 }
 
+export interface DecisionLogProps {
+  /** The decisions answered, newest first. */
+  readonly decisions: readonly RestDecision[];
+  readonly tasks?: ReadonlyMap<string, RestTask> | undefined;
+  readonly taskHref?: ((task: RestTask) => string) | undefined;
+  /** Where each decision's own page is, with its context, its rationale and what followed. */
+  readonly decisionHref?: ((decision: RestDecision) => string) | undefined;
+}
+
+/** The record: one row per decision answered, what was asked, what was chosen, by whom, when. */
+export function DecisionLog(props: DecisionLogProps) {
+  const words = useWords();
+  return (
+    <ol className="sc-decision-log" aria-label={words.decisions.record}>
+      {props.decisions.map((decision) => {
+        const task = decision.taskId === null ? undefined : props.tasks?.get(decision.taskId);
+        const href = props.decisionHref?.(decision);
+        const chosen =
+          decision.options.find((option) => option.id === decision.answer?.option)?.label ??
+          decision.answer?.option ??
+          "";
+        return (
+          <li key={decision.id} className="sc-decision-row">
+            <span className="sc-decision-row-question">
+              {href === undefined ? decision.question : <a href={href}>{decision.question}</a>}
+            </span>
+            <span className="sc-decision-row-answer">{chosen}</span>
+            <span className="sc-decision-row-meta">
+              {decision.answer !== null && (
+                <>
+                  <PersonChip person={decision.answer.by} /> <Time iso={decision.answer.at} />
+                </>
+              )}
+              {task !== undefined &&
+                (props.taskHref === undefined ? (
+                  <span className="sc-card-number">#{task.number}</span>
+                ) : (
+                  <a className="sc-card-number" href={props.taskHref(task)}>
+                    #{task.number}
+                  </a>
+                ))}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 export function DecisionList(props: DecisionListProps) {
   const words = useWords();
   const waiting = props.decisions.filter((decision) => decision.answer === null);
@@ -268,9 +319,15 @@ export function DecisionList(props: DecisionListProps) {
       {answered.length > 0 && (
         <section aria-label={words.decisions.answered}>
           <h2 className="sc-section-title">
-            {words.decisions.answered} <span className="sc-column-count">{answered.length}</span>
+            {words.decisions.record} <span className="sc-column-count">{answered.length}</span>
           </h2>
-          {answered.map(card)}
+          <p className="sc-lead">{words.decisions.recordLead}</p>
+          <DecisionLog
+            decisions={answered}
+            tasks={props.tasks}
+            taskHref={props.taskHref}
+            decisionHref={props.decisionHref}
+          />
         </section>
       )}
     </div>

@@ -23,6 +23,9 @@ The API is the board as its members see it: the people, the projects, and in eac
 | 400 | `member.invalid_person` | The person to list is not one of the workspace. |
 | 400 | `task.invalid_assignee` | The assignee is not a person who may work in the project. |
 | 400 | `task.invalid_parent` | The parent is not a task of the project, is the task itself, or would make a loop. |
+| 400 | `task.invalid_category` | No category of the workspace has that key. |
+| 400 | `task.invalid_goal` | The goal is not one of the project's. |
+| 400 | `task.invalid_dates` | The due day is before the start. |
 | 400 | `decision.invalid_task` | The decision is about a task that is not one of the project's. |
 | 400 | `decision.no_such_option` | The answer names an option the decision does not have. |
 | 400 | `decision.invalid_run` | A decision raised from a run that is not the asker's, or is over. |
@@ -35,13 +38,15 @@ The API is the board as its members see it: the people, the projects, and in eac
 | 403 | `auth.session_required` | A token asked for what only a person signed in may do: the tokens themselves, and configuring. |
 | 403 | `run.not_yours` | The run is another person's. |
 | 404 | `project.not_found` | No project has that key, or it is not the asker's to see: the two are one answer. The key is checked before anything is asked. |
-| 404 | `task.not_found`, `decision.not_found`, `token.not_found`, `person.not_found`, `run.not_found`, `run.task_not_found`, `member.not_found` | No such id in the project (or in the workspace, for a token, a person); for a token, none of the asker's. An id that is not a UUID is not found either, except a task's number. |
+| 404 | `task.not_found`, `decision.not_found`, `goal.not_found`, `token.not_found`, `person.not_found`, `run.not_found`, `run.task_not_found`, `member.not_found` | No such id in the project (or in the workspace, for a token, a person); for a token, none of the asker's. An id that is not a UUID is not found either, except a task's number. |
+| 404 | `category.not_found` | No category of the workspace has that key; a key that is not one is not found either. |
 | 404 | `file.not_found` | No file handed in, or attached to the page, has that id in the project; a link handed in is not a file. |
 | 404 | `document.not_found`, `document.version_not_found` | No page has that path in the project, or the page has no such version. A path that is not one is not found either. |
 | 404 | `connect.not_found` | No agent asks to connect under this code or secret: it was never asked, it expired, the person said no, or the token was handed over already. |
 | 404 | `not_found` | Nothing at this path. |
 | 409 | `project.key_taken` | A project of the workspace has that key already. |
 | 409 | `member.exists` | The person is listed in the project already. |
+| 409 | `category.key_taken`, `category.in_use`, `category.too_many` | A category of the workspace has that key already; tasks are sorted into the category, so it stays until they are moved; the workspace has as many categories as one may (`MAX_CATEGORIES`). |
 | 409 | `decision.answered` | The decision has an answer already. |
 | 409 | `document.conflict` | The page has moved on since the version the write started from (`baseVersion`), or was written at that path by someone else first. |
 | 409 | `document.archived` | The page is archived: restore it before writing to it or attaching to it. |
@@ -78,11 +83,23 @@ Takes `key` and `name`, and optionally `description`, `visibility` (default `pri
 
 ### `GET /api/v1/events?after=&limit=`
 
-The workspace's own events, the ones about no project: who joined (`person.joined`), who was made what (`person.role_changed`). The same shape and parameters as a project's feed below, without the filters.
+The workspace's own events, the ones about no project: who joined (`person.joined`), who was made what (`person.role_changed`), and what became of the categories (`category.created`, `category.updated`, `category.removed`, each with the `key` and the `name`). The same shape and parameters as a project's feed below, without the filters.
 
 ### `PATCH /api/v1/me`
 
 Keeps the person's own choice of language for the pages ([ADR-0012](../adr/0012-the-pages-speak-the-persons-language-from-packs-that-ship-with-the-package.md)): `{ "language": "ko" }`, a language tag as a browser sends one, or `null` to choose none and let the browser's languages decide; answers what `GET` answers. A person's own doing, from the console's own pages: never with a token.
+
+### `GET /api/v1/categories`
+
+`{ "items": [category, ...] }`: the kinds of work tasks are sorted into ([ADR-0019](../adr/0019-a-task-is-planned-in-days-the-board-keeps-its-moments-and-goals-and-categories-give-the-work-its-shape.md)), by name, for whoever is signed in or presents a token. A category carries its `key` (what the command and the filters say; lowercase letters, digits and hyphens; immutable), `name`, `color` (one of `CATEGORY_COLORS`, a name the pages paint and never a value typed), `createdAt` and `updatedAt`. Every workspace starts with `engineering`, `product`, `design`, `marketing` and `operations`.
+
+### `POST /api/v1/categories`, `PATCH /api/v1/categories/<key>` and `DELETE /api/v1/categories/<key>`
+
+Kept by an administrator signed in on the console's own pages, never with a token, as the rest of configuring is. `POST` takes `key`, `name` and optionally `color` (default `gray`), answers `201` with the category and writes a `category.created` event in the workspace's own feed with `key` and `name`; a key taken is `category.key_taken`, and the workspace holds at most `MAX_CATEGORIES` (`category.too_many`). `PATCH` takes any of `name` and `color`, answers the category and writes `category.updated` naming the `fields`; what is already so writes nothing; the key does not change. `DELETE` answers `204` and writes `category.removed`; a category tasks are sorted into is `category.in_use` until they are moved out of it.
+
+### `GET /api/v1/work`
+
+`{ "tasks": [{ "project": { "key", "name" }, "task" }, ...], "decisions": [{ "project", "decision" }, ...] }`: what is on the asker's plate across the projects they may see ([ADR-0019](../adr/0019-a-task-is-planned-in-days-the-board-keeps-its-moments-and-goals-and-categories-give-the-work-its-shape.md)): the open tasks assigned to them, the sooner due first and those with no day last, and the decisions that wait for a person, the longest waiting first; each with the project it belongs to, so that a page says and links it. At most `LIST_LIMIT` of each.
 
 ### `GET /api/v1/tokens` and `POST /api/v1/tokens`
 
@@ -122,17 +139,17 @@ The project, as the asker sees it. A patch, for an owner signed in, takes any of
 
 For an owner signed in. The patch takes `role` and writes `project.member_changed`; the removal answers `204` and writes `project.member_removed`. A person not listed is `member.not_found`. A project may be left without an owner listed; the administrators own it then.
 
-### `GET /api/v1/projects/<key>/tasks?state=`
+### `GET /api/v1/projects/<key>/tasks?state=&open=&category=&goal=&assignee=&dueBy=`
 
-`{ "items": [task, ...] }`: the project's board, newest first, at most `LIST_LIMIT` tasks; `state` keeps one state of it. A task carries its `number` (the one people say out loud, numbered per project), `title`, `body` (Markdown, to be shown as text or rendered to elements, never as HTML), `state`, `priority`, `owner`, `assignee` (a person, or `null`), `parentId`, `links` (`url` and `label`), `openDecisions` (how many decisions about it wait for a person), `openRuns` (how many agents are at work on it, or waiting), `createdAt` and `updatedAt`.
+`{ "items": [task, ...] }`: the project's board, newest first, at most `LIST_LIMIT` tasks. `state` keeps one state of it; `open=true` the tasks not done or dropped, `open=false` the rest; `category=<key>` those sorted into a category; `goal=<id>` those that work towards a goal; `assignee=<person id>` those assigned to one person; `dueBy=<day>` (`2026-10-24`) those due on that day or before it. A task carries its `number` (the one people say out loud, numbered per project), `title`, `body` (Markdown, to be shown as text or rendered to elements, never as HTML), `state`, `priority`, `owner`, `assignee` (a person, or `null`), `parentId`, `category` (its `key`, `name` and `color` as the workspace keeps it, or `null`), `goalId` (or `null`), its plan ([ADR-0019](../adr/0019-a-task-is-planned-in-days-the-board-keeps-its-moments-and-goals-and-categories-give-the-work-its-shape.md)): `startsOn` and `dueOn`, each a day (`2026-10-24`) or `null`; its moments, which the board keeps itself: `startedAt`, when it was first moved past `ready`, and `doneAt`, when it was moved to `done`, each an instant or `null`; `links` (`url` and `label`), `openDecisions` (how many decisions about it wait for a person), `openRuns` (how many agents are at work on it, or waiting), `createdAt` and `updatedAt`.
 
 ### `POST /api/v1/projects/<key>/tasks`
 
-Takes `title`, and optionally `body`, `state` (default `idea`), `priority` (default `normal`), `assigneeId` (a person who may work in the project: everyone of the workspace for a project open to it, those listed for a private one, an administrator anywhere; `task.invalid_assignee`), `parentId` (a task of the project) and `links`. The owner is whoever writes it. Answers `201` with the task, numbered after the project's last, and writes a `task.created` event.
+Takes `title`, and optionally `body`, `state` (default `idea`), `priority` (default `normal`), `assigneeId` (a person who may work in the project: everyone of the workspace for a project open to it, those listed for a private one, an administrator anywhere; `task.invalid_assignee`), `parentId` (a task of the project), `category` (the key of a category of the workspace, or `null`; `task.invalid_category`), `goalId` (a goal of the project, or `null`; `task.invalid_goal`), `startsOn` and `dueOn` (days; the due day not before the start, `task.invalid_dates`) and `links`. The owner is whoever writes it. Answers `201` with the task, numbered after the project's last, and writes a `task.created` event. A task written past `ready` has its `startedAt`; one written `done` has its `doneAt` too.
 
 ### `GET /api/v1/projects/<key>/tasks/<id or number>` and `PATCH .../tasks/<id>`
 
-One task, by its id or by its number in the project (`/tasks/7`): the pages hold ids, people and their agents say numbers. A patch takes the id and names only what changes, with the same fields as a creation; a field set to `null` clears it. A change of `state` is a `task.moved` event with `from` and `to`; any other change is one `task.updated` event naming the `fields`. A patch that changes nothing writes nothing and answers the task as it is.
+One task, by its id or by its number in the project (`/tasks/7`): the pages hold ids, people and their agents say numbers. A patch takes the id and names only what changes, with the same fields as a creation; a field set to `null` clears it. A change of `state` is a `task.moved` event with `from` and `to`; any other change is one `task.updated` event naming the `fields` (`category`, `goalId`, `startsOn` and `dueOn` among them, as the input names them). A patch that changes nothing writes nothing and answers the task as it is. The moments follow the moves: the first move past `ready` sets `startedAt`, a move to `done` sets `doneAt`, and a move back out of `done` clears it.
 
 ### `GET /api/v1/projects/<key>/decisions?open=&task=`
 
@@ -151,6 +168,14 @@ The answer takes `option` (the id of one of its options) and optionally a `note`
 ### `PATCH /api/v1/projects/<key>/decisions/<id>`
 
 Grows the record: takes any of `body` (the context) and `outcome` (what followed; empty clears it), for anyone who may work in the project, with a session from the console's own pages or a token, answered or not. Writes a `decision.updated` event naming the `fields`; a patch that changes nothing writes nothing.
+
+### `GET /api/v1/projects/<key>/goals` and `POST /api/v1/projects/<key>/goals`
+
+The roadmap ([ADR-0019](../adr/0019-a-task-is-planned-in-days-the-board-keeps-its-moments-and-goals-and-categories-give-the-work-its-shape.md)). `GET`, for whoever may see the project, answers `{ "items": [goal, ...] }`: the active goals first, then the planned, the reached and the dropped, the sooner due first within each and the older first among those with no day; at most `LIST_LIMIT`. A goal carries its `title`, `body` (Markdown: what reaching it means), `state` (`planned`, `active`, `done`, `dropped`), `dueOn` (the day it is meant to be reached by, or `null`), `createdBy`, `taskCounts` (the tasks that work towards it, counted by state: `idea`, `ready`, `in_progress`, `in_review`, `done`, `dropped`; read from the board as it stands, never written down), `createdAt` and `updatedAt`. `POST`, for an owner of the project, from the console's own pages or with a token, takes `title` and optionally `body`, `state` (default `planned`) and `dueOn`, answers `201` with the goal and writes a `goal.created` event with its `title`; a member is `auth.forbidden`.
+
+### `GET .../goals/<id>` and `PATCH .../goals/<id>`
+
+One goal, for whoever may see the project. The patch, for an owner, takes any of `title`, `body`, `state` and `dueOn` (`null` for none), answers the goal and writes `goal.updated` naming the `fields`; a patch that changes nothing writes nothing. A goal is never deleted: one let go is `dropped`. A task works towards a goal through its `goalId`; the goal's events are read from the project's feed with `goal=<id>`.
 
 ### `GET /api/v1/projects/<key>/runs?task=&open=&mine=` and `GET .../runs/<id>`
 
@@ -206,9 +231,9 @@ Put the page away, and bring it back: archived, it is kept out of the folders an
 
 A file attached to the page, sent and read back exactly as a run hands one in ([above](#post-runsidfiles-and-get-apiv1projectskeyfilesid)): the parts `file` and `label` of a form, kept under the SHA-256 of the bytes, at most `MAX_FILE_BYTES`, at most `MAX_FILES_PER_DOCUMENT` on one page (`document.too_many_files`), and none on an archived page. Answers `201` with the page and writes `document.file_attached` with the label or the file's name. The bytes are read back at the file's `id`, with the same headers and the same policy as a run's file.
 
-### `GET /api/v1/projects/<key>/events?after=&limit=&task=&run=&decision=&document=`
+### `GET /api/v1/projects/<key>/events?after=&limit=&task=&run=&decision=&document=&goal=`
 
-`{ "items": [event, ...], "more": boolean }`: what happened in the project after event number `after` (`0` for the beginning), oldest first, at most `limit` (default and maximum `EVENTS_PAGE_LIMIT`); `more` says whether there is more after the last item. `task=<id>`, `run=<id>`, `decision=<id>` or `document=<id>` keeps the events about one of them: how a page shows everything that happened to a task, a run, a decision or a document. An event carries its `id` (the number), `kind` (one of `EVENT_KINDS`), the `actor` (a person, or, for what an agent did, the person it acts for), `agent` (what the person acted through: the run's agent for what a run did, else the name of the token presented; `null` when a person acted themselves), `projectId`, `taskId`, `decisionId`, `runId` and `documentId` (or `null`), `data` (what a feed shows without asking for the subject: `number`, `title`, `fields`, `from`, `to`, `question`, `option`, `login`, `role`, `key`, `name`, `agent`, `status`, `label`, `excerpt`, `path`, `version`, each only when the kind has it), and `createdAt`.
+`{ "items": [event, ...], "more": boolean }`: what happened in the project after event number `after` (`0` for the beginning), oldest first, at most `limit` (default and maximum `EVENTS_PAGE_LIMIT`); `more` says whether there is more after the last item. `task=<id>`, `run=<id>`, `decision=<id>`, `document=<id>` or `goal=<id>` keeps the events about one of them: how a page shows everything that happened to a task, a run, a decision, a document or a goal. An event carries its `id` (the number), `kind` (one of `EVENT_KINDS`), the `actor` (a person, or, for what an agent did, the person it acts for), `agent` (what the person acted through: the run's agent for what a run did, else the name of the token presented; `null` when a person acted themselves), `projectId`, `taskId`, `decisionId`, `runId`, `documentId` and `goalId` (or `null`), `data` (what a feed shows without asking for the subject: `number`, `title`, `fields`, `from`, `to`, `question`, `option`, `login`, `role`, `key`, `name`, `agent`, `status`, `label`, `excerpt`, `path`, `version`, each only when the kind has it), and `createdAt`.
 
 ### `GET /api/v1/projects/<key>/events/stream?after=`
 

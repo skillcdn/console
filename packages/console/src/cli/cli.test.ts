@@ -23,9 +23,33 @@ const TASK = {
   owner: PERSON,
   assignee: null,
   parentId: null,
+  category: null,
+  goalId: null,
+  startsOn: null,
+  dueOn: null,
+  startedAt: null,
+  doneAt: null,
   links: [],
   openDecisions: 0,
   openRuns: 0,
+  createdAt: WHEN,
+  updatedAt: WHEN,
+};
+const GOAL = {
+  id: "0199c4d8-0000-7000-8000-000000000060",
+  title: "Ship v1",
+  body: "What it means.",
+  state: "active",
+  dueOn: "2026-11-15",
+  createdBy: PERSON,
+  taskCounts: { idea: 1, ready: 0, in_progress: 1, in_review: 0, done: 2, dropped: 0 },
+  createdAt: WHEN,
+  updatedAt: WHEN,
+};
+const CATEGORY = {
+  key: "engineering",
+  name: "Engineering",
+  color: "blue",
   createdAt: WHEN,
   updatedAt: WHEN,
 };
@@ -867,5 +891,165 @@ describe("the console command", () => {
     expect(await runCli(["tasks"], o.io)).toBe(EXIT.failed);
     expect(o.err()).toContain("auth.required");
     expect(o.err()).toContain("console login");
+  });
+});
+
+describe("the plan on the command line", () => {
+  /** Noon on 2026-10-11 by this machine's clock: the day the tests count from. */
+  const NOON = Date.parse("2026-10-11T12:00:00");
+  const BOB = { ...PERSON, id: "0199c4d8-0000-7000-8000-000000000002", login: "bob" };
+
+  it("narrows the tasks by what is due, one's own, a category and a goal", async () => {
+    const { fetch, calls } = fakeConsole({
+      "GET /api/v1/me": { body: ME },
+      [`GET ${IN}/tasks?open=true&assignee=${PERSON.id}&dueBy=2026-10-10`]: {
+        body: { items: [{ ...TASK, dueOn: "2026-10-01" }] },
+      },
+      [`GET ${IN}/tasks?category=engineering&goal=${GOAL.id}`]: { body: { items: [] } },
+      [`GET ${IN}/tasks?dueBy=2026-10-17`]: { body: { items: [TASK] } },
+    });
+    const overdue = harness({ fetch, env: SIGNED_IN, now: () => NOON });
+    expect(await runCli(["tasks", "--mine", "--due", "overdue"], overdue.io)).toBe(EXIT.ok);
+    expect(overdue.out()).toBe("#7  ready  high  Fix the parser  (owner alice; due 2026-10-01)\n");
+    const narrow = harness({ fetch, env: SIGNED_IN, now: () => NOON });
+    expect(await runCli(["tasks", "--category", "engineering", "--goal", GOAL.id], narrow.io)).toBe(
+      EXIT.ok,
+    );
+    expect(narrow.out()).toBe("No tasks.\n");
+    const week = harness({ fetch, env: SIGNED_IN, now: () => NOON });
+    expect(await runCli(["tasks", "--due", "week"], week.io)).toBe(EXIT.ok);
+    expect(calls.at(-1)?.key).toBe(`GET ${IN}/tasks?dueBy=2026-10-17`);
+    const bad = harness({ fetch, env: SIGNED_IN, now: () => NOON });
+    expect(await runCli(["tasks", "--due", "soon"], bad.io)).toBe(EXIT.usage);
+    expect(bad.err()).toContain("Not a day: soon");
+  });
+
+  it("writes a task with its plan, and changes one in what the flags say, none clearing a field", async () => {
+    const parentId = "0199c4d8-0000-7000-8000-000000000011";
+    const { fetch, calls } = fakeConsole({
+      "GET /api/v1/me": { body: ME },
+      "GET /api/v1/people": { body: { items: [PERSON, BOB] } },
+      [`POST ${IN}/tasks`]: { status: 201, body: { ...TASK, dueOn: "2026-10-24" } },
+      [`GET ${IN}/tasks/7`]: { body: TASK },
+      [`GET ${IN}/tasks/3`]: { body: { ...TASK, id: parentId, number: 3 } },
+      [`PATCH ${IN}/tasks/${TASK.id}`]: { body: { ...TASK, assignee: PERSON } },
+    });
+    const h = harness({ fetch, env: SIGNED_IN, now: () => NOON });
+    expect(
+      await runCli(
+        [
+          "task",
+          "new",
+          "Plan the launch",
+          "--category",
+          "engineering",
+          "--goal",
+          GOAL.id,
+          "--starts",
+          "today",
+          "--due",
+          "+13",
+          "--assignee",
+          "bob",
+          "--parent",
+          "3",
+          "--priority",
+          "high",
+        ],
+        h.io,
+      ),
+    ).toBe(EXIT.ok);
+    expect(calls.find((call) => call.key === `POST ${IN}/tasks`)?.body).toEqual({
+      title: "Plan the launch",
+      priority: "high",
+      category: "engineering",
+      goalId: GOAL.id,
+      startsOn: "2026-10-11",
+      dueOn: "2026-10-24",
+      assigneeId: BOB.id,
+      parentId,
+    });
+    expect(h.out()).toContain("Task #7 written");
+    const edit = harness({ fetch, env: SIGNED_IN, now: () => NOON });
+    expect(
+      await runCli(
+        ["task", "edit", "7", "--due", "none", "--assignee", "me", "--category", "none"],
+        edit.io,
+      ),
+    ).toBe(EXIT.ok);
+    expect(calls.find((call) => call.key === `PATCH ${IN}/tasks/${TASK.id}`)?.body).toEqual({
+      category: null,
+      dueOn: null,
+      assigneeId: PERSON.id,
+    });
+    expect(edit.out()).toContain("assignee: alice");
+    const nothing = harness({ fetch, env: SIGNED_IN, now: () => NOON });
+    expect(await runCli(["task", "edit", "7"], nothing.io)).toBe(EXIT.usage);
+    expect(nothing.err()).toContain("Say what to change");
+    const nobody = harness({ fetch, env: SIGNED_IN, now: () => NOON });
+    expect(await runCli(["task", "edit", "7", "--assignee", "carol"], nobody.io)).toBe(EXIT.usage);
+    expect(nobody.err()).toContain("Nobody of the workspace is called carol");
+  });
+
+  it("lists the roadmap, reads a goal with its tasks, sets one and changes one", async () => {
+    const { fetch, calls } = fakeConsole({
+      [`GET ${IN}/goals`]: { body: { items: [GOAL] } },
+      [`GET ${IN}/goals/${GOAL.id}`]: { body: GOAL },
+      [`GET ${IN}/tasks?goal=${GOAL.id}`]: { body: { items: [TASK] } },
+      [`POST ${IN}/goals`]: { status: 201, body: GOAL },
+      [`PATCH ${IN}/goals/${GOAL.id}`]: { body: { ...GOAL, state: "done" } },
+    });
+    const list = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["goals"], list.io)).toBe(EXIT.ok);
+    expect(list.out()).toBe(
+      `${GOAL.id}  active  Ship v1  (due 2026-11-15; 2/4 done, 1 in progress)\n`,
+    );
+    const one = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["goal", GOAL.id], one.io)).toBe(EXIT.ok);
+    expect(one.out()).toContain("What it means.");
+    expect(one.out()).toContain("progress: 2/4 done, 1 in progress");
+    expect(one.out()).toContain("#7  ready  high  Fix the parser");
+    const set = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(["goal", "new", "Ship v1", "--due", "2026-11-15", "--state", "active"], set.io),
+    ).toBe(EXIT.ok);
+    expect(calls.find((call) => call.key === `POST ${IN}/goals`)?.body).toEqual({
+      title: "Ship v1",
+      state: "active",
+      dueOn: "2026-11-15",
+    });
+    expect(set.out()).toContain(`id: ${GOAL.id}`);
+    const change = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["goal", "edit", GOAL.id, "--state", "done"], change.io)).toBe(EXIT.ok);
+    expect(calls.find((call) => call.key === `PATCH ${IN}/goals/${GOAL.id}`)?.body).toEqual({
+      state: "done",
+    });
+    expect(change.out()).toContain("state: done");
+    const nothing = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["goal", "edit", GOAL.id], nothing.io)).toBe(EXIT.usage);
+    const wrong = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["goal", "new", "x", "--state", "open"], wrong.io)).toBe(EXIT.usage);
+    expect(wrong.err()).toContain("Not a state of a goal");
+  });
+
+  it("lists the categories, and what is on one's plate across the projects", async () => {
+    const { fetch } = fakeConsole({
+      "GET /api/v1/categories": { body: { items: [CATEGORY] } },
+      "GET /api/v1/work": {
+        body: {
+          tasks: [{ project: { key: "web", name: "The web app" }, task: TASK }],
+          decisions: [],
+        },
+      },
+    });
+    const list = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["categories"], list.io)).toBe(EXIT.ok);
+    expect(list.out()).toBe("engineering  Engineering  (blue)\n");
+    // No project is needed: the plate spans them all.
+    const plate = harness({ fetch, env: { CONSOLE_URL: ORIGIN, CONSOLE_TOKEN: "cns_t_secret" } });
+    expect(await runCli(["work"], plate.io)).toBe(EXIT.ok);
+    expect(plate.out()).toContain("tasks assigned to you:");
+    expect(plate.out()).toContain("  web  #7  ready  high  Fix the parser");
+    expect(plate.out()).toContain("decisions waiting: none");
   });
 });

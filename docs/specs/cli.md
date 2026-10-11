@@ -22,9 +22,16 @@ The board is a project's ([ADR-0008](../adr/0008-a-workspace-holds-projects-and-
 | `whoami` | `GET /api/v1/me` | the login, the role, the workspace, the address, and the project this directory works in |
 | `projects` | `GET /api/v1/projects` | one line per project: key, name, what the person is in it, what waits in it |
 | `use <key>` | `GET /api/v1/projects/<key>` | that the directory works in the project from now on; writes `.skillcdn-console.json` |
-| `tasks [--state <state>]` | `GET .../tasks` | one line per task: number, state, priority, title, owner, assignee, what waits on it |
-| `task <number\|id>` | `GET .../tasks/<ref>`, the decisions about it, the runs on it | the task in full |
-| `task new <title> [--body <markdown>\|--file <path>] [--state <state>] [--priority <priority>]` | `POST .../tasks` | the number and the id |
+| `work` | `GET /api/v1/work` | what is on the person's plate across their projects: the open tasks assigned to them, the sooner due first, each with its project; and the decisions waiting. Needs no project |
+| `tasks [--state <state>] [--open] [--mine] [--category <key>] [--goal <id>] [--due <day\|today\|week\|overdue>]` | `GET .../tasks` with the filters | one line per task: number, state, priority, title, owner, assignee, category, due day, what waits on it |
+| `task <number\|id>` | `GET .../tasks/<ref>`, the decisions about it, the runs on it | the task in full, with its plan and its moments |
+| `task new <title> [--body <markdown>\|--file <path>] [--state <state>] [--priority <priority>] [--category <key>] [--goal <id>] [--starts <day>] [--due <day>] [--assignee <login\|me>] [--parent <number\|id>]` | `POST .../tasks` | the number and the id |
+| `task edit <number\|id> [--title <title>] [--body ...] [the same flags; `none` clears a field]` | `GET .../tasks/<ref>`, then `PATCH .../tasks/<id>` | the task in full, as it is now |
+| `goals` | `GET .../goals` | one line per goal of the roadmap: id, state, title, target day, how far it is |
+| `goal <id>` | `GET .../goals/<id>`, `GET .../tasks?goal=` | the goal in full, with the tasks that work towards it |
+| `goal new <title> [--body <markdown>\|--file <path>] [--state <state>] [--due <day>]` | `POST .../goals` | the title and the id; for an owner of the project |
+| `goal edit <id> [--title <title>] [--body ...] [--state <state>] [--due <day\|none>]` | `PATCH .../goals/<id>` | the goal in full, as it is now |
+| `categories` | `GET /api/v1/categories` | one line per category: key, name, colour |
 | `skills` | `GET .../skills` | the project's skills, or the organization's: each with its description and the URI an agent loads it by through its own SkillCDN connection; or why there are none to show |
 | `take <number\|id> [--agent <name>]` | `GET .../tasks/<ref>`, then `POST .../runs` | the run that began, the task in full, and what to do next |
 | `report <markdown>`, `report --file <path>`, `report -` | `POST .../runs/<id>/reports` | how many reports the run carries |
@@ -46,7 +53,7 @@ The board is a project's ([ADR-0008](../adr/0008-a-workspace-holds-projects-and-
 | `help [<command>]` | nothing | the usage, written for an agent that meets the command for the first time |
 | `--version` (also `version`, `-v`) | nothing | which version of the command this is |
 
-`...` is `/api/v1/projects/<key>`, the project the command works in. Everywhere: `--json` prints the console's own answer as JSON, in the shapes of `@skillcdn/console/api`; `--url <origin>` names another console for this one command; `--project <key>` the project. A Markdown body given as `-` is read from standard input. Every argument is bounded and checked by the console, as the REST API's schemas say; the command sends it as it was given.
+`...` is `/api/v1/projects/<key>`, the project the command works in. Everywhere: `--json` prints the console's own answer as JSON, in the shapes of `@skillcdn/console/api`; `--url <origin>` names another console for this one command; `--project <key>` the project. A Markdown body given as `-` is read from standard input. A day is given as `2026-10-24`, `today`, `tomorrow` or `+7` (days from today by this machine's clock); `--due overdue` keeps the open tasks past their day, `--due week` those due within seven days. Every argument is bounded and checked by the console, as the REST API's schemas say; the command sends it as it was given.
 
 ## The documents
 

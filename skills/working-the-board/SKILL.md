@@ -5,7 +5,7 @@ license: MIT
 compatibility: Needs a shell with the console command on the PATH (npm install -g @skillcdn/console, Node.js 24 or newer), signed in by a person. Nothing else; the command needs no key of its own and the agent never sees a token.
 metadata:
   author: skillcdn
-  version: "1.1"
+  version: "1.2"
 skillcdn:
   translations:
     ko:
@@ -37,8 +37,8 @@ The full contract is the [specification of the command line](/docs/specs/cli.md)
 
 | Input | Source |
 |---|---|
-| The task | Its number (`#7`) or its id, from what the person said. Told to pick one, `console tasks --state ready` lists what is ready; a task is never taken without being told which, or that any ready one may be. |
-| The work | The task's body, read with `console task <number>`: what to make, where, the milestones, what to ask. The pages it links to (`console doc <path>`) and the project's skills (`console skills`, each loaded through the agent's own SkillCDN connection) say the rest. |
+| The task | Its number (`#7`) or its id, from what the person said. Told to pick one, `console work` lists what is on the person's plate across their projects, the sooner due first, and `console tasks --state ready --mine` what is ready and theirs in this one (`--due overdue`, `--due week`, `--category <key>` and `--goal <id>` narrow it further); a task is never taken without being told which, or that any ready one may be. |
+| The work | The task's body, read with `console task <number>`: what to make, where, the milestones, what to ask; with its plan, the category, the goal it works towards (`console goal <id>` says what reaching it means) and the days it starts and is due, which the reports and the summary keep to. The pages it links to (`console doc <path>`) and the project's skills (`console skills`, each loaded through the agent's own SkillCDN connection) say the rest. |
 | The organization's way | Its own skill for its console, when it has one, adds which tasks to take, what to report and when to ask; it comes through the same kind of address as its other skills. |
 
 ## Workflow
@@ -47,7 +47,7 @@ Each phase ends with something on the board. Only phase 4 waits for a person.
 
 ### Phase 1: Read
 
-`console task <number>` shows the task in full, the decisions about it and the runs on it. A run open on it by another agent means the task is taken: say so and stop. Read what the body links to, with `console doc <path>` for the project's pages and `console skills` for the organization's skills, before anything is made.
+`console task <number>` shows the task in full, with its plan, the decisions about it and the runs on it. A run open on it by another agent means the task is taken: say so and stop. A task that is past its due day is still the task; the first report says so, and what the day was for is kept in mind. Read what the body links to, with `console doc <path>` for the project's pages and `console skills` for the organization's skills, before anything is made.
 
 ### Phase 2: Take
 
@@ -77,10 +77,11 @@ After the last report, `console finish --summary "<what was done, and what is le
 
 - Never look for, read, print or send a token. The rules of the repository say the rest.
 - One run at a time: a command on a run acts on the one open run of this token in the project; working two tasks at once, say which with `--run <id>`.
-- The board's words are the vocabulary's own: states `idea`, `ready`, `in_progress`, `in_review`, `done` and `dropped`; priorities `low`, `normal`, `high` and `urgent`. Taking a task moves it, finishing moves it; it is not moved by hand around a run.
+- The board's words are the vocabulary's own: states `idea`, `ready`, `in_progress`, `in_review`, `done` and `dropped`; priorities `low`, `normal`, `high` and `urgent`; a day is `2026-10-24`. Taking a task moves it, finishing moves it; it is not moved by hand around a run. When a task is started and when it is done, the board writes down itself: never typed.
+- The plan is the person's: a task's days, its category and its goal are changed (`console task edit`) only when the task says so or a person asks, and a goal is set or moved (`console goal new`, `console goal edit`) only when the person is an owner and said to.
 - Exit codes: `0` done; `1` refused or unreachable, the reason on standard error as a code and words, which `console help <command>` names; `2` not understood; `3` a decision still waits.
 - Everything sent is held to limits the console states (`console help <command>`); a refusal `request.invalid` names the field.
 
 ## Terms
 
-- **Task**: what is to be done, numbered per project. **Run**: one agent at work on one task for one person, with its reports, what it handed in, and what it waits for. **Decision**: a question with options, which a person answers on the board. **Page**: a document of the project, Markdown at a path that does not change. **Project**: a board of its own, with its members and its skills address.
+- **Task**: what is to be done, numbered per project, with its plan (a category, a goal, the days it starts and is due) and its moments (when it was started and done, which the board keeps). **Goal**: what the project works towards, on its roadmap, with the day it is meant to be reached by; its progress is its tasks. **Category**: a kind of work, the workspace's word for it, by key. **Run**: one agent at work on one task for one person, with its reports, what it handed in, and what it waits for. **Decision**: a question with options, which a person answers on the board. **Page**: a document of the project, Markdown at a path that does not change. **Project**: a board of its own, with its members and its skills address.

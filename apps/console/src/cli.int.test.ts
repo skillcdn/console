@@ -419,4 +419,84 @@ describe("the command line", () => {
     const whoami = await console_(["whoami"], bobToken);
     expect(whoami.out).toBe(`bob (member) at Acme, ${SIGN_IN_URL}; project web\n`);
   });
+
+  it("plans the work: a goal the owner sets, tasks written towards it with days and a category, and the board narrowed", async () => {
+    const set = await console_([
+      "goal",
+      "new",
+      "Ship v1",
+      "--due",
+      "2026-11-15",
+      "--state",
+      "active",
+    ]);
+    expect(set.code, set.err).toBe(EXIT.ok);
+    const goalId = /id: ([0-9a-f-]{36})/.exec(set.out)?.[1] ?? "";
+    expect(goalId).not.toBe("");
+    const written = await console_([
+      "task",
+      "new",
+      "Plan the launch",
+      "--goal",
+      goalId,
+      "--category",
+      "engineering",
+      "--starts",
+      "2026-10-20",
+      "--due",
+      "2026-10-24",
+      "--assignee",
+      "me",
+    ]);
+    expect(written.code, written.err).toBe(EXIT.ok);
+    const number = /Task #(\d+) written/.exec(written.out)?.[1] ?? "";
+    const shown = await console_(["task", number]);
+    expect(shown.out).toContain(
+      `category: engineering  goal: ${goalId}  starts: 2026-10-20  due: 2026-10-24`,
+    );
+    expect(shown.out).toContain("assignee: Alice");
+    const narrowed = await console_(["tasks", "--category", "engineering", "--mine"]);
+    expect(narrowed.out).toContain(`#${number}`);
+    expect(narrowed.out).toContain("engineering; due 2026-10-24");
+    expect((await console_(["tasks", "--category", "design"])).out).toBe("No tasks.\n");
+    const goal = await console_(["goal", goalId]);
+    expect(goal.out).toContain("progress: 0/1 done");
+    expect(goal.out).toContain(`#${number}`);
+    // Done: the board keeps the moment, and the goal counts it.
+    const edited = await console_(["task", "edit", number, "--state", "done", "--due", "none"]);
+    expect(edited.code, edited.err).toBe(EXIT.ok);
+    expect(edited.out).toContain("done: ");
+    expect(edited.out).not.toContain("due:");
+    const reached = await console_(["goal", "edit", goalId, "--state", "done"]);
+    expect(reached.code, reached.err).toBe(EXIT.ok);
+    expect(reached.out).toContain("state: done");
+    expect(reached.out).toContain("progress: 1/1 done");
+    expect((await console_(["goals"])).out).toContain(`${goalId}  done  Ship v1`);
+    expect((await console_(["categories"])).out).toContain("engineering  Engineering  (blue)");
+    // The plate spans the projects and needs none named.
+    const plate = await console_(["work"], aliceToken, { project: undefined });
+    expect(plate.code, plate.err).toBe(EXIT.ok);
+    expect(plate.out).toContain("decisions waiting");
+    // Bob works in the project and may not set its roadmap; and what is not a plan is refused.
+    const bobToken = await tokenFor(bob, "Codex on the desk");
+    const refused = await console_(["goal", "new", "Bob's own"], bobToken);
+    expect(refused.code).toBe(EXIT.failed);
+    expect(refused.err).toContain("auth.forbidden");
+    const wrongDay = await console_(["task", "new", "x", "--due", "soon"]);
+    expect(wrongDay.code).toBe(EXIT.usage);
+    const backwards = await console_([
+      "task",
+      "new",
+      "x",
+      "--starts",
+      "2026-10-24",
+      "--due",
+      "2026-10-20",
+    ]);
+    expect(backwards.code).toBe(EXIT.failed);
+    expect(backwards.err).toContain("task.invalid_dates");
+    const noSuchCategory = await console_(["task", "new", "x", "--category", "nothing"]);
+    expect(noSuchCategory.err).toContain("task.invalid_category");
+    expect(noSuchCategory.err).toContain("console categories");
+  });
 });

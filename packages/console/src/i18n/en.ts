@@ -1,5 +1,7 @@
 import type { SignInFailure } from "../routes.js";
 import type {
+  CategoryColor,
+  GoalState,
   PersonRole,
   ProjectRole,
   ProjectVisibility,
@@ -47,6 +49,22 @@ export const en = {
       failed: "Failed",
       abandoned: "Abandoned",
     } satisfies Record<RunStatus, string>,
+    goalState: {
+      planned: "Planned",
+      active: "Active",
+      done: "Reached",
+      dropped: "Dropped",
+    } satisfies Record<GoalState, string>,
+    categoryColor: {
+      gray: "Gray",
+      blue: "Blue",
+      green: "Green",
+      orange: "Orange",
+      pink: "Pink",
+      purple: "Purple",
+      teal: "Teal",
+      yellow: "Yellow",
+    } satisfies Record<CategoryColor, string>,
   },
 
   common: {
@@ -81,9 +99,13 @@ export const en = {
 
   nav: {
     projects: "Projects",
+    work: "My work",
     people: "People",
     agents: "Agents",
+    categories: "Categories",
     board: "Board",
+    roadmap: "Roadmap",
+    calendar: "Calendar",
     docs: "Docs",
     decisions: "Decisions",
     feed: "Feed",
@@ -187,7 +209,25 @@ export const en = {
     decisionsTitle: "Decisions waiting for a person",
     agentAtWork: "agent at work",
     agentAtWorkTitle: "An agent is at work on it",
-    links: (n: number) => count(n, "link", "links"),
+    agentSince: (agent: string, since: string) => `${agent}, at work since ${since}`,
+    filters: {
+      aria: "Narrow the board",
+      everyone: "Everyone",
+      mine: "Mine",
+      anyCategory: "Any category",
+      noCategory: "No category",
+      anyGoal: "Any goal",
+      noGoal: "No goal",
+      clear: "Show everything",
+      showing: (n: number, of: number) => `${n} of ${count(of, "task", "tasks")}`,
+    },
+    due: {
+      overdue: (days: number) => `${count(days, "day", "days")} overdue`,
+      today: "Due today",
+      tomorrow: "Due tomorrow",
+      inDays: (days: number) => `Due in ${count(days, "day", "days")}`,
+      on: (day: string) => `Due ${day}`,
+    },
   },
 
   task: {
@@ -213,6 +253,19 @@ export const en = {
     history: "What happened",
     subtasks: "Subtasks",
     partOfIt: "Part of it",
+    category: "Category",
+    goal: "Goal",
+    plan: "Plan",
+    planned: (from: string | undefined, to: string | undefined) =>
+      from !== undefined && to !== undefined
+        ? `${from} to ${to}`
+        : from !== undefined
+          ? `from ${from}`
+          : to !== undefined
+            ? `by ${to}`
+            : "",
+    started: "Started",
+    done: "Done",
     form: {
       title: "Title",
       body: "Body",
@@ -221,6 +274,12 @@ export const en = {
       priority: "Priority",
       assignee: "Assignee",
       partOf: "Part of",
+      category: "Category",
+      noCategory: "No category",
+      goal: "Goal",
+      noGoal: "No goal",
+      startsOn: "Starts on",
+      dueOn: "Due on",
       links: "Links",
       label: "Label",
       addLink: "Add a link",
@@ -244,6 +303,10 @@ export const en = {
     },
     waiting: "Waiting",
     answered: "Answered",
+    record: "The record",
+    recordLead:
+      "Every decision answered, newest first: what was asked, what was chosen, by whom. Open one for its context, its rationale and what followed.",
+    openRecord: "Open",
     waitingForPerson: "Waiting for a person.",
     options: "Options",
     notePlaceholder: "A word about it, if any",
@@ -271,6 +334,112 @@ export const en = {
     },
   },
 
+  calendar: {
+    title: "Calendar",
+    lead: "The tasks by the day they are due. A task with a start is shown from it; one with no day waits at the bottom to be given one.",
+    grid: "The month",
+    previous: "The month before",
+    next: "The month after",
+    thisMonth: "This month",
+    nothingDue: "Nothing is due this month.",
+    overdue: "Overdue",
+    nothingOverdue: "Nothing is overdue.",
+    unscheduled: "No day set",
+    allScheduled: "Every open task has a day.",
+    starts: "starts",
+    workload: {
+      title: "Who has what",
+      lead: "The open tasks of each person, and what of them is late or due within the week.",
+      person: "Person",
+      open: "Open",
+      inProgress: "In progress",
+      dueSoon: "Due in 7 days",
+      overdue: "Overdue",
+      unassigned: "Nobody's yet",
+    },
+  },
+
+  roadmap: {
+    title: "Roadmap",
+    lead: "What the project works towards: each goal with the day it is meant to be reached by, and how far its tasks are. Progress is read from the board as it stands.",
+    setGoal: "Set a goal",
+    setGoalAria: "Set a goal",
+    editAria: "Change the goal",
+    one: "Goal",
+    all: "All goals",
+    empty: {
+      title: "No goal is set yet",
+      body: "An owner sets the first one: what to reach, and by when. Tasks are then written towards it.",
+    },
+    noSuch: {
+      title: "No such goal",
+      body: "It may belong to another project, or the link is wrong.",
+    },
+    onlyOwner: {
+      title: "Only an owner sets the roadmap",
+      body: "Ask one of the project's owners, or a workspace administrator.",
+    },
+    progress: (done: number, of: number) => `${done} of ${count(of, "task", "tasks")} done`,
+    inProgress: (n: number) => `${n} in progress`,
+    noTasks: "No task works towards it yet.",
+    tasks: "Tasks",
+    target: "Target",
+    noTarget: "No target day",
+    setBy: "Set by",
+    state: "State",
+    nothingMore: "Nothing more was written about it.",
+    form: {
+      title: "Title",
+      body: "What reaching it means",
+      bodyPlaceholder: "What is true once the goal is reached, in Markdown.",
+      state: "State",
+      dueOn: "Target day",
+      set: "Set the goal",
+    },
+  },
+
+  work: {
+    title: "My work",
+    lead: "What is on your plate across your projects: the open tasks assigned to you, by the day they are due, and the decisions that wait for a person.",
+    loading: "Loading your work",
+    couldNotLoad: "Your work could not be loaded.",
+    empty: {
+      title: "Nothing is assigned to you",
+      body: "A task assigned to you in any project you may see shows up here.",
+    },
+    overdue: "Overdue",
+    thisWeek: "Due this week",
+    later: "Later",
+    noDay: "No day set",
+    decisions: "Decisions waiting for a person",
+    noDecisions: "No decision waits.",
+    inProject: (project: string) => `in ${project}`,
+  },
+
+  categories: {
+    title: "Categories",
+    lead: "The kinds of work tasks are sorted into, the same in every project. A task carries one, the board is narrowed by one, and an administrator keeps the list.",
+    onlyAdmin: "An administrator adds, changes and removes them; everyone else reads them here.",
+    list: "Categories",
+    add: "Add a category",
+    addAria: "Add a category",
+    empty: {
+      title: "No categories",
+      body: "An administrator adds the first one here.",
+    },
+    inUse: "A category tasks are sorted into cannot be removed until they are moved out of it.",
+    form: {
+      name: "Name",
+      key: "Key",
+      keyHint:
+        "Lowercase letters, digits and hyphens: what the command and the filters say. It does not change.",
+      color: "Colour",
+      add: "Add",
+    },
+    nameOf: (key: string) => `Name of ${key}`,
+    colorOf: (key: string) => `Colour of ${key}`,
+  },
+
   feed: {
     title: "What happened",
     list: "What happened",
@@ -284,6 +453,8 @@ export const en = {
     something: "something",
     aQuestion: "a question",
     aFile: "a file",
+    aGoal: "a goal",
+    aCategory: "a category",
     thePage: (name: string) => `the page ${name}`.trimEnd(),
     role: {
       admin: "an administrator",
@@ -303,6 +474,12 @@ export const en = {
       visibility: "who is a member",
       skillsAddress: "the skills address",
       outcome: "what followed",
+      category: "the category",
+      goalId: "the goal",
+      startsOn: "the start",
+      dueOn: "the due date",
+      state: "the state",
+      color: "the colour",
     } as Readonly<Record<string, string>>,
     event: {
       personJoined: () => "joined the board",
@@ -315,6 +492,12 @@ export const en = {
       memberChanged: (login: string, role: string, project: string) =>
         `made ${login} ${role} of ${project}`,
       memberRemoved: (login: string, project: string) => `removed ${login} from ${project}`,
+      categoryCreated: (category: string) => `made the category ${category}`,
+      categoryUpdated: (fields: string, category: string) =>
+        `changed ${fields} of the category ${category}`,
+      categoryRemoved: (category: string) => `removed the category ${category}`,
+      goalCreated: (goal: string) => `set the goal ${goal}`,
+      goalUpdated: (fields: string, goal: string) => `changed ${fields} of the goal ${goal}`,
       taskCreated: (task: string) => `wrote ${task}`,
       taskMoved: (task: string, from: string, to: string) => `moved ${task} from ${from} to ${to}`,
       taskUpdated: (fields: string, task: string) => `changed ${fields} of ${task}`,

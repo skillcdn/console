@@ -35,6 +35,7 @@ export interface EventScope {
   readonly runId?: string | undefined;
   readonly decisionId?: string | undefined;
   readonly documentId?: string | undefined;
+  readonly goalId?: string | undefined;
 }
 
 export interface EventRecord {
@@ -49,6 +50,7 @@ export interface EventRecord {
   readonly decisionId: string | undefined;
   readonly runId: string | undefined;
   readonly documentId: string | undefined;
+  readonly goalId: string | undefined;
   readonly data: RestEventData;
   readonly createdAt: Date;
 }
@@ -71,6 +73,7 @@ export async function recordEvent(
     readonly decisionId?: string | undefined;
     readonly runId?: string | undefined;
     readonly documentId?: string | undefined;
+    readonly goalId?: string | undefined;
     readonly data: RestEventData;
     readonly now: Date;
   },
@@ -87,6 +90,7 @@ export async function recordEvent(
       decisionId: event.decisionId ?? null,
       runId: event.runId ?? null,
       documentId: event.documentId ?? null,
+      goalId: event.goalId ?? null,
       data: event.data,
       createdAt: event.now,
     })
@@ -120,6 +124,7 @@ export async function listEventsAfter(
       decisionId: events.decisionId,
       runId: events.runId,
       documentId: events.documentId,
+      goalId: events.goalId,
       data: events.data,
       createdAt: events.createdAt,
       actor: personColumns(actors),
@@ -134,6 +139,7 @@ export async function listEventsAfter(
         scope.runId === undefined ? undefined : eq(events.runId, scope.runId),
         scope.decisionId === undefined ? undefined : eq(events.decisionId, scope.decisionId),
         scope.documentId === undefined ? undefined : eq(events.documentId, scope.documentId),
+        scope.goalId === undefined ? undefined : eq(events.goalId, scope.goalId),
         gt(events.id, after),
       ),
     )
@@ -152,6 +158,7 @@ export async function listEventsAfter(
       decisionId: row.decisionId ?? undefined,
       runId: row.runId ?? undefined,
       documentId: row.documentId ?? undefined,
+      goalId: row.goalId ?? undefined,
       data: row.data,
       createdAt: row.createdAt,
     })),

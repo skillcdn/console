@@ -5,6 +5,7 @@ import {
   isFolderPath,
   LIST_LIMIT,
   MAX_ARTIFACTS_PER_RUN,
+  MAX_CATEGORY_KEY_LENGTH,
   MAX_DOCUMENT_PATH_LENGTH,
   MAX_FILE_BYTES,
   MAX_FILES_PER_DOCUMENT,
@@ -14,12 +15,14 @@ import {
   MAX_VERSIONS_PER_DOCUMENT,
   normalizeConnectCode,
   REST_ROUTES,
+  type RestCategories,
   type RestClaim,
   type RestConnection,
   type RestConnectRequest,
   type RestDecisions,
   type RestDocuments,
   type RestEvents,
+  type RestGoals,
   type RestMembers,
   type RestPeople,
   type RestProjects,
@@ -29,14 +32,19 @@ import {
   type RestTokenCreated,
   type RestTokens,
   type RestVersions,
+  type RestWork,
   restAnswerInputSchema,
   restArtifactInputSchema,
+  restCategoryInputSchema,
+  restCategoryPatchSchema,
   restClaimInputSchema,
   restConnectInputSchema,
   restDecisionInputSchema,
   restDecisionPatchSchema,
   restDocumentInputSchema,
   restFileInputSchema,
+  restGoalInputSchema,
+  restGoalPatchSchema,
   restMemberInputSchema,
   restMemberPatchSchema,
   restPersonPatchSchema,
@@ -58,6 +66,13 @@ import * as z from "zod";
 import type { Connections } from "../auth/connect.js";
 import type { Tokens } from "../auth/tokens.js";
 import type { Database } from "../db/client.js";
+import {
+  CategoryError,
+  createCategory,
+  listCategories,
+  removeCategory,
+  updateCategory,
+} from "../db/queries/categories.js";
 import { ConnectError, type ConnectRequestRecord } from "../db/queries/connect.js";
 import {
   answerDecision,
@@ -65,6 +80,7 @@ import {
   type DecisionRecord,
   getDecision,
   listDecisions,
+  listWaitingDecisionsFor,
   raiseDecision,
   updateDecision,
 } from "../db/queries/decisions.js";
@@ -82,6 +98,7 @@ import {
   writeDocument,
 } from "../db/queries/documents.js";
 import { type Actor, latestEventId, listEventsAfter, type Scope } from "../db/queries/events.js";
+import { createGoal, GoalError, getGoal, listGoals, updateGoal } from "../db/queries/goals.js";
 import {
   findPerson,
   listPeople,
@@ -117,6 +134,7 @@ import {
   findTaskByNumber,
   getTask,
   listTasks,
+  listTasksAssignedTo,
   TaskError,
   updateTask,
 } from "../db/queries/tasks.js";
@@ -137,10 +155,12 @@ import {
 import type { LiveFeed } from "./live-feed.js";
 import type { AppEnv } from "./request-context.js";
 import {
+  restCategory,
   restDecision,
   restDocument,
   restDocumentSummary,
   restEvent,
+  restGoal,
   restMember,
   restPerson,
   restProject,
@@ -194,6 +214,10 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TASK_NUMBER = /^[1-9]\d{0,8}$/;
 /** A project's key in a path, as the package's schema has it; anything else is not found. */
 const PROJECT_KEY = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
+/** A category's key in a path, spelled the same way. */
+const CATEGORY_KEY = PROJECT_KEY;
+/** A day as the plan is made in: `2026-10-20`. */
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
 /** A version's number in a path. */
 const VERSION_NUMBER = /^[1-9]\d{0,8}$/;
 /** The most a read of a decision may ask to wait, in seconds; the server's own bound is lower. */
@@ -203,7 +227,14 @@ const DAY_MS = 86_400_000;
 /** The board of one project: `/api/v1/projects/:key/...`. */
 const PROJECT = `${REST_ROUTES.projects}/:key`;
 
-const tasksQuery = z.object({ state: z.enum(TASK_STATES).optional() });
+const tasksQuery = z.object({
+  state: z.enum(TASK_STATES).optional(),
+  open: z.enum(["true", "false"]).optional(),
+  category: z.string().max(MAX_CATEGORY_KEY_LENGTH).regex(CATEGORY_KEY).optional(),
+  goal: z.string().regex(UUID).optional(),
+  assignee: z.string().regex(UUID).optional(),
+  dueBy: z.string().regex(DAY).optional(),
+});
 const decisionsQuery = z.object({
   open: z.enum(["true", "false"]).optional(),
   task: z.string().regex(UUID).optional(),
@@ -223,6 +254,7 @@ const eventsQuery = z.object({
   run: z.string().regex(UUID).optional(),
   decision: z.string().regex(UUID).optional(),
   document: z.string().regex(UUID).optional(),
+  goal: z.string().regex(UUID).optional(),
 });
 const documentsQuery = z.object({
   folder: z
@@ -365,6 +397,10 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     notFound(c, "document.not_found", "The page was not found.");
   const noSuchFile = (c: Context<AppEnv>) =>
     notFound(c, "file.not_found", "The file was not found.");
+  const noSuchGoal = (c: Context<AppEnv>) =>
+    notFound(c, "goal.not_found", "The goal was not found.");
+  const noSuchCategory = (c: Context<AppEnv>) =>
+    notFound(c, "category.not_found", "The category was not found.");
   /** The document's path in the URL, decoded: one segment, its slashes encoded. */
   const documentPathOf = (c: Context<AppEnv>): string | undefined => {
     const path = c.req.param("path") ?? "";
@@ -405,6 +441,17 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
   const reading = async (c: Context<AppEnv>) => inProject(c, await askingCaller(c));
   /** Changing something in it: anyone who may see it, from the console's own pages or with a token. */
   const changing = async (c: Context<AppEnv>) => inProject(c, await changingCaller(c));
+  /**
+   * Setting its roadmap: an owner, from the console's own pages or with a token, since a goal
+   * is content an owner's agent may be told to write, not configuration.
+   */
+  const owning = async (c: Context<AppEnv>): Promise<InProject | Response> => {
+    const found = await changing(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    return found.project.role === "owner" ? found : ownerRequired(c);
+  };
   /** Configuring it: an owner, signed in on the console's own pages. */
   const configuring = async (c: Context<AppEnv>): Promise<InProject | Response> => {
     const person = await signedInOnOwnPages(c);
@@ -521,6 +568,15 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
           ? 404
           : 409;
       return c.json(errorBody(error.code, error.message), status);
+    }
+    if (error instanceof GoalError) {
+      return c.json(errorBody(error.code, error.message), 404);
+    }
+    if (error instanceof CategoryError) {
+      return c.json(
+        errorBody(error.code, error.message),
+        error.code === "category.not_found" ? 404 : 409,
+      );
     }
     if (error instanceof BlobStoreError) {
       // The store is the deployment's to fix; a client can only try again later.
@@ -751,6 +807,143 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     } catch (error) {
       return failure(c, error);
     }
+  });
+
+  // The categories tasks are sorted into (ADR-0019): read by anyone, kept by an administrator
+  // signed in on the console's own pages, as the rest of configuring is.
+  app.get(REST_ROUTES.categories, async (c) => {
+    const person = await asking(c);
+    if (person instanceof Response) {
+      return person;
+    }
+    const body: RestCategories = {
+      items: (await listCategories(database, person.workspaceId)).map(restCategory),
+    };
+    return c.json(body);
+  });
+
+  app.post(REST_ROUTES.categories, tooLarge, async (c) => {
+    const person = await signedInOnOwnPages(c);
+    if (person instanceof Response) {
+      return person;
+    }
+    if (person.role !== "admin") {
+      return administratorRequired(c);
+    }
+    const input = await bodyOf(c, restCategoryInputSchema);
+    if (input instanceof Response) {
+      return input;
+    }
+    try {
+      const category = await createCategory(database, {
+        workspaceId: person.workspaceId,
+        actor: { id: person.id },
+        category: input,
+        now: clock.now(),
+      });
+      logger.info(
+        { person: person.id, category: category.key, requestId: c.get("requestId") },
+        "category created",
+      );
+      return c.json(restCategory(category), 201);
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
+  /** The category's key in the path, or nothing for text that is not one. */
+  const categoryKeyOf = (c: Context<AppEnv>): string | undefined => {
+    const key = c.req.param("key") ?? "";
+    return key.length <= MAX_CATEGORY_KEY_LENGTH && CATEGORY_KEY.test(key) ? key : undefined;
+  };
+
+  app.patch(`${REST_ROUTES.categories}/:key`, tooLarge, async (c) => {
+    const person = await signedInOnOwnPages(c);
+    if (person instanceof Response) {
+      return person;
+    }
+    if (person.role !== "admin") {
+      return administratorRequired(c);
+    }
+    const patch = await bodyOf(c, restCategoryPatchSchema);
+    if (patch instanceof Response) {
+      return patch;
+    }
+    const key = categoryKeyOf(c);
+    if (key === undefined) {
+      return noSuchCategory(c);
+    }
+    try {
+      const category = await updateCategory(database, {
+        workspaceId: person.workspaceId,
+        actor: { id: person.id },
+        key,
+        patch,
+        now: clock.now(),
+      });
+      return c.json(restCategory(category));
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
+  app.delete(`${REST_ROUTES.categories}/:key`, async (c) => {
+    const person = await signedInOnOwnPages(c);
+    if (person instanceof Response) {
+      return person;
+    }
+    if (person.role !== "admin") {
+      return administratorRequired(c);
+    }
+    const key = categoryKeyOf(c);
+    if (key === undefined) {
+      return noSuchCategory(c);
+    }
+    try {
+      await removeCategory(database, {
+        workspaceId: person.workspaceId,
+        actor: { id: person.id },
+        key,
+        now: clock.now(),
+      });
+      logger.info(
+        { person: person.id, category: key, requestId: c.get("requestId") },
+        "category removed",
+      );
+      return c.body(null, 204);
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
+  // What is on the asker's plate, across the projects they may see: their open tasks, and the
+  // decisions waiting for a person. Each with its project, for the page to say and link.
+  app.get(REST_ROUTES.work, async (c) => {
+    const person = await asking(c);
+    if (person instanceof Response) {
+      return person;
+    }
+    const [projects, tasks, decisions] = await Promise.all([
+      listProjectsFor(database, person.workspaceId, person),
+      listTasksAssignedTo(database, person.workspaceId, person, LIST_LIMIT),
+      listWaitingDecisionsFor(database, person.workspaceId, person, LIST_LIMIT),
+    ]);
+    const named = new Map(projects.map((project) => [project.id, project]));
+    const projectOf = (projectId: string) => {
+      const project = named.get(projectId);
+      return project === undefined ? undefined : { key: project.key, name: project.name };
+    };
+    const body: RestWork = {
+      tasks: tasks.flatMap((task) => {
+        const project = projectOf(task.projectId);
+        return project === undefined ? [] : [{ project, task: restTask(task) }];
+      }),
+      decisions: decisions.flatMap((decision) => {
+        const project = projectOf(decision.projectId);
+        return project === undefined ? [] : [{ project, decision: restDecision(decision) }];
+      }),
+    };
+    return c.json(body);
   });
 
   // The workspace's own events: what happened to its people, which no project holds.
@@ -1158,6 +1351,11 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
     const items = await listTasks(database, found.scope, {
       state: query.data.state,
+      open: query.data.open === undefined ? undefined : query.data.open === "true",
+      category: query.data.category,
+      goalId: query.data.goal,
+      assigneeId: query.data.assignee,
+      dueBy: query.data.dueBy,
       limit: LIST_LIMIT,
     });
     const body: RestTasks = { items: items.map(restTask) };
@@ -1601,6 +1799,81 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
   });
 
+  // The roadmap (ADR-0019): the project's goals, read by whoever may see it, set by an owner.
+  app.get(`${PROJECT}/goals`, async (c) => {
+    const found = await reading(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    const body: RestGoals = {
+      items: (await listGoals(database, found.scope, LIST_LIMIT)).map(restGoal),
+    };
+    return c.json(body);
+  });
+
+  app.post(`${PROJECT}/goals`, tooLarge, async (c) => {
+    const found = await owning(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    const input = await bodyOf(c, restGoalInputSchema);
+    if (input instanceof Response) {
+      return input;
+    }
+    try {
+      const goal = await createGoal(database, {
+        scope: found.scope,
+        actor: found.actor,
+        goal: input,
+        now: clock.now(),
+      });
+      logger.info(
+        { person: found.person.id, goal: goal.id, requestId: c.get("requestId") },
+        "goal created",
+      );
+      return c.json(restGoal(goal), 201);
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
+  app.get(`${PROJECT}/goals/:id`, async (c) => {
+    const found = await reading(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    const id = c.req.param("id");
+    const goal = UUID.test(id) ? await getGoal(database, found.scope, id) : undefined;
+    return goal === undefined ? noSuchGoal(c) : c.json(restGoal(goal));
+  });
+
+  app.patch(`${PROJECT}/goals/:id`, tooLarge, async (c) => {
+    const found = await owning(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    const patch = await bodyOf(c, restGoalPatchSchema);
+    if (patch instanceof Response) {
+      return patch;
+    }
+    const id = c.req.param("id");
+    if (!UUID.test(id)) {
+      return noSuchGoal(c);
+    }
+    try {
+      const goal = await updateGoal(database, {
+        scope: found.scope,
+        actor: found.actor,
+        goalId: id,
+        patch,
+        now: clock.now(),
+      });
+      return c.json(restGoal(goal));
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
   // The project's skills, as the SkillCDN deployment serves them at its address, or the organization's.
   app.get(`${PROJECT}/skills`, async (c) => {
     const found = await reading(c);
@@ -1853,6 +2126,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         runId: query.data.run,
         decisionId: query.data.decision,
         documentId: query.data.document,
+        goalId: query.data.goal,
       },
       query.data.after,
       query.data.limit,

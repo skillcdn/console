@@ -6,6 +6,9 @@ import {
   EVENT_KINDS,
   type FileUpload,
   type RestAnswerInput,
+  type RestCategory,
+  type RestCategoryInput,
+  type RestCategoryPatch,
   type RestConnectRequest,
   type RestDecision,
   type RestDecisionInput,
@@ -14,6 +17,9 @@ import {
   type RestDocumentInput,
   type RestDocuments,
   type RestEvent,
+  type RestGoal,
+  type RestGoalInput,
+  type RestGoalPatch,
   type RestMe,
   type RestMember,
   type RestMemberInput,
@@ -35,6 +41,7 @@ import {
   type RestTokens,
   type RestVersion,
   type RestVersions,
+  type RestWork,
   restEventSchema,
 } from "./api.js";
 
@@ -64,6 +71,15 @@ export interface ConsoleActions {
   answerDecision(id: string, input: RestAnswerInput): Promise<RestDecision>;
   /** Grows a decision's record: its context, or what followed. */
   updateDecision(id: string, patch: RestDecisionPatch): Promise<RestDecision>;
+  /** Sets a goal on the roadmap of the project the page is on; for an owner. */
+  createGoal(input: RestGoalInput): Promise<RestGoal>;
+  updateGoal(id: string, patch: RestGoalPatch): Promise<RestGoal>;
+  /** What is on the person's plate across their projects, read when the page asks. */
+  work(signal?: AbortSignal): Promise<RestWork>;
+  /** The categories tasks are sorted into: kept by an administrator. */
+  createCategory(input: RestCategoryInput): Promise<RestCategory>;
+  updateCategory(key: string, patch: RestCategoryPatch): Promise<RestCategory>;
+  removeCategory(key: string): Promise<void>;
   /** A folder's pages and folders, or the pages a search finds, in the project the page is on. */
   documents(filter?: DocumentFilter, signal?: AbortSignal): Promise<RestDocuments>;
   document(path: string, signal?: AbortSignal): Promise<RestDocument>;
@@ -104,6 +120,8 @@ export interface ConsoleData {
   /** The projects the person may see, by name. */
   readonly projects: readonly RestProject[];
   readonly people: readonly RestPerson[];
+  /** The categories tasks are sorted into, by name. */
+  readonly categories: readonly RestCategory[];
   /** The tokens of whoever is signed in, newest first. */
   readonly tokens: readonly RestToken[];
   /** The project the page is on, once loaded; `undefined` while loading, or when the page is on none. */
@@ -116,6 +134,8 @@ export interface ConsoleData {
   readonly live: boolean;
   readonly tasks: readonly RestTask[];
   readonly decisions: readonly RestDecision[];
+  /** The roadmap of the project: its goals, the active first. */
+  readonly goals: readonly RestGoal[];
   /** The runs of the project, newest first. */
   readonly runs: readonly RestRun[];
   /** The project's events, oldest first. */
@@ -161,6 +181,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
   const [loaded, setLoaded] = useState(false);
   const [projects, setProjects] = useState<readonly RestProject[]>([]);
   const [people, setPeople] = useState<readonly RestPerson[]>([]);
+  const [categories, setCategories] = useState<readonly RestCategory[]>([]);
   const [tokens, setTokens] = useState<readonly RestToken[]>([]);
   const [project, setProject] = useState<RestProject | undefined>(undefined);
   const [projectLoaded, setProjectLoaded] = useState(false);
@@ -168,6 +189,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
   const [live, setLive] = useState(false);
   const [tasks, setTasks] = useState<readonly RestTask[]>([]);
   const [decisions, setDecisions] = useState<readonly RestDecision[]>([]);
+  const [goals, setGoals] = useState<readonly RestGoal[]>([]);
   const [runs, setRuns] = useState<readonly RestRun[]>([]);
   const [events, setEvents] = useState<readonly RestEvent[]>([]);
   const [members, setMembers] = useState<readonly RestMember[]>([]);
@@ -181,15 +203,17 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
   /** Loads the workspace's lists again. What fails stays as it was. */
   const refreshWorkspace = useCallback(
     async (signal?: AbortSignal) => {
-      const [nextProjects, nextPeople] = await Promise.all([
+      const [nextProjects, nextPeople, nextCategories] = await Promise.all([
         client.projects(signal),
         client.people(signal),
+        client.categories(signal),
       ]);
       if (signal?.aborted === true) {
         return;
       }
       setProjects(nextProjects.items);
       setPeople(nextPeople.items);
+      setCategories(nextCategories.items);
     },
     [client],
   );
@@ -201,19 +225,22 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
         return;
       }
       const scope = client.project(projectKey);
-      const [nextProject, nextTasks, nextDecisions, nextRuns, nextMembers] = await Promise.all([
-        scope.get(signal),
-        scope.tasks(undefined, signal),
-        scope.decisions(undefined, signal),
-        scope.runs(undefined, signal),
-        scope.members(signal),
-      ]);
+      const [nextProject, nextTasks, nextDecisions, nextGoals, nextRuns, nextMembers] =
+        await Promise.all([
+          scope.get(signal),
+          scope.tasks(undefined, signal),
+          scope.decisions(undefined, signal),
+          scope.goals(signal),
+          scope.runs(undefined, signal),
+          scope.members(signal),
+        ]);
       if (signal?.aborted === true) {
         return;
       }
       setProject(nextProject);
       setTasks(nextTasks.items);
       setDecisions(nextDecisions.items);
+      setGoals(nextGoals.items);
       setRuns(nextRuns.items);
       setMembers(nextMembers.items);
     },
@@ -274,6 +301,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
     setProjectError(undefined);
     setTasks([]);
     setDecisions([]);
+    setGoals([]);
     setRuns([]);
     setEvents([]);
     setMembers([]);
@@ -411,6 +439,31 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
         );
         return decision;
       },
+      async createGoal(input) {
+        const goal = await scope().createGoal(input);
+        await refreshProject();
+        return goal;
+      },
+      async updateGoal(id, patch) {
+        const goal = await scope().updateGoal(id, patch);
+        setGoals((current) => current.map((candidate) => (candidate.id === id ? goal : candidate)));
+        return goal;
+      },
+      work: (signal) => client.work(signal),
+      async createCategory(input) {
+        const category = await client.createCategory(input);
+        setCategories((await client.categories()).items);
+        return category;
+      },
+      async updateCategory(key, patch) {
+        const category = await client.updateCategory(key, patch);
+        setCategories((await client.categories()).items);
+        return category;
+      },
+      async removeCategory(key) {
+        await client.removeCategory(key);
+        setCategories((current) => current.filter((category) => category.key !== key));
+      },
       documents: (filter, signal) => scope().documents(filter, signal),
       document: (path, signal) => scope().document(path, signal),
       writeDocument: (path, input) => scope().writeDocument(path, input),
@@ -476,6 +529,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
     loaded,
     projects,
     people,
+    categories,
     tokens,
     project,
     projectLoaded,
@@ -483,6 +537,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
     live,
     tasks,
     decisions,
+    goals,
     runs,
     events,
     members,

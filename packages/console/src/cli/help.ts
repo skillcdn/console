@@ -51,6 +51,22 @@ const MARKDOWN = `Markdown, up to ${MAX_BODY_LENGTH} characters`;
 const DOCUMENT_PATH = `a path of lowercase letters, digits and hyphens, with slashes between its folders (guides/onboarding), up to ${MAX_DOCUMENT_PATH_LENGTH} characters; it does not change once written`;
 const DOCUMENT_REFUSALS = ["document.not_found: no page has that path in this project"];
 
+const DAY = "a day as 2026-10-24, today, tomorrow, or +7 for seven days from today";
+const TASK_FIELD_FLAGS =
+  "[--state <state>] [--priority <priority>] [--category <key>] [--goal <id>] [--starts <day>] [--due <day>] [--assignee <login|me>] [--parent <number|id>]";
+const TASK_FIELD_LIMITS = [
+  `starts, due: ${DAY}; the due day is not before the start`,
+  "category: the key of one of the workspace's categories (console categories); goal: the id of one of the project's goals (console goals)",
+  "assignee: a login of the workspace, or me; parent: a task of the project",
+];
+const TASK_FIELD_REFUSALS = [
+  "task.invalid_category: no category has that key",
+  "task.invalid_goal: the goal is not one of this project",
+  "task.invalid_dates: the due day is before the start",
+  "task.invalid_assignee: the person may not work in the project",
+  "task.invalid_parent: the parent is not a task of the project, or would make a loop",
+];
+
 export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   login: {
     usage: "login --url <origin> [--agent <name>] [--token-stdin]",
@@ -82,18 +98,52 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
       "Says which project this directory works in: writes .skillcdn-console.json here, which the commands read from this directory or one above it, and which is meant to be committed. --project <key> on any command, or CONSOLE_PROJECT in the environment, wins over it.",
     refusals: ["project.not_found: no project has the key, or it is not yours to see"],
   },
-  tasks: {
-    usage: "tasks [--state <state>]",
+  work: {
+    usage: "work",
     about:
-      "The tasks on the board, newest first: number, state, priority, title, who owns and works on each, and what waits on it. States: idea, ready, in_progress, in_review, done, dropped.",
+      "What is on your plate across the projects you may see: the open tasks assigned to you, the sooner due first, each with its project; and the decisions waiting for a person. Needs no project.",
+  },
+  tasks: {
+    usage:
+      "tasks [--state <state>] [--open] [--mine] [--category <key>] [--goal <id>] [--due <day|today|week|overdue>]",
+    about:
+      "The tasks on the board, newest first: number, state, priority, title, who owns and works on each, its category and its due day, and what waits on it. --open keeps the ones not done or dropped, --mine those assigned to you, --category and --goal those sorted into one, --due those due by a day: today, within the week, or overdue (the open ones past their day). States: idea, ready, in_progress, in_review, done, dropped.",
   },
   task: {
-    usage:
-      "task <number|id>  |  task new <title> [--body <markdown>|--file <path>] [--state <state>] [--priority <priority>]",
+    usage: `task <number|id>  |  task new <title> [--body <markdown>|--file <path>] ${TASK_FIELD_FLAGS}  |  task edit <number|id> [--title <title>] [--body <markdown>|--file <path>] ${TASK_FIELD_FLAGS}`,
     about:
-      "One task in full, with the decisions about it and the runs on it; or a new task written down (priorities: low, normal, high, urgent).",
-    limits: [`title: one line, up to ${MAX_TITLE_LENGTH} characters`, `body: ${MARKDOWN}`],
-    refusals: ["task.not_found: no task has that number or id"],
+      "One task in full, with its plan (category, goal, start and due days), what happened to it (when it was started and done, which the board keeps itself), the decisions about it and the runs on it; or a new task written down; or a task changed, only in what the flags say, where none clears a field (priorities: low, normal, high, urgent).",
+    limits: [
+      `title: one line, up to ${MAX_TITLE_LENGTH} characters`,
+      `body: ${MARKDOWN}`,
+      ...TASK_FIELD_LIMITS,
+    ],
+    refusals: ["task.not_found: no task has that number or id", ...TASK_FIELD_REFUSALS],
+  },
+  goals: {
+    usage: "goals",
+    about:
+      "The roadmap of the project: its goals, the active first, each with its id, its state (planned, active, done, dropped), its target day, and how far it is, counted from the tasks that work towards it.",
+  },
+  goal: {
+    usage:
+      'goal <id>  |  goal new "<title>" [--body <markdown>|--file <path>] [--state <state>] [--due <day>]  |  goal edit <id> [--title <title>] [--body <markdown>|--file <path>] [--state <state>] [--due <day|none>]',
+    about:
+      "One goal in full, with the tasks that work towards it; or a goal set on the roadmap, for an owner of the project; or one changed, only in what the flags say. A task works towards a goal through its --goal.",
+    limits: [
+      `title: one line, up to ${MAX_TITLE_LENGTH} characters`,
+      `body: ${MARKDOWN}`,
+      `due: ${DAY}`,
+    ],
+    refusals: [
+      "goal.not_found: no goal of this project has that id",
+      "auth.forbidden: only an owner of the project sets its roadmap",
+    ],
+  },
+  categories: {
+    usage: "categories",
+    about:
+      "The categories tasks are sorted into, the same in every project: each with its key, which --category takes, its name and its colour. An administrator keeps them on the console's Categories page.",
   },
   skills: {
     usage: "skills",
@@ -283,7 +333,19 @@ const SECTIONS: readonly { readonly title: string; readonly commands: readonly s
   },
   {
     title: "The board",
-    commands: ["tasks", "task", "decisions", "decision", "runs", "run", "skills"],
+    commands: [
+      "work",
+      "tasks",
+      "task",
+      "goals",
+      "goal",
+      "categories",
+      "decisions",
+      "decision",
+      "runs",
+      "run",
+      "skills",
+    ],
   },
   { title: "Working", commands: ["take", "report", "hand-in", "ask", "finish", "fail", "abandon"] },
   {

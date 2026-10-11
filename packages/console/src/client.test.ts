@@ -74,6 +74,12 @@ describe("createClient", () => {
       owner: PERSON,
       assignee: null,
       parentId: null,
+      category: null,
+      goalId: null,
+      startsOn: null,
+      dueOn: null,
+      startedAt: null,
+      doneAt: null,
       links: [],
       openDecisions: 0,
       openRuns: 0,
@@ -82,12 +88,27 @@ describe("createClient", () => {
     };
     const { send, calls } = fakeFetch({
       [`PATCH /api/v1/projects/web/tasks/${task.id}`]: { body: { ...task, state: "done" } },
+      "GET /api/v1/projects/web/tasks?open=true&category=engineering&assignee=p&dueBy=2026-10-20": {
+        body: { items: [task] },
+      },
+      "GET /api/v1/categories": { body: { items: [] } },
+      "GET /api/v1/work": { body: { tasks: [], decisions: [] } },
+      "DELETE /api/v1/categories/research": { status: 204 },
     });
     const client = createClient({ fetch: send });
     const updated = await client.project("web").updateTask(task.id, { state: "done" });
     expect(updated.state).toBe("done");
     expect(calls[0]?.init?.body).toBe(JSON.stringify({ state: "done" }));
     expect(new Headers(calls[0]?.init?.headers).get("content-type")).toBe("application/json");
+    // The board narrowed: each filter a parameter, left out when not given.
+    const narrowed = await client
+      .project("web")
+      .tasks({ open: true, category: "engineering", assignee: "p", dueBy: "2026-10-20" });
+    expect(narrowed.items).toHaveLength(1);
+    expect((await client.categories()).items).toEqual([]);
+    expect(await client.work()).toEqual({ tasks: [], decisions: [] });
+    await client.removeCategory("research");
+    expect(calls.at(-1)?.init?.method).toBe("DELETE");
   });
 
   it("turns an error body into an ApiError with its code", async () => {

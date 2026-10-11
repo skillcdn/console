@@ -1,5 +1,15 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
-import type { PersonRole, RestPerson, TaskPriority, TaskState } from "../api.js";
+import {
+  type CategoryColor,
+  type GoalState,
+  OPEN_TASK_STATES,
+  type PersonRole,
+  type RestPerson,
+  type RestTaskCounts,
+  type TaskPriority,
+  type TaskState,
+} from "../api.js";
+import { daysBetween, formatDay, today } from "../dates.js";
 import { useLanguage, useWords } from "../i18n/index.js";
 
 // Small building blocks. Each one is a class in styles/console.css and nothing more. Classes
@@ -155,6 +165,111 @@ export function PriorityBadge(props: { readonly priority: TaskPriority }) {
   const tone =
     props.priority === "urgent" ? "danger" : props.priority === "high" ? "point" : "neutral";
   return <Badge tone={tone}>{words.vocabulary.priority[props.priority]}</Badge>;
+}
+
+/** A category as a badge, in its colour: a class the stylesheet paints, never a value typed by hand. */
+export function CategoryBadge(props: {
+  readonly category: { readonly name: string; readonly color: CategoryColor };
+}) {
+  return (
+    <span className={cx("sc-badge", "sc-badge-category", `sc-category-${props.category.color}`)}>
+      {props.category.name}
+    </span>
+  );
+}
+
+export function GoalStateBadge(props: { readonly state: GoalState }) {
+  const words = useWords();
+  const tone =
+    props.state === "done"
+      ? "success"
+      : props.state === "active"
+        ? "accent"
+        : props.state === "dropped"
+          ? "neutral"
+          : "neutral";
+  return <Badge tone={tone}>{words.vocabulary.goalState[props.state]}</Badge>;
+}
+
+/**
+ * When a task is due, as a person needs to read it: how late it is while it is open and past
+ * its day, how soon it is due within the week, and the day itself otherwise. A task that is
+ * over keeps its day as a plain fact.
+ */
+export function DueBadge(props: {
+  readonly dueOn: string;
+  readonly state: TaskState;
+  /** The day to count from; the browser's today when left out. */
+  readonly today?: string | undefined;
+}) {
+  const words = useWords();
+  const { tag } = useLanguage();
+  const now = props.today ?? today();
+  const open = OPEN_TASK_STATES.includes(props.state);
+  const days = daysBetween(now, props.dueOn);
+  const day = formatDay(props.dueOn, tag);
+  if (!open) {
+    return <Badge tone="neutral">{words.board.due.on(day)}</Badge>;
+  }
+  if (days < 0) {
+    return (
+      <Badge tone="danger" title={day}>
+        {words.board.due.overdue(-days)}
+      </Badge>
+    );
+  }
+  if (days === 0) {
+    return <Badge tone="warning">{words.board.due.today}</Badge>;
+  }
+  if (days === 1) {
+    return <Badge tone="warning">{words.board.due.tomorrow}</Badge>;
+  }
+  if (days <= 7) {
+    return (
+      <Badge tone="point" title={day}>
+        {words.board.due.inDays(days)}
+      </Badge>
+    );
+  }
+  return <Badge tone="neutral">{words.board.due.on(day)}</Badge>;
+}
+
+/** How far a goal is, read from its tasks: the done ones, the ones at work, and the rest. */
+export function ProgressBar(props: { readonly counts: RestTaskCounts }) {
+  const words = useWords();
+  const { counts } = props;
+  const total = counts.idea + counts.ready + counts.in_progress + counts.in_review + counts.done;
+  const working = counts.in_progress + counts.in_review;
+  const share = (count: number) => (total === 0 ? 0 : (count / total) * 100);
+  return (
+    <div className="sc-progress">
+      <div
+        className="sc-progress-bar"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={total}
+        aria-valuenow={counts.done}
+        aria-label={words.roadmap.progress(counts.done, total)}
+      >
+        <span className="sc-progress-done" style={{ width: `${share(counts.done)}%` }} />
+        <span className="sc-progress-working" style={{ width: `${share(working)}%` }} />
+      </div>
+      <span className="sc-progress-words">
+        {words.roadmap.progress(counts.done, total)}
+        {working > 0 && ` · ${words.roadmap.inProgress(working)}`}
+      </span>
+    </div>
+  );
+}
+
+/** A day as people read one, in the language of the page. */
+export function Day(props: { readonly day: string }) {
+  const { tag } = useLanguage();
+  return (
+    <time className="sc-time" dateTime={props.day}>
+      {formatDay(props.day, tag)}
+    </time>
+  );
 }
 
 export function Spinner(props: { readonly label: string }) {

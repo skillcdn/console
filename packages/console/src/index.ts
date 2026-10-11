@@ -4,7 +4,24 @@
 // a script that wants none of the pages. The styles are `@skillcdn/console/console.css`.
 
 export * from "./api.js";
-export { Board, type BoardProps, TaskCard } from "./components/board.js";
+export {
+  Board,
+  BoardFilters,
+  type BoardFiltersProps,
+  type BoardProps,
+  byDue,
+  filterTasks,
+  TaskCard,
+} from "./components/board.js";
+export {
+  Calendar,
+  type CalendarProps,
+  Workload,
+  type WorkloadProps,
+  type WorkloadRow,
+  workloadOf,
+} from "./components/calendar.js";
+export { CategoryList, type CategoryListProps } from "./components/categories.js";
 export {
   ConnectApproval,
   type ConnectApprovalProps,
@@ -19,6 +36,8 @@ export {
   type DecisionCardProps,
   DecisionList,
   type DecisionListProps,
+  DecisionLog,
+  type DecisionLogProps,
 } from "./components/decision-list.js";
 export {
   DocumentCrumbs,
@@ -36,6 +55,14 @@ export {
   type FolderViewProps,
 } from "./components/documents.js";
 export { describeEvent, EventFeed, type EventFeedProps } from "./components/event-feed.js";
+export {
+  GoalForm,
+  type GoalFormProps,
+  GoalList,
+  type GoalListProps,
+  GoalView,
+  type GoalViewProps,
+} from "./components/goals.js";
 export { Markdown, type MarkdownProps } from "./components/markdown.js";
 export { PeopleList, type PeopleListProps } from "./components/people.js";
 export {
@@ -69,6 +96,7 @@ export {
 export { SignIn, type SignInProps } from "./components/sign-in.js";
 export { SkillList, type SkillListProps } from "./components/skills.js";
 export { TaskForm, type TaskFormProps } from "./components/task-form.js";
+export { TaskList, type TaskListProps } from "./components/task-list.js";
 export { TaskView, type TaskViewProps } from "./components/task-view.js";
 export {
   NewToken,
@@ -83,13 +111,18 @@ export {
   Badge,
   Button,
   Callout,
+  CategoryBadge,
   cx,
+  Day,
+  DueBadge,
   EmptyState,
   formatBytes,
   formatInstant,
+  GoalStateBadge,
   PersonChip,
   PRIORITY_LABELS,
   PriorityBadge,
+  ProgressBar,
   ROLE_LABELS,
   RoleBadge,
   Spinner,
@@ -97,6 +130,7 @@ export {
   StateBadge,
   Time,
 } from "./components/ui.js";
+export { WorkList, type WorkListProps } from "./components/work.js";
 export { ConnectPage, type ConnectPageProps } from "./connect-page.js";
 export {
   type ConsoleApp,
@@ -106,6 +140,24 @@ export {
   DEFAULT_COMPONENTS,
 } from "./console.js";
 export { type ConsoleActions, type ConsoleData, useConsoleData } from "./data.js";
+export {
+  addDays,
+  addMonths,
+  dateOf,
+  dayOf,
+  daysBetween,
+  firstDayOfWeek,
+  formatDay,
+  formatMonth,
+  formatWeekday,
+  type GridDay,
+  isDay,
+  isMonth,
+  monthGrid,
+  monthOf,
+  today,
+  weekdays,
+} from "./dates.js";
 export { DocsPage, type DocsPageProps } from "./docs-page.js";
 export {
   chooseLanguage,
@@ -120,14 +172,19 @@ export {
   useWords,
 } from "./i18n/index.js";
 export {
+  type BoardFilter,
+  boardHref,
+  calendarHref,
   connectHref,
   type DocsView,
   decisionHref,
   docHref,
+  goalHref,
   matchRoute,
   movedFrom,
   type Navigation,
   newDecisionHref,
+  newGoalHref,
   newTaskHref,
   PATHS,
   type ProjectPage,

@@ -5,6 +5,8 @@ import {
   MAX_LINKS,
   MAX_TITLE_LENGTH,
   MAX_URL_LENGTH,
+  type RestCategory,
+  type RestGoal,
   type RestPerson,
   type RestTask,
   type RestTaskInput,
@@ -15,6 +17,8 @@ import { useWords } from "../i18n/index.js";
 import { Button } from "./ui.js";
 
 // Writing a task, or changing one. The bounds are the package's, said before a request is made.
+// The plan is two days (ADR-0019); what happened to the task is the board's to keep, not a
+// field here.
 
 export interface TaskFormProps {
   readonly people: readonly RestPerson[];
@@ -22,6 +26,10 @@ export interface TaskFormProps {
   readonly task?: RestTask | undefined;
   /** The tasks a new one may be part of. */
   readonly parents?: readonly RestTask[] | undefined;
+  /** The categories of the workspace, to sort the task into one. */
+  readonly categories?: readonly RestCategory[] | undefined;
+  /** The goals of the project, for the task to work towards one. */
+  readonly goals?: readonly RestGoal[] | undefined;
   readonly busy?: boolean | undefined;
   readonly error?: string | undefined;
   readonly onSubmit: (input: RestTaskInput) => void;
@@ -43,6 +51,10 @@ export function TaskForm(props: TaskFormProps) {
   const [priority, setPriority] = useState(task?.priority ?? "normal");
   const [assigneeId, setAssigneeId] = useState(task?.assignee?.id ?? "");
   const [parentId, setParentId] = useState(task?.parentId ?? "");
+  const [category, setCategory] = useState(task?.category?.key ?? "");
+  const [goalId, setGoalId] = useState(task?.goalId ?? "");
+  const [startsOn, setStartsOn] = useState(task?.startsOn ?? "");
+  const [dueOn, setDueOn] = useState(task?.dueOn ?? "");
   const [links, setLinks] = useState<readonly LinkDraft[]>(
     task?.links.map((link) => ({ url: link.url, label: link.label ?? "" })) ?? [],
   );
@@ -56,6 +68,10 @@ export function TaskForm(props: TaskFormProps) {
       priority,
       assigneeId: assigneeId === "" ? null : assigneeId,
       parentId: parentId === "" ? null : parentId,
+      category: category === "" ? null : category,
+      goalId: goalId === "" ? null : goalId,
+      startsOn: startsOn === "" ? null : startsOn,
+      dueOn: dueOn === "" ? null : dueOn,
       links: links
         .filter((link) => link.url.trim().length > 0)
         .map((link) => ({
@@ -66,6 +82,12 @@ export function TaskForm(props: TaskFormProps) {
   };
 
   const parents = (props.parents ?? []).filter((candidate) => candidate.id !== task?.id);
+  const categories = props.categories ?? [];
+  // A goal let go is not offered, unless the task is on it already.
+  const goals = (props.goals ?? []).filter(
+    (goal) => goal.state !== "dropped" || goal.id === task?.goalId,
+  );
+  const datesInOrder = startsOn === "" || dueOn === "" || startsOn <= dueOn;
 
   return (
     <form className="sc-form" onSubmit={submit}>
@@ -134,6 +156,61 @@ export function TaskForm(props: TaskFormProps) {
             ))}
           </select>
         </label>
+        {categories.length > 0 && (
+          <label className="sc-field">
+            <span className="sc-field-label">{form.category}</span>
+            <select
+              className="sc-input"
+              value={category}
+              onChange={(event) => setCategory(event.target.value)}
+            >
+              <option value="">{form.noCategory}</option>
+              {categories.map((candidate) => (
+                <option key={candidate.key} value={candidate.key}>
+                  {candidate.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+      </div>
+      <div className="sc-field-row">
+        <label className="sc-field">
+          <span className="sc-field-label">{form.startsOn}</span>
+          <input
+            className="sc-input"
+            type="date"
+            value={startsOn}
+            onChange={(event) => setStartsOn(event.target.value)}
+          />
+        </label>
+        <label className="sc-field">
+          <span className="sc-field-label">{form.dueOn}</span>
+          <input
+            className="sc-input"
+            type="date"
+            value={dueOn}
+            min={startsOn === "" ? undefined : startsOn}
+            onChange={(event) => setDueOn(event.target.value)}
+          />
+        </label>
+        {goals.length > 0 && (
+          <label className="sc-field">
+            <span className="sc-field-label">{form.goal}</span>
+            <select
+              className="sc-input"
+              value={goalId}
+              onChange={(event) => setGoalId(event.target.value)}
+            >
+              <option value="">{form.noGoal}</option>
+              {goals.map((goal) => (
+                <option key={goal.id} value={goal.id}>
+                  {goal.title}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         {parents.length > 0 && (
           <label className="sc-field">
             <span className="sc-field-label">{form.partOf}</span>
@@ -214,7 +291,7 @@ export function TaskForm(props: TaskFormProps) {
         <Button
           type="submit"
           variant="primary"
-          disabled={props.busy === true || title.trim() === ""}
+          disabled={props.busy === true || title.trim() === "" || !datesInOrder}
         >
           {task === undefined ? form.write : words.common.save}
         </Button>

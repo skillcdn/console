@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import {
   type ConsoleClient,
   createClient,
+  OPEN_TASK_STATES,
   type RestAnswerInput,
   type RestDecision,
   type RestDecisionInput,
@@ -15,13 +16,17 @@ import {
   type RestTaskInput,
   type RestToken,
   type RestTokenCreated,
+  type RestWork,
   type TaskState,
 } from "./api.js";
-import { Board, type BoardProps } from "./components/board.js";
+import { Board, BoardFilters, type BoardProps, byDue, filterTasks } from "./components/board.js";
+import { Calendar, type CalendarProps, Workload } from "./components/calendar.js";
+import { CategoryList, type CategoryListProps } from "./components/categories.js";
 import { ConnectWords } from "./components/connect.js";
 import { DecisionForm } from "./components/decision-form.js";
 import { DecisionCard, DecisionList, type DecisionListProps } from "./components/decision-list.js";
 import { EventFeed, type EventFeedProps } from "./components/event-feed.js";
+import { GoalForm, GoalList, type GoalListProps, GoalView } from "./components/goals.js";
 import { PeopleList, type PeopleListProps } from "./components/people.js";
 import {
   MemberList,
@@ -40,11 +45,14 @@ import {
 import { SignIn, type SignInProps } from "./components/sign-in.js";
 import { SkillList, type SkillListProps } from "./components/skills.js";
 import { TaskForm } from "./components/task-form.js";
+import { TaskList } from "./components/task-list.js";
 import { TaskView, type TaskViewProps } from "./components/task-view.js";
 import { NewToken, TokenForm, TokenList, type TokenListProps } from "./components/tokens.js";
 import { Button, Callout, EmptyState, Spinner } from "./components/ui.js";
+import { WorkList, type WorkListProps } from "./components/work.js";
 import { ConnectPage } from "./connect-page.js";
 import { type ConsoleData, useConsoleData } from "./data.js";
+import { monthOf, today } from "./dates.js";
 import { DocsPage } from "./docs-page.js";
 import {
   chooseLanguage,
@@ -54,11 +62,15 @@ import {
   useWords,
 } from "./i18n/index.js";
 import {
+  boardHref,
+  calendarHref,
   decisionHref,
   docHref,
+  goalHref,
   matchRoute,
   type Navigation,
   newDecisionHref,
+  newGoalHref,
   newTaskHref,
   PATHS,
   personAgentsHref,
@@ -69,7 +81,7 @@ import {
   withoutSignInParam,
 } from "./router.js";
 import { projectPath } from "./routes.js";
-import { useAction } from "./use-action.js";
+import { errorWords, useAction } from "./use-action.js";
 
 // The composition of the default console: the pages assembled from the components, with the
 // places a team may replace named. The UI the image serves is this, with the default config.
@@ -90,6 +102,10 @@ export interface ConsoleComponents {
   readonly SkillList: ComponentType<SkillListProps>;
   readonly ProjectList: ComponentType<ProjectListProps>;
   readonly MemberList: ComponentType<MemberListProps>;
+  readonly Calendar: ComponentType<CalendarProps>;
+  readonly GoalList: ComponentType<GoalListProps>;
+  readonly WorkList: ComponentType<WorkListProps>;
+  readonly CategoryList: ComponentType<CategoryListProps>;
 }
 
 export const DEFAULT_COMPONENTS: ConsoleComponents = {
@@ -104,6 +120,10 @@ export const DEFAULT_COMPONENTS: ConsoleComponents = {
   SkillList,
   ProjectList,
   MemberList,
+  Calendar,
+  GoalList,
+  WorkList,
+  CategoryList,
 };
 
 export interface ConsoleConfig {
@@ -426,8 +446,11 @@ function TaskPage(props: {
       decisions={data.decisions}
       runs={data.runs}
       history={history}
+      categories={data.categories}
+      goals={data.goals}
       taskHref={(candidate) => taskHref(key, candidate.number)}
       decisionHref={(decisionId) => decisionHref(key, decisionId)}
+      goalHref={(goalId) => goalHref(key, goalId)}
       fileHref={(artifact) => projectPath(key, "files", artifact.id)}
       docHref={(path) => docHref(key, path)}
       form={route.form}
@@ -483,6 +506,8 @@ function ProjectPage(props: {
     void act(() => data.actions.updateDecision(decision.id, patch));
 
   if (route.name === "board") {
+    const me = data.me?.person ?? undefined;
+    const shown = filterTasks(data.tasks, route.filter, me);
     return (
       <>
         <div className="sc-page-head">
@@ -493,8 +518,21 @@ function ProjectPage(props: {
         </div>
         {project.description.length > 0 && <p className="sc-lead">{project.description}</p>}
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
+        {data.tasks.length > 0 && (
+          <BoardFilters
+            filter={route.filter}
+            categories={data.categories}
+            goals={data.goals}
+            people={data.people}
+            me={me}
+            shown={shown.length}
+            total={data.tasks.length}
+            onChange={(filter) => navigation.replace(boardHref(key, filter))}
+          />
+        )}
         <components.Board
-          tasks={data.tasks}
+          tasks={shown}
+          runs={data.runs}
           taskHref={href}
           onOpen={(task) => navigation.go(href(task))}
           onMove={onMove}
@@ -522,6 +560,8 @@ function ProjectPage(props: {
           <TaskForm
             people={data.people}
             parents={data.tasks}
+            categories={data.categories}
+            goals={data.goals}
             busy={busy}
             onSubmit={(input: RestTaskInput) =>
               void act(async () => {
@@ -547,6 +587,183 @@ function ProjectPage(props: {
         error={error}
         act={act}
       />
+    );
+  }
+  if (route.name === "calendar") {
+    const now = today();
+    const month = route.month ?? monthOf(now);
+    const open = data.tasks.filter((task) => OPEN_TASK_STATES.includes(task.state));
+    const overdue = open.filter((task) => task.dueOn !== null && task.dueOn < now).sort(byDue);
+    const unscheduled = open.filter((task) => task.dueOn === null).sort(byDue);
+    const calendar = words.calendar;
+    return (
+      <>
+        <div className="sc-page-head">
+          <h1 className="sc-page-title">{calendar.title}</h1>
+          <LinkButton href={newTaskHref(key)} variant="primary">
+            {words.board.writeTask}
+          </LinkButton>
+        </div>
+        <p className="sc-lead">{calendar.lead}</p>
+        <components.Calendar
+          tasks={data.tasks}
+          month={month}
+          today={now}
+          taskHref={href}
+          monthHref={(wanted) => calendarHref(key, wanted)}
+        />
+        <div className="sc-calendar-below">
+          <section className="sc-task-section" aria-label={calendar.overdue}>
+            <h2 className="sc-section-title">
+              {calendar.overdue} <span className="sc-column-count">{overdue.length}</span>
+            </h2>
+            <TaskList
+              tasks={overdue}
+              taskHref={href}
+              today={now}
+              showState
+              empty={<p className="sc-muted">{calendar.nothingOverdue}</p>}
+            />
+          </section>
+          <section className="sc-task-section" aria-label={calendar.unscheduled}>
+            <h2 className="sc-section-title">
+              {calendar.unscheduled} <span className="sc-column-count">{unscheduled.length}</span>
+            </h2>
+            <TaskList
+              tasks={unscheduled}
+              taskHref={href}
+              today={now}
+              showState
+              empty={<p className="sc-muted">{calendar.allScheduled}</p>}
+            />
+          </section>
+        </div>
+        {open.length > 0 && (
+          <section className="sc-task-section" aria-label={calendar.workload.title}>
+            <h2 className="sc-section-title">{calendar.workload.title}</h2>
+            <p className="sc-lead">{calendar.workload.lead}</p>
+            <Workload
+              tasks={data.tasks}
+              today={now}
+              personHref={(person) =>
+                boardHref(key, person === undefined ? {} : { person: person.id })
+              }
+            />
+          </section>
+        )}
+      </>
+    );
+  }
+  if (route.name === "roadmap" || route.name === "new-goal") {
+    const roadmap = words.roadmap;
+    const making = route.name === "new-goal";
+    if (making && !owner) {
+      return <EmptyState title={roadmap.onlyOwner.title} body={roadmap.onlyOwner.body} />;
+    }
+    return (
+      <>
+        <div className="sc-page-head">
+          <h1 className="sc-page-title">{roadmap.title}</h1>
+          {!making && owner && (
+            <LinkButton href={newGoalHref(key)} variant="primary">
+              {roadmap.setGoal}
+            </LinkButton>
+          )}
+        </div>
+        <p className="sc-lead">{roadmap.lead}</p>
+        {error !== undefined && <Callout tone="danger">{error}</Callout>}
+        {making && (
+          <section className="sc-panel sc-panel-form" aria-label={roadmap.setGoalAria}>
+            <GoalForm
+              busy={busy}
+              onSubmit={(input) =>
+                void act(async () => {
+                  const made = await data.actions.createGoal(input);
+                  navigation.replace(goalHref(key, made.id));
+                })
+              }
+              onCancel={() => navigation.back(projectHref(key, "roadmap"))}
+            />
+          </section>
+        )}
+        <components.GoalList
+          goals={data.goals}
+          goalHref={(goal) => goalHref(key, goal.id)}
+          empty={
+            <EmptyState
+              title={roadmap.empty.title}
+              body={roadmap.empty.body}
+              action={
+                owner ? (
+                  <LinkButton href={newGoalHref(key)}>{roadmap.setGoal}</LinkButton>
+                ) : undefined
+              }
+            />
+          }
+        />
+      </>
+    );
+  }
+  if (route.name === "goal") {
+    const roadmap = words.roadmap;
+    const goal = data.goals.find((candidate) => candidate.id === route.id);
+    const here = goalHref(key, route.id);
+    if (goal === undefined) {
+      return (
+        <EmptyState
+          title={roadmap.noSuch.title}
+          body={roadmap.noSuch.body}
+          action={<LinkButton href={projectHref(key, "roadmap")}>{roadmap.all}</LinkButton>}
+        />
+      );
+    }
+    if (route.form === "edit") {
+      if (!owner) {
+        return <EmptyState title={roadmap.onlyOwner.title} body={roadmap.onlyOwner.body} />;
+      }
+      return (
+        <>
+          <div className="sc-page-head">
+            <h1 className="sc-page-title">{goal.title}</h1>
+          </div>
+          {error !== undefined && <Callout tone="danger">{error}</Callout>}
+          <section className="sc-panel sc-panel-form" aria-label={roadmap.editAria}>
+            <GoalForm
+              goal={goal}
+              busy={busy}
+              onSubmit={(input) =>
+                void act(async () => {
+                  await data.actions.updateGoal(goal.id, input);
+                  navigation.replace(here);
+                })
+              }
+              onCancel={() => navigation.back(here)}
+            />
+          </section>
+        </>
+      );
+    }
+    return (
+      <>
+        <div className="sc-page-head">
+          <h1 className="sc-page-title">{roadmap.one}</h1>
+          <LinkButton href={projectHref(key, "roadmap")}>{roadmap.all}</LinkButton>
+        </div>
+        {error !== undefined && <Callout tone="danger">{error}</Callout>}
+        <GoalView
+          goal={goal}
+          tasks={data.tasks}
+          taskHref={href}
+          docHref={toDoc}
+          editHref={owner ? goalHref(key, goal.id, "edit") : undefined}
+          onMove={
+            owner
+              ? (target, state) => void act(() => data.actions.updateGoal(target.id, { state }))
+              : undefined
+          }
+          busy={busy}
+        />
+      </>
     );
   }
   if (route.name === "docs") {
@@ -649,6 +866,9 @@ function ProjectPage(props: {
             }
             if (event.decisionId !== null) {
               return decisionHref(key, event.decisionId);
+            }
+            if (event.goalId !== null) {
+              return goalHref(key, event.goalId);
             }
             return event.data.path === undefined ? undefined : toDoc(event.data.path);
           }}
@@ -822,6 +1042,55 @@ function PersonAgentsPage(props: {
   );
 }
 
+/** What is on the person's plate, across their projects: read when the page is opened. */
+function WorkPage(props: { readonly data: ConsoleData; readonly components: ConsoleComponents }) {
+  const words = useWords();
+  const { data, components } = props;
+  const [work, setWork] = useState<RestWork | undefined>(undefined);
+  const [problem, setProblem] = useState<string | undefined>(undefined);
+  const { work: load } = data.actions;
+  const couldNotLoad = words.work.couldNotLoad;
+  useEffect(() => {
+    const controller = new AbortController();
+    load(controller.signal)
+      .then((answer) => {
+        if (!controller.signal.aborted) {
+          setWork(answer);
+        }
+      })
+      .catch((failure: unknown) => {
+        if (!controller.signal.aborted) {
+          setProblem(errorWords(failure, couldNotLoad));
+        }
+      });
+    return () => controller.abort();
+  }, [load, couldNotLoad]);
+  return (
+    <>
+      <div className="sc-page-head">
+        <h1 className="sc-page-title">{words.work.title}</h1>
+      </div>
+      <p className="sc-lead">{words.work.lead}</p>
+      {problem !== undefined && <Callout tone="danger">{problem}</Callout>}
+      {work === undefined ? (
+        problem === undefined && (
+          <div className="sc-loading">
+            <Spinner label={words.work.loading} />
+          </div>
+        )
+      ) : work.tasks.length === 0 && work.decisions.length === 0 ? (
+        <EmptyState title={words.work.empty.title} body={words.work.empty.body} />
+      ) : (
+        <components.WorkList
+          work={work}
+          taskHref={(projectKey, task) => taskHref(projectKey, task.number)}
+          decisionHref={(projectKey, decisionId) => decisionHref(projectKey, decisionId)}
+        />
+      )}
+    </>
+  );
+}
+
 function WorkspacePage(props: {
   readonly route: Route;
   readonly data: ConsoleData;
@@ -832,6 +1101,48 @@ function WorkspacePage(props: {
   const { route, data, components, navigation } = props;
   const [fresh, setFresh] = useState<RestTokenCreated | undefined>(undefined);
   const { busy, error, act } = useAction();
+
+  if (route.name === "work") {
+    return <WorkPage data={data} components={components} />;
+  }
+  if (route.name === "categories") {
+    const me = data.me?.person ?? undefined;
+    const administrator = me?.role === "admin" && !holdsToken(data);
+    const categories = words.categories;
+    return (
+      <>
+        <div className="sc-page-head">
+          <h1 className="sc-page-title">{categories.title}</h1>
+        </div>
+        <p className="sc-lead">
+          {categories.lead} {categories.onlyAdmin}
+        </p>
+        {error !== undefined && <Callout tone="danger">{error}</Callout>}
+        <components.CategoryList
+          categories={data.categories}
+          busy={busy}
+          onAdd={
+            administrator
+              ? (input) => void act(() => data.actions.createCategory(input))
+              : undefined
+          }
+          onChange={
+            administrator
+              ? (category, patch) =>
+                  void act(() => data.actions.updateCategory(category.key, patch))
+              : undefined
+          }
+          onRemove={
+            administrator
+              ? (category) => void act(() => data.actions.removeCategory(category.key))
+              : undefined
+          }
+          empty={<EmptyState title={categories.empty.title} body={categories.empty.body} />}
+        />
+        {administrator && <p className="sc-muted">{categories.inUse}</p>}
+      </>
+    );
+  }
 
   if (route.name === "people") {
     const me = data.me?.person ?? undefined;
@@ -998,6 +1309,7 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
           label: words.nav.projects,
           current: route.name === "projects" || route.name === "new-project",
         },
+        { href: PATHS.work, label: words.nav.work, current: route.name === "work" },
         {
           href: PATHS.people,
           label: words.nav.people,
@@ -1012,6 +1324,16 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
                 current: route.name === "agents" || route.name === "new-token",
               },
             ]),
+        // The categories are read by everyone and kept by an administrator; only they need the page.
+        ...(data.me.person.role === "admin" && !viaToken
+          ? [
+              {
+                href: PATHS.categories,
+                label: words.nav.categories,
+                current: route.name === "categories",
+              },
+            ]
+          : []),
       ];
       const nav: NavItem[] =
         projectKey === undefined
@@ -1022,6 +1344,17 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
                 label: words.nav.board,
                 current:
                   route.name === "board" || route.name === "task" || route.name === "new-task",
+              },
+              {
+                href: projectHref(projectKey, "roadmap"),
+                label: words.nav.roadmap,
+                current:
+                  route.name === "roadmap" || route.name === "goal" || route.name === "new-goal",
+              },
+              {
+                href: projectHref(projectKey, "calendar"),
+                label: words.nav.calendar,
+                current: route.name === "calendar",
               },
               {
                 href: projectHref(projectKey, "docs"),
@@ -1140,7 +1473,7 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
           }}
           person={data.me.person}
           live={projectKey === undefined ? undefined : data.live}
-          wide={route.name === "board"}
+          wide={route.name === "board" || route.name === "calendar"}
           onNavigate={(href) => navigation.go(href)}
           onSignOut={viaToken ? undefined : () => void data.actions.signOut()}
         >

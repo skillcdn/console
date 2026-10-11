@@ -2351,6 +2351,496 @@ table {
   }
 }
 
+/* The schedule, the roadmap and the categories (ADR-0019). */
+
+/* The colours a category may be shown in: names, painted here and nowhere else. Each is a
+   dark fill with a light line and text, so that a badge reads on the glass. */
+.sc-category-gray {
+  --sc-category-line: #aeb7c4;
+  --sc-category-fill: #2a3240;
+}
+
+.sc-category-blue {
+  --sc-category-line: #8fb6ff;
+  --sc-category-fill: #1a2d52;
+}
+
+.sc-category-green {
+  --sc-category-line: #6fd3a0;
+  --sc-category-fill: #143326;
+}
+
+.sc-category-orange {
+  --sc-category-line: #ffb77a;
+  --sc-category-fill: #3a2414;
+}
+
+.sc-category-pink {
+  --sc-category-line: #ff9ac2;
+  --sc-category-fill: #3b1a2b;
+}
+
+.sc-category-purple {
+  --sc-category-line: #c4a4ff;
+  --sc-category-fill: #2b1f4a;
+}
+
+.sc-category-teal {
+  --sc-category-line: #7ad7d4;
+  --sc-category-fill: #10343a;
+}
+
+.sc-category-yellow {
+  --sc-category-line: #f0d36a;
+  --sc-category-fill: #3a3012;
+}
+
+.sc-badge-category {
+  border-color: color-mix(in srgb, var(--sc-category-line) 45%, transparent);
+  background: var(--sc-category-fill);
+  color: var(--sc-category-line);
+}
+
+.sc-category-swatch,
+.sc-calendar-dot {
+  display: inline-block;
+  flex: none;
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 50%;
+  background: var(--sc-category-line, var(--sc-color-text-faint));
+}
+
+/* The filters above the board: a quiet row of controls, as wide as its words. */
+.sc-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2) var(--sc-space-3);
+  margin-bottom: var(--sc-space-3);
+}
+
+.sc-filters .sc-field-inline {
+  flex: none;
+}
+
+.sc-filters .sc-input {
+  min-height: 2rem;
+  padding-block: 0;
+  font-size: var(--sc-text-sm);
+}
+
+.sc-filters-count {
+  font-size: var(--sc-text-sm);
+}
+
+/* Tasks as rows, where the columns are not the point. */
+.sc-task-rows {
+  display: grid;
+  gap: var(--sc-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sc-task-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2) var(--sc-space-3);
+  padding: var(--sc-space-2) var(--sc-space-3);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-sheet);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-task-row-title {
+  flex: 1 1 14rem;
+  min-width: 0;
+  color: var(--sc-color-text);
+  font-weight: var(--sc-weight-medium);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.sc-task-row-title:hover {
+  color: var(--sc-color-accent);
+}
+
+.sc-task-row-project {
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-xs);
+}
+
+.sc-task-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-1);
+  margin-left: auto;
+}
+
+/* The calendar: the month as a table, a cell a day, the tasks due in it one line each. */
+.sc-calendar {
+  display: grid;
+  gap: var(--sc-space-3);
+}
+
+.sc-calendar-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sc-space-2);
+}
+
+.sc-calendar-month {
+  font-size: var(--sc-text-lg);
+}
+
+.sc-calendar-nav {
+  display: flex;
+  gap: var(--sc-space-1);
+}
+
+.sc-calendar-grid {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0.25rem;
+  table-layout: fixed;
+}
+
+.sc-calendar-grid th {
+  padding: var(--sc-space-1);
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-xs);
+  font-weight: var(--sc-weight-medium);
+  letter-spacing: 0.04em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.sc-calendar-cell {
+  height: 7rem;
+  padding: var(--sc-space-1) var(--sc-space-2);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-sheet);
+  vertical-align: top;
+}
+
+.sc-calendar-cell-outside {
+  background: transparent;
+  color: var(--sc-color-text-faint);
+}
+
+.sc-calendar-cell-today {
+  border-color: var(--sc-color-accent);
+  box-shadow: inset 0 0 0 1px var(--sc-color-accent);
+}
+
+.sc-calendar-day {
+  display: block;
+  margin-bottom: var(--sc-space-1);
+  font-size: var(--sc-text-xs);
+  font-weight: var(--sc-weight-medium);
+}
+
+.sc-calendar-cell-today .sc-calendar-day {
+  color: var(--sc-color-accent);
+}
+
+.sc-calendar-task {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-space-1);
+  margin-top: 2px;
+  padding: 1px var(--sc-space-1);
+  border-radius: var(--sc-radius-sm);
+  color: var(--sc-color-text);
+  font-size: var(--sc-text-xs);
+  line-height: 1.4;
+  text-decoration: none;
+}
+
+.sc-calendar-task:hover {
+  background: var(--sc-color-sheet-hover);
+  color: var(--sc-color-text);
+}
+
+.sc-calendar-task-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-calendar-task-over {
+  color: var(--sc-color-text-faint);
+  text-decoration: line-through;
+}
+
+.sc-calendar-task-late {
+  color: var(--sc-color-danger);
+}
+
+.sc-calendar-task-start {
+  color: var(--sc-color-text-muted);
+}
+
+.sc-calendar-task-start::before {
+  content: "\203A";
+  color: var(--sc-color-text-faint);
+}
+
+.sc-calendar-below {
+  display: grid;
+  align-items: start;
+  gap: var(--sc-space-5);
+  margin-top: var(--sc-space-5);
+}
+
+@media (min-width: 64rem) {
+  .sc-calendar-below {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* The record of the decisions: a row each. */
+.sc-decision-log {
+  display: grid;
+  gap: var(--sc-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sc-decision-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sc-space-1) var(--sc-space-3);
+  padding: var(--sc-space-2) var(--sc-space-3);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-sheet);
+  font-size: var(--sc-text-sm);
+}
+
+@media (min-width: 40rem) {
+  .sc-decision-row {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto;
+    align-items: center;
+  }
+}
+
+.sc-decision-row-question {
+  overflow-wrap: anywhere;
+}
+
+.sc-decision-row-question a {
+  color: var(--sc-color-text);
+  text-decoration: none;
+}
+
+.sc-decision-row-question a:hover {
+  color: var(--sc-color-accent);
+}
+
+.sc-decision-row-answer {
+  color: var(--sc-color-success);
+  font-weight: var(--sc-weight-medium);
+  overflow-wrap: anywhere;
+}
+
+.sc-decision-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
+  color: var(--sc-color-text-muted);
+}
+
+/* Who has what: a small table, the late numbers in the danger colour. */
+.sc-workload {
+  width: 100%;
+  max-width: var(--sc-width-prose);
+  border-collapse: collapse;
+  font-size: var(--sc-text-sm);
+}
+
+.sc-workload th,
+.sc-workload td {
+  padding: var(--sc-space-2) var(--sc-space-3);
+  border-bottom: var(--sc-border);
+  text-align: left;
+}
+
+.sc-workload thead th {
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-xs);
+  font-weight: var(--sc-weight-medium);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sc-workload tbody th {
+  font-weight: var(--sc-weight-normal);
+}
+
+.sc-workload tbody th a {
+  color: var(--sc-color-text);
+  text-decoration: none;
+}
+
+.sc-workload tbody th a:hover {
+  color: var(--sc-color-accent);
+}
+
+.sc-workload td {
+  font-variant-numeric: tabular-nums;
+}
+
+.sc-workload-soon {
+  color: var(--sc-color-warning);
+}
+
+.sc-workload-late {
+  color: var(--sc-color-danger);
+  font-weight: var(--sc-weight-bold);
+}
+
+/* The roadmap: a goal a pane, with how far it is as a bar. */
+.sc-goals {
+  display: grid;
+  gap: var(--sc-space-3);
+  max-width: var(--sc-width-prose);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sc-goal {
+  display: grid;
+  gap: var(--sc-space-3);
+  padding: var(--sc-space-4) var(--sc-space-5);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-xl);
+  background: var(--sc-glass-surface);
+  backdrop-filter: var(--sc-glass-backdrop);
+}
+
+.sc-goal-done {
+  opacity: 0.75;
+}
+
+.sc-goal-dropped {
+  opacity: 0.55;
+}
+
+.sc-goal-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
+}
+
+.sc-goal-title {
+  flex: 1 1 12rem;
+  color: var(--sc-color-text);
+  font-size: var(--sc-text-lg);
+  font-weight: var(--sc-weight-medium);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.sc-goal-title:hover {
+  color: var(--sc-color-accent);
+}
+
+.sc-progress {
+  display: grid;
+  gap: var(--sc-space-1);
+}
+
+.sc-progress-bar {
+  display: flex;
+  height: 0.5rem;
+  overflow: hidden;
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-color-bg-inset);
+}
+
+.sc-progress-done {
+  background: var(--sc-color-success);
+}
+
+.sc-progress-working {
+  background: var(--sc-color-accent);
+}
+
+.sc-progress-words {
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-xs);
+}
+
+.sc-goal-tasks {
+  margin-top: var(--sc-space-3);
+}
+
+.sc-goal-tasks-state {
+  margin-bottom: var(--sc-space-2);
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-xs);
+  font-weight: var(--sc-weight-medium);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* The categories: a row each, with its name and its colour open to an administrator. */
+.sc-categories {
+  display: grid;
+  gap: var(--sc-space-4);
+  max-width: var(--sc-width-prose);
+}
+
+.sc-category-list {
+  display: grid;
+  gap: var(--sc-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sc-category-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2) var(--sc-space-3);
+  padding: var(--sc-space-2) var(--sc-space-3);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-sheet);
+}
+
+.sc-category-form {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2) var(--sc-space-3);
+}
+
+.sc-category-form .sc-field-inline {
+  flex: 1 1 10rem;
+}
+
+/* What is on a person's plate. */
+.sc-work {
+  display: grid;
+  gap: var(--sc-space-6);
+  max-width: var(--sc-width-prose);
+}
+
 /* Small screens. */
 
 @media (max-width: 40rem) {
@@ -2408,6 +2898,27 @@ table {
 
   .sc-board {
     grid-auto-columns: min(var(--sc-column-width), 85vw);
+  }
+
+  /* A phone's calendar has room for a dot per task and no more; the lists below say the rest. */
+  .sc-calendar-grid {
+    border-spacing: 2px;
+  }
+
+  .sc-calendar-cell {
+    height: 3.25rem;
+    padding: 2px var(--sc-space-1);
+  }
+
+  .sc-calendar-task {
+    display: inline-flex;
+    margin: 1px 2px 0 0;
+    padding: 0;
+  }
+
+  .sc-calendar-task-title,
+  .sc-calendar-task-start {
+    display: none;
   }
 
   .sc-feed-item {

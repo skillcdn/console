@@ -1,15 +1,23 @@
-import type { RestTaskLink, TaskPriority, TaskState } from "@skillcdn/console/api";
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import {
+  type CategoryColor,
+  OPEN_TASK_STATES,
+  type RestTaskLink,
+  type TaskPriority,
+  type TaskState,
+} from "@skillcdn/console/api";
+import { and, desc, eq, inArray, isNull, lte, notInArray, type SQL, sql } from "drizzle-orm";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
-import { decisions, people, projects, runs, tasks } from "../schema.js";
+import { categories, decisions, goals, people, projects, runs, tasks } from "../schema.js";
 import { recordLinks } from "./documents.js";
 import { type Actor, recordEvent, type Scope } from "./events.js";
 import { assignees, owners, type PersonRecord, personColumns, toPerson } from "./people.js";
-import { mayWorkIn } from "./projects.js";
+import { mayWorkIn, visibleTo } from "./projects.js";
 
 // The work on the board of a project. Every change is one transaction with the event that
-// records it, and every read is scoped to the project: a task of another is not found.
+// records it, and every read is scoped to the project: a task of another is not found. The
+// plan of a task is two days people set; what happened to it is two moments the board keeps
+// itself (ADR-0019).
 
 export interface TaskRecord {
   readonly id: string;
@@ -23,6 +31,18 @@ export interface TaskRecord {
   readonly owner: PersonRecord;
   readonly assignee: PersonRecord | undefined;
   readonly parentId: string | undefined;
+  /** The category the task is sorted into, as the workspace keeps it. */
+  readonly category:
+    | { readonly key: string; readonly name: string; readonly color: CategoryColor }
+    | undefined;
+  /** The goal of the project's roadmap the task works towards. */
+  readonly goalId: string | undefined;
+  /** The plan: the day the work is meant to begin, and the day it is due (`2026-10-20`). */
+  readonly startsOn: string | undefined;
+  readonly dueOn: string | undefined;
+  /** What happened: when the task was first moved past ready, and when it was moved to done. */
+  readonly startedAt: Date | undefined;
+  readonly doneAt: Date | undefined;
   readonly links: readonly RestTaskLink[];
   /** How many decisions about the task wait for a person. */
   readonly openDecisions: number;
@@ -34,17 +54,27 @@ export interface TaskRecord {
 
 /** What is wrong with a task a person asked for. `code` is what the API answers with. */
 export class TaskError extends DomainError {
-  constructor(code: "task.not_found" | "task.invalid_assignee" | "task.invalid_parent") {
-    super(
-      code,
-      code === "task.not_found"
-        ? "the task was not found"
-        : code === "task.invalid_assignee"
-          ? "the assignee is not a person of the project"
-          : "the parent is not a task of the project, or would make a loop",
-    );
+  constructor(
+    code:
+      | "task.not_found"
+      | "task.invalid_assignee"
+      | "task.invalid_parent"
+      | "task.invalid_category"
+      | "task.invalid_goal"
+      | "task.invalid_dates",
+  ) {
+    super(code, TASK_ERROR_WORDS[code]);
   }
 }
+
+const TASK_ERROR_WORDS = {
+  "task.not_found": "the task was not found",
+  "task.invalid_assignee": "the assignee is not a person of the project",
+  "task.invalid_parent": "the parent is not a task of the project, or would make a loop",
+  "task.invalid_category": "the category is not one of the workspace",
+  "task.invalid_goal": "the goal is not one of the project",
+  "task.invalid_dates": "the due day is before the start",
+} as const;
 
 export interface TaskInput {
   readonly title: string;
@@ -53,14 +83,36 @@ export interface TaskInput {
   readonly priority?: TaskPriority;
   readonly assigneeId?: string | null;
   readonly parentId?: string | null;
+  /** The key of a category of the workspace, or none. */
+  readonly category?: string | null;
+  readonly goalId?: string | null;
+  readonly startsOn?: string | null;
+  readonly dueOn?: string | null;
   readonly links?: readonly RestTaskLink[];
 }
 
 /** Only what changes; a key that is absent leaves the field as it is. */
 export type TaskPatch = Partial<TaskInput>;
 
+/** What the board is narrowed to, as the API takes it. */
+export interface TaskFilter {
+  readonly state?: TaskState | undefined;
+  /** True for the tasks not done or dropped; false for the rest. */
+  readonly open?: boolean | undefined;
+  /** The key of a category. */
+  readonly category?: string | undefined;
+  readonly goalId?: string | undefined;
+  readonly assigneeId?: string | undefined;
+  /** A day: the tasks due on it or before it. */
+  readonly dueBy?: string | undefined;
+  readonly limit: number;
+}
+
 /** How far up a chain of parents is looked at before a loop is assumed. */
 const MAX_PARENT_DEPTH = 50;
+
+/** The states past `ready`: a task in one of them has been started. */
+const STARTED_STATES: readonly TaskState[] = ["in_progress", "in_review", "done"];
 
 const openDecisionsOf = sql<number>`(select count(*) from ${decisions} where ${decisions.taskId} = ${tasks.id} and ${decisions.answeredAt} is null)`;
 const openRunsOf = sql<number>`(select count(*) from ${runs} where ${runs.taskId} = ${tasks.id} and ${runs.status} in ('running', 'waiting'))`;
@@ -75,11 +127,19 @@ const taskColumns = {
   state: tasks.state,
   priority: tasks.priority,
   parentId: tasks.parentId,
+  goalId: tasks.goalId,
+  startsOn: tasks.startsOn,
+  dueOn: tasks.dueOn,
+  startedAt: tasks.startedAt,
+  doneAt: tasks.doneAt,
   links: tasks.links,
   createdAt: tasks.createdAt,
   updatedAt: tasks.updatedAt,
   owner: personColumns(owners),
   assignee: personColumns(assignees),
+  categoryKey: categories.key,
+  categoryName: categories.name,
+  categoryColor: categories.color,
   openDecisions: openDecisionsOf.mapWith(Number),
   openRuns: openRunsOf.mapWith(Number),
 };
@@ -93,7 +153,8 @@ function selectTasks(handle: Handle) {
     .select(taskColumns)
     .from(tasks)
     .innerJoin(owners, eq(owners.id, tasks.ownerId))
-    .leftJoin(assignees, eq(assignees.id, tasks.assigneeId));
+    .leftJoin(assignees, eq(assignees.id, tasks.assigneeId))
+    .leftJoin(categories, eq(categories.id, tasks.categoryId));
 }
 
 function toTask(row: TaskRow): TaskRecord {
@@ -109,6 +170,15 @@ function toTask(row: TaskRow): TaskRecord {
     owner: toPerson(row.owner),
     assignee: row.assignee === null ? undefined : toPerson(row.assignee),
     parentId: row.parentId ?? undefined,
+    category:
+      row.categoryKey === null || row.categoryName === null || row.categoryColor === null
+        ? undefined
+        : { key: row.categoryKey, name: row.categoryName, color: row.categoryColor },
+    goalId: row.goalId ?? undefined,
+    startsOn: row.startsOn ?? undefined,
+    dueOn: row.dueOn ?? undefined,
+    startedAt: row.startedAt ?? undefined,
+    doneAt: row.doneAt ?? undefined,
     links: row.links,
     openDecisions: row.openDecisions,
     openRuns: row.openRuns,
@@ -186,6 +256,52 @@ async function checkParent(
   }
 }
 
+/** The category, named by its key, must be one of the workspace: its id, or `null` for none, or as it was. */
+async function categoryIdOf(
+  tx: Transaction,
+  scope: Scope,
+  key: string | null | undefined,
+): Promise<string | null | undefined> {
+  if (key === undefined || key === null) {
+    return key;
+  }
+  const [row] = await tx
+    .select({ id: categories.id })
+    .from(categories)
+    .where(and(eq(categories.workspaceId, scope.workspaceId), eq(categories.key, key)))
+    .limit(1);
+  if (row === undefined) {
+    throw new TaskError("task.invalid_category");
+  }
+  return row.id;
+}
+
+/** The goal must be one of the project. */
+async function checkGoal(
+  tx: Transaction,
+  scope: Scope,
+  goalId: string | null | undefined,
+): Promise<void> {
+  if (goalId === undefined || goalId === null) {
+    return;
+  }
+  const [row] = await tx
+    .select({ id: goals.id })
+    .from(goals)
+    .where(and(eq(goals.projectId, scope.projectId), eq(goals.id, goalId)))
+    .limit(1);
+  if (row === undefined) {
+    throw new TaskError("task.invalid_goal");
+  }
+}
+
+/** A plan whose due day comes before its start is no plan. Days compare as the strings they are. */
+function checkDates(startsOn: string | null, dueOn: string | null): void {
+  if (startsOn !== null && dueOn !== null && dueOn < startsOn) {
+    throw new TaskError("task.invalid_dates");
+  }
+}
+
 /** Writes a task down, numbered after the project's last, owned by whoever wrote it, and tells the board. */
 export async function createTask(
   database: Database,
@@ -200,6 +316,10 @@ export async function createTask(
   return drizzleOf(database).transaction(async (tx) => {
     await checkAssignee(tx, scope, task.assigneeId);
     await checkParent(tx, scope, undefined, task.parentId);
+    const categoryId = await categoryIdOf(tx, scope, task.category);
+    await checkGoal(tx, scope, task.goalId);
+    checkDates(task.startsOn ?? null, task.dueOn ?? null);
+    const state = task.state ?? "idea";
     // The counter is bumped under the row lock the update takes, so two tasks written at once
     // get two numbers.
     const [counter] = await tx
@@ -218,11 +338,18 @@ export async function createTask(
         number: counter.number,
         title: task.title,
         body: task.body ?? "",
-        state: task.state ?? "idea",
+        state,
         priority: task.priority ?? "normal",
         ownerId: actor.id,
         assigneeId: task.assigneeId ?? null,
         parentId: task.parentId ?? null,
+        categoryId: categoryId ?? null,
+        goalId: task.goalId ?? null,
+        startsOn: task.startsOn ?? null,
+        dueOn: task.dueOn ?? null,
+        // A task written past ready has been started; one written done is done now.
+        startedAt: STARTED_STATES.includes(state) ? now : null,
+        doneAt: state === "done" ? now : null,
         links: [...(task.links ?? [])],
         createdAt: now,
         updatedAt: now,
@@ -276,6 +403,12 @@ export async function updateTaskIn(tx: Transaction, input: TaskUpdate): Promise<
       priority: tasks.priority,
       assigneeId: tasks.assigneeId,
       parentId: tasks.parentId,
+      categoryId: tasks.categoryId,
+      goalId: tasks.goalId,
+      startsOn: tasks.startsOn,
+      dueOn: tasks.dueOn,
+      startedAt: tasks.startedAt,
+      doneAt: tasks.doneAt,
       links: tasks.links,
       number: tasks.number,
     })
@@ -287,6 +420,8 @@ export async function updateTaskIn(tx: Transaction, input: TaskUpdate): Promise<
   }
   await checkAssignee(tx, scope, patch.assigneeId);
   await checkParent(tx, scope, taskId, patch.parentId);
+  const categoryId = await categoryIdOf(tx, scope, patch.category);
+  await checkGoal(tx, scope, patch.goalId);
 
   const changed: string[] = [];
   const next = {
@@ -296,9 +431,23 @@ export async function updateTaskIn(tx: Transaction, input: TaskUpdate): Promise<
     priority: patch.priority ?? current.priority,
     assigneeId: patch.assigneeId === undefined ? current.assigneeId : patch.assigneeId,
     parentId: patch.parentId === undefined ? current.parentId : patch.parentId,
+    categoryId: categoryId === undefined ? current.categoryId : categoryId,
+    goalId: patch.goalId === undefined ? current.goalId : patch.goalId,
+    startsOn: patch.startsOn === undefined ? current.startsOn : patch.startsOn,
+    dueOn: patch.dueOn === undefined ? current.dueOn : patch.dueOn,
     links: patch.links === undefined ? current.links : [...patch.links],
   };
+  checkDates(next.startsOn, next.dueOn);
   for (const field of ["title", "body", "priority", "assigneeId", "parentId"] as const) {
+    if (next[field] !== current[field]) {
+      changed.push(field);
+    }
+  }
+  // Named on the wire as the API takes them, so that a feed says what a person changed.
+  if (next.categoryId !== current.categoryId) {
+    changed.push("category");
+  }
+  for (const field of ["goalId", "startsOn", "dueOn"] as const) {
     if (next[field] !== current[field]) {
       changed.push(field);
     }
@@ -314,9 +463,13 @@ export async function updateTaskIn(tx: Transaction, input: TaskUpdate): Promise<
     }
     return unchanged;
   }
+  // What happened, kept by the board: the first move past ready is the start, a move to done
+  // is the end, and a move back out of done takes the end away again.
+  const startedAt = current.startedAt ?? (STARTED_STATES.includes(next.state) ? now : null);
+  const doneAt = next.state === "done" ? (current.state === "done" ? current.doneAt : now) : null;
   await tx
     .update(tasks)
-    .set({ ...next, updatedAt: now })
+    .set({ ...next, startedAt, doneAt, updatedAt: now })
     .where(eq(tasks.id, taskId));
   if (changed.includes("body")) {
     await recordLinks(tx, scope, { kind: "task", id: taskId }, [next.body], now);
@@ -368,21 +521,57 @@ export function getTask(
   return readTask(drizzleOf(database), scope, taskId);
 }
 
-/** The board of the project, newest first, or one state of it. */
+/** The conditions a filter adds to a read of the board. */
+function narrowing(filter: Omit<TaskFilter, "limit">): (SQL | undefined)[] {
+  return [
+    filter.state === undefined ? undefined : eq(tasks.state, filter.state),
+    filter.open === undefined
+      ? undefined
+      : filter.open
+        ? inArray(tasks.state, [...OPEN_TASK_STATES])
+        : notInArray(tasks.state, [...OPEN_TASK_STATES]),
+    filter.category === undefined ? undefined : eq(categories.key, filter.category),
+    filter.goalId === undefined ? undefined : eq(tasks.goalId, filter.goalId),
+    filter.assigneeId === undefined ? undefined : eq(tasks.assigneeId, filter.assigneeId),
+    filter.dueBy === undefined ? undefined : lte(tasks.dueOn, filter.dueBy),
+  ];
+}
+
+/** The board of the project, newest first, or what the filter keeps of it. */
 export async function listTasks(
   database: Database,
   scope: Scope,
-  filter: { readonly state?: TaskState | undefined; readonly limit: number },
+  filter: TaskFilter,
 ): Promise<TaskRecord[]> {
   const rows = await selectTasks(drizzleOf(database))
-    .where(
-      and(
-        eq(tasks.projectId, scope.projectId),
-        filter.state === undefined ? undefined : eq(tasks.state, filter.state),
-      ),
-    )
+    .where(and(eq(tasks.projectId, scope.projectId), ...narrowing(filter)))
     .orderBy(desc(tasks.number))
     .limit(filter.limit);
+  return rows.map(toTask);
+}
+
+/**
+ * What is on a person's plate: the open tasks assigned to them, across the projects they may
+ * see, the sooner due first and those with no day last. For the workspace's own page of it.
+ */
+export async function listTasksAssignedTo(
+  database: Database,
+  workspaceId: string,
+  person: PersonRecord,
+  limit: number,
+): Promise<TaskRecord[]> {
+  const rows = await selectTasks(drizzleOf(database))
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+    .where(
+      and(
+        eq(tasks.workspaceId, workspaceId),
+        eq(tasks.assigneeId, person.id),
+        inArray(tasks.state, [...OPEN_TASK_STATES]),
+        visibleTo(person),
+      ),
+    )
+    .orderBy(sql`${tasks.dueOn} asc nulls last`, desc(tasks.number))
+    .limit(limit);
   return rows.map(toTask);
 }
 

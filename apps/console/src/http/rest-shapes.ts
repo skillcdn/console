@@ -1,9 +1,11 @@
 import type {
+  RestCategory,
   RestDecision,
   RestDocument,
   RestDocumentFile,
   RestDocumentSummary,
   RestEvent,
+  RestGoal,
   RestMember,
   RestPerson,
   RestProject,
@@ -13,6 +15,7 @@ import type {
   RestVersion,
   RestVersionSummary,
 } from "@skillcdn/console/api";
+import type { CategoryRecord } from "../db/queries/categories.js";
 import type { DecisionRecord } from "../db/queries/decisions.js";
 import type {
   DocumentFileRecord,
@@ -22,6 +25,7 @@ import type {
   VersionSummary,
 } from "../db/queries/documents.js";
 import type { EventRecord } from "../db/queries/events.js";
+import type { GoalRecord } from "../db/queries/goals.js";
 import type { PersonRecord } from "../db/queries/people.js";
 import type { MemberRecord, ProjectView } from "../db/queries/projects.js";
 import type { RunRecord } from "../db/queries/runs.js";
@@ -67,6 +71,30 @@ export function restMember(member: MemberRecord): RestMember {
   };
 }
 
+export function restCategory(category: CategoryRecord): RestCategory {
+  return {
+    key: category.key,
+    name: category.name,
+    color: category.color,
+    createdAt: category.createdAt.toISOString(),
+    updatedAt: category.updatedAt.toISOString(),
+  };
+}
+
+export function restGoal(goal: GoalRecord): RestGoal {
+  return {
+    id: goal.id,
+    title: goal.title,
+    body: goal.body,
+    state: goal.state,
+    dueOn: goal.dueOn ?? null,
+    createdBy: restPerson(goal.createdBy),
+    taskCounts: goal.taskCounts,
+    createdAt: goal.createdAt.toISOString(),
+    updatedAt: goal.updatedAt.toISOString(),
+  };
+}
+
 export function restTask(task: TaskRecord): RestTask {
   return {
     id: task.id,
@@ -78,6 +106,12 @@ export function restTask(task: TaskRecord): RestTask {
     owner: restPerson(task.owner),
     assignee: task.assignee === undefined ? null : restPerson(task.assignee),
     parentId: task.parentId ?? null,
+    category: task.category ?? null,
+    goalId: task.goalId ?? null,
+    startsOn: task.startsOn ?? null,
+    dueOn: task.dueOn ?? null,
+    startedAt: task.startedAt?.toISOString() ?? null,
+    doneAt: task.doneAt?.toISOString() ?? null,
     links: task.links.map((link) => ({ url: link.url, label: link.label ?? null })),
     openDecisions: task.openDecisions,
     openRuns: task.openRuns,
@@ -169,6 +203,7 @@ export function restEvent(event: EventRecord): RestEvent {
     decisionId: event.decisionId ?? null,
     runId: event.runId ?? null,
     documentId: event.documentId ?? null,
+    goalId: event.goalId ?? null,
     data: event.data,
     createdAt: event.createdAt.toISOString(),
   };

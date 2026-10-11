@@ -2,10 +2,11 @@ import type { RestDecisionOption } from "@skillcdn/console/api";
 import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
-import { decisions, runs, tasks } from "../schema.js";
+import { decisions, projects, runs, tasks } from "../schema.js";
 import { recordLinks } from "./documents.js";
 import { type Actor, recordEvent, type Scope } from "./events.js";
 import { answerers, type PersonRecord, personColumns, raisers, toPerson } from "./people.js";
+import { visibleTo } from "./projects.js";
 
 // The questions that need a person. A decision is raised once and answered once; both are
 // one transaction with the event that records them. Every read is scoped to the project.
@@ -419,6 +420,26 @@ export function getDecision(
   decisionId: string,
 ): Promise<DecisionRecord | undefined> {
   return readDecision(drizzleOf(database), scope, decisionId);
+}
+
+/**
+ * The decisions that wait for a person across the projects `person` may see, the oldest first:
+ * what has waited longest comes first on a person's own page of what is theirs to do.
+ */
+export async function listWaitingDecisionsFor(
+  database: Database,
+  workspaceId: string,
+  person: PersonRecord,
+  limit: number,
+): Promise<DecisionRecord[]> {
+  const rows = await selectDecisions(drizzleOf(database))
+    .innerJoin(projects, eq(projects.id, decisions.projectId))
+    .where(
+      and(eq(decisions.workspaceId, workspaceId), isNull(decisions.answeredAt), visibleTo(person)),
+    )
+    .orderBy(asc(decisions.createdAt), asc(decisions.id))
+    .limit(limit);
+  return rows.map(toDecision);
 }
 
 /** The decisions of the project, the ones that wait first and newest first within each; or only those that wait. */

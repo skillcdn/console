@@ -3,12 +3,16 @@ import { describe, expect, it } from "vitest";
 import type { ConsoleClient, ProjectClient } from "./api.js";
 import { createConsole, DEFAULT_COMPONENTS, onlyOnOwnPages } from "./console.js";
 import {
+  boardHref,
+  calendarHref,
   connectHref,
   decisionHref,
   docHref,
+  goalHref,
   matchRoute,
   movedFrom,
   newDecisionHref,
+  newGoalHref,
   newTaskHref,
   personAgentsHref,
   projectHref,
@@ -26,8 +30,16 @@ describe("matchRoute", () => {
     expect(matchRoute("/people/")).toEqual({ name: "people" });
     expect(matchRoute("/agents")).toEqual({ name: "agents" });
     expect(matchRoute("/agents/new")).toEqual({ name: "new-token" });
-    expect(matchRoute("/projects/web")).toEqual({ name: "board", project: "web" });
-    expect(matchRoute("/projects/web/")).toEqual({ name: "board", project: "web" });
+    expect(matchRoute("/projects/web")).toEqual({ name: "board", project: "web", filter: {} });
+    expect(matchRoute("/projects/web/")).toEqual({ name: "board", project: "web", filter: {} });
+    expect(matchRoute("/work")).toEqual({ name: "work" });
+    expect(matchRoute("/categories")).toEqual({ name: "categories" });
+    expect(matchRoute("/projects/web/roadmap")).toEqual({ name: "roadmap", project: "web" });
+    expect(matchRoute("/projects/web/calendar")).toEqual({
+      name: "calendar",
+      project: "web",
+      month: undefined,
+    });
     expect(matchRoute("/projects/web/decisions/")).toEqual({ name: "decisions", project: "web" });
     expect(matchRoute("/projects/web-2/feed")).toEqual({ name: "feed", project: "web-2" });
     expect(matchRoute("/projects/web/skills")).toEqual({ name: "skills", project: "web" });
@@ -54,6 +66,10 @@ describe("matchRoute", () => {
       "/projects/web/decisions/x",
       "/projects/web/nothing",
       "/projects/web/feed/x",
+      "/projects/web/roadmap/x",
+      "/projects/web/roadmap/new/x",
+      "/projects/web/calendar/x",
+      "/work/x",
       `/tasks/${ID}`,
       "/agents/x",
       "/elsewhere",
@@ -128,6 +144,53 @@ describe("matchRoute", () => {
     );
   });
 
+  it("reads the board's filters, the calendar's month and a goal's form off the query", () => {
+    expect(matchRoute("/projects/web", "?category=engineering&mine")).toEqual({
+      name: "board",
+      project: "web",
+      filter: { category: "engineering", mine: true },
+    });
+    expect(matchRoute("/projects/web", `?goal=${ID}&person=${ID}`)).toMatchObject({
+      filter: { goal: ID, person: ID },
+    });
+    // A value that is not one is left out, never carried.
+    expect(matchRoute("/projects/web", "?category=Not%20A%20Key&person=bob&goal=7")).toMatchObject({
+      filter: {},
+    });
+    expect(matchRoute("/projects/web", "?category=&goal=")).toMatchObject({
+      filter: { category: "", goal: "" },
+    });
+    expect(boardHref("web", {})).toBe("/projects/web");
+    expect(boardHref("web", { category: "engineering", mine: true })).toBe(
+      "/projects/web?category=engineering&mine",
+    );
+    expect(boardHref("web", { goal: "", person: ID })).toBe(`/projects/web?goal=&person=${ID}`);
+    const [narrowedPath = "", narrowedQuery = ""] = boardHref("web", {
+      category: "",
+      person: ID,
+    }).split("?");
+    expect(matchRoute(narrowedPath, `?${narrowedQuery}`)).toMatchObject({
+      filter: { category: "", person: ID },
+    });
+    expect(matchRoute("/projects/web/calendar", "?month=2026-10")).toEqual({
+      name: "calendar",
+      project: "web",
+      month: "2026-10",
+    });
+    expect(matchRoute("/projects/web/calendar", "?month=2026-13")).toEqual({ name: "not-found" });
+    expect(calendarHref("web")).toBe("/projects/web/calendar");
+    expect(calendarHref("web", "2026-10")).toBe("/projects/web/calendar?month=2026-10");
+    expect(matchRoute(newGoalHref("web"))).toEqual({ name: "new-goal", project: "web" });
+    expect(goalHref("web", ID)).toBe(`/projects/web/roadmap/${ID}`);
+    expect(goalHref("web", ID, "edit")).toBe(`/projects/web/roadmap/${ID}?edit`);
+    expect(matchRoute(`/projects/web/roadmap/${ID}`, "?edit")).toEqual({
+      name: "goal",
+      project: "web",
+      id: ID,
+      form: "edit",
+    });
+  });
+
   it("takes the addresses of the line before to the new ones", () => {
     expect(movedFrom("/p/web/decisions")).toBe("/projects/web/decisions");
     expect(movedFrom("/tokens")).toBe("/agents");
@@ -194,6 +257,10 @@ describe("createConsole", () => {
     attachFile: never,
     documentFileUrl: (path: string, id: string) =>
       `/api/v1/projects/${key}/docs/${encodeURIComponent(path)}/files/${id}`,
+    goals: never,
+    goal: never,
+    createGoal: never,
+    updateGoal: never,
   });
   const client: ConsoleClient = {
     me: never,
@@ -215,6 +282,11 @@ describe("createConsole", () => {
     denyConnection: never,
     claimConnection: never,
     signOut: never,
+    categories: never,
+    createCategory: never,
+    updateCategory: never,
+    removeCategory: never,
+    work: never,
   };
 
   it("assembles an app from the default components, and the ones a team replaces", () => {
@@ -242,9 +314,13 @@ describe("createConsole", () => {
     for (const path of [
       "/",
       "/people",
+      "/work",
+      "/categories",
       "/projects/web",
       "/projects/web/tasks/new",
       "/projects/web/members",
+      "/projects/web/roadmap",
+      "/projects/web/calendar",
     ]) {
       expect(onlyOnOwnPages(matchRoute(path)), path).toBe(false);
     }

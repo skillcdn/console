@@ -1,17 +1,20 @@
 import type {
   RestAnswerInput,
   RestArtifact,
+  RestCategory,
   RestDecision,
   RestDecisionInput,
   RestDecisionPatch,
   RestEvent,
+  RestGoal,
   RestPerson,
   RestRun,
   RestTask,
   RestTaskInput,
   TaskState,
 } from "../api.js";
-import { useWords } from "../i18n/index.js";
+import { formatDay } from "../dates.js";
+import { useLanguage, useWords } from "../i18n/index.js";
 import type { TaskFormKind } from "../router.js";
 import { TASK_STATES } from "../vocabulary.js";
 import { DecisionForm } from "./decision-form.js";
@@ -20,12 +23,13 @@ import { EventFeed } from "./event-feed.js";
 import { Markdown } from "./markdown.js";
 import { RunList } from "./runs.js";
 import { TaskForm } from "./task-form.js";
-import { PersonChip, PriorityBadge, StateBadge, Time } from "./ui.js";
+import { CategoryBadge, DueBadge, PersonChip, PriorityBadge, StateBadge, Time } from "./ui.js";
 
 // One task: what it is, who it is on, what it links to, the agents at work on it, the decisions
 // about it, the tasks that are part of it, everything that happened to it, and the ways to
 // change it. Takes its data as props and nothing from the network; which of its forms is open
-// is told by the page, since each form has an address of its own (ADR-0010).
+// is told by the page, since each form has an address of its own (ADR-0010). The facts beside
+// the text say only what is set: a plan, a category or a goal the task has none of is not a row.
 
 export interface TaskViewProps {
   readonly task: RestTask;
@@ -37,13 +41,21 @@ export interface TaskViewProps {
   readonly runs?: readonly RestRun[] | undefined;
   /** Everything that happened to the task, oldest first, when the page has read it. */
   readonly history?: readonly RestEvent[] | undefined;
+  /** The categories of the workspace, for the form. */
+  readonly categories?: readonly RestCategory[] | undefined;
+  /** The goals of the project, for the form and for naming the one the task works towards. */
+  readonly goals?: readonly RestGoal[] | undefined;
   readonly taskHref: (task: RestTask) => string;
   /** Where a decision is answered, for a run that waits for one. */
   readonly decisionHref?: ((decisionId: string) => string) | undefined;
+  /** Where a goal of the roadmap is read. */
+  readonly goalHref?: ((goalId: string) => string) | undefined;
   /** Where a file a run handed in is read. */
   readonly fileHref?: ((artifact: RestArtifact) => string) | undefined;
   /** Where a document of the project is read, by its path, for the links in what was written. */
   readonly docHref?: ((path: string) => string) | undefined;
+  /** The day to count due days from; the browser's today when left out. */
+  readonly today?: string | undefined;
   /** The form open on the page, if one: the task edited, or a decision raised about it. */
   readonly form?: TaskFormKind | undefined;
   /** Where each form is opened; left out, the forms cannot be opened from here. */
@@ -65,6 +77,7 @@ export interface TaskViewProps {
 
 export function TaskView(props: TaskViewProps) {
   const words = useWords();
+  const { tag } = useLanguage();
   const { task } = props;
   const parent =
     task.parentId === null
@@ -74,6 +87,11 @@ export function TaskView(props: TaskViewProps) {
   const about = props.decisions.filter((decision) => decision.taskId === task.id);
   const runs = (props.runs ?? []).filter((run) => run.taskId === task.id);
   const tasksById = new Map(props.tasks.map((candidate) => [candidate.id, candidate]));
+  const goal =
+    task.goalId === null
+      ? undefined
+      : props.goals?.find((candidate) => candidate.id === task.goalId);
+  const day = (value: string) => formatDay(value, tag);
 
   if (props.form === "edit") {
     return (
@@ -85,6 +103,8 @@ export function TaskView(props: TaskViewProps) {
           people={props.people}
           task={task}
           parents={props.tasks}
+          categories={props.categories}
+          goals={props.goals}
           busy={props.busy}
           error={props.error}
           onSubmit={(input) => props.onChange(task, input)}
@@ -110,7 +130,11 @@ export function TaskView(props: TaskViewProps) {
         </h1>
         <div className="sc-task-badges">
           <StateBadge state={task.state} />
+          {task.category !== null && <CategoryBadge category={task.category} />}
           <PriorityBadge priority={task.priority} />
+          {task.dueOn !== null && (
+            <DueBadge dueOn={task.dueOn} state={task.state} today={props.today} />
+          )}
         </div>
       </header>
       <div className="sc-task-body">
@@ -226,6 +250,26 @@ export function TaskView(props: TaskViewProps) {
               <dt>{words.task.form.priority}</dt>
               <dd>{words.vocabulary.priority[task.priority]}</dd>
             </div>
+            {task.category !== null && (
+              <div>
+                <dt>{words.task.category}</dt>
+                <dd>
+                  <CategoryBadge category={task.category} />
+                </dd>
+              </div>
+            )}
+            {task.goalId !== null && (
+              <div>
+                <dt>{words.task.goal}</dt>
+                <dd>
+                  {props.goalHref === undefined ? (
+                    (goal?.title ?? task.goalId)
+                  ) : (
+                    <a href={props.goalHref(task.goalId)}>{goal?.title ?? task.goalId}</a>
+                  )}
+                </dd>
+              </div>
+            )}
             <div>
               <dt>{words.task.owner}</dt>
               <dd>
@@ -242,6 +286,33 @@ export function TaskView(props: TaskViewProps) {
                 )}
               </dd>
             </div>
+            {(task.startsOn !== null || task.dueOn !== null) && (
+              <div>
+                <dt>{words.task.plan}</dt>
+                <dd>
+                  {words.task.planned(
+                    task.startsOn === null ? undefined : day(task.startsOn),
+                    task.dueOn === null ? undefined : day(task.dueOn),
+                  )}
+                </dd>
+              </div>
+            )}
+            {task.startedAt !== null && (
+              <div>
+                <dt>{words.task.started}</dt>
+                <dd>
+                  <Time iso={task.startedAt} />
+                </dd>
+              </div>
+            )}
+            {task.doneAt !== null && (
+              <div>
+                <dt>{words.task.done}</dt>
+                <dd>
+                  <Time iso={task.doneAt} />
+                </dd>
+              </div>
+            )}
             <div>
               <dt>{words.task.written}</dt>
               <dd>

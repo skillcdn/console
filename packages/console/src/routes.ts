@@ -17,7 +17,16 @@ export const REST_ROUTES = {
   tokens: "/api/v1/tokens",
   /** Connecting an agent (ADR-0011): begun as nobody, approved by a person, claimed by the command. */
   connect: "/api/v1/connect",
+  /** The categories tasks are sorted into (ADR-0019): the workspace's vocabulary, kept by an administrator. */
+  categories: "/api/v1/categories",
+  /** What is on the asker's plate across the projects they may see: their open tasks, and the decisions waiting. */
+  work: "/api/v1/work",
 } as const;
+
+/** The REST path of one category, by its key. */
+export function categoryPath(key: string): string {
+  return `${REST_ROUTES.categories}/${encodeURIComponent(key)}`;
+}
 
 /** Where the command claims the token of a connection, with its secret. */
 export const CLAIM_PATH = `${REST_ROUTES.connect}/claim`;
@@ -44,6 +53,7 @@ export const PROJECT_COLLECTIONS = [
   "skills",
   "members",
   "docs",
+  "goals",
 ] as const;
 
 export type ProjectCollection = (typeof PROJECT_COLLECTIONS)[number];

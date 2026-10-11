@@ -1,6 +1,7 @@
 import {
   AUTH_ROUTES,
   CLAIM_PATH,
+  categoryPath,
   connectPath,
   personTokensPath,
   projectPath,
@@ -10,6 +11,10 @@ import {
 import {
   type RestAnswerInput,
   type RestArtifactInput,
+  type RestCategories,
+  type RestCategory,
+  type RestCategoryInput,
+  type RestCategoryPatch,
   type RestClaim,
   type RestConnectInput,
   type RestConnection,
@@ -22,6 +27,10 @@ import {
   type RestDocumentInput,
   type RestDocuments,
   type RestEvents,
+  type RestGoal,
+  type RestGoalInput,
+  type RestGoalPatch,
+  type RestGoals,
   type RestMe,
   type RestMember,
   type RestMemberInput,
@@ -50,6 +59,9 @@ import {
   type RestTokens,
   type RestVersion,
   type RestVersions,
+  type RestWork,
+  restCategoriesSchema,
+  restCategorySchema,
   restClaimSchema,
   restConnectionSchema,
   restConnectRequestSchema,
@@ -59,6 +71,8 @@ import {
   restDocumentsSchema,
   restErrorSchema,
   restEventsSchema,
+  restGoalSchema,
+  restGoalsSchema,
   restMemberSchema,
   restMembersSchema,
   restMeSchema,
@@ -75,6 +89,7 @@ import {
   restTokensSchema,
   restVersionSchema,
   restVersionsSchema,
+  restWorkSchema,
 } from "./schemas.js";
 import type { TaskState } from "./vocabulary.js";
 
@@ -135,6 +150,21 @@ export interface EventFilter {
   readonly document?: string | undefined;
 }
 
+/** What the board is narrowed to: one state, the open ones, a category, a goal, an assignee, or what is due by a day. */
+export interface TaskFilter {
+  readonly state?: TaskState | undefined;
+  /** True for the tasks not done or dropped; false for the rest. */
+  readonly open?: boolean | undefined;
+  /** The key of a category. */
+  readonly category?: string | undefined;
+  /** The id of a goal. */
+  readonly goal?: string | undefined;
+  /** The id of the person the tasks are assigned to. */
+  readonly assignee?: string | undefined;
+  /** A day (`2026-10-20`): the tasks due on it or before it. */
+  readonly dueBy?: string | undefined;
+}
+
 /** What a folder's listing, or a search, of the documents is narrowed to. */
 export interface DocumentFilter {
   /** The folder to list, `""` or left out for the root. */
@@ -159,7 +189,7 @@ export interface ProjectClient {
   addMember(input: RestMemberInput): Promise<RestMember>;
   updateMember(personId: string, patch: RestMemberPatch): Promise<RestMember>;
   removeMember(personId: string): Promise<void>;
-  tasks(filter?: { readonly state?: TaskState }, signal?: AbortSignal): Promise<RestTasks>;
+  tasks(filter?: TaskFilter, signal?: AbortSignal): Promise<RestTasks>;
   /** One task, by its id or by its number. */
   task(ref: string, signal?: AbortSignal): Promise<RestTask>;
   createTask(input: RestTaskInput): Promise<RestTask>;
@@ -221,6 +251,12 @@ export interface ProjectClient {
   attachFile(path: string, input: FileUpload): Promise<RestDocument>;
   /** Where the bytes of a file attached to a document are read, by the file's id. */
   documentFileUrl(path: string, fileId: string): string;
+  /** The roadmap (ADR-0019): the goals, the active first, each with its tasks counted by state. */
+  goals(signal?: AbortSignal): Promise<RestGoals>;
+  goal(id: string, signal?: AbortSignal): Promise<RestGoal>;
+  /** Sets a goal; for an owner, with a session or a token. */
+  createGoal(input: RestGoalInput): Promise<RestGoal>;
+  updateGoal(id: string, patch: RestGoalPatch): Promise<RestGoal>;
 }
 
 export interface ConsoleClient {
@@ -238,6 +274,15 @@ export interface ConsoleClient {
   project(key: string): ProjectClient;
   /** The workspace's own events, the ones about no project, after event number `after`. */
   events(after: number, signal?: AbortSignal): Promise<RestEvents>;
+  /** The categories tasks are sorted into (ADR-0019), by name. */
+  categories(signal?: AbortSignal): Promise<RestCategories>;
+  /** Makes a category; for an administrator signed in. */
+  createCategory(input: RestCategoryInput): Promise<RestCategory>;
+  updateCategory(key: string, patch: RestCategoryPatch): Promise<RestCategory>;
+  /** Removes a category no task uses; for an administrator signed in. */
+  removeCategory(key: string): Promise<void>;
+  /** What is on the asker's plate across the projects they may see: their open tasks, and the decisions waiting. */
+  work(signal?: AbortSignal): Promise<RestWork>;
   /** The tokens of whoever asks. */
   tokens(signal?: AbortSignal): Promise<RestTokens>;
   /** The tokens of another person: for an administrator. */
@@ -370,7 +415,14 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
       tasks: (filter = {}, signal) =>
         request(
           "GET",
-          withQuery(at("tasks"), { state: filter.state }),
+          withQuery(at("tasks"), {
+            state: filter.state,
+            open: flag(filter.open),
+            category: filter.category,
+            goal: filter.goal,
+            assignee: filter.assignee,
+            dueBy: filter.dueBy,
+          }),
           undefined,
           restTasksSchema,
           signal,
@@ -485,6 +537,13 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
         request("POST", `${base}${at("docs", path)}/files`, formOf(input), restDocumentSchema),
       documentFileUrl: (path, fileId) =>
         `${base}${at("docs", path)}/files/${encodeURIComponent(fileId)}`,
+      goals: (signal) =>
+        request("GET", `${base}${at("goals")}`, undefined, restGoalsSchema, signal),
+      goal: (id, signal) =>
+        request("GET", `${base}${at("goals", id)}`, undefined, restGoalSchema, signal),
+      createGoal: (input) => request("POST", `${base}${at("goals")}`, input, restGoalSchema),
+      updateGoal: (id, patch) =>
+        request("PATCH", `${base}${at("goals", id)}`, patch, restGoalSchema),
     };
   };
 
@@ -507,6 +566,15 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
         restEventsSchema,
         signal,
       ),
+    categories: (signal) =>
+      request("GET", `${base}${REST_ROUTES.categories}`, undefined, restCategoriesSchema, signal),
+    createCategory: (input) =>
+      request("POST", `${base}${REST_ROUTES.categories}`, input, restCategorySchema),
+    updateCategory: (key, patch) =>
+      request("PATCH", `${base}${categoryPath(key)}`, patch, restCategorySchema),
+    removeCategory: (key) => request("DELETE", `${base}${categoryPath(key)}`, undefined, undefined),
+    work: (signal) =>
+      request("GET", `${base}${REST_ROUTES.work}`, undefined, restWorkSchema, signal),
     tokens: (signal) =>
       request("GET", `${base}${REST_ROUTES.tokens}`, undefined, restTokensSchema, signal),
     createToken: (input) =>

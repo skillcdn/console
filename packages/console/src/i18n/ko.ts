@@ -27,6 +27,17 @@ export const ko: Messages = {
       failed: "실패",
       abandoned: "중단됨",
     },
+    goalState: { planned: "계획됨", active: "진행 중", done: "달성", dropped: "중단" },
+    categoryColor: {
+      gray: "회색",
+      blue: "파랑",
+      green: "초록",
+      orange: "주황",
+      pink: "분홍",
+      purple: "보라",
+      teal: "청록",
+      yellow: "노랑",
+    },
   },
 
   common: {
@@ -61,9 +72,13 @@ export const ko: Messages = {
 
   nav: {
     projects: "프로젝트",
+    work: "내 작업",
     people: "사람들",
     agents: "에이전트",
+    categories: "카테고리",
     board: "보드",
+    roadmap: "로드맵",
+    calendar: "캘린더",
     docs: "문서",
     decisions: "결정",
     feed: "피드",
@@ -166,7 +181,25 @@ export const ko: Messages = {
     decisionsTitle: "사람을 기다리는 결정",
     agentAtWork: "에이전트 작업 중",
     agentAtWorkTitle: "에이전트가 이 작업을 하고 있습니다",
-    links: (n) => `링크 ${n}개`,
+    agentSince: (agent, since) => `${agent}, ${since}부터 작업 중`,
+    filters: {
+      aria: "보드 좁혀 보기",
+      everyone: "모두",
+      mine: "내 작업",
+      anyCategory: "모든 카테고리",
+      noCategory: "카테고리 없음",
+      anyGoal: "모든 목표",
+      noGoal: "목표 없음",
+      clear: "전체 보기",
+      showing: (n, of) => `작업 ${of}개 중 ${n}개`,
+    },
+    due: {
+      overdue: (days) => `${days}일 지남`,
+      today: "오늘 마감",
+      tomorrow: "내일 마감",
+      inDays: (days) => `${days}일 남음`,
+      on: (day) => `${day} 마감`,
+    },
   },
 
   task: {
@@ -192,6 +225,19 @@ export const ko: Messages = {
     history: "일어난 일",
     subtasks: "하위 작업",
     partOfIt: "하위 작업",
+    category: "카테고리",
+    goal: "목표",
+    plan: "일정",
+    planned: (from, to) =>
+      from !== undefined && to !== undefined
+        ? `${from}부터 ${to}까지`
+        : from !== undefined
+          ? `${from}부터`
+          : to !== undefined
+            ? `${to}까지`
+            : "",
+    started: "시작",
+    done: "완료",
     form: {
       title: "제목",
       body: "본문",
@@ -200,6 +246,12 @@ export const ko: Messages = {
       priority: "우선순위",
       assignee: "배정",
       partOf: "상위 작업",
+      category: "카테고리",
+      noCategory: "카테고리 없음",
+      goal: "목표",
+      noGoal: "목표 없음",
+      startsOn: "시작일",
+      dueOn: "기한",
       links: "링크",
       label: "이름",
       addLink: "링크 추가",
@@ -223,6 +275,10 @@ export const ko: Messages = {
     },
     waiting: "대기 중",
     answered: "답변됨",
+    record: "기록",
+    recordLead:
+      "답변된 모든 결정, 최신순. 무엇을 물었고, 무엇을 골랐고, 누가 골랐는지. 맥락과 근거, 그 뒤에 일어난 일은 각 결정을 열어 봅니다.",
+    openRecord: "열기",
     waitingForPerson: "사람을 기다리는 중입니다.",
     options: "선택지",
     notePlaceholder: "덧붙일 말이 있다면",
@@ -250,6 +306,111 @@ export const ko: Messages = {
     },
   },
 
+  calendar: {
+    title: "캘린더",
+    lead: "작업을 기한일에 놓고 봅니다. 시작일이 있는 작업은 그날부터 보이고, 날짜가 없는 작업은 아래에서 날짜를 기다립니다.",
+    grid: "이 달",
+    previous: "이전 달",
+    next: "다음 달",
+    thisMonth: "이번 달",
+    nothingDue: "이 달에 마감인 작업이 없습니다.",
+    overdue: "기한 지남",
+    nothingOverdue: "기한이 지난 작업이 없습니다.",
+    unscheduled: "날짜 없음",
+    allScheduled: "열린 작업마다 날짜가 있습니다.",
+    starts: "시작",
+    workload: {
+      title: "누가 무엇을",
+      lead: "사람마다 열린 작업과, 그중 늦은 것과 일주일 안에 마감인 것.",
+      person: "사람",
+      open: "열림",
+      inProgress: "진행 중",
+      dueSoon: "7일 내 마감",
+      overdue: "기한 지남",
+      unassigned: "아직 배정 없음",
+    },
+  },
+
+  roadmap: {
+    title: "로드맵",
+    lead: "프로젝트가 향하는 것. 목표마다 달성 목표일과, 그 아래 작업들이 어디까지 왔는지. 진행은 보드의 현재 상태에서 그대로 읽습니다.",
+    setGoal: "목표 세우기",
+    setGoalAria: "목표 세우기",
+    editAria: "목표 바꾸기",
+    one: "목표",
+    all: "모든 목표",
+    empty: {
+      title: "아직 세운 목표가 없습니다",
+      body: "소유자가 첫 목표를 세웁니다. 무엇을, 언제까지. 그 뒤 작업을 그 목표를 향해 씁니다.",
+    },
+    noSuch: {
+      title: "그런 목표가 없습니다",
+      body: "다른 프로젝트의 것이거나, 링크가 잘못됐습니다.",
+    },
+    onlyOwner: {
+      title: "로드맵은 소유자만 세웁니다",
+      body: "프로젝트 소유자나 워크스페이스 관리자에게 요청하세요.",
+    },
+    progress: (done, of) => `작업 ${of}개 중 ${done}개 완료`,
+    inProgress: (n) => `${n}개 진행 중`,
+    noTasks: "아직 이 목표를 향한 작업이 없습니다.",
+    tasks: "작업",
+    target: "목표일",
+    noTarget: "목표일 없음",
+    setBy: "세운 사람",
+    state: "상태",
+    nothingMore: "더 적힌 내용이 없습니다.",
+    form: {
+      title: "제목",
+      body: "달성의 의미",
+      bodyPlaceholder: "목표를 이루면 무엇이 참이 되는지, Markdown으로.",
+      state: "상태",
+      dueOn: "목표일",
+      set: "목표 세우기",
+    },
+  },
+
+  work: {
+    title: "내 작업",
+    lead: "내 프로젝트들에 걸쳐 내게 놓인 일. 내게 배정된 열린 작업을 기한순으로, 그리고 사람을 기다리는 결정.",
+    loading: "내 작업을 불러오는 중",
+    couldNotLoad: "내 작업을 불러올 수 없습니다.",
+    empty: {
+      title: "내게 배정된 작업이 없습니다",
+      body: "볼 수 있는 어느 프로젝트에서든 내게 배정된 작업이 여기에 나타납니다.",
+    },
+    overdue: "기한 지남",
+    thisWeek: "이번 주 마감",
+    later: "그 뒤",
+    noDay: "날짜 없음",
+    decisions: "사람을 기다리는 결정",
+    noDecisions: "기다리는 결정이 없습니다.",
+    inProject: (project) => `${project}에서`,
+  },
+
+  categories: {
+    title: "카테고리",
+    lead: "작업을 나누는 일의 종류이며, 모든 프로젝트에서 같습니다. 작업은 하나를 가지고, 보드는 하나로 좁혀 보며, 관리자가 목록을 관리합니다.",
+    onlyAdmin: "관리자가 추가하고 바꾸고 제거합니다. 다른 사람은 여기서 읽습니다.",
+    list: "카테고리",
+    add: "카테고리 추가",
+    addAria: "카테고리 추가",
+    empty: {
+      title: "카테고리가 없습니다",
+      body: "관리자가 여기서 첫 카테고리를 추가합니다.",
+    },
+    inUse: "작업이 속해 있는 카테고리는 그 작업들을 옮기기 전에는 제거할 수 없습니다.",
+    form: {
+      name: "이름",
+      key: "키",
+      keyHint: "소문자, 숫자, 하이픈. 명령과 필터가 부르는 이름이며 바뀌지 않습니다.",
+      color: "색",
+      add: "추가",
+    },
+    nameOf: (key) => `${key}의 이름`,
+    colorOf: (key) => `${key}의 색`,
+  },
+
   feed: {
     title: "일어난 일",
     list: "일어난 일",
@@ -263,6 +424,8 @@ export const ko: Messages = {
     something: "무언가",
     aQuestion: "질문",
     aFile: "파일",
+    aGoal: "목표",
+    aCategory: "카테고리",
     thePage: (name) => `페이지 ${name}`.trimEnd(),
     role: {
       admin: "관리자",
@@ -282,6 +445,12 @@ export const ko: Messages = {
       visibility: "멤버 범위",
       skillsAddress: "스킬 주소",
       outcome: "그 뒤에 일어난 일",
+      category: "카테고리",
+      goalId: "목표",
+      startsOn: "시작일",
+      dueOn: "기한",
+      state: "상태",
+      color: "색",
     },
     event: {
       personJoined: () => "보드에 들어왔습니다",
@@ -293,6 +462,11 @@ export const ko: Messages = {
       memberChanged: (login, role, project) =>
         `${login}을(를) ${project}의 ${role}(으)로 지정했습니다`,
       memberRemoved: (login, project) => `${login}을(를) ${project}에서 제외했습니다`,
+      categoryCreated: (category) => `카테고리 ${category}을(를) 만들었습니다`,
+      categoryUpdated: (fields, category) => `카테고리 ${category}의 ${fields}을(를) 바꿨습니다`,
+      categoryRemoved: (category) => `카테고리 ${category}을(를) 제거했습니다`,
+      goalCreated: (goal) => `목표 ${goal}을(를) 세웠습니다`,
+      goalUpdated: (fields, goal) => `목표 ${goal}의 ${fields}을(를) 바꿨습니다`,
       taskCreated: (task) => `${task}을(를) 썼습니다`,
       taskMoved: (task, from, to) => `${task}을(를) ${from}에서 ${to}(으)로 옮겼습니다`,
       taskUpdated: (fields, task) => `${task}의 ${fields}을(를) 바꿨습니다`,

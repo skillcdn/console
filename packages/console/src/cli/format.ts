@@ -1,15 +1,18 @@
 import type {
   RestArtifact,
+  RestCategory,
   RestDecision,
   RestDocument,
   RestDocumentSummary,
   RestDocuments,
+  RestGoal,
   RestProject,
   RestRun,
   RestSkills,
   RestTask,
   RestVersion,
   RestVersionSummary,
+  RestWork,
 } from "../schemas.js";
 
 // What the command prints: one line per thing in a list, a few lines for one thing in full.
@@ -47,6 +50,12 @@ export function formatTaskLine(task: RestTask): string {
   if (task.assignee !== null) {
     notes.push(`assigned to ${task.assignee.login}`);
   }
+  if (task.category !== null) {
+    notes.push(task.category.key);
+  }
+  if (task.dueOn !== null) {
+    notes.push(`due ${task.dueOn}`);
+  }
   if (task.openDecisions > 0) {
     notes.push(`${plural(task.openDecisions, "decision")} waiting`);
   }
@@ -54,6 +63,28 @@ export function formatTaskLine(task: RestTask): string {
     notes.push("an agent at work");
   }
   return `#${task.number}  ${task.state}  ${task.priority}  ${task.title}  (${notes.join("; ")})`;
+}
+
+/** The plan and what happened, as a line each, only where there is something to say. */
+function scheduleLines(task: RestTask): string[] {
+  const lines: string[] = [];
+  const plan = [
+    task.category === null ? undefined : `category: ${task.category.key}`,
+    task.goalId === null ? undefined : `goal: ${task.goalId}`,
+    task.startsOn === null ? undefined : `starts: ${task.startsOn}`,
+    task.dueOn === null ? undefined : `due: ${task.dueOn}`,
+  ].filter((part) => part !== undefined);
+  if (plan.length > 0) {
+    lines.push(plan.join("  "));
+  }
+  const happened = [
+    task.startedAt === null ? undefined : `started: ${task.startedAt}`,
+    task.doneAt === null ? undefined : `done: ${task.doneAt}`,
+  ].filter((part) => part !== undefined);
+  if (happened.length > 0) {
+    lines.push(happened.join("  "));
+  }
+  return lines;
 }
 
 /** One task in full; with the decisions about it and the runs on it, when given. */
@@ -66,6 +97,7 @@ export function formatTask(
     `#${task.number} ${task.title}`,
     `state: ${task.state}  priority: ${task.priority}  owner: ${task.owner.login}  assignee: ${task.assignee?.login ?? "nobody"}`,
     `id: ${task.id}${task.parentId === null ? "" : `  part of: ${task.parentId}`}`,
+    ...scheduleLines(task),
   ];
   if (task.links.length > 0) {
     lines.push("links:");
@@ -162,6 +194,62 @@ export function formatSkills(skills: RestSkills): string {
     "",
     "Load a skill by its URI through your SkillCDN connection. --json adds the page of each, for a person.",
   );
+  return lines.join("\n");
+}
+
+/** How far a goal is, from its tasks: the done, the at work, and the rest, in one phrase. */
+function progressOf(goal: RestGoal): string {
+  const counts = goal.taskCounts;
+  const total = counts.idea + counts.ready + counts.in_progress + counts.in_review + counts.done;
+  const working = counts.in_progress + counts.in_review;
+  return `${counts.done}/${total} done${working === 0 ? "" : `, ${working} in progress`}${counts.dropped === 0 ? "" : `, ${counts.dropped} dropped`}`;
+}
+
+/** One goal: its id, its state, its title, when it is due, and how far it is. */
+export function formatGoalLine(goal: RestGoal): string {
+  const notes = [goal.dueOn === null ? "no target day" : `due ${goal.dueOn}`, progressOf(goal)];
+  return `${goal.id}  ${goal.state}  ${goal.title}  (${notes.join("; ")})`;
+}
+
+/** One goal in full; with the tasks that work towards it, when given. */
+export function formatGoal(goal: RestGoal, tasks?: readonly RestTask[]): string {
+  const lines = [
+    `goal ${goal.id}: ${goal.title}`,
+    `state: ${goal.state}  due: ${goal.dueOn ?? "none"}  set by: ${goal.createdBy.login}`,
+    `progress: ${progressOf(goal)}`,
+  ];
+  if (goal.body.trim().length > 0) {
+    lines.push("", goal.body.trimEnd());
+  }
+  if (tasks !== undefined) {
+    lines.push("", tasks.length === 0 ? "tasks: none" : "tasks:");
+    for (const task of tasks) {
+      lines.push(`  ${formatTaskLine(task)}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+/** One category: its key, what people call it, and its colour. */
+export function formatCategoryLine(category: RestCategory): string {
+  return `${category.key}  ${category.name}  (${category.color})`;
+}
+
+/** What is on a person's plate: their open tasks by project, and the decisions waiting. */
+export function formatWork(work: RestWork): string {
+  const lines: string[] = [];
+  if (work.tasks.length === 0) {
+    lines.push("No open task is assigned to you.");
+  } else {
+    lines.push("tasks assigned to you:");
+    for (const { project, task } of work.tasks) {
+      lines.push(`  ${project.key}  ${formatTaskLine(task)}`);
+    }
+  }
+  lines.push("", work.decisions.length === 0 ? "decisions waiting: none" : "decisions waiting:");
+  for (const { project, decision } of work.decisions) {
+    lines.push(`  ${project.key}  ${formatDecisionLine(decision)}`);
+  }
   return lines.join("\n");
 }
 

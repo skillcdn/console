@@ -59,3 +59,8 @@ export const MAX_VERSIONS_PER_DOCUMENT = 500;
 export const MAX_FILES_PER_DOCUMENT = 50;
 /** The words a search of the documents takes. */
 export const MAX_SEARCH_LENGTH = 200;
+/** A category of tasks (ADR-0019): its key, what the command and filters say, and its name. */
+export const MAX_CATEGORY_KEY_LENGTH = 40;
+export const MAX_CATEGORY_NAME_LENGTH = 60;
+/** How many categories one workspace may have: a vocabulary, not a tag cloud. */
+export const MAX_CATEGORIES = 50;

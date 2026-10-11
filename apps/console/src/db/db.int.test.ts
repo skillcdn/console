@@ -3,6 +3,13 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "./client.js";
 import { getSchemaStatus, migrateDatabase } from "./migrate.js";
 import {
+  createCategory,
+  findCategory,
+  listCategories,
+  removeCategory,
+  updateCategory,
+} from "./queries/categories.js";
+import {
   answerDecision,
   DecisionError,
   getDecision,
@@ -10,6 +17,7 @@ import {
   raiseDecision,
 } from "./queries/decisions.js";
 import { EVENTS_CHANNEL, latestEventId, listEventsAfter, type Scope } from "./queries/events.js";
+import { createGoal, getGoal, listGoals, updateGoal } from "./queries/goals.js";
 import { findPerson, listPeople, type PersonRecord, savePerson } from "./queries/people.js";
 import {
   addMember,
@@ -894,5 +902,287 @@ describe("runs", () => {
     expect(excerptOf("\n\n- first   point\nsecond")).toBe("first point");
     expect(excerptOf("")).toBe("");
     expect(excerptOf("x".repeat(300))).toHaveLength(140);
+  });
+});
+
+describe("the schedule", () => {
+  it("keeps the plan in days, and what happened in moments the board sets itself", async () => {
+    const task = await createTask(database, {
+      scope,
+      actor: alice,
+      task: { title: "Plan the launch", startsOn: "2026-10-20", dueOn: "2026-10-24" },
+      now: minutes(40),
+    });
+    expect(task).toMatchObject({
+      startsOn: "2026-10-20",
+      dueOn: "2026-10-24",
+      startedAt: undefined,
+      doneAt: undefined,
+    });
+    const move = (state: "ready" | "in_progress" | "in_review" | "done", at: number) =>
+      updateTask(database, {
+        scope,
+        actor: bob,
+        taskId: task.id,
+        patch: { state },
+        now: minutes(at),
+      });
+    // The first move past ready is the start, and it stays.
+    const started = await move("in_progress", 41);
+    expect(started.startedAt).toEqual(minutes(41));
+    expect(started.doneAt).toBeUndefined();
+    const reviewed = await move("in_review", 42);
+    expect(reviewed.startedAt).toEqual(minutes(41));
+    // The move to done is the end; a move back out of done takes it away; done again is now.
+    const done = await move("done", 43);
+    expect(done.doneAt).toEqual(minutes(43));
+    const reopened = await move("ready", 44);
+    expect(reopened.doneAt).toBeUndefined();
+    expect(reopened.startedAt).toEqual(minutes(41));
+    const doneAgain = await move("done", 45);
+    expect(doneAgain.doneAt).toEqual(minutes(45));
+    // A task written past ready has been started; one written done is done now.
+    const written = await createTask(database, {
+      scope,
+      actor: alice,
+      task: { title: "Done already", state: "done" },
+      now: minutes(46),
+    });
+    expect(written).toMatchObject({ startedAt: minutes(46), doneAt: minutes(46) });
+    // A change of the plan is named on the wire as the API takes it.
+    const before = await latestEventId(database, workspaceId);
+    const replanned = await updateTask(database, {
+      scope,
+      actor: alice,
+      taskId: task.id,
+      patch: { startsOn: null, dueOn: "2026-10-30" },
+      now: minutes(47),
+    });
+    expect(replanned).toMatchObject({ startsOn: undefined, dueOn: "2026-10-30" });
+    const { items } = await listEventsAfter(database, scope, before, 10);
+    expect(items.map((event) => [event.kind, event.data.fields])).toEqual([
+      ["task.updated", ["startsOn", "dueOn"]],
+    ]);
+  });
+
+  it("refuses a due day before the start, a category that is not one, and a goal that is not the project's", async () => {
+    const write = (task: Parameters<typeof createTask>[1]["task"]) =>
+      createTask(database, { scope, actor: alice, task, now: T0 });
+    await expect(
+      write({ title: "x", startsOn: "2026-10-24", dueOn: "2026-10-20" }),
+    ).rejects.toMatchObject({ code: "task.invalid_dates" });
+    await expect(write({ title: "x", category: "nothing" })).rejects.toMatchObject({
+      code: "task.invalid_category",
+    });
+    await expect(
+      write({ title: "x", goalId: "0199c4d8-0000-7000-8000-000000000099" }),
+    ).rejects.toMatchObject({ code: "task.invalid_goal" });
+    const planned = await write({ title: "x", startsOn: "2026-10-20" });
+    await expect(
+      updateTask(database, {
+        scope,
+        actor: alice,
+        taskId: planned.id,
+        patch: { dueOn: "2026-10-01" },
+        now: T0,
+      }),
+    ).rejects.toMatchObject({ code: "task.invalid_dates" });
+  });
+});
+
+describe("categories", () => {
+  it("start as the usual kinds of work, listed by name", async () => {
+    const listed = await listCategories(database, workspaceId);
+    expect(listed.map((category) => category.key)).toEqual([
+      "design",
+      "engineering",
+      "marketing",
+      "operations",
+      "product",
+    ]);
+    expect(listed.find((category) => category.key === "engineering")).toMatchObject({
+      name: "Engineering",
+      color: "blue",
+    });
+  });
+
+  it("are made, changed and removed by key, told to the workspace, and kept while tasks use them", async () => {
+    const before = await latestEventId(database, workspaceId);
+    const actor = { id: alice.id };
+    const made = await createCategory(database, {
+      workspaceId,
+      actor,
+      category: { key: "research", name: "Research" },
+      now: minutes(50),
+    });
+    expect(made).toMatchObject({ key: "research", name: "Research", color: "gray" });
+    await expect(
+      createCategory(database, {
+        workspaceId,
+        actor,
+        category: { key: "research", name: "Again" },
+        now: minutes(50),
+      }),
+    ).rejects.toMatchObject({ code: "category.key_taken" });
+    const changed = await updateCategory(database, {
+      workspaceId,
+      actor,
+      key: "research",
+      patch: { name: "Research and insight", color: "yellow" },
+      now: minutes(51),
+    });
+    expect(changed).toMatchObject({ name: "Research and insight", color: "yellow" });
+    const same = await updateCategory(database, {
+      workspaceId,
+      actor,
+      key: "research",
+      patch: { color: "yellow" },
+      now: minutes(52),
+    });
+    expect(same.updatedAt).toEqual(minutes(51));
+    // Sorted into it, a task keeps it there; moved out, the category may go.
+    const task = await createTask(database, {
+      scope,
+      actor: alice,
+      task: { title: "Interview users", category: "research" },
+      now: minutes(53),
+    });
+    expect(task.category).toEqual({
+      key: "research",
+      name: "Research and insight",
+      color: "yellow",
+    });
+    await expect(
+      removeCategory(database, { workspaceId, actor, key: "research", now: minutes(54) }),
+    ).rejects.toMatchObject({ code: "category.in_use" });
+    const moved = await updateTask(database, {
+      scope,
+      actor: alice,
+      taskId: task.id,
+      patch: { category: null },
+      now: minutes(55),
+    });
+    expect(moved.category).toBeUndefined();
+    await removeCategory(database, { workspaceId, actor, key: "research", now: minutes(56) });
+    expect(await findCategory(database, workspaceId, "research")).toBeUndefined();
+    await expect(
+      removeCategory(database, { workspaceId, actor, key: "research", now: minutes(57) }),
+    ).rejects.toMatchObject({ code: "category.not_found" });
+    const { items } = await listEventsAfter(database, { workspaceId, projectId: null }, before, 10);
+    expect(items.map((event) => [event.kind, event.data])).toEqual([
+      ["category.created", { key: "research", name: "Research" }],
+      [
+        "category.updated",
+        { key: "research", name: "Research and insight", fields: ["name", "color"] },
+      ],
+      ["category.removed", { key: "research", name: "Research and insight" }],
+    ]);
+  });
+});
+
+describe("goals", () => {
+  it("are set on the roadmap, read in order, counted from their tasks, and changed", async () => {
+    const later = await createGoal(database, {
+      scope,
+      actor: alice,
+      goal: { title: "Launch v2", dueOn: "2026-12-31" },
+      now: minutes(60),
+    });
+    expect(later).toMatchObject({
+      state: "planned",
+      dueOn: "2026-12-31",
+      body: "",
+      createdBy: alice,
+      taskCounts: { idea: 0, ready: 0, in_progress: 0, in_review: 0, done: 0, dropped: 0 },
+    });
+    const ship = await createGoal(database, {
+      scope,
+      actor: alice,
+      goal: { title: "Ship v1", body: "What it means.", state: "active", dueOn: "2026-11-15" },
+      now: minutes(61),
+    });
+    const hire = await createGoal(database, {
+      scope,
+      actor: alice,
+      goal: { title: "Hire", state: "active" },
+      now: minutes(62),
+    });
+    // The active first, the sooner due first among them, and a goal with no day last.
+    expect((await listGoals(database, scope, 10)).map((goal) => goal.title)).toEqual([
+      "Ship v1",
+      "Hire",
+      "Launch v2",
+    ]);
+    for (const [title, state] of [
+      ["Define it", "done"],
+      ["Build it", "in_progress"],
+      ["Doubt it", "dropped"],
+    ] as const) {
+      await createTask(database, {
+        scope,
+        actor: bob,
+        task: { title, state, goalId: ship.id },
+        now: minutes(63),
+      });
+    }
+    expect((await getGoal(database, scope, ship.id))?.taskCounts).toEqual({
+      idea: 0,
+      ready: 0,
+      in_progress: 1,
+      in_review: 0,
+      done: 1,
+      dropped: 1,
+    });
+    const before = await latestEventId(database, workspaceId);
+    const reached = await updateGoal(database, {
+      scope,
+      actor: alice,
+      goalId: ship.id,
+      patch: { title: "Shipped v1", state: "done" },
+      now: minutes(64),
+    });
+    expect(reached).toMatchObject({ title: "Shipped v1", state: "done" });
+    const same = await updateGoal(database, {
+      scope,
+      actor: alice,
+      goalId: ship.id,
+      patch: { state: "done" },
+      now: minutes(65),
+    });
+    expect(same.updatedAt).toEqual(minutes(64));
+    const { items } = await listEventsAfter(database, { ...scope, goalId: ship.id }, 0, 10);
+    expect(items.map((event) => [event.kind, event.data])).toEqual([
+      ["goal.created", { title: "Ship v1" }],
+      ["goal.updated", { title: "Shipped v1", fields: ["title", "state"] }],
+    ]);
+    expect((await listEventsAfter(database, scope, before, 10)).items).toHaveLength(1);
+    await expect(
+      updateGoal(database, {
+        scope,
+        actor: alice,
+        goalId: "0199c4d8-0000-7000-8000-000000000099",
+        patch: { state: "done" },
+        now: T0,
+      }),
+    ).rejects.toMatchObject({ code: "goal.not_found" });
+    // Another project does not find it, nor may its tasks work towards it.
+    const other = await createProject(database, {
+      workspaceId,
+      actor: { id: alice.id },
+      person: alice,
+      project: { key: "other", name: "Another" },
+      now: T0,
+    });
+    const elsewhere = { workspaceId, projectId: other.id };
+    expect(await getGoal(database, elsewhere, ship.id)).toBeUndefined();
+    expect(hire.projectId).toBe(scope.projectId);
+    await expect(
+      createTask(database, {
+        scope: elsewhere,
+        actor: alice,
+        task: { title: "x", goalId: ship.id },
+        now: T0,
+      }),
+    ).rejects.toMatchObject({ code: "task.invalid_goal" });
   });
 });

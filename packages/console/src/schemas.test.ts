@@ -11,12 +11,15 @@ import {
 } from "./limits.js";
 import {
   restAnswerInputSchema,
+  restCategoryInputSchema,
   restDecisionInputSchema,
   restDecisionPatchSchema,
   restDocumentInputSchema,
   restDocumentSchema,
   restDocumentsSchema,
   restEventSchema,
+  restGoalInputSchema,
+  restGoalSchema,
   restMemberInputSchema,
   restPersonPatchSchema,
   restPersonSchema,
@@ -30,6 +33,7 @@ import {
   restTokenInputSchema,
   restTokenSchema,
   restTokensSchema,
+  restWorkSchema,
 } from "./schemas.js";
 
 const PERSON = {
@@ -78,9 +82,36 @@ describe("task input", () => {
     ["too many links", { title: "t", links: Array(MAX_LINKS + 1).fill({ url: "https://a.b/" }) }],
     ["a number for a title", { title: 42 }],
     ["an array for a body", { title: "t", body: ["x"] }],
+    ["a day that is not one", { title: "t", dueOn: "next week" }],
+    ["an instant for a day", { title: "t", startsOn: "2026-10-20T00:00:00Z" }],
+    ["a month for a day", { title: "t", dueOn: "2026-10" }],
+    ["a category that is not a key", { title: "t", category: "Not A Key" }],
+    ["a goal that is not an id", { title: "t", goalId: "ship" }],
     ["nothing", undefined],
   ])("refuses %s", (_, input) => {
     expect(restTaskInputSchema.safeParse(input).success).toBe(false);
+  });
+
+  it("takes the plan in days, a category by its key, and a goal by its id, each or null", () => {
+    expect(
+      restTaskInputSchema.parse({
+        title: "Plan",
+        startsOn: "2026-10-20",
+        dueOn: "2026-10-24",
+        category: "engineering",
+        goalId: PERSON.id,
+      }),
+    ).toMatchObject({
+      startsOn: "2026-10-20",
+      dueOn: "2026-10-24",
+      category: "engineering",
+      goalId: PERSON.id,
+    });
+    expect(restTaskPatchSchema.parse({ dueOn: null, category: null, goalId: null })).toEqual({
+      dueOn: null,
+      category: null,
+      goalId: null,
+    });
   });
 
   it("keeps a body's line breaks and tabs", () => {
@@ -141,6 +172,12 @@ describe("what the server answers", () => {
       owner: PERSON,
       assignee: null,
       parentId: null,
+      category: { key: "engineering", name: "Engineering", color: "blue" },
+      goalId: null,
+      startsOn: "2026-10-20",
+      dueOn: null,
+      startedAt: "2026-10-21T09:00:00.000Z",
+      doneAt: null,
       links: [],
       openDecisions: 0,
       openRuns: 0,
@@ -148,6 +185,32 @@ describe("what the server answers", () => {
       updatedAt: "2026-10-09T10:00:00.000Z",
     });
     expect(task.number).toBe(7);
+    expect(task.category?.color).toBe("blue");
+  });
+
+  it("parses a goal with its tasks counted, and a person's work with its projects", () => {
+    const goal = restGoalSchema.parse({
+      id: "0199c4d8-0000-7000-8000-000000000030",
+      title: "Ship",
+      body: "",
+      state: "active",
+      dueOn: "2026-11-15",
+      createdBy: PERSON,
+      taskCounts: { idea: 0, ready: 1, in_progress: 0, in_review: 0, done: 2, dropped: 0 },
+      createdAt: "2026-10-09T10:00:00.000Z",
+      updatedAt: "2026-10-09T10:00:00.000Z",
+    });
+    expect(goal.taskCounts.done).toBe(2);
+    expect(restWorkSchema.parse({ tasks: [], decisions: [] })).toEqual({
+      tasks: [],
+      decisions: [],
+    });
+    expect(
+      restWorkSchema.safeParse({
+        tasks: [{ project: { key: "Web", name: "x" }, task: {} }],
+        decisions: [],
+      }).success,
+    ).toBe(false);
   });
 
   it("refuses an answer that is missing a key: absent values are null, never missing", () => {
@@ -161,6 +224,7 @@ describe("what the server answers", () => {
       decisionId: null,
       runId: null,
       documentId: null,
+      goalId: null,
       data: { number: 1, title: "Ship" },
       createdAt: "2026-10-09T10:00:00.000Z",
     };
@@ -350,5 +414,41 @@ describe("documents", () => {
       restDocumentsSchema.parse({ folder: "guides", folders: ["guides/setup"], items: [summary] })
         .items[0]?.path,
     ).toBe("guides/onboarding");
+  });
+});
+
+describe("categories and goals", () => {
+  it("take a category's key as a project's, with a colour from the list, and a goal's title with the rest by default", () => {
+    expect(restCategoryInputSchema.parse({ key: "research", name: " Research " })).toEqual({
+      key: "research",
+      name: "Research",
+    });
+    expect(restCategoryInputSchema.parse({ key: "r-d", name: "R&D", color: "teal" }).color).toBe(
+      "teal",
+    );
+    for (const input of [
+      { key: "Research", name: "x" },
+      { key: "re search", name: "x" },
+      { key: "research-", name: "x" },
+      { key: "research", name: "" },
+      { key: "research", name: "x", color: "#fff" },
+      { key: "research", name: `x${String.fromCodePoint(0x200b)}` },
+    ]) {
+      expect(restCategoryInputSchema.safeParse(input).success, JSON.stringify(input)).toBe(false);
+    }
+    expect(restGoalInputSchema.parse({ title: " Ship v1 " })).toEqual({ title: "Ship v1" });
+    expect(restGoalInputSchema.parse({ title: "Ship", state: "active", dueOn: null })).toEqual({
+      title: "Ship",
+      state: "active",
+      dueOn: null,
+    });
+    for (const input of [
+      { title: "" },
+      { title: "x", state: "open" },
+      { title: "x", dueOn: "soon" },
+      { title: "x", body: "b".repeat(MAX_BODY_LENGTH + 1) },
+    ]) {
+      expect(restGoalInputSchema.safeParse(input).success, JSON.stringify(input)).toBe(false);
+    }
   });
 });

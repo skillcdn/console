@@ -1,5 +1,7 @@
 import {
   ARTIFACT_KINDS,
+  CATEGORY_COLORS,
+  GOAL_STATES,
   LINK_SOURCES,
   PERSON_ROLES,
   PROJECT_ROLES,
@@ -17,6 +19,7 @@ import {
   bigint,
   check,
   customType,
+  date,
   index,
   integer,
   jsonb,
@@ -204,6 +207,63 @@ export const projectMembers = pgTable(
   ],
 );
 
+/**
+ * A category tasks are sorted into (ADR-0019): the workspace's own word for a kind of work,
+ * engineering, product, design, kept by an administrator. Its key is what the command and the
+ * filters say, and does not change; a category no task uses may be removed.
+ */
+export const categories = pgTable(
+  "categories",
+  {
+    id: id(),
+    workspaceId: uuid()
+      .notNull()
+      .references(() => workspaces.id),
+    key: text().notNull(),
+    name: text().notNull(),
+    /** One of the names the pages paint a category in; never a value typed by hand. */
+    color: text({ enum: CATEGORY_COLORS }).notNull().default("gray"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex("categories_key_key").on(table.workspaceId, table.key),
+    check("categories_color_check", sql`${table.color} in (${sql.raw(literals(CATEGORY_COLORS))})`),
+  ],
+);
+
+/**
+ * A goal of a project's roadmap (ADR-0019): what the project works towards, by when, and how it
+ * stands; the tasks that work towards it say how far it is. Set and changed by an owner.
+ */
+export const goals = pgTable(
+  "goals",
+  {
+    id: id(),
+    workspaceId: uuid()
+      .notNull()
+      .references(() => workspaces.id),
+    projectId: uuid()
+      .notNull()
+      .references(() => projects.id),
+    title: text().notNull(),
+    /** Markdown, bounded at the edge; shown as text, never as HTML. */
+    body: text().notNull().default(""),
+    state: text({ enum: GOAL_STATES }).notNull().default("planned"),
+    /** The day the goal is meant to be reached by, or none: a plan is made in days. */
+    dueOn: date({ mode: "string" }),
+    createdById: uuid()
+      .notNull()
+      .references(() => people.id),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    index("goals_project_state_idx").on(table.projectId, table.state),
+    check("goals_state_check", sql`${table.state} in (${sql.raw(literals(GOAL_STATES))})`),
+  ],
+);
+
 /** A unit of work on the board of a project. */
 export const tasks = pgTable(
   "tasks",
@@ -229,6 +289,19 @@ export const tasks = pgTable(
     assigneeId: uuid().references(() => people.id),
     /** The task this one is part of, for a breakdown. */
     parentId: uuid().references((): AnyPgColumn => tasks.id),
+    /** The category the task is sorted into, or none; a category in use cannot be removed. */
+    categoryId: uuid().references(() => categories.id),
+    /** The goal of the project's roadmap the task works towards, or none. */
+    goalId: uuid().references(() => goals.id),
+    /** The plan (ADR-0019): the day the work is meant to begin, and the day it is due, in days. */
+    startsOn: date({ mode: "string" }),
+    dueOn: date({ mode: "string" }),
+    /**
+     * What happened, kept by the board itself: when the task was first moved past ready, and
+     * when it was moved to done, cleared when it is moved back out of done.
+     */
+    startedAt: instant(),
+    doneAt: instant(),
     /** Repositories, pull requests, documents: `https` URLs with a label, as the API checked them. */
     links: jsonb().$type<RestTaskLink[]>().notNull().default([]),
     createdAt: createdAt(),
@@ -238,6 +311,10 @@ export const tasks = pgTable(
     uniqueIndex("tasks_project_number_key").on(table.projectId, table.number),
     index("tasks_project_state_idx").on(table.projectId, table.state),
     index("tasks_parent_idx").on(table.parentId),
+    index("tasks_project_due_idx").on(table.projectId, table.dueOn),
+    index("tasks_goal_idx").on(table.goalId),
+    index("tasks_category_idx").on(table.categoryId),
+    index("tasks_assignee_state_idx").on(table.assigneeId, table.state),
     check("tasks_state_check", sql`${table.state} in (${sql.raw(literals(TASK_STATES))})`),
     check(
       "tasks_priority_check",
@@ -563,6 +640,8 @@ export const events = pgTable(
     runId: uuid().references(() => runs.id),
     /** The document it is about. */
     documentId: uuid().references(() => documents.id),
+    /** The goal it is about. */
+    goalId: uuid().references(() => goals.id),
     /** What a feed shows without asking for the subject, as the API describes it. */
     data: jsonb().$type<RestEventData>().notNull().default({}),
     createdAt: createdAt(),
@@ -574,5 +653,6 @@ export const events = pgTable(
     index("events_run_idx").on(table.runId),
     index("events_decision_idx").on(table.decisionId),
     index("events_document_idx").on(table.documentId),
+    index("events_goal_idx").on(table.goalId),
   ],
 );

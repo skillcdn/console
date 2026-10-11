@@ -7,18 +7,29 @@ import {
   type FetchLike,
   type ProjectClient,
 } from "../client.js";
+import { addDays, dayOf as dayOfDate, isDay } from "../dates.js";
 import { MAX_OPTIONS, MIN_OPTIONS } from "../limits.js";
-import type { RestClaim, RestDecision } from "../schemas.js";
-import { TASK_PRIORITIES, TASK_STATES, type TaskPriority, type TaskState } from "../vocabulary.js";
+import type { RestClaim, RestDecision, RestTaskPatch } from "../schemas.js";
+import {
+  GOAL_STATES,
+  type GoalState,
+  TASK_PRIORITIES,
+  TASK_STATES,
+  type TaskPriority,
+  type TaskState,
+} from "../vocabulary.js";
 import { loadWebRoot, type WebRoot, WebRootError } from "../web.js";
 import type { CredentialStore } from "./credentials.js";
 import type { DirectoryStore } from "./directory.js";
 import {
   formatAnswer,
+  formatCategoryLine,
   formatDecision,
   formatDecisionLine,
   formatDocument,
   formatDocuments,
+  formatGoal,
+  formatGoalLine,
   formatOptions,
   formatProjectLine,
   formatRun,
@@ -28,6 +39,7 @@ import {
   formatTaskLine,
   formatVersion,
   formatVersionLine,
+  formatWork,
 } from "./format.js";
 import { COMMAND_HELP, helpFor, usage } from "./help.js";
 import { createServeHandler, DEFAULT_SERVE_PORT, type Listen } from "./serve.js";
@@ -255,6 +267,79 @@ function priorityOf(value: string | undefined): TaskPriority | undefined {
   return found;
 }
 
+function goalStateOf(value: string | undefined): GoalState | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const found = GOAL_STATES.find((state) => state === value);
+  if (found === undefined) {
+    throw misuse(`Not a state of a goal: ${value}. One of ${GOAL_STATES.join(", ")}`);
+  }
+  return found;
+}
+
+/** Today by this machine's clock, as a day. */
+const todayOf = (io: CliIo): string => dayOfDate(new Date(io.now()));
+
+/**
+ * A day as a flag takes one: `2026-10-24`, `today`, `tomorrow`, or `+<n>` days from today; and
+ * `none` where a field may be cleared, which is `null` on the wire.
+ */
+function dayOf(io: CliIo, value: string | undefined, clearable = false): string | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (clearable && value === "none") {
+    return null;
+  }
+  if (value === "today") {
+    return todayOf(io);
+  }
+  if (value === "tomorrow") {
+    return addDays(todayOf(io), 1);
+  }
+  const ahead = /^\+(\d{1,3})$/.exec(value);
+  if (ahead !== null) {
+    return addDays(todayOf(io), Number(ahead[1]));
+  }
+  if (!isDay(value)) {
+    throw misuse(`Not a day: ${value}. Say it as 2026-10-24, today, tomorrow, or +7`);
+  }
+  return value;
+}
+
+/** A value a field is set to, or `none` to clear it, which is `null` on the wire. */
+const orNone = (value: string | undefined): string | null | undefined =>
+  value === "none" ? null : value;
+
+/** The id of the person a flag names: `me`, or a login of the workspace. */
+async function personIdOf(
+  session: Session,
+  value: string | undefined,
+): Promise<string | null | undefined> {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === "none") {
+    return null;
+  }
+  if (value === "me") {
+    const me = await session.client.me();
+    if (me.person === null) {
+      throw failed("The console does not know this token. Sign in again: console login");
+    }
+    return me.person.id;
+  }
+  const { items } = await session.client.people();
+  const found = items.find((person) => person.login.toLowerCase() === value.toLowerCase());
+  if (found === undefined) {
+    throw misuse(
+      `Nobody of the workspace is called ${value}. console people is not a command; the logins are as people sign in.`,
+    );
+  }
+  return found.id;
+}
+
 function secondsOf(value: string | undefined, fallback: number): number {
   if (value === undefined) {
     return fallback;
@@ -452,13 +537,63 @@ const use: Command = async (args, io) => {
 };
 
 const tasks: Command = async (args, io) => {
-  const { values } = parse(args, { state: { type: "string" } }, false);
+  const { values } = parse(
+    args,
+    {
+      state: { type: "string" },
+      open: { type: "boolean" },
+      mine: { type: "boolean" },
+      category: { type: "string" },
+      goal: { type: "string" },
+      due: { type: "string" },
+    },
+    false,
+  );
   const state = stateOf(text(values, "state"));
   const session = await open(io, values);
   const project = await session.project();
-  const found = await project.tasks(state === undefined ? {} : { state });
+  // What is due: a day, or the words for the usual windows; overdue keeps only the open ones.
+  const due = text(values, "due");
+  const today = todayOf(io);
+  const dueBy =
+    due === undefined
+      ? undefined
+      : due === "overdue"
+        ? addDays(today, -1)
+        : due === "week"
+          ? addDays(today, 6)
+          : (dayOf(io, due) ?? undefined);
+  const assignee = on(values, "mine")
+    ? ((await personIdOf(session, "me")) ?? undefined)
+    : undefined;
+  const found = await project.tasks({
+    ...(state === undefined ? {} : { state }),
+    ...(on(values, "open") || due === "overdue" ? { open: true } : {}),
+    ...(assignee === undefined ? {} : { assignee }),
+    ...(text(values, "category") === undefined ? {} : { category: text(values, "category") }),
+    ...(text(values, "goal") === undefined ? {} : { goal: text(values, "goal") }),
+    ...(dueBy === undefined ? {} : { dueBy }),
+  });
   answer(io, session, found, () =>
     found.items.length === 0 ? "No tasks." : found.items.map(formatTaskLine).join("\n"),
+  );
+  return EXIT.ok;
+};
+
+const work: Command = async (args, io) => {
+  const { values } = parse(args, {}, false);
+  const session = await open(io, values);
+  const found = await session.client.work();
+  answer(io, session, found, () => formatWork(found));
+  return EXIT.ok;
+};
+
+const categories: Command = async (args, io) => {
+  const { values } = parse(args, {}, false);
+  const session = await open(io, values);
+  const found = await session.client.categories();
+  answer(io, session, found, () =>
+    found.items.length === 0 ? "No categories." : found.items.map(formatCategoryLine).join("\n"),
   );
   return EXIT.ok;
 };
@@ -472,32 +607,104 @@ const skills: Command = async (args, io) => {
   return EXIT.ok;
 };
 
-const newTask: Command = async (args, io) => {
-  const { values, positionals } = parse(args, {
-    body: { type: "string" },
-    file: { type: "string" },
-    state: { type: "string" },
-    priority: { type: "string" },
-  });
-  const title = theOne(positionals, 'Say the title: console task new "<title>"');
+/** The flags that set a task's fields, shared by writing one and changing one. */
+const TASK_FIELDS: OptionSpec = {
+  state: { type: "string" },
+  priority: { type: "string" },
+  category: { type: "string" },
+  goal: { type: "string" },
+  starts: { type: "string" },
+  due: { type: "string" },
+  assignee: { type: "string" },
+  parent: { type: "string" },
+};
+
+/** What the flags say of a task's fields, as the API takes them; `none` clears a field. */
+async function taskFieldsOf(
+  io: CliIo,
+  session: Session,
+  project: ProjectClient,
+  values: Values,
+): Promise<RestTaskPatch> {
   const state = stateOf(text(values, "state"));
   const priority = priorityOf(text(values, "priority"));
+  const category = orNone(text(values, "category"));
+  const goalId = orNone(text(values, "goal"));
+  const startsOn = dayOf(io, text(values, "starts"), true);
+  const dueOn = dayOf(io, text(values, "due"), true);
+  const assigneeId = await personIdOf(session, text(values, "assignee"));
+  const parent = text(values, "parent");
+  const parentId =
+    parent === undefined ? undefined : parent === "none" ? null : (await project.task(parent)).id;
+  return {
+    ...(state === undefined ? {} : { state }),
+    ...(priority === undefined ? {} : { priority }),
+    ...(category === undefined ? {} : { category }),
+    ...(goalId === undefined ? {} : { goalId }),
+    ...(startsOn === undefined ? {} : { startsOn }),
+    ...(dueOn === undefined ? {} : { dueOn }),
+    ...(assigneeId === undefined ? {} : { assigneeId }),
+    ...(parentId === undefined ? {} : { parentId }),
+  };
+}
+
+const newTask: Command = async (args, io) => {
+  const { values, positionals } = parse(args, {
+    ...TASK_FIELDS,
+    body: { type: "string" },
+    file: { type: "string" },
+  });
+  const title = theOne(positionals, 'Say the title: console task new "<title>"');
   const body = await bodyOf(io, values, text(values, "body"));
   const session = await open(io, values);
   const project = await session.project();
+  const fields = await taskFieldsOf(io, session, project, values);
   const made = await project.createTask({
     title,
     ...(body === undefined ? {} : { body }),
-    ...(state === undefined ? {} : { state }),
-    ...(priority === undefined ? {} : { priority }),
+    ...fields,
   });
   answer(io, session, made, () => `Task #${made.number} written: ${made.title}\nid: ${made.id}`);
+  return EXIT.ok;
+};
+
+const editTask: Command = async (args, io) => {
+  const { values, positionals } = parse(args, {
+    ...TASK_FIELDS,
+    title: { type: "string" },
+    body: { type: "string" },
+    file: { type: "string" },
+  });
+  const ref = theOne(
+    positionals,
+    "Say which task: console task edit <number|id> --due <day> [--category <key>] ...",
+  );
+  const body = await bodyOf(io, values, text(values, "body"));
+  const session = await open(io, values);
+  const project = await session.project();
+  const title = text(values, "title");
+  const patch: RestTaskPatch = {
+    ...(title === undefined ? {} : { title }),
+    ...(body === undefined ? {} : { body }),
+    ...(await taskFieldsOf(io, session, project, values)),
+  };
+  if (Object.keys(patch).length === 0) {
+    throw misuse(
+      "Say what to change: --title, --body, --state, --priority, --category, --goal, --starts, --due, --assignee or --parent; none clears a field.",
+    );
+  }
+  const found = await project.task(ref);
+  const changed = await project.updateTask(found.id, patch);
+  answer(io, session, changed, () => formatTask(changed));
   return EXIT.ok;
 };
 
 const task: Command = async (args, io) => {
   if (args[0] === "new") {
     return newTask(args.slice(1), io);
+  }
+  if (args[0] === "edit") {
+    return editTask(args.slice(1), io);
   }
   const { values, positionals } = parse(args, {});
   const ref = theOne(positionals, "Say which task: console task <number|id>");
@@ -864,6 +1071,88 @@ const restore: Command = async (args, io) => {
   return EXIT.ok;
 };
 
+const goals: Command = async (args, io) => {
+  const { values } = parse(args, {}, false);
+  const session = await open(io, values);
+  const project = await session.project();
+  const found = await project.goals();
+  answer(io, session, found, () =>
+    found.items.length === 0
+      ? "No goals. An owner sets one: console goal new <title> --due <day>"
+      : found.items.map(formatGoalLine).join("\n"),
+  );
+  return EXIT.ok;
+};
+
+const GOAL_FIELDS: OptionSpec = {
+  state: { type: "string" },
+  due: { type: "string" },
+  body: { type: "string" },
+  file: { type: "string" },
+};
+
+const newGoal: Command = async (args, io) => {
+  const { values, positionals } = parse(args, GOAL_FIELDS);
+  const title = theOne(positionals, 'Say the title: console goal new "<title>" [--due <day>]');
+  const state = goalStateOf(text(values, "state"));
+  const dueOn = dayOf(io, text(values, "due"));
+  const body = await bodyOf(io, values, text(values, "body"));
+  const session = await open(io, values);
+  const project = await session.project();
+  const made = await project.createGoal({
+    title,
+    ...(body === undefined ? {} : { body }),
+    ...(state === undefined ? {} : { state }),
+    ...(dueOn === undefined ? {} : { dueOn }),
+  });
+  answer(io, session, made, () => `Goal set: ${made.title}\nid: ${made.id}`);
+  return EXIT.ok;
+};
+
+const editGoal: Command = async (args, io) => {
+  const { values, positionals } = parse(args, { ...GOAL_FIELDS, title: { type: "string" } });
+  const id = theOne(positionals, "Say which goal: console goal edit <id> --state <state> ...");
+  const title = text(values, "title");
+  const state = goalStateOf(text(values, "state"));
+  const dueOn = dayOf(io, text(values, "due"), true);
+  const body = await bodyOf(io, values, text(values, "body"));
+  const patch = {
+    ...(title === undefined ? {} : { title }),
+    ...(body === undefined ? {} : { body }),
+    ...(state === undefined ? {} : { state }),
+    ...(dueOn === undefined ? {} : { dueOn }),
+  };
+  if (Object.keys(patch).length === 0) {
+    throw misuse(
+      "Say what to change: --title, --body, --state or --due; --due none clears the day.",
+    );
+  }
+  const session = await open(io, values);
+  const project = await session.project();
+  const changed = await project.updateGoal(id, patch);
+  answer(io, session, changed, () => formatGoal(changed));
+  return EXIT.ok;
+};
+
+const goal: Command = async (args, io) => {
+  if (args[0] === "new") {
+    return newGoal(args.slice(1), io);
+  }
+  if (args[0] === "edit") {
+    return editGoal(args.slice(1), io);
+  }
+  const { values, positionals } = parse(args, {});
+  const id = theOne(positionals, "Say which goal: console goal <id>");
+  const session = await open(io, values);
+  const project = await session.project();
+  const found = await project.goal(id);
+  const towards = await project.tasks({ goal: found.id });
+  answer(io, session, { goal: found, tasks: towards.items }, () =>
+    formatGoal(found, towards.items),
+  );
+  return EXIT.ok;
+};
+
 const decisions: Command = async (args, io) => {
   const { values } = parse(args, { open: { type: "boolean" } }, false);
   const session = await open(io, values);
@@ -1024,8 +1313,12 @@ const COMMANDS: Readonly<Record<string, Command>> = {
   serve,
   projects,
   use,
+  work,
   tasks,
   task,
+  goals,
+  goal,
+  categories,
   skills,
   take,
   report,
@@ -1072,6 +1365,14 @@ function hintFor(error: ApiError): string {
       return "The page has moved on since the version you started from. Read it again, and write from there.\n";
     case "document.archived":
       return "The page is archived. console restore <path> brings it back first.\n";
+    case "task.invalid_category":
+      return "No category has that key. console categories lists them.\n";
+    case "task.invalid_goal":
+      return "No goal of this project has that id. console goals lists them.\n";
+    case "task.invalid_dates":
+      return "The due day is before the start. Say a due day on or after it.\n";
+    case "goal.not_found":
+      return "No goal of this project has that id. console goals lists them.\n";
     case "connect.too_many":
       return "The console holds as many connections as it may at once. Try again in a few minutes.\n";
     case "network":

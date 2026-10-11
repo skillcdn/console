@@ -14,10 +14,38 @@ export const TASK_STATES = [
 
 export type TaskState = (typeof TASK_STATES)[number];
 
+/** The states a task is still open in: not done, not dropped. */
+export const OPEN_TASK_STATES: readonly TaskState[] = ["idea", "ready", "in_progress", "in_review"];
+
 /** How much a task matters next to the others, in rising order. */
 export const TASK_PRIORITIES = ["low", "normal", "high", "urgent"] as const;
 
 export type TaskPriority = (typeof TASK_PRIORITIES)[number];
+
+/**
+ * The states of a goal on the roadmap (ADR-0019): planned for later, being worked towards,
+ * reached, or let go. A person says which; the tasks under it say how far it is.
+ */
+export const GOAL_STATES = ["planned", "active", "done", "dropped"] as const;
+
+export type GoalState = (typeof GOAL_STATES)[number];
+
+/**
+ * The colours a category may be shown in: names, so that a custom console paints them in its
+ * own tokens and no value an administrator typed reaches a stylesheet.
+ */
+export const CATEGORY_COLORS = [
+  "gray",
+  "blue",
+  "green",
+  "orange",
+  "pink",
+  "purple",
+  "teal",
+  "yellow",
+] as const;
+
+export type CategoryColor = (typeof CATEGORY_COLORS)[number];
 
 /** The identity providers people may sign in through: the git host, and Google (Workspace). */
 export const PROVIDER_KEYS = ["gh", "google"] as const;
@@ -85,11 +113,16 @@ export type SkillsStatus = (typeof SKILLS_STATUSES)[number];
 export const EVENT_KINDS = [
   "person.joined",
   "person.role_changed",
+  "category.created",
+  "category.updated",
+  "category.removed",
   "project.created",
   "project.updated",
   "project.member_added",
   "project.member_changed",
   "project.member_removed",
+  "goal.created",
+  "goal.updated",
   "task.created",
   "task.updated",
   "task.moved",

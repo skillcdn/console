@@ -30,6 +30,8 @@ export function describeEvent(event: RestEvent, words: Messages = en): string {
           : feed.role.other;
   const login = data.login ?? feed.someone;
   const question = data.question ?? feed.aQuestion;
+  const goal = data.title ?? feed.aGoal;
+  const category = data.name ?? data.key ?? feed.aCategory;
   switch (event.kind) {
     case "person.joined":
       return feed.event.personJoined();
@@ -45,6 +47,16 @@ export function describeEvent(event: RestEvent, words: Messages = en): string {
       return feed.event.memberChanged(login, role(data.role), project);
     case "project.member_removed":
       return feed.event.memberRemoved(login, project);
+    case "category.created":
+      return feed.event.categoryCreated(category);
+    case "category.updated":
+      return feed.event.categoryUpdated(fields, category);
+    case "category.removed":
+      return feed.event.categoryRemoved(category);
+    case "goal.created":
+      return feed.event.goalCreated(goal);
+    case "goal.updated":
+      return feed.event.goalUpdated(fields, goal);
     case "task.created":
       return feed.event.taskCreated(task);
     case "task.moved":

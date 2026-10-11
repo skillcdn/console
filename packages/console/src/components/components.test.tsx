@@ -1,23 +1,29 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type {
+  RestCategory,
   RestConnectRequest,
   RestDecision,
   RestDocument,
   RestEvent,
+  RestGoal,
   RestMember,
   RestPerson,
   RestProject,
   RestRun,
   RestTask,
   RestToken,
+  RestWork,
 } from "../api.js";
 import { KOREAN, LanguageContext } from "../i18n/index.js";
-import { Board } from "./board.js";
+import { Board, BoardFilters, byDue, filterTasks } from "./board.js";
+import { Calendar, Workload, workloadOf } from "./calendar.js";
+import { CategoryList } from "./categories.js";
 import { ConnectApproval, ConnectCodeForm, ConnectWords } from "./connect.js";
-import { DecisionCard, DecisionList } from "./decision-list.js";
+import { DecisionCard, DecisionList, DecisionLog } from "./decision-list.js";
 import { DocumentForm, DocumentList, DocumentView, FolderView } from "./documents.js";
 import { describeEvent, EventFeed } from "./event-feed.js";
+import { GoalForm, GoalList, GoalView } from "./goals.js";
 import { Markdown } from "./markdown.js";
 import { PeopleList } from "./people.js";
 import { keyOf, MemberList, ProjectForm, ProjectList } from "./projects.js";
@@ -25,8 +31,10 @@ import { RunList } from "./runs.js";
 import { Shell } from "./shell.js";
 import { SignIn } from "./sign-in.js";
 import { SkillList } from "./skills.js";
+import { TaskList } from "./task-list.js";
 import { TaskView } from "./task-view.js";
 import { NewToken, TokenForm, TokenList } from "./tokens.js";
+import { WorkList } from "./work.js";
 
 const alice: RestPerson = {
   id: "0199c4d8-0000-7000-8000-000000000001",
@@ -53,6 +61,12 @@ const task = (overrides: Partial<RestTask> = {}): RestTask => ({
   owner: alice,
   assignee: bob,
   parentId: null,
+  category: null,
+  goalId: null,
+  startsOn: null,
+  dueOn: null,
+  startedAt: null,
+  doneAt: null,
   links: [],
   openDecisions: 1,
   openRuns: 0,
@@ -60,6 +74,30 @@ const task = (overrides: Partial<RestTask> = {}): RestTask => ({
   updatedAt: "2026-10-09T11:00:00.000Z",
   ...overrides,
 });
+
+const engineering: RestCategory = {
+  key: "engineering",
+  name: "Engineering",
+  color: "blue",
+  createdAt: "2026-10-09T10:00:00.000Z",
+  updatedAt: "2026-10-09T10:00:00.000Z",
+};
+
+const goal = (overrides: Partial<RestGoal> = {}): RestGoal => ({
+  id: "0199c4d8-0000-7000-8000-000000000030",
+  title: "Ship v1 <b>now</b>",
+  body: "",
+  state: "active",
+  dueOn: "2026-11-15",
+  createdBy: alice,
+  taskCounts: { idea: 1, ready: 0, in_progress: 1, in_review: 0, done: 2, dropped: 1 },
+  createdAt: "2026-10-09T10:00:00.000Z",
+  updatedAt: "2026-10-09T10:00:00.000Z",
+  ...overrides,
+});
+
+/** The day the tests count from: a Sunday in October 2026. */
+const TODAY = "2026-10-11";
 
 const decision = (overrides: Partial<RestDecision> = {}): RestDecision => ({
   id: "0199c4d8-0000-7000-8000-000000000020",
@@ -108,6 +146,7 @@ describe("the language", () => {
           decisionId: null,
           runId: null,
           documentId: null,
+          goalId: null,
           data: { number: 7, title: "Ship", from: "ready", to: "in_progress" },
           createdAt: "2026-10-09T10:00:00.000Z",
         },
@@ -182,6 +221,7 @@ describe("one task", () => {
             decisionId: null,
             runId: null,
             documentId: null,
+            goalId: null,
             data: { number: 7, title: "Ship", from: "ready", to: "in_progress" },
             createdAt: "2026-10-09T10:00:00.000Z",
           },
@@ -242,7 +282,7 @@ describe("one task", () => {
 });
 
 describe("decisions", () => {
-  it("list the waiting ones with their options, and the answered ones with who answered", () => {
+  it("list the waiting ones as cards with their options, and the answered ones as the record, a row each", () => {
     const answered = decision({
       id: "0199c4d8-0000-7000-8000-000000000021",
       question: "Name?",
@@ -253,16 +293,22 @@ describe("decisions", () => {
         decisions={[decision(), answered]}
         tasks={new Map([[task().id, task()]])}
         taskHref={href}
+        decisionHref={(item) => `/projects/web/decisions/${item.id}`}
         onAnswer={() => undefined}
       />,
     );
     expect(html).toContain('aria-label="Waiting"');
-    expect(html).toContain('aria-label="Answered"');
     expect(html).toContain('type="radio"');
+    // The record: what was asked, what was chosen, by whom, in a row that leads to the page.
+    expect(html).toContain('aria-label="The record"');
+    expect(html).toContain(`href="/projects/web/decisions/${answered.id}"`);
     expect(html).toContain("The second");
-    expect(html).toContain("Shorter.");
-    expect(html).toContain("answered");
+    expect(html).toContain("bob");
+    expect(html).not.toContain("Shorter.");
     expect(html).toContain("#7");
+    const log = renderToStaticMarkup(<DecisionLog decisions={[answered]} />);
+    expect(log).toContain("Name?");
+    expect(log).not.toContain("<a ");
   });
 
   it("read as a record: the context, the rationale, and what followed, with the way to write it", () => {
@@ -308,6 +354,7 @@ describe("the feed", () => {
     actor: alice,
     agent: null,
     documentId: null,
+    goalId: null,
     projectId: null,
     taskId: null,
     decisionId: null,
@@ -816,6 +863,7 @@ describe("people", () => {
       decisionId: null,
       runId: null,
       documentId: null,
+      goalId: null,
       data: { login: "bob", role: "admin" },
       createdAt: "2026-10-09T10:00:00.000Z",
     };
@@ -926,6 +974,7 @@ describe("runs", () => {
       decisionId: null,
       runId: run.id,
       documentId: null,
+      goalId: null,
       data: { number: 7, title: "Ship", agent: "Claude Code" },
       createdAt: "2026-10-09T10:00:00.000Z",
     };
@@ -1118,5 +1167,391 @@ describe("skills", () => {
     );
     expect(indexing).toContain("still indexing");
     expect(indexing).toContain("/gh/acme/skills");
+  });
+});
+
+describe("the schedule on the board", () => {
+  it("says on a card what is due and whose agent is at work, and nothing it need not", () => {
+    const run: RestRun = {
+      id: "0199c4d8-0000-7000-8000-000000000040",
+      taskId: task().id,
+      taskNumber: 7,
+      person: alice,
+      agent: "Claude Code",
+      status: "running",
+      startedAt: "2026-10-11T09:00:00.000Z",
+      endedAt: null,
+      summary: null,
+      reports: [],
+      artifacts: [],
+      waitingFor: null,
+    };
+    const html = renderToStaticMarkup(
+      <Board
+        tasks={[
+          task({
+            category: engineering,
+            dueOn: "2026-10-09",
+            openRuns: 1,
+            links: [{ url: "https://example.com", label: null }],
+          }),
+        ]}
+        runs={[run]}
+        today={TODAY}
+        taskHref={href}
+        onOpen={() => undefined}
+      />,
+    );
+    expect(html).toContain("sc-badge-category sc-category-blue");
+    expect(html).toContain("Engineering");
+    expect(html).toContain("2 days overdue");
+    expect(html).toContain("Claude Code");
+    expect(html).not.toContain("agent at work");
+    expect(html).not.toContain("1 link");
+    // Due today, tomorrow, within the week, and later: each said as a person reads it.
+    const words = (dueOn: string, state: RestTask["state"] = "ready") =>
+      renderToStaticMarkup(
+        <Board
+          tasks={[task({ dueOn, state, openDecisions: 0 })]}
+          today={TODAY}
+          taskHref={href}
+          onOpen={() => undefined}
+        />,
+      );
+    expect(words("2026-10-11")).toContain("Due today");
+    expect(words("2026-10-12")).toContain("Due tomorrow");
+    expect(words("2026-10-15")).toContain("Due in 4 days");
+    expect(words("2026-11-20")).toContain("Due Nov 20");
+    expect(words("2026-10-01", "done")).toContain("Due Oct 1");
+    expect(words("2026-10-01", "done")).not.toContain("overdue");
+  });
+
+  it("reads a column soonest due first, and narrows the board by category, goal, person and one's own", () => {
+    const a = task({ id: "0199c4d8-0000-7000-8000-000000000011", number: 1, dueOn: null });
+    const b = task({ id: "0199c4d8-0000-7000-8000-000000000012", number: 2, dueOn: "2026-10-20" });
+    const c = task({ id: "0199c4d8-0000-7000-8000-000000000013", number: 3, dueOn: "2026-10-12" });
+    const d = task({ id: "0199c4d8-0000-7000-8000-000000000014", number: 4, dueOn: null });
+    expect([a, b, c, d].sort(byDue).map((item) => item.number)).toEqual([3, 2, 4, 1]);
+    const mine = task({
+      id: "0199c4d8-0000-7000-8000-000000000015",
+      number: 5,
+      assignee: alice,
+      category: engineering,
+      goalId: goal().id,
+    });
+    const all = [a, mine];
+    expect(filterTasks(all, {}).length).toBe(2);
+    expect(filterTasks(all, { category: "engineering" })).toEqual([mine]);
+    expect(filterTasks(all, { category: "" })).toEqual([a]);
+    expect(filterTasks(all, { goal: goal().id })).toEqual([mine]);
+    expect(filterTasks(all, { goal: "" })).toEqual([a]);
+    expect(filterTasks(all, { person: alice.id })).toEqual([mine]);
+    expect(filterTasks(all, { mine: true }, alice)).toEqual([mine]);
+    expect(filterTasks(all, { mine: true })).toEqual([]);
+    const html = renderToStaticMarkup(
+      <BoardFilters
+        filter={{ category: "engineering" }}
+        categories={[engineering]}
+        goals={[
+          goal(),
+          goal({ id: "0199c4d8-0000-7000-8000-000000000031", state: "dropped", title: "Gone" }),
+        ]}
+        people={[alice, bob]}
+        me={alice}
+        shown={1}
+        total={2}
+        onChange={() => undefined}
+      />,
+    );
+    expect(html).toContain('aria-label="Narrow the board"');
+    expect(html).toContain("1 of 2 tasks");
+    expect(html).toContain("Show everything");
+    expect(html).toContain("Ship v1");
+    expect(html).not.toContain("Gone");
+    expect(html).toContain("Mine");
+  });
+
+  it("lists tasks as rows with the project named when asked, and says the plan on a task's page", () => {
+    const rows = renderToStaticMarkup(
+      <TaskList
+        tasks={[task({ category: engineering, dueOn: "2026-10-09", openRuns: 1 })]}
+        taskHref={href}
+        today={TODAY}
+        showState
+        projectOf={() => "The web app"}
+      />,
+    );
+    expect(rows).toContain("The web app");
+    expect(rows).toContain("Ready");
+    expect(rows).toContain("2 days overdue");
+    expect(rows).toContain("agent at work");
+    const view = renderToStaticMarkup(
+      <TaskView
+        task={task({
+          category: engineering,
+          goalId: goal().id,
+          startsOn: "2026-10-20",
+          dueOn: "2026-10-24",
+          startedAt: "2026-10-21T09:00:00.000Z",
+          doneAt: null,
+        })}
+        people={[alice, bob]}
+        tasks={[task()]}
+        decisions={[]}
+        goals={[goal()]}
+        goalHref={(id) => `/projects/web/roadmap/${id}`}
+        taskHref={href}
+        today={TODAY}
+        onChange={() => undefined}
+        onMove={() => undefined}
+        onRaiseDecision={() => undefined}
+        onAnswer={() => undefined}
+      />,
+    );
+    expect(view).toContain("Oct 20 to Oct 24");
+    expect(view).toContain(`href="/projects/web/roadmap/${goal().id}"`);
+    expect(view).toContain("Ship v1");
+    expect(view).toContain("Started");
+    expect(view).not.toContain("<dt>Done</dt>");
+    const bare = renderToStaticMarkup(
+      <TaskView
+        task={task()}
+        people={[alice, bob]}
+        tasks={[task()]}
+        decisions={[]}
+        taskHref={href}
+        onChange={() => undefined}
+        onMove={() => undefined}
+        onRaiseDecision={() => undefined}
+        onAnswer={() => undefined}
+      />,
+    );
+    expect(bare).not.toContain("<dt>Plan</dt>");
+    expect(bare).not.toContain("<dt>Category</dt>");
+  });
+});
+
+describe("the calendar", () => {
+  it("lays the month out with each task on its day, late ones marked, and the neighbours' days greyed", () => {
+    const html = renderToStaticMarkup(
+      <Calendar
+        tasks={[
+          task({ dueOn: "2026-10-09", title: "Late one" }),
+          task({
+            id: "0199c4d8-0000-7000-8000-000000000011",
+            number: 8,
+            title: "Planned one",
+            startsOn: "2026-10-20",
+            dueOn: "2026-10-24",
+            category: engineering,
+          }),
+          task({
+            id: "0199c4d8-0000-7000-8000-000000000012",
+            number: 9,
+            title: "Done one",
+            dueOn: "2026-10-05",
+            state: "done",
+          }),
+        ]}
+        month="2026-10"
+        today={TODAY}
+        taskHref={href}
+        monthHref={(month) => `/projects/web/calendar?month=${month}`}
+      />,
+    );
+    expect(html).toContain("October 2026");
+    expect(html).toContain('href="/projects/web/calendar?month=2026-09"');
+    expect(html).toContain('href="/projects/web/calendar?month=2026-11"');
+    expect(html).toContain("sc-calendar-cell-today");
+    expect(html).toContain("sc-calendar-cell-outside");
+    expect(html).toContain("sc-calendar-task-late");
+    expect(html).toContain("sc-calendar-task-over");
+    expect(html).toContain("sc-calendar-task-start");
+    expect(html).toContain("sc-category-blue");
+    expect(html).toContain("Planned one");
+    expect(html).not.toContain("Nothing is due this month");
+    const empty = renderToStaticMarkup(
+      <Calendar
+        tasks={[]}
+        month="2026-12"
+        today={TODAY}
+        taskHref={href}
+        monthHref={(month) => month}
+      />,
+    );
+    expect(empty).toContain("Nothing is due this month");
+  });
+
+  it("says who has what, with the late and the soon due counted, and nobody's last", () => {
+    const tasks = [
+      task({ assignee: bob, dueOn: "2026-10-09", state: "in_progress" }),
+      task({ id: "0199c4d8-0000-7000-8000-000000000011", assignee: bob, dueOn: "2026-10-15" }),
+      task({ id: "0199c4d8-0000-7000-8000-000000000012", assignee: null, dueOn: null }),
+      task({ id: "0199c4d8-0000-7000-8000-000000000013", assignee: alice, state: "done" }),
+      task({ id: "0199c4d8-0000-7000-8000-000000000014", assignee: alice, dueOn: "2026-10-30" }),
+    ];
+    const rows = workloadOf(tasks, TODAY);
+    expect(rows.map((row) => row.person?.login ?? null)).toEqual(["alice", "bob", null]);
+    expect(rows[1]).toMatchObject({ open: 2, inProgress: 1, dueSoon: 1, overdue: 1 });
+    expect(rows[0]).toMatchObject({ open: 1, inProgress: 0, dueSoon: 0, overdue: 0 });
+    expect(rows[2]).toMatchObject({ open: 1 });
+    const html = renderToStaticMarkup(
+      <Workload
+        tasks={tasks}
+        today={TODAY}
+        personHref={(person) => `/board?person=${person?.id ?? ""}`}
+      />,
+    );
+    expect(html).toContain('aria-label="Who has what"');
+    expect(html).toContain("sc-workload-late");
+    expect(html).toContain("Nobody&#x27;s yet");
+    expect(html).toContain(`href="/board?person=${bob.id}"`);
+    expect(renderToStaticMarkup(<Workload tasks={[]} today={TODAY} />)).toBe("");
+  });
+});
+
+describe("the roadmap", () => {
+  it("lists the goals with how far each is, as text and never as HTML", () => {
+    const html = renderToStaticMarkup(
+      <GoalList
+        goals={[
+          goal(),
+          goal({ id: "0199c4d8-0000-7000-8000-000000000031", state: "done", title: "Reached" }),
+        ]}
+        goalHref={(item) => `/projects/web/roadmap/${item.id}`}
+        today={TODAY}
+      />,
+    );
+    expect(html).toContain("Ship v1 &lt;b&gt;now&lt;/b&gt;");
+    expect(html).not.toContain("<b>now</b>");
+    expect(html).toContain("2 of 4 tasks done");
+    expect(html).toContain("1 in progress");
+    expect(html).toContain('role="progressbar"');
+    expect(html).toContain("Active");
+    expect(html).toContain("Reached");
+    expect(html).toContain("Due Nov 15");
+    expect(html).toContain("sc-goal-done");
+    expect(
+      renderToStaticMarkup(<GoalList goals={[]} goalHref={() => "#"} empty={<p>none</p>} />),
+    ).toBe("<p>none</p>");
+  });
+
+  it("shows one goal with its tasks by state, the way to change it, and the form to set one", () => {
+    const html = renderToStaticMarkup(
+      <GoalView
+        goal={goal({ body: "See [the plan](plan)." })}
+        tasks={[
+          task({ goalId: goal().id, state: "done", title: "Defined" }),
+          task({ id: "0199c4d8-0000-7000-8000-000000000011", goalId: goal().id, title: "Pending" }),
+          task({ id: "0199c4d8-0000-7000-8000-000000000012", title: "Elsewhere" }),
+        ]}
+        taskHref={href}
+        docHref={(path) => `/projects/web/docs/${path}`}
+        today={TODAY}
+        editHref="/projects/web/roadmap/x?edit"
+        onMove={() => undefined}
+      />,
+    );
+    expect(html).toContain('href="/projects/web/docs/plan"');
+    expect(html).toContain("Defined");
+    expect(html).toContain("Pending");
+    expect(html).not.toContain("Elsewhere");
+    expect(html).toContain('href="/projects/web/roadmap/x?edit"');
+    expect(html).toContain("<select");
+    expect(html).toContain("Set by");
+    const readOnly = renderToStaticMarkup(
+      <GoalView goal={goal({ dueOn: null })} tasks={[]} taskHref={href} today={TODAY} />,
+    );
+    expect(readOnly).not.toContain("<select");
+    expect(readOnly).toContain("No target day");
+    expect(readOnly).toContain("No task works towards it yet.");
+    const form = renderToStaticMarkup(<GoalForm onSubmit={() => undefined} />);
+    expect(form).toContain('type="date"');
+    expect(form).toContain("Set the goal");
+    expect(form).toContain("Planned");
+    const edit = renderToStaticMarkup(<GoalForm goal={goal()} onSubmit={() => undefined} />);
+    expect(edit).toContain('value="2026-11-15"');
+    expect(edit).toContain("Save");
+  });
+});
+
+describe("the categories", () => {
+  it("list each in its colour, and give an administrator the ways to rename, recolour, add and remove", () => {
+    const readOnly = renderToStaticMarkup(<CategoryList categories={[engineering]} />);
+    expect(readOnly).toContain("Engineering");
+    expect(readOnly).toContain("sc-category-blue");
+    expect(readOnly).not.toContain("<form");
+    const html = renderToStaticMarkup(
+      <CategoryList
+        categories={[engineering]}
+        onAdd={() => undefined}
+        onChange={() => undefined}
+        onRemove={() => undefined}
+      />,
+    );
+    expect(html).toContain('aria-label="Add a category"');
+    expect(html).toContain('value="Engineering"');
+    expect(html).toContain("Remove");
+    expect(html).toContain("Teal");
+    expect(html).toContain('pattern="[a-z0-9]([a-z0-9-]*[a-z0-9])?"');
+  });
+});
+
+describe("a person's work", () => {
+  it("groups what is on the plate by when it is due, names the project, and lists the decisions waiting", () => {
+    const work: RestWork = {
+      tasks: [
+        {
+          project: { key: "web", name: "The web app" },
+          task: task({ dueOn: "2026-10-09", title: "Late" }),
+        },
+        {
+          project: { key: "web", name: "The web app" },
+          task: task({
+            id: "0199c4d8-0000-7000-8000-000000000011",
+            dueOn: "2026-10-14",
+            title: "Soon",
+          }),
+        },
+        {
+          project: { key: "docs", name: "The docs" },
+          task: task({
+            id: "0199c4d8-0000-7000-8000-000000000012",
+            dueOn: "2026-11-30",
+            title: "Far",
+          }),
+        },
+        {
+          project: { key: "docs", name: "The docs" },
+          task: task({ id: "0199c4d8-0000-7000-8000-000000000013", dueOn: null, title: "Someday" }),
+        },
+      ],
+      decisions: [{ project: { key: "web", name: "The web app" }, decision: decision() }],
+    };
+    const html = renderToStaticMarkup(
+      <WorkList
+        work={work}
+        today={TODAY}
+        taskHref={(key, item) => `/projects/${key}/tasks/${item.number}`}
+        decisionHref={(key, id) => `/projects/${key}/decisions/${id}`}
+      />,
+    );
+    for (const section of ["Overdue", "Due this week", "Later", "No day set"]) {
+      expect(html).toContain(`aria-label="${section}"`);
+    }
+    expect(html).toContain("The docs");
+    expect(html).toContain('href="/projects/docs/tasks/7"');
+    expect(html).toContain(`href="/projects/web/decisions/${decision().id}"`);
+    expect(html).toContain("Which one?");
+    const quiet = renderToStaticMarkup(
+      <WorkList
+        work={{ tasks: [], decisions: [] }}
+        today={TODAY}
+        taskHref={() => "#"}
+        decisionHref={() => "#"}
+      />,
+    );
+    expect(quiet).toContain("No decision waits.");
+    expect(quiet).not.toContain('aria-label="Overdue"');
   });
 });
