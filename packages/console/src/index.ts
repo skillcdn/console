@@ -16,9 +16,11 @@ export {
 export {
   Calendar,
   type CalendarProps,
+  type WeekSegment,
   Workload,
   type WorkloadProps,
   type WorkloadRow,
+  weekSegments,
   workloadOf,
 } from "./components/calendar.js";
 export { CategoryList, type CategoryListProps } from "./components/categories.js";
@@ -64,6 +66,7 @@ export {
   type GoalViewProps,
 } from "./components/goals.js";
 export { Markdown, type MarkdownProps } from "./components/markdown.js";
+export { PAGE_SIZE, ShowMore, usePaged } from "./components/paged.js";
 export { PeopleList, type PeopleListProps } from "./components/people.js";
 export {
   keyOf,
@@ -74,6 +77,7 @@ export {
   type ProjectFormProps,
   ProjectList,
   type ProjectListProps,
+  ProjectMark,
   ProjectRoleBadge,
   VISIBILITY_LABELS,
 } from "./components/projects.js";

@@ -16,6 +16,9 @@ const PROJECT = {
   description: "",
   visibility: "private",
   skillsAddress: null,
+  color: null,
+  symbol: null,
+  icon: null,
   role: "owner",
   openDecisions: 0,
   openRuns: 0,
@@ -89,9 +92,9 @@ describe("createClient", () => {
     const { send, calls } = fakeFetch({
       [`PATCH /api/v1/projects/web/tasks/${task.id}`]: { body: { ...task, state: "done" } },
       "GET /api/v1/projects/web/tasks?open=true&category=engineering&assignee=p&dueBy=2026-10-20": {
-        body: { items: [task] },
+        body: { more: false, items: [task] },
       },
-      "GET /api/v1/categories": { body: { items: [] } },
+      "GET /api/v1/categories": { body: { more: false, items: [] } },
       "GET /api/v1/work": { body: { tasks: [], decisions: [] } },
       "DELETE /api/v1/categories/research": { status: 204 },
     });
@@ -146,7 +149,9 @@ describe("createClient", () => {
     const { send, calls } = fakeFetch({
       "GET https://console.test/api/v1/projects/web/events?after=0&task=0199c4d8-0000-7000-8000-000000000010":
         { body: { items: [], more: false } },
-      "GET https://console.test/api/v1/events?after=7": { body: { items: [], more: false } },
+      "GET https://console.test/api/v1/events?after=7": {
+        body: { items: [], more: false },
+      },
     });
     const client = createClient({ baseUrl: "https://console.test", fetch: send });
     expect(client.project("web").eventStreamUrl(42)).toBe(
@@ -237,7 +242,7 @@ describe("createClient", () => {
       lastUsedAt: null,
     };
     const { send, calls } = fakeFetch({
-      "GET https://console.test/api/v1/tokens": { body: { items: [token] } },
+      "GET https://console.test/api/v1/tokens": { body: { more: false, items: [token] } },
       "POST https://console.test/api/v1/tokens": {
         status: 201,
         body: { token, secret: "cns_t_secret" },
@@ -289,7 +294,9 @@ describe("createClient", () => {
         status: 202,
         body: { status: "pending", expiresAt: connection.expiresAt },
       },
-      [`GET https://console.test/api/v1/people/${PERSON.id}/tokens`]: { body: { items: [] } },
+      [`GET https://console.test/api/v1/people/${PERSON.id}/tokens`]: {
+        body: { more: false, items: [] },
+      },
       [`DELETE https://console.test/api/v1/people/${PERSON.id}/tokens/${tokenId}`]: { status: 204 },
     });
     const client = createClient({ baseUrl: "https://console.test", fetch: send });
@@ -320,6 +327,7 @@ describe("createClient", () => {
       status: "running",
       startedAt: "2026-10-09T10:00:00.000Z",
       endedAt: null,
+      lastHeardAt: "2026-10-09T10:00:00.000Z",
       summary: null,
       reports: [],
       artifacts: [
@@ -382,11 +390,11 @@ describe("createClient", () => {
   it("lists the projects, makes one, and manages one's settings and members", async () => {
     const member = { person: PERSON, role: "member", addedAt: "2026-10-09T10:00:00.000Z" };
     const { send, calls } = fakeFetch({
-      "GET /api/v1/projects": { body: { items: [PROJECT] } },
+      "GET /api/v1/projects": { body: { more: false, items: [PROJECT] } },
       "POST /api/v1/projects": { status: 201, body: PROJECT },
       "GET /api/v1/projects/web": { body: PROJECT },
       "PATCH /api/v1/projects/web": { body: { ...PROJECT, name: "Web" } },
-      "GET /api/v1/projects/web/members": { body: { items: [member] } },
+      "GET /api/v1/projects/web/members": { body: { more: false, items: [member] } },
       "POST /api/v1/projects/web/members": { status: 201, body: member },
       [`PATCH /api/v1/projects/web/members/${PERSON.id}`]: { body: { ...member, role: "owner" } },
       [`DELETE /api/v1/projects/web/members/${PERSON.id}`]: { status: 204 },
@@ -405,5 +413,34 @@ describe("createClient", () => {
     expect(calls[1]?.init?.body).toBe(JSON.stringify({ key: "web", name: "The web app" }));
     expect(calls[5]?.init?.body).toBe(JSON.stringify({ personId: PERSON.id, role: "member" }));
     expect(calls[7]?.init?.method).toBe("DELETE");
+  });
+});
+
+describe("a project's image for its mark", () => {
+  it("is sent as a form and taken away with a delete, each answered with the project", async () => {
+    const { send, calls } = fakeFetch({
+      "POST https://console.test/api/v1/projects/web/icon": { body: PROJECT },
+      "DELETE https://console.test/api/v1/projects/web/icon": { body: PROJECT },
+    });
+    const client = createClient({ baseUrl: "https://console.test", fetch: send });
+    const project = client.project("web");
+    expect(
+      await project.setIcon({
+        name: "mark.png",
+        bytes: new Uint8Array([1, 2, 3]),
+        contentType: "image/png",
+      }),
+    ).toEqual(PROJECT);
+    expect(await project.removeIcon()).toEqual(PROJECT);
+    expect(calls.map((call) => `${call.init?.method} ${call.url}`)).toEqual([
+      "POST https://console.test/api/v1/projects/web/icon",
+      "DELETE https://console.test/api/v1/projects/web/icon",
+    ]);
+    const form = calls[0]?.init?.body;
+    expect(form).toBeInstanceOf(FormData);
+    const file = (form as FormData).get("file");
+    expect(file).toBeInstanceOf(File);
+    expect((file as File).name).toBe("mark.png");
+    expect((file as File).type).toBe("image/png");
   });
 });

@@ -1,13 +1,20 @@
-import { type FormEvent, type ReactNode, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import {
+  COLOR_NAMES,
+  type ColorName,
   MAX_PROJECT_DESCRIPTION_LENGTH,
   MAX_PROJECT_KEY_LENGTH,
   MAX_PROJECT_NAME_LENGTH,
+  MAX_PROJECT_SYMBOL_LENGTH,
   MAX_SKILLS_ADDRESS_LENGTH,
+  PROJECT_ICON_TYPES,
   PROJECT_ROLES,
   PROJECT_VISIBILITIES,
   type ProjectRole,
   type ProjectVisibility,
+  projectColorOf,
+  projectIconPath,
+  projectSymbolOf,
   type RestMember,
   type RestMemberInput,
   type RestPerson,
@@ -16,7 +23,44 @@ import {
   type RestProjectPatch,
 } from "../api.js";
 import { useWords } from "../i18n/index.js";
-import { Badge, Button, PersonChip, Time } from "./ui.js";
+import { Badge, Button, cx, PersonChip, Time } from "./ui.js";
+
+/** A project's mark: its symbol on its colour, so that projects tell apart at a glance. */
+export function ProjectMark(props: {
+  readonly project: {
+    readonly key: string;
+    readonly name: string;
+    readonly color: ColorName | null;
+    readonly symbol: string | null;
+    /** The project's own image, when it has one; the symbol on the colour otherwise. */
+    readonly icon?: { readonly sha256: string } | null | undefined;
+  };
+  readonly size?: "sm" | "md" | "lg";
+  /** Where the image is read from; the console's own path for it when left out. */
+  readonly iconSrc?: string | undefined;
+}) {
+  const size = props.size ?? "md";
+  const icon = props.project.icon ?? null;
+  const src =
+    props.iconSrc ?? (icon === null ? undefined : projectIconPath(props.project.key, icon));
+  return (
+    <span
+      className={cx(
+        "sc-mark",
+        `sc-mark-${size}`,
+        `sc-category-${projectColorOf(props.project)}`,
+        src !== undefined && "sc-mark-pictured",
+      )}
+      aria-hidden="true"
+    >
+      {src === undefined ? (
+        projectSymbolOf(props.project)
+      ) : (
+        <img className="sc-mark-image" src={src} alt="" />
+      )}
+    </span>
+  );
+}
 
 // The projects of the workspace (ADR-0008): the list a person may see, the way to make one,
 // a project's settings for its owners, and those listed in it. Each takes its data as props
@@ -60,6 +104,7 @@ export function ProjectList(props: ProjectListProps) {
       {props.projects.map((project) => (
         <li key={project.id} className="sc-project">
           <div className="sc-project-head">
+            <ProjectMark project={project} size="md" />
             <a
               className="sc-project-name"
               href={props.projectHref(project)}
@@ -79,14 +124,11 @@ export function ProjectList(props: ProjectListProps) {
           {project.description.length > 0 && (
             <p className="sc-project-description">{project.description}</p>
           )}
-          <p className="sc-project-meta">
-            {project.openDecisions > 0 && (
+          {project.openDecisions > 0 && (
+            <p className="sc-project-meta">
               <Badge tone="warning">{words.decisionsWaiting(project.openDecisions)}</Badge>
-            )}
-            {project.openRuns > 0 && (
-              <Badge tone="accent">{words.agentsAtWork(project.openRuns)}</Badge>
-            )}
-          </p>
+            </p>
+          )}
         </li>
       ))}
     </ul>
@@ -98,7 +140,11 @@ export interface ProjectFormProps {
   readonly project?: RestProject | undefined;
   readonly busy?: boolean | undefined;
   readonly error?: string | undefined;
-  readonly onSubmit: (input: RestProjectInput | RestProjectPatch) => void;
+  /**
+   * Called with the settings as they are to be, and the image for the mark: a file chosen,
+   * `null` to take the image away, or nothing to keep what the project has.
+   */
+  readonly onSubmit: (input: RestProjectInput | RestProjectPatch, icon?: File | null) => void;
   readonly onCancel?: (() => void) | undefined;
 }
 
@@ -121,6 +167,31 @@ export function ProjectForm(props: ProjectFormProps) {
   const [description, setDescription] = useState(project?.description ?? "");
   const [visibility, setVisibility] = useState<ProjectVisibility>(project?.visibility ?? "private");
   const [skillsAddress, setSkillsAddress] = useState(project?.skillsAddress ?? "");
+  const [color, setColor] = useState<ColorName | "">(project?.color ?? "");
+  const [symbol, setSymbol] = useState(project?.symbol ?? "");
+  /** The image for the mark: a file chosen, `null` for none any more, nothing to keep the project's. */
+  const [icon, setIcon] = useState<File | null | undefined>(undefined);
+  const chosenSrc = useMemo(
+    () => (icon instanceof File ? URL.createObjectURL(icon) : undefined),
+    [icon],
+  );
+  useEffect(
+    () => () => {
+      if (chosenSrc !== undefined) {
+        URL.revokeObjectURL(chosenSrc);
+      }
+    },
+    [chosenSrc],
+  );
+  const kept = icon === undefined ? (project?.icon ?? null) : null;
+  /** The mark as it will be, from what is typed and chosen so far. */
+  const preview = {
+    key: key.trim() === "" ? keyOf(name) : key.trim(),
+    name: name.trim() === "" ? "?" : name.trim(),
+    color: color === "" ? null : color,
+    symbol: symbol.trim() === "" ? null : symbol.trim(),
+    icon: icon instanceof File ? { sha256: "chosen" } : kept,
+  };
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -129,9 +200,12 @@ export function ProjectForm(props: ProjectFormProps) {
       description: description.trim(),
       visibility,
       skillsAddress: skillsAddress.trim() === "" ? null : skillsAddress.trim(),
+      color: preview.color,
+      symbol: preview.symbol,
     };
     props.onSubmit(
       project === undefined ? { key: key.trim(), ...settings, name: name.trim() } : settings,
+      icon,
     );
   };
 
@@ -206,6 +280,50 @@ export function ProjectForm(props: ProjectFormProps) {
             onChange={(event) => setSkillsAddress(event.target.value)}
           />
         </label>
+      </div>
+      <div className="sc-field-row sc-mark-row">
+        <ProjectMark project={preview} size="lg" iconSrc={chosenSrc} />
+        <label className="sc-field">
+          <span className="sc-field-label">{form.symbol}</span>
+          <input
+            className="sc-input"
+            value={symbol}
+            maxLength={MAX_PROJECT_SYMBOL_LENGTH}
+            pattern="\S*"
+            placeholder={projectSymbolOf({ name: preview.name, symbol: null })}
+            onChange={(event) => setSymbol(event.target.value)}
+          />
+        </label>
+        <label className="sc-field">
+          <span className="sc-field-label">{form.color}</span>
+          <select
+            className="sc-input"
+            value={color}
+            onChange={(event) => setColor(event.target.value as ColorName | "")}
+          >
+            <option value="">{form.colorAuto}</option>
+            {COLOR_NAMES.map((candidate) => (
+              <option key={candidate} value={candidate}>
+                {words.vocabulary.categoryColor[candidate]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="sc-field">
+          <span className="sc-field-label">{form.image}</span>
+          <input
+            key={icon === null ? "none" : "some"}
+            className="sc-input sc-input-file"
+            type="file"
+            accept={PROJECT_ICON_TYPES.join(",")}
+            onChange={(event) => setIcon(event.target.files?.[0] ?? undefined)}
+          />
+        </label>
+        {(icon instanceof File || kept !== null) && (
+          <Button variant="ghost" size="sm" onClick={() => setIcon(null)}>
+            {form.imageRemove}
+          </Button>
+        )}
       </div>
       {props.error !== undefined && (
         <p className="sc-form-error" role="alert">

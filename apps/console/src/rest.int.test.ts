@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
 import {
   CLAIM_PATH,
   connectPath,
   DEFAULT_TOKEN_DAYS,
+  MAX_PROJECT_ICON_BYTES,
   MAX_TITLE_LENGTH,
   MAX_TOKEN_DAYS,
   MAX_TOKEN_NAME_LENGTH,
@@ -138,6 +140,8 @@ describe("projects", () => {
       name: "  The docs  ",
       description: "What we write.",
       skillsAddress: "/gh/Acme/Writing@main",
+      color: "teal",
+      symbol: "Dx",
     });
     expect(made.status).toBe(201);
     const docs = restProjectSchema.parse(await made.json());
@@ -147,6 +151,8 @@ describe("projects", () => {
       description: "What we write.",
       visibility: "private",
       skillsAddress: "/gh/acme/writing@main",
+      color: "teal",
+      symbol: "Dx",
       role: "owner",
       openDecisions: 0,
       openRuns: 0,
@@ -176,7 +182,87 @@ describe("projects", () => {
     const one = restProjectSchema.parse(await (await get(alice, projectPath("docs"))).json());
     expect(one).toEqual(docs);
     const open = restProjectSchema.parse(await (await get(bob, IN)).json());
-    expect(open).toMatchObject({ key: "web", role: "member", visibility: "workspace" });
+    // A project that chose no mark has none: the pages choose one from its key and name.
+    expect(open).toMatchObject({
+      key: "web",
+      role: "member",
+      visibility: "workspace",
+      color: null,
+      symbol: null,
+    });
+  });
+
+  it("carry an image for their mark: set and taken away by an owner on the console's own pages, served to whoever may see the project, and never believed to be what it says", async () => {
+    const png = Uint8Array.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52,
+    ]);
+    const upload = (cookie: string, bytes: Uint8Array, type = "image/png", at = IN) => {
+      const form = new FormData();
+      form.set("file", new File([bytes], "mark.png", { type }), "mark.png");
+      return h.request(`${at}/icon`, {
+        method: "POST",
+        headers: { cookie, origin: SIGN_IN_URL },
+        body: form,
+      });
+    };
+    const byMember = await upload(bob, png);
+    expect(byMember.status).toBe(403);
+    expect(await errorOf(byMember)).toBe("auth.forbidden");
+    const svg = await upload(
+      alice,
+      new TextEncoder().encode("<svg xmlns='http://www.w3.org/2000/svg'/>"),
+      "image/svg+xml",
+    );
+    expect(svg.status).toBe(400);
+    expect(await errorOf(svg)).toBe("project.invalid_icon");
+    const saysPng = await upload(alice, new TextEncoder().encode("not a picture at all"));
+    expect(saysPng.status).toBe(400);
+    expect(await errorOf(saysPng)).toBe("project.invalid_icon");
+    const tooBig = new Uint8Array(MAX_PROJECT_ICON_BYTES + 1);
+    tooBig.set(png);
+    const large = await upload(alice, tooBig);
+    expect(large.status).toBe(413);
+    expect(await errorOf(large)).toBe("request.too_large");
+
+    const before = await latestEventIn(alice);
+    const set = await upload(alice, png);
+    expect(set.status).toBe(200);
+    const sha256 = createHash("sha256").update(png).digest("hex");
+    expect(restProjectSchema.parse(await set.json()).icon).toEqual({
+      sha256,
+      contentType: "image/png",
+    });
+    // The same image again changes nothing and writes nothing.
+    expect((await upload(alice, png)).status).toBe(200);
+    const since = restEventsSchema.parse(
+      await (await get(alice, `${IN}/events?after=${before}`)).json(),
+    );
+    expect(since.items.map((event) => [event.kind, event.data])).toEqual([
+      ["project.updated", { key: "web", name: "The web app", fields: ["icon"] }],
+    ]);
+    const served = await get(bob, `${IN}/icon`);
+    expect(served.status).toBe(200);
+    expect(served.headers.get("content-type")).toBe("image/png");
+    expect(served.headers.get("etag")).toBe(`"${sha256}"`);
+    expect(served.headers.get("cache-control")).toBe("private, max-age=86400");
+    expect(served.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(served.headers.get("content-disposition")).toContain("inline");
+    expect(new Uint8Array(await served.arrayBuffer())).toEqual(png);
+    const cached = await h.request(`${IN}/icon`, {
+      headers: { cookie: bob, "if-none-match": `"${sha256}"` },
+    });
+    expect(cached.status).toBe(304);
+    // A project one may not see has no image to speak of; one without an image says so.
+    expect(await errorOf(await get(bob, `${projectPath("docs")}/icon`))).toBe("project.not_found");
+    expect(await errorOf(await get(alice, `${projectPath("docs")}/icon`))).toBe("project.no_icon");
+
+    const removed = await send(alice, "DELETE", `${IN}/icon`);
+    expect(removed.status).toBe(200);
+    expect(restProjectSchema.parse(await removed.json()).icon).toBeNull();
+    const gone = await get(bob, `${IN}/icon`);
+    expect(gone.status).toBe(404);
+    expect(await errorOf(gone)).toBe("project.no_icon");
+    expect((await send(bob, "DELETE", `${IN}/icon`)).status).toBe(403);
   });
 
   it("refuse a key taken, one that is not a key, and an address that is not one", async () => {
@@ -190,6 +276,9 @@ describe("projects", () => {
       { key: "", name: "x" },
       { key: "ok" },
       { key: "ok", name: "x", visibility: "public" },
+      { key: "ok", name: "x", color: "red" },
+      { key: "ok", name: "x", symbol: "a b" },
+      { key: "ok", name: "x", symbol: "123456789" },
     ]) {
       const response = await send(alice, "POST", REST_ROUTES.projects, body);
       expect(response.status, JSON.stringify(body)).toBe(400);
@@ -216,6 +305,27 @@ describe("projects", () => {
       visibility: "workspace",
       skillsAddress: null,
     });
+    // The mark is set and given up like the rest, and the board hears which fields changed.
+    const marked = await send(alice, "PATCH", projectPath("docs"), { color: "pink", symbol: "D" });
+    expect(restProjectSchema.parse(await marked.json())).toMatchObject({
+      color: "pink",
+      symbol: "D",
+    });
+    const sinceMarked = await latestEventIn(alice, projectPath("docs"));
+    const unmarked = await send(alice, "PATCH", projectPath("docs"), { color: null, symbol: null });
+    expect(restProjectSchema.parse(await unmarked.json())).toMatchObject({
+      color: null,
+      symbol: null,
+    });
+    expect(
+      restEventsSchema
+        .parse(
+          await (await get(alice, `${projectPath("docs")}/events?after=${sinceMarked}`)).json(),
+        )
+        .items.map((event) => [event.kind, event.data]),
+    ).toEqual([
+      ["project.updated", { key: "docs", name: "Documentation", fields: ["color", "symbol"] }],
+    ]);
     // Open to the workspace now, Bob sees it as a member, and may not change it.
     const byMember = await send(bob, "PATCH", projectPath("docs"), { name: "Mine" });
     expect(byMember.status).toBe(403);
@@ -373,6 +483,25 @@ describe("tasks", () => {
     const ready = restTasksSchema.parse(await (await get(alice, `${IN}/tasks?state=ready`)).json());
     expect(ready.items.every((task) => task.state === "ready")).toBe(true);
     expect(ready.items.some((task) => task.id === second.id)).toBe(true);
+    // A page at a time, the newest first, and whether there is more after it.
+    const page = restTasksSchema.parse(await (await get(alice, `${IN}/tasks?limit=1`)).json());
+    expect(page.items.map((task) => task.id)).toEqual([second.id]);
+    expect(page.more).toBe(true);
+    const next = restTasksSchema.parse(
+      await (await get(alice, `${IN}/tasks?limit=1&offset=1`)).json(),
+    );
+    expect(next.items.map((task) => task.id)).toEqual([first.id]);
+    expect(next.more).toBe(listed.items.length > 2);
+    expect(
+      restTasksSchema.parse(
+        await (await get(alice, `${IN}/tasks?offset=${listed.items.length}`)).json(),
+      ),
+    ).toEqual({ items: [], more: false });
+    for (const query of ["limit=0", "limit=501", "limit=x", "offset=-1"]) {
+      const refused = await get(alice, `${IN}/tasks?${query}`);
+      expect(refused.status, query).toBe(400);
+      expect(await errorOf(refused)).toBe("request.invalid");
+    }
     const one = await get(bob, `${IN}/tasks/${second.id}`);
     expect(one.headers.get("cache-control")).toBe("no-store");
     expect(restTaskSchema.parse(await one.json())).toEqual(second);
@@ -520,6 +649,16 @@ describe("decisions", () => {
       await (await get(bob, `${IN}/decisions?task=${task.id}`)).json(),
     );
     expect(about.items.map((item) => item.id)).toEqual([decision.id]);
+    expect(
+      restDecisionsSchema.parse(
+        await (await get(bob, `${IN}/decisions?task=${task.id}&limit=1`)).json(),
+      ),
+    ).toEqual({ items: about.items, more: false });
+    expect(
+      restDecisionsSchema.parse(
+        await (await get(bob, `${IN}/decisions?task=${task.id}&offset=1`)).json(),
+      ),
+    ).toEqual({ items: [], more: false });
     // Another project does not find it.
     expect((await get(alice, `${projectPath("docs")}/decisions/${decision.id}`)).status).toBe(404);
 

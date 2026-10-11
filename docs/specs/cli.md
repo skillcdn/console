@@ -23,7 +23,7 @@ The board is a project's ([ADR-0008](../adr/0008-a-workspace-holds-projects-and-
 | `projects` | `GET /api/v1/projects` | one line per project: key, name, what the person is in it, what waits in it |
 | `use <key>` | `GET /api/v1/projects/<key>` | that the directory works in the project from now on; writes `.skillcdn-console.json` |
 | `work` | `GET /api/v1/work` | what is on the person's plate across their projects: the open tasks assigned to them, the sooner due first, each with its project; and the decisions waiting. Needs no project |
-| `tasks [--state <state>] [--open] [--mine] [--category <key>] [--goal <id>] [--due <day\|today\|week\|overdue>]` | `GET .../tasks` with the filters | one line per task: number, state, priority, title, owner, assignee, category, due day, what waits on it |
+| `tasks [--state <state>] [--open] [--mine] [--category <key>] [--goal <id>] [--due <day\|today\|week\|overdue>] [--limit <n>] [--offset <n>]` | `GET .../tasks` with the filters and the page | one line per task: number, state, priority, title, owner, assignee, category, due day, what waits on it; a page at a time |
 | `task <number\|id>` | `GET .../tasks/<ref>`, the decisions about it, the runs on it | the task in full, with its plan and its moments |
 | `task new <title> [--body <markdown>\|--file <path>] [--state <state>] [--priority <priority>] [--category <key>] [--goal <id>] [--starts <day>] [--due <day>] [--assignee <login\|me>] [--parent <number\|id>]` | `POST .../tasks` | the number and the id |
 | `task edit <number\|id> [--title <title>] [--body ...] [the same flags; `none` clears a field]` | `GET .../tasks/<ref>`, then `PATCH .../tasks/<id>` | the task in full, as it is now |
@@ -33,15 +33,15 @@ The board is a project's ([ADR-0008](../adr/0008-a-workspace-holds-projects-and-
 | `goal edit <id> [--title <title>] [--body ...] [--state <state>] [--due <day\|none>]` | `PATCH .../goals/<id>` | the goal in full, as it is now |
 | `categories` | `GET /api/v1/categories` | one line per category: key, name, colour |
 | `skills` | `GET .../skills` | the project's skills, or the organization's: each with its description and the URI an agent loads it by through its own SkillCDN connection; or why there are none to show |
-| `take <number\|id> [--agent <name>]` | `GET .../tasks/<ref>`, then `POST .../runs` | the run that began, the task in full, and what to do next |
+| `take <number\|id> [--agent <name>]` | `GET .../tasks/<ref>`, then `POST .../runs` | the run that began, the task in full, and what to do next; a run open on the task is taken over ([ADR-0020](../adr/0020-the-console-does-not-claim-an-agent-is-at-work-a-run-says-when-it-was-last-heard-from-and-a-new-run-takes-over.md)) |
 | `report <markdown>`, `report --file <path>`, `report -` | `POST .../runs/<id>/reports` | how many reports the run carries |
 | `hand-in <https url \| file path> [--label <words>]` | `POST .../runs/<id>/artifacts` for a link; `POST .../runs/<id>/files` for a file, sent as a form with its name and its media type by extension | how many artifacts |
 | `ask "<question>" --option "<label>" ... [--body <markdown>\|--file <path>] [--wait <seconds>]` | `POST .../decisions` with `runId`, then `GET .../decisions/<id>?wait=` | the decision raised, its options; then the answer, or that it still waits |
 | `decision <id> [--wait <seconds>]` | `GET .../decisions/<id>`, with `?wait=` while waiting | the decision; with a wait, the answer or that it still waits |
-| `decisions [--open]` | `GET .../decisions` | one line per decision |
+| `decisions [--open] [--limit <n>] [--offset <n>]` | `GET .../decisions` | one line per decision; a page at a time |
 | `finish [--summary <markdown>\|--file <path>]`, `fail [...]` | `POST .../runs/<id>/end` | how the run ended |
 | `abandon [<run id>] [--summary <markdown>]` | `POST .../runs/<id>/end`, as `abandoned` | the same |
-| `runs [--task <number\|id>] [--open] [--mine]` | `GET .../runs` | one line per run |
+| `runs [--task <number\|id>] [--open] [--mine] [--limit <n>] [--offset <n>]` | `GET .../runs` | one line per run, with when an open one was last heard from; a page at a time |
 | `run <id>` | `GET .../runs/<id>` | the run in full, with its reports, what it handed in and where each file is read |
 | `decision <id> --outcome <markdown>\|--file <path>` | `PATCH .../decisions/<id>` | the decision as a record, with what followed written down |
 | `docs [<folder>] [--search <words>] [--archived]` | `GET .../docs?folder=` or `?q=` | the folders and the pages of a folder, or the pages found by words: one line per page |
@@ -63,6 +63,8 @@ A project's pages of Markdown ([ADR-0009](../adr/0009-documents-are-pages-of-mar
 
 `report`, `hand-in`, `ask`, `finish` and `fail` act on a run. Named with `--run <id>`, that one; else the one open run begun with this token in the project (`GET .../runs?open=true&mine=true`). None open, or several: the command exits with `1` and says so, listing the open ones, so that an agent working two tasks at once says which.
 
+`tasks`, `decisions` and `runs` show a page at a time: `DEFAULT_PAGE_LIMIT` lines unless `--limit <n>` says otherwise (up to `LIST_LIMIT`), from `--offset <n>` on, and a last line, `... more: --offset <n>`, says how to ask for the next page when there is one; with `--json`, the console's answer as it is, `more` included. An agent reads the first page and asks for the next only when what it looks for is not on it.
+
 ## Waiting for a decision
 
 `ask` waits 60 seconds for the answer unless `--wait` says otherwise, within what an agent's shell gives one command; `decision <id> --wait <seconds>` waits as long as it is told, a day at most. The command asks the console to hold each request for up to 50 seconds (`?wait=`), the server's own bound, and repeats while the time lasts, with a breath between requests; the answer arrives as soon as a person gives it, since the console is woken through the database's own channel. A decision that still waits when the time is up is exit code `3`: the run waits with it, so the agent keeps waiting with `console decision <id> --wait 100`, within what its shell gives one command, and goes on meanwhile only with work that does not depend on the answer. `ask` prints the decision's id as soon as it is raised, before any waiting, so that a wait cut short loses nothing; with `--json` it prints the decision then, and again with its answer when that comes.
@@ -73,7 +75,7 @@ A project's pages of Markdown ([ADR-0009](../adr/0009-documents-are-pages-of-mar
 
 ## Output and exit codes
 
-Plain text on standard output: one line per thing in a list, a few lines for one thing in full, with ids given, since the commands take them, and the vocabulary's own words (`in_progress`, `waiting`), since the options take them. What went wrong goes to standard error as the console's stable code and its words (`run.task_taken: an agent is at work on the task already`), with a hint when there is something to do about it.
+Plain text on standard output: one line per thing in a list, a few lines for one thing in full, with ids given, since the commands take them, and the vocabulary's own words (`in_progress`, `waiting`), since the options take them. What went wrong goes to standard error as the console's stable code and its words (`run.task_closed: the task is done or dropped`), with a hint when there is something to do about it.
 
 | Exit code | Meaning |
 |---|---|

@@ -1,6 +1,7 @@
 import {
   ARTIFACT_KINDS,
   CATEGORY_COLORS,
+  COLOR_NAMES,
   GOAL_STATES,
   LINK_SOURCES,
   PERSON_ROLES,
@@ -169,6 +170,12 @@ export const projects = pgTable(
     visibility: text({ enum: PROJECT_VISIBILITIES }).notNull().default("private"),
     /** The address of the project's skills at the SkillCDN deployment, canonical; null for the organization's. */
     skillsAddress: text(),
+    /** The project's mark: a colour by name, and a symbol; null for the ones chosen from its key and its name. */
+    color: text({ enum: COLOR_NAMES }),
+    symbol: text(),
+    /** The project's own image for its mark: the hash the blob store keeps it by, and its media type; null for none. */
+    iconSha256: text(),
+    iconContentType: text(),
     /** The number the next task gets: tasks are numbered per project, for people to say. */
     nextTaskNumber: integer().notNull().default(1),
     createdAt: createdAt(),
@@ -179,6 +186,14 @@ export const projects = pgTable(
     check(
       "projects_visibility_check",
       sql`${table.visibility} in (${sql.raw(literals(PROJECT_VISIBILITIES))})`,
+    ),
+    check(
+      "projects_color_check",
+      sql`${table.color} is null or ${table.color} in (${sql.raw(literals(COLOR_NAMES))})`,
+    ),
+    check(
+      "projects_icon_check",
+      sql`(${table.iconSha256} is null) = (${table.iconContentType} is null)`,
     ),
   ],
 );
@@ -354,6 +369,11 @@ export const runs = pgTable(
     summary: text(),
     startedAt: instant().notNull(),
     endedAt: instant(),
+    /**
+     * When the agent was last heard from: the start, a report, a hand-in, a question. The board
+     * cannot know whether an agent still runs (ADR-0020); this is what it knows.
+     */
+    lastHeardAt: instant().notNull().defaultNow(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

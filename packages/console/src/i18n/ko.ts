@@ -21,7 +21,7 @@ export const ko: Messages = {
     projectRole: { owner: "소유자", member: "멤버" },
     visibility: { workspace: "워크스페이스의 모두", private: "목록에 있는 사람만" },
     runStatus: {
-      running: "작업 중",
+      running: "열림",
       waiting: "결정 대기 중",
       finished: "완료",
       failed: "실패",
@@ -68,6 +68,7 @@ export const ko: Messages = {
     nobody: "없음",
     nothing: "없음",
     language: "언어",
+    showMore: (n, of) => `${of}개 중 ${n}개 더 보기`,
   },
 
   nav: {
@@ -123,7 +124,6 @@ export const ko: Messages = {
     list: "프로젝트",
     private: "비공개",
     decisionsWaiting: (n) => `결정 ${n}건 대기 중`,
-    agentsAtWork: (n) => `에이전트 ${n}개 작업 중`,
     form: {
       aria: "새 프로젝트",
       name: "이름",
@@ -134,6 +134,11 @@ export const ko: Messages = {
       whoIsMember: "멤버 범위",
       skillsAddress: "스킬 주소",
       skillsAddressPlaceholder: "/gh/<owner>/<repo>, 비우면 조직의 스킬",
+      symbol: "마크",
+      image: "이미지",
+      imageRemove: "이미지 지우기",
+      color: "색",
+      colorAuto: "키에서 정해진 색",
       make: "프로젝트 만들기",
     },
     members: {
@@ -179,9 +184,6 @@ export const ko: Messages = {
     moveTo: "이동",
     decisions: (n) => `결정 ${n}건`,
     decisionsTitle: "사람을 기다리는 결정",
-    agentAtWork: "에이전트 작업 중",
-    agentAtWorkTitle: "에이전트가 이 작업을 하고 있습니다",
-    agentSince: (agent, since) => `${agent}, ${since}부터 작업 중`,
     filters: {
       aria: "보드 좁혀 보기",
       everyone: "모두",
@@ -219,7 +221,6 @@ export const ko: Messages = {
     raiseDecision: "결정 요청",
     nothingMore: "더 적힌 내용이 없습니다.",
     links: "링크",
-    agentsAtWork: "작업 중인 에이전트",
     runs: "실행",
     decisions: "결정",
     history: "일어난 일",
@@ -308,8 +309,10 @@ export const ko: Messages = {
 
   calendar: {
     title: "캘린더",
-    lead: "작업을 기한일에 놓고 봅니다. 시작일이 있는 작업은 그날부터 보이고, 날짜가 없는 작업은 아래에서 날짜를 기다립니다.",
+    lead: "작업을 날짜 위에 놓고 봅니다. 시작일과 기한이 있는 작업은 그 기간에 걸쳐 놓이고, 기한만 있는 작업은 그날에 놓입니다. 날짜가 없는 작업은 아래에서 날짜를 기다립니다.",
     grid: "이 달",
+    legend: { title: "카테고리 색" },
+    startsOnly: "그날 시작, 기한은 아직 없음",
     previous: "이전 달",
     next: "다음 달",
     thisMonth: "이번 달",
@@ -318,7 +321,6 @@ export const ko: Messages = {
     nothingOverdue: "기한이 지난 작업이 없습니다.",
     unscheduled: "날짜 없음",
     allScheduled: "열린 작업마다 날짜가 있습니다.",
-    starts: "시작",
     workload: {
       title: "누가 무엇을",
       lead: "사람마다 열린 작업과, 그중 늦은 것과 일주일 안에 마감인 것.",
@@ -477,6 +479,7 @@ export const ko: Messages = {
       runReported: (task, excerpt) =>
         `${task}에 보고했습니다${excerpt === undefined ? "" : `: ${excerpt}`}`,
       runHandedIn: (label, task) => `${task}에 ${label}을(를) 제출했습니다`,
+      runTakenOver: (task, agent) => `${agent}에게서 ${task}을(를) 넘겨받았습니다`,
       runFinished: (task) => `${task}을(를) 끝냈습니다`,
       runFailed: (task) => `${task}에 실패했습니다`,
       runAbandoned: (task) => `${task}을(를) 포기했습니다`,
@@ -492,6 +495,7 @@ export const ko: Messages = {
     for: "대신:",
     since: "시작",
     until: "종료",
+    lastHeard: "마지막 소식",
     markAbandoned: "중단됨으로 표시",
     waitingForDecision: "결정을 기다리는 중",
     answerIt: "답변하기",

@@ -47,7 +47,7 @@ Each phase ends with something on the board. Only phase 4 waits for a person.
 
 ### Phase 1: Read
 
-`console task <number>` shows the task in full, with its plan, the decisions about it and the runs on it. A run open on it by another agent means the task is taken: say so and stop. A task that is past its due day is still the task; the first report says so, and what the day was for is kept in mind. Read what the body links to, with `console doc <path>` for the project's pages and `console skills` for the organization's skills, before anything is made.
+`console task <number>` shows the task in full, with its plan, the decisions about it and the runs on it. A run open on it means another agent was at it, and may still be: the console cannot tell ([ADR-0020](/docs/adr/0020-the-console-does-not-claim-an-agent-is-at-work-a-run-says-when-it-was-last-heard-from-and-a-new-run-takes-over.md)), so read its reports and when it was last heard from, and take the task only when the person said to, since taking it ends that run as taken over; otherwise say so and stop. A task that is past its due day is still the task; the first report says so, and what the day was for is kept in mind. Read what the body links to, with `console doc <path>` for the project's pages and `console skills` for the organization's skills, before anything is made.
 
 ### Phase 2: Take
 

@@ -61,6 +61,8 @@ export interface RunRecord {
   readonly summary: string | undefined;
   readonly startedAt: Date;
   readonly endedAt: Date | undefined;
+  /** When the agent was last heard from on this run: its start, a report, a hand-in, a question. */
+  readonly lastHeardAt: Date;
   readonly reports: readonly ReportRecord[];
   readonly artifacts: readonly ArtifactRecord[];
   /** The decision the run waits for, while one does. */
@@ -74,7 +76,6 @@ export class RunError extends DomainError {
       | "run.not_found"
       | "run.task_not_found"
       | "run.task_closed"
-      | "run.task_taken"
       | "run.not_yours"
       | "run.over"
       | "run.too_many_reports"
@@ -88,7 +89,6 @@ const RUN_ERROR_WORDS = {
   "run.not_found": "the run was not found",
   "run.task_not_found": "the task is not one of the project",
   "run.task_closed": "the task is done or dropped",
-  "run.task_taken": "an agent is at work on the task already",
   "run.not_yours": "the run is another person's",
   "run.over": "the run is over",
   "run.too_many_reports": "the run carries as many reports as one may",
@@ -118,6 +118,7 @@ const runColumns = {
   summary: runs.summary,
   startedAt: runs.startedAt,
   endedAt: runs.endedAt,
+  lastHeardAt: runs.lastHeardAt,
   person: personColumns(runners),
   waitingFor: waitingForOf,
 };
@@ -203,6 +204,7 @@ async function attach(handle: Handle, rows: readonly RunRow[]): Promise<RunRecor
     summary: row.summary ?? undefined,
     startedAt: row.startedAt,
     endedAt: row.endedAt ?? undefined,
+    lastHeardAt: row.lastHeardAt,
     reports: reported
       .filter((report) => report.runId === row.id)
       .map((report) => ({ id: report.id, body: report.body, createdAt: report.createdAt })),
@@ -283,8 +285,10 @@ const asAgent = (actor: Actor, agent: string): Actor => ({ id: actor.id, agent }
 
 /**
  * An agent takes a task for its person: the run begins, the task is at work and the person's,
- * and the board is told. A task that is done or dropped, or that an agent is at work on
- * already, cannot be taken.
+ * and the board is told. A task that is done or dropped cannot be taken. A run open on the
+ * task is taken over (ADR-0020): the board cannot know whether its agent still runs, so the
+ * person taking the task is the one who decides; the old run ends as abandoned, with a word
+ * that says so, and the feed says who took over from which agent.
  */
 export async function startRun(
   database: Database,
@@ -310,13 +314,31 @@ export async function startRun(
     if (task.state === "done" || task.state === "dropped") {
       throw new RunError("run.task_closed");
     }
-    const [busy] = await tx
-      .select({ id: runs.id })
+    const runner = asAgent(actor, agent);
+    const open = await tx
+      .select({ id: runs.id, agent: runs.agent })
       .from(runs)
       .where(and(eq(runs.taskId, taskId), inArray(runs.status, [...OPEN_RUN_STATUSES])))
-      .limit(1);
-    if (busy !== undefined) {
-      throw new RunError("run.task_taken");
+      .for("update");
+    for (const previous of open) {
+      await tx
+        .update(runs)
+        .set({
+          status: "abandoned",
+          summary: `Taken over by ${agent}.`,
+          endedAt: now,
+          updatedAt: now,
+        })
+        .where(eq(runs.id, previous.id));
+      await recordEvent(tx, {
+        ...scope,
+        kind: "run.taken_over",
+        actor: runner,
+        taskId,
+        runId: previous.id,
+        data: { number: task.number, title: task.title, agent: previous.agent },
+        now,
+      });
     }
     const [inserted] = await tx
       .insert(runs)
@@ -329,6 +351,7 @@ export async function startRun(
         agent,
         status: "running",
         startedAt: now,
+        lastHeardAt: now,
         createdAt: now,
         updatedAt: now,
       })
@@ -336,7 +359,6 @@ export async function startRun(
     if (inserted === undefined) {
       throw new Error("run insert returned no row");
     }
-    const runner = asAgent(actor, agent);
     await recordEvent(tx, {
       ...scope,
       kind: "run.started",
@@ -384,7 +406,7 @@ export async function addReport(
       throw new RunError("run.too_many_reports");
     }
     await tx.insert(reports).values({ runId, body, createdAt: now });
-    await tx.update(runs).set({ updatedAt: now }).where(eq(runs.id, runId));
+    await tx.update(runs).set({ lastHeardAt: now, updatedAt: now }).where(eq(runs.id, runId));
     await recordEvent(tx, {
       ...scope,
       kind: "run.reported",
@@ -447,7 +469,7 @@ export async function addArtifact(
             createdAt: now,
           },
     );
-    await tx.update(runs).set({ updatedAt: now }).where(eq(runs.id, runId));
+    await tx.update(runs).set({ lastHeardAt: now, updatedAt: now }).where(eq(runs.id, runId));
     await recordEvent(tx, {
       ...scope,
       kind: "run.handed_in",
@@ -545,8 +567,9 @@ export async function findArtifact(
 }
 
 /**
- * The runs of the project, newest first: all of them, those on one task, those that are open
- * or over, those for one person, those begun with one token (which is one agent's own).
+ * A page of the runs of the project, newest first: all of them, those on one task, those that
+ * are open or over, those for one person, those begun with one token (which is one agent's
+ * own); and whether there is more after the page.
  */
 export async function listRuns(
   database: Database,
@@ -557,8 +580,9 @@ export async function listRuns(
     readonly personId?: string | undefined;
     readonly tokenId?: string | undefined;
     readonly limit: number;
+    readonly offset?: number | undefined;
   },
-): Promise<RunRecord[]> {
+): Promise<{ readonly items: RunRecord[]; readonly more: boolean }> {
   const handle = drizzleOf(database);
   const rows = await selectRuns(handle)
     .where(
@@ -575,6 +599,10 @@ export async function listRuns(
       ),
     )
     .orderBy(desc(runs.startedAt), desc(runs.id))
-    .limit(filter.limit);
-  return attach(handle, rows);
+    .limit(filter.limit + 1)
+    .offset(filter.offset ?? 0);
+  return {
+    items: await attach(handle, rows.slice(0, filter.limit)),
+    more: rows.length > filter.limit,
+  };
 }

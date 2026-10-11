@@ -58,10 +58,13 @@ const FEED_MAX_PAGES = 20;
 const RELOAD_DELAY_MS = 150;
 
 export interface ConsoleActions {
-  /** Makes a project, whose owner the person becomes. */
-  createProject(input: RestProjectInput): Promise<RestProject>;
+  /** Makes a project, whose owner the person becomes, with an image for its mark when one is given. */
+  createProject(input: RestProjectInput, icon?: FileUpload): Promise<RestProject>;
   /** Changes the settings of the project the page is on; for an owner. */
   updateProject(patch: RestProjectPatch): Promise<RestProject>;
+  /** Sets the image for the mark of the project the page is on, or takes it away; for an owner. */
+  setProjectIcon(input: FileUpload): Promise<RestProject>;
+  removeProjectIcon(): Promise<RestProject>;
   addMember(input: RestMemberInput): Promise<RestMember>;
   updateMember(personId: string, patch: RestMemberPatch): Promise<RestMember>;
   removeMember(personId: string): Promise<void>;
@@ -387,13 +390,26 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
       return client.project(projectKey);
     };
     return {
-      async createProject(input) {
+      async createProject(input, icon) {
         const made = await client.createProject(input);
+        const marked = icon === undefined ? made : await client.project(made.key).setIcon(icon);
         await refreshWorkspace();
-        return made;
+        return marked;
       },
       async updateProject(patch) {
         const changed = await scope().update(patch);
+        setProject(changed);
+        await refreshWorkspace();
+        return changed;
+      },
+      async setProjectIcon(input) {
+        const changed = await scope().setIcon(input);
+        setProject(changed);
+        await refreshWorkspace();
+        return changed;
+      },
+      async removeProjectIcon() {
+        const changed = await scope().removeIcon();
         setProject(changed);
         await refreshWorkspace();
         return changed;

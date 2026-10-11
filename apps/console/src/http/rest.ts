@@ -9,11 +9,13 @@ import {
   MAX_DOCUMENT_PATH_LENGTH,
   MAX_FILE_BYTES,
   MAX_FILES_PER_DOCUMENT,
+  MAX_PROJECT_ICON_BYTES,
   MAX_PROJECT_KEY_LENGTH,
   MAX_REPORTS_PER_RUN,
   MAX_SEARCH_LENGTH,
   MAX_VERSIONS_PER_DOCUMENT,
   normalizeConnectCode,
+  type ProjectIconType,
   REST_ROUTES,
   type RestCategories,
   type RestClaim,
@@ -115,6 +117,7 @@ import {
   ProjectError,
   type ProjectView,
   removeMember,
+  setProjectIcon,
   updateMember,
   updateProject,
 } from "../db/queries/projects.js";
@@ -209,6 +212,37 @@ const INLINE_TYPES: ReadonlySet<string> = new Set([
   "text/csv",
   "application/json",
 ]);
+/**
+ * The kind of image bytes begin as, by their first bytes, or nothing: an image for a project's
+ * mark is one the pages show in place, and what the file says of itself is not believed.
+ */
+function imageTypeOf(bytes: Uint8Array): ProjectIconType | undefined {
+  const at = (index: number, ...expected: number[]) =>
+    expected.every((byte, offset) => bytes[index + offset] === byte);
+  if (at(0, 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)) {
+    return "image/png";
+  }
+  if (at(0, 0xff, 0xd8, 0xff)) {
+    return "image/jpeg";
+  }
+  if (
+    at(0, 0x47, 0x49, 0x46, 0x38) &&
+    (bytes[4] === 0x37 || bytes[4] === 0x39) &&
+    bytes[5] === 0x61
+  ) {
+    return "image/gif";
+  }
+  if (at(0, 0x52, 0x49, 0x46, 0x46) && at(8, 0x57, 0x45, 0x42, 0x50)) {
+    return "image/webp";
+  }
+  return undefined;
+}
+const ICON_EXTENSIONS: Readonly<Record<ProjectIconType, string>> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/gif": "gif",
+  "image/webp": "webp",
+};
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** A task's number in a path: what people say out loud, where the pages say the id. */
 const TASK_NUMBER = /^[1-9]\d{0,8}$/;
@@ -227,6 +261,11 @@ const DAY_MS = 86_400_000;
 /** The board of one project: `/api/v1/projects/:key/...`. */
 const PROJECT = `${REST_ROUTES.projects}/:key`;
 
+/** One page of a listing: at most `LIST_LIMIT`, the whole listing when nothing is asked. */
+const page = {
+  limit: z.coerce.number().int().min(1).max(LIST_LIMIT).default(LIST_LIMIT),
+  offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
+};
 const tasksQuery = z.object({
   state: z.enum(TASK_STATES).optional(),
   open: z.enum(["true", "false"]).optional(),
@@ -234,10 +273,12 @@ const tasksQuery = z.object({
   goal: z.string().regex(UUID).optional(),
   assignee: z.string().regex(UUID).optional(),
   dueBy: z.string().regex(DAY).optional(),
+  ...page,
 });
 const decisionsQuery = z.object({
   open: z.enum(["true", "false"]).optional(),
   task: z.string().regex(UUID).optional(),
+  ...page,
 });
 const decisionQuery = z.object({
   wait: z.coerce.number().int().min(0).max(MAX_WAIT_SECONDS).default(0),
@@ -246,6 +287,7 @@ const runsQuery = z.object({
   task: z.string().regex(UUID).optional(),
   open: z.enum(["true", "false"]).optional(),
   mine: z.enum(["true", "false"]).optional(),
+  ...page,
 });
 const eventsQuery = z.object({
   after: z.coerce.number().int().min(0).default(0),
@@ -510,6 +552,15 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     maxSize: MAX_FILE_BYTES + FORM_OVERHEAD_BYTES,
     onError: fileTooLarge,
   });
+  const iconTooLarge = (c: Context<AppEnv>): Response =>
+    c.json(
+      errorBody("request.too_large", `The image is over ${MAX_PROJECT_ICON_BYTES} bytes.`),
+      413,
+    );
+  const iconFormTooLarge = bodyLimit({
+    maxSize: MAX_PROJECT_ICON_BYTES + FORM_OVERHEAD_BYTES,
+    onError: iconTooLarge,
+  });
 
   /** What a task, a decision, a run, a person or a project that could not be worked on answers with. */
   const failure = (c: Context<AppEnv>, error: unknown): Response => {
@@ -543,9 +594,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
           ? 404
           : error.code === "run.not_yours"
             ? 403
-            : error.code === "run.over" ||
-                error.code === "run.task_taken" ||
-                error.code === "run.task_closed"
+            : error.code === "run.over" || error.code === "run.task_closed"
               ? 409
               : 400;
       return c.json(errorBody(error.code, error.message), status);
@@ -931,7 +980,15 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     const named = new Map(projects.map((project) => [project.id, project]));
     const projectOf = (projectId: string) => {
       const project = named.get(projectId);
-      return project === undefined ? undefined : { key: project.key, name: project.name };
+      return project === undefined
+        ? undefined
+        : {
+            key: project.key,
+            name: project.name,
+            color: project.color ?? null,
+            symbol: project.symbol ?? null,
+            icon: project.icon ?? null,
+          };
     };
     const body: RestWork = {
       tasks: tasks.flatMap((task) => {
@@ -1236,6 +1293,92 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
   });
 
+  // The project's own image for its mark: set and taken away by an owner on the console's own
+  // pages, as the rest of configuring is; read by whoever may see the project.
+  app.post(`${PROJECT}/icon`, iconFormTooLarge, async (c) => {
+    const found = await configuring(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    const sent = await filePartOf(c);
+    if (sent instanceof Response) {
+      return sent;
+    }
+    if (sent.part.size > MAX_PROJECT_ICON_BYTES) {
+      return iconTooLarge(c);
+    }
+    const bytes = new Uint8Array(await sent.part.arrayBuffer());
+    const contentType = imageTypeOf(bytes);
+    if (contentType === undefined) {
+      return c.json(
+        errorBody(
+          "project.invalid_icon",
+          "file: the image must be a PNG, a JPEG, a GIF or a WebP.",
+        ),
+        400,
+      );
+    }
+    try {
+      const kept = await blobs.put(bytes, clock.now());
+      const project = await setProjectIcon(database, {
+        projectId: found.project.id,
+        actor: found.actor,
+        person: found.person,
+        icon: { sha256: kept.sha256, contentType },
+        now: clock.now(),
+      });
+      return c.json(restProject(project));
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
+  app.delete(`${PROJECT}/icon`, async (c) => {
+    const found = await configuring(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    try {
+      const project = await setProjectIcon(database, {
+        projectId: found.project.id,
+        actor: found.actor,
+        person: found.person,
+        icon: undefined,
+        now: clock.now(),
+      });
+      return c.json(restProject(project));
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
+  // The image's bytes, kept by their hash: a browser keeps them for a day, and asks again by the hash.
+  app.get(`${PROJECT}/icon`, async (c) => {
+    const found = await reading(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    const { icon } = found.project;
+    if (icon === undefined) {
+      return notFound(c, "project.no_icon", "The project has no image.");
+    }
+    const tag = `"${icon.sha256}"`;
+    c.header("etag", tag);
+    c.header("cache-control", "private, max-age=86400");
+    if (c.req.header("if-none-match") === tag) {
+      return c.body(null, 304);
+    }
+    return serveFile(
+      c,
+      {
+        name: `icon.${ICON_EXTENSIONS[icon.contentType]}`,
+        contentType: icon.contentType,
+        sha256: icon.sha256,
+      },
+      { project: found.project.id },
+    );
+  });
+
   app.get(`${PROJECT}/members`, async (c) => {
     const found = await reading(c);
     if (found instanceof Response) {
@@ -1349,16 +1492,17 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     if (found instanceof Response) {
       return found;
     }
-    const items = await listTasks(database, found.scope, {
+    const page = await listTasks(database, found.scope, {
       state: query.data.state,
       open: query.data.open === undefined ? undefined : query.data.open === "true",
       category: query.data.category,
       goalId: query.data.goal,
       assigneeId: query.data.assignee,
       dueBy: query.data.dueBy,
-      limit: LIST_LIMIT,
+      limit: query.data.limit,
+      offset: query.data.offset,
     });
-    const body: RestTasks = { items: items.map(restTask) };
+    const body: RestTasks = { items: page.items.map(restTask), more: page.more };
     return c.json(body);
   });
 
@@ -1445,12 +1589,13 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     if (found instanceof Response) {
       return found;
     }
-    const items = await listDecisions(database, found.scope, {
+    const page = await listDecisions(database, found.scope, {
       open: query.data.open === undefined ? undefined : query.data.open === "true",
       taskId: query.data.task,
-      limit: LIST_LIMIT,
+      limit: query.data.limit,
+      offset: query.data.offset,
     });
-    const body: RestDecisions = { items: items.map(restDecision) };
+    const body: RestDecisions = { items: page.items.map(restDecision), more: page.more };
     return c.json(body);
   });
 
@@ -1588,15 +1733,16 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       return found;
     }
     const mine = query.data.mine === "true";
-    const items = await listRuns(database, found.scope, {
+    const page = await listRuns(database, found.scope, {
       taskId: query.data.task,
       open: query.data.open === undefined ? undefined : query.data.open === "true",
       // An agent's own runs are the ones begun with its token; a person's, the ones for them.
       tokenId: mine && found.token !== undefined ? found.token.id : undefined,
       personId: mine && found.token === undefined ? found.person.id : undefined,
-      limit: LIST_LIMIT,
+      limit: query.data.limit,
+      offset: query.data.offset,
     });
-    const body: RestRuns = { items: items.map(restRun) };
+    const body: RestRuns = { items: page.items.map(restRun), more: page.more };
     return c.json(body);
   });
 

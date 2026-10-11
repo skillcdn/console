@@ -1,4 +1,5 @@
 import {
+  DEFAULT_PAGE_LIMIT,
   MAX_AGENT_LENGTH,
   MAX_ARTIFACTS_PER_RUN,
   MAX_BODY_LENGTH,
@@ -105,9 +106,8 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   },
   tasks: {
     usage:
-      "tasks [--state <state>] [--open] [--mine] [--category <key>] [--goal <id>] [--due <day|today|week|overdue>]",
-    about:
-      "The tasks on the board, newest first: number, state, priority, title, who owns and works on each, its category and its due day, and what waits on it. --open keeps the ones not done or dropped, --mine those assigned to you, --category and --goal those sorted into one, --due those due by a day: today, within the week, or overdue (the open ones past their day). States: idea, ready, in_progress, in_review, done, dropped.",
+      "tasks [--state <state>] [--open] [--mine] [--category <key>] [--goal <id>] [--due <day|today|week|overdue>] [--limit <n>] [--offset <n>]",
+    about: `The tasks on the board, newest first: number, state, priority, title, who owns and works on each, its category and its due day, and what waits on it. --open keeps the ones not done or dropped, --mine those assigned to you, --category and --goal those sorted into one, --due those due by a day: today, within the week, or overdue (the open ones past their day). A page at a time: ${DEFAULT_PAGE_LIMIT} unless --limit says otherwise, from --offset on; a last line says when there is more. States: idea, ready, in_progress, in_review, done, dropped.`,
   },
   task: {
     usage: `task <number|id>  |  task new <title> [--body <markdown>|--file <path>] ${TASK_FIELD_FLAGS}  |  task edit <number|id> [--title <title>] [--body <markdown>|--file <path>] ${TASK_FIELD_FLAGS}`,
@@ -153,11 +153,10 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   take: {
     usage: "take <number|id> [--agent <name>]",
     about:
-      "Takes a task: a run begins, and the task is in progress and the person's. One agent at a time per task. --agent is what people see at work; left out, it is what the person called the token.",
+      "Takes a task: a run begins, and the task is in progress and the person's. A run still open on the task is taken over, since the board cannot know whether its agent still runs: it ends as abandoned, the feed says who took over, and that agent is refused on its next command. Look before taking (console task <number> lists the runs, with when each was last heard from), and take a task another agent was heard from on lately only when told to. --agent is what people see at work; left out, it is what the person called the token.",
     limits: [`agent: one line, up to ${MAX_AGENT_LENGTH} characters`],
     refusals: [
       "task.not_found: no task has that number or id",
-      "run.task_taken: a run is open on the task already; console runs --open --mine shows whether it is yours",
       "run.task_closed: the task is done or dropped",
     ],
   },
@@ -207,8 +206,8 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     refusals: ["decision.not_found: no decision has that id"],
   },
   decisions: {
-    usage: "decisions [--open]",
-    about: "The decisions on the board, the waiting first; --open keeps only those.",
+    usage: "decisions [--open] [--limit <n>] [--offset <n>]",
+    about: `The decisions on the board, the waiting first; --open keeps only those. A page at a time: ${DEFAULT_PAGE_LIMIT} unless --limit says otherwise, from --offset on.`,
   },
   finish: {
     usage: 'finish [--summary "<markdown>"|--file <path>]',
@@ -231,9 +230,8 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     refusals: RUN_REFUSALS,
   },
   runs: {
-    usage: "runs [--task <number|id>] [--open] [--mine]",
-    about:
-      "The runs, newest first: agents at work and what they did. --mine keeps those begun with this token.",
+    usage: "runs [--task <number|id>] [--open] [--mine] [--limit <n>] [--offset <n>]",
+    about: `The runs, newest first, each with when its agent was last heard from: --open keeps the ones not over, --mine those begun with this token. A page at a time: ${DEFAULT_PAGE_LIMIT} unless --limit says otherwise, from --offset on.`,
   },
   run: {
     usage: "run <id>",
@@ -312,6 +310,8 @@ Usage: console <command> [arguments] [--json] [--url <origin>] [--project <key>]
 
 const CLOSING = `Options everywhere: --json answers with the console's own JSON; --url names another console;
 --project names the project to work in, over CONSOLE_PROJECT and over what console use kept here.
+A listing (tasks, decisions, runs) is a page at a time: --limit <n> and --offset <n>, and a last line
+says when there is more, so that nothing is read that is not needed.
 Commands on a run (report, hand-in, ask, finish, fail) act on your one open run in the project;
 with several open, say which with --run <id>. A Markdown body given as - is read from standard input.
 console help <command> says what each command takes, the limits the console holds it to, and

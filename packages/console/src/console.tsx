@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import {
   type ConsoleClient,
   createClient,
+  type FileUpload,
   OPEN_TASK_STATES,
   type RestAnswerInput,
   type RestDecision,
@@ -34,6 +35,7 @@ import {
   ProjectForm,
   ProjectList,
   type ProjectListProps,
+  ProjectMark,
 } from "./components/projects.js";
 import {
   type Brand,
@@ -354,9 +356,12 @@ function ProjectsPage(props: {
         <section className="sc-panel sc-panel-form" aria-label={words.form.aria}>
           <ProjectForm
             busy={busy}
-            onSubmit={(input) =>
+            onSubmit={(input, icon) =>
               void act(async () => {
-                const made = await data.actions.createProject(input as RestProjectInput);
+                const made = await data.actions.createProject(
+                  input as RestProjectInput,
+                  icon instanceof File ? uploadOf(icon) : undefined,
+                );
                 navigation.replace(projectHref(made.key));
               })
             }
@@ -532,7 +537,6 @@ function ProjectPage(props: {
         )}
         <components.Board
           tasks={shown}
-          runs={data.runs}
           taskHref={href}
           onOpen={(task) => navigation.go(href(task))}
           onMove={onMove}
@@ -592,7 +596,9 @@ function ProjectPage(props: {
   if (route.name === "calendar") {
     const now = today();
     const month = route.month ?? monthOf(now);
-    const open = data.tasks.filter((task) => OPEN_TASK_STATES.includes(task.state));
+    const me = data.me?.person ?? undefined;
+    const shown = filterTasks(data.tasks, route.filter, me);
+    const open = shown.filter((task) => OPEN_TASK_STATES.includes(task.state));
     const overdue = open.filter((task) => task.dueOn !== null && task.dueOn < now).sort(byDue);
     const unscheduled = open.filter((task) => task.dueOn === null).sort(byDue);
     const calendar = words.calendar;
@@ -605,12 +611,25 @@ function ProjectPage(props: {
           </LinkButton>
         </div>
         <p className="sc-lead">{calendar.lead}</p>
+        {data.tasks.length > 0 && (
+          <BoardFilters
+            filter={route.filter}
+            categories={data.categories}
+            goals={data.goals}
+            people={data.people}
+            me={me}
+            shown={shown.length}
+            total={data.tasks.length}
+            onChange={(filter) => navigation.replace(calendarHref(key, route.month, filter))}
+          />
+        )}
         <components.Calendar
-          tasks={data.tasks}
+          tasks={shown}
           month={month}
           today={now}
+          categories={data.categories}
           taskHref={href}
-          monthHref={(wanted) => calendarHref(key, wanted)}
+          monthHref={(wanted) => calendarHref(key, wanted, route.filter)}
         />
         <div className="sc-calendar-below">
           <section className="sc-task-section" aria-label={calendar.overdue}>
@@ -643,7 +662,7 @@ function ProjectPage(props: {
             <h2 className="sc-section-title">{calendar.workload.title}</h2>
             <p className="sc-lead">{calendar.workload.lead}</p>
             <Workload
-              tasks={data.tasks}
+              tasks={shown}
               today={now}
               personHref={(person) =>
                 boardHref(key, person === undefined ? {} : { person: person.id })
@@ -950,8 +969,15 @@ function ProjectPage(props: {
           <ProjectForm
             project={project}
             busy={busy}
-            onSubmit={(input) =>
-              void act(() => data.actions.updateProject(input as RestProjectPatch))
+            onSubmit={(input, icon) =>
+              void act(async () => {
+                await data.actions.updateProject(input as RestProjectPatch);
+                if (icon === null) {
+                  await data.actions.removeProjectIcon();
+                } else if (icon !== undefined) {
+                  await data.actions.setProjectIcon(uploadOf(icon));
+                }
+              })
             }
           />
         </section>
@@ -960,6 +986,13 @@ function ProjectPage(props: {
   }
   return <NothingHere />;
 }
+
+/** A file a person chose, as the client sends it: its name, its bytes and the type the browser says. */
+const uploadOf = (file: File): FileUpload => ({
+  name: file.name,
+  bytes: file,
+  ...(file.type === "" ? {} : { contentType: file.type }),
+});
 
 function NothingHere() {
   const words = useWords();
@@ -1324,16 +1357,12 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
                 current: route.name === "agents" || route.name === "new-token",
               },
             ]),
-        // The categories are read by everyone and kept by an administrator; only they need the page.
-        ...(data.me.person.role === "admin" && !viaToken
-          ? [
-              {
-                href: PATHS.categories,
-                label: words.nav.categories,
-                current: route.name === "categories",
-              },
-            ]
-          : []),
+        // The categories are read by everyone, for what the colours mean, and kept by an administrator.
+        {
+          href: PATHS.categories,
+          label: words.nav.categories,
+          current: route.name === "categories",
+        },
       ];
       const nav: NavItem[] =
         projectKey === undefined
@@ -1454,7 +1483,12 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
           project={
             projectKey === undefined
               ? undefined
-              : { name: project?.name ?? projectKey, href: projectHref(projectKey) }
+              : {
+                  name: project?.name ?? projectKey,
+                  href: projectHref(projectKey),
+                  mark:
+                    project === undefined ? undefined : <ProjectMark project={project} size="sm" />,
+                }
           }
           nav={nav}
           menu={workspaceNav}

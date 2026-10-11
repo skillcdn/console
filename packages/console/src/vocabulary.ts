@@ -31,10 +31,10 @@ export const GOAL_STATES = ["planned", "active", "done", "dropped"] as const;
 export type GoalState = (typeof GOAL_STATES)[number];
 
 /**
- * The colours a category may be shown in: names, so that a custom console paints them in its
- * own tokens and no value an administrator typed reaches a stylesheet.
+ * The colours a category, or a project's mark, may be shown in: names, so that a custom console
+ * paints them in its own tokens and no value a person typed reaches a stylesheet.
  */
-export const CATEGORY_COLORS = [
+export const COLOR_NAMES = [
   "gray",
   "blue",
   "green",
@@ -45,7 +45,16 @@ export const CATEGORY_COLORS = [
   "yellow",
 ] as const;
 
-export type CategoryColor = (typeof CATEGORY_COLORS)[number];
+export type ColorName = (typeof COLOR_NAMES)[number];
+
+/** The colours of the categories: the same names. */
+export const CATEGORY_COLORS = COLOR_NAMES;
+
+export type CategoryColor = ColorName;
+
+/** The kinds of image a project's own mark may be: what a browser shows in place, and nothing that can run. */
+export const PROJECT_ICON_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const;
+export type ProjectIconType = (typeof PROJECT_ICON_TYPES)[number];
 
 /** The identity providers people may sign in through: the git host, and Google (Workspace). */
 export const PROVIDER_KEYS = ["gh", "google"] as const;
@@ -132,6 +141,7 @@ export const EVENT_KINDS = [
   "run.started",
   "run.reported",
   "run.handed_in",
+  "run.taken_over",
   "run.ended",
   "document.written",
   "document.archived",

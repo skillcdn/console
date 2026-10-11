@@ -8,7 +8,7 @@ import {
   type ProjectClient,
 } from "../client.js";
 import { addDays, dayOf as dayOfDate, isDay } from "../dates.js";
-import { MAX_OPTIONS, MIN_OPTIONS } from "../limits.js";
+import { DEFAULT_PAGE_LIMIT, LIST_LIMIT, MAX_OPTIONS, MIN_OPTIONS } from "../limits.js";
 import type { RestClaim, RestDecision, RestTaskPatch } from "../schemas.js";
 import {
   GOAL_STATES,
@@ -30,6 +30,7 @@ import {
   formatDocuments,
   formatGoal,
   formatGoalLine,
+  formatMore,
   formatOptions,
   formatProjectLine,
   formatRun,
@@ -351,6 +352,26 @@ function secondsOf(value: string | undefined, fallback: number): number {
   return seconds;
 }
 
+/** The flags of a page of a listing: how many, from which one on. */
+const PAGE_OPTIONS: OptionSpec = { limit: { type: "string" }, offset: { type: "string" } };
+
+/** The page the flags ask for: `DEFAULT_PAGE_LIMIT` items from the first when nothing is said. */
+function pageOf(values: Values): { readonly limit: number; readonly offset: number } {
+  const limit = text(values, "limit");
+  const offset = text(values, "offset");
+  const page = {
+    limit: limit === undefined ? DEFAULT_PAGE_LIMIT : Number(limit),
+    offset: offset === undefined ? 0 : Number(offset),
+  };
+  if (!Number.isInteger(page.limit) || page.limit < 1 || page.limit > LIST_LIMIT) {
+    throw misuse(`Not a number of items, 1 to ${LIST_LIMIT}: ${limit}`);
+  }
+  if (!Number.isInteger(page.offset) || page.offset < 0) {
+    throw misuse(`Not a number of items to skip: ${offset}`);
+  }
+  return page;
+}
+
 /** One positional, and nothing else. */
 function theOne(positionals: readonly string[], ask: string): string {
   const [first] = positionals;
@@ -546,10 +567,12 @@ const tasks: Command = async (args, io) => {
       category: { type: "string" },
       goal: { type: "string" },
       due: { type: "string" },
+      ...PAGE_OPTIONS,
     },
     false,
   );
   const state = stateOf(text(values, "state"));
+  const page = pageOf(values);
   const session = await open(io, values);
   const project = await session.project();
   // What is due: a day, or the words for the usual windows; overdue keeps only the open ones.
@@ -573,9 +596,13 @@ const tasks: Command = async (args, io) => {
     ...(text(values, "category") === undefined ? {} : { category: text(values, "category") }),
     ...(text(values, "goal") === undefined ? {} : { goal: text(values, "goal") }),
     ...(dueBy === undefined ? {} : { dueBy }),
+    ...page,
   });
   answer(io, session, found, () =>
-    found.items.length === 0 ? "No tasks." : found.items.map(formatTaskLine).join("\n"),
+    found.items.length === 0
+      ? "No tasks."
+      : found.items.map(formatTaskLine).join("\n") +
+        formatMore(found.more, page.limit, page.offset),
   );
   return EXIT.ok;
 };
@@ -734,7 +761,7 @@ const take: Command = async (args, io) => {
   });
   answer(io, session, { run, task: found }, () =>
     [
-      `Run ${run.id} began on #${found.number} ${found.title}, as "${run.agent}" for ${run.person.login}. The task is in progress and theirs.`,
+      `Run ${run.id} began on #${found.number} ${found.title}, as "${run.agent}" for ${run.person.login}. The task is in progress and theirs. A run that was open on it is over now: the board cannot know whether its agent still ran, so taking it was deciding.`,
       "",
       formatTask(found),
       "",
@@ -1154,12 +1181,19 @@ const goal: Command = async (args, io) => {
 };
 
 const decisions: Command = async (args, io) => {
-  const { values } = parse(args, { open: { type: "boolean" } }, false);
+  const { values } = parse(args, { open: { type: "boolean" }, ...PAGE_OPTIONS }, false);
+  const page = pageOf(values);
   const session = await open(io, values);
   const project = await session.project();
-  const found = await project.decisions(on(values, "open") ? { open: true } : {});
+  const found = await project.decisions({
+    ...(on(values, "open") ? { open: true } : {}),
+    ...page,
+  });
   answer(io, session, found, () =>
-    found.items.length === 0 ? "No decisions." : found.items.map(formatDecisionLine).join("\n"),
+    found.items.length === 0
+      ? "No decisions."
+      : found.items.map(formatDecisionLine).join("\n") +
+        formatMore(found.more, page.limit, page.offset),
   );
   return EXIT.ok;
 };
@@ -1212,9 +1246,15 @@ const abandon: Command = async (args, io) => {
 const runs: Command = async (args, io) => {
   const { values } = parse(
     args,
-    { task: { type: "string" }, open: { type: "boolean" }, mine: { type: "boolean" } },
+    {
+      task: { type: "string" },
+      open: { type: "boolean" },
+      mine: { type: "boolean" },
+      ...PAGE_OPTIONS,
+    },
     false,
   );
+  const page = pageOf(values);
   const session = await open(io, values);
   const project = await session.project();
   const ref = text(values, "task");
@@ -1223,9 +1263,12 @@ const runs: Command = async (args, io) => {
     ...(taskId === undefined ? {} : { task: taskId }),
     ...(on(values, "open") ? { open: true } : {}),
     ...(on(values, "mine") ? { mine: true } : {}),
+    ...page,
   });
   answer(io, session, found, () =>
-    found.items.length === 0 ? "No runs." : found.items.map(formatRunLine).join("\n"),
+    found.items.length === 0
+      ? "No runs."
+      : found.items.map(formatRunLine).join("\n") + formatMore(found.more, page.limit, page.offset),
   );
   return EXIT.ok;
 };

@@ -9,7 +9,7 @@ import { Badge, Button, formatBytes, PersonChip, Time } from "./ui.js";
 
 /** The words of a run's status in English: the default pack's. */
 export const RUN_STATUS_LABELS: Readonly<Record<RunStatus, string>> = {
-  running: "At work",
+  running: "Open",
   waiting: "Waiting for a decision",
   finished: "Finished",
   failed: "Failed",
@@ -59,6 +59,12 @@ export function RunCard(props: RunCardProps) {
             <>
               {" "}
               {words.until} <Time iso={run.endedAt} />
+            </>
+          )}
+          {open && (
+            <>
+              {" "}
+              · {words.lastHeard} <Time iso={run.lastHeardAt} />
             </>
           )}
         </span>

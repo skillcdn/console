@@ -43,7 +43,7 @@ export const en = {
       private: "Only those listed",
     } satisfies Record<ProjectVisibility, string>,
     runStatus: {
-      running: "At work",
+      running: "Open",
       waiting: "Waiting for a decision",
       finished: "Finished",
       failed: "Failed",
@@ -95,6 +95,7 @@ export const en = {
     nobody: "Nobody",
     nothing: "Nothing",
     language: "Language",
+    showMore: (n: number, of: number) => `Show ${n} more of ${of}`,
   },
 
   nav: {
@@ -150,7 +151,6 @@ export const en = {
     list: "Projects",
     private: "Private",
     decisionsWaiting: (n: number) => `${count(n, "decision", "decisions")} waiting`,
-    agentsAtWork: (n: number) => `${count(n, "agent", "agents")} at work`,
     form: {
       aria: "New project",
       name: "Name",
@@ -162,6 +162,11 @@ export const en = {
       whoIsMember: "Who is a member",
       skillsAddress: "Skills address",
       skillsAddressPlaceholder: "/gh/<owner>/<repo>, or empty for the organization's",
+      symbol: "Mark",
+      image: "Image",
+      imageRemove: "Remove the image",
+      color: "Colour",
+      colorAuto: "Chosen from the key",
       make: "Make the project",
     },
     members: {
@@ -207,9 +212,6 @@ export const en = {
     moveTo: "Move to",
     decisions: (n: number) => count(n, "decision", "decisions"),
     decisionsTitle: "Decisions waiting for a person",
-    agentAtWork: "agent at work",
-    agentAtWorkTitle: "An agent is at work on it",
-    agentSince: (agent: string, since: string) => `${agent}, at work since ${since}`,
     filters: {
       aria: "Narrow the board",
       everyone: "Everyone",
@@ -247,7 +249,6 @@ export const en = {
     raiseDecision: "Raise a decision",
     nothingMore: "Nothing more was written about it.",
     links: "Links",
-    agentsAtWork: "Agents at work",
     runs: "Runs",
     decisions: "Decisions",
     history: "What happened",
@@ -336,8 +337,10 @@ export const en = {
 
   calendar: {
     title: "Calendar",
-    lead: "The tasks by the day they are due. A task with a start is shown from it; one with no day waits at the bottom to be given one.",
+    lead: "The tasks on their days: planned from a start to a due day, a task lies across them; due on a day alone, it sits on it. One with no day waits at the bottom to be given one.",
     grid: "The month",
+    legend: { title: "Category colours" },
+    startsOnly: "Starts that day, with no due day yet",
     previous: "The month before",
     next: "The month after",
     thisMonth: "This month",
@@ -346,7 +349,6 @@ export const en = {
     nothingOverdue: "Nothing is overdue.",
     unscheduled: "No day set",
     allScheduled: "Every open task has a day.",
-    starts: "starts",
     workload: {
       title: "Who has what",
       lead: "The open tasks of each person, and what of them is late or due within the week.",
@@ -509,6 +511,7 @@ export const en = {
       runReported: (task: string, excerpt: string | undefined) =>
         `reported on ${task}${excerpt === undefined ? "" : `: ${excerpt}`}`,
       runHandedIn: (label: string, task: string) => `handed in ${label} on ${task}`,
+      runTakenOver: (task: string, agent: string) => `took over ${task} from ${agent}`,
       runFinished: (task: string) => `finished ${task}`,
       runFailed: (task: string) => `failed on ${task}`,
       runAbandoned: (task: string) => `gave up on ${task}`,
@@ -524,6 +527,7 @@ export const en = {
     for: "for",
     since: "since",
     until: "until",
+    lastHeard: "last heard",
     markAbandoned: "Mark abandoned",
     waitingForDecision: "Waiting for a decision",
     answerIt: "answer it",

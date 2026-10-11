@@ -39,10 +39,12 @@ export function formatProjectLine(project: RestProject): string {
   if (project.openDecisions > 0) {
     notes.push(`${plural(project.openDecisions, "decision")} waiting`);
   }
-  if (project.openRuns > 0) {
-    notes.push(`${plural(project.openRuns, "agent")} at work`);
-  }
   return `${project.key}  ${project.name}  (${notes.join("; ")})`;
+}
+
+/** The line under a page of a listing that has more after it: how to ask for the next page. */
+export function formatMore(more: boolean, limit: number, offset: number): string {
+  return more ? `\n... more: --offset ${offset + limit}` : "";
 }
 
 export function formatTaskLine(task: RestTask): string {
@@ -58,9 +60,6 @@ export function formatTaskLine(task: RestTask): string {
   }
   if (task.openDecisions > 0) {
     notes.push(`${plural(task.openDecisions, "decision")} waiting`);
-  }
-  if (task.openRuns > 0) {
-    notes.push("an agent at work");
   }
   return `#${task.number}  ${task.state}  ${task.priority}  ${task.title}  (${notes.join("; ")})`;
 }
@@ -127,6 +126,9 @@ export function formatRunLine(run: RestRun): string {
   const notes = [plural(run.reports.length, "report"), plural(run.artifacts.length, "artifact")];
   if (run.waitingFor !== null) {
     notes.push(`waiting for decision ${run.waitingFor}`);
+  }
+  if (run.endedAt === null) {
+    notes.push(`last heard ${run.lastHeardAt}`);
   }
   return `${run.id}  ${run.status}  ${run.agent} for ${run.person.login}  task #${run.taskNumber}  (${notes.join(", ")})`;
 }

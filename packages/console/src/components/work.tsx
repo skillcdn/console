@@ -1,6 +1,7 @@
 import type { RestTask, RestWork } from "../api.js";
 import { addDays, today as todayOf } from "../dates.js";
 import { useWords } from "../i18n/index.js";
+import { ProjectMark } from "./projects.js";
 import { TaskList } from "./task-list.js";
 import { PersonChip, Time } from "./ui.js";
 
@@ -24,7 +25,14 @@ export function WorkList(props: WorkListProps) {
   const { tasks, decisions } = props.work;
   const projectOf = new Map(tasks.map((item) => [item.task.id, item.project]));
   const hrefOf = (task: RestTask) => props.taskHref(projectOf.get(task.id)?.key ?? "", task);
-  const nameOf = (task: RestTask) => projectOf.get(task.id)?.name;
+  const nameOf = (task: RestTask) => {
+    const project = projectOf.get(task.id);
+    return project === undefined ? undefined : (
+      <>
+        <ProjectMark project={project} size="sm" /> {project.name}
+      </>
+    );
+  };
   const groups: { readonly title: string; readonly tasks: RestTask[] }[] = [
     { title: work.overdue, tasks: [] },
     { title: work.thisWeek, tasks: [] },
@@ -69,7 +77,9 @@ export function WorkList(props: WorkListProps) {
                 >
                   {decision.question}
                 </a>
-                <span className="sc-task-row-project">{work.inProject(project.name)}</span>
+                <span className="sc-task-row-project">
+                  <ProjectMark project={project} size="sm" /> {work.inProject(project.name)}
+                </span>
                 <span className="sc-decision-row-meta">
                   <PersonChip person={decision.raisedBy} /> <Time iso={decision.createdAt} />
                 </span>

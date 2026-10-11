@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { RestEvent } from "../api.js";
 import { en, type Messages } from "../i18n/en.js";
 import { useWords } from "../i18n/index.js";
+import { ShowMore, usePaged } from "./paged.js";
 import { PersonChip, Time } from "./ui.js";
 
 // The feed: one line per event, newest first, as a sentence a person reads at a glance: who,
@@ -79,6 +80,8 @@ export function describeEvent(event: RestEvent, words: Messages = en): string {
       return feed.event.runReported(task, data.excerpt);
     case "run.handed_in":
       return feed.event.runHandedIn(data.label ?? feed.something, task);
+    case "run.taken_over":
+      return feed.event.runTakenOver(task, data.agent ?? feed.someone);
     case "run.ended":
       return data.status === "finished"
         ? feed.event.runFinished(task)
@@ -106,36 +109,40 @@ export interface EventFeedProps {
 
 export function EventFeed(props: EventFeedProps) {
   const words = useWords();
+  const newestFirst = [...props.events].reverse();
+  const { shown, rest, more } = usePaged(newestFirst);
   if (props.events.length === 0) {
     return <div className="sc-feed">{props.empty ?? null}</div>;
   }
-  const newestFirst = [...props.events].reverse();
   return (
-    <ol className="sc-feed" aria-label={words.feed.list}>
-      {newestFirst.map((event) => {
-        const href = props.href?.(event);
-        const said = describeEvent(event, words);
-        return (
-          <li key={event.id} className="sc-feed-item">
-            <span className="sc-feed-actor">
-              {event.actor === null ? (
-                <span className="sc-person-login">{words.feed.console}</span>
-              ) : (
-                <PersonChip person={event.actor} />
-              )}
-              {event.agent !== null && (
-                <span className="sc-feed-agent" title={words.feed.asTitle}>
-                  {words.feed.as(event.agent)}
-                </span>
-              )}
-            </span>
-            <span className="sc-feed-words">
-              {href === undefined ? said : <a href={href}>{said}</a>}
-            </span>
-            <Time iso={event.createdAt} />
-          </li>
-        );
-      })}
-    </ol>
+    <>
+      <ol className="sc-feed" aria-label={words.feed.list}>
+        {shown.map((event) => {
+          const href = props.href?.(event);
+          const said = describeEvent(event, words);
+          return (
+            <li key={event.id} className="sc-feed-item">
+              <span className="sc-feed-actor">
+                {event.actor === null ? (
+                  <span className="sc-person-login">{words.feed.console}</span>
+                ) : (
+                  <PersonChip person={event.actor} />
+                )}
+                {event.agent !== null && (
+                  <span className="sc-feed-agent" title={words.feed.asTitle}>
+                    {words.feed.as(event.agent)}
+                  </span>
+                )}
+              </span>
+              <span className="sc-feed-words">
+                {href === undefined ? said : <a href={href}>{said}</a>}
+              </span>
+              <Time iso={event.createdAt} />
+            </li>
+          );
+        })}
+      </ol>
+      <ShowMore rest={rest} onMore={more} />
+    </>
   );
 }

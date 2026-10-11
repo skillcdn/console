@@ -30,7 +30,7 @@ import {
   updateMember,
   updateProject,
 } from "./queries/projects.js";
-import { endRun, excerptOf, RunError, startRun } from "./queries/runs.js";
+import { endRun, excerptOf, listRuns, RunError, startRun } from "./queries/runs.js";
 import {
   createSession,
   deleteExpiredSessions,
@@ -266,10 +266,19 @@ describe("tasks", () => {
       links: [{ url: "https://github.com/acme/app/pull/1", label: null }],
     });
     expect(await getTask(database, scope, second.id)).toEqual(second);
-    expect((await listTasks(database, scope, { limit: 10 })).map((t) => t.number)).toEqual([2, 1]);
+    expect((await listTasks(database, scope, { limit: 10 })).items.map((t) => t.number)).toEqual([
+      2, 1,
+    ]);
     expect(
-      (await listTasks(database, scope, { state: "ready", limit: 10 })).map((t) => t.number),
+      (await listTasks(database, scope, { state: "ready", limit: 10 })).items.map((t) => t.number),
     ).toEqual([2]);
+    // A page at a time: the next page begins where the last one ended, and says when nothing follows.
+    const firstPage = await listTasks(database, scope, { limit: 1 });
+    expect(firstPage.items.map((t) => t.number)).toEqual([2]);
+    expect(firstPage.more).toBe(true);
+    const secondPage = await listTasks(database, scope, { limit: 1, offset: 1 });
+    expect(secondPage.items.map((t) => t.number)).toEqual([1]);
+    expect(secondPage.more).toBe(false);
   });
 
   it("refuse an assignee who is not of the workspace, and a parent that is not a task", async () => {
@@ -551,7 +560,7 @@ describe("decisions", () => {
   });
 
   it("list the ones that wait first, newest first within each", async () => {
-    const all = await listDecisions(database, scope, { limit: 100 });
+    const all = (await listDecisions(database, scope, { limit: 100 })).items;
     const waiting = all.filter((decision) => decision.answer === undefined);
     const done = all.filter((decision) => decision.answer !== undefined);
     expect(all.slice(0, waiting.length)).toEqual(waiting);
@@ -566,7 +575,9 @@ describe("decisions", () => {
         }
       }
     }
-    expect(await listDecisions(database, scope, { open: true, limit: 100 })).toEqual(waiting);
+    expect((await listDecisions(database, scope, { open: true, limit: 100 })).items).toEqual(
+      waiting,
+    );
   });
 });
 
@@ -818,14 +829,14 @@ describe("projects", () => {
 });
 
 describe("runs", () => {
-  it("take a task for a person, one agent at a time, and not a closed one", async () => {
+  it("take a task for a person, taking over a run still open on it, and not a closed one", async () => {
     const task = await createTask(database, {
       scope,
       actor: bob,
       task: { title: "Index the docs", state: "ready" },
       now: minutes(100),
     });
-    const run = await startRun(database, {
+    let run = await startRun(database, {
       scope,
       actor: alice,
       tokenId: undefined,
@@ -847,16 +858,46 @@ describe("runs", () => {
     const taken = await getTask(database, scope, task.id);
     expect(taken).toMatchObject({ state: "in_progress", openRuns: 1 });
     expect(taken?.assignee?.id).toBe(alice.id);
-    await expect(
-      startRun(database, {
-        scope,
-        actor: bob,
-        tokenId: undefined,
-        taskId: task.id,
-        agent: "another",
-        now: minutes(102),
-      }),
-    ).rejects.toMatchObject({ code: "run.task_taken" });
+    expect(run.lastHeardAt).toEqual(minutes(101));
+    // The board cannot know whether Codex still runs: a second take takes the task over, and
+    // the first run ends as abandoned, with a word that says so and an event that says who.
+    const second = await startRun(database, {
+      scope,
+      actor: bob,
+      tokenId: undefined,
+      taskId: task.id,
+      agent: "another",
+      now: minutes(102),
+    });
+    expect(second).toMatchObject({ status: "running", agent: "another" });
+    const first = (await listRuns(database, scope, { taskId: task.id, limit: 10 })).items.find(
+      (candidate) => candidate.id === run.id,
+    );
+    expect(first).toMatchObject({
+      status: "abandoned",
+      summary: "Taken over by another.",
+      endedAt: minutes(102),
+    });
+    expect((await getTask(database, scope, task.id))?.openRuns).toBe(1);
+    const takeover = (await listEventsAfter(database, { ...scope, runId: run.id }, 0, 100)).items;
+    expect(takeover.map((event) => [event.kind, event.agent, event.data.agent])).toEqual([
+      ["run.started", "Codex", "Codex"],
+      ["run.taken_over", "another", "Codex"],
+    ]);
+    // Alice takes it back for the rest: Bob's run is over in its turn.
+    run = await startRun(database, {
+      scope,
+      actor: alice,
+      tokenId: undefined,
+      taskId: task.id,
+      agent: "Codex",
+      now: minutes(102),
+    });
+    expect(
+      (await listRuns(database, scope, { taskId: task.id, open: true, limit: 10 })).items.map(
+        (candidate) => candidate.id,
+      ),
+    ).toEqual([run.id]);
     // Only its person ends it, unless an administrator does; a finished run puts the task up for review.
     await expect(
       endRun(database, {

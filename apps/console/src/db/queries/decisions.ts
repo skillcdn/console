@@ -187,7 +187,10 @@ export async function raiseDecision(
       runId = run.id;
       agent = run.agent;
       taskOfRun = run.taskId;
-      await tx.update(runs).set({ status: "waiting", updatedAt: now }).where(eq(runs.id, run.id));
+      await tx
+        .update(runs)
+        .set({ status: "waiting", lastHeardAt: now, updatedAt: now })
+        .where(eq(runs.id, run.id));
     }
     let taskId: string | null = null;
     let about: { readonly number: number; readonly title: string } | undefined;
@@ -442,7 +445,7 @@ export async function listWaitingDecisionsFor(
   return rows.map(toDecision);
 }
 
-/** The decisions of the project, the ones that wait first and newest first within each; or only those that wait. */
+/** A page of the decisions of the project, the ones that wait first and newest first within each, or only those that wait; and whether there is more. */
 export async function listDecisions(
   database: Database,
   scope: Scope,
@@ -450,8 +453,9 @@ export async function listDecisions(
     readonly open?: boolean | undefined;
     readonly taskId?: string | undefined;
     readonly limit: number;
+    readonly offset?: number | undefined;
   },
-): Promise<DecisionRecord[]> {
+): Promise<{ readonly items: DecisionRecord[]; readonly more: boolean }> {
   const rows = await selectDecisions(drizzleOf(database))
     .where(
       and(
@@ -465,6 +469,7 @@ export async function listDecisions(
       desc(decisions.createdAt),
       desc(decisions.id),
     )
-    .limit(filter.limit);
-  return rows.map(toDecision);
+    .limit(filter.limit + 1)
+    .offset(filter.offset ?? 0);
+  return { items: rows.slice(0, filter.limit).map(toDecision), more: rows.length > filter.limit };
 }

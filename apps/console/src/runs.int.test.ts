@@ -126,12 +126,7 @@ describe("runs", () => {
     const atWork = await readTask(task.id);
     expect(atWork).toMatchObject({ state: "in_progress", openRuns: 1 });
     expect(atWork.assignee?.login).toBe("Alice");
-    const again = await asAgent(aliceToken, "POST", `${IN}/runs`, {
-      taskId: task.id,
-      agent: "another",
-    });
-    expect(again.status).toBe(409);
-    expect(await errorOf(again)).toBe("run.task_taken");
+    expect(run.lastHeardAt).toBe(run.startedAt);
 
     // It reports and hands in; a report says something, and only https is handed in.
     const reported = await asAgent(aliceToken, "POST", `${IN}/runs/${run.id}/reports`, {
@@ -545,5 +540,57 @@ describe("runs", () => {
     expect(late.status).toBe(409);
     expect(await errorOf(late)).toBe("run.over");
     expect(JSON.stringify(h.logs)).not.toContain("All of it");
+  });
+});
+
+describe("a run open on a task", () => {
+  it("is taken over by the next take, since the board cannot know whether its agent still runs", async () => {
+    const task = await writeTask(bob, { title: "Index the docs", state: "ready" });
+    const first = await startRun(aliceToken, task.id);
+    expect(first.lastHeardAt).toBe(first.startedAt);
+    const reported = await asAgent(aliceToken, "POST", `${IN}/runs/${first.id}/reports`, {
+      body: "Half way.",
+    });
+    expect(restRunSchema.parse(await reported.json()).lastHeardAt > first.lastHeardAt).toBe(true);
+    // Another take, as another agent: the first run ends as abandoned, with a word that says so.
+    const again = await asAgent(aliceToken, "POST", `${IN}/runs`, {
+      taskId: task.id,
+      agent: "another",
+    });
+    expect(again.status).toBe(201);
+    const second = restRunSchema.parse(await again.json());
+    expect(second).toMatchObject({ status: "running", agent: "another" });
+    expect(await readRun(first.id)).toMatchObject({
+      status: "abandoned",
+      summary: "Taken over by another.",
+    });
+    expect(await readTask(task.id)).toMatchObject({ state: "in_progress", openRuns: 1 });
+    const history = restEventsSchema.parse(
+      await (await asAgent(aliceToken, "GET", `${IN}/events?run=${first.id}`)).json(),
+    );
+    expect(history.items.map((event) => [event.kind, event.agent, event.data.agent])).toEqual([
+      ["run.started", "Claude Code on the laptop", "Claude Code on the laptop"],
+      ["run.reported", "Claude Code on the laptop", "Claude Code on the laptop"],
+      ["run.taken_over", "another", "Claude Code on the laptop"],
+    ]);
+    // The first agent learns on its next command that its run is over.
+    const late = await asAgent(aliceToken, "POST", `${IN}/runs/${first.id}/reports`, {
+      body: "Still here?",
+    });
+    expect(late.status).toBe(409);
+    expect(await errorOf(late)).toBe("run.over");
+    // A page of the runs: the newest first, and whether there is more.
+    const page = restRunsSchema.parse(
+      await (await asAgent(aliceToken, "GET", `${IN}/runs?task=${task.id}&limit=1`)).json(),
+    );
+    expect(page.items.map((run) => run.id)).toEqual([second.id]);
+    expect(page.more).toBe(true);
+    const rest = restRunsSchema.parse(
+      await (
+        await asAgent(aliceToken, "GET", `${IN}/runs?task=${task.id}&limit=1&offset=1`)
+      ).json(),
+    );
+    expect(rest.items.map((run) => run.id)).toEqual([first.id]);
+    expect(rest.more).toBe(false);
   });
 });

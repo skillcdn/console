@@ -39,6 +39,7 @@ describe("matchRoute", () => {
       name: "calendar",
       project: "web",
       month: undefined,
+      filter: {},
     });
     expect(matchRoute("/projects/web/decisions/")).toEqual({ name: "decisions", project: "web" });
     expect(matchRoute("/projects/web-2/feed")).toEqual({ name: "feed", project: "web-2" });
@@ -176,10 +177,21 @@ describe("matchRoute", () => {
       name: "calendar",
       project: "web",
       month: "2026-10",
+      filter: {},
     });
     expect(matchRoute("/projects/web/calendar", "?month=2026-13")).toEqual({ name: "not-found" });
     expect(calendarHref("web")).toBe("/projects/web/calendar");
     expect(calendarHref("web", "2026-10")).toBe("/projects/web/calendar?month=2026-10");
+    expect(calendarHref("web", "2026-10", { category: "design", mine: true })).toBe(
+      "/projects/web/calendar?month=2026-10&category=design&mine",
+    );
+    expect(calendarHref("web", undefined, { goal: "" })).toBe("/projects/web/calendar?goal=");
+    expect(matchRoute("/projects/web/calendar", "?month=2026-10&category=design&mine")).toEqual({
+      name: "calendar",
+      project: "web",
+      month: "2026-10",
+      filter: { category: "design", mine: true },
+    });
     expect(matchRoute(newGoalHref("web"))).toEqual({ name: "new-goal", project: "web" });
     expect(goalHref("web", ID)).toBe(`/projects/web/roadmap/${ID}`);
     expect(goalHref("web", ID, "edit")).toBe(`/projects/web/roadmap/${ID}?edit`);
@@ -222,6 +234,8 @@ describe("createConsole", () => {
     key,
     get: never,
     update: never,
+    setIcon: never,
+    removeIcon: never,
     members: never,
     addMember: never,
     updateMember: never,

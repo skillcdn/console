@@ -106,6 +106,7 @@ export interface TaskFilter {
   /** A day: the tasks due on it or before it. */
   readonly dueBy?: string | undefined;
   readonly limit: number;
+  readonly offset?: number | undefined;
 }
 
 /** How far up a chain of parents is looked at before a loop is assumed. */
@@ -537,17 +538,18 @@ function narrowing(filter: Omit<TaskFilter, "limit">): (SQL | undefined)[] {
   ];
 }
 
-/** The board of the project, newest first, or what the filter keeps of it. */
+/** A page of the board of the project, newest first, or of what the filter keeps of it; and whether there is more. */
 export async function listTasks(
   database: Database,
   scope: Scope,
   filter: TaskFilter,
-): Promise<TaskRecord[]> {
+): Promise<{ readonly items: TaskRecord[]; readonly more: boolean }> {
   const rows = await selectTasks(drizzleOf(database))
     .where(and(eq(tasks.projectId, scope.projectId), ...narrowing(filter)))
     .orderBy(desc(tasks.number))
-    .limit(filter.limit);
-  return rows.map(toTask);
+    .limit(filter.limit + 1)
+    .offset(filter.offset ?? 0);
+  return { items: rows.slice(0, filter.limit).map(toTask), more: rows.length > filter.limit };
 }
 
 /**

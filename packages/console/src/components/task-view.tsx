@@ -177,7 +177,7 @@ export function TaskView(props: TaskViewProps) {
           )}
           {runs.length > 0 && (
             <section className="sc-task-section" aria-label={words.task.runs}>
-              <h2 className="sc-section-title">{words.task.agentsAtWork}</h2>
+              <h2 className="sc-section-title">{words.task.runs}</h2>
               <RunList
                 runs={runs}
                 decisionHref={props.decisionHref}

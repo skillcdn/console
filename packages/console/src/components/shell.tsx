@@ -34,8 +34,10 @@ export interface ShellProps {
   readonly title: string;
   /** The marks to show beside the name; none shows the name alone. */
   readonly brand?: Brand | undefined;
-  /** The project the page is on, named after the workspace, or nothing on the workspace's own pages. */
-  readonly project?: { readonly name: string; readonly href: string } | undefined;
+  /** The project the page is on, named after the workspace, with its mark when the page has it, or nothing on the workspace's own pages. */
+  readonly project?:
+    | { readonly name: string; readonly href: string; readonly mark?: ReactNode }
+    | undefined;
   /** The pages of the level the person is on, as tabs: the project's, or the workspace's. */
   readonly nav: readonly NavItem[];
   /** The workspace's pages, reached from anywhere through the person's menu. */
@@ -228,6 +230,7 @@ export function Shell(props: ShellProps) {
                 href={props.project.href}
                 onClick={follow(props.project.href)}
               >
+                {props.project.mark}
                 {props.project.name}
               </a>
             </span>

@@ -1197,6 +1197,7 @@ table {
   flex: 1 1 0;
   grid-auto-flow: column;
   grid-auto-columns: minmax(var(--sc-column-width), 1fr);
+  grid-template-rows: minmax(0, 1fr);
   gap: var(--sc-space-3);
   min-height: 24rem;
   overflow-x: auto;
@@ -1209,6 +1210,8 @@ table {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  /* The body scrolls; the column clips, so that nothing of it reaches the board's own scrolling. */
+  overflow: hidden;
   border-radius: var(--sc-radius-xl);
   scroll-snap-align: start;
 }
@@ -2575,13 +2578,87 @@ table {
   white-space: nowrap;
 }
 
-.sc-calendar-task-over {
+.sc-calendar-over {
   color: var(--sc-color-text-faint);
   text-decoration: line-through;
 }
 
-.sc-calendar-task-late {
+.sc-calendar-late {
   color: var(--sc-color-danger);
+}
+
+/* A task planned across days lies across them: a bar in a lane of its own, in its category's
+   colour, reaching over the gap between the cells so that it reads as one. */
+.sc-calendar-lane,
+.sc-calendar-bar {
+  display: flex;
+  align-items: center;
+  height: 1.125rem;
+  margin-top: 2px;
+}
+
+.sc-calendar-bar {
+  margin-inline: calc(-1 * var(--sc-space-2) - 0.125rem - 1px);
+  padding-inline: var(--sc-space-2);
+  border-block: 1px solid color-mix(in srgb, var(--sc-category-line) 45%, transparent);
+  background: var(--sc-category-fill);
+  color: var(--sc-category-line);
+  font-size: var(--sc-text-xs);
+  line-height: 1;
+  text-decoration: none;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.sc-calendar-bar:hover {
+  filter: brightness(1.15);
+}
+
+.sc-calendar-bar-begins {
+  margin-left: 0;
+  border-left: 1px solid color-mix(in srgb, var(--sc-category-line) 45%, transparent);
+  border-start-start-radius: var(--sc-radius-full);
+  border-end-start-radius: var(--sc-radius-full);
+}
+
+.sc-calendar-bar-ends {
+  margin-right: 0;
+  border-right: 1px solid color-mix(in srgb, var(--sc-category-line) 45%, transparent);
+  border-start-end-radius: var(--sc-radius-full);
+  border-end-end-radius: var(--sc-radius-full);
+}
+
+.sc-calendar-bar.sc-calendar-late {
+  border-color: color-mix(in srgb, var(--sc-color-danger) 70%, transparent);
+  color: var(--sc-color-danger);
+}
+
+.sc-calendar-bar.sc-calendar-over {
+  opacity: 0.55;
+}
+
+.sc-calendar-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-1) var(--sc-space-4);
+  margin: 0;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-xs);
+}
+
+.sc-calendar-legend div {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-space-1);
+}
+
+.sc-calendar-legend dt {
+  display: flex;
+  align-items: center;
+}
+
+.sc-calendar-legend dd {
+  margin: 0;
 }
 
 .sc-calendar-task-start {
@@ -2591,6 +2668,69 @@ table {
 .sc-calendar-task-start::before {
   content: "\203A";
   color: var(--sc-color-text-faint);
+}
+
+/* The button under a list shown a page at a time. */
+.sc-show-more {
+  margin-top: var(--sc-space-3);
+}
+
+/* A project's mark: its symbol on its colour. */
+.sc-mark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--sc-radius-sm);
+  background: var(--sc-category-fill);
+  color: var(--sc-category-line);
+  font-weight: var(--sc-weight-bold);
+  line-height: 1;
+  vertical-align: middle;
+}
+
+.sc-mark-sm {
+  width: 1.125rem;
+  height: 1.125rem;
+  margin-right: var(--sc-space-1);
+  font-size: 0.625rem;
+}
+
+.sc-mark-md {
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--sc-radius-md);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-mark-lg {
+  width: 3rem;
+  height: 3rem;
+  border-radius: var(--sc-radius-lg);
+  font-size: var(--sc-text-xl);
+}
+
+.sc-mark-row {
+  align-items: end;
+}
+
+/* A project's own image, in place of the symbol, filling the mark. */
+.sc-mark-pictured {
+  padding: 0;
+  overflow: hidden;
+  background: var(--sc-color-bg-inset);
+}
+
+.sc-mark-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.sc-input-file {
+  padding-block: calc(var(--sc-space-2) - 2px);
+  font-size: var(--sc-text-sm);
 }
 
 .sc-calendar-below {
@@ -2919,6 +3059,13 @@ table {
   .sc-calendar-task-title,
   .sc-calendar-task-start {
     display: none;
+  }
+
+  .sc-calendar-lane,
+  .sc-calendar-bar {
+    height: 4px;
+    padding: 0;
+    border: 0;
   }
 
   .sc-feed-item {

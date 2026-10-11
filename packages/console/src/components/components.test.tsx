@@ -17,7 +17,7 @@ import type {
 } from "../api.js";
 import { KOREAN, LanguageContext } from "../i18n/index.js";
 import { Board, BoardFilters, byDue, filterTasks } from "./board.js";
-import { Calendar, Workload, workloadOf } from "./calendar.js";
+import { Calendar, Workload, weekSegments, workloadOf } from "./calendar.js";
 import { CategoryList } from "./categories.js";
 import { ConnectApproval, ConnectCodeForm, ConnectWords } from "./connect.js";
 import { DecisionCard, DecisionList, DecisionLog } from "./decision-list.js";
@@ -26,7 +26,7 @@ import { describeEvent, EventFeed } from "./event-feed.js";
 import { GoalForm, GoalList, GoalView } from "./goals.js";
 import { Markdown } from "./markdown.js";
 import { PeopleList } from "./people.js";
-import { keyOf, MemberList, ProjectForm, ProjectList } from "./projects.js";
+import { keyOf, MemberList, ProjectForm, ProjectList, ProjectMark } from "./projects.js";
 import { RunList } from "./runs.js";
 import { Shell } from "./shell.js";
 import { SignIn } from "./sign-in.js";
@@ -884,6 +884,7 @@ describe("runs", () => {
     status: "waiting",
     startedAt: "2026-10-09T10:00:00.000Z",
     endedAt: null,
+    lastHeardAt: "2026-10-09T10:05:00.000Z",
     summary: null,
     reports: [
       {
@@ -1004,11 +1005,11 @@ describe("runs", () => {
     expect(html).toContain("started on #7 Ship");
   });
 
-  it("marks a task an agent is at work on", () => {
+  it("says nothing on a card of an agent at work, since the board cannot know", () => {
     const html = renderToStaticMarkup(
       <Board tasks={[task({ openRuns: 1 })]} taskHref={href} onOpen={() => undefined} />,
     );
-    expect(html).toContain("agent at work");
+    expect(html).not.toContain("agent");
   });
 });
 
@@ -1020,6 +1021,9 @@ describe("projects", () => {
     description: "What we ship.",
     visibility: "private",
     skillsAddress: "/gh/acme/skills",
+    color: null,
+    symbol: null,
+    icon: null,
     role: "owner",
     openDecisions: 2,
     openRuns: 1,
@@ -1056,7 +1060,18 @@ describe("projects", () => {
     expect(html).toContain("Member");
     expect(html).toContain("Private");
     expect(html).toContain("2 decisions waiting");
-    expect(html).toContain("1 agent at work");
+    expect(html).not.toContain("at work");
+    // Each with its mark: the first letter of its name on a colour from its key, unless it names its own.
+    expect(html).toContain('class="sc-mark sc-mark-md sc-category-');
+    expect(html).toContain(">T</span>");
+    const marked = renderToStaticMarkup(
+      <ProjectMark project={project({ color: "teal", symbol: "W2" })} size="lg" />,
+    );
+    expect(marked).toContain("sc-mark-lg sc-category-teal");
+    expect(marked).toContain(">W2</span>");
+    const chosen = renderToStaticMarkup(<ProjectMark project={project()} />);
+    expect(chosen).toBe(renderToStaticMarkup(<ProjectMark project={project()} />));
+    expect(chosen).not.toContain("sc-category-gray");
     expect(
       renderToStaticMarkup(
         <ProjectList
@@ -1181,6 +1196,7 @@ describe("the schedule on the board", () => {
       status: "running",
       startedAt: "2026-10-11T09:00:00.000Z",
       endedAt: null,
+      lastHeardAt: "2026-10-11T09:00:00.000Z",
       summary: null,
       reports: [],
       artifacts: [],
@@ -1196,7 +1212,6 @@ describe("the schedule on the board", () => {
             links: [{ url: "https://example.com", label: null }],
           }),
         ]}
-        runs={[run]}
         today={TODAY}
         taskHref={href}
         onOpen={() => undefined}
@@ -1205,7 +1220,7 @@ describe("the schedule on the board", () => {
     expect(html).toContain("sc-badge-category sc-category-blue");
     expect(html).toContain("Engineering");
     expect(html).toContain("2 days overdue");
-    expect(html).toContain("Claude Code");
+    expect(html).not.toContain(run.agent);
     expect(html).not.toContain("agent at work");
     expect(html).not.toContain("1 link");
     // Due today, tomorrow, within the week, and later: each said as a person reads it.
@@ -1284,7 +1299,18 @@ describe("the schedule on the board", () => {
     expect(rows).toContain("The web app");
     expect(rows).toContain("Ready");
     expect(rows).toContain("2 days overdue");
-    expect(rows).toContain("agent at work");
+    expect(rows).not.toContain("agent at work");
+    // A long list shows a page at a time, and says how many more there are.
+    const many = Array.from({ length: 60 }, (_, index) =>
+      task({
+        id: `0199c4d8-0000-7000-8000-0000000001${String(index).padStart(2, "0")}`,
+        number: index + 100,
+      }),
+    );
+    const paged = renderToStaticMarkup(<TaskList tasks={many} taskHref={href} />);
+    expect(paged).toContain("#149");
+    expect(paged).not.toContain("#150");
+    expect(paged).toContain("Show 10 more of 10");
     const view = renderToStaticMarkup(
       <TaskView
         task={task({
@@ -1364,9 +1390,8 @@ describe("the calendar", () => {
     expect(html).toContain('href="/projects/web/calendar?month=2026-11"');
     expect(html).toContain("sc-calendar-cell-today");
     expect(html).toContain("sc-calendar-cell-outside");
-    expect(html).toContain("sc-calendar-task-late");
-    expect(html).toContain("sc-calendar-task-over");
-    expect(html).toContain("sc-calendar-task-start");
+    expect(html).toContain("sc-calendar-late");
+    expect(html).toContain("sc-calendar-over");
     expect(html).toContain("sc-category-blue");
     expect(html).toContain("Planned one");
     expect(html).not.toContain("Nothing is due this month");
@@ -1502,11 +1527,11 @@ describe("a person's work", () => {
     const work: RestWork = {
       tasks: [
         {
-          project: { key: "web", name: "The web app" },
+          project: { key: "web", name: "The web app", color: null, symbol: null, icon: null },
           task: task({ dueOn: "2026-10-09", title: "Late" }),
         },
         {
-          project: { key: "web", name: "The web app" },
+          project: { key: "web", name: "The web app", color: null, symbol: null, icon: null },
           task: task({
             id: "0199c4d8-0000-7000-8000-000000000011",
             dueOn: "2026-10-14",
@@ -1514,7 +1539,7 @@ describe("a person's work", () => {
           }),
         },
         {
-          project: { key: "docs", name: "The docs" },
+          project: { key: "docs", name: "The docs", color: "green", symbol: "D", icon: null },
           task: task({
             id: "0199c4d8-0000-7000-8000-000000000012",
             dueOn: "2026-11-30",
@@ -1522,11 +1547,16 @@ describe("a person's work", () => {
           }),
         },
         {
-          project: { key: "docs", name: "The docs" },
+          project: { key: "docs", name: "The docs", color: "green", symbol: "D", icon: null },
           task: task({ id: "0199c4d8-0000-7000-8000-000000000013", dueOn: null, title: "Someday" }),
         },
       ],
-      decisions: [{ project: { key: "web", name: "The web app" }, decision: decision() }],
+      decisions: [
+        {
+          project: { key: "web", name: "The web app", color: null, symbol: null, icon: null },
+          decision: decision(),
+        },
+      ],
     };
     const html = renderToStaticMarkup(
       <WorkList
@@ -1540,6 +1570,7 @@ describe("a person's work", () => {
       expect(html).toContain(`aria-label="${section}"`);
     }
     expect(html).toContain("The docs");
+    expect(html).toContain("sc-mark-sm sc-category-green");
     expect(html).toContain('href="/projects/docs/tasks/7"');
     expect(html).toContain(`href="/projects/web/decisions/${decision().id}"`);
     expect(html).toContain("Which one?");
@@ -1553,5 +1584,174 @@ describe("a person's work", () => {
     );
     expect(quiet).toContain("No decision waits.");
     expect(quiet).not.toContain('aria-label="Overdue"');
+  });
+});
+
+describe("a task planned across days", () => {
+  it("lies across its days as a bar in a lane of its own, cut to each week, and the legend says what the marks mean", () => {
+    const week = Array.from({ length: 7 }, (_, index) => ({
+      day: `2026-10-${String(11 + index).padStart(2, "0")}`,
+      inMonth: true,
+    }));
+    const a = task({
+      id: "0199c4d8-0000-7000-8000-000000000011",
+      number: 1,
+      startsOn: "2026-10-09",
+      dueOn: "2026-10-13",
+    });
+    const b = task({
+      id: "0199c4d8-0000-7000-8000-000000000012",
+      number: 2,
+      startsOn: "2026-10-12",
+      dueOn: "2026-10-20",
+    });
+    const c = task({
+      id: "0199c4d8-0000-7000-8000-000000000013",
+      number: 3,
+      startsOn: "2026-10-15",
+      dueOn: "2026-10-16",
+    });
+    const single = task({
+      id: "0199c4d8-0000-7000-8000-000000000014",
+      number: 4,
+      startsOn: "2026-10-12",
+      dueOn: "2026-10-12",
+    });
+    const outside = task({
+      id: "0199c4d8-0000-7000-8000-000000000015",
+      number: 5,
+      startsOn: "2026-10-20",
+      dueOn: "2026-10-22",
+    });
+    const segments = weekSegments(week, [a, b, c, single, outside]);
+    expect(
+      segments.map((segment) => [
+        segment.task.number,
+        segment.from,
+        segment.to,
+        segment.lane,
+        segment.begins,
+        segment.ends,
+      ]),
+    ).toEqual([
+      [1, 0, 2, 0, false, true],
+      [2, 1, 6, 1, true, false],
+      [3, 4, 5, 0, true, true],
+    ]);
+    const html = renderToStaticMarkup(
+      <Calendar
+        tasks={[
+          b,
+          single,
+          task({
+            id: "0199c4d8-0000-7000-8000-000000000016",
+            number: 6,
+            startsOn: "2026-10-14",
+            dueOn: null,
+            title: "Begins",
+          }),
+        ]}
+        month="2026-10"
+        today={TODAY}
+        categories={[engineering]}
+        taskHref={href}
+        monthHref={(month) => month}
+      />,
+    );
+    expect(html).toContain("sc-calendar-bar sc-category-gray sc-calendar-bar-begins");
+    expect(html).toContain("sc-calendar-bar-ends");
+    expect(html).toContain("sc-calendar-lane");
+    expect(html).toContain('aria-label="Category colours"');
+    expect(html).toContain("Engineering");
+    expect(html).not.toContain("Planned from");
+    expect(html).toContain("sc-calendar-task-start");
+    expect(html).toContain("sc-calendar-dot");
+  });
+});
+
+describe("a run and the feed, a page at a time", () => {
+  it("says when a run's agent was last heard from, and shows the feed a page at a time", () => {
+    const open: RestRun = {
+      id: "0199c4d8-0000-7000-8000-000000000041",
+      taskId: task().id,
+      taskNumber: 7,
+      person: alice,
+      agent: "Codex",
+      status: "running",
+      startedAt: "2026-10-11T09:00:00.000Z",
+      endedAt: null,
+      lastHeardAt: "2026-10-11T10:30:00.000Z",
+      summary: null,
+      reports: [],
+      artifacts: [],
+      waitingFor: null,
+    };
+    const html = renderToStaticMarkup(<RunList runs={[open]} />);
+    expect(html).toContain("last heard");
+    expect(html).toContain('dateTime="2026-10-11T10:30:00.000Z"');
+    expect(html).toContain("Open");
+    const over = renderToStaticMarkup(
+      <RunList runs={[{ ...open, status: "finished", endedAt: "2026-10-11T11:00:00.000Z" }]} />,
+    );
+    expect(over).not.toContain("last heard");
+    const events = Array.from({ length: 55 }, (_, index) => ({
+      id: index + 1,
+      kind: "task.created" as const,
+      actor: alice,
+      agent: null,
+      projectId: null,
+      taskId: null,
+      decisionId: null,
+      runId: null,
+      documentId: null,
+      goalId: null,
+      data: { number: index + 1, title: `Task ${index + 1}` },
+      createdAt: "2026-10-09T10:00:00.000Z",
+    }));
+    const feed = renderToStaticMarkup(<EventFeed events={events} />);
+    expect(feed).toContain("wrote #55 Task 55");
+    expect(feed).toContain("wrote #6 Task 6");
+    expect(feed).not.toContain("wrote #5 Task 5");
+    expect(feed).toContain("Show 5 more of 5");
+  });
+
+  it("lets a project choose its mark, and shows it as it will be", () => {
+    const html = renderToStaticMarkup(<ProjectForm onSubmit={() => undefined} />);
+    expect(html).toContain("Mark");
+    expect(html).toContain("Chosen from the key");
+    expect(html).toContain("sc-mark sc-mark-lg");
+    expect(html).toContain('type="file"');
+    expect(html).toContain('accept="image/png,image/jpeg,image/gif,image/webp"');
+    expect(html).not.toContain("A letter or two");
+    expect(html).not.toContain("Remove the image");
+    // A project with an image shows it in the mark, and offers to take it away.
+    const sha256 = "b".repeat(64);
+    const marked: RestProject = {
+      id: "0199c4d8-0000-7000-8000-000000000001",
+      key: "web",
+      name: "The web app",
+      description: "",
+      visibility: "private",
+      skillsAddress: null,
+      color: null,
+      symbol: null,
+      icon: { sha256, contentType: "image/png" },
+      role: "owner",
+      openDecisions: 0,
+      openRuns: 0,
+      createdAt: "2026-10-09T10:00:00.000Z",
+      updatedAt: "2026-10-09T10:00:00.000Z",
+    };
+    const pictured = renderToStaticMarkup(
+      <ProjectForm project={marked} onSubmit={() => undefined} />,
+    );
+    expect(pictured).toContain("Remove the image");
+    expect(pictured).toContain(
+      `<img class="sc-mark-image" src="/api/v1/projects/web/icon?v=${sha256.slice(0, 16)}" alt=""/>`,
+    );
+    expect(pictured).toContain("sc-mark-pictured");
+    expect(renderToStaticMarkup(<ProjectMark project={{ ...marked, icon: null }} />)).not.toContain(
+      "<img",
+    );
   });
 });

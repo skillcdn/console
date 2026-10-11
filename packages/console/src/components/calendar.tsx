@@ -1,10 +1,11 @@
-import { OPEN_TASK_STATES, type RestPerson, type RestTask } from "../api.js";
+import { OPEN_TASK_STATES, type RestCategory, type RestPerson, type RestTask } from "../api.js";
 import {
   addMonths,
   daysBetween,
   firstDayOfWeek,
   formatMonth,
   formatWeekday,
+  type GridDay,
   monthGrid,
   monthOf,
   today as todayOf,
@@ -13,12 +14,17 @@ import {
 import { useLanguage, useWords } from "../i18n/index.js";
 import { cx, PersonChip } from "./ui.js";
 
-// The calendar of a project (ADR-0019): the month as a grid, each task on the day it is due
-// and, lightly, on the day it starts; and who has what, so that whoever runs the project sees
-// at a glance whether the work is on its days. Takes its data as props and nothing from the
-// network; the month shown is the address's (ADR-0010).
+// The calendar of a project (ADR-0019): the month as a grid. A task planned from a start to a
+// due day lies across its days as a bar, in a lane of its own within each week so that the bars
+// of one week never cross; a task with a due day alone sits on it as a dot, and one with a
+// start alone is marked on that day. Who has what says whether the work is on its days. Takes
+// its data as props and nothing from the network; the month shown is the address's (ADR-0010).
 
 const isOpen = (task: RestTask): boolean => OPEN_TASK_STATES.includes(task.state);
+
+/** Whether a task lies across days: a start and a due day, and the due day after the start. */
+const spans = (task: RestTask): boolean =>
+  task.startsOn !== null && task.dueOn !== null && task.startsOn < task.dueOn;
 
 export interface CalendarProps {
   readonly tasks: readonly RestTask[];
@@ -26,9 +32,62 @@ export interface CalendarProps {
   readonly month: string;
   /** The day to count from; the browser's today when left out. */
   readonly today?: string | undefined;
+  /** The workspace's categories, for the legend to say what the colours mean. */
+  readonly categories?: readonly RestCategory[] | undefined;
   readonly taskHref: (task: RestTask) => string;
   /** Where the calendar is on another month. */
   readonly monthHref: (month: string) => string;
+}
+
+/** One task's stretch across one week: which columns it covers, and in which lane it lies. */
+export interface WeekSegment {
+  readonly task: RestTask;
+  /** The first and the last column (0 to 6) the task covers in this week. */
+  readonly from: number;
+  readonly to: number;
+  readonly lane: number;
+  /** Whether the task begins in this week, and whether it ends in it. */
+  readonly begins: boolean;
+  readonly ends: boolean;
+}
+
+/**
+ * The bars of one week: every task lying across days that touches the week, cut to it, each
+ * in the first lane where it crosses nothing that was laid before it. The longest and earliest
+ * go first, so that the lanes stay few.
+ */
+export function weekSegments(week: readonly GridDay[], tasks: readonly RestTask[]): WeekSegment[] {
+  const first = week[0]?.day;
+  const last = week[week.length - 1]?.day;
+  if (first === undefined || last === undefined) {
+    return [];
+  }
+  const cut = tasks
+    .filter(spans)
+    .flatMap((task) => {
+      const startsOn = task.startsOn ?? first;
+      const dueOn = task.dueOn ?? last;
+      if (dueOn < first || startsOn > last) {
+        return [];
+      }
+      const from = startsOn < first ? 0 : daysBetween(first, startsOn);
+      const to = dueOn > last ? week.length - 1 : daysBetween(first, dueOn);
+      return [{ task, from, to, begins: startsOn >= first, ends: dueOn <= last }];
+    })
+    .sort(
+      (a, b) => a.from - b.from || b.to - b.from - (a.to - a.from) || a.task.number - b.task.number,
+    );
+  const ends: number[] = [];
+  return cut.map((segment) => {
+    let lane = ends.findIndex((end) => end < segment.from);
+    if (lane === -1) {
+      lane = ends.length;
+      ends.push(segment.to);
+    } else {
+      ends[lane] = segment.to;
+    }
+    return { ...segment, lane };
+  });
 }
 
 function push(map: Map<string, RestTask[]>, day: string, task: RestTask): void {
@@ -49,10 +108,12 @@ export function Calendar(props: CalendarProps) {
   const due = new Map<string, RestTask[]>();
   const starting = new Map<string, RestTask[]>();
   for (const task of props.tasks) {
+    if (spans(task)) {
+      continue;
+    }
     if (task.dueOn !== null) {
       push(due, task.dueOn, task);
-    }
-    if (task.startsOn !== null && task.startsOn !== task.dueOn) {
+    } else if (task.startsOn !== null) {
       push(starting, task.startsOn, task);
     }
   }
@@ -61,9 +122,17 @@ export function Calendar(props: CalendarProps) {
     list.sort((a, b) => Number(isOpen(b)) - Number(isOpen(a)) || a.number - b.number);
   }
   const inMonth = (day: string) => monthOf(day) === props.month;
+  const monthWeeks = weeks.map((week) => ({ week, segments: weekSegments(week, props.tasks) }));
   const nothing =
     [...due.keys()].every((day) => !inMonth(day)) &&
-    [...starting.keys()].every((day) => !inMonth(day));
+    [...starting.keys()].every((day) => !inMonth(day)) &&
+    monthWeeks.every(({ week, segments }) =>
+      segments.every(
+        (segment) => !week.slice(segment.from, segment.to + 1).some((cell) => cell.inMonth),
+      ),
+    );
+  const tone = (task: RestTask, day: string) =>
+    cx(!isOpen(task) && "sc-calendar-over", isOpen(task) && day < now && "sc-calendar-late");
   return (
     <div className="sc-calendar">
       <div className="sc-calendar-head">
@@ -102,54 +171,97 @@ export function Calendar(props: CalendarProps) {
           </tr>
         </thead>
         <tbody>
-          {weeks.map((week) => (
-            <tr key={week[0]?.day}>
-              {week.map((cell) => (
-                <td
-                  key={cell.day}
-                  className={cx(
-                    "sc-calendar-cell",
-                    !cell.inMonth && "sc-calendar-cell-outside",
-                    cell.day === now && "sc-calendar-cell-today",
-                  )}
-                >
-                  <span className="sc-calendar-day">{Number(cell.day.slice(8))}</span>
-                  {(due.get(cell.day) ?? []).map((task) => (
-                    <a
-                      key={task.id}
-                      className={cx(
-                        "sc-calendar-task",
-                        !isOpen(task) && "sc-calendar-task-over",
-                        isOpen(task) && cell.day < now && "sc-calendar-task-late",
-                      )}
-                      href={props.taskHref(task)}
-                      title={`#${task.number} ${task.title}`}
-                    >
-                      <span
-                        className={cx(
-                          "sc-calendar-dot",
-                          `sc-category-${task.category?.color ?? "gray"}`,
-                        )}
-                      />
-                      <span className="sc-calendar-task-title">{task.title}</span>
-                    </a>
-                  ))}
-                  {(starting.get(cell.day) ?? []).map((task) => (
-                    <a
-                      key={task.id}
-                      className="sc-calendar-task sc-calendar-task-start"
-                      href={props.taskHref(task)}
-                      title={`#${task.number} ${task.title}: ${words.starts}`}
-                    >
-                      <span className="sc-calendar-task-title">{task.title}</span>
-                    </a>
-                  ))}
-                </td>
-              ))}
-            </tr>
-          ))}
+          {monthWeeks.map(({ week, segments }) => {
+            const lanes = segments.reduce((most, segment) => Math.max(most, segment.lane + 1), 0);
+            return (
+              <tr key={week[0]?.day}>
+                {week.map((cell, column) => (
+                  <td
+                    key={cell.day}
+                    className={cx(
+                      "sc-calendar-cell",
+                      !cell.inMonth && "sc-calendar-cell-outside",
+                      cell.day === now && "sc-calendar-cell-today",
+                    )}
+                  >
+                    <span className="sc-calendar-day">{Number(cell.day.slice(8))}</span>
+                    {Array.from({ length: lanes }, (_, lane) => {
+                      const segment = segments.find(
+                        (candidate) =>
+                          candidate.lane === lane &&
+                          candidate.from <= column &&
+                          column <= candidate.to,
+                      );
+                      if (segment === undefined) {
+                        // The lane is someone else's on this day: the bars below keep their height.
+                        // biome-ignore lint/suspicious/noArrayIndexKey: an empty lane is nothing but its position, and the lanes of a week never reorder
+                        return <span key={lane} className="sc-calendar-lane" aria-hidden="true" />;
+                      }
+                      const { task } = segment;
+                      return (
+                        <a
+                          key={task.id}
+                          className={cx(
+                            "sc-calendar-bar",
+                            `sc-category-${task.category?.color ?? "gray"}`,
+                            segment.from === column && segment.begins && "sc-calendar-bar-begins",
+                            segment.to === column && segment.ends && "sc-calendar-bar-ends",
+                            tone(task, task.dueOn ?? cell.day),
+                          )}
+                          href={props.taskHref(task)}
+                          title={`#${task.number} ${task.title}`}
+                        >
+                          {segment.from === column && (
+                            <span className="sc-calendar-task-title">{task.title}</span>
+                          )}
+                        </a>
+                      );
+                    })}
+                    {(due.get(cell.day) ?? []).map((task) => (
+                      <a
+                        key={task.id}
+                        className={cx("sc-calendar-task", tone(task, cell.day))}
+                        href={props.taskHref(task)}
+                        title={`#${task.number} ${task.title}`}
+                      >
+                        <span
+                          className={cx(
+                            "sc-calendar-dot",
+                            `sc-category-${task.category?.color ?? "gray"}`,
+                          )}
+                        />
+                        <span className="sc-calendar-task-title">{task.title}</span>
+                      </a>
+                    ))}
+                    {(starting.get(cell.day) ?? []).map((task) => (
+                      <a
+                        key={task.id}
+                        className="sc-calendar-task sc-calendar-task-start"
+                        href={props.taskHref(task)}
+                        title={`#${task.number} ${task.title}: ${words.startsOnly}`}
+                      >
+                        <span className="sc-calendar-task-title">{task.title}</span>
+                      </a>
+                    ))}
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
+      {(props.categories ?? []).length > 0 && (
+        <dl className="sc-calendar-legend" aria-label={words.legend.title}>
+          {(props.categories ?? []).map((category) => (
+            <div key={category.key}>
+              <dt>
+                <span className={cx("sc-calendar-dot", `sc-category-${category.color}`)} />
+              </dt>
+              <dd>{category.name}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
       {nothing && <p className="sc-muted">{words.nothingDue}</p>}
     </div>
   );

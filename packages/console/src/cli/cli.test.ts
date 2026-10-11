@@ -62,6 +62,7 @@ const RUN = {
   status: "running",
   startedAt: WHEN,
   endedAt: null,
+  lastHeardAt: WHEN,
   summary: null,
   reports: [],
   artifacts: [],
@@ -116,6 +117,9 @@ const PROJECT = {
   description: "",
   visibility: "private",
   skillsAddress: null,
+  color: null,
+  symbol: null,
+  icon: null,
   role: "member",
   openDecisions: 1,
   openRuns: 0,
@@ -332,20 +336,20 @@ describe("the console command", () => {
 
   it("works in the project the flag, the environment or the directory names, and says so when none does", async () => {
     const { fetch, calls } = fakeConsole({
-      [`GET ${IN}/tasks`]: { body: { items: [TASK] } },
-      "GET /api/v1/projects/ops/tasks": { body: { items: [] } },
-      "GET /api/v1/projects/dir/tasks": { body: { items: [] } },
+      [`GET ${IN}/tasks?limit=50&offset=0`]: { body: { more: false, items: [TASK] } },
+      "GET /api/v1/projects/ops/tasks?limit=50&offset=0": { body: { more: false, items: [] } },
+      "GET /api/v1/projects/dir/tasks?limit=50&offset=0": { body: { more: false, items: [] } },
     });
     const flagged = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["tasks", "--project", "ops"], flagged.io)).toBe(EXIT.ok);
-    expect(calls.at(-1)?.key).toBe("GET /api/v1/projects/ops/tasks");
+    expect(calls.at(-1)?.key).toBe("GET /api/v1/projects/ops/tasks?limit=50&offset=0");
     const fromDirectory = harness({
       fetch,
       env: { CONSOLE_URL: ORIGIN, CONSOLE_TOKEN: "cns_t_secret" },
       directory: memoryDirectory({ project: "dir" }).store,
     });
     expect(await runCli(["tasks"], fromDirectory.io)).toBe(EXIT.ok);
-    expect(calls.at(-1)?.key).toBe("GET /api/v1/projects/dir/tasks");
+    expect(calls.at(-1)?.key).toBe("GET /api/v1/projects/dir/tasks?limit=50&offset=0");
     const none = harness({ fetch, env: { CONSOLE_URL: ORIGIN, CONSOLE_TOKEN: "cns_t_secret" } });
     expect(await runCli(["tasks"], none.io)).toBe(EXIT.failed);
     expect(none.err()).toContain("console use <key>");
@@ -367,7 +371,7 @@ describe("the console command", () => {
     const listed = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["projects"], listed.io)).toBe(EXIT.ok);
     expect(listed.out()).toBe(
-      "web  The web app  (member; 1 decision waiting)\nops  Ops  (owner; 2 agents at work)\n",
+      "web  The web app  (member; 1 decision waiting)\nops  Ops  (owner)\n",
     );
     const directory = memoryDirectory();
     const used = harness({
@@ -393,7 +397,7 @@ describe("the console command", () => {
   it("serves a console of one's own: the API carried with the token, from the page's origin only", async () => {
     const { fetch, calls } = fakeConsole({
       "GET /api/v1/me": { body: ME },
-      [`GET ${IN}/tasks`]: { body: { items: [TASK] } },
+      [`GET ${IN}/tasks`]: { body: { more: false, items: [TASK] } },
     });
     let close: () => void = () => undefined;
     let ready: (handler: ServeHandler) => void = () => undefined;
@@ -420,7 +424,7 @@ describe("the console command", () => {
       }),
     );
     expect(tasks.status).toBe(200);
-    expect(await tasks.json()).toEqual({ items: [TASK] });
+    expect(await tasks.json()).toEqual({ more: false, items: [TASK] });
     const carried = new Headers(
       calls.find((call) => call.key === `GET ${IN}/tasks`)?.init?.headers,
     );
@@ -444,15 +448,17 @@ describe("the console command", () => {
   });
 
   it("takes the token from the environment over what was kept, and answers JSON on demand", async () => {
-    const { fetch, calls } = fakeConsole({ [`GET ${IN}/tasks`]: { body: { items: [TASK] } } });
+    const { fetch, calls } = fakeConsole({
+      [`GET ${IN}/tasks?limit=50&offset=0`]: { body: { more: false, items: [TASK] } },
+    });
     const h = harness({
       fetch,
       env: SIGNED_IN,
       store: memoryStore({ url: "https://other.test", token: "cns_t_kept" }).store,
     });
     expect(await runCli(["tasks", "--json"], h.io)).toBe(EXIT.ok);
-    expect(JSON.parse(h.out())).toEqual({ items: [TASK] });
-    expect(calls[0]?.key).toBe(`GET ${IN}/tasks`);
+    expect(JSON.parse(h.out())).toEqual({ more: false, items: [TASK] });
+    expect(calls[0]?.key).toBe(`GET ${IN}/tasks?limit=50&offset=0`);
     expect(new Headers(calls[0]?.init?.headers).get("authorization")).toBe("Bearer cns_t_secret");
     const words = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["tasks"], words.io)).toBe(EXIT.ok);
@@ -525,7 +531,7 @@ describe("the console command", () => {
 
   it("reports on the one open run, and asks which when there are several or none", async () => {
     const { fetch, calls } = fakeConsole({
-      [OPEN_RUNS]: { body: { items: [RUN] } },
+      [OPEN_RUNS]: { body: { more: false, items: [RUN] } },
       [`POST ${IN}/runs/${RUN.id}/reports`]: {
         status: 201,
         body: { ...RUN, reports: [{ id: RUN.id, body: "# Found it", createdAt: WHEN }] },
@@ -538,13 +544,13 @@ describe("the console command", () => {
 
     const several = fakeConsole({
       [OPEN_RUNS]: {
-        body: { items: [RUN, { ...RUN, id: "0199c4d8-0000-7000-8000-000000000021" }] },
+        body: { more: false, items: [RUN, { ...RUN, id: "0199c4d8-0000-7000-8000-000000000021" }] },
       },
     });
     const s = harness({ fetch: several.fetch, env: SIGNED_IN });
     expect(await runCli(["report", "which?"], s.io)).toBe(EXIT.failed);
     expect(s.err()).toContain("--run <id>");
-    const none = fakeConsole({ [OPEN_RUNS]: { body: { items: [] } } });
+    const none = fakeConsole({ [OPEN_RUNS]: { body: { more: false, items: [] } } });
     const n = harness({ fetch: none.fetch, env: SIGNED_IN });
     expect(await runCli(["report", "to nobody"], n.io)).toBe(EXIT.failed);
     expect(n.err()).toContain("console take <number>");
@@ -573,7 +579,7 @@ describe("the console command", () => {
       ],
     };
     const { fetch, calls } = fakeConsole({
-      [OPEN_RUNS]: { body: { items: [RUN] } },
+      [OPEN_RUNS]: { body: { more: false, items: [RUN] } },
       [`POST ${IN}/runs/${RUN.id}/artifacts`]: { status: 201, body: RUN },
       [`POST ${IN}/runs/${RUN.id}/files`]: { status: 201, body: handedIn },
       [`GET ${IN}/runs/${RUN.id}`]: { body: handedIn },
@@ -619,7 +625,7 @@ describe("the console command", () => {
 
   it("reads a body from a file or from standard input", async () => {
     const { fetch, calls } = fakeConsole({
-      [OPEN_RUNS]: { body: { items: [RUN] } },
+      [OPEN_RUNS]: { body: { more: false, items: [RUN] } },
       [`POST ${IN}/runs/${RUN.id}/reports`]: { status: 201, body: RUN },
     });
     const file = harness({ fetch, env: SIGNED_IN, readFile: async (path) => `from ${path}` });
@@ -634,7 +640,7 @@ describe("the console command", () => {
 
   it("asks, waits for the answer, and says when the decision still waits", async () => {
     const { fetch, calls } = fakeConsole({
-      [OPEN_RUNS]: { body: { items: [RUN] } },
+      [OPEN_RUNS]: { body: { more: false, items: [RUN] } },
       [`POST ${IN}/decisions`]: { status: 201, body: DECISION },
       [`GET ${IN}/decisions/${DECISION.id}?wait=50`]: [{ body: DECISION }, { body: ANSWERED }],
     });
@@ -656,7 +662,7 @@ describe("the console command", () => {
     expect(h.out()).toContain("Note: Carefully.");
 
     const unanswered = fakeConsole({
-      [OPEN_RUNS]: { body: { items: [RUN] } },
+      [OPEN_RUNS]: { body: { more: false, items: [RUN] } },
       [`POST ${IN}/decisions`]: { status: 201, body: DECISION },
     });
     const u = harness({ fetch: unanswered.fetch, env: SIGNED_IN });
@@ -702,7 +708,7 @@ describe("the console command", () => {
 
   it("ends a run as finished, failed or abandoned", async () => {
     const { fetch, calls } = fakeConsole({
-      [OPEN_RUNS]: { body: { items: [RUN] } },
+      [OPEN_RUNS]: { body: { more: false, items: [RUN] } },
       [`POST ${IN}/runs/${RUN.id}/end`]: {
         body: { ...RUN, status: "finished", summary: "Done." },
       },
@@ -875,14 +881,14 @@ describe("the console command", () => {
       [`GET ${IN}/tasks/7`]: { body: TASK },
       [`POST ${IN}/runs`]: {
         status: 409,
-        body: { error: { code: "run.task_taken", message: "an agent is at work on it already" } },
+        body: { error: { code: "run.task_closed", message: "the task is done or dropped" } },
       },
     });
     const h = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["take", "7"], h.io)).toBe(EXIT.failed);
-    expect(h.err()).toBe("run.task_taken: an agent is at work on it already\n");
+    expect(h.err()).toBe("run.task_closed: the task is done or dropped\n");
     const out = fakeConsole({
-      [`GET ${IN}/tasks`]: {
+      [`GET ${IN}/tasks?limit=50&offset=0`]: {
         status: 401,
         body: { error: { code: "auth.required", message: "Sign in to continue." } },
       },
@@ -902,11 +908,15 @@ describe("the plan on the command line", () => {
   it("narrows the tasks by what is due, one's own, a category and a goal", async () => {
     const { fetch, calls } = fakeConsole({
       "GET /api/v1/me": { body: ME },
-      [`GET ${IN}/tasks?open=true&assignee=${PERSON.id}&dueBy=2026-10-10`]: {
-        body: { items: [{ ...TASK, dueOn: "2026-10-01" }] },
+      [`GET ${IN}/tasks?open=true&assignee=${PERSON.id}&dueBy=2026-10-10&limit=50&offset=0`]: {
+        body: { more: false, items: [{ ...TASK, dueOn: "2026-10-01" }] },
       },
-      [`GET ${IN}/tasks?category=engineering&goal=${GOAL.id}`]: { body: { items: [] } },
-      [`GET ${IN}/tasks?dueBy=2026-10-17`]: { body: { items: [TASK] } },
+      [`GET ${IN}/tasks?category=engineering&goal=${GOAL.id}&limit=50&offset=0`]: {
+        body: { more: false, items: [] },
+      },
+      [`GET ${IN}/tasks?dueBy=2026-10-17&limit=50&offset=0`]: {
+        body: { more: false, items: [TASK] },
+      },
     });
     const overdue = harness({ fetch, env: SIGNED_IN, now: () => NOON });
     expect(await runCli(["tasks", "--mine", "--due", "overdue"], overdue.io)).toBe(EXIT.ok);
@@ -918,7 +928,7 @@ describe("the plan on the command line", () => {
     expect(narrow.out()).toBe("No tasks.\n");
     const week = harness({ fetch, env: SIGNED_IN, now: () => NOON });
     expect(await runCli(["tasks", "--due", "week"], week.io)).toBe(EXIT.ok);
-    expect(calls.at(-1)?.key).toBe(`GET ${IN}/tasks?dueBy=2026-10-17`);
+    expect(calls.at(-1)?.key).toBe(`GET ${IN}/tasks?dueBy=2026-10-17&limit=50&offset=0`);
     const bad = harness({ fetch, env: SIGNED_IN, now: () => NOON });
     expect(await runCli(["tasks", "--due", "soon"], bad.io)).toBe(EXIT.usage);
     expect(bad.err()).toContain("Not a day: soon");
@@ -928,7 +938,7 @@ describe("the plan on the command line", () => {
     const parentId = "0199c4d8-0000-7000-8000-000000000011";
     const { fetch, calls } = fakeConsole({
       "GET /api/v1/me": { body: ME },
-      "GET /api/v1/people": { body: { items: [PERSON, BOB] } },
+      "GET /api/v1/people": { body: { more: false, items: [PERSON, BOB] } },
       [`POST ${IN}/tasks`]: { status: 201, body: { ...TASK, dueOn: "2026-10-24" } },
       [`GET ${IN}/tasks/7`]: { body: TASK },
       [`GET ${IN}/tasks/3`]: { body: { ...TASK, id: parentId, number: 3 } },
@@ -993,9 +1003,9 @@ describe("the plan on the command line", () => {
 
   it("lists the roadmap, reads a goal with its tasks, sets one and changes one", async () => {
     const { fetch, calls } = fakeConsole({
-      [`GET ${IN}/goals`]: { body: { items: [GOAL] } },
+      [`GET ${IN}/goals`]: { body: { more: false, items: [GOAL] } },
       [`GET ${IN}/goals/${GOAL.id}`]: { body: GOAL },
-      [`GET ${IN}/tasks?goal=${GOAL.id}`]: { body: { items: [TASK] } },
+      [`GET ${IN}/tasks?goal=${GOAL.id}`]: { body: { more: false, items: [TASK] } },
       [`POST ${IN}/goals`]: { status: 201, body: GOAL },
       [`PATCH ${IN}/goals/${GOAL.id}`]: { body: { ...GOAL, state: "done" } },
     });
@@ -1034,10 +1044,15 @@ describe("the plan on the command line", () => {
 
   it("lists the categories, and what is on one's plate across the projects", async () => {
     const { fetch } = fakeConsole({
-      "GET /api/v1/categories": { body: { items: [CATEGORY] } },
+      "GET /api/v1/categories": { body: { more: false, items: [CATEGORY] } },
       "GET /api/v1/work": {
         body: {
-          tasks: [{ project: { key: "web", name: "The web app" }, task: TASK }],
+          tasks: [
+            {
+              project: { key: "web", name: "The web app", color: null, symbol: null, icon: null },
+              task: TASK,
+            },
+          ],
           decisions: [],
         },
       },
@@ -1051,5 +1066,36 @@ describe("the plan on the command line", () => {
     expect(plate.out()).toContain("tasks assigned to you:");
     expect(plate.out()).toContain("  web  #7  ready  high  Fix the parser");
     expect(plate.out()).toContain("decisions waiting: none");
+  });
+});
+
+describe("a page at a time", () => {
+  it("asks for a page of the tasks, the decisions and the runs, and says when there is more", async () => {
+    const { fetch, calls } = fakeConsole({
+      [`GET ${IN}/tasks?limit=1&offset=1`]: { body: { more: true, items: [TASK] } },
+      [`GET ${IN}/decisions?open=true&limit=50&offset=0`]: {
+        body: { more: false, items: [DECISION] },
+      },
+      [`GET ${IN}/runs?open=true&limit=2&offset=0`]: { body: { more: true, items: [RUN] } },
+    });
+    const page = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["tasks", "--limit", "1", "--offset", "1"], page.io)).toBe(EXIT.ok);
+    expect(page.out()).toContain("#7  ready  high  Fix the parser");
+    expect(page.out()).toContain("... more: --offset 2");
+    const waiting = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["decisions", "--open"], waiting.io)).toBe(EXIT.ok);
+    expect(waiting.out()).not.toContain("more:");
+    const runs = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["runs", "--open", "--limit", "2"], runs.io)).toBe(EXIT.ok);
+    expect(runs.out()).toContain(`last heard ${WHEN}`);
+    expect(runs.out()).toContain("... more: --offset 2");
+    expect(calls.map((call) => call.key)).toEqual([
+      `GET ${IN}/tasks?limit=1&offset=1`,
+      `GET ${IN}/decisions?open=true&limit=50&offset=0`,
+      `GET ${IN}/runs?open=true&limit=2&offset=0`,
+    ]);
+    const bad = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["tasks", "--limit", "0"], bad.io)).toBe(EXIT.usage);
+    expect(bad.err()).toContain("Not a number of items");
   });
 });

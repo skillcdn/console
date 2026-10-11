@@ -87,10 +87,13 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
     return c.json({ status: "ready" });
   });
 
-  // Nothing under /api is ever cached: it is one person's, or it changes.
+  // Nothing under /api is cached, unless the handler said how long: it is one person's, or it
+  // changes, except what is read by its hash.
   app.use("/api/*", async (c, next) => {
     await next();
-    c.header("cache-control", "no-store");
+    if (!c.res.headers.has("cache-control")) {
+      c.header("cache-control", "no-store");
+    }
   });
 
   const access = createAccess(auth);

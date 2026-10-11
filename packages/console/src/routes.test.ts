@@ -3,6 +3,7 @@ import {
   AUTH_ROUTES,
   isSignInFailure,
   loginPath,
+  projectIconPath,
   projectPath,
   restPath,
   signInPath,
@@ -36,6 +37,15 @@ describe("routes", () => {
     // A document's path is one segment of the URL, its slashes encoded.
     expect(projectPath("web", "docs", "guides/onboarding")).toBe(
       "/api/v1/projects/web/docs/guides%2Fonboarding",
+    );
+  });
+});
+describe("where a project's image is read", () => {
+  it("is the project's icon path, versioned by the hash where the image is known", () => {
+    expect(projectIconPath("web")).toBe("/api/v1/projects/web/icon");
+    expect(projectIconPath("web", null)).toBe("/api/v1/projects/web/icon");
+    expect(projectIconPath("web", { sha256: "abcdef0123456789ffff" })).toBe(
+      "/api/v1/projects/web/icon?v=abcdef0123456789",
     );
   });
 });

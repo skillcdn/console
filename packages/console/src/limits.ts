@@ -64,3 +64,9 @@ export const MAX_CATEGORY_KEY_LENGTH = 40;
 export const MAX_CATEGORY_NAME_LENGTH = 60;
 /** How many categories one workspace may have: a vocabulary, not a tag cloud. */
 export const MAX_CATEGORIES = 50;
+/** A project's mark: a letter or two, or a symbol, shown on its colour; counted in code units. */
+export const MAX_PROJECT_SYMBOL_LENGTH = 8;
+/** How large a project's own image for its mark may be, in bytes. */
+export const MAX_PROJECT_ICON_BYTES = 512 * 1024;
+/** How many items a listing answers with when none is asked for, and the most one may ask for. */
+export const DEFAULT_PAGE_LIMIT = 50;

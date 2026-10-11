@@ -3,27 +3,18 @@ import {
   type RestCategory,
   type RestGoal,
   type RestPerson,
-  type RestRun,
   type RestTask,
   TASK_STATES,
   type TaskState,
 } from "../api.js";
-import { useLanguage, useWords } from "../i18n/index.js";
+import { useWords } from "../i18n/index.js";
 import type { BoardFilter } from "../router.js";
-import {
-  Avatar,
-  Badge,
-  Button,
-  CategoryBadge,
-  cx,
-  DueBadge,
-  formatInstant,
-  PriorityBadge,
-} from "./ui.js";
+import { Avatar, Badge, Button, CategoryBadge, cx, DueBadge, PriorityBadge } from "./ui.js";
 
 // The board: one column per state, the tasks in it, the sooner due first and the newest after.
 // A card says what a person needs at a glance and nothing more: the number and the title, the
-// category, what is due, who is on it, what blocks it, and whose agent is at it. It takes its
+// category, what is due, who is on it, and what blocks it. Whether an agent is at it is not
+// said, since the board cannot know (ADR-0020); the task's page shows its runs. It takes its
 // data as props and nothing from the network; what it is told on a click goes back up.
 
 export interface BoardProps {
@@ -33,19 +24,10 @@ export interface BoardProps {
   readonly onOpen: (task: RestTask) => void;
   /** Called when a person moves a task to another column. Left out, the board is read-only. */
   readonly onMove?: ((task: RestTask, state: TaskState) => void) | undefined;
-  /** The runs of the project, for a card to name the agent at work on its task. */
-  readonly runs?: readonly RestRun[] | undefined;
   /** The day to count due days from; the browser's today when left out. */
   readonly today?: string | undefined;
   /** What a column shows when it has nothing; the way to write the first task, for example. */
   readonly empty?: ReactNode;
-}
-
-/** The open run on a task, when an agent is at work on it: whose, and since when. */
-function runOn(task: RestTask, runs: readonly RestRun[] | undefined): RestRun | undefined {
-  return runs?.find(
-    (run) => run.taskId === task.id && (run.status === "running" || run.status === "waiting"),
-  );
 }
 
 export function TaskCard(props: {
@@ -53,12 +35,10 @@ export function TaskCard(props: {
   readonly href: string;
   readonly onOpen: (task: RestTask) => void;
   readonly onMove?: ((task: RestTask, state: TaskState) => void) | undefined;
-  readonly run?: RestRun | undefined;
   readonly today?: string | undefined;
 }) {
   const words = useWords();
-  const { tag } = useLanguage();
-  const { task, run } = props;
+  const { task } = props;
   return (
     <article className="sc-card" aria-label={`#${task.number} ${task.title}`}>
       <a
@@ -82,18 +62,6 @@ export function TaskCard(props: {
         {task.openDecisions > 0 && (
           <Badge tone="warning" title={words.board.decisionsTitle}>
             {words.board.decisions(task.openDecisions)}
-          </Badge>
-        )}
-        {task.openRuns > 0 && (
-          <Badge
-            tone="accent"
-            title={
-              run === undefined
-                ? words.board.agentAtWorkTitle
-                : words.board.agentSince(run.agent, formatInstant(run.startedAt, tag))
-            }
-          >
-            {run === undefined ? words.board.agentAtWork : run.agent}
           </Badge>
         )}
         <span className="sc-card-spacer" />
@@ -156,7 +124,6 @@ export function Board(props: BoardProps) {
                   href={props.taskHref(task)}
                   onOpen={props.onOpen}
                   onMove={props.onMove}
-                  run={runOn(task, props.runs)}
                   today={props.today}
                 />
               ))}

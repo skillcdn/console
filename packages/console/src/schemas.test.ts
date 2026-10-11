@@ -23,6 +23,7 @@ import {
   restMemberInputSchema,
   restPersonPatchSchema,
   restPersonSchema,
+  restProjectIconSchema,
   restProjectInputSchema,
   restProjectPatchSchema,
   restProjectSchema,
@@ -284,6 +285,9 @@ describe("projects", () => {
 
   it("are read as the server answers them, with what the asker is in each", () => {
     const project = restProjectSchema.parse({
+      color: "teal",
+      symbol: "W",
+      icon: null,
       id: "0199c4d8-0000-7000-8000-000000000050",
       key: "web",
       name: "The web app",
@@ -450,5 +454,21 @@ describe("categories and goals", () => {
     ]) {
       expect(restGoalInputSchema.safeParse(input).success, JSON.stringify(input)).toBe(false);
     }
+  });
+});
+
+describe("a project's image for its mark", () => {
+  it("is the hash it is kept by and one of the kinds the pages show, and nothing else", () => {
+    const sha256 = "a".repeat(64);
+    expect(restProjectIconSchema.parse({ sha256, contentType: "image/webp" })).toEqual({
+      sha256,
+      contentType: "image/webp",
+    });
+    expect(restProjectIconSchema.safeParse({ sha256, contentType: "image/svg+xml" }).success).toBe(
+      false,
+    );
+    expect(
+      restProjectIconSchema.safeParse({ sha256: "abc", contentType: "image/png" }).success,
+    ).toBe(false);
   });
 });

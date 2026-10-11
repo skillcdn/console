@@ -9,6 +9,7 @@ import {
 } from "../api.js";
 import { useWords } from "../i18n/index.js";
 import { Markdown } from "./markdown.js";
+import { ShowMore, usePaged } from "./paged.js";
 import { Button, cx, PersonChip, Time } from "./ui.js";
 
 // The decisions: the ones that wait, each a card with the way to answer it, since they are what
@@ -254,40 +255,44 @@ export interface DecisionLogProps {
 /** The record: one row per decision answered, what was asked, what was chosen, by whom, when. */
 export function DecisionLog(props: DecisionLogProps) {
   const words = useWords();
+  const { shown, rest, more } = usePaged(props.decisions);
   return (
-    <ol className="sc-decision-log" aria-label={words.decisions.record}>
-      {props.decisions.map((decision) => {
-        const task = decision.taskId === null ? undefined : props.tasks?.get(decision.taskId);
-        const href = props.decisionHref?.(decision);
-        const chosen =
-          decision.options.find((option) => option.id === decision.answer?.option)?.label ??
-          decision.answer?.option ??
-          "";
-        return (
-          <li key={decision.id} className="sc-decision-row">
-            <span className="sc-decision-row-question">
-              {href === undefined ? decision.question : <a href={href}>{decision.question}</a>}
-            </span>
-            <span className="sc-decision-row-answer">{chosen}</span>
-            <span className="sc-decision-row-meta">
-              {decision.answer !== null && (
-                <>
-                  <PersonChip person={decision.answer.by} /> <Time iso={decision.answer.at} />
-                </>
-              )}
-              {task !== undefined &&
-                (props.taskHref === undefined ? (
-                  <span className="sc-card-number">#{task.number}</span>
-                ) : (
-                  <a className="sc-card-number" href={props.taskHref(task)}>
-                    #{task.number}
-                  </a>
-                ))}
-            </span>
-          </li>
-        );
-      })}
-    </ol>
+    <>
+      <ol className="sc-decision-log" aria-label={words.decisions.record}>
+        {shown.map((decision) => {
+          const task = decision.taskId === null ? undefined : props.tasks?.get(decision.taskId);
+          const href = props.decisionHref?.(decision);
+          const chosen =
+            decision.options.find((option) => option.id === decision.answer?.option)?.label ??
+            decision.answer?.option ??
+            "";
+          return (
+            <li key={decision.id} className="sc-decision-row">
+              <span className="sc-decision-row-question">
+                {href === undefined ? decision.question : <a href={href}>{decision.question}</a>}
+              </span>
+              <span className="sc-decision-row-answer">{chosen}</span>
+              <span className="sc-decision-row-meta">
+                {decision.answer !== null && (
+                  <>
+                    <PersonChip person={decision.answer.by} /> <Time iso={decision.answer.at} />
+                  </>
+                )}
+                {task !== undefined &&
+                  (props.taskHref === undefined ? (
+                    <span className="sc-card-number">#{task.number}</span>
+                  ) : (
+                    <a className="sc-card-number" href={props.taskHref(task)}>
+                      #{task.number}
+                    </a>
+                  ))}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+      <ShowMore rest={rest} onMore={more} />
+    </>
   );
 }
 

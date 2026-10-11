@@ -1,4 +1,10 @@
-import type { ProjectRole, ProjectVisibility } from "@skillcdn/console/api";
+import {
+  type ColorName,
+  PROJECT_ICON_TYPES,
+  type ProjectIconType,
+  type ProjectRole,
+  type ProjectVisibility,
+} from "@skillcdn/console/api";
 import { and, asc, eq, type SQL, sql } from "drizzle-orm";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
@@ -10,6 +16,12 @@ import { type PersonRecord, personColumns, toPerson } from "./people.js";
 // is in a project, and whether they are in it at all, is decided here, on every request, from
 // the project's visibility, its members and the person's role in the workspace.
 
+/** A project's own image for its mark: the bytes are the blob store's, by their hash. */
+export interface ProjectIcon {
+  readonly sha256: string;
+  readonly contentType: ProjectIconType;
+}
+
 export interface ProjectRecord {
   readonly id: string;
   readonly workspaceId: string;
@@ -19,6 +31,11 @@ export interface ProjectRecord {
   readonly visibility: ProjectVisibility;
   /** The address of the project's skills, canonical, or none for the organization's. */
   readonly skillsAddress: string | undefined;
+  /** The project's mark: a colour by name and a symbol, each or none for the ones chosen from the key and the name. */
+  readonly color: ColorName | undefined;
+  readonly symbol: string | undefined;
+  /** The project's own image for its mark, or none: then the mark is the symbol on the colour. */
+  readonly icon: ProjectIcon | undefined;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -64,6 +81,8 @@ export interface ProjectInput {
   readonly description?: string | undefined;
   readonly visibility?: ProjectVisibility | undefined;
   readonly skillsAddress?: string | null | undefined;
+  readonly color?: ColorName | null | undefined;
+  readonly symbol?: string | null | undefined;
 }
 
 /** Only what changes; a key that is absent leaves the field as it is. */
@@ -82,6 +101,10 @@ const projectColumns = {
   description: projects.description,
   visibility: projects.visibility,
   skillsAddress: projects.skillsAddress,
+  color: projects.color,
+  symbol: projects.symbol,
+  iconSha256: projects.iconSha256,
+  iconContentType: projects.iconContentType,
   createdAt: projects.createdAt,
   updatedAt: projects.updatedAt,
 };
@@ -94,9 +117,22 @@ type ProjectRow = {
   readonly description: string;
   readonly visibility: ProjectVisibility;
   readonly skillsAddress: string | null;
+  readonly color: ColorName | null;
+  readonly symbol: string | null;
+  readonly iconSha256: string | null;
+  readonly iconContentType: string | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 };
+
+const isIconType = (value: string): value is ProjectIconType =>
+  (PROJECT_ICON_TYPES as readonly string[]).includes(value);
+
+/** The image a row names, when it names one of a kind the pages show; a row cannot name another. */
+const iconOf = (row: ProjectRow): ProjectIcon | undefined =>
+  row.iconSha256 !== null && row.iconContentType !== null && isIconType(row.iconContentType)
+    ? { sha256: row.iconSha256, contentType: row.iconContentType }
+    : undefined;
 
 const toProject = (row: ProjectRow): ProjectRecord => ({
   id: row.id,
@@ -106,6 +142,9 @@ const toProject = (row: ProjectRow): ProjectRecord => ({
   description: row.description,
   visibility: row.visibility,
   skillsAddress: row.skillsAddress ?? undefined,
+  color: row.color ?? undefined,
+  symbol: row.symbol ?? undefined,
+  icon: iconOf(row),
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
 });
@@ -246,6 +285,8 @@ export async function createProject(
         description: project.description ?? "",
         visibility: project.visibility ?? "private",
         skillsAddress: project.skillsAddress ?? null,
+        color: project.color ?? null,
+        symbol: project.symbol ?? null,
         createdAt: now,
         updatedAt: now,
       })
@@ -298,10 +339,12 @@ export async function updateProject(
       visibility: patch.visibility ?? current.visibility,
       skillsAddress:
         patch.skillsAddress === undefined ? current.skillsAddress : patch.skillsAddress,
+      color: patch.color === undefined ? current.color : patch.color,
+      symbol: patch.symbol === undefined ? current.symbol : patch.symbol,
     };
-    const changed = (["name", "description", "visibility", "skillsAddress"] as const).filter(
-      (field) => next[field] !== current[field],
-    );
+    const changed = (
+      ["name", "description", "visibility", "skillsAddress", "color", "symbol"] as const
+    ).filter((field) => next[field] !== current[field]);
     if (changed.length === 0) {
       return readView(tx, projectId, person);
     }
@@ -315,6 +358,55 @@ export async function updateProject(
       kind: "project.updated",
       actor,
       data: { key: current.key, name: next.name, fields: changed },
+      now,
+    });
+    return readView(tx, projectId, person);
+  });
+}
+
+/**
+ * Sets the project's own image for its mark, or takes it away, and tells the board which field
+ * changed; the same image again writes nothing. The bytes are the blob store's, by their hash,
+ * and stay there: the store keeps each set of bytes once, whatever refers to them.
+ */
+export async function setProjectIcon(
+  database: Database,
+  input: {
+    readonly projectId: string;
+    readonly actor: Actor;
+    readonly person: PersonRecord;
+    readonly icon: ProjectIcon | undefined;
+    readonly now: Date;
+  },
+): Promise<ProjectView> {
+  const { projectId, actor, person, icon, now } = input;
+  return drizzleOf(database).transaction(async (tx) => {
+    const [current] = await tx
+      .select(projectColumns)
+      .from(projects)
+      .where(eq(projects.id, projectId))
+      .for("update");
+    if (current === undefined) {
+      throw new ProjectError("project.not_found");
+    }
+    const before = iconOf(current);
+    if (before?.sha256 === icon?.sha256 && before?.contentType === icon?.contentType) {
+      return readView(tx, projectId, person);
+    }
+    await tx
+      .update(projects)
+      .set({
+        iconSha256: icon?.sha256 ?? null,
+        iconContentType: icon?.contentType ?? null,
+        updatedAt: now,
+      })
+      .where(eq(projects.id, projectId));
+    await recordEvent(tx, {
+      workspaceId: current.workspaceId,
+      projectId,
+      kind: "project.updated",
+      actor,
+      data: { key: current.key, name: current.name, fields: ["icon"] },
       now,
     });
     return readView(tx, projectId, person);

@@ -55,6 +55,9 @@ export function restProject(project: ProjectView): RestProject {
     description: project.description,
     visibility: project.visibility,
     skillsAddress: project.skillsAddress ?? null,
+    color: project.color ?? null,
+    symbol: project.symbol ?? null,
+    icon: project.icon ?? null,
     role: project.role,
     openDecisions: project.openDecisions,
     openRuns: project.openRuns,
@@ -166,6 +169,7 @@ export function restRun(run: RunRecord): RestRun {
     status: run.status,
     startedAt: run.startedAt.toISOString(),
     endedAt: run.endedAt?.toISOString() ?? null,
+    lastHeardAt: run.lastHeardAt.toISOString(),
     summary: run.summary ?? null,
     reports: run.reports.map((report) => ({
       id: report.id,

@@ -52,8 +52,13 @@ export type Route =
   | { readonly name: "decisions"; readonly project: string }
   | { readonly name: "new-decision"; readonly project: string }
   | { readonly name: "decision"; readonly project: string; readonly id: string }
-  /** The calendar of a project: the month shown, or this one when the address names none. */
-  | { readonly name: "calendar"; readonly project: string; readonly month: string | undefined }
+  /** The calendar of a project: the month shown, or this one when the address names none, narrowed as the board is. */
+  | {
+      readonly name: "calendar";
+      readonly project: string;
+      readonly month: string | undefined;
+      readonly filter: BoardFilter;
+    }
   | { readonly name: "roadmap"; readonly project: string }
   | { readonly name: "new-goal"; readonly project: string }
   | {
@@ -280,7 +285,7 @@ export function matchRoute(pathname: string, search = ""): Route {
     if (month !== null && !isMonth(month)) {
       return NOT_FOUND;
     }
-    return { name: "calendar", project, month: month ?? undefined };
+    return { name: "calendar", project, month: month ?? undefined, filter: boardFilterOf(params) };
   }
   if (page === "roadmap") {
     return { name: "roadmap", project };
@@ -307,6 +312,12 @@ export function projectHref(key: string, page?: ProjectPage): string {
 
 /** Where a project's board is, narrowed as the filter says; the plain board for an empty one. */
 export function boardHref(key: string, filter: BoardFilter = {}): string {
+  const parts = filterParts(filter);
+  return parts.length === 0 ? projectHref(key) : `${projectHref(key)}?${parts.join("&")}`;
+}
+
+/** The filter as the query carries it, a part per narrowing; nothing for the plain board. */
+function filterParts(filter: BoardFilter): string[] {
   const parts: string[] = [];
   // An empty value means "none": it keeps its sign; "mine" is a flag and has no value.
   if (filter.category !== undefined) {
@@ -321,7 +332,7 @@ export function boardHref(key: string, filter: BoardFilter = {}): string {
   if (filter.mine === true) {
     parts.push("mine");
   }
-  return parts.length === 0 ? projectHref(key) : `${projectHref(key)}?${parts.join("&")}`;
+  return parts;
 }
 
 /** Where a task is written: the form. */
@@ -345,10 +356,11 @@ export function decisionHref(key: string, id: string): string {
   return `${PATHS.project}/${key}/decisions/${id}`;
 }
 
-/** Where a project's calendar is, on a month, or on this one when none is named. */
-export function calendarHref(key: string, month?: string): string {
+/** Where a project's calendar is, on a month, or on this one when none is named, narrowed as the filter says. */
+export function calendarHref(key: string, month?: string, filter: BoardFilter = {}): string {
   const base = projectHref(key, "calendar");
-  return month === undefined ? base : `${base}?month=${month}`;
+  const parts = [...(month === undefined ? [] : [`month=${month}`]), ...filterParts(filter)];
+  return parts.length === 0 ? base : `${base}?${parts.join("&")}`;
 }
 
 /** Where a goal is set: the form. */

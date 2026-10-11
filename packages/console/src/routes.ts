@@ -114,3 +114,12 @@ export function projectPath(key: string, collection?: ProjectCollection, id?: st
     ? `${base}/${collection}`
     : `${base}/${collection}/${encodeURIComponent(id)}`;
 }
+
+/**
+ * Where a project's own image for its mark is read, with the hash as a version where the image
+ * is known, so that a browser's copy is asked for again only when the image changes.
+ */
+export function projectIconPath(key: string, icon?: { readonly sha256: string } | null): string {
+  const base = `${projectPath(key)}/icon`;
+  return icon === undefined || icon === null ? base : `${base}?v=${icon.sha256.slice(0, 16)}`;
+}

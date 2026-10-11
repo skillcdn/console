@@ -21,6 +21,7 @@ import {
   MAX_PROJECT_DESCRIPTION_LENGTH,
   MAX_PROJECT_KEY_LENGTH,
   MAX_PROJECT_NAME_LENGTH,
+  MAX_PROJECT_SYMBOL_LENGTH,
   MAX_QUESTION_LENGTH,
   MAX_SECRET_LENGTH,
   MAX_SKILLS_ADDRESS_LENGTH,
@@ -35,10 +36,12 @@ import { hasForbiddenCodePoint } from "./text.js";
 import {
   ARTIFACT_KINDS,
   CATEGORY_COLORS,
+  COLOR_NAMES,
   EVENT_KINDS,
   GOAL_STATES,
   LINK_SOURCES,
   PERSON_ROLES,
+  PROJECT_ICON_TYPES,
   PROJECT_ROLES,
   PROJECT_VISIBILITIES,
   PROVIDER_KEYS,
@@ -160,7 +163,19 @@ const projectKey = z.string().check(
 /** The address of a project's skills, as the standard spells one; the console checks it as one. */
 const skillsAddress = line(MAX_SKILLS_ADDRESS_LENGTH);
 
+/** A project's mark: a letter or two, or a symbol, with no space in it; shown on the project's colour. */
+const projectSymbol = line(MAX_PROJECT_SYMBOL_LENGTH).check(
+  z.refine((value) => !/\s/.test(value), "must have no space in it"),
+);
+
 /** A project of the workspace, as the asker sees it: with what they are in it. */
+/** A project's own image for its mark: the hash it is kept by, which `projectIconPath` reads it with, and its kind. */
+export const restProjectIconSchema = z.object({
+  sha256: z.string().check(z.regex(/^[0-9a-f]{64}$/)),
+  contentType: z.enum(PROJECT_ICON_TYPES),
+});
+export type RestProjectIcon = z.infer<typeof restProjectIconSchema>;
+
 export const restProjectSchema = z.object({
   id: uuid,
   key: projectKey,
@@ -170,6 +185,12 @@ export const restProjectSchema = z.object({
   visibility: z.enum(PROJECT_VISIBILITIES),
   /** The address of the project's skills at the SkillCDN deployment, canonical, or `null` for the organization's. */
   skillsAddress: z.nullable(z.string()),
+  /** The colour of the project's mark, one of the names, or `null` for one chosen from its key. */
+  color: z.nullable(z.enum(COLOR_NAMES)),
+  /** The project's mark, a letter or two or a symbol, or `null` for the first letter of its name. */
+  symbol: z.nullable(z.string()),
+  /** The project's own image for its mark, shown in place of the symbol, or `null` for none. */
+  icon: z.nullable(restProjectIconSchema),
   /** What the asker is in it: an owner configures the project, a member works on it. */
   role: z.enum(PROJECT_ROLES),
   /** How many decisions in it wait for a person. */
@@ -194,6 +215,9 @@ export const restProjectInputSchema = z.object({
   visibility: z.optional(z.enum(PROJECT_VISIBILITIES)),
   /** Left out or `null`: the organization's skills. */
   skillsAddress: z.optional(z.nullable(skillsAddress)),
+  /** Left out or `null`: a colour chosen from the key, and the first letter of the name. */
+  color: z.optional(z.nullable(z.enum(COLOR_NAMES))),
+  symbol: z.optional(z.nullable(projectSymbol)),
 });
 export type RestProjectInput = z.infer<typeof restProjectInputSchema>;
 
@@ -203,6 +227,8 @@ export const restProjectPatchSchema = z.object({
   description: z.optional(paragraphs(MAX_PROJECT_DESCRIPTION_LENGTH)),
   visibility: z.optional(z.enum(PROJECT_VISIBILITIES)),
   skillsAddress: z.optional(z.nullable(skillsAddress)),
+  color: z.optional(z.nullable(z.enum(COLOR_NAMES))),
+  symbol: z.optional(z.nullable(projectSymbol)),
 });
 export type RestProjectPatch = z.infer<typeof restProjectPatchSchema>;
 
@@ -313,8 +339,8 @@ export const restTaskSchema = z.object({
 });
 export type RestTask = z.infer<typeof restTaskSchema>;
 
-/** `GET /api/v1/projects/<key>/tasks`: the board, newest first. */
-export const restTasksSchema = z.object({ items: z.array(restTaskSchema) });
+/** `GET /api/v1/projects/<key>/tasks`: a page of the board, newest first, and whether there is more after it. */
+export const restTasksSchema = z.object({ items: z.array(restTaskSchema), more: z.boolean() });
 export type RestTasks = z.infer<typeof restTasksSchema>;
 
 const taskLinkInput = z.object({
@@ -449,12 +475,21 @@ export const restDecisionSchema = z.object({
 });
 export type RestDecision = z.infer<typeof restDecisionSchema>;
 
-/** `GET /api/v1/projects/<key>/decisions`: the ones that wait first, newest first within each. */
-export const restDecisionsSchema = z.object({ items: z.array(restDecisionSchema) });
+/** `GET /api/v1/projects/<key>/decisions`: a page, the ones that wait first, newest first within each, and whether there is more. */
+export const restDecisionsSchema = z.object({
+  items: z.array(restDecisionSchema),
+  more: z.boolean(),
+});
 export type RestDecisions = z.infer<typeof restDecisionsSchema>;
 
-/** The project a thing on a person's plate belongs to, named for the page to say and link it. */
-const projectRef = z.object({ key: projectKey, name: z.string() });
+/** The project a thing on a person's plate belongs to, named and marked for the page to say, link and show it. */
+const projectRef = z.object({
+  key: projectKey,
+  name: z.string(),
+  color: z.nullable(z.enum(COLOR_NAMES)),
+  symbol: z.nullable(z.string()),
+  icon: z.nullable(restProjectIconSchema),
+});
 
 /**
  * `GET /api/v1/work`: what is on the asker's plate across the projects they may see (ADR-0019):
@@ -598,6 +633,11 @@ export const restRunSchema = z.object({
   status: z.enum(RUN_STATUSES),
   startedAt: instant,
   endedAt: z.nullable(instant),
+  /**
+   * When the agent was last heard from on this run: when it began, reported, handed in or
+   * asked. The board cannot know whether an agent still runs; this is what it knows.
+   */
+  lastHeardAt: instant,
   /** What the agent said when the run ended, in Markdown, or `null`. */
   summary: z.nullable(z.string()),
   /** Oldest first. */
@@ -608,8 +648,8 @@ export const restRunSchema = z.object({
 });
 export type RestRun = z.infer<typeof restRunSchema>;
 
-/** `GET /api/v1/projects/<key>/runs`: the runs, newest first. */
-export const restRunsSchema = z.object({ items: z.array(restRunSchema) });
+/** `GET /api/v1/projects/<key>/runs`: a page of the runs, newest first, and whether there is more. */
+export const restRunsSchema = z.object({ items: z.array(restRunSchema), more: z.boolean() });
 export type RestRuns = z.infer<typeof restRunsSchema>;
 
 /** `GET .../events?after=`: what happened after that number, oldest first. */

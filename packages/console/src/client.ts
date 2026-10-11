@@ -150,8 +150,14 @@ export interface EventFilter {
   readonly document?: string | undefined;
 }
 
+/** One page of a listing: how many items, from which one on; the server's bounds apply. */
+export interface Page {
+  readonly limit?: number | undefined;
+  readonly offset?: number | undefined;
+}
+
 /** What the board is narrowed to: one state, the open ones, a category, a goal, an assignee, or what is due by a day. */
-export interface TaskFilter {
+export interface TaskFilter extends Page {
   readonly state?: TaskState | undefined;
   /** True for the tasks not done or dropped; false for the rest. */
   readonly open?: boolean | undefined;
@@ -183,6 +189,10 @@ export interface ProjectClient {
   get(signal?: AbortSignal): Promise<RestProject>;
   /** Changes the project's settings; for an owner. */
   update(patch: RestProjectPatch): Promise<RestProject>;
+  /** Sets the project's own image for its mark, sent as a form; for an owner on the console's own pages. */
+  setIcon(input: FileUpload): Promise<RestProject>;
+  /** Takes the image away: the mark is the symbol on the colour again. */
+  removeIcon(): Promise<RestProject>;
   /** Those listed in the project, by login. */
   members(signal?: AbortSignal): Promise<RestMembers>;
   /** Lists a person of the workspace in the project; for an owner. */
@@ -194,9 +204,9 @@ export interface ProjectClient {
   task(ref: string, signal?: AbortSignal): Promise<RestTask>;
   createTask(input: RestTaskInput): Promise<RestTask>;
   updateTask(id: string, patch: RestTaskPatch): Promise<RestTask>;
-  /** The decisions, or only those that wait, or only those about one task. */
+  /** The decisions, or only those that wait, or only those about one task; a page of them. */
   decisions(
-    filter?: { readonly open?: boolean; readonly task?: string },
+    filter?: { readonly open?: boolean; readonly task?: string } & Page,
     signal?: AbortSignal,
   ): Promise<RestDecisions>;
   decision(id: string, signal?: AbortSignal): Promise<RestDecision>;
@@ -209,9 +219,9 @@ export interface ProjectClient {
   answerDecision(id: string, input: RestAnswerInput): Promise<RestDecision>;
   /** Grows a decision's record: its context, or what followed. */
   updateDecision(id: string, patch: RestDecisionPatch): Promise<RestDecision>;
-  /** The runs, newest first; or only those on one task, only the open ones, only the asker's own. */
+  /** The runs, newest first; or only those on one task, only the open ones, only the asker's own; a page of them. */
   runs(
-    filter?: { readonly task?: string; readonly open?: boolean; readonly mine?: boolean },
+    filter?: { readonly task?: string; readonly open?: boolean; readonly mine?: boolean } & Page,
     signal?: AbortSignal,
   ): Promise<RestRuns>;
   run(id: string, signal?: AbortSignal): Promise<RestRun>;
@@ -381,6 +391,8 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
 
   const flag = (value: boolean | undefined): string | undefined =>
     value === undefined ? undefined : String(value);
+  const number = (value: number | undefined): string | undefined =>
+    value === undefined ? undefined : String(value);
 
   /** A file as the parts of a form: the bytes with their name and type, and the label. */
   const formOf = (input: FileUpload): FormData => {
@@ -405,6 +417,8 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
       key,
       get: (signal) => request("GET", `${base}${at()}`, undefined, restProjectSchema, signal),
       update: (patch) => request("PATCH", `${base}${at()}`, patch, restProjectSchema),
+      setIcon: (input) => request("POST", `${base}${at()}/icon`, formOf(input), restProjectSchema),
+      removeIcon: () => request("DELETE", `${base}${at()}/icon`, undefined, restProjectSchema),
       members: (signal) =>
         request("GET", `${base}${at("members")}`, undefined, restMembersSchema, signal),
       addMember: (input) => request("POST", `${base}${at("members")}`, input, restMemberSchema),
@@ -422,6 +436,8 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
             goal: filter.goal,
             assignee: filter.assignee,
             dueBy: filter.dueBy,
+            limit: number(filter.limit),
+            offset: number(filter.offset),
           }),
           undefined,
           restTasksSchema,
@@ -435,7 +451,12 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
       decisions: (filter = {}, signal) =>
         request(
           "GET",
-          withQuery(at("decisions"), { open: flag(filter.open), task: filter.task }),
+          withQuery(at("decisions"), {
+            open: flag(filter.open),
+            task: filter.task,
+            limit: number(filter.limit),
+            offset: number(filter.offset),
+          }),
           undefined,
           restDecisionsSchema,
           signal,
@@ -463,6 +484,8 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
             task: filter.task,
             open: flag(filter.open),
             mine: flag(filter.mine),
+            limit: number(filter.limit),
+            offset: number(filter.offset),
           }),
           undefined,
           restRunsSchema,
