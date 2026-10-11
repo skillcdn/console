@@ -1,20 +1,28 @@
 ---
 name: working-the-board
-description: "Works a task from the board of a SkillCDN Console with the console command, as the person whose token the command holds: reads the task, takes it, reports at the milestones of the work, asks on the board when a person must decide and waits for the answer, hands in what was made as a link or a file, writes down what the next agent needs on a page of the project, and finishes. Use when an agent is told to take, work or finish a task on the console, or to report, ask, hand in or write a page there; any agent with a shell where the command is signed in. To build a console or a script against the console's API, use building-a-console."
+description: "Works a task from the board of a SkillCDN Console with the console command, as the person whose token the command holds: reads the task, takes it, reports at the milestones of the work, asks on the board when a person must decide and waits for the answer, hands in what was made as a link or a file, writes down what the next agent needs on a page of the project, and finishes. Use when an agent is told to take, work or finish a task on the console, or to report, ask, hand in or write a page there; any agent with a shell where the command is signed in. To build a console or a script against the console's API, use building-a-console; to deploy a console for an organization, use deploying-a-console."
 license: MIT
 compatibility: Needs a shell with the console command on the PATH (npm install -g @skillcdn/console, Node.js 24 or newer), signed in by a person. Nothing else; the command needs no key of its own and the agent never sees a token.
 metadata:
   author: skillcdn
-  version: "1.0"
+  version: "1.1"
 skillcdn:
   translations:
     ko:
       title: 콘솔 보드에서 일하기
-      description: "SkillCDN 콘솔의 보드에 있는 작업을 console 명령으로 수행합니다. 명령에 로그인한 사람의 자격으로, 작업을 읽고 맡고, 진행의 이정표마다 보고하고, 사람이 정해야 할 일은 보드에 물어 답을 기다리고, 만든 것을 링크나 파일로 제출하고, 다음 에이전트에게 필요한 것을 프로젝트 페이지에 적고, 마칩니다. 에이전트에게 콘솔의 작업을 맡거나 끝내라고, 또는 보고·질문·제출·페이지 쓰기를 하라고 할 때 쓰세요. 콘솔이나 API 클라이언트를 만들 때는 building-a-console을 쓰세요."
+      description: "SkillCDN 콘솔의 보드에 있는 작업을 console 명령으로 수행합니다. 명령에 로그인한 사람의 자격으로, 작업을 읽고 맡고, 진행의 이정표마다 보고하고, 사람이 정해야 할 일은 보드에 물어 답을 기다리고, 만든 것을 링크나 파일로 제출하고, 다음 에이전트에게 필요한 것을 프로젝트 페이지에 적고, 마칩니다. 에이전트에게 콘솔의 작업을 맡거나 끝내라고, 또는 보고·질문·제출·페이지 쓰기를 하라고 할 때 쓰세요. 콘솔이나 API 클라이언트를 만들 때는 building-a-console을, 조직의 콘솔을 배포할 때는 deploying-a-console을 쓰세요."
 ---
 # Working a task on the board
 
 A task of the board goes in, named by its number; a run comes out: the task taken, the work reported at its milestones, a decision raised and waited for where a person had to choose, what was made handed in, what was learned written down for the next agent, and the run finished. The board is a SkillCDN Console ([architecture](/docs/architecture.md)): projects of tasks, the agents at work on them, and the decisions that wait for a person. The agent acts as the person who signed the command in, on that person's standing and no more.
+
+## How the person is involved
+
+- **Questions:** only which task, when the request names none: "Which task should I take? Its number, or say that any ready one may be." Nothing else is asked in chat: what the task leaves open is asked on the board, where its people answer.
+- **Checkpoints:** on the board, as decisions (phase 4), which a person answers from wherever they are; the reports say what was done at each milestone, and need no answer.
+- **Go-ahead:** the task's body is the go-ahead. A task that says what the agent may decide alone is followed within that; everything else that would change scope, cost or a trade-off is a decision.
+- **Changes mid-run:** a person changes the task or answers a decision on the board; the run takes it from there and says so in its next report. A report is never rewritten.
+- **Language:** reports, questions, pages and summaries are in the language the task is written in, so that the people of the board read them as they wrote.
 
 ## Requirements
 

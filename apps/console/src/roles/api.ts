@@ -282,6 +282,7 @@ export function shutdownSignal(): Promise<string> {
 export async function runApi(config: Config, logger: Logger): Promise<void> {
   const database = createDatabase({
     connectionString: config.database.url,
+    ca: config.database.ca,
     maxConnections: config.database.poolMax,
     applicationName: `${APP_NAME}-api`,
   });
@@ -335,6 +336,7 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
   // What any process changes reaches this one's subscribers through the database's own channel.
   const listener = startEventListener({
     connectionString: config.database.url,
+    ca: config.database.ca,
     logger,
     onNudge: () => feed.nudge(),
   });

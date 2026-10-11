@@ -17,6 +17,7 @@ const JANITOR_INTERVAL_MS = 15 * 60_000;
 export async function runWorker(config: Config, logger: Logger): Promise<void> {
   const database = createDatabase({
     connectionString: config.database.url,
+    ca: config.database.ca,
     maxConnections: 2,
     applicationName: `${APP_NAME}-worker`,
   });

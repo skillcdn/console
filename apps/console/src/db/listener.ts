@@ -1,5 +1,6 @@
 import { Client } from "pg";
 import type { Logger } from "../logger.js";
+import { sslOf } from "./client.js";
 import { EVENTS_CHANNEL } from "./queries/events.js";
 
 // A connection of its own that listens for the nudge every change to the board sends with its
@@ -13,6 +14,8 @@ export interface EventListener {
 
 export interface EventListenerOptions {
   readonly connectionString: string;
+  /** The authority the server's certificate is checked against, as the pool's is. */
+  readonly ca?: string | undefined;
   readonly logger: Logger;
   /** Called on every nudge, on no particular tick. It says nothing but that there is something new. */
   readonly onNudge: () => void;
@@ -39,7 +42,11 @@ export function startEventListener(options: EventListenerOptions): EventListener
     if (closed) {
       return;
     }
-    const next = new Client({ connectionString, application_name: "console-listener" });
+    const next = new Client({
+      connectionString,
+      ssl: sslOf(options.ca),
+      application_name: "console-listener",
+    });
     next.on("notification", () => {
       onNudge();
     });

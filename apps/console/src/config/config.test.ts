@@ -34,7 +34,7 @@ describe("loadConfig", () => {
         clientIpHeader: "x-forwarded-for",
         requestIdHeader: "x-request-id",
       },
-      database: { url: DATABASE_URL, poolMax: 10 },
+      database: { url: DATABASE_URL, poolMax: 10, ca: undefined },
       workspace: { name: "Console" },
       worker: { inProcess: false },
       auth: undefined,
@@ -403,5 +403,38 @@ describe("a bucket", () => {
       expect(error.problems[0]).toContain(name);
       expect(error.message).not.toContain("the-secret-of-the-example-keys");
     }
+  });
+});
+
+describe("the database's certificate authority", () => {
+  const PEM = "-----BEGIN CERTIFICATE-----\nMIIBAAAA+/==\n-----END CERTIFICATE-----\n";
+  const TWO = `${PEM}${PEM}`;
+
+  it("is read as PEM, one certificate or a bundle, and from a file", () => {
+    expect(loadConfig({ DATABASE_URL }, noFiles).database.ca).toBeUndefined();
+    expect(loadConfig({ DATABASE_URL, DATABASE_CA: PEM }, noFiles).database.ca).toBe(PEM);
+    expect(loadConfig({ DATABASE_URL, DATABASE_CA: TWO }, noFiles).database.ca).toBe(TWO);
+    expect(
+      loadConfig({ DATABASE_URL, DATABASE_CA_FILE: "/run/secrets/ca" }, (path) =>
+        path === "/run/secrets/ca" ? `${PEM}\n` : noFiles(),
+      ).database.ca,
+    ).toBe(PEM.trim());
+  });
+
+  it("refuses what is not PEM, and a URL that carries ssl parameters of its own", () => {
+    expect(problemsOf({ DATABASE_URL, DATABASE_CA: "not a certificate" }).problems).toEqual([
+      "DATABASE_CA: must be one or more certificates in PEM",
+    ]);
+    expect(
+      problemsOf({
+        DATABASE_URL: `${DATABASE_URL}?sslmode=verify-full&sslrootcert=/etc/ca.pem`,
+        DATABASE_CA: PEM,
+      }).problems,
+    ).toEqual([
+      "DATABASE_URL: sslmode, sslrootcert cannot be set together with DATABASE_CA; remove them from the URL",
+    ]);
+    expect(
+      loadConfig({ DATABASE_URL: `${DATABASE_URL}?sslmode=verify-full` }, noFiles).database.ca,
+    ).toBeUndefined();
   });
 });

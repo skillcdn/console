@@ -9,6 +9,8 @@ export type Transaction = Parameters<Parameters<Drizzle["transaction"]>[0]>[0];
 export interface DatabaseOptions {
   /** Passed in by the caller: the config module, or a test. Nothing here reads the environment. */
   readonly connectionString: string;
+  /** The authority the server's certificate is checked against, as PEM. See {@link sslOf}. */
+  readonly ca?: string | undefined;
   readonly maxConnections?: number;
   /** Shows up in `pg_stat_activity`. */
   readonly applicationName?: string;
@@ -28,9 +30,22 @@ export interface Database {
 
 const handles = new WeakMap<Database, Drizzle>();
 
+/**
+ * How a connection checks the server's certificate when the operator hands in the authority that
+ * signed it (`DATABASE_CA`): the chain against that authority, and the name against the host, which
+ * is what `sslmode=verify-full` means. Without one, nothing is said here and the URL's own
+ * parameters decide, as the driver reads them.
+ */
+export function sslOf(
+  ca: string | undefined,
+): { readonly ca: string; readonly rejectUnauthorized: true } | undefined {
+  return ca === undefined ? undefined : { ca, rejectUnauthorized: true };
+}
+
 export function createDatabase(options: DatabaseOptions): Database {
   const pool = new Pool({
     connectionString: options.connectionString,
+    ssl: sslOf(options.ca),
     max: options.maxConnections ?? 10,
     application_name: options.applicationName ?? "console",
     connectionTimeoutMillis: 5000,

@@ -7,7 +7,8 @@
 //   2. every `/api/v1/...` path a skill names is in docs/specs/rest.md, spelled as there;
 //   3. every link a skill or the manifest makes to a file of the repository resolves;
 //   4. a skill's name is its directory's, and its description is within the authoring limit;
-//   5. the manifest's document directories and exclusions exist.
+//   5. the manifest's document directories and exclusions exist;
+//   6. a reference page that quotes files of the repository quotes them as they are.
 // A changed meaning is not caught here: a change to the command or the API updates its spec
 // and re-reads the skills that name it (AGENTS.md, documentation protocol).
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
@@ -132,6 +133,35 @@ for (const file of files) {
     if (!/^---\r?\n[\s\S]*?\r?\n---\r?\n+# /.test(text)) {
       fail(file, "does not start its body with a level-one heading");
     }
+  }
+}
+
+// 6. A reference page that quotes files of the repository quotes them as they are: a heading
+//    `### \`<path>\`` followed by a fenced block holds the file's text, line for line, so that
+//    an agent that has the skill and not the repository starts from the same shape.
+for (const page of ["skills/building-a-console/references/the-default-console.md"]) {
+  if (!existsSync(path.join(root, page))) {
+    fail(page, "is missing");
+    continue;
+  }
+  const text = read(page);
+  let quoted = 0;
+  for (const match of text.matchAll(
+    /^### `([^`\n]+)`\r?\n\r?\n```[a-z]*\r?\n([\s\S]*?)\r?\n```/gm,
+  )) {
+    quoted += 1;
+    const [, quotedPath, body] = match;
+    if (!existsSync(path.join(root, quotedPath))) {
+      fail(page, `quotes ${quotedPath}, which does not exist`);
+      continue;
+    }
+    const file = read(quotedPath).replace(/\r\n/g, "\n");
+    if (file !== `${body.replace(/\r\n/g, "\n")}\n`) {
+      fail(page, `quotes ${quotedPath}, which differs: copy the file into the page again`);
+    }
+  }
+  if (quoted === 0) {
+    fail(page, "quotes no file");
   }
 }
 

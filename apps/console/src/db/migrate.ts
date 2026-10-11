@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Client } from "pg";
-import { type Database, drizzleOf } from "./client.js";
+import { type Database, drizzleOf, sslOf } from "./client.js";
 
 // Generated SQL ships next to the compiled code: <app>/migrations beside <app>/dist, and the
 // same inside the image (the package's `files`).
@@ -29,9 +29,13 @@ function latestMigration(): { tag: string; when: number } | undefined {
  * Applies pending migrations on a dedicated connection, under an advisory lock, without the
  * statement timeout that ordinary queries run with. Safe to run concurrently and repeatedly.
  */
-export async function migrateDatabase(connectionString: string): Promise<{ latest: string }> {
+export async function migrateDatabase(
+  connectionString: string,
+  options: { readonly ca?: string | undefined } = {},
+): Promise<{ latest: string }> {
   const client = new Client({
     connectionString,
+    ssl: sslOf(options.ca),
     application_name: "console-migrate",
     lock_timeout: 10_000,
   });

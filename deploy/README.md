@@ -36,6 +36,7 @@ The console is configured only through environment variables. [`.env.example`](.
 | `CLIENT_IP_HEADER`, `REQUEST_ID_HEADER` | `api` | no | no | Defaults `x-forwarded-for` and `x-request-id`. Read only from trusted proxies. |
 | `DATABASE_URL` | all | yes | **yes** | PostgreSQL connection string. |
 | `DATABASE_POOL_MAX` | `api` | no | no | Default `10` connections per process. |
+| `DATABASE_CA` | all | no | no | The authority the database's certificate is checked against, as PEM, one certificate or a bundle, where the platform's authority is its own: the chain and the host name are verified, as `sslmode=verify-full` does. For a platform that hands a container no files; also as `DATABASE_CA_FILE`. With it, `DATABASE_URL` carries no `ssl` parameters of its own. |
 | `WORKSPACE_NAME` | `api`, `worker` | no | no | What the board is called. Default `Console`. The workspace row is made at boot by whichever role comes first and renamed from here. |
 | `WORKER_IN_PROCESS` | `api` | no | no | Default `false`. `true` makes the `api` role carry the worker's work itself, for an install with one container and no `worker`. |
 | `PUBLIC_URL` | `api` | no | no | The origin people use, such as `https://console.example.com`, without a path. Required for signing in: it is where a provider sends people back, what the session cookie is bound to, and what requests that change something must come from. See [Signing in](#signing-in). |
@@ -83,12 +84,16 @@ A volume mounted over `/app/web`, or `WEB_ROOT` pointing at a mounted directory,
 Written so that a cloud deployment is the image as containers, a managed PostgreSQL and a bucket, and nothing else:
 
 - **Secrets at runtime**, as environment variables or mounted files; never as build arguments.
-- **A managed PostgreSQL** reachable from the containers, over TLS: `DATABASE_URL` takes the driver's parameters, `?sslmode=verify-full`, with `&sslrootcert=/path/to/ca.pem` where the platform's certificate authority is its own. `migrate` runs once per rollout, before the new `api` and `worker` start, and migrations follow expand, then contract, across separate releases.
+- **A managed PostgreSQL** reachable from the containers, over TLS: `DATABASE_URL` takes the driver's parameters, `?sslmode=verify-full`, with `&sslrootcert=/path/to/ca.pem` where the platform's certificate authority is its own; or, for a platform that hands a container no files, the authority's PEM as `DATABASE_CA`, which verifies the same. `migrate` runs once per rollout, before the new `api` and `worker` start, and migrations follow expand, then contract, across separate releases.
 - **A bucket with the S3 API** for the files runs hand in and people attach, and a pair of keys that may read and write objects in it ([The bucket](#the-bucket)). Without one the bytes live in PostgreSQL, which the smallest install is fine with.
 - **Outbound HTTPS** to the SkillCDN deployment (`SKILLCDN_URL`), for the organization's skills, to the identity providers people sign in through, and to the bucket's endpoint.
 - **Health probes** on `GET /healthz` (liveness) and `GET /readyz` (readiness), and a stop timeout above the shutdown grace period, so that `SIGTERM` lets requests in flight finish.
 - **Logs from stdout**, JSON, one line per event; they never contain tokens or what an agent handed in.
 - **A reverse proxy or load balancer** that terminates TLS and limits requests per client; the image does neither.
+
+## The reference deployment
+
+An organization deploys the console with an agent, through [`skills/deploying-a-console`](../skills/deploying-a-console/SKILL.md) ([ADR-0017](../docs/adr/0017-the-reference-deployment-is-the-image-on-aws-behind-cloudflare-written-as-a-skill.md)): the image as tasks on AWS (ECS with Fargate) next to a managed PostgreSQL (RDS) and a bucket (S3), the secrets in a parameter store, reached only through Cloudflare, whose tunnel's connector runs beside the `api` container so that nothing listens on the internet; built and rolled out by a private deployment repository of the organization's own on every push, with `migrate` as a one-off task before the services roll. The skill asks the organization's size and shows the monthly cost before anything is made, sized from one person to a hundred. It is the reference, not the only way: every other platform deploys from this contract, and the definitions of an organization's own deployment stay in its own repository.
 
 ## Signing in
 

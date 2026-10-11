@@ -10,6 +10,7 @@ import { type Cidr, parseCidr } from "../http/client-address.js";
 /** Variables that may arrive as `NAME_FILE`, so that container secret mounts work. */
 const SECRET_NAMES = [
   "DATABASE_URL",
+  "DATABASE_CA",
   "GITHUB_CLIENT_SECRET",
   "GOOGLE_CLIENT_SECRET",
   "AUTH_SECRET",
@@ -132,6 +133,13 @@ const environmentSchema = z.object({
 
   DATABASE_URL: z.string().regex(/^postgres(ql)?:\/\//, "must be a postgres:// connection string"),
   DATABASE_POOL_MAX: integer(10, 1, 200),
+  DATABASE_CA: z
+    .string()
+    .regex(
+      /^(?:-----BEGIN CERTIFICATE-----\r?\n[A-Za-z0-9+/=\r\n]+-----END CERTIFICATE-----\s*)+$/,
+      "must be one or more certificates in PEM",
+    )
+    .optional(),
 
   WORKSPACE_NAME: z
     .string()
@@ -281,6 +289,12 @@ export interface Config {
   readonly database: {
     readonly url: string;
     readonly poolMax: number;
+    /**
+     * The authority the server's certificate is checked against, as PEM, where the platform's is
+     * its own; the host name is checked as well, as `sslmode=verify-full` does. Unset: the URL's
+     * own parameters decide.
+     */
+    readonly ca: string | undefined;
   };
   readonly workspace: {
     /** What the board is called, on its pages. */
@@ -431,6 +445,28 @@ function authOf(
   };
 }
 
+/**
+ * The authority the database's certificate is checked against, or none. The driver reads `ssl`
+ * parameters out of the URL and lets them override what it is handed, so the two cannot both say:
+ * with the authority given here, the URL carries none of them.
+ */
+function databaseCaOf(
+  env: z.infer<typeof environmentSchema>,
+  problems: string[],
+): string | undefined {
+  if (env.DATABASE_CA === undefined) {
+    return undefined;
+  }
+  const conflicting = [...env.DATABASE_URL.matchAll(/[?&](ssl[a-z]*)=/g)].map((match) => match[1]);
+  if (conflicting.length > 0) {
+    problems.push(
+      `DATABASE_URL: ${conflicting.join(", ")} cannot be set together with DATABASE_CA; remove them from the URL`,
+    );
+    return undefined;
+  }
+  return env.DATABASE_CA;
+}
+
 /** The address of the organization's skills, as the standard reads one, or none. */
 function skillsAddressOf(value: string | undefined, problems: string[]): Address | undefined {
   if (value === undefined) {
@@ -513,6 +549,7 @@ export function loadConfig(
   const auth = authOf(env, problems);
   const address = skillsAddressOf(env.SKILLS_ADDRESS, problems);
   const bucket = bucketOf(env, problems);
+  const ca = databaseCaOf(env, problems);
   if (problems.length > 0) {
     throw new ConfigError(problems);
   }
@@ -530,7 +567,7 @@ export function loadConfig(
       clientIpHeader: env.CLIENT_IP_HEADER,
       requestIdHeader: env.REQUEST_ID_HEADER,
     },
-    database: { url: env.DATABASE_URL, poolMax: env.DATABASE_POOL_MAX },
+    database: { url: env.DATABASE_URL, poolMax: env.DATABASE_POOL_MAX, ca },
     workspace: { name: env.WORKSPACE_NAME },
     worker: { inProcess: env.WORKER_IN_PROCESS },
     auth,
