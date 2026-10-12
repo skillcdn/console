@@ -46,18 +46,31 @@ export function ProjectMark(props: {
   const icon = props.project.icon ?? null;
   const src =
     props.iconSrc ?? (icon === null ? undefined : projectIconPath(props.project.key, icon));
+  // The symbol stands in until the image is there, and comes back should the image fail; once
+  // the image is shown, the symbol goes, since an image with clear parts would show it through.
+  const [shown, setShown] = useState<string | undefined>(undefined);
+  const [failed, setFailed] = useState<string | undefined>(undefined);
+  const pictured = src !== undefined && failed !== src;
   return (
     <span
       className={cx(
         "sc-mark",
         `sc-mark-${size}`,
         `sc-category-${projectColorOf(props.project)}`,
-        src !== undefined && "sc-mark-pictured",
+        pictured && "sc-mark-pictured",
       )}
       aria-hidden="true"
     >
-      {projectSymbolOf(props.project)}
-      {src !== undefined && <img className="sc-mark-image" src={src} alt="" />}
+      {(!pictured || shown !== src) && projectSymbolOf(props.project)}
+      {pictured && (
+        <img
+          className="sc-mark-image"
+          src={src}
+          alt=""
+          onLoad={() => setShown(src)}
+          onError={() => setFailed(src)}
+        />
+      )}
     </span>
   );
 }
