@@ -37,7 +37,7 @@ import { DecisionForm } from "./components/decision-form.js";
 import { DecisionCard, DecisionList, type DecisionListProps } from "./components/decision-list.js";
 import { EventFeed, type EventFeedProps } from "./components/event-feed.js";
 import { GoalForm, GoalList, type GoalListProps, GoalView } from "./components/goals.js";
-import { PeopleList, type PeopleListProps } from "./components/people.js";
+import { ListingForm, PeopleList, type PeopleListProps } from "./components/people.js";
 import {
   MemberList,
   type MemberListProps,
@@ -478,7 +478,7 @@ function TaskPage(props: {
   return (
     <components.TaskView
       task={task}
-      people={data.people}
+      people={data.people.filter(inWorkspace)}
       tasks={data.tasks}
       decisions={data.decisions}
       runs={data.runs}
@@ -560,7 +560,7 @@ function ProjectPage(props: {
             filter={route.filter}
             categories={data.categories}
             goals={data.goals}
-            people={data.people}
+            people={data.people.filter(inWorkspace)}
             me={me}
             shown={shown.length}
             total={data.tasks.length}
@@ -594,7 +594,7 @@ function ProjectPage(props: {
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
         <section className="sc-panel sc-panel-form" aria-label={words.task.newAria}>
           <TaskForm
-            people={data.people}
+            people={data.people.filter(inWorkspace)}
             parents={data.tasks}
             categories={data.categories}
             goals={data.goals}
@@ -647,7 +647,7 @@ function ProjectPage(props: {
             filter={route.filter}
             categories={data.categories}
             goals={data.goals}
-            people={data.people}
+            people={data.people.filter(inWorkspace)}
             me={me}
             shown={shown.length}
             total={data.tasks.length}
@@ -948,7 +948,7 @@ function ProjectPage(props: {
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
         <components.MemberList
           members={data.members}
-          people={data.people}
+          people={data.people.filter(inWorkspace)}
           me={me}
           busy={busy}
           onAdd={configures ? (input) => void act(() => data.actions.addMember(input)) : undefined}
@@ -1010,6 +1010,10 @@ function ProjectPage(props: {
 }
 
 /** A file a person chose, as the client sends it: its name, its bytes and the type the browser says. */
+/** Whether a person is in: who a picker of assignees and of members offers (ADR-0022). */
+const inWorkspace = (person: { readonly status: "active" | "deactivated" }): boolean =>
+  person.status === "active";
+
 const uploadOf = (file: File): FileUpload => ({
   name: file.name,
   bytes: file,
@@ -1291,24 +1295,56 @@ function WorkspacePage(props: {
     );
   }
 
-  if (route.name === "people") {
+  if (route.name === "people" || route.name === "new-listing") {
     const me = data.me?.person ?? undefined;
     const administrator = me?.role === "admin";
+    const making = route.name === "new-listing" && administrator;
     // An owner sees the work of the people in their projects; the console refuses the rest.
     const oversees = administrator || data.projects.some((project) => project.role === "owner");
     return (
       <>
         <div className="sc-page-head">
           <h1 className="sc-page-title">{words.people.title}</h1>
+          {administrator && !making && (
+            <LinkButton href={PATHS.newListing} variant="primary">
+              {words.people.letIn}
+            </LinkButton>
+          )}
         </div>
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
+        {making && (
+          <section className="sc-panel sc-panel-form" aria-label={words.people.letInAria}>
+            <ListingForm
+              providers={data.me?.signIn ?? []}
+              busy={busy}
+              onSubmit={(input) =>
+                void act(async () => {
+                  await data.actions.createListing(input);
+                  navigation.replace(PATHS.people);
+                })
+              }
+              onCancel={() => navigation.back(PATHS.people)}
+            />
+          </section>
+        )}
         <components.PeopleList
           people={data.people}
+          listed={data.listed}
           me={me}
           busy={busy}
           onChangeRole={
             administrator
               ? (person, role) => void act(() => data.actions.updatePerson(person.id, { role }))
+              : undefined
+          }
+          onChangeStatus={
+            administrator
+              ? (person, status) => void act(() => data.actions.updatePerson(person.id, { status }))
+              : undefined
+          }
+          onUnlist={
+            administrator
+              ? (listing) => void act(() => data.actions.removeListing(listing.id))
               : undefined
           }
           workHref={oversees ? (person) => personWorkHref(person.id) : undefined}
@@ -1459,7 +1495,10 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
         {
           href: PATHS.people,
           label: words.nav.people,
-          current: route.name === "people" || route.name === "person-agents",
+          current:
+            route.name === "people" ||
+            route.name === "new-listing" ||
+            route.name === "person-agents",
         },
         ...(viaToken
           ? []

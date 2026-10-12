@@ -72,6 +72,8 @@ export type Route =
   | { readonly name: "members"; readonly project: string }
   | { readonly name: "settings"; readonly project: string }
   | { readonly name: "people" }
+  /** The form where an administrator lets someone in by login (ADR-0022). */
+  | { readonly name: "new-listing" }
   /** The agents of one person, for an administrator. */
   | { readonly name: "person-agents"; readonly id: string }
   /** Another person's plate, for whoever oversees them: a day of the week shown at the top, or today's. */
@@ -117,6 +119,8 @@ export const PATHS = {
   /** What is on the person's plate, across the projects they may see. */
   work: "/work",
   people: "/people",
+  /** The form where an administrator lets someone in by login. */
+  newListing: "/people/new",
   /** The agents of whoever is signed in, which hold their tokens: their own page. */
   agents: "/agents",
   /** The form for a token made by hand, for a script or a console of one's own. */
@@ -220,6 +224,9 @@ export function matchRoute(pathname: string, search = ""): Route {
   }
   if (path === PATHS.people) {
     return { name: "people" };
+  }
+  if (path === PATHS.newListing) {
+    return { name: "new-listing" };
   }
   if (path === PATHS.agents) {
     return { name: "agents" };

@@ -4,9 +4,12 @@ import {
   COLOR_NAMES,
   GOAL_STATES,
   LINK_SOURCES,
+  MEMBERSHIP_SOURCES,
   PERSON_ROLES,
+  PERSON_STATUSES,
   PROJECT_ROLES,
   PROJECT_VISIBILITIES,
+  PROVIDER_KEYS,
   type RestDecisionOption,
   type RestEventData,
   type RestTaskLink,
@@ -88,6 +91,11 @@ export const people = pgTable(
     avatarUrl: text(),
     /** An administrator configures the board, a member works on it: the console's own record. */
     role: text({ enum: PERSON_ROLES }).notNull().default("member"),
+    /** Whether they are in (ADR-0022): a deactivated person is kept, for what they did, and refused. */
+    status: text({ enum: PERSON_STATUSES }).notNull().default("active"),
+    /** What let them in at their last sign-in: the organization, the domain, or a listing. */
+    source: text({ enum: MEMBERSHIP_SOURCES }).notNull().default("listed"),
+    deactivatedAt: instant(),
     /** The language the person chose for the pages (ADR-0012), a tag; null for the browser's. */
     language: text(),
     lastLoginAt: instant().notNull(),
@@ -97,6 +105,44 @@ export const people = pgTable(
   (table) => [
     uniqueIndex("people_host_account_key").on(table.workspaceId, table.host, table.hostAccountId),
     check("people_role_check", sql`${table.role} in (${sql.raw(literals(PERSON_ROLES))})`),
+    check("people_status_check", sql`${table.status} in (${sql.raw(literals(PERSON_STATUSES))})`),
+    check(
+      "people_source_check",
+      sql`${table.source} in (${sql.raw(literals(MEMBERSHIP_SOURCES))})`,
+    ),
+    check(
+      "people_deactivated_check",
+      sql`(${table.status} = 'deactivated') = (${table.deactivatedAt} is not null)`,
+    ),
+  ],
+);
+
+/**
+ * A login an administrator let in (ADR-0022): whoever signs in with that account at that host
+ * becomes the person, and the row is bound to them from then on, so that a renamed account
+ * stays let in and no other account can take the login. Deactivating a listed person takes the
+ * row away with their standing; reactivating them lists them again. Rows go with their person.
+ */
+export const listings = pgTable(
+  "listings",
+  {
+    id: id(),
+    workspaceId: uuid()
+      .notNull()
+      .references(() => workspaces.id),
+    host: text().notNull(),
+    /** As the administrator spelled it; compared without regard to case. */
+    login: text().notNull(),
+    /** The person who signed in with it, once someone has. */
+    personId: uuid().references(() => people.id, { onDelete: "cascade" }),
+    /** The administrator who listed it; nobody when the console listed a person again on their reactivation. */
+    listedById: uuid().references(() => people.id),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex("listings_login_key").on(table.workspaceId, table.host, sql`lower(${table.login})`),
+    index("listings_person_idx").on(table.personId),
+    check("listings_host_check", sql`${table.host} in (${sql.raw(literals(PROVIDER_KEYS))})`),
   ],
 );
 

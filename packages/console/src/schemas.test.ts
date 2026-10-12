@@ -10,6 +10,8 @@ import {
   MAX_TOKEN_NAME_LENGTH,
 } from "./limits.js";
 import {
+  hostOfLogin,
+  isLoginAt,
   restAnswerInputSchema,
   restCategoryInputSchema,
   restDecisionInputSchema,
@@ -20,6 +22,7 @@ import {
   restEventSchema,
   restGoalInputSchema,
   restGoalSchema,
+  restListingInputSchema,
   restMemberInputSchema,
   restPersonPatchSchema,
   restPersonSchema,
@@ -43,6 +46,9 @@ const PERSON = {
   name: "Alice Example",
   avatar: "https://avatars.example/alice.png",
   role: "member" as const,
+  status: "active" as const,
+  source: "listed" as const,
+  deactivatedAt: null,
 };
 
 describe("task input", () => {
@@ -356,8 +362,42 @@ describe("people", () => {
     expect(restPersonSchema.safeParse(without).success).toBe(false);
     expect(restPersonSchema.safeParse({ ...PERSON, role: "owner" }).success).toBe(false);
     expect(restPersonPatchSchema.parse({ role: "admin" })).toEqual({ role: "admin" });
+    expect(restPersonPatchSchema.parse({ status: "deactivated" })).toEqual({
+      status: "deactivated",
+    });
     expect(restPersonPatchSchema.safeParse({ role: "root" }).success).toBe(false);
+    expect(restPersonPatchSchema.safeParse({ status: "gone" }).success).toBe(false);
     expect(restPersonPatchSchema.safeParse({}).success).toBe(false);
+    // Whether they are in, and what let them in, always travel with a person.
+    const { status: _status, ...noStanding } = PERSON;
+    expect(restPersonSchema.safeParse(noStanding).success).toBe(false);
+    expect(restPersonSchema.safeParse({ ...PERSON, source: "ldap" }).success).toBe(false);
+  });
+
+  it("take a login to let in as its host spells one, and read the host off a login", () => {
+    expect(restListingInputSchema.parse({ host: "gh", login: " Dana " })).toEqual({
+      host: "gh",
+      login: "Dana",
+    });
+    expect(restListingInputSchema.parse({ host: "google", login: "dana@acme.test" }).login).toBe(
+      "dana@acme.test",
+    );
+    for (const input of [
+      { host: "gh", login: "dana@acme.test" },
+      { host: "gh", login: "-dana" },
+      { host: "gh", login: "not a login" },
+      { host: "google", login: "dana" },
+      { host: "google", login: "dana@acme" },
+      { host: "gitlab", login: "dana" },
+      { host: "gh", login: "" },
+      { host: "google", login: `${"a".repeat(250)}@acme.test` },
+    ]) {
+      expect(restListingInputSchema.safeParse(input).success, JSON.stringify(input)).toBe(false);
+    }
+    expect(hostOfLogin("dana")).toBe("gh");
+    expect(hostOfLogin("dana@acme.test")).toBe("google");
+    expect(isLoginAt("gh", "dana-1")).toBe(true);
+    expect(isLoginAt("google", "dana-1")).toBe(false);
   });
 });
 

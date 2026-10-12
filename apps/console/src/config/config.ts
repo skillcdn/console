@@ -2,7 +2,6 @@ import { readFileSync } from "node:fs";
 import { hasForbiddenCodePoint, MAX_TOKEN_DAYS } from "@skillcdn/console/api";
 import { type Address, MAX_ADDRESS_LENGTH, parseAddress } from "@skillcdn/core";
 import * as z from "zod";
-import { domainOf } from "../auth/membership.js";
 import { type Cidr, parseCidr } from "../http/client-address.js";
 
 // The only module that reads the environment. Contract: .env.example and deploy/README.md.
@@ -107,7 +106,7 @@ const cidrList = z
     return networks;
   });
 
-/** A comma-separated list of logins at the git host, or of addresses at Google, as each spells one. */
+/** A comma-separated list of logins at the git host, or of addresses at Google, as each spells one (ADMINS). */
 const loginList = z
   .string()
   .default("")
@@ -184,7 +183,6 @@ const environmentSchema = z.object({
     .string()
     .min(MIN_SECRET_LENGTH, `must be at least ${MIN_SECRET_LENGTH} characters`)
     .optional(),
-  MEMBERS: loginList,
   ADMINS: loginList,
   SESSION_TTL_DAYS: integer(30, 1, 365),
   TOKEN_DAYS_AT_MOST: z.coerce.number().int().min(1).max(MAX_TOKEN_DAYS).optional(),
@@ -258,9 +256,10 @@ export interface AuthConfig {
     | undefined;
   /** What travels through a browser between two requests is sealed with. */
   readonly secret: string;
-  /** The logins the operator lets in. Empty: nobody, unless a domain is. */
-  readonly members: readonly string[];
-  /** The logins among them that configure the board, made administrators when they sign in. */
+  /**
+   * The logins the operator names administrators (ADR-0022): let in when they sign in, and made
+   * administrators then, so that the first one can get in; who else is in is the People page's.
+   */
   readonly admins: readonly string[];
   /** The Workspace domains whose accounts are members, as their provider vouches for them. */
   readonly domains: readonly string[];
@@ -417,9 +416,6 @@ function authOf(
     GOOGLE_WORKSPACE_DOMAIN: env.GOOGLE_WORKSPACE_DOMAIN,
   };
   if (Object.values(given).every((value) => value === undefined)) {
-    if (env.MEMBERS.length > 0) {
-      problems.push("MEMBERS: lists who may sign in, and is read only with signing in configured");
-    }
     if (env.ADMINS.length > 0) {
       problems.push("ADMINS: names administrators, and is read only with signing in configured");
     }
@@ -462,20 +458,11 @@ function authOf(
     return undefined;
   }
   const domains = env.GOOGLE_WORKSPACE_DOMAIN === undefined ? [] : [env.GOOGLE_WORKSPACE_DOMAIN];
-  // An administrator who cannot sign in is a mistake, not a setting.
-  const members = new Set(env.MEMBERS.map((login) => login.toLowerCase()));
-  const isMember = (login: string): boolean =>
-    members.has(login.toLowerCase()) || domains.includes(domainOf(login) ?? "");
-  if (env.ADMINS.some((login) => !isMember(login))) {
-    problems.push("ADMINS: every administrator must be a member, by login or by domain");
-    return undefined;
-  }
   return {
     publicUrl: env.PUBLIC_URL,
     github,
     google,
     secret: env.AUTH_SECRET,
-    members: env.MEMBERS,
     admins: env.ADMINS,
     domains,
     sessionTtlMs: env.SESSION_TTL_DAYS * 86_400_000,

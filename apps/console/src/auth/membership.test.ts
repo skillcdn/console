@@ -1,49 +1,62 @@
 import { describe, expect, it } from "vitest";
+import type { PersonRecord } from "../db/queries/people.js";
 import { domainOf, Membership } from "./membership.js";
 
+const person = (fields: Partial<PersonRecord>): PersonRecord => ({
+  id: "0199c4d8-0000-7000-8000-000000000001",
+  workspaceId: "0199c4d8-0000-7000-8000-000000000000",
+  host: "gh",
+  hostAccountId: "1001",
+  login: "alice",
+  name: undefined,
+  avatarUrl: undefined,
+  role: "member",
+  status: "active",
+  source: "listed",
+  deactivatedAt: undefined,
+  ...fields,
+});
+
 describe("Membership", () => {
-  it("lets the listed logins in, whatever their case, and nobody else", () => {
-    const members = new Membership({ logins: ["Alice", " bob ", "", "alice"] });
-    expect(members.empty).toBe(false);
-    expect(members.allows({ host: "gh", login: "alice" })).toBe(true);
-    expect(members.allows({ host: "gh", login: "ALICE" })).toBe(true);
-    expect(members.allows({ host: "gh", login: "bob" })).toBe(true);
-    expect(members.allows({ host: "gh", login: "carol" })).toBe(false);
-    expect(members.allows({ host: "gh", login: "" })).toBe(false);
-    expect(members.admits("gh", { login: "Bob", domain: undefined })).toBe(true);
-    expect(members.admits("gh", { login: "carol", domain: undefined })).toBe(false);
-  });
-
-  it("lets nobody in when nobody is listed", () => {
-    const nobody = new Membership({ logins: [] });
-    expect(nobody.empty).toBe(true);
-    expect(nobody.allows({ host: "gh", login: "alice" })).toBe(false);
-    expect(nobody.admits("google", { login: "a@acme.test", domain: "acme.test" })).toBe(false);
-  });
-
-  it("lets the accounts of a named domain in when their provider vouches for it", () => {
-    const members = new Membership({ logins: ["dave@elsewhere.test"], domains: ["Acme.test"] });
-    expect(members.empty).toBe(false);
-    // At sign-in the provider says which domain the account belongs to.
-    expect(members.admits("google", { login: "alice@acme.test", domain: "acme.test" })).toBe(true);
-    expect(members.admits("google", { login: "alice@acme.test", domain: undefined })).toBe(false);
-    expect(members.admits("google", { login: "x@other.test", domain: "other.test" })).toBe(false);
-    expect(members.admits("google", { login: "dave@elsewhere.test", domain: undefined })).toBe(
-      true,
+  it("keeps a person in while they are active, and a deactivated one out at once", () => {
+    const members = new Membership({ admins: ["alice"] });
+    expect(members.allows(person({}))).toBe(true);
+    expect(members.allows(person({ status: "deactivated", deactivatedAt: new Date() }))).toBe(
+      false,
     );
-    // A git host vouches for no domain.
-    expect(members.admits("gh", { login: "alice@acme.test", domain: "acme.test" })).toBe(false);
-    // On every request after, the address the person signs in as says which domain.
-    expect(members.allows({ host: "google", login: "Alice@ACME.test" })).toBe(true);
-    expect(members.allows({ host: "google", login: "alice@other.test" })).toBe(false);
-    expect(members.allows({ host: "gh", login: "alice@acme.test" })).toBe(false);
-    expect(members.allows({ host: "google", login: "dave@elsewhere.test" })).toBe(true);
   });
 
-  it("names administrators among the logins", () => {
-    const members = new Membership({ logins: ["alice", "bob"], admins: ["ALICE"] });
+  it("keeps a domain's people in while the domain is named, whatever the case of the address", () => {
+    const members = new Membership({ domains: ["Acme.test"] });
+    expect(members.empty).toBe(false);
+    expect(
+      members.allows(person({ host: "google", login: "Alice@ACME.test", source: "domain" })),
+    ).toBe(true);
+    expect(
+      members.allows(person({ host: "google", login: "alice@other.test", source: "domain" })),
+    ).toBe(false);
+    // A git host vouches for no domain.
+    expect(members.allows(person({ host: "gh", login: "alice@acme.test", source: "domain" }))).toBe(
+      false,
+    );
+    // The domain taken out of the configuration takes its people with it; a listing does not go.
+    const without = new Membership({});
+    expect(
+      without.allows(person({ host: "google", login: "alice@acme.test", source: "domain" })),
+    ).toBe(false);
+    expect(
+      without.allows(person({ host: "google", login: "alice@acme.test", source: "listed" })),
+    ).toBe(true);
+  });
+
+  it("names administrators, whatever their case, and knows when the configuration lets nobody in", () => {
+    const members = new Membership({ admins: [" ALICE ", "bob"] });
     expect(members.administers("alice")).toBe(true);
-    expect(members.administers("bob")).toBe(false);
+    expect(members.administers("Bob")).toBe(true);
+    expect(members.administers("carol")).toBe(false);
+    expect(members.empty).toBe(false);
+    expect(new Membership({}).empty).toBe(true);
+    expect(new Membership({ admins: [""], domains: [] }).empty).toBe(true);
   });
 
   it("reads the domain off an address, and nothing off a login", () => {

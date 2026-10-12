@@ -26,6 +26,7 @@ import {
   restEventsSchema,
   restGoalSchema,
   restGoalsSchema,
+  restListingSchema,
   restMemberSchema,
   restMembersSchema,
   restMeSchema,
@@ -1056,9 +1057,14 @@ describe("documents", () => {
 });
 
 describe("people and the feeds", () => {
-  it("list everyone who signed in, by login", async () => {
+  it("list everyone who signed in, by login, each with their standing", async () => {
     const people = restPeopleSchema.parse(await (await get(alice, REST_ROUTES.people)).json());
     expect(people.items.map((person) => person.login)).toEqual(["Alice", "bob", "carol"]);
+    expect(people.items[0]).toMatchObject({
+      status: "active",
+      source: "listed",
+      deactivatedAt: null,
+    });
   });
 
   it("page a project's feed from a number on, keep the workspace's own apart, and refuse a cursor that is not one", async () => {
@@ -1246,16 +1252,31 @@ describe("tokens", () => {
       ).status,
     ).toBe(200);
 
-    // Membership is decided on every request, for a token as for a session.
-    const { secret: whileListed } = await make(alice, { name: "while listed" });
-    const bobOnly = createHarness(testDatabase, {
+    // Membership is decided on every request, for a token as for a session (ADR-0022):
+    // deactivated, Bob's token is nothing; back in, it is Bob again.
+    const { secret: whileIn } = await make(bob, { name: "while in" });
+    const admins = createHarness(testDatabase, {
       providers: [createFixtureProvider()],
-      members: ["bob"],
+      admins: ["carol"],
     });
-    const out = await bobOnly.request(`${IN}/tasks`, {
-      headers: { authorization: `Bearer ${whileListed}` },
+    const carol = await admins.signIn("carol");
+    const bobId = restMeSchema.parse(await (await get(bob, REST_ROUTES.me)).json()).person?.id;
+    const standing = (status: string) =>
+      admins.request(`${REST_ROUTES.people}/${bobId}`, {
+        method: "PATCH",
+        headers: { cookie: carol, origin: SIGN_IN_URL, "content-type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+    expect((await standing("deactivated")).status).toBe(200);
+    const out = await h.request(`${IN}/tasks`, {
+      headers: { authorization: `Bearer ${whileIn}` },
     });
     expect(out.status).toBe(401);
+    expect((await standing("active")).status).toBe(200);
+    const back = await h.request(`${IN}/tasks`, {
+      headers: { authorization: `Bearer ${whileIn}` },
+    });
+    expect(back.status).toBe(200);
   });
 
   it("cannot be made, listed or taken away with a token, nor from elsewhere", async () => {
@@ -2098,5 +2119,158 @@ describe("categories", () => {
       ["category.removed", { key: "research", name: "Research and insight" }],
     ]);
     await named.close();
+  });
+});
+
+describe("who is in", () => {
+  const admins = () =>
+    createHarness(testDatabase, { providers: [createFixtureProvider()], admins: ["carol"] });
+  const change = (
+    h2: Harness,
+    cookie: string,
+    path: string,
+    method: "POST" | "PATCH" | "DELETE",
+    body?: unknown,
+  ) =>
+    h2.request(path, {
+      method,
+      headers: {
+        cookie,
+        origin: SIGN_IN_URL,
+        ...(body === undefined ? {} : { "content-type": "application/json" }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+  const idOf = async (cookie: string, login: string) =>
+    restPeopleSchema
+      .parse(await (await get(cookie, REST_ROUTES.people)).json())
+      .items.find((person) => person.login.toLowerCase() === login)?.id ?? "";
+
+  it("lets a login in by listing it, for an administrator, and takes a listing away", async () => {
+    const named = admins();
+    const carol = await named.signIn("carol");
+    const list = (cookie: string, body: unknown) =>
+      change(named, cookie, REST_ROUTES.listings, "POST", body);
+    const byMember = await list(bob, { host: "gh", login: "dana" });
+    expect(byMember.status).toBe(403);
+    expect(await errorOf(byMember)).toBe("auth.forbidden");
+    const elsewhere = await named.request(REST_ROUTES.listings, {
+      method: "POST",
+      headers: { cookie: carol, "content-type": "application/json" },
+      body: JSON.stringify({ host: "gh", login: "dana" }),
+    });
+    expect(elsewhere.status).toBe(403);
+    // A login as the host spells one, at a provider this deployment has.
+    const spelled = await list(carol, { host: "gh", login: "not a login" });
+    expect(spelled.status).toBe(400);
+    expect(await errorOf(spelled)).toBe("request.invalid");
+    const unknownHost = await list(carol, { host: "google", login: "dana@acme.test" });
+    expect(unknownHost.status).toBe(400);
+    expect(await errorOf(unknownHost)).toBe("listing.unknown_host");
+    const made = await list(carol, { host: "gh", login: " Dana " });
+    expect(made.status).toBe(201);
+    const listing = restListingSchema.parse(await made.json());
+    expect(listing).toMatchObject({ host: "gh", login: "Dana" });
+    // Listed once, whatever the case; a person in needs no listing.
+    const again = await list(carol, { host: "gh", login: "dana" });
+    expect(again.status).toBe(409);
+    expect(await errorOf(again)).toBe("listing.exists");
+    const member = await list(carol, { host: "gh", login: "ALICE" });
+    expect(member.status).toBe(409);
+    expect(await errorOf(member)).toBe("listing.exists");
+    const people = restPeopleSchema.parse(await (await get(bob, REST_ROUTES.people)).json());
+    expect(people.listed.map((item) => item.login)).toContain("Dana");
+    expect(people.items.map((person) => person.login)).not.toContain("Dana");
+    const latest = restEventsSchema
+      .parse(await (await get(bob, `${REST_ROUTES.events}?after=0`)).json())
+      .items.at(-1);
+    expect(latest).toMatchObject({ kind: "person.listed", data: { login: "Dana" } });
+    expect(latest?.actor?.login).toBe("carol");
+
+    const removal = (cookie: string) =>
+      change(named, cookie, `${REST_ROUTES.listings}/${listing.id}`, "DELETE");
+    expect((await removal(bob)).status).toBe(403);
+    expect((await removal(carol)).status).toBe(204);
+    const gone = await removal(carol);
+    expect(gone.status).toBe(404);
+    expect(await errorOf(gone)).toBe("listing.not_found");
+    const after = restPeopleSchema.parse(await (await get(bob, REST_ROUTES.people)).json());
+    expect(after.listed.map((item) => item.login)).not.toContain("Dana");
+    expect(
+      restEventsSchema
+        .parse(await (await get(bob, `${REST_ROUTES.events}?after=0`)).json())
+        .items.at(-1),
+    ).toMatchObject({ kind: "person.unlisted", data: { login: "Dana" } });
+  });
+
+  it("deactivates a person, who is out at once and everywhere, and takes them back in", async () => {
+    const named = admins();
+    const carol = await named.signIn("carol");
+    const bobId = await idOf(carol, "bob");
+    const standing = (cookie: string, id: string, status: string) =>
+      change(named, cookie, `${REST_ROUTES.people}/${id}`, "PATCH", { status });
+    const byMember = await standing(bob, bobId, "deactivated");
+    expect(byMember.status).toBe(403);
+    const out = await standing(carol, bobId, "deactivated");
+    expect(out.status).toBe(200);
+    const deactivated = restPersonSchema.parse(await out.json());
+    expect(deactivated).toMatchObject({ login: "bob", status: "deactivated" });
+    expect(deactivated.deactivatedAt).not.toBeNull();
+    // Bob's session is nothing now, and nothing may be assigned to him or list him.
+    expect((await get(bob, REST_ROUTES.people)).status).toBe(401);
+    const assigned = await send(alice, "POST", `${IN}/tasks`, {
+      title: "For nobody",
+      assigneeId: bobId,
+    });
+    expect(assigned.status).toBe(400);
+    expect(await errorOf(assigned)).toBe("task.invalid_assignee");
+    const project = await h.project(alice, {
+      key: "closed",
+      name: "Closed",
+      visibility: "private",
+    });
+    const listed = await send(alice, "POST", `${projectPath(project.key)}/members`, {
+      personId: bobId,
+    });
+    expect(listed.status).toBe(400);
+    expect(await errorOf(listed)).toBe("member.invalid_person");
+    // Still everyone's to see, as deactivated, those in first.
+    const people = restPeopleSchema.parse(await (await get(alice, REST_ROUTES.people)).json());
+    expect(people.items.map((person) => [person.login, person.status])).toEqual([
+      ["Alice", "active"],
+      ["carol", "active"],
+      ["bob", "deactivated"],
+    ]);
+    // What is already so writes nothing; back in, the listing is his again.
+    const before = restEventsSchema.parse(
+      await (await get(alice, `${REST_ROUTES.events}?after=0`)).json(),
+    ).items.length;
+    expect((await standing(carol, bobId, "deactivated")).status).toBe(200);
+    const back = await standing(carol, bobId, "active");
+    expect(back.status).toBe(200);
+    expect(restPersonSchema.parse(await back.json())).toMatchObject({
+      status: "active",
+      deactivatedAt: null,
+    });
+    const events = restEventsSchema.parse(
+      await (await get(alice, `${REST_ROUTES.events}?after=0`)).json(),
+    ).items;
+    expect(events.length).toBe(before + 1);
+    expect(events.at(-1)).toMatchObject({ kind: "person.reactivated", data: { login: "bob" } });
+    expect((await get(bob, REST_ROUTES.people)).status).toBe(200);
+    // The board keeps at least one administrator in.
+    const carolId = await idOf(carol, "carol");
+    const aliceId = await idOf(carol, "alice");
+    expect(
+      (await change(named, carol, `${REST_ROUTES.people}/${aliceId}`, "PATCH", { role: "member" }))
+        .status,
+    ).toBe(200);
+    const last = await standing(carol, carolId, "deactivated");
+    expect(last.status).toBe(409);
+    expect(await errorOf(last)).toBe("person.last_admin");
+    const nothing = await change(named, carol, `${REST_ROUTES.people}/${bobId}`, "PATCH", {});
+    expect(nothing.status).toBe(400);
+    const nobody = await standing(carol, "0199c4d8-0000-7000-8000-000000000099", "deactivated");
+    expect(nobody.status).toBe(404);
   });
 });

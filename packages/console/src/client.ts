@@ -32,6 +32,8 @@ import {
   type RestGoalInput,
   type RestGoalPatch,
   type RestGoals,
+  type RestListing,
+  type RestListingInput,
   type RestMe,
   type RestMember,
   type RestMemberInput,
@@ -75,6 +77,7 @@ import {
   restEventsSchema,
   restGoalSchema,
   restGoalsSchema,
+  restListingSchema,
   restMemberSchema,
   restMembersSchema,
   restMeSchema,
@@ -277,8 +280,12 @@ export interface ConsoleClient {
   /** Keeps the person's choice of language, or none; for a person signed in. */
   updateMe(patch: RestMePatch): Promise<RestMe>;
   people(signal?: AbortSignal): Promise<RestPeople>;
-  /** Changes what a person is; for an administrator. */
+  /** Changes what a person is, or whether they are in; for an administrator. */
   updatePerson(id: string, patch: RestPersonPatch): Promise<RestPerson>;
+  /** Lets a login in (ADR-0022): whoever signs in with that account becomes a person; for an administrator. */
+  createListing(input: RestListingInput): Promise<RestListing>;
+  /** Takes a listing away before anyone signed in with it; for an administrator. */
+  removeListing(id: string): Promise<void>;
   /** The projects the asker may see, with what they are in each. */
   projects(signal?: AbortSignal): Promise<RestProjects>;
   /** Makes a project, whose owner the asker becomes. */
@@ -581,6 +588,10 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
       request("GET", `${base}${REST_ROUTES.people}`, undefined, restPeopleSchema, signal),
     updatePerson: (id, patch) =>
       request("PATCH", `${base}${restPath("people", id)}`, patch, restPersonSchema),
+    createListing: (input) =>
+      request("POST", `${base}${REST_ROUTES.listings}`, input, restListingSchema),
+    removeListing: (id) =>
+      request("DELETE", `${base}${restPath("listings", id)}`, undefined, undefined),
     projects: (signal) =>
       request("GET", `${base}${REST_ROUTES.projects}`, undefined, restProjectsSchema, signal),
     createProject: (input) =>

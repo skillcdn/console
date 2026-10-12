@@ -25,12 +25,12 @@ git clone https://github.com/skillcdn/console.git && cd console
 pnpm install                                          # pnpm 12+; the Node.js runtime is pinned and fetched by pnpm
 docker compose -f deploy/compose.dev.yaml up -d       # PostgreSQL 18 on 127.0.0.1:5433
 pnpm build
-cp .env.example .env                                  # then set PUBLIC_URL, a provider's client id and secret, AUTH_SECRET, MEMBERS, ADMINS
+cp .env.example .env                                  # then set PUBLIC_URL, a provider's client id and secret, AUTH_SECRET, and ADMINS (your login)
 pnpm --filter @skillcdn/console-app run start migrate
 pnpm --filter @skillcdn/console-app run start api     # http://127.0.0.1:11199
 ```
 
-People sign in through GitHub, Google Workspace, or both ([deploy/README.md](deploy/README.md#signing-in)); until that is configured the console says so and nobody is let in.
+People sign in through GitHub, Google Workspace, or both ([deploy/README.md](deploy/README.md#signing-in)); until that is configured the console says so and nobody is let in. The first administrator is named in `ADMINS` and lets everyone else in on the People page, unless a Google Workspace domain lets them in ([ADR-0022](docs/adr/0022-who-is-in-is-the-consoles-own-record-and-an-administrator-keeps-it.md)).
 
 **On a cloud.** Tell an agent connected to `skillcdn.ai/gh/skillcdn/console` to deploy the console for your organization. The skill [`deploying-a-console`](skills/deploying-a-console/SKILL.md) asks how many people, which web address and how people sign in, shows the monthly cost of the size that fits, and puts the console on AWS behind Cloudflare, with a private repository of yours that redeploys on every push ([ADR-0017](docs/adr/0017-the-reference-deployment-is-the-image-on-aws-behind-cloudflare-written-as-a-skill.md)). Any other platform deploys the same image from [deploy/README.md](deploy/README.md).
 

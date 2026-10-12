@@ -6,6 +6,7 @@ import type {
   RestDocumentSummary,
   RestEvent,
   RestGoal,
+  RestListing,
   RestMember,
   RestPerson,
   RestProject,
@@ -26,7 +27,7 @@ import type {
 } from "../db/queries/documents.js";
 import type { EventRecord } from "../db/queries/events.js";
 import type { GoalRecord } from "../db/queries/goals.js";
-import type { PersonRecord } from "../db/queries/people.js";
+import type { ListingRecord, PersonRecord } from "../db/queries/people.js";
 import type { MemberRecord, ProjectView } from "../db/queries/projects.js";
 import type { RunRecord } from "../db/queries/runs.js";
 import type { TaskRecord } from "../db/queries/tasks.js";
@@ -43,6 +44,19 @@ export function restPerson(person: PersonRecord): RestPerson {
     name: person.name ?? null,
     avatar: person.avatarUrl ?? null,
     role: person.role,
+    status: person.status,
+    source: person.source,
+    deactivatedAt: person.deactivatedAt?.toISOString() ?? null,
+  };
+}
+
+/** A login let in that nobody has signed in with yet (ADR-0022). */
+export function restListing(listing: ListingRecord): RestListing {
+  return {
+    id: listing.id,
+    host: listing.host,
+    login: listing.login,
+    createdAt: listing.createdAt.toISOString(),
   };
 }
 

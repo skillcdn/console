@@ -159,15 +159,19 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   people: {
     usage: "people",
     about:
-      "Everyone of the workspace, by login, with their name where the host gives one and what they are in it: admin, who configures the workspace, or member, who works in the projects they are in. The logins are what --assignee, member and person role take.",
+      "Everyone of the workspace, by login, with their name where the host gives one and what they are in it: admin, who configures the workspace, or member, who works in the projects they are in; a person taken out is marked deactivated. Then the logins an administrator let in that nobody has signed in with yet. The logins are what --assignee, member and person take.",
   },
   person: {
-    usage: "person role <login> <admin|member>",
+    usage:
+      "person role <login> <admin|member>  |  person add <login> [--host gh|google]  |  person remove <login>  |  person deactivate <login>  |  person reactivate <login>",
     about:
-      "Says what a person is in the workspace, for an administrator: the person themselves on the People page, or their agent here, named on it. The board keeps at least one administrator.",
+      "For an administrator: the person themselves on the People page, or their agent here, named on it. role says what a person is in the workspace; the board keeps at least one administrator in. add lets a login in: whoever signs in with that account at that host is a person from then on; the host is read off the login (an address is Google's, anything else GitHub's) unless --host says. remove takes a login away that nobody has signed in with yet. deactivate takes a person out: refused on every request at once, their agents with them, kept with everything they did, and listed nowhere; reactivate takes them back in. A person the organization let in comes and goes with it, and is neither.",
     refusals: [
-      "auth.forbidden: only an administrator says what a person is",
-      "person.last_admin: the board keeps at least one administrator; make another one first",
+      "auth.forbidden: only an administrator says who is in and what they are",
+      "person.last_admin: the board keeps at least one administrator in; make another one first",
+      "person.of_organization: the organization says whether that person is in",
+      "listing.exists: the login is let in already, or is a person's who is in",
+      "listing.unknown_host: nobody signs in through that provider here",
     ],
   },
   project: {

@@ -22,7 +22,8 @@ The API is the board as its members see it: the people, the projects, and in eac
 | 400 | `project.invalid_address` | The skills address is not one, as the standard spells them. |
 | 400 | `project.invalid_icon` | The image for the mark is not a PNG, a JPEG, a GIF or a WebP, by its first bytes. |
 | 404 | `project.no_icon` | The project has no image for its mark. |
-| 400 | `member.invalid_person` | The person to list is not one of the workspace. |
+| 400 | `member.invalid_person` | The person to list is not one of the workspace, or is deactivated. |
+| 400 | `listing.unknown_host` | The login to let in names a provider nobody signs in through here. |
 | 400 | `task.invalid_assignee` | The assignee is not a person who may work in the project. |
 | 400 | `task.invalid_parent` | The parent is not a task of the project, is the task itself, or would make a loop. |
 | 400 | `task.invalid_category` | No category of the workspace has that key. |
@@ -42,6 +43,7 @@ The API is the board as its members see it: the people, the projects, and in eac
 | 404 | `project.not_found` | No project has that key, or it is not the asker's to see: the two are one answer. The key is checked before anything is asked. |
 | 404 | `task.not_found`, `decision.not_found`, `goal.not_found`, `token.not_found`, `person.not_found`, `run.not_found`, `run.task_not_found`, `member.not_found` | No such id in the project (or in the workspace, for a token, a person); for a token, none of the asker's. An id that is not a UUID is not found either, except a task's number. |
 | 404 | `category.not_found` | No category of the workspace has that key; a key that is not one is not found either. |
+| 404 | `listing.not_found` | No login let in and not signed in with yet has that id; one somebody signed in with is the person's, and goes with their deactivation. |
 | 404 | `file.not_found` | No file handed in, or attached to the page, has that id in the project; a link handed in is not a file. |
 | 404 | `document.not_found`, `document.version_not_found` | No page has that path in the project, or the page has no such version. A path that is not one is not found either. |
 | 404 | `connect.not_found` | No agent asks to connect under this code or secret: it was never asked, it expired, the person said no, or the token was handed over already. |
@@ -56,7 +58,9 @@ The API is the board as its members see it: the people, the projects, and in eac
 | 409 | `token.too_many` | The person holds as many live tokens as one may (`MAX_TOKENS_PER_PERSON`). |
 | 409 | `connect.approved` | The connection was approved already; the command claims its token. |
 | 429 | `connect.too_many` | As many agents ask to connect as the console holds at once; try again in a few minutes. |
-| 409 | `person.last_admin` | The change would leave the board without an administrator. |
+| 409 | `person.last_admin` | The change would leave the board without an administrator in. |
+| 409 | `person.of_organization` | The organization let the person in, and says whether they are in; an administrator lists their login to keep one who left ([ADR-0022](../adr/0022-who-is-in-is-the-consoles-own-record-and-an-administrator-keeps-it.md)). |
+| 409 | `listing.exists` | The login is let in already, or is one an active person signs in as. |
 | 409 | `run.over`, `run.task_closed` | The run has ended already; the task is done or dropped. A run open on a task is no refusal: a new run takes it over ([ADR-0020](../adr/0020-the-console-does-not-claim-an-agent-is-at-work-a-run-says-when-it-was-last-heard-from-and-a-new-run-takes-over.md)). |
 | 413 | `request.too_large` | The body is over the limit; for a file handed in or attached, the file is over `MAX_FILE_BYTES`. |
 | 503 | `file.store_unavailable` | The bytes of files are kept in a bucket, and it did not answer or refused the console; `retry-after` says when to try again. Nothing was written on the run or the page. |
@@ -69,11 +73,15 @@ The API is the board as its members see it: the people, the projects, and in eac
 
 ### `GET /api/v1/people`
 
-`{ "items": [person, ...] }`: everyone who has signed in and is still listed, by login. What a picker of assignees and of members is made of. A person carries their `role` in the workspace: `admin`, who configures it, or `member`, who works in the projects they are in. A token reads it as its person does: what the command's `--assignee`, `member` and `person role` take a login from.
+`{ "items": [person, ...], "listed": [listing, ...] }`: everyone who has signed in, those in first and by login, and the logins an administrator let in that nobody has signed in with yet ([ADR-0022](../adr/0022-who-is-in-is-the-consoles-own-record-and-an-administrator-keeps-it.md)). A person carries their `role` in the workspace (`admin`, who configures it, or `member`, who works in the projects they are in), their `status` (`active`, or `deactivated`: kept with everything they did, refused on every request, and offered to no picker), their `source` (what let them in at their last sign-in: `organization`, the git host's organization the deployment names; `domain`, the Workspace domain it names; or `listed`, an administrator's listing) and `deactivatedAt` (or `null`). A listing carries its `id`, the `host` (`gh`, `google`), the `login` as the administrator spelled it, and `createdAt`. What a picker of assignees and of members is made of, the active people. A token reads it as its person does: what the command's `--assignee`, `member` and `person` take a login from.
 
 ### `PATCH /api/v1/people/<id>`
 
-Takes `role` and answers the person. For an administrator, signed in or through their agent's token ([ADR-0021](../adr/0021-a-token-configures-as-its-person-does.md)). The board keeps at least one administrator (`person.last_admin`). A change writes a `person.role_changed` event with `login` and `role`; a change to what is already so writes nothing.
+Takes `role`, `status`, or both, and answers the person. For an administrator, signed in or through their agent's token ([ADR-0021](../adr/0021-a-token-configures-as-its-person-does.md)). The board keeps at least one administrator in (`person.last_admin`). A change of role writes `person.role_changed` with `login` and `role`. `status: "deactivated"` takes the person out: refused on every request from the next one, their agents' tokens with them, listed nowhere and offered to no picker, kept with everything they did; the listing they came in on goes with it, so that signing in again admits nobody. `status: "active"` takes them back in, and lists them again where a listing let them in. Each writes `person.deactivated` or `person.reactivated` with `login`; what is already so writes nothing. A person the organization let in is neither (`person.of_organization`): the organization says, on the schedule the worker reads it on.
+
+### `POST /api/v1/listings` and `DELETE /api/v1/listings/<id>`
+
+Who may sign in, by login ([ADR-0022](../adr/0022-who-is-in-is-the-consoles-own-record-and-an-administrator-keeps-it.md)): for an administrator, signed in or through their agent's token. `POST` takes `host` (one the deployment signs people in through; `listing.unknown_host` otherwise) and `login` (a login at the git host, or an address at Google, as the host spells one; trimmed, compared without regard to case), answers `201` with the listing, and writes `person.listed` with `login`. Whoever signs in with that account at that host is a person from then on, and the listing is theirs: bound to the account, so that a rename changes nothing and no other account can take the login. A login listed already, or one an active person signs in as, is `listing.exists`; a deactivated person's login may be listed, and they are back in, as listed, when they next sign in. `DELETE` takes a listing away that nobody has signed in with yet, answers `204` and writes `person.unlisted`; one somebody signed in with is `listing.not_found`, since it goes with the person's deactivation.
 
 ### `GET /api/v1/projects`
 
@@ -85,7 +93,7 @@ Takes `key` and `name`, and optionally `description`, `visibility` (default `pri
 
 ### `GET /api/v1/events?after=&limit=`
 
-The workspace's own events, the ones about no project: who joined (`person.joined`), who was made what (`person.role_changed`), and what became of the categories (`category.created`, `category.updated`, `category.removed`, each with the `key` and the `name`). The same shape and parameters as a project's feed below, without the filters.
+The workspace's own events, the ones about no project: who joined (`person.joined`), who was made what (`person.role_changed`), who was let in, taken off the list, taken out and taken back in (`person.listed`, `person.unlisted`, `person.deactivated`, `person.reactivated`, each with the `login`), and what became of the categories (`category.created`, `category.updated`, `category.removed`, each with the `key` and the `name`). The same shape and parameters as a project's feed below, without the filters.
 
 ### `PATCH /api/v1/me`
 

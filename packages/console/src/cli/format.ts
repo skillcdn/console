@@ -6,6 +6,7 @@ import type {
   RestDocumentSummary,
   RestDocuments,
   RestGoal,
+  RestListing,
   RestMember,
   RestPerson,
   RestPersonWork,
@@ -58,11 +59,20 @@ export function formatProject(project: RestProject): string {
   return lines.join("\n");
 }
 
-/** One person: their login, their name where the host gives one, and what they are in the workspace. */
+/** One person: their login, their name where the host gives one, what they are in the workspace, and that they are out when they are. */
 export function formatPersonLine(person: RestPerson): string {
+  const standing = person.status === "active" ? person.role : `${person.role}, deactivated`;
   return person.name === null
-    ? `${person.login}  (${person.role})`
-    : `${person.login}  ${person.name}  (${person.role})`;
+    ? `${person.login}  (${standing})`
+    : `${person.login}  ${person.name}  (${standing})`;
+}
+
+/** The provider a listing names, as people call it. */
+const HOST_NAMES = { gh: "GitHub", google: "Google" } as const;
+
+/** One login let in that nobody has signed in with yet (ADR-0022). */
+export function formatListingLine(listing: RestListing): string {
+  return `${listing.login}  (let in at ${HOST_NAMES[listing.host]}, not signed in yet)`;
 }
 
 /** One member of a project: their login, what they are in it, and since when. */

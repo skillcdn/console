@@ -196,7 +196,8 @@ export class Login {
   /**
    * The code becomes a credential, the credential says who the person is, and then it is
    * dropped: membership is decided here and not at the provider, so nothing of the provider's
-   * is kept. Someone the operator did not let in is `refused` and leaves nothing behind.
+   * is kept. Someone nothing lets in, or someone deactivated, is `refused` and leaves nothing
+   * behind (ADR-0022).
    */
   async #signIn(code: string, verifier: string): Promise<PersonRecord | "refused"> {
     const { database, provider, membership, clock, logger } = this.#options;
@@ -206,15 +207,17 @@ export class Login {
       codeVerifier: verifier,
     });
     const account = await provider.getAccount(issued.accessToken);
-    if (!membership.admits(provider.key, account)) {
+    const workspaceId = await this.#options.workspaceId();
+    const admission = await membership.admit(database, workspaceId, provider.key, account);
+    if (admission === undefined) {
       logger.info(
         { login: account.login, provider: provider.key },
         "a sign-in was refused: not a member",
       );
       return "refused";
     }
-    const { person, joined } = await savePerson(database, {
-      workspaceId: await this.#options.workspaceId(),
+    const saved = await savePerson(database, {
+      workspaceId,
       host: provider.key,
       account: {
         hostAccountId: account.accountId,
@@ -222,11 +225,24 @@ export class Login {
         name: account.name,
         avatarUrl: account.avatarUrl,
       },
-      // The operator's list makes administrators; what a person is otherwise is the board's record.
+      // The operator's naming makes administrators; what a person is otherwise is the board's record.
       role: membership.administers(account.login) ? "admin" : undefined,
+      source: admission.source,
+      listing: admission.listing,
       now: clock.now(),
     });
-    logger.info({ person: person.id, joined, provider: provider.key }, "a person signed in");
+    if (saved === "deactivated") {
+      logger.info(
+        { login: account.login, provider: provider.key },
+        "a sign-in was refused: deactivated",
+      );
+      return "refused";
+    }
+    const { person, joined } = saved;
+    logger.info(
+      { person: person.id, joined, source: admission.source, provider: provider.key },
+      "a person signed in",
+    );
     return person;
   }
 }

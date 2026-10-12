@@ -7,8 +7,10 @@ import type { ProviderKey } from "./vocabulary.js";
 export const REST_ROUTES = {
   /** Who is signed in, what the workspace is called, and whether anyone can sign in. */
   me: "/api/v1/me",
-  /** The people of the workspace: everyone who has signed in. */
+  /** The people of the workspace: everyone who has signed in, and the logins let in that have not. */
   people: "/api/v1/people",
+  /** The logins an administrator let in (ADR-0022), made and removed by one. */
+  listings: "/api/v1/listings",
   /** The projects the asker may see; the board of each is under its key. */
   projects: "/api/v1/projects",
   /** The workspace's own events, the ones about no project: who joined, who was made what. */
@@ -99,8 +101,11 @@ export function signInPath(page: string, failure: SignInFailure): string {
   return `${page}${page.includes("?") ? "&" : "?"}${SIGN_IN_PARAM}=${failure}`;
 }
 
-/** The REST path of one person, token or project: the collection, then the id or the key. */
-export function restPath(collection: "people" | "tokens" | "projects", id: string): string {
+/** The REST path of one person, listing, token or project: the collection, then the id or the key. */
+export function restPath(
+  collection: "people" | "listings" | "tokens" | "projects",
+  id: string,
+): string {
   return `${REST_ROUTES[collection]}/${encodeURIComponent(id)}`;
 }
 

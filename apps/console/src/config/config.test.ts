@@ -180,7 +180,6 @@ describe("signing in", () => {
     GITHUB_CLIENT_ID: "Iv23liExampleClientId",
     GITHUB_CLIENT_SECRET: "client-secret-of-the-app",
     AUTH_SECRET: "an-auth-secret-of-at-least-32-characters",
-    MEMBERS: "alice, Bob,,carol",
   };
 
   it("is off until it is configured, and then has safe defaults", () => {
@@ -195,7 +194,6 @@ describe("signing in", () => {
       },
       google: undefined,
       secret: "an-auth-secret-of-at-least-32-characters",
-      members: ["alice", "Bob", "carol"],
       admins: [],
       domains: [],
       sessionTtlMs: 30 * 86_400_000,
@@ -219,13 +217,11 @@ describe("signing in", () => {
       domain: "acme.test",
     });
     expect(auth?.domains).toEqual(["acme.test"]);
-    expect(auth?.members).toEqual([]);
     const both = loadConfig(
       {
         ...signIn,
         GOOGLE_CLIENT_ID: google.GOOGLE_CLIENT_ID,
         GOOGLE_CLIENT_SECRET: google.GOOGLE_CLIENT_SECRET,
-        MEMBERS: "alice, dave@acme.test",
         ADMINS: "dave@acme.test",
       },
       noFiles,
@@ -249,13 +245,17 @@ describe("signing in", () => {
     ]);
   });
 
-  it("names administrators among the members, and only among them", () => {
+  it("names administrators by login or by address, who are let in by that alone", () => {
     expect(loadConfig({ ...signIn, ADMINS: " Alice ,bob" }, noFiles).auth?.admins).toEqual([
       "Alice",
       "bob",
     ]);
-    expect(problemsOf({ ...signIn, ADMINS: "dave" }).problems).toEqual([
-      "ADMINS: every administrator must be a member, by login or by domain",
+    expect(
+      loadConfig({ ...signIn, ADMINS: "alice, Dave@acme.test" }, noFiles).auth?.admins,
+    ).toEqual(["alice", "Dave@acme.test"]);
+    expect(loadConfig({ ...signIn, ADMINS: "" }, noFiles).auth?.admins).toEqual([]);
+    expect(problemsOf({ ...signIn, ADMINS: "alice, not a login" }).problems).toEqual([
+      "ADMINS: must be a list of logins or email addresses",
     ]);
     expect(problemsOf({ DATABASE_URL, ADMINS: "alice" }).problems[0]).toContain(
       "ADMINS: names administrators",
@@ -296,9 +296,6 @@ describe("signing in", () => {
       problemsOf({ DATABASE_URL, PUBLIC_URL: signIn.PUBLIC_URL, AUTH_SECRET: signIn.AUTH_SECRET })
         .problems,
     ).toEqual(["GITHUB_CLIENT_ID or GOOGLE_CLIENT_ID: signing in needs a provider"]);
-    expect(problemsOf({ DATABASE_URL, MEMBERS: "alice" }).problems[0]).toContain(
-      "MEMBERS: lists who may sign in",
-    );
   });
 
   it("wants an origin, a secret that is not short, and logins that are logins", () => {
@@ -317,13 +314,6 @@ describe("signing in", () => {
     const short = problemsOf({ ...signIn, AUTH_SECRET: "hunter2" });
     expect(short.problems).toEqual(["AUTH_SECRET: must be at least 32 characters"]);
     expect(short.message).not.toContain("hunter2");
-    expect(problemsOf({ ...signIn, MEMBERS: "alice, not a login" }).problems).toEqual([
-      "MEMBERS: must be a list of logins or email addresses",
-    ]);
-    expect(
-      loadConfig({ ...signIn, MEMBERS: "alice, Dave@acme.test" }, noFiles).auth?.members,
-    ).toEqual(["alice", "Dave@acme.test"]);
-    expect(loadConfig({ ...signIn, MEMBERS: "" }, noFiles).auth?.members).toEqual([]);
   });
 });
 

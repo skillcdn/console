@@ -16,6 +16,7 @@ import {
   MAX_VERSIONS_PER_DOCUMENT,
   normalizeConnectCode,
   type ProjectIconType,
+  type ProviderKey,
   REST_ROUTES,
   type RestCategories,
   type RestClaim,
@@ -48,6 +49,7 @@ import {
   restFileInputSchema,
   restGoalInputSchema,
   restGoalPatchSchema,
+  restListingInputSchema,
   restMemberInputSchema,
   restMemberPatchSchema,
   restPersonPatchSchema,
@@ -103,11 +105,16 @@ import {
 import { type Actor, latestEventId, listEventsAfter, type Scope } from "../db/queries/events.js";
 import { createGoal, GoalError, getGoal, listGoals, updateGoal } from "../db/queries/goals.js";
 import {
+  createListing,
+  deleteListing,
   findPerson,
+  ListingError,
+  listListings,
   listPeople,
   PersonError,
   type PersonRecord,
   updatePersonRole,
+  updatePersonStatus,
 } from "../db/queries/people.js";
 import {
   addMember,
@@ -167,6 +174,7 @@ import {
   restDocumentSummary,
   restEvent,
   restGoal,
+  restListing,
   restMember,
   restPerson,
   restProject,
@@ -196,6 +204,8 @@ export interface RestDependencies {
     /** How long a read of a decision may wait for its answer before answering that it still waits. */
     readonly waitMs: number;
   };
+  /** The providers people sign in through: what a listing may name. None where nobody signs in. */
+  readonly signIn: readonly ProviderKey[];
 }
 
 /** A task or a decision is a few fields and a body of bounded Markdown; this is far above both. */
@@ -382,6 +392,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     clock,
     logger,
     agents,
+    signIn,
   } = dependencies;
 
   /** Who is asking and with what, or the refusal to answer with. */
@@ -568,6 +579,12 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       return c.json(
         errorBody(error.code, error.message),
         error.code === "person.not_found" ? 404 : 409,
+      );
+    }
+    if (error instanceof ListingError) {
+      return c.json(
+        errorBody(error.code, error.message),
+        error.code === "listing.not_found" ? 404 : 409,
       );
     }
     if (error instanceof ProjectError) {
@@ -759,13 +776,16 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     if (person instanceof Response) {
       return person;
     }
-    const body: RestPeople = {
-      items: (await listPeople(database, person.workspaceId)).map(restPerson),
-    };
+    const [items, listed] = await Promise.all([
+      listPeople(database, person.workspaceId),
+      listListings(database, person.workspaceId),
+    ]);
+    const body: RestPeople = { items: items.map(restPerson), listed: listed.map(restListing) };
     return c.json(body);
   });
 
-  // What a person is: said by an administrator, themselves or through their agent (ADR-0021).
+  // What a person is, and whether they are in: said by an administrator, themselves or through
+  // their agent (ADR-0021, ADR-0022).
   app.patch(`${REST_ROUTES.people}/:id`, tooLarge, async (c) => {
     const caller = await changingCaller(c);
     if (caller instanceof Response) {
@@ -784,23 +804,104 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       return notFound(c, "person.not_found", "The person was not found.");
     }
     try {
-      const changed = await updatePersonRole(database, {
-        workspaceId: person.workspaceId,
-        actor: actorOf(caller),
-        personId: id,
-        role: patch.role,
-        now: clock.now(),
-      });
+      let changed: PersonRecord | undefined;
+      if (patch.role !== undefined) {
+        changed = await updatePersonRole(database, {
+          workspaceId: person.workspaceId,
+          actor: actorOf(caller),
+          personId: id,
+          role: patch.role,
+          now: clock.now(),
+        });
+      }
+      if (patch.status !== undefined) {
+        changed = await updatePersonStatus(database, {
+          workspaceId: person.workspaceId,
+          actor: actorOf(caller),
+          personId: id,
+          status: patch.status,
+          now: clock.now(),
+        });
+      }
+      if (changed === undefined) {
+        return invalid(c, "The patch names nothing to change.");
+      }
       logger.info(
         {
           person: person.id,
           subject: changed.id,
           role: changed.role,
+          status: changed.status,
           requestId: c.get("requestId"),
         },
-        "role changed",
+        "person changed",
       );
       return c.json(restPerson(changed));
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
+  // Who may sign in, by login (ADR-0022): an administrator lets a login in, and takes one away
+  // that nobody signed in with; a person who did is deactivated instead.
+  app.post(REST_ROUTES.listings, tooLarge, async (c) => {
+    const caller = await changingCaller(c);
+    if (caller instanceof Response) {
+      return caller;
+    }
+    const { person } = caller;
+    if (person.role !== "admin") {
+      return administratorRequired(c);
+    }
+    const input = await bodyOf(c, restListingInputSchema);
+    if (input instanceof Response) {
+      return input;
+    }
+    if (!signIn.includes(input.host)) {
+      return c.json(
+        errorBody("listing.unknown_host", "Nobody signs in through that provider here."),
+        400,
+      );
+    }
+    try {
+      const listing = await createListing(database, {
+        workspaceId: person.workspaceId,
+        actor: actorOf(caller),
+        host: input.host,
+        login: input.login,
+        now: clock.now(),
+      });
+      logger.info(
+        { person: person.id, listing: listing.id, requestId: c.get("requestId") },
+        "a login was let in",
+      );
+      return c.json(restListing(listing), 201);
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
+  app.delete(`${REST_ROUTES.listings}/:id`, async (c) => {
+    const caller = await changingCaller(c);
+    if (caller instanceof Response) {
+      return caller;
+    }
+    const { person } = caller;
+    if (person.role !== "admin") {
+      return administratorRequired(c);
+    }
+    const id = c.req.param("id");
+    if (!UUID.test(id)) {
+      return notFound(c, "listing.not_found", "The listing was not found.");
+    }
+    try {
+      await deleteListing(database, {
+        workspaceId: person.workspaceId,
+        actor: actorOf(caller),
+        listingId: id,
+        now: clock.now(),
+      });
+      return c.body(null, 204);
     } catch (error) {
       return failure(c, error);
     }

@@ -12,6 +12,9 @@ const PERSON = {
   name: null,
   avatar: null,
   role: "member",
+  status: "active",
+  source: "listed",
+  deactivatedAt: null,
 };
 const TASK = {
   id: "0199c4d8-0000-7000-8000-000000000010",
@@ -938,7 +941,7 @@ describe("the plan on the command line", () => {
     const parentId = "0199c4d8-0000-7000-8000-000000000011";
     const { fetch, calls } = fakeConsole({
       "GET /api/v1/me": { body: ME },
-      "GET /api/v1/people": { body: { more: false, items: [PERSON, BOB] } },
+      "GET /api/v1/people": { body: { items: [PERSON, BOB], listed: [] } },
       [`POST ${IN}/tasks`]: { status: 201, body: { ...TASK, dueOn: "2026-10-24" } },
       [`GET ${IN}/tasks/7`]: { body: TASK },
       [`GET ${IN}/tasks/3`]: { body: { ...TASK, id: parentId, number: 3 } },
@@ -1071,7 +1074,7 @@ describe("the plan on the command line", () => {
   it("shows another person's plate by their login, for whoever oversees them", async () => {
     const bob = { ...PERSON, id: "0199c4d8-0000-7000-8000-000000000002", login: "bob" };
     const { fetch } = fakeConsole({
-      "GET /api/v1/people": { body: { items: [PERSON, bob] } },
+      "GET /api/v1/people": { body: { items: [PERSON, bob], listed: [] } },
       [`GET /api/v1/people/${bob.id}/work`]: {
         body: {
           tasks: [
@@ -1146,13 +1149,37 @@ describe("configuring, as the person", () => {
   const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
   it("lists the people and says what one is", async () => {
+    const dana = {
+      id: "0199c4d8-0000-7000-8000-000000000077",
+      host: "gh",
+      login: "dana",
+      createdAt: WHEN,
+    };
     const { fetch, calls } = fakeConsole({
-      "GET /api/v1/people": { body: { items: [PERSON, BOB] } },
+      "GET /api/v1/people": {
+        body: {
+          items: [
+            PERSON,
+            BOB,
+            {
+              ...BOB,
+              id: "0199c4d8-0000-7000-8000-000000000078",
+              login: "erin",
+              name: null,
+              status: "deactivated",
+              deactivatedAt: WHEN,
+            },
+          ],
+          listed: [dana],
+        },
+      },
       [`PATCH /api/v1/people/${BOB.id}`]: { body: { ...BOB, role: "admin" } },
     });
     const list = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["people"], list.io)).toBe(EXIT.ok);
-    expect(list.out()).toBe("alice  (member)\nbob  Bob Example  (member)\n");
+    expect(list.out()).toBe(
+      "alice  (member)\nbob  Bob Example  (member)\nerin  (member, deactivated)\ndana  (let in at GitHub, not signed in yet)\n",
+    );
     const role = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["person", "role", "Bob", "admin"], role.io)).toBe(EXIT.ok);
     expect(calls.find((call) => call.key === `PATCH /api/v1/people/${BOB.id}`)?.body).toEqual({
@@ -1166,6 +1193,61 @@ describe("configuring, as the person", () => {
     expect(await runCli(["person", "role", "carol", "admin"], nobody.io)).toBe(EXIT.usage);
     expect(nobody.err()).toContain("console people");
     expect(await runCli(["person"], harness({ fetch, env: SIGNED_IN }).io)).toBe(EXIT.usage);
+  });
+
+  it("lets a login in, takes a listing away, and takes a person out and back in", async () => {
+    const dana = {
+      id: "0199c4d8-0000-7000-8000-000000000077",
+      host: "google",
+      login: "dana@acme.test",
+      createdAt: WHEN,
+    };
+    const { fetch, calls } = fakeConsole({
+      "GET /api/v1/people": { body: { items: [PERSON, BOB], listed: [dana] } },
+      "POST /api/v1/listings": { status: 201, body: dana },
+      [`DELETE /api/v1/listings/${dana.id}`]: { status: 204 },
+      [`PATCH /api/v1/people/${BOB.id}`]: {
+        body: { ...BOB, status: "deactivated", deactivatedAt: WHEN },
+      },
+    });
+    const add = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["person", "add", "dana@acme.test"], add.io)).toBe(EXIT.ok);
+    expect(calls.find((call) => call.key === "POST /api/v1/listings")?.body).toEqual({
+      host: "google",
+      login: "dana@acme.test",
+    });
+    expect(add.out()).toBe("dana@acme.test  (let in at Google, not signed in yet)\n");
+    const named = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["person", "add", "dana", "--host", "gh"], named.io)).toBe(EXIT.ok);
+    expect(calls.filter((call) => call.key === "POST /api/v1/listings").at(-1)?.body).toEqual({
+      host: "gh",
+      login: "dana",
+    });
+    const wrongHost = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["person", "add", "dana", "--host", "gitlab"], wrongHost.io)).toBe(
+      EXIT.usage,
+    );
+    const remove = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["person", "remove", "Dana@acme.test"], remove.io)).toBe(EXIT.ok);
+    expect(calls.some((call) => call.key === `DELETE /api/v1/listings/${dana.id}`)).toBe(true);
+    expect(remove.out()).toBe("dana@acme.test is no longer let in.\n");
+    const nobody = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["person", "remove", "bob"], nobody.io)).toBe(EXIT.usage);
+    expect(nobody.err()).toContain("person deactivate");
+    const out = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["person", "deactivate", "Bob"], out.io)).toBe(EXIT.ok);
+    expect(
+      calls.filter((call) => call.key === `PATCH /api/v1/people/${BOB.id}`).at(-1)?.body,
+    ).toEqual({ status: "deactivated" });
+    expect(out.out()).toBe("bob  Bob Example  (member, deactivated)\n");
+    const back = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["person", "reactivate", "bob"], back.io)).toBe(EXIT.ok);
+    expect(
+      calls.filter((call) => call.key === `PATCH /api/v1/people/${BOB.id}`).at(-1)?.body,
+    ).toEqual({ status: "active" });
+    expect(await runCli(["person", "forget", "bob"], harness({ fetch, env: SIGNED_IN }).io)).toBe(
+      EXIT.usage,
+    );
   });
 
   it("makes a project, reads it, changes it, and gives it an image or takes it away", async () => {
@@ -1256,7 +1338,7 @@ describe("configuring, as the person", () => {
 
   it("lists the members, adds one, changes what they are, and takes them off the list", async () => {
     const { fetch, calls } = fakeConsole({
-      "GET /api/v1/people": { body: { items: [PERSON, BOB] } },
+      "GET /api/v1/people": { body: { items: [PERSON, BOB], listed: [] } },
       [`GET ${IN}/members`]: {
         body: { items: [{ person: PERSON, role: "owner", addedAt: WHEN }] },
       },

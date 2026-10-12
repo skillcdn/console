@@ -1915,6 +1915,30 @@ table {
   font-size: var(--sc-text-sm);
 }
 
+/* What let a person in, when they were deactivated, when a login was let in: beside the name, smaller. */
+.sc-person-note {
+  font-size: var(--sc-text-xs);
+}
+
+/* Those let in and not signed in yet, and those deactivated: sections below everyone in. */
+.sc-people-section {
+  margin-top: var(--sc-space-6);
+}
+
+.sc-person-row-out .sc-person {
+  opacity: 0.7;
+}
+
+.sc-listing-form .sc-field-row {
+  align-items: end;
+}
+
+.sc-field-hint {
+  margin-top: var(--sc-space-2);
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
 /* Projects: what a person may see, each with what they are in it and what waits in it. */
 
 .sc-projects {

@@ -15,6 +15,7 @@ import {
   MAX_LANGUAGE_TAG_LENGTH,
   MAX_LINK_LABEL_LENGTH,
   MAX_LINKS,
+  MAX_LOGIN_LENGTH,
   MAX_NOTE_LENGTH,
   MAX_OPTION_LABEL_LENGTH,
   MAX_OPTIONS,
@@ -40,11 +41,14 @@ import {
   EVENT_KINDS,
   GOAL_STATES,
   LINK_SOURCES,
+  MEMBERSHIP_SOURCES,
   PERSON_ROLES,
+  PERSON_STATUSES,
   PROJECT_ICON_TYPES,
   PROJECT_ROLES,
   PROJECT_VISIBILITIES,
   PROVIDER_KEYS,
+  type ProviderKey,
   RUN_ENDINGS,
   RUN_STATUSES,
   SKILLS_STATUSES,
@@ -92,8 +96,48 @@ export const restPersonSchema = z.object({
   avatar: z.nullable(z.string()),
   /** An administrator configures the board; a member works on it. */
   role: z.enum(PERSON_ROLES),
+  /** Whether they are in: `active`, or `deactivated`, kept for what they did and shown as such (ADR-0022). */
+  status: z.enum(PERSON_STATUSES),
+  /** What let them in: the organization, the domain, or an administrator's listing. */
+  source: z.enum(MEMBERSHIP_SOURCES),
+  /** When they were deactivated, or `null`. */
+  deactivatedAt: z.nullable(instant),
 });
 export type RestPerson = z.infer<typeof restPersonSchema>;
+
+/** The provider a login belongs to, by its shape: an address is Google's, anything else the git host's. */
+export function hostOfLogin(login: string): ProviderKey {
+  return login.includes("@") ? "google" : "gh";
+}
+
+/** Whether `login` is spelled as the host spells one: a login at the git host, an address at Google. */
+export function isLoginAt(host: ProviderKey, login: string): boolean {
+  return host === "gh"
+    ? /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/.test(login)
+    : /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(login);
+}
+
+/**
+ * A login an administrator let in, which has not signed in yet (ADR-0022): whoever signs in
+ * with that account at that host becomes the person.
+ */
+export const restListingSchema = z.object({
+  id: uuid,
+  host: z.enum(PROVIDER_KEYS),
+  /** The login at the host, as the administrator spelled it. */
+  login: z.string(),
+  createdAt: instant,
+});
+export type RestListing = z.infer<typeof restListingSchema>;
+
+/** What `POST /api/v1/listings` is sent: a login at one of the providers the deployment has. */
+export const restListingInputSchema = z
+  .object({
+    host: z.enum(PROVIDER_KEYS),
+    login: z.string().check(z.trim(), z.minLength(1), z.maxLength(MAX_LOGIN_LENGTH)),
+  })
+  .check(z.refine((input) => isLoginAt(input.host, input.login), "must be a login at the host"));
+export type RestListingInput = z.infer<typeof restListingInputSchema>;
 
 /** An identity provider people may sign in through, as the pages offer it. */
 export const restProviderSchema = z.object({
@@ -138,12 +182,28 @@ export const restMeSchema = z.object({
 });
 export type RestMe = z.infer<typeof restMeSchema>;
 
-/** `GET /api/v1/people`: everyone who has signed in, by login. */
-export const restPeopleSchema = z.object({ items: z.array(restPersonSchema) });
+/** `GET /api/v1/people`: everyone who has signed in, by login, and the logins let in that have not. */
+export const restPeopleSchema = z.object({
+  items: z.array(restPersonSchema),
+  listed: z.array(restListingSchema),
+});
 export type RestPeople = z.infer<typeof restPeopleSchema>;
 
-/** What `PATCH /api/v1/people/<id>` is sent, by an administrator: what the person is to be. */
-export const restPersonPatchSchema = z.object({ role: z.enum(PERSON_ROLES) });
+/**
+ * What `PATCH /api/v1/people/<id>` is sent, by an administrator: what the person is to be, and
+ * whether they are in; either, or both.
+ */
+export const restPersonPatchSchema = z
+  .object({
+    role: z.optional(z.enum(PERSON_ROLES)),
+    status: z.optional(z.enum(PERSON_STATUSES)),
+  })
+  .check(
+    z.refine(
+      (patch) => patch.role !== undefined || patch.status !== undefined,
+      "must name a role or a status",
+    ),
+  );
 export type RestPersonPatch = z.infer<typeof restPersonPatchSchema>;
 
 /** The words under `/projects/` that are the pages' own, which no project may be called. */

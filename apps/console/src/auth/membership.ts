@@ -1,4 +1,6 @@
 import type { ProviderKey } from "@skillcdn/console/api";
+import type { Database } from "../db/client.js";
+import { findListingFor, type ListingRecord, type PersonRecord } from "../db/queries/people.js";
 
 const normalize = (values: readonly string[]): ReadonlySet<string> =>
   new Set(values.map((value) => value.trim().toLowerCase()).filter(Boolean));
@@ -15,68 +17,84 @@ export function domainOf(login: string): string | undefined {
 }
 
 export interface MembershipOptions {
-  /** The accounts the operator listed, by login (or email, at a provider that calls people so). */
-  readonly logins: readonly string[];
-  /** The logins among them that administer. */
+  /** The logins the operator names administrators: let in at sign-in, and made administrators then. */
   readonly admins?: readonly string[] | undefined;
   /** The Workspace domains whose accounts are members, as their provider vouches for them. */
   readonly domains?: readonly string[] | undefined;
 }
 
+/** What let an account in at sign-in: its source, and the listing it came in on, when one did. */
+export interface Admission {
+  readonly source: "domain" | "listed";
+  /** The listing that admitted the account, to be bound to the person; none for a domain or for `ADMINS`. */
+  readonly listing?: ListingRecord | undefined;
+}
+
 /**
- * Who may be in the workspace (docs/architecture.md, open question 1): the accounts the operator
- * listed by login, and the accounts of the Workspace domains the operator named, which their
- * provider vouches for. Checked when a person signs in and on every request after, so that a
- * login taken off the list, or a domain, is out at once. Logins are compared without regard to
- * case. Nothing listed lets nobody in. The operator also names who administers, which is what
- * a person is made at sign-in; what they are afterwards is the board's own record.
+ * Who may be in the workspace (ADR-0022): the accounts of the Workspace domains the operator
+ * named, which their provider vouches for at sign-in; the logins an administrator let in on the
+ * People page, which the database holds; and the logins the operator names administrators, so
+ * that the first one can get in. Decided at sign-in, and on every request after from what is
+ * written on the person: deactivated is out at once, and so is a domain taken out of the
+ * configuration. Logins are compared without regard to case.
  */
 export class Membership {
-  readonly #logins: ReadonlySet<string>;
   readonly #admins: ReadonlySet<string>;
   readonly #domains: ReadonlySet<string>;
 
   constructor(options: MembershipOptions) {
-    this.#logins = normalize(options.logins);
     this.#admins = normalize(options.admins ?? []);
     this.#domains = normalize(options.domains ?? []);
   }
 
-  /** True when nothing is listed, so that nobody can be let in. */
+  /** True when the configuration alone lets nobody in: no domain, and no administrator named. */
   get empty(): boolean {
-    return this.#logins.size === 0 && this.#domains.size === 0;
+    return this.#admins.size === 0 && this.#domains.size === 0;
   }
 
   /**
-   * Whether an account may sign in: listed by login, or of a domain named, which only a
-   * provider that vouches for domains can say.
+   * What admits an account signing in, or nothing: a domain named, which only a provider that
+   * vouches for domains can say; a listing an administrator made, unbound and spelled as the
+   * account's login, or bound to this very account; or the operator's own naming.
    */
-  admits(
+  async admit(
+    database: Database,
+    workspaceId: string,
     host: ProviderKey,
-    account: { readonly login: string; readonly domain: string | undefined },
-  ): boolean {
-    if (this.#logins.has(account.login.trim().toLowerCase())) {
-      return true;
-    }
-    return (
+    account: {
+      readonly accountId: string;
+      readonly login: string;
+      readonly domain: string | undefined;
+    },
+  ): Promise<Admission | undefined> {
+    if (
       host === "google" &&
       account.domain !== undefined &&
       this.#domains.has(account.domain.trim().toLowerCase())
-    );
+    ) {
+      return { source: "domain" };
+    }
+    const listing = await findListingFor(database, workspaceId, host, account);
+    if (listing !== undefined) {
+      return { source: "listed", listing };
+    }
+    return this.administers(account.login) ? { source: "listed" } : undefined;
   }
 
   /**
-   * Whether a person already written down is still a member: by login, or by the domain of
-   * the address a Workspace account signs in as. A Workspace that signs people in under an
-   * alias domain lists that domain too, or lists those people.
+   * Whether a person already written down is still in: active, and, where what let them in is
+   * the deployment's to name, still named. A Workspace that signs people in under an alias
+   * domain names that domain too, or lists those people.
    */
-  allows(person: { readonly host: ProviderKey; readonly login: string }): boolean {
-    const login = person.login.trim().toLowerCase();
-    if (this.#logins.has(login)) {
-      return true;
+  allows(person: PersonRecord): boolean {
+    if (person.status !== "active") {
+      return false;
     }
-    const domain = domainOf(login);
-    return person.host === "google" && domain !== undefined && this.#domains.has(domain);
+    if (person.source === "domain") {
+      const domain = domainOf(person.login);
+      return person.host === "google" && domain !== undefined && this.#domains.has(domain);
+    }
+    return true;
   }
 
   /** Whether the operator named the login an administrator. */

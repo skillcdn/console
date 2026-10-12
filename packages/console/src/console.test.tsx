@@ -37,6 +37,7 @@ describe("matchRoute", () => {
     expect(matchRoute("/")).toEqual({ name: "projects" });
     expect(matchRoute("/projects/new")).toEqual({ name: "new-project" });
     expect(matchRoute("/people/")).toEqual({ name: "people" });
+    expect(matchRoute("/people/new")).toEqual({ name: "new-listing" });
     expect(matchRoute("/agents")).toEqual({ name: "agents" });
     expect(matchRoute("/agents/new")).toEqual({ name: "new-token" });
     expect(matchRoute("/projects/web")).toEqual({ name: "board", project: "web", filter: {} });
@@ -339,6 +340,8 @@ describe("createConsole", () => {
     updateMe: never,
     people: never,
     updatePerson: never,
+    createListing: never,
+    removeListing: never,
     projects: never,
     createProject: never,
     project,
@@ -388,6 +391,7 @@ describe("createConsole", () => {
     for (const path of [
       "/",
       "/people",
+      "/people/new",
       "/work",
       "/categories",
       "/projects/web",

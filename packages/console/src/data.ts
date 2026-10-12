@@ -20,6 +20,8 @@ import {
   type RestGoal,
   type RestGoalInput,
   type RestGoalPatch,
+  type RestListing,
+  type RestListingInput,
   type RestMe,
   type RestMember,
   type RestMemberInput,
@@ -93,8 +95,12 @@ export interface ConsoleActions {
   documentVersions(path: string, signal?: AbortSignal): Promise<RestVersions>;
   documentVersion(path: string, number: number, signal?: AbortSignal): Promise<RestVersion>;
   attachDocumentFile(path: string, input: FileUpload): Promise<RestDocument>;
-  /** Changes what a person is; for an administrator. */
+  /** Changes what a person is, or whether they are in; for an administrator. */
   updatePerson(id: string, patch: RestPersonPatch): Promise<RestPerson>;
+  /** Lets a login in (ADR-0022); for an administrator. */
+  createListing(input: RestListingInput): Promise<RestListing>;
+  /** Takes a listing away that nobody signed in with; for an administrator. */
+  removeListing(id: string): Promise<void>;
   /** Keeps the person's own choice of language (ADR-0012). */
   updateMe(patch: RestMePatch): Promise<RestMe>;
   /** Marks a run that will not come back as abandoned. */
@@ -125,7 +131,10 @@ export interface ConsoleData {
   readonly loaded: boolean;
   /** The projects the person may see, by name. */
   readonly projects: readonly RestProject[];
+  /** Everyone of the workspace, those in first, the deactivated last (ADR-0022). */
   readonly people: readonly RestPerson[];
+  /** The logins let in that nobody has signed in with yet. */
+  readonly listed: readonly RestListing[];
   /** The categories tasks are sorted into, by name. */
   readonly categories: readonly RestCategory[];
   /** The tokens of whoever is signed in, newest first. */
@@ -187,6 +196,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
   const [loaded, setLoaded] = useState(false);
   const [projects, setProjects] = useState<readonly RestProject[]>([]);
   const [people, setPeople] = useState<readonly RestPerson[]>([]);
+  const [listed, setListed] = useState<readonly RestListing[]>([]);
   const [categories, setCategories] = useState<readonly RestCategory[]>([]);
   const [tokens, setTokens] = useState<readonly RestToken[]>([]);
   const [project, setProject] = useState<RestProject | undefined>(undefined);
@@ -219,6 +229,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
       }
       setProjects(nextProjects.items);
       setPeople(nextPeople.items);
+      setListed(nextPeople.listed);
       setCategories(nextCategories.items);
     },
     [client],
@@ -497,6 +508,15 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
         await refreshWorkspace();
         return person;
       },
+      async createListing(input) {
+        const listing = await client.createListing(input);
+        await refreshWorkspace();
+        return listing;
+      },
+      async removeListing(id) {
+        await client.removeListing(id);
+        await refreshWorkspace();
+      },
       async updateMe(patch) {
         const answer = await client.updateMe(patch);
         setMe(answer);
@@ -549,6 +569,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
     loaded,
     projects,
     people,
+    listed,
     categories,
     tokens,
     project,

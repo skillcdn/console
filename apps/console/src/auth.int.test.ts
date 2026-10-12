@@ -105,6 +105,9 @@ describe("signing in", () => {
         name: "Alice Example",
         avatar: "https://avatars.example/alice.png",
         role: "member",
+        status: "active",
+        source: "listed",
+        deactivatedAt: null,
       },
       signIn: [{ key: "gh", label: "GitHub" }],
     });
@@ -211,8 +214,8 @@ describe("signing in", () => {
     login.unreachable(false);
   });
 
-  it("refuses someone the operator did not list, and writes nothing down about them", async () => {
-    const { request, login } = harness({ members: ["alice"] });
+  it("refuses someone nobody let in, and writes nothing down about them", async () => {
+    const { request, login } = harness({ listed: ["alice"] });
     const begun = await request(`${AUTH_ROUTES.login("gh")}?return_to=/tasks`);
     const state = new URL(begun.headers.get("location") ?? "").searchParams.get("state") ?? "";
     const done = await request(
@@ -287,15 +290,54 @@ describe("a session", () => {
     expect((await me(h, cookie)).person).toBeNull();
   });
 
-  it("ends at once for a login taken off the list, and the cookie goes with the answer", async () => {
+  it("ends at once for a person deactivated, and the cookie goes with the answer", async () => {
     const login = createFixtureProvider();
-    const h = harness({ login, members: ["alice", "bob"] });
+    const h = harness({ login, listed: ["alice", "bob"], admins: ["alice"] });
+    const admin = await h.signIn("alice");
     const cookie = await h.signIn("bob");
-    expect((await me(h, cookie)).person?.login).toBe("bob");
-    const without = harness({ login, members: ["alice"] });
-    const answer = await without.request(REST_ROUTES.me, { headers: { cookie } });
+    const bob = (await me(h, cookie)).person;
+    expect(bob).toMatchObject({ login: "bob", status: "active", source: "listed" });
+    const out = await h.request(`${REST_ROUTES.people}/${bob?.id}`, {
+      method: "PATCH",
+      headers: { cookie: admin, origin: SIGN_IN_URL, "content-type": "application/json" },
+      body: JSON.stringify({ status: "deactivated" }),
+    });
+    expect(out.status).toBe(200);
+    const answer = await h.request(REST_ROUTES.me, { headers: { cookie } });
     expect(restMeSchema.parse(await answer.json()).person).toBeNull();
     expect(answer.headers.getSetCookie()[0]).toMatch(/^__Host-console_session=; .*Max-Age=0/);
+    // Signing in again admits nobody: the listing went with the deactivation.
+    const begun = await h.request(AUTH_ROUTES.login("gh"));
+    const state = new URL(begun.headers.get("location") ?? "").searchParams.get("state") ?? "";
+    const refused = await h.request(
+      `${AUTH_ROUTES.callback("gh")}?code=${login.codeFor("bob", state)}&state=${state}`,
+      { headers: { cookie: cookieOf(begun, "console_login") } },
+    );
+    expect(refused.headers.get("location")).toBe("/?sign_in=refused");
+    // Listed again by an administrator, Bob signs in and is back in, as the board is told.
+    const listed = await h.request(REST_ROUTES.listings, {
+      method: "POST",
+      headers: { cookie: admin, origin: SIGN_IN_URL, "content-type": "application/json" },
+      body: JSON.stringify({ host: "gh", login: "BOB" }),
+    });
+    expect(listed.status).toBe(201);
+    const back = (await me(h, await h.signIn("bob"))).person;
+    expect(back).toMatchObject({ id: bob?.id, status: "active", source: "listed" });
+    const workspace = await ensureWorkspace(testDatabase.database, {
+      name: "Acme",
+      now: new Date(),
+    });
+    const { items } = await listEventsAfter(
+      testDatabase.database,
+      { workspaceId: workspace.id, projectId: null },
+      0,
+      1000,
+    );
+    expect(items.map((event) => event.kind).slice(-3)).toEqual([
+      "person.deactivated",
+      "person.listed",
+      "person.reactivated",
+    ]);
   });
 
   it("is nobody's with a cookie that was not handed out here", async () => {
@@ -326,7 +368,7 @@ describe("a Workspace as a second provider", () => {
     const google = createFixtureProvider("google");
     const h = createHarness(testDatabase, {
       providers: [git, google],
-      members: ["alice"],
+      listed: ["alice"],
       domains: ["acme.test"],
     });
     expect((await me(h)).signIn).toEqual([
@@ -338,6 +380,7 @@ describe("a Workspace as a second provider", () => {
       login: "dave@acme.test",
       name: "Dave Example",
       role: "member",
+      source: "domain",
     });
     // Erin's account is of no domain, and she is not listed.
     const begun = await h.request(AUTH_ROUTES.login("google"));
@@ -352,12 +395,16 @@ describe("a Workspace as a second provider", () => {
     // Listed by address, Erin is in.
     const listed = createHarness(testDatabase, {
       providers: [google],
-      members: ["Erin@mail.test"],
+      listed: ["Erin@mail.test"],
     });
-    expect((await me(listed, await listed.signIn("erin"))).person?.login).toBe("erin@mail.test");
-    // The domain taken away, Dave is out at once.
-    const without = createHarness(testDatabase, { providers: [git, google], members: ["alice"] });
+    expect((await me(listed, await listed.signIn("erin"))).person).toMatchObject({
+      login: "erin@mail.test",
+      source: "listed",
+    });
+    // The domain taken away, Dave is out at once; Erin, listed, stays.
+    const without = createHarness(testDatabase, { providers: [git, google], listed: ["alice"] });
     expect((await me(without, dave)).person).toBeNull();
+    expect((await me(without, await listed.signIn("erin"))).person?.login).toBe("erin@mail.test");
   });
 
   it("finishes a sign-in only at the provider where it began", async () => {

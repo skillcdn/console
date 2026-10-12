@@ -9,7 +9,13 @@ import {
 } from "../client.js";
 import { addDays, dayOf as dayOfDate, isDay } from "../dates.js";
 import { DEFAULT_PAGE_LIMIT, LIST_LIMIT, MAX_OPTIONS, MIN_OPTIONS } from "../limits.js";
-import type { RestClaim, RestDecision, RestPerson, RestTaskPatch } from "../schemas.js";
+import {
+  hostOfLogin,
+  type RestClaim,
+  type RestDecision,
+  type RestPerson,
+  type RestTaskPatch,
+} from "../schemas.js";
 import {
   COLOR_NAMES,
   type ColorName,
@@ -19,8 +25,10 @@ import {
   type PersonRole,
   PROJECT_ROLES,
   PROJECT_VISIBILITIES,
+  PROVIDER_KEYS,
   type ProjectRole,
   type ProjectVisibility,
+  type ProviderKey,
   TASK_PRIORITIES,
   TASK_STATES,
   type TaskPriority,
@@ -38,6 +46,7 @@ import {
   formatDocuments,
   formatGoal,
   formatGoalLine,
+  formatListingLine,
   formatMemberLine,
   formatMore,
   formatOptions,
@@ -369,6 +378,8 @@ function wordOf<T extends string>(value: string, words: readonly T[], what: stri
 
 const personRoleOf = (value: string): PersonRole =>
   wordOf(value, PERSON_ROLES, "a role in the workspace");
+const providerOf = (value: string): ProviderKey =>
+  wordOf(value, PROVIDER_KEYS, "a provider people sign in through");
 const projectRoleOf = (value: string): ProjectRole =>
   wordOf(value, PROJECT_ROLES, "a role in a project");
 const visibilityOf = (value: string): ProjectVisibility =>
@@ -1412,25 +1423,67 @@ const people: Command = async (args, io) => {
   const { values } = parse(args, {}, false);
   const session = await open(io, values);
   const found = await session.client.people();
-  answer(io, session, found, () => found.items.map(formatPersonLine).join("\n"));
+  answer(io, session, found, () =>
+    [...found.items.map(formatPersonLine), ...found.listed.map(formatListingLine)].join("\n"),
+  );
   return EXIT.ok;
 };
 
+const PERSON_USAGE =
+  "Say what to do: console person role <login> <admin|member>  |  person add <login> [--host gh|google]  |  person remove <login>  |  person deactivate <login>  |  person reactivate <login>";
+
 const person: Command = async (args, io) => {
-  if (args[0] !== "role") {
-    throw misuse("Say what to do: console person role <login> <admin|member>");
+  const what = args[0];
+  if (what === "role") {
+    const { values, positionals } = parse(args.slice(1), {});
+    const [login, role] = theTwo(
+      positionals,
+      "Say whom and what: console person role <login> <admin|member>",
+    );
+    const wanted = personRoleOf(role);
+    const session = await open(io, values);
+    const found = await personOf(session, login);
+    const changed = await session.client.updatePerson(found.id, { role: wanted });
+    answer(io, session, changed, () => formatPersonLine(changed));
+    return EXIT.ok;
   }
-  const { values, positionals } = parse(args.slice(1), {});
-  const [login, role] = theTwo(
-    positionals,
-    "Say whom and what: console person role <login> <admin|member>",
-  );
-  const wanted = personRoleOf(role);
-  const session = await open(io, values);
-  const found = await personOf(session, login);
-  const changed = await session.client.updatePerson(found.id, { role: wanted });
-  answer(io, session, changed, () => formatPersonLine(changed));
-  return EXIT.ok;
+  if (what === "add") {
+    const { values, positionals } = parse(args.slice(1), { host: { type: "string" } });
+    const login = theOne(positionals, "Say whom: console person add <login> [--host gh|google]");
+    const chosen = text(values, "host");
+    const host = chosen === undefined ? hostOfLogin(login) : providerOf(chosen);
+    const session = await open(io, values);
+    const made = await session.client.createListing({ host, login });
+    answer(io, session, made, () => formatListingLine(made));
+    return EXIT.ok;
+  }
+  if (what === "remove") {
+    const { values, positionals } = parse(args.slice(1), {});
+    const login = theOne(positionals, "Say whom: console person remove <login>");
+    const session = await open(io, values);
+    const { listed } = await session.client.people();
+    const found = listed.find((listing) => listing.login.toLowerCase() === login.toLowerCase());
+    if (found === undefined) {
+      throw misuse(
+        `Nobody called ${login} is let in and not signed in yet. console people lists them; a person who signed in is taken out with console person deactivate <login>.`,
+      );
+    }
+    await session.client.removeListing(found.id);
+    answer(io, session, { removed: found }, () => `${found.login} is no longer let in.`);
+    return EXIT.ok;
+  }
+  if (what === "deactivate" || what === "reactivate") {
+    const { values, positionals } = parse(args.slice(1), {});
+    const login = theOne(positionals, `Say whom: console person ${what} <login>`);
+    const session = await open(io, values);
+    const found = await personOf(session, login);
+    const changed = await session.client.updatePerson(found.id, {
+      status: what === "deactivate" ? "deactivated" : "active",
+    });
+    answer(io, session, changed, () => formatPersonLine(changed));
+    return EXIT.ok;
+  }
+  throw misuse(PERSON_USAGE);
 };
 
 /** The flags that set what a project is, shared by making one and changing one. */
@@ -1752,7 +1805,15 @@ function hintFor(error: ApiError): string {
     case "category.in_use":
       return "Tasks are sorted into the category. Move them out first: console task edit <number> --category <other|none>\n";
     case "person.last_admin":
-      return "The board keeps at least one administrator. Make another one first.\n";
+      return "The board keeps at least one administrator in. Make another one first.\n";
+    case "person.of_organization":
+      return "The organization says who is in: a person it let in comes and goes with it, and is listed by login to stay.\n";
+    case "listing.exists":
+      return "The login is let in already, or is a person's who is in. console people lists both.\n";
+    case "listing.not_found":
+      return "No login let in and not signed in yet has that id. console people lists them.\n";
+    case "listing.unknown_host":
+      return "Nobody signs in through that provider here. console whoami --json names the ways in.\n";
     case "connect.too_many":
       return "The console holds as many connections as it may at once. Try again in a few minutes.\n";
     case "network":

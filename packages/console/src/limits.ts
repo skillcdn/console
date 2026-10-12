@@ -33,6 +33,8 @@ export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 export const MAX_FILE_NAME_LENGTH = 200;
 /** What a person calls a token: the agent it is for, where it runs. One line. */
 export const MAX_TOKEN_NAME_LENGTH = 80;
+/** A login at a git host, or an address at a Workspace, as an administrator lists one. */
+export const MAX_LOGIN_LENGTH = 254;
 /** How long a token may be good for, in days, and how long one is when nothing is said. */
 export const MAX_TOKEN_DAYS = 365;
 export const DEFAULT_TOKEN_DAYS = 90;

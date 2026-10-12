@@ -118,7 +118,16 @@ Goal: what a person opens the console for, seen at once and without being told w
 - [x] A cut title told at once (2026-10-12): on the calendars, a task whose title its line cut short shows the whole of it in a tip of the console's own the moment the pointer is on it, in place of the browser's tooltip that came after a wait.
 - [x] A person's work, seen by whoever oversees them (2026-10-12): `/people/<id>/work`, the week and the lists of My work under the person's name, without the decisions, for an administrator and for an owner of a project the person is in, within the projects the viewer may see and no other; reached from the People page and from a project's Members page; `GET /api/v1/people/<id>/work` and `console work --person <login>` ([specs/rest.md](specs/rest.md), [specs/cli.md](specs/cli.md)).
 
-## After milestone 11
+## Milestone 12, who is in
+
+Goal: who may use the board is the console's own record, kept by an administrator from the console itself, with the organization at the git host and the Workspace domain as what vouches; nobody is deleted, and nobody out is in ([ADR-0022](adr/0022-who-is-in-is-the-consoles-own-record-and-an-administrator-keeps-it.md)).
+
+- [x] A person's standing (2026-10-12): `status` and `source` on every person; a deactivated person kept with everything they did, refused on every request with their agents, listed nowhere and offered to no picker; the board keeps at least one administrator in.
+- [x] Let in by login (2026-10-12): an administrator lets a login in on the People page or with `console person add`, and whoever signs in with that account is the person, the listing bound to the account from then on; a listing nobody signed in with is taken away; a person is taken out and back in on the same page, or with `person deactivate` and `person reactivate`; the feed says each. `MEMBERS` is gone; `ADMINS` lets the first administrators in ([specs/rest.md](specs/rest.md), [specs/cli.md](specs/cli.md)).
+- [ ] The organization at the git host, read through a GitHub App installed on it: at sign-in, and by the worker on a schedule, so that those who left are out and those who returned are in; what an administrator cannot change.
+- [ ] A console set up from a connected agent: the README's quick start, and the skills saying how each provider is registered.
+
+## After milestone 12
 
 Nothing is chosen yet; the list below is where the next milestone comes from. Left open by milestone 9: whether the board should end a run not heard from for a long while itself ([ADR-0020](adr/0020-the-console-does-not-claim-an-agent-is-at-work-a-run-says-when-it-was-last-heard-from-and-a-new-run-takes-over.md)); a roadmap across projects.
 

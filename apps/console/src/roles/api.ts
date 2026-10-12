@@ -114,12 +114,14 @@ export function createApi(
     const origin = config.auth.publicUrl;
     const secure = origin.startsWith("https://");
     const membership = new Membership({
-      logins: config.auth.members,
       admins: config.auth.admins,
       domains: config.auth.domains,
     });
     if (membership.empty) {
-      logger.warn("nobody is listed as a member: signing in is configured, and nobody is let in");
+      // People let in on the People page still get in; the first administrator cannot.
+      logger.warn(
+        "signing in is configured, and the configuration lets nobody in: name ADMINS, or a Workspace domain, so that the first administrator can sign in",
+      );
     }
     const sessions = new Sessions({
       database,

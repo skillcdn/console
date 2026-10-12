@@ -26,7 +26,7 @@ import { DocumentForm, DocumentList, DocumentView, FolderView } from "./document
 import { describeEvent, EventFeed } from "./event-feed.js";
 import { GoalForm, GoalList, GoalView } from "./goals.js";
 import { Markdown } from "./markdown.js";
-import { PeopleList } from "./people.js";
+import { ListingForm, PeopleList } from "./people.js";
 import { keyOf, MemberList, ProjectForm, ProjectList, ProjectMark } from "./projects.js";
 import { RunList } from "./runs.js";
 import { Shell } from "./shell.js";
@@ -44,6 +44,9 @@ const alice: RestPerson = {
   name: "Alice Example",
   avatar: "https://avatars.example/alice.png",
   role: "admin",
+  status: "active",
+  source: "listed",
+  deactivatedAt: null,
 };
 const bob: RestPerson = {
   id: "0199c4d8-0000-7000-8000-000000000002",
@@ -51,6 +54,9 @@ const bob: RestPerson = {
   name: null,
   avatar: null,
   role: "member",
+  status: "active",
+  source: "listed",
+  deactivatedAt: null,
 };
 
 const task = (overrides: Partial<RestTask> = {}): RestTask => ({
@@ -858,6 +864,73 @@ describe("people", () => {
     );
     expect(change.match(/<select/g)).toHaveLength(2);
     expect(change).toContain('value="admin"');
+  });
+
+  it("keeps those out apart, with the way back in, and shows the logins let in with the way out", () => {
+    const carol: RestPerson = {
+      ...bob,
+      id: "0199c4d8-0000-7000-8000-000000000003",
+      login: "carol",
+      status: "deactivated",
+      deactivatedAt: "2026-10-12T09:00:00.000Z",
+    };
+    const dave: RestPerson = {
+      ...carol,
+      id: "0199c4d8-0000-7000-8000-000000000004",
+      login: "dave",
+      source: "organization",
+    };
+    const dana = {
+      id: "0199c4d8-0000-7000-8000-000000000077",
+      host: "gh" as const,
+      login: "dana",
+      createdAt: "2026-10-12T09:00:00.000Z",
+    };
+    const read = renderToStaticMarkup(
+      <PeopleList people={[alice, carol, dave]} listed={[dana]} me={bob} />,
+    );
+    expect(read).toContain("Let in, not signed in yet");
+    expect(read).toContain("dana");
+    expect(read).toContain("at GitHub");
+    expect(read).toContain("Deactivated");
+    expect(read).toContain("Left the organization");
+    expect(read).not.toContain("<button");
+    const kept = renderToStaticMarkup(
+      <PeopleList
+        people={[alice, carol, dave]}
+        listed={[dana]}
+        me={alice}
+        onChangeStatus={() => undefined}
+        onUnlist={() => undefined}
+      />,
+    );
+    // Carol may be taken back in; Dave comes and goes with the organization; Alice is not her own to take out.
+    expect(kept.match(/Reactivate/g)).toHaveLength(1);
+    expect(kept).not.toContain(">Deactivate<");
+    expect(kept).toContain(">Remove<");
+    const others = renderToStaticMarkup(
+      <PeopleList people={[alice, bob]} me={alice} onChangeStatus={() => undefined} />,
+    );
+    expect(others.match(/>Deactivate</g)).toHaveLength(1);
+  });
+
+  it("lets someone in by a login spelled as its host spells one", () => {
+    const both = renderToStaticMarkup(
+      <ListingForm
+        providers={[
+          { key: "gh", label: "GitHub" },
+          { key: "google", label: "Google" },
+        ]}
+        onSubmit={() => undefined}
+      />,
+    );
+    expect(both).toContain("Login, or address");
+    expect(both).toContain("<select");
+    expect(both).toContain("disabled");
+    const one = renderToStaticMarkup(
+      <ListingForm providers={[{ key: "gh", label: "GitHub" }]} onSubmit={() => undefined} />,
+    );
+    expect(one).not.toContain("<select");
   });
 
   it("says in the feed who was made what", () => {

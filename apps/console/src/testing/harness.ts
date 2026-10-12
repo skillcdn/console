@@ -1,14 +1,19 @@
 import {
   AUTH_ROUTES,
+  hostOfLogin,
   REST_ROUTES,
   type RestProject,
   type RestProjectInput,
   restProjectSchema,
 } from "@skillcdn/console/api";
 import { parseAddress } from "@skillcdn/core";
+import { and, eq, isNull, notInArray, sql } from "drizzle-orm";
 import type { Hono } from "hono";
 import { pino } from "pino";
+import { drizzleOf } from "../db/client.js";
 import { type EventListener, startEventListener } from "../db/listener.js";
+import { ensureWorkspace } from "../db/queries/workspaces.js";
+import { listings } from "../db/schema.js";
 import type { TestDatabase } from "../db/testing.js";
 import type { LiveFeed } from "../http/live-feed.js";
 import type { AppEnv } from "../http/request-context.js";
@@ -54,8 +59,13 @@ export interface HarnessOptions {
   readonly providers?: readonly FixtureProvider[];
   /** The Workspace domains the operator names. None when left out. */
   readonly domains?: readonly string[];
-  /** The logins the operator lists. Everyone of the fixture when left out. */
-  readonly members?: readonly string[];
+  /**
+   * The logins an administrator let in and nobody signed in with yet, as rows of the database
+   * (ADR-0022), made exactly so before the first sign-in: one of another harness on the same
+   * database that nobody signed in with goes. The git host's three when left out; empty lets
+   * nobody in but a domain's accounts and the administrators named.
+   */
+  readonly listed?: readonly string[];
   /** The logins the operator names administrators. Nobody when left out. */
   readonly admins?: readonly string[];
   /** The time everything is told; the system's when left out. */
@@ -124,7 +134,6 @@ export function createHarness(testDatabase: TestDatabase, options: HarnessOption
             auth: {
               publicUrl: origin,
               secret: "a secret for tests, long enough to be one",
-              members: options.members ?? ["alice", "bob", "carol"],
               admins: options.admins ?? [],
               domains: options.domains ?? [],
               sessionTtlMs: options.sessionTtlMs ?? 30 * 86_400_000,
@@ -150,8 +159,41 @@ export function createHarness(testDatabase: TestDatabase, options: HarnessOption
           onNudge: () => feed.nudge(),
         })
       : undefined;
-  const request = async (path: string, init?: RequestInit) =>
-    app.fetch(new Request(`${origin}${path}`, init));
+  /** The listings an administrator would have made, written once, before the first request. */
+  let seeded: Promise<void> | undefined;
+  const seed = (): Promise<void> => {
+    seeded ??= (async () => {
+      const workspace = await ensureWorkspace(testDatabase.database, {
+        name: "Acme",
+        now: new Date(),
+      });
+      const logins = options.listed ?? ["alice", "bob", "carol"];
+      const handle = drizzleOf(testDatabase.database);
+      await handle.delete(listings).where(
+        and(
+          eq(listings.workspaceId, workspace.id),
+          isNull(listings.personId),
+          notInArray(
+            sql`lower(${listings.login})`,
+            logins.map((login) => login.toLowerCase()),
+          ),
+        ),
+      );
+      for (const login of logins) {
+        await handle
+          .insert(listings)
+          .values({ workspaceId: workspace.id, host: hostOfLogin(login), login, personId: null })
+          .onConflictDoNothing();
+      }
+    })();
+    return seeded;
+  };
+  const request = async (path: string, init?: RequestInit) => {
+    if (providers.length > 0) {
+      await seed();
+    }
+    return app.fetch(new Request(`${origin}${path}`, init));
+  };
   return {
     app,
     origin,

@@ -472,10 +472,17 @@ export async function addMember(
     if (project === undefined) {
       throw new ProjectError("project.not_found");
     }
+    // A person out of the workspace (ADR-0022) is listed nowhere.
     const [person] = await tx
       .select({ login: people.login })
       .from(people)
-      .where(and(eq(people.workspaceId, workspaceId), eq(people.id, personId)))
+      .where(
+        and(
+          eq(people.workspaceId, workspaceId),
+          eq(people.id, personId),
+          eq(people.status, "active"),
+        ),
+      )
       .limit(1);
     if (person === undefined) {
       throw new ProjectError("member.invalid_person");
@@ -581,10 +588,10 @@ export async function removeMember(
 /**
  * The condition under which `personId` may work in `projectId`: what an assignee of a task
  * in it must satisfy. An administrator may everywhere; everyone of the workspace in a project
- * open to it; those listed in a private one.
+ * open to it; those listed in a private one. Nobody out of the workspace (ADR-0022).
  */
 export function mayWorkIn(projectId: string, personId: string): SQL {
-  return sql`exists (select 1 from ${projects} where ${projects.id} = ${projectId} and (${projects.visibility} = 'workspace' or exists (select 1 from ${projectMembers} where ${projectMembers.projectId} = ${projects.id} and ${projectMembers.personId} = ${personId}) or exists (select 1 from ${people} where ${people.id} = ${personId} and ${people.role} = 'admin')))`;
+  return sql`exists (select 1 from ${people} where ${people.id} = ${personId} and ${people.status} = 'active') and exists (select 1 from ${projects} where ${projects.id} = ${projectId} and (${projects.visibility} = 'workspace' or exists (select 1 from ${projectMembers} where ${projectMembers.projectId} = ${projects.id} and ${projectMembers.personId} = ${personId}) or exists (select 1 from ${people} where ${people.id} = ${personId} and ${people.role} = 'admin')))`;
 }
 
 /**

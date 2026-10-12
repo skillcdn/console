@@ -70,14 +70,23 @@ let bob: PersonRecord;
 const T0 = new Date("2026-01-01T00:00:00Z");
 const minutes = (count: number) => new Date(T0.getTime() + count * 60_000);
 
+/** A sign-in that was let in: nobody here is deactivated. */
+function signedIn<T>(result: T | "deactivated"): T {
+  if (result === "deactivated") {
+    throw new Error("the person is deactivated");
+  }
+  return result;
+}
+
 beforeAll(async () => {
   testDatabase = await createTestDatabase(process.env.TEST_DATABASE_URL ?? DEV_DATABASE_URL);
   database = testDatabase.database;
   workspaceId = (await ensureWorkspace(database, { name: "Acme", now: T0 })).id;
-  alice = (
+  alice = signedIn(
     await savePerson(database, {
       workspaceId,
       host: "gh",
+      source: "listed",
       account: {
         hostAccountId: "1001",
         login: "Alice",
@@ -85,15 +94,16 @@ beforeAll(async () => {
         avatarUrl: "https://avatars.example/alice.png",
       },
       now: T0,
-    })
+    }),
   ).person;
-  bob = (
+  bob = signedIn(
     await savePerson(database, {
       workspaceId,
       host: "gh",
+      source: "listed",
       account: { hostAccountId: "1002", login: "bob", name: undefined, avatarUrl: undefined },
       now: T0,
-    })
+    }),
   ).person;
   const project = await createProject(database, {
     workspaceId,
@@ -131,26 +141,30 @@ describe("the workspace", () => {
 
 describe("people", () => {
   it("join once, keyed by the host's id, and keep their id through a rename", async () => {
-    const renamed = await savePerson(database, {
-      workspaceId,
-      host: "gh",
-      account: {
-        hostAccountId: "1001",
-        login: "alice-renamed",
-        name: "Alice",
-        avatarUrl: undefined,
-      },
-      now: minutes(2),
-    });
+    const renamed = signedIn(
+      await savePerson(database, {
+        workspaceId,
+        host: "gh",
+        source: "listed",
+        account: {
+          hostAccountId: "1001",
+          login: "alice-renamed",
+          name: "Alice",
+          avatarUrl: undefined,
+        },
+        now: minutes(2),
+      }),
+    );
     expect(renamed.joined).toBe(false);
     expect(renamed.person.id).toBe(alice.id);
     expect(renamed.person.login).toBe("alice-renamed");
     expect(renamed.person.avatarUrl).toBeUndefined();
     // Back to how the rest of the file knows her.
-    alice = (
+    alice = signedIn(
       await savePerson(database, {
         workspaceId,
         host: "gh",
+        source: "listed",
         account: {
           hostAccountId: "1001",
           login: "Alice",
@@ -158,7 +172,7 @@ describe("people", () => {
           avatarUrl: "https://avatars.example/alice.png",
         },
         now: minutes(3),
-      })
+      }),
     ).person;
     expect(await findPerson(database, workspaceId, alice.id)).toEqual(alice);
     expect(await findPerson(database, workspaceId, "0199c4d8-0000-7000-8000-000000000099")).toBe(

@@ -7,6 +7,9 @@ const PERSON = {
   name: null,
   avatar: null,
   role: "member",
+  status: "active",
+  source: "listed",
+  deactivatedAt: null,
 };
 
 const PROJECT = {
@@ -387,6 +390,24 @@ describe("createClient", () => {
     const client = createClient({ fetch: send });
     expect((await client.updatePerson(PERSON.id, { role: "admin" })).role).toBe("admin");
     expect(calls[0]?.init?.body).toBe(JSON.stringify({ role: "admin" }));
+  });
+
+  it("lets a login in, and takes a listing away", async () => {
+    const listing = {
+      id: "0199c4d8-0000-7000-8000-000000000077",
+      host: "gh",
+      login: "dana",
+      createdAt: "2026-10-09T10:00:00.000Z",
+    };
+    const { send, calls } = fakeFetch({
+      "POST /api/v1/listings": { status: 201, body: listing },
+      [`DELETE /api/v1/listings/${listing.id}`]: { status: 204 },
+    });
+    const client = createClient({ fetch: send });
+    expect(await client.createListing({ host: "gh", login: "dana" })).toEqual(listing);
+    expect(calls[0]?.init?.body).toBe(JSON.stringify({ host: "gh", login: "dana" }));
+    await client.removeListing(listing.id);
+    expect(calls[1]?.init?.method).toBe("DELETE");
   });
 
   it("lists the projects, makes one, and manages one's settings and members", async () => {

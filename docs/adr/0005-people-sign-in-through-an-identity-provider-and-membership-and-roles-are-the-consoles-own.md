@@ -1,6 +1,6 @@
 # ADR-0005: People sign in through an identity provider; membership and roles are the console's own
 
-- Status: Accepted
+- Status: Accepted; decision 4's list of members (`MEMBERS`) superseded by [ADR-0022](0022-who-is-in-is-the-consoles-own-record-and-an-administrator-keeps-it.md)
 - Date: 2026-10-09
 
 ## Context

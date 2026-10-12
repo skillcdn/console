@@ -70,6 +70,23 @@ export const PERSON_ROLES = ["admin", "member"] as const;
 
 export type PersonRole = (typeof PERSON_ROLES)[number];
 
+/**
+ * Whether a person is in: `active`, or `deactivated`, which is kept rather than deleted so that
+ * what they did stays theirs (ADR-0022). A deactivated person is refused on every request.
+ */
+export const PERSON_STATUSES = ["active", "deactivated"] as const;
+
+export type PersonStatus = (typeof PERSON_STATUSES)[number];
+
+/**
+ * What let a person in (ADR-0022): the organization at the git host the deployment names,
+ * whose members come and go with it; the Workspace domain the deployment names; or an
+ * administrator, who listed their login on the People page.
+ */
+export const MEMBERSHIP_SOURCES = ["organization", "domain", "listed"] as const;
+
+export type MembershipSource = (typeof MEMBERSHIP_SOURCES)[number];
+
 /** What a person is within a project: an owner configures it, a member works on it. */
 export const PROJECT_ROLES = ["owner", "member"] as const;
 
@@ -122,6 +139,10 @@ export type SkillsStatus = (typeof SKILLS_STATUSES)[number];
 export const EVENT_KINDS = [
   "person.joined",
   "person.role_changed",
+  "person.listed",
+  "person.unlisted",
+  "person.deactivated",
+  "person.reactivated",
   "category.created",
   "category.updated",
   "category.removed",
