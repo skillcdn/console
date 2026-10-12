@@ -605,15 +605,27 @@ describe("the console command", () => {
       `Run ${RUN.id} began on #7 Fix the parser, as "Claude Code" for alice`,
     );
     expect(h.out()).toContain("It fails on empty input.");
+    // Nothing was open on the task, so nothing is said of a take-over.
+    expect(h.out()).not.toContain("taking it was deciding");
     // The rules come with the run, the workspace's then the project's, before what to do next.
     expect(h.out()).toMatch(/Read these\.[\s\S]*Ask before pushing\.[\s\S]*Say how it goes/);
     expect(calls[1]?.body).toEqual({ taskId: TASK.id });
     const named = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["take", "7", "--agent", "Codex on the laptop"], named.io)).toBe(EXIT.ok);
-    expect(calls[5]?.body).toEqual({ taskId: TASK.id, agent: "Codex on the laptop" });
+    expect(calls[6]?.body).toEqual({ taskId: TASK.id, agent: "Codex on the laptop" });
     const asJson = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["take", "7", "--json"], asJson.io)).toBe(EXIT.ok);
     expect(JSON.parse(asJson.out())).toEqual({ run: RUN, task: TASK, rules: RULES });
+    // A run open on the task is taken over, and that is said.
+    const busy = fakeConsole({
+      [`GET ${IN}/tasks/7`]: { body: { ...TASK, openRuns: 1 } },
+      [`POST ${IN}/runs`]: { status: 201, body: RUN },
+      [`GET ${IN}/rules`]: { body: RULES },
+      "GET /api/v1/me": { body: ME },
+    });
+    const over = harness({ fetch: busy.fetch, env: SIGNED_IN });
+    expect(await runCli(["take", "7"], over.io)).toBe(EXIT.ok);
+    expect(over.out()).toContain("A run that was open on it is over now");
   });
 
   it("reads the rules as they are for the person: {language} filled with the language they chose", async () => {

@@ -974,17 +974,26 @@ const take: Command = async (args, io) => {
     ...(agent === undefined ? {} : { agent }),
   });
   // The rules come with the run, as they read for the person: everything from here acts
-  // within them (ADR-0023).
-  const [ruling, me] = await Promise.all([project.rules(), session.client.me()]);
+  // within them (ADR-0023); the task is read again, as it stands now that it is taken.
+  const [ruling, me, taken] = await Promise.all([
+    project.rules(),
+    session.client.me(),
+    project.task(ref),
+  ]);
+  // Taking a task with a run open on it ends that run (ADR-0020): said when it happened.
+  const tookOver =
+    found.openRuns > 0
+      ? " A run that was open on it is over now: the board cannot know whether its agent still ran, so taking it was deciding."
+      : "";
   const rules = {
     workspace: forPerson(ruling.workspace, me.language),
     project: forPerson(ruling.project, me.language),
   };
-  answer(io, session, { run, task: found, rules }, () =>
+  answer(io, session, { run, task: taken, rules }, () =>
     [
-      `Run ${run.id} began on #${found.number} ${found.title}, as "${run.agent}" for ${run.person.login}. The task is in progress and theirs. A run that was open on it is over now: the board cannot know whether its agent still ran, so taking it was deciding.`,
+      `Run ${run.id} began on #${found.number} ${found.title}, as "${run.agent}" for ${run.person.login}. The task is in progress and theirs.${tookOver}`,
       "",
-      formatTask(found),
+      formatTask(taken),
       "",
       formatRules(rules),
       "",
