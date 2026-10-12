@@ -402,7 +402,7 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
 const preamble = (version: string | undefined): string =>
   `console${version === undefined ? "" : ` ${version}`}: the board of your organization's work with AI agents, from the command line.
 You act as the person whose token you hold; everything you send is shown to people as text.
-console rules says what this organization asks of agents: read it before taking a task.
+The rules of this organization come with the task: console take prints them; console rules reads them any time.
 
 Usage: console <command> [arguments] [--json] [--url <origin>] [--project <key>]
 `;

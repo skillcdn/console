@@ -46,7 +46,7 @@ console take 7                                   # a run begins on task #7 of th
 console report "Found the cause: the parser trusts its input."
 console hand-in ./report.md --label "the report"  # a file the console keeps, or an https link
 console skills                                   # the project's skills, with the URI to load each by
-console rules                                    # what the organization and the project ask of agents; take prints them again
+console rules                                    # what the organization and the project ask of agents; take prints them with the task
 console ask "Keep the old behaviour?" --option "Keep it" --option "Change it"
 console write notes/parser --title "The parser" --file notes.md   # a page of the project's documents, by path
 console doc guides/onboarding                     # a page in full, with what refers to it
