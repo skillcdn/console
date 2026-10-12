@@ -941,7 +941,7 @@ describe("the plan on the command line", () => {
     const parentId = "0199c4d8-0000-7000-8000-000000000011";
     const { fetch, calls } = fakeConsole({
       "GET /api/v1/me": { body: ME },
-      "GET /api/v1/people": { body: { items: [PERSON, BOB], listed: [] } },
+      "GET /api/v1/people": { body: { items: [PERSON, BOB], listed: [], organization: null } },
       [`POST ${IN}/tasks`]: { status: 201, body: { ...TASK, dueOn: "2026-10-24" } },
       [`GET ${IN}/tasks/7`]: { body: TASK },
       [`GET ${IN}/tasks/3`]: { body: { ...TASK, id: parentId, number: 3 } },
@@ -1074,7 +1074,7 @@ describe("the plan on the command line", () => {
   it("shows another person's plate by their login, for whoever oversees them", async () => {
     const bob = { ...PERSON, id: "0199c4d8-0000-7000-8000-000000000002", login: "bob" };
     const { fetch } = fakeConsole({
-      "GET /api/v1/people": { body: { items: [PERSON, bob], listed: [] } },
+      "GET /api/v1/people": { body: { items: [PERSON, bob], listed: [], organization: null } },
       [`GET /api/v1/people/${bob.id}/work`]: {
         body: {
           tasks: [
@@ -1171,6 +1171,7 @@ describe("configuring, as the person", () => {
             },
           ],
           listed: [dana],
+          organization: null,
         },
       },
       [`PATCH /api/v1/people/${BOB.id}`]: { body: { ...BOB, role: "admin" } },
@@ -1203,7 +1204,7 @@ describe("configuring, as the person", () => {
       createdAt: WHEN,
     };
     const { fetch, calls } = fakeConsole({
-      "GET /api/v1/people": { body: { items: [PERSON, BOB], listed: [dana] } },
+      "GET /api/v1/people": { body: { items: [PERSON, BOB], listed: [dana], organization: null } },
       "POST /api/v1/listings": { status: 201, body: dana },
       [`DELETE /api/v1/listings/${dana.id}`]: { status: 204 },
       [`PATCH /api/v1/people/${BOB.id}`]: {
@@ -1338,7 +1339,7 @@ describe("configuring, as the person", () => {
 
   it("lists the members, adds one, changes what they are, and takes them off the list", async () => {
     const { fetch, calls } = fakeConsole({
-      "GET /api/v1/people": { body: { items: [PERSON, BOB], listed: [] } },
+      "GET /api/v1/people": { body: { items: [PERSON, BOB], listed: [], organization: null } },
       [`GET ${IN}/members`]: {
         body: { items: [{ person: PERSON, role: "owner", addedAt: WHEN }] },
       },

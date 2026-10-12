@@ -19,6 +19,7 @@ import type { LiveFeed } from "../http/live-feed.js";
 import type { AppEnv } from "../http/request-context.js";
 import type { BlobStore } from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
+import type { OrganizationDirectory } from "../ports/organization.js";
 import type { SkillSource } from "../ports/skill-source.js";
 import { createApi } from "../roles/api.js";
 import type { FixtureProvider } from "./fixture-provider.js";
@@ -59,6 +60,8 @@ export interface HarnessOptions {
   readonly providers?: readonly FixtureProvider[];
   /** The Workspace domains the operator names. None when left out. */
   readonly domains?: readonly string[];
+  /** The git host's organization the operator names, as the host answers for it. None when left out. */
+  readonly organization?: OrganizationDirectory | undefined;
   /**
    * The logins an administrator let in and nobody signed in with yet, as rows of the database
    * (ADR-0022), made exactly so before the first sign-in: one of another harness on the same
@@ -144,6 +147,7 @@ export function createHarness(testDatabase: TestDatabase, options: HarnessOption
     {
       database: testDatabase.database,
       providers,
+      organization: options.organization,
       clock: options.clock ?? { now: () => new Date() },
       logger,
       isShuttingDown: () => false,

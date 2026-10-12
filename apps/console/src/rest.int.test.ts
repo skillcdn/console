@@ -44,9 +44,13 @@ import {
   restVersionsSchema,
   restWorkSchema,
 } from "@skillcdn/console/api";
+import { pino } from "pino";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { ensureWorkspace } from "./db/queries/workspaces.js";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "./db/testing.js";
+import { OrganizationSync } from "./jobs/organization-sync.js";
 import type { SkillSource } from "./ports/skill-source.js";
+import { createFixtureOrganization } from "./testing/fixture-organization.js";
 import { createFixtureProvider } from "./testing/fixture-provider.js";
 import { createHarness, type Harness, SIGN_IN_URL } from "./testing/harness.js";
 
@@ -2272,5 +2276,88 @@ describe("who is in", () => {
     expect(nothing.status).toBe(400);
     const nobody = await standing(carol, "0199c4d8-0000-7000-8000-000000000099", "deactivated");
     expect(nobody.status).toBe(404);
+  });
+});
+
+describe("the organization at the git host", () => {
+  it("says who is in, by the account's id, when the worker reads it; and nobody else may", async () => {
+    const organization = createFixtureOrganization({ Alice: "1001", bob: "1002" });
+    const named = createHarness(testDatabase, {
+      providers: [createFixtureProvider()],
+      organization,
+      admins: ["carol"],
+    });
+    const carol = await named.signIn("carol");
+    const aliceIn = await named.signIn("alice");
+    const bobIn = await named.signIn("bob");
+    // Everything is asked of the harness that names the organization: the base one names none.
+    const read = (cookie: string, path: string) => named.request(path, { headers: { cookie } });
+    const latest = async () =>
+      restEventsSchema
+        .parse(await (await read(carol, `${REST_ROUTES.events}?after=0`)).json())
+        .items.at(-1);
+    const people = restPeopleSchema.parse(await (await read(carol, REST_ROUTES.people)).json());
+    expect(people.organization).toEqual({ host: "gh", name: "acme", syncedAt: null });
+    const bobId = people.items.find((person) => person.login === "bob")?.id ?? "";
+    expect(people.items.find((person) => person.id === bobId)?.source).toBe("organization");
+    // Not an administrator's to change.
+    const out = await named.request(`${REST_ROUTES.people}/${bobId}`, {
+      method: "PATCH",
+      headers: { cookie: carol, origin: SIGN_IN_URL, "content-type": "application/json" },
+      body: JSON.stringify({ status: "deactivated" }),
+    });
+    expect(out.status).toBe(409);
+    expect(await errorOf(out)).toBe("person.of_organization");
+
+    const workspace = await ensureWorkspace(testDatabase.database, {
+      name: "Acme",
+      now: new Date(),
+    });
+    const logs: Record<string, unknown>[] = [];
+    const sync = new OrganizationSync({
+      database: testDatabase.database,
+      organization,
+      workspaceId: async () => workspace.id,
+      clock: { now: () => new Date() },
+      logger: pino(
+        { level: "info" },
+        { write: (line: string) => logs.push(JSON.parse(line) as Record<string, unknown>) },
+      ),
+    });
+    // Bob leaves the organization: out at once, and the board is told by nobody.
+    organization.members.delete("bob");
+    await sync.sync();
+    const after = restPeopleSchema.parse(await (await read(carol, REST_ROUTES.people)).json());
+    expect(after.organization?.syncedAt).not.toBeNull();
+    expect(after.items.find((person) => person.id === bobId)).toMatchObject({
+      status: "deactivated",
+      source: "organization",
+    });
+    expect((await read(bobIn, REST_ROUTES.people)).status).toBe(401);
+    expect((await read(aliceIn, REST_ROUTES.people)).status).toBe(200);
+    expect(await latest()).toMatchObject({
+      kind: "person.deactivated",
+      actor: null,
+      data: { login: "bob" },
+    });
+    // Back in the organization under a new login, Bob is back in here: the id says it is him.
+    organization.members.set("robert", "1002");
+    await sync.sync();
+    expect((await read(bobIn, REST_ROUTES.people)).status).toBe(200);
+    expect(await latest()).toMatchObject({ kind: "person.reactivated", data: { login: "bob" } });
+    // Nobody listed, or the host away: nothing changes.
+    const before = (await latest())?.id;
+    organization.members.clear();
+    await sync.sync();
+    organization.members.set("Alice", "1001");
+    organization.unreachable(true);
+    await sync.sync();
+    organization.unreachable(false);
+    expect((await read(bobIn, REST_ROUTES.people)).status).toBe(200);
+    expect((await latest())?.id).toBe(before);
+    expect(logs.filter((line) => String(line.msg).includes("nothing changed"))).toHaveLength(2);
+    // Carol, named by the operator, is nobody of the organization's: the sync leaves her be.
+    expect((await read(carol, REST_ROUTES.people)).status).toBe(200);
+    await sync.close();
   });
 });

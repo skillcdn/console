@@ -7,6 +7,7 @@ import {
   type ProviderKey,
   type RestListing,
   type RestListingInput,
+  type RestOrganization,
   type RestPerson,
   type RestProvider,
 } from "../api.js";
@@ -24,6 +25,8 @@ export interface PeopleListProps {
   readonly people: readonly RestPerson[];
   /** The logins let in that nobody has signed in with yet. */
   readonly listed?: readonly RestListing[] | undefined;
+  /** The organization at the git host that says who is in, where the deployment names one. */
+  readonly organization?: RestOrganization | null | undefined;
   /** Whoever is looking, so that their own row says so. */
   readonly me?: RestPerson | undefined;
   /** Called with the role an administrator chose. Left out, roles are read here, not changed. */
@@ -53,8 +56,21 @@ export function PeopleList(props: PeopleListProps) {
     props.onChangeStatus !== undefined &&
     person.source !== "organization" &&
     props.me?.id !== person.id;
+  const organization = props.organization ?? undefined;
   return (
     <div className="sc-people-page">
+      {organization !== undefined && (
+        <p className="sc-people-organization sc-muted">
+          {people.organization(organization.name)}{" "}
+          {organization.syncedAt === null ? (
+            people.organizationNotRead
+          ) : (
+            <>
+              {people.organizationRead} <Time iso={organization.syncedAt} />
+            </>
+          )}
+        </p>
+      )}
       <ul className="sc-people" aria-label={people.list}>
         {active.map((person) => (
           <li key={person.id} className="sc-person-row">

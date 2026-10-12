@@ -111,6 +111,10 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
     logger,
     agents: dependencies.agents,
     signIn: auth?.providers.map((provider) => provider.key) ?? [],
+    organization:
+      auth?.organization === undefined
+        ? undefined
+        : { host: auth.organization.host, name: auth.organization.name },
   });
 
   // After the API: a file of the build, or the page for every other path, which routes in the

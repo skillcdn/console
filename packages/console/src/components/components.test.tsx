@@ -912,6 +912,20 @@ describe("people", () => {
       <PeopleList people={[alice, bob]} me={alice} onChangeStatus={() => undefined} />,
     );
     expect(others.match(/>Deactivate</g)).toHaveLength(1);
+    // The organization that says who is in, and when it was last read.
+    const unread = renderToStaticMarkup(
+      <PeopleList people={[alice]} organization={{ host: "gh", name: "acme", syncedAt: null }} />,
+    );
+    expect(unread).toContain("The organization acme at GitHub says who is in.");
+    expect(unread).toContain("Not read yet.");
+    const synced = renderToStaticMarkup(
+      <PeopleList
+        people={[alice]}
+        organization={{ host: "gh", name: "acme", syncedAt: "2026-10-12T09:00:00.000Z" }}
+      />,
+    );
+    expect(synced).toContain("Last read");
+    expect(synced).toContain("<time");
   });
 
   it("lets someone in by a login spelled as its host spells one", () => {

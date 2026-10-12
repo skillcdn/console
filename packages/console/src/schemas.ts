@@ -130,6 +130,16 @@ export const restListingSchema = z.object({
 });
 export type RestListing = z.infer<typeof restListingSchema>;
 
+/** The organization at the git host whose members are in (ADR-0022), and when it was last read whole. */
+export const restOrganizationSchema = z.object({
+  host: z.enum(PROVIDER_KEYS),
+  /** What the organization is called at the host. */
+  name: z.string(),
+  /** When the worker last read it whole, or `null` until it has. */
+  syncedAt: z.nullable(instant),
+});
+export type RestOrganization = z.infer<typeof restOrganizationSchema>;
+
 /** What `POST /api/v1/listings` is sent: a login at one of the providers the deployment has. */
 export const restListingInputSchema = z
   .object({
@@ -182,10 +192,14 @@ export const restMeSchema = z.object({
 });
 export type RestMe = z.infer<typeof restMeSchema>;
 
-/** `GET /api/v1/people`: everyone who has signed in, by login, and the logins let in that have not. */
+/**
+ * `GET /api/v1/people`: everyone who has signed in, by login, the logins let in that have not,
+ * and the organization that says who is in, where the deployment names one.
+ */
 export const restPeopleSchema = z.object({
   items: z.array(restPersonSchema),
   listed: z.array(restListingSchema),
+  organization: z.nullable(restOrganizationSchema),
 });
 export type RestPeople = z.infer<typeof restPeopleSchema>;
 

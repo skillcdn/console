@@ -4,7 +4,7 @@ import type {
   PersonStatus,
   ProviderKey,
 } from "@skillcdn/console/api";
-import { and, asc, count, eq, isNull, or, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNull, notInArray, or, sql } from "drizzle-orm";
 import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
@@ -517,6 +517,91 @@ export async function updatePersonStatus(
       now,
     });
     return changed;
+  });
+}
+
+/**
+ * Keeps the people the organization let in as the organization has them (ADR-0022): those not
+ * in `members` any more are deactivated, those in it again reactivated, by the account's id,
+ * and the board is told of each, by nobody. People let in by a listing or a domain are not
+ * looked at. The time the organization was read is written on the workspace.
+ */
+export async function syncOrganization(
+  database: Database,
+  input: {
+    readonly workspaceId: string;
+    readonly host: ProviderKey;
+    readonly members: readonly { readonly accountId: string }[];
+    readonly now: Date;
+  },
+): Promise<{ readonly deactivated: string[]; readonly reactivated: string[] }> {
+  const { workspaceId, host, members, now } = input;
+  const ids = members.map((member) => member.accountId);
+  return drizzleOf(database).transaction(async (tx) => {
+    await tx
+      .select({ id: workspaces.id })
+      .from(workspaces)
+      .where(eq(workspaces.id, workspaceId))
+      .for("update");
+    const ofOrganization = and(
+      eq(people.workspaceId, workspaceId),
+      eq(people.host, host),
+      eq(people.source, "organization"),
+    );
+    const gone =
+      ids.length === 0
+        ? []
+        : await tx
+            .update(people)
+            .set({ status: "deactivated", deactivatedAt: now, updatedAt: now })
+            .where(
+              and(
+                ofOrganization,
+                eq(people.status, "active"),
+                notInArray(people.hostAccountId, ids),
+              ),
+            )
+            .returning({ login: people.login });
+    const back =
+      ids.length === 0
+        ? []
+        : await tx
+            .update(people)
+            .set({ status: "active", deactivatedAt: null, updatedAt: now })
+            .where(
+              and(
+                ofOrganization,
+                eq(people.status, "deactivated"),
+                inArray(people.hostAccountId, ids),
+              ),
+            )
+            .returning({ login: people.login });
+    for (const row of gone) {
+      await recordEvent(tx, {
+        workspaceId,
+        kind: "person.deactivated",
+        actor: undefined,
+        data: { login: row.login },
+        now,
+      });
+    }
+    for (const row of back) {
+      await recordEvent(tx, {
+        workspaceId,
+        kind: "person.reactivated",
+        actor: undefined,
+        data: { login: row.login },
+        now,
+      });
+    }
+    await tx
+      .update(workspaces)
+      .set({ membersSyncedAt: now, updatedAt: now })
+      .where(eq(workspaces.id, workspaceId));
+    return {
+      deactivated: gone.map((row) => row.login),
+      reactivated: back.map((row) => row.login),
+    };
   });
 }
 

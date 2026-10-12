@@ -27,6 +27,7 @@ import {
   type RestMemberInput,
   type RestMemberPatch,
   type RestMePatch,
+  type RestOrganization,
   type RestPerson,
   type RestPersonPatch,
   type RestPersonWork,
@@ -135,6 +136,8 @@ export interface ConsoleData {
   readonly people: readonly RestPerson[];
   /** The logins let in that nobody has signed in with yet. */
   readonly listed: readonly RestListing[];
+  /** The organization at the git host that says who is in, where the deployment names one. */
+  readonly organization: RestOrganization | null;
   /** The categories tasks are sorted into, by name. */
   readonly categories: readonly RestCategory[];
   /** The tokens of whoever is signed in, newest first. */
@@ -197,6 +200,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
   const [projects, setProjects] = useState<readonly RestProject[]>([]);
   const [people, setPeople] = useState<readonly RestPerson[]>([]);
   const [listed, setListed] = useState<readonly RestListing[]>([]);
+  const [organization, setOrganization] = useState<RestOrganization | null>(null);
   const [categories, setCategories] = useState<readonly RestCategory[]>([]);
   const [tokens, setTokens] = useState<readonly RestToken[]>([]);
   const [project, setProject] = useState<RestProject | undefined>(undefined);
@@ -230,6 +234,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
       setProjects(nextProjects.items);
       setPeople(nextPeople.items);
       setListed(nextPeople.listed);
+      setOrganization(nextPeople.organization);
       setCategories(nextCategories.items);
     },
     [client],
@@ -570,6 +575,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
     projects,
     people,
     listed,
+    organization,
     categories,
     tokens,
     project,

@@ -21,6 +21,7 @@ import type { TokenRecord } from "../db/queries/tokens.js";
 import type { WorkspaceRecord } from "../db/queries/workspaces.js";
 import type { Logger } from "../logger.js";
 import type { Clock } from "../ports/clock.js";
+import type { OrganizationDirectory } from "../ports/organization.js";
 import { errorBody } from "./app.js";
 import type { AppEnv } from "./request-context.js";
 import { restPerson } from "./rest-shapes.js";
@@ -39,6 +40,8 @@ export interface AppAuth {
   /** The providers, as the pages offer them. */
   readonly providers: readonly RestProvider[];
   readonly membership: Membership;
+  /** The organization at the git host whose members are in (ADR-0022), when one is named. */
+  readonly organization: OrganizationDirectory | undefined;
 }
 
 // The sign-in paths of the package, with the provider as a parameter of the route.

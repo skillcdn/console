@@ -67,6 +67,8 @@ export const workspaces = pgTable(
      * (expand, then contract), and is dropped then.
      */
     nextTaskNumber: integer().notNull().default(1),
+    /** When the organization at the git host was last read whole (ADR-0022); null until it is. */
+    membersSyncedAt: instant(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

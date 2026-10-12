@@ -11,6 +11,7 @@ const SECRET_NAMES = [
   "DATABASE_URL",
   "DATABASE_CA",
   "GITHUB_CLIENT_SECRET",
+  "GITHUB_APP_PRIVATE_KEY",
   "GOOGLE_CLIENT_SECRET",
   "AUTH_SECRET",
   "S3_SECRET_ACCESS_KEY",
@@ -23,6 +24,8 @@ const PROVIDER_NAMES = {
   gh: ["GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"],
   google: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
 } as const;
+/** What reading the organization at the git host needs (ADR-0022): all three, or none. */
+const ORGANIZATION_NAMES = ["GITHUB_APP_ID", "GITHUB_APP_PRIVATE_KEY", "GITHUB_ORG"] as const;
 /** What a bucket needs: both, or neither. */
 const BUCKET_NAMES = ["S3_ENDPOINT", "S3_BUCKET"] as const;
 /** The pair of keys, where the credentials are keys: both, or neither. */
@@ -173,6 +176,21 @@ const environmentSchema = z.object({
     .regex(/^[A-Za-z0-9._-]{1,64}$/, "must be the app's client id")
     .optional(),
   GITHUB_CLIENT_SECRET: z.string().min(1).optional(),
+  GITHUB_APP_ID: z
+    .string()
+    .regex(/^[A-Za-z0-9._-]{1,64}$/, "must be the app's id, or its client id")
+    .optional(),
+  GITHUB_APP_PRIVATE_KEY: z
+    .string()
+    .regex(
+      /^-----BEGIN (?:RSA )?PRIVATE KEY-----\r?\n[A-Za-z0-9+/=\r\n]+-----END (?:RSA )?PRIVATE KEY-----\s*$/,
+      "must be the app's private key in PEM",
+    )
+    .optional(),
+  GITHUB_ORG: z
+    .string()
+    .regex(/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/, "must be the organization's login at the host")
+    .optional(),
   GOOGLE_CLIENT_ID: z
     .string()
     .regex(/^[A-Za-z0-9._-]{1,128}$/, "must be the client id")
@@ -243,6 +261,20 @@ export interface AuthConfig {
         readonly webUrl: string;
         /** Where the host's API is. */
         readonly apiUrl: string;
+        /**
+         * The organization at the host whose members are in, read through the app installed on
+         * it (ADR-0022); nothing when none is named, and then only the listings and the
+         * administrators named let people in at the host.
+         */
+        readonly organization:
+          | {
+              readonly name: string;
+              /** The app's id, or its client id: what signs for the app. */
+              readonly appId: string;
+              /** The app's private key, as PEM. */
+              readonly privateKey: string;
+            }
+          | undefined;
       }
     | undefined;
   /** The client the operator registered at Google; nothing when people do not sign in there. */
@@ -411,6 +443,9 @@ function authOf(
     AUTH_SECRET: env.AUTH_SECRET,
     GITHUB_CLIENT_ID: env.GITHUB_CLIENT_ID,
     GITHUB_CLIENT_SECRET: env.GITHUB_CLIENT_SECRET,
+    GITHUB_APP_ID: env.GITHUB_APP_ID,
+    GITHUB_APP_PRIVATE_KEY: env.GITHUB_APP_PRIVATE_KEY,
+    GITHUB_ORG: env.GITHUB_ORG,
     GOOGLE_CLIENT_ID: env.GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET: env.GOOGLE_CLIENT_SECRET,
     GOOGLE_WORKSPACE_DOMAIN: env.GOOGLE_WORKSPACE_DOMAIN,
@@ -431,6 +466,16 @@ function authOf(
       problems.push(`${names.join(", ")}: set both or neither`);
     }
   }
+  const named = ORGANIZATION_NAMES.filter((name) => env[name] !== undefined);
+  if (named.length > 0 && named.length < ORGANIZATION_NAMES.length) {
+    problems.push(`${ORGANIZATION_NAMES.join(", ")}: set all three or none`);
+  }
+  const organization =
+    env.GITHUB_APP_ID !== undefined &&
+    env.GITHUB_APP_PRIVATE_KEY !== undefined &&
+    env.GITHUB_ORG !== undefined
+      ? { name: env.GITHUB_ORG, appId: env.GITHUB_APP_ID, privateKey: env.GITHUB_APP_PRIVATE_KEY }
+      : undefined;
   const github =
     env.GITHUB_CLIENT_ID !== undefined && env.GITHUB_CLIENT_SECRET !== undefined
       ? {
@@ -438,8 +483,14 @@ function authOf(
           clientSecret: env.GITHUB_CLIENT_SECRET,
           webUrl: env.GITHUB_WEB_URL,
           apiUrl: env.GITHUB_API_URL,
+          organization,
         }
       : undefined;
+  if (named.length > 0 && github === undefined) {
+    problems.push(
+      `${ORGANIZATION_NAMES.join(", ")}: need GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET`,
+    );
+  }
   const google =
     env.GOOGLE_CLIENT_ID !== undefined && env.GOOGLE_CLIENT_SECRET !== undefined
       ? {

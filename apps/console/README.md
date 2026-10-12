@@ -53,15 +53,21 @@ src/
                  roadmap, tasks.ts the board with its plan and its moments), listener.ts (a
                  connection of its own on the events channel, made again when lost), testing.ts
                  (a database per test file; not compiled)
-  jobs/          janitor.ts: the sweep of what time has ended, on a timer
+  jobs/          janitor.ts: the sweep of what time has ended, on a timer; organization-sync.ts:
+                 the organization at the git host read whole on a timer, those who left
+                 deactivated and those who returned reactivated (ADR-0022)
   skills.ts      a project's skills as the board shows them: read by address through the skill
                  source, the project's own or the organization's, each with its page and its URI,
                  and held per address for a minute
   ports/         the interfaces the domain needs implemented: the clock, the identity provider's
-                 side of signing in, the blob store for the files runs hand in and the source of
-                 the credentials it signs with, the skill source for the organization's skills
+                 side of signing in, the organization at the git host that says who is in, the
+                 blob store for the files runs hand in and the source of the credentials it signs
+                 with, the skill source for the organization's skills
   adapters/      their implementations: the system clock, the GitHub and Google providers and
-                 what those share (upstream.ts: a bounded request and its reply), the blob store
+                 what those share (upstream.ts: a bounded request and its reply), the GitHub
+                 organization read through a GitHub App (github-organization.ts: a JWT the app's
+                 key signs, the installation's token held until near its end, the members by
+                 the account's id), the blob store
                  in PostgreSQL (pg-blob-store.ts) and in a bucket through the S3 API, signing its
                  own requests (s3-blob-store.ts, ADR-0016) with keys or with the credentials the
                  platform hands the container (container-credentials.ts, ADR-0018), and the
@@ -103,6 +109,7 @@ Read the root [`AGENTS.md`](../../AGENTS.md) first. This workspace is the compos
 - Unit tests next to the code: the config module, the client address, the listener and its shutdown.
 - `src/http/app.int.test.ts` runs the app of the `api` role against real PostgreSQL: the probes in every state, the id and the address every request gets, the access log and what it leaves out.
 - `src/auth.int.test.ts` covers signing in through fixture providers, a git host and a Workspace: the round trip, the sealed cookie, where a browser may be sent back, what did not complete and why, a login nobody let in, who the operator names an administrator, sessions and their end (sign-out from the console's own pages only, time, deactivation, and the way back in by a listing), and a deployment where nobody signs in.
+- `src/adapters/github-organization.test.ts` covers the organization read through a GitHub App against a fake host: the JWT the app's key signs, checked with the public half of a key pair the test makes; the installation's token asked for, held, and asked for again near its end; the members a page at a time by the account's id; and each refusal by kind.
 - `src/adapters/github-login.test.ts` and `google-login.test.ts` cover the adapters against a fake `fetch`: what each sends, what it reads, and what it refuses.
 - `src/adapters/skillcdn.test.ts` and `src/skills.test.ts` cover the organization's skills: the deployment's overview read as the contracts say, what each state and each failure becomes, and the answer held for a while and asked for again.
 - `src/adapters/s3-blob-store.test.ts` covers the blob store in a bucket against one in memory that checks the signatures: the signing against the examples the API's documentation publishes, what is sent, what is checked of what comes back, what each refusal becomes, and that each request is signed with what its credentials source answers now. `src/adapters/container-credentials.test.ts` covers the platform's credentials endpoint against a fake: what is asked and when again, the authorization sent from a value or a file read each time, what is kept while the endpoint is away, and what is refused. `src/adapters/s3-blob-store.int.test.ts` runs it against the store of `deploy/compose.dev.yaml`, or wherever `TEST_S3_URL` points (`http://<access key>:<secret>@<host>:<port>/<bucket>`): bytes kept and read back whole, the rows read for what was kept before the bucket, bytes that are not their hash's refused, each refusal named, and a file handed in through the REST API kept there and read back, with `503` while the bucket refuses the console.
@@ -130,7 +137,7 @@ Primary keys are `uuid DEFAULT uuidv7()` and timestamps are `timestamptz`, with 
 
 | Table | What a row is | Keys and indexes |
 |---|---|---|
-| `workspaces` | An organization. A deployment holds one, found by its `key` (`default`), made at boot by whichever role comes first and renamed from configuration since (`ensureWorkspace`). `next_task_number` is what tasks were numbered by before projects; unused, kept until the next release (expand, then contract). | unique `key` |
+| `workspaces` | An organization. A deployment holds one, found by its `key` (`default`), made at boot by whichever role comes first and renamed from configuration since (`ensureWorkspace`). `next_task_number` is what tasks were numbered by before projects; unused, kept until the next release (expand, then contract). `members_synced_at`: when the organization at the git host was last read whole ([ADR-0022](../../docs/adr/0022-who-is-in-is-the-consoles-own-record-and-an-administrator-keeps-it.md)), or null. | unique `key` |
 | `projects` | The unit of work and of permission: `key` (what paths and the command say; immutable), `name`, `description`, `visibility` (`workspace`: everyone of the workspace is a member; `private`: only those listed; checked), `skills_address` (canonical, or null for the organization's), the project's mark, `color` (one of the package's names, or null; checked) and `symbol` (or null), its own image for it, `icon_sha256` and `icon_content_type` (the hash the blob store keeps the bytes by and the kind they were found to be; both or neither; checked), and `next_task_number`, the number the next task of the project gets. The migration that brought projects made one, `general`, open to the workspace, and moved the board into it. | unique `(workspace_id, key)` |
 | `project_members` | A person listed in a project with a `role` in it: `owner` configures it, `member` works on it (checked). A workspace administrator is an owner of every project without a row; a project open to the workspace has everyone of it as a member without one. Rows go with their project or their person (`on delete cascade`). | primary key `(project_id, person_id)`; `person_id` |
 | `people` | A person who signed in through an identity provider and was let in: the provider (`host`: `gh`, `google`) and its immutable `host_account_id`, which is what a person is known by, so that a renamed account stays the same person; `login` (a login at GitHub, an address at Google), `name` and `avatar_url` as the provider said at the last sign-in; `role`, `admin` or `member`, the console's own record; `status`, `active` or `deactivated`, with `deactivated_at` (both or neither; checked), and `source`, what let them in at their last sign-in, `organization`, `domain` or `listed` (checked) ([ADR-0022](../../docs/adr/0022-who-is-in-is-the-consoles-own-record-and-an-administrator-keeps-it.md)); `language`, the tag of the language the person chose for the pages, or null for the browser's; `last_login_at`. Never deleted: what they did names them. | unique `(workspace_id, host, host_account_id)` |

@@ -598,6 +598,9 @@ export const ko: Messages = {
       listed: "관리자가 들임",
     },
     at: { gh: "GitHub", google: "Google" },
+    organization: (name) => `GitHub 조직 ${name}이(가) 구성원을 정합니다.`,
+    organizationRead: "마지막으로 읽음",
+    organizationNotRead: "아직 읽지 않았습니다.",
     form: {
       login: "로그인 아이디 또는 주소",
       provider: "로그인 방식",

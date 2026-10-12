@@ -286,6 +286,52 @@ describe("signing in", () => {
     });
   });
 
+  it("reads the organization at the git host through its app: all three or none, with the client", () => {
+    const key =
+      "-----BEGIN RSA PRIVATE KEY-----\nMIIBOgIBAAJBAKj34GkxFhD90vcNLYLInFEX6Ppy1tPf9Cnzj4p4WGeKLs1Pt8Qu\n-----END RSA PRIVATE KEY-----\n";
+    const organization = {
+      ...signIn,
+      GITHUB_APP_ID: "12345",
+      GITHUB_APP_PRIVATE_KEY: key,
+      GITHUB_ORG: "acme",
+    };
+    expect(loadConfig(organization, noFiles).auth?.github?.organization).toEqual({
+      name: "acme",
+      appId: "12345",
+      privateKey: key,
+    });
+    expect(loadConfig(signIn, noFiles).auth?.github?.organization).toBeUndefined();
+    expect(
+      loadConfig(
+        {
+          ...organization,
+          GITHUB_APP_PRIVATE_KEY: undefined,
+          GITHUB_APP_PRIVATE_KEY_FILE: "/run/secrets/key",
+        },
+        (path) => (path === "/run/secrets/key" ? `${key}\n` : noFiles()),
+      ).auth?.github?.organization?.privateKey,
+    ).toBe(key.trim());
+    expect(problemsOf({ ...organization, GITHUB_ORG: undefined }).problems).toEqual([
+      "GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY, GITHUB_ORG: set all three or none",
+    ]);
+    expect(problemsOf({ ...organization, GITHUB_APP_PRIVATE_KEY: "not a key" }).problems).toEqual([
+      "GITHUB_APP_PRIVATE_KEY: must be the app's private key in PEM",
+    ]);
+    expect(problemsOf({ ...organization, GITHUB_ORG: "not an org" }).problems).toEqual([
+      "GITHUB_ORG: must be the organization's login at the host",
+    ]);
+    const { GITHUB_CLIENT_ID: _id, GITHUB_CLIENT_SECRET: _secret, ...withoutClient } = organization;
+    expect(
+      problemsOf({
+        ...withoutClient,
+        GOOGLE_CLIENT_ID: "123-example.apps.googleusercontent.com",
+        GOOGLE_CLIENT_SECRET: "client-secret-of-the-client",
+      }).problems,
+    ).toEqual([
+      "GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY, GITHUB_ORG: need GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET",
+    ]);
+  });
+
   it("wants all of it or none of it, and names what is missing", () => {
     const { GITHUB_CLIENT_SECRET: _secret, AUTH_SECRET: _auth, ...partial } = signIn;
     expect(problemsOf(partial).problems).toEqual([

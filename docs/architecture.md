@@ -85,7 +85,7 @@ These are the concepts the schema, the API and the UI are named after. The vocab
 | Role | What it does | Scaling |
 |---|---|---|
 | `api` | Serves HTTP: the REST API for the UI and for agents' commands ([specs/rest.md](specs/rest.md)) with its live feed, sign-in, the default UI's files. Holds no state another replica needs: a change any replica makes reaches every replica's feed subscribers through the database's own notification channel. | Any number of replicas. |
-| `worker` | Runs schedules, and consumes the job queue once there are jobs: today the clean-up of expired sessions; later reminders for decisions that wait, and the runs the console starts itself. | Any number; interruptible. |
+| `worker` | Runs schedules, and consumes the job queue once there are jobs: today the clean-up of expired sessions, and the reading of the organization at the git host where one is named ([ADR-0022](adr/0022-who-is-in-is-the-consoles-own-record-and-an-administrator-keeps-it.md)); later reminders for decisions that wait, and the runs the console starts itself. | Any number; interruptible. |
 | `migrate` | Applies pending migrations, then exits. | Once, before a new version rolls out. |
 
 A flag (`WORKER_IN_PROCESS`) lets `api` run the worker loop in-process for a single-container install. `GET /healthz` reports liveness and `GET /readyz` readiness (database reachable, schema at the expected version, workspace found). On `SIGTERM` the process stops accepting work, drains what is in flight and exits within the grace period. The exit codes and the probes are the process contract in [`deploy/README.md`](../deploy/README.md#process-contract).

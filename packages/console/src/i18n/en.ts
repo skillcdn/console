@@ -633,6 +633,9 @@ export const en = {
       listed: "Let in by an administrator",
     } satisfies Record<MembershipSource, string>,
     at: { gh: "at GitHub", google: "at Google" } satisfies Record<ProviderKey, string>,
+    organization: (name: string) => `The organization ${name} at GitHub says who is in.`,
+    organizationRead: "Last read",
+    organizationNotRead: "Not read yet.",
     form: {
       login: "Login, or address",
       provider: "Signs in with",

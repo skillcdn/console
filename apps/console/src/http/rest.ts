@@ -152,7 +152,7 @@ import {
   updateTask,
 } from "../db/queries/tasks.js";
 import { TokenError, type TokenRecord } from "../db/queries/tokens.js";
-import type { WorkspaceRecord } from "../db/queries/workspaces.js";
+import { membersSyncedAt, type WorkspaceRecord } from "../db/queries/workspaces.js";
 import type { Logger } from "../logger.js";
 import { type BlobStore, BlobStoreError } from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
@@ -206,6 +206,8 @@ export interface RestDependencies {
   };
   /** The providers people sign in through: what a listing may name. None where nobody signs in. */
   readonly signIn: readonly ProviderKey[];
+  /** The organization at the git host whose members are in (ADR-0022), when one is named. */
+  readonly organization: { readonly host: ProviderKey; readonly name: string } | undefined;
 }
 
 /** A task or a decision is a few fields and a body of bounded Markdown; this is far above both. */
@@ -393,6 +395,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     logger,
     agents,
     signIn,
+    organization,
   } = dependencies;
 
   /** Who is asking and with what, or the refusal to answer with. */
@@ -776,11 +779,23 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     if (person instanceof Response) {
       return person;
     }
-    const [items, listed] = await Promise.all([
+    const [items, listed, syncedAt] = await Promise.all([
       listPeople(database, person.workspaceId),
       listListings(database, person.workspaceId),
+      organization === undefined ? undefined : membersSyncedAt(database, person.workspaceId),
     ]);
-    const body: RestPeople = { items: items.map(restPerson), listed: listed.map(restListing) };
+    const body: RestPeople = {
+      items: items.map(restPerson),
+      listed: listed.map(restListing),
+      organization:
+        organization === undefined
+          ? null
+          : {
+              host: organization.host,
+              name: organization.name,
+              syncedAt: syncedAt?.toISOString() ?? null,
+            },
+    };
     return c.json(body);
   });
 

@@ -1,6 +1,9 @@
-import type { ProviderKey } from "@skillcdn/console/api";
+import type { MembershipSource, ProviderKey } from "@skillcdn/console/api";
 import type { Database } from "../db/client.js";
 import { findListingFor, type ListingRecord, type PersonRecord } from "../db/queries/people.js";
+import type { Logger } from "../logger.js";
+import { ProviderError } from "../ports/identity-provider.js";
+import type { OrganizationDirectory } from "../ports/organization.js";
 
 const normalize = (values: readonly string[]): ReadonlySet<string> =>
   new Set(values.map((value) => value.trim().toLowerCase()).filter(Boolean));
@@ -21,41 +24,51 @@ export interface MembershipOptions {
   readonly admins?: readonly string[] | undefined;
   /** The Workspace domains whose accounts are members, as their provider vouches for them. */
   readonly domains?: readonly string[] | undefined;
+  /** The organization at the git host whose members are in, when the deployment names one. */
+  readonly organization?: OrganizationDirectory | undefined;
+  readonly logger?: Logger | undefined;
 }
 
 /** What let an account in at sign-in: its source, and the listing it came in on, when one did. */
 export interface Admission {
-  readonly source: "domain" | "listed";
+  readonly source: MembershipSource;
   /** The listing that admitted the account, to be bound to the person; none for a domain or for `ADMINS`. */
   readonly listing?: ListingRecord | undefined;
 }
 
 /**
- * Who may be in the workspace (ADR-0022): the accounts of the Workspace domains the operator
- * named, which their provider vouches for at sign-in; the logins an administrator let in on the
- * People page, which the database holds; and the logins the operator names administrators, so
- * that the first one can get in. Decided at sign-in, and on every request after from what is
- * written on the person: deactivated is out at once, and so is a domain taken out of the
- * configuration. Logins are compared without regard to case.
+ * Who may be in the workspace (ADR-0022): the members of the organization at the git host the
+ * operator named, as the host says; the accounts of the Workspace domains the operator named,
+ * which their provider vouches for at sign-in; the logins an administrator let in on the People
+ * page, which the database holds; and the logins the operator names administrators, so that
+ * the first one can get in. Decided at sign-in, and on every request after from what is
+ * written on the person: deactivated is out at once, and so is a domain or an organization
+ * taken out of the configuration. Logins are compared without regard to case.
  */
 export class Membership {
   readonly #admins: ReadonlySet<string>;
   readonly #domains: ReadonlySet<string>;
+  readonly #organization: OrganizationDirectory | undefined;
+  readonly #logger: Logger | undefined;
 
   constructor(options: MembershipOptions) {
     this.#admins = normalize(options.admins ?? []);
     this.#domains = normalize(options.domains ?? []);
+    this.#organization = options.organization;
+    this.#logger = options.logger;
   }
 
-  /** True when the configuration alone lets nobody in: no domain, and no administrator named. */
+  /** True when the configuration alone lets nobody in: no organization, no domain, and no administrator named. */
   get empty(): boolean {
-    return this.#admins.size === 0 && this.#domains.size === 0;
+    return this.#admins.size === 0 && this.#domains.size === 0 && this.#organization === undefined;
   }
 
   /**
-   * What admits an account signing in, or nothing: a domain named, which only a provider that
-   * vouches for domains can say; a listing an administrator made, unbound and spelled as the
-   * account's login, or bound to this very account; or the operator's own naming.
+   * What admits an account signing in, or nothing: the organization, when the host says the
+   * account is a member of it; a domain named, which only a provider that vouches for domains
+   * can say; a listing an administrator made, unbound and spelled as the account's login, or
+   * bound to this very account; or the operator's own naming. An organization that cannot be
+   * asked admits nobody and refuses nobody: the rest decide.
    */
   async admit(
     database: Database,
@@ -67,6 +80,21 @@ export class Membership {
       readonly domain: string | undefined;
     },
   ): Promise<Admission | undefined> {
+    if (host === "gh" && this.#organization !== undefined) {
+      try {
+        if (await this.#organization.isMember(account.login)) {
+          return { source: "organization" };
+        }
+      } catch (error) {
+        if (!(error instanceof ProviderError)) {
+          throw error;
+        }
+        this.#logger?.warn(
+          { err: error, kind: error.kind, organization: this.#organization.name },
+          "the organization could not be asked at a sign-in; the listings decide",
+        );
+      }
+    }
     if (
       host === "google" &&
       account.domain !== undefined &&
@@ -93,6 +121,9 @@ export class Membership {
     if (person.source === "domain") {
       const domain = domainOf(person.login);
       return person.host === "google" && domain !== undefined && this.#domains.has(domain);
+    }
+    if (person.source === "organization") {
+      return person.host === "gh" && this.#organization !== undefined;
     }
     return true;
   }

@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { listEventsAfter } from "./db/queries/events.js";
 import { ensureWorkspace } from "./db/queries/workspaces.js";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "./db/testing.js";
+import { createFixtureOrganization } from "./testing/fixture-organization.js";
 import { createFixtureProvider, type FixtureProvider } from "./testing/fixture-provider.js";
 import {
   cookieOf,
@@ -344,6 +345,42 @@ describe("a session", () => {
     const h = harness();
     expect((await me(h, "__Host-console_session=cns_s_forged")).person).toBeNull();
     expect((await me(h, "console_session=; other=1")).person).toBeNull();
+  });
+});
+
+describe("the organization at the git host", () => {
+  it("lets its members in as the host says, and the listings decide for the rest", async () => {
+    const organization = createFixtureOrganization({ Alice: "1001", carol: "1003" });
+    const login = createFixtureProvider();
+    const h = createHarness(testDatabase, {
+      providers: [login],
+      organization,
+      listed: ["bob"],
+    });
+    // Carol is in by the organization alone, never listed; Alice by it too; Bob by his listing.
+    expect((await me(h, await h.signIn("carol"))).person).toMatchObject({
+      login: "carol",
+      source: "organization",
+      status: "active",
+    });
+    expect((await me(h, await h.signIn("alice"))).person?.source).toBe("organization");
+    expect((await me(h, await h.signIn("bob"))).person?.source).toBe("listed");
+    expect(organization.calls.isMember).toBe(3);
+    // While the host cannot be asked, a listed person still signs in; a member of the organization waits.
+    organization.unreachable(true);
+    expect((await me(h, await h.signIn("bob"))).person?.login).toBe("bob");
+    const again = await h.request(AUTH_ROUTES.login("gh"));
+    const state = new URL(again.headers.get("location") ?? "").searchParams.get("state") ?? "";
+    const waits = await h.request(
+      `${AUTH_ROUTES.callback("gh")}?code=${login.codeFor("carol", state)}&state=${state}`,
+      { headers: { cookie: cookieOf(again, "console_login") } },
+    );
+    expect(waits.headers.get("location")).toBe("/?sign_in=refused");
+    organization.unreachable(false);
+    // The organization taken out of the configuration takes its people with it at once.
+    const carol = await h.signIn("carol");
+    const without = createHarness(testDatabase, { providers: [login], listed: ["bob"] });
+    expect((await me(without, carol)).person).toBeNull();
   });
 });
 

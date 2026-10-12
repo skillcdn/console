@@ -202,7 +202,7 @@ The generated one first, if the Conventions' example was not run as a step: `nod
 
 ### The secrets the person holds
 
-The hostname being known, one message per provider chosen with the steps of access.md "The OAuth app" and "The OAuth client", the exact URLs filled in, the line to add to the secrets file (`"GITHUB_CLIENT_SECRET": "<the secret>"`), and `later` as the other answer. On an answer, store it (`store` again adds what is new) and note the client id for the task definition. A provider answered `later` is left out of the task definition entirely, since the console wants both halves or neither; a provider not chosen has no line in the secrets file and nothing in the record.
+The hostname being known, one message per provider chosen with the steps of access.md "The GitHub App" and "The OAuth client", the exact URLs filled in, the lines to add to the secrets file (`"GITHUB_CLIENT_SECRET": "<the secret>"`, and, with an organization, `"GITHUB_APP_PRIVATE_KEY": "<the key, as PEM>"`, the file's lines joined with `\n`), and `later` as the other answer. On an answer, store it (`store` again adds what is new) and note the client id, and the app's id and the organization, for the task definition. A provider answered `later` is left out of the task definition entirely, since the console wants both halves or neither, and so is the organization without its key, since it wants all three or none; a provider not chosen has no line in the secrets file and nothing in the record.
 
 ## Phase 4: The deployment repository
 
@@ -257,7 +257,9 @@ The task definition of the `api` role with the tunnel's connector beside it, in 
         { "name": "CLIENT_IP_HEADER", "value": "cf-connecting-ip" },
         { "name": "HTTP_KEEP_ALIVE_SECONDS", "value": "100" },
         { "name": "ADMINS", "value": "<the first administrators: logins and addresses, comma-separated>" },
-        { "name": "GITHUB_CLIENT_ID", "value": "<the OAuth app's client id>" },
+        { "name": "GITHUB_CLIENT_ID", "value": "<the GitHub App's client id>" },
+        { "name": "GITHUB_APP_ID", "value": "<the GitHub App's id, or drop the three lines of the organization>" },
+        { "name": "GITHUB_ORG", "value": "<the organization's login at GitHub>" },
         { "name": "SKILLS_ADDRESS", "value": "<the organization's skills address, or drop the line>" },
         { "name": "S3_ENDPOINT", "value": "https://s3.<region>.amazonaws.com" },
         { "name": "S3_BUCKET", "value": "console-files-<account>" },
@@ -268,7 +270,8 @@ The task definition of the `api` role with the tunnel's connector beside it, in 
         { "name": "DATABASE_URL", "valueFrom": "arn:aws:ssm:<region>:<account>:parameter/console/DATABASE_URL" },
         { "name": "DATABASE_CA", "valueFrom": "arn:aws:ssm:<region>:<account>:parameter/console/DATABASE_CA" },
         { "name": "AUTH_SECRET", "valueFrom": "arn:aws:ssm:<region>:<account>:parameter/console/AUTH_SECRET" },
-        { "name": "GITHUB_CLIENT_SECRET", "valueFrom": "arn:aws:ssm:<region>:<account>:parameter/console/GITHUB_CLIENT_SECRET" }
+        { "name": "GITHUB_CLIENT_SECRET", "valueFrom": "arn:aws:ssm:<region>:<account>:parameter/console/GITHUB_CLIENT_SECRET" },
+        { "name": "GITHUB_APP_PRIVATE_KEY", "valueFrom": "arn:aws:ssm:<region>:<account>:parameter/console/GITHUB_APP_PRIVATE_KEY" }
       ],
       "healthCheck": {
         "command": ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:11199/readyz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))\""],
@@ -506,7 +509,7 @@ Made on <date> with the skill `deploying-a-console` of the SkillCDN Console (ski
 
 - **A deployment** is a push to `main` that touches `deploy/` or `console-ui/`: the workflow builds the image, runs the migrations, and rolls the services. `gh run list` shows the runs.
 - **A new version of the console:** set `CONSOLE_REF` in `deploy/console.env` to the commit of the newest release tag: the last line of `git ls-remote --tags https://github.com/skillcdn/console 'refs/tags/@skillcdn/console@*' | sort -t@ -k3 -V` is the highest version, with the commit in its first column; move `console-ui/` to the same version of the package when there is one; push. **A new connector:** `CLOUDFLARED_VERSION` there, push.
-- **A person added or removed:** on the People page, or with `console person add <login>` and `console person deactivate <login>`, by an administrator; nothing to push. With a Google Workspace, everyone of `GOOGLE_WORKSPACE_DOMAIN` is in. `ADMINS` in `deploy/api.task.json` names only the first administrators, who make others on the People page.
+- **A person added or removed:** with an organization at GitHub (`GITHUB_ORG`), in the organization, which the console reads every ten minutes; otherwise on the People page, or with `console person add <login>` and `console person deactivate <login>`, by an administrator; nothing to push. With a Google Workspace, everyone of `GOOGLE_WORKSPACE_DOMAIN` is in. `ADMINS` in `deploy/api.task.json` names only the first administrators, who make others on the People page.
 - **The next size:** the numbers in `deploy/api.task.json` (and `deploy/worker.task.json` at `large`), `API_COUNT` and `WORKER_COUNT` in `deploy/console.env`, push; to `large`, also `deploy/worker.task.json` written as the skill's resources.md gives it and `WORKER_IN_PROCESS` dropped from the api task; the database: `aws rds modify-db-instance --db-instance-identifier console --db-instance-class <class> --apply-immediately` (a few minutes of unavailability).
 - **A secret rotated:** the new value into a secrets file of the same shape with the skill's script (`set`), then `node <the script> store <file> /console`, which overwrites the parameter in its tier (`$(npm root -g)/@skillcdn/console/skills/deploying-a-console/scripts/store-secrets.mjs`; `DATABASE_CA` is in the advanced tier, which an `aws ssm put-parameter --overwrite` by hand must name with `--tier Advanced`); then `aws ecs update-service --cluster console --service api --force-new-deployment`.
 - **The organization's own console:** its source in `console-ui/` (building-a-console makes it); a push builds it into the image.
@@ -550,7 +553,8 @@ Only on request, each step confirmed, in this order, after a last snapshot of th
 | `https://<hostname>` answers 530 or 502 from Cloudflare | No connector yet, or the hostname's ingress rule points elsewhere | Wait for the service; check the tunnel's configuration and the DNS record |
 | `https://<hostname>` does not resolve | The zone is not active yet | The nameservers at the registrar; `cf "/zones?name=<domain>"` says when |
 | The sign-in button is missing | The provider's id or secret is not in the task definition | Both halves or neither; check `environment` and `secrets` |
-| The sign-in is refused after the provider | Nobody let the login in: it is not in `ADMINS`, not of `GOOGLE_WORKSPACE_DOMAIN`, and no administrator listed it on the People page; or the person was deactivated | An administrator lets the login in on the People page (`console person add <login>`), or takes the person back in; the first administrator is `ADMINS`, a push |
+| The sign-in is refused after the provider | Nobody let the login in: it is not in `ADMINS`, not of the organization (`GITHUB_ORG`) or of `GOOGLE_WORKSPACE_DOMAIN`, and no administrator listed it on the People page; or the person was deactivated | An administrator lets the login in on the People page (`console person add <login>`), or takes the person back in; the first administrator is `ADMINS`, a push |
+| The log says `the organization could not be read` | The app's key is wrong (`unauthorized`), the app is not installed on the organization or lacks the Members permission (`invalid`, `unauthorized`), or GitHub was away (`transient`) | Check the parameter, the installation and the app's permissions; nothing changed meanwhile, and the next pass reads again |
 | The mirror step cannot pull `cloudflare/cloudflared` | Docker Hub's anonymous pull limit on the runner | Run the workflow again (`gh run rerun <id>`); the pull happens once per connector version, and the tasks pull from the repository afterwards |
 | `gh run watch` shows the build failing on `npm ci` in `console-ui` | The UI's lockfile is out of step | Fix in `console-ui/` (building-a-console), push |
 | A 524 at Cloudflare on a long read | A request held longer than the proxy's 100 seconds | The console holds a decision's read for 50 at most; look for a slow database |

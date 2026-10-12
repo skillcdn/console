@@ -5,6 +5,7 @@ import { loadWebRoot, type WebRoot, WebRootError } from "@skillcdn/console/web";
 import type { Hono } from "hono";
 import { createContainerCredentials } from "../adapters/container-credentials.js";
 import { createGitHubProvider } from "../adapters/github-login.js";
+import { createGitHubOrganization } from "../adapters/github-organization.js";
 import { createGoogleProvider } from "../adapters/google-login.js";
 import { createPgBlobStore } from "../adapters/pg-blob-store.js";
 import { createS3BlobStore } from "../adapters/s3-blob-store.js";
@@ -27,17 +28,21 @@ import { LiveFeed } from "../http/live-feed.js";
 import type { AppEnv } from "../http/request-context.js";
 import { startServer } from "../http/server.js";
 import { Janitor } from "../jobs/janitor.js";
+import { OrganizationSync } from "../jobs/organization-sync.js";
 import type { Logger } from "../logger.js";
 import { type BlobStore, BlobStoreError } from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
 import { fixedCredentials } from "../ports/credentials.js";
 import type { IdentityProvider } from "../ports/identity-provider.js";
+import type { OrganizationDirectory } from "../ports/organization.js";
 import type { SkillSource } from "../ports/skill-source.js";
 import { Skills, type SkillsConfig } from "../skills.js";
 import { APP_NAME, APP_VERSION } from "../version.js";
 
 /** How often what time has ended is removed, when this process does the worker's work. */
 const JANITOR_INTERVAL_MS = 15 * 60_000;
+/** How often the organization is read, when this process does the worker's work. */
+export const ORGANIZATION_SYNC_INTERVAL_MS = 10 * 60_000;
 /** How long a feed subscriber waits in silence before a heartbeat: under what proxies allow idle. */
 const FEED_HEARTBEAT_MS = 25_000;
 /** How long a subscriber goes without asking, nudge or no nudge: a missed nudge costs this much. */
@@ -49,6 +54,8 @@ export interface ApiPorts {
   readonly database: Database;
   /** The identity providers people sign in through. Needed, with `auth` configured, for anyone to. */
   readonly providers?: readonly IdentityProvider[] | undefined;
+  /** The organization at the git host whose members are in (ADR-0022). Left out, none vouches. */
+  readonly organization?: OrganizationDirectory | undefined;
   readonly clock: Clock;
   readonly logger: Logger;
   readonly isShuttingDown: () => boolean;
@@ -116,6 +123,8 @@ export function createApi(
     const membership = new Membership({
       admins: config.auth.admins,
       domains: config.auth.domains,
+      organization: ports.organization,
+      logger,
     });
     if (membership.empty) {
       // People let in on the People page still get in; the first administrator cannot.
@@ -152,6 +161,7 @@ export function createApi(
         pageFor: (code) => `${origin}/connect/${code}`,
       }),
       membership,
+      organization: ports.organization,
       logins: new Map(
         providers.map((provider) => [
           provider.key,
@@ -326,6 +336,7 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
       }),
     );
   }
+  const organization = organizationOf(config, userAgent);
   let web: WebRoot | undefined;
   if (config.web.root !== undefined) {
     try {
@@ -344,6 +355,7 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
   const { app, feed } = createApi(config, {
     database,
     providers,
+    organization,
     clock: systemClock,
     logger,
     isShuttingDown: () => shuttingDown,
@@ -362,6 +374,21 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
     ? new Janitor({ database, clock: systemClock, logger })
     : undefined;
   janitor?.start(JANITOR_INTERVAL_MS);
+  const workspace = workspaceResolver(database, systemClock, config.workspace.name);
+  const sync =
+    config.worker.inProcess && organization !== undefined
+      ? new OrganizationSync({
+          database,
+          organization,
+          workspaceId: async () => (await workspace()).id,
+          clock: systemClock,
+          logger,
+        })
+      : undefined;
+  if (sync !== undefined) {
+    void sync.sync();
+    sync.start(ORGANIZATION_SYNC_INTERVAL_MS);
+  }
 
   const server = await startServer({
     fetch: app.fetch,
@@ -390,6 +417,26 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
   await server.close(config.http.shutdownGraceMs);
   await listener.close();
   await janitor?.close();
+  await sync?.close();
   await database.close();
   logger.info("shutdown complete");
+}
+
+/** The organization at the git host, read through the app the configuration names, or none. */
+export function organizationOf(
+  config: Config,
+  userAgent: string,
+): OrganizationDirectory | undefined {
+  const github = config.auth?.github;
+  if (github?.organization === undefined) {
+    return undefined;
+  }
+  return createGitHubOrganization({
+    apiUrl: github.apiUrl,
+    organization: github.organization.name,
+    appId: github.organization.appId,
+    privateKey: github.organization.privateKey,
+    userAgent,
+    clock: systemClock,
+  });
 }

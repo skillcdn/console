@@ -1330,6 +1330,7 @@ function WorkspacePage(props: {
         <components.PeopleList
           people={data.people}
           listed={data.listed}
+          organization={data.organization}
           me={me}
           busy={busy}
           onChangeRole={

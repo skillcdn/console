@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PersonRecord } from "../db/queries/people.js";
+import { createFixtureOrganization } from "../testing/fixture-organization.js";
 import { domainOf, Membership } from "./membership.js";
 
 const person = (fields: Partial<PersonRecord>): PersonRecord => ({
@@ -47,6 +48,15 @@ describe("Membership", () => {
     expect(
       without.allows(person({ host: "google", login: "alice@acme.test", source: "listed" })),
     ).toBe(true);
+  });
+
+  it("keeps the organization's people in while it is named, and no longer when it is not", () => {
+    const organization = createFixtureOrganization();
+    const members = new Membership({ organization });
+    expect(members.empty).toBe(false);
+    expect(members.allows(person({ source: "organization" }))).toBe(true);
+    expect(members.allows(person({ host: "google", source: "organization" }))).toBe(false);
+    expect(new Membership({}).allows(person({ source: "organization" }))).toBe(false);
   });
 
   it("names administrators, whatever their case, and knows when the configuration lets nobody in", () => {

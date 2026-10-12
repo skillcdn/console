@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { type Database, drizzleOf } from "../client.js";
 import { workspaces } from "../schema.js";
 import { seedCategories } from "./categories.js";
@@ -41,4 +41,17 @@ export async function ensureWorkspace(
     await seedCategories(handle, row.id, workspace.now);
   }
   return { id: row.id, name: row.name };
+}
+
+/** When the organization at the git host was last read whole, or nothing (ADR-0022). */
+export async function membersSyncedAt(
+  database: Database,
+  workspaceId: string,
+): Promise<Date | undefined> {
+  const [row] = await drizzleOf(database)
+    .select({ syncedAt: workspaces.membersSyncedAt })
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId))
+    .limit(1);
+  return row?.syncedAt ?? undefined;
 }
