@@ -1,0 +1,3 @@
+# Findings of the secret scan that are not secrets, by fingerprint (commit:file:rule:line).
+# A test fixture shaped like a private key, in one commit of the history; later commits build the fixture from parts.
+4e331c8762f74f8ffa6504ed4a1bf59edd4cb127:apps/console/src/config/config.test.ts:private-key:291
