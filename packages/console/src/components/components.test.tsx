@@ -18,7 +18,15 @@ import type {
 import { addDays, firstDayOfWeek, weekOf } from "../dates.js";
 import { KOREAN, LanguageContext } from "../i18n/index.js";
 import { Board, BoardFilters, byDue, filterTasks } from "./board.js";
-import { Calendar, Week, Workload, weekSegments, workloadOf } from "./calendar.js";
+import {
+  Calendar,
+  placeTip,
+  TaskTip,
+  Week,
+  Workload,
+  weekSegments,
+  workloadOf,
+} from "./calendar.js";
 import { CategoryList } from "./categories.js";
 import { ConnectApproval, ConnectCodeForm, ConnectWords } from "./connect.js";
 import { DecisionCard, DecisionList, DecisionLog } from "./decision-list.js";
@@ -1499,11 +1507,10 @@ describe("the calendar", () => {
     expect(html).toContain("sc-calendar-over");
     expect(html).toContain("sc-category-blue");
     expect(html).toContain("Planned one");
-    // The whole title is the item's own tip, not the browser's.
-    expect(html).toContain('data-tip="#8 Planned one · bob"');
-    expect(html).toContain('data-tip="#7 Late one · bob"');
+    // Not the browser's tip: the task under the pointer is shown in full by the calendar, and only then.
     expect(html).not.toContain('title="#');
-    expect(html).toContain("sc-calendar-late sc-tip");
+    expect(html).not.toContain("data-tip");
+    expect(html).not.toContain("sc-task-tip");
     expect(html).not.toContain("Nothing is due this month");
     const empty = renderToStaticMarkup(
       <Calendar
@@ -1863,8 +1870,8 @@ describe("a task planned across days", () => {
     expect(html).not.toContain("Starts that day");
     expect(html.match(/sc-calendar-dot/g)).toHaveLength(3);
     expect(html).not.toContain("sc-calendar-late");
-    // On a project's calendar the person who has a task stands before its title, and is named in the tip.
-    expect(html).toContain('data-tip="#6 Begins \u00B7 bob"');
+    // On a project's calendar the person who has a task stands before its title.
+    expect(html).not.toContain("data-tip");
     expect(html).toContain(
       '<span class="sc-avatar sc-avatar-initial sc-avatar-xs" aria-hidden="true">B</span>',
     );
@@ -1878,7 +1885,69 @@ describe("a task planned across days", () => {
       />,
     );
     expect(nobody).not.toContain("sc-avatar");
-    expect(nobody).toContain('data-tip="#7 Ship the release &lt;b&gt;now&lt;/b&gt;"');
+    expect(nobody).not.toContain("data-tip");
+  });
+
+  it("shows the task under the pointer in full, on the side of the item with more room", () => {
+    // Near the top of the window the card goes below the item; near the bottom, above it; at the
+    // right edge it moves left to stay within the window, and never right.
+    expect(placeTip({ top: 40, bottom: 60, left: 100 }, { width: 1400, height: 1000 })).toEqual({
+      side: "below",
+      shift: 0,
+    });
+    expect(placeTip({ top: 900, bottom: 920, left: 1300 }, { width: 1400, height: 1000 })).toEqual({
+      side: "above",
+      shift: -228,
+    });
+    expect(placeTip({ top: 500, bottom: 520, left: 2 }, { width: 1400, height: 1000 })).toEqual({
+      side: "above",
+      shift: 0,
+    });
+    const html = renderToStaticMarkup(
+      <TaskTip
+        task={task({
+          category: engineering,
+          goalId: goal().id,
+          startsOn: "2026-10-20",
+          dueOn: "2026-10-24",
+          startedAt: "2026-10-20T09:00:00.000Z",
+        })}
+        goals={[goal()]}
+        place={{ side: "above", shift: -40 }}
+      />,
+    );
+    expect(html).toContain('class="sc-task-tip sc-task-tip-above"');
+    expect(html).toContain('style="left:-40px"');
+    expect(html).toContain('aria-hidden="true"');
+    expect(html).toContain("#7 Ship the release &lt;b&gt;now&lt;/b&gt;");
+    expect(html).toContain("<dt>State</dt>");
+    expect(html).toContain("Ready");
+    expect(html).toContain("<dt>Priority</dt>");
+    expect(html).toContain("High");
+    expect(html).toContain("<dt>Category</dt>");
+    expect(html).toContain("Engineering");
+    expect(html).toContain("<dt>Goal</dt>");
+    expect(html).toContain("Ship v1 &lt;b&gt;now&lt;/b&gt;");
+    expect(html).toContain("<dt>Owner</dt>");
+    expect(html).toContain("Alice Example");
+    expect(html).toContain("<dt>Assignee</dt>");
+    expect(html).toContain("bob");
+    expect(html).toContain("<dt>Plan</dt>");
+    expect(html).toContain("<dt>Started</dt>");
+    expect(html).not.toContain("<dt>Done</dt>");
+    expect(html).toContain("<dt>Written</dt>");
+    expect(html).toContain("<dt>Changed</dt>");
+    // Across projects the goals are unknown and the row is left out; what is not set is no row.
+    const bare = renderToStaticMarkup(
+      <TaskTip
+        task={task({ assignee: null, goalId: goal().id })}
+        place={{ side: "below", shift: 0 }}
+      />,
+    );
+    expect(bare).toContain("sc-task-tip-below");
+    expect(bare).not.toContain("<dt>Goal</dt>");
+    expect(bare).not.toContain("<dt>Plan</dt>");
+    expect(bare).toContain("Nobody");
   });
 });
 

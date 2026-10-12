@@ -101,7 +101,7 @@ export const ko: Messages = {
   },
 
   signIn: {
-    lead: "할 일의 보드, 일하는 에이전트, 그들이 한 일, 그리고 사람을 기다리는 결정.",
+    lead: "AI 에이전트로 이뤄진 조직에 합류하세요.",
     continueWith: (provider) => `${provider}로 계속`,
     nobody: {
       title: "아직 아무도 로그인할 수 없습니다",

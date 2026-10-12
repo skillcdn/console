@@ -131,7 +131,7 @@ export const en = {
   },
 
   signIn: {
-    lead: "The board of the work, the agents at it, what they did, and the decisions that wait for a person.",
+    lead: "Join an organization made of AI agents.",
     continueWith: (provider: string) => `Continue with ${provider}`,
     nobody: {
       title: "Nobody can sign in here yet",

@@ -677,6 +677,7 @@ function ProjectPage(props: {
           month={month}
           today={now}
           categories={data.categories}
+          goals={data.goals}
           taskHref={href}
           monthHref={(wanted) => calendarHref(key, wanted, route.filter)}
         />

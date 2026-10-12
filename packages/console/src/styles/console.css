@@ -1071,9 +1071,15 @@ table {
   border-radius: 50%;
 }
 
-@media (prefers-reduced-motion: no-preference) {
+/* The ring turns whatever the motion preference: it says that the page still waits, and a ring
+   that stands still reads as a page that stopped. Where motion is to be reduced it turns slowly. */
+.sc-spinner-ring {
+  animation: sc-spin 700ms linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
   .sc-spinner-ring {
-    animation: sc-spin 700ms linear infinite;
+    animation-duration: 1.6s;
   }
 }
 
@@ -2654,8 +2660,9 @@ table {
   white-space: nowrap;
 }
 
+/* Lit a little under the pointer by its colour, not by a filter, which would light the card within it too. */
 .sc-calendar-bar:hover {
-  filter: brightness(1.15);
+  background: color-mix(in srgb, var(--sc-category-fill), white 12%);
 }
 
 .sc-calendar-bar-begins {
@@ -3009,54 +3016,84 @@ table {
   flex: 1 1 10rem;
 }
 
-/* A tip of the console's own: what an item says in full, shown the moment the pointer is on it,
-   where its line cut the title short or shows none. The item carries the words in `data-tip`
-   and is marked `data-clipped` when the tip applies. */
-.sc-tip {
+/* The task under the pointer in full: a card within its item with its title and the facts its page
+   lists, above or below the item, whichever side has more room, and moved left where it would
+   leave the window; the calendar measures that as the pointer arrives, since only the browser
+   knows where the item is. The card lies out of the accessible tree and takes no pointer. */
+.sc-calendar-task,
+.sc-calendar-bar {
   position: relative;
 }
 
-.sc-tip::after {
-  content: attr(data-tip);
+/* The item under the pointer rises above its neighbours, which would otherwise paint over its card. */
+.sc-calendar-task:hover,
+.sc-calendar-task:focus-visible,
+.sc-calendar-bar:hover,
+.sc-calendar-bar:focus-visible {
+  z-index: 20;
+}
+
+.sc-task-tip {
   position: absolute;
-  bottom: calc(100% + var(--sc-space-1));
   left: 0;
   z-index: 20;
   width: max-content;
-  max-width: 18rem;
-  padding: var(--sc-space-1) var(--sc-space-2);
+  max-width: 20rem;
+  padding: var(--sc-space-2) var(--sc-space-3);
   border: var(--sc-border);
   border-radius: var(--sc-radius-md);
   background: var(--sc-color-bg-inset);
   box-shadow: var(--sc-shadow-stage);
   color: var(--sc-color-text);
   font-size: var(--sc-text-xs);
-  font-weight: var(--sc-weight-medium);
+  font-weight: var(--sc-weight-normal);
   line-height: 1.4;
+  text-align: left;
   text-decoration: none;
   white-space: normal;
   overflow-wrap: anywhere;
-  opacity: 0;
-  visibility: hidden;
   pointer-events: none;
+  animation: sc-task-tip-in 120ms ease-out 100ms backwards;
 }
 
-/* The item under the pointer rises above its neighbours, which would otherwise paint over its tip. */
-.sc-tip[data-clipped]:hover,
-.sc-tip[data-clipped]:focus-visible {
-  z-index: 20;
+.sc-task-tip-above {
+  bottom: calc(100% + var(--sc-space-1));
 }
 
-.sc-tip[data-clipped]:hover::after,
-.sc-tip[data-clipped]:focus-visible::after {
-  opacity: 1;
-  visibility: visible;
+.sc-task-tip-below {
+  top: calc(100% + var(--sc-space-1));
 }
 
-/* In the last columns the tip hangs from the item's right edge, so that it stays on the page. */
-.sc-calendar-cell:nth-last-child(-n + 2) .sc-tip::after {
-  right: 0;
-  left: auto;
+.sc-task-tip-title {
+  margin: 0 0 var(--sc-space-2);
+  font-weight: var(--sc-weight-medium);
+}
+
+.sc-task-tip-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--sc-space-1) var(--sc-space-3);
+  margin: 0;
+}
+
+.sc-task-tip-facts > div {
+  display: contents;
+}
+
+.sc-task-tip-facts dt {
+  color: var(--sc-color-text-faint);
+  font-weight: var(--sc-weight-medium);
+}
+
+.sc-task-tip-facts dd {
+  margin: 0;
+}
+
+/* The card arrives after a moment, so that a pointer passing over the days opens none. */
+@keyframes sc-task-tip-in {
+  from {
+    opacity: 0;
+  }
 }
 
 /* One week on its own, the only row there is: its days are taller than a month's. */
@@ -3193,8 +3230,8 @@ table {
     margin: 0;
   }
 
-  /* No pointer rests on a phone's calendar; the lists below say the titles. */
-  .sc-tip::after {
+  /* No pointer rests on a phone's calendar, and the lists below say the titles. */
+  .sc-task-tip {
     display: none;
   }
 

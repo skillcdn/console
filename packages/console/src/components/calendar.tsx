@@ -1,10 +1,17 @@
-import type { ReactNode, SyntheticEvent } from "react";
-import { OPEN_TASK_STATES, type RestCategory, type RestPerson, type RestTask } from "../api.js";
+import { type ReactNode, type SyntheticEvent, useState } from "react";
+import {
+  OPEN_TASK_STATES,
+  type RestCategory,
+  type RestGoal,
+  type RestPerson,
+  type RestTask,
+} from "../api.js";
 import {
   addDays,
   addMonths,
   daysBetween,
   firstDayOfWeek,
+  formatDay,
   formatDays,
   formatMonth,
   formatWeekday,
@@ -16,15 +23,16 @@ import {
   weekOf,
 } from "../dates.js";
 import { useLanguage, useWords } from "../i18n/index.js";
-import { Avatar, cx, PersonChip, personName } from "./ui.js";
+import { Avatar, CategoryBadge, cx, PersonChip, personName, StateBadge, Time } from "./ui.js";
 
 // The calendar of a project (ADR-0019): the month as a grid, or one week on its own. A task
 // planned from a start to a due day lies across its days as a bar, in a lane of its own within
 // each week so that the bars of one week never cross; a task with one day alone, a due day or
 // a start, sits on that day as a dot. On a project's calendar the person who has a task stands
 // before its title, since the days hold several people's work. Who has what says whether the
-// work is on its days. Takes its data as props and nothing from the network; the month or the
-// week shown is the address's (ADR-0010).
+// work is on its days. The task under the pointer is shown in full within its item, with the
+// facts its own page lists, above or below it where there is more room. Takes its data as props
+// and nothing from the network; the month or the week shown is the address's (ADR-0010).
 
 const isOpen = (task: RestTask): boolean => OPEN_TASK_STATES.includes(task.state);
 
@@ -40,6 +48,8 @@ export interface CalendarProps {
   readonly today?: string | undefined;
   /** The workspace's categories, for the legend to say what the colours mean. */
   readonly categories?: readonly RestCategory[] | undefined;
+  /** The project's goals, so that the task under the pointer is shown with its goal's title. */
+  readonly goals?: readonly RestGoal[] | undefined;
   readonly taskHref: (task: RestTask) => string;
   /** Where the calendar is on another month. */
   readonly monthHref: (month: string) => string;
@@ -131,6 +141,174 @@ const tone = (task: RestTask, now: string): string =>
     isOpen(task) && task.dueOn !== null && task.dueOn < now && "sc-calendar-late",
   );
 
+/** Where the card of the item under the pointer goes: the side with more room, kept within the window. */
+export interface TipPlace {
+  readonly side: "above" | "below";
+  /** How far the card moves from the item's left edge, in pixels, to stay within the window: zero or less. */
+  readonly shift: number;
+}
+
+/** What the card may grow to, in pixels: 20rem at the usual root size, as the style says. */
+const TIP_WIDTH = 320;
+/** What stays between the card and the window's edge, in pixels. */
+const TIP_MARGIN = 8;
+
+/**
+ * Places the card beside an item, from the item's box and the window's size, both in pixels from
+ * the window's top left corner: above the item where the room above is at least the room below,
+ * else below it, and moved left where it would otherwise leave the window on the right.
+ */
+export function placeTip(
+  item: { readonly top: number; readonly bottom: number; readonly left: number },
+  window: { readonly width: number; readonly height: number },
+): TipPlace {
+  const side = item.top >= window.height - item.bottom ? "above" : "below";
+  const left = Math.max(TIP_MARGIN, Math.min(item.left, window.width - TIP_WIDTH - TIP_MARGIN));
+  return { side, shift: Math.min(0, left - item.left) };
+}
+
+/** The item the pointer is on: a task on a day, since a bar has an item on each of its days, and where its card goes. */
+interface Pointed {
+  readonly task: RestTask;
+  readonly day: string;
+  readonly place: TipPlace;
+}
+
+/** The item under the pointer, measured as the pointer arrives, since only the browser knows where it is. */
+function usePointed(): [
+  Pointed | null,
+  (task: RestTask, day: string, item: HTMLElement) => void,
+  () => void,
+] {
+  const [pointed, setPointed] = useState<Pointed | null>(null);
+  const point = (task: RestTask, day: string, item: HTMLElement): void =>
+    setPointed({
+      task,
+      day,
+      place: placeTip(item.getBoundingClientRect(), {
+        width: window.innerWidth,
+        height: window.innerHeight,
+      }),
+    });
+  const leave = (): void => setPointed(null);
+  return [pointed, point, leave];
+}
+
+export interface TaskTipProps {
+  readonly task: RestTask;
+  /** The project's goals, so that the task's goal is named by its title; without them the row is left out. */
+  readonly goals?: readonly RestGoal[] | undefined;
+  readonly place: TipPlace;
+}
+
+/**
+ * The task under the pointer in full: its number and its title, then the facts its own page lists
+ * beside the text, those that are set. Lies within the item it belongs to, above or below it, and
+ * out of the accessible tree: the item's text is the title, and the facts are on the task's page.
+ */
+export function TaskTip(props: TaskTipProps) {
+  const words = useWords();
+  const { tag } = useLanguage();
+  const { task, place } = props;
+  const goal = props.goals?.find((candidate) => candidate.id === task.goalId);
+  const day = (value: string): string => formatDay(value, tag);
+  return (
+    <div
+      className={cx(
+        "sc-task-tip",
+        place.side === "above" ? "sc-task-tip-above" : "sc-task-tip-below",
+      )}
+      style={{ left: place.shift }}
+      aria-hidden="true"
+    >
+      <p className="sc-task-tip-title">
+        #{task.number} {task.title}
+      </p>
+      <dl className="sc-task-tip-facts">
+        <div>
+          <dt>{words.task.state}</dt>
+          <dd>
+            <StateBadge state={task.state} />
+          </dd>
+        </div>
+        <div>
+          <dt>{words.task.form.priority}</dt>
+          <dd>{words.vocabulary.priority[task.priority]}</dd>
+        </div>
+        {task.category !== null && (
+          <div>
+            <dt>{words.task.category}</dt>
+            <dd>
+              <CategoryBadge category={task.category} />
+            </dd>
+          </div>
+        )}
+        {goal !== undefined && (
+          <div>
+            <dt>{words.task.goal}</dt>
+            <dd>{goal.title}</dd>
+          </div>
+        )}
+        <div>
+          <dt>{words.task.owner}</dt>
+          <dd>
+            <PersonChip person={task.owner} />
+          </dd>
+        </div>
+        <div>
+          <dt>{words.task.assignee}</dt>
+          <dd>
+            {task.assignee === null ? (
+              <span className="sc-muted">{words.common.nobody}</span>
+            ) : (
+              <PersonChip person={task.assignee} />
+            )}
+          </dd>
+        </div>
+        {(task.startsOn !== null || task.dueOn !== null) && (
+          <div>
+            <dt>{words.task.plan}</dt>
+            <dd>
+              {words.task.planned(
+                task.startsOn === null ? undefined : day(task.startsOn),
+                task.dueOn === null ? undefined : day(task.dueOn),
+              )}
+            </dd>
+          </div>
+        )}
+        {task.startedAt !== null && (
+          <div>
+            <dt>{words.task.started}</dt>
+            <dd>
+              <Time iso={task.startedAt} />
+            </dd>
+          </div>
+        )}
+        {task.doneAt !== null && (
+          <div>
+            <dt>{words.task.done}</dt>
+            <dd>
+              <Time iso={task.doneAt} />
+            </dd>
+          </div>
+        )}
+        <div>
+          <dt>{words.task.written}</dt>
+          <dd>
+            <Time iso={task.createdAt} />
+          </dd>
+        </div>
+        <div>
+          <dt>{words.task.changed}</dt>
+          <dd>
+            <Time iso={task.updatedAt} />
+          </dd>
+        </div>
+      </dl>
+    </div>
+  );
+}
+
 interface WeekRowProps {
   readonly week: readonly GridDay[];
   readonly segments: readonly WeekSegment[];
@@ -142,26 +320,30 @@ interface WeekRowProps {
   readonly markOf?: ((task: RestTask) => ReactNode) | undefined;
   /** Whether the person who has a task stands before its title, where the days hold several people's work. */
   readonly people?: boolean | undefined;
-}
-
-/**
- * Marks an item whose title its line cut short, or which shows none (a bar on its later days),
- * so that the tip it carries in `data-tip` is shown at once while the pointer is on it. Measured
- * as the pointer arrives, since only the browser knows where the line ended.
- */
-function reveal(event: SyntheticEvent<HTMLElement>): void {
-  const item = event.currentTarget;
-  const title = item.querySelector(".sc-calendar-task-title");
-  item.toggleAttribute("data-clipped", title === null || title.scrollWidth > title.clientWidth);
+  /** The item under the pointer, shown in full within that item, or none. */
+  readonly pointed: Pointed | null;
+  /** The project's goals, so that the item under the pointer names its goal; none across projects. */
+  readonly goals?: readonly RestGoal[] | undefined;
+  /** The pointer, or the focus, arrived on a task's item on a day. */
+  readonly onPoint: (task: RestTask, day: string, item: HTMLElement) => void;
+  /** It left. */
+  readonly onLeave: () => void;
 }
 
 /** One week as a row of cells: the bars across the days in their lanes, then the tasks on each day. */
 function WeekRow(props: WeekRowProps) {
   const { week, segments, now } = props;
-  const tip = (task: RestTask): string =>
-    props.people === true && task.assignee !== null
-      ? `#${task.number} ${task.title} \u00B7 ${personName(task.assignee)}`
-      : `#${task.number} ${task.title}`;
+  const pointing = (task: RestTask, day: string) => ({
+    onMouseEnter: (event: SyntheticEvent<HTMLElement>) =>
+      props.onPoint(task, day, event.currentTarget),
+    onMouseLeave: props.onLeave,
+    onFocus: (event: SyntheticEvent<HTMLElement>) => props.onPoint(task, day, event.currentTarget),
+    onBlur: props.onLeave,
+  });
+  const tipIn = (task: RestTask, day: string): ReactNode =>
+    props.pointed !== null && props.pointed.task.id === task.id && props.pointed.day === day ? (
+      <TaskTip task={task} goals={props.goals} place={props.pointed.place} />
+    ) : null;
   const who = (task: RestTask): ReactNode =>
     props.people === true && task.assignee !== null ? (
       <Avatar person={task.assignee} size="xs" />
@@ -199,12 +381,9 @@ function WeekRow(props: WeekRowProps) {
                   segment.from === column && segment.begins && "sc-calendar-bar-begins",
                   segment.to === column && segment.ends && "sc-calendar-bar-ends",
                   tone(task, now),
-                  "sc-tip",
                 )}
                 href={props.taskHref(task)}
-                data-tip={tip(task)}
-                onMouseEnter={reveal}
-                onFocus={reveal}
+                {...pointing(task, cell.day)}
               >
                 {segment.from === column && (
                   <>
@@ -213,6 +392,7 @@ function WeekRow(props: WeekRowProps) {
                     <span className="sc-calendar-task-title">{task.title}</span>
                   </>
                 )}
+                {tipIn(task, cell.day)}
               </a>
             );
           })}
@@ -221,11 +401,9 @@ function WeekRow(props: WeekRowProps) {
             return (
               <a
                 key={task.id}
-                className={cx("sc-calendar-task", tone(task, now), "sc-tip")}
+                className={cx("sc-calendar-task", tone(task, now))}
                 href={props.taskHref(task)}
-                data-tip={tip(task)}
-                onMouseEnter={reveal}
-                onFocus={reveal}
+                {...pointing(task, cell.day)}
               >
                 {mark === undefined || mark === null ? (
                   <span
@@ -239,6 +417,7 @@ function WeekRow(props: WeekRowProps) {
                 )}
                 {who(task)}
                 <span className="sc-calendar-task-title">{task.title}</span>
+                {tipIn(task, cell.day)}
               </a>
             );
           })}
@@ -251,6 +430,7 @@ function WeekRow(props: WeekRowProps) {
 export function Calendar(props: CalendarProps) {
   const words = useWords().calendar;
   const { tag } = useLanguage();
+  const [pointed, point, leave] = usePointed();
   const now = props.today ?? todayOf();
   const firstDay = firstDayOfWeek(tag);
   const weeks = monthGrid(props.month, firstDay);
@@ -310,6 +490,10 @@ export function Calendar(props: CalendarProps) {
               on={on}
               now={now}
               taskHref={props.taskHref}
+              pointed={pointed}
+              goals={props.goals}
+              onPoint={point}
+              onLeave={leave}
               people
             />
           ))}
@@ -349,6 +533,7 @@ export interface WeekProps {
 export function Week(props: WeekProps) {
   const words = useWords().calendar.week;
   const { tag } = useLanguage();
+  const [pointed, point, leave] = usePointed();
   const now = props.today ?? todayOf();
   const firstDay = firstDayOfWeek(tag);
   const days = weekOf(props.day ?? now, firstDay);
@@ -400,6 +585,9 @@ export function Week(props: WeekProps) {
             now={now}
             taskHref={props.taskHref}
             markOf={props.markOf}
+            pointed={pointed}
+            onPoint={point}
+            onLeave={leave}
           />
         </tbody>
       </table>
