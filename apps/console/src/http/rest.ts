@@ -1552,7 +1552,8 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
     const tag = `"${icon.sha256}"`;
     c.header("etag", tag);
-    c.header("cache-control", "private, max-age=86400");
+    // The address carries the hash, so a browser's copy is good as long as it is kept.
+    c.header("cache-control", "private, max-age=86400, immutable");
     if (c.req.header("if-none-match") === tag) {
       return c.body(null, 304);
     }

@@ -2719,6 +2719,7 @@ table {
 
 /* A project's mark: its symbol on its colour. */
 .sc-mark {
+  position: relative;
   display: inline-flex;
   flex: none;
   align-items: center;
@@ -2756,7 +2757,7 @@ table {
   align-items: end;
 }
 
-/* A project's own image, in place of the symbol, filling the mark. */
+/* A project's own image over the symbol, filling the mark; the symbol shows until the image is there. */
 .sc-mark-pictured {
   padding: 0;
   overflow: hidden;
@@ -2764,6 +2765,8 @@ table {
 }
 
 .sc-mark-image {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;

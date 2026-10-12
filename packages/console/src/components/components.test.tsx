@@ -2032,6 +2032,8 @@ describe("a run and the feed, a page at a time", () => {
       `<img class="sc-mark-image" src="/api/v1/projects/web/icon?v=${sha256.slice(0, 16)}" alt=""/>`,
     );
     expect(pictured).toContain("sc-mark-pictured");
+    // The symbol stays under the image, so that the mark is never empty while the image loads.
+    expect(pictured).toMatch(/aria-hidden="true">[^<]+<img class="sc-mark-image"/);
     expect(renderToStaticMarkup(<ProjectMark project={{ ...marked, icon: null }} />)).not.toContain(
       "<img",
     );

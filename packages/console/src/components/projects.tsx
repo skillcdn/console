@@ -25,7 +25,10 @@ import {
 import { useWords } from "../i18n/index.js";
 import { Badge, Button, cx, PersonChip, personName, Time } from "./ui.js";
 
-/** A project's mark: its symbol on its colour, so that projects tell apart at a glance. */
+/**
+ * A project's mark: its symbol on its colour, so that projects tell apart at a glance; its own
+ * image over the symbol where it has one, so that the mark is never empty while the image loads.
+ */
 export function ProjectMark(props: {
   readonly project: {
     readonly key: string;
@@ -53,11 +56,8 @@ export function ProjectMark(props: {
       )}
       aria-hidden="true"
     >
-      {src === undefined ? (
-        projectSymbolOf(props.project)
-      ) : (
-        <img className="sc-mark-image" src={src} alt="" />
-      )}
+      {projectSymbolOf(props.project)}
+      {src !== undefined && <img className="sc-mark-image" src={src} alt="" />}
     </span>
   );
 }

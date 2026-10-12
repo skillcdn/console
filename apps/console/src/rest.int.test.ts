@@ -256,7 +256,7 @@ describe("projects", () => {
     expect(served.status).toBe(200);
     expect(served.headers.get("content-type")).toBe("image/png");
     expect(served.headers.get("etag")).toBe(`"${sha256}"`);
-    expect(served.headers.get("cache-control")).toBe("private, max-age=86400");
+    expect(served.headers.get("cache-control")).toBe("private, max-age=86400, immutable");
     expect(served.headers.get("x-content-type-options")).toBe("nosniff");
     expect(served.headers.get("content-disposition")).toContain("inline");
     expect(new Uint8Array(await served.arrayBuffer())).toEqual(png);
