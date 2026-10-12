@@ -99,6 +99,8 @@ export const en = {
     nobody: "Nobody",
     nothing: "Nothing",
     language: "Language",
+    copy: "Copy",
+    copied: "Copied",
     showMore: (n: number, of: number) => `Show ${n} more of ${of}`,
   },
 
@@ -332,7 +334,6 @@ export const en = {
     title: "Calendar",
     grid: "The month",
     legend: { title: "Category colours" },
-    startsOnly: "Starts that day, with no due day yet",
     previous: "The month before",
     next: "The month after",
     thisMonth: "This month",
@@ -479,7 +480,7 @@ export const en = {
     event: {
       personJoined: () => "joined the board",
       roleChanged: (login: string, role: string) => `made ${login} ${role}`,
-      personListed: (login: string) => `let ${login} in`,
+      personListed: (login: string) => `added ${login}`,
       personUnlisted: (login: string) => `took ${login} off the list`,
       personDeactivated: (login: string) => `deactivated ${login}`,
       personReactivated: (login: string) => `reactivated ${login}`,
@@ -620,9 +621,9 @@ export const en = {
     title: "People",
     list: "People",
     roleOf: (name: string) => `Role of ${name}`,
-    letIn: "Let someone in",
-    letInAria: "Let someone in",
-    notSignedIn: "Let in, not signed in yet",
+    letIn: "Add a person",
+    letInAria: "Add a person",
+    notSignedIn: "Added, not signed in yet",
     deactivated: "Deactivated",
     deactivate: "Deactivate",
     reactivate: "Reactivate",
@@ -630,7 +631,7 @@ export const en = {
     source: {
       organization: "Of the organization",
       domain: "Of the domain",
-      listed: "Let in by an administrator",
+      listed: "Added by an administrator",
     } satisfies Record<MembershipSource, string>,
     at: { gh: "at GitHub", google: "at Google" } satisfies Record<ProviderKey, string>,
     organization: (name: string) => `The organization ${name} at GitHub says who is in.`,
@@ -641,7 +642,7 @@ export const en = {
       provider: "Signs in with",
       byShape: "As the login reads",
       hint: "A login at GitHub, or an address at Google. Whoever signs in with that account is in.",
-      submit: "Let in",
+      submit: "Add",
     },
     work: "Work",
     workOf: (name: string) => `Work of ${name}`,
@@ -690,8 +691,6 @@ export const en = {
     fresh: {
       ready: (name: string) => `The token "${name}" is ready`,
       copyNow: "Copy it now: it is shown this once, and the console keeps only its hash.",
-      copy: "Copy",
-      copied: "Copied",
       useIt:
         "Sign the console command in with it, present it as a bearer token to the REST API, or give it to a console or a script of your own.",
       removeWhenDone: "It does not expire, so remove it here once it is no longer needed.",
@@ -737,11 +736,9 @@ export const en = {
       title: "Connecting an agent",
       tellYourAgent: "Tell your agent, in its own chat:",
       quote: (origin: string) =>
-        `Install @skillcdn/console from npm, run console login --url ${origin}, and tell me the address and the code it shows.`,
+        `Run these two commands, and tell me the address and the code the second shows:\nnpm install -g @skillcdn/console\nconsole login --url ${origin}`,
       doesTheRest:
         "An agent that can run commands does the rest: it installs the command, connects, and shows you an address with a code.",
-      thenApprove:
-        "Open the address, signed in here, check that the page shows the same code, give the agent a name, and approve. From then on the agent works here as you, within what you may do; disconnect it on this page when that is over. The token it holds is never shown to anyone, you included.",
       byHand: "By hand, where no agent runs the command for you:",
     },
   },

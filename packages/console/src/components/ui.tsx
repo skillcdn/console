@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { type ButtonHTMLAttributes, type ReactNode, useState } from "react";
 import {
   type CategoryColor,
   type GoalState,
@@ -87,7 +87,10 @@ export function personName(person: {
  * A person's picture as the git host serves it: loaded lazily, without a referrer, and gone as
  * a whole when there is none or it cannot be loaded, leaving the initial of the name instead.
  */
-export function Avatar(props: { readonly person: RestPerson; readonly size?: "sm" | "md" | "lg" }) {
+export function Avatar(props: {
+  readonly person: RestPerson;
+  readonly size?: "xs" | "sm" | "md" | "lg";
+}) {
   const size = props.size ?? "md";
   const initial = personName(props.person).slice(0, 1).toUpperCase();
   if (props.person.avatar === null) {
@@ -109,6 +112,26 @@ export function Avatar(props: { readonly person: RestPerson; readonly size?: "sm
       decoding="async"
       referrerPolicy="no-referrer"
     />
+  );
+}
+
+/** Puts a text on the clipboard, where the browser offers one, and says so once it is there. */
+export function CopyButton(props: { readonly text: string; readonly size?: "md" | "sm" }) {
+  const words = useWords().common;
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    if (typeof navigator === "undefined" || navigator.clipboard === undefined) {
+      return;
+    }
+    void navigator.clipboard.writeText(props.text).then(
+      () => setCopied(true),
+      () => setCopied(false),
+    );
+  };
+  return (
+    <Button size={props.size ?? "md"} onClick={copy}>
+      {copied ? words.copied : words.copy}
+    </Button>
   );
 }
 

@@ -16,14 +16,15 @@ import {
   weekOf,
 } from "../dates.js";
 import { useLanguage, useWords } from "../i18n/index.js";
-import { cx, PersonChip, personName } from "./ui.js";
+import { Avatar, cx, PersonChip, personName } from "./ui.js";
 
 // The calendar of a project (ADR-0019): the month as a grid, or one week on its own. A task
 // planned from a start to a due day lies across its days as a bar, in a lane of its own within
-// each week so that the bars of one week never cross; a task with a due day alone sits on it as
-// a dot, and one with a start alone is marked on that day. Who has what says whether the work
-// is on its days. Takes its data as props and nothing from the network; the month or the week
-// shown is the address's (ADR-0010).
+// each week so that the bars of one week never cross; a task with one day alone, a due day or
+// a start, sits on that day as a dot. On a project's calendar the person who has a task stands
+// before its title, since the days hold several people's work. Who has what says whether the
+// work is on its days. Takes its data as props and nothing from the network; the month or the
+// week shown is the address's (ADR-0010).
 
 const isOpen = (task: RestTask): boolean => OPEN_TASK_STATES.includes(task.state);
 
@@ -104,43 +105,43 @@ function push(map: Map<string, RestTask[]>, day: string, task: RestTask): void {
   }
 }
 
-/** The tasks that sit on one day each: due on it, or beginning on it with no due day yet. */
-function onDays(tasks: readonly RestTask[]): {
-  readonly due: ReadonlyMap<string, readonly RestTask[]>;
-  readonly starting: ReadonlyMap<string, readonly RestTask[]>;
-} {
-  const due = new Map<string, RestTask[]>();
-  const starting = new Map<string, RestTask[]>();
+/** The tasks that sit on one day each, by day: due on it, or beginning on it with no due day yet. */
+function onDays(tasks: readonly RestTask[]): ReadonlyMap<string, readonly RestTask[]> {
+  const on = new Map<string, RestTask[]>();
   for (const task of tasks) {
     if (spans(task)) {
       continue;
     }
-    if (task.dueOn !== null) {
-      push(due, task.dueOn, task);
-    } else if (task.startsOn !== null) {
-      push(starting, task.startsOn, task);
+    const day = task.dueOn ?? task.startsOn;
+    if (day !== null) {
+      push(on, day, task);
     }
   }
   // Within a day, what is still open comes first; the rest reads as what was.
-  for (const list of due.values()) {
+  for (const list of on.values()) {
     list.sort((a, b) => Number(isOpen(b)) - Number(isOpen(a)) || a.number - b.number);
   }
-  return { due, starting };
+  return on;
 }
 
-/** How a task reads on a day: struck through once it is over, and marked once it is late. */
-const tone = (task: RestTask, day: string, now: string): string =>
-  cx(!isOpen(task) && "sc-calendar-over", isOpen(task) && day < now && "sc-calendar-late");
+/** How a task reads: struck through once it is over, and marked once its due day is past. */
+const tone = (task: RestTask, now: string): string =>
+  cx(
+    !isOpen(task) && "sc-calendar-over",
+    isOpen(task) && task.dueOn !== null && task.dueOn < now && "sc-calendar-late",
+  );
 
 interface WeekRowProps {
   readonly week: readonly GridDay[];
   readonly segments: readonly WeekSegment[];
-  readonly due: ReadonlyMap<string, readonly RestTask[]>;
-  readonly starting: ReadonlyMap<string, readonly RestTask[]>;
+  /** The tasks on one day each, by day. */
+  readonly on: ReadonlyMap<string, readonly RestTask[]>;
   readonly now: string;
   readonly taskHref: (task: RestTask) => string;
   /** What stands before a task's title where the tasks are of several projects: the project's mark. */
   readonly markOf?: ((task: RestTask) => ReactNode) | undefined;
+  /** Whether the person who has a task stands before its title, where the days hold several people's work. */
+  readonly people?: boolean | undefined;
 }
 
 /**
@@ -156,8 +157,15 @@ function reveal(event: SyntheticEvent<HTMLElement>): void {
 
 /** One week as a row of cells: the bars across the days in their lanes, then the tasks on each day. */
 function WeekRow(props: WeekRowProps) {
-  const words = useWords().calendar;
   const { week, segments, now } = props;
+  const tip = (task: RestTask): string =>
+    props.people === true && task.assignee !== null
+      ? `#${task.number} ${task.title} \u00B7 ${personName(task.assignee)}`
+      : `#${task.number} ${task.title}`;
+  const who = (task: RestTask): ReactNode =>
+    props.people === true && task.assignee !== null ? (
+      <Avatar person={task.assignee} size="xs" />
+    ) : null;
   const lanes = segments.reduce((most, segment) => Math.max(most, segment.lane + 1), 0);
   return (
     <tr>
@@ -190,31 +198,32 @@ function WeekRow(props: WeekRowProps) {
                   `sc-category-${task.category?.color ?? "gray"}`,
                   segment.from === column && segment.begins && "sc-calendar-bar-begins",
                   segment.to === column && segment.ends && "sc-calendar-bar-ends",
-                  tone(task, task.dueOn ?? cell.day, now),
+                  tone(task, now),
                   "sc-tip",
                 )}
                 href={props.taskHref(task)}
-                data-tip={`#${task.number} ${task.title}`}
+                data-tip={tip(task)}
                 onMouseEnter={reveal}
                 onFocus={reveal}
               >
                 {segment.from === column && (
                   <>
                     {props.markOf?.(task)}
+                    {who(task)}
                     <span className="sc-calendar-task-title">{task.title}</span>
                   </>
                 )}
               </a>
             );
           })}
-          {(props.due.get(cell.day) ?? []).map((task) => {
+          {(props.on.get(cell.day) ?? []).map((task) => {
             const mark = props.markOf?.(task);
             return (
               <a
                 key={task.id}
-                className={cx("sc-calendar-task", tone(task, cell.day, now), "sc-tip")}
+                className={cx("sc-calendar-task", tone(task, now), "sc-tip")}
                 href={props.taskHref(task)}
-                data-tip={`#${task.number} ${task.title}`}
+                data-tip={tip(task)}
                 onMouseEnter={reveal}
                 onFocus={reveal}
               >
@@ -228,23 +237,11 @@ function WeekRow(props: WeekRowProps) {
                 ) : (
                   mark
                 )}
+                {who(task)}
                 <span className="sc-calendar-task-title">{task.title}</span>
               </a>
             );
           })}
-          {(props.starting.get(cell.day) ?? []).map((task) => (
-            <a
-              key={task.id}
-              className="sc-calendar-task sc-calendar-task-start sc-tip"
-              href={props.taskHref(task)}
-              data-tip={`#${task.number} ${task.title}: ${words.startsOnly}`}
-              onMouseEnter={reveal}
-              onFocus={reveal}
-            >
-              {props.markOf?.(task)}
-              <span className="sc-calendar-task-title">{task.title}</span>
-            </a>
-          ))}
         </td>
       ))}
     </tr>
@@ -257,12 +254,11 @@ export function Calendar(props: CalendarProps) {
   const now = props.today ?? todayOf();
   const firstDay = firstDayOfWeek(tag);
   const weeks = monthGrid(props.month, firstDay);
-  const { due, starting } = onDays(props.tasks);
+  const on = onDays(props.tasks);
   const inMonth = (day: string) => monthOf(day) === props.month;
   const monthWeeks = weeks.map((week) => ({ week, segments: weekSegments(week, props.tasks) }));
   const nothing =
-    [...due.keys()].every((day) => !inMonth(day)) &&
-    [...starting.keys()].every((day) => !inMonth(day)) &&
+    [...on.keys()].every((day) => !inMonth(day)) &&
     monthWeeks.every(({ week, segments }) =>
       segments.every(
         (segment) => !week.slice(segment.from, segment.to + 1).some((cell) => cell.inMonth),
@@ -311,10 +307,10 @@ export function Calendar(props: CalendarProps) {
               key={week[0]?.day}
               week={week}
               segments={segments}
-              due={due}
-              starting={starting}
+              on={on}
               now={now}
               taskHref={props.taskHref}
+              people
             />
           ))}
         </tbody>
@@ -359,9 +355,9 @@ export function Week(props: WeekProps) {
   const first = days[0] ?? now;
   const last = days[days.length - 1] ?? now;
   const week: GridDay[] = days.map((day) => ({ day, inMonth: true }));
-  const { due, starting } = onDays(props.tasks);
+  const on = onDays(props.tasks);
   const segments = weekSegments(week, props.tasks);
-  const nothing = segments.length === 0 && days.every((day) => !due.has(day) && !starting.has(day));
+  const nothing = segments.length === 0 && days.every((day) => !on.has(day));
   return (
     <div className="sc-calendar sc-week">
       <div className="sc-calendar-head">
@@ -400,8 +396,7 @@ export function Week(props: WeekProps) {
           <WeekRow
             week={week}
             segments={segments}
-            due={due}
-            starting={starting}
+            on={on}
             now={now}
             taskHref={props.taskHref}
             markOf={props.markOf}

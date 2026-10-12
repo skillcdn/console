@@ -836,8 +836,12 @@ describe("connecting an agent", () => {
     expect(approval).toContain("30 days");
     expect(approval).not.toContain("Does not expire");
     const words = renderToStaticMarkup(<ConnectWords origin="https://console.test" />);
-    expect(words).toContain("console login --url https://console.test");
+    expect(words).toContain(
+      "npm install -g @skillcdn/console\nconsole login --url https://console.test</pre>",
+    );
     expect(words).toContain("Tell your agent");
+    expect(words).toContain(">Copy<");
+    expect(words).not.toContain("Open the address");
   });
 });
 
@@ -889,7 +893,7 @@ describe("people", () => {
     const read = renderToStaticMarkup(
       <PeopleList people={[alice, carol, dave]} listed={[dana]} me={bob} />,
     );
-    expect(read).toContain("Let in, not signed in yet");
+    expect(read).toContain("Added, not signed in yet");
     expect(read).toContain("dana");
     expect(read).toContain("at GitHub");
     expect(read).toContain("Deactivated");
@@ -1493,8 +1497,8 @@ describe("the calendar", () => {
     expect(html).toContain("sc-category-blue");
     expect(html).toContain("Planned one");
     // The whole title is the item's own tip, not the browser's.
-    expect(html).toContain('data-tip="#8 Planned one"');
-    expect(html).toContain('data-tip="#7 Late one"');
+    expect(html).toContain('data-tip="#8 Planned one · bob"');
+    expect(html).toContain('data-tip="#7 Late one · bob"');
     expect(html).not.toContain('title="#');
     expect(html).toContain("sc-calendar-late sc-tip");
     expect(html).not.toContain("Nothing is due this month");
@@ -1759,6 +1763,8 @@ describe("a person's work", () => {
     expect(html).toContain('<span class="sc-mark">8</span>');
     expect(html).toContain("On the day");
     expect(html).not.toContain("sc-calendar-dot");
+    // One person's week says nothing about who has the work: it is theirs.
+    expect(html).not.toContain("sc-avatar");
     expect(html).not.toContain("Someday");
     expect(html).not.toContain("Nothing is planned");
     const korean = renderToStaticMarkup(
@@ -1849,8 +1855,27 @@ describe("a task planned across days", () => {
     expect(html).toContain('aria-label="Category colours"');
     expect(html).toContain("Engineering");
     expect(html).not.toContain("Planned from");
-    expect(html).toContain("sc-calendar-task-start");
-    expect(html).toContain("sc-calendar-dot");
+    // A task with a start alone sits on that day as any task on its day: a dot, and never late.
+    expect(html).not.toContain("sc-calendar-task-start");
+    expect(html).not.toContain("Starts that day");
+    expect(html.match(/sc-calendar-dot/g)).toHaveLength(3);
+    expect(html).not.toContain("sc-calendar-late");
+    // On a project's calendar the person who has a task stands before its title, and is named in the tip.
+    expect(html).toContain('data-tip="#6 Begins \u00B7 bob"');
+    expect(html).toContain(
+      '<span class="sc-avatar sc-avatar-initial sc-avatar-xs" aria-hidden="true">B</span>',
+    );
+    const nobody = renderToStaticMarkup(
+      <Calendar
+        tasks={[task({ dueOn: "2026-10-14", assignee: null })]}
+        month="2026-10"
+        today={TODAY}
+        taskHref={href}
+        monthHref={(month) => month}
+      />,
+    );
+    expect(nobody).not.toContain("sc-avatar");
+    expect(nobody).toContain('data-tip="#7 Ship the release &lt;b&gt;now&lt;/b&gt;"');
   });
 });
 

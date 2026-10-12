@@ -6,7 +6,7 @@ import {
   type RestTokenInput,
 } from "../api.js";
 import { useWords } from "../i18n/index.js";
-import { Button, Callout, Time } from "./ui.js";
+import { Button, Callout, CopyButton, Time } from "./ui.js";
 
 // The tokens a person holds for their agents, scripts and consoles of their own, shown as the
 // agents that hold them: the list, the way to make one by hand, and the one just made, whose
@@ -180,16 +180,6 @@ export interface NewTokenProps {
 export function NewToken(props: NewTokenProps) {
   const words = useWords();
   const fresh = words.agents.fresh;
-  const [copied, setCopied] = useState(false);
-  const copy = () => {
-    if (typeof navigator === "undefined" || navigator.clipboard === undefined) {
-      return;
-    }
-    void navigator.clipboard.writeText(props.secret).then(
-      () => setCopied(true),
-      () => setCopied(false),
-    );
-  };
   return (
     <Callout
       tone="warning"
@@ -203,9 +193,7 @@ export function NewToken(props: NewTokenProps) {
       <p>{fresh.copyNow}</p>
       <p className="sc-secret">
         <code className="sc-secret-value">{props.secret}</code>
-        <Button size="sm" onClick={copy}>
-          {copied ? fresh.copied : fresh.copy}
-        </Button>
+        <CopyButton text={props.secret} size="sm" />
       </p>
       <p>
         {fresh.useIt}{" "}

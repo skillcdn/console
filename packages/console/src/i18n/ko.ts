@@ -69,6 +69,8 @@ export const ko: Messages = {
     nobody: "없음",
     nothing: "없음",
     language: "언어",
+    copy: "복사",
+    copied: "복사됨",
     showMore: (n, of) => `${of}개 중 ${n}개 더 보기`,
   },
 
@@ -301,7 +303,6 @@ export const ko: Messages = {
     title: "캘린더",
     grid: "이 달",
     legend: { title: "카테고리 색" },
-    startsOnly: "그날 시작, 기한은 아직 없음",
     previous: "이전 달",
     next: "다음 달",
     thisMonth: "이번 달",
@@ -447,7 +448,7 @@ export const ko: Messages = {
     event: {
       personJoined: () => "보드에 들어왔습니다",
       roleChanged: (login, role) => `${login}을(를) ${role}(으)로 지정했습니다`,
-      personListed: (login) => `${login}을(를) 들였습니다`,
+      personListed: (login) => `${login}을(를) 추가했습니다`,
       personUnlisted: (login) => `${login}을(를) 목록에서 뺐습니다`,
       personDeactivated: (login) => `${login}을(를) 비활성화했습니다`,
       personReactivated: (login) => `${login}을(를) 다시 활성화했습니다`,
@@ -585,9 +586,9 @@ export const ko: Messages = {
     title: "사람들",
     list: "사람들",
     roleOf: (name) => `${name}의 역할`,
-    letIn: "사람 들이기",
-    letInAria: "사람 들이기",
-    notSignedIn: "들였지만 아직 로그인하지 않음",
+    letIn: "사람 추가",
+    letInAria: "사람 추가",
+    notSignedIn: "추가됨, 아직 로그인하지 않음",
     deactivated: "비활성화됨",
     deactivate: "비활성화",
     reactivate: "다시 활성화",
@@ -595,7 +596,7 @@ export const ko: Messages = {
     source: {
       organization: "조직의 구성원",
       domain: "도메인의 계정",
-      listed: "관리자가 들임",
+      listed: "관리자가 추가함",
     },
     at: { gh: "GitHub", google: "Google" },
     organization: (name) => `GitHub 조직 ${name}이(가) 구성원을 정합니다.`,
@@ -606,7 +607,7 @@ export const ko: Messages = {
       provider: "로그인 방식",
       byShape: "아이디 모양대로",
       hint: "GitHub 아이디나 Google 주소. 그 계정으로 로그인하는 사람이 들어옵니다.",
-      submit: "들이기",
+      submit: "추가",
     },
     work: "작업",
     workOf: (name) => `${name}의 작업`,
@@ -655,8 +656,6 @@ export const ko: Messages = {
     fresh: {
       ready: (name) => `토큰 "${name}"이(가) 준비됐습니다`,
       copyNow: "지금 복사하세요. 이번 한 번만 보이며, 콘솔은 해시만 보관합니다.",
-      copy: "복사",
-      copied: "복사됨",
       useIt:
         "이 토큰으로 console 명령을 로그인시키거나, REST API에 bearer 토큰으로 제시하거나, 내 콘솔이나 스크립트에 주세요.",
       removeWhenDone: "만료되지 않으니, 더 쓰지 않게 되면 여기서 제거하세요.",
@@ -701,11 +700,9 @@ export const ko: Messages = {
       title: "에이전트 연결하기",
       tellYourAgent: "에이전트의 대화창에서 이렇게 말하세요:",
       quote: (origin) =>
-        `npm으로 @skillcdn/console을 설치하고, console login --url ${origin} 을 실행한 뒤 나오는 주소와 코드를 알려줘.`,
+        `이 두 명령을 실행하고, 두 번째 명령이 보여 주는 주소와 코드를 알려 줘:\nnpm install -g @skillcdn/console\nconsole login --url ${origin}`,
       doesTheRest:
         "명령을 실행할 수 있는 에이전트는 나머지를 알아서 합니다. 명령을 설치하고, 연결하고, 코드가 있는 주소를 보여 줍니다.",
-      thenApprove:
-        "여기에 로그인한 채 그 주소를 열고, 페이지에 같은 코드가 보이는지 확인하고, 에이전트에게 이름을 붙이고, 승인하세요. 그때부터 에이전트는 내가 할 수 있는 범위 안에서 나로서 여기서 일합니다. 더 쓰지 않으면 이 페이지에서 연결을 끊으세요. 에이전트가 가진 토큰은 나를 포함해 아무에게도 보이지 않습니다.",
       byHand: "에이전트가 명령을 대신 실행하지 않는다면, 직접:",
     },
   },

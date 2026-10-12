@@ -957,6 +957,12 @@ table {
   line-height: 1;
 }
 
+.sc-avatar-xs {
+  width: 0.875rem;
+  height: 0.875rem;
+  font-size: 0.5rem;
+}
+
 .sc-avatar-sm {
   width: 1.5rem;
   height: 1.5rem;
@@ -2142,6 +2148,21 @@ table {
   word-break: break-all;
 }
 
+/* A text to copy as it is, with the way to copy it in its corner. */
+.sc-copyable {
+  position: relative;
+}
+
+.sc-copyable .sc-code {
+  padding-right: 5rem;
+}
+
+.sc-copyable .sc-button {
+  position: absolute;
+  top: var(--sc-space-2);
+  right: var(--sc-space-2);
+}
+
 .sc-code-input {
   max-width: 12rem;
   font-family: var(--sc-font-mono);
@@ -2684,15 +2705,6 @@ table {
   margin: 0;
 }
 
-.sc-calendar-task-start {
-  color: var(--sc-color-text-muted);
-}
-
-.sc-calendar-task-start::before {
-  content: "\203A";
-  color: var(--sc-color-text-faint);
-}
-
 /* The button under a list shown a page at a time. */
 .sc-show-more {
   margin-top: var(--sc-space-3);
@@ -3063,6 +3075,11 @@ table {
   margin-right: 0;
 }
 
+/* Who has a task, before its title on a project's calendar; a bar has no gap of its own. */
+.sc-calendar-bar .sc-avatar {
+  margin-right: var(--sc-space-1);
+}
+
 /* What is on a person's plate: the week across the page, the lists below it at reading width. */
 .sc-work {
   display: grid;
@@ -3150,8 +3167,7 @@ table {
     padding: 0;
   }
 
-  .sc-calendar-task-title,
-  .sc-calendar-task-start {
+  .sc-calendar-task-title {
     display: none;
   }
 
@@ -3167,7 +3183,9 @@ table {
   }
 
   /* A bar is a line here, too thin for a mark; a task on its day keeps its mark as its dot. */
-  .sc-calendar-bar .sc-mark {
+  .sc-calendar-bar .sc-mark,
+  .sc-calendar-bar .sc-avatar,
+  .sc-calendar-task .sc-avatar {
     display: none;
   }
 
@@ -3178,6 +3196,22 @@ table {
   /* No pointer rests on a phone's calendar; the lists below say the titles. */
   .sc-tip::after {
     display: none;
+  }
+
+  /* A text to copy keeps the whole width here; the button that copies it sits below it. */
+  .sc-copyable {
+    display: grid;
+    justify-items: end;
+    gap: var(--sc-space-2);
+  }
+
+  .sc-copyable .sc-code {
+    width: 100%;
+    padding-right: var(--sc-space-4);
+  }
+
+  .sc-copyable .sc-button {
+    position: static;
   }
 
   .sc-feed-item {

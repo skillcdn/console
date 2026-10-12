@@ -117,6 +117,7 @@ Goal: what a person opens the console for, seen at once and without being told w
 - [x] The prose under the titles gone (2026-10-12): every fixed description under a page's or a section's title, and the note under the categories; what remains is data: a project's description on its board, its visibility on its members, the address the skills come from.
 - [x] A cut title told at once (2026-10-12): on the calendars, a task whose title its line cut short shows the whole of it in a tip of the console's own the moment the pointer is on it, in place of the browser's tooltip that came after a wait.
 - [x] A person's work, seen by whoever oversees them (2026-10-12): `/people/<id>/work`, the week and the lists of My work under the person's name, without the decisions, for an administrator and for an owner of a project the person is in, within the projects the viewer may see and no other; reached from the People page and from a project's Members page; `GET /api/v1/people/<id>/work` and `console work --person <login>` ([specs/rest.md](specs/rest.md), [specs/cli.md](specs/cli.md)).
+- [x] Whose day it is (2026-10-12): a task with one day alone, a due day or a start, sits on that day as any task on its day; on a project's calendar the person who has a task stands before its title, so that the days say whose work they hold. The Agents page puts the words for an agent in a box to copy, the two commands as they are; the People page says add.
 
 ## Milestone 12, who is in
 

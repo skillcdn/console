@@ -123,6 +123,7 @@ export {
   Button,
   Callout,
   CategoryBadge,
+  CopyButton,
   cx,
   Day,
   DueBadge,

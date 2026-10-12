@@ -2,7 +2,7 @@ import { useState } from "react";
 import { normalizeConnectCode, type RestConnectRequest, type RestTokenInput } from "../api.js";
 import { useWords } from "../i18n/index.js";
 import { TokenForm } from "./tokens.js";
-import { Button, Callout, Time } from "./ui.js";
+import { Button, Callout, CopyButton, Time } from "./ui.js";
 
 // Connecting an agent (ADR-0011): where a person types the code their agent showed, what asks
 // to connect under a code with the way to approve it, and the words that tell a person what to
@@ -106,16 +106,22 @@ export interface ConnectWordsProps {
   readonly origin: string;
 }
 
-/** What a person says to their agent to connect it, in words for someone who is not a developer. */
+/**
+ * What a person says to their agent to connect it: the words to paste into its chat, as they
+ * are, with the way to copy them; and the commands for a person who runs them by hand.
+ */
 export function ConnectWords(props: ConnectWordsProps) {
   const words = useWords().connect.words;
+  const quote = words.quote(props.origin);
   return (
     <section className="sc-panel sc-connect" aria-label={words.title}>
       <h2 className="sc-section-title">{words.title}</h2>
-      <p>
-        {words.tellYourAgent} <q>{words.quote(props.origin)}</q> {words.doesTheRest}
-      </p>
-      <p>{words.thenApprove}</p>
+      <p>{words.tellYourAgent}</p>
+      <div className="sc-copyable">
+        <pre className="sc-code">{quote}</pre>
+        <CopyButton text={quote} size="sm" />
+      </div>
+      <p>{words.doesTheRest}</p>
       <p>{words.byHand}</p>
       <pre className="sc-code">
         npm install -g @skillcdn/console{"\n"}console login --url {props.origin}
