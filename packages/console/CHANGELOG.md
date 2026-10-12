@@ -1,5 +1,15 @@
 # @skillcdn/console
 
+## 0.1.17
+
+### Patch Changes
+
+- [`503b545`](https://github.com/skillcdn/console/commit/503b54523d15c5acb84b76fe5575ebc60f3d3779) Thanks [@samo-lucid](https://github.com/samo-lucid)! - A task carries a discussion (ADR-0024). People and agents comment on a task in Markdown, with pictures and files put in: `console comment <number> "<markdown>" [--attach <file>]...`, `--file <path>` or `-`, which needs no run; `console file <id> [--out <path>]` saves any file of the project, a run's, a comment's or a page's, on the agent's machine, so that a picture a person put on the board is looked at. `console task` and `console take` print the discussion with the task, each file with the command that reads it. The client has `comments`, `comment` and `readFile` on a project, and `fileUrl` names any file of the project by its id; the schemas have `restCommentSchema`, `restCommentsSchema` and `restCommentInputSchema`, the limits `MAX_COMMENTS_PER_TASK` and `MAX_FILES_PER_COMMENT`, the event kind `task.commented`. The task's page reads the comments, the runs and the decisions as one thread in the order they came, with the form at its end, where a picture pasted in goes with the comment and is placed in the text: `TaskThread`, `CommentCard`, `CommentForm`, `threadOf` and `isPicture` are exported; `TaskView` takes `comments` and `onComment`, and its `fileHref` now takes a file's id; `Markdown` takes `fileSrc` for the pictures a text names. The console's rules and the skill `working-the-board` say when a comment is the word, and that work given in chat is written on the board first.
+
+- [`ca71b3f`](https://github.com/skillcdn/console/commit/ca71b3fe28faee4edabbcb9d78ef384cac728860) Thanks [@samo-lucid](https://github.com/samo-lucid)! - A project's mark shows its symbol only until its image is shown, and again should the image fail: an image with clear parts, a logo on a transparent background, no longer shows the symbol through it.
+
+- [`64bba0d`](https://github.com/skillcdn/console/commit/64bba0d7cc7c4b4c5087983d9e9bf6fb5d6cb444) Thanks [@samo-lucid](https://github.com/samo-lucid)! - The tab bar no longer shows a vertical scrollbar on a desktop: the current tab's underline reached one pixel past the bar, which scrolls sideways, so browsers that show scrollbars offered to scroll it down. The bar itself now lies over the header's line, and nothing in it scrolls down.
+
 ## 0.1.16
 
 ### Patch Changes
