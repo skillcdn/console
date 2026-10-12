@@ -546,9 +546,8 @@ export const documents = pgTable(
     workspaceId: uuid()
       .notNull()
       .references(() => workspaces.id),
-    projectId: uuid()
-      .notNull()
-      .references(() => projects.id),
+    /** The project the page belongs to; null for a page of the workspace's own, which is its rules alone (ADR-0023). */
+    projectId: uuid().references(() => projects.id),
     /** Segments of lowercase letters, digits and hyphens, separated by slashes, as the package checks them. */
     path: text().notNull(),
     title: text().notNull(),
@@ -575,8 +574,17 @@ export const documents = pgTable(
   },
   (table) => [
     uniqueIndex("documents_path_key").on(table.projectId, table.path),
+    // One page of the workspace's own per path: the index above lets nulls repeat.
+    uniqueIndex("documents_workspace_path_key")
+      .on(table.workspaceId, table.path)
+      .where(sql`${table.projectId} is null`),
     index("documents_project_archived_idx").on(table.projectId, table.archivedAt),
     index("documents_search_idx").using("gin", table.search),
+    // The workspace's own pages are its rules, until a decision widens them.
+    check(
+      "documents_workspace_page_check",
+      sql`${table.projectId} is not null or ${table.path} = 'rules'`,
+    ),
   ],
 );
 

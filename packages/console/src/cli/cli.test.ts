@@ -93,7 +93,11 @@ const ANSWERED = {
   answer: { option: "2", note: "Carefully.", by: { ...PERSON, login: "bob" }, at: WHEN },
 };
 const ME = {
-  workspace: { name: "Acme", tokenDaysAtMost: null },
+  workspace: {
+    name: "Acme",
+    tokenDaysAtMost: null,
+    skills: { source: "https://skillcdn.test", address: "/gh/acme/skills" },
+  },
   person: PERSON,
   agent: "Claude Code on laptop",
   language: null,
@@ -128,6 +132,34 @@ const PROJECT = {
   openRuns: 0,
   createdAt: WHEN,
   updatedAt: WHEN,
+};
+const RULES_PAGE = {
+  id: "0199c4d8-0000-7000-8000-000000000080",
+  path: "rules",
+  title: "Rules",
+  version: 2,
+  updatedBy: PERSON,
+  agent: null,
+  archivedAt: null,
+  createdAt: WHEN,
+  updatedAt: WHEN,
+};
+const RULES_DOC = {
+  ...RULES_PAGE,
+  body: "# Rules of this project\n\nAsk before pushing.",
+  createdBy: PERSON,
+  links: [],
+  backlinks: [],
+  files: [],
+};
+/** The rules as a project answers them: the console's own at the workspace, and the project's own page. */
+const RULES = {
+  workspace: {
+    source: "reference",
+    body: "# Rules for agents on this board\n\nRead these.",
+    page: null,
+  },
+  project: { source: "written", body: RULES_DOC.body, page: RULES_PAGE },
 };
 const ORIGIN = "https://console.test";
 const SIGNED_IN = { CONSOLE_URL: ORIGIN, CONSOLE_TOKEN: "cns_t_secret", CONSOLE_PROJECT: "web" };
@@ -487,11 +519,22 @@ describe("the console command", () => {
       ],
     };
     const { fetch } = fakeConsole({ [`GET ${IN}/skills`]: { body: skills } });
-    const h = harness({ fetch, env: SIGNED_IN });
+    const h = harness({
+      fetch,
+      env: SIGNED_IN,
+      skillsDir: "/usr/lib/node_modules/@skillcdn/console/skills/",
+    });
     expect(await runCli(["skills"], h.io)).toBe(EXIT.ok);
     expect(h.out()).toContain("skills at /gh/acme/skills, served by https://skillcdn.test: ready");
     expect(h.out()).toContain(
       "review  Reviews a change.\n    skill://gh/acme/skills/review/SKILL.md",
+    );
+    // Where a person connects an agent that has no connection, and where the console's own skills are.
+    expect(h.out()).toContain(
+      "an agent without one is connected by a person at https://skillcdn.test/gh/acme/skills",
+    );
+    expect(h.out()).toContain(
+      "The console's own skills, for working the board: /usr/lib/node_modules/@skillcdn/console/skills/",
     );
     const none = fakeConsole({
       [`GET ${IN}/skills`]: {
@@ -515,10 +558,11 @@ describe("the console command", () => {
     expect(d.out()).toContain("could not be reached");
   });
 
-  it("takes a task by its number and says which run began", async () => {
+  it("takes a task by its number, says which run began, and prints the rules that hold", async () => {
     const { fetch, calls } = fakeConsole({
       [`GET ${IN}/tasks/7`]: { body: TASK },
       [`POST ${IN}/runs`]: { status: 201, body: RUN },
+      [`GET ${IN}/rules`]: { body: RULES },
     });
     const h = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["take", "7"], h.io)).toBe(EXIT.ok);
@@ -526,10 +570,67 @@ describe("the console command", () => {
       `Run ${RUN.id} began on #7 Fix the parser, as "Claude Code" for alice`,
     );
     expect(h.out()).toContain("It fails on empty input.");
+    // The rules come with the run, the workspace's then the project's, before what to do next.
+    expect(h.out()).toMatch(/Read these\.[\s\S]*Ask before pushing\.[\s\S]*Say how it goes/);
     expect(calls[1]?.body).toEqual({ taskId: TASK.id });
     const named = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["take", "7", "--agent", "Codex on the laptop"], named.io)).toBe(EXIT.ok);
-    expect(calls[3]?.body).toEqual({ taskId: TASK.id, agent: "Codex on the laptop" });
+    expect(calls[4]?.body).toEqual({ taskId: TASK.id, agent: "Codex on the laptop" });
+    const asJson = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["take", "7", "--json"], asJson.io)).toBe(EXIT.ok);
+    expect(JSON.parse(asJson.out())).toEqual({ run: RUN, task: TASK, rules: RULES });
+  });
+
+  it("reads the rules that hold, writes a project's or the workspace's, and puts them away", async () => {
+    const { fetch, calls } = fakeConsole({
+      [`GET ${IN}/rules`]: { body: RULES },
+      "GET /api/v1/rules": { body: RULES.workspace },
+      [`PUT ${IN}/docs/rules`]: { body: { ...RULES_DOC, version: 3 } },
+      "PUT /api/v1/rules": {
+        body: { source: "written", body: "# Ours", page: { ...RULES_PAGE, version: 1 } },
+      },
+      "POST /api/v1/rules/archive": { body: RULES.workspace },
+      [`POST ${IN}/docs/rules/archive`]: { body: { ...RULES_DOC, archivedAt: WHEN } },
+    });
+    const h = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["rules"], h.io)).toBe(EXIT.ok);
+    expect(h.out()).toContain(
+      "Rules of the workspace: the console's own, until an administrator writes the organization's (console rules write --workspace).",
+    );
+    expect(h.out()).toContain("Read these.");
+    expect(h.out()).toContain("Rules of this project (v2, by alice; ");
+    expect(h.out()).toContain("Ask before pushing.");
+    // Without a project named, the workspace's alone.
+    const alone = harness({ fetch, env: { CONSOLE_URL: ORIGIN, CONSOLE_TOKEN: "cns_t_secret" } });
+    expect(await runCli(["rules"], alone.io)).toBe(EXIT.ok);
+    expect(alone.out()).toContain("Read these.");
+    expect(alone.out()).not.toContain("this project");
+    const written = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["rules", "write", "--body", "# Ours"], written.io)).toBe(EXIT.ok);
+    expect(written.out()).toBe("Wrote this project's rules, version 3.\n");
+    expect(calls.at(-1)?.body).toEqual({ title: "Rules", body: "# Ours" });
+    const workspace = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(
+        ["rules", "write", "--workspace", "--body", "# Ours", "--base", "2"],
+        workspace.io,
+      ),
+    ).toBe(EXIT.ok);
+    expect(workspace.out()).toBe("Wrote the workspace's rules, version 1.\n");
+    expect(calls.at(-1)?.body).toEqual({ body: "# Ours", baseVersion: 2 });
+    const away = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["rules", "write", "none", "--workspace"], away.io)).toBe(EXIT.ok);
+    expect(away.out()).toBe("The organization's rules are put away: the console's own hold.\n");
+    const projectAway = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["rules", "write", "none"], projectAway.io)).toBe(EXIT.ok);
+    expect(projectAway.out()).toBe("This project's rules are put away: it adds none now.\n");
+    const nothing = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["rules", "write"], nothing.io)).toBe(EXIT.usage);
+    expect(nothing.err()).toContain("none to put the written rules away");
+    const odd = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["rules", "write", "--body", "x", "--base", "zero"], odd.io)).toBe(
+      EXIT.usage,
+    );
   });
 
   it("reports on the one open run, and asks which when there are several or none", async () => {

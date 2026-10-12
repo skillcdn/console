@@ -79,7 +79,6 @@ export const ko: Messages = {
     work: "내 작업",
     people: "사람들",
     agents: "에이전트",
-    categories: "카테고리",
     board: "보드",
     roadmap: "로드맵",
     calendar: "캘린더",
@@ -135,7 +134,11 @@ export const ko: Messages = {
       descriptionPlaceholder: "이 프로젝트가 무엇을 위한 것인지, 한두 문장으로.",
       whoIsMember: "멤버 범위",
       skillsAddress: "스킬 주소",
-      skillsAddressPlaceholder: "/gh/<owner>/<repo>, 비우면 조직의 스킬",
+      skillsAddressPlaceholder: "/gh/<owner>/<repo>",
+      skillsAddressHint: (address) =>
+        address === null
+          ? "비우면 이 프로젝트에 스킬이 없습니다. 콘솔에 조직의 주소가 없습니다."
+          : `비우면 조직의 스킬: ${address}`,
       symbol: "마크",
       image: "이미지",
       imageRemove: "이미지 지우기",
@@ -162,10 +165,9 @@ export const ko: Messages = {
     settings: {
       title: "설정",
       aria: "프로젝트 설정",
-      onlyOwner: {
-        title: "소유자만 프로젝트를 바꿀 수 있습니다",
-        body: "소유자나 워크스페이스 관리자에게 요청하세요.",
-      },
+      edit: "프로젝트 편집",
+      organizationsSkills: (address) => `조직의 스킬: ${address}`,
+      noSkills: "없음: 콘솔에 조직의 주소가 없습니다.",
     },
   },
 
@@ -404,6 +406,38 @@ export const ko: Messages = {
     colorOf: (key) => `${key}의 색`,
   },
 
+  settings: {
+    title: "설정",
+    categories: "카테고리",
+    manageCategories: "카테고리 관리",
+    skills: "스킬",
+    skillsSource: "SkillCDN 제공 주소",
+    skillsAddress: "조직의 스킬",
+    noSkillsAddress: "주소 없음: 프로젝트마다 자기 주소를 두거나, 두지 않습니다.",
+    skillsFromConfiguration:
+      "콘솔을 운영하는 쪽이 설정으로 정합니다. 스킬을 읽어 오는 배포와 조직의 주소.",
+  },
+
+  rules: {
+    title: "규칙",
+    loading: "규칙을 불러오는 중",
+    reference:
+      "관리자가 조직의 규칙을 쓰기 전까지 콘솔의 기본 규칙이 적용됩니다. 콘솔 버전과 함께 바뀝니다.",
+    writeOrganizations: "조직의 규칙 쓰기",
+    useReference: "콘솔의 기본 규칙으로 되돌리기",
+    none: "이 프로젝트에 더하는 규칙이 없습니다. 워크스페이스의 규칙이 적용됩니다.",
+    write: "이 프로젝트의 규칙 쓰기",
+    projectRules: "이 프로젝트의 규칙",
+    workspaceRules: "워크스페이스의 규칙",
+    onWorkspaceSettings: "워크스페이스 설정에서 바꿉니다.",
+    form: {
+      body: "규칙",
+      hint: (max) =>
+        `Markdown, 최대 ${max}자. 여기서 일하는 모든 에이전트가 먼저 읽습니다. 먼저 불러올 스킬, 일이 있는 곳, 페이지, 혼자 정할 것, 보고 방식. 비밀은 적지 않습니다.`,
+      save: "규칙 저장",
+    },
+  },
+
   feed: {
     title: "일어난 일",
     list: "일어난 일",
@@ -508,6 +542,8 @@ export const ko: Messages = {
     },
     servedBy: "제공:",
     at: "주소:",
+    connect: "에이전트는 이 주소에 자기 MCP 연결로 스킬을 받습니다. 사람이 한 번 연결해 줍니다:",
+    connectLink: "SkillCDN 페이지의 연결 안내",
     status: {
       indexing: "SkillCDN이 아직 저장소를 색인하고 있습니다. 잠시 후 다시 보세요.",
       failed: "SkillCDN이 저장소를 색인하지 못했습니다. 찾은 내용은 주소의 페이지에 있습니다.",

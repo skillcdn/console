@@ -62,6 +62,7 @@ console report "Found the cause: the parser trusts its input."
 console hand-in https://github.com/acme/app/pull/3 --label "the fix"
 console hand-in ./report.md                           # a file, kept by the console and shown on the task
 console skills                                        # the project's skills, served by SkillCDN, with the URI to load each by
+console rules                                         # what the organization and the project ask of agents, read first; take prints them again
 console ask "Keep the old behaviour?" --option "Keep it" --option "Change it"   # the run waits for a person's answer
 console finish --summary "Done: the parser refuses empty input."               # the task goes up for review
 console help                                          # the rest, written for an agent that meets the command for the first time

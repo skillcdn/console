@@ -1,7 +1,9 @@
 #!/usr/bin/env node
+import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { hostname } from "node:os";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 import * as z from "zod/mini";
 import { runCli } from "./cli.js";
 import { createFileStore, defaultConfigDir } from "./credentials.js";
@@ -16,6 +18,8 @@ import { readBytesAt, readFileAt, readStdin } from "./terminal.js";
 const manifest = z
   .object({ version: z.string() })
   .safeParse(createRequire(import.meta.url)("../../package.json"));
+/** The console's own skills, shipped with the package beside dist/ (ADR-0015); not there in a checkout before packing. */
+const skillsDir = fileURLToPath(new URL("../../skills/", import.meta.url));
 
 process.exitCode = await runCli(process.argv.slice(2), {
   env: process.env,
@@ -35,5 +39,6 @@ process.exitCode = await runCli(process.argv.slice(2), {
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   now: () => Date.now(),
   version: manifest.success ? manifest.data.version : undefined,
+  skillsDir: existsSync(skillsDir) ? skillsDir : undefined,
   listen: listenOn,
 });

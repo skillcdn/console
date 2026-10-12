@@ -24,6 +24,7 @@ import {
   MAX_PROJECT_NAME_LENGTH,
   MAX_PROJECT_SYMBOL_LENGTH,
   MAX_QUESTION_LENGTH,
+  MAX_RULES_LENGTH,
   MAX_SECRET_LENGTH,
   MAX_SKILLS_ADDRESS_LENGTH,
   MAX_SUMMARY_LENGTH,
@@ -49,6 +50,7 @@ import {
   PROJECT_VISIBILITIES,
   PROVIDER_KEYS,
   type ProviderKey,
+  RULES_SOURCES,
   RUN_ENDINGS,
   RUN_STATUSES,
   SKILLS_STATUSES,
@@ -179,6 +181,11 @@ export const restMeSchema = z.object({
     name: z.string(),
     /** The most days a token may be good for here, or `null` when a person chooses. */
     tokenDaysAtMost: z.nullable(z.int().check(z.positive())),
+    /**
+     * The organization's skills: the origin of the SkillCDN deployment they are read through,
+     * and the address a project without one of its own reads, canonical, or `null` for none.
+     */
+    skills: z.object({ source: z.string(), address: z.nullable(z.string()) }),
   }),
   person: z.nullable(restPersonSchema),
   /**
@@ -947,6 +954,35 @@ export const restDocumentInputSchema = z.object({
   baseVersion: z.optional(z.int().check(z.positive())),
 });
 export type RestDocumentInput = z.infer<typeof restDocumentInputSchema>;
+
+/**
+ * `GET /api/v1/rules`, and each half of a project's (ADR-0023): the rules that hold, and where
+ * they come from. `reference`: the console's own, since the organization wrote none;
+ * `written`: the page written, with its facts; `none`: a project that adds none.
+ */
+export const restRulesSchema = z.object({
+  source: z.enum(RULES_SOURCES),
+  /** The rules as they hold, Markdown; `null` for a project that adds none. */
+  body: z.nullable(z.string()),
+  /** The page they are written on, or `null` for the console's own and for none. */
+  page: z.nullable(restDocumentSummarySchema),
+});
+export type RestRules = z.infer<typeof restRulesSchema>;
+
+/** `GET /api/v1/projects/<key>/rules`: the workspace's rules, and what the project adds to them. */
+export const restProjectRulesSchema = z.object({
+  workspace: restRulesSchema,
+  project: restRulesSchema,
+});
+export type RestProjectRules = z.infer<typeof restProjectRulesSchema>;
+
+/** What `PUT /api/v1/rules` is sent: the rules as they are to be. */
+export const restRulesInputSchema = z.object({
+  body: paragraphs(MAX_RULES_LENGTH),
+  /** The version the writer started from; the write is refused when the rules have moved on. */
+  baseVersion: z.optional(z.int().check(z.positive())),
+});
+export type RestRulesInput = z.infer<typeof restRulesInputSchema>;
 
 /** One version of a document, as the list of them says it: who wrote it, through which agent, when. */
 export const restVersionSummarySchema = z.object({

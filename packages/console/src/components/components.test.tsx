@@ -28,6 +28,7 @@ import { GoalForm, GoalList, GoalView } from "./goals.js";
 import { Markdown } from "./markdown.js";
 import { ListingForm, PeopleList } from "./people.js";
 import { keyOf, MemberList, ProjectForm, ProjectList, ProjectMark } from "./projects.js";
+import { RulesForm, RulesView } from "./rules.js";
 import { RunList } from "./runs.js";
 import { Shell } from "./shell.js";
 import { SignIn } from "./sign-in.js";
@@ -1977,5 +1978,96 @@ describe("a person's name", () => {
     );
     expect(personName({ login: "carol", name: "  " })).toBe("carol");
     expect(renderToStaticMarkup(<Avatar person={{ ...alice, avatar: null }} />)).toContain(">A<");
+  });
+});
+
+describe("the rules", () => {
+  const page = {
+    id: "0199c4d8-0000-7000-8000-000000000080",
+    path: "rules",
+    title: "Rules",
+    version: 2,
+    updatedBy: bob,
+    agent: "Claude Code",
+    archivedAt: null,
+    createdAt: "2026-10-12T10:00:00.000Z",
+    updatedAt: "2026-10-12T11:00:00.000Z",
+  };
+
+  it("show the console's own rules as such, a written page with its facts, and a project that adds none", () => {
+    const reference = renderToStaticMarkup(
+      <RulesView
+        rules={{
+          source: "reference",
+          body: "# Rules for agents <b>here</b>\n\nRead first.",
+          page: null,
+        }}
+        scope="workspace"
+        editHref="/settings?rules"
+      />,
+    );
+    expect(reference).toContain("The console&#x27;s own rules hold here");
+    expect(reference).toContain("Write the organization&#x27;s rules");
+    expect(reference).toContain("Rules for agents &lt;b&gt;here&lt;/b&gt;");
+    expect(reference).not.toContain("<b>here</b>");
+    const written = renderToStaticMarkup(
+      <RulesView
+        rules={{ source: "written", body: "Ask first.", page }}
+        scope="workspace"
+        editHref="/settings?rules"
+        onArchive={() => undefined}
+      />,
+    );
+    expect(written).toContain("v2");
+    expect(written).toContain("bob");
+    expect(written).toContain("as Claude Code");
+    expect(written).toContain("Use the console&#x27;s rules");
+    expect(written).toContain(">Edit<");
+    expect(written).toContain("Ask first.");
+    const project = renderToStaticMarkup(
+      <RulesView
+        rules={{ source: "written", body: "Ask first.", page }}
+        scope="project"
+        onArchive={() => undefined}
+      />,
+    );
+    expect(project).toContain(">Remove<");
+    const none = renderToStaticMarkup(
+      <RulesView
+        rules={{ source: "none", body: null, page: null }}
+        scope="project"
+        editHref="/projects/web/settings?rules"
+      />,
+    );
+    expect(none).toContain("This project adds no rules of its own");
+    expect(none).toContain("Write this project&#x27;s rules");
+    const readOnly = renderToStaticMarkup(
+      <RulesView rules={{ source: "none", body: null, page: null }} scope="project" />,
+    );
+    expect(readOnly).not.toContain("sc-button");
+  });
+
+  it("start the form from what holds, and save nothing that would change nothing", () => {
+    const fromReference = renderToStaticMarkup(
+      <RulesForm
+        rules={{ source: "reference", body: "# Theirs", page: null }}
+        scope="workspace"
+        template=""
+        onSubmit={() => undefined}
+      />,
+    );
+    expect(fromReference).toContain("# Theirs");
+    expect(fromReference).toContain("disabled");
+    const fresh = renderToStaticMarkup(
+      <RulesForm
+        rules={{ source: "none", body: null, page: null }}
+        scope="project"
+        template="# Rules of this project"
+        onSubmit={() => undefined}
+      />,
+    );
+    expect(fresh).toContain("# Rules of this project");
+    expect(fresh).not.toContain("disabled");
+    expect(fresh).toContain("Save the rules");
   });
 });

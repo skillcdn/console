@@ -14,6 +14,8 @@ import {
   createClient,
   type FileUpload,
   OPEN_TASK_STATES,
+  PROJECT_RULES_TEMPLATE,
+  REFERENCE_RULES,
   type RestAnswerInput,
   type RestDecision,
   type RestDecisionInput,
@@ -22,11 +24,15 @@ import {
   type RestProject,
   type RestProjectInput,
   type RestProjectPatch,
+  type RestProjectRules,
+  type RestRules,
   type RestTask,
   type RestTaskInput,
   type RestToken,
   type RestTokenCreated,
   type RestWork,
+  RULES_PATH,
+  RULES_TITLE,
   type TaskState,
 } from "./api.js";
 import { Board, BoardFilters, type BoardProps, byDue, filterTasks } from "./components/board.js";
@@ -46,6 +52,7 @@ import {
   type ProjectListProps,
   ProjectMark,
 } from "./components/projects.js";
+import { RulesForm, RulesView } from "./components/rules.js";
 import {
   type Brand,
   isPlainClick,
@@ -59,7 +66,14 @@ import { TaskForm } from "./components/task-form.js";
 import { TaskList } from "./components/task-list.js";
 import { TaskView, type TaskViewProps } from "./components/task-view.js";
 import { NewToken, TokenForm, TokenList, type TokenListProps } from "./components/tokens.js";
-import { Button, Callout, EmptyState, personName, Spinner } from "./components/ui.js";
+import {
+  Button,
+  Callout,
+  CategoryBadge,
+  EmptyState,
+  personName,
+  Spinner,
+} from "./components/ui.js";
 import { WorkList, type WorkListProps } from "./components/work.js";
 import { ConnectPage } from "./connect-page.js";
 import { type ConsoleData, useConsoleData } from "./data.js";
@@ -89,7 +103,9 @@ import {
   personAgentsHref,
   personWorkHref,
   projectHref,
+  projectSettingsHref,
   type Route,
+  settingsHref,
   signInFailureOf,
   taskHref,
   withoutSignInParam,
@@ -392,6 +408,8 @@ function ProjectsPage(props: {
         <section className="sc-panel sc-panel-form" aria-label={words.form.aria}>
           <ProjectForm
             busy={busy}
+            skillsSource={data.me?.workspace.skills.source}
+            organizationAddress={data.me?.workspace.skills.address ?? null}
             onSubmit={(input, icon) =>
               void act(async () => {
                 const made = await data.actions.createProject(
@@ -918,6 +936,10 @@ function ProjectPage(props: {
             if (event.goalId !== null) {
               return goalHref(key, event.goalId);
             }
+            // The rules are a page shown on the settings, not among the documents (ADR-0023).
+            if (event.data.path === RULES_PATH) {
+              return projectSettingsHref(key);
+            }
             return event.data.path === undefined ? undefined : toDoc(event.data.path);
           }}
           empty={<EmptyState title={words.feed.empty} />}
@@ -977,20 +999,71 @@ function ProjectPage(props: {
     );
   }
   if (route.name === "settings") {
-    const settings = words.projects.settings;
+    return (
+      <ProjectSettingsPage route={route} project={project} data={data} navigation={navigation} />
+    );
+  }
+  return <NothingHere />;
+}
+
+/**
+ * A project's settings (ADR-0023): read by every member, so that everyone sees what the project
+ * is and what its agents are asked; changed by an owner, on the forms at their own addresses.
+ */
+function ProjectSettingsPage(props: {
+  readonly route: Extract<Route, { name: "settings" }>;
+  readonly project: RestProject;
+  readonly data: ConsoleData;
+  readonly navigation: Navigation;
+}) {
+  const words = useWords();
+  const { route, project, data, navigation } = props;
+  const { busy, error, act } = useAction();
+  const settings = words.projects.settings;
+  const form = words.projects.form;
+  const owner = project.role === "owner";
+  const key = project.key;
+  const here = projectSettingsHref(key);
+  const skills = data.me?.workspace.skills;
+  const [rules, setRules] = useState<RestProjectRules | undefined>(undefined);
+  const feedLength = data.events.length;
+  // The rules, asked for again whenever the project's feed grows.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the feed's length is the trigger
+  useEffect(() => {
+    const controller = new AbortController();
+    data.actions
+      .projectRules(controller.signal)
+      .then((found) => {
+        if (!controller.signal.aborted) {
+          setRules(found);
+        }
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [data.actions, feedLength]);
+
+  const head = (
+    <div className="sc-page-head">
+      <h1 className="sc-page-title">{settings.title}</h1>
+      {owner && route.form === undefined && (
+        <LinkButton href={projectSettingsHref(key, "edit")}>{words.common.edit}</LinkButton>
+      )}
+    </div>
+  );
+  if (route.form === "edit") {
     if (!owner) {
-      return <EmptyState title={settings.onlyOwner.title} body={settings.onlyOwner.body} />;
+      return <NothingHere />;
     }
     return (
       <>
-        <div className="sc-page-head">
-          <h1 className="sc-page-title">{settings.title}</h1>
-        </div>
+        {head}
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
         <section className="sc-panel sc-panel-form" aria-label={settings.aria}>
           <ProjectForm
             project={project}
             busy={busy}
+            skillsSource={skills?.source}
+            organizationAddress={skills?.address ?? null}
             onSubmit={(input, icon) =>
               void act(async () => {
                 await data.actions.updateProject(input as RestProjectPatch);
@@ -999,14 +1072,268 @@ function ProjectPage(props: {
                 } else if (icon !== undefined) {
                   await data.actions.setProjectIcon(uploadOf(icon));
                 }
+                navigation.replace(here);
               })
             }
+            onCancel={() => navigation.back(here)}
           />
         </section>
       </>
     );
   }
-  return <NothingHere />;
+  if (route.form === "rules") {
+    if (!owner) {
+      return <NothingHere />;
+    }
+    return (
+      <>
+        {head}
+        {error !== undefined && <Callout tone="danger">{error}</Callout>}
+        <section className="sc-panel sc-panel-form" aria-label={words.rules.projectRules}>
+          {rules === undefined ? (
+            <Spinner label={words.rules.loading} />
+          ) : (
+            <RulesForm
+              rules={rules.project}
+              scope="project"
+              template={PROJECT_RULES_TEMPLATE}
+              busy={busy}
+              onSubmit={(input) =>
+                void act(async () => {
+                  await data.actions.writeDocument(RULES_PATH, {
+                    title: RULES_TITLE,
+                    body: input.body,
+                    ...(input.baseVersion === undefined ? {} : { baseVersion: input.baseVersion }),
+                  });
+                  navigation.replace(here);
+                })
+              }
+              onCancel={() => navigation.back(here)}
+            />
+          )}
+        </section>
+      </>
+    );
+  }
+  return (
+    <>
+      {head}
+      {error !== undefined && <Callout tone="danger">{error}</Callout>}
+      <section className="sc-panel" aria-label={settings.aria}>
+        <dl className="sc-facts">
+          <div>
+            <dt>{form.name}</dt>
+            <dd>{project.name}</dd>
+          </div>
+          <div>
+            <dt>{form.key}</dt>
+            <dd>
+              <code className="sc-project-key">{project.key}</code>
+            </dd>
+          </div>
+          <div>
+            <dt>{form.whoIsMember}</dt>
+            <dd>{words.vocabulary.visibility[project.visibility]}</dd>
+          </div>
+          <div>
+            <dt>{form.skillsAddress}</dt>
+            <dd>
+              {project.skillsAddress !== null ? (
+                <code>
+                  {skills?.source ?? ""}
+                  {project.skillsAddress}
+                </code>
+              ) : skills?.address != null ? (
+                settings.organizationsSkills(skills.address)
+              ) : (
+                settings.noSkills
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt>{form.symbol}</dt>
+            <dd>
+              <ProjectMark project={project} size="sm" />
+            </dd>
+          </div>
+        </dl>
+        {project.description.length > 0 && <p className="sc-lead">{project.description}</p>}
+      </section>
+      <section className="sc-panel" aria-label={words.rules.projectRules}>
+        <h2 className="sc-section-title">{words.rules.projectRules}</h2>
+        {rules === undefined ? (
+          <Spinner label={words.rules.loading} />
+        ) : (
+          <RulesView
+            rules={rules.project}
+            scope="project"
+            docHref={(path) => docHref(key, path)}
+            editHref={owner ? projectSettingsHref(key, "rules") : undefined}
+            onArchive={
+              owner
+                ? () =>
+                    void act(async () => {
+                      await data.actions.archiveDocument(RULES_PATH);
+                      setRules(await data.actions.projectRules());
+                    })
+                : undefined
+            }
+            busy={busy}
+          />
+        )}
+      </section>
+      <section className="sc-panel" aria-label={words.rules.workspaceRules}>
+        <h2 className="sc-section-title">{words.rules.workspaceRules}</h2>
+        {rules !== undefined && <RulesView rules={rules.workspace} scope="workspace" />}
+        <p className="sc-muted">
+          <a href={settingsHref()}>{words.rules.onWorkspaceSettings}</a>
+        </p>
+      </section>
+    </>
+  );
+}
+
+/**
+ * The workspace's settings (ADR-0023): its rules, the console's own until an administrator
+ * writes the organization's; its categories, kept on their own page; and where its skills come
+ * from, which whoever runs the console set. Read by everyone; the rules written by an administrator.
+ */
+function WorkspaceSettingsPage(props: {
+  readonly form: "rules" | undefined;
+  readonly data: ConsoleData;
+  readonly navigation: Navigation;
+}) {
+  const words = useWords();
+  const { form, data, navigation } = props;
+  const { busy, error, act } = useAction();
+  const administrator = data.me?.person?.role === "admin";
+  const skills = data.me?.workspace.skills;
+  const [rules, setRules] = useState<RestRules | undefined>(undefined);
+  useEffect(() => {
+    const controller = new AbortController();
+    data.actions
+      .rules(controller.signal)
+      .then((found) => {
+        if (!controller.signal.aborted) {
+          setRules(found);
+        }
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [data.actions]);
+
+  const head = (
+    <div className="sc-page-head">
+      <h1 className="sc-page-title">{words.settings.title}</h1>
+    </div>
+  );
+  if (form === "rules") {
+    if (!administrator) {
+      return <NothingHere />;
+    }
+    return (
+      <>
+        {head}
+        {error !== undefined && <Callout tone="danger">{error}</Callout>}
+        <section className="sc-panel sc-panel-form" aria-label={words.rules.title}>
+          {rules === undefined ? (
+            <Spinner label={words.rules.loading} />
+          ) : (
+            <RulesForm
+              rules={rules}
+              scope="workspace"
+              template={REFERENCE_RULES}
+              busy={busy}
+              onSubmit={(input) =>
+                void act(async () => {
+                  setRules(
+                    await data.actions.writeRules({
+                      body: input.body,
+                      ...(input.baseVersion === undefined
+                        ? {}
+                        : { baseVersion: input.baseVersion }),
+                    }),
+                  );
+                  navigation.replace(PATHS.settings);
+                })
+              }
+              onCancel={() => navigation.back(PATHS.settings)}
+            />
+          )}
+        </section>
+      </>
+    );
+  }
+  return (
+    <>
+      {head}
+      {error !== undefined && <Callout tone="danger">{error}</Callout>}
+      <section className="sc-panel" aria-label={words.rules.title}>
+        <h2 className="sc-section-title">{words.rules.title}</h2>
+        {rules === undefined ? (
+          <Spinner label={words.rules.loading} />
+        ) : (
+          <RulesView
+            rules={rules}
+            scope="workspace"
+            editHref={administrator ? settingsHref("rules") : undefined}
+            onArchive={
+              administrator
+                ? () =>
+                    void act(async () => {
+                      setRules(await data.actions.archiveRules());
+                    })
+                : undefined
+            }
+            busy={busy}
+          />
+        )}
+      </section>
+      <section className="sc-panel" aria-label={words.settings.categories}>
+        <h2 className="sc-section-title">{words.settings.categories}</h2>
+        {data.categories.length > 0 && (
+          <p className="sc-category-chips">
+            {data.categories.map((category) => (
+              <CategoryBadge key={category.key} category={category} />
+            ))}
+          </p>
+        )}
+        <LinkButton href={PATHS.categories}>{words.settings.manageCategories}</LinkButton>
+      </section>
+      {skills !== undefined && (
+        <section className="sc-panel" aria-label={words.settings.skills}>
+          <h2 className="sc-section-title">{words.settings.skills}</h2>
+          <dl className="sc-facts">
+            <div>
+              <dt>{words.settings.skillsSource}</dt>
+              <dd>
+                <a href={skills.source} target="_blank" rel="noopener noreferrer">
+                  {skills.source}
+                </a>
+              </dd>
+            </div>
+            <div>
+              <dt>{words.settings.skillsAddress}</dt>
+              <dd>
+                {skills.address === null ? (
+                  words.settings.noSkillsAddress
+                ) : (
+                  <a
+                    href={`${skills.source}${skills.address}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <code>{skills.address}</code>
+                  </a>
+                )}
+              </dd>
+            </div>
+          </dl>
+          <p className="sc-muted">{words.settings.skillsFromConfiguration}</p>
+        </section>
+      )}
+    </>
+  );
 }
 
 /** A file a person chose, as the client sends it: its name, its bytes and the type the browser says. */
@@ -1260,6 +1587,9 @@ function WorkspacePage(props: {
   if (route.name === "person-work") {
     return <PersonWorkPage id={route.id} data={data} components={components} week={route.week} />;
   }
+  if (route.name === "workspace-settings") {
+    return <WorkspaceSettingsPage form={route.form} data={data} navigation={navigation} />;
+  }
   if (route.name === "categories") {
     const me = data.me?.person ?? undefined;
     const administrator = me?.role === "admin";
@@ -1510,11 +1840,12 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
                 current: route.name === "agents" || route.name === "new-token",
               },
             ]),
-        // The categories are read by everyone, for what the colours mean, and kept by an administrator.
+        // The settings are read by everyone: the rules every agent follows, the categories and
+        // what the colours mean, where the skills come from; kept by an administrator.
         {
-          href: PATHS.categories,
-          label: words.nav.categories,
-          current: route.name === "categories",
+          href: PATHS.settings,
+          label: words.nav.settings,
+          current: route.name === "workspace-settings" || route.name === "categories",
         },
         ...pages
           .filter((candidate) => candidate.level === "workspace")
@@ -1577,15 +1908,12 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
                 label: words.nav.members,
                 current: route.name === "members",
               },
-              ...(project?.role === "owner"
-                ? [
-                    {
-                      href: projectHref(projectKey, "settings"),
-                      label: words.nav.settings,
-                      current: route.name === "settings",
-                    },
-                  ]
-                : []),
+              // Read by every member: what the project is, and what its agents are asked (ADR-0023).
+              {
+                href: projectHref(projectKey, "settings"),
+                label: words.nav.settings,
+                current: route.name === "settings",
+              },
               ...pages
                 .filter((candidate) => candidate.level === "project")
                 .map((candidate) => ({

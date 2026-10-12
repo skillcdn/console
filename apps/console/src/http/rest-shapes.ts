@@ -10,6 +10,7 @@ import type {
   RestMember,
   RestPerson,
   RestProject,
+  RestRules,
   RestRun,
   RestTask,
   RestToken,
@@ -29,6 +30,7 @@ import type { EventRecord } from "../db/queries/events.js";
 import type { GoalRecord } from "../db/queries/goals.js";
 import type { ListingRecord, PersonRecord } from "../db/queries/people.js";
 import type { MemberRecord, ProjectView } from "../db/queries/projects.js";
+import type { RulesRecord } from "../db/queries/rules.js";
 import type { RunRecord } from "../db/queries/runs.js";
 import type { TaskRecord } from "../db/queries/tasks.js";
 import type { TokenRecord } from "../db/queries/tokens.js";
@@ -254,6 +256,15 @@ export function restDocumentFile(file: DocumentFileRecord): RestDocumentFile {
     addedBy: restPerson(file.addedBy),
     agent: file.agent ?? null,
     createdAt: file.createdAt.toISOString(),
+  };
+}
+
+/** The rules that hold in a scope (ADR-0023), with the page they are written on when they are. */
+export function restRules(rules: RulesRecord): RestRules {
+  return {
+    source: rules.source,
+    body: rules.body ?? null,
+    page: rules.page === undefined ? null : restDocumentSummary(rules.page),
   };
 }
 

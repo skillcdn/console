@@ -32,4 +32,6 @@ These hold for an agent working the board, building a console or deploying one a
 
 **Speak the person's language.** What is written for people, in chat, in a report, a question, a summary or a page, is in the language the person or the task uses; code, identifiers, commit messages and the skills themselves stay in English.
 
+**The board's rules come first.** A console's rules, the workspace's and the project's (`console rules`), say what its organization asks of agents, and hold over these skills' defaults where they differ, within what the specifications allow.
+
 **The specifications win.** Where a skill and `console help`, the package's README, its types or a specification differ, the latter are right and the skill is behind: say so, and go by them.

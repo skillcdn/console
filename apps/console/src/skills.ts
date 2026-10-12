@@ -51,6 +51,16 @@ export class Skills {
     this.#cacheMs = options.cacheMs ?? SKILLS_CACHE_MS;
   }
 
+  /** The origin of the SkillCDN deployment the skills are read through: what a person connects their agent to. */
+  get source(): string {
+    return this.#config.source;
+  }
+
+  /** The organization's address, canonical, for a project that names none; or nothing. */
+  get address(): string | undefined {
+    return this.#config.address === undefined ? undefined : formatAddress(this.#config.address);
+  }
+
   /**
    * What the board answers for a project: the skills at the project's address, as it names
    * one, else at the organization's, as they stand; or why there are none to show.

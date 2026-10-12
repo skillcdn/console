@@ -55,7 +55,11 @@ describe("createClient", () => {
     const { send, calls } = fakeFetch({
       "GET https://console.test/api/v1/me": {
         body: {
-          workspace: { name: "Acme", tokenDaysAtMost: null },
+          workspace: {
+            name: "Acme",
+            tokenDaysAtMost: null,
+            skills: { source: "https://skillcdn.ai", address: null },
+          },
           language: null,
           person: PERSON,
           agent: null,

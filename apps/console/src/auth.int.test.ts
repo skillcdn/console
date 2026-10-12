@@ -97,7 +97,11 @@ describe("signing in", () => {
     });
     expect(answer.headers.get("cache-control")).toBe("no-store");
     expect(restMeSchema.parse(await answer.json())).toEqual({
-      workspace: { name: "Acme", tokenDaysAtMost: null },
+      workspace: {
+        name: "Acme",
+        tokenDaysAtMost: null,
+        skills: { source: "https://skillcdn.ai", address: null },
+      },
       language: null,
       agent: null,
       person: {
@@ -113,7 +117,11 @@ describe("signing in", () => {
       signIn: [{ key: "gh", label: "GitHub" }],
     });
     expect(await me(h)).toEqual({
-      workspace: { name: "Acme", tokenDaysAtMost: null },
+      workspace: {
+        name: "Acme",
+        tokenDaysAtMost: null,
+        skills: { source: "https://skillcdn.ai", address: null },
+      },
       language: null,
       agent: null,
       person: null,
@@ -388,7 +396,11 @@ describe("a deployment where nobody signs in", () => {
   it("has no sign-in routes, and says so", async () => {
     const h = createHarness(testDatabase);
     expect(await me(h)).toEqual({
-      workspace: { name: "Acme", tokenDaysAtMost: null },
+      workspace: {
+        name: "Acme",
+        tokenDaysAtMost: null,
+        skills: { source: "https://skillcdn.ai", address: null },
+      },
       language: null,
       agent: null,
       person: null,

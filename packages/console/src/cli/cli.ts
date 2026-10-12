@@ -9,6 +9,7 @@ import {
 } from "../client.js";
 import { addDays, dayOf as dayOfDate, isDay } from "../dates.js";
 import { DEFAULT_PAGE_LIMIT, LIST_LIMIT, MAX_OPTIONS, MIN_OPTIONS } from "../limits.js";
+import { RULES_PATH, RULES_TITLE } from "../rules.js";
 import {
   hostOfLogin,
   type RestClaim,
@@ -54,6 +55,7 @@ import {
   formatPersonWork,
   formatProject,
   formatProjectLine,
+  formatRules,
   formatRun,
   formatRunLine,
   formatSkills,
@@ -112,6 +114,8 @@ export interface CliIo {
   readonly now: () => number;
   /** The version of the package the command runs from, when the entry point knows it. */
   readonly version?: string | undefined;
+  /** Where the console's own skills are on this machine, shipped with the package; nothing when they are not there. */
+  readonly skillsDir?: string | undefined;
   /** How `serve` listens on the loopback (ADR-0014); left out, the command cannot serve. */
   readonly listen?: Listen | undefined;
 }
@@ -609,7 +613,7 @@ const use: Command = async (args, io) => {
     session,
     project,
     () =>
-      `Working in ${project.name} (${project.key}) from this directory on: kept in ${kept}, which is meant to be committed.`,
+      `Working in ${project.name} (${project.key}) from this directory on: kept in ${kept}, which is meant to be committed. What its people ask of agents: console rules.`,
   );
   return EXIT.ok;
 };
@@ -695,7 +699,95 @@ const skills: Command = async (args, io) => {
   const session = await open(io, values);
   const project = await session.project();
   const found = await project.skills();
-  answer(io, session, found, () => formatSkills(found));
+  answer(io, session, found, () => formatSkills(found, io.skillsDir));
+  return EXIT.ok;
+};
+
+/** A version number given as a flag, or nothing; anything else is not understood. */
+function versionOf(given: string | undefined): number | undefined {
+  if (given === undefined) {
+    return undefined;
+  }
+  const version = Number(given);
+  if (!Number.isInteger(version) || version < 1) {
+    throw misuse(`Not a version number: ${given}`);
+  }
+  return version;
+}
+
+// The rules of the board (ADR-0023): read before a task is taken, written by an owner for the
+// project and by an administrator for the workspace, through the same page the console keeps.
+const rules: Command = async (args, io) => {
+  const [verb, ...rest] = args;
+  if (verb === "write") {
+    const { values, positionals } = parse(rest, {
+      body: { type: "string" },
+      file: { type: "string" },
+      workspace: { type: "boolean" },
+      base: { type: "string" },
+    });
+    if (positionals.length > 1) {
+      throw misuse("Say the rules as one argument: console rules write --body <markdown>");
+    }
+    const given = positionals[0] ?? text(values, "body");
+    const none = given === "none";
+    const body = none ? undefined : await bodyOf(io, values, given);
+    if (!none && body === undefined) {
+      throw misuse(
+        "Say what the rules are to say: --body <markdown>, --file <path>, - to read standard input, or none to put the written rules away.",
+      );
+    }
+    const baseVersion = versionOf(text(values, "base"));
+    const session = await open(io, values);
+    if (on(values, "workspace")) {
+      if (none) {
+        const put = await session.client.archiveRules();
+        answer(
+          io,
+          session,
+          put,
+          () => "The organization's rules are put away: the console's own hold.",
+        );
+        return EXIT.ok;
+      }
+      const written = await session.client.writeRules({
+        body: body ?? "",
+        ...(baseVersion === undefined ? {} : { baseVersion }),
+      });
+      answer(io, session, written, () =>
+        written.page === null
+          ? "Nothing written: these are the console's own rules as they stand, and they hold already."
+          : `Wrote the workspace's rules, version ${written.page.version}.`,
+      );
+      return EXIT.ok;
+    }
+    const project = await session.project();
+    if (none) {
+      try {
+        const put = await project.archiveDocument(RULES_PATH);
+        answer(io, session, put, () => "This project's rules are put away: it adds none now.");
+      } catch (error) {
+        if (!(error instanceof ApiError) || error.code !== "document.not_found") {
+          throw error;
+        }
+        answer(io, session, null, () => "This project has no rules of its own to put away.");
+      }
+      return EXIT.ok;
+    }
+    const written = await project.writeDocument(RULES_PATH, {
+      title: RULES_TITLE,
+      body: body ?? "",
+      ...(baseVersion === undefined ? {} : { baseVersion }),
+    });
+    answer(io, session, written, () => `Wrote this project's rules, version ${written.version}.`);
+    return EXIT.ok;
+  }
+  const { values } = parse(args, {}, false);
+  const session = await open(io, values);
+  const key = await session.projectKey();
+  const found =
+    key === undefined ? await session.client.rules() : await session.client.project(key).rules();
+  answer(io, session, found, () => formatRules(found));
   return EXIT.ok;
 };
 
@@ -824,11 +916,15 @@ const take: Command = async (args, io) => {
     taskId: found.id,
     ...(agent === undefined ? {} : { agent }),
   });
-  answer(io, session, { run, task: found }, () =>
+  // The rules come with the run: everything from here acts within them (ADR-0023).
+  const ruling = await project.rules();
+  answer(io, session, { run, task: found, rules: ruling }, () =>
     [
       `Run ${run.id} began on #${found.number} ${found.title}, as "${run.agent}" for ${run.person.login}. The task is in progress and theirs. A run that was open on it is over now: the board cannot know whether its agent still ran, so taking it was deciding.`,
       "",
       formatTask(found),
+      "",
+      formatRules(ruling),
       "",
       'Say how it goes: console report "<what you found or did>". Hand in what you make: console hand-in <https url | file path>.',
       'Ask when a person must decide: console ask "<question>" --option "..." --option "...". End with: console finish --summary "<what was done, what is left>".',
@@ -1727,6 +1823,7 @@ const COMMANDS: Readonly<Record<string, Command>> = {
   goal,
   categories,
   skills,
+  rules,
   people,
   person,
   project,

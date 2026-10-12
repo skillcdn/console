@@ -23,7 +23,14 @@ export const REST_ROUTES = {
   categories: "/api/v1/categories",
   /** What is on the asker's plate across the projects they may see: their open tasks, and the decisions waiting. */
   work: "/api/v1/work",
+  /** The rules of the board (ADR-0023): the console's own until an administrator writes the organization's. */
+  rules: "/api/v1/rules",
 } as const;
+
+/** The REST path of the workspace's rules put away, or of their versions. */
+export function rulesPath(part?: "archive" | "versions"): string {
+  return part === undefined ? REST_ROUTES.rules : `${REST_ROUTES.rules}/${part}`;
+}
 
 /** The REST path of one category, by its key. */
 export function categoryPath(key: string): string {
@@ -61,6 +68,7 @@ export const PROJECT_COLLECTIONS = [
   "members",
   "docs",
   "goals",
+  "rules",
 ] as const;
 
 export type ProjectCollection = (typeof PROJECT_COLLECTIONS)[number];

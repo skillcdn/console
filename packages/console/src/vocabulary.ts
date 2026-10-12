@@ -133,6 +133,15 @@ export const SKILLS_STATUSES = [
 export type SkillsStatus = (typeof SKILLS_STATUSES)[number];
 
 /**
+ * Where the rules that hold on a board come from (ADR-0023): the console's own, since the
+ * organization wrote none; a page the organization or the project wrote; or none, for a
+ * project that adds nothing to the workspace's.
+ */
+export const RULES_SOURCES = ["reference", "written", "none"] as const;
+
+export type RulesSource = (typeof RULES_SOURCES)[number];
+
+/**
  * What can happen to the board. Every change of state is one of these, written down once with
  * who did it: the live feed shows them as they happen, and the audit trail keeps them.
  */

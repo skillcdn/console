@@ -151,6 +151,8 @@ export interface AuthDependencies {
   readonly auth: AppAuth | undefined;
   readonly access: Access;
   readonly workspace: () => Promise<WorkspaceRecord>;
+  /** The organization's skills: the deployment they are read through, and its default address. */
+  readonly skills: { readonly source: string; readonly address: string | undefined };
   readonly database: Database;
   readonly clock: Clock;
   readonly logger: Logger;
@@ -162,7 +164,7 @@ export interface AuthDependencies {
  * says that nobody can sign in.
  */
 export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies): void {
-  const { auth, access, workspace, database, clock } = dependencies;
+  const { auth, access, workspace, skills, database, clock } = dependencies;
 
   /**
    * What the pages are told about who asks: the workspace, the person, with what (a token's
@@ -174,7 +176,11 @@ export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies):
     const found = await workspace();
     const person = caller?.person;
     return {
-      workspace: { name: found.name, tokenDaysAtMost: auth?.tokens.daysAtMost ?? null },
+      workspace: {
+        name: found.name,
+        tokenDaysAtMost: auth?.tokens.daysAtMost ?? null,
+        skills: { source: skills.source, address: skills.address ?? null },
+      },
       person: person === undefined ? null : restPerson(person),
       agent: caller?.token?.name ?? null,
       language: person === undefined ? null : ((await languageOf(database, person.id)) ?? null),

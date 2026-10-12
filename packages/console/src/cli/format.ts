@@ -11,6 +11,8 @@ import type {
   RestPerson,
   RestPersonWork,
   RestProject,
+  RestProjectRules,
+  RestRules,
   RestRun,
   RestSkills,
   RestTask,
@@ -214,17 +216,27 @@ const SKILLS_WORDS: Readonly<Record<Exclude<RestSkills["status"], "none" | "read
   unavailable: "SkillCDN could not be reached; ask again later.",
 };
 
-/** The organization's skills: where they are, and each with what an agent loads it by. */
-export function formatSkills(skills: RestSkills): string {
-  if (skills.status === "none" || skills.address === null) {
-    return "No skills address: neither this project nor the console names one.";
+/**
+ * The organization's skills: where they are, each with what an agent loads it by, where a
+ * person connects an agent that has no connection to the address, and where the console's own
+ * skills are on this machine, when the command knows.
+ */
+export function formatSkills(skills: RestSkills, ownSkills?: string): string {
+  const own =
+    ownSkills === undefined
+      ? []
+      : ["", `The console's own skills, for working the board: ${ownSkills}`];
+  if (skills.status === "none" || skills.address === null || skills.page === null) {
+    return ["No skills address: neither this project nor the console names one.", ...own].join(
+      "\n",
+    );
   }
   const head = `skills at ${skills.address}, served by ${skills.source}: ${skills.status}`;
   if (skills.status !== "ready") {
-    return `${head}\n${SKILLS_WORDS[skills.status]}`;
+    return [head, SKILLS_WORDS[skills.status], ...own].join("\n");
   }
   if (skills.items.length === 0) {
-    return `${head}\nNo skills at this address.`;
+    return [head, "No skills at this address.", ...own].join("\n");
   }
   const lines = [head];
   for (const skill of skills.items) {
@@ -232,9 +244,39 @@ export function formatSkills(skills: RestSkills): string {
   }
   lines.push(
     "",
-    "Load a skill by its URI through your SkillCDN connection. --json adds the page of each, for a person.",
+    `Load a skill by its URI through your SkillCDN connection to this address; an agent without one is connected by a person at ${skills.page}. --json adds the page of each, for a person.`,
+    ...own,
   );
   return lines.join("\n");
+}
+
+/** One half of the rules: where it comes from, and the text as it stands. */
+function formatRulesHalf(where: "the workspace" | "this project", rules: RestRules): string {
+  const page = rules.page;
+  const facts =
+    page === null
+      ? undefined
+      : `v${page.version}, by ${writer(page.updatedBy, page.agent)}; ${page.updatedAt}`;
+  if (rules.source === "none" || rules.body === null) {
+    return `Rules of ${where}: none of its own; the workspace's hold.`;
+  }
+  const head =
+    rules.source === "reference"
+      ? `Rules of ${where}: the console's own, until an administrator writes the organization's (console rules write --workspace).`
+      : `Rules of ${where} (${facts ?? "written"}):`;
+  return `${head}\n\n${rules.body.trimEnd()}`;
+}
+
+/** The rules that hold: the workspace's, and what the project adds when the command works in one. */
+export function formatRules(rules: RestProjectRules | RestRules): string {
+  if ("workspace" in rules) {
+    return [
+      formatRulesHalf("the workspace", rules.workspace),
+      "",
+      formatRulesHalf("this project", rules.project),
+    ].join("\n");
+  }
+  return formatRulesHalf("the workspace", rules);
 }
 
 /** How far a goal is, from its tasks: the done, the at work, and the rest, in one phrase. */

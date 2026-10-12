@@ -34,6 +34,9 @@ import {
   type RestProject,
   type RestProjectInput,
   type RestProjectPatch,
+  type RestProjectRules,
+  type RestRules,
+  type RestRulesInput,
   type RestRun,
   type RestSkills,
   type RestTask,
@@ -87,6 +90,12 @@ export interface ConsoleActions {
   createCategory(input: RestCategoryInput): Promise<RestCategory>;
   updateCategory(key: string, patch: RestCategoryPatch): Promise<RestCategory>;
   removeCategory(key: string): Promise<void>;
+  /** The workspace's rules (ADR-0023), read when the page asks; written and put away by an administrator. */
+  rules(signal?: AbortSignal): Promise<RestRules>;
+  writeRules(input: RestRulesInput): Promise<RestRules>;
+  archiveRules(): Promise<RestRules>;
+  /** The rules that hold in the project the page is on: the workspace's, and what the project adds. */
+  projectRules(signal?: AbortSignal): Promise<RestProjectRules>;
   /** A folder's pages and folders, or the pages a search finds, in the project the page is on. */
   documents(filter?: DocumentFilter, signal?: AbortSignal): Promise<RestDocuments>;
   document(path: string, signal?: AbortSignal): Promise<RestDocument>;
@@ -554,6 +563,10 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
         await client.revokeToken(id);
         setTokens((current) => current.filter((token) => token.id !== id));
       },
+      rules: (signal) => client.rules(signal),
+      writeRules: (input) => client.writeRules(input),
+      archiveRules: () => client.archiveRules(),
+      projectRules: (signal) => scope().rules(signal),
       connectRequest: (code, signal) => client.connectRequest(code, signal),
       approveConnection: (code, input) => client.approveConnection(code, input),
       denyConnection: (code) => client.denyConnection(code),

@@ -59,7 +59,7 @@ export function DocumentCrumbs(props: {
 }
 
 /** Who wrote a version, and through which agent, as a chip and a word. */
-function Writer(props: {
+export function Writer(props: {
   readonly by: RestDocumentSummary["updatedBy"];
   readonly agent: string | null;
 }) {

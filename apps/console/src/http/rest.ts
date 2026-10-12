@@ -12,6 +12,7 @@ import {
   MAX_PROJECT_ICON_BYTES,
   MAX_PROJECT_KEY_LENGTH,
   MAX_REPORTS_PER_RUN,
+  MAX_RULES_LENGTH,
   MAX_SEARCH_LENGTH,
   MAX_VERSIONS_PER_DOCUMENT,
   normalizeConnectCode,
@@ -29,6 +30,7 @@ import {
   type RestMembers,
   type RestPeople,
   type RestPersonWork,
+  type RestProjectRules,
   type RestProjects,
   type RestRuns,
   type RestSkills,
@@ -37,6 +39,8 @@ import {
   type RestTokens,
   type RestVersions,
   type RestWork,
+  RULES_PATH,
+  RULES_TITLE,
   restAnswerInputSchema,
   restArtifactInputSchema,
   restCategoryInputSchema,
@@ -56,11 +60,13 @@ import {
   restProjectInputSchema,
   restProjectPatchSchema,
   restReportInputSchema,
+  restRulesInputSchema,
   restRunEndInputSchema,
   restRunInputSchema,
   restTaskInputSchema,
   restTaskPatchSchema,
   restTokenInputSchema,
+  rulesPath,
   TASK_STATES,
 } from "@skillcdn/console/api";
 import { formatAddress, parseAddress } from "@skillcdn/core";
@@ -131,6 +137,7 @@ import {
   updateMember,
   updateProject,
 } from "../db/queries/projects.js";
+import { archiveRules, readRules, writeRules } from "../db/queries/rules.js";
 import {
   addArtifact,
   addReport,
@@ -178,6 +185,7 @@ import {
   restMember,
   restPerson,
   restProject,
+  restRules,
   restRun,
   restTask,
   restToken,
@@ -2190,6 +2198,89 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
   // project, written by whoever may work in it, a person as an agent. The path is one segment
   // of the URL, its slashes encoded.
 
+  // The rules of the board (ADR-0023): the workspace's, the console's own until an administrator
+  // writes the organization's, read by everyone of the workspace and kept by an administrator,
+  // signed in or through their agent; and a project's, read with the workspace's by whoever may
+  // see the project, written as the page `rules` by an owner.
+  const workspacePages = (person: PersonRecord) => ({
+    workspaceId: person.workspaceId,
+    projectId: null,
+  });
+
+  app.get(REST_ROUTES.rules, async (c) => {
+    const person = await asking(c);
+    if (person instanceof Response) {
+      return person;
+    }
+    return c.json(restRules(await readRules(database, workspacePages(person))));
+  });
+
+  app.put(REST_ROUTES.rules, documentTooLarge, async (c) => {
+    const caller = await changingCaller(c);
+    if (caller instanceof Response) {
+      return caller;
+    }
+    if (caller.person.role !== "admin") {
+      return administratorRequired(c);
+    }
+    const input = await bodyOf(c, restRulesInputSchema);
+    if (input instanceof Response) {
+      return input;
+    }
+    try {
+      const rules = await writeRules(database, {
+        scope: workspacePages(caller.person),
+        actor: actorOf(caller),
+        body: input.body,
+        baseVersion: input.baseVersion,
+        maxVersions: MAX_VERSIONS_PER_DOCUMENT,
+        now: clock.now(),
+      });
+      return c.json(restRules(rules));
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
+  app.post(rulesPath("archive"), async (c) => {
+    const caller = await changingCaller(c);
+    if (caller instanceof Response) {
+      return caller;
+    }
+    if (caller.person.role !== "admin") {
+      return administratorRequired(c);
+    }
+    const rules = await archiveRules(database, {
+      scope: workspacePages(caller.person),
+      actor: actorOf(caller),
+      now: clock.now(),
+    });
+    return c.json(restRules(rules));
+  });
+
+  app.get(rulesPath("versions"), async (c) => {
+    const person = await asking(c);
+    if (person instanceof Response) {
+      return person;
+    }
+    const versions = await listVersions(database, workspacePages(person), RULES_PATH, LIST_LIMIT);
+    const body: RestVersions = { items: (versions ?? []).map(restVersionSummary) };
+    return c.json(body);
+  });
+
+  app.get(`${PROJECT}/rules`, async (c) => {
+    const found = await reading(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    const [workspace, project] = await Promise.all([
+      readRules(database, { workspaceId: found.scope.workspaceId, projectId: null }),
+      readRules(database, found.scope),
+    ]);
+    const body: RestProjectRules = { workspace: restRules(workspace), project: restRules(project) };
+    return c.json(body);
+  });
+
   app.get(`${PROJECT}/docs`, async (c) => {
     const query = documentsQuery.safeParse(c.req.query());
     if (!query.success) {
@@ -2257,14 +2348,24 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     if (input instanceof Response) {
       return input;
     }
+    // The rules are the project's configuration (ADR-0023): an owner's, kept short, with the
+    // one title, and written again when they were put away.
+    const rules = path === RULES_PATH;
+    if (rules && found.project.role !== "owner") {
+      return ownerRequired(c);
+    }
+    if (rules && input.body.length > MAX_RULES_LENGTH) {
+      return invalid(c, `body: the rules are at most ${MAX_RULES_LENGTH} characters`);
+    }
     try {
       const { document, created } = await writeDocument(database, {
         scope: found.scope,
         actor: found.actor,
         path,
-        title: input.title,
+        title: rules ? RULES_TITLE : input.title,
         body: input.body,
         baseVersion: input.baseVersion,
+        restoreArchived: rules,
         maxVersions: MAX_VERSIONS_PER_DOCUMENT,
         now: clock.now(),
       });
@@ -2295,6 +2396,9 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       const path = documentPathOf(c);
       if (path === undefined) {
         return noSuchDocument(c);
+      }
+      if (path === RULES_PATH && found.project.role !== "owner") {
+        return ownerRequired(c);
       }
       try {
         const document = await setArchived(database, {
@@ -2357,6 +2461,9 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     const path = documentPathOf(c);
     if (path === undefined) {
       return noSuchDocument(c);
+    }
+    if (path === RULES_PATH && found.project.role !== "owner") {
+      return ownerRequired(c);
     }
     const sent = await filePartOf(c);
     if (sent instanceof Response) {

@@ -109,7 +109,6 @@ export const en = {
     work: "My work",
     people: "People",
     agents: "Agents",
-    categories: "Categories",
     board: "Board",
     roadmap: "Roadmap",
     calendar: "Calendar",
@@ -166,7 +165,11 @@ export const en = {
       descriptionPlaceholder: "What the project is for, in a sentence or two.",
       whoIsMember: "Who is a member",
       skillsAddress: "Skills address",
-      skillsAddressPlaceholder: "/gh/<owner>/<repo>, or empty for the organization's",
+      skillsAddressPlaceholder: "/gh/<owner>/<repo>",
+      skillsAddressHint: (address: string | null) =>
+        address === null
+          ? "Left empty, the project has no skills: the console names no address for the organization's."
+          : `Left empty, the organization's: ${address}`,
       symbol: "Mark",
       image: "Image",
       imageRemove: "Remove the image",
@@ -193,10 +196,9 @@ export const en = {
     settings: {
       title: "Settings",
       aria: "Project settings",
-      onlyOwner: {
-        title: "Only an owner may change the project",
-        body: "Ask one of its owners, or a workspace administrator.",
-      },
+      edit: "Edit the project",
+      organizationsSkills: (address: string) => `The organization's: ${address}`,
+      noSkills: "None: the console names no address for the organization's.",
     },
   },
 
@@ -436,6 +438,38 @@ export const en = {
     colorOf: (key: string) => `Colour of ${key}`,
   },
 
+  settings: {
+    title: "Settings",
+    categories: "Categories",
+    manageCategories: "Manage the categories",
+    skills: "Skills",
+    skillsSource: "Served by SkillCDN at",
+    skillsAddress: "The organization's skills",
+    noSkillsAddress: "No address: each project names its own, or has none.",
+    skillsFromConfiguration:
+      "Set by whoever runs the console, in its configuration: the deployment the skills are read through, and the organization's address.",
+  },
+
+  rules: {
+    title: "Rules",
+    loading: "Loading the rules",
+    reference:
+      "The console's own rules hold here until an administrator writes the organization's. They change with the console's version.",
+    writeOrganizations: "Write the organization's rules",
+    useReference: "Use the console's rules",
+    none: "This project adds no rules of its own; the workspace's hold.",
+    write: "Write this project's rules",
+    projectRules: "This project's rules",
+    workspaceRules: "The workspace's rules",
+    onWorkspaceSettings: "Changed on the workspace's Settings page.",
+    form: {
+      body: "Rules",
+      hint: (max: number) =>
+        `Markdown, up to ${max} characters, read by every agent before it works here: which skills to load first, where the work lives, the pages, what may be decided alone, how to report. Nothing secret.`,
+      save: "Save the rules",
+    },
+  },
+
   feed: {
     title: "What happened",
     list: "What happened",
@@ -543,6 +577,9 @@ export const en = {
     },
     servedBy: "Served by",
     at: "at",
+    connect:
+      "An agent reads these through its own MCP connection to this address, which a person makes once:",
+    connectLink: "how, on the address's page at SkillCDN",
     status: {
       indexing: "SkillCDN is still indexing the repository. Look again in a moment.",
       failed: "SkillCDN could not index the repository. What it found is on the address's page.",

@@ -4,6 +4,7 @@ import {
   connectPath,
   DEFAULT_TOKEN_DAYS,
   MAX_PROJECT_ICON_BYTES,
+  MAX_RULES_LENGTH,
   MAX_TITLE_LENGTH,
   MAX_TOKEN_DAYS,
   MAX_TOKEN_NAME_LENGTH,
@@ -11,6 +12,7 @@ import {
   personTokensPath,
   personWorkPath,
   projectPath,
+  REFERENCE_RULES,
   REST_ROUTES,
   type RestTask,
   restCategoriesSchema,
@@ -33,8 +35,10 @@ import {
   restPeopleSchema,
   restPersonSchema,
   restPersonWorkSchema,
+  restProjectRulesSchema,
   restProjectSchema,
   restProjectsSchema,
+  restRulesSchema,
   restSkillsSchema,
   restTaskSchema,
   restTasksSchema,
@@ -43,6 +47,7 @@ import {
   restVersionSchema,
   restVersionsSchema,
   restWorkSchema,
+  rulesPath,
 } from "@skillcdn/console/api";
 import { pino } from "pino";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -2359,5 +2364,164 @@ describe("the organization at the git host", () => {
     // Carol, named by the operator, is nobody of the organization's: the sync leaves her be.
     expect((await read(carol, REST_ROUTES.people)).status).toBe(200);
     await sync.close();
+  });
+});
+
+describe("the rules", () => {
+  const RULES = REST_ROUTES.rules;
+  const as = (
+    cookie: string,
+    method: "PUT" | "POST",
+    path: string,
+    body?: unknown,
+    harness: Harness = h,
+  ) =>
+    harness.request(path, {
+      method,
+      headers: {
+        cookie,
+        origin: SIGN_IN_URL,
+        ...(body === undefined ? {} : { "content-type": "application/json" }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+  const rulesOf = async (response: Response) => {
+    expect(response.status, await response.clone().text()).toBe(200);
+    return restRulesSchema.parse(await response.json());
+  };
+
+  it("are the console's own until an administrator writes the organization's, then the page written, versioned, put away and written again", async () => {
+    const named = createHarness(testDatabase, {
+      providers: [createFixtureProvider()],
+      admins: ["alice"],
+    });
+    const admin = await named.signIn("alice");
+    // Bob was taken out and back in above, which ended his session: a new one.
+    const bob = await h.signIn("bob");
+    expect((await h.request(RULES)).status).toBe(401);
+    expect(await rulesOf(await get(bob, RULES))).toEqual({
+      source: "reference",
+      body: REFERENCE_RULES,
+      page: null,
+    });
+    expect(restVersionsSchema.parse(await (await get(bob, rulesPath("versions"))).json())).toEqual({
+      items: [],
+    });
+    // A member may not write them, nor put them away.
+    const refused = await as(bob, "PUT", RULES, { body: "# Ours" });
+    expect(refused.status).toBe(403);
+    expect(await errorOf(refused)).toBe("auth.forbidden");
+    expect((await as(bob, "POST", rulesPath("archive"))).status).toBe(403);
+    // The console's own, sent as they are, write nothing: they keep following the console's version.
+    const same = await rulesOf(
+      await as(admin, "PUT", RULES, { body: `${REFERENCE_RULES}\n` }, named),
+    );
+    expect(same).toMatchObject({ source: "reference", page: null });
+    // An administrator writes the organization's, and the workspace's own feed says so.
+    const written = await rulesOf(
+      await as(admin, "PUT", RULES, { body: "# Ours\n\nAsk first." }, named),
+    );
+    expect(written).toMatchObject({
+      source: "written",
+      body: "# Ours\n\nAsk first.",
+      page: { path: "rules", title: "Rules", version: 1, agent: null, archivedAt: null },
+    });
+    const feed = restEventsSchema.parse(
+      await (
+        await named.request(`${REST_ROUTES.events}?after=0`, { headers: { cookie: admin } })
+      ).json(),
+    );
+    expect(feed.items.at(-1)).toMatchObject({
+      kind: "document.written",
+      projectId: null,
+      data: { path: "rules", title: "Rules", version: 1 },
+    });
+    // Everyone reads them; a write from a version they have moved on from is refused.
+    expect((await rulesOf(await get(bob, RULES))).body).toBe("# Ours\n\nAsk first.");
+    const stale = await as(admin, "PUT", RULES, { body: "# Older", baseVersion: 3 }, named);
+    expect(await errorOf(stale)).toBe("document.conflict");
+    const next = await rulesOf(
+      await as(
+        admin,
+        "PUT",
+        RULES,
+        { body: "# Ours\n\nAsk first, always.", baseVersion: 1 },
+        named,
+      ),
+    );
+    expect(next.page?.version).toBe(2);
+    const versions = restVersionsSchema.parse(await (await get(bob, rulesPath("versions"))).json());
+    expect(versions.items.map((version) => version.number)).toEqual([2, 1]);
+    // Put away, the console's own hold again, and again changes nothing; written again, the page comes back.
+    expect(
+      await rulesOf(await as(admin, "POST", rulesPath("archive"), undefined, named)),
+    ).toMatchObject({ source: "reference", page: null });
+    expect(
+      await rulesOf(await as(admin, "POST", rulesPath("archive"), undefined, named)),
+    ).toMatchObject({ source: "reference" });
+    const back = await rulesOf(await as(admin, "PUT", RULES, { body: "# Ours again" }, named));
+    expect(back.page).toMatchObject({ version: 3, archivedAt: null });
+    // Kept short.
+    const long = await as(admin, "PUT", RULES, { body: "x".repeat(MAX_RULES_LENGTH + 1) }, named);
+    expect(long.status).toBe(400);
+    expect(await errorOf(long)).toBe("request.invalid");
+  });
+
+  it("add a project's own, written as the page rules by an owner, read with the workspace's by whoever may see the project, and kept out of the folders", async () => {
+    const at = `${IN}/rules`;
+    const page = `${IN}/docs/rules`;
+    const bob = await h.signIn("bob");
+    const alice = await h.signIn("alice");
+    const start = restProjectRulesSchema.parse(await (await get(bob, at)).json());
+    expect(start.project).toEqual({ source: "none", body: null, page: null });
+    expect(start.workspace.body).toBe("# Ours again");
+    // A member of the project may not write them.
+    const refused = await as(bob, "PUT", page, { title: "Whatever", body: "# No" });
+    expect(refused.status).toBe(403);
+    expect(await errorOf(refused)).toBe("auth.forbidden");
+    // The owner writes them, under the one title whatever was said, with the links the page makes.
+    const written = restDocumentSchema.parse(
+      await (
+        await as(alice, "PUT", page, {
+          title: "Whatever",
+          body: "# Rules of web\n\nSee [the setup](guides/setup) first.",
+        })
+      ).json(),
+    );
+    expect(written).toMatchObject({
+      path: "rules",
+      title: "Rules",
+      version: 1,
+      links: [{ path: "guides/setup", title: null }],
+    });
+    const both = restProjectRulesSchema.parse(await (await get(bob, at)).json());
+    expect(both.project).toMatchObject({
+      source: "written",
+      body: written.body,
+      page: { path: "rules", version: 1 },
+    });
+    // The project's configuration, not its knowledge: in no folder, found by no words, readable at its path.
+    const root = restDocumentsSchema.parse(await (await get(bob, `${IN}/docs`)).json());
+    expect(root.items.map((item) => item.path)).not.toContain("rules");
+    const found = restDocumentsSchema.parse(await (await get(bob, `${IN}/docs?q=setup`)).json());
+    expect(found.items.map((item) => item.path)).not.toContain("rules");
+    expect((await get(bob, page)).status).toBe(200);
+    // Kept short; put away by the owner alone, and the project adds none again; written again, the page comes back.
+    const long = await as(alice, "PUT", page, {
+      title: "Rules",
+      body: "x".repeat(MAX_RULES_LENGTH + 1),
+    });
+    expect(long.status).toBe(400);
+    expect((await as(bob, "POST", `${page}/archive`)).status).toBe(403);
+    expect((await as(alice, "POST", `${page}/archive`)).status).toBe(200);
+    expect(restProjectRulesSchema.parse(await (await get(bob, at)).json()).project.source).toBe(
+      "none",
+    );
+    const back = restDocumentSchema.parse(
+      await (await as(alice, "PUT", page, { title: "Rules", body: "# Back" })).json(),
+    );
+    expect(back).toMatchObject({ version: 2, archivedAt: null });
+    // A project the asker may not see has no rules to show.
+    expect((await get(bob, `${projectPath("docs")}/rules`)).status).toBe(404);
   });
 });

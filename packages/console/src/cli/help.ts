@@ -20,6 +20,7 @@ import {
   MAX_PROJECT_SYMBOL_LENGTH,
   MAX_QUESTION_LENGTH,
   MAX_REPORTS_PER_RUN,
+  MAX_RULES_LENGTH,
   MAX_SUMMARY_LENGTH,
   MAX_TITLE_LENGTH,
   MAX_VERSIONS_PER_DOCUMENT,
@@ -232,7 +233,20 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   skills: {
     usage: "skills",
     about:
-      "The organization's skills, as SkillCDN serves them at the console's address: each with its description and the URI you load it by through your own SkillCDN connection. --json adds the page of each, for a person.",
+      "The organization's skills, as SkillCDN serves them at the project's address: each with its description and the URI you load it by through your own SkillCDN connection, which a person makes at the address's page when you have none; and where the console's own skills are on this machine. --json adds the page of each, for a person.",
+  },
+  rules: {
+    usage:
+      "rules  |  rules write --body <markdown>|--file <path>|-|none [--workspace] [--base <version>]",
+    about:
+      "What this organization asks of agents (ADR-0023): the workspace's rules, the console's own until an administrator writes the organization's, and this project's own when it has them. Read them before taking a task; take prints them again. rules write writes this project's rules, for an owner, or with --workspace the workspace's, for an administrator; none puts the written rules away, so that the console's own hold again, or the project adds none. Without a project named, rules shows the workspace's alone.",
+    limits: [
+      `body: Markdown, up to ${MAX_RULES_LENGTH} characters; the console's own rules, written as they are, write nothing`,
+    ],
+    refusals: [
+      "auth.forbidden: an owner writes a project's rules, an administrator the workspace's",
+      "document.conflict: the rules have moved on since --base; read them again",
+    ],
   },
   take: {
     usage: "take <number|id> [--agent <name>]",
@@ -388,6 +402,7 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
 const preamble = (version: string | undefined): string =>
   `console${version === undefined ? "" : ` ${version}`}: the board of your organization's work with AI agents, from the command line.
 You act as the person whose token you hold; everything you send is shown to people as text.
+console rules says what this organization asks of agents: read it before taking a task.
 
 Usage: console <command> [arguments] [--json] [--url <origin>] [--project <key>]
 `;
@@ -429,6 +444,7 @@ const SECTIONS: readonly { readonly title: string; readonly commands: readonly s
       "runs",
       "run",
       "skills",
+      "rules",
     ],
   },
   { title: "Working", commands: ["take", "report", "hand-in", "ask", "finish", "fail", "abandon"] },

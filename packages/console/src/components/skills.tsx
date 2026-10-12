@@ -21,16 +21,24 @@ export function SkillList(props: SkillListProps) {
     return <EmptyState title={words.noAddress.title} body={words.noAddress.body} />;
   }
   const where = (
-    <p className="sc-lead">
-      {words.servedBy}{" "}
-      <a href={skills.source} target="_blank" rel="noopener noreferrer">
-        SkillCDN
-      </a>{" "}
-      {words.at}{" "}
-      <a href={skills.page} target="_blank" rel="noopener noreferrer">
-        <code>{skills.address}</code>
-      </a>
-    </p>
+    <>
+      <p className="sc-lead">
+        {words.servedBy}{" "}
+        <a href={skills.source} target="_blank" rel="noopener noreferrer">
+          SkillCDN
+        </a>{" "}
+        {words.at}{" "}
+        <a href={skills.page} target="_blank" rel="noopener noreferrer">
+          <code>{skills.address}</code>
+        </a>
+      </p>
+      <p className="sc-muted">
+        {words.connect}{" "}
+        <a href={skills.page} target="_blank" rel="noopener noreferrer">
+          {words.connectLink}
+        </a>
+      </p>
+    </>
   );
   if (skills.status !== "ready") {
     return (

@@ -89,6 +89,12 @@ export {
   VISIBILITY_LABELS,
 } from "./components/projects.js";
 export {
+  RulesForm,
+  type RulesFormProps,
+  RulesView,
+  type RulesViewProps,
+} from "./components/rules.js";
+export {
   RUN_STATUS_LABELS,
   RunCard,
   type RunCardProps,
@@ -210,7 +216,9 @@ export {
   personAgentsHref,
   personWorkHref,
   projectHref,
+  projectSettingsHref,
   type Route,
+  settingsHref,
   signInFailureOf,
   type TaskFormKind,
   taskHref,

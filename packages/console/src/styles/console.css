@@ -3234,3 +3234,45 @@ table {
     border-radius: var(--sc-radius-lg);
   }
 }
+
+/* An input with what stands before it: the deployment's origin before a skills address. */
+.sc-input-group {
+  display: flex;
+  align-items: stretch;
+}
+
+.sc-input-prefix {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--sc-space-3);
+  border: 1px solid var(--sc-color-border-strong);
+  border-right: 0;
+  border-radius: var(--sc-radius-md) 0 0 var(--sc-radius-md);
+  background: color-mix(in srgb, var(--sc-color-field) 60%, var(--sc-color-border));
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+  white-space: nowrap;
+}
+
+.sc-input-group .sc-input-prefix + .sc-input {
+  border-radius: 0 var(--sc-radius-md) var(--sc-radius-md) 0;
+}
+
+/* The rules (ADR-0023): the facts of the page they are written on stand above the text. */
+.sc-rules-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
+  margin: 0 0 var(--sc-space-3);
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+/* The categories on the settings, as chips, with the way to the page that keeps them. */
+.sc-category-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-2);
+  margin: 0 0 var(--sc-space-4);
+}

@@ -56,6 +56,8 @@ export const MAX_DOCUMENT_PATH_LENGTH = 200;
 export const MAX_DOCUMENT_SEGMENT_LENGTH = 64;
 /** A document's body: a page of Markdown. */
 export const MAX_DOCUMENT_LENGTH = 64_000;
+/** The rules of a board, the workspace's or a project's (ADR-0023): kept short, since every agent reads them. */
+export const MAX_RULES_LENGTH = 12_000;
 /** How many versions one document keeps, and how many files attach to one. */
 export const MAX_VERSIONS_PER_DOCUMENT = 500;
 export const MAX_FILES_PER_DOCUMENT = 50;

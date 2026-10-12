@@ -128,10 +128,21 @@ Goal: who may use the board is the console's own record, kept by an administrato
 - [x] The organization at the git host (2026-10-12), read through a GitHub App installed on it (`GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_ORG`): asked at sign-in, and read whole by the worker every ten minutes, so that those who left are out and those who returned are in, by the account's id; what an administrator cannot change; the People page says when it was last read.
 - [x] A console set up from a connected agent (2026-10-12): the README's quick start, which is connecting `skillcdn.ai/gh/skillcdn/console` and asking for a console; the deploying skill registers the GitHub App for signing in and for the organization, or the Google client, with the steps of the day.
 
-## After milestone 12
+## Done: milestone 13, the rules (2026-10-12)
+
+Goal: what an organization asks of its agents, said once on the board and read first: which skills to load, where the work lives, how the pages are laid out, what may be decided alone, how to report; the console's own rules holding until the organization writes its own and changing with the console's version, and each project adding its own ([ADR-0023](adr/0023-the-rules-of-a-board-are-pages-the-workspace-and-its-projects-keep-read-first-by-every-agent.md)).
+
+- [x] The decision (2026-10-12, [ADR-0023](adr/0023-the-rules-of-a-board-are-pages-the-workspace-and-its-projects-keep-read-first-by-every-agent.md)): rules as pages at `rules`, the workspace's own and a project's; the console's own as the default that follows its version; who writes them; the surfaces; the rules as the organization's layer and its skills as the craft.
+- [x] The data model (2026-10-12): a document of the workspace's own (`project_id` null), kept to the rules by a check; migration 0015.
+- [x] The REST API (2026-10-12): `/api/v1/rules` with its archive and its versions, `/api/v1/projects/<key>/rules`; the page `rules` of a project an owner's, kept short and out of the folders and the search; `me` says where the skills come from ([specs/rest.md](specs/rest.md)).
+- [x] The command (2026-10-12): `rules` and `rules write`; `take` prints the rules with the task; `skills` says where a person connects an agent and where the console's own skills are on the machine ([specs/cli.md](specs/cli.md)).
+- [x] The default UI (2026-10-12): Settings on the workspace, with the rules, the categories and where the skills come from; a project's Settings read by every member, with its rules and the forms at addresses of their own; the deployment's origin shown before a skills address typed; the Skills page says how an agent is connected.
+- [x] The skills (2026-10-12): `working-the-board` reads the rules first and carries an example of a project's rules; the manifest says the board's rules come first.
+
+## After milestone 13
 
 Nothing is chosen yet; the list below is where the next milestone comes from. Left open by milestone 9: whether the board should end a run not heard from for a long while itself ([ADR-0020](adr/0020-the-console-does-not-claim-an-agent-is-at-work-a-run-says-when-it-was-last-heard-from-and-a-new-run-takes-over.md)); a roadmap across projects.
 
 ## Later, undecided
 
-Unattended runs, where the console would start agents itself: not planned, since an agent is a person's own app or CLI under their own subscription, and the console calls no model API; a runner on a person's own machine, which starts their agent when the board has work for them, is the shape to consider instead. Ideas and intake: from a thought to a task, with the questions a person is asked on the way. Rules for what an agent may decide alone. Notifications beyond the board. Hooks that report an agent's events without being asked. A second workspace in one deployment, should projects not be enough.
+Unattended runs, where the console would start agents itself: not planned, since an agent is a person's own app or CLI under their own subscription, and the console calls no model API; a runner on a person's own machine, which starts their agent when the board has work for them, is the shape to consider instead. Ideas and intake: from a thought to a task, with the questions a person is asked on the way. Notifications beyond the board. Hooks that report an agent's events without being asked. A second workspace in one deployment, should projects not be enough.

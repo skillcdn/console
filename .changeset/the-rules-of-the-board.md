@@ -1,0 +1,11 @@
+---
+"@skillcdn/console": patch
+---
+
+The rules of the board: what an organization asks of its agents, on the settings (ADR-0023).
+
+- **Rules** are pages the workspace and each project keep at `rules`. The console's own hold until an administrator writes the organization's, and change with the console's version; a project adds its own or none, written by an owner. `GET` and `PUT /api/v1/rules`, `POST /api/v1/rules/archive`, `GET /api/v1/rules/versions`; `GET /api/v1/projects/<key>/rules` answers both halves; a project's are written as the page `rules`, kept out of the folders and the search. The client gains `rules`, `writeRules`, `archiveRules` and `rulesVersions`, and a project's `rules`; the API layer `restRulesSchema`, `restProjectRulesSchema`, `restRulesInputSchema`, `RULES_SOURCES`, `REFERENCE_RULES`, `PROJECT_RULES_TEMPLATE`, `RULES_PATH`, `RULES_TITLE`, `isReferenceRules`, `MAX_RULES_LENGTH` and `rulesPath`.
+- **The command**: `console rules` prints what holds; `console rules write` writes a project's or, with `--workspace`, the workspace's, and `none` puts them away; `console take` prints the rules with the task; `console skills` says where a person connects an agent that has no connection to the address, and where the console's own skills are on the machine (`CliIo.skillsDir`).
+- **The pages**: a Settings tab on the workspace (`/settings`), with the rules, the categories and where the skills come from; the Categories tab moves under it, its address unchanged. A project's Settings are read by every member, with the project's form at `?edit` and its rules at `?rules`. `RulesView`, `RulesForm`, `settingsHref` and `projectSettingsHref` are exported; `ProjectForm` takes `skillsSource` and `organizationAddress`, and shows the deployment's origin before the address typed; the Skills page says how an agent is connected.
+- `GET /api/v1/me` carries `workspace.skills`: the SkillCDN deployment's origin and the organization's address, or `null`.
+- Words: `settings.*`, `rules.*`, `projects.settings.edit`, `projects.settings.organizationsSkills`, `projects.settings.noSkills`, `projects.form.skillsAddressHint`, `skills.connect` and `skills.connectLink`; `nav.categories` and `projects.settings.onlyOwner` are gone. New classes: `sc-rules`, `sc-rules-facts`, `sc-input-group`, `sc-input-prefix`, `sc-category-chips`.

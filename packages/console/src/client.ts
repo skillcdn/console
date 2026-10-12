@@ -8,6 +8,7 @@ import {
   projectPath,
   REST_ROUTES,
   restPath,
+  rulesPath,
 } from "./routes.js";
 import {
   type RestAnswerInput,
@@ -47,8 +48,11 @@ import {
   type RestProject,
   type RestProjectInput,
   type RestProjectPatch,
+  type RestProjectRules,
   type RestProjects,
   type RestReportInput,
+  type RestRules,
+  type RestRulesInput,
   type RestRun,
   type RestRunEndInput,
   type RestRunInput,
@@ -84,8 +88,10 @@ import {
   restPeopleSchema,
   restPersonSchema,
   restPersonWorkSchema,
+  restProjectRulesSchema,
   restProjectSchema,
   restProjectsSchema,
+  restRulesSchema,
   restRunSchema,
   restRunsSchema,
   restSkillsSchema,
@@ -249,6 +255,8 @@ export interface ProjectClient {
   eventStreamUrl(after: number): string;
   /** The project's skills, as SkillCDN serves them at its address, or the organization's. */
   skills(signal?: AbortSignal): Promise<RestSkills>;
+  /** The rules that hold in the project (ADR-0023): the workspace's, and what the project adds. */
+  rules(signal?: AbortSignal): Promise<RestProjectRules>;
   /** A folder's pages and folders, or the pages a search finds. */
   documents(filter?: DocumentFilter, signal?: AbortSignal): Promise<RestDocuments>;
   /** One document, by its path: its latest version, its links both ways, its files. */
@@ -296,6 +304,14 @@ export interface ConsoleClient {
   events(after: number, signal?: AbortSignal): Promise<RestEvents>;
   /** The categories tasks are sorted into (ADR-0019), by name. */
   categories(signal?: AbortSignal): Promise<RestCategories>;
+  /** The workspace's rules (ADR-0023): the console's own until an administrator writes the organization's. */
+  rules(signal?: AbortSignal): Promise<RestRules>;
+  /** Writes the organization's rules; for an administrator. The console's own, sent as they are, write nothing. */
+  writeRules(input: RestRulesInput): Promise<RestRules>;
+  /** Puts the organization's rules away, so that the console's own hold again; for an administrator. */
+  archiveRules(): Promise<RestRules>;
+  /** The versions of the organization's rules, newest first; none while the console's own hold. */
+  rulesVersions(signal?: AbortSignal): Promise<RestVersions>;
   /** Makes a category; for an administrator signed in. */
   createCategory(input: RestCategoryInput): Promise<RestCategory>;
   updateCategory(key: string, patch: RestCategoryPatch): Promise<RestCategory>;
@@ -532,6 +548,8 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
       eventStreamUrl: (after) => withQuery(`${at("events")}/stream`, { after: String(after) }),
       skills: (signal) =>
         request("GET", `${base}${at("skills")}`, undefined, restSkillsSchema, signal),
+      rules: (signal) =>
+        request("GET", `${base}${at("rules")}`, undefined, restProjectRulesSchema, signal),
       documents: (filter = {}, signal) =>
         request(
           "GET",
@@ -607,6 +625,13 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
       ),
     categories: (signal) =>
       request("GET", `${base}${REST_ROUTES.categories}`, undefined, restCategoriesSchema, signal),
+    rules: (signal) =>
+      request("GET", `${base}${REST_ROUTES.rules}`, undefined, restRulesSchema, signal),
+    writeRules: (input) => request("PUT", `${base}${REST_ROUTES.rules}`, input, restRulesSchema),
+    archiveRules: () =>
+      request("POST", `${base}${rulesPath("archive")}`, undefined, restRulesSchema),
+    rulesVersions: (signal) =>
+      request("GET", `${base}${rulesPath("versions")}`, undefined, restVersionsSchema, signal),
     createCategory: (input) =>
       request("POST", `${base}${REST_ROUTES.categories}`, input, restCategorySchema),
     updateCategory: (key, patch) =>

@@ -411,6 +411,43 @@ describe("the command line", () => {
     expect(untitled.err).toContain("Say its title");
   });
 
+  it("reads the rules that hold, prints them with a task taken, and writes the project's as its person", async () => {
+    const start = await console_(["rules"]);
+    expect(start.code, start.err).toBe(EXIT.ok);
+    expect(start.out).toContain(
+      "Rules of the workspace: the console's own, until an administrator writes the organization's",
+    );
+    expect(start.out).toContain("# Rules for agents on this board");
+    expect(start.out).toContain("Rules of this project: none of its own; the workspace's hold.");
+    const written = await console_([
+      "rules",
+      "write",
+      "--body",
+      "# Rules of web\n\nAsk before pushing.",
+    ]);
+    expect(written.code, written.err).toBe(EXIT.ok);
+    expect(written.out).toBe("Wrote this project's rules, version 1.\n");
+    const task = await writeTask(alice, { title: "Read the rules", body: "Then work." });
+    const taken = await console_(["take", String(task.number)]);
+    expect(taken.code, taken.err).toBe(EXIT.ok);
+    expect(taken.out).toMatch(
+      /# Rules for agents on this board[\s\S]*Ask before pushing\.[\s\S]*Say how it goes/,
+    );
+    expect((await console_(["abandon"])).code).toBe(EXIT.ok);
+    // A member's agent may not write them; the workspace's take an administrator, which nobody here is.
+    const bobToken = await tokenFor(bob, "Codex for Bob");
+    const refused = await console_(["rules", "write", "--body", "# Mine"], bobToken);
+    expect(refused.code).toBe(EXIT.failed);
+    expect(refused.err).toContain("auth.forbidden");
+    const workspace = await console_(["rules", "write", "--workspace", "--body", "# Ours"]);
+    expect(workspace.code).toBe(EXIT.failed);
+    expect(workspace.err).toContain("auth.forbidden");
+    const away = await console_(["rules", "write", "none"]);
+    expect(away.code, away.err).toBe(EXIT.ok);
+    expect(away.out).toBe("This project's rules are put away: it adds none now.\n");
+    expect((await console_(["rules"])).out).toContain("none of its own");
+  });
+
   it("keeps an agent to its person's runs, and says when a token is nothing", async () => {
     const nobody = await console_(["tasks"], "cns_t_nonsense");
     expect(nobody.code).toBe(EXIT.failed);

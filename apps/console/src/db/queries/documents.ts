@@ -1,5 +1,5 @@
-import { documentPathsIn, type LinkSource } from "@skillcdn/console/api";
-import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
+import { documentPathsIn, type LinkSource, RULES_PATH } from "@skillcdn/console/api";
+import { and, asc, desc, eq, isNull, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
@@ -12,6 +12,7 @@ import {
   people,
   projects,
   tasks,
+  workspaces,
 } from "../schema.js";
 import { type Actor, recordEvent, type Scope } from "./events.js";
 import { type PersonRecord, personColumns, toPerson } from "./people.js";
@@ -19,12 +20,23 @@ import { type PersonRecord, personColumns, toPerson } from "./people.js";
 // The documents of a project (ADR-0009): pages of Markdown under a path, each write a version,
 // the links a text makes recorded both ways, archived rather than deleted, with files attached.
 // Every change is one transaction with the event that records it, and every read is scoped
-// to the project: a page of another is not found.
+// to the project: a page of another is not found. The workspace has pages of its own too, its
+// rules (ADR-0023): the same table, with no project, and no links or files.
+
+/**
+ * Where a page belongs: a project, or the workspace itself (`projectId: null`), whose pages
+ * are its rules alone.
+ */
+export interface DocumentScope {
+  readonly workspaceId: string;
+  readonly projectId: string | null;
+}
 
 export interface DocumentSummary {
   readonly id: string;
   readonly workspaceId: string;
-  readonly projectId: string;
+  /** The project the page belongs to, or null for a page of the workspace's own. */
+  readonly projectId: string | null;
   readonly path: string;
   readonly title: string;
   /** The number of the latest version, from 1. */
@@ -165,6 +177,18 @@ function toSummary(row: SummaryRow): DocumentSummary {
 /** The condition that keeps archived pages out, unless they are asked for. */
 const current = (archived: boolean) => (archived ? undefined : isNull(documents.archivedAt));
 
+/** The pages of a scope: a project's by its id, the workspace's own by its workspace and no project. */
+const inScope = (scope: DocumentScope) =>
+  scope.projectId === null
+    ? and(eq(documents.workspaceId, scope.workspaceId), isNull(documents.projectId))
+    : eq(documents.projectId, scope.projectId);
+
+/** What an event of a page carries of its scope: the project when it has one. */
+const eventScope = (scope: DocumentScope) => ({
+  workspaceId: scope.workspaceId,
+  projectId: scope.projectId ?? undefined,
+});
+
 /** `%`, `_` and `\` as themselves in a `like` pattern. Paths carry none; words may. */
 const escapeLike = (value: string): string => value.replace(/[\\%_]/g, (char) => `\\${char}`);
 
@@ -174,7 +198,7 @@ const escapeLike = (value: string): string => value.replace(/[\\%_]/g, (char) =>
  */
 export async function listDocuments(
   database: Database,
-  scope: Scope,
+  scope: DocumentScope,
   filter: {
     readonly folder: string;
     readonly archived?: boolean | undefined;
@@ -185,8 +209,10 @@ export async function listDocuments(
   const archived = filter.archived === true;
   /** The path after the folder's prefix: the page's name, or a folder and more. */
   const rest = sql`substr(${documents.path}, ${prefix.length + 1})`;
+  // The rules are a page of the project's configuration, shown on its settings, not among its knowledge.
   const inFolder = and(
-    eq(documents.projectId, scope.projectId),
+    inScope(scope),
+    ne(documents.path, RULES_PATH),
     prefix === "" ? undefined : sql`${documents.path} like ${`${prefix}%`}`,
     current(archived),
   );
@@ -215,7 +241,7 @@ export async function listDocuments(
  */
 export async function searchDocuments(
   database: Database,
-  scope: Scope,
+  scope: DocumentScope,
   filter: {
     readonly query: string;
     readonly archived?: boolean | undefined;
@@ -227,7 +253,8 @@ export async function searchDocuments(
   const rows = await selectSummaries(drizzleOf(database))
     .where(
       and(
-        eq(documents.projectId, scope.projectId),
+        inScope(scope),
+        ne(documents.path, RULES_PATH),
         current(filter.archived === true),
         sql`(${documents.search} @@ ${query} or lower(${documents.title}) like ${pattern} escape '\\' or ${documents.path} like ${pattern} escape '\\')`,
       ),
@@ -356,7 +383,7 @@ async function filesOf(handle: Handle, documentId: string): Promise<DocumentFile
 
 async function readDocument(
   handle: Handle,
-  scope: Scope,
+  scope: DocumentScope,
   path: string,
 ): Promise<DocumentRecord | undefined> {
   const [row] = await handle
@@ -368,14 +395,16 @@ async function readDocument(
     .from(documents)
     .innerJoin(writers, eq(writers.id, documents.updatedById))
     .innerJoin(authors, eq(authors.id, documents.createdById))
-    .where(and(eq(documents.projectId, scope.projectId), eq(documents.path, path)))
+    .where(and(inScope(scope), eq(documents.path, path)))
     .limit(1);
   if (row === undefined) {
     return undefined;
   }
+  // A page of the workspace's own links to nothing and nothing links to it: links are a project's.
+  const project = scope.projectId === null ? undefined : { ...scope, projectId: scope.projectId };
   const [links, backlinks, files] = await Promise.all([
-    linksOf(handle, scope, row.id),
-    backlinksOf(handle, scope, path),
+    project === undefined ? [] : linksOf(handle, project, row.id),
+    project === undefined ? [] : backlinksOf(handle, project, path),
     filesOf(handle, row.id),
   ]);
   return {
@@ -391,7 +420,7 @@ async function readDocument(
 /** One document by its path, with what it links to, what refers to it, and its files. */
 export function getDocument(
   database: Database,
-  scope: Scope,
+  scope: DocumentScope,
   path: string,
 ): Promise<DocumentRecord | undefined> {
   return readDocument(drizzleOf(database), scope, path);
@@ -437,17 +466,19 @@ export async function recordLinks(
  * Writes a page: the first version at a new path, or the next version of the page there, and
  * tells the board. A write that changes nothing is no version and no event. With a base
  * version, the write is refused when the page has moved on since; an archived page is not
- * written to; and a page carries only so many versions.
+ * written to, unless the write is to bring it back (`restoreArchived`, for the rules, which
+ * are put away and written again); and a page carries only so many versions.
  */
 export async function writeDocument(
   database: Database,
   input: {
-    readonly scope: Scope;
+    readonly scope: DocumentScope;
     readonly actor: Actor;
     readonly path: string;
     readonly title: string;
     readonly body: string;
     readonly baseVersion?: number | undefined;
+    readonly restoreArchived?: boolean | undefined;
     readonly maxVersions: number;
     readonly now: Date;
   },
@@ -463,7 +494,7 @@ export async function writeDocument(
         archivedAt: documents.archivedAt,
       })
       .from(documents)
-      .where(and(eq(documents.projectId, scope.projectId), eq(documents.path, path)))
+      .where(and(inScope(scope), eq(documents.path, path)))
       .for("update");
     let documentId: string;
     let version: number;
@@ -471,16 +502,25 @@ export async function writeDocument(
       if (baseVersion !== undefined) {
         throw new DocumentError("document.conflict");
       }
-      // Two first writes at one path at once: the second waits on the project's row, then finds the first.
-      await tx
-        .select({ id: projects.id })
-        .from(projects)
-        .where(eq(projects.id, scope.projectId))
-        .for("update");
+      // Two first writes at one path at once: the second waits on the project's row (the
+      // workspace's, for a page of its own), then finds the first.
+      if (scope.projectId === null) {
+        await tx
+          .select({ id: workspaces.id })
+          .from(workspaces)
+          .where(eq(workspaces.id, scope.workspaceId))
+          .for("update");
+      } else {
+        await tx
+          .select({ id: projects.id })
+          .from(projects)
+          .where(eq(projects.id, scope.projectId))
+          .for("update");
+      }
       const [again] = await tx
         .select({ id: documents.id })
         .from(documents)
-        .where(and(eq(documents.projectId, scope.projectId), eq(documents.path, path)))
+        .where(and(inScope(scope), eq(documents.path, path)))
         .limit(1);
       if (again !== undefined) {
         throw new DocumentError("document.conflict");
@@ -507,13 +547,14 @@ export async function writeDocument(
       documentId = inserted.id;
       version = 1;
     } else {
-      if (existing.archivedAt !== null) {
+      const archived = existing.archivedAt !== null;
+      if (archived && input.restoreArchived !== true) {
         throw new DocumentError("document.archived");
       }
       if (baseVersion !== undefined && baseVersion !== existing.version) {
         throw new DocumentError("document.conflict");
       }
-      if (existing.title === title && existing.body === body) {
+      if (!archived && existing.title === title && existing.body === body) {
         const unchanged = await readDocument(tx, scope, path);
         if (unchanged === undefined) {
           throw new DocumentError("document.not_found");
@@ -533,9 +574,20 @@ export async function writeDocument(
           version,
           updatedById: actor.id,
           agent: actor.agent ?? null,
+          archivedAt: null,
           updatedAt: now,
         })
         .where(eq(documents.id, documentId));
+      if (archived) {
+        await recordEvent(tx, {
+          ...eventScope(scope),
+          kind: "document.restored",
+          actor,
+          documentId,
+          data: { path, title: existing.title },
+          now,
+        });
+      }
     }
     await tx.insert(documentVersions).values({
       documentId,
@@ -546,9 +598,17 @@ export async function writeDocument(
       agent: actor.agent ?? null,
       createdAt: now,
     });
-    await recordLinks(tx, scope, { kind: "document", id: documentId }, [body], now);
+    if (scope.projectId !== null) {
+      await recordLinks(
+        tx,
+        { ...scope, projectId: scope.projectId },
+        { kind: "document", id: documentId },
+        [body],
+        now,
+      );
+    }
     await recordEvent(tx, {
-      ...scope,
+      ...eventScope(scope),
       kind: "document.written",
       actor,
       documentId,
@@ -570,7 +630,7 @@ export async function writeDocument(
 export async function setArchived(
   database: Database,
   input: {
-    readonly scope: Scope;
+    readonly scope: DocumentScope;
     readonly actor: Actor;
     readonly path: string;
     readonly archived: boolean;
@@ -582,7 +642,7 @@ export async function setArchived(
     const [existing] = await tx
       .select({ id: documents.id, title: documents.title, archivedAt: documents.archivedAt })
       .from(documents)
-      .where(and(eq(documents.projectId, scope.projectId), eq(documents.path, path)))
+      .where(and(inScope(scope), eq(documents.path, path)))
       .for("update");
     if (existing === undefined) {
       throw new DocumentError("document.not_found");
@@ -593,7 +653,7 @@ export async function setArchived(
         .set({ archivedAt: archived ? now : null, updatedAt: now })
         .where(eq(documents.id, existing.id));
       await recordEvent(tx, {
-        ...scope,
+        ...eventScope(scope),
         kind: archived ? "document.archived" : "document.restored",
         actor,
         documentId: existing.id,
@@ -620,7 +680,7 @@ const versionColumns = {
 /** The id of the page at a path, or nothing. */
 export async function findDocumentId(
   handle: Handle | Database,
-  scope: Scope,
+  scope: DocumentScope,
   path: string,
 ): Promise<string | undefined> {
   if (!isHandle(handle)) {
@@ -629,7 +689,7 @@ export async function findDocumentId(
   const [row] = await handle
     .select({ id: documents.id })
     .from(documents)
-    .where(and(eq(documents.projectId, scope.projectId), eq(documents.path, path)))
+    .where(and(inScope(scope), eq(documents.path, path)))
     .limit(1);
   return row?.id;
 }
@@ -637,7 +697,7 @@ export async function findDocumentId(
 /** The versions of a page, newest first: who wrote each, through which agent, and when. */
 export async function listVersions(
   database: Database,
-  scope: Scope,
+  scope: DocumentScope,
   path: string,
   limit: number,
 ): Promise<VersionSummary[] | undefined> {
@@ -665,7 +725,7 @@ export async function listVersions(
 /** One version of a page, with its body as it was; nothing when the page or the version is not there. */
 export async function getVersion(
   database: Database,
-  scope: Scope,
+  scope: DocumentScope,
   path: string,
   number: number,
 ): Promise<VersionRecord | undefined> {
@@ -699,7 +759,7 @@ export async function getVersion(
 export async function attachFile(
   database: Database,
   input: {
-    readonly scope: Scope;
+    readonly scope: DocumentScope;
     readonly actor: Actor;
     readonly path: string;
     readonly file: {
@@ -718,7 +778,7 @@ export async function attachFile(
     const [existing] = await tx
       .select({ id: documents.id, title: documents.title, archivedAt: documents.archivedAt })
       .from(documents)
-      .where(and(eq(documents.projectId, scope.projectId), eq(documents.path, path)))
+      .where(and(inScope(scope), eq(documents.path, path)))
       .for("update");
     if (existing === undefined) {
       throw new DocumentError("document.not_found");
@@ -746,7 +806,7 @@ export async function attachFile(
     });
     await tx.update(documents).set({ updatedAt: now }).where(eq(documents.id, existing.id));
     await recordEvent(tx, {
-      ...scope,
+      ...eventScope(scope),
       kind: "document.file_attached",
       actor,
       documentId: existing.id,
@@ -764,7 +824,7 @@ export async function attachFile(
 /** A file attached to the page at a path, by its id, within the project; or nothing. */
 export async function findDocumentFile(
   database: Database,
-  scope: Scope,
+  scope: DocumentScope,
   path: string,
   fileId: string,
 ): Promise<DocumentFileRecord | undefined> {

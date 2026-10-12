@@ -97,7 +97,7 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
   });
 
   const access = createAccess(auth);
-  registerAuth(app, { auth, access, workspace, database, clock, logger });
+  registerAuth(app, { auth, access, workspace, skills, database, clock, logger });
   registerRest(app, {
     database,
     workspace,

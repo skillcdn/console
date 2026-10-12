@@ -1,0 +1,3 @@
+ALTER TABLE "documents" ALTER COLUMN "project_id" DROP NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "documents_workspace_path_key" ON "documents" USING btree ("workspace_id","path") WHERE "documents"."project_id" is null;--> statement-breakpoint
+ALTER TABLE "documents" ADD CONSTRAINT "documents_workspace_page_check" CHECK ("documents"."project_id" is not null or "documents"."path" = 'rules');

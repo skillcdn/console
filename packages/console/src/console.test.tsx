@@ -24,6 +24,8 @@ import {
   personAgentsHref,
   personWorkHref,
   projectHref,
+  projectSettingsHref,
+  settingsHref,
   signInFailureOf,
   taskHref,
   withoutSignInParam,
@@ -59,7 +61,31 @@ describe("matchRoute", () => {
     expect(matchRoute("/projects/web-2/feed")).toEqual({ name: "feed", project: "web-2" });
     expect(matchRoute("/projects/web/skills")).toEqual({ name: "skills", project: "web" });
     expect(matchRoute("/projects/web/members")).toEqual({ name: "members", project: "web" });
-    expect(matchRoute("/projects/web/settings")).toEqual({ name: "settings", project: "web" });
+    expect(matchRoute("/projects/web/settings")).toEqual({
+      name: "settings",
+      project: "web",
+      form: undefined,
+    });
+    expect(matchRoute("/projects/web/settings", "?edit")).toEqual({
+      name: "settings",
+      project: "web",
+      form: "edit",
+    });
+    expect(matchRoute("/projects/web/settings", "?rules")).toEqual({
+      name: "settings",
+      project: "web",
+      form: "rules",
+    });
+    expect(projectSettingsHref("web")).toBe("/projects/web/settings");
+    expect(projectSettingsHref("web", "rules")).toBe("/projects/web/settings?rules");
+    expect(matchRoute("/settings")).toEqual({ name: "workspace-settings", form: undefined });
+    expect(matchRoute("/settings", "?rules")).toEqual({
+      name: "workspace-settings",
+      form: "rules",
+    });
+    expect(matchRoute("/settings/rules")).toEqual({ name: "not-found" });
+    expect(settingsHref()).toBe("/settings");
+    expect(settingsHref("rules")).toBe("/settings?rules");
     expect(projectHref("web")).toBe("/projects/web");
     expect(projectHref("web", "feed")).toBe("/projects/web/feed");
     expect(matchRoute("/connect")).toEqual({ name: "connect", code: undefined });
@@ -319,6 +345,7 @@ describe("createConsole", () => {
     events: never,
     eventStreamUrl: () => `/api/v1/projects/${key}/events/stream`,
     skills: never,
+    rules: never,
     updateDecision: never,
     documents: never,
     document: never,
@@ -361,6 +388,10 @@ describe("createConsole", () => {
     createCategory: never,
     updateCategory: never,
     removeCategory: never,
+    rules: never,
+    writeRules: never,
+    archiveRules: never,
+    rulesVersions: never,
     work: never,
     personWork: never,
   };
@@ -401,6 +432,7 @@ describe("createConsole", () => {
       "/projects/web/calendar",
       "/projects/new",
       "/projects/web/settings",
+      "/settings",
     ]) {
       expect(onlyOnOwnPages(matchRoute(path)), path).toBe(false);
     }

@@ -146,6 +146,10 @@ export interface ProjectFormProps {
    */
   readonly onSubmit: (input: RestProjectInput | RestProjectPatch, icon?: File | null) => void;
   readonly onCancel?: (() => void) | undefined;
+  /** The origin of the SkillCDN deployment the skills are read through, shown before the address typed. */
+  readonly skillsSource?: string | undefined;
+  /** The organization's address, which a project without one of its own reads; `null` for none. */
+  readonly organizationAddress?: string | null | undefined;
 }
 
 /** A key as a person types a name: lowercase letters, digits and hyphens, from what they typed. */
@@ -272,13 +276,21 @@ export function ProjectForm(props: ProjectFormProps) {
         </label>
         <label className="sc-field">
           <span className="sc-field-label">{form.skillsAddress}</span>
-          <input
-            className="sc-input"
-            value={skillsAddress}
-            maxLength={MAX_SKILLS_ADDRESS_LENGTH}
-            placeholder={form.skillsAddressPlaceholder}
-            onChange={(event) => setSkillsAddress(event.target.value)}
-          />
+          <span className="sc-input-group">
+            {props.skillsSource !== undefined && (
+              <span className="sc-input-prefix">{props.skillsSource}</span>
+            )}
+            <input
+              className="sc-input"
+              value={skillsAddress}
+              maxLength={MAX_SKILLS_ADDRESS_LENGTH}
+              placeholder={form.skillsAddressPlaceholder}
+              onChange={(event) => setSkillsAddress(event.target.value)}
+            />
+          </span>
+          <span className="sc-muted">
+            {form.skillsAddressHint(props.organizationAddress ?? null)}
+          </span>
         </label>
       </div>
       <div className="sc-field-row sc-mark-row">

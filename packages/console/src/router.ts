@@ -70,7 +70,14 @@ export type Route =
   | { readonly name: "feed"; readonly project: string }
   | { readonly name: "skills"; readonly project: string }
   | { readonly name: "members"; readonly project: string }
-  | { readonly name: "settings"; readonly project: string }
+  /** A project's settings, read; or one of its forms open: the project's own, or its rules (ADR-0023). */
+  | {
+      readonly name: "settings";
+      readonly project: string;
+      readonly form: "edit" | "rules" | undefined;
+    }
+  /** The workspace's settings: its rules, its categories, its skills; or the form the rules are written on. */
+  | { readonly name: "workspace-settings"; readonly form: "rules" | undefined }
   | { readonly name: "people" }
   /** The form where an administrator lets someone in by login (ADR-0022). */
   | { readonly name: "new-listing" }
@@ -125,8 +132,10 @@ export const PATHS = {
   agents: "/agents",
   /** The form for a token made by hand, for a script or a console of one's own. */
   newToken: "/agents/new",
-  /** The categories tasks are sorted into, kept by an administrator. */
+  /** The categories tasks are sorted into, kept by an administrator; reached from the settings. */
   categories: "/categories",
+  /** The workspace's settings: the rules, the categories, the skills (ADR-0023). */
+  settings: "/settings",
   /** Where the pages a console adds of its own are: `/pages/<key>`, and `/projects/<key>/pages/<page>` on a project. */
   pages: "/pages",
   /** Where an agent's connection is approved (ADR-0011): `/connect/<code>`, or the code typed. */
@@ -139,12 +148,11 @@ const NUMBER = /^[1-9][0-9]{0,8}$/;
 /** A code as it may be typed into an address: checked for what it is by the page. */
 const CODE_TEXT = /^[A-Za-z0-9-]{1,16}$/;
 /** The pages of a project that take nothing after their name. */
-const PLAIN_PAGES: readonly Exclude<ProjectPage, "docs" | "calendar" | "roadmap">[] = [
+const PLAIN_PAGES: readonly Exclude<ProjectPage, "docs" | "calendar" | "roadmap" | "settings">[] = [
   "decisions",
   "feed",
   "skills",
   "members",
-  "settings",
 ];
 const NOT_FOUND: Route = { name: "not-found" };
 
@@ -236,6 +244,9 @@ export function matchRoute(pathname: string, search = ""): Route {
   }
   if (path === PATHS.categories) {
     return { name: "categories" };
+  }
+  if (path === PATHS.settings) {
+    return { name: "workspace-settings", form: params.has("rules") ? "rules" : undefined };
   }
   if (path === PATHS.connect) {
     return { name: "connect", code: undefined };
@@ -336,6 +347,13 @@ export function matchRoute(pathname: string, search = ""): Route {
   if (page === "roadmap") {
     return { name: "roadmap", project };
   }
+  if (page === "settings") {
+    return {
+      name: "settings",
+      project,
+      form: params.has("edit") ? "edit" : params.has("rules") ? "rules" : undefined,
+    };
+  }
   const found = PLAIN_PAGES.find((candidate) => candidate === page);
   return found === undefined ? NOT_FOUND : { name: found, project };
 }
@@ -360,6 +378,17 @@ export function personWorkHref(personId: string, week?: string): string {
 export function projectHref(key: string, page?: ProjectPage): string {
   const base = `${PATHS.project}/${key}`;
   return page === undefined ? base : `${base}/${page}`;
+}
+
+/** Where a project's settings are read, or one of their forms is open: the project's own, or its rules. */
+export function projectSettingsHref(key: string, form?: "edit" | "rules"): string {
+  const base = projectHref(key, "settings");
+  return form === undefined ? base : `${base}?${form}`;
+}
+
+/** Where the workspace's settings are, or the form its rules are written on. */
+export function settingsHref(form?: "rules"): string {
+  return form === undefined ? PATHS.settings : `${PATHS.settings}?${form}`;
 }
 
 /** Where a project's board is, narrowed as the filter says; the plain board for an empty one. */
