@@ -12,22 +12,17 @@
   </p>
 </div>
 
-> **Status: pre-alpha.** The board runs, and agents work it: people sign in, make projects and say who is in each, write tasks, move them along, raise decisions and answer them, and see one board per project, live; an agent takes a task through the `console` command, reports, hands in links and files, asks, and finishes, named beside its person on everything it did; a project's skills show by address, served by SkillCDN; a project's documents, pages of Markdown by path with every version kept, are written by people and agents, link to each other and to the tasks and decisions both ways, and are found by their words. `@skillcdn/console` is on npm, and `npm install -g @skillcdn/console` is how a machine gets the command; an agent connects with a code a person approves, and the pages speak English and Korean. A task is planned in days and the board keeps its moments itself; tasks are sorted into categories an administrator keeps, each project has a roadmap of goals whose progress is read from the board and a calendar of what is due, and a person sees their own work across projects on one page. A member builds a console of their own from the package and serves it from their machine with `console serve`, on their token. The console's skills, in the SkillCDN Format and served by SkillCDN at `skillcdn.ai/gh/skillcdn/console`, say how an agent works the board and how it builds a console. Where the deployment has a bucket, the files go there through the S3 API, and an agent deploys the console for an organization on AWS behind Cloudflare with the skill `deploying-a-console`, sized from one person to a hundred and priced before anything is made. [docs/roadmap.md](docs/roadmap.md) says what exists; [docs/architecture.md](docs/architecture.md) says how it fits together and what is still open.
+> **Status: pre-alpha.** The board runs, an organization runs on it, and the API and the package still change between releases. [docs/roadmap.md](docs/roadmap.md) says what exists; [docs/architecture.md](docs/architecture.md) says how it fits together.
 
-The console holds the work to be done, which agent (Claude Code, Codex, any agent with a shell) is doing what right now, what each has done, and the decisions that wait for a person. People decide; agents work. One container image next to PostgreSQL; people sign in with the accounts they already have; each person's agent connects with the `console` command and works the board as that person. The organization's playbooks and skills live in git repositories and reach the agents through [SkillCDN](https://skillcdn.ai).
+The console holds the work to be done, which agent (Claude Code, Codex, any agent with a shell) is doing what right now, what each has done, and the decisions that wait for a person. People decide; agents work. One container image next to PostgreSQL; people sign in with the accounts they already have; each person's agent connects with the `console` command and works the board as that person. The organization's skills live in git repositories and reach the agents through [SkillCDN](https://skillcdn.ai).
 
 ## Quick start
 
-Connect `https://skillcdn.ai/gh/skillcdn/console` to your agent as an MCP server and say: **"Set up a SkillCDN console for my organization."** The agent reads the console's skills and takes it from there: it asks what it cannot derive (how many people, the web address, how people sign in and who configures the console), shows the monthly cost before anything is made, creates the deployment on AWS behind Cloudflare, writes out the few steps only you can take (a GitHub App on your organization, or a Google client; the first sign-in; a domain's nameservers), signs you in as the first administrator, and proves it with an agent connected and a file handed in ([`deploying-a-console`](skills/deploying-a-console/SKILL.md)). Nothing is made or bought before you say so.
+Open [skillcdn.ai/gh/skillcdn/console](https://skillcdn.ai/gh/skillcdn/console), connect it to your agent as the page shows, and say:
 
-The page at [skillcdn.ai/gh/skillcdn/console](https://skillcdn.ai/gh/skillcdn/console) shows how each app connects; two of them:
+> Set up a SkillCDN console for my organization.
 
-```sh
-claude mcp add --transport http skillcdn-console https://skillcdn.ai/gh/skillcdn/console   # Claude Code
-codex mcp add skillcdn-console --url https://skillcdn.ai/gh/skillcdn/console                # Codex CLI
-```
-
-What the agent needs from you: an AWS account, a domain on Cloudflare or one to buy, and a browser for the steps that are yours. People then sign in with the accounts they already have; with a GitHub organization or a Google Workspace, everyone of it is in, and an administrator lets anyone else in on the People page ([ADR-0022](docs/adr/0022-who-is-in-is-the-consoles-own-record-and-an-administrator-keeps-it.md)). To run the console on a laptop first, or on another platform, see below.
+The agent asks for what it needs and does the rest.
 
 ## Install
 
