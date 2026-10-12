@@ -326,7 +326,6 @@ export function DecisionList(props: DecisionListProps) {
           <h2 className="sc-section-title">
             {words.decisions.record} <span className="sc-column-count">{answered.length}</span>
           </h2>
-          <p className="sc-lead">{words.decisions.recordLead}</p>
           <DecisionLog
             decisions={answered}
             tasks={props.tasks}

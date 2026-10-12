@@ -116,7 +116,6 @@ export const ko: Messages = {
   projects: {
     title: "프로젝트",
     newProject: "새 프로젝트",
-    lead: "프로젝트는 보드, 문서, 스킬, 사람들을 가집니다. 무엇을 보고 바꿀 수 있는지는 프로젝트마다 정해집니다. 소유자는 설정하고, 멤버는 일합니다.",
     empty: {
       title: "아직 프로젝트가 없습니다",
       body: "첫 프로젝트를 만드세요. 무엇을 위한 것인지, 누가 함께하는지. 또는 소유자에게 추가를 요청하세요.",
@@ -144,11 +143,6 @@ export const ko: Messages = {
     members: {
       title: "멤버",
       list: "멤버",
-      leadWorkspace:
-        "워크스페이스의 모두가 이 프로젝트의 멤버입니다. 여기 목록은 소유자와 따로 지정된 사람들입니다.",
-      leadPrivate: "여기 목록에 있는 사람만 이 프로젝트에 속합니다.",
-      leadRoles:
-        "소유자는 프로젝트를 설정하고, 멤버는 프로젝트에서 일합니다. 워크스페이스 관리자는 모든 프로젝트의 소유자입니다.",
       since: "부터",
       roleOf: (name) => `${name}의 역할`,
       addAria: "멤버 추가",
@@ -165,9 +159,6 @@ export const ko: Messages = {
     settings: {
       title: "설정",
       aria: "프로젝트 설정",
-      leadBefore: "키 ",
-      leadAfter:
-        "는 주소와 명령이 부르는 이름이며 바뀌지 않습니다. 스킬 주소는 SkillCDN이 제공하는 저장소를 가리킵니다. 비우면 조직의 스킬이 보입니다.",
       onlyOwner: {
         title: "소유자만 프로젝트를 바꿀 수 있습니다",
         body: "소유자나 워크스페이스 관리자에게 요청하세요.",
@@ -277,8 +268,6 @@ export const ko: Messages = {
     waiting: "대기 중",
     answered: "답변됨",
     record: "기록",
-    recordLead:
-      "답변된 모든 결정, 최신순. 무엇을 물었고, 무엇을 골랐고, 누가 골랐는지. 맥락과 근거, 그 뒤에 일어난 일은 각 결정을 열어 봅니다.",
     openRecord: "열기",
     waitingForPerson: "사람을 기다리는 중입니다.",
     options: "선택지",
@@ -309,7 +298,6 @@ export const ko: Messages = {
 
   calendar: {
     title: "캘린더",
-    lead: "작업을 날짜 위에 놓고 봅니다. 시작일과 기한이 있는 작업은 그 기간에 걸쳐 놓이고, 기한만 있는 작업은 그날에 놓입니다. 날짜가 없는 작업은 아래에서 날짜를 기다립니다.",
     grid: "이 달",
     legend: { title: "카테고리 색" },
     startsOnly: "그날 시작, 기한은 아직 없음",
@@ -321,9 +309,15 @@ export const ko: Messages = {
     nothingOverdue: "기한이 지난 작업이 없습니다.",
     unscheduled: "날짜 없음",
     allScheduled: "열린 작업마다 날짜가 있습니다.",
+    week: {
+      title: "이 주",
+      previous: "이전 주",
+      next: "다음 주",
+      thisWeek: "이번 주",
+      nothing: "이 주에 잡힌 작업이 없습니다.",
+    },
     workload: {
       title: "누가 무엇을",
-      lead: "사람마다 열린 작업과, 그중 늦은 것과 일주일 안에 마감인 것.",
       person: "사람",
       open: "열림",
       inProgress: "진행 중",
@@ -335,7 +329,6 @@ export const ko: Messages = {
 
   roadmap: {
     title: "로드맵",
-    lead: "프로젝트가 향하는 것. 목표마다 달성 목표일과, 그 아래 작업들이 어디까지 왔는지. 진행은 보드의 현재 상태에서 그대로 읽습니다.",
     setGoal: "목표 세우기",
     setGoalAria: "목표 세우기",
     editAria: "목표 바꾸기",
@@ -374,7 +367,6 @@ export const ko: Messages = {
 
   work: {
     title: "내 작업",
-    lead: "내 프로젝트들에 걸쳐 내게 놓인 일. 내게 배정된 열린 작업을 기한순으로, 그리고 사람을 기다리는 결정.",
     loading: "내 작업을 불러오는 중",
     couldNotLoad: "내 작업을 불러올 수 없습니다.",
     empty: {
@@ -392,8 +384,6 @@ export const ko: Messages = {
 
   categories: {
     title: "카테고리",
-    lead: "작업을 나누는 일의 종류이며, 모든 프로젝트에서 같습니다. 작업은 하나를 가지고, 보드는 하나로 좁혀 보며, 관리자가 목록을 관리합니다.",
-    onlyAdmin: "관리자가 추가하고 바꾸고 제거합니다. 다른 사람은 여기서 읽습니다.",
     list: "카테고리",
     add: "카테고리 추가",
     addAria: "카테고리 추가",
@@ -401,7 +391,6 @@ export const ko: Messages = {
       title: "카테고리가 없습니다",
       body: "관리자가 여기서 첫 카테고리를 추가합니다.",
     },
-    inUse: "작업이 속해 있는 카테고리는 그 작업들을 옮기기 전에는 제거할 수 없습니다.",
     form: {
       name: "이름",
       key: "키",
@@ -511,10 +500,8 @@ export const ko: Messages = {
       title: "아직 스킬 주소가 없습니다",
       body: "이 콘솔에는 조직의 스킬 주소가 없습니다. 운영자가 설정에서 SkillCDN이 제공하는 저장소를 지정합니다.",
     },
-    servedBy: "조직의 스킬. 제공:",
+    servedBy: "제공:",
     at: "주소:",
-    howLoaded:
-      ". 에이전트는 SkillCDN 연결을 통해 스킬을 불러오고, 사람은 해당 페이지에서 읽습니다.",
     status: {
       indexing: "SkillCDN이 아직 저장소를 색인하고 있습니다. 잠시 후 다시 보세요.",
       failed: "SkillCDN이 저장소를 색인하지 못했습니다. 찾은 내용은 주소의 페이지에 있습니다.",
@@ -592,12 +579,9 @@ export const ko: Messages = {
   people: {
     title: "사람들",
     list: "사람들",
-    lead: "로그인한 모든 사람. 관리자는 워크스페이스를 설정하고 각 사람의 역할을 정합니다. 멤버는 속한 프로젝트에서 일합니다. 사람이 할 수 있는 일은 그 사람의 에이전트도 할 수 있습니다.",
     roleOf: (name) => `${name}의 역할`,
     agents: "에이전트",
     agentsOf: (name) => `${name}의 에이전트`,
-    agentsLead: (name) =>
-      `${name}(으)로 여기서 일하는 것들입니다. 각각 고유한 토큰을 가집니다. 연결을 끊으면 토큰이 즉시 사라집니다.`,
     loadingAgents: "에이전트를 불러오는 중",
     noAgent: "연결된 에이전트가 없습니다",
     onlyAdmin: {
@@ -610,7 +594,6 @@ export const ko: Messages = {
     title: "에이전트",
     makeByHand: "토큰 직접 만들기",
     makeAria: "토큰 만들기",
-    lead: "나로서 여기서 일하는 것들입니다. 연결한 각 에이전트는 아무도 볼 수 없는 고유한 토큰을 가집니다. 내가 할 수 있는 일은 에이전트도 할 수 있습니다. 더 쓰지 않으면 여기서 연결을 끊으세요. 내 스크립트나 콘솔도 직접 만든 토큰으로 같은 방식으로 일합니다.",
     empty: {
       title: "아직 연결된 에이전트가 없습니다",
       body: "아래처럼 에이전트에게 이 콘솔에 연결하라고 말하면 여기에 나타납니다.",
@@ -645,7 +628,6 @@ export const ko: Messages = {
   connect: {
     title: "에이전트 연결",
     aria: "연결",
-    lead: "에이전트에게 이 콘솔에 연결하라고 말하면 코드를 보여 줍니다. 그 코드를 여기에 입력하고, 에이전트가 나로서 일해도 되는지 답하세요.",
     codeAria: "코드",
     codeLabel: "에이전트가 보여 준 코드",
     continue: "계속",

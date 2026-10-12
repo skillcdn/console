@@ -91,6 +91,7 @@ import {
   signInFailureOf,
   taskHref,
   withoutSignInParam,
+  workHref,
 } from "./router.js";
 import { projectPath } from "./routes.js";
 import { errorWords, useAction } from "./use-action.js";
@@ -384,7 +385,6 @@ function ProjectsPage(props: {
           </LinkButton>
         )}
       </div>
-      <p className="sc-lead">{words.lead}</p>
       {error !== undefined && <Callout tone="danger">{error}</Callout>}
       {making && (
         <section className="sc-panel sc-panel-form" aria-label={words.form.aria}>
@@ -640,7 +640,6 @@ function ProjectPage(props: {
             {words.board.writeTask}
           </LinkButton>
         </div>
-        <p className="sc-lead">{calendar.lead}</p>
         {data.tasks.length > 0 && (
           <BoardFilters
             filter={route.filter}
@@ -690,7 +689,6 @@ function ProjectPage(props: {
         {open.length > 0 && (
           <section className="sc-task-section" aria-label={calendar.workload.title}>
             <h2 className="sc-section-title">{calendar.workload.title}</h2>
-            <p className="sc-lead">{calendar.workload.lead}</p>
             <Workload
               tasks={shown}
               today={now}
@@ -719,7 +717,6 @@ function ProjectPage(props: {
             </LinkButton>
           )}
         </div>
-        <p className="sc-lead">{roadmap.lead}</p>
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
         {making && (
           <section className="sc-panel sc-panel-form" aria-label={roadmap.setGoalAria}>
@@ -945,10 +942,7 @@ function ProjectPage(props: {
         <div className="sc-page-head">
           <h1 className="sc-page-title">{members.title}</h1>
         </div>
-        <p className="sc-lead">
-          {project.visibility === "workspace" ? members.leadWorkspace : members.leadPrivate}{" "}
-          {members.leadRoles}
-        </p>
+        <p className="sc-lead">{words.vocabulary.visibility[project.visibility]}</p>
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
         <components.MemberList
           members={data.members}
@@ -989,11 +983,6 @@ function ProjectPage(props: {
         <div className="sc-page-head">
           <h1 className="sc-page-title">{settings.title}</h1>
         </div>
-        <p className="sc-lead">
-          {settings.leadBefore}
-          <code>{project.key}</code>
-          {settings.leadAfter}
-        </p>
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
         <section className="sc-panel sc-panel-form" aria-label={settings.aria}>
           <ProjectForm
@@ -1082,9 +1071,6 @@ function PersonAgentsPage(props: {
         </h1>
         <LinkButton href={PATHS.people}>{words.nav.people}</LinkButton>
       </div>
-      <p className="sc-lead">
-        {words.people.agentsLead(person?.name ?? person?.login ?? words.feed.someone)}
-      </p>
       {error !== undefined && <Callout tone="danger">{error}</Callout>}
       {tokens === undefined ? (
         <div className="sc-loading">
@@ -1108,7 +1094,12 @@ function PersonAgentsPage(props: {
 }
 
 /** What is on the person's plate, across their projects: read when the page is opened. */
-function WorkPage(props: { readonly data: ConsoleData; readonly components: ConsoleComponents }) {
+function WorkPage(props: {
+  readonly data: ConsoleData;
+  readonly components: ConsoleComponents;
+  /** A day of the week shown at the top, from the address; today's week when it names none. */
+  readonly week: string | undefined;
+}) {
   const words = useWords();
   const { data, components } = props;
   const [work, setWork] = useState<RestWork | undefined>(undefined);
@@ -1135,7 +1126,6 @@ function WorkPage(props: { readonly data: ConsoleData; readonly components: Cons
       <div className="sc-page-head">
         <h1 className="sc-page-title">{words.work.title}</h1>
       </div>
-      <p className="sc-lead">{words.work.lead}</p>
       {problem !== undefined && <Callout tone="danger">{problem}</Callout>}
       {work === undefined ? (
         problem === undefined && (
@@ -1148,8 +1138,10 @@ function WorkPage(props: { readonly data: ConsoleData; readonly components: Cons
       ) : (
         <components.WorkList
           work={work}
+          week={props.week}
           taskHref={(projectKey, task) => taskHref(projectKey, task.number)}
           decisionHref={(projectKey, decisionId) => decisionHref(projectKey, decisionId)}
+          weekHref={workHref}
         />
       )}
     </>
@@ -1168,7 +1160,7 @@ function WorkspacePage(props: {
   const { busy, error, act } = useAction();
 
   if (route.name === "work") {
-    return <WorkPage data={data} components={components} />;
+    return <WorkPage data={data} components={components} week={route.week} />;
   }
   if (route.name === "categories") {
     const me = data.me?.person ?? undefined;
@@ -1179,9 +1171,6 @@ function WorkspacePage(props: {
         <div className="sc-page-head">
           <h1 className="sc-page-title">{categories.title}</h1>
         </div>
-        <p className="sc-lead">
-          {categories.lead} {categories.onlyAdmin}
-        </p>
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
         <components.CategoryList
           categories={data.categories}
@@ -1204,7 +1193,6 @@ function WorkspacePage(props: {
           }
           empty={<EmptyState title={categories.empty.title} body={categories.empty.body} />}
         />
-        {administrator && <p className="sc-muted">{categories.inUse}</p>}
       </>
     );
   }
@@ -1217,7 +1205,6 @@ function WorkspacePage(props: {
         <div className="sc-page-head">
           <h1 className="sc-page-title">{words.people.title}</h1>
         </div>
-        <p className="sc-lead">{words.people.lead}</p>
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
         <components.PeopleList
           people={data.people}
@@ -1253,7 +1240,6 @@ function WorkspacePage(props: {
             </LinkButton>
           )}
         </div>
-        <p className="sc-lead">{agents.lead}</p>
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
         {fresh !== undefined && (
           <NewToken token={fresh.token} secret={fresh.secret} onDone={() => setFresh(undefined)} />

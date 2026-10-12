@@ -109,7 +109,14 @@ Goal: what the first organization running on a deployment of its own found on it
 - [x] The code `console login` shows is good for thirty minutes (2026-10-11).
 - [x] Node.js 22 runs the command today, said in the package's README; 24 stays the floor the package states and is tested on (2026-10-11).
 
-## After milestone 10
+## Done: milestone 11, the pages at a glance (2026-10-12)
+
+Goal: what a person opens the console for, seen at once and without being told what the page is. My work says what the week holds before it lists anything, and no page explains itself under its title: what stands there is what the page is about, never prose.
+
+- [x] My work as a week (2026-10-12): the person's open tasks on the seven days at the top, a task planned across days as a bar, each with its project's mark, today marked, the weeks around a step away and the week in the address (`/work?week=<day>`); the lists below stay, a page at a time.
+- [x] The prose under the titles gone (2026-10-12): every fixed description under a page's or a section's title, and the note under the categories; what remains is data: a project's description on its board, its visibility on its members, the address the skills come from.
+
+## After milestone 11
 
 Nothing is chosen yet; the list below is where the next milestone comes from. Left open by milestone 9: whether the board should end a run not heard from for a long while itself ([ADR-0020](adr/0020-the-console-does-not-claim-an-agent-is-at-work-a-run-says-when-it-was-last-heard-from-and-a-new-run-takes-over.md)); a roadmap across projects.
 

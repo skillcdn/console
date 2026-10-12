@@ -143,7 +143,6 @@ export const en = {
   projects: {
     title: "Projects",
     newProject: "New project",
-    lead: "A project holds its board, its documents, its skills and its people. What you may see and change is decided per project: an owner configures it, a member works on it.",
     empty: {
       title: "No projects yet",
       body: "Make the first one: what it is for, and who is in it. Or ask an owner to add you to theirs.",
@@ -172,11 +171,6 @@ export const en = {
     members: {
       title: "Members",
       list: "Members",
-      leadWorkspace:
-        "Everyone of the workspace is a member of this project; those listed here are its owners and the people named besides.",
-      leadPrivate: "Only those listed here are in this project.",
-      leadRoles:
-        "An owner configures the project; a member works on it. A workspace administrator is an owner of every project.",
       since: "since",
       roleOf: (name: string) => `Role of ${name}`,
       addAria: "Add a member",
@@ -193,9 +187,6 @@ export const en = {
     settings: {
       title: "Settings",
       aria: "Project settings",
-      leadBefore: "The key, ",
-      leadAfter:
-        ", is what addresses and the command say, and does not change. The skills address names a repository served by SkillCDN; empty, the organization's skills are shown.",
       onlyOwner: {
         title: "Only an owner may change the project",
         body: "Ask one of its owners, or a workspace administrator.",
@@ -305,8 +296,6 @@ export const en = {
     waiting: "Waiting",
     answered: "Answered",
     record: "The record",
-    recordLead:
-      "Every decision answered, newest first: what was asked, what was chosen, by whom. Open one for its context, its rationale and what followed.",
     openRecord: "Open",
     waitingForPerson: "Waiting for a person.",
     options: "Options",
@@ -337,7 +326,6 @@ export const en = {
 
   calendar: {
     title: "Calendar",
-    lead: "The tasks on their days: planned from a start to a due day, a task lies across them; due on a day alone, it sits on it. One with no day waits at the bottom to be given one.",
     grid: "The month",
     legend: { title: "Category colours" },
     startsOnly: "Starts that day, with no due day yet",
@@ -349,9 +337,15 @@ export const en = {
     nothingOverdue: "Nothing is overdue.",
     unscheduled: "No day set",
     allScheduled: "Every open task has a day.",
+    week: {
+      title: "The week",
+      previous: "The week before",
+      next: "The week after",
+      thisWeek: "This week",
+      nothing: "Nothing is planned this week.",
+    },
     workload: {
       title: "Who has what",
-      lead: "The open tasks of each person, and what of them is late or due within the week.",
       person: "Person",
       open: "Open",
       inProgress: "In progress",
@@ -363,7 +357,6 @@ export const en = {
 
   roadmap: {
     title: "Roadmap",
-    lead: "What the project works towards: each goal with the day it is meant to be reached by, and how far its tasks are. Progress is read from the board as it stands.",
     setGoal: "Set a goal",
     setGoalAria: "Set a goal",
     editAria: "Change the goal",
@@ -402,7 +395,6 @@ export const en = {
 
   work: {
     title: "My work",
-    lead: "What is on your plate across your projects: the open tasks assigned to you, by the day they are due, and the decisions that wait for a person.",
     loading: "Loading your work",
     couldNotLoad: "Your work could not be loaded.",
     empty: {
@@ -420,8 +412,6 @@ export const en = {
 
   categories: {
     title: "Categories",
-    lead: "The kinds of work tasks are sorted into, the same in every project. A task carries one, the board is narrowed by one, and an administrator keeps the list.",
-    onlyAdmin: "An administrator adds, changes and removes them; everyone else reads them here.",
     list: "Categories",
     add: "Add a category",
     addAria: "Add a category",
@@ -429,7 +419,6 @@ export const en = {
       title: "No categories",
       body: "An administrator adds the first one here.",
     },
-    inUse: "A category tasks are sorted into cannot be removed until they are moved out of it.",
     form: {
       name: "Name",
       key: "Key",
@@ -543,10 +532,8 @@ export const en = {
       title: "No skills address yet",
       body: "This console has no address for the organization's skills. Whoever runs it names a repository served by SkillCDN in its configuration.",
     },
-    servedBy: "The organization's skills, served by",
+    servedBy: "Served by",
     at: "at",
-    howLoaded:
-      ". An agent loads one through its SkillCDN connection; a person reads it at its page.",
     status: {
       indexing: "SkillCDN is still indexing the repository. Look again in a moment.",
       failed: "SkillCDN could not index the repository. What it found is on the address's page.",
@@ -624,12 +611,9 @@ export const en = {
   people: {
     title: "People",
     list: "People",
-    lead: "Everyone who has signed in. An administrator configures the workspace and says what each person is; a member works in the projects they are in. What a person may do, their agents may do.",
     roleOf: (name: string) => `Role of ${name}`,
     agents: "Agents",
     agentsOf: (name: string) => `Agents of ${name}`,
-    agentsLead: (name: string) =>
-      `What works here as ${name}, each with a token of its own. Disconnecting one takes its token away at once.`,
     loadingAgents: "Loading the agents",
     noAgent: "No agent is connected",
     onlyAdmin: {
@@ -642,7 +626,6 @@ export const en = {
     title: "Agents",
     makeByHand: "Make a token by hand",
     makeAria: "Make a token",
-    lead: "What works here as you: each agent you connected, with a token of its own that nobody sees. What you may do, it may do; disconnect it here when that is over. A script or a console of your own holds a token the same way, made by hand.",
     empty: {
       title: "No agent is connected yet",
       body: "Tell your agent to connect to this console, as below, and it shows up here.",
@@ -677,7 +660,6 @@ export const en = {
   connect: {
     title: "Connect an agent",
     aria: "Connect",
-    lead: "Your agent showed you a code when it was told to connect to this console. Type it here, and say whether the agent may work as you.",
     codeAria: "The code",
     codeLabel: "The code your agent showed",
     continue: "Continue",

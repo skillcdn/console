@@ -2974,8 +2974,29 @@ table {
   flex: 1 1 10rem;
 }
 
-/* What is on a person's plate. */
+/* One week on its own, the only row there is: its days are taller than a month's. */
+.sc-week .sc-calendar-cell {
+  height: 9rem;
+}
+
+/* A project's mark before a task on a day: the cell's own gap keeps it off the title. */
+.sc-calendar-task .sc-mark,
+.sc-calendar-bar .sc-mark {
+  flex: none;
+  margin-right: var(--sc-space-1);
+}
+
+.sc-calendar-task .sc-mark {
+  margin-right: 0;
+}
+
+/* What is on a person's plate: the week across the page, the lists below it at reading width. */
 .sc-work {
+  display: grid;
+  gap: var(--sc-space-6);
+}
+
+.sc-work-lists {
   display: grid;
   gap: var(--sc-space-6);
   max-width: var(--sc-width-prose);
@@ -3066,6 +3087,19 @@ table {
     height: 4px;
     padding: 0;
     border: 0;
+  }
+
+  .sc-week .sc-calendar-cell {
+    height: 4.5rem;
+  }
+
+  /* A bar is a line here, too thin for a mark; a task on its day keeps its mark as its dot. */
+  .sc-calendar-bar .sc-mark {
+    display: none;
+  }
+
+  .sc-calendar-task .sc-mark {
+    margin: 0;
   }
 
   .sc-feed-item {

@@ -113,6 +113,17 @@ export function weekdays(firstDay = 1): number[] {
   return Array.from({ length: 7 }, (_, index) => ((firstDay - 1 + index) % 7) + 1);
 }
 
+/** The seven days of the week `day` is in, from the day the week begins on (1 for Monday, 7 for Sunday). */
+export function weekOf(day: string, firstDay = 1): string[] {
+  const date = dateOf(day);
+  if (Number.isNaN(date.getTime())) {
+    return [];
+  }
+  const weekday = date.getDay() === 0 ? 7 : date.getDay();
+  const first = addDays(day, -((weekday - firstDay + 7) % 7));
+  return Array.from({ length: 7 }, (_, index) => addDays(first, index));
+}
+
 /** A day as people read one in a language: the month and the day, with the year when it is not this year's. */
 export function formatDay(day: string, language?: string, now: Date = new Date()): string {
   const date = dateOf(day);
@@ -124,6 +135,23 @@ export function formatDay(day: string, language?: string, now: Date = new Date()
     day: "numeric",
     ...(date.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
   });
+}
+
+/** A stretch of days as people read one: from a day to a day, with the year. */
+export function formatDays(from: string, to: string, language?: string): string {
+  const start = dateOf(from);
+  const end = dateOf(to);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return `${from} - ${to}`;
+  }
+  const format = new Intl.DateTimeFormat(language, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  return typeof format.formatRange === "function"
+    ? format.formatRange(start, end)
+    : `${format.format(start)} - ${format.format(end)}`;
 }
 
 /** A month as people read one: the month and the year. */

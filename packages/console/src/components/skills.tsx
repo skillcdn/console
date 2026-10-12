@@ -30,7 +30,6 @@ export function SkillList(props: SkillListProps) {
       <a href={skills.page} target="_blank" rel="noopener noreferrer">
         <code>{skills.address}</code>
       </a>
-      {words.howLoaded}
     </p>
   );
   if (skills.status !== "ready") {

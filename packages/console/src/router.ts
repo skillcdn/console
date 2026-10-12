@@ -1,12 +1,12 @@
 import { isFolderPath, isSignInFailure, SIGN_IN_PARAM, type SignInFailure } from "./api.js";
-import { isMonth } from "./dates.js";
+import { isDay, isMonth } from "./dates.js";
 
 // The addresses of the default console (ADR-0010): the router is a function from a URL to a
 // route, and the hrefs below are its inverse. A project's pages live under `/projects/<key>`,
 // the word the REST API uses; an address names what it shows (a task by its number, a decision
 // by its id, a document by its path, a goal by its id), every form has one, and the query says
-// how a page is shown (`?edit`, `?ask`, `?new`, `?version=`, `?q=`, `?month=`, and the board's
-// filters). The old addresses are taken to the new.
+// how a page is shown (`?edit`, `?ask`, `?new`, `?version=`, `?q=`, `?month=`, `?week=`, and the
+// board's filters). The old addresses are taken to the new.
 
 /** How a task's page is shown: as it is, or with one of its forms open. */
 export type TaskFormKind = "edit" | "ask";
@@ -77,7 +77,8 @@ export type Route =
   | { readonly name: "agents" }
   | { readonly name: "new-token" }
   /** What is on the person's plate across their projects. */
-  | { readonly name: "work" }
+  /** What is on the person's plate: a day of the week shown at the top, or today's when the address names none. */
+  | { readonly name: "work"; readonly week: string | undefined }
   /** The categories tasks are sorted into; an administrator keeps them here. */
   | { readonly name: "categories" }
   /** Where a person approves an agent's connection, by the code it showed, or types one. */
@@ -206,7 +207,11 @@ export function matchRoute(pathname: string, search = ""): Route {
     return { name: "new-project" };
   }
   if (path === PATHS.work) {
-    return { name: "work" };
+    const week = params.get("week");
+    if (week !== null && !isDay(week)) {
+      return NOT_FOUND;
+    }
+    return { name: "work", week: week ?? undefined };
   }
   if (path === PATHS.people) {
     return { name: "people" };
@@ -375,6 +380,11 @@ export function newDecisionHref(key: string): string {
 /** Where one decision is read, and answered. */
 export function decisionHref(key: string, id: string): string {
   return `${PATHS.project}/${key}/decisions/${id}`;
+}
+
+/** Where the person's own work is, with the week of a day at the top, or this week's when none is named. */
+export function workHref(week?: string): string {
+  return week === undefined ? PATHS.work : `${PATHS.work}?week=${week}`;
 }
 
 /** Where a project's calendar is, on a month, or on this one when none is named, narrowed as the filter says. */

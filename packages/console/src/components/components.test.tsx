@@ -15,9 +15,10 @@ import type {
   RestToken,
   RestWork,
 } from "../api.js";
+import { addDays, firstDayOfWeek, weekOf } from "../dates.js";
 import { KOREAN, LanguageContext } from "../i18n/index.js";
 import { Board, BoardFilters, byDue, filterTasks } from "./board.js";
-import { Calendar, Workload, weekSegments, workloadOf } from "./calendar.js";
+import { Calendar, Week, Workload, weekSegments, workloadOf } from "./calendar.js";
 import { CategoryList } from "./categories.js";
 import { ConnectApproval, ConnectCodeForm, ConnectWords } from "./connect.js";
 import { DecisionCard, DecisionList, DecisionLog } from "./decision-list.js";
@@ -1551,6 +1552,15 @@ describe("a person's work", () => {
           project: { key: "docs", name: "The docs", color: "green", symbol: "D", icon: null },
           task: task({ id: "0199c4d8-0000-7000-8000-000000000013", dueOn: null, title: "Someday" }),
         },
+        {
+          project: { key: "docs", name: "The docs", color: "green", symbol: "D", icon: null },
+          task: task({
+            id: "0199c4d8-0000-7000-8000-000000000014",
+            number: 9,
+            dueOn: TODAY,
+            title: "On the day",
+          }),
+        },
       ],
       decisions: [
         {
@@ -1565,6 +1575,7 @@ describe("a person's work", () => {
         today={TODAY}
         taskHref={(key, item) => `/projects/${key}/tasks/${item.number}`}
         decisionHref={(key, id) => `/projects/${key}/decisions/${id}`}
+        weekHref={(day) => `/work?week=${day}`}
       />,
     );
     for (const section of ["Overdue", "Due this week", "Later", "No day set"]) {
@@ -1575,16 +1586,74 @@ describe("a person's work", () => {
     expect(html).toContain('href="/projects/docs/tasks/7"');
     expect(html).toContain(`href="/projects/web/decisions/${decision().id}"`);
     expect(html).toContain("Which one?");
+    // The week at the top: today's, with the project's mark before the task on its day.
+    const first = weekOf(TODAY, firstDayOfWeek("en"))[0] ?? "";
+    expect(html).toContain('aria-label="The week"');
+    expect(html).toContain("sc-calendar-cell-today");
+    expect(html).toContain(`href="/work?week=${addDays(first, -7)}"`);
+    expect(html).toContain(`href="/work?week=${addDays(first, 7)}"`);
+    expect(html).toMatch(
+      /class="sc-calendar-task[^"]*"[^>]*><span class="sc-mark sc-mark-sm sc-category-green"[^>]*>D<\/span><span class="sc-calendar-task-title">On the day/,
+    );
     const quiet = renderToStaticMarkup(
       <WorkList
         work={{ tasks: [], decisions: [] }}
         today={TODAY}
         taskHref={() => "#"}
         decisionHref={() => "#"}
+        weekHref={(day) => `/work?week=${day}`}
       />,
     );
     expect(quiet).toContain("No decision waits.");
+    expect(quiet).toContain("Nothing is planned this week.");
     expect(quiet).not.toContain('aria-label="Overdue"');
+  });
+
+  it("shows one week on its own, the weeks around a step away, in the person's language", () => {
+    const first = weekOf("2026-10-14", firstDayOfWeek("en"))[0] ?? "";
+    const html = renderToStaticMarkup(
+      <Week
+        tasks={[
+          task({ dueOn: "2026-10-14", title: "On the day" }),
+          task({
+            id: "0199c4d8-0000-7000-8000-000000000011",
+            number: 8,
+            title: "Across",
+            startsOn: "2026-10-13",
+            dueOn: "2026-10-16",
+            category: engineering,
+          }),
+          task({ id: "0199c4d8-0000-7000-8000-000000000012", number: 9, title: "Someday" }),
+        ]}
+        day="2026-10-14"
+        today={TODAY}
+        taskHref={href}
+        weekHref={(day) => `/work?week=${day}`}
+        markOf={(item) => <span className="sc-mark">{item.number}</span>}
+      />,
+    );
+    expect(html).toContain('aria-label="The week"');
+    expect(html).toContain("Oct");
+    expect(html).toContain("2026");
+    expect(html).toContain(`href="/work?week=${addDays(first, -7)}"`);
+    expect(html).toContain(`href="/work?week=${addDays(first, 7)}"`);
+    expect(html).toContain(`href="/work?week=${TODAY}"`);
+    expect(html).toContain("This week");
+    expect(html).toContain("sc-calendar-bar sc-category-blue sc-calendar-bar-begins");
+    expect(html).toContain("sc-calendar-bar-ends");
+    expect(html).toContain('<span class="sc-mark">8</span>');
+    expect(html).toContain("On the day");
+    expect(html).not.toContain("sc-calendar-dot");
+    expect(html).not.toContain("Someday");
+    expect(html).not.toContain("Nothing is planned");
+    const korean = renderToStaticMarkup(
+      <LanguageContext.Provider value={KOREAN}>
+        <Week tasks={[]} today={TODAY} taskHref={href} weekHref={(day) => day} />
+      </LanguageContext.Provider>,
+    );
+    expect(korean).toContain("이 주에 잡힌 작업이 없습니다.");
+    expect(korean).toContain("sc-calendar-cell-today");
+    expect(korean).toContain("10월");
   });
 });
 

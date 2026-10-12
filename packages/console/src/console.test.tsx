@@ -26,6 +26,7 @@ import {
   signInFailureOf,
   taskHref,
   withoutSignInParam,
+  workHref,
 } from "./router.js";
 
 const ID = "0199c4d8-0000-7000-8000-000000000010";
@@ -39,7 +40,11 @@ describe("matchRoute", () => {
     expect(matchRoute("/agents/new")).toEqual({ name: "new-token" });
     expect(matchRoute("/projects/web")).toEqual({ name: "board", project: "web", filter: {} });
     expect(matchRoute("/projects/web/")).toEqual({ name: "board", project: "web", filter: {} });
-    expect(matchRoute("/work")).toEqual({ name: "work" });
+    expect(matchRoute("/work")).toEqual({ name: "work", week: undefined });
+    expect(matchRoute("/work", "?week=2026-10-12")).toEqual({ name: "work", week: "2026-10-12" });
+    expect(matchRoute("/work", "?week=next")).toEqual({ name: "not-found" });
+    expect(workHref()).toBe("/work");
+    expect(workHref("2026-10-12")).toBe("/work?week=2026-10-12");
     expect(matchRoute("/categories")).toEqual({ name: "categories" });
     expect(matchRoute("/projects/web/roadmap")).toEqual({ name: "roadmap", project: "web" });
     expect(matchRoute("/projects/web/calendar")).toEqual({

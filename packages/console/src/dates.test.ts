@@ -7,6 +7,7 @@ import {
   daysBetween,
   firstDayOfWeek,
   formatDay,
+  formatDays,
   formatMonth,
   isDay,
   isMonth,
@@ -14,6 +15,7 @@ import {
   monthOf,
   today,
   weekdays,
+  weekOf,
 } from "./dates.js";
 
 describe("days", () => {
@@ -66,6 +68,25 @@ describe("days", () => {
     expect(firstDayOfWeek("not a tag at all")).toBe(1);
   });
 
+  it("know the week a day is in, from the day the week begins on", () => {
+    // 2026-10-14 is a Wednesday, 2026-10-11 a Sunday.
+    expect(weekOf("2026-10-14", 1)).toEqual([
+      "2026-10-12",
+      "2026-10-13",
+      "2026-10-14",
+      "2026-10-15",
+      "2026-10-16",
+      "2026-10-17",
+      "2026-10-18",
+    ]);
+    expect(weekOf("2026-10-14", 7)[0]).toBe("2026-10-11");
+    expect(weekOf("2026-10-12", 1)[0]).toBe("2026-10-12");
+    expect(weekOf("2026-10-11", 1)[0]).toBe("2026-10-05");
+    expect(weekOf("2026-10-11", 7)[0]).toBe("2026-10-11");
+    expect(weekOf("2026-12-30", 1)).toContain("2027-01-03");
+    expect(weekOf("not a day")).toEqual([]);
+  });
+
   it("read as people read them, with the year only when it is another's", () => {
     const now = new Date(2026, 9, 11);
     expect(formatDay("2026-10-20", "en", now)).toBe("Oct 20");
@@ -74,5 +95,11 @@ describe("days", () => {
     expect(formatDay("nothing", "en", now)).toBe("nothing");
     expect(formatMonth("2026-10", "en")).toBe("October 2026");
     expect(formatMonth("2026-10", "ko")).toBe("2026년 10월");
+    expect(formatDays("2026-10-12", "2026-10-18", "en")).toMatch(/^Oct 12\s*–\s*18, 2026$/);
+    expect(formatDays("2026-12-28", "2027-01-03", "en")).toMatch(
+      /^Dec 28, 2026\s*–\s*Jan 3, 2027$/,
+    );
+    expect(formatDays("2026-10-12", "2026-10-18", "ko")).toContain("10월 12일");
+    expect(formatDays("nothing", "2026-10-18", "en")).toBe("nothing - 2026-10-18");
   });
 });

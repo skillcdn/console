@@ -16,6 +16,8 @@ export {
 export {
   Calendar,
   type CalendarProps,
+  Week,
+  type WeekProps,
   type WeekSegment,
   Workload,
   type WorkloadProps,
@@ -156,6 +158,7 @@ export {
   daysBetween,
   firstDayOfWeek,
   formatDay,
+  formatDays,
   formatMonth,
   formatWeekday,
   type GridDay,
@@ -165,6 +168,7 @@ export {
   monthOf,
   today,
   weekdays,
+  weekOf,
 } from "./dates.js";
 export { DocsPage, type DocsPageProps } from "./docs-page.js";
 export {
@@ -204,5 +208,6 @@ export {
   type TaskFormKind,
   taskHref,
   withoutSignInParam,
+  workHref,
 } from "./router.js";
 export { errorWords, useAction } from "./use-action.js";
