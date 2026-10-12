@@ -9,7 +9,7 @@ import {
 } from "../client.js";
 import { addDays, dayOf as dayOfDate, isDay } from "../dates.js";
 import { DEFAULT_PAGE_LIMIT, LIST_LIMIT, MAX_OPTIONS, MIN_OPTIONS } from "../limits.js";
-import { RULES_PATH, RULES_TITLE } from "../rules.js";
+import { fillRules, RULES_PATH, RULES_TITLE } from "../rules.js";
 import {
   hostOfLogin,
   type RestClaim,
@@ -538,7 +538,8 @@ const login: Command = async (args, io) => {
   // A connection (ADR-0011): a code a person approves on the console's own pages, and the token
   // handed over here once, never shown.
   const client = createClient({ baseUrl: url, fetch: io.fetch });
-  const agent = text(values, "agent") ?? "The console command";
+  // "<agent> on <machine>": the pages say the agent and keep the machine for a hover.
+  const agent = text(values, "agent") ?? agentOf(io.env) ?? "An agent";
   const begun = await client.connect({
     agent: io.hostname === undefined ? agent : `${agent} on ${io.hostname}`,
   });
@@ -566,10 +567,46 @@ const login: Command = async (args, io) => {
 
 const logout: Command = async (args, io) => {
   parse(args, {}, false);
+  const stored = await io.store.load();
+  const url = io.env.CONSOLE_URL ?? stored?.url;
+  const token = io.env.CONSOLE_TOKEN ?? stored?.token;
+  if (url === undefined || token === undefined) {
+    io.stdout("Not signed in here: nothing to forget.\n");
+    return EXIT.ok;
+  }
+  // The token is given up at the console first, so that it is good for nothing from now on;
+  // one the console no longer knows is gone already. A console out of reach leaves it to the
+  // Agents page, and the person is told so.
+  let gone = true;
+  try {
+    await createClient({ baseUrl: url, token, fetch: io.fetch }).giveUpToken();
+  } catch (error) {
+    if (!(error instanceof ApiError && error.code === "auth.required")) {
+      gone = false;
+    }
+  }
   await io.store.clear();
-  io.stdout("Signed out here. The token itself is removed on your Agents page.\n");
+  io.stdout(
+    gone
+      ? "Signed out: the token is given up at the console and forgotten here.\n"
+      : `Signed out here, but the console at ${url} could not be reached to give the token up: a person removes it on the Agents page.\n`,
+  );
+  if (io.env.CONSOLE_TOKEN !== undefined) {
+    io.stdout("CONSOLE_TOKEN in the environment still holds it: unset it.\n");
+  }
   return EXIT.ok;
 };
+
+/** The agent the command runs under, where its environment says so: what a connection is named by default. */
+function agentOf(env: CliIo["env"]): string | undefined {
+  if (env.CLAUDECODE !== undefined) {
+    return "Claude Code";
+  }
+  if (Object.keys(env).some((key) => key.startsWith("CODEX_"))) {
+    return "Codex";
+  }
+  return undefined;
+}
 
 const whoami: Command = async (args, io) => {
   const { values } = parse(args, {}, false);
@@ -785,11 +822,31 @@ const rules: Command = async (args, io) => {
   const { values } = parse(args, {}, false);
   const session = await open(io, values);
   const key = await session.projectKey();
-  const found =
-    key === undefined ? await session.client.rules() : await session.client.project(key).rules();
-  answer(io, session, found, () => formatRules(found));
+  const [found, me] = await Promise.all([
+    key === undefined ? session.client.rules() : session.client.project(key).rules(),
+    session.client.me(),
+  ]);
+  const read =
+    "workspace" in found
+      ? {
+          workspace: forPerson(found.workspace, me.language),
+          project: forPerson(found.project, me.language),
+        }
+      : forPerson(found, me.language);
+  answer(io, session, read, () => formatRules(read));
   return EXIT.ok;
 };
+
+/**
+ * The rules as they read for the person whose token the command holds: `{language}` filled
+ * with the language they chose for the pages, or with the task's when they chose none.
+ */
+function forPerson<T extends { readonly body: string | null }>(
+  half: T,
+  language: string | null,
+): T {
+  return half.body === null ? half : { ...half, body: fillRules(half.body, language) };
+}
 
 /** The flags that set a task's fields, shared by writing one and changing one. */
 const TASK_FIELDS: OptionSpec = {
@@ -916,15 +973,20 @@ const take: Command = async (args, io) => {
     taskId: found.id,
     ...(agent === undefined ? {} : { agent }),
   });
-  // The rules come with the run: everything from here acts within them (ADR-0023).
-  const ruling = await project.rules();
-  answer(io, session, { run, task: found, rules: ruling }, () =>
+  // The rules come with the run, as they read for the person: everything from here acts
+  // within them (ADR-0023).
+  const [ruling, me] = await Promise.all([project.rules(), session.client.me()]);
+  const rules = {
+    workspace: forPerson(ruling.workspace, me.language),
+    project: forPerson(ruling.project, me.language),
+  };
+  answer(io, session, { run, task: found, rules }, () =>
     [
       `Run ${run.id} began on #${found.number} ${found.title}, as "${run.agent}" for ${run.person.login}. The task is in progress and theirs. A run that was open on it is over now: the board cannot know whether its agent still ran, so taking it was deciding.`,
       "",
       formatTask(found),
       "",
-      formatRules(ruling),
+      formatRules(rules),
       "",
       'Say how it goes: console report "<what you found or did>". Hand in what you make: console hand-in <https url | file path>.',
       'Ask when a person must decide: console ask "<question>" --option "..." --option "...". End with: console finish --summary "<what was done, what is left>".',

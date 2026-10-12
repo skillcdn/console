@@ -1246,6 +1246,29 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     return c.body(null, 204);
   });
 
+  // A token gives itself up: what `console logout` does, so that a token forgotten on a machine
+  // does not outlive it. The one thing a token does about the tokens; a session has none to give.
+  app.delete(REST_ROUTES.meToken, async (c) => {
+    const caller = await askingCaller(c);
+    if (caller instanceof Response) {
+      return caller;
+    }
+    if (caller.token === undefined) {
+      return invalid(
+        c,
+        "A session has no token to give up: a token is removed on the Agents page.",
+      );
+    }
+    if (tokens === undefined || !(await tokens.revoke(caller.person, caller.token.id))) {
+      return notFound(c, "token.not_found", "The token was not found.");
+    }
+    logger.info(
+      { person: caller.person.id, tokenId: caller.token.id, requestId: c.get("requestId") },
+      "token given up",
+    );
+    return c.body(null, 204);
+  });
+
   // An administrator's sight of everyone's agents: another person's tokens, listed and taken
   // away on the console's own pages (ADR-0011).
   const administering = async (

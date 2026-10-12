@@ -123,6 +123,16 @@ describe("createClient", () => {
     expect(calls.at(-1)?.init?.method).toBe("DELETE");
   });
 
+  it("gives its own token up", async () => {
+    const { send, calls } = fakeFetch({
+      "DELETE https://console.test/api/v1/me/token": { status: 204 },
+    });
+    const client = createClient({ baseUrl: "https://console.test", token: "cns_t_x", fetch: send });
+    await client.giveUpToken();
+    expect(calls.at(-1)?.init?.method).toBe("DELETE");
+    expect(calls.at(-1)?.url).toBe("https://console.test/api/v1/me/token");
+  });
+
   it("turns an error body into an ApiError with its code", async () => {
     const { send } = fakeFetch({
       "GET /api/v1/projects/web/tasks?state=done": {

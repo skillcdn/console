@@ -143,5 +143,20 @@ describe("the SkillCDN source", () => {
     expect((await odd.source.list(ADDRESS)).status).toBe("unavailable");
     const long = source(async () => new Response("x".repeat(1024 * 1024 + 1), { status: 200 }));
     expect((await long.source.list(ADDRESS)).status).toBe("unavailable");
+    // Headers in time, the body not: the deployment stopped answering, which is unavailable too.
+    const cut = source(
+      async () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode("{"));
+              controller.error(new DOMException("Aborted due to timeout", "TimeoutError"));
+            },
+          }),
+          { status: 200 },
+        ),
+    );
+    expect((await cut.source.list(ADDRESS)).status).toBe("unavailable");
+    expect(cut.logs.at(-1)?.msg).toBe("the SkillCDN deployment stopped answering");
   });
 });

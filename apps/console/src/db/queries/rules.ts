@@ -42,8 +42,9 @@ export async function readRules(database: Database, scope: DocumentScope): Promi
 
 /**
  * Writes the rules of a scope as a version of their page, bringing the page back when it was
- * put away. At the workspace, the console's own rules sent as they are write nothing: what
- * is written would stop following the console's version, and what holds is unchanged.
+ * put away. At the workspace, the console's own rules sent as they are are never written:
+ * a copy would stop following the console's version. With none written they change nothing;
+ * with the organization's written they put its page away, so that the console's own hold.
  */
 export async function writeRules(
   database: Database,
@@ -58,10 +59,7 @@ export async function writeRules(
 ): Promise<RulesRecord> {
   const { scope, body } = input;
   if (scope.projectId === null && isReferenceRules(body)) {
-    const current = await readRules(database, scope);
-    if (current.source === "reference") {
-      return current;
-    }
+    return archiveRules(database, { scope, actor: input.actor, now: input.now });
   }
   await writeDocument(database, {
     scope,

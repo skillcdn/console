@@ -3276,3 +3276,55 @@ table {
   gap: var(--sc-space-2);
   margin: 0 0 var(--sc-space-4);
 }
+
+/* The facts of a thing inside a panel: a list in the panel, not a pane of their own. */
+.sc-facts-plain {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+
+.sc-facts-plain::before {
+  content: none;
+}
+
+/* A fact that needs the whole row: a description. */
+.sc-facts-wide {
+  grid-column: 1 / -1;
+}
+
+/* A section's title with what stands beside it: a way to where the thing is kept. */
+.sc-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sc-space-2) var(--sc-space-4);
+  margin-bottom: var(--sc-space-3);
+}
+
+.sc-section-head .sc-section-title {
+  margin-bottom: 0;
+}
+
+/* The ways to change the rules stand off the text, as a form's actions do. */
+.sc-rules-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-2);
+  margin-top: var(--sc-space-4);
+}
+
+/* The rules folded under where they come from, where the page is about something else. */
+.sc-rules-fold > summary {
+  cursor: pointer;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-rules-fold[open] > summary {
+  margin-bottom: var(--sc-space-3);
+}

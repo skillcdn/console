@@ -52,7 +52,15 @@ export function createSkillCdnSource(options: SkillCdnOptions): SkillSource {
         logger.warn({ status: response.status }, "the SkillCDN deployment answered an error");
         return nothing("unavailable");
       }
-      const bytes = await readBody(response, MAX_OVERVIEW_BYTES);
+      // The body comes under the same timeout as the headers: a deployment that stops answering
+      // half-way is one that could not be reached.
+      let bytes: Uint8Array | undefined;
+      try {
+        bytes = await readBody(response, MAX_OVERVIEW_BYTES);
+      } catch (error) {
+        logger.warn({ err: error }, "the SkillCDN deployment stopped answering");
+        return nothing("unavailable");
+      }
       if (bytes === undefined) {
         logger.warn("the SkillCDN deployment answered more than an overview");
         return nothing("unavailable");

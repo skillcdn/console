@@ -154,6 +154,7 @@ export const en = {
     },
     list: "Projects",
     private: "Private",
+    public: "Open to everyone",
     decisionsWaiting: (n: number) => `${count(n, "decision", "decisions")} waiting`,
     form: {
       aria: "New project",
@@ -456,7 +457,8 @@ export const en = {
     reference:
       "The console's own rules hold here until an administrator writes the organization's. They change with the console's version.",
     writeOrganizations: "Write the organization's rules",
-    useReference: "Use the console's rules",
+    useReference: "Reset to the console's rules",
+    read: "Read the rules",
     none: "This project adds no rules of its own; the workspace's hold.",
     write: "Write this project's rules",
     projectRules: "This project's rules",
@@ -465,7 +467,7 @@ export const en = {
     form: {
       body: "Rules",
       hint: (max: number) =>
-        `Markdown, up to ${max} characters, read by every agent before it works here: which skills to load first, where the work lives, the pages, what may be decided alone, how to report. Nothing secret.`,
+        `Markdown, up to ${max} characters, read by every agent before it works here: which skills to load first, where the work lives, the pages, what may be decided alone, how to report. {language} stands for the language of the person the agent works for. Nothing secret, such as a token or a password.`,
       save: "Save the rules",
     },
   },

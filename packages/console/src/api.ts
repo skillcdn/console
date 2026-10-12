@@ -3,6 +3,7 @@
 // custom UI talks to any console with types, and so that the contract has one source. No React
 // here: the server and the command line import this entry point, and nothing of the pages.
 
+export { agentLabel } from "./agent-name.js";
 export {
   ApiError,
   type ClientOptions,
@@ -99,9 +100,12 @@ export {
   signInPath,
 } from "./routes.js";
 export {
+  fillRules,
   isReferenceRules,
+  languageNameOf,
   PROJECT_RULES_TEMPLATE,
   REFERENCE_RULES,
+  RULES_LANGUAGE_PLACEHOLDER,
   RULES_PATH,
   RULES_TITLE,
 } from "./rules.js";

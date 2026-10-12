@@ -366,7 +366,41 @@ describe("the console command", () => {
     const l = harness({ fetch: late.fetch });
     expect(await runCli(["login", "--url", ORIGIN], l.io)).toBe(EXIT.failed);
     expect(l.err()).toContain("not approved in time");
-    expect(late.calls[0]?.body).toEqual({ agent: "The console command" });
+    // Named by default after the agent the command runs under, where the environment says so.
+    expect(late.calls[0]?.body).toEqual({ agent: "An agent" });
+    for (const [env, agent] of [
+      [{ CLAUDECODE: "1" }, "Claude Code on laptop"],
+      [{ CODEX_SANDBOX: "seatbelt" }, "Codex on laptop"],
+    ] as const) {
+      const u = harness({ fetch: late.fetch, env, hostname: "laptop" });
+      expect(await runCli(["login", "--url", ORIGIN], u.io)).toBe(EXIT.failed);
+      expect(late.calls.at(-2)?.body).toEqual({ agent });
+    }
+  });
+
+  it("signs out: gives the token up at the console and forgets it here, and forgets it when the console is out of reach", async () => {
+    const { fetch, calls } = fakeConsole({ "DELETE /api/v1/me/token": { status: 204 } });
+    const memory = memoryStore({ url: ORIGIN, token: "cns_t_kept" });
+    const h = harness({ fetch, store: memory.store });
+    expect(await runCli(["logout"], h.io)).toBe(EXIT.ok);
+    expect(calls.map((call) => call.key)).toEqual(["DELETE /api/v1/me/token"]);
+    expect(memory.kept()).toBeUndefined();
+    expect(h.out()).toContain("given up at the console and forgotten here");
+    const away = memoryStore({ url: ORIGIN, token: "cns_t_kept" });
+    const down = harness({
+      fetch: async () => {
+        throw new TypeError("fetch failed");
+      },
+      store: away.store,
+    });
+    expect(await runCli(["logout"], down.io)).toBe(EXIT.ok);
+    expect(away.kept()).toBeUndefined();
+    expect(down.out()).toContain("could not be reached");
+    expect(down.out()).toContain("Agents page");
+    const nobody = harness({ fetch });
+    expect(await runCli(["logout"], nobody.io)).toBe(EXIT.ok);
+    expect(nobody.out()).toContain("nothing to forget");
+    expect(h.out() + down.out()).not.toContain("cns_");
   });
 
   it("works in the project the flag, the environment or the directory names, and says so when none does", async () => {
@@ -563,6 +597,7 @@ describe("the console command", () => {
       [`GET ${IN}/tasks/7`]: { body: TASK },
       [`POST ${IN}/runs`]: { status: 201, body: RUN },
       [`GET ${IN}/rules`]: { body: RULES },
+      "GET /api/v1/me": { body: ME },
     });
     const h = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["take", "7"], h.io)).toBe(EXIT.ok);
@@ -575,16 +610,43 @@ describe("the console command", () => {
     expect(calls[1]?.body).toEqual({ taskId: TASK.id });
     const named = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["take", "7", "--agent", "Codex on the laptop"], named.io)).toBe(EXIT.ok);
-    expect(calls[4]?.body).toEqual({ taskId: TASK.id, agent: "Codex on the laptop" });
+    expect(calls[5]?.body).toEqual({ taskId: TASK.id, agent: "Codex on the laptop" });
     const asJson = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["take", "7", "--json"], asJson.io)).toBe(EXIT.ok);
     expect(JSON.parse(asJson.out())).toEqual({ run: RUN, task: TASK, rules: RULES });
+  });
+
+  it("reads the rules as they are for the person: {language} filled with the language they chose", async () => {
+    const ruled = {
+      ...RULES,
+      workspace: { ...RULES.workspace, body: "# Ours. Write what people read in {language}." },
+    };
+    const { fetch } = fakeConsole({
+      [`GET ${IN}/rules`]: { body: ruled },
+      "GET /api/v1/me": { body: { ...ME, language: "ko" } },
+    });
+    const h = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["rules"], h.io)).toBe(EXIT.ok);
+    expect(h.out()).toContain("Write what people read in Korean.");
+    expect(h.out()).not.toContain("{language}");
+    const asJson = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["rules", "--json"], asJson.io)).toBe(EXIT.ok);
+    expect(JSON.parse(asJson.out()).workspace.body).toContain("in Korean.");
+    // Nothing chosen: the task's language, as the people of the board wrote it.
+    const unchosen = harness({
+      fetch: fakeConsole({ [`GET ${IN}/rules`]: { body: ruled }, "GET /api/v1/me": { body: ME } })
+        .fetch,
+      env: SIGNED_IN,
+    });
+    expect(await runCli(["rules"], unchosen.io)).toBe(EXIT.ok);
+    expect(unchosen.out()).toContain("in the language the task is written in.");
   });
 
   it("reads the rules that hold, writes a project's or the workspace's, and puts them away", async () => {
     const { fetch, calls } = fakeConsole({
       [`GET ${IN}/rules`]: { body: RULES },
       "GET /api/v1/rules": { body: RULES.workspace },
+      "GET /api/v1/me": { body: ME },
       [`PUT ${IN}/docs/rules`]: { body: { ...RULES_DOC, version: 3 } },
       "PUT /api/v1/rules": {
         body: { source: "written", body: "# Ours", page: { ...RULES_PAGE, version: 1 } },

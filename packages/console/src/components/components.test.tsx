@@ -1159,6 +1159,8 @@ describe("projects", () => {
     expect(html).toContain("Owner");
     expect(html).toContain("Member");
     expect(html).toContain("Private");
+    // What is not private says so, in so many words: a project is never open by accident.
+    expect(html).toContain("Open to everyone");
     expect(html).toContain("2 decisions waiting");
     expect(html).not.toContain("at work");
     // Each with its mark: the first letter of its name on a colour from its key, unless it names its own.
@@ -2021,9 +2023,21 @@ describe("the rules", () => {
     expect(written).toContain("v2");
     expect(written).toContain("bob");
     expect(written).toContain("as Claude Code");
-    expect(written).toContain("Use the console&#x27;s rules");
+    expect(written).toContain("Reset to the console&#x27;s rules");
     expect(written).toContain(">Edit<");
     expect(written).toContain("Ask first.");
+    expect(written).toContain('class="sc-rules-actions"');
+    // Folded under where it comes from, and {language} filled with the language the pages speak.
+    const folded = renderToStaticMarkup(
+      <RulesView
+        rules={{ source: "reference", body: "Write in {language}.", page: null }}
+        scope="workspace"
+        folded
+      />,
+    );
+    expect(folded).toContain('<details class="sc-rules-fold"><summary>Read the rules</summary>');
+    expect(folded).toContain("Write in English.");
+    expect(folded).not.toContain("{language}");
     const project = renderToStaticMarkup(
       <RulesView
         rules={{ source: "written", body: "Ask first.", page }}
@@ -2069,5 +2083,17 @@ describe("the rules", () => {
     expect(fresh).toContain("# Rules of this project");
     expect(fresh).not.toContain("disabled");
     expect(fresh).toContain("Save the rules");
+    // The organization's written: the way back to the console's own is offered on the form too.
+    const written = renderToStaticMarkup(
+      <RulesForm
+        rules={{ source: "written", body: "# Ours", page }}
+        scope="workspace"
+        template=""
+        onSubmit={() => undefined}
+        onReset={() => undefined}
+      />,
+    );
+    expect(written).toContain("Reset to the console&#x27;s rules");
+    expect(fromReference).not.toContain("Reset to the console");
   });
 });

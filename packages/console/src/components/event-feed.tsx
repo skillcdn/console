@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { RestEvent } from "../api.js";
+import { agentLabel, type RestEvent } from "../api.js";
 import { en, type Messages } from "../i18n/en.js";
 import { useWords } from "../i18n/index.js";
 import { ShowMore, usePaged } from "./paged.js";
@@ -137,8 +137,13 @@ export function EventFeed(props: EventFeedProps) {
                   <PersonChip person={event.actor} />
                 )}
                 {event.agent !== null && (
-                  <span className="sc-feed-agent" title={words.feed.asTitle}>
-                    {words.feed.as(event.agent)}
+                  <span
+                    className="sc-feed-agent"
+                    title={
+                      agentLabel(event.agent) === event.agent ? words.feed.asTitle : event.agent
+                    }
+                  >
+                    {words.feed.as(agentLabel(event.agent))}
                   </span>
                 )}
               </span>

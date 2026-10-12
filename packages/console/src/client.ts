@@ -285,6 +285,8 @@ export interface ProjectClient {
 
 export interface ConsoleClient {
   me(signal?: AbortSignal): Promise<RestMe>;
+  /** Gives up the token this client acts with, so that it is good for nothing from now on: what `console logout` does. For a token; a session has none. */
+  giveUpToken(): Promise<void>;
   /** Keeps the person's choice of language, or none; for a person signed in. */
   updateMe(patch: RestMePatch): Promise<RestMe>;
   people(signal?: AbortSignal): Promise<RestPeople>;
@@ -602,6 +604,7 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
 
   return {
     me: (signal) => request("GET", `${base}${REST_ROUTES.me}`, undefined, restMeSchema, signal),
+    giveUpToken: () => request("DELETE", `${base}${REST_ROUTES.meToken}`, undefined, undefined),
     people: (signal) =>
       request("GET", `${base}${REST_ROUTES.people}`, undefined, restPeopleSchema, signal),
     updatePerson: (id, patch) =>

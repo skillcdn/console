@@ -1120,7 +1120,7 @@ function ProjectSettingsPage(props: {
       {head}
       {error !== undefined && <Callout tone="danger">{error}</Callout>}
       <section className="sc-panel" aria-label={settings.aria}>
-        <dl className="sc-facts">
+        <dl className="sc-facts sc-facts-plain">
           <div>
             <dt>{form.name}</dt>
             <dd>{project.name}</dd>
@@ -1156,8 +1156,13 @@ function ProjectSettingsPage(props: {
               <ProjectMark project={project} size="sm" />
             </dd>
           </div>
+          {project.description.length > 0 && (
+            <div className="sc-facts-wide">
+              <dt>{form.description}</dt>
+              <dd>{project.description}</dd>
+            </div>
+          )}
         </dl>
-        {project.description.length > 0 && <p className="sc-lead">{project.description}</p>}
       </section>
       <section className="sc-panel" aria-label={words.rules.projectRules}>
         <h2 className="sc-section-title">{words.rules.projectRules}</h2>
@@ -1183,11 +1188,13 @@ function ProjectSettingsPage(props: {
         )}
       </section>
       <section className="sc-panel" aria-label={words.rules.workspaceRules}>
-        <h2 className="sc-section-title">{words.rules.workspaceRules}</h2>
-        {rules !== undefined && <RulesView rules={rules.workspace} scope="workspace" />}
-        <p className="sc-muted">
-          <a href={settingsHref()}>{words.rules.onWorkspaceSettings}</a>
-        </p>
+        <div className="sc-section-head">
+          <h2 className="sc-section-title">{words.rules.workspaceRules}</h2>
+          <a className="sc-muted" href={settingsHref()}>
+            {words.rules.onWorkspaceSettings}
+          </a>
+        </div>
+        {rules !== undefined && <RulesView rules={rules.workspace} scope="workspace" folded />}
       </section>
     </>
   );
@@ -1258,6 +1265,12 @@ function WorkspaceSettingsPage(props: {
                 })
               }
               onCancel={() => navigation.back(PATHS.settings)}
+              onReset={() =>
+                void act(async () => {
+                  setRules(await data.actions.archiveRules());
+                  navigation.replace(PATHS.settings);
+                })
+              }
             />
           )}
         </section>
@@ -1303,7 +1316,7 @@ function WorkspaceSettingsPage(props: {
       {skills !== undefined && (
         <section className="sc-panel" aria-label={words.settings.skills}>
           <h2 className="sc-section-title">{words.settings.skills}</h2>
-          <dl className="sc-facts">
+          <dl className="sc-facts sc-facts-plain">
             <div>
               <dt>{words.settings.skillsSource}</dt>
               <dd>

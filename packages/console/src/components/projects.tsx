@@ -119,7 +119,11 @@ export function ProjectList(props: ProjectListProps) {
             </a>
             <code className="sc-project-key">{project.key}</code>
             <ProjectRoleBadge role={project.role} />
-            {project.visibility === "private" && <Badge tone="neutral">{words.private}</Badge>}
+            {project.visibility === "private" ? (
+              <Badge tone="neutral">{words.private}</Badge>
+            ) : (
+              <Badge tone="warning">{words.public}</Badge>
+            )}
           </div>
           {project.description.length > 0 && (
             <p className="sc-project-description">{project.description}</p>

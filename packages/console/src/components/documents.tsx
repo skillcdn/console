@@ -1,4 +1,5 @@
 import { type FormEvent, type ReactNode, useState } from "react";
+import { agentLabel } from "../agent-name.js";
 import {
   foldersAbove,
   isDocumentPath,
@@ -68,8 +69,11 @@ export function Writer(props: {
     <>
       <PersonChip person={props.by} />
       {props.agent !== null && (
-        <span className="sc-feed-agent" title={words.docs.asAgentTitle}>
-          {words.feed.as(props.agent)}
+        <span
+          className="sc-feed-agent"
+          title={agentLabel(props.agent) === props.agent ? words.docs.asAgentTitle : props.agent}
+        >
+          {words.feed.as(agentLabel(props.agent))}
         </span>
       )}
     </>

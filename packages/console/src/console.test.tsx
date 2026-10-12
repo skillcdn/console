@@ -392,6 +392,7 @@ describe("createConsole", () => {
     writeRules: never,
     archiveRules: never,
     rulesVersions: never,
+    giveUpToken: never,
     work: never,
     personWork: never,
   };

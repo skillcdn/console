@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  agentLabel,
   MAX_BODY_LENGTH,
   MAX_NOTE_LENGTH,
   type RestAnswerInput,
@@ -128,7 +129,7 @@ export function DecisionCard(props: DecisionCardProps) {
           <PersonChip person={decision.raisedBy} />{" "}
           {decision.run === null
             ? words.decisions.asked
-            : words.decisions.askedThrough(decision.run.agent)}{" "}
+            : words.decisions.askedThrough(agentLabel(decision.run.agent))}{" "}
           <Time iso={decision.createdAt} />
           {task !== undefined && (
             <>

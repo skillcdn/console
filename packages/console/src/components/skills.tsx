@@ -17,6 +17,10 @@ export function SkillList(props: SkillListProps) {
   if (skills === undefined) {
     return <Spinner label={words.loading} />;
   }
+  // The console could not answer for the deployment at all: said as such, not as no address.
+  if (skills.status === "unavailable" && skills.address === null) {
+    return <Callout tone="warning">{words.status.unavailable}</Callout>;
+  }
   if (skills.status === "none" || skills.address === null || skills.page === null) {
     return <EmptyState title={words.noAddress.title} body={words.noAddress.body} />;
   }

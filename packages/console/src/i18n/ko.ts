@@ -124,6 +124,7 @@ export const ko: Messages = {
     },
     list: "프로젝트",
     private: "비공개",
+    public: "공개",
     decisionsWaiting: (n) => `결정 ${n}건 대기 중`,
     form: {
       aria: "새 프로젝트",
@@ -424,7 +425,8 @@ export const ko: Messages = {
     reference:
       "관리자가 조직의 규칙을 쓰기 전까지 콘솔의 기본 규칙이 적용됩니다. 콘솔 버전과 함께 바뀝니다.",
     writeOrganizations: "조직의 규칙 쓰기",
-    useReference: "콘솔의 기본 규칙으로 되돌리기",
+    useReference: "콘솔의 기본 규칙으로 초기화",
+    read: "규칙 읽기",
     none: "이 프로젝트에 더하는 규칙이 없습니다. 워크스페이스의 규칙이 적용됩니다.",
     write: "이 프로젝트의 규칙 쓰기",
     projectRules: "이 프로젝트의 규칙",
@@ -433,7 +435,7 @@ export const ko: Messages = {
     form: {
       body: "규칙",
       hint: (max) =>
-        `Markdown, 최대 ${max}자. 여기서 일하는 모든 에이전트가 먼저 읽습니다. 먼저 불러올 스킬, 일이 있는 곳, 페이지, 혼자 정할 것, 보고 방식. 비밀은 적지 않습니다.`,
+        `Markdown, 최대 ${max}자. 여기서 일하는 모든 에이전트가 먼저 읽습니다. 먼저 불러올 스킬, 일이 있는 곳, 페이지, 혼자 정할 것, 보고 방식. {language}는 에이전트가 대신 일하는 사람의 언어로 바뀝니다. 토큰이나 비밀번호 같은 민감한 정보는 넣지 않습니다.`,
       save: "규칙 저장",
     },
   },

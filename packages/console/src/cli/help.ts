@@ -84,7 +84,7 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   login: {
     usage: "login --url <origin> [--agent <name>] [--token-stdin]",
     about:
-      "Connects this agent to the console: shows an address and a code, which a person opens signed in, names the agent and approves; the command then receives a token of its own and keeps it, with the console's address, in your home directory, never showing it. An agent running the command relays the address and the code to its person and waits. --agent says what the agent calls itself. --token-stdin reads a token made by hand from standard input instead, for a script or a job.",
+      "Connects this agent to the console: shows an address and a code, which a person opens signed in, names the agent and approves; the command then receives a token of its own and keeps it, with the console's address, in your home directory, never showing it. An agent running the command relays the address and the code to its person and waits. --agent says what the agent calls itself; left out, the command names the agent it runs under where its environment says so (Claude Code, Codex), else An agent; the machine's name follows, and the pages show the name before 'on' with the whole on hover. --token-stdin reads a token made by hand from standard input instead, for a script or a job.",
     refusals: [
       "connect.not_found: the code was not approved in time, or the person said it was not theirs; run login again",
       "the console does not know the token given: make one on the Agents page and try again",
@@ -93,7 +93,7 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   logout: {
     usage: "logout",
     about:
-      "Forgets the address and the token kept here. The token itself is removed on the Agents page.",
+      "Signs this agent out: gives the token up at the console, so that it is good for nothing from now on, and forgets it with the address kept here. A console out of reach leaves the token to the Agents page.",
   },
   whoami: {
     usage: "whoami",

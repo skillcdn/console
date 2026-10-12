@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { RestArtifact, RestRun, RunStatus } from "../api.js";
+import { agentLabel, type RestArtifact, type RestRun, type RunStatus } from "../api.js";
 import { useWords } from "../i18n/index.js";
 import { Markdown } from "./markdown.js";
 import { Badge, Button, formatBytes, PersonChip, personName, Time } from "./ui.js";
@@ -51,7 +51,9 @@ export function RunCard(props: RunCardProps) {
   return (
     <article className="sc-run" aria-label={words.label(run.agent, personName(run.person))}>
       <header className="sc-run-header">
-        <span className="sc-run-agent">{run.agent}</span>
+        <span className="sc-run-agent" title={run.agent}>
+          {agentLabel(run.agent)}
+        </span>
         <RunStatusBadge status={run.status} />
         <span className="sc-run-meta">
           {words.for} <PersonChip person={run.person} /> {words.since} <Time iso={run.startedAt} />

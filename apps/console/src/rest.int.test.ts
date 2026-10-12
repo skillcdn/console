@@ -1201,6 +1201,24 @@ describe("tokens", () => {
     expect(projects.items.map((project) => project.key)).toEqual(["docs", "by-agent", "web"]);
   });
 
+  it("give themselves up: DELETE /api/v1/me/token with the token, never with a session", async () => {
+    const { token, secret } = await make(alice, { name: "leaving" });
+    const auth = { authorization: `Bearer ${secret}` };
+    const bySession = await h.request(REST_ROUTES.meToken, {
+      method: "DELETE",
+      headers: { cookie: alice, origin: SIGN_IN_URL },
+    });
+    expect(bySession.status).toBe(400);
+    expect(await errorOf(bySession)).toBe("request.invalid");
+    expect((await listed(alice)).map((item) => item.id)).toContain(token.id);
+    const gone = await h.request(REST_ROUTES.meToken, { method: "DELETE", headers: auth });
+    expect(gone.status).toBe(204);
+    expect((await listed(alice)).map((item) => item.id)).not.toContain(token.id);
+    const again = await h.request(REST_ROUTES.meToken, { method: "DELETE", headers: auth });
+    expect(again.status).toBe(401);
+    expect((await h.request(`${IN}/tasks`, { headers: auth })).status).toBe(401);
+  });
+
   it("are refused when they are nothing, taken away, expired, or no longer a member's", async () => {
     for (const header of [
       "Bearer cns_t_nonsense",
@@ -2461,6 +2479,19 @@ describe("the rules", () => {
     ).toMatchObject({ source: "reference" });
     const back = await rulesOf(await as(admin, "PUT", RULES, { body: "# Ours again" }, named));
     expect(back.page).toMatchObject({ version: 3, archivedAt: null });
+    // The console's own, sent as they are while the organization's are written, put the page
+    // away rather than copy it: the console's own hold again and follow the console's version.
+    const reset = await rulesOf(await as(admin, "PUT", RULES, { body: REFERENCE_RULES }, named));
+    expect(reset).toMatchObject({ source: "reference", page: null });
+    const after = restEventsSchema.parse(
+      await (
+        await named.request(`${REST_ROUTES.events}?after=0`, { headers: { cookie: admin } })
+      ).json(),
+    );
+    expect(after.items.at(-1)).toMatchObject({ kind: "document.archived", projectId: null });
+    // Written once more, for what follows: the page comes back again.
+    const once = await rulesOf(await as(admin, "PUT", RULES, { body: "# Ours again" }, named));
+    expect(once.page).toMatchObject({ version: 4, archivedAt: null });
     // Kept short.
     const long = await as(admin, "PUT", RULES, { body: "x".repeat(MAX_RULES_LENGTH + 1) }, named);
     expect(long.status).toBe(400);

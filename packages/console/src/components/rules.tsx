@@ -1,6 +1,6 @@
 import { type FormEvent, useState } from "react";
-import { isReferenceRules, MAX_RULES_LENGTH, type RestRules } from "../api.js";
-import { useWords } from "../i18n/index.js";
+import { fillRules, isReferenceRules, MAX_RULES_LENGTH, type RestRules } from "../api.js";
+import { useLanguage, useWords } from "../i18n/index.js";
 import { Writer } from "./documents.js";
 import { Markdown } from "./markdown.js";
 import { Button, Callout, Time } from "./ui.js";
@@ -8,7 +8,8 @@ import { Button, Callout, Time } from "./ui.js";
 // The rules of the board (ADR-0023), as the settings pages show them: what holds, where it
 // comes from (the console's own, a page written, or none), who wrote the page and when, and
 // the ways to change them for whoever may. Each takes its data as props and nothing from the
-// network; the rules are Markdown rendered to elements, never HTML.
+// network; the rules are Markdown rendered to elements, never HTML, with `{language}` filled
+// with the language the pages speak, as the command fills it with the person's.
 
 export interface RulesViewProps {
   readonly rules: RestRules;
@@ -21,10 +22,13 @@ export interface RulesViewProps {
   readonly busy?: boolean | undefined;
   /** Where a page of the project is read, by its path, for the links a project's rules make. */
   readonly docHref?: ((path: string) => string) | undefined;
+  /** Whether the text stays folded under where it comes from, on a page where it is not the point. */
+  readonly folded?: boolean | undefined;
 }
 
 export function RulesView(props: RulesViewProps) {
   const words = useWords();
+  const language = useLanguage().tag;
   const { rules, scope } = props;
   const page = rules.page;
   if (rules.source === "none" || rules.body === null) {
@@ -32,7 +36,7 @@ export function RulesView(props: RulesViewProps) {
       <div className="sc-rules">
         <p className="sc-muted">{words.rules.none}</p>
         {props.editHref !== undefined && (
-          <div className="sc-task-actions">
+          <div className="sc-rules-actions">
             <a className="sc-button sc-button-secondary" href={props.editHref}>
               {words.rules.write}
             </a>
@@ -41,6 +45,7 @@ export function RulesView(props: RulesViewProps) {
       </div>
     );
   }
+  const text = <Markdown source={fillRules(rules.body, language)} docHref={props.docHref} />;
   return (
     <div className="sc-rules">
       {rules.source === "reference" ? (
@@ -53,9 +58,16 @@ export function RulesView(props: RulesViewProps) {
           </p>
         )
       )}
-      <Markdown source={rules.body} docHref={props.docHref} />
+      {props.folded === true ? (
+        <details className="sc-rules-fold">
+          <summary>{words.rules.read}</summary>
+          {text}
+        </details>
+      ) : (
+        text
+      )}
       {(props.editHref !== undefined || props.onArchive !== undefined) && (
-        <div className="sc-task-actions">
+        <div className="sc-rules-actions">
           {props.editHref !== undefined && (
             <a className="sc-button sc-button-secondary" href={props.editHref}>
               {rules.source === "reference" ? words.rules.writeOrganizations : words.common.edit}
@@ -85,13 +97,15 @@ export interface RulesFormProps {
     readonly baseVersion?: number | undefined;
   }) => void;
   readonly onCancel?: (() => void) | undefined;
+  /** Called to put the organization's page away, so that the console's own rules hold again; offered while one is written. */
+  readonly onReset?: (() => void) | undefined;
 }
 
 /**
  * The form the rules are written on: prefilled with what holds (the console's own, for a
  * workspace that wrote none), and saving nothing that would change nothing: the text as it
- * is, or the console's own rules as they stand, which written would stop following the
- * console's version.
+ * is, or the console's own rules where they hold already. Where the organization's are
+ * written, the console's own saved as they stand put the page away, as the reset does.
  */
 export function RulesForm(props: RulesFormProps) {
   const words = useWords();
@@ -100,7 +114,8 @@ export function RulesForm(props: RulesFormProps) {
   const current = rules.source === "none" ? undefined : (rules.body ?? undefined);
   const [body, setBody] = useState(current ?? props.template);
   const unchanged =
-    body.trim() === (current ?? "").trim() || (scope === "workspace" && isReferenceRules(body));
+    body.trim() === (current ?? "").trim() ||
+    (scope === "workspace" && rules.source === "reference" && isReferenceRules(body));
   const ready = !unchanged && body.trim().length > 0;
 
   const submit = (event: FormEvent) => {
@@ -139,6 +154,11 @@ export function RulesForm(props: RulesFormProps) {
         {props.onCancel !== undefined && (
           <Button variant="ghost" onClick={props.onCancel}>
             {words.common.cancel}
+          </Button>
+        )}
+        {props.onReset !== undefined && rules.source === "written" && (
+          <Button variant="ghost" onClick={props.onReset} disabled={props.busy === true}>
+            {words.rules.useReference}
           </Button>
         )}
       </div>

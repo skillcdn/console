@@ -5,7 +5,7 @@ license: MIT
 compatibility: Needs a shell with the console command on the PATH (npm install -g @skillcdn/console, Node.js 24 or newer), signed in by a person. Nothing else; the command needs no key of its own and the agent never sees a token.
 metadata:
   author: skillcdn
-  version: "1.4"
+  version: "1.5"
 skillcdn:
   translations:
     ko:
@@ -22,7 +22,7 @@ A task of the board goes in, named by its number; a run comes out: the task take
 - **Checkpoints:** on the board, as decisions (phase 4), which a person answers from wherever they are; the reports say what was done at each milestone, and need no answer.
 - **Go-ahead:** the task's body is the go-ahead. A task that says what the agent may decide alone is followed within that; everything else that would change scope, cost or a trade-off is a decision.
 - **Changes mid-run:** a person changes the task or answers a decision on the board; the run takes it from there and says so in its next report. A report is never rewritten.
-- **Language:** reports, questions, pages and summaries are in the language the task is written in, so that the people of the board read them as they wrote.
+- **Language:** what people read, the reports, the questions, the pages and the summaries, is in the language the rules name for the person (`console take` prints them with the task), else the task's, so that the people of the board read as they wrote.
 
 ## Requirements
 

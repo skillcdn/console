@@ -2,7 +2,9 @@
 // page of Markdown the workspace keeps and each project adds to. The console's own rules stand
 // until the organization writes its own, and change with the console's version: nothing is
 // copied into the database for them. English only, as the command is: agents read them, and
-// an organization that writes its own writes them in the language it manages them in.
+// an organization that writes its own writes them in the language it manages them in. What
+// people read is another matter: `{language}` in the rules stands for the language of the
+// person the agent works for, filled where the rules are shown, never in the page.
 
 /** The path of the rules, at the workspace and in every project: a page like any other, kept apart. */
 export const RULES_PATH = "rules";
@@ -40,9 +42,9 @@ export const REFERENCE_RULES = [
   "",
   "Alone: how to do what the task settles, which skill to load, what to write on pages. On the board, with `console ask`: a trade-off the task leaves open, a change of scope or of the plan, anything that costs money, anything that leaves the machine, anything that deletes. Answered once, never asked again.",
   "",
-  "## Reports, and the language",
+  "## Reports",
   "",
-  "Report at the milestones, not every step: what was found, what was done, what is next, in words for people; a problem as a problem, with what it blocks. Write in the language the task is written in; code, identifiers and commit messages stay in English. The result goes in a last report or is handed in as a link or a file, with the check that ran and its result; a check that did not run is said to be not run.",
+  "Report at the milestones, not every step: what was found, what was done, what is next, in words for people; a problem as a problem, with what it blocks. What people read on the board, the reports, the questions and their options, the tasks and the pages, is written in {language}. The result goes in a last report or is handed in as a link or a file, with the check that ran and its result; a check that did not run is said to be not run.",
   "",
   "## What never happens",
   "",
@@ -75,4 +77,33 @@ export const PROJECT_RULES_TEMPLATE = [
  */
 export function isReferenceRules(body: string): boolean {
   return body.trim() === REFERENCE_RULES.trim();
+}
+
+/** What stands in the rules for the language of the person the agent works for. */
+export const RULES_LANGUAGE_PLACEHOLDER = "{language}";
+
+/** What the rules say when the person chose no language: the task's, as the people of the board wrote it. */
+const TASKS_LANGUAGE = "the language the task is written in";
+
+/** The name of a language in English, from its tag (`ko` is Korean); the tag itself when it is not one. */
+export function languageNameOf(tag: string): string {
+  try {
+    const name = new Intl.DisplayNames(["en"], { type: "language", fallback: "none" }).of(tag);
+    if (name !== undefined) {
+      return name;
+    }
+  } catch {
+    // Not a language tag: said as it is.
+  }
+  return tag;
+}
+
+/**
+ * The rules as they read for a person: `{language}` filled with the name of the language they
+ * chose for the pages, or with the task's language when they chose none. The command fills
+ * them for the person whose token it holds; the pages for whoever reads them.
+ */
+export function fillRules(body: string, language: string | null | undefined): string {
+  const name = language == null ? TASKS_LANGUAGE : languageNameOf(language);
+  return body.split(RULES_LANGUAGE_PLACEHOLDER).join(name);
 }
