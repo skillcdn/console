@@ -2606,7 +2606,6 @@ table {
   font-size: var(--sc-text-xs);
   line-height: 1;
   text-decoration: none;
-  overflow: hidden;
   white-space: nowrap;
 }
 
@@ -2974,6 +2973,56 @@ table {
   flex: 1 1 10rem;
 }
 
+/* A tip of the console's own: what an item says in full, shown the moment the pointer is on it,
+   where its line cut the title short or shows none. The item carries the words in `data-tip`
+   and is marked `data-clipped` when the tip applies. */
+.sc-tip {
+  position: relative;
+}
+
+.sc-tip::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + var(--sc-space-1));
+  left: 0;
+  z-index: 20;
+  width: max-content;
+  max-width: 18rem;
+  padding: var(--sc-space-1) var(--sc-space-2);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-bg-inset);
+  box-shadow: var(--sc-shadow-stage);
+  color: var(--sc-color-text);
+  font-size: var(--sc-text-xs);
+  font-weight: var(--sc-weight-medium);
+  line-height: 1.4;
+  text-decoration: none;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* The item under the pointer rises above its neighbours, which would otherwise paint over its tip. */
+.sc-tip[data-clipped]:hover,
+.sc-tip[data-clipped]:focus-visible {
+  z-index: 20;
+}
+
+.sc-tip[data-clipped]:hover::after,
+.sc-tip[data-clipped]:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* In the last columns the tip hangs from the item's right edge, so that it stays on the page. */
+.sc-calendar-cell:nth-last-child(-n + 2) .sc-tip::after {
+  right: 0;
+  left: auto;
+}
+
 /* One week on its own, the only row there is: its days are taller than a month's. */
 .sc-week .sc-calendar-cell {
   height: 9rem;
@@ -3100,6 +3149,11 @@ table {
 
   .sc-calendar-task .sc-mark {
     margin: 0;
+  }
+
+  /* No pointer rests on a phone's calendar; the lists below say the titles. */
+  .sc-tip::after {
+    display: none;
   }
 
   .sc-feed-item {

@@ -1396,6 +1396,11 @@ describe("the calendar", () => {
     expect(html).toContain("sc-calendar-over");
     expect(html).toContain("sc-category-blue");
     expect(html).toContain("Planned one");
+    // The whole title is the item's own tip, not the browser's.
+    expect(html).toContain('data-tip="#8 Planned one"');
+    expect(html).toContain('data-tip="#7 Late one"');
+    expect(html).not.toContain('title="#');
+    expect(html).toContain("sc-calendar-late sc-tip");
     expect(html).not.toContain("Nothing is due this month");
     const empty = renderToStaticMarkup(
       <Calendar

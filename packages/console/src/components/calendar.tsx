@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactNode, SyntheticEvent } from "react";
 import { OPEN_TASK_STATES, type RestCategory, type RestPerson, type RestTask } from "../api.js";
 import {
   addDays,
@@ -143,6 +143,17 @@ interface WeekRowProps {
   readonly markOf?: ((task: RestTask) => ReactNode) | undefined;
 }
 
+/**
+ * Marks an item whose title its line cut short, or which shows none (a bar on its later days),
+ * so that the tip it carries in `data-tip` is shown at once while the pointer is on it. Measured
+ * as the pointer arrives, since only the browser knows where the line ended.
+ */
+function reveal(event: SyntheticEvent<HTMLElement>): void {
+  const item = event.currentTarget;
+  const title = item.querySelector(".sc-calendar-task-title");
+  item.toggleAttribute("data-clipped", title === null || title.scrollWidth > title.clientWidth);
+}
+
 /** One week as a row of cells: the bars across the days in their lanes, then the tasks on each day. */
 function WeekRow(props: WeekRowProps) {
   const words = useWords().calendar;
@@ -180,9 +191,12 @@ function WeekRow(props: WeekRowProps) {
                   segment.from === column && segment.begins && "sc-calendar-bar-begins",
                   segment.to === column && segment.ends && "sc-calendar-bar-ends",
                   tone(task, task.dueOn ?? cell.day, now),
+                  "sc-tip",
                 )}
                 href={props.taskHref(task)}
-                title={`#${task.number} ${task.title}`}
+                data-tip={`#${task.number} ${task.title}`}
+                onMouseEnter={reveal}
+                onFocus={reveal}
               >
                 {segment.from === column && (
                   <>
@@ -198,9 +212,11 @@ function WeekRow(props: WeekRowProps) {
             return (
               <a
                 key={task.id}
-                className={cx("sc-calendar-task", tone(task, cell.day, now))}
+                className={cx("sc-calendar-task", tone(task, cell.day, now), "sc-tip")}
                 href={props.taskHref(task)}
-                title={`#${task.number} ${task.title}`}
+                data-tip={`#${task.number} ${task.title}`}
+                onMouseEnter={reveal}
+                onFocus={reveal}
               >
                 {mark === undefined || mark === null ? (
                   <span
@@ -219,9 +235,11 @@ function WeekRow(props: WeekRowProps) {
           {(props.starting.get(cell.day) ?? []).map((task) => (
             <a
               key={task.id}
-              className="sc-calendar-task sc-calendar-task-start"
+              className="sc-calendar-task sc-calendar-task-start sc-tip"
               href={props.taskHref(task)}
-              title={`#${task.number} ${task.title}: ${words.startsOnly}`}
+              data-tip={`#${task.number} ${task.title}: ${words.startsOnly}`}
+              onMouseEnter={reveal}
+              onFocus={reveal}
             >
               {props.markOf?.(task)}
               <span className="sc-calendar-task-title">{task.title}</span>
