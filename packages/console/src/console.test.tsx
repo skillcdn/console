@@ -22,6 +22,7 @@ import {
   newGoalHref,
   newTaskHref,
   personAgentsHref,
+  personWorkHref,
   projectHref,
   signInFailureOf,
   taskHref,
@@ -65,11 +66,26 @@ describe("matchRoute", () => {
     expect(connectHref("ABCD-EFGH")).toBe("/connect/ABCD-EFGH");
     expect(matchRoute(`/people/${ID}/agents`)).toEqual({ name: "person-agents", id: ID });
     expect(personAgentsHref(ID)).toBe(`/people/${ID}/agents`);
+    expect(matchRoute(`/people/${ID}/work`)).toEqual({
+      name: "person-work",
+      id: ID,
+      week: undefined,
+    });
+    expect(matchRoute(`/people/${ID}/work`, "?week=2026-10-12")).toEqual({
+      name: "person-work",
+      id: ID,
+      week: "2026-10-12",
+    });
+    expect(matchRoute(`/people/${ID}/work`, "?week=soon")).toEqual({ name: "not-found" });
+    expect(personWorkHref(ID)).toBe(`/people/${ID}/work`);
+    expect(personWorkHref(ID, "2026-10-12")).toBe(`/people/${ID}/work?week=2026-10-12`);
     for (const path of [
       "/connect/a/b",
       "/connect/not-a-code-at-all-too-long",
       "/people/x/agents",
       `/people/${ID}`,
+      `/people/${ID}/work/x`,
+      `/people/${ID}/plate`,
       "/projects/Web",
       "/projects/-web",
       "/projects/web/tasks",
@@ -343,6 +359,7 @@ describe("createConsole", () => {
     updateCategory: never,
     removeCategory: never,
     work: never,
+    personWork: never,
   };
 
   it("assembles an app from the default components, and the ones a team replaces", () => {

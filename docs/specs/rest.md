@@ -115,6 +115,10 @@ Takes one of the asker's tokens away, whoever holds it, and answers `204`. A tok
 
 An administrator's sight of everyone's agents ([ADR-0011](../adr/0011-an-agent-connects-with-a-short-code-a-person-approves-and-the-token-is-never-shown.md)): the live tokens of any person, as `GET /api/v1/tokens` lists one's own, and the way to take one away, from the console's own pages; `auth.forbidden` for a member, `person.not_found` for an id that is nobody's, `token.not_found` for a token that is not that person's.
 
+### `GET /api/v1/people/<id>/work`
+
+`{ "tasks": [{ "project", "task" }, ...] }`: what is on another person's plate, for whoever oversees them: an administrator, or an owner of a project the person is in (everyone of the workspace is in a project open to it; a private one holds those listed), signed in or through their agent. The person's open tasks, the sooner due first and those with no day last, within the projects the asker may see and no other, each with its project; the decisions are left out, since they wait for anyone. `auth.forbidden` for anyone else; `person.not_found` for an id that is nobody's.
+
 ### Connecting an agent
 
 `POST /api/v1/connect`, `GET /api/v1/connect/<code>`, `POST /api/v1/connect/<code>/approve`, `POST /api/v1/connect/<code>/deny` and `POST /api/v1/connect/claim`: how an agent gets its token without anyone copying one ([ADR-0011](../adr/0011-an-agent-connects-with-a-short-code-a-person-approves-and-the-token-is-never-shown.md)).

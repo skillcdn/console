@@ -612,6 +612,18 @@ export const en = {
     title: "People",
     list: "People",
     roleOf: (name: string) => `Role of ${name}`,
+    work: "Work",
+    workOf: (name: string) => `Work of ${name}`,
+    loadingWork: "Loading the work",
+    couldNotLoadWork: "The work could not be loaded.",
+    noWork: {
+      title: (name: string) => `Nothing is assigned to ${name}`,
+      body: "An open task assigned to them, in a project you may see, shows up here.",
+    },
+    notOverseen: {
+      title: "Not yours to see",
+      body: "An administrator sees everyone's work; an owner sees the work of the people in their projects.",
+    },
     agents: "Agents",
     agentsOf: (name: string) => `Agents of ${name}`,
     loadingAgents: "Loading the agents",

@@ -12,6 +12,8 @@ export interface PeopleListProps {
   readonly me?: RestPerson | undefined;
   /** Called with the role an administrator chose. Left out, roles are read here, not changed. */
   readonly onChangeRole?: ((person: RestPerson, role: PersonRole) => void) | undefined;
+  /** Where a person's work is seen; given to an administrator, or an owner of a project. */
+  readonly workHref?: ((person: RestPerson) => string) | undefined;
   /** Where a person's agents are seen; given to an administrator. */
   readonly agentsHref?: ((person: RestPerson) => string) | undefined;
   readonly busy?: boolean | undefined;
@@ -46,6 +48,11 @@ export function PeopleList(props: PeopleListProps) {
                 ))}
               </select>
             </label>
+          )}
+          {props.workHref !== undefined && (
+            <a className="sc-button sc-button-ghost sc-button-sm" href={props.workHref(person)}>
+              {words.people.work}
+            </a>
           )}
           {props.agentsHref !== undefined && (
             <a className="sc-button sc-button-ghost sc-button-sm" href={props.agentsHref(person)}>

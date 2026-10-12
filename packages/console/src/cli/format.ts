@@ -8,6 +8,7 @@ import type {
   RestGoal,
   RestMember,
   RestPerson,
+  RestPersonWork,
   RestProject,
   RestRun,
   RestSkills,
@@ -280,6 +281,17 @@ export function formatWork(work: RestWork): string {
     lines.push(`  ${project.key}  ${formatDecisionLine(decision)}`);
   }
   return lines.join("\n");
+}
+
+/** Another person's plate: their open tasks, each with its project; no decisions, which wait for anyone. */
+export function formatPersonWork(person: RestPerson, work: RestPersonWork): string {
+  if (work.tasks.length === 0) {
+    return `No open task is assigned to ${person.login}.`;
+  }
+  return [
+    `tasks assigned to ${person.login}:`,
+    ...work.tasks.map(({ project, task }) => `  ${project.key}  ${formatTaskLine(task)}`),
+  ].join("\n");
 }
 
 export function formatDecisionLine(decision: RestDecision): string {

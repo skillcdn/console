@@ -4,6 +4,7 @@ import {
   categoryPath,
   connectPath,
   personTokensPath,
+  personWorkPath,
   projectPath,
   REST_ROUTES,
   restPath,
@@ -40,6 +41,7 @@ import {
   type RestPeople,
   type RestPerson,
   type RestPersonPatch,
+  type RestPersonWork,
   type RestProject,
   type RestProjectInput,
   type RestProjectPatch,
@@ -78,6 +80,7 @@ import {
   restMeSchema,
   restPeopleSchema,
   restPersonSchema,
+  restPersonWorkSchema,
   restProjectSchema,
   restProjectsSchema,
   restRunSchema,
@@ -293,6 +296,8 @@ export interface ConsoleClient {
   removeCategory(key: string): Promise<void>;
   /** What is on the asker's plate across the projects they may see: their open tasks, and the decisions waiting. */
   work(signal?: AbortSignal): Promise<RestWork>;
+  /** Another person's plate, within what the asker may see: for an administrator, or an owner of a project they are in. */
+  personWork(personId: string, signal?: AbortSignal): Promise<RestPersonWork>;
   /** The tokens of whoever asks. */
   tokens(signal?: AbortSignal): Promise<RestTokens>;
   /** The tokens of another person: for an administrator. */
@@ -598,6 +603,8 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
     removeCategory: (key) => request("DELETE", `${base}${categoryPath(key)}`, undefined, undefined),
     work: (signal) =>
       request("GET", `${base}${REST_ROUTES.work}`, undefined, restWorkSchema, signal),
+    personWork: (personId, signal) =>
+      request("GET", `${base}${personWorkPath(personId)}`, undefined, restPersonWorkSchema, signal),
     tokens: (signal) =>
       request("GET", `${base}${REST_ROUTES.tokens}`, undefined, restTokensSchema, signal),
     createToken: (input) =>

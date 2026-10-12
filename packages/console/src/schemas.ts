@@ -501,6 +501,13 @@ export const restWorkSchema = z.object({
 });
 export type RestWork = z.infer<typeof restWorkSchema>;
 
+/**
+ * What `GET /api/v1/people/<id>/work` answers: another person's open tasks, within the projects
+ * the asker may see, for whoever oversees them. No decisions, which wait for anyone.
+ */
+export const restPersonWorkSchema = z.object({ tasks: restWorkSchema.shape.tasks });
+export type RestPersonWork = z.infer<typeof restPersonWorkSchema>;
+
 /** What `POST /api/v1/projects/<key>/decisions` is sent: the question, its context, and the options. */
 export const restDecisionInputSchema = z.object({
   question: line(MAX_QUESTION_LENGTH),

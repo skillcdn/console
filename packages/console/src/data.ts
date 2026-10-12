@@ -27,6 +27,7 @@ import {
   type RestMePatch,
   type RestPerson,
   type RestPersonPatch,
+  type RestPersonWork,
   type RestProject,
   type RestProjectInput,
   type RestProjectPatch,
@@ -107,6 +108,8 @@ export interface ConsoleActions {
   connectRequest(code: string, signal?: AbortSignal): Promise<RestConnectRequest>;
   approveConnection(code: string, input: RestTokenInput): Promise<RestConnectRequest>;
   denyConnection(code: string): Promise<void>;
+  /** Another person's plate: for an administrator, or an owner of a project they are in. */
+  personWork(personId: string, signal?: AbortSignal): Promise<RestPersonWork>;
   /** The tokens of another person, and the way to take one away: for an administrator. */
   personTokens(personId: string, signal?: AbortSignal): Promise<RestTokens>;
   revokePersonToken(personId: string, tokenId: string): Promise<void>;
@@ -529,6 +532,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
       connectRequest: (code, signal) => client.connectRequest(code, signal),
       approveConnection: (code, input) => client.approveConnection(code, input),
       denyConnection: (code) => client.denyConnection(code),
+      personWork: (personId, signal) => client.personWork(personId, signal),
       personTokens: (personId, signal) => client.personTokens(personId, signal),
       revokePersonToken: (personId, tokenId) => client.revokePersonToken(personId, tokenId),
       async signOut() {

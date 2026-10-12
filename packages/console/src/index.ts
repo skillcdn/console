@@ -202,6 +202,7 @@ export {
   PATHS,
   type ProjectPage,
   personAgentsHref,
+  personWorkHref,
   projectHref,
   type Route,
   signInFailureOf,

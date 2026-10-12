@@ -840,10 +840,16 @@ describe("people", () => {
     const read = renderToStaticMarkup(<PeopleList people={[alice, bob]} me={bob} />);
     expect(read).toContain("Administrator");
     const seen = renderToStaticMarkup(
-      <PeopleList people={[alice]} agentsHref={(person) => `/people/${person.id}/agents`} />,
+      <PeopleList
+        people={[alice]}
+        workHref={(person) => `/people/${person.id}/work`}
+        agentsHref={(person) => `/people/${person.id}/agents`}
+      />,
     );
+    expect(seen).toContain(`href="/people/${alice.id}/work"`);
     expect(seen).toContain(`href="/people/${alice.id}/agents"`);
     expect(read).not.toContain("/agents");
+    expect(read).not.toContain("/work");
     expect(read).toContain("Member");
     expect(read).toContain("(you)");
     expect(read).not.toContain("<select");
@@ -1120,9 +1126,12 @@ describe("projects", () => {
         onAdd={() => undefined}
         onChangeRole={() => undefined}
         onRemove={() => undefined}
+        workHref={(member) => `/people/${member.person.id}/work`}
       />,
     );
     expect(change).toContain('aria-label="Add a member"');
+    expect(change).toContain(`href="/people/${alice.id}/work"`);
+    expect(read).not.toContain("/work");
     // Only those not listed yet are offered.
     expect(change).toContain(`<option value="${bob.id}">bob</option>`);
     expect(change).not.toContain(`<option value="${alice.id}"`);
@@ -1612,6 +1621,20 @@ describe("a person's work", () => {
     expect(quiet).toContain("No decision waits.");
     expect(quiet).toContain("Nothing is planned this week.");
     expect(quiet).not.toContain('aria-label="Overdue"');
+    // Another person's plate carries no decisions, and says nothing of them.
+    const theirs = renderToStaticMarkup(
+      <WorkList
+        work={{ tasks: work.tasks }}
+        today={TODAY}
+        taskHref={(key, item) => `/projects/${key}/tasks/${item.number}`}
+        decisionHref={() => "#"}
+        weekHref={(day) => `/people/x/work?week=${day}`}
+      />,
+    );
+    expect(theirs).toContain('aria-label="Overdue"');
+    expect(theirs).not.toContain('aria-label="Decisions waiting for a person"');
+    expect(theirs).not.toContain("No decision waits.");
+    expect(quiet).toContain('aria-label="Decisions waiting for a person"');
   });
 
   it("shows one week on its own, the weeks around a step away, in the person's language", () => {

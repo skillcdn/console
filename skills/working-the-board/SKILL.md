@@ -37,7 +37,7 @@ The full contract is the [specification of the command line](/docs/specs/cli.md)
 
 | Input | Source |
 |---|---|
-| The task | Its number (`#7`) or its id, from what the person said. Told to pick one, `console work` lists what is on the person's plate across their projects, the sooner due first, and `console tasks --state ready --mine` what is ready and theirs in this one (`--due overdue`, `--due week`, `--category <key>` and `--goal <id>` narrow it further); a task is never taken without being told which, or that any ready one may be. |
+| The task | Its number (`#7`) or its id, from what the person said. Told to pick one, `console work` lists what is on the person's plate across their projects, the sooner due first (`--person <login>` another person's, for an administrator or an owner of a project they are in), and `console tasks --state ready --mine` what is ready and theirs in this one (`--due overdue`, `--due week`, `--category <key>` and `--goal <id>` narrow it further); a task is never taken without being told which, or that any ready one may be. |
 | The work | The task's body, read with `console task <number>`: what to make, where, the milestones, what to ask; with its plan, the category, the goal it works towards (`console goal <id>` says what reaching it means) and the days it starts and is due, which the reports and the summary keep to. The pages it links to (`console doc <path>`) and the project's skills (`console skills`, each loaded through the agent's own SkillCDN connection) say the rest. |
 | The organization's way | Its own skill for its console, when it has one, adds which tasks to take, what to report and when to ask; it comes through the same kind of address as its other skills. |
 

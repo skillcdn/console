@@ -42,6 +42,7 @@ import {
   formatMore,
   formatOptions,
   formatPersonLine,
+  formatPersonWork,
   formatProject,
   formatProjectLine,
   formatRun,
@@ -653,10 +654,18 @@ const tasks: Command = async (args, io) => {
 };
 
 const work: Command = async (args, io) => {
-  const { values } = parse(args, {}, false);
+  const { values } = parse(args, { person: { type: "string" } }, false);
   const session = await open(io, values);
-  const found = await session.client.work();
-  answer(io, session, found, () => formatWork(found));
+  const login = text(values, "person");
+  if (login === undefined) {
+    const found = await session.client.work();
+    answer(io, session, found, () => formatWork(found));
+    return EXIT.ok;
+  }
+  // Another person's plate: the console decides whether it is the asker's to see.
+  const whose = await personOf(session, login);
+  const found = await session.client.personWork(whose.id);
+  answer(io, session, found, () => formatPersonWork(whose, found));
   return EXIT.ok;
 };
 

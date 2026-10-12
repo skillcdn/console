@@ -27,6 +27,7 @@ import {
   type RestGoals,
   type RestMembers,
   type RestPeople,
+  type RestPersonWork,
   type RestProjects,
   type RestRuns,
   type RestSkills,
@@ -114,7 +115,9 @@ import {
   findProjectFor,
   listMembers,
   listProjectsFor,
+  ownsProjectWith,
   ProjectError,
+  type ProjectRecord,
   type ProjectView,
   removeMember,
   setProjectIcon,
@@ -957,20 +960,12 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
   });
 
-  // What is on the asker's plate, across the projects they may see: their open tasks, and the
-  // decisions waiting for a person. Each with its project, for the page to say and link.
-  app.get(REST_ROUTES.work, async (c) => {
-    const person = await asking(c);
-    if (person instanceof Response) {
-      return person;
-    }
-    const [projects, tasks, decisions] = await Promise.all([
-      listProjectsFor(database, person.workspaceId, person),
-      listTasksAssignedTo(database, person.workspaceId, person, LIST_LIMIT),
-      listWaitingDecisionsFor(database, person.workspaceId, person, LIST_LIMIT),
-    ]);
-    const named = new Map(projects.map((project) => [project.id, project]));
-    const projectOf = (projectId: string) => {
+  /** The projects a plate's tasks are in, as a page says and links them; nothing for one the asker may not see. */
+  const projectRefsOf = (
+    found: readonly Pick<ProjectRecord, "id" | "key" | "name" | "color" | "symbol" | "icon">[],
+  ) => {
+    const named = new Map(found.map((project) => [project.id, project]));
+    return (projectId: string) => {
       const project = named.get(projectId);
       return project === undefined
         ? undefined
@@ -982,6 +977,21 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
             icon: project.icon ?? null,
           };
     };
+  };
+
+  // What is on the asker's plate, across the projects they may see: their open tasks, and the
+  // decisions waiting for a person. Each with its project, for the page to say and link.
+  app.get(REST_ROUTES.work, async (c) => {
+    const person = await asking(c);
+    if (person instanceof Response) {
+      return person;
+    }
+    const [projects, tasks, decisions] = await Promise.all([
+      listProjectsFor(database, person.workspaceId, person),
+      listTasksAssignedTo(database, person.workspaceId, person, person, LIST_LIMIT),
+      listWaitingDecisionsFor(database, person.workspaceId, person, LIST_LIMIT),
+    ]);
+    const projectOf = projectRefsOf(projects);
     const body: RestWork = {
       tasks: tasks.flatMap((task) => {
         const project = projectOf(task.projectId);
@@ -990,6 +1000,45 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       decisions: decisions.flatMap((decision) => {
         const project = projectOf(decision.projectId);
         return project === undefined ? [] : [{ project, decision: restDecision(decision) }];
+      }),
+    };
+    return c.json(body);
+  });
+
+  // Another person's plate, for whoever oversees them: an administrator, or an owner of a
+  // project the person is in; the tasks within the projects the asker may see and no other.
+  // The decisions are left out, since they wait for anyone.
+  app.get(`${REST_ROUTES.people}/:id/work`, async (c) => {
+    const asker = await asking(c);
+    if (asker instanceof Response) {
+      return asker;
+    }
+    const id = c.req.param("id") ?? "";
+    const subject = UUID.test(id) ? await findPerson(database, asker.workspaceId, id) : undefined;
+    if (subject === undefined) {
+      return notFound(c, "person.not_found", "The person was not found.");
+    }
+    if (
+      asker.role !== "admin" &&
+      !(await ownsProjectWith(database, asker.workspaceId, asker.id, subject.id))
+    ) {
+      return c.json(
+        errorBody(
+          "auth.forbidden",
+          "Only an administrator, or an owner of a project the person is in, sees their work.",
+        ),
+        403,
+      );
+    }
+    const [projects, tasks] = await Promise.all([
+      listProjectsFor(database, asker.workspaceId, asker),
+      listTasksAssignedTo(database, asker.workspaceId, subject, asker, LIST_LIMIT),
+    ]);
+    const projectOf = projectRefsOf(projects);
+    const body: RestPersonWork = {
+      tasks: tasks.flatMap((task) => {
+        const project = projectOf(task.projectId);
+        return project === undefined ? [] : [{ project, task: restTask(task) }];
       }),
     };
     return c.json(body);

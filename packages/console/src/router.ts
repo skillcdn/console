@@ -74,6 +74,8 @@ export type Route =
   | { readonly name: "people" }
   /** The agents of one person, for an administrator. */
   | { readonly name: "person-agents"; readonly id: string }
+  /** Another person's plate, for whoever oversees them: a day of the week shown at the top, or today's. */
+  | { readonly name: "person-work"; readonly id: string; readonly week: string | undefined }
   | { readonly name: "agents" }
   | { readonly name: "new-token" }
   /** What is on the person's plate across their projects. */
@@ -193,6 +195,12 @@ const docsViewOf = (params: URLSearchParams, path: string): DocsView | undefined
   return { kind: "read" };
 };
 
+/** The week a plate's address names, or none for this week's; a value that is not a day is nobody's address. */
+function weekShown(params: URLSearchParams): { readonly week: string | undefined } | undefined {
+  const week = params.get("week");
+  return week !== null && !isDay(week) ? undefined : { week: week ?? undefined };
+}
+
 export function matchRoute(pathname: string, search = ""): Route {
   const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
   const moved = movedFrom(path);
@@ -207,11 +215,8 @@ export function matchRoute(pathname: string, search = ""): Route {
     return { name: "new-project" };
   }
   if (path === PATHS.work) {
-    const week = params.get("week");
-    if (week !== null && !isDay(week)) {
-      return NOT_FOUND;
-    }
-    return { name: "work", week: week ?? undefined };
+    const shown = weekShown(params);
+    return shown === undefined ? NOT_FOUND : { name: "work", ...shown };
   }
   if (path === PATHS.people) {
     return { name: "people" };
@@ -234,9 +239,17 @@ export function matchRoute(pathname: string, search = ""): Route {
   }
   if (path.startsWith(`${PATHS.people}/`)) {
     const [id, page, ...more] = path.slice(PATHS.people.length + 1).split("/");
-    return id !== undefined && UUID.test(id) && page === "agents" && more.length === 0
-      ? { name: "person-agents", id }
-      : NOT_FOUND;
+    if (id === undefined || !UUID.test(id) || more.length > 0) {
+      return NOT_FOUND;
+    }
+    if (page === "agents") {
+      return { name: "person-agents", id };
+    }
+    if (page === "work") {
+      const shown = weekShown(params);
+      return shown === undefined ? NOT_FOUND : { name: "person-work", id, ...shown };
+    }
+    return NOT_FOUND;
   }
   if (path.startsWith(`${PATHS.pages}/`)) {
     const [page, ...more] = path.slice(PATHS.pages.length + 1).split("/");
@@ -328,6 +341,12 @@ export function connectHref(code?: string): string {
 /** Where an administrator sees one person's agents. */
 export function personAgentsHref(personId: string): string {
   return `${PATHS.people}/${personId}/agents`;
+}
+
+/** Where another person's work is seen, with the week of a day at the top, or this week's when none is named. */
+export function personWorkHref(personId: string, week?: string): string {
+  const base = `${PATHS.people}/${personId}/work`;
+  return week === undefined ? base : `${base}?week=${week}`;
 }
 
 /** Where a project's board is, or one of its pages. */

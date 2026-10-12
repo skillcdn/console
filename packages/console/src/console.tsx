@@ -9,6 +9,7 @@ import {
 } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import {
+  ApiError,
   type ConsoleClient,
   createClient,
   type FileUpload,
@@ -86,6 +87,7 @@ import {
   newTaskHref,
   PATHS,
   personAgentsHref,
+  personWorkHref,
   projectHref,
   type Route,
   signInFailureOf,
@@ -961,6 +963,7 @@ function ProjectPage(props: {
               ? (member) => void act(() => data.actions.removeMember(member.person.id))
               : undefined
           }
+          workHref={owner ? (member) => personWorkHref(member.person.id) : undefined}
           empty={
             <EmptyState
               title={members.empty.title}
@@ -1093,58 +1096,146 @@ function PersonAgentsPage(props: {
   );
 }
 
-/** What is on the person's plate, across their projects: read when the page is opened. */
-function WorkPage(props: {
-  readonly data: ConsoleData;
+/** What a plate's page shows: the tasks, and the decisions waiting on the person's own. */
+interface Plate {
+  readonly tasks: RestWork["tasks"];
+  readonly decisions?: RestWork["decisions"] | undefined;
+}
+
+/**
+ * A plate, read when the page is opened: the person's own, or another person's for whoever
+ * oversees them. The week at the top is the address's.
+ */
+function PlatePage(props: {
   readonly components: ConsoleComponents;
+  /** Reads the plate; stable across renders, since the page reads again whenever it changes. */
+  readonly load: (signal: AbortSignal) => Promise<Plate>;
+  readonly title: string;
+  /** What stands beside the title: the way back, on another person's plate. */
+  readonly aside?: ReactNode;
   /** A day of the week shown at the top, from the address; today's week when it names none. */
   readonly week: string | undefined;
+  readonly weekHref: (day: string) => string;
+  readonly loading: string;
+  readonly couldNotLoad: string;
+  readonly empty: { readonly title: string; readonly body: string };
+  /** What a refusal says where the plate may not be the asker's to see; the server's words otherwise. */
+  readonly refused?: { readonly title: string; readonly body: string } | undefined;
 }) {
   const words = useWords();
-  const { data, components } = props;
-  const [work, setWork] = useState<RestWork | undefined>(undefined);
+  const { components, load, couldNotLoad, refused } = props;
+  const [plate, setPlate] = useState<Plate | undefined>(undefined);
   const [problem, setProblem] = useState<string | undefined>(undefined);
-  const { work: load } = data.actions;
-  const couldNotLoad = words.work.couldNotLoad;
+  const [forbidden, setForbidden] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
+    setPlate(undefined);
+    setProblem(undefined);
+    setForbidden(false);
     load(controller.signal)
       .then((answer) => {
         if (!controller.signal.aborted) {
-          setWork(answer);
+          setPlate(answer);
         }
       })
       .catch((failure: unknown) => {
-        if (!controller.signal.aborted) {
+        if (controller.signal.aborted) {
+          return;
+        }
+        if (
+          refused !== undefined &&
+          failure instanceof ApiError &&
+          failure.code === "auth.forbidden"
+        ) {
+          setForbidden(true);
+        } else {
           setProblem(errorWords(failure, couldNotLoad));
         }
       });
     return () => controller.abort();
-  }, [load, couldNotLoad]);
+  }, [load, couldNotLoad, refused]);
   return (
     <>
       <div className="sc-page-head">
-        <h1 className="sc-page-title">{words.work.title}</h1>
+        <h1 className="sc-page-title">{props.title}</h1>
+        {props.aside}
       </div>
       {problem !== undefined && <Callout tone="danger">{problem}</Callout>}
-      {work === undefined ? (
+      {forbidden && refused !== undefined ? (
+        <EmptyState
+          title={refused.title}
+          body={refused.body}
+          action={<LinkButton href={PATHS.work}>{words.nav.work}</LinkButton>}
+        />
+      ) : plate === undefined ? (
         problem === undefined && (
           <div className="sc-loading">
-            <Spinner label={words.work.loading} />
+            <Spinner label={props.loading} />
           </div>
         )
-      ) : work.tasks.length === 0 && work.decisions.length === 0 ? (
-        <EmptyState title={words.work.empty.title} body={words.work.empty.body} />
+      ) : plate.tasks.length === 0 && (plate.decisions?.length ?? 0) === 0 ? (
+        <EmptyState title={props.empty.title} body={props.empty.body} />
       ) : (
         <components.WorkList
-          work={work}
+          work={plate}
           week={props.week}
           taskHref={(projectKey, task) => taskHref(projectKey, task.number)}
           decisionHref={(projectKey, decisionId) => decisionHref(projectKey, decisionId)}
-          weekHref={workHref}
+          weekHref={props.weekHref}
         />
       )}
     </>
+  );
+}
+
+/** What is on the person's own plate, across their projects. */
+function WorkPage(props: {
+  readonly data: ConsoleData;
+  readonly components: ConsoleComponents;
+  readonly week: string | undefined;
+}) {
+  const words = useWords();
+  const { work } = props.data.actions;
+  return (
+    <PlatePage
+      components={props.components}
+      load={work}
+      title={words.work.title}
+      week={props.week}
+      weekHref={workHref}
+      loading={words.work.loading}
+      couldNotLoad={words.work.couldNotLoad}
+      empty={words.work.empty}
+    />
+  );
+}
+
+/** Another person's plate, for whoever oversees them: an administrator, or an owner of a project they are in. */
+function PersonWorkPage(props: {
+  readonly id: string;
+  readonly data: ConsoleData;
+  readonly components: ConsoleComponents;
+  readonly week: string | undefined;
+}) {
+  const words = useWords();
+  const { id, data } = props;
+  const person = data.people.find((candidate) => candidate.id === id);
+  const name = person === undefined ? "?" : personName(person);
+  const { personWork } = data.actions;
+  const load = useCallback((signal: AbortSignal) => personWork(id, signal), [personWork, id]);
+  return (
+    <PlatePage
+      components={props.components}
+      load={load}
+      title={words.people.workOf(name)}
+      aside={<LinkButton href={PATHS.people}>{words.nav.people}</LinkButton>}
+      week={props.week}
+      weekHref={(day) => personWorkHref(id, day)}
+      loading={words.people.loadingWork}
+      couldNotLoad={words.people.couldNotLoadWork}
+      empty={{ title: words.people.noWork.title(name), body: words.people.noWork.body }}
+      refused={words.people.notOverseen}
+    />
   );
 }
 
@@ -1161,6 +1252,9 @@ function WorkspacePage(props: {
 
   if (route.name === "work") {
     return <WorkPage data={data} components={components} week={route.week} />;
+  }
+  if (route.name === "person-work") {
+    return <PersonWorkPage id={route.id} data={data} components={components} week={route.week} />;
   }
   if (route.name === "categories") {
     const me = data.me?.person ?? undefined;
@@ -1200,6 +1294,8 @@ function WorkspacePage(props: {
   if (route.name === "people") {
     const me = data.me?.person ?? undefined;
     const administrator = me?.role === "admin";
+    // An owner sees the work of the people in their projects; the console refuses the rest.
+    const oversees = administrator || data.projects.some((project) => project.role === "owner");
     return (
       <>
         <div className="sc-page-head">
@@ -1215,6 +1311,7 @@ function WorkspacePage(props: {
               ? (person, role) => void act(() => data.actions.updatePerson(person.id, { role }))
               : undefined
           }
+          workHref={oversees ? (person) => personWorkHref(person.id) : undefined}
           agentsHref={administrator ? (person) => personAgentsHref(person.id) : undefined}
         />
       </>

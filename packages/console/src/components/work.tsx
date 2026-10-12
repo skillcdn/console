@@ -12,7 +12,11 @@ import { PersonChip, Time } from "./ui.js";
 // the network; the week shown is the address's (ADR-0010).
 
 export interface WorkListProps {
-  readonly work: RestWork;
+  /** The tasks on the plate; and the decisions waiting on the person's own plate, left out on another's. */
+  readonly work: {
+    readonly tasks: RestWork["tasks"];
+    readonly decisions?: RestWork["decisions"] | undefined;
+  };
   /** The day to count from; the browser's today when left out. */
   readonly today?: string | undefined;
   /** A day of the week shown at the top; today's week when left out. */
@@ -80,33 +84,35 @@ export function WorkList(props: WorkListProps) {
               />
             </section>
           ))}
-        <section className="sc-task-section" aria-label={work.decisions}>
-          <h2 className="sc-section-title">
-            {work.decisions} <span className="sc-column-count">{decisions.length}</span>
-          </h2>
-          {decisions.length === 0 ? (
-            <p className="sc-muted">{work.noDecisions}</p>
-          ) : (
-            <ol className="sc-decision-log">
-              {decisions.map(({ project, decision }) => (
-                <li key={decision.id} className="sc-decision-row">
-                  <a
-                    className="sc-decision-row-question"
-                    href={props.decisionHref(project.key, decision.id)}
-                  >
-                    {decision.question}
-                  </a>
-                  <span className="sc-task-row-project">
-                    <ProjectMark project={project} size="sm" /> {work.inProject(project.name)}
-                  </span>
-                  <span className="sc-decision-row-meta">
-                    <PersonChip person={decision.raisedBy} /> <Time iso={decision.createdAt} />
-                  </span>
-                </li>
-              ))}
-            </ol>
-          )}
-        </section>
+        {decisions !== undefined && (
+          <section className="sc-task-section" aria-label={work.decisions}>
+            <h2 className="sc-section-title">
+              {work.decisions} <span className="sc-column-count">{decisions.length}</span>
+            </h2>
+            {decisions.length === 0 ? (
+              <p className="sc-muted">{work.noDecisions}</p>
+            ) : (
+              <ol className="sc-decision-log">
+                {decisions.map(({ project, decision }) => (
+                  <li key={decision.id} className="sc-decision-row">
+                    <a
+                      className="sc-decision-row-question"
+                      href={props.decisionHref(project.key, decision.id)}
+                    >
+                      {decision.question}
+                    </a>
+                    <span className="sc-task-row-project">
+                      <ProjectMark project={project} size="sm" /> {work.inProject(project.name)}
+                    </span>
+                    <span className="sc-decision-row-meta">
+                      <PersonChip person={decision.raisedBy} /> <Time iso={decision.createdAt} />
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
+        )}
       </div>
     </div>
   );

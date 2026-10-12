@@ -1067,6 +1067,31 @@ describe("the plan on the command line", () => {
     expect(plate.out()).toContain("  web  #7  ready  high  Fix the parser");
     expect(plate.out()).toContain("decisions waiting: none");
   });
+
+  it("shows another person's plate by their login, for whoever oversees them", async () => {
+    const bob = { ...PERSON, id: "0199c4d8-0000-7000-8000-000000000002", login: "bob" };
+    const { fetch } = fakeConsole({
+      "GET /api/v1/people": { body: { items: [PERSON, bob] } },
+      [`GET /api/v1/people/${bob.id}/work`]: {
+        body: {
+          tasks: [
+            {
+              project: { key: "web", name: "The web app", color: null, symbol: null, icon: null },
+              task: { ...TASK, assignee: bob },
+            },
+          ],
+        },
+      },
+    });
+    const seen = harness({ fetch, env: { CONSOLE_URL: ORIGIN, CONSOLE_TOKEN: "cns_t_secret" } });
+    expect(await runCli(["work", "--person", "Bob"], seen.io)).toBe(EXIT.ok);
+    expect(seen.out()).toContain("tasks assigned to bob:");
+    expect(seen.out()).toContain("  web  #7  ready  high  Fix the parser");
+    expect(seen.out()).not.toContain("decisions waiting");
+    const nobody = harness({ fetch, env: { CONSOLE_URL: ORIGIN, CONSOLE_TOKEN: "cns_t_secret" } });
+    expect(await runCli(["work", "--person", "dave"], nobody.io)).toBe(EXIT.usage);
+    expect(nobody.err()).toContain("Nobody of the workspace is called dave");
+  });
 });
 
 describe("a page at a time", () => {

@@ -96,6 +96,7 @@ describe("createClient", () => {
       },
       "GET /api/v1/categories": { body: { more: false, items: [] } },
       "GET /api/v1/work": { body: { tasks: [], decisions: [] } },
+      [`GET /api/v1/people/${PERSON.id}/work`]: { body: { tasks: [] } },
       "DELETE /api/v1/categories/research": { status: 204 },
     });
     const client = createClient({ fetch: send });
@@ -110,6 +111,7 @@ describe("createClient", () => {
     expect(narrowed.items).toHaveLength(1);
     expect((await client.categories()).items).toEqual([]);
     expect(await client.work()).toEqual({ tasks: [], decisions: [] });
+    expect(await client.personWork(PERSON.id)).toEqual({ tasks: [] });
     await client.removeCategory("research");
     expect(calls.at(-1)?.init?.method).toBe("DELETE");
   });

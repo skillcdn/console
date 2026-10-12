@@ -37,6 +37,11 @@ export function connectPath(code: string, action?: "approve" | "deny"): string {
   return action === undefined ? base : `${base}/${action}`;
 }
 
+/** The REST path of another person's plate: for an administrator, or an owner of a project they are in. */
+export function personWorkPath(personId: string): string {
+  return `${restPath("people", personId)}/work`;
+}
+
 /** The REST path of a person's tokens, or of one of them: for an administrator. */
 export function personTokensPath(personId: string, tokenId?: string): string {
   const base = `${restPath("people", personId)}/tokens`;

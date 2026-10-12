@@ -9,6 +9,7 @@ import {
   MAX_TOKEN_NAME_LENGTH,
   MAX_TOKENS_PER_PERSON,
   personTokensPath,
+  personWorkPath,
   projectPath,
   REST_ROUTES,
   type RestTask,
@@ -30,6 +31,7 @@ import {
   restMeSchema,
   restPeopleSchema,
   restPersonSchema,
+  restPersonWorkSchema,
   restProjectSchema,
   restProjectsSchema,
   restSkillsSchema,
@@ -1909,6 +1911,48 @@ describe("the schedule and the roadmap", () => {
     expect(bobWork.tasks.some((item) => item.task.id === inDocs.id)).toBe(false);
     expect(bobWork.decisions.some((item) => item.decision.id === raised.id)).toBe(true);
     expect(finished.state).toBe("done");
+  });
+
+  it("show another person's plate to whoever oversees them, within what the asker may see", async () => {
+    const aliceId = await personId("Alice");
+    const bobId = await personId("bob");
+    // Alice owns the web project, open to everyone of the workspace: Bob is in it, so his plate is hers to see.
+    const bobsPlate = restPersonWorkSchema.parse(
+      await (await get(alice, personWorkPath(bobId))).json(),
+    );
+    expect(bobsPlate.tasks.map((item) => item.task.title)).toContain("Bob's");
+    expect(bobsPlate.tasks.every((item) => item.task.assignee?.id === bobId)).toBe(true);
+    expect(bobsPlate).not.toHaveProperty("decisions");
+    // Bob owns nothing yet: Alice's plate is not his to see; nor is an id that is nobody's anyone's.
+    expect(await errorOf(await get(bob, personWorkPath(aliceId)))).toBe("auth.forbidden");
+    expect(
+      await errorOf(await get(alice, personWorkPath("0199c4d8-0000-7000-8000-00000000dead"))),
+    ).toBe("person.not_found");
+    // A private project of Bob's own, with Alice listed in it, makes her plate his to see: within
+    // what he may see, which the docs project, private and not his, is not.
+    await h.project(bob, { key: "bobs", name: "Bob's own", visibility: "private" });
+    const listed = await send(bob, "POST", `${projectPath("bobs")}/members`, { personId: aliceId });
+    expect(listed.status).toBe(201);
+    const alicesPlate = restPersonWorkSchema.parse(
+      await (await get(bob, personWorkPath(aliceId))).json(),
+    );
+    const titles = alicesPlate.tasks.map((item) => [item.project.key, item.task.title]);
+    expect(titles).toContainEqual(["web", "Mine, sooner"]);
+    expect(titles).not.toContainEqual(["docs", "Mine in the docs"]);
+    expect(titles.some(([key]) => key === "docs")).toBe(false);
+    // An administrator sees everyone's, through their agent too.
+    const admins = createHarness(testDatabase, {
+      providers: [createFixtureProvider()],
+      admins: ["carol"],
+    });
+    const carol = await admins.signIn("carol");
+    const seen = await admins.request(personWorkPath(aliceId), { headers: { cookie: carol } });
+    expect(seen.status).toBe(200);
+    expect(
+      restPersonWorkSchema
+        .parse(await seen.json())
+        .tasks.map((item) => [item.project.key, item.task.title]),
+    ).toContainEqual(["docs", "Mine in the docs"]);
   });
 });
 

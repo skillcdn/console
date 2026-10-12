@@ -111,9 +111,9 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     refusals: ["project.not_found: no project has the key, or it is not yours to see"],
   },
   work: {
-    usage: "work",
+    usage: "work [--person <login>]",
     about:
-      "What is on your plate across the projects you may see: the open tasks assigned to you, the sooner due first, each with its project; and the decisions waiting for a person. Needs no project.",
+      "What is on your plate across the projects you may see: the open tasks assigned to you, the sooner due first, each with its project; and the decisions waiting for a person. Needs no project. --person <login> shows another person's plate, for an administrator or for an owner of a project they are in: their open tasks within the projects you may see, without the decisions, which wait for anyone.",
   },
   tasks: {
     usage:

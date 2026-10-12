@@ -553,13 +553,15 @@ export async function listTasks(
 }
 
 /**
- * What is on a person's plate: the open tasks assigned to them, across the projects they may
- * see, the sooner due first and those with no day last. For the workspace's own page of it.
+ * What is on a person's plate: the open tasks assigned to `assignee`, within the projects
+ * `viewer` may see and no other, the sooner due first and those with no day last. The viewer
+ * is the person themselves on their own page, and whoever oversees them on theirs.
  */
 export async function listTasksAssignedTo(
   database: Database,
   workspaceId: string,
-  person: PersonRecord,
+  assignee: { readonly id: string },
+  viewer: PersonRecord,
   limit: number,
 ): Promise<TaskRecord[]> {
   const rows = await selectTasks(drizzleOf(database))
@@ -567,9 +569,9 @@ export async function listTasksAssignedTo(
     .where(
       and(
         eq(tasks.workspaceId, workspaceId),
-        eq(tasks.assigneeId, person.id),
+        eq(tasks.assigneeId, assignee.id),
         inArray(tasks.state, [...OPEN_TASK_STATES]),
-        visibleTo(person),
+        visibleTo(viewer),
       ),
     )
     .orderBy(sql`${tasks.dueOn} asc nulls last`, desc(tasks.number))

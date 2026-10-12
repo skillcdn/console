@@ -586,3 +586,35 @@ export async function removeMember(
 export function mayWorkIn(projectId: string, personId: string): SQL {
   return sql`exists (select 1 from ${projects} where ${projects.id} = ${projectId} and (${projects.visibility} = 'workspace' or exists (select 1 from ${projectMembers} where ${projectMembers.projectId} = ${projects.id} and ${projectMembers.personId} = ${personId}) or exists (select 1 from ${people} where ${people.id} = ${personId} and ${people.role} = 'admin')))`;
 }
+
+/**
+ * Whether `ownerId` is listed as an owner of a project `personId` is in: what the sight of
+ * another person's work asks of someone who is not an administrator. Everyone of the workspace
+ * is in a project open to it; a private one holds those listed.
+ */
+export async function ownsProjectWith(
+  database: Database,
+  workspaceId: string,
+  ownerId: string,
+  personId: string,
+): Promise<boolean> {
+  const rows = await drizzleOf(database)
+    .select({ id: projects.id })
+    .from(projects)
+    .innerJoin(
+      projectMembers,
+      and(
+        eq(projectMembers.projectId, projects.id),
+        eq(projectMembers.personId, ownerId),
+        eq(projectMembers.role, "owner"),
+      ),
+    )
+    .where(
+      and(
+        eq(projects.workspaceId, workspaceId),
+        sql`(${projects.visibility} = 'workspace' or exists (select 1 from ${projectMembers} where ${projectMembers.projectId} = ${projects.id} and ${projectMembers.personId} = ${personId}))`,
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}

@@ -358,6 +358,8 @@ export interface MemberListProps {
   readonly onAdd?: ((input: RestMemberInput) => void) | undefined;
   readonly onChangeRole?: ((member: RestMember, role: ProjectRole) => void) | undefined;
   readonly onRemove?: ((member: RestMember) => void) | undefined;
+  /** Where a member's work is seen; given to the project's owners. */
+  readonly workHref?: ((member: RestMember) => string) | undefined;
   readonly busy?: boolean | undefined;
   readonly empty?: ReactNode;
 }
@@ -410,6 +412,11 @@ export function MemberList(props: MemberListProps) {
                     ))}
                   </select>
                 </label>
+              )}
+              {props.workHref !== undefined && (
+                <a className="sc-button sc-button-ghost sc-button-sm" href={props.workHref(member)}>
+                  {words.people.work}
+                </a>
               )}
               {props.onRemove !== undefined && (
                 <Button

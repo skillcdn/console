@@ -580,6 +580,18 @@ export const ko: Messages = {
     title: "사람들",
     list: "사람들",
     roleOf: (name) => `${name}의 역할`,
+    work: "작업",
+    workOf: (name) => `${name}의 작업`,
+    loadingWork: "작업을 불러오는 중",
+    couldNotLoadWork: "작업을 불러올 수 없습니다.",
+    noWork: {
+      title: (name) => `${name}에게 배정된 작업이 없습니다`,
+      body: "내가 볼 수 있는 프로젝트에서 그 사람에게 배정된 열린 작업이 여기에 나타납니다.",
+    },
+    notOverseen: {
+      title: "볼 수 없는 작업입니다",
+      body: "관리자는 모든 사람의 작업을, 소유자는 자기 프로젝트에 속한 사람의 작업을 봅니다.",
+    },
     agents: "에이전트",
     agentsOf: (name) => `${name}의 에이전트`,
     loadingAgents: "에이전트를 불러오는 중",
