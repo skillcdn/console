@@ -96,6 +96,7 @@ export function TaskForm(props: TaskFormProps) {
         <input
           className="sc-input"
           value={title}
+          placeholder={form.titlePlaceholder}
           maxLength={MAX_TITLE_LENGTH}
           required
           onChange={(event) => setTitle(event.target.value)}

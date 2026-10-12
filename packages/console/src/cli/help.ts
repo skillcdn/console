@@ -126,7 +126,7 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     about:
       "One task in full, with its plan (category, goal, start and due days), what happened to it (when it was started and done, which the board keeps itself), the decisions about it and the runs on it; or a new task written down; or a task changed, only in what the flags say, where none clears a field (priorities: low, normal, high, urgent).",
     limits: [
-      `title: one line, up to ${MAX_TITLE_LENGTH} characters`,
+      `title: one line, up to ${MAX_TITLE_LENGTH} characters, saying what is to be done on its own; what it refers to goes in the body`,
       `body: ${MARKDOWN}`,
       ...TASK_FIELD_LIMITS,
     ],

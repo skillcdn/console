@@ -238,6 +238,7 @@ export const ko: Messages = {
     done: "완료",
     form: {
       title: "제목",
+      titlePlaceholder: "무엇을 할지, 제목만 보고도 알 수 있게.",
       body: "본문",
       bodyPlaceholder: "무엇을 할지, Markdown으로.",
       state: "상태",

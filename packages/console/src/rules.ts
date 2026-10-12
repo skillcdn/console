@@ -44,7 +44,7 @@ export const REFERENCE_RULES = [
   "",
   "## Reports",
   "",
-  "Report at the milestones, not every step: what was found, what was done, what is next, in words for people; a problem as a problem, with what it blocks. What people read on the board, the reports, the questions and their options, the tasks and the pages, is written in {language}. The result goes in a last report or is handed in as a link or a file, with the check that ran and its result; a check that did not run is said to be not run.",
+  "Report at the milestones, not every step: what was found, what was done, what is next, in words for people; a problem as a problem, with what it blocks. What people read on the board, the reports, the questions and their options, the tasks and the pages, is written in {language}. A task's title says what is to be done, in plain words that stand on their own; what it refers to, a milestone, a commit, a page, goes in the body, linked where it can be. The result goes in a last report or is handed in as a link or a file, with the check that ran and its result; a check that did not run is said to be not run.",
   "",
   "## What never happens",
   "",

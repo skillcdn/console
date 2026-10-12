@@ -269,6 +269,7 @@ export const en = {
     done: "Done",
     form: {
       title: "Title",
+      titlePlaceholder: "What is to be done, in plain words that stand on their own.",
       body: "Body",
       bodyPlaceholder: "What is to be done, in Markdown.",
       state: "State",
