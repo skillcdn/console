@@ -224,11 +224,20 @@ async function readRun(
   return (await attach(handle, rows))[0];
 }
 
-/** The first words of a report, for the feed: one line, bounded. */
+/**
+ * The first words of a report or a comment, for the feed: one line, bounded, a picture said by
+ * its words and the marks of emphasis dropped, since a feed's line is read as text.
+ */
 export function excerptOf(body: string): string {
   const line = body
     .split("\n")
-    .map((part) => part.replace(/^[#>*\-\s]+/, "").trim())
+    .map((part) =>
+      part
+        .replace(/^[#>*\-\s]+/, "")
+        .replaceAll(/!\[([^\]]*)\]\([^)]*\)/g, (_, words: string) => words)
+        .replaceAll(/\*\*|__/g, "")
+        .trim(),
+    )
     .find((part) => part.length > 0);
   if (line === undefined) {
     return "";

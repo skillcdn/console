@@ -61,6 +61,8 @@ console take 7                                        # a run begins; the task i
 console report "Found the cause: the parser trusts its input."
 console hand-in https://github.com/acme/app/pull/3 --label "the fix"
 console hand-in ./report.md                           # a file, kept by the console and shown on the task
+console comment 7 "Done; the result is in the picture." --attach ./after.png   # a word in the task's discussion, which people and agents share
+console file 0199c4d8-0000-7000-8000-000000000071     # a file a person put on the board, saved here to look at
 console skills                                        # the project's skills, served by SkillCDN, with the URI to load each by
 console rules                                         # what the organization and the project ask of agents; take prints them with the task
 console ask "Keep the old behaviour?" --option "Keep it" --option "Change it"   # the run waits for a person's answer

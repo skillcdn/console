@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type {
   RestCategory,
+  RestComment,
   RestConnectRequest,
   RestDecision,
   RestDocument,
@@ -28,6 +29,7 @@ import {
   workloadOf,
 } from "./calendar.js";
 import { CategoryList } from "./categories.js";
+import { CommentCard, CommentForm, TaskThread, threadOf } from "./comments.js";
 import { ConnectApproval, ConnectCodeForm, ConnectWords } from "./connect.js";
 import { DecisionCard, DecisionList, DecisionLog } from "./decision-list.js";
 import { DocumentForm, DocumentList, DocumentView, FolderView } from "./documents.js";
@@ -509,6 +511,18 @@ describe("Markdown", () => {
     expect(linked).toContain("<span>nothing</span>");
     const unlinked = renderToStaticMarkup(<Markdown source={source} />);
     expect(unlinked).toContain("<span>onboarding</span>");
+  });
+
+  it("shows a picture named by a file's name where the text puts it, when told where the file is", () => {
+    const source = "Before ![the board](board.png) and ![elsewhere](other.png).";
+    const html = renderToStaticMarkup(
+      <Markdown
+        source={source}
+        fileSrc={(name) => (name === "board.png" ? "/api/v1/projects/web/files/f1" : undefined)}
+      />,
+    );
+    expect(html).toContain('<img src="/api/v1/projects/web/files/f1" alt="the board"');
+    expect(html).toContain('<span class="sc-prose-image-text">elsewhere</span>');
   });
 });
 
@@ -2051,6 +2065,154 @@ describe("a person's name", () => {
     );
     expect(personName({ login: "carol", name: "  " })).toBe("carol");
     expect(renderToStaticMarkup(<Avatar person={{ ...alice, avatar: null }} />)).toContain(">A<");
+  });
+});
+
+describe("the discussion on a task", () => {
+  const task: RestTask = {
+    id: "0199c4d8-0000-7000-8000-000000000010",
+    number: 7,
+    title: "Fix the parser",
+    body: "",
+    state: "in_progress",
+    priority: "normal",
+    owner: alice,
+    assignee: null,
+    parentId: null,
+    category: null,
+    goalId: null,
+    startsOn: null,
+    dueOn: null,
+    startedAt: null,
+    doneAt: null,
+    links: [],
+    openDecisions: 0,
+    openRuns: 0,
+    createdAt: "2026-10-09T09:00:00.000Z",
+    updatedAt: "2026-10-09T09:00:00.000Z",
+  };
+  const comment: RestComment = {
+    id: "0199c4d8-0000-7000-8000-000000000070",
+    taskId: task.id,
+    author: bob,
+    agent: "Codex on the laptop",
+    body: "Which screen? This one: ![the board](board.png)",
+    files: [
+      {
+        id: "0199c4d8-0000-7000-8000-000000000071",
+        file: { name: "board.png", size: 2048, contentType: "image/png", sha256: "cd".repeat(32) },
+      },
+      {
+        id: "0199c4d8-0000-7000-8000-000000000072",
+        file: {
+          name: "shot <2>.webp",
+          size: 4096,
+          contentType: "image/webp",
+          sha256: "ef".repeat(32),
+        },
+      },
+      {
+        id: "0199c4d8-0000-7000-8000-000000000073",
+        file: { name: "log.txt", size: 10, contentType: "text/plain", sha256: "ab".repeat(32) },
+      },
+    ],
+    createdAt: "2026-10-09T10:30:00.000Z",
+  };
+  const fileHref = (fileId: string) => `/api/v1/projects/web/files/${fileId}`;
+
+  it("shows a comment with who said it, through which agent, the picture it names in place and the rest after it", () => {
+    const html = renderToStaticMarkup(
+      <CommentCard comment={comment} fileHref={(file) => fileHref(file.id)} />,
+    );
+    expect(html).toContain('<span class="sc-person-login">bob</span>');
+    expect(html).toContain("as Codex");
+    // The picture the text names is in the text, once; the other picture is shown after it; the text file is a link.
+    expect(html.split("files/0199c4d8-0000-7000-8000-000000000071").length).toBe(2);
+    expect(html).toContain(
+      '<img src="/api/v1/projects/web/files/0199c4d8-0000-7000-8000-000000000071" alt="the board"',
+    );
+    expect(html).toContain('<li class="sc-comment-picture">');
+    expect(html).toContain('src="/api/v1/projects/web/files/0199c4d8-0000-7000-8000-000000000072"');
+    expect(html).toContain("shot &lt;2&gt;.webp");
+    expect(html).toContain(
+      '<a href="/api/v1/projects/web/files/0199c4d8-0000-7000-8000-000000000073" rel="nofollow ugc">log.txt</a>',
+    );
+    // Without an address for the files, the pictures named stay text and the files are named only.
+    const unlinked = renderToStaticMarkup(<CommentCard comment={comment} />);
+    expect(unlinked).not.toContain("<img");
+    expect(unlinked).toContain("<span>log.txt</span>");
+  });
+
+  it("reads the comments, the runs and the decisions as one thread in the order they came, with the way to say more", () => {
+    const run: RestRun = {
+      id: "0199c4d8-0000-7000-8000-000000000020",
+      taskId: task.id,
+      taskNumber: 7,
+      person: alice,
+      agent: "Claude Code",
+      status: "running",
+      startedAt: "2026-10-09T10:00:00.000Z",
+      endedAt: null,
+      lastHeardAt: "2026-10-09T10:05:00.000Z",
+      summary: null,
+      reports: [],
+      artifacts: [],
+      waitingFor: null,
+    };
+    const decision: RestDecision = {
+      id: "0199c4d8-0000-7000-8000-000000000030",
+      question: "Keep the old behaviour?",
+      body: "",
+      options: [
+        { id: "1", label: "Keep it" },
+        { id: "2", label: "Change it" },
+      ],
+      taskId: task.id,
+      taskNumber: 7,
+      raisedBy: alice,
+      run: { id: run.id, agent: "Claude Code" },
+      answer: null,
+      outcome: null,
+      createdAt: "2026-10-09T11:00:00.000Z",
+      updatedAt: "2026-10-09T11:00:00.000Z",
+    };
+    expect(threadOf([comment], [run], [decision]).map((item) => item.kind)).toEqual([
+      "run",
+      "comment",
+      "decision",
+    ]);
+    const html = renderToStaticMarkup(
+      <TaskThread
+        task={task}
+        comments={[comment]}
+        runs={[run]}
+        decisions={[decision]}
+        fileHref={fileHref}
+        onAnswer={() => undefined}
+        onComment={() => undefined}
+      />,
+    );
+    expect(html.indexOf("sc-run")).toBeLessThan(html.indexOf("sc-comment"));
+    expect(html.indexOf("sc-comment")).toBeLessThan(html.indexOf("sc-decision"));
+    expect(html).toContain('aria-label="Write a comment"');
+    expect(html).toContain('placeholder="A word in the discussion, in Markdown."');
+    const silent = renderToStaticMarkup(
+      <TaskThread task={task} comments={[]} runs={[]} decisions={[]} empty={<p>none</p>} />,
+    );
+    expect(silent).toContain("<p>none</p>");
+    expect(silent).not.toContain("<form");
+  });
+
+  it("has a form that cannot send nothing, in the person's language", () => {
+    const html = renderToStaticMarkup(
+      <LanguageContext.Provider value={KOREAN}>
+        <CommentForm onSubmit={() => undefined} />
+      </LanguageContext.Provider>,
+    );
+    expect(html).toContain('aria-label="댓글 쓰기"');
+    expect(html).toContain(">댓글 남기기</button>");
+    expect(html).toContain("disabled");
+    expect(html).toContain('type="file" multiple');
   });
 });
 

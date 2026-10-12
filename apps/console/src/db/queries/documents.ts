@@ -822,6 +822,25 @@ export async function attachFile(
 }
 
 /** A file attached to the page at a path, by its id, within the project; or nothing. */
+/** A file attached to any page of the project, by the file's id alone: for the project's one address for files. */
+export async function findDocumentFileById(
+  database: Database,
+  scope: DocumentScope,
+  fileId: string,
+): Promise<DocumentFileRecord | undefined> {
+  const [row] = await drizzleOf(database)
+    .select({ documentId: documentFiles.documentId })
+    .from(documentFiles)
+    .innerJoin(documents, eq(documents.id, documentFiles.documentId))
+    .where(and(inScope(scope), eq(documentFiles.id, fileId)))
+    .limit(1);
+  if (row === undefined) {
+    return undefined;
+  }
+  const files = await filesOf(drizzleOf(database), row.documentId);
+  return files.find((file) => file.id === fileId);
+}
+
 export async function findDocumentFile(
   database: Database,
   scope: DocumentScope,

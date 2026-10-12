@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
+  type CommentInput,
   type ConsoleClient,
   type DocumentFilter,
   EVENT_KINDS,
@@ -9,6 +10,7 @@ import {
   type RestCategory,
   type RestCategoryInput,
   type RestCategoryPatch,
+  type RestComment,
   type RestConnectRequest,
   type RestDecision,
   type RestDecisionInput,
@@ -117,6 +119,10 @@ export interface ConsoleActions {
   abandonRun(id: string): Promise<RestRun>;
   /** Everything that happened to one task of the project, oldest first. */
   taskHistory(taskId: string, signal?: AbortSignal): Promise<RestEvent[]>;
+  /** The discussion on one task of the project, oldest first (ADR-0024). */
+  taskComments(taskId: string, signal?: AbortSignal): Promise<RestComment[]>;
+  /** A word in the discussion on a task, with the files put in it. */
+  comment(taskId: string, input: CommentInput): Promise<RestComment>;
   /** Makes a token for whoever is signed in; the answer carries the secret, this once. */
   createToken(input: RestTokenInput): Promise<RestTokenCreated>;
   revokeToken(id: string): Promise<void>;
@@ -560,6 +566,8 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
         }
         return history;
       },
+      taskComments: async (taskId, signal) => (await scope().comments(taskId, signal)).items,
+      comment: (taskId, input) => scope().comment(taskId, input),
       async createToken(input) {
         const made = await client.createToken(input);
         setTokens((await client.tokens()).items);

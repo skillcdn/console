@@ -41,6 +41,7 @@ import type { DirectoryStore } from "./directory.js";
 import {
   formatAnswer,
   formatCategoryLine,
+  formatComment,
   formatDecision,
   formatDecisionLine,
   formatDocument,
@@ -107,6 +108,8 @@ export interface CliIo {
   readonly readFile: (path: string) => Promise<string>;
   /** A file handed in, as bytes. */
   readonly readBytes: (path: string) => Promise<Uint8Array>;
+  /** A file read from the console, written at a path, or into a directory under its name; says where. */
+  readonly writeBytes: (path: string, bytes: Uint8Array, name: string) => Promise<string>;
   readonly store: CredentialStore;
   /** What the working directory says of the project, and the way to write it. */
   readonly directory: DirectoryStore;
@@ -952,12 +955,94 @@ const task: Command = async (args, io) => {
   const session = await open(io, values);
   const project = await session.project();
   const found = await project.task(ref);
-  const [decisions, runs] = await Promise.all([
+  const [decisions, runs, comments] = await Promise.all([
     project.decisions({ task: found.id }),
     project.runs({ task: found.id }),
+    project.comments(found.id),
   ]);
-  answer(io, session, { task: found, decisions: decisions.items, runs: runs.items }, () =>
-    formatTask(found, decisions.items, runs.items),
+  answer(
+    io,
+    session,
+    { task: found, decisions: decisions.items, runs: runs.items, comments: comments.items },
+    () => formatTask(found, decisions.items, runs.items, comments.items),
+  );
+  return EXIT.ok;
+};
+
+/**
+ * A word in the discussion on a task (ADR-0024): what is said, as given, from a file or from
+ * standard input, with the files named by --attach put in it; one request, one comment.
+ */
+const comment: Command = async (args, io) => {
+  const { values, positionals } = parse(args, {
+    file: { type: "string" },
+    attach: { type: "string", multiple: true },
+  });
+  const ask =
+    'Say which task, and what: console comment <number|id> "<markdown>" [--file <path> | -] [--attach <path>]...';
+  if (positionals.length === 0 || positionals.length > 2) {
+    throw misuse(ask);
+  }
+  const ref = positionals[0] ?? "";
+  const body = (await bodyOf(io, values, positionals[1])) ?? "";
+  const paths = texts(values, "attach");
+  if (body.trim().length === 0 && paths.length === 0) {
+    throw misuse(`Say something, or attach a file. ${ask}`);
+  }
+  const files = [];
+  for (const path of paths) {
+    let bytes: Uint8Array;
+    try {
+      bytes = await io.readBytes(path);
+    } catch {
+      throw failed(`No file could be read at ${path}. Name the path of a file to attach.`);
+    }
+    const name = basename(path);
+    const contentType = CONTENT_TYPES[extname(name).toLowerCase()];
+    files.push({ name, bytes, ...(contentType === undefined ? {} : { contentType }) });
+  }
+  const session = await open(io, values);
+  const project = await session.project();
+  const task = await project.task(ref);
+  const written = await project.comment(task.id, { body, files });
+  answer(io, session, written, () =>
+    [
+      `Commented on #${task.number} ${task.title}${written.files.length === 0 ? "" : `, with ${written.files.length} file${written.files.length === 1 ? "" : "s"}`}.`,
+      formatComment(written),
+    ].join("\n"),
+  );
+  return EXIT.ok;
+};
+
+/**
+ * A file of the project, read from the console and written on this machine: one a run handed
+ * in, one put in a comment, or one attached to a page, by its id, so that an agent can look at
+ * a picture a person put on the board.
+ */
+const file: Command = async (args, io) => {
+  const { values, positionals } = parse(args, { out: { type: "string" } });
+  const id = theOne(positionals, "Say which file: console file <id> [--out <path>]");
+  const session = await open(io, values);
+  const project = await session.project();
+  const read = await project.readFile(id);
+  const target = text(values, "out") ?? read.name;
+  let saved: string;
+  try {
+    saved = await io.writeBytes(target, read.bytes, read.name);
+  } catch {
+    throw failed(`The file could not be written at ${target}. Name a path with --out <path>.`);
+  }
+  answer(
+    io,
+    session,
+    {
+      id,
+      name: read.name,
+      contentType: read.contentType,
+      size: read.bytes.byteLength,
+      path: saved,
+    },
+    () => `Saved ${read.name} (${read.bytes.byteLength} bytes, ${read.contentType}) at ${saved}`,
   );
   return EXIT.ok;
 };
@@ -975,10 +1060,11 @@ const take: Command = async (args, io) => {
   });
   // The rules come with the run, as they read for the person: everything from here acts
   // within them (ADR-0023); the task is read again, as it stands now that it is taken.
-  const [ruling, me, taken] = await Promise.all([
+  const [ruling, me, taken, comments] = await Promise.all([
     project.rules(),
     session.client.me(),
     project.task(ref),
+    project.comments(found.id),
   ]);
   // Taking a task with a run open on it ends that run (ADR-0020): said when it happened.
   const tookOver =
@@ -989,16 +1075,16 @@ const take: Command = async (args, io) => {
     workspace: forPerson(ruling.workspace, me.language),
     project: forPerson(ruling.project, me.language),
   };
-  answer(io, session, { run, task: taken, rules }, () =>
+  answer(io, session, { run, task: taken, comments: comments.items, rules }, () =>
     [
       `Run ${run.id} began on #${found.number} ${found.title}, as "${run.agent}" for ${run.person.login}. The task is in progress and theirs.${tookOver}`,
       "",
-      formatTask(taken),
+      formatTask(taken, undefined, undefined, comments.items),
       "",
       formatRules(rules),
       "",
       'Say how it goes: console report "<what you found or did>". Hand in what you make: console hand-in <https url | file path>.',
-      'Ask when a person must decide: console ask "<question>" --option "..." --option "...". End with: console finish --summary "<what was done, what is left>".',
+      'Ask when a person must decide: console ask "<question>" --option "..." --option "...". A word for the task\'s people that is not a report: console comment <number> "<markdown>". End with: console finish --summary "<what was done, what is left>".',
     ].join("\n"),
   );
   return EXIT.ok;
@@ -1904,6 +1990,8 @@ const COMMANDS: Readonly<Record<string, Command>> = {
   take,
   report,
   "hand-in": handIn,
+  comment,
+  file,
   ask,
   decision,
   decisions,

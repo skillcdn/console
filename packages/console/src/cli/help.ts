@@ -6,9 +6,11 @@ import {
   MAX_CATEGORIES,
   MAX_CATEGORY_KEY_LENGTH,
   MAX_CATEGORY_NAME_LENGTH,
+  MAX_COMMENTS_PER_TASK,
   MAX_DOCUMENT_LENGTH,
   MAX_DOCUMENT_PATH_LENGTH,
   MAX_FILE_BYTES,
+  MAX_FILES_PER_COMMENT,
   MAX_FILES_PER_DOCUMENT,
   MAX_LINK_LABEL_LENGTH,
   MAX_OPTION_LABEL_LENGTH,
@@ -124,7 +126,7 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   task: {
     usage: `task <number|id>  |  task new <title> [--body <markdown>|--file <path>] ${TASK_FIELD_FLAGS}  |  task edit <number|id> [--title <title>] [--body <markdown>|--file <path>] ${TASK_FIELD_FLAGS}`,
     about:
-      "One task in full, with its plan (category, goal, start and due days), what happened to it (when it was started and done, which the board keeps itself), the decisions about it and the runs on it; or a new task written down; or a task changed, only in what the flags say, where none clears a field (priorities: low, normal, high, urgent).",
+      "One task in full, with its plan (category, goal, start and due days), what happened to it (when it was started and done, which the board keeps itself), the decisions about it, the runs on it and the discussion on it, each comment whole with its files; or a new task written down; or a task changed, only in what the flags say, where none clears a field (priorities: low, normal, high, urgent).",
     limits: [
       `title: one line, up to ${MAX_TITLE_LENGTH} characters, saying what is to be done on its own; what it refers to goes in the body`,
       `body: ${MARKDOWN}`,
@@ -336,6 +338,30 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     about: "One run in full: its reports, what it handed in, what it waits for, how it ended.",
     refusals: ["run.not_found: no run has that id"],
   },
+  comment: {
+    usage:
+      'comment <number|id> "<markdown>" [--attach <path>]...  |  comment <number|id> --file <path>  |  comment <number|id> -',
+    about:
+      "Says something in the discussion on a task, for its people: an answer to what they asked there, a question that is not a decision, a remark; with files from this machine put in it, which the console keeps and shows on the task, pictures in place. Needs no run. A report is the run's record; a comment is a word to people. Never rewritten: a mistake is corrected in the next one.",
+    limits: [
+      `the comment: ${MARKDOWN}; blank only when a file comes with it`,
+      `a file: up to ${MAX_FILE_BYTES} bytes, not empty; called by its name, without the path; a picture is placed in the text as ![words](its name)`,
+      `at most ${MAX_FILES_PER_COMMENT} files on one comment, together up to ${MAX_FILE_BYTES} bytes`,
+      `at most ${MAX_COMMENTS_PER_TASK} comments on one task`,
+    ],
+    refusals: [
+      "task.not_found: no task has that number or id",
+      "comment.too_many: the task carries as many comments as one may",
+      "comment.too_many_files: more files than one comment may carry",
+      "request.too_large: the files are over the limit together",
+    ],
+  },
+  file: {
+    usage: "file <id> [--out <path>]",
+    about:
+      "Reads a file of the project from the console and writes it on this machine: one a run handed in, one put in a comment, or one attached to a page, by the id the task, the run or the page shows. Written under its own name in the working directory, at --out <path>, or into --out <directory>. Then look at it with your own tools.",
+    refusals: ["file.not_found: no file of this project has that id"],
+  },
   docs: {
     usage: "docs [<folder>] [--search <words>] [--archived]",
     about:
@@ -447,7 +473,10 @@ const SECTIONS: readonly { readonly title: string; readonly commands: readonly s
       "rules",
     ],
   },
-  { title: "Working", commands: ["take", "report", "hand-in", "ask", "finish", "fail", "abandon"] },
+  {
+    title: "Working",
+    commands: ["take", "report", "hand-in", "comment", "file", "ask", "finish", "fail", "abandon"],
+  },
   {
     title: "The documents: the project's pages of Markdown, in folders, by path",
     commands: ["docs", "doc", "write", "attach", "archive", "restore"],

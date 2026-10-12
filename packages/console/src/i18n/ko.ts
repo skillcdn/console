@@ -218,8 +218,6 @@ export const ko: Messages = {
     raiseDecision: "결정 요청",
     nothingMore: "더 적힌 내용이 없습니다.",
     links: "링크",
-    runs: "실행",
-    decisions: "결정",
     history: "일어난 일",
     subtasks: "하위 작업",
     partOfIt: "하위 작업",
@@ -504,6 +502,8 @@ export const ko: Messages = {
       taskCreated: (task) => `${task}을(를) 썼습니다`,
       taskMoved: (task, from, to) => `${task}을(를) ${from}에서 ${to}(으)로 옮겼습니다`,
       taskUpdated: (fields, task) => `${task}의 ${fields}을(를) 바꿨습니다`,
+      taskCommented: (task, excerpt) =>
+        `${task}에 댓글을 남겼습니다${excerpt === undefined || excerpt === "" ? "" : `: ${excerpt}`}`,
       decisionRaised: (question) => `질문했습니다: ${question}`,
       decisionAnswered: (question, option) => `"${question}"에 답했습니다: ${option}`,
       decisionUpdated: (fields, question) => `결정 "${question}"의 ${fields}을(를) 썼습니다`,
@@ -534,6 +534,20 @@ export const ko: Messages = {
     reports: "보고",
     handedIn: "제출물",
     label: (agent, name) => `${name}을(를) 위한 ${agent}`,
+  },
+
+  comments: {
+    title: "논의",
+    empty: "아직 아무 말도 없습니다.",
+    one: "댓글 남기기",
+    write: "댓글 쓰기",
+    placeholder: "논의에 보탤 말을 마크다운으로.",
+    files: "파일",
+    chooseFiles: "파일 추가",
+    hint: "여기에 붙여 넣거나 고른 그림은 댓글과 함께 올라갑니다. ![설명](파일 이름)으로 본문에 넣을 수 있습니다.",
+    removeFile: (name) => `${name} 빼기`,
+    picture: (name) => `그림 ${name}`,
+    label: (name) => `${name}의 댓글`,
   },
 
   skills: {

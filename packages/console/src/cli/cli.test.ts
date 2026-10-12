@@ -92,6 +92,20 @@ const ANSWERED = {
   ...DECISION,
   answer: { option: "2", note: "Carefully.", by: { ...PERSON, login: "bob" }, at: WHEN },
 };
+const COMMENT = {
+  id: "0199c4d8-0000-7000-8000-000000000070",
+  taskId: TASK.id,
+  author: { ...PERSON, id: "0199c4d8-0000-7000-8000-000000000002", login: "bob" },
+  agent: "Codex on the laptop",
+  body: "Which screen did you mean? See the picture.",
+  files: [
+    {
+      id: "0199c4d8-0000-7000-8000-000000000071",
+      file: { name: "screen.png", size: 2048, contentType: "image/png", sha256: "cd".repeat(32) },
+    },
+  ],
+  createdAt: WHEN,
+};
 const ME = {
   workspace: {
     name: "Acme",
@@ -242,6 +256,9 @@ function harness(overrides: Partial<CliIo> & { readonly fetch: CliIo["fetch"] })
     },
     readBytes: async () => {
       throw new Error("no files here");
+    },
+    writeBytes: async () => {
+      throw new Error("nowhere to write");
     },
     store: memoryStore().store,
     directory: memoryDirectory().store,
@@ -598,6 +615,7 @@ describe("the console command", () => {
       [`POST ${IN}/runs`]: { status: 201, body: RUN },
       [`GET ${IN}/rules`]: { body: RULES },
       "GET /api/v1/me": { body: ME },
+      [`GET ${IN}/tasks/${TASK.id}/comments`]: { body: { items: [COMMENT] } },
     });
     const h = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["take", "7"], h.io)).toBe(EXIT.ok);
@@ -609,19 +627,33 @@ describe("the console command", () => {
     expect(h.out()).not.toContain("taking it was deciding");
     // The rules come with the run, the workspace's then the project's, before what to do next.
     expect(h.out()).toMatch(/Read these\.[\s\S]*Ask before pushing\.[\s\S]*Say how it goes/);
+    // The discussion comes with the task, whole, each file with the command that reads it.
+    expect(h.out()).toContain(
+      `comments:\n  bob as Codex on the laptop, ${WHEN}, comment ${COMMENT.id}:`,
+    );
+    expect(h.out()).toContain("    Which screen did you mean? See the picture.");
+    expect(h.out()).toContain(
+      `    file: screen.png (2048 bytes, image/png): console file ${COMMENT.files[0]?.id}`,
+    );
     expect(calls[1]?.body).toEqual({ taskId: TASK.id });
     const named = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["take", "7", "--agent", "Codex on the laptop"], named.io)).toBe(EXIT.ok);
-    expect(calls[6]?.body).toEqual({ taskId: TASK.id, agent: "Codex on the laptop" });
+    expect(calls[7]?.body).toEqual({ taskId: TASK.id, agent: "Codex on the laptop" });
     const asJson = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["take", "7", "--json"], asJson.io)).toBe(EXIT.ok);
-    expect(JSON.parse(asJson.out())).toEqual({ run: RUN, task: TASK, rules: RULES });
+    expect(JSON.parse(asJson.out())).toEqual({
+      run: RUN,
+      task: TASK,
+      comments: [COMMENT],
+      rules: RULES,
+    });
     // A run open on the task is taken over, and that is said.
     const busy = fakeConsole({
       [`GET ${IN}/tasks/7`]: { body: { ...TASK, openRuns: 1 } },
       [`POST ${IN}/runs`]: { status: 201, body: RUN },
       [`GET ${IN}/rules`]: { body: RULES },
       "GET /api/v1/me": { body: ME },
+      [`GET ${IN}/tasks/${TASK.id}/comments`]: { body: { items: [] } },
     });
     const over = harness({ fetch: busy.fetch, env: SIGNED_IN });
     expect(await runCli(["take", "7"], over.io)).toBe(EXIT.ok);
@@ -797,8 +829,111 @@ describe("the console command", () => {
     const shown = io();
     expect(await runCli(["run", RUN.id], shown.io)).toBe(EXIT.ok);
     expect(shown.out()).toContain(
-      `the report: notes.md (10 bytes, text/markdown; read at ${ORIGIN}${IN}/files/0199c4d8-0000-7000-8000-000000000022)`,
+      `the report: notes.md (10 bytes, text/markdown; read at ${ORIGIN}${IN}/files/0199c4d8-0000-7000-8000-000000000022; console file 0199c4d8-0000-7000-8000-000000000022)`,
     );
+  });
+
+  it("says something in the discussion on a task, with files put in as the parts of one form", async () => {
+    const written = { ...COMMENT, author: PERSON, agent: null, body: "Done; see the two shots." };
+    const { fetch, calls } = fakeConsole({
+      [`GET ${IN}/tasks/7`]: { body: TASK },
+      [`POST ${IN}/tasks/${TASK.id}/comments`]: { status: 201, body: written },
+    });
+    const bytes = new Uint8Array([137, 80, 78, 71]);
+    const io = () =>
+      harness({
+        fetch,
+        env: SIGNED_IN,
+        readBytes: async (path) => {
+          if (!path.startsWith("shots/")) {
+            throw new Error("no such file");
+          }
+          return bytes;
+        },
+        readFile: async () => "From the file.\n",
+      });
+    const plain = io();
+    expect(await runCli(["comment", "7", "The parser is fine."], plain.io)).toBe(EXIT.ok);
+    // Without files, the comment goes as JSON.
+    expect(calls[1]?.key).toBe(`POST ${IN}/tasks/${TASK.id}/comments`);
+    expect(calls[1]?.body).toEqual({ body: "The parser is fine." });
+    expect(plain.out()).toContain(
+      `Commented on #7 Fix the parser, with 1 file.\n  alice, ${WHEN}, comment ${COMMENT.id}:`,
+    );
+    const pictured = io();
+    expect(
+      await runCli(
+        [
+          "comment",
+          "7",
+          "Done; see the two shots.",
+          "--attach",
+          "shots/a.png",
+          "--attach",
+          "shots/b.webp",
+        ],
+        pictured.io,
+      ),
+    ).toBe(EXIT.ok);
+    const form = calls[3]?.init?.body;
+    expect(form).toBeInstanceOf(FormData);
+    expect((form as FormData).get("body")).toBe("Done; see the two shots.");
+    const parts = (form as FormData).getAll("file");
+    expect(parts.map((part) => (part as File).name)).toEqual(["a.png", "b.webp"]);
+    expect(parts.map((part) => (part as File).type)).toEqual(["image/png", "image/webp"]);
+    const fromFile = io();
+    expect(await runCli(["comment", "7", "--file", "notes.md"], fromFile.io)).toBe(EXIT.ok);
+    expect(calls[5]?.body).toEqual({ body: "From the file.\n" });
+    const nothing = io();
+    expect(await runCli(["comment", "7"], nothing.io)).toBe(EXIT.usage);
+    expect(nothing.err()).toContain("Say something, or attach a file.");
+    const missing = io();
+    expect(await runCli(["comment", "7", "--attach", "elsewhere/x.png"], missing.io)).toBe(
+      EXIT.failed,
+    );
+    expect(missing.err()).toContain("No file could be read at elsewhere/x.png");
+  });
+
+  it("reads a file of the project by its id and writes it on this machine, where it says", async () => {
+    const bytes = new Uint8Array([137, 80, 78, 71, 13, 10]);
+    const fileId = COMMENT.files[0]?.id ?? "";
+    const fetch: CliIo["fetch"] = async (url) => {
+      if (url !== `${ORIGIN}${IN}/files/${fileId}`) {
+        return new Response(JSON.stringify({ error: { code: "file.not_found", message: "no" } }), {
+          status: 404,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response(bytes, {
+        status: 200,
+        headers: {
+          "content-type": "image/png",
+          "content-disposition": `inline; filename="screen.png"; filename*=UTF-8''screen.png`,
+        },
+      });
+    };
+    const written: { path: string; name: string; size: number }[] = [];
+    const io = () =>
+      harness({
+        fetch,
+        env: SIGNED_IN,
+        writeBytes: async (path, data, name) => {
+          written.push({ path, name, size: data.byteLength });
+          return `/work/app/${path === "." ? name : path}`;
+        },
+      });
+    const here = io();
+    expect(await runCli(["file", fileId], here.io)).toBe(EXIT.ok);
+    expect(written).toEqual([{ path: "screen.png", name: "screen.png", size: 6 }]);
+    expect(here.out()).toBe("Saved screen.png (6 bytes, image/png) at /work/app/screen.png\n");
+    const there = io();
+    expect(await runCli(["file", fileId, "--out", "shots/seen.png"], there.io)).toBe(EXIT.ok);
+    expect(written[1]).toEqual({ path: "shots/seen.png", name: "screen.png", size: 6 });
+    const nowhere = io();
+    expect(await runCli(["file", "0199c4d8-0000-7000-8000-000000000099"], nowhere.io)).toBe(
+      EXIT.failed,
+    );
+    expect(nowhere.err()).toContain("file.not_found");
   });
 
   it("reads a body from a file or from standard input", async () => {

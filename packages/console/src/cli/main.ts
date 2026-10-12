@@ -9,7 +9,7 @@ import { runCli } from "./cli.js";
 import { createFileStore, defaultConfigDir } from "./credentials.js";
 import { createDirectoryStore } from "./directory.js";
 import { listenOn } from "./serve.js";
-import { readBytesAt, readFileAt, readStdin } from "./terminal.js";
+import { readBytesAt, readFileAt, readStdin, writeBytesAt } from "./terminal.js";
 
 // The `console` command: the only place the command reads the process. Everything it does is in
 // cli.ts, which takes what it needs and is what the tests run.
@@ -34,6 +34,7 @@ process.exitCode = await runCli(process.argv.slice(2), {
   hostname: hostname(),
   readFile: readFileAt,
   readBytes: readBytesAt,
+  writeBytes: writeBytesAt,
   store: createFileStore(defaultConfigDir(process.env)),
   directory: createDirectoryStore(process.cwd()),
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),

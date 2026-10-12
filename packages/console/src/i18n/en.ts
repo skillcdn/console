@@ -249,8 +249,6 @@ export const en = {
     raiseDecision: "Raise a decision",
     nothingMore: "Nothing more was written about it.",
     links: "Links",
-    runs: "Runs",
-    decisions: "Decisions",
     history: "What happened",
     subtasks: "Subtasks",
     partOfIt: "Part of it",
@@ -538,6 +536,8 @@ export const en = {
       taskCreated: (task: string) => `wrote ${task}`,
       taskMoved: (task: string, from: string, to: string) => `moved ${task} from ${from} to ${to}`,
       taskUpdated: (fields: string, task: string) => `changed ${fields} of ${task}`,
+      taskCommented: (task: string, excerpt: string | undefined) =>
+        `commented on ${task}${excerpt === undefined || excerpt === "" ? "" : `: ${excerpt}`}`,
       decisionRaised: (question: string) => `asked: ${question}`,
       decisionAnswered: (question: string, option: string) => `answered "${question}": ${option}`,
       decisionUpdated: (fields: string, question: string) =>
@@ -569,6 +569,20 @@ export const en = {
     reports: "Reports",
     handedIn: "Handed in",
     label: (agent: string, name: string) => `${agent} for ${name}`,
+  },
+
+  comments: {
+    title: "Discussion",
+    empty: "Nothing was said yet.",
+    one: "Comment",
+    write: "Write a comment",
+    placeholder: "A word in the discussion, in Markdown.",
+    files: "Files",
+    chooseFiles: "Add files",
+    hint: "A picture pasted or chosen here goes with the comment; ![words](its name) places it in the text.",
+    removeFile: (name: string) => `Take ${name} out`,
+    picture: (name: string) => `The picture ${name}`,
+    label: (name: string) => `A comment by ${name}`,
   },
 
   skills: {

@@ -478,10 +478,55 @@ export const artifacts = pgTable(
 );
 
 /**
- * The bytes of files handed in, under their SHA-256: the PostgreSQL implementation of the
- * blob-store port, for the smallest install. The artifacts that name a hash are what refers to
- * a row; the table is not the model, and the bucket writes nothing here, reading only what was
- * kept before it (ADR-0016).
+ * A word in the discussion on a task (ADR-0024): Markdown by a person, or by their agent, in
+ * the task's project. Never rewritten and never deleted: a mistake is corrected in the next one.
+ */
+export const comments = pgTable(
+  "comments",
+  {
+    id: id(),
+    workspaceId: uuid()
+      .notNull()
+      .references(() => workspaces.id),
+    projectId: uuid()
+      .notNull()
+      .references(() => projects.id),
+    taskId: uuid()
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    authorId: uuid()
+      .notNull()
+      .references(() => people.id),
+    /** The agent the author wrote through, when they did; null when a person wrote it themselves. */
+    agent: text(),
+    body: text().notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [index("comments_task_idx").on(table.taskId, table.createdAt)],
+);
+
+/** A file put in a comment, kept as a run's file is: its name, its size, its media type and its hash. */
+export const commentFiles = pgTable(
+  "comment_files",
+  {
+    id: id(),
+    commentId: uuid()
+      .notNull()
+      .references(() => comments.id, { onDelete: "cascade" }),
+    fileName: text().notNull(),
+    fileSize: integer().notNull(),
+    contentType: text().notNull(),
+    sha256: text().notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [index("comment_files_comment_idx").on(table.commentId)],
+);
+
+/**
+ * The bytes of files handed in, put in comments or attached to pages, under their SHA-256: the
+ * PostgreSQL implementation of the blob-store port, for the smallest install. The rows that
+ * name a hash are what refers to a row here; the table is not the model, and the bucket writes
+ * nothing here, reading only what was kept before it (ADR-0016).
  */
 export const blobs = pgTable("blobs", {
   sha256: text().primaryKey(),

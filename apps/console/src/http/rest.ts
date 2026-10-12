@@ -6,8 +6,10 @@ import {
   LIST_LIMIT,
   MAX_ARTIFACTS_PER_RUN,
   MAX_CATEGORY_KEY_LENGTH,
+  MAX_COMMENTS_PER_TASK,
   MAX_DOCUMENT_PATH_LENGTH,
   MAX_FILE_BYTES,
+  MAX_FILES_PER_COMMENT,
   MAX_FILES_PER_DOCUMENT,
   MAX_PROJECT_ICON_BYTES,
   MAX_PROJECT_KEY_LENGTH,
@@ -21,6 +23,7 @@ import {
   REST_ROUTES,
   type RestCategories,
   type RestClaim,
+  type RestComments,
   type RestConnection,
   type RestConnectRequest,
   type RestDecisions,
@@ -46,6 +49,7 @@ import {
   restCategoryInputSchema,
   restCategoryPatchSchema,
   restClaimInputSchema,
+  restCommentInputSchema,
   restConnectInputSchema,
   restDecisionInputSchema,
   restDecisionPatchSchema,
@@ -70,7 +74,7 @@ import {
   TASK_STATES,
 } from "@skillcdn/console/api";
 import { formatAddress, parseAddress } from "@skillcdn/core";
-import type { Context, Hono } from "hono";
+import type { Context, Hono, MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { streamSSE } from "hono/streaming";
 import * as z from "zod";
@@ -84,6 +88,12 @@ import {
   removeCategory,
   updateCategory,
 } from "../db/queries/categories.js";
+import {
+  CommentError,
+  findCommentFile,
+  listComments,
+  writeComment,
+} from "../db/queries/comments.js";
 import { ConnectError, type ConnectRequestRecord } from "../db/queries/connect.js";
 import {
   answerDecision,
@@ -99,6 +109,7 @@ import {
   attachFile,
   DocumentError,
   findDocumentFile,
+  findDocumentFileById,
   findDocumentId,
   getDocument,
   getVersion,
@@ -176,6 +187,7 @@ import type { LiveFeed } from "./live-feed.js";
 import type { AppEnv } from "./request-context.js";
 import {
   restCategory,
+  restComment,
   restDecision,
   restDocument,
   restDocumentSummary,
@@ -267,6 +279,9 @@ const ICON_EXTENSIONS: Readonly<Record<ProjectIconType, string>> = {
   "image/webp": "webp",
 };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Whether a request carries a form, with files in it, rather than JSON. */
+const isForm = (c: Context<AppEnv>): boolean =>
+  (c.req.header("content-type") ?? "").toLowerCase().startsWith("multipart/form-data");
 /** A task's number in a path: what people say out loud, where the pages say the id. */
 const TASK_NUMBER = /^[1-9]\d{0,8}$/;
 /** A project's key in a path, as the package's schema has it; anything else is not found. */
@@ -565,6 +580,21 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     maxSize: MAX_FILE_BYTES + FORM_OVERHEAD_BYTES,
     onError: fileTooLarge,
   });
+  // A comment comes as JSON, bounded as a body is, or as a form with its files, bounded as a
+  // file is: the files of one comment are together what one file may be.
+  const commentFormTooLarge = bodyLimit({
+    maxSize: MAX_FILE_BYTES + FORM_OVERHEAD_BYTES,
+    onError: (c) =>
+      c.json(
+        errorBody(
+          "request.too_large",
+          `The files of a comment are over ${MAX_FILE_BYTES} bytes together.`,
+        ),
+        413,
+      ),
+  });
+  const commentTooLarge: MiddlewareHandler<AppEnv> = (c, next) =>
+    isForm(c) ? commentFormTooLarge(c, next) : tooLarge(c, next);
   const iconTooLarge = (c: Context<AppEnv>): Response =>
     c.json(
       errorBody("request.too_large", `The image is over ${MAX_PROJECT_ICON_BYTES} bytes.`),
@@ -637,6 +667,9 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
           : 409;
       return c.json(errorBody(error.code, error.message), status);
     }
+    if (error instanceof CommentError) {
+      return c.json(errorBody(error.code, error.message), 400);
+    }
     if (error instanceof GoalError) {
       return c.json(errorBody(error.code, error.message), 404);
     }
@@ -705,6 +738,69 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       contentType: parsed.data.contentType ?? "application/octet-stream",
       label: parsed.data.label,
     };
+  };
+
+  /**
+   * A comment as the parts of a form: the part `body`, and a part `file` for each file put in
+   * it, each checked as a file handed in is; or the refusal. The parts are read before any
+   * byte is kept, so that a form with one bad file keeps nothing.
+   */
+  const commentPartsOf = async (
+    c: Context<AppEnv>,
+  ): Promise<
+    | {
+        readonly body: string;
+        readonly files: readonly {
+          readonly part: File;
+          readonly name: string;
+          readonly contentType: string;
+        }[];
+      }
+    | Response
+  > => {
+    let form: FormData;
+    try {
+      form = await c.req.formData();
+    } catch {
+      return invalid(c, "The request body is not a form.");
+    }
+    const bodyPart = form.get("body");
+    const parsedBody = restCommentInputSchema.safeParse({
+      body: typeof bodyPart === "string" ? bodyPart : "",
+    });
+    if (!parsedBody.success) {
+      return invalid(c, firstProblem(parsedBody));
+    }
+    const parts = form.getAll("file");
+    if (parts.length > MAX_FILES_PER_COMMENT) {
+      return invalid(c, `file: at most ${MAX_FILES_PER_COMMENT} files on one comment.`);
+    }
+    const files: { part: File; name: string; contentType: string }[] = [];
+    for (const part of parts) {
+      if (!(part instanceof File)) {
+        return invalid(c, "file: every part called file is a file.");
+      }
+      const type = part.type.split(";")[0]?.trim() ?? "";
+      const parsed = restFileInputSchema.safeParse({
+        name: part.name,
+        ...(type.length === 0 ? {} : { contentType: type }),
+      });
+      if (!parsed.success || parsed.data === undefined) {
+        return invalid(c, firstProblem(parsed));
+      }
+      if (part.size === 0) {
+        return invalid(c, `file: ${parsed.data.name} is empty.`);
+      }
+      if (part.size > MAX_FILE_BYTES) {
+        return fileTooLarge(c);
+      }
+      files.push({
+        part,
+        name: parsed.data.name,
+        contentType: parsed.data.contentType ?? "application/octet-stream",
+      });
+    }
+    return { body: parsedBody.data.body, files };
   };
 
   /**
@@ -1724,18 +1820,20 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
   });
 
-  // One task, by its id or by its number: the pages hold ids, people and their agents say numbers.
+  /** One task, by its id or by its number: the pages hold ids, people and their agents say numbers. */
+  const taskOf = (scope: Scope, ref: string) =>
+    UUID.test(ref)
+      ? getTask(database, scope, ref)
+      : TASK_NUMBER.test(ref)
+        ? findTaskByNumber(database, scope, Number(ref))
+        : Promise.resolve(undefined);
+
   app.get(`${PROJECT}/tasks/:id`, async (c) => {
     const found = await reading(c);
     if (found instanceof Response) {
       return found;
     }
-    const ref = c.req.param("id");
-    const task = UUID.test(ref)
-      ? await getTask(database, found.scope, ref)
-      : TASK_NUMBER.test(ref)
-        ? await findTaskByNumber(database, found.scope, Number(ref))
-        : undefined;
+    const task = await taskOf(found.scope, c.req.param("id"));
     return task === undefined ? noSuchTask(c) : c.json(restTask(task));
   });
 
@@ -1764,6 +1862,84 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         now: clock.now(),
       });
       return c.json(restTask(task));
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
+  // The discussion on a task (ADR-0024), oldest first and whole; the task by its id or its number.
+  app.get(`${PROJECT}/tasks/:id/comments`, async (c) => {
+    const found = await reading(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    const task = await taskOf(found.scope, c.req.param("id"));
+    if (task === undefined) {
+      return noSuchTask(c);
+    }
+    const items = await listComments(database, found.scope, task.id);
+    const body: RestComments = { items: items.map(restComment) };
+    return c.json(body);
+  });
+
+  // A word in the discussion, with the files put in it: as JSON, the body alone; as a form,
+  // the part `body` and the parts `file`, whose bytes go to the blob store under their hash
+  // once the whole form has been read and found good. One request, one comment, one event.
+  app.post(`${PROJECT}/tasks/:id/comments`, commentTooLarge, async (c) => {
+    const found = await changing(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    const task = await taskOf(found.scope, c.req.param("id"));
+    if (task === undefined) {
+      return noSuchTask(c);
+    }
+    let body: string;
+    let sent: readonly {
+      readonly part: File;
+      readonly name: string;
+      readonly contentType: string;
+    }[];
+    if (isForm(c)) {
+      const parts = await commentPartsOf(c);
+      if (parts instanceof Response) {
+        return parts;
+      }
+      body = parts.body;
+      sent = parts.files;
+    } else {
+      const input = await bodyOf(c, restCommentInputSchema);
+      if (input instanceof Response) {
+        return input;
+      }
+      body = input.body;
+      sent = [];
+    }
+    if (body.trim().length === 0 && sent.length === 0) {
+      return invalid(c, "body: say something, or put a file in.");
+    }
+    try {
+      const files = [];
+      for (const file of sent) {
+        const kept = await blobs.put(new Uint8Array(await file.part.arrayBuffer()), clock.now());
+        files.push({
+          name: file.name,
+          size: kept.size,
+          contentType: file.contentType,
+          sha256: kept.sha256,
+        });
+      }
+      const written = await writeComment(database, {
+        scope: found.scope,
+        actor: found.actor,
+        taskId: task.id,
+        body,
+        files,
+        limit: MAX_COMMENTS_PER_TASK,
+        fileLimit: MAX_FILES_PER_COMMENT,
+        now: clock.now(),
+      });
+      return c.json(restComment(written), 201);
     } catch (error) {
       return failure(c, error);
     }
@@ -2083,18 +2259,30 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
   });
 
-  // The bytes of a file handed in, for whoever may see the project.
+  // The bytes of a file of the project, whichever way it came: handed in by a run, put in a
+  // comment, or attached to a page; one address for all of them, for whoever may see the project.
   app.get(`${PROJECT}/files/:id`, async (c) => {
     const found = await reading(c);
     if (found instanceof Response) {
       return found;
     }
     const id = c.req.param("id");
-    const artifact = UUID.test(id) ? await findArtifact(database, found.scope, id) : undefined;
-    if (artifact?.file === undefined) {
+    if (!UUID.test(id)) {
       return noSuchFile(c);
     }
-    return serveFile(c, artifact.file, { artifact: artifact.id });
+    const artifact = await findArtifact(database, found.scope, id);
+    if (artifact?.file !== undefined) {
+      return serveFile(c, artifact.file, { artifact: artifact.id });
+    }
+    const commented = await findCommentFile(database, found.scope, id);
+    if (commented !== undefined) {
+      return serveFile(c, commented.file, { commentFile: commented.id });
+    }
+    const attached = await findDocumentFileById(database, found.scope, id);
+    if (attached !== undefined) {
+      return serveFile(c, attached.file, { documentFile: attached.id });
+    }
+    return noSuchFile(c);
   });
 
   app.post(`${PROJECT}/runs/:id/end`, tooLarge, async (c) => {

@@ -1,6 +1,7 @@
 import type {
   RestArtifact,
   RestCategory,
+  RestComment,
   RestDecision,
   RestDocument,
   RestDocumentSummary,
@@ -131,6 +132,7 @@ export function formatTask(
   task: RestTask,
   decisions?: readonly RestDecision[],
   runs?: readonly RestRun[],
+  comments?: readonly RestComment[],
 ): string {
   const lines = [
     `#${task.number} ${task.title}`,
@@ -158,6 +160,31 @@ export function formatTask(
     for (const run of runs) {
       lines.push(`  ${formatRunLine(run)}`);
     }
+  }
+  if (comments !== undefined) {
+    lines.push("", comments.length === 0 ? "comments: none" : "comments:");
+    for (const comment of comments) {
+      lines.push(formatComment(comment));
+    }
+  }
+  return lines.join("\n");
+}
+
+/**
+ * One comment of the discussion, indented under the list: who said it, through which agent,
+ * when, the whole word, and each file put in it with the command that reads it.
+ */
+export function formatComment(comment: RestComment): string {
+  const who =
+    comment.agent === null ? comment.author.login : `${comment.author.login} as ${comment.agent}`;
+  const lines = [`  ${who}, ${comment.createdAt}, comment ${comment.id}:`];
+  if (comment.body.trim().length > 0) {
+    lines.push(indent(comment.body));
+  }
+  for (const attached of comment.files) {
+    lines.push(
+      `    file: ${attached.file.name} (${attached.file.size} bytes, ${attached.file.contentType}): console file ${attached.id}`,
+    );
   }
   return lines.join("\n");
 }
@@ -205,7 +232,7 @@ export function formatArtifact(
   const what =
     artifact.file === null
       ? (artifact.url ?? "")
-      : `${artifact.file.name} (${artifact.file.size} bytes, ${artifact.file.contentType}${fileUrl === undefined ? "" : `; read at ${fileUrl(artifact.id)}`})`;
+      : `${artifact.file.name} (${artifact.file.size} bytes, ${artifact.file.contentType}${fileUrl === undefined ? "" : `; read at ${fileUrl(artifact.id)}`}; console file ${artifact.id})`;
   return artifact.label === null ? what : `${artifact.label}: ${what}`;
 }
 

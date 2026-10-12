@@ -140,7 +140,18 @@ Goal: what an organization asks of its agents, said once on the board and read f
 - [x] The skills (2026-10-12): `working-the-board` reads the rules first and carries an example of a project's rules; the manifest says the board's rules come first.
 - [x] The second pass (2026-10-12): the rules say `{language}`, filled where they are shown with the language the person chose, never stored; writing the console's own rules as they stand puts the organization's page away, which is the reset the settings offer; `console logout` gives the token up at the console before forgetting it; `console login` names the agent after its environment (Claude Code, Codex) with the machine after it, shown before `on` on the pages; the settings pages tidied, a project open to the workspace marked so wherever projects are listed, a SkillCDN deployment that stops answering shown as unavailable; and `console take` prints the rules with the task, read once there ([specs/cli.md](specs/cli.md), [specs/rest.md](specs/rest.md)).
 
-## After milestone 13
+## Done: milestone 14, the discussion on a task (2026-10-13)
+
+Goal: a task that can be talked about where it is: comments by people and by their agents, in Markdown, with pictures and files, read on the task's page as one thread with the runs and the decisions in the order they came, and reaching an agent through the command, pictures included ([ADR-0024](adr/0024-a-task-carries-a-discussion-of-comments-with-their-files-read-as-one-thread-with-the-runs-and-the-decisions.md)).
+
+- [x] The decision (2026-10-13, [ADR-0024](adr/0024-a-task-carries-a-discussion-of-comments-with-their-files-read-as-one-thread-with-the-runs-and-the-decisions.md)): comments never rewritten, their files in the one blob store as rows of their own, one request per comment, one address for every file of the project, pictures shown in place where the browser cannot run them, the thread.
+- [x] The data model (2026-10-13): `comments` and `comment_files`; migration 0016.
+- [x] The REST API (2026-10-13): `GET` and `POST .../tasks/<id or number>/comments`, as JSON or as one form with the files; `.../files/<id>` serves a run's, a comment's and a page's file alike; the event `task.commented` ([specs/rest.md](specs/rest.md)).
+- [x] The command (2026-10-13): `console comment` with `--attach`, `console file` to save a file of the project and look at it; `task` and `take` print the discussion with the task ([specs/cli.md](specs/cli.md)).
+- [x] The default UI (2026-10-13): the task's page reads the discussion as one thread, with the form at its end, pictures pasted in placed in the text; a project's mark shows its symbol only until its image is there, so that an image with clear parts does not show it through.
+- [x] The skills and the rules (2026-10-13): `working-the-board` reads the discussion with the task and says when a comment is the word, and that work given in chat is written on the board first; the console's rules say a comment is a word to people and a report the run's record.
+
+## After milestone 14
 
 Nothing is chosen yet; the list below is where the next milestone comes from. Left open by milestone 9: whether the board should end a run not heard from for a long while itself ([ADR-0020](adr/0020-the-console-does-not-claim-an-agent-is-at-work-a-run-says-when-it-was-last-heard-from-and-a-new-run-takes-over.md)); a roadmap across projects.
 

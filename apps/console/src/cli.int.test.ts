@@ -132,6 +132,9 @@ async function console_(
         : path === "mark.png"
           ? PNG
           : Promise.reject(new Error("no such file")),
+    writeBytes: async () => {
+      throw new Error("nowhere to write");
+    },
     store: {
       load: async () => undefined,
       save: async () => "nowhere",
@@ -163,6 +166,9 @@ describe("the command line", () => {
       },
       readBytes: async () => {
         throw new Error("no files here");
+      },
+      writeBytes: async () => {
+        throw new Error("nowhere to write");
       },
       store: {
         load: async () => kept,

@@ -18,6 +18,8 @@ import {
   type RestCategoryInput,
   type RestCategoryPatch,
   type RestClaim,
+  type RestComment,
+  type RestComments,
   type RestConnectInput,
   type RestConnection,
   type RestConnectRequest,
@@ -71,6 +73,8 @@ import {
   restCategoriesSchema,
   restCategorySchema,
   restClaimSchema,
+  restCommentSchema,
+  restCommentsSchema,
   restConnectionSchema,
   restConnectRequestSchema,
   restDecisionSchema,
@@ -121,6 +125,22 @@ export interface FileUpload {
   /** The media type; `application/octet-stream` when left out. */
   readonly contentType?: string | undefined;
   readonly label?: string | undefined;
+}
+
+/** A comment to write on a task: the word, and the files put in it, which go in the one request. */
+export interface CommentInput {
+  /** Markdown; may be blank when a file comes with it. */
+  readonly body: string;
+  readonly files?: readonly FileUpload[] | undefined;
+}
+
+/** The bytes of a file of the project, as the console hands them back, with what it calls them. */
+export interface FileRead {
+  /** The file's name, as the console says it; the id when it says none. */
+  readonly name: string;
+  /** The media type the console answered with, without its parameters. */
+  readonly contentType: string;
+  readonly bytes: Uint8Array;
 }
 
 export interface ClientOptions {
@@ -245,8 +265,14 @@ export interface ProjectClient {
   handIn(runId: string, input: RestArtifactInput): Promise<RestRun>;
   /** Hands in a file, on a run of the asker's: the console keeps the bytes. */
   handInFile(runId: string, input: FileUpload): Promise<RestRun>;
-  /** Where the bytes of a file handed in are read, by the artifact's id. */
-  fileUrl(artifactId: string): string;
+  /** Where the bytes of a file of the project are read, by its id: handed in by a run, put in a comment, or attached to a page. */
+  fileUrl(fileId: string): string;
+  /** The bytes of a file of the project, by its id, with the name and the type the console says. */
+  readFile(fileId: string, signal?: AbortSignal): Promise<FileRead>;
+  /** The discussion on a task: its comments, oldest first, whole. */
+  comments(taskId: string, signal?: AbortSignal): Promise<RestComments>;
+  /** Writes a comment on a task, with its files when given, in one request. */
+  comment(taskId: string, input: CommentInput): Promise<RestComment>;
   /** Ends a run: finished or failed by the agent; abandoned by the person it is for, or an administrator. */
   endRun(runId: string, input: RestRunEndInput): Promise<RestRun>;
   /** What happened in the project after event number `after`; `0` for the beginning. Narrowed by `filter`. */
@@ -419,6 +445,37 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
     return parsed.data;
   };
 
+  /** The bytes at `url`, with the name and the type the console says, for a file of the project. */
+  const read = async (
+    url: string,
+    fallbackName: string,
+    signal?: AbortSignal,
+  ): Promise<FileRead> => {
+    let response: Response;
+    try {
+      response = await send(url, {
+        method: "GET",
+        ...(signal === undefined ? {} : { signal }),
+        credentials: token === undefined ? "same-origin" : "omit",
+        headers: token === undefined ? {} : { authorization: `Bearer ${token}` },
+      });
+    } catch (error) {
+      if (signal?.aborted === true) {
+        throw error;
+      }
+      throw new ApiError(0, "network", "The server could not be reached.");
+    }
+    if (!response.ok) {
+      throw await failure(response);
+    }
+    const type = response.headers.get("content-type") ?? "application/octet-stream";
+    return {
+      name: fileNameOf(response.headers.get("content-disposition") ?? "") ?? fallbackName,
+      contentType: type.split(";")[0]?.trim() ?? "application/octet-stream",
+      bytes: new Uint8Array(await response.arrayBuffer()),
+    };
+  };
+
   const flag = (value: boolean | undefined): string | undefined =>
     value === undefined ? undefined : String(value);
   const number = (value: number | undefined): string | undefined =>
@@ -436,6 +493,22 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
     );
     if (input.label !== undefined) {
       form.set("label", input.label);
+    }
+    return form;
+  };
+
+  /** A comment with files as the parts of a form: the part `body`, and a part `file` for each file. */
+  const commentFormOf = (input: CommentInput): FormData => {
+    const form = new FormData();
+    form.set("body", input.body);
+    for (const file of input.files ?? []) {
+      const bytes =
+        file.bytes instanceof Blob ? file.bytes : new Blob([Uint8Array.from(file.bytes)]);
+      form.append(
+        "file",
+        new File([bytes], file.name, { type: file.contentType ?? "application/octet-stream" }),
+        file.name,
+      );
     }
     return form;
   };
@@ -530,7 +603,23 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
         request("POST", `${base}${at("runs", runId)}/artifacts`, input, restRunSchema),
       handInFile: (runId, input) =>
         request("POST", `${base}${at("runs", runId)}/files`, formOf(input), restRunSchema),
-      fileUrl: (artifactId) => `${base}${at("files", artifactId)}`,
+      fileUrl: (fileId) => `${base}${at("files", fileId)}`,
+      readFile: (fileId, signal) => read(`${base}${at("files", fileId)}`, fileId, signal),
+      comments: (taskId, signal) =>
+        request(
+          "GET",
+          `${base}${at("tasks", taskId)}/comments`,
+          undefined,
+          restCommentsSchema,
+          signal,
+        ),
+      comment: (taskId, input) =>
+        request(
+          "POST",
+          `${base}${at("tasks", taskId)}/comments`,
+          (input.files?.length ?? 0) > 0 ? commentFormOf(input) : { body: input.body },
+          restCommentSchema,
+        ),
       endRun: (runId, input) =>
         request("POST", `${base}${at("runs", runId)}/end`, input, restRunSchema),
       events: (after, filter = {}, signal) =>
@@ -667,4 +756,24 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
       request("POST", `${base}${CLAIM_PATH}`, { secret }, restClaimSchema),
     signOut: () => request("POST", `${base}${AUTH_ROUTES.logout}`, undefined, undefined),
   };
+}
+
+/**
+ * The file's name as a `content-disposition` header says it: the exact one (`filename*`, UTF-8,
+ * percent-encoded) when it is readable, else the plain one in quotes; nothing when neither is.
+ */
+export function fileNameOf(disposition: string): string | undefined {
+  const exact = /filename\*=UTF-8''([^;]+)/i.exec(disposition);
+  if (exact?.[1] !== undefined) {
+    try {
+      const decoded = decodeURIComponent(exact[1].trim());
+      if (decoded.length > 0) {
+        return decoded;
+      }
+    } catch {
+      // Not percent-encoded as it should be: the plain name below is what there is.
+    }
+  }
+  const plain = /filename="([^"]*)"/i.exec(disposition);
+  return plain?.[1] === undefined || plain[1].length === 0 ? undefined : plain[1];
 }

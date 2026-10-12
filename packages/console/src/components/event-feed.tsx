@@ -76,6 +76,8 @@ export function describeEvent(event: RestEvent, words: Messages = en): string {
       );
     case "task.updated":
       return feed.event.taskUpdated(fields, task);
+    case "task.commented":
+      return feed.event.taskCommented(task, data.excerpt);
     case "decision.raised":
       return feed.event.decisionRaised(question);
     case "decision.answered":

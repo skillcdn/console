@@ -1,7 +1,7 @@
 import type {
   RestAnswerInput,
-  RestArtifact,
   RestCategory,
+  RestComment,
   RestDecision,
   RestDecisionInput,
   RestDecisionPatch,
@@ -17,19 +17,20 @@ import { formatDay } from "../dates.js";
 import { useLanguage, useWords } from "../i18n/index.js";
 import type { TaskFormKind } from "../router.js";
 import { TASK_STATES } from "../vocabulary.js";
+import { type CommentDraft, TaskThread } from "./comments.js";
 import { DecisionForm } from "./decision-form.js";
-import { DecisionCard } from "./decision-list.js";
 import { EventFeed } from "./event-feed.js";
 import { Markdown } from "./markdown.js";
-import { RunList } from "./runs.js";
 import { TaskForm } from "./task-form.js";
 import { CategoryBadge, DueBadge, PersonChip, PriorityBadge, StateBadge, Time } from "./ui.js";
 
-// One task: what it is, who it is on, what it links to, the agents at work on it, the decisions
-// about it, the tasks that are part of it, everything that happened to it, and the ways to
-// change it. Takes its data as props and nothing from the network; which of its forms is open
-// is told by the page, since each form has an address of its own (ADR-0010). The facts beside
-// the text say only what is set: a plan, a category or a goal the task has none of is not a row.
+// One task: what it is, who it is on, what it links to, the discussion on it, which is what was
+// said about it with the agents at work on it and the decisions about it in the order they
+// came (ADR-0024), the tasks that are part of it, everything that happened to it, and the ways
+// to change it. Takes its data as props and nothing from the network; which of its forms is
+// open is told by the page, since each form has an address of its own (ADR-0010). The facts
+// beside the text say only what is set: a plan, a category or a goal the task has none of is
+// not a row.
 
 export interface TaskViewProps {
   readonly task: RestTask;
@@ -39,6 +40,8 @@ export interface TaskViewProps {
   readonly decisions: readonly RestDecision[];
   /** The runs of the board, or of this task; the ones on this task are shown. */
   readonly runs?: readonly RestRun[] | undefined;
+  /** The comments on the task, oldest first, when the page has read them. */
+  readonly comments?: readonly RestComment[] | undefined;
   /** Everything that happened to the task, oldest first, when the page has read it. */
   readonly history?: readonly RestEvent[] | undefined;
   /** The categories of the workspace, for the form. */
@@ -50,8 +53,8 @@ export interface TaskViewProps {
   readonly decisionHref?: ((decisionId: string) => string) | undefined;
   /** Where a goal of the roadmap is read. */
   readonly goalHref?: ((goalId: string) => string) | undefined;
-  /** Where a file a run handed in is read. */
-  readonly fileHref?: ((artifact: RestArtifact) => string) | undefined;
+  /** Where a file of the project is read, by its id: one a run handed in, or one put in a comment. */
+  readonly fileHref?: ((fileId: string) => string) | undefined;
   /** Where a document of the project is read, by its path, for the links in what was written. */
   readonly docHref?: ((path: string) => string) | undefined;
   /** The day to count due days from; the browser's today when left out. */
@@ -73,6 +76,8 @@ export interface TaskViewProps {
     | ((decision: RestDecision, patch: RestDecisionPatch) => void)
     | undefined;
   readonly onAbandonRun?: ((run: RestRun) => void) | undefined;
+  /** Called with a word for the discussion, and the files put in it. Left out, nothing can be said here. */
+  readonly onComment?: ((draft: CommentDraft) => void) | undefined;
 }
 
 export function TaskView(props: TaskViewProps) {
@@ -86,7 +91,7 @@ export function TaskView(props: TaskViewProps) {
   const subtasks = props.tasks.filter((candidate) => candidate.parentId === task.id);
   const about = props.decisions.filter((decision) => decision.taskId === task.id);
   const runs = (props.runs ?? []).filter((run) => run.taskId === task.id);
-  const tasksById = new Map(props.tasks.map((candidate) => [candidate.id, candidate]));
+  const comments = (props.comments ?? []).filter((comment) => comment.taskId === task.id);
   const goal =
     task.goalId === null
       ? undefined
@@ -175,33 +180,27 @@ export function TaskView(props: TaskViewProps) {
               />
             </section>
           )}
-          {runs.length > 0 && (
-            <section className="sc-task-section" aria-label={words.task.runs}>
-              <h2 className="sc-section-title">{words.task.runs}</h2>
-              <RunList
+          {(runs.length > 0 ||
+            about.length > 0 ||
+            comments.length > 0 ||
+            props.onComment !== undefined) && (
+            <section className="sc-task-section" aria-label={words.comments.title}>
+              <h2 className="sc-section-title">{words.comments.title}</h2>
+              <TaskThread
+                task={task}
+                comments={comments}
                 runs={runs}
-                decisionHref={props.decisionHref}
+                decisions={about}
                 fileHref={props.fileHref}
+                decisionHref={props.decisionHref}
                 docHref={props.docHref}
-                onAbandon={props.onAbandonRun}
+                onAnswer={props.onAnswer}
+                onUpdateDecision={props.onUpdateDecision}
+                onAbandonRun={props.onAbandonRun}
+                onComment={props.onComment}
                 busy={props.busy}
+                empty={<p className="sc-muted">{words.comments.empty}</p>}
               />
-            </section>
-          )}
-          {about.length > 0 && (
-            <section className="sc-task-section" aria-label={words.task.decisions}>
-              <h2 className="sc-section-title">{words.task.decisions}</h2>
-              {about.map((decision) => (
-                <DecisionCard
-                  key={decision.id}
-                  decision={decision}
-                  task={decision.taskId === null ? undefined : tasksById.get(decision.taskId)}
-                  docHref={props.docHref}
-                  onAnswer={props.onAnswer}
-                  onUpdate={props.onUpdateDecision}
-                  busy={props.busy}
-                />
-              ))}
             </section>
           )}
           {props.history !== undefined && props.history.length > 0 && (

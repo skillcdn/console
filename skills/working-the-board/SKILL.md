@@ -5,7 +5,7 @@ license: MIT
 compatibility: Needs a shell with the console command on the PATH (npm install -g @skillcdn/console, Node.js 24 or newer), signed in by a person. Nothing else; the command needs no key of its own and the agent never sees a token.
 metadata:
   author: skillcdn
-  version: "1.5"
+  version: "1.6"
 skillcdn:
   translations:
     ko:
@@ -22,6 +22,8 @@ A task of the board goes in, named by its number; a run comes out: the task take
 - **Checkpoints:** on the board, as decisions (phase 4), which a person answers from wherever they are; the reports say what was done at each milestone, and need no answer.
 - **Go-ahead:** the task's body is the go-ahead. A task that says what the agent may decide alone is followed within that; everything else that would change scope, cost or a trade-off is a decision.
 - **Changes mid-run:** a person changes the task or answers a decision on the board; the run takes it from there and says so in its next report. A report is never rewritten.
+- **The discussion:** what people say about the task is in its comments, which `console task <number>` and `console take` print with the task; a picture they put in is saved with `console file <id>` and looked at with the agent's own tools. An answer to what they asked there, a question that is not a decision, a remark on what was handed in, is a comment of the agent's own: `console comment <number> "<markdown>" [--attach <file>]`, which needs no run. A report is the run's record; a comment is a word to people.
+- **Work given in chat:** when a person gives work in chat, in a directory that works in a project, the agent writes it on the board first (`console task new`), tells the person the number, takes it and works it as below, so that the board holds the work and its record, and the person decides on the board.
 - **Language:** what people read, the reports, the questions, the pages and the summaries, is in the language the rules name for the person (`console take` prints them with the task), else the task's, so that the people of the board read as they wrote.
 
 ## Requirements
@@ -38,7 +40,7 @@ The full contract is the [specification of the command line](/docs/specs/cli.md)
 | Input | Source |
 |---|---|
 | The task | Its number (`#7`) or its id, from what the person said. Told to pick one, `console work` lists what is on the person's plate across their projects, the sooner due first (`--person <login>` another person's, for an administrator or an owner of a project they are in), and `console tasks --state ready --mine` what is ready and theirs in this one (`--due overdue`, `--due week`, `--category <key>` and `--goal <id>` narrow it further); a task is never taken without being told which, or that any ready one may be. |
-| The work | The task's body, read with `console task <number>`: what to make, where, the milestones, what to ask; with its plan, the category, the goal it works towards (`console goal <id>` says what reaching it means) and the days it starts and is due, which the reports and the summary keep to. The pages it links to (`console doc <path>`) and the project's skills (`console skills`, each loaded through the agent's own SkillCDN connection to the address; with none that covers it, stop and tell the person, who connects the agent at the address's page) say the rest. |
+| The work | The task's body, read with `console task <number>`: what to make, where, the milestones, what to ask; the comments on it, which are the discussion so far, printed with the task, their pictures saved with `console file <id>`; with its plan, the category, the goal it works towards (`console goal <id>` says what reaching it means) and the days it starts and is due, which the reports and the summary keep to. The pages it links to (`console doc <path>`) and the project's skills (`console skills`, each loaded through the agent's own SkillCDN connection to the address; with none that covers it, stop and tell the person, who connects the agent at the address's page) say the rest. |
 | The rules | The workspace's, the console's own until an administrator writes the organization's, and this project's own when it has them: which skills to load first, where the work lives, the pages, what may be decided alone, how to report ([ADR-0023](/docs/adr/0023-the-rules-of-a-board-are-pages-the-workspace-and-its-projects-keep-read-first-by-every-agent.md)). `console take` prints them with the task, so they are read once, there; `console rules` reads them without taking, as when a task is still to be chosen. They hold over this skill's defaults where they differ. |
 
 ## Workflow
@@ -47,7 +49,7 @@ Each phase ends with something on the board. Only phase 4 waits for a person.
 
 ### Phase 1: Read
 
-Told which task, go to phase 2: `console take` prints the rules of the board with the task, and they are read there, once. Choosing one, or checking one before taking it, `console rules` says which tasks to take and what to load, and `console task <number>` shows a task in full, with its plan, the decisions about it and the runs on it, without taking it. A run open on it means another agent was at it, and may still be: the console cannot tell ([ADR-0020](/docs/adr/0020-the-console-does-not-claim-an-agent-is-at-work-a-run-says-when-it-was-last-heard-from-and-a-new-run-takes-over.md)), so read its reports and when it was last heard from, and take the task only when the person said to, since taking it ends that run as taken over; otherwise say so and stop. A task that is past its due day is still the task; the first report says so, and what the day was for is kept in mind. Read what the body links to, with `console doc <path>` for the project's pages and `console skills` for the organization's skills, before anything is made.
+Told which task, go to phase 2: `console take` prints the rules of the board with the task, and they are read there, once. Choosing one, or checking one before taking it, `console rules` says which tasks to take and what to load, and `console task <number>` shows a task in full, with its plan, the decisions about it, the runs on it and the discussion on it, without taking it. A run open on it means another agent was at it, and may still be: the console cannot tell ([ADR-0020](/docs/adr/0020-the-console-does-not-claim-an-agent-is-at-work-a-run-says-when-it-was-last-heard-from-and-a-new-run-takes-over.md)), so read its reports and when it was last heard from, and take the task only when the person said to, since taking it ends that run as taken over; otherwise say so and stop. A task that is past its due day is still the task; the first report says so, and what the day was for is kept in mind. Read what the body links to, with `console doc <path>` for the project's pages and `console skills` for the organization's skills, before anything is made.
 
 ### Phase 2: Take
 
@@ -55,7 +57,7 @@ Told which task, go to phase 2: `console take` prints the rules of the board wit
 
 ### Phase 3: Work, and report at the milestones
 
-The work happens where it happens: in the repository, the document, the tool. At each milestone the body names, or a natural one, `console report "<markdown>"` (or `--file <path>`, or `-` for standard input) says what was found, what was done and what is next, in words for people: a milestone at a time, not every step. A problem is reported as a problem, with what it blocks. The result itself goes in a last report before finishing, or in what is handed in. A report is never rewritten; a mistake is corrected in a new one.
+The work happens where it happens: in the repository, the document, the tool. At each milestone the body names, or a natural one, `console report "<markdown>"` (or `--file <path>`, or `-` for standard input) says what was found, what was done and what is next, in words for people: a milestone at a time, not every step. A problem is reported as a problem, with what it blocks. The result itself goes in a last report before finishing, or in what is handed in. A report is never rewritten; a mistake is corrected in a new one. A word for the task's people that is not a report, an answer to a comment of theirs, a question that is not a decision, is a comment, `console comment <number> "<markdown>"`, with `--attach <file>` for a picture or a file they should see; a comment is never rewritten either.
 
 ### Phase 4: Ask when a person must decide
 

@@ -14,6 +14,12 @@ export interface MarkdownProps {
   readonly source: string;
   /** Where a document of the project is read, by its path; left out, such links stay text. */
   readonly docHref?: ((path: string) => string) | undefined;
+  /**
+   * Where a picture named in the text is read, when the text comes with files: given the
+   * source of `![words](source)`, the address of the file it names, or nothing. A picture that
+   * is neither one of those nor over https stays text.
+   */
+  readonly fileSrc?: ((source: string) => string | undefined) | undefined;
 }
 
 export function Markdown(props: MarkdownProps) {
@@ -48,7 +54,9 @@ export function Markdown(props: MarkdownProps) {
             return <span>{children}</span>;
           },
           img({ src, alt, title }) {
-            const url = typeof src === "string" && SAFE_IMAGE.test(src) ? src : undefined;
+            const named = typeof src === "string" ? props.fileSrc?.(src) : undefined;
+            const url =
+              named ?? (typeof src === "string" && SAFE_IMAGE.test(src) ? src : undefined);
             if (url === undefined) {
               return <span className="sc-prose-image-text">{alt ?? ""}</span>;
             }

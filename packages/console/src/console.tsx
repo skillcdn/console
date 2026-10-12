@@ -17,6 +17,7 @@ import {
   PROJECT_RULES_TEMPLATE,
   REFERENCE_RULES,
   type RestAnswerInput,
+  type RestComment,
   type RestDecision,
   type RestDecisionInput,
   type RestDecisionPatch,
@@ -457,7 +458,8 @@ function TaskPage(props: {
       ? data.tasks.find((candidate) => candidate.id === route.id)
       : data.tasks.find((candidate) => candidate.number === route.number);
   const [history, setHistory] = useState<readonly RestEvent[] | undefined>(undefined);
-  const { taskHistory } = data.actions;
+  const [comments, setComments] = useState<readonly RestComment[] | undefined>(undefined);
+  const { taskHistory, taskComments } = data.actions;
   const taskId = task?.id;
   const number = task?.number;
   // A task named by its id is shown at its number's address.
@@ -481,8 +483,15 @@ function TaskPage(props: {
         }
       })
       .catch(() => undefined);
+    taskComments(taskId, controller.signal)
+      .then((items) => {
+        if (!controller.signal.aborted) {
+          setComments(items);
+        }
+      })
+      .catch(() => undefined);
     return () => controller.abort();
-  }, [taskId, taskHistory, feedLength]);
+  }, [taskId, taskHistory, taskComments, feedLength]);
   if (task === undefined) {
     return (
       <EmptyState
@@ -500,13 +509,14 @@ function TaskPage(props: {
       tasks={data.tasks}
       decisions={data.decisions}
       runs={data.runs}
+      comments={comments}
       history={history}
       categories={data.categories}
       goals={data.goals}
       taskHref={(candidate) => taskHref(key, candidate.number)}
       decisionHref={(decisionId) => decisionHref(key, decisionId)}
       goalHref={(goalId) => goalHref(key, goalId)}
-      fileHref={(artifact) => projectPath(key, "files", artifact.id)}
+      fileHref={(fileId) => projectPath(key, "files", fileId)}
       docHref={(path) => docHref(key, path)}
       form={route.form}
       formHref={(form) => taskHref(key, task.number, form)}
@@ -533,6 +543,19 @@ function TaskPage(props: {
         void act(() => data.actions.updateDecision(decision.id, patch))
       }
       onAbandonRun={(run) => void act(() => data.actions.abandonRun(run.id))}
+      onComment={(draft) =>
+        void act(async () => {
+          await data.actions.comment(task.id, {
+            body: draft.body,
+            files: draft.files.map((file) => ({
+              name: file.name,
+              bytes: file,
+              ...(file.type === "" ? {} : { contentType: file.type }),
+            })),
+          });
+          setComments(await taskComments(task.id));
+        })
+      }
     />
   );
 }

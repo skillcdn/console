@@ -3,6 +3,8 @@ import {
   CLAIM_PATH,
   connectPath,
   DEFAULT_TOKEN_DAYS,
+  MAX_FILE_BYTES,
+  MAX_FILES_PER_COMMENT,
   MAX_PROJECT_ICON_BYTES,
   MAX_RULES_LENGTH,
   MAX_TITLE_LENGTH,
@@ -18,6 +20,8 @@ import {
   restCategoriesSchema,
   restCategorySchema,
   restClaimSchema,
+  restCommentSchema,
+  restCommentsSchema,
   restConnectionSchema,
   restConnectRequestSchema,
   restDecisionSchema,
@@ -2554,5 +2558,165 @@ describe("the rules", () => {
     expect(back).toMatchObject({ version: 2, archivedAt: null });
     // A project the asker may not see has no rules to show.
     expect((await get(bob, `${projectPath("docs")}/rules`)).status).toBe(404);
+  });
+});
+
+describe("the discussion on a task", () => {
+  const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13]);
+  const form = (
+    body: string,
+    files: readonly { name: string; type: string; bytes: Uint8Array | string }[],
+  ) => {
+    const data = new FormData();
+    data.set("body", body);
+    for (const file of files) {
+      data.append("file", new File([file.bytes], file.name, { type: file.type }), file.name);
+    }
+    return data;
+  };
+
+  it("is written by people as JSON and by agents with files as one form, read oldest first, and told to the board", async () => {
+    const task = await createTask(alice, { title: "Draw the new board", state: "ready" });
+    const at = `${IN}/tasks/${task.id}/comments`;
+    // A person says a word, from the pages.
+    const said = await send(alice, "POST", at, { body: "Which screen did you mean?" });
+    expect(said.status, await said.clone().text()).toBe(201);
+    const first = restCommentSchema.parse(await said.json());
+    expect(first).toMatchObject({
+      taskId: task.id,
+      agent: null,
+      body: "Which screen did you mean?",
+      files: [],
+    });
+    expect(first.author.login).toBe("Alice");
+    // An agent answers with a picture and a log, in one request; the form may name the task by its number.
+    const made = await h.request(REST_ROUTES.tokens, {
+      method: "POST",
+      headers: { cookie: bob, origin: SIGN_IN_URL, "content-type": "application/json" },
+      body: JSON.stringify({ name: "Codex on the laptop" }),
+    });
+    expect(made.status).toBe(201);
+    const { secret } = restTokenCreatedSchema.parse(await made.json());
+    const auth = { authorization: `Bearer ${secret}` };
+    const answered = await h.request(`${IN}/tasks/${task.number}/comments`, {
+      method: "POST",
+      headers: auth,
+      body: form("This one: ![the board](board.png)", [
+        { name: "board.png", type: "image/png", bytes: png },
+        { name: "run.log", type: "text/plain", bytes: "ok\n" },
+      ]),
+    });
+    expect(answered.status, await answered.clone().text()).toBe(201);
+    const second = restCommentSchema.parse(await answered.json());
+    expect(second.author.login).toBe("bob");
+    expect(second.agent).toBe("Codex on the laptop");
+    expect(second.files.map((file) => file.file)).toEqual([
+      {
+        name: "board.png",
+        size: png.byteLength,
+        contentType: "image/png",
+        sha256: expect.any(String),
+      },
+      { name: "run.log", size: 3, contentType: "text/plain", sha256: expect.any(String) },
+    ]);
+    // A picture alone says enough; words alone do; neither does not.
+    const pictured = await h.request(at, {
+      method: "POST",
+      headers: auth,
+      body: form("", [{ name: "more.png", type: "image/png", bytes: png }]),
+    });
+    expect(pictured.status).toBe(201);
+    const silent = await h.request(at, { method: "POST", headers: auth, body: form("   ", []) });
+    expect(silent.status).toBe(400);
+    expect(await errorOf(silent)).toBe("request.invalid");
+    const blank = await send(alice, "POST", at, { body: "" });
+    expect(blank.status).toBe(400);
+    // Read back oldest first, whole, by anyone who may see the project; by the task's number too.
+    const listed = restCommentsSchema.parse(await (await get(bob, at)).json());
+    expect(listed.items.map((comment) => comment.id)).toEqual([
+      first.id,
+      second.id,
+      restCommentSchema.parse(await pictured.json()).id,
+    ]);
+    expect(
+      restCommentsSchema.parse(await (await get(bob, `${IN}/tasks/${task.number}/comments`)).json())
+        .items,
+    ).toHaveLength(3);
+    // The files are read at the project's one address for files, as a run's are.
+    const [picture, log] = second.files;
+    const bytes = await get(alice, `${IN}/files/${picture?.id}`);
+    expect(bytes.status).toBe(200);
+    expect(bytes.headers.get("content-type")).toBe("image/png");
+    expect(bytes.headers.get("content-disposition")).toContain("inline");
+    expect(bytes.headers.get("content-security-policy")).toBe("default-src 'none'; sandbox");
+    expect(new Uint8Array(await bytes.arrayBuffer())).toEqual(png);
+    expect(await (await get(alice, `${IN}/files/${log?.id}`)).text()).toBe("ok\n");
+    // Another project's file, or nothing, is not found.
+    expect((await get(alice, `${projectPath("docs")}/files/${picture?.id}`)).status).toBe(404);
+    expect((await get(alice, `${IN}/files/0199c4d8-0000-7000-8000-000000000000`)).status).toBe(404);
+    // The board is told once per comment, with the first words and how many files came.
+    const history = restEventsSchema.parse(
+      await (await get(alice, `${IN}/events?task=${task.id}`)).json(),
+    );
+    const commented = history.items.filter((event) => event.kind === "task.commented");
+    expect(commented).toHaveLength(3);
+    expect(commented[1]).toMatchObject({
+      agent: "Codex on the laptop",
+      data: {
+        number: task.number,
+        title: "Draw the new board",
+        excerpt: "This one: the board",
+        files: 2,
+      },
+    });
+    expect(commented[1]?.actor?.login).toBe("bob");
+    // A task of another project, or none, has no discussion to read or write.
+    expect((await get(alice, `${projectPath("docs")}/tasks/${task.id}/comments`)).status).toBe(404);
+    expect(
+      (
+        await send(alice, "POST", `${IN}/tasks/0199c4d8-0000-7000-8000-000000000000/comments`, {
+          body: "x",
+        })
+      ).status,
+    ).toBe(404);
+  });
+
+  it("refuses a form with too many files, an empty file, or one over the limit, keeping nothing of it", async () => {
+    const task = await createTask(alice, { title: "Hold the line" });
+    const at = `${IN}/tasks/${task.id}/comments`;
+    const post = (body: FormData) =>
+      h.request(at, { method: "POST", headers: { cookie: alice, origin: SIGN_IN_URL }, body });
+    const many = await post(
+      form(
+        "all of them",
+        Array.from({ length: MAX_FILES_PER_COMMENT + 1 }, (_, n) => ({
+          name: `${n}.png`,
+          type: "image/png",
+          bytes: png,
+        })),
+      ),
+    );
+    expect(many.status).toBe(400);
+    expect(await errorOf(many)).toBe("request.invalid");
+    const empty = await post(
+      form("one is empty", [{ name: "nothing.png", type: "image/png", bytes: new Uint8Array() }]),
+    );
+    expect(empty.status).toBe(400);
+    const heavy = await post(
+      form("too heavy", [
+        {
+          name: "big.bin",
+          type: "application/octet-stream",
+          bytes: new Uint8Array(MAX_FILE_BYTES + 1),
+        },
+      ]),
+    );
+    expect(heavy.status).toBe(413);
+    expect(await errorOf(heavy)).toBe("request.too_large");
+    const named = await post(
+      form("a path, not a name", [{ name: "../up.png", type: "image/png", bytes: png }]),
+    );
+    expect(named.status).toBe(400);
+    expect(restCommentsSchema.parse(await (await get(alice, at)).json()).items).toEqual([]);
   });
 });

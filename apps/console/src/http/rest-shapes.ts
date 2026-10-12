@@ -1,5 +1,6 @@
 import type {
   RestCategory,
+  RestComment,
   RestDecision,
   RestDocument,
   RestDocumentFile,
@@ -18,6 +19,7 @@ import type {
   RestVersionSummary,
 } from "@skillcdn/console/api";
 import type { CategoryRecord } from "../db/queries/categories.js";
+import type { CommentRecord } from "../db/queries/comments.js";
 import type { DecisionRecord } from "../db/queries/decisions.js";
 import type {
   DocumentFileRecord,
@@ -161,6 +163,26 @@ export function restDecision(decision: DecisionRecord): RestDecision {
     outcome: decision.outcome ?? null,
     createdAt: decision.createdAt.toISOString(),
     updatedAt: decision.updatedAt.toISOString(),
+  };
+}
+
+export function restComment(comment: CommentRecord): RestComment {
+  return {
+    id: comment.id,
+    taskId: comment.taskId,
+    author: restPerson(comment.author),
+    agent: comment.agent ?? null,
+    body: comment.body,
+    files: comment.files.map((attached) => ({
+      id: attached.id,
+      file: {
+        name: attached.file.name,
+        size: attached.file.size,
+        contentType: attached.file.contentType,
+        sha256: attached.file.sha256,
+      },
+    })),
+    createdAt: comment.createdAt.toISOString(),
   };
 }
 

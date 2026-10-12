@@ -27,6 +27,18 @@ export {
 } from "./components/calendar.js";
 export { CategoryList, type CategoryListProps } from "./components/categories.js";
 export {
+  CommentCard,
+  type CommentCardProps,
+  type CommentDraft,
+  CommentForm,
+  type CommentFormProps,
+  isPicture,
+  TaskThread,
+  type TaskThreadProps,
+  type ThreadItem,
+  threadOf,
+} from "./components/comments.js";
+export {
   ConnectApproval,
   type ConnectApprovalProps,
   ConnectCodeForm,

@@ -955,6 +955,9 @@ describe("runs", () => {
   it("say the first words of a report, in one line, bounded", () => {
     expect(excerptOf("# Found it\n\nThe parser trusts its input.")).toBe("Found it");
     expect(excerptOf("\n\n- first   point\nsecond")).toBe("first point");
+    expect(excerptOf("See ![the sketch](shot.png) and **this** too, __then__ `that`")).toBe(
+      "See the sketch and this too, then `that`",
+    );
     expect(excerptOf("")).toBe("");
     expect(excerptOf("x".repeat(300))).toHaveLength(140);
   });

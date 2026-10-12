@@ -647,8 +647,10 @@ export const restEventDataSchema = z.object({
   status: z.optional(z.enum(RUN_STATUSES)),
   /** For `run.handed_in`: what the artifact is called. */
   label: z.optional(z.string()),
-  /** For `run.reported`: the first words of the report. */
+  /** For `run.reported` and `task.commented`: the first words of what was written. */
   excerpt: z.optional(z.string()),
+  /** For `task.commented`: how many files came with it. */
+  files: z.optional(z.int()),
 });
 export type RestEventData = z.infer<typeof restEventDataSchema>;
 
@@ -739,6 +741,34 @@ export type RestRun = z.infer<typeof restRunSchema>;
 /** `GET /api/v1/projects/<key>/runs`: a page of the runs, newest first, and whether there is more. */
 export const restRunsSchema = z.object({ items: z.array(restRunSchema), more: z.boolean() });
 export type RestRuns = z.infer<typeof restRunsSchema>;
+
+/** A file put in a comment, kept as a run's file is; its bytes are at `projectPath(key, "files", <id>)`. */
+export const restCommentFileSchema = z.object({
+  id: uuid,
+  file: restFileSchema,
+});
+export type RestCommentFile = z.infer<typeof restCommentFileSchema>;
+
+/**
+ * A word in the discussion on a task (ADR-0024): by a person, or by their agent, with the
+ * files put in it. Never rewritten: a mistake is corrected in the next one.
+ */
+export const restCommentSchema = z.object({
+  id: uuid,
+  taskId: uuid,
+  author: restPersonSchema,
+  /** The agent the author wrote through, or `null` when a person wrote it themselves. */
+  agent: z.nullable(z.string()),
+  /** Markdown. A picture among the files is placed in it as `![words](its name)`. */
+  body: z.string(),
+  files: z.array(restCommentFileSchema),
+  createdAt: instant,
+});
+export type RestComment = z.infer<typeof restCommentSchema>;
+
+/** `GET .../tasks/<id>/comments`: the discussion on a task, oldest first, whole. */
+export const restCommentsSchema = z.object({ items: z.array(restCommentSchema) });
+export type RestComments = z.infer<typeof restCommentsSchema>;
 
 /** `GET .../events?after=`: what happened after that number, oldest first. */
 export const restEventsSchema = z.object({
@@ -1031,6 +1061,15 @@ export const restReportInputSchema = z.object({
   body: body.check(z.refine((value) => value.trim().length > 0, "must say something")),
 });
 export type RestReportInput = z.infer<typeof restReportInputSchema>;
+
+/**
+ * What `POST .../tasks/<id>/comments` is sent as JSON: the word, in Markdown. As a form, the
+ * part `body` says the same and the parts `file` carry the files; then the body may be blank.
+ */
+export const restCommentInputSchema = z.object({
+  body,
+});
+export type RestCommentInput = z.infer<typeof restCommentInputSchema>;
 
 /** What `POST .../runs/<id>/artifacts` is sent: a link to what was made. */
 export const restArtifactInputSchema = z.object({

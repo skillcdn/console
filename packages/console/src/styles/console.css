@@ -295,6 +295,7 @@ table {
 .sc-answer-form > *,
 .sc-run > *,
 .sc-report > *,
+.sc-comment > *,
 .sc-feed > *,
 .sc-card > *,
 .sc-form > *,
@@ -745,6 +746,7 @@ table {
 .sc-project,
 .sc-decision,
 .sc-run,
+.sc-comment,
 .sc-sign-in,
 .sc-facts {
   position: relative;
@@ -760,6 +762,7 @@ table {
 .sc-project::before,
 .sc-decision::before,
 .sc-run::before,
+.sc-comment::before,
 .sc-sign-in::before,
 .sc-facts::before {
   content: "";
@@ -2135,6 +2138,109 @@ table {
 .sc-run-summary {
   padding-top: var(--sc-space-3);
   border-top: var(--sc-border);
+}
+
+/* The discussion on a task (ADR-0024): what was said, the runs and the decisions, one thread in
+   the order they came, with the way to say something at its end. */
+.sc-thread {
+  display: grid;
+  gap: var(--sc-space-3);
+}
+
+.sc-comment {
+  display: grid;
+  gap: var(--sc-space-3);
+  padding: var(--sc-space-4) var(--sc-space-5);
+  border-radius: var(--sc-radius-lg);
+}
+
+.sc-comment-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
+}
+
+.sc-comment-meta {
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+/* A picture in a comment is seen where it is, no taller than a screen's worth. */
+.sc-comment-picture img,
+.sc-comment .sc-prose img {
+  display: block;
+  max-width: 100%;
+  max-height: 24rem;
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+}
+
+.sc-comment-files {
+  display: grid;
+  gap: var(--sc-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--sc-text-sm);
+}
+
+.sc-comment-picture {
+  display: grid;
+  gap: var(--sc-space-1);
+  justify-items: start;
+}
+
+.sc-comment-form {
+  display: grid;
+  gap: var(--sc-space-2);
+}
+
+.sc-comment-chosen {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--sc-text-sm);
+}
+
+.sc-comment-chosen-file {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sc-space-1);
+  padding: var(--sc-space-1) var(--sc-space-2);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-sheet);
+}
+
+.sc-comment-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sc-space-2);
+}
+
+.sc-comment-form-actions label {
+  position: relative;
+  cursor: pointer;
+}
+
+/* The file input is the label's: there for the keyboard and the screen reader, not seen. */
+.sc-comment-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  opacity: 0;
+}
+
+.sc-comment-form .sc-field-hint {
+  margin-top: 0;
 }
 
 .sc-connect {
