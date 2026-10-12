@@ -1,5 +1,19 @@
 # @skillcdn/console
 
+## 0.1.16
+
+### Patch Changes
+
+- [`cebb1a0`](https://github.com/skillcdn/console/commit/cebb1a05782c5511fbe36823f6d39814fa7c9f4c) Thanks [@samo-lucid](https://github.com/samo-lucid)! - The console's rules say what a task's title is: what is to be done, in plain words that stand on their own, with what it refers to in the body. The task form says so under its title, and `console task new` says so in its limits.
+
+- [`3807f32`](https://github.com/skillcdn/console/commit/3807f328de04091edd7381ec41a607e474c1aa70) Thanks [@samo-lucid](https://github.com/samo-lucid)! - The Decisions page says "No decision waits for a person" where there is none, in both languages.
+
+- [`e73a807`](https://github.com/skillcdn/console/commit/e73a80778a36aeff4d4d8a0be5c46bc76d9a9ed3) Thanks [@samo-lucid](https://github.com/samo-lucid)! - `console take` says that a run was taken over only when one was open on the task, and prints the task as it stands once taken.
+
+- [`957c774`](https://github.com/skillcdn/console/commit/957c774e800826dbce8f7080e757716c613af1f5) Thanks [@samo-lucid](https://github.com/samo-lucid)! - A project's mark shows its symbol until its own image is there, so that it is never empty while the image loads.
+
+- [`e41a3b7`](https://github.com/skillcdn/console/commit/e41a3b7f94a34d9c4a1781977d6097cacc2c2c32) Thanks [@samo-lucid](https://github.com/samo-lucid)! - The calendar shows the task under the pointer in full: a card with its number and title and the facts its page lists (state, priority, category, goal, owner, assignee, plan, and when it was started, done, written and changed), above or below the item where there is more room, kept within the window (`TaskTip`, placed by `placeTip`; `Calendar` takes the project's `goals` to name a task's goal). Phones keep the lists below the calendar instead, as before. The spinner turns whatever the motion preference, slowly where motion is to be reduced. The sign-in page's line now reads "Join an organization made of AI agents."
+
 ## 0.1.15
 
 ### Patch Changes
