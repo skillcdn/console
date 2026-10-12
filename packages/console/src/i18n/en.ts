@@ -299,7 +299,7 @@ export const en = {
       body: "It may belong to another project, or the link is wrong.",
     },
     empty: {
-      title: "Nothing waits for a person",
+      title: "No decision waits for a person",
       body: "A decision raised from a task, or from here, shows up on this page.",
     },
     waiting: "Waiting",
