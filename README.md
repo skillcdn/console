@@ -16,6 +16,19 @@
 
 The console holds the work to be done, which agent (Claude Code, Codex, any agent with a shell) is doing what right now, what each has done, and the decisions that wait for a person. People decide; agents work. One container image next to PostgreSQL; people sign in with the accounts they already have; each person's agent connects with the `console` command and works the board as that person. The organization's playbooks and skills live in git repositories and reach the agents through [SkillCDN](https://skillcdn.ai).
 
+## Quick start
+
+Connect `https://skillcdn.ai/gh/skillcdn/console` to your agent as an MCP server and say: **"Set up a SkillCDN console for my organization."** The agent reads the console's skills and takes it from there: it asks what it cannot derive (how many people, the web address, how people sign in and who configures the console), shows the monthly cost before anything is made, creates the deployment on AWS behind Cloudflare, writes out the few steps only you can take (a GitHub App on your organization, or a Google client; the first sign-in; a domain's nameservers), signs you in as the first administrator, and proves it with an agent connected and a file handed in ([`deploying-a-console`](skills/deploying-a-console/SKILL.md)). Nothing is made or bought before you say so.
+
+The page at [skillcdn.ai/gh/skillcdn/console](https://skillcdn.ai/gh/skillcdn/console) shows how each app connects; two of them:
+
+```sh
+claude mcp add --transport http skillcdn-console https://skillcdn.ai/gh/skillcdn/console   # Claude Code
+codex mcp add skillcdn-console --url https://skillcdn.ai/gh/skillcdn/console                # Codex CLI
+```
+
+What the agent needs from you: an AWS account, a domain on Cloudflare or one to buy, and a browser for the steps that are yours. People then sign in with the accounts they already have; with a GitHub organization or a Google Workspace, everyone of it is in, and an administrator lets anyone else in on the People page ([ADR-0022](docs/adr/0022-who-is-in-is-the-consoles-own-record-and-an-administrator-keeps-it.md)). To run the console on a laptop first, or on another platform, see below.
+
 ## Install
 
 **The console.** One image, one database; [deploy/README.md](deploy/README.md) is the contract for whoever operates it. Locally, from a checkout:
@@ -32,7 +45,7 @@ pnpm --filter @skillcdn/console-app run start api     # http://127.0.0.1:11199
 
 People sign in through GitHub, Google Workspace, or both ([deploy/README.md](deploy/README.md#signing-in)); until that is configured the console says so and nobody is let in. The first administrator is named in `ADMINS` and lets everyone else in on the People page, unless a Google Workspace domain lets them in ([ADR-0022](docs/adr/0022-who-is-in-is-the-consoles-own-record-and-an-administrator-keeps-it.md)).
 
-**On a cloud.** Tell an agent connected to `skillcdn.ai/gh/skillcdn/console` to deploy the console for your organization. The skill [`deploying-a-console`](skills/deploying-a-console/SKILL.md) asks how many people, which web address and how people sign in, shows the monthly cost of the size that fits, and puts the console on AWS behind Cloudflare, with a private repository of yours that redeploys on every push ([ADR-0017](docs/adr/0017-the-reference-deployment-is-the-image-on-aws-behind-cloudflare-written-as-a-skill.md)). Any other platform deploys the same image from [deploy/README.md](deploy/README.md).
+**On a cloud.** The [quick start](#quick-start): an agent connected to `skillcdn.ai/gh/skillcdn/console` deploys the console for your organization with [`deploying-a-console`](skills/deploying-a-console/SKILL.md), on AWS behind Cloudflare, with a private repository of yours that redeploys on every push ([ADR-0017](docs/adr/0017-the-reference-deployment-is-the-image-on-aws-behind-cloudflare-written-as-a-skill.md)). Any other platform deploys the same image from [deploy/README.md](deploy/README.md).
 
 **The command, where an agent runs.** `@skillcdn/console` ships `console`, the agent's side of the console: a thin client of the REST API, which a person signs in once with a token from their Agents page.
 

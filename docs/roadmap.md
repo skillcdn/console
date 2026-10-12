@@ -125,7 +125,7 @@ Goal: who may use the board is the console's own record, kept by an administrato
 - [x] A person's standing (2026-10-12): `status` and `source` on every person; a deactivated person kept with everything they did, refused on every request with their agents, listed nowhere and offered to no picker; the board keeps at least one administrator in.
 - [x] Let in by login (2026-10-12): an administrator lets a login in on the People page or with `console person add`, and whoever signs in with that account is the person, the listing bound to the account from then on; a listing nobody signed in with is taken away; a person is taken out and back in on the same page, or with `person deactivate` and `person reactivate`; the feed says each. `MEMBERS` is gone; `ADMINS` lets the first administrators in ([specs/rest.md](specs/rest.md), [specs/cli.md](specs/cli.md)).
 - [x] The organization at the git host (2026-10-12), read through a GitHub App installed on it (`GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_ORG`): asked at sign-in, and read whole by the worker every ten minutes, so that those who left are out and those who returned are in, by the account's id; what an administrator cannot change; the People page says when it was last read.
-- [ ] A console set up from a connected agent: the README's quick start, and the skills saying how each provider is registered.
+- [x] A console set up from a connected agent (2026-10-12): the README's quick start, which is connecting `skillcdn.ai/gh/skillcdn/console` and asking for a console; the deploying skill registers the GitHub App for signing in and for the organization, or the Google client, with the steps of the day.
 
 ## After milestone 12
 
