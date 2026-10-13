@@ -3,6 +3,8 @@ import { MAX_SUMMARY_LENGTH } from "../limits.js";
 import { type CliIo, EXIT, runCli } from "./cli.js";
 import type { CredentialStore, Credentials } from "./credentials.js";
 import type { DirectorySettings, DirectoryStore } from "./directory.js";
+import type { Install } from "./install.js";
+import type { NoticeStore, VersionNotice } from "./notices.js";
 import type { Listen, ServeHandler } from "./serve.js";
 
 const WHEN = "2026-10-09T10:00:00.000Z";
@@ -116,6 +118,7 @@ const ME = {
   agent: "Claude Code on laptop",
   language: null,
   signIn: [],
+  console: { version: "0.1.18", clientRange: ">=0.1.18 <0.2.0" },
 };
 const TOKEN = {
   id: "0199c4d8-0000-7000-8000-000000000030",
@@ -123,6 +126,7 @@ const TOKEN = {
   createdAt: WHEN,
   expiresAt: null,
   lastUsedAt: null,
+  client: null,
 };
 const CONNECTION = {
   code: "ABCD-EFGH",
@@ -185,9 +189,20 @@ interface Answer {
   readonly body?: unknown;
 }
 
+/** What a console says of itself on every answer (ADR-0025); the fake says nothing unless told. */
+interface Says {
+  readonly version?: string;
+  readonly clientRange?: string;
+}
+
 /** A console that answers from a table: one answer per route, or several in turn. */
-function fakeConsole(table: Record<string, Answer | Answer[]>) {
+function fakeConsole(table: Record<string, Answer | Answer[]>, says: Says = {}) {
   const calls: { key: string; init: RequestInit | undefined; body: unknown }[] = [];
+  const headers = {
+    "content-type": "application/json",
+    ...(says.version === undefined ? {} : { "console-version": says.version }),
+    ...(says.clientRange === undefined ? {} : { "console-client-range": says.clientRange }),
+  };
   const fetch: CliIo["fetch"] = async (url, init) => {
     const key = `${init?.method ?? "GET"} ${url.replace(ORIGIN, "")}`;
     const raw = init?.body;
@@ -197,12 +212,12 @@ function fakeConsole(table: Record<string, Answer | Answer[]>) {
     if (answer === undefined) {
       return new Response(
         JSON.stringify({ error: { code: "not_found", message: "Nothing here." } }),
-        { status: 404, headers: { "content-type": "application/json" } },
+        { status: 404, headers },
       );
     }
     return new Response(answer.body === undefined ? null : JSON.stringify(answer.body), {
       status: answer.status ?? 200,
-      headers: { "content-type": "application/json" },
+      headers,
     });
   };
   return { fetch, calls };
@@ -220,6 +235,19 @@ function memoryStore(initial?: Credentials) {
     },
     async clear() {
       kept = undefined;
+    },
+  };
+  return { store, kept: () => kept };
+}
+
+function memoryNotices(initial?: VersionNotice) {
+  let kept = initial;
+  const store: NoticeStore = {
+    async load() {
+      return kept;
+    },
+    async save(notice) {
+      kept = notice;
     },
   };
   return { store, kept: () => kept };
@@ -477,7 +505,9 @@ describe("the console command", () => {
       env: SIGNED_IN,
     });
     expect(await runCli(["whoami"], who.io)).toBe(EXIT.ok);
-    expect(who.out()).toBe(`alice (member) at Acme, ${ORIGIN}; project web\n`);
+    expect(who.out()).toBe(
+      `alice (member) at Acme, ${ORIGIN}; project web\nThis command is of a version it does not know; the console is 0.1.18 and takes >=0.1.18 <0.2.0.\n`,
+    );
   });
 
   it("serves a console of one's own: the API carried with the token, from the page's origin only", async () => {
@@ -1729,5 +1759,181 @@ describe("configuring, as the person", () => {
     expect(await runCli(["help"], whole.io)).toBe(EXIT.ok);
     expect(whole.out()).toContain("Configuring, as the person");
     expect(whole.out()).toContain('project new <key> "<name>"');
+  });
+});
+
+describe("the versions of the command and the console (ADR-0025)", () => {
+  const SAYS = { version: "0.1.18", clientRange: ">=0.1.18 <0.2.0" };
+  const GLOBAL: Install = {
+    kind: "global",
+    manager: "npm",
+    root: "C:/Users/alice/AppData/Roaming/npm",
+  };
+  const IN_PROJECT: Install = { kind: "project", manager: "pnpm", root: "/work/app" };
+  const NO_TASKS = {
+    [`GET ${IN}/tasks?limit=50&offset=0`]: { body: { more: false, items: [] } },
+  };
+
+  it("names itself on every request, and says where it is installed and what the console takes", async () => {
+    const { fetch, calls } = fakeConsole({ "GET /api/v1/me": { body: ME } }, SAYS);
+    const userAgent = "skillcdn-console/0.1.18 (cli; node 24.11.0; win32)";
+    const h = harness({ fetch, env: SIGNED_IN, version: "0.1.18", userAgent, install: GLOBAL });
+    expect(await runCli(["whoami"], h.io)).toBe(EXIT.ok);
+    expect(new Headers(calls[0]?.init?.headers).get("user-agent")).toBe(userAgent);
+    expect(h.out()).toBe(
+      `alice (member) at Acme, ${ORIGIN}; project web\nThis command is 0.1.18, installed for the machine with npm in C:/Users/alice/AppData/Roaming/npm; the console is 0.1.18 and takes >=0.1.18 <0.2.0.\n`,
+    );
+    expect(h.err()).toBe("");
+    const version = harness({ fetch, version: "0.1.18", install: GLOBAL });
+    expect(await runCli(["--version"], version.io)).toBe(EXIT.ok);
+    expect(version.out()).toBe(
+      "console 0.1.18 (@skillcdn/console), installed for the machine with npm in C:/Users/alice/AppData/Roaming/npm\n",
+    );
+    const json = harness({ fetch, env: SIGNED_IN, version: "0.1.18", install: GLOBAL });
+    expect(await runCli(["whoami", "--json"], json.io)).toBe(EXIT.ok);
+    expect(JSON.parse(json.out())).toMatchObject({
+      console: SAYS,
+      command: { version: "0.1.18", install: GLOBAL },
+    });
+  });
+
+  it("notices a newer console once a day, and a console older than the command, on stderr only", async () => {
+    // From 1.0 a command one minor behind is answered, and told once that a newer one exists.
+    const later = { version: "1.4.2", clientRange: ">=1.3.0 <1.6.0" };
+    const notices = memoryNotices();
+    const behind = (now: string, store = notices.store) =>
+      harness({
+        fetch: fakeConsole(NO_TASKS, later).fetch,
+        env: SIGNED_IN,
+        version: "1.4.0",
+        install: IN_PROJECT,
+        notices: store,
+        now: () => Date.parse(now),
+      });
+    const first = behind("2026-10-13T10:00:00Z");
+    expect(await runCli(["tasks"], first.io)).toBe(EXIT.ok);
+    expect(first.out()).not.toContain("newer");
+    expect(first.err()).toBe(
+      "A newer command exists: the console runs 1.4.2, this command is 1.4.0. Update it: pnpm add @skillcdn/console@1.4.2 (in /work/app)\n",
+    );
+    expect(notices.kept()).toEqual({
+      command: "1.4.0",
+      console: "1.4.2",
+      shownAt: "2026-10-13T10:00:00.000Z",
+    });
+    const sameDay = behind("2026-10-13T20:00:00Z");
+    expect(await runCli(["tasks"], sameDay.io)).toBe(EXIT.ok);
+    expect(sameDay.err()).toBe("");
+    const nextDay = behind("2026-10-14T11:00:00Z");
+    expect(await runCli(["tasks"], nextDay.io)).toBe(EXIT.ok);
+    expect(nextDay.err()).toContain("A newer command exists");
+    // With --json, the console's JSON stays on stdout and the notice on stderr.
+    const json = behind("2026-10-15T11:00:00Z", memoryNotices().store);
+    expect(await runCli(["tasks", "--json"], json.io)).toBe(EXIT.ok);
+    expect(JSON.parse(json.out())).toEqual({ more: false, items: [] });
+    expect(json.err()).toContain("A newer command exists");
+    // Before 1.0 a command newer than the console, within the minor, is answered and warned.
+    const ahead = harness({
+      fetch: fakeConsole(NO_TASKS, SAYS).fetch,
+      env: SIGNED_IN,
+      version: "0.1.19",
+      install: GLOBAL,
+    });
+    expect(await runCli(["tasks"], ahead.io)).toBe(EXIT.ok);
+    expect(ahead.err()).toBe(
+      "This command (0.1.19) is newer than the console (0.1.18, which takes >=0.1.18 <0.2.0): what the console has not got yet is refused as not found. The console's operator updates it; to match the console meanwhile: npm install -g @skillcdn/console@0.1.18\n",
+    );
+    // The same version, or a console that says nothing of itself: nothing to say.
+    const same = harness({
+      fetch: fakeConsole(NO_TASKS, SAYS).fetch,
+      env: SIGNED_IN,
+      version: "0.1.18",
+    });
+    expect(await runCli(["tasks"], same.io)).toBe(EXIT.ok);
+    expect(same.err()).toBe("");
+    const mute = harness({ fetch: fakeConsole(NO_TASKS).fetch, env: SIGNED_IN, version: "0.1.19" });
+    expect(await runCli(["tasks"], mute.io)).toBe(EXIT.ok);
+    expect(mute.err()).toBe("");
+    // whoami says it itself, every time, in its own words.
+    const who = harness({
+      fetch: fakeConsole({ "GET /api/v1/me": { body: ME } }, SAYS).fetch,
+      env: SIGNED_IN,
+      version: "0.1.19",
+      install: GLOBAL,
+      notices: memoryNotices({
+        command: "0.1.19",
+        console: "0.1.18",
+        shownAt: "2026-10-13T10:00:00.000Z",
+      }).store,
+      now: () => Date.parse("2026-10-13T10:01:00Z"),
+    });
+    expect(await runCli(["whoami"], who.io)).toBe(EXIT.ok);
+    expect(who.out()).toContain(
+      "This command is newer than the console: what the console has not got yet is refused as not found. To match the console: npm install -g @skillcdn/console@0.1.18",
+    );
+    expect(who.err()).toBe("");
+  });
+
+  it("is refused outside the range with 426, exits with 4, and says the command to run", async () => {
+    const refused = (code: string, message: string) => ({
+      [`GET ${IN}/tasks?limit=50&offset=0`]: { status: 426, body: { error: { code, message } } },
+    });
+    const old = harness({
+      fetch: fakeConsole(refused("client.outdated", "Older than this console takes."), SAYS).fetch,
+      env: SIGNED_IN,
+      version: "0.1.17",
+      install: IN_PROJECT,
+    });
+    expect(await runCli(["tasks"], old.io)).toBe(EXIT.incompatible);
+    expect(old.err()).toBe(
+      "client.outdated: Older than this console takes.\nUpdate the command: pnpm add @skillcdn/console@0.1.18 (in /work/app)\n",
+    );
+    const fresh = harness({
+      fetch: fakeConsole(refused("client.too_new", "Newer than this console takes."), SAYS).fetch,
+      env: SIGNED_IN,
+      version: "0.2.0",
+    });
+    expect(await runCli(["tasks"], fresh.io)).toBe(EXIT.incompatible);
+    expect(fresh.err()).toBe(
+      "client.too_new: Newer than this console takes.\nInstall the console's version: npm install -g @skillcdn/console@0.1.18; or ask the console's operator to update the console.\n",
+    );
+    // An outdated command is told at the door: login is refused the same way.
+    const door = harness({
+      fetch: fakeConsole(
+        {
+          "POST /api/v1/connect": {
+            status: 426,
+            body: { error: { code: "client.outdated", message: "Old." } },
+          },
+        },
+        SAYS,
+      ).fetch,
+      version: "0.1.17",
+      install: GLOBAL,
+    });
+    expect(await runCli(["login", "--url", ORIGIN], door.io)).toBe(EXIT.incompatible);
+    expect(door.err()).toContain("Update the command: npm install -g @skillcdn/console@0.1.18");
+    // A console that says nothing of its version is asked for the latest.
+    const unsaid = harness({
+      fetch: fakeConsole(refused("client.outdated", "Old.")).fetch,
+      env: SIGNED_IN,
+      version: "0.1.17",
+    });
+    expect(await runCli(["tasks"], unsaid.io)).toBe(EXIT.incompatible);
+    expect(unsaid.err()).toContain("npm install -g @skillcdn/console@latest");
+  });
+
+  it("still reads a console older than the rule, and says that it does not say its version", async () => {
+    const { console: _, ...older } = ME;
+    const h = harness({
+      fetch: fakeConsole({ "GET /api/v1/me": { body: older } }).fetch,
+      env: SIGNED_IN,
+      version: "0.1.18",
+    });
+    expect(await runCli(["whoami"], h.io)).toBe(EXIT.ok);
+    expect(h.out()).toBe(
+      `alice (member) at Acme, ${ORIGIN}; project web\nThis command is 0.1.18; the console does not say its version, so it is older than 0.1.18.\n`,
+    );
+    expect(h.err()).toBe("");
   });
 });

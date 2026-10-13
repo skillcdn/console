@@ -154,6 +154,12 @@ export interface ClientOptions {
    * the page's own origin is what the console answers to.
    */
   readonly token?: string;
+  /**
+   * What the client calls itself, sent as `user-agent` where the platform lets a client say
+   * (Node; a browser keeps its own): the command sends its product token, by which the console
+   * holds it to the versions it takes (ADR-0025).
+   */
+  readonly userAgent?: string;
 }
 
 export class ApiError extends Error {
@@ -381,7 +387,8 @@ const INVALID = "The server answered unexpectedly.";
 export function createClient(options: ClientOptions = {}): ConsoleClient {
   const base = (options.baseUrl ?? "").replace(/\/+$/, "");
   const send = options.fetch ?? ((input, init) => fetch(input, init));
-  const { token } = options;
+  const { token, userAgent } = options;
+  const named: Record<string, string> = userAgent === undefined ? {} : { "user-agent": userAgent };
 
   const withQuery = (path: string, params: Record<string, string | undefined>): string => {
     const query = new URLSearchParams();
@@ -423,6 +430,7 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
           // A form names its own type, boundary included; everything else is JSON.
           ...(body === undefined || form ? {} : { "content-type": "application/json" }),
           ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
+          ...named,
         },
         ...(body === undefined ? {} : { body: form ? body : JSON.stringify(body) }),
       });
@@ -457,7 +465,10 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
         method: "GET",
         ...(signal === undefined ? {} : { signal }),
         credentials: token === undefined ? "same-origin" : "omit",
-        headers: token === undefined ? {} : { authorization: `Bearer ${token}` },
+        headers: {
+          ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
+          ...named,
+        },
       });
     } catch (error) {
       if (signal?.aborted === true) {

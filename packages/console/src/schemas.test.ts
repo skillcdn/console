@@ -347,6 +347,7 @@ describe("tokens", () => {
       createdAt: "2026-10-09T10:00:00.000Z",
       expiresAt: "2027-01-07T10:00:00.000Z",
       lastUsedAt: null,
+      client: null,
     };
     expect(restTokensSchema.parse({ items: [token] }).items).toHaveLength(1);
     expect(restTokenCreatedSchema.parse({ token, secret: "cns_t_x" }).secret).toBe("cns_t_x");

@@ -20,6 +20,28 @@ export {
   type TaskFilter,
 } from "./client.js";
 export {
+  CLIENT_POLICY,
+  CLIENT_PRODUCT,
+  CLIENT_RANGE_HEADER,
+  type ClientJudgement,
+  type ClientPolicy,
+  type ClientVerdict,
+  clientRange,
+  clientVersionOf,
+  commonRange,
+  compareVersions,
+  formatRange,
+  formatVersion,
+  inRange,
+  judgeClient,
+  parseRange,
+  parseVersion,
+  userAgentOf,
+  VERSION_HEADER,
+  type Version,
+  type VersionRange,
+} from "./compat.js";
+export {
   CONNECT_CODE_ALPHABET,
   CONNECT_CODE_LENGTH,
   isConnectCode,

@@ -1,5 +1,7 @@
 import {
   AUTH_ROUTES,
+  clientVersionOf,
+  formatVersion,
   isProviderKey,
   type ProviderKey,
   REST_ROUTES,
@@ -90,7 +92,13 @@ export function createAccess(auth: AppAuth | undefined): Access {
       }
       const authorization = c.req.header("authorization");
       if (authorization !== undefined) {
-        const found = await auth.tokens.resolve(authorization);
+        // The command names its version; the token keeps it, so that the Agents page says
+        // which version each agent runs (ADR-0025).
+        const client = clientVersionOf(c.req.header("user-agent"));
+        const found = await auth.tokens.resolve(
+          authorization,
+          client === undefined ? undefined : formatVersion(client),
+        );
         // Membership is decided on every request, for a token as for a session.
         return found === undefined || !auth.membership.allows(found.person)
           ? undefined
@@ -153,6 +161,8 @@ export interface AuthDependencies {
   readonly workspace: () => Promise<WorkspaceRecord>;
   /** The organization's skills: the deployment they are read through, and its default address. */
   readonly skills: { readonly source: string; readonly address: string | undefined };
+  /** The console's version and the range of command versions it takes (ADR-0025). */
+  readonly console: { readonly version: string; readonly clientRange: string };
   readonly database: Database;
   readonly clock: Clock;
   readonly logger: Logger;
@@ -168,7 +178,8 @@ export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies):
 
   /**
    * What the pages are told about who asks: the workspace, the person, with what (a token's
-   * name, so that a console of a person's own knows it holds one), their language, the ways in.
+   * name, so that a console of a person's own knows it holds one), their language, the ways in,
+   * and the console's version, for a console built on the package to compare itself with.
    */
   const meOf = async (
     caller: { readonly person: PersonRecord; readonly token: TokenRecord | undefined } | undefined,
@@ -185,6 +196,10 @@ export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies):
       agent: caller?.token?.name ?? null,
       language: person === undefined ? null : ((await languageOf(database, person.id)) ?? null),
       signIn: auth === undefined ? [] : [...auth.providers],
+      console: {
+        version: dependencies.console.version,
+        clientRange: dependencies.console.clientRange,
+      },
     };
   };
 

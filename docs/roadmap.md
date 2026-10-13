@@ -151,7 +151,17 @@ Goal: a task that can be talked about where it is: comments by people and by the
 - [x] The default UI (2026-10-13): the task's page reads the discussion as one thread, with the form at its end, pictures pasted in placed in the text; a project's mark shows its symbol only until its image is there, so that an image with clear parts does not show it through.
 - [x] The skills and the rules (2026-10-13): `working-the-board` reads the discussion with the task and says when a comment is the word, and that work given in chat is written on the board first; the console's rules say a comment is a word to people and a report the run's record.
 
-## After milestone 14
+## Done: milestone 15, the command and the console go together by version (2026-10-13)
+
+Goal: a command that no longer goes with the console it talks to is told so, and told what to run, before it meets a route the console lacks or an answer it cannot read; the console knows its own version; and nothing is added to any request ([ADR-0025](adr/0025-the-command-names-its-version-on-every-request-and-the-console-holds-it-to-the-range-it-takes.md)).
+
+- [x] The decision (2026-10-13, [ADR-0025](adr/0025-the-command-names-its-version-on-every-request-and-the-console-holds-it-to-the-range-it-takes.md)): the command names its version in its `user-agent`, every answer of the API says the console's version and the range it takes, the common rule (before 1.0 the console's version on within its minor; from 1.0 the major and a minor within one), the package narrowing the rule and never widening it, `426` with `client.outdated` and `client.too_new`, and the REST API staying at `/api/v1`.
+- [x] The rule in the package (2026-10-13): `compat`, read by the console and the command alike, with `CLIENT_POLICY`; `createClient({ userAgent })`.
+- [x] The console (2026-10-13): its version read from the package's manifest at start, in place of `0.0.0`; the gate on `/api/*` before anything else; `console-version` and `console-client-range` on every answer; `me.console`; the token keeping the version of the command that last presented it (migration 0017), shown on the Agents pages with whether the console still takes it.
+- [x] The command (2026-10-13): exit code `4` with the update to make where it is installed (for the machine, in the project, or fetched for the run, with the manager that put it there); a line on stderr once a day when it is behind or ahead within the range; `whoami` and `--version` saying the versions and the install.
+- [x] The skill (2026-10-13): `working-the-board` runs the update the command prints and goes on.
+
+## After milestone 15
 
 Nothing is chosen yet; the list below is where the next milestone comes from. Left open by milestone 9: whether the board should end a run not heard from for a long while itself ([ADR-0020](adr/0020-the-console-does-not-claim-an-agent-is-at-work-a-run-says-when-it-was-last-heard-from-and-a-new-run-takes-over.md)); a roadmap across projects.
 

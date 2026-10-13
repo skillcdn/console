@@ -31,6 +31,8 @@ import type { FixtureProvider } from "./fixture-provider.js";
 export const BASE_URL = "http://console.test";
 /** The origin of a harness where people can sign in: signing in wants one origin, and a secure one. */
 export const SIGN_IN_URL = "https://console.test";
+/** The console's version a harness runs as (ADR-0025), fixed so that the tests do not move with the package's. */
+export const HARNESS_VERSION = "0.1.18";
 
 export interface Harness {
   readonly app: Hono<AppEnv>;
@@ -153,6 +155,7 @@ export function createHarness(testDatabase: TestDatabase, options: HarnessOption
       isShuttingDown: () => false,
       skillSource: options.skills?.source,
       blobs: options.blobs,
+      version: HARNESS_VERSION,
     },
   );
   const listener: EventListener | undefined =

@@ -196,6 +196,13 @@ export const restMeSchema = z.object({
   /** The language the person chose for the pages (ADR-0012), or `null` for the browser's. */
   language: z.nullable(languageTag),
   signIn: z.array(restProviderSchema),
+  /**
+   * The console's version and the range of command versions it takes, as npm spells one
+   * (ADR-0025): what a console of a person's own compares the package it was built on with.
+   * Every console answers it from 0.1.18; read as optional, so that a command or a console
+   * built on this package still reads an older console's answer, and says it is older.
+   */
+  console: z.optional(z.object({ version: z.string(), clientRange: z.string() })),
 });
 export type RestMe = z.infer<typeof restMeSchema>;
 
@@ -791,6 +798,8 @@ export const restTokenSchema = z.object({
   expiresAt: z.nullable(instant),
   /** When it was last presented, or `null` if never. */
   lastUsedAt: z.nullable(instant),
+  /** The version of the command that last presented it (`0.1.18`), or `null` when the last to present it named none. */
+  client: z.nullable(z.string()),
 });
 export type RestToken = z.infer<typeof restTokenSchema>;
 

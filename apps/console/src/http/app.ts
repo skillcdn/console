@@ -9,6 +9,7 @@ import type { Clock } from "../ports/clock.js";
 import type { Skills } from "../skills.js";
 import { type AppAuth, createAccess, registerAuth } from "./auth.js";
 import type { ClientAddressResolver } from "./client-address.js";
+import { clientVersionGate, versionFactsOf } from "./client-version.js";
 import type { LiveFeed } from "./live-feed.js";
 import { type AppEnv, requestContext } from "./request-context.js";
 import { registerRest } from "./rest.js";
@@ -31,6 +32,8 @@ export interface AppDependencies {
   readonly skills: Skills;
   /** A build of the default UI to serve. Left out, the server is API only. */
   readonly web: WebRoot | undefined;
+  /** The console's version: the package's, which the command is held to (ADR-0025). */
+  readonly version: string;
   readonly clock: Clock;
   readonly logger: Logger;
   readonly requests: {
@@ -87,6 +90,11 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
     return c.json({ status: "ready" });
   });
 
+  // The command is held to the versions the console takes before anything else is asked of its
+  // request, and every answer of the API says the version and the range (ADR-0025).
+  const version = versionFactsOf(dependencies.version);
+  app.use("/api/*", clientVersionGate(version));
+
   // Nothing under /api is cached, unless the handler said how long: it is one person's, or it
   // changes, except what is read by its hash.
   app.use("/api/*", async (c, next) => {
@@ -97,7 +105,16 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
   });
 
   const access = createAccess(auth);
-  registerAuth(app, { auth, access, workspace, skills, database, clock, logger });
+  registerAuth(app, {
+    auth,
+    access,
+    workspace,
+    skills,
+    database,
+    clock,
+    logger,
+    console: { version: version.version, clientRange: version.clientRange },
+  });
   registerRest(app, {
     database,
     workspace,

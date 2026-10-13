@@ -64,6 +64,7 @@ describe("createClient", () => {
           person: PERSON,
           agent: null,
           signIn: [{ key: "gh", label: "GitHub" }],
+          console: { version: "0.1.18", clientRange: ">=0.1.18 <0.2.0" },
         },
       },
     });
@@ -259,6 +260,7 @@ describe("createClient", () => {
       createdAt: "2026-10-09T10:00:00.000Z",
       expiresAt: "2027-01-07T10:00:00.000Z",
       lastUsedAt: null,
+      client: null,
     };
     const { send, calls } = fakeFetch({
       "GET https://console.test/api/v1/tokens": { body: { more: false, items: [token] } },

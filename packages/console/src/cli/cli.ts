@@ -7,6 +7,7 @@ import {
   type FetchLike,
   type ProjectClient,
 } from "../client.js";
+import { CLIENT_RANGE_HEADER, judgeClient, parseVersion, VERSION_HEADER } from "../compat.js";
 import { addDays, dayOf as dayOfDate, isDay } from "../dates.js";
 import { DEFAULT_PAGE_LIMIT, LIST_LIMIT, MAX_OPTIONS, MIN_OPTIONS } from "../limits.js";
 import { fillRules, RULES_PATH, RULES_TITLE } from "../rules.js";
@@ -67,6 +68,8 @@ import {
   formatWork,
 } from "./format.js";
 import { COMMAND_HELP, helpFor, usage } from "./help.js";
+import { describeInstall, type Install, updateCommandFor } from "./install.js";
+import type { NoticeStore } from "./notices.js";
 import { createServeHandler, DEFAULT_SERVE_PORT, type Listen } from "./serve.js";
 
 // The `console` command (docs/specs/cli.md): the agent's side of the console. A thin client of
@@ -84,7 +87,12 @@ export const EXIT = {
   usage: 2,
   /** The decision still waits for a person. */
   waiting: 3,
+  /** The command and the console do not go together (ADR-0025): stderr says which to update, and how. */
+  incompatible: 4,
 } as const;
+
+/** A day, for how often the command repeats what it noticed of the versions. */
+const DAY_MS = 86_400_000;
 
 /** How long one request for a decision's answer asks the console to hold it: what the server allows. */
 const WAIT_STEP_SECONDS = 50;
@@ -117,6 +125,12 @@ export interface CliIo {
   readonly now: () => number;
   /** The version of the package the command runs from, when the entry point knows it. */
   readonly version?: string | undefined;
+  /** What the command calls itself on every request (ADR-0025); nothing when it does not know its version. */
+  readonly userAgent?: string | undefined;
+  /** Where the command is installed, so that an update is told the way it takes effect; nothing when unknown. */
+  readonly install?: Install | undefined;
+  /** What the command last said of the versions; left out, it says it every time. */
+  readonly notices?: NoticeStore | undefined;
   /** Where the console's own skills are on this machine, shipped with the package; nothing when they are not there. */
   readonly skillsDir?: string | undefined;
   /** How `serve` listens on the loopback (ADR-0014); left out, the command cannot serve. */
@@ -200,7 +214,7 @@ async function open(io: CliIo, values: Values): Promise<Session> {
       "Not signed in. A person signs the command in: console login --url <the console's origin>",
     );
   }
-  const client = createClient({ baseUrl: url, token, fetch: io.fetch });
+  const client = clientOf(io, url, token);
   const projectKey = async () =>
     text(values, "project") ?? io.env.CONSOLE_PROJECT ?? (await io.directory.load())?.project;
   return {
@@ -505,7 +519,7 @@ type Command = (args: readonly string[], io: CliIo) => Promise<number>;
 
 /** Checks a token against the console, keeps it with the address, and says who it is. */
 async function keep(io: CliIo, url: string, token: string, agent?: string): Promise<number> {
-  const me = await createClient({ baseUrl: url, token, fetch: io.fetch }).me();
+  const me = await clientOf(io, url, token).me();
   const person = me.person;
   if (person === null) {
     throw failed(
@@ -540,7 +554,7 @@ const login: Command = async (args, io) => {
   }
   // A connection (ADR-0011): a code a person approves on the console's own pages, and the token
   // handed over here once, never shown.
-  const client = createClient({ baseUrl: url, fetch: io.fetch });
+  const client = clientOf(io, url);
   // "<agent> on <machine>": the pages say the agent and keep the machine for a hover.
   const agent = text(values, "agent") ?? agentOf(io.env) ?? "An agent";
   const begun = await client.connect({
@@ -582,7 +596,7 @@ const logout: Command = async (args, io) => {
   // Agents page, and the person is told so.
   let gone = true;
   try {
-    await createClient({ baseUrl: url, token, fetch: io.fetch }).giveUpToken();
+    await clientOf(io, url, token).giveUpToken();
   } catch (error) {
     if (!(error instanceof ApiError && error.code === "auth.required")) {
       gone = false;
@@ -620,12 +634,38 @@ const whoami: Command = async (args, io) => {
     throw failed("The console does not know this token. Sign in again: console login");
   }
   const key = await session.projectKey();
+  const command = parseVersion(io.version);
+  const server = parseVersion(me.console?.version);
+  const verdict =
+    command === undefined || server === undefined
+      ? undefined
+      : judgeClient(command, server).verdict;
+  // A console from before the rule says nothing of itself; the command says so instead.
+  const consoleWords =
+    me.console === undefined
+      ? "the console does not say its version, so it is older than 0.1.18"
+      : `the console is ${me.console.version} and takes ${me.console.clientRange}`;
   answer(
     io,
     session,
-    { ...me, project: key ?? null },
+    {
+      ...me,
+      console: me.console ?? null,
+      project: key ?? null,
+      command: { version: io.version ?? null, install: io.install ?? null },
+    },
     () =>
-      `${person.login} (${person.role}) at ${me.workspace.name}, ${session.url}${key === undefined ? "; no project named here" : `; project ${key}`}`,
+      [
+        `${person.login} (${person.role}) at ${me.workspace.name}, ${session.url}${key === undefined ? "; no project named here" : `; project ${key}`}`,
+        `This command is ${io.version ?? "of a version it does not know"}${io.install === undefined ? "" : `, ${describeInstall(io.install)}`}; ${consoleWords}.`,
+        ...(verdict === "behind"
+          ? [`A newer command exists. Update it: ${updateWords(io, me.console?.version)}`]
+          : verdict === "ahead"
+            ? [
+                `This command is newer than the console: what the console has not got yet is refused as not found. To match the console: ${updateWords(io, me.console?.version)}`,
+              ]
+            : []),
+      ].join("\n"),
   );
   return EXIT.ok;
 };
@@ -2021,9 +2061,82 @@ function help(io: CliIo, name: string | undefined): number {
   return EXIT.ok;
 }
 
+/** A client of the console at `url`, naming the command on every request (ADR-0025). */
+function clientOf(io: CliIo, url: string, token?: string): ConsoleClient {
+  return createClient({
+    baseUrl: url,
+    fetch: io.fetch,
+    ...(token === undefined ? {} : { token }),
+    ...(io.userAgent === undefined ? {} : { userAgent: io.userAgent }),
+  });
+}
+
+/** What the console said of itself on its last answer (ADR-0025): its version, and the range of command versions it takes. */
+interface ConsoleSeen {
+  version?: string | undefined;
+  range?: string | undefined;
+}
+
+/** The command that puts the console's version where this command is installed. */
+function updateWords(io: CliIo, version: string | undefined): string {
+  const wanted = version ?? "latest";
+  if (io.install === undefined) {
+    return `npm install -g @skillcdn/console@${wanted}`;
+  }
+  const command = updateCommandFor(io.install, wanted);
+  return io.install.kind === "project" ? `${command} (in ${io.install.root})` : command;
+}
+
+/**
+ * What the command says of the versions once the console answered: that a newer command exists,
+ * or that this one is newer than the console; once a day for one pair of versions, on stderr,
+ * so that the console's JSON stays what it is. What is out of the range never gets here: the
+ * console refused it, and the refusal says what to do.
+ */
+async function noticeVersions(io: CliIo, seen: ConsoleSeen): Promise<void> {
+  const command = parseVersion(io.version);
+  const server = parseVersion(seen.version);
+  if (
+    io.version === undefined ||
+    seen.version === undefined ||
+    command === undefined ||
+    server === undefined
+  ) {
+    return;
+  }
+  const { verdict } = judgeClient(command, server);
+  if (verdict !== "behind" && verdict !== "ahead") {
+    return;
+  }
+  const previous = await io.notices?.load();
+  const now = io.now();
+  if (
+    previous !== undefined &&
+    previous.command === io.version &&
+    previous.console === seen.version &&
+    now - Date.parse(previous.shownAt) < DAY_MS
+  ) {
+    return;
+  }
+  io.stderr(
+    verdict === "behind"
+      ? `A newer command exists: the console runs ${seen.version}, this command is ${io.version}. Update it: ${updateWords(io, seen.version)}\n`
+      : `This command (${io.version}) is newer than the console (${seen.version}, which takes ${seen.range ?? "an older line"}): what the console has not got yet is refused as not found. The console's operator updates it; to match the console meanwhile: ${updateWords(io, seen.version)}\n`,
+  );
+  await io.notices?.save({
+    command: io.version,
+    console: seen.version,
+    shownAt: new Date(now).toISOString(),
+  });
+}
+
 /** What a refusal of the console is followed by, when there is something to do about it. */
-function hintFor(error: ApiError): string {
+function hintFor(error: ApiError, io: CliIo, seen: ConsoleSeen): string {
   switch (error.code) {
+    case "client.outdated":
+      return `Update the command: ${updateWords(io, seen.version)}\n`;
+    case "client.too_new":
+      return `Install the console's version: ${updateWords(io, seen.version)}; or ask the console's operator to update the console.\n`;
     case "auth.required":
       return "The token is not one the console knows, any more or at all. A person signs the command in again: console login\n";
     case "project.not_found":
@@ -2082,9 +2195,23 @@ function hintFor(error: ApiError): string {
 /** Runs the command and answers with its exit code. What it prints goes through `io`. */
 export async function runCli(argv: readonly string[], io: CliIo): Promise<number> {
   const [name, ...rest] = argv;
+  // Every answer of the console says its version and the range it takes; the command reads
+  // them off the answers it gets anyway, and asks nothing more (ADR-0025).
+  const seen: ConsoleSeen = {};
+  const watched: CliIo = {
+    ...io,
+    fetch: async (input, init) => {
+      const response = await io.fetch(input, init);
+      seen.version = response.headers.get(VERSION_HEADER) ?? seen.version;
+      seen.range = response.headers.get(CLIENT_RANGE_HEADER) ?? seen.range;
+      return response;
+    },
+  };
   try {
     if (name === "--version" || name === "-v" || name === "version") {
-      io.stdout(`console ${io.version ?? "(version unknown)"} (@skillcdn/console)\n`);
+      io.stdout(
+        `console ${io.version ?? "(version unknown)"} (@skillcdn/console)${io.install === undefined ? "" : `, ${describeInstall(io.install)}`}\n`,
+      );
       return EXIT.ok;
     }
     if (name === undefined || name === "help" || name === "--help" || name === "-h") {
@@ -2097,15 +2224,21 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
     if (command === undefined) {
       throw misuse(`Not a command: ${name}. Run: console help`);
     }
-    return await command(rest, io);
+    const exit = await command(rest, watched);
+    if (name !== "whoami") {
+      await noticeVersions(io, seen);
+    }
+    return exit;
   } catch (error) {
     if (error instanceof CliExit) {
       io.stderr(`${error.message}\n`);
       return error.exit;
     }
     if (error instanceof ApiError) {
-      io.stderr(`${error.code}: ${error.message}\n${hintFor(error)}`);
-      return EXIT.failed;
+      io.stderr(`${error.code}: ${error.message}\n${hintFor(error, io, seen)}`);
+      return error.code === "client.outdated" || error.code === "client.too_new"
+        ? EXIT.incompatible
+        : EXIT.failed;
     }
     throw error;
   }

@@ -190,6 +190,8 @@ export const tokens = pgTable(
     expiresAt: instant(),
     /** When it was last presented; null until it is. */
     lastUsedAt: instant(),
+    /** The version of the command that last presented it (ADR-0025); null when the last to present it named none. */
+    client: text(),
     createdAt: createdAt(),
   },
   (table) => [

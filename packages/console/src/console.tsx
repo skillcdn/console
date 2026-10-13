@@ -1451,6 +1451,7 @@ function PersonAgentsPage(props: {
         <components.TokenList
           tokens={tokens}
           busy={busy}
+          consoleVersion={data.me?.console?.version}
           onRevoke={(token) =>
             void act(async () => {
               await data.actions.revokePersonToken(id, token.id);
@@ -1763,6 +1764,7 @@ function WorkspacePage(props: {
         <components.TokenList
           tokens={data.tokens}
           busy={busy}
+          consoleVersion={data.me?.console?.version}
           onRevoke={(token) => void act(() => data.actions.revokeToken(token.id))}
           empty={<EmptyState title={agents.empty.title} body={agents.empty.body} />}
         />

@@ -770,6 +770,7 @@ describe("tokens", () => {
     createdAt: "2026-10-09T10:00:00.000Z",
     expiresAt: "2027-01-07T10:00:00.000Z",
     lastUsedAt: null,
+    client: null,
   };
 
   it("lists what a person holds, as text, with the way to remove each when there is one", () => {
@@ -782,14 +783,17 @@ describe("tokens", () => {
             id: "0199c4d8-0000-7000-8000-000000000031",
             name: "ci",
             lastUsedAt: "2026-10-09T12:00:00.000Z",
+            client: "0.1.18",
           },
           {
             ...token,
             id: "0199c4d8-0000-7000-8000-000000000032",
             name: "forever",
             expiresAt: null,
+            client: "0.1.17",
           },
         ]}
+        consoleVersion="0.1.18"
         onRevoke={() => undefined}
       />,
     );
@@ -798,6 +802,11 @@ describe("tokens", () => {
     expect(html).toContain("Last active");
     expect(html).toContain("Good until");
     expect(html).toContain("Does not expire");
+    // Which version of the command each agent runs, and whether the console still takes it.
+    expect(html).toContain("console 0.1.18");
+    expect(html).toContain("console 0.1.17");
+    expect(html).toContain("must be updated");
+    expect(html.split("must be updated")).toHaveLength(2);
     expect(html.match(/>Disconnect</g)).toHaveLength(3);
     const readOnly = renderToStaticMarkup(<TokenList tokens={[token]} />);
     expect(readOnly).not.toContain("Disconnect");

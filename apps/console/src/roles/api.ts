@@ -65,6 +65,8 @@ export interface ApiPorts {
   readonly blobs?: BlobStore | undefined;
   /** The SkillCDN deployment's side of the organization's skills. Left out, read over HTTPS from the configured deployment. */
   readonly skillSource?: SkillSource | undefined;
+  /** The console's version, which the command is held to (ADR-0025). The package's when left out; for tests. */
+  readonly version?: string | undefined;
 }
 
 export type ApiConfig = Pick<Config, "workspace"> & {
@@ -212,6 +214,7 @@ export function createApi(
     blobs: ports.blobs ?? createPgBlobStore(database),
     skills,
     web: ports.web,
+    version: ports.version ?? APP_VERSION,
     clock,
     logger,
     isShuttingDown: ports.isShuttingDown,

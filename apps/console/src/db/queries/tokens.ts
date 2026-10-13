@@ -18,6 +18,8 @@ export interface TokenRecord {
   readonly expiresAt: Date | undefined;
   /** When it was last presented, if ever. */
   readonly lastUsedAt: Date | undefined;
+  /** The version of the command that last presented it, when it named one. */
+  readonly client: string | undefined;
 }
 
 /** What is wrong with a token a person asked for. `code` is what the API answers with. */
@@ -41,6 +43,7 @@ const tokenColumns = {
   createdAt: tokens.createdAt,
   expiresAt: tokens.expiresAt,
   lastUsedAt: tokens.lastUsedAt,
+  client: tokens.client,
 };
 
 interface TokenRow {
@@ -50,6 +53,7 @@ interface TokenRow {
   readonly createdAt: Date;
   readonly expiresAt: Date | null;
   readonly lastUsedAt: Date | null;
+  readonly client: string | null;
 }
 
 const toToken = (row: TokenRow): TokenRecord => ({
@@ -59,6 +63,7 @@ const toToken = (row: TokenRow): TokenRecord => ({
   createdAt: row.createdAt,
   expiresAt: row.expiresAt ?? undefined,
   lastUsedAt: row.lastUsedAt ?? undefined,
+  client: row.client ?? undefined,
 });
 
 /** A token still good at `now`: one that does not expire, or one that has not yet. */
@@ -132,9 +137,17 @@ export async function findToken(
     : { token: toToken(row.token), person: toPerson(row.person) };
 }
 
-/** Notes that a token was presented. */
-export async function touchToken(database: Database, tokenId: string, now: Date): Promise<void> {
-  await drizzleOf(database).update(tokens).set({ lastUsedAt: now }).where(eq(tokens.id, tokenId));
+/** Notes that a token was presented, and by which version of the command when one said. */
+export async function touchToken(
+  database: Database,
+  tokenId: string,
+  now: Date,
+  client?: string,
+): Promise<void> {
+  await drizzleOf(database)
+    .update(tokens)
+    .set({ lastUsedAt: now, client: client ?? null })
+    .where(eq(tokens.id, tokenId));
 }
 
 /** The live tokens of a person, newest first. */

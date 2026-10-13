@@ -1,3 +1,4 @@
+import { restMeSchema } from "@skillcdn/console/api";
 import { pino } from "pino";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDatabase } from "../db/client.js";
@@ -41,6 +42,7 @@ function harness(options: { readonly shuttingDown?: boolean; readonly broken?: b
         { write: (line: string) => logs.push(JSON.parse(line) as Record<string, unknown>) },
       ),
       isShuttingDown: () => options.shuttingDown === true,
+      version: "0.1.18",
     },
   );
   return {
@@ -55,6 +57,31 @@ function harness(options: { readonly shuttingDown?: boolean; readonly broken?: b
 }
 
 describe("the api role", () => {
+  it("says its version on every answer of the API, and holds the command to the versions it takes", async () => {
+    const h = harness();
+    const me = await h.request("/api/v1/me");
+    expect(me.status).toBe(200);
+    expect(me.headers.get("console-version")).toBe("0.1.18");
+    expect(me.headers.get("console-client-range")).toBe(">=0.1.18 <0.2.0");
+    expect(restMeSchema.parse(await me.json()).console).toEqual({
+      version: "0.1.18",
+      clientRange: ">=0.1.18 <0.2.0",
+    });
+    const current = await h.request("/api/v1/me", {
+      headers: { "user-agent": "skillcdn-console/0.1.18 (cli; node 24.11.0; linux)" },
+    });
+    expect(current.status).toBe(200);
+    const old = await h.request("/api/v1/me", {
+      headers: { "user-agent": "skillcdn-console/0.1.17 (cli; node 24.11.0; linux)" },
+    });
+    expect(old.status).toBe(426);
+    expect(old.headers.get("console-version")).toBe("0.1.18");
+    expect(((await old.json()) as { error: { code: string } }).error.code).toBe("client.outdated");
+    // The refusal is a request like any other to the access log, with the command named.
+    const logged = h.logs.find((line) => line.status === 426);
+    expect(logged?.userAgent).toBe("skillcdn-console/0.1.17 (cli; node 24.11.0; linux)");
+  });
+
   it("is alive, and ready once the database answers with the schema of this build", async () => {
     const h = harness();
     const alive = await h.request("/healthz");

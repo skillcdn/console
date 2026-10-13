@@ -1,12 +1,15 @@
 import { type FormEvent, type ReactNode, useState } from "react";
 import {
+  type ClientVerdict,
   DEFAULT_TOKEN_DAYS,
+  judgeClient,
   MAX_TOKEN_NAME_LENGTH,
+  parseVersion,
   type RestToken,
   type RestTokenInput,
 } from "../api.js";
 import { useWords } from "../i18n/index.js";
-import { Button, Callout, CopyButton, Time } from "./ui.js";
+import { Badge, Button, Callout, CopyButton, Time } from "./ui.js";
 
 // The tokens a person holds for their agents, scripts and consoles of their own, shown as the
 // agents that hold them: the list, the way to make one by hand, and the one just made, whose
@@ -36,6 +39,22 @@ export interface TokenListProps {
   readonly onRevoke?: ((token: RestToken) => void) | undefined;
   readonly busy?: boolean | undefined;
   readonly empty?: ReactNode;
+  /** The console's version (ADR-0025), so that the version of the command an agent runs is said to be behind or ahead; left out, the version alone is shown. */
+  readonly consoleVersion?: string | undefined;
+}
+
+/** What a command's version is to the console's: nothing to say when they go together, else which way they differ. */
+function verdictOf(
+  client: string,
+  consoleVersion: string | undefined,
+): Exclude<ClientVerdict, "current"> | undefined {
+  const command = parseVersion(client);
+  const server = parseVersion(consoleVersion);
+  if (command === undefined || server === undefined) {
+    return undefined;
+  }
+  const { verdict } = judgeClient(command, server);
+  return verdict === "current" ? undefined : verdict;
 }
 
 export function TokenList(props: TokenListProps) {
@@ -53,6 +72,24 @@ export function TokenList(props: TokenListProps) {
               <span>
                 {words.connected} <Time iso={token.createdAt} />
               </span>
+              {token.client !== null && (
+                <span>
+                  {words.command(token.client)}
+                  {((verdict) =>
+                    verdict === undefined ? null : (
+                      <>
+                        {" "}
+                        <Badge
+                          tone={
+                            verdict === "outdated" || verdict === "too_new" ? "danger" : "warning"
+                          }
+                        >
+                          {words.commandVerdict[verdict]}
+                        </Badge>
+                      </>
+                    ))(verdictOf(token.client, props.consoleVersion))}
+                </span>
+              )}
               <span>
                 {token.expiresAt === null ? (
                   words.doesNotExpire

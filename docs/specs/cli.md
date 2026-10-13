@@ -9,6 +9,8 @@ A person installs the package where the agent runs, or has the agent install it,
 
 From then on the agent is that person on the board ([ADR-0004](../adr/0004-people-and-agents-reach-the-board-only-through-the-api-with-a-credential-of-their-own.md)): what it does is attributed to the person and shown as done by the agent, called what the person called the token unless `take --agent` says otherwise.
 
+The command names its version on every request, as the product token of its `user-agent` (`skillcdn-console/<version> (cli; node <v>; <platform>)`), and the console holds it to the versions it takes ([ADR-0025](../adr/0025-the-command-names-its-version-on-every-request-and-the-console-holds-it-to-the-range-it-takes.md)): before 1.0, from the console's own version on and within its minor; from 1.0, the console's major and a minor within one, either way. A command outside the range is refused with `426` (`client.outdated`, `client.too_new`), `login` included, and exits with `4` after printing the command that updates it where it is installed: `npm install -g @skillcdn/console@<version>` for one installed for the machine (`pnpm add -g`, `yarn global add`, `bun add -g` where those put it there), `pnpm add @skillcdn/console@<version>` in the project's root for one installed in the project the working directory is in (the manager its lockfile names), or `npx`, `pnpm dlx` and their kind at the version for one fetched for the run; for a checkout, pull and build. Within the range, a command older than the console is told once a day, on stderr, that a newer one exists, and one newer that what the console has not got yet is refused as not found; what it last said is kept in `notices.json` beside the credentials, and `--json` output stays the console's. `whoami` says the versions, where the command is installed and what the console takes, every time.
+
 ## The project
 
 The board is a project's ([ADR-0008](../adr/0008-a-workspace-holds-projects-and-what-a-person-may-see-and-change-is-decided-per-project.md)), and every command on it works in one: the one `--project <key>` names, else `CONSOLE_PROJECT` in the environment, else the one `.skillcdn-console.json` names in the working directory or the nearest directory above it. `console use <key>` writes that file, after checking that the console knows the project to the person; it is meant to be committed, so that everyone who works in the checkout, and every agent they run in it, is in the same project without saying so. With none of the three, a command on the board says so and exits with `1`. `console projects` lists the projects the person may work in, with what they are in each; a project the person may not see is not found, as if it were not there.
@@ -19,7 +21,7 @@ The board is a project's ([ADR-0008](../adr/0008-a-workspace-holds-projects-and-
 |---|---|---|
 | `login --url <origin> [--agent <name>] [--token-stdin]` | `POST /api/v1/connect`, then `POST /api/v1/connect/claim` until a person approved, then `GET /api/v1/me` with the token | the address and the code for a person; then who the token is; keeps the credentials |
 | `logout` | `DELETE /api/v1/me/token` | that the token is given up and forgotten, or that the console was out of reach and the token is left to the Agents page |
-| `whoami` | `GET /api/v1/me` | the login, the role, the workspace, the address, and the project this directory works in |
+| `whoami` | `GET /api/v1/me` | the login, the role, the workspace, the address, and the project this directory works in; then the command's version and where it is installed, the console's version and the range it takes, and the update to make when they differ |
 | `projects` | `GET /api/v1/projects` | one line per project: key, name, what the person is in it, what waits in it |
 | `use <key>` | `GET /api/v1/projects/<key>` | that the directory works in the project from now on, and that `console rules` says what its people ask; writes `.skillcdn-console.json` |
 | `work [--person <login>]` | `GET /api/v1/work`, `GET /api/v1/people/<id>/work` | what is on the person's plate across their projects: the open tasks assigned to them, the sooner due first, each with its project; and the decisions waiting. `--person` shows another person's plate, for an administrator or an owner of a project they are in: their open tasks within the projects the asker may see, without the decisions. Needs no project |
@@ -66,7 +68,7 @@ The board is a project's ([ADR-0008](../adr/0008-a-workspace-holds-projects-and-
 | `archive <path>`, `restore <path>` | `POST .../docs/<path>/archive`, `.../restore` | that the page is put away, or back |
 | `serve [<dir>] [--port <n>]` | `GET /api/v1/me` once; then every request of the pages under `/api/`, carried with the token | where it serves and as whom; then nothing until stopped ([a console of one's own](#a-console-of-ones-own)) |
 | `help [<command>]` | nothing | the usage, written for an agent that meets the command for the first time |
-| `--version` (also `version`, `-v`) | nothing | which version of the command this is |
+| `--version` (also `version`, `-v`) | nothing | which version of the command this is, and where it is installed |
 
 `...` is `/api/v1/projects/<key>`, the project the command works in. Everywhere: `--json` prints the console's own answer as JSON, in the shapes of `@skillcdn/console/api`; `--url <origin>` names another console for this one command; `--project <key>` the project. A Markdown body given as `-` is read from standard input. A day is given as `2026-10-24`, `today`, `tomorrow` or `+7` (days from today by this machine's clock); `--due overdue` keeps the open tasks past their day, `--due week` those due within seven days. Every argument is bounded and checked by the console, as the REST API's schemas say; the command sends it as it was given.
 
@@ -102,6 +104,7 @@ Plain text on standard output: one line per thing in a list, a few lines for one
 | `1` | The console refused, or could not be reached; the reason is on standard error. |
 | `2` | The command was not understood. |
 | `3` | The decision still waits for a person. |
+| `4` | The command and the console do not go together ([ADR-0025](../adr/0025-the-command-names-its-version-on-every-request-and-the-console-holds-it-to-the-range-it-takes.md)); standard error says which to update, and how. |
 
 ## What an agent is told
 

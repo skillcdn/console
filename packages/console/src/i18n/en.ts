@@ -734,6 +734,13 @@ export const en = {
     goodUntil: "Good until",
     notActive: "Not active yet",
     lastActive: "Last active",
+    command: (version: string) => `console ${version}`,
+    commandVerdict: {
+      behind: "an update is available",
+      ahead: "newer than this console",
+      outdated: "must be updated",
+      too_new: "too new for this console",
+    },
     disconnect: "Disconnect",
     form: {
       name: "Name",

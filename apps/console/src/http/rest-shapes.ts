@@ -194,6 +194,7 @@ export function restToken(token: TokenRecord): RestToken {
     createdAt: token.createdAt.toISOString(),
     expiresAt: token.expiresAt?.toISOString() ?? null,
     lastUsedAt: token.lastUsedAt?.toISOString() ?? null,
+    client: token.client ?? null,
   };
 }
 

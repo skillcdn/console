@@ -61,7 +61,7 @@ import { OrganizationSync } from "./jobs/organization-sync.js";
 import type { SkillSource } from "./ports/skill-source.js";
 import { createFixtureOrganization } from "./testing/fixture-organization.js";
 import { createFixtureProvider } from "./testing/fixture-provider.js";
-import { createHarness, type Harness, SIGN_IN_URL } from "./testing/harness.js";
+import { createHarness, HARNESS_VERSION, type Harness, SIGN_IN_URL } from "./testing/harness.js";
 
 let testDatabase: TestDatabase;
 let h: Harness;
@@ -1198,6 +1198,15 @@ describe("tokens", () => {
     expect(events.items[0]?.actor?.login).toBe("Alice");
     const used = (await listed(alice)).find((item) => item.id === token.id);
     expect(used?.lastUsedAt).not.toBeNull();
+    expect(used?.client).toBeNull();
+    // The command names its version, and the token keeps it (ADR-0025).
+    const named = await h.request(REST_ROUTES.projects, {
+      headers: { ...auth, "user-agent": `skillcdn-console/${HARNESS_VERSION} (cli)` },
+    });
+    expect(named.status).toBe(200);
+    expect((await listed(alice)).find((item) => item.id === token.id)?.client).toBe(
+      HARNESS_VERSION,
+    );
     // A token sees the projects its person sees, and no more.
     const projects = restProjectsSchema.parse(
       await (await h.request(REST_ROUTES.projects, { headers: auth })).json(),

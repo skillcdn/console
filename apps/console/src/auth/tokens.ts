@@ -98,9 +98,13 @@ export class Tokens {
     return { token, secret };
   }
 
-  /** Who the request's authorization header says is asking, or nobody. */
+  /**
+   * Who the request's authorization header says is asking, or nobody; with the version of the
+   * command presenting the token, when one does, which the token keeps.
+   */
   async resolve(
     authorizationHeader: string | null | undefined,
+    client?: string,
   ): Promise<{ readonly person: PersonRecord; readonly token: TokenRecord } | undefined> {
     const secret = readBearer(authorizationHeader);
     if (secret === undefined || !secret.startsWith(AGENT_TOKEN_PREFIX)) {
@@ -113,9 +117,13 @@ export class Tokens {
       return undefined;
     }
     const lastUsed = found.token.lastUsedAt;
-    if (lastUsed === undefined || now.getTime() - lastUsed.getTime() >= TOUCH_INTERVAL_MS) {
+    if (
+      lastUsed === undefined ||
+      now.getTime() - lastUsed.getTime() >= TOUCH_INTERVAL_MS ||
+      found.token.client !== client
+    ) {
       // The answer does not wait for the note.
-      touchToken(database, found.token.id, now).catch((error: unknown) => {
+      touchToken(database, found.token.id, now, client).catch((error: unknown) => {
         logger.warn({ err: error }, "a token could not be noted as used");
       });
     }

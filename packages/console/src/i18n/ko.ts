@@ -698,6 +698,13 @@ export const ko: Messages = {
     goodUntil: "만료",
     notActive: "아직 활동 없음",
     lastActive: "마지막 활동",
+    command: (version) => `console ${version}`,
+    commandVerdict: {
+      behind: "업데이트할 수 있음",
+      ahead: "이 콘솔보다 새 버전",
+      outdated: "업데이트 필요",
+      too_new: "이 콘솔에는 너무 새 버전",
+    },
     disconnect: "연결 끊기",
     form: {
       name: "이름",

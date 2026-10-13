@@ -350,7 +350,9 @@ describe("the command line", () => {
     expect(hidden.err).toContain("console projects");
     expect((await console_(["projects"])).out).not.toContain("secret");
     const who = await console_(["whoami"]);
-    expect(who.out).toBe(`Alice (member) at Acme, ${SIGN_IN_URL}; project web\n`);
+    expect(who.out).toBe(
+      `Alice (member) at Acme, ${SIGN_IN_URL}; project web\nThis command is of a version it does not know; the console is 0.1.18 and takes >=0.1.18 <0.2.0.\n`,
+    );
   });
 
   it("writes, reads, attaches to, archives and restores the project's pages as its person", async () => {
@@ -470,7 +472,9 @@ describe("the command line", () => {
     const theirs = await console_(["runs", "--open", "--mine"], bobToken);
     expect(theirs.out).toBe("No runs.\n");
     const whoami = await console_(["whoami"], bobToken);
-    expect(whoami.out).toBe(`bob (member) at Acme, ${SIGN_IN_URL}; project web\n`);
+    expect(whoami.out).toBe(
+      `bob (member) at Acme, ${SIGN_IN_URL}; project web\nThis command is of a version it does not know; the console is 0.1.18 and takes >=0.1.18 <0.2.0.\n`,
+    );
   });
 
   it("plans the work: a goal the owner sets, tasks written towards it with days and a category, and the board narrowed", async () => {
