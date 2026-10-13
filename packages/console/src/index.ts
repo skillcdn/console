@@ -101,6 +101,13 @@ export {
   VISIBILITY_LABELS,
 } from "./components/projects.js";
 export {
+  DEFAULT_TIMELINE_MONTHS,
+  GoalTimeline,
+  type GoalTimelineProps,
+  type TimelineBar,
+  timelineBars,
+} from "./components/roadmap.js";
+export {
   RulesForm,
   type RulesFormProps,
   RulesView,
@@ -230,6 +237,7 @@ export {
   projectHref,
   projectSettingsHref,
   type Route,
+  roadmapHref,
   settingsHref,
   signInFailureOf,
   type TaskFormKind,

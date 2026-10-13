@@ -1243,4 +1243,68 @@ describe("goals", () => {
       }),
     ).rejects.toMatchObject({ code: "task.invalid_goal" });
   });
+
+  it("are planned in days and sorted into a category, as a task is (ADR-0026)", async () => {
+    const planned = await createGoal(database, {
+      scope,
+      actor: alice,
+      goal: {
+        title: "Planned",
+        category: "engineering",
+        startsOn: "2026-10-01",
+        dueOn: "2026-12-31",
+      },
+      now: minutes(70),
+    });
+    expect(planned).toMatchObject({
+      category: { key: "engineering", name: "Engineering", color: "blue" },
+      startsOn: "2026-10-01",
+      dueOn: "2026-12-31",
+    });
+    await expect(
+      createGoal(database, {
+        scope,
+        actor: alice,
+        goal: { title: "x", category: "nope" },
+        now: minutes(70),
+      }),
+    ).rejects.toMatchObject({ code: "goal.invalid_category" });
+    await expect(
+      createGoal(database, {
+        scope,
+        actor: alice,
+        goal: { title: "x", startsOn: "2026-12-31", dueOn: "2026-10-01" },
+        now: minutes(70),
+      }),
+    ).rejects.toMatchObject({ code: "goal.invalid_dates" });
+    expect(
+      (await listGoals(database, scope, 10, { category: "engineering" })).map((goal) => goal.id),
+    ).toEqual([planned.id]);
+    expect(await listGoals(database, scope, 10, { state: "planned", category: "design" })).toEqual(
+      [],
+    );
+    const before = await latestEventId(database, workspaceId);
+    const moved = await updateGoal(database, {
+      scope,
+      actor: alice,
+      goalId: planned.id,
+      patch: { category: null, startsOn: null },
+      now: minutes(71),
+    });
+    expect(moved.category).toBeUndefined();
+    expect(moved.startsOn).toBeUndefined();
+    await expect(
+      updateGoal(database, {
+        scope,
+        actor: alice,
+        goalId: planned.id,
+        patch: { startsOn: "2027-01-01" },
+        now: minutes(72),
+      }),
+    ).rejects.toMatchObject({ code: "goal.invalid_dates" });
+    const { items } = await listEventsAfter(database, scope, before, 10);
+    expect(items.map((event) => event.data)).toEqual([
+      { title: "Planned", fields: ["category", "startsOn"] },
+    ]);
+  });
 });

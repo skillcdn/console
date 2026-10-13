@@ -1919,6 +1919,59 @@ describe("the schedule and the roadmap", () => {
     expect(await errorOf(across)).toBe("task.invalid_goal");
   });
 
+  it("plan a goal in days and sort it into a category, and narrow the roadmap by them (ADR-0026)", async () => {
+    const set = await send(alice, "POST", `${IN}/goals`, {
+      title: "Planned",
+      category: "design",
+      startsOn: "2026-10-01",
+      dueOn: "2026-12-31",
+    });
+    expect(set.status).toBe(201);
+    const planned = restGoalSchema.parse(await set.json());
+    expect(planned).toMatchObject({
+      category: { key: "design", name: "Design", color: "pink" },
+      startsOn: "2026-10-01",
+      dueOn: "2026-12-31",
+    });
+    const byCategory = restGoalsSchema.parse(
+      await (await get(bob, `${IN}/goals?category=design&state=planned`)).json(),
+    );
+    expect(byCategory.items.map((goal) => goal.id)).toEqual([planned.id]);
+    expect(
+      restGoalsSchema.parse(await (await get(bob, `${IN}/goals?category=engineering`)).json())
+        .items,
+    ).toEqual([]);
+    for (const [body, code] of [
+      [{ title: "x", category: "nope" }, "goal.invalid_category"],
+      [{ title: "x", startsOn: "2026-12-31", dueOn: "2026-10-01" }, "goal.invalid_dates"],
+    ] as const) {
+      const refused = await send(alice, "POST", `${IN}/goals`, body);
+      expect(refused.status, code).toBe(400);
+      expect(await errorOf(refused)).toBe(code);
+    }
+    for (const query of ["state=open", "category=Not%20A%20Key"]) {
+      const response = await get(alice, `${IN}/goals?${query}`);
+      expect(response.status, query).toBe(400);
+      expect(await errorOf(response)).toBe("request.invalid");
+    }
+    const latest = await latestEventIn(alice);
+    const moved = await send(alice, "PATCH", `${IN}/goals/${planned.id}`, {
+      category: null,
+      startsOn: null,
+    });
+    expect(moved.status).toBe(200);
+    expect(restGoalSchema.parse(await moved.json())).toMatchObject({
+      category: null,
+      startsOn: null,
+    });
+    const since = restEventsSchema.parse(
+      await (await get(alice, `${IN}/events?after=${latest}`)).json(),
+    );
+    expect(since.items.map((event) => event.data)).toEqual([
+      { title: "Planned", fields: ["category", "startsOn"] },
+    ]);
+  });
+
   it("list what is on a person's plate across the projects they may see", async () => {
     const aliceId = await personId("Alice");
     const bobId = await personId("bob");
@@ -2135,6 +2188,19 @@ describe("categories", () => {
     expect(inUse.status).toBe(409);
     expect(await errorOf(inUse)).toBe("category.in_use");
     expect((await send(alice, "PATCH", `${IN}/tasks/${task.id}`, { category: null })).status).toBe(
+      200,
+    );
+    // A goal sorted into it keeps it too (ADR-0026), until the goal is moved out.
+    const aimed = restGoalSchema.parse(
+      await (
+        await send(alice, "POST", `${IN}/goals`, { title: "Research done", category: "research" })
+      ).json(),
+    );
+    expect(aimed.category?.key).toBe("research");
+    const stillInUse = await asAdmin("DELETE", `${REST_ROUTES.categories}/research`);
+    expect(stillInUse.status).toBe(409);
+    expect(await errorOf(stillInUse)).toBe("category.in_use");
+    expect((await send(alice, "PATCH", `${IN}/goals/${aimed.id}`, { category: null })).status).toBe(
       200,
     );
     expect((await asAdmin("DELETE", `${REST_ROUTES.categories}/research`)).status).toBe(204);

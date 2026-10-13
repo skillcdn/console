@@ -1,0 +1,5 @@
+---
+"@skillcdn/console": patch
+---
+
+A goal is planned in days and sorted into a category, and the roadmap is read as months (ADR-0026). A goal carries `startsOn` and `category` beside its `dueOn`; `POST` and `PATCH .../goals` take them (`goal.invalid_dates`, `goal.invalid_category`), `GET .../goals?category=&state=` narrows the roadmap, and a category goals are sorted into cannot be removed (`category.in_use`). The client takes a `GoalFilter` on `goals()`. `GoalTimeline` shows the months as columns and each goal as a bar from its start to its target in the colour of its category, filled as far as its tasks are done, with today marked, and `timelineBars` lays it out; `Calendar` takes `goalHref` and marks each goal's target day on the month; `GoalForm` takes `categories` and offers the start day; `GoalList` and `GoalView` show the category and the days; `roadmapHref(key, from)` names the roadmap from a month on. The command gets `goal new --starts --category`, `goal edit --starts <day|none> --category <key|none>`, and `goals --category --state`.

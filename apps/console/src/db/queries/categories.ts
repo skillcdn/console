@@ -2,7 +2,7 @@ import { type CategoryColor, MAX_CATEGORIES } from "@skillcdn/console/api";
 import { and, asc, count, eq, sql } from "drizzle-orm";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
-import { categories, tasks, workspaces } from "../schema.js";
+import { categories, goals, tasks, workspaces } from "../schema.js";
 import { type Actor, recordEvent } from "./events.js";
 
 // The categories tasks are sorted into (ADR-0019): the workspace's own vocabulary for the kinds
@@ -32,7 +32,7 @@ export class CategoryError extends DomainError {
 const CATEGORY_ERROR_WORDS = {
   "category.not_found": "the category was not found",
   "category.key_taken": "a category with this key exists already",
-  "category.in_use": "tasks are sorted into the category; move them first",
+  "category.in_use": "tasks or goals are sorted into the category; move them first",
   "category.too_many": "the workspace has as many categories as one may",
 } as const;
 
@@ -255,7 +255,11 @@ export async function removeCategory(
       .select({ count: count() })
       .from(tasks)
       .where(eq(tasks.categoryId, current.id));
-    if ((used?.count ?? 0) > 0) {
+    const [sorted] = await tx
+      .select({ count: count() })
+      .from(goals)
+      .where(eq(goals.categoryId, current.id));
+    if ((used?.count ?? 0) > 0 || (sorted?.count ?? 0) > 0) {
       throw new CategoryError("category.in_use");
     }
     await tx.delete(categories).where(eq(categories.id, current.id));

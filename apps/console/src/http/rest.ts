@@ -1,6 +1,7 @@
 import {
   CLAIM_PATH,
   EVENTS_PAGE_LIMIT,
+  GOAL_STATES,
   isDocumentPath,
   isFolderPath,
   LIST_LIMIT,
@@ -317,6 +318,10 @@ const decisionsQuery = z.object({
   open: z.enum(["true", "false"]).optional(),
   task: z.string().regex(UUID).optional(),
   ...page,
+});
+const goalsQuery = z.object({
+  state: z.enum(GOAL_STATES).optional(),
+  category: z.string().max(MAX_CATEGORY_KEY_LENGTH).regex(CATEGORY_KEY).optional(),
 });
 const decisionQuery = z.object({
   wait: z.coerce.number().int().min(0).max(MAX_WAIT_SECONDS).default(0),
@@ -671,7 +676,10 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       return c.json(errorBody(error.code, error.message), 400);
     }
     if (error instanceof GoalError) {
-      return c.json(errorBody(error.code, error.message), 404);
+      return c.json(
+        errorBody(error.code, error.message),
+        error.code === "goal.not_found" ? 404 : 400,
+      );
     }
     if (error instanceof CategoryError) {
       return c.json(
@@ -2323,12 +2331,21 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
 
   // The roadmap (ADR-0019): the project's goals, read by whoever may see it, set by an owner.
   app.get(`${PROJECT}/goals`, async (c) => {
+    const query = goalsQuery.safeParse(c.req.query());
+    if (!query.success) {
+      return invalid(c, firstProblem(query));
+    }
     const found = await reading(c);
     if (found instanceof Response) {
       return found;
     }
     const body: RestGoals = {
-      items: (await listGoals(database, found.scope, LIST_LIMIT)).map(restGoal),
+      items: (
+        await listGoals(database, found.scope, LIST_LIMIT, {
+          state: query.data.state,
+          category: query.data.category,
+        })
+      ).map(restGoal),
     };
     return c.json(body);
   });

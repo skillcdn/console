@@ -4,20 +4,32 @@ import {
   type GoalState,
   MAX_BODY_LENGTH,
   MAX_TITLE_LENGTH,
+  type RestCategory,
   type RestGoal,
   type RestGoalInput,
   type RestTask,
   TASK_STATES,
 } from "../api.js";
-import { useWords } from "../i18n/index.js";
+import { formatDays } from "../dates.js";
+import { useLanguage, useWords } from "../i18n/index.js";
 import { Markdown } from "./markdown.js";
 import { TaskList } from "./task-list.js";
-import { Button, Day, DueBadge, GoalStateBadge, PersonChip, ProgressBar, Time } from "./ui.js";
+import {
+  Button,
+  CategoryBadge,
+  Day,
+  DueBadge,
+  GoalStateBadge,
+  PersonChip,
+  ProgressBar,
+  Time,
+} from "./ui.js";
 
-// The roadmap of a project (ADR-0019): its goals, each with the day it is meant to be reached
-// by and how far its tasks are, read from the board as it stands. The list, one goal with its
-// tasks, and the form an owner sets one with. Each takes its data as props and nothing from
-// the network; what people wrote is shown as text, never as HTML.
+// The roadmap of a project (ADR-0019): its goals, each planned in days as a task is, a start
+// and a target, sorted into a category of the workspace (ADR-0026), with how far its tasks
+// are, read from the board as it stands. The list, one goal with its tasks, and the form an
+// owner sets one with. Each takes its data as props and nothing from the network; what people
+// wrote is shown as text, never as HTML.
 
 /** A goal's day on the calendar's terms: reached or let go, it is a plain fact; else it may be late. */
 const dueState = (goal: RestGoal) =>
@@ -33,6 +45,7 @@ export interface GoalListProps {
 
 export function GoalList(props: GoalListProps) {
   const words = useWords().roadmap;
+  const { tag } = useLanguage();
   if (props.goals.length === 0) {
     return <>{props.empty ?? null}</>;
   }
@@ -44,7 +57,11 @@ export function GoalList(props: GoalListProps) {
             <a className="sc-goal-title" href={props.goalHref(goal)}>
               {goal.title}
             </a>
+            {goal.category !== null && <CategoryBadge category={goal.category} />}
             <GoalStateBadge state={goal.state} />
+            {goal.startsOn !== null && goal.dueOn !== null && goal.startsOn < goal.dueOn && (
+              <span className="sc-goal-days">{formatDays(goal.startsOn, goal.dueOn, tag)}</span>
+            )}
             {goal.dueOn !== null && (
               <DueBadge dueOn={goal.dueOn} state={dueState(goal)} today={props.today} />
             )}
@@ -59,6 +76,8 @@ export function GoalList(props: GoalListProps) {
 export interface GoalFormProps {
   /** The goal to change; left out, the form sets a new one. */
   readonly goal?: RestGoal | undefined;
+  /** The workspace's categories to sort the goal into; left out, the form offers none. */
+  readonly categories?: readonly RestCategory[] | undefined;
   readonly busy?: boolean | undefined;
   readonly error?: string | undefined;
   readonly onSubmit: (input: RestGoalInput) => void;
@@ -72,11 +91,20 @@ export function GoalForm(props: GoalFormProps) {
   const [title, setTitle] = useState(goal?.title ?? "");
   const [body, setBody] = useState(goal?.body ?? "");
   const [state, setState] = useState<GoalState>(goal?.state ?? "planned");
+  const [category, setCategory] = useState(goal?.category?.key ?? "");
+  const [startsOn, setStartsOn] = useState(goal?.startsOn ?? "");
   const [dueOn, setDueOn] = useState(goal?.dueOn ?? "");
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    props.onSubmit({ title: title.trim(), body, state, dueOn: dueOn === "" ? null : dueOn });
+    props.onSubmit({
+      title: title.trim(),
+      body,
+      state,
+      category: category === "" ? null : category,
+      startsOn: startsOn === "" ? null : startsOn,
+      dueOn: dueOn === "" ? null : dueOn,
+    });
   };
 
   return (
@@ -117,12 +145,42 @@ export function GoalForm(props: GoalFormProps) {
             ))}
           </select>
         </label>
+        {props.categories !== undefined && (
+          <label className="sc-field">
+            <span className="sc-field-label">{form.category}</span>
+            <select
+              className="sc-input"
+              value={category}
+              onChange={(event) => setCategory(event.target.value)}
+            >
+              <option value="">{form.noCategory}</option>
+              {props.categories.map((candidate) => (
+                <option key={candidate.key} value={candidate.key}>
+                  {candidate.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+      </div>
+      <div className="sc-field-row">
+        <label className="sc-field">
+          <span className="sc-field-label">{form.startsOn}</span>
+          <input
+            className="sc-input"
+            type="date"
+            value={startsOn}
+            max={dueOn === "" ? undefined : dueOn}
+            onChange={(event) => setStartsOn(event.target.value)}
+          />
+        </label>
         <label className="sc-field">
           <span className="sc-field-label">{form.dueOn}</span>
           <input
             className="sc-input"
             type="date"
             value={dueOn}
+            min={startsOn === "" ? undefined : startsOn}
             onChange={(event) => setDueOn(event.target.value)}
           />
         </label>
@@ -175,6 +233,7 @@ export function GoalView(props: GoalViewProps) {
       <header className="sc-task-header">
         <h1 className="sc-task-title">{goal.title}</h1>
         <div className="sc-task-badges">
+          {goal.category !== null && <CategoryBadge category={goal.category} />}
           <GoalStateBadge state={goal.state} />
           {goal.dueOn !== null && (
             <DueBadge dueOn={goal.dueOn} state={dueState(goal)} today={props.today} />
@@ -230,6 +289,26 @@ export function GoalView(props: GoalViewProps) {
                       </option>
                     ))}
                   </select>
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>{roadmap.category}</dt>
+              <dd>
+                {goal.category === null ? (
+                  <span className="sc-muted">{roadmap.noCategory}</span>
+                ) : (
+                  <CategoryBadge category={goal.category} />
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>{roadmap.starts}</dt>
+              <dd>
+                {goal.startsOn === null ? (
+                  <span className="sc-muted">{roadmap.noStart}</span>
+                ) : (
+                  <Day day={goal.startsOn} />
                 )}
               </dd>
             </div>

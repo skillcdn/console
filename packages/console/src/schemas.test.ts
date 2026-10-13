@@ -201,6 +201,8 @@ describe("what the server answers", () => {
       title: "Ship",
       body: "",
       state: "active",
+      category: { key: "product", name: "Product", color: "purple" },
+      startsOn: "2026-10-01",
       dueOn: "2026-11-15",
       createdBy: PERSON,
       taskCounts: { idea: 0, ready: 1, in_progress: 0, in_review: 0, done: 2, dropped: 0 },

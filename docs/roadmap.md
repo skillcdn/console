@@ -161,7 +161,18 @@ Goal: a command that no longer goes with the console it talks to is told so, and
 - [x] The command (2026-10-13): exit code `4` with the update to make where it is installed (for the machine, in the project, or fetched for the run, with the manager that put it there); a line on stderr once a day when it is behind or ahead within the range; `whoami` and `--version` saying the versions and the install.
 - [x] The skill (2026-10-13): `working-the-board` runs the update the command prints and goes on.
 
-## After milestone 15
+## Done: milestone 16, the roadmap in days and months (2026-10-13)
+
+Goal: a goal planned as a task is, a start and a target and a category, and the roadmap read as months, so that whoever runs a project sees what is worked towards when, of what kind and how far, on one page ([ADR-0026](adr/0026-a-goal-is-planned-in-days-and-sorted-into-a-category-and-the-roadmap-is-read-as-months.md)).
+
+- [x] The decision (2026-10-13, [ADR-0026](adr/0026-a-goal-is-planned-in-days-and-sorted-into-a-category-and-the-roadmap-is-read-as-months.md)): days and a category on a goal, the roadmap as months, the goal's target day on the calendar, and what was rejected (bars on the month grid, a stored order, an assignee, moments on a goal).
+- [x] The data model (2026-10-13): `starts_on` and `category_id` on `goals`, a category goals are sorted into kept until they are moved; migration 0018.
+- [x] The REST API (2026-10-13): `startsOn` and `category` on a goal, taken on `POST` and `PATCH`, `goal.invalid_dates` and `goal.invalid_category`, the roadmap narrowed by `category` and `state` ([specs/rest.md](specs/rest.md)).
+- [x] The command (2026-10-13): `goal new --starts --category`, `goal edit --starts <day|none> --category <key|none>`, `goals --category --state`; the goal line and the goal in full say the category and the days ([specs/cli.md](specs/cli.md)).
+- [x] The default UI (2026-10-13): the Roadmap page as months, six from the month the address names (`?from=`), each goal a bar from its start to its target in its category's colour, filled as far as its tasks are done, today marked, the goals without days named below; the category and the days on the list, the goal's page and the form; the goal's target day marked on the project's Calendar.
+- [x] The skill (2026-10-13): `working-the-board` reads the goal's plan with the task.
+
+## After milestone 16
 
 Nothing is chosen yet; the list below is where the next milestone comes from. Left open by milestone 9: whether the board should end a run not heard from for a long while itself ([ADR-0020](adr/0020-the-console-does-not-claim-an-agent-is-at-work-a-run-says-when-it-was-last-heard-from-and-a-new-run-takes-over.md)); a roadmap across projects.
 

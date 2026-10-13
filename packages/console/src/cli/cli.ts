@@ -1457,13 +1457,24 @@ const restore: Command = async (args, io) => {
 };
 
 const goals: Command = async (args, io) => {
-  const { values } = parse(args, {}, false);
+  const { values } = parse(
+    args,
+    { category: { type: "string" }, state: { type: "string" } },
+    false,
+  );
+  const state = goalStateOf(text(values, "state"));
+  const category = text(values, "category");
   const session = await open(io, values);
   const project = await session.project();
-  const found = await project.goals();
+  const found = await project.goals({
+    ...(state === undefined ? {} : { state }),
+    ...(category === undefined ? {} : { category }),
+  });
   answer(io, session, found, () =>
     found.items.length === 0
-      ? "No goals. An owner sets one: console goal new <title> --due <day>"
+      ? state === undefined && category === undefined
+        ? "No goals. An owner sets one: console goal new <title> --due <day>"
+        : "No goal matches."
       : found.items.map(formatGoalLine).join("\n"),
   );
   return EXIT.ok;
@@ -1471,15 +1482,24 @@ const goals: Command = async (args, io) => {
 
 const GOAL_FIELDS: OptionSpec = {
   state: { type: "string" },
+  category: { type: "string" },
+  starts: { type: "string" },
   due: { type: "string" },
   body: { type: "string" },
   file: { type: "string" },
 };
 
+/** A category's key as a flag names one, or `null` for `none` where the field may be cleared. */
+function categoryOf(value: string | undefined, clearable = false): string | null | undefined {
+  return clearable && value === "none" ? null : value;
+}
+
 const newGoal: Command = async (args, io) => {
   const { values, positionals } = parse(args, GOAL_FIELDS);
   const title = theOne(positionals, 'Say the title: console goal new "<title>" [--due <day>]');
   const state = goalStateOf(text(values, "state"));
+  const category = categoryOf(text(values, "category"));
+  const startsOn = dayOf(io, text(values, "starts"));
   const dueOn = dayOf(io, text(values, "due"));
   const body = await bodyOf(io, values, text(values, "body"));
   const session = await open(io, values);
@@ -1488,6 +1508,8 @@ const newGoal: Command = async (args, io) => {
     title,
     ...(body === undefined ? {} : { body }),
     ...(state === undefined ? {} : { state }),
+    ...(category === undefined ? {} : { category }),
+    ...(startsOn === undefined ? {} : { startsOn }),
     ...(dueOn === undefined ? {} : { dueOn }),
   });
   answer(io, session, made, () => `Goal set: ${made.title}\nid: ${made.id}`);
@@ -1499,17 +1521,21 @@ const editGoal: Command = async (args, io) => {
   const id = theOne(positionals, "Say which goal: console goal edit <id> --state <state> ...");
   const title = text(values, "title");
   const state = goalStateOf(text(values, "state"));
+  const category = categoryOf(text(values, "category"), true);
+  const startsOn = dayOf(io, text(values, "starts"), true);
   const dueOn = dayOf(io, text(values, "due"), true);
   const body = await bodyOf(io, values, text(values, "body"));
   const patch = {
     ...(title === undefined ? {} : { title }),
     ...(body === undefined ? {} : { body }),
     ...(state === undefined ? {} : { state }),
+    ...(category === undefined ? {} : { category }),
+    ...(startsOn === undefined ? {} : { startsOn }),
     ...(dueOn === undefined ? {} : { dueOn }),
   };
   if (Object.keys(patch).length === 0) {
     throw misuse(
-      "Say what to change: --title, --body, --state or --due; --due none clears the day.",
+      "Say what to change: --title, --body, --state, --category, --starts or --due; none clears a category or a day.",
     );
   }
   const session = await open(io, values);
@@ -2155,6 +2181,10 @@ function hintFor(error: ApiError, io: CliIo, seen: ConsoleSeen): string {
       return "The due day is before the start. Say a due day on or after it.\n";
     case "goal.not_found":
       return "No goal of this project has that id. console goals lists them.\n";
+    case "goal.invalid_category":
+      return "No category has that key. console categories lists them.\n";
+    case "goal.invalid_dates":
+      return "The target day is before the start. Say a target day on or after it.\n";
     case "auth.forbidden":
       return "What was asked is an administrator's, or an owner's of the project, and the person this token acts as is not one here. Hand the step to them.\n";
     case "project.key_taken":

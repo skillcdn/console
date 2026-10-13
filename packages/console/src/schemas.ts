@@ -492,6 +492,12 @@ export const restGoalSchema = z.object({
   /** Markdown: what reaching the goal means. Shown as text or rendered to elements, never as HTML. */
   body: z.string(),
   state: z.enum(GOAL_STATES),
+  /** The category the goal is sorted into, as the workspace keeps it, or `null` (ADR-0026). */
+  category: z.nullable(
+    z.object({ key: z.string(), name: z.string(), color: z.enum(CATEGORY_COLORS) }),
+  ),
+  /** The plan (ADR-0026): the day the work towards the goal is meant to begin, or `null`. */
+  startsOn: z.nullable(day),
   /** The day the goal is meant to be reached by, or `null`. */
   dueOn: z.nullable(day),
   createdBy: restPersonSchema,
@@ -512,6 +518,9 @@ export const restGoalInputSchema = z.object({
   body: z.optional(body),
   /** Left out: `planned`. */
   state: z.optional(z.enum(GOAL_STATES)),
+  /** The key of a category of the workspace, or `null` for none. */
+  category: z.optional(z.nullable(categoryKey)),
+  startsOn: z.optional(z.nullable(day)),
   dueOn: z.optional(z.nullable(day)),
 });
 export type RestGoalInput = z.infer<typeof restGoalInputSchema>;
@@ -521,6 +530,8 @@ export const restGoalPatchSchema = z.object({
   title: z.optional(line(MAX_TITLE_LENGTH)),
   body: z.optional(body),
   state: z.optional(z.enum(GOAL_STATES)),
+  category: z.optional(z.nullable(categoryKey)),
+  startsOn: z.optional(z.nullable(day)),
   dueOn: z.optional(z.nullable(day)),
 });
 export type RestGoalPatch = z.infer<typeof restGoalPatchSchema>;

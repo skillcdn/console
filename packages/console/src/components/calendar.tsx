@@ -48,9 +48,11 @@ export interface CalendarProps {
   readonly today?: string | undefined;
   /** The workspace's categories, for the legend to say what the colours mean. */
   readonly categories?: readonly RestCategory[] | undefined;
-  /** The project's goals, so that the task under the pointer is shown with its goal's title. */
+  /** The project's goals, so that the task under the pointer is shown with its goal's title, and, given `goalHref`, so that each goal marks its target day. */
   readonly goals?: readonly RestGoal[] | undefined;
   readonly taskHref: (task: RestTask) => string;
+  /** Where a goal's page is: given, the goals mark their target days on the month (ADR-0026). */
+  readonly goalHref?: ((goal: RestGoal) => string) | undefined;
   /** Where the calendar is on another month. */
   readonly monthHref: (month: string) => string;
 }
@@ -324,10 +326,30 @@ interface WeekRowProps {
   readonly pointed: Pointed | null;
   /** The project's goals, so that the item under the pointer names its goal; none across projects. */
   readonly goals?: readonly RestGoal[] | undefined;
+  /** The goals whose target day is each day, where the goals mark the month. */
+  readonly goalsOn?: ReadonlyMap<string, readonly RestGoal[]> | undefined;
+  readonly goalHref?: ((goal: RestGoal) => string) | undefined;
   /** The pointer, or the focus, arrived on a task's item on a day. */
   readonly onPoint: (task: RestTask, day: string, item: HTMLElement) => void;
   /** It left. */
   readonly onLeave: () => void;
+}
+
+/** The goals that aim at each day, by day: those with a target day, still planned or worked towards. */
+function goalsOnDays(goals: readonly RestGoal[]): ReadonlyMap<string, readonly RestGoal[]> {
+  const on = new Map<string, RestGoal[]>();
+  for (const goal of goals) {
+    if (goal.dueOn === null || goal.state === "dropped") {
+      continue;
+    }
+    const list = on.get(goal.dueOn);
+    if (list === undefined) {
+      on.set(goal.dueOn, [goal]);
+    } else {
+      list.push(goal);
+    }
+  }
+  return on;
 }
 
 /** One week as a row of cells: the bars across the days in their lanes, then the tasks on each day. */
@@ -361,6 +383,21 @@ function WeekRow(props: WeekRowProps) {
           )}
         >
           <span className="sc-calendar-day">{Number(cell.day.slice(8))}</span>
+          {props.goalHref !== undefined &&
+            (props.goalsOn?.get(cell.day) ?? []).map((goal) => (
+              <a
+                key={goal.id}
+                className={cx(
+                  "sc-calendar-goal",
+                  `sc-category-${goal.category?.color ?? "gray"}`,
+                  goal.state === "done" && "sc-calendar-over",
+                )}
+                href={props.goalHref?.(goal)}
+              >
+                <span className="sc-calendar-flag" aria-hidden="true" />
+                <span className="sc-calendar-task-title">{goal.title}</span>
+              </a>
+            ))}
           {Array.from({ length: lanes }, (_, lane) => {
             const segment = segments.find(
               (candidate) =>
@@ -435,6 +472,7 @@ export function Calendar(props: CalendarProps) {
   const firstDay = firstDayOfWeek(tag);
   const weeks = monthGrid(props.month, firstDay);
   const on = onDays(props.tasks);
+  const goalsOn = props.goalHref === undefined ? undefined : goalsOnDays(props.goals ?? []);
   const inMonth = (day: string) => monthOf(day) === props.month;
   const monthWeeks = weeks.map((week) => ({ week, segments: weekSegments(week, props.tasks) }));
   const nothing =
@@ -492,6 +530,8 @@ export function Calendar(props: CalendarProps) {
               taskHref={props.taskHref}
               pointed={pointed}
               goals={props.goals}
+              goalsOn={goalsOn}
+              goalHref={props.goalHref}
               onPoint={point}
               onLeave={leave}
               people

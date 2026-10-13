@@ -15,6 +15,7 @@ export {
   type FetchLike,
   type FileRead,
   type FileUpload,
+  type GoalFilter,
   type Page,
   type ProjectClient,
   type TaskFilter,

@@ -314,9 +314,14 @@ function progressOf(goal: RestGoal): string {
   return `${counts.done}/${total} done${working === 0 ? "" : `, ${working} in progress`}${counts.dropped === 0 ? "" : `, ${counts.dropped} dropped`}`;
 }
 
-/** One goal: its id, its state, its title, when it is due, and how far it is. */
+/** One goal: its id, its state, its title, its category, its days, and how far it is. */
 export function formatGoalLine(goal: RestGoal): string {
-  const notes = [goal.dueOn === null ? "no target day" : `due ${goal.dueOn}`, progressOf(goal)];
+  const notes = [
+    ...(goal.category === null ? [] : [goal.category.key]),
+    ...(goal.startsOn === null ? [] : [`starts ${goal.startsOn}`]),
+    goal.dueOn === null ? "no target day" : `due ${goal.dueOn}`,
+    progressOf(goal),
+  ];
   return `${goal.id}  ${goal.state}  ${goal.title}  (${notes.join("; ")})`;
 }
 
@@ -324,7 +329,7 @@ export function formatGoalLine(goal: RestGoal): string {
 export function formatGoal(goal: RestGoal, tasks?: readonly RestTask[]): string {
   const lines = [
     `goal ${goal.id}: ${goal.title}`,
-    `state: ${goal.state}  due: ${goal.dueOn ?? "none"}  set by: ${goal.createdBy.login}`,
+    `state: ${goal.state}  category: ${goal.category?.key ?? "none"}  starts: ${goal.startsOn ?? "none"}  due: ${goal.dueOn ?? "none"}  set by: ${goal.createdBy.login}`,
     `progress: ${progressOf(goal)}`,
   ];
   if (goal.body.trim().length > 0) {

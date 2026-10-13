@@ -315,8 +315,12 @@ export const goals = pgTable(
     /** Markdown, bounded at the edge; shown as text, never as HTML. */
     body: text().notNull().default(""),
     state: text({ enum: GOAL_STATES }).notNull().default("planned"),
+    /** The day the work towards the goal is meant to begin, or none: a goal is planned in days as a task is (ADR-0026). */
+    startsOn: date({ mode: "string" }),
     /** The day the goal is meant to be reached by, or none: a plan is made in days. */
     dueOn: date({ mode: "string" }),
+    /** The category the goal is sorted into, as a task is; null for none. */
+    categoryId: uuid().references(() => categories.id),
     createdById: uuid()
       .notNull()
       .references(() => people.id),
@@ -325,6 +329,7 @@ export const goals = pgTable(
   },
   (table) => [
     index("goals_project_state_idx").on(table.projectId, table.state),
+    index("goals_category_idx").on(table.categoryId),
     check("goals_state_check", sql`${table.state} in (${sql.raw(literals(GOAL_STATES))})`),
   ],
 );

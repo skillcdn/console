@@ -38,6 +38,7 @@ import { GoalForm, GoalList, GoalView } from "./goals.js";
 import { Markdown } from "./markdown.js";
 import { ListingForm, PeopleList } from "./people.js";
 import { keyOf, MemberList, ProjectForm, ProjectList, ProjectMark } from "./projects.js";
+import { GoalTimeline, timelineBars } from "./roadmap.js";
 import { RulesForm, RulesView } from "./rules.js";
 import { RunList } from "./runs.js";
 import { Shell } from "./shell.js";
@@ -107,6 +108,8 @@ const goal = (overrides: Partial<RestGoal> = {}): RestGoal => ({
   title: "Ship v1 <b>now</b>",
   body: "",
   state: "active",
+  category: null,
+  startsOn: null,
   dueOn: "2026-11-15",
   createdBy: alice,
   taskCounts: { idea: 1, ready: 0, in_progress: 1, in_review: 0, done: 2, dropped: 1 },
@@ -2337,5 +2340,133 @@ describe("the rules", () => {
     );
     expect(written).toContain("Reset to the console&#x27;s rules");
     expect(fromReference).not.toContain("Reset to the console");
+  });
+});
+
+describe("the roadmap as months (ADR-0026)", () => {
+  const planned = goal({
+    startsOn: "2026-10-01",
+    dueOn: "2026-12-31",
+    category: { key: "engineering", name: "Engineering", color: "blue" },
+  });
+  const ids = (n: number) => `0199c4d8-0000-7000-8000-0000000000${n}`;
+
+  it("lays the goals across the months from their start to their target, cut to the span", () => {
+    const bars = timelineBars(
+      [
+        planned,
+        goal({ id: ids(31), startsOn: "2026-08-01", dueOn: "2026-10-15" }),
+        goal({ id: ids(32), startsOn: null, dueOn: "2026-11-15" }),
+        goal({ id: ids(33), startsOn: null, dueOn: null }),
+        goal({ id: ids(34), startsOn: "2027-05-01", dueOn: "2027-06-01" }),
+      ],
+      "2026-10",
+      6,
+    );
+    // The span: October 2026 to March 2027, 182 days.
+    expect(bars.map((bar) => bar.goal.id)).toEqual([planned.id, ids(31), ids(32)]);
+    expect(bars[0]).toMatchObject({ from: 0, begins: true, ends: true, point: false });
+    expect(bars[0]?.to).toBeCloseTo(92 / 182);
+    expect(bars[1]).toMatchObject({ from: 0, begins: false, ends: true, point: false });
+    expect(bars[1]?.to).toBeCloseTo(15 / 182);
+    expect(bars[2]).toMatchObject({ begins: true, ends: true, point: true });
+    expect(bars[2]?.from).toBeCloseTo(45 / 182);
+    expect(timelineBars([planned], "2026-10", 0)).toEqual([]);
+  });
+
+  it("shows the months, each goal as a bar in its colour with its progress, today, the legend and the goals without days", () => {
+    const html = renderToStaticMarkup(
+      <GoalTimeline
+        goals={[planned, goal({ id: ids(33), title: "Someday", startsOn: null, dueOn: null })]}
+        from="2026-10"
+        today={TODAY}
+        categories={[engineering]}
+        goalHref={(item) => `/projects/web/roadmap/${item.id}`}
+        fromHref={(month) => `/projects/web/roadmap?from=${month}`}
+      />,
+    );
+    expect(html).toContain("sc-timeline-month");
+    expect(html).toContain("sc-timeline-bar");
+    expect(html).toContain("sc-category-blue");
+    expect(html).toContain("sc-timeline-fill");
+    expect(html).toContain("2/4");
+    expect(html).toContain("sc-timeline-today");
+    expect(html).toContain("Someday");
+    expect(html).toContain("No day set");
+    expect(html).toContain("Engineering");
+    expect(html).toContain('href="/projects/web/roadmap?from=2026-09"');
+    expect(html).toContain('href="/projects/web/roadmap?from=2026-11"');
+    expect(html).toContain(`href="/projects/web/roadmap/${planned.id}"`);
+    const empty = renderToStaticMarkup(
+      <GoalTimeline
+        goals={[]}
+        from="2026-10"
+        today={TODAY}
+        goalHref={() => "#"}
+        fromHref={() => "#"}
+      />,
+    );
+    expect(empty).toContain("No goal is planned in these months.");
+  });
+
+  it("marks the target day of a goal on the calendar when told where its page is", () => {
+    const html = renderToStaticMarkup(
+      <Calendar
+        tasks={[]}
+        month="2026-11"
+        today={TODAY}
+        goals={[
+          goal(),
+          goal({ id: ids(31), title: "Let go", state: "dropped", dueOn: "2026-11-20" }),
+        ]}
+        taskHref={href}
+        goalHref={(item) => `/projects/web/roadmap/${item.id}`}
+        monthHref={(month) => `/projects/web/calendar?month=${month}`}
+      />,
+    );
+    expect(html).toContain("sc-calendar-goal");
+    expect(html).toContain(`href="/projects/web/roadmap/${goal().id}"`);
+    expect(html).toContain("Ship v1 &lt;b&gt;now&lt;/b&gt;");
+    expect(html).not.toContain("Let go");
+    const unmarked = renderToStaticMarkup(
+      <Calendar
+        tasks={[]}
+        month="2026-11"
+        today={TODAY}
+        goals={[goal()]}
+        taskHref={href}
+        monthHref={(month) => `/projects/web/calendar?month=${month}`}
+      />,
+    );
+    expect(unmarked).not.toContain("sc-calendar-goal");
+  });
+
+  it("takes the category and the start day on the form, and shows them on the list and the goal", () => {
+    const form = renderToStaticMarkup(
+      <GoalForm categories={[engineering]} onSubmit={() => undefined} />,
+    );
+    expect(form).toContain("No category");
+    expect(form).toContain("Engineering");
+    expect(form).toContain("Start day");
+    expect(form.split('type="date"')).toHaveLength(3);
+    const edit = renderToStaticMarkup(
+      <GoalForm goal={planned} categories={[engineering]} onSubmit={() => undefined} />,
+    );
+    expect(edit).toContain('value="2026-10-01"');
+    const list = renderToStaticMarkup(
+      <GoalList goals={[planned]} goalHref={() => "#"} today={TODAY} />,
+    );
+    expect(list).toContain("sc-badge-category");
+    expect(list).toContain("sc-goal-days");
+    const view = renderToStaticMarkup(
+      <GoalView goal={planned} tasks={[]} taskHref={href} today={TODAY} />,
+    );
+    expect(view).toContain("Starts");
+    expect(view).toContain("Engineering");
+    const bare = renderToStaticMarkup(
+      <GoalView goal={goal({ dueOn: null })} tasks={[]} taskHref={href} today={TODAY} />,
+    );
+    expect(bare).toContain("No start day");
+    expect(bare).toContain("No category");
   });
 });

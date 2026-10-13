@@ -59,7 +59,8 @@ export type Route =
       readonly month: string | undefined;
       readonly filter: BoardFilter;
     }
-  | { readonly name: "roadmap"; readonly project: string }
+  /** The roadmap of a project: the months shown from the one named, or from this one. */
+  | { readonly name: "roadmap"; readonly project: string; readonly from: string | undefined }
   | { readonly name: "new-goal"; readonly project: string }
   | {
       readonly name: "goal";
@@ -345,7 +346,11 @@ export function matchRoute(pathname: string, search = ""): Route {
     return { name: "calendar", project, month: month ?? undefined, filter: boardFilterOf(params) };
   }
   if (page === "roadmap") {
-    return { name: "roadmap", project };
+    const from = params.get("from");
+    if (from !== null && !isMonth(from)) {
+      return NOT_FOUND;
+    }
+    return { name: "roadmap", project, from: from ?? undefined };
   }
   if (page === "settings") {
     return {
@@ -455,6 +460,12 @@ export function customPageHref(page: string, project?: string): string {
 }
 
 /** Where a goal is set: the form. */
+/** Where a project's roadmap is, from a month on, or from this one when none is named. */
+export function roadmapHref(key: string, from?: string): string {
+  const base = projectHref(key, "roadmap");
+  return from === undefined ? base : `${base}?from=${from}`;
+}
+
 export function newGoalHref(key: string): string {
   return `${PATHS.project}/${key}/roadmap/new`;
 }

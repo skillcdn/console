@@ -29,10 +29,10 @@ The board is a project's ([ADR-0008](../adr/0008-a-workspace-holds-projects-and-
 | `task <number\|id>` | `GET .../tasks/<ref>`, the decisions about it, the runs on it, `GET .../tasks/<id>/comments` | the task in full, with its plan and its moments, and the discussion on it: each comment whole, with its files and the command that reads each |
 | `task new <title> [--body <markdown>\|--file <path>] [--state <state>] [--priority <priority>] [--category <key>] [--goal <id>] [--starts <day>] [--due <day>] [--assignee <login\|me>] [--parent <number\|id>]` | `POST .../tasks` | the number and the id |
 | `task edit <number\|id> [--title <title>] [--body ...] [the same flags; `none` clears a field]` | `GET .../tasks/<ref>`, then `PATCH .../tasks/<id>` | the task in full, as it is now |
-| `goals` | `GET .../goals` | one line per goal of the roadmap: id, state, title, target day, how far it is |
-| `goal <id>` | `GET .../goals/<id>`, `GET .../tasks?goal=` | the goal in full, with the tasks that work towards it |
-| `goal new <title> [--body <markdown>\|--file <path>] [--state <state>] [--due <day>]` | `POST .../goals` | the title and the id; for an owner of the project |
-| `goal edit <id> [--title <title>] [--body ...] [--state <state>] [--due <day\|none>]` | `PATCH .../goals/<id>` | the goal in full, as it is now |
+| `goals [--category <key>] [--state <state>]` | `GET .../goals?category=&state=` | one line per goal of the roadmap: id, state, title, category, the days it starts and is meant to be reached by, how far it is ([ADR-0026](../adr/0026-a-goal-is-planned-in-days-and-sorted-into-a-category-and-the-roadmap-is-read-as-months.md)) |
+| `goal <id>` | `GET .../goals/<id>`, `GET .../tasks?goal=` | the goal in full, with its plan and the tasks that work towards it |
+| `goal new <title> [--body <markdown>\|--file <path>] [--state <state>] [--category <key>] [--starts <day>] [--due <day>]` | `POST .../goals` | the title and the id; for an owner of the project |
+| `goal edit <id> [--title <title>] [--body ...] [--state <state>] [--category <key\|none>] [--starts <day\|none>] [--due <day\|none>]` | `PATCH .../goals/<id>` | the goal in full, as it is now |
 | `categories` | `GET /api/v1/categories` | one line per category: key, name, colour |
 | `people` | `GET /api/v1/people` | one line per person: login, name, role in the workspace, and `deactivated` for one taken out; then one line per login let in that nobody has signed in with yet. Needs no project |
 | `person role <login> <admin\|member>` | `GET /api/v1/people` for the id, then `PATCH /api/v1/people/<id>` | the person as they are now; for an administrator |

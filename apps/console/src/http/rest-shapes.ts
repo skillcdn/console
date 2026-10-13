@@ -108,6 +108,8 @@ export function restGoal(goal: GoalRecord): RestGoal {
     title: goal.title,
     body: goal.body,
     state: goal.state,
+    category: goal.category ?? null,
+    startsOn: goal.startsOn ?? null,
     dueOn: goal.dueOn ?? null,
     createdBy: restPerson(goal.createdBy),
     taskCounts: goal.taskCounts,

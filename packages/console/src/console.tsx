@@ -53,6 +53,7 @@ import {
   type ProjectListProps,
   ProjectMark,
 } from "./components/projects.js";
+import { GoalTimeline } from "./components/roadmap.js";
 import { RulesForm, RulesView } from "./components/rules.js";
 import {
   type Brand,
@@ -106,6 +107,7 @@ import {
   projectHref,
   projectSettingsHref,
   type Route,
+  roadmapHref,
   settingsHref,
   signInFailureOf,
   taskHref,
@@ -702,6 +704,7 @@ function ProjectPage(props: {
           categories={data.categories}
           goals={data.goals}
           taskHref={href}
+          goalHref={(goal) => goalHref(key, goal.id)}
           monthHref={(wanted) => calendarHref(key, wanted, route.filter)}
         />
         <div className="sc-calendar-below">
@@ -765,6 +768,7 @@ function ProjectPage(props: {
         {making && (
           <section className="sc-panel sc-panel-form" aria-label={roadmap.setGoalAria}>
             <GoalForm
+              categories={data.categories}
               busy={busy}
               onSubmit={(input) =>
                 void act(async () => {
@@ -775,6 +779,18 @@ function ProjectPage(props: {
               onCancel={() => navigation.back(projectHref(key, "roadmap"))}
             />
           </section>
+        )}
+        {data.goals.length > 0 && (
+          <GoalTimeline
+            goals={data.goals}
+            from={
+              route.name === "roadmap" && route.from !== undefined ? route.from : monthOf(today())
+            }
+            today={today()}
+            categories={data.categories}
+            goalHref={(goal) => goalHref(key, goal.id)}
+            fromHref={(month) => roadmapHref(key, month)}
+          />
         )}
         <components.GoalList
           goals={data.goals}
@@ -820,6 +836,7 @@ function ProjectPage(props: {
           <section className="sc-panel sc-panel-form" aria-label={roadmap.editAria}>
             <GoalForm
               goal={goal}
+              categories={data.categories}
               busy={busy}
               onSubmit={(input) =>
                 void act(async () => {

@@ -267,7 +267,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
           scope.get(signal),
           scope.tasks(undefined, signal),
           scope.decisions(undefined, signal),
-          scope.goals(signal),
+          scope.goals({}, signal),
           scope.runs(undefined, signal),
           scope.members(signal),
         ]);

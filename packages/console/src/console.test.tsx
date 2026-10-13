@@ -25,6 +25,7 @@ import {
   personWorkHref,
   projectHref,
   projectSettingsHref,
+  roadmapHref,
   settingsHref,
   signInFailureOf,
   taskHref,
@@ -51,6 +52,14 @@ describe("matchRoute", () => {
     expect(workHref("2026-10-12")).toBe("/work?week=2026-10-12");
     expect(matchRoute("/categories")).toEqual({ name: "categories" });
     expect(matchRoute("/projects/web/roadmap")).toEqual({ name: "roadmap", project: "web" });
+    expect(matchRoute("/projects/web/roadmap", "?from=2026-10")).toEqual({
+      name: "roadmap",
+      project: "web",
+      from: "2026-10",
+    });
+    expect(matchRoute("/projects/web/roadmap", "?from=nope")).toEqual({ name: "not-found" });
+    expect(roadmapHref("web", "2026-10")).toBe("/projects/web/roadmap?from=2026-10");
+    expect(roadmapHref("web")).toBe("/projects/web/roadmap");
     expect(matchRoute("/projects/web/calendar")).toEqual({
       name: "calendar",
       project: "web",

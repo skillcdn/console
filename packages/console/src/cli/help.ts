@@ -135,22 +135,24 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     refusals: ["task.not_found: no task has that number or id", ...TASK_FIELD_REFUSALS],
   },
   goals: {
-    usage: "goals",
+    usage: "goals [--category <key>] [--state <state>]",
     about:
-      "The roadmap of the project: its goals, the active first, each with its id, its state (planned, active, done, dropped), its target day, and how far it is, counted from the tasks that work towards it.",
+      "The roadmap of the project: its goals, the active first, each with its id, its state (planned, active, done, dropped), its category, the days it starts and is meant to be reached by, and how far it is, counted from the tasks that work towards it. --category keeps those sorted into one, --state those in one state.",
   },
   goal: {
     usage:
-      'goal <id>  |  goal new "<title>" [--body <markdown>|--file <path>] [--state <state>] [--due <day>]  |  goal edit <id> [--title <title>] [--body <markdown>|--file <path>] [--state <state>] [--due <day|none>]',
+      'goal <id>  |  goal new "<title>" [--body <markdown>|--file <path>] [--state <state>] [--category <key>] [--starts <day>] [--due <day>]  |  goal edit <id> [--title <title>] [--body <markdown>|--file <path>] [--state <state>] [--category <key|none>] [--starts <day|none>] [--due <day|none>]',
     about:
-      "One goal in full, with the tasks that work towards it; or a goal set on the roadmap, for an owner of the project; or one changed, only in what the flags say. A task works towards a goal through its --goal.",
+      "One goal in full, with the tasks that work towards it; or a goal set on the roadmap, for an owner of the project; or one changed, only in what the flags say, where none clears a category or a day. A goal is planned in days as a task is, a start and a target, and sorted into a category of the workspace (console categories). A task works towards a goal through its --goal.",
     limits: [
       `title: one line, up to ${MAX_TITLE_LENGTH} characters`,
       `body: ${MARKDOWN}`,
-      `due: ${DAY}`,
+      `starts, due: ${DAY}`,
     ],
     refusals: [
       "goal.not_found: no goal of this project has that id",
+      "goal.invalid_category: no category of the workspace has that key",
+      "goal.invalid_dates: the target day is before the start",
       "auth.forbidden: only an owner of the project sets its roadmap",
     ],
   },

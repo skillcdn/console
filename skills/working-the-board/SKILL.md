@@ -5,7 +5,7 @@ license: MIT
 compatibility: Needs a shell with the console command on the PATH (npm install -g @skillcdn/console, Node.js 24 or newer), signed in by a person. Nothing else; the command needs no key of its own and the agent never sees a token.
 metadata:
   author: skillcdn
-  version: "1.7"
+  version: "1.8"
 skillcdn:
   translations:
     ko:
@@ -41,7 +41,7 @@ The full contract is the [specification of the command line](/docs/specs/cli.md)
 | Input | Source |
 |---|---|
 | The task | Its number (`#7`) or its id, from what the person said. Told to pick one, `console work` lists what is on the person's plate across their projects, the sooner due first (`--person <login>` another person's, for an administrator or an owner of a project they are in), and `console tasks --state ready --mine` what is ready and theirs in this one (`--due overdue`, `--due week`, `--category <key>` and `--goal <id>` narrow it further); a task is never taken without being told which, or that any ready one may be. |
-| The work | The task's body, read with `console task <number>`: what to make, where, the milestones, what to ask; the comments on it, which are the discussion so far, printed with the task, their pictures saved with `console file <id>`; with its plan, the category, the goal it works towards (`console goal <id>` says what reaching it means) and the days it starts and is due, which the reports and the summary keep to. The pages it links to (`console doc <path>`) and the project's skills (`console skills`, each loaded through the agent's own SkillCDN connection to the address; with none that covers it, stop and tell the person, who connects the agent at the address's page) say the rest. |
+| The work | The task's body, read with `console task <number>`: what to make, where, the milestones, what to ask; the comments on it, which are the discussion so far, printed with the task, their pictures saved with `console file <id>`; with its plan, the category, the goal it works towards (`console goal <id>` says what reaching it means, its category and the days it starts and is meant to be reached by) and the days it starts and is due, which the reports and the summary keep to. The pages it links to (`console doc <path>`) and the project's skills (`console skills`, each loaded through the agent's own SkillCDN connection to the address; with none that covers it, stop and tell the person, who connects the agent at the address's page) say the rest. |
 | The rules | The workspace's, the console's own until an administrator writes the organization's, and this project's own when it has them: which skills to load first, where the work lives, the pages, what may be decided alone, how to report ([ADR-0023](/docs/adr/0023-the-rules-of-a-board-are-pages-the-workspace-and-its-projects-keep-read-first-by-every-agent.md)). `console take` prints them with the task, so they are read once, there; `console rules` reads them without taking, as when a task is still to be chosen. They hold over this skill's defaults where they differ. |
 
 ## Workflow

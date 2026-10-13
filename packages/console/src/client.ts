@@ -107,7 +107,7 @@ import {
   restVersionsSchema,
   restWorkSchema,
 } from "./schemas.js";
-import type { TaskState } from "./vocabulary.js";
+import type { GoalState, TaskState } from "./vocabulary.js";
 
 // The client of the console's REST API: what the default console and a custom one talk to the
 // server with, and what the command line, a script or a console of a person's own talks to it
@@ -195,6 +195,13 @@ export interface Page {
 }
 
 /** What the board is narrowed to: one state, the open ones, a category, a goal, an assignee, or what is due by a day. */
+/** What the roadmap is narrowed by: the goals in one state, or sorted into one category (ADR-0026). */
+export interface GoalFilter {
+  readonly state?: GoalState | undefined;
+  /** The key of a category of the workspace. */
+  readonly category?: string | undefined;
+}
+
 export interface TaskFilter extends Page {
   readonly state?: TaskState | undefined;
   /** True for the tasks not done or dropped; false for the rest. */
@@ -308,7 +315,8 @@ export interface ProjectClient {
   /** Where the bytes of a file attached to a document are read, by the file's id. */
   documentFileUrl(path: string, fileId: string): string;
   /** The roadmap (ADR-0019): the goals, the active first, each with its tasks counted by state. */
-  goals(signal?: AbortSignal): Promise<RestGoals>;
+  /** The roadmap, or what the filter keeps of it: the active goals first. */
+  goals(filter?: GoalFilter, signal?: AbortSignal): Promise<RestGoals>;
   goal(id: string, signal?: AbortSignal): Promise<RestGoal>;
   /** Sets a goal; for an owner, with a session or a token. */
   createGoal(input: RestGoalInput): Promise<RestGoal>;
@@ -692,8 +700,14 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
         request("POST", `${base}${at("docs", path)}/files`, formOf(input), restDocumentSchema),
       documentFileUrl: (path, fileId) =>
         `${base}${at("docs", path)}/files/${encodeURIComponent(fileId)}`,
-      goals: (signal) =>
-        request("GET", `${base}${at("goals")}`, undefined, restGoalsSchema, signal),
+      goals: (filter = {}, signal) =>
+        request(
+          "GET",
+          withQuery(at("goals"), { state: filter.state, category: filter.category }),
+          undefined,
+          restGoalsSchema,
+          signal,
+        ),
       goal: (id, signal) =>
         request("GET", `${base}${at("goals", id)}`, undefined, restGoalSchema, signal),
       createGoal: (input) => request("POST", `${base}${at("goals")}`, input, restGoalSchema),

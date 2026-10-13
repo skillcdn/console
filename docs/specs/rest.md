@@ -30,6 +30,8 @@ The API is the board as its members see it: the people, the projects, and in eac
 | 400 | `task.invalid_category` | No category of the workspace has that key. |
 | 400 | `task.invalid_goal` | The goal is not one of the project's. |
 | 400 | `task.invalid_dates` | The due day is before the start. |
+| 400 | `goal.invalid_category` | No category of the workspace has that key. |
+| 400 | `goal.invalid_dates` | The target day of the goal is before its start. |
 | 400 | `decision.invalid_task` | The decision is about a task that is not one of the project's. |
 | 400 | `decision.no_such_option` | The answer names an option the decision does not have. |
 | 400 | `decision.invalid_run` | A decision raised from a run that is not the asker's, or is over. |
@@ -52,7 +54,7 @@ The API is the board as its members see it: the people, the projects, and in eac
 | 404 | `not_found` | Nothing at this path. |
 | 409 | `project.key_taken` | A project of the workspace has that key already. |
 | 409 | `member.exists` | The person is listed in the project already. |
-| 409 | `category.key_taken`, `category.in_use`, `category.too_many` | A category of the workspace has that key already; tasks are sorted into the category, so it stays until they are moved; the workspace has as many categories as one may (`MAX_CATEGORIES`). |
+| 409 | `category.key_taken`, `category.in_use`, `category.too_many` | A category of the workspace has that key already; tasks or goals are sorted into the category, so it stays until they are moved; the workspace has as many categories as one may (`MAX_CATEGORIES`). |
 | 409 | `decision.answered` | The decision has an answer already. |
 | 409 | `document.conflict` | The page has moved on since the version the write started from (`baseVersion`), or was written at that path by someone else first. |
 | 409 | `document.archived` | The page is archived: restore it before writing to it or attaching to it. |
@@ -206,11 +208,11 @@ Grows the record: takes any of `body` (the context) and `outcome` (what followed
 
 ### `GET /api/v1/projects/<key>/goals` and `POST /api/v1/projects/<key>/goals`
 
-The roadmap ([ADR-0019](../adr/0019-a-task-is-planned-in-days-the-board-keeps-its-moments-and-goals-and-categories-give-the-work-its-shape.md)). `GET`, for whoever may see the project, answers `{ "items": [goal, ...] }`: the active goals first, then the planned, the reached and the dropped, the sooner due first within each and the older first among those with no day; at most `LIST_LIMIT`. A goal carries its `title`, `body` (Markdown: what reaching it means), `state` (`planned`, `active`, `done`, `dropped`), `dueOn` (the day it is meant to be reached by, or `null`), `createdBy`, `taskCounts` (the tasks that work towards it, counted by state: `idea`, `ready`, `in_progress`, `in_review`, `done`, `dropped`; read from the board as it stands, never written down), `createdAt` and `updatedAt`. `POST`, for an owner of the project, from the console's own pages or with a token, takes `title` and optionally `body`, `state` (default `planned`) and `dueOn`, answers `201` with the goal and writes a `goal.created` event with its `title`; a member is `auth.forbidden`.
+The roadmap ([ADR-0019](../adr/0019-a-task-is-planned-in-days-the-board-keeps-its-moments-and-goals-and-categories-give-the-work-its-shape.md), [ADR-0026](../adr/0026-a-goal-is-planned-in-days-and-sorted-into-a-category-and-the-roadmap-is-read-as-months.md)). `GET`, for whoever may see the project, answers `{ "items": [goal, ...] }`: the active goals first, then the planned, the reached and the dropped, the sooner due first within each and the older first among those with no day; at most `LIST_LIMIT`; `?category=<key>` keeps those sorted into a category and `?state=<state>` those in one state. A goal carries its `title`, `body` (Markdown: what reaching it means), `state` (`planned`, `active`, `done`, `dropped`), `category` (its `key`, `name` and `color` as the workspace keeps it, or `null`), its plan, `startsOn` (the day the work towards it is meant to begin, or `null`) and `dueOn` (the day it is meant to be reached by, or `null`), `createdBy`, `taskCounts` (the tasks that work towards it, counted by state: `idea`, `ready`, `in_progress`, `in_review`, `done`, `dropped`; read from the board as it stands, never written down), `createdAt` and `updatedAt`. `POST`, for an owner of the project, from the console's own pages or with a token, takes `title` and optionally `body`, `state` (default `planned`), `category` (the key of a category of the workspace, or `null`; `goal.invalid_category`), `startsOn` and `dueOn` (days; the target not before the start, `goal.invalid_dates`), answers `201` with the goal and writes a `goal.created` event with its `title`; a member is `auth.forbidden`.
 
 ### `GET .../goals/<id>` and `PATCH .../goals/<id>`
 
-One goal, for whoever may see the project. The patch, for an owner, takes any of `title`, `body`, `state` and `dueOn` (`null` for none), answers the goal and writes `goal.updated` naming the `fields`; a patch that changes nothing writes nothing. A goal is never deleted: one let go is `dropped`. A task works towards a goal through its `goalId`; the goal's events are read from the project's feed with `goal=<id>`.
+One goal, for whoever may see the project. The patch, for an owner, takes any of `title`, `body`, `state`, `category`, `startsOn` and `dueOn` (`null` for none), answers the goal and writes `goal.updated` naming the `fields` (`category`, `startsOn` and `dueOn` among them, as the input names them); a patch that changes nothing writes nothing. A goal is never deleted: one let go is `dropped`. A task works towards a goal through its `goalId`; the goal's events are read from the project's feed with `goal=<id>`.
 
 ### `GET /api/v1/projects/<key>/runs?task=&open=&mine=&limit=&offset=` and `GET .../runs/<id>`
 

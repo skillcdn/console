@@ -45,6 +45,8 @@ const GOAL = {
   title: "Ship v1",
   body: "What it means.",
   state: "active",
+  category: null,
+  startsOn: null,
   dueOn: "2026-11-15",
   createdBy: PERSON,
   taskCounts: { idea: 1, ready: 0, in_progress: 1, in_review: 0, done: 2, dropped: 0 },
@@ -1935,5 +1937,72 @@ describe("the versions of the command and the console (ADR-0025)", () => {
       `alice (member) at Acme, ${ORIGIN}; project web\nThis command is 0.1.18; the console does not say its version, so it is older than 0.1.18.\n`,
     );
     expect(h.err()).toBe("");
+  });
+});
+
+describe("the plan of a goal (ADR-0026)", () => {
+  const PLANNED = {
+    ...GOAL,
+    category: { key: "engineering", name: "Engineering", color: "blue" },
+    startsOn: "2026-10-01",
+  };
+
+  it("sets and changes the days and the category, and narrows the roadmap by them", async () => {
+    const { fetch, calls } = fakeConsole({
+      [`GET ${IN}/goals?state=active&category=engineering`]: {
+        body: { more: false, items: [PLANNED] },
+      },
+      [`GET ${IN}/goals?category=design`]: { body: { more: false, items: [] } },
+      [`POST ${IN}/goals`]: { status: 201, body: PLANNED },
+      [`PATCH ${IN}/goals/${GOAL.id}`]: { body: { ...PLANNED, category: null, startsOn: null } },
+    });
+    const narrowed = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(["goals", "--state", "active", "--category", "engineering"], narrowed.io),
+    ).toBe(EXIT.ok);
+    expect(narrowed.out()).toBe(
+      `${GOAL.id}  active  Ship v1  (engineering; starts 2026-10-01; due 2026-11-15; 2/4 done, 1 in progress)\n`,
+    );
+    const none = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["goals", "--category", "design"], none.io)).toBe(EXIT.ok);
+    expect(none.out()).toBe("No goal matches.\n");
+    const set = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(
+        [
+          "goal",
+          "new",
+          "Ship v1",
+          "--category",
+          "engineering",
+          "--starts",
+          "2026-10-01",
+          "--due",
+          "2026-11-15",
+        ],
+        set.io,
+      ),
+    ).toBe(EXIT.ok);
+    expect(calls.find((call) => call.key === `POST ${IN}/goals`)?.body).toEqual({
+      title: "Ship v1",
+      category: "engineering",
+      startsOn: "2026-10-01",
+      dueOn: "2026-11-15",
+    });
+    const cleared = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(["goal", "edit", GOAL.id, "--category", "none", "--starts", "none"], cleared.io),
+    ).toBe(EXIT.ok);
+    expect(calls.find((call) => call.key === `PATCH ${IN}/goals/${GOAL.id}`)?.body).toEqual({
+      category: null,
+      startsOn: null,
+    });
+    expect(cleared.out()).toContain("category: none  starts: none  due: 2026-11-15");
+    const wrongState = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["goals", "--state", "open"], wrongState.io)).toBe(EXIT.usage);
+    const help = harness({ fetch });
+    expect(await runCli(["help", "goal"], help.io)).toBe(EXIT.ok);
+    expect(help.out()).toContain("--starts <day|none>");
+    expect(help.out()).toContain("goal.invalid_dates");
   });
 });
