@@ -1,5 +1,13 @@
 # @skillcdn/console
 
+## 0.1.18
+
+### Patch Changes
+
+- [`ab65be0`](https://github.com/skillcdn/console/commit/ab65be0818f3d4fb0794bba786db9e6be7362898) Thanks [@samo-lucid](https://github.com/samo-lucid)! - A goal is planned in days and sorted into a category, and the roadmap is read as months (ADR-0026). A goal carries `startsOn` and `category` beside its `dueOn`; `POST` and `PATCH .../goals` take them (`goal.invalid_dates`, `goal.invalid_category`), `GET .../goals?category=&state=` narrows the roadmap, and a category goals are sorted into cannot be removed (`category.in_use`). The client takes a `GoalFilter` on `goals()`. `GoalTimeline` shows the months as columns and each goal as a bar from its start to its target in the colour of its category, filled as far as its tasks are done, with today marked, and `timelineBars` lays it out; `Calendar` takes `goalHref` and marks each goal's target day on the month; `GoalForm` takes `categories` and offers the start day; `GoalList` and `GoalView` show the category and the days; `roadmapHref(key, from)` names the roadmap from a month on. The command gets `goal new --starts --category`, `goal edit --starts <day|none> --category <key|none>`, and `goals --category --state`.
+
+- [`92ab63e`](https://github.com/skillcdn/console/commit/92ab63ead79e659c496a89c7298885b75a4340dd) Thanks [@samo-lucid](https://github.com/samo-lucid)! - The command names its version on every request, and the console holds it to the versions it takes (ADR-0025). `console` sends `user-agent: skillcdn-console/<version> (cli; ...)`; every answer of the API carries `console-version` and `console-client-range`, and `GET /api/v1/me` answers them as `console`. Before 1.0 a console takes a command from its own version on and within its minor; from 1.0 the same major and a minor within one, either way. A command outside the range is refused with `426` and `client.outdated` or `client.too_new`; it exits with `4` and prints the update command for where it is installed (for the machine, in a project, or run again from a cache, with the package manager that put it there). Within the range, a command older or newer than the console is told once a day on stderr; `console whoami` says the versions and where the command is installed every time. `createClient` takes `userAgent`; `@skillcdn/console/api` exports the `compat` module (`parseVersion`, `judgeClient`, `clientRange`, `userAgentOf`, `clientVersionOf`, the headers, and `CLIENT_POLICY`, which narrows the common rule and never widens it); a token carries `client`, the version of the command that last presented it, which `TokenList` shows with whether the console still takes it (`consoleVersion`). The package now exports its `package.json`.
+
 ## 0.1.17
 
 ### Patch Changes
