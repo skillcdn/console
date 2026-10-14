@@ -1204,9 +1204,12 @@ describe("tokens", () => {
       headers: { ...auth, "user-agent": `skillcdn-console/${HARNESS_VERSION} (cli)` },
     });
     expect(named.status).toBe(200);
-    expect((await listed(alice)).find((item) => item.id === token.id)?.client).toBe(
-      HARNESS_VERSION,
-    );
+    // The note does not hold the answer up, so the listing is read once it has landed.
+    await expect
+      .poll(async () => (await listed(alice)).find((item) => item.id === token.id)?.client, {
+        timeout: 2000,
+      })
+      .toBe(HARNESS_VERSION);
     // A token sees the projects its person sees, and no more.
     const projects = restProjectsSchema.parse(
       await (await h.request(REST_ROUTES.projects, { headers: auth })).json(),
