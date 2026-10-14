@@ -5,7 +5,7 @@ license: MIT
 compatibility: Needs a shell with the console command on the PATH (npm install -g @skillcdn/console, Node.js 24 or newer), signed in by a person. Nothing else; the command needs no key of its own and the agent never sees a token.
 metadata:
   author: skillcdn
-  version: "1.8"
+  version: "1.9"
 skillcdn:
   translations:
     ko:
@@ -79,6 +79,12 @@ After the last report, `console finish --summary "<what was done, and what is le
 ## Setting up, when told to
 
 A task or a person may ask for the project itself rather than work in it: a project made or changed (`console project new <key> "<name>"`, `console project edit <key>`), its mark (`console project icon <key> <file>`), its members (`console member add <login>`, `console member role`, `console member remove`), the workspace's categories (`console category new <key> "<name>"`, `console category edit`, `console category remove`), what a person is (`console person role <login> <admin|member>`), its goals (`console goal new`), and its rules (`console rules write --file <path>`, from [the example](references/project-rules.md); the workspace's with `--workspace`, for an administrator). The agent does these as its person may, an owner of the project or an administrator of the workspace ([ADR-0021](/docs/adr/0021-a-token-configures-as-its-person-does.md)); the feed names the agent beside the person on each. What the person may not, the console refuses (`auth.forbidden`): that step goes back to the person in the report, never worked around. `console people` and `console members` say who is who, by login.
+
+## The sentence a repository carries
+
+A repository whose checkouts are worked through a console says so in its agreement (AGENTS.md, or CLAUDE.md where that is the file agents read), in one sentence copied as it is and placed at the head of its workflow; a pack says it in the rules of its `SKILLCDN.md`, with `the checkout` for `this checkout`. The sentence binds the checkout to the console and says nothing of how: the command's help and this skill say how, and the repository's own agreement keeps saying how a change is committed and pushed.
+
+> **Bound to a console?** When `.skillcdn-console.json` is in this checkout, or `console whoami` names a project, work the task through that SkillCDN console (`console help` says how).
 
 ## Hard rules
 
