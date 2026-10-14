@@ -84,23 +84,28 @@ const TASK_FIELD_REFUSALS = [
 
 export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   login: {
-    usage: "login --url <origin> [--agent <name>] [--token-stdin]",
+    usage: "login --url <origin> [--agent <name>] [--token-stdin] [--default]",
     about:
-      "Connects this agent to the console: shows an address and a code, which a person opens signed in, names the agent and approves; the command then receives a token of its own and keeps it, with the console's address, in your home directory, never showing it. An agent running the command relays the address and the code to its person and waits. --agent says what the agent calls itself; left out, the command names the agent it runs under where its environment says so (Claude Code, Codex), else An agent; the machine's name follows, and the pages show the name before 'on' with the whole on hover. --token-stdin reads a token made by hand from standard input instead, for a script or a job.",
+      "Connects this agent to the console: shows an address and a code, which a person opens signed in, names the agent and approves; the command then receives a token of its own and keeps it, with the console's address and the account, in your home directory, never showing it. One login per console and account: a second console adds a login beside the first, the first is the default console a directory that names none works at, and --default makes this one that. A login repeated for the same console and account replaces its token, which is given up at the console. An agent running the command relays the address and the code to its person and waits. --agent says what the agent calls itself; left out, the command names the agent it runs under where its environment says so (Claude Code, Codex), else An agent; the machine's name follows, and the pages show the name before 'on' with the whole on hover. --token-stdin reads a token made by hand from standard input instead, for a script or a job.",
     refusals: [
       "connect.not_found: the code was not approved in time, or the person said it was not theirs; run login again",
       "the console does not know the token given: make one on the Agents page and try again",
     ],
   },
-  logout: {
-    usage: "logout",
+  logins: {
+    usage: "logins",
     about:
-      "Signs this agent out: gives the token up at the console, so that it is good for nothing from now on, and forgets it with the address kept here. A console out of reach leaves the token to the Agents page.",
+      "The consoles this machine is signed in to, each with the account, what the token is called there, since when, and which is the default; never a token.",
+  },
+  logout: {
+    usage: "logout [--url <origin>] [--account <login>]",
+    about:
+      "Signs this agent out of one console: gives the token up there, so that it is good for nothing from now on, and forgets it here. Which console: --url, else the one this directory is bound to, else the default, else the one console signed in to; --account says which account where the console has several. A console out of reach leaves the token to the Agents page.",
   },
   whoami: {
     usage: "whoami",
     about:
-      "Who the token acts as, which console it is for, and which project this directory works in.",
+      "Who the token acts as, which console the command talks to from here and as which account, and which project this directory works in.",
   },
   projects: {
     usage: "projects",
@@ -108,9 +113,9 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
       "The projects you may work in: each with its key, its name, what you are in it, and what waits in it. Every command on the board works in one project.",
   },
   use: {
-    usage: "use <key>",
+    usage: "use <key> [--url <origin>] [--account <login>]",
     about:
-      "Says which project this directory works in: writes .skillcdn-console.json here, which the commands read from this directory or one above it, and which is meant to be committed. --project <key> on any command, or CONSOLE_PROJECT in the environment, wins over it.",
+      "Says which project this directory works in: writes .skillcdn-console.json here, which the commands read from this directory or one above it, and which is meant to be committed in a private repository and left out of a public one. The file names the project; and the console, where that is not the default login here or --url says so; and the account, where the console has several logins or --account says so. Never a token. --project <key> on any command, or CONSOLE_PROJECT in the environment, wins over the project it names.",
     refusals: ["project.not_found: no project has the key, or it is not yours to see"],
   },
   work: {
@@ -449,14 +454,18 @@ Exit codes: 0 done; 1 the console refused, or could not be reached (the reason i
 What the console refuses is printed as its code and its words. Everywhere:
 ${COMMON_REFUSALS.map((refusal) => `  ${refusal}`).join("\n")}
 
-Credentials: CONSOLE_URL and CONSOLE_TOKEN in the environment, else what login kept in
-$XDG_CONFIG_HOME/skillcdn-console/credentials.json (~/.config when XDG_CONFIG_HOME is unset).
+Which console a command talks to: --url, else CONSOLE_URL in the environment, else the console
+.skillcdn-console.json binds this directory to, else the default login. The token is then the one
+kept for that console alone (CONSOLE_TOKEN only together with CONSOLE_URL, for a hook or a job), in
+$XDG_CONFIG_HOME/skillcdn-console/credentials.json (~/.config when XDG_CONFIG_HOME is unset);
+a console nobody is signed in to here gets no request. --account <login> says which account where
+a console has several. console logins lists them.
 `;
 
 const SECTIONS: readonly { readonly title: string; readonly commands: readonly string[] }[] = [
   {
     title: "Signing in, once, as a person, and the project to work in",
-    commands: ["login", "logout", "whoami", "projects", "use"],
+    commands: ["login", "logins", "logout", "whoami", "projects", "use"],
   },
   {
     title: "The board",

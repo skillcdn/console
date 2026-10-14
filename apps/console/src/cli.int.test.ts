@@ -151,7 +151,7 @@ async function console_(
 describe("the command line", () => {
   it("connects with a code a person approves, and holds the token from then on", async () => {
     const out: string[] = [];
-    let kept: { url: string; token: string } | undefined;
+    let kept: Parameters<CliIo["store"]["save"]>[0] | undefined;
     const io: CliIo = {
       env: {},
       stdout: (text) => {
@@ -203,7 +203,7 @@ describe("the command line", () => {
     expect(out.join("")).toContain('Connected as "Claude Code for Bob" to');
     expect(out.join("")).toContain("as bob (");
     expect(out.join("")).not.toContain("cns_");
-    expect(kept?.token).toMatch(/^cns_t_/);
+    expect(kept?.logins[0]?.token).toMatch(/^cns_t_/);
     // The token works as Bob's: his agents list it, and he takes it away again.
     const listed = await h.request(REST_ROUTES.tokens, { headers: { cookie: bob } });
     const mine = restTokensSchema.parse(await listed.json()).items;

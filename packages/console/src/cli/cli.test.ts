@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MAX_SUMMARY_LENGTH } from "../limits.js";
 import { type CliIo, EXIT, runCli } from "./cli.js";
-import type { CredentialStore, Credentials } from "./credentials.js";
+import { type CredentialStore, type Credentials, CredentialsError } from "./credentials.js";
 import type { DirectorySettings, DirectoryStore } from "./directory.js";
 import type { Install } from "./install.js";
 import type { NoticeStore, VersionNotice } from "./notices.js";
@@ -242,6 +242,14 @@ function memoryStore(initial?: Credentials) {
   return { store, kept: () => kept };
 }
 
+/** One login kept, at a console, as its default. */
+function one(url: string, token: string, account = "alice"): Credentials {
+  return {
+    default: url,
+    logins: [{ url, account, token, agent: undefined, since: undefined }],
+  };
+}
+
 function memoryNotices(initial?: VersionNotice) {
   let kept = initial;
   const store: NoticeStore = {
@@ -356,7 +364,19 @@ describe("the console command", () => {
       EXIT.ok,
     );
     expect(h.out()).toContain("Signed in to Acme at https://console.test as alice (member)");
-    expect(memory.kept()).toEqual({ url: "https://console.test", token: "cns_t_new" });
+    expect(h.out()).toContain("the default console here");
+    expect(memory.kept()).toEqual({
+      default: ORIGIN,
+      logins: [
+        {
+          url: ORIGIN,
+          account: "alice",
+          token: "cns_t_new",
+          agent: undefined,
+          since: "1970-01-01T00:00:00.000Z",
+        },
+      ],
+    });
     expect(new Headers(calls[0]?.init?.headers).get("authorization")).toBe("Bearer cns_t_new");
     expect(calls[0]?.init?.credentials).toBe("omit");
 
@@ -396,7 +416,15 @@ describe("the console command", () => {
     expect(h.out()).toContain("https://console.test/connect/ABCD-EFGH");
     expect(h.out()).toContain("code ABCD-EFGH");
     expect(h.out()).toContain('Connected as "Claude Code on laptop" to Acme');
-    expect(memory.kept()).toEqual({ url: ORIGIN, token: "cns_t_handed" });
+    expect(memory.kept()?.logins).toEqual([
+      {
+        url: ORIGIN,
+        account: "alice",
+        token: "cns_t_handed",
+        agent: "Claude Code on laptop",
+        since: "1970-01-01T00:00:00.000Z",
+      },
+    ]);
     expect(
       calls.filter((call) => call.key === "POST /api/v1/connect/claim").map((call) => call.body),
     ).toEqual([{ secret: "cns_c_secret" }, { secret: "cns_c_secret" }]);
@@ -427,13 +455,14 @@ describe("the console command", () => {
 
   it("signs out: gives the token up at the console and forgets it here, and forgets it when the console is out of reach", async () => {
     const { fetch, calls } = fakeConsole({ "DELETE /api/v1/me/token": { status: 204 } });
-    const memory = memoryStore({ url: ORIGIN, token: "cns_t_kept" });
+    const memory = memoryStore(one(ORIGIN, "cns_t_kept"));
     const h = harness({ fetch, store: memory.store });
     expect(await runCli(["logout"], h.io)).toBe(EXIT.ok);
     expect(calls.map((call) => call.key)).toEqual(["DELETE /api/v1/me/token"]);
+    expect(new Headers(calls[0]?.init?.headers).get("authorization")).toBe("Bearer cns_t_kept");
     expect(memory.kept()).toBeUndefined();
     expect(h.out()).toContain("given up at the console and forgotten here");
-    const away = memoryStore({ url: ORIGIN, token: "cns_t_kept" });
+    const away = memoryStore(one(ORIGIN, "cns_t_kept"));
     const down = harness({
       fetch: async () => {
         throw new TypeError("fetch failed");
@@ -497,6 +526,7 @@ describe("the console command", () => {
     });
     expect(await runCli(["use", "web"], used.io)).toBe(EXIT.ok);
     expect(used.out()).toContain("Working in The web app (web) from this directory on");
+    expect(used.out()).toContain("left out of a public one");
     expect(used.out()).toContain("/work/app/.skillcdn-console.json");
     expect(directory.kept()).toEqual({ project: "web" });
     const unknown = harness({ fetch, env: SIGNED_IN });
@@ -572,7 +602,7 @@ describe("the console command", () => {
     const h = harness({
       fetch,
       env: SIGNED_IN,
-      store: memoryStore({ url: "https://other.test", token: "cns_t_kept" }).store,
+      store: memoryStore(one("https://other.test", "cns_t_kept")).store,
     });
     expect(await runCli(["tasks", "--json"], h.io)).toBe(EXIT.ok);
     expect(JSON.parse(h.out())).toEqual({ more: false, items: [TASK] });
@@ -2004,5 +2034,244 @@ describe("the plan of a goal (ADR-0026)", () => {
     expect(await runCli(["help", "goal"], help.io)).toBe(EXIT.ok);
     expect(help.out()).toContain("--starts <day|none>");
     expect(help.out()).toContain("goal.invalid_dates");
+  });
+});
+
+describe("the consoles the command is signed in to (ADR-0027)", () => {
+  const OTHER = "https://other.test";
+  /** Two consoles, told apart by their origin: what each was asked. */
+  function twoConsoles(table: Record<string, Answer | Answer[]>) {
+    const first = fakeConsole(table);
+    const second = fakeConsole(table);
+    const fetch: CliIo["fetch"] = (url, init) =>
+      url.startsWith(OTHER)
+        ? second.fetch(url.replace(OTHER, ORIGIN), init)
+        : first.fetch(url, init);
+    return { fetch, first: first.calls, second: second.calls };
+  }
+  const both: Credentials = {
+    default: ORIGIN,
+    logins: [
+      { url: ORIGIN, account: "alice", token: "cns_t_first", agent: undefined, since: undefined },
+      { url: OTHER, account: "alice", token: "cns_t_second", agent: "Codex", since: WHEN },
+    ],
+  };
+  const tasks = { [`GET ${IN}/tasks?limit=50&offset=0`]: { body: { more: false, items: [TASK] } } };
+
+  it("sends a token only to the console that issued it, as the directory, the flag or the default names it", async () => {
+    const { fetch, first, second } = twoConsoles(tasks);
+    // The directory bound to the other console: its token goes there, and nothing goes to the first.
+    const bound = harness({
+      fetch,
+      store: memoryStore(both).store,
+      directory: memoryDirectory({ project: "web", url: OTHER }).store,
+    });
+    expect(await runCli(["tasks"], bound.io)).toBe(EXIT.ok);
+    expect(first).toHaveLength(0);
+    expect(new Headers(second[0]?.init?.headers).get("authorization")).toBe("Bearer cns_t_second");
+    // The default console, with nothing in the directory but the project.
+    const plain = harness({
+      fetch,
+      store: memoryStore(both).store,
+      directory: memoryDirectory({ project: "web" }).store,
+    });
+    expect(await runCli(["tasks"], plain.io)).toBe(EXIT.ok);
+    expect(new Headers(first.at(-1)?.init?.headers).get("authorization")).toBe(
+      "Bearer cns_t_first",
+    );
+    // A console nobody is signed in to here gets no request, whatever token is kept for another.
+    const elsewhere = harness({ fetch, store: memoryStore(both).store });
+    expect(await runCli(["whoami", "--url", "https://third.test"], elsewhere.io)).toBe(EXIT.failed);
+    expect(elsewhere.err()).toContain("Nobody is signed in here at https://third.test");
+    expect(elsewhere.err()).toContain("console login --url https://third.test");
+    expect(first).toHaveLength(1);
+    expect(second).toHaveLength(1);
+    // A directory bound to a console nobody is signed in to says so, naming the directory.
+    const stranded = harness({
+      fetch,
+      store: memoryStore(one(ORIGIN, "cns_t_first")).store,
+      directory: memoryDirectory({ project: "web", url: OTHER }).store,
+    });
+    expect(await runCli(["tasks"], stranded.io)).toBe(EXIT.failed);
+    expect(stranded.err()).toContain(`This directory works at ${OTHER}`);
+    expect(second).toHaveLength(1);
+    // Half of the environment's pair is no credential at all.
+    const half = harness({ fetch, env: { CONSOLE_URL: ORIGIN }, store: memoryStore(both).store });
+    expect(await runCli(["tasks"], half.io)).toBe(EXIT.failed);
+    expect(half.err()).toContain("Both CONSOLE_URL and CONSOLE_TOKEN");
+    // The environment's token goes to the environment's console, and to no other.
+    const env = harness({
+      fetch,
+      env: { CONSOLE_URL: ORIGIN, CONSOLE_TOKEN: "cns_t_env" },
+      store: memoryStore(both).store,
+      directory: memoryDirectory({ project: "web", url: OTHER }).store,
+    });
+    expect(await runCli(["tasks"], env.io)).toBe(EXIT.ok);
+    expect(new Headers(first.at(-1)?.init?.headers).get("authorization")).toBe("Bearer cns_t_env");
+    expect(second).toHaveLength(1);
+    expect(
+      [bound.out(), plain.out(), elsewhere.err(), stranded.err(), half.err()].join(),
+    ).not.toContain("cns_t_");
+  });
+
+  it("tells two accounts at one console apart by --account or by the directory, and asks when nothing says which", async () => {
+    const { fetch, first } = twoConsoles(tasks);
+    const two: Credentials = {
+      default: ORIGIN,
+      logins: [
+        { url: ORIGIN, account: "alice", token: "cns_t_alice", agent: undefined, since: undefined },
+        { url: ORIGIN, account: "bob", token: "cns_t_bob", agent: undefined, since: undefined },
+      ],
+    };
+    const unsaid = harness({
+      fetch,
+      store: memoryStore(two).store,
+      directory: memoryDirectory({ project: "web" }).store,
+    });
+    expect(await runCli(["tasks"], unsaid.io)).toBe(EXIT.failed);
+    expect(unsaid.err()).toContain(
+      "Several accounts are signed in at https://console.test (alice, bob)",
+    );
+    expect(unsaid.err()).toContain("--account <login>");
+    expect(first).toHaveLength(0);
+    const flagged = harness({
+      fetch,
+      store: memoryStore(two).store,
+      directory: memoryDirectory({ project: "web" }).store,
+    });
+    expect(await runCli(["tasks", "--account", "bob"], flagged.io)).toBe(EXIT.ok);
+    expect(new Headers(first.at(-1)?.init?.headers).get("authorization")).toBe("Bearer cns_t_bob");
+    const fromDirectory = harness({
+      fetch,
+      store: memoryStore(two).store,
+      directory: memoryDirectory({ project: "web", account: "alice" }).store,
+    });
+    expect(await runCli(["tasks"], fromDirectory.io)).toBe(EXIT.ok);
+    expect(new Headers(first.at(-1)?.init?.headers).get("authorization")).toBe(
+      "Bearer cns_t_alice",
+    );
+    const nobody = harness({
+      fetch,
+      store: memoryStore(two).store,
+      directory: memoryDirectory({ project: "web", account: "carol" }).store,
+    });
+    expect(await runCli(["tasks"], nobody.io)).toBe(EXIT.failed);
+    expect(nobody.err()).toContain("as carol");
+  });
+
+  it("lists the logins without a token, signs out of one console, and keeps the rest", async () => {
+    const { fetch, first, second } = twoConsoles({ "DELETE /api/v1/me/token": { status: 204 } });
+    const memory = memoryStore(both);
+    const listed = harness({ fetch, store: memory.store });
+    expect(await runCli(["logins"], listed.io)).toBe(EXIT.ok);
+    expect(listed.out()).toBe(
+      `${ORIGIN}  alice  (default)\n${OTHER}  alice  Codex  since ${WHEN.slice(0, 10)}\n`,
+    );
+    const asJson = harness({ fetch, store: memory.store });
+    expect(await runCli(["logins", "--json"], asJson.io)).toBe(EXIT.ok);
+    expect(JSON.parse(asJson.out())).toEqual({
+      default: ORIGIN,
+      logins: [
+        { url: ORIGIN, account: "alice", agent: null, since: null, default: true },
+        { url: OTHER, account: "alice", agent: "Codex", since: WHEN, default: false },
+      ],
+    });
+    expect(asJson.out()).not.toContain("cns_t_");
+    const out = harness({ fetch, store: memory.store });
+    expect(await runCli(["logout", "--url", OTHER], out.io)).toBe(EXIT.ok);
+    expect(first).toHaveLength(0);
+    expect(second.map((call) => call.key)).toEqual(["DELETE /api/v1/me/token"]);
+    expect(new Headers(second[0]?.init?.headers).get("authorization")).toBe("Bearer cns_t_second");
+    expect(memory.kept()).toEqual({ default: ORIGIN, logins: [both.logins[0]] });
+    expect(out.out()).toContain(`Signed out of ${OTHER} as alice`);
+    // With several consoles, no default and nothing to say which, the command asks rather than guessing.
+    const several = harness({ fetch, store: memoryStore({ ...both, default: undefined }).store });
+    expect(await runCli(["logout"], several.io)).toBe(EXIT.failed);
+    expect(several.err()).toContain("console logout --url <origin>");
+    // Nothing kept for the console named: nothing to forget, and no request.
+    const none = harness({ fetch, store: memoryStore(both).store });
+    expect(await runCli(["logout", "--url", "https://third.test"], none.io)).toBe(EXIT.failed);
+    expect(none.err()).toContain("nothing to forget");
+    expect(second).toHaveLength(1);
+  });
+
+  it("binds a directory to the console and the account it used, and never to a token", async () => {
+    const { fetch } = twoConsoles({ [`GET ${IN}`]: { body: PROJECT } });
+    const directory = memoryDirectory();
+    const other = harness({ fetch, store: memoryStore(both).store, directory: directory.store });
+    expect(await runCli(["use", "web", "--url", OTHER], other.io)).toBe(EXIT.ok);
+    expect(directory.kept()).toEqual({ project: "web", url: OTHER });
+    expect(other.out()).toContain(
+      `Working in The web app (web) at ${OTHER} from this directory on`,
+    );
+    // The default console is not named: a directory that says only the project follows the default.
+    const plain = memoryDirectory();
+    const first = harness({ fetch, store: memoryStore(both).store, directory: plain.store });
+    expect(await runCli(["use", "web"], first.io)).toBe(EXIT.ok);
+    expect(plain.kept()).toEqual({ project: "web" });
+    // Two accounts at a console: the one used is named.
+    const two: Credentials = {
+      default: ORIGIN,
+      logins: [
+        { url: ORIGIN, account: "alice", token: "cns_t_alice", agent: undefined, since: undefined },
+        { url: ORIGIN, account: "bob", token: "cns_t_bob", agent: undefined, since: undefined },
+      ],
+    };
+    const named = memoryDirectory();
+    const asBob = harness({ fetch, store: memoryStore(two).store, directory: named.store });
+    expect(await runCli(["use", "web", "--account", "bob"], asBob.io)).toBe(EXIT.ok);
+    expect(named.kept()).toEqual({ project: "web", account: "bob" });
+    expect(JSON.stringify([directory.kept(), plain.kept(), named.kept()])).not.toContain("cns_t_");
+  });
+
+  it("does not follow a redirect with the token, and takes an http console on this machine alone", async () => {
+    const calls: string[] = [];
+    const redirecting: CliIo["fetch"] = async (url, init) => {
+      calls.push(url);
+      expect(init?.redirect).toBe("manual");
+      return new Response(null, {
+        status: 302,
+        headers: { location: "https://elsewhere.test/api/v1/me" },
+      });
+    };
+    const h = harness({ fetch: redirecting, store: memoryStore(one(ORIGIN, "cns_t_kept")).store });
+    expect(await runCli(["whoami"], h.io)).toBe(EXIT.failed);
+    expect(calls).toEqual([`${ORIGIN}/api/v1/me`]);
+    const { fetch } = fakeConsole({ "GET /api/v1/me": { body: ME } });
+    const clear = harness({
+      fetch,
+      store: memoryStore().store,
+      readStdin: async () => "cns_t_x\n",
+    });
+    expect(await runCli(["login", "--url", "http://console.test", "--token-stdin"], clear.io)).toBe(
+      EXIT.usage,
+    );
+    expect(clear.err()).toContain("Not a safe origin");
+    const local = harness({
+      fetch: fakeConsole({}).fetch,
+      store: memoryStore(one("http://localhost:3000", "cns_t_local")).store,
+    });
+    expect(await runCli(["whoami"], local.io)).toBe(EXIT.failed);
+    expect(local.err()).not.toContain("Not a safe origin");
+  });
+
+  it("refuses to write over a credentials file it cannot read", async () => {
+    const broken: CredentialStore = {
+      load: async () => {
+        throw new CredentialsError(
+          "credentials.malformed",
+          "/home/alice/.config/skillcdn-console/credentials.json",
+        );
+      },
+      save: async () => {
+        throw new Error("must not be written");
+      },
+      clear: async () => undefined,
+    };
+    const { fetch } = fakeConsole({ "GET /api/v1/me": { body: ME } });
+    const h = harness({ fetch, store: broken, readStdin: async () => "cns_t_new\n" });
+    expect(await runCli(["login", "--url", ORIGIN, "--token-stdin"], h.io)).toBe(EXIT.failed);
+    expect(h.err()).toContain("could not be read as one");
+    expect(h.err()).toContain("Move it away");
   });
 });

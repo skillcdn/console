@@ -37,8 +37,18 @@ import {
   type TaskState,
 } from "../vocabulary.js";
 import { loadWebRoot, type WebRoot, WebRootError } from "../web.js";
-import type { CredentialStore } from "./credentials.js";
-import type { DirectoryStore } from "./directory.js";
+import {
+  type CredentialStore,
+  type Credentials,
+  CredentialsError,
+  EMPTY_CREDENTIALS,
+  loginsAt,
+  type Resolution,
+  resolveLogin,
+  withLogin,
+  withoutLogin,
+} from "./credentials.js";
+import type { DirectorySettings, DirectoryStore } from "./directory.js";
 import {
   formatAnswer,
   formatCategoryLine,
@@ -158,6 +168,7 @@ type OptionSpec = Readonly<
 const GLOBAL_OPTIONS: OptionSpec = {
   json: { type: "boolean" },
   url: { type: "string" },
+  account: { type: "string" },
   project: { type: "string" },
 };
 
@@ -194,6 +205,12 @@ interface Session {
   readonly url: string;
   /** The token the client holds: what `serve` carries the page's requests with. */
   readonly token: string;
+  /** The person's login at the console, when the login kept knows it. */
+  readonly account: string | undefined;
+  /** Where the token came from: the environment's pair, or a login kept here. */
+  readonly via: "environment" | "login";
+  /** What the command keeps, as it was read for this command. */
+  readonly credentials: Credentials | undefined;
   readonly json: boolean;
   /** The project the command works in: named by `--project`, the environment, or the working directory. */
   project(): Promise<ProjectClient>;
@@ -204,23 +221,85 @@ interface Session {
 const NO_PROJECT =
   "Say which project: --project <key>, CONSOLE_PROJECT in the environment, or console use <key> once in this directory. console projects lists the projects you may work in.";
 
-/** The console and the token to talk to it with: the flags, the environment, then what login kept. */
-async function open(io: CliIo, values: Values): Promise<Session> {
-  const stored = await io.store.load();
-  const url = text(values, "url") ?? io.env.CONSOLE_URL ?? stored?.url;
-  const token = io.env.CONSOLE_TOKEN ?? stored?.token;
-  if (url === undefined || token === undefined) {
-    throw failed(
-      "Not signed in. A person signs the command in: console login --url <the console's origin>",
-    );
+/** What the command keeps, or nothing; a file that cannot be read stops the command, and is never written over. */
+async function loadCredentials(io: CliIo): Promise<Credentials | undefined> {
+  try {
+    return await io.store.load();
+  } catch (error) {
+    if (error instanceof CredentialsError) {
+      throw failed(
+        `${error.message} Move it away, then sign in again: console login --url <the console's origin>`,
+      );
+    }
+    throw error;
   }
+}
+
+/** The console a directory is bound to, as an origin, when it names one. */
+function directoryOrigin(settings: DirectorySettings | undefined): string | undefined {
+  if (settings?.url === undefined) {
+    return undefined;
+  }
+  try {
+    return originOf(settings.url);
+  } catch {
+    throw failed(`.skillcdn-console.json names a console that is not an origin: ${settings.url}`);
+  }
+}
+
+/** Why no console could be talked to, for the person who reads it. */
+function wordsOf(failure: Exclude<Resolution, { ok: true }>): string {
+  switch (failure.reason) {
+    case "nothing":
+      return "Not signed in. A person signs the command in: console login --url <the console's origin>";
+    case "environment_half":
+      return `Both CONSOLE_URL and CONSOLE_TOKEN are needed in the environment, and only ${failure.have} is set: set both, or neither.`;
+    case "no_login": {
+      const whom = failure.account === undefined ? "" : ` as ${failure.account}`;
+      const where =
+        failure.source === "directory"
+          ? `This directory works at ${failure.url}${whom}, where nobody is signed in here`
+          : `Nobody is signed in here at ${failure.url}${whom}`;
+      return `${where}: console login --url ${failure.url}. console logins lists the consoles signed in.`;
+    }
+    case "ambiguous":
+      return `Several accounts are signed in at ${failure.url} (${failure.accounts.join(", ")}): say which with --account <login>, or bind this directory to one with console use <key> --account <login>.`;
+  }
+}
+
+/**
+ * The console a command talks to, and with what (ADR-0027): the address from the flag, the
+ * environment, the directory or the default login, in that order, and then the token kept for
+ * that address and no other. A token never travels to a console it was not made at.
+ */
+async function open(io: CliIo, values: Values): Promise<Session> {
+  const directory = await io.directory.load();
+  const flag = text(values, "url");
+  const envUrl = io.env.CONSOLE_URL;
+  const credentials = await loadCredentials(io);
+  const resolved = resolveLogin({
+    flagUrl: flag === undefined ? undefined : originOf(flag),
+    flagAccount: text(values, "account"),
+    envUrl: envUrl === undefined ? undefined : originOf(envUrl),
+    envToken: io.env.CONSOLE_TOKEN,
+    directoryUrl: directoryOrigin(directory),
+    directoryAccount: directory?.account,
+    credentials,
+  });
+  if (!resolved.ok) {
+    throw failed(wordsOf(resolved));
+  }
+  const { url, token } = resolved;
   const client = clientOf(io, url, token);
   const projectKey = async () =>
-    text(values, "project") ?? io.env.CONSOLE_PROJECT ?? (await io.directory.load())?.project;
+    text(values, "project") ?? io.env.CONSOLE_PROJECT ?? directory?.project;
   return {
     client,
     url,
     token,
+    account: resolved.account,
+    via: resolved.via,
+    credentials,
     json: on(values, "json"),
     projectKey,
     async project() {
@@ -272,6 +351,9 @@ async function bodyOf(
   return given === "-" ? io.readStdin() : given;
 }
 
+/** The hosts a token may travel to in the clear: this machine, and no other. */
+const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
 function originOf(value: string): string {
   const url = URL.canParse(value) ? new URL(value) : undefined;
   if (
@@ -283,6 +365,12 @@ function originOf(value: string): string {
   ) {
     throw misuse(
       `Not an origin: ${value}. Say the console's address without a path, such as https://console.example.com`,
+    );
+  }
+  // A token travels over https; in the clear only to this machine, where a console is run for development.
+  if (url.protocol === "http:" && !LOOPBACK_HOSTS.has(url.hostname)) {
+    throw misuse(
+      `Not a safe origin: ${value}. A token travels over https only; http is for a console on this machine (localhost).`,
     );
   }
   return url.origin;
@@ -517,8 +605,17 @@ async function settle(
 
 type Command = (args: readonly string[], io: CliIo) => Promise<number>;
 
-/** Checks a token against the console, keeps it with the address, and says who it is. */
-async function keep(io: CliIo, url: string, token: string, agent?: string): Promise<number> {
+/**
+ * Checks a token against the console, keeps it as the login at that console for that account,
+ * and says who it is. A token the login replaces is given up at the console on the way.
+ */
+async function keep(
+  io: CliIo,
+  url: string,
+  token: string,
+  agent: string | undefined,
+  asDefault: boolean,
+): Promise<number> {
   const me = await clientOf(io, url, token).me();
   const person = me.person;
   if (person === null) {
@@ -526,9 +623,22 @@ async function keep(io: CliIo, url: string, token: string, agent?: string): Prom
       "The console does not know this token. Make one on your Agents page and try again.",
     );
   }
-  const kept = await io.store.save({ url, token });
+  const credentials = (await loadCredentials(io)) ?? EMPTY_CREDENTIALS;
+  const replaced = loginsAt(credentials, url).find((login) => login.account === person.login);
+  if (replaced !== undefined && replaced.token !== token) {
+    await clientOf(io, url, replaced.token)
+      .giveUpToken()
+      .catch(() => undefined);
+  }
+  const next = withLogin(
+    credentials,
+    { url, account: person.login, token, agent, since: new Date(io.now()).toISOString() },
+    { default: asDefault },
+  );
+  const kept = await io.store.save(next);
+  const standing = next.default === url ? ", the default console here" : "";
   io.stdout(
-    `${agent === undefined ? "Signed in" : `Connected as "${agent}"`} to ${me.workspace.name} at ${url} as ${person.login} (${person.role}). The token is kept in ${kept}.\nNext, say which project this directory works in: console use <key> (console projects lists them).\n`,
+    `${agent === undefined ? "Signed in" : `Connected as "${agent}"`} to ${me.workspace.name} at ${url} as ${person.login} (${person.role})${standing}. The token is kept in ${kept}.\nNext, say which project this directory works in: console use <key> (console projects lists them).\n`,
   );
   return EXIT.ok;
 }
@@ -536,21 +646,22 @@ async function keep(io: CliIo, url: string, token: string, agent?: string): Prom
 const login: Command = async (args, io) => {
   const { values } = parse(
     args,
-    { "token-stdin": { type: "boolean" }, agent: { type: "string" } },
+    { "token-stdin": { type: "boolean" }, agent: { type: "string" }, default: { type: "boolean" } },
     false,
   );
-  const stored = await io.store.load();
-  const wanted = text(values, "url") ?? io.env.CONSOLE_URL ?? stored?.url;
+  const credentials = await loadCredentials(io);
+  const wanted = text(values, "url") ?? io.env.CONSOLE_URL ?? credentials?.default;
   if (wanted === undefined) {
     throw misuse("Say where the console is: console login --url https://console.example.com");
   }
   const url = originOf(wanted);
+  const asDefault = on(values, "default");
   if (on(values, "token-stdin")) {
     const token = (await io.readStdin()).trim();
     if (token.length === 0) {
       throw failed("No token was given.");
     }
-    return keep(io, url, token);
+    return keep(io, url, token, undefined, asDefault);
   }
   // A connection (ADR-0011): a code a person approves on the console's own pages, and the token
   // handed over here once, never shown.
@@ -577,40 +688,110 @@ const login: Command = async (args, io) => {
       throw error;
     }
     if (claim.status === "connected") {
-      return keep(io, url, claim.secret, claim.token.name);
+      return keep(io, url, claim.secret, claim.token.name, asDefault);
     }
   }
 };
 
 const logout: Command = async (args, io) => {
-  parse(args, {}, false);
-  const stored = await io.store.load();
-  const url = io.env.CONSOLE_URL ?? stored?.url;
-  const token = io.env.CONSOLE_TOKEN ?? stored?.token;
-  if (url === undefined || token === undefined) {
+  const { values } = parse(args, {}, false);
+  const credentials = await loadCredentials(io);
+  const directory = await io.directory.load();
+  const envNote = () => {
+    if (io.env.CONSOLE_TOKEN !== undefined) {
+      io.stdout("CONSOLE_TOKEN in the environment still holds a token: unset it.\n");
+    }
+  };
+  if (credentials === undefined || credentials.logins.length === 0) {
     io.stdout("Not signed in here: nothing to forget.\n");
+    envNote();
     return EXIT.ok;
+  }
+  // Which login: the console the flag names, else the directory's, else the default, else the
+  // one console signed in to; and the account the same way, where the console has several.
+  const consoles = [...new Set(credentials.logins.map((login) => login.url))];
+  const flag = text(values, "url");
+  const url =
+    flag === undefined
+      ? (directoryOrigin(directory) ??
+        credentials.default ??
+        (consoles.length === 1 ? consoles[0] : undefined))
+      : originOf(flag);
+  if (url === undefined) {
+    throw failed(
+      `Several consoles are signed in here; say which: console logout --url <origin>. console logins lists them.`,
+    );
+  }
+  const account = text(values, "account") ?? directory?.account;
+  const at = loginsAt(credentials, url);
+  const chosen = account === undefined ? at : at.filter((login) => login.account === account);
+  const [login] = chosen;
+  if (login === undefined) {
+    throw failed(
+      `Nobody is signed in here at ${url}${account === undefined ? "" : ` as ${account}`}: nothing to forget. console logins lists the consoles signed in.`,
+    );
+  }
+  if (chosen.length > 1) {
+    throw failed(
+      `Several accounts are signed in at ${url} (${chosen.map((kept) => kept.account ?? "?").join(", ")}); say which: console logout --url ${url} --account <login>`,
+    );
   }
   // The token is given up at the console first, so that it is good for nothing from now on;
   // one the console no longer knows is gone already. A console out of reach leaves it to the
   // Agents page, and the person is told so.
   let gone = true;
   try {
-    await clientOf(io, url, token).giveUpToken();
+    await clientOf(io, url, login.token).giveUpToken();
   } catch (error) {
     if (!(error instanceof ApiError && error.code === "auth.required")) {
       gone = false;
     }
   }
-  await io.store.clear();
+  const next = withoutLogin(credentials, url, login.account);
+  if (next.logins.length === 0) {
+    await io.store.clear();
+  } else {
+    await io.store.save(next);
+  }
+  const whom = login.account === undefined ? "" : ` as ${login.account}`;
   io.stdout(
     gone
-      ? "Signed out: the token is given up at the console and forgotten here.\n"
-      : `Signed out here, but the console at ${url} could not be reached to give the token up: a person removes it on the Agents page.\n`,
+      ? `Signed out of ${url}${whom}: the token is given up at the console and forgotten here.\n`
+      : `Signed out of ${url}${whom} here, but the console could not be reached to give the token up: a person removes it on the Agents page.\n`,
   );
-  if (io.env.CONSOLE_TOKEN !== undefined) {
-    io.stdout("CONSOLE_TOKEN in the environment still holds it: unset it.\n");
+  envNote();
+  return EXIT.ok;
+};
+
+/** The consoles this machine is signed in to, with the account at each; never a token. */
+const logins: Command = async (args, io) => {
+  const { values } = parse(args, {}, false);
+  const credentials = await loadCredentials(io);
+  const kept = (credentials?.logins ?? []).map((login) => ({
+    url: login.url,
+    account: login.account ?? null,
+    agent: login.agent ?? null,
+    since: login.since ?? null,
+    default: credentials?.default === login.url,
+  }));
+  if (on(values, "json")) {
+    io.stdout(
+      `${JSON.stringify({ default: credentials?.default ?? null, logins: kept }, null, 2)}\n`,
+    );
+    return EXIT.ok;
   }
+  if (kept.length === 0) {
+    io.stdout("Not signed in anywhere here: console login --url <the console's origin>\n");
+    return EXIT.ok;
+  }
+  io.stdout(
+    `${kept
+      .map(
+        (login) =>
+          `${login.url}  ${login.account ?? "(account unknown)"}${login.agent === null ? "" : `  ${login.agent}`}${login.since === null ? "" : `  since ${login.since.slice(0, 10)}`}${login.default ? "  (default)" : ""}`,
+      )
+      .join("\n")}\n`,
+  );
   return EXIT.ok;
 };
 
@@ -684,16 +865,35 @@ const projects: Command = async (args, io) => {
 
 const use: Command = async (args, io) => {
   const { values, positionals } = parse(args, {});
-  const key = theOne(positionals, "Say which project: console use <key>");
+  const key = theOne(
+    positionals,
+    "Say which project: console use <key> [--url <origin>] [--account <login>]",
+  );
   const session = await open(io, values);
   const project = await session.client.project(key).get();
-  const kept = await io.directory.save({ project: project.key });
+  // The directory names the console where that is not the default login here, or when asked,
+  // and the account where the console has several, or when asked; never a token.
+  const credentials = session.credentials ?? EMPTY_CREDENTIALS;
+  const pinUrl =
+    text(values, "url") !== undefined ||
+    (session.via === "login" && credentials.default !== session.url);
+  const pinAccount =
+    text(values, "account") !== undefined ||
+    (session.via === "login" && loginsAt(credentials, session.url).length > 1);
+  const kept = await io.directory.save({
+    project: project.key,
+    ...(pinUrl ? { url: session.url } : {}),
+    ...(pinAccount && session.account !== undefined ? { account: session.account } : {}),
+  });
+  const bound = pinUrl
+    ? ` at ${session.url}${pinAccount && session.account !== undefined ? ` as ${session.account}` : ""}`
+    : "";
   answer(
     io,
     session,
     project,
     () =>
-      `Working in ${project.name} (${project.key}) from this directory on: kept in ${kept}, which is meant to be committed. What its people ask of agents: console rules.`,
+      `Working in ${project.name} (${project.key})${bound} from this directory on: kept in ${kept}, which is meant to be committed in a private repository and left out of a public one. What its people ask of agents: console rules.`,
   );
   return EXIT.ok;
 };
@@ -2034,6 +2234,7 @@ const category: Command = async (args, io) => {
 
 const COMMANDS: Readonly<Record<string, Command>> = {
   login,
+  logins,
   logout,
   whoami,
   serve,
@@ -2087,11 +2288,14 @@ function help(io: CliIo, name: string | undefined): number {
   return EXIT.ok;
 }
 
-/** A client of the console at `url`, naming the command on every request (ADR-0025). */
+/**
+ * A client of the console at `url`, naming the command on every request (ADR-0025). A redirect
+ * is not followed: the token goes to the address the command resolved, and nowhere it is sent on to.
+ */
 function clientOf(io: CliIo, url: string, token?: string): ConsoleClient {
   return createClient({
     baseUrl: url,
-    fetch: io.fetch,
+    fetch: (input, init) => io.fetch(input, { ...init, redirect: "manual" }),
     ...(token === undefined ? {} : { token }),
     ...(io.userAgent === undefined ? {} : { userAgent: io.userAgent }),
   });

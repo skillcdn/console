@@ -180,6 +180,14 @@ Goal: a goal's page that reads as the board does, in the views a person wants (t
 - [x] The goal's views (2026-10-14): a goal's page laid out as the board's, its facts in a row at the head and its tasks under a switch, `?view=board|list|calendar`, the board of them with the project board's own columns and cards, the list by state, and the calendar of them on `?month=`, opening on this month while the goal is under way.
 - [x] Cards moved by hand (2026-10-14): a card dragged by its grip to another column moves the task, on the project's board and a goal's alike, with a mouse or a finger, the board scrolling when the pointer nears its edge; the state select stays for the keyboard.
 
+## Milestone 18, one machine, several consoles (2026-10-14)
+
+Goal: a person whose checkouts belong to different consoles works them from one machine, each command talking to the console its directory is bound to, and a token never travelling to a console it was not made at ([ADR-0027](adr/0027-the-command-keeps-a-login-per-console-and-a-token-goes-only-to-the-console-that-issued-it.md)).
+
+- [x] The decision (2026-10-14, [ADR-0027](adr/0027-the-command-keeps-a-login-per-console-and-a-token-goes-only-to-the-console-that-issued-it.md)): a login per console and account in the credentials file, the address resolved before the token, the token only for that address, the directory file naming the console and the account and never a secret, the environment's pair taken together or not at all, https or this machine, no redirect followed.
+- [x] The command (2026-10-14): the credentials file in its second shape, the first read as one login; `login` adding a login and `--default`; `logins`; `logout --url --account`; `use --url --account`; `--account` everywhere; a file that cannot be read never written over; the refusals naming the console and the account ([specs/cli.md](specs/cli.md)).
+- [x] The tests (2026-10-14): the resolution as a table, hostile files, two consoles told apart by what each was asked, a redirect not followed, nothing secret in a directory's file.
+
 ## After milestone 16
 
 Nothing is chosen yet; the list below is where the next milestone comes from. Left open by milestone 9: whether the board should end a run not heard from for a long while itself ([ADR-0020](adr/0020-the-console-does-not-claim-an-agent-is-at-work-a-run-says-when-it-was-last-heard-from-and-a-new-run-takes-over.md)); a roadmap across projects.
