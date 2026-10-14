@@ -210,6 +210,7 @@ export const en = {
       body: "Write the first task: what is to be done, and for whom.",
     },
     moveTo: "Move to",
+    grip: "Drag to another column",
     decisions: (n: number) => count(n, "decision", "decisions"),
     decisionsTitle: "Decisions waiting for a person",
     filters: {
@@ -394,6 +395,9 @@ export const en = {
     setBy: "Set by",
     state: "State",
     nothingMore: "Nothing more was written about it.",
+    about: "What reaching it means",
+    view: "View",
+    views: { board: "Board", list: "List", calendar: "Calendar" },
     timeline: {
       title: "The months",
       legend: "Category colours",

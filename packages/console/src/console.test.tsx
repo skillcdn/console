@@ -258,13 +258,30 @@ describe("matchRoute", () => {
     });
     expect(matchRoute(newGoalHref("web"))).toEqual({ name: "new-goal", project: "web" });
     expect(goalHref("web", ID)).toBe(`/projects/web/roadmap/${ID}`);
-    expect(goalHref("web", ID, "edit")).toBe(`/projects/web/roadmap/${ID}?edit`);
+    expect(goalHref("web", ID, { form: "edit" })).toBe(`/projects/web/roadmap/${ID}?edit`);
     expect(matchRoute(`/projects/web/roadmap/${ID}`, "?edit")).toEqual({
       name: "goal",
       project: "web",
       id: ID,
       form: "edit",
+      view: "board",
+      month: undefined,
     });
+    // The views of a goal's tasks: the board without a word, the others named, the calendar on a month.
+    expect(goalHref("web", ID, { view: "board" })).toBe(`/projects/web/roadmap/${ID}`);
+    expect(goalHref("web", ID, { view: "calendar", month: "2026-11" })).toBe(
+      `/projects/web/roadmap/${ID}?view=calendar&month=2026-11`,
+    );
+    expect(matchRoute(`/projects/web/roadmap/${ID}`, "?view=list")).toMatchObject({
+      name: "goal",
+      view: "list",
+      month: undefined,
+    });
+    expect(matchRoute(`/projects/web/roadmap/${ID}`, "?view=calendar&month=2026-11")).toMatchObject(
+      { view: "calendar", month: "2026-11" },
+    );
+    expect(matchRoute(`/projects/web/roadmap/${ID}`, "?view=nope")).toEqual({ name: "not-found" });
+    expect(matchRoute(`/projects/web/roadmap/${ID}`, "?month=nope")).toEqual({ name: "not-found" });
   });
 
   it("knows the pages a console adds of its own, on the workspace and on a project, and the words of their tabs", () => {

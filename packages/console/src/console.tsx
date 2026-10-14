@@ -43,7 +43,7 @@ import { ConnectWords } from "./components/connect.js";
 import { DecisionForm } from "./components/decision-form.js";
 import { DecisionCard, DecisionList, type DecisionListProps } from "./components/decision-list.js";
 import { EventFeed, type EventFeedProps } from "./components/event-feed.js";
-import { GoalForm, GoalList, type GoalListProps, GoalView } from "./components/goals.js";
+import { GoalForm, GoalList, type GoalListProps, GoalView, goalMonth } from "./components/goals.js";
 import { ListingForm, PeopleList, type PeopleListProps } from "./components/people.js";
 import {
   MemberList,
@@ -95,6 +95,7 @@ import {
   customPageHref,
   decisionHref,
   docHref,
+  type GoalTaskView,
   goalHref,
   matchRoute,
   type Navigation,
@@ -850,6 +851,10 @@ function ProjectPage(props: {
         </>
       );
     }
+    const now = today();
+    const towards = data.tasks.filter((task) => task.goalId === goal.id);
+    const month = route.month ?? goalMonth(goal, now);
+    const viewHref = (view: GoalTaskView) => goalHref(key, goal.id, { view });
     return (
       <>
         <div className="sc-page-head">
@@ -862,13 +867,40 @@ function ProjectPage(props: {
           tasks={data.tasks}
           taskHref={href}
           docHref={toDoc}
-          editHref={owner ? goalHref(key, goal.id, "edit") : undefined}
+          today={now}
+          editHref={owner ? goalHref(key, goal.id, { form: "edit" }) : undefined}
           onMove={
             owner
               ? (target, state) => void act(() => data.actions.updateGoal(target.id, { state }))
               : undefined
           }
           busy={busy}
+          view={route.view}
+          viewHref={viewHref}
+          board={
+            <components.Board
+              tasks={towards}
+              taskHref={href}
+              onOpen={(task) => navigation.go(href(task))}
+              onMove={onMove}
+              today={now}
+              empty={
+                towards.length === 0 ? <p className="sc-muted">{roadmap.noTasks}</p> : undefined
+              }
+            />
+          }
+          calendar={
+            <components.Calendar
+              tasks={towards}
+              month={month}
+              today={now}
+              categories={data.categories}
+              goals={[goal]}
+              taskHref={href}
+              goalHref={(target) => goalHref(key, target.id)}
+              monthHref={(wanted) => goalHref(key, goal.id, { view: "calendar", month: wanted })}
+            />
+          }
         />
       </>
     );
@@ -2073,6 +2105,7 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
           wide={
             route.name === "board" ||
             route.name === "calendar" ||
+            (route.name === "goal" && route.form === undefined) ||
             (route.name === "custom" &&
               pages.some((candidate) => candidate.key === route.page && candidate.wide === true))
           }

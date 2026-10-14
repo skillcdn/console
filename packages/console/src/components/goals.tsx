@@ -10,13 +10,15 @@ import {
   type RestTask,
   TASK_STATES,
 } from "../api.js";
-import { formatDays } from "../dates.js";
+import { formatDays, monthOf } from "../dates.js";
 import { useLanguage, useWords } from "../i18n/index.js";
+import { GOAL_TASK_VIEWS, type GoalTaskView } from "../router.js";
 import { Markdown } from "./markdown.js";
 import { TaskList } from "./task-list.js";
 import {
   Button,
   CategoryBadge,
+  cx,
   Day,
   DueBadge,
   GoalStateBadge,
@@ -27,9 +29,10 @@ import {
 
 // The roadmap of a project (ADR-0019): its goals, each planned in days as a task is, a start
 // and a target, sorted into a category of the workspace (ADR-0026), with how far its tasks
-// are, read from the board as it stands. The list, one goal with its tasks, and the form an
-// owner sets one with. Each takes its data as props and nothing from the network; what people
-// wrote is shown as text, never as HTML.
+// are, read from the board as it stands. The list, one goal with its tasks (as the board of
+// them, the list by state, or the calendar, the first two given by the composition from the
+// board's own parts), and the form an owner sets one with. Each takes its data as props and
+// nothing from the network; what people wrote is shown as text, never as HTML.
 
 /** A goal's day on the calendar's terms: reached or let go, it is a plain fact; else it may be late. */
 const dueState = (goal: RestGoal) =>
@@ -208,9 +211,23 @@ export function GoalForm(props: GoalFormProps) {
   );
 }
 
+/**
+ * The month a goal's calendar opens on: the month it starts while that is still to come, the
+ * month it is meant to be reached by once that is past, and this month otherwise.
+ */
+export function goalMonth(goal: RestGoal, today: string): string {
+  if (goal.startsOn !== null && today < goal.startsOn) {
+    return monthOf(goal.startsOn);
+  }
+  if (goal.dueOn !== null && today > goal.dueOn) {
+    return monthOf(goal.dueOn);
+  }
+  return monthOf(today);
+}
+
 export interface GoalViewProps {
   readonly goal: RestGoal;
-  /** The tasks of the board; those that work towards the goal are shown, by state. */
+  /** The tasks of the board; those that work towards the goal are shown. */
   readonly tasks: readonly RestTask[];
   readonly taskHref: (task: RestTask) => string;
   /** Where a document of the project is read, by its path, for the links in what was written. */
@@ -221,6 +238,14 @@ export interface GoalViewProps {
   /** Called when an owner moves the goal to another state from here. */
   readonly onMove?: ((goal: RestGoal, state: GoalState) => void) | undefined;
   readonly busy?: boolean | undefined;
+  /** Which view of the goal's tasks is shown: the list when left out. */
+  readonly view?: GoalTaskView | undefined;
+  /** Where each view is; left out, the views cannot be switched from here. */
+  readonly viewHref?: ((view: GoalTaskView) => string) | undefined;
+  /** The board of the goal's tasks, built by the composition from the board's own parts; the list stands in without it. */
+  readonly board?: ReactNode;
+  /** The calendar of the goal's tasks, the same way. */
+  readonly calendar?: ReactNode;
 }
 
 export function GoalView(props: GoalViewProps) {
@@ -228,116 +253,143 @@ export function GoalView(props: GoalViewProps) {
   const roadmap = words.roadmap;
   const { goal } = props;
   const towards = props.tasks.filter((task) => task.goalId === goal.id);
+  const view: GoalTaskView = props.view ?? "list";
+  const done = goal.taskCounts.done;
+  const total = Object.values(goal.taskCounts).reduce((sum, n) => sum + n, 0);
+  const list =
+    towards.length === 0 ? (
+      <p className="sc-muted">{roadmap.noTasks}</p>
+    ) : (
+      TASK_STATES.map((state) => {
+        const inState = towards.filter((task) => task.state === state);
+        return inState.length === 0 ? null : (
+          <div key={state} className="sc-goal-tasks">
+            <h3 className="sc-goal-tasks-state">
+              {words.vocabulary.state[state]}{" "}
+              <span className="sc-column-count">{inState.length}</span>
+            </h3>
+            <TaskList tasks={inState} taskHref={props.taskHref} today={props.today} />
+          </div>
+        );
+      })
+    );
+  const shown =
+    view === "board" && props.board !== undefined
+      ? props.board
+      : view === "calendar" && props.calendar !== undefined
+        ? props.calendar
+        : list;
   return (
-    <div className="sc-task sc-goal-view">
-      <header className="sc-task-header">
-        <h1 className="sc-task-title">{goal.title}</h1>
-        <div className="sc-task-badges">
-          {goal.category !== null && <CategoryBadge category={goal.category} />}
-          <GoalStateBadge state={goal.state} />
-          {goal.dueOn !== null && (
-            <DueBadge dueOn={goal.dueOn} state={dueState(goal)} today={props.today} />
-          )}
-        </div>
-      </header>
-      <div className="sc-task-body">
-        <div className="sc-task-main">
-          <ProgressBar counts={goal.taskCounts} />
-          {goal.body.length > 0 ? (
-            <Markdown source={goal.body} docHref={props.docHref} />
-          ) : (
-            <p className="sc-muted">{roadmap.nothingMore}</p>
-          )}
-          <section className="sc-task-section" aria-label={roadmap.tasks}>
-            <h2 className="sc-section-title">{roadmap.tasks}</h2>
-            {towards.length === 0 ? (
-              <p className="sc-muted">{roadmap.noTasks}</p>
-            ) : (
-              TASK_STATES.map((state) => {
-                const inState = towards.filter((task) => task.state === state);
-                return inState.length === 0 ? null : (
-                  <div key={state} className="sc-goal-tasks">
-                    <h3 className="sc-goal-tasks-state">
-                      {words.vocabulary.state[state]}{" "}
-                      <span className="sc-column-count">{inState.length}</span>
-                    </h3>
-                    <TaskList tasks={inState} taskHref={props.taskHref} today={props.today} />
-                  </div>
-                );
-              })
+    <div className="sc-goal-page">
+      <header className="sc-goal-header">
+        <div className="sc-task-header">
+          <h1 className="sc-task-title">{goal.title}</h1>
+          <div className="sc-task-badges">
+            {goal.category !== null && <CategoryBadge category={goal.category} />}
+            <GoalStateBadge state={goal.state} />
+            {goal.dueOn !== null && (
+              <DueBadge dueOn={goal.dueOn} state={dueState(goal)} today={props.today} />
             )}
-          </section>
+          </div>
         </div>
-        <aside className="sc-task-aside" aria-label={words.task.facts}>
-          <dl className="sc-facts">
-            <div>
-              <dt>{roadmap.state}</dt>
-              <dd>
-                {props.onMove === undefined ? (
-                  words.vocabulary.goalState[goal.state]
-                ) : (
-                  <select
-                    className="sc-input"
-                    aria-label={roadmap.state}
-                    value={goal.state}
-                    disabled={props.busy === true}
-                    onChange={(event) => props.onMove?.(goal, event.target.value as GoalState)}
-                  >
-                    {GOAL_STATES.map((state) => (
-                      <option key={state} value={state}>
-                        {words.vocabulary.goalState[state]}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt>{roadmap.category}</dt>
-              <dd>
-                {goal.category === null ? (
-                  <span className="sc-muted">{roadmap.noCategory}</span>
-                ) : (
-                  <CategoryBadge category={goal.category} />
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt>{roadmap.starts}</dt>
-              <dd>
-                {goal.startsOn === null ? (
-                  <span className="sc-muted">{roadmap.noStart}</span>
-                ) : (
-                  <Day day={goal.startsOn} />
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt>{roadmap.target}</dt>
-              <dd>
-                {goal.dueOn === null ? (
-                  <span className="sc-muted">{roadmap.noTarget}</span>
-                ) : (
-                  <Day day={goal.dueOn} />
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt>{roadmap.setBy}</dt>
-              <dd>
-                <PersonChip person={goal.createdBy} /> <Time iso={goal.createdAt} />
-              </dd>
-            </div>
-          </dl>
+        <div className="sc-goal-progress">
+          <ProgressBar counts={goal.taskCounts} />
+          <span className="sc-muted">{roadmap.progress(done, total)}</span>
+        </div>
+        <dl className="sc-facts-row">
+          <div>
+            <dt>{roadmap.state}</dt>
+            <dd>
+              {props.onMove === undefined ? (
+                words.vocabulary.goalState[goal.state]
+              ) : (
+                <select
+                  className="sc-input"
+                  aria-label={roadmap.state}
+                  value={goal.state}
+                  disabled={props.busy === true}
+                  onChange={(event) => props.onMove?.(goal, event.target.value as GoalState)}
+                >
+                  {GOAL_STATES.map((state) => (
+                    <option key={state} value={state}>
+                      {words.vocabulary.goalState[state]}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt>{roadmap.category}</dt>
+            <dd>
+              {goal.category === null ? (
+                <span className="sc-muted">{roadmap.noCategory}</span>
+              ) : (
+                <CategoryBadge category={goal.category} />
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt>{roadmap.starts}</dt>
+            <dd>
+              {goal.startsOn === null ? (
+                <span className="sc-muted">{roadmap.noStart}</span>
+              ) : (
+                <Day day={goal.startsOn} />
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt>{roadmap.target}</dt>
+            <dd>
+              {goal.dueOn === null ? (
+                <span className="sc-muted">{roadmap.noTarget}</span>
+              ) : (
+                <Day day={goal.dueOn} />
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt>{roadmap.setBy}</dt>
+            <dd>
+              <PersonChip person={goal.createdBy} /> <Time iso={goal.createdAt} />
+            </dd>
+          </div>
           {props.editHref !== undefined && (
-            <div className="sc-task-actions">
-              <a className="sc-button sc-button-secondary" href={props.editHref}>
+            <div>
+              <a className="sc-button sc-button-secondary sc-button-sm" href={props.editHref}>
                 {words.common.edit}
               </a>
             </div>
           )}
-        </aside>
-      </div>
+        </dl>
+        {goal.body.length > 0 && (
+          <details className="sc-goal-about">
+            <summary className="sc-goal-about-summary">{roadmap.about}</summary>
+            <Markdown source={goal.body} docHref={props.docHref} />
+          </details>
+        )}
+      </header>
+      {props.viewHref !== undefined && (
+        <nav className="sc-views" aria-label={roadmap.view}>
+          {GOAL_TASK_VIEWS.map((candidate) => (
+            <a
+              key={candidate}
+              className={cx("sc-view", candidate === view && "sc-view-current")}
+              href={props.viewHref(candidate)}
+              aria-current={candidate === view ? "page" : undefined}
+            >
+              {roadmap.views[candidate]}
+            </a>
+          ))}
+        </nav>
+      )}
+      <section
+        className={cx("sc-goal-tasks-view", `sc-goal-view-${view}`)}
+        aria-label={roadmap.tasks}
+      >
+        {shown}
+      </section>
     </div>
   );
 }

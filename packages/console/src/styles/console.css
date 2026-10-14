@@ -3774,3 +3774,170 @@ table {
     grid-template-columns: minmax(6rem, 8rem) minmax(16rem, 1fr);
   }
 }
+
+/* A card is dragged to another column by its grip, which shows on the card under the pointer
+   and always to a finger; the column under the dragged card says it would take it, and a ghost
+   of the card follows the pointer. The keyboard keeps the select. */
+.sc-card {
+  position: relative;
+}
+
+.sc-card-grip {
+  position: absolute;
+  top: var(--sc-space-1);
+  right: var(--sc-space-1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--sc-radius-sm);
+  background: none;
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-sm);
+  letter-spacing: -0.15em;
+  cursor: grab;
+  opacity: 0;
+  touch-action: none;
+  transition: opacity var(--sc-transition);
+}
+
+.sc-card:hover .sc-card-grip,
+.sc-card:focus-within .sc-card-grip,
+.sc-card.sc-card-dragging .sc-card-grip {
+  opacity: 1;
+}
+
+@media (pointer: coarse) {
+  .sc-card-grip {
+    opacity: 1;
+  }
+}
+
+.sc-card:has(.sc-card-grip) .sc-card-title {
+  padding-right: 1.75rem;
+}
+
+.sc-card-dragging {
+  opacity: 0.5;
+}
+
+.sc-board-dragging {
+  user-select: none;
+}
+
+.sc-column-over {
+  outline: 2px solid var(--sc-color-accent);
+  outline-offset: -2px;
+}
+
+.sc-drag-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 50;
+  max-width: 18rem;
+  padding: var(--sc-space-2) var(--sc-space-3);
+  border: 1px solid var(--sc-color-accent);
+  border-radius: var(--sc-radius-lg);
+  background: var(--sc-color-bg-raised);
+  box-shadow: var(--sc-glow);
+  color: var(--sc-color-text);
+  font-size: var(--sc-text-sm);
+  pointer-events: none;
+}
+
+/* A goal's page reads as the board does: the facts in a row at its head, then a switch between
+   the views of its tasks, then the view, which takes the rest of the height as the board does. */
+.sc-goal-page {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: var(--sc-space-4);
+  min-height: 0;
+}
+
+.sc-goal-header {
+  display: grid;
+  gap: var(--sc-space-3);
+}
+
+.sc-goal-progress {
+  display: grid;
+  grid-template-columns: minmax(0, 20rem) auto;
+  align-items: center;
+  gap: var(--sc-space-3);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-facts-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2) var(--sc-space-5);
+  margin: 0;
+  font-size: var(--sc-text-sm);
+}
+
+.sc-facts-row > div {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-space-2);
+}
+
+.sc-facts-row dt {
+  color: var(--sc-color-text-muted);
+}
+
+.sc-facts-row dd {
+  margin: 0;
+}
+
+.sc-goal-about-summary {
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+  cursor: pointer;
+}
+
+.sc-goal-about .sc-prose {
+  max-width: var(--sc-width-prose);
+  margin-top: var(--sc-space-3);
+}
+
+.sc-views {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-1);
+}
+
+.sc-view {
+  padding: var(--sc-space-1) var(--sc-space-3);
+  border-radius: var(--sc-radius-full);
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+  text-decoration: none;
+}
+
+.sc-view:hover {
+  background: var(--sc-color-bg-inset);
+  color: var(--sc-color-text);
+}
+
+.sc-view-current {
+  background: var(--sc-color-bg-inset);
+  color: var(--sc-color-text);
+  font-weight: var(--sc-weight-medium);
+}
+
+.sc-goal-tasks-view {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.sc-goal-view-list {
+  display: block;
+}

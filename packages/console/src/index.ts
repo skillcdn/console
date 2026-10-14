@@ -10,6 +10,7 @@ export {
   type BoardFiltersProps,
   type BoardProps,
   byDue,
+  columnStateOf,
   filterTasks,
   TaskCard,
 } from "./components/board.js";
@@ -78,6 +79,7 @@ export {
   type GoalListProps,
   GoalView,
   type GoalViewProps,
+  goalMonth,
 } from "./components/goals.js";
 export { Markdown, type MarkdownProps } from "./components/markdown.js";
 export { PAGE_SIZE, ShowMore, usePaged } from "./components/paged.js";
@@ -243,6 +245,9 @@ export {
   type DocsView,
   decisionHref,
   docHref,
+  GOAL_TASK_VIEWS,
+  type GoalPageOptions,
+  type GoalTaskView,
   goalHref,
   matchRoute,
   movedFrom,

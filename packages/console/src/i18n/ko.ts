@@ -179,6 +179,7 @@ export const ko: Messages = {
       body: "첫 작업을 쓰세요. 무엇을, 누구를 위해 할지.",
     },
     moveTo: "이동",
+    grip: "끌어서 다른 열로",
     decisions: (n) => `결정 ${n}건`,
     decisionsTitle: "사람을 기다리는 결정",
     filters: {
@@ -363,6 +364,9 @@ export const ko: Messages = {
     setBy: "세운 사람",
     state: "상태",
     nothingMore: "더 적힌 내용이 없습니다.",
+    about: "이루면 무엇이 달라지나",
+    view: "보기",
+    views: { board: "보드", list: "목록", calendar: "캘린더" },
     timeline: {
       title: "달별 로드맵",
       legend: "카테고리 색",

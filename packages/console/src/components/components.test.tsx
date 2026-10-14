@@ -18,7 +18,7 @@ import type {
 } from "../api.js";
 import { addDays, firstDayOfWeek, weekOf } from "../dates.js";
 import { KOREAN, LanguageContext } from "../i18n/index.js";
-import { Board, BoardFilters, byDue, filterTasks } from "./board.js";
+import { Board, BoardFilters, byDue, columnStateOf, filterTasks } from "./board.js";
 import {
   Calendar,
   placeTip,
@@ -34,7 +34,7 @@ import { ConnectApproval, ConnectCodeForm, ConnectWords } from "./connect.js";
 import { DecisionCard, DecisionList, DecisionLog } from "./decision-list.js";
 import { DocumentForm, DocumentList, DocumentView, FolderView } from "./documents.js";
 import { describeEvent, EventFeed } from "./event-feed.js";
-import { GoalForm, GoalList, GoalView } from "./goals.js";
+import { GoalForm, GoalList, GoalView, goalMonth } from "./goals.js";
 import { Markdown } from "./markdown.js";
 import { ListingForm, PeopleList } from "./people.js";
 import {
@@ -2539,5 +2539,98 @@ describe("a picture large over the page", () => {
       </LanguageContext.Provider>,
     );
     expect(korean).toContain('aria-label="그림 board.png 크게 보기"');
+  });
+});
+
+describe("a goal in its views", () => {
+  const planned: RestGoal = {
+    id: "0199c4d8-0000-7000-8000-000000000400",
+    title: "Ship the board",
+    body: "",
+    state: "active",
+    category: null,
+    startsOn: "2026-10-01",
+    dueOn: "2026-11-15",
+    createdBy: alice,
+    taskCounts: { idea: 1, ready: 0, in_progress: 1, in_review: 0, done: 2, dropped: 0 },
+    createdAt: "2026-10-01T09:00:00.000Z",
+    updatedAt: "2026-10-01T09:00:00.000Z",
+  };
+  const href = (task: RestTask) => `/projects/web/tasks/${task.number}`;
+
+  it("opens the calendar on this month while the goal is under way, else on its start or its target", () => {
+    expect(goalMonth(planned, "2026-10-14")).toBe("2026-10");
+    expect(goalMonth(planned, "2026-09-20")).toBe("2026-10");
+    expect(goalMonth(planned, "2026-12-02")).toBe("2026-11");
+    expect(goalMonth({ ...planned, startsOn: null, dueOn: null }, "2026-12-02")).toBe("2026-12");
+    expect(goalMonth({ ...planned, startsOn: null }, "2026-12-02")).toBe("2026-11");
+  });
+
+  it("shows the view the address names, with the switch between them and the progress at the head", () => {
+    const board = renderToStaticMarkup(
+      <GoalView
+        goal={planned}
+        tasks={[]}
+        taskHref={href}
+        today="2026-10-14"
+        view="board"
+        viewHref={(view) => `/projects/web/roadmap/g?view=${view}`}
+        board={<div id="the-board" />}
+        calendar={<div id="the-calendar" />}
+      />,
+    );
+    expect(board).toContain('id="the-board"');
+    expect(board).not.toContain('id="the-calendar"');
+    expect(board).toContain("2 of 4 tasks done");
+    expect(board).toContain(
+      '<a class="sc-view sc-view-current" href="/projects/web/roadmap/g?view=board" aria-current="page">Board</a>',
+    );
+    expect(board).toContain('href="/projects/web/roadmap/g?view=calendar"');
+    const calendar = renderToStaticMarkup(
+      <GoalView
+        goal={planned}
+        tasks={[]}
+        taskHref={href}
+        today="2026-10-14"
+        view="calendar"
+        board={<div id="the-board" />}
+        calendar={<div id="the-calendar" />}
+      />,
+    );
+    expect(calendar).toContain('id="the-calendar"');
+    expect(calendar).not.toContain("sc-views");
+    // Without a board given, the board view falls back to the list, as a console of before shows it.
+    const list = renderToStaticMarkup(
+      <GoalView goal={planned} tasks={[]} taskHref={href} today="2026-10-14" view="board" />,
+    );
+    expect(list).toContain("No task works towards it yet.");
+  });
+});
+
+describe("a card dragged to another column", () => {
+  it("has a grip only where the board can move a task, and columns that say which state they stand for", () => {
+    const tasks = [
+      { ...task({ state: "idea" }), id: "0199c4d8-0000-7000-8000-000000000501", number: 51 },
+    ];
+    const movable = renderToStaticMarkup(
+      <Board
+        tasks={tasks}
+        taskHref={() => "#"}
+        onOpen={() => undefined}
+        onMove={() => undefined}
+      />,
+    );
+    expect(movable).toContain('data-column="idea"');
+    expect(movable).toContain('data-column="dropped"');
+    expect(movable).toContain('class="sc-card-grip" title="Drag to another column"');
+    expect(movable).toContain("<select");
+    const readOnly = renderToStaticMarkup(
+      <Board tasks={tasks} taskHref={() => "#"} onOpen={() => undefined} />,
+    );
+    expect(readOnly).not.toContain("sc-card-grip");
+    expect(readOnly).not.toContain("sc-drag-ghost");
+    expect(columnStateOf("in_review")).toBe("in_review");
+    expect(columnStateOf("archived")).toBeUndefined();
+    expect(columnStateOf(undefined)).toBeUndefined();
   });
 });

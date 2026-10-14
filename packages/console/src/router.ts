@@ -62,11 +62,14 @@ export type Route =
   /** The roadmap of a project: the months shown from the one named, or from this one. */
   | { readonly name: "roadmap"; readonly project: string; readonly from: string | undefined }
   | { readonly name: "new-goal"; readonly project: string }
+  /** One goal: its tasks as a board, a list or a calendar (on a month, or this one), or its form. */
   | {
       readonly name: "goal";
       readonly project: string;
       readonly id: string;
       readonly form: "edit" | undefined;
+      readonly view: GoalTaskView;
+      readonly month: string | undefined;
     }
   | { readonly name: "feed"; readonly project: string }
   | { readonly name: "skills"; readonly project: string }
@@ -331,9 +334,23 @@ export function matchRoute(pathname: string, search = ""): Route {
     if (third === "new") {
       return { name: "new-goal", project };
     }
-    return UUID.test(third)
-      ? { name: "goal", project, id: third, form: params.has("edit") ? "edit" : undefined }
-      : NOT_FOUND;
+    if (!UUID.test(third)) {
+      return NOT_FOUND;
+    }
+    const named = params.get("view");
+    const view = named === null ? "board" : isGoalTaskView(named) ? named : undefined;
+    const month = params.get("month");
+    if (view === undefined || (month !== null && !isMonth(month))) {
+      return NOT_FOUND;
+    }
+    return {
+      name: "goal",
+      project,
+      id: third,
+      form: params.has("edit") ? "edit" : undefined,
+      view,
+      month: month ?? undefined,
+    };
   }
   if (third !== undefined) {
     return NOT_FOUND;
@@ -470,10 +487,31 @@ export function newGoalHref(key: string): string {
   return `${PATHS.project}/${key}/roadmap/new`;
 }
 
-/** Where one goal is read, or changed. */
-export function goalHref(key: string, id: string, form?: "edit"): string {
+/** The views of a goal's tasks: the board of them, the list by state, or the calendar. */
+export const GOAL_TASK_VIEWS = ["board", "list", "calendar"] as const;
+export type GoalTaskView = (typeof GOAL_TASK_VIEWS)[number];
+
+function isGoalTaskView(value: string): value is GoalTaskView {
+  return (GOAL_TASK_VIEWS as readonly string[]).includes(value);
+}
+
+/** What a goal's address may say besides the goal: its form, the view of its tasks, the calendar's month. */
+export interface GoalPageOptions {
+  readonly form?: "edit" | undefined;
+  /** The board is the view an address without one shows. */
+  readonly view?: GoalTaskView | undefined;
+  readonly month?: string | undefined;
+}
+
+/** Where one goal is read, in a view of its tasks, or changed. */
+export function goalHref(key: string, id: string, options: GoalPageOptions = {}): string {
   const base = `${PATHS.project}/${key}/roadmap/${id}`;
-  return form === undefined ? base : `${base}?${form}`;
+  const parts = [
+    ...(options.form === undefined ? [] : [options.form]),
+    ...(options.view === undefined || options.view === "board" ? [] : [`view=${options.view}`]),
+    ...(options.month === undefined ? [] : [`month=${options.month}`]),
+  ];
+  return parts.length === 0 ? base : `${base}?${parts.join("&")}`;
 }
 
 /**
