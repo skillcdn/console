@@ -254,6 +254,7 @@ export function GoalView(props: GoalViewProps) {
   const { goal } = props;
   const towards = props.tasks.filter((task) => task.goalId === goal.id);
   const view: GoalTaskView = props.view ?? "list";
+  const { viewHref } = props;
   const done = goal.taskCounts.done;
   const total = Object.values(goal.taskCounts).reduce((sum, n) => sum + n, 0);
   const list =
@@ -370,13 +371,13 @@ export function GoalView(props: GoalViewProps) {
           </details>
         )}
       </header>
-      {props.viewHref !== undefined && (
+      {viewHref !== undefined && (
         <nav className="sc-views" aria-label={roadmap.view}>
           {GOAL_TASK_VIEWS.map((candidate) => (
             <a
               key={candidate}
               className={cx("sc-view", candidate === view && "sc-view-current")}
-              href={props.viewHref(candidate)}
+              href={viewHref(candidate)}
               aria-current={candidate === view ? "page" : undefined}
             >
               {roadmap.views[candidate]}
