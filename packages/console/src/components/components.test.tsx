@@ -37,6 +37,15 @@ import { describeEvent, EventFeed } from "./event-feed.js";
 import { GoalForm, GoalList, GoalView } from "./goals.js";
 import { Markdown } from "./markdown.js";
 import { ListingForm, PeopleList } from "./people.js";
+import {
+  clampScale,
+  FITTED,
+  PictureOverlay,
+  PictureThumb,
+  panBy,
+  wheelFactor,
+  zoomAround,
+} from "./pictures.js";
 import { keyOf, MemberList, ProjectForm, ProjectList, ProjectMark } from "./projects.js";
 import { GoalTimeline, timelineBars } from "./roadmap.js";
 import { RulesForm, RulesView } from "./rules.js";
@@ -2149,6 +2158,10 @@ describe("the discussion on a task", () => {
     expect(html).toContain(
       '<a href="/api/v1/projects/web/files/0199c4d8-0000-7000-8000-000000000073" rel="nofollow ugc">log.txt</a>',
     );
+    // Each picture is a thumbnail that opens large over the page, in the text and after it; nothing leaves the page.
+    expect(html.split('class="sc-picture-thumb"').length).toBe(3);
+    expect(html).toContain('aria-label="Open the picture shot &lt;2&gt;.webp"');
+    expect(html).not.toContain('target="_blank"');
     // Without an address for the files, the pictures named stay text and the files are named only.
     const unlinked = renderToStaticMarkup(<CommentCard comment={comment} />);
     expect(unlinked).not.toContain("<img");
@@ -2468,5 +2481,63 @@ describe("the roadmap as months (ADR-0026)", () => {
     );
     expect(bare).toContain("No start day");
     expect(bare).toContain("No category");
+  });
+});
+
+describe("a picture large over the page", () => {
+  const picture = {
+    src: "/api/v1/projects/web/files/f1",
+    alt: "the board",
+    name: "board.png",
+    size: 2048,
+  };
+
+  it("zooms around a point within its bounds, and comes back to the centre once it fits again", () => {
+    expect(clampScale(0.2)).toBe(1);
+    expect(clampScale(99)).toBe(8);
+    expect(clampScale(Number.NaN)).toBe(1);
+    const zoomed = zoomAround(FITTED, 2, { x: 100, y: 50 });
+    expect(zoomed).toEqual({ scale: 2, x: -100, y: -50 });
+    // What was under the pointer stays under it: the point maps to the same spot of the picture.
+    const before = { x: (100 - FITTED.x) / FITTED.scale, y: (50 - FITTED.y) / FITTED.scale };
+    const after = { x: (100 - zoomed.x) / zoomed.scale, y: (50 - zoomed.y) / zoomed.scale };
+    expect(after).toEqual(before);
+    expect(zoomAround(zoomed, 0.5, { x: 100, y: 50 })).toEqual(FITTED);
+    expect(zoomAround(zoomed, 100, { x: 0, y: 0 }).scale).toBe(8);
+    expect(zoomAround(FITTED, 0.5, { x: 0, y: 0 })).toBe(FITTED);
+    expect(wheelFactor(-100)).toBeCloseTo(1.25);
+    expect(wheelFactor(100)).toBeCloseTo(0.8);
+    expect(wheelFactor(0)).toBe(1);
+    expect(panBy(FITTED, 10, 10)).toBe(FITTED);
+    expect(panBy(zoomed, 10, -10)).toEqual({ scale: 2, x: -90, y: -60 });
+  });
+
+  it("is a thumbnail that opens it, and a dialog that names it with the ways to zoom and to close", () => {
+    const thumb = renderToStaticMarkup(<PictureThumb picture={picture} onOpen={() => undefined} />);
+    expect(thumb).toContain(
+      '<button type="button" class="sc-picture-thumb" aria-label="Open the picture board.png">',
+    );
+    expect(thumb).toContain(
+      '<img src="/api/v1/projects/web/files/f1" alt="the board" loading="lazy" decoding="async"',
+    );
+    const overlay = renderToStaticMarkup(
+      <PictureOverlay picture={picture} onClose={() => undefined} />,
+    );
+    expect(overlay).toContain('role="dialog"');
+    expect(overlay).toContain('aria-modal="true"');
+    expect(overlay).toContain('aria-label="The picture board.png, large"');
+    for (const label of ["Zoom in", "Zoom out", "Fit to the screen", "Close"]) {
+      expect(overlay).toContain(`aria-label="${label}"`);
+    }
+    expect(overlay).toContain('href="/api/v1/projects/web/files/f1" target="_blank"');
+    expect(overlay).toContain("2.0 KB");
+    expect(overlay).toContain('class="sc-overlay-picture"');
+    expect(overlay).toContain("translate(0px, 0px) scale(1)");
+    const korean = renderToStaticMarkup(
+      <LanguageContext.Provider value={KOREAN}>
+        <PictureThumb picture={picture} onOpen={() => undefined} />
+      </LanguageContext.Provider>,
+    );
+    expect(korean).toContain('aria-label="그림 board.png 크게 보기"');
   });
 });

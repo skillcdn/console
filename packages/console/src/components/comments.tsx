@@ -12,12 +12,14 @@ import {
 import { useWords } from "../i18n/index.js";
 import { DecisionCard, type DecisionCardProps } from "./decision-list.js";
 import { Markdown } from "./markdown.js";
+import { Lightbox, PictureThumb, usePicture } from "./pictures.js";
 import { RunCard } from "./runs.js";
 import { Button, formatBytes, PersonChip, personName, Time } from "./ui.js";
 
 // The discussion on a task (ADR-0024): what people and agents said about it, each word with
 // the files put in it, read in one thread with the runs on the task and the decisions about
-// it, in the order they came. Takes its data as props and nothing from the network.
+// it, in the order they came. A picture is a thumbnail that opens large over the page. Takes
+// its data as props and nothing from the network.
 
 /** The kinds of picture the pages show in place: what a browser renders and cannot run. */
 const PICTURE_TYPES: ReadonlySet<string> = new Set([
@@ -48,6 +50,7 @@ export interface CommentCardProps {
 export function CommentCard(props: CommentCardProps) {
   const words = useWords();
   const { comment } = props;
+  const pictures = usePicture();
   const hrefOf = (file: RestCommentFile) => props.fileHref?.(file);
   // A picture the text names by its file name is shown where the text puts it; the rest of
   // the files follow the text, pictures in place and everything else as a link.
@@ -77,7 +80,12 @@ export function CommentCard(props: CommentCardProps) {
         </span>
       </header>
       {comment.body.trim().length > 0 && (
-        <Markdown source={comment.body} docHref={props.docHref} fileSrc={named} />
+        <Markdown
+          source={comment.body}
+          docHref={props.docHref}
+          fileSrc={named}
+          onOpenPicture={pictures.open}
+        />
       )}
       {following.length > 0 && (
         <ul className="sc-comment-files" aria-label={words.comments.files}>
@@ -87,14 +95,15 @@ export function CommentCard(props: CommentCardProps) {
             if (href !== undefined && isPicture(file.contentType)) {
               return (
                 <li key={attached.id} className="sc-comment-picture">
-                  <a href={href} rel="noopener nofollow ugc" target="_blank">
-                    <img
-                      src={href}
-                      alt={words.comments.picture(file.name)}
-                      loading="lazy"
-                      decoding="async"
-                    />
-                  </a>
+                  <PictureThumb
+                    picture={{
+                      src: href,
+                      alt: words.comments.picture(file.name),
+                      name: file.name,
+                      size: file.size,
+                    }}
+                    onOpen={pictures.open}
+                  />
                   <span className="sc-muted">
                     {file.name}, {formatBytes(file.size)}
                   </span>
@@ -116,6 +125,7 @@ export function CommentCard(props: CommentCardProps) {
           })}
         </ul>
       )}
+      <Lightbox picture={pictures.shown} onClose={pictures.close} />
     </article>
   );
 }

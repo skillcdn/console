@@ -566,6 +566,16 @@ export const ko: Messages = {
     picture: (name) => `그림 ${name}`,
     label: (name) => `${name}의 댓글`,
   },
+  pictures: {
+    open: (name) => `그림 ${name} 크게 보기`,
+    label: (name) => `그림 ${name}, 크게`,
+    close: "닫기",
+    zoomIn: "확대",
+    zoomOut: "축소",
+    fit: "화면에 맞추기",
+    file: "파일 자체 열기",
+    hint: "휠·버튼·두 손가락으로 확대와 축소, 끌어서 이동, Esc로 닫기.",
+  },
 
   skills: {
     loading: "스킬을 불러오는 중",

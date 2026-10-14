@@ -172,6 +172,14 @@ Goal: a goal planned as a task is, a start and a target and a category, and the 
 - [x] The default UI (2026-10-13): the Roadmap page as months, six from the month the address names (`?from=`), each goal a bar from its start to its target in its category's colour, filled as far as its tasks are done, today marked, the goals without days named below; the category and the days on the list, the goal's page and the form; the goal's target day marked on the project's Calendar.
 - [x] The skill (2026-10-13): `working-the-board` reads the goal's plan with the task.
 
+## Milestone 17, the goal in views and the pictures large
+
+Goal: a goal's page that reads as the board does, in the views a person wants (the board, the list, the calendar), with the cards moved by hand; and a picture in a discussion seen small where it is and large over the page.
+
+- [x] The pictures (2026-10-14): a picture in a comment is a thumbnail that opens in an overlay over the page, which zooms with the wheel, the buttons and two fingers, moves with a drag, and closes with Escape, its button or a click beside it, the focus going back to the thumbnail; the same bytes, loaded once and lazily, since the console makes no smaller copy of a file.
+- [ ] The goal's views: `?view=board|list|calendar` on a goal's page, the board of its tasks with the project board's own columns and cards, and the calendar of them.
+- [ ] Cards moved by hand: a card dragged to another column moves the task, on the project's board and a goal's alike; the state select stays for the keyboard.
+
 ## After milestone 16
 
 Nothing is chosen yet; the list below is where the next milestone comes from. Left open by milestone 9: whether the board should end a run not heard from for a long while itself ([ADR-0020](adr/0020-the-console-does-not-claim-an-agent-is-at-work-a-run-says-when-it-was-last-heard-from-and-a-new-run-takes-over.md)); a roadmap across projects.

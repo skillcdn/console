@@ -88,6 +88,26 @@ export {
   type PeopleListProps,
 } from "./components/people.js";
 export {
+  clampScale,
+  FITTED,
+  Lightbox,
+  type LightboxProps,
+  MAX_SCALE,
+  MIN_SCALE,
+  type Picture,
+  PictureOverlay,
+  type PictureOverlayProps,
+  type PictureState,
+  PictureThumb,
+  type PictureThumbProps,
+  type PictureView,
+  panBy,
+  usePicture,
+  wheelFactor,
+  ZOOM_STEP,
+  zoomAround,
+} from "./components/pictures.js";
+export {
   keyOf,
   MemberList,
   type MemberListProps,

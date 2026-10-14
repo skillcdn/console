@@ -601,6 +601,16 @@ export const en = {
     picture: (name: string) => `The picture ${name}`,
     label: (name: string) => `A comment by ${name}`,
   },
+  pictures: {
+    open: (name: string) => `Open the picture ${name}`,
+    label: (name: string) => `The picture ${name}, large`,
+    close: "Close",
+    zoomIn: "Zoom in",
+    zoomOut: "Zoom out",
+    fit: "Fit to the screen",
+    file: "Open the file itself",
+    hint: "Zoom with the wheel, the buttons or two fingers; drag to move; Escape closes.",
+  },
 
   skills: {
     loading: "Loading the skills",

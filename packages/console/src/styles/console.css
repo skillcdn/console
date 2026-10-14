@@ -2166,14 +2166,108 @@ table {
   font-size: var(--sc-text-sm);
 }
 
-/* A picture in a comment is seen where it is, no taller than a screen's worth. */
-.sc-comment-picture img,
+/* A picture in a comment is a thumbnail, no taller than a few lines, that opens large over the
+   page; a picture that only comes over https stays where it is, as small. */
+.sc-picture-thumb {
+  display: inline-block;
+  padding: 0;
+  border: 0;
+  border-radius: var(--sc-radius-md);
+  background: none;
+  line-height: 0;
+  cursor: zoom-in;
+}
+
+.sc-picture-thumb:focus-visible {
+  outline: 2px solid var(--sc-color-accent);
+  outline-offset: 2px;
+}
+
+.sc-picture-thumb img,
 .sc-comment .sc-prose img {
   display: block;
+  width: auto;
   max-width: 100%;
-  max-height: 24rem;
+  height: auto;
+  max-height: 10rem;
   border: var(--sc-border);
   border-radius: var(--sc-radius-md);
+}
+
+.sc-prose .sc-picture-thumb {
+  margin: var(--sc-space-2) 0;
+}
+
+/* The picture large, over the page: a bar with its name and the ways to zoom and to close, the
+   stage it moves on, and a hint. The page under it is dimmed and does not scroll. */
+.sc-overlay {
+  position: fixed;
+  z-index: 100;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  inset: 0;
+  background: color-mix(in srgb, var(--sc-color-bg) 90%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+.sc-overlay-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sc-space-3);
+  padding: var(--sc-space-3) var(--sc-space-4);
+}
+
+.sc-overlay-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--sc-color-text);
+  font-size: var(--sc-text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-overlay-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--sc-space-1);
+}
+
+.sc-overlay-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.sc-overlay-stage[data-dragging="true"] {
+  cursor: grabbing;
+}
+
+.sc-overlay-picture {
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 100%;
+  transform-origin: center center;
+  will-change: transform;
+}
+
+.sc-overlay-hint {
+  margin: 0;
+  padding: var(--sc-space-2) var(--sc-space-4) var(--sc-space-3);
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-xs);
+  text-align: center;
+}
+
+@media (max-width: 40rem) {
+  .sc-overlay-hint {
+    display: none;
+  }
 }
 
 .sc-comment-files {

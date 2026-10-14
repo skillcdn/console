@@ -1,6 +1,7 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { isDocumentPath } from "../documents.js";
+import { type Picture, PictureThumb } from "./pictures.js";
 
 // What people and agents write is untrusted. It is rendered as React elements, never as HTML:
 // raw HTML in the source stays text, links are limited to a few schemes and open elsewhere,
@@ -20,6 +21,11 @@ export interface MarkdownProps {
    * is neither one of those nor over https stays text.
    */
   readonly fileSrc?: ((source: string) => string | undefined) | undefined;
+  /**
+   * Called when a picture that came with the text is pressed, to show it large over the page;
+   * left out, such a picture is only seen where it is.
+   */
+  readonly onOpenPicture?: ((picture: Picture, opener: HTMLElement) => void) | undefined;
 }
 
 export function Markdown(props: MarkdownProps) {
@@ -59,6 +65,19 @@ export function Markdown(props: MarkdownProps) {
               named ?? (typeof src === "string" && SAFE_IMAGE.test(src) ? src : undefined);
             if (url === undefined) {
               return <span className="sc-prose-image-text">{alt ?? ""}</span>;
+            }
+            if (
+              named !== undefined &&
+              props.onOpenPicture !== undefined &&
+              typeof src === "string"
+            ) {
+              const name = src.startsWith("./") ? src.slice(2) : src;
+              return (
+                <PictureThumb
+                  picture={{ src: named, alt: alt ?? "", name }}
+                  onOpen={props.onOpenPicture}
+                />
+              );
             }
             return (
               <img
