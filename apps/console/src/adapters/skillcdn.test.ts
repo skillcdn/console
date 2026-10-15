@@ -498,5 +498,12 @@ describe("the SkillCDN source, reading the pack (ADR-0028)", () => {
     });
     const odd = source(async () => json({ status: "ready", entries: "no" }));
     expect(await odd.source.browse(ADDRESS, {})).toEqual({ status: "unavailable" });
+    // A path the deployment refuses as not one is nothing to read, not a deployment out of reach.
+    const refusedPath = source(async () =>
+      json({ error: { code: "request.invalid", message: "path" } }, 400),
+    );
+    expect(await refusedPath.source.browse(ADDRESS, { path: "C:/Program Files/Git" })).toEqual({
+      status: "not_found",
+    });
   });
 });

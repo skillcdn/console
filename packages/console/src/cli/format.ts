@@ -290,7 +290,7 @@ export function formatSkills(skills: RestSkills, ownSkills?: string): string {
   }
   if (skills.counts !== undefined) {
     lines.push(
-      `${counted(skills.counts.skills, "skill")}, ${counted(skills.counts.documents, "document")}: console skills <folder> shows what a folder holds (/ for the root), console skills --search <words> finds skills and documents by words.`,
+      `${counted(skills.counts.skills, "skill")}, ${counted(skills.counts.documents, "document")}: console skills <folder> shows what a folder holds (. for the root), console skills --search <words> finds skills and documents by words.`,
     );
   }
   if (skills.items.length === 0) {

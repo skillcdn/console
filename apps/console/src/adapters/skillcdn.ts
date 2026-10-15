@@ -121,8 +121,9 @@ export function createSkillCdnSource(options: SkillCdnOptions): SkillSource {
       await response.body?.cancel();
       return { kind: "status", status: "token_invalid" };
     }
-    // Not served, or not to someone the deployment does not know: the same to the board.
-    if (response.status === 404 || response.status === 403) {
+    // Not served, not to someone the deployment does not know, or asked for by a path that is
+    // not one: nothing is there, the same to the board.
+    if (response.status === 404 || response.status === 403 || response.status === 400) {
       await response.body?.cancel();
       return { kind: "status", status: "not_found" };
     }
