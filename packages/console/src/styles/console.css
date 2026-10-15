@@ -710,6 +710,14 @@ table {
   letter-spacing: -0.02em;
 }
 
+/* The ways a page offers at its head, side by side. */
+.sc-page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
+}
+
 .sc-lead {
   max-width: var(--sc-width-prose);
   margin-bottom: var(--sc-space-5);
@@ -1340,28 +1348,6 @@ table {
 
 .sc-card-spacer {
   flex: 1;
-}
-
-/* Moving a task from its card: a quiet control, as wide as the card. */
-.sc-card-move select {
-  width: 100%;
-  min-height: 1.75rem;
-  padding: 0 var(--sc-space-2);
-  border: 1px solid transparent;
-  border-radius: var(--sc-radius-sm);
-  background: transparent;
-  color: var(--sc-color-text-faint);
-  font-size: var(--sc-text-xs);
-  transition:
-    border-color var(--sc-transition),
-    color var(--sc-transition);
-}
-
-.sc-card-move select:hover,
-.sc-card-move select:focus {
-  border-color: var(--sc-color-border-strong);
-  background: var(--sc-color-field);
-  color: var(--sc-color-text);
 }
 
 /* One task, and a page of the documents: the text in a column for reading, the facts beside it
@@ -2600,13 +2586,6 @@ table {
   }
 }
 
-/* Where there is no pointer to hover with, the control on a card is as tall as a finger needs. */
-@media (hover: none) {
-  .sc-card-move select {
-    min-height: 2rem;
-  }
-}
-
 /* The schedule, the roadmap and the categories (ADR-0019). */
 
 /* The colours a category may be shown in: names, painted here and nowhere else. Each is a
@@ -3775,14 +3754,40 @@ table {
   }
 }
 
-/* A card is dragged to another column by its grip, which shows on the card under the pointer
-   and always to a finger; the column under the dragged card says it would take it, and a ghost
-   of the card follows the pointer. The keyboard keeps the select. */
+/* A card is dragged to another column from anywhere on it but its title and its menu: with a
+   mouse at once, under a finger once it has rested a moment, so that a finger that moves scrolls.
+   The cursor is the standard `move`, which every platform draws itself; the column under the
+   dragged card says it would take it, and a ghost of the card follows the pointer. */
 .sc-card {
   position: relative;
 }
 
-.sc-card-grip {
+.sc-card-movable {
+  cursor: move;
+}
+
+/* A finger resting on a card is neither selecting its words nor asking for the page's menu. */
+@media (pointer: coarse) {
+  .sc-card-movable {
+    -webkit-touch-callout: none;
+    user-select: none;
+  }
+}
+
+.sc-card-dragging {
+  opacity: 0.5;
+}
+
+.sc-board-dragging,
+.sc-board-dragging .sc-card,
+.sc-board-dragging .sc-card * {
+  cursor: move;
+  user-select: none;
+}
+
+/* The card's menu: three dots in the corner, seen on the card under the pointer or with the
+   focus, and always to a finger; the menu itself stands over the page, clipped by no column. */
+.sc-card-menu-button {
   position: absolute;
   top: var(--sc-space-1);
   right: var(--sc-space-1);
@@ -3796,36 +3801,57 @@ table {
   border-radius: var(--sc-radius-sm);
   background: none;
   color: var(--sc-color-text-faint);
-  font-size: var(--sc-text-sm);
-  letter-spacing: -0.15em;
-  cursor: grab;
+  cursor: pointer;
   opacity: 0;
-  touch-action: none;
-  transition: opacity var(--sc-transition);
+  transition:
+    opacity var(--sc-transition),
+    background var(--sc-transition),
+    color var(--sc-transition);
 }
 
-.sc-card:hover .sc-card-grip,
-.sc-card:focus-within .sc-card-grip,
-.sc-card.sc-card-dragging .sc-card-grip {
+.sc-card-menu-button svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.sc-card:hover .sc-card-menu-button,
+.sc-card:focus-within .sc-card-menu-button,
+.sc-card-menu-button[aria-expanded="true"] {
   opacity: 1;
 }
 
+.sc-card-menu-button:hover,
+.sc-card-menu-button[aria-expanded="true"] {
+  background: var(--sc-color-bg-inset);
+  color: var(--sc-color-text);
+}
+
+.sc-card-menu-button:focus-visible {
+  outline: 2px solid var(--sc-color-accent);
+  outline-offset: 1px;
+}
+
 @media (pointer: coarse) {
-  .sc-card-grip {
+  .sc-card-menu-button {
     opacity: 1;
   }
 }
 
-.sc-card:has(.sc-card-grip) .sc-card-title {
+.sc-card:has(.sc-card-menu-button) .sc-card-title {
   padding-right: 1.75rem;
 }
 
-.sc-card-dragging {
-  opacity: 0.5;
-}
-
-.sc-board-dragging {
-  user-select: none;
+.sc-card-menu {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  min-width: 10rem;
+  padding: var(--sc-space-1);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-lg);
+  background: var(--sc-color-bg-inset);
+  box-shadow: var(--sc-shadow-stage);
 }
 
 .sc-column-over {
@@ -3940,22 +3966,4 @@ table {
 
 .sc-goal-view-list {
   display: block;
-}
-
-/* The done and dropped columns lead to the archive (ADR-0029), beside their count. */
-.sc-column-meta {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sc-space-2);
-}
-
-.sc-column-archive {
-  color: var(--sc-color-text-muted);
-  font-size: var(--sc-text-xs);
-  text-decoration: none;
-}
-
-.sc-column-archive:hover {
-  color: var(--sc-color-text);
-  text-decoration: underline;
 }

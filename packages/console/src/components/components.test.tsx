@@ -215,9 +215,10 @@ describe("the board", () => {
     expect(html).toContain("1 decision");
     expect(html).toContain("High");
     expect(html).toContain('href="/projects/web/tasks/7"');
-    // The second task's column, with its count, and no move control without a handler.
+    // The second task's column, with its count; no menu without a way to edit or to put away.
     expect(html).toContain('class="sc-column sc-column-done"');
-    expect(html).not.toContain("sc-card-move");
+    expect(html).not.toContain("sc-card-menu-button");
+    expect(html).not.toContain("<select");
   });
 });
 
@@ -2620,7 +2621,7 @@ describe("a goal in its views", () => {
 });
 
 describe("a card dragged to another column", () => {
-  it("has a grip only where the board can move a task, and columns that say which state they stand for", () => {
+  it("is movable only where the board can move a task, by itself and not by a grip or a select, in columns that say which state they stand for", () => {
     const tasks = [
       { ...task({ state: "idea" }), id: "0199c4d8-0000-7000-8000-000000000501", number: 51 },
     ];
@@ -2634,16 +2635,52 @@ describe("a card dragged to another column", () => {
     );
     expect(movable).toContain('data-column="idea"');
     expect(movable).toContain('data-column="dropped"');
-    expect(movable).toContain('class="sc-card-grip" title="Drag to another column"');
-    expect(movable).toContain("<select");
+    expect(movable).toContain('class="sc-board sc-board-movable"');
+    expect(movable).toContain('class="sc-card sc-card-movable"');
+    expect(movable).not.toContain("sc-card-grip");
+    expect(movable).not.toContain("<select");
     const readOnly = renderToStaticMarkup(
       <Board tasks={tasks} taskHref={() => "#"} onOpen={() => undefined} />,
     );
-    expect(readOnly).not.toContain("sc-card-grip");
+    expect(readOnly).not.toContain("sc-card-movable");
+    expect(readOnly).not.toContain("sc-board-movable");
     expect(readOnly).not.toContain("sc-drag-ghost");
     expect(columnStateOf("in_review")).toBe("in_review");
     expect(columnStateOf("archived")).toBeUndefined();
     expect(columnStateOf(undefined)).toBeUndefined();
+  });
+
+  it("has a menu with the way to the form, and the way to put the task away once it is done or dropped", () => {
+    const render = (
+      overrides: Partial<RestTask>,
+      ways: {
+        editHref?: (task: RestTask) => string;
+        onArchive?: (task: RestTask) => void;
+      },
+    ) =>
+      renderToStaticMarkup(
+        <Board tasks={[task(overrides)]} taskHref={href} onOpen={() => undefined} {...ways} />,
+      );
+    const button = 'aria-label="Task menu" aria-haspopup="menu" aria-expanded="false"';
+    const open = render(
+      { state: "in_progress" },
+      { editHref: (target) => `/projects/web/tasks/${target.number}?edit` },
+    );
+    expect(open).toContain(button);
+    // The menu is closed as rendered: nothing of what it holds is on the page yet.
+    expect(open).not.toContain('role="menu"');
+    const done = render({ state: "done" }, { onArchive: () => undefined });
+    expect(done).toContain(button);
+    // An open task cannot be put away, so the way alone gives it no menu.
+    const openWithoutForm = render({ state: "in_progress" }, { onArchive: () => undefined });
+    expect(openWithoutForm).not.toContain("sc-card-menu-button");
+    expect(render({}, {})).not.toContain("sc-card-menu-button");
+    const korean = renderToStaticMarkup(
+      <LanguageContext.Provider value={KOREAN}>
+        <Board tasks={[task()]} taskHref={href} onOpen={() => undefined} editHref={() => "#"} />
+      </LanguageContext.Provider>,
+    );
+    expect(korean).toContain('aria-label="작업 메뉴"');
   });
 });
 
@@ -2668,35 +2705,6 @@ describe("the pack token of a project", () => {
 });
 
 describe("the archive of the board (ADR-0029)", () => {
-  it("leads from the done and dropped columns to the archive, and from nowhere else", () => {
-    const html = renderToStaticMarkup(
-      <Board
-        tasks={[task({ state: "done" })]}
-        taskHref={href}
-        onOpen={() => undefined}
-        archiveHref="/projects/web/archive"
-      />,
-    );
-    expect(
-      html.match(/class="sc-column-archive" href="\/projects\/web\/archive">Archive<\/a>/g),
-    ).toHaveLength(2);
-    const without = renderToStaticMarkup(
-      <Board tasks={[task({ state: "done" })]} taskHref={href} onOpen={() => undefined} />,
-    );
-    expect(without).not.toContain("sc-column-archive");
-    const korean = renderToStaticMarkup(
-      <LanguageContext.Provider value={KOREAN}>
-        <Board
-          tasks={[]}
-          taskHref={href}
-          onOpen={() => undefined}
-          archiveHref="/projects/web/archive"
-        />
-      </LanguageContext.Provider>,
-    );
-    expect(korean).toContain(">보관함</a>");
-  });
-
   it("offers to put a done task away and to bring one back, and says on the task that it is put away", () => {
     const render = (
       overrides: Partial<RestTask>,

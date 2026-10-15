@@ -221,9 +221,8 @@ export const en = {
       title: "Nothing on the board yet",
       body: "Write the first task: what is to be done, and for whom.",
     },
-    moveTo: "Move to",
-    grip: "Drag to another column",
     archive: "Archive",
+    menu: "Task menu",
     decisions: (n: number) => count(n, "decision", "decisions"),
     decisionsTitle: "Decisions waiting for a person",
     filters: {
@@ -603,7 +602,6 @@ export const en = {
 
   archive: {
     title: "Archive",
-    lead: "Tasks done or dropped and put away: out of the board, the lists and the calendar, each still open by its number. Brought back from here.",
     loading: "Loading the archive",
     empty: {
       title: "Nothing is put away",

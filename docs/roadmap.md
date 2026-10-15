@@ -178,7 +178,7 @@ Goal: a goal's page that reads as the board does, in the views a person wants (t
 
 - [x] The pictures (2026-10-14): a picture in a comment is a thumbnail that opens in an overlay over the page, which zooms with the wheel, the buttons and two fingers, moves with a drag, and closes with Escape, its button or a click beside it, the focus going back to the thumbnail; the same bytes, loaded once and lazily, since the console makes no smaller copy of a file.
 - [x] The goal's views (2026-10-14): a goal's page laid out as the board's, its facts in a row at the head and its tasks under a switch, `?view=board|list|calendar`, the board of them with the project board's own columns and cards, the list by state, and the calendar of them on `?month=`, opening on this month while the goal is under way.
-- [x] Cards moved by hand (2026-10-14): a card dragged by its grip to another column moves the task, on the project's board and a goal's alike, with a mouse or a finger, the board scrolling when the pointer nears its edge; the state select stays for the keyboard.
+- [x] Cards moved by hand (2026-10-14): a card dragged to another column moves the task, on the project's board and a goal's alike, with a mouse or a finger, the board scrolling when the pointer nears its edge; by a grip on the card, with a state select for the keyboard, until milestone 22.
 
 ## Milestone 18, one machine, several consoles (2026-10-14)
 
@@ -208,7 +208,7 @@ Goal: a board that shows what is open and what was closed lately, and keeps the 
 - [x] The REST API (2026-10-15): `archived=` on the listing, `POST .../tasks/<id>/archive` and `.../restore`, `POST .../tasks/archive` for a goal's, `task.open`, `archivedAt` on a task, the events `task.archived` and `task.restored` ([specs/rest.md](specs/rest.md)).
 - [x] The worker (2026-10-15): the archivist puts away what was done or dropped and not touched for `TASK_ARCHIVE_AFTER_DAYS` (thirty unless configured, `0` never), every hour, in the `api` role too with `WORKER_IN_PROCESS`.
 - [x] The command (2026-10-15): `console tasks --archived`, `console task archive <number|id>`, `console task archive --goal <id>`, `console task restore <number|id>` ([specs/cli.md](specs/cli.md)).
-- [x] The default UI (2026-10-15): the archive page of a project, read a page at a time, each task brought back from there; the done and dropped columns leading to it; the task page saying a task is put away, putting one away and bringing one back; a goal closed offering to take its closed tasks along, and its page putting them away.
+- [x] The default UI (2026-10-15): the archive page of a project, read a page at a time, each task brought back from there; the board leading to it (from its done and dropped columns until milestone 22); the task page saying a task is put away, putting one away and bringing one back; a goal closed offering to take its closed tasks along, and its page putting them away.
 
 ## Milestone 21, the feedback of the first weeks (2026-10-15)
 
@@ -218,6 +218,14 @@ Goal: what the first organization on the console found in its first weeks, where
 - [x] `console member add <login> --project a,b,c` (2026-10-15): a person listed in several projects at once, one line per project, one listed already said so.
 - [x] The rules (2026-10-15): what the person whose token the command holds says is an instruction too, next to the task, the rules and the answers on the board.
 - [ ] Not taken up here: a one-line connection from the Agents page, which would make the code a credential pasted into a chat ([ADR-0011](adr/0011-an-agent-connects-with-a-short-code-a-person-approves-and-the-token-is-never-shown.md) stands); and the front pages split for people and for agents, which is a documentation change of its own.
+
+## Milestone 22, the board in hand (2026-10-15)
+
+Goal: the board as a person uses it at a desk and on a phone, after the first days on the published console: a card moved by hand from anywhere on it, the ways of a card in a menu, one way to the archive; and a picture seen wherever it was put.
+
+- [x] Cards in hand (2026-10-15): a card is dragged from anywhere on it but its title and its menu, with a mouse at once and under a finger once it has rested a moment, so that a finger that moves scrolls as before; the cursor is the standard `move`, which every platform draws itself; the state select is gone from the card, the task's page keeping the way for the keyboard.
+- [x] The card's menu (2026-10-15): three dots in the card's corner open the way to the task's form and, once the task is done or dropped, the way to put it away.
+- [x] One way to the archive (2026-10-15): the board's page leads to the archive beside the way to write a task, no longer each closed column; the archive page says nothing above its list.
 
 ## After milestone 16
 

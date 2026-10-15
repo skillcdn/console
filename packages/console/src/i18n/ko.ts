@@ -190,9 +190,8 @@ export const ko: Messages = {
       title: "보드에 아직 아무것도 없습니다",
       body: "첫 작업을 쓰세요. 무엇을, 누구를 위해 할지.",
     },
-    moveTo: "이동",
-    grip: "끌어서 다른 열로",
     archive: "보관함",
+    menu: "작업 메뉴",
     decisions: (n) => `결정 ${n}건`,
     decisionsTitle: "사람을 기다리는 결정",
     filters: {
@@ -567,7 +566,6 @@ export const ko: Messages = {
 
   archive: {
     title: "보관함",
-    lead: "완료·폐기된 뒤 보관된 작업입니다. 보드·목록·캘린더에서는 빠지고, 번호로는 여전히 열립니다. 여기서 되살립니다.",
     loading: "보관함을 불러오는 중",
     empty: {
       title: "보관된 작업이 없습니다",

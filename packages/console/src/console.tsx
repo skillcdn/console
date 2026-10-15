@@ -490,7 +490,6 @@ function ArchivePage(props: { readonly project: RestProject; readonly data: Cons
         <h1 className="sc-page-title">{archive.title}</h1>
         <LinkButton href={projectHref(key)}>{words.nav.board}</LinkButton>
       </div>
-      <p className="sc-lead">{archive.lead}</p>
       {error !== undefined && <Callout tone="danger">{error}</Callout>}
       {!loaded ? (
         <Spinner label={archive.loading} />
@@ -740,9 +739,12 @@ function ProjectPage(props: {
       <>
         <div className="sc-page-head">
           <h1 className="sc-page-title">{project.name}</h1>
-          <LinkButton href={newTaskHref(key)} variant="primary">
-            {words.board.writeTask}
-          </LinkButton>
+          <div className="sc-page-actions">
+            <LinkButton href={projectHref(key, "archive")}>{words.board.archive}</LinkButton>
+            <LinkButton href={newTaskHref(key)} variant="primary">
+              {words.board.writeTask}
+            </LinkButton>
+          </div>
         </div>
         {project.description.length > 0 && <p className="sc-lead">{project.description}</p>}
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
@@ -763,7 +765,9 @@ function ProjectPage(props: {
           taskHref={href}
           onOpen={(task) => navigation.go(href(task))}
           onMove={onMove}
-          archiveHref={projectHref(key, "archive")}
+          editHref={(task) => taskHref(key, task.number, "edit")}
+          onEdit={(task) => navigation.go(taskHref(key, task.number, "edit"))}
+          onArchive={(task) => void act(() => data.actions.archiveTask(task.id))}
           empty={
             data.tasks.length === 0 ? (
               <EmptyState
@@ -1051,7 +1055,9 @@ function ProjectPage(props: {
               onOpen={(task) => navigation.go(href(task))}
               onMove={onMove}
               today={now}
-              archiveHref={projectHref(key, "archive")}
+              editHref={(task) => taskHref(key, task.number, "edit")}
+              onEdit={(task) => navigation.go(taskHref(key, task.number, "edit"))}
+              onArchive={(task) => void act(() => data.actions.archiveTask(task.id))}
               empty={
                 towards.length === 0 ? <p className="sc-muted">{roadmap.noTasks}</p> : undefined
               }
