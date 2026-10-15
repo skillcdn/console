@@ -231,6 +231,14 @@ Goal: the board as a person uses it at a desk and on a phone, after the first da
 - [x] The way from the pack to the board (2026-10-15): the console's own rules say that work given in chat goes on the board first, written, numbered, taken, without asking whether to, and that the skill working-the-board is read before the first command of a run; `console help` and `console whoami` in a project point the same way, so that an agent brought to the console by a pack's rules finds the next step there.
 - [x] The pictures wherever they were put (2026-10-15): a picture handed in on a run is a thumbnail on the task's page that opens large, as a comment's is, and a report places it by its file name; a picture attached to a page is shown where the body names it, as the text has it, and the page's form takes a picture pasted or chosen, attaching it once the page is written.
 
+## Milestone 23, the command as an agent reads it (2026-10-15)
+
+Goal: what an agent meets first, the command's help and the pack it reads through the command, made for reading once and for finding what the work needs: the help in two layers, as [specs/cli.md](specs/cli.md) always said, and the pack browsed and searched through the console as the deployment's tools browse and search it, so that the command gives an agent what its own connection to the deployment would.
+
+- [x] The help in two layers (2026-10-15): `console help` is the map, every command in a line with what it does in a sentence and a many-formed command listing its forms without their flags, about half as long as before; `console help <command>` is the reference, the command in full with its limits and refusals; what the skill and the rules say of how the work goes is no longer repeated in the help ([specs/cli.md](specs/cli.md)).
+- [ ] The pack browsed and searched (2026-10-15): `GET .../skills/browse` and `GET .../skills/find`, the deployment's `browse_repo` and `search_repo` through the console; `console skills <folder>` and `console skills --search <words>`; `console skills` naming the pack and counting its skills and documents; `console skill --file <path>` without a skill's path ([specs/rest.md](specs/rest.md), [specs/cli.md](specs/cli.md)).
+- [ ] The command tried by an agent that meets it for the first time (2026-10-15): an isolated agent given the sentence a pack's rules give and a task's number, watched for what it read, what it got wrong and what it cost, and what it found going back into the help, the skill and the rules.
+
 ## After milestone 16
 
 Nothing is chosen yet; the list below is where the next milestone comes from. Left open by milestone 9: whether the board should end a run not heard from for a long while itself ([ADR-0020](adr/0020-the-console-does-not-claim-an-agent-is-at-work-a-run-says-when-it-was-last-heard-from-and-a-new-run-takes-over.md)); a roadmap across projects.

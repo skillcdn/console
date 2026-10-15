@@ -316,6 +316,21 @@ describe("the console command", () => {
     expect(await runCli([], whole.io)).toBe(EXIT.ok);
     expect(whole.out()).toContain("console take <number|id>");
     expect(whole.out()).toContain("Exit codes");
+    // The overview is a map: every command in a line with what it does in a sentence, and the
+    // forms of a many-formed command without their flags; the command in full is its own help.
+    expect(whole.out()).toContain(
+      "  console take <number|id> [--agent <name>]\n      Takes a task: a run begins",
+    );
+    expect(whole.out()).toContain("task new <title> [flags]");
+    expect(whole.out()).not.toContain("--token-stdin reads a token");
+    expect(whole.out()).not.toContain("--parent <number|id>");
+    expect(whole.out().length).toBeLessThan(11_000);
+    const login = harness({ fetch });
+    expect(await runCli(["help", "login"], login.io)).toBe(EXIT.ok);
+    expect(login.out()).toContain("--token-stdin reads a token");
+    const task = harness({ fetch });
+    expect(await runCli(["help", "task"], task.io)).toBe(EXIT.ok);
+    expect(task.out()).toContain("--parent <number|id>");
     const one = harness({ fetch });
     expect(await runCli(["help", "ask"], one.io)).toBe(EXIT.ok);
     expect(one.out()).toContain("--option");
@@ -1833,7 +1848,10 @@ describe("configuring, as the person", () => {
     const whole = harness({ fetch });
     expect(await runCli(["help"], whole.io)).toBe(EXIT.ok);
     expect(whole.out()).toContain("Configuring, as the person");
-    expect(whole.out()).toContain('project new <key> "<name>"');
+    expect(whole.out()).toContain("project new <key> <name> [flags]");
+    const project = harness({ fetch });
+    expect(await runCli(["help", "project"], project.io)).toBe(EXIT.ok);
+    expect(project.out()).toContain('project new <key> "<name>"');
   });
 });
 
