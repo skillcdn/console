@@ -814,6 +814,12 @@ table {
   pointer-events: none;
 }
 
+/* A column's frame stands in front of what scrolls within it: a card scrolling out goes under
+   the lit edge, never over it. The other panes do not scroll, and keep the rim under the content. */
+.sc-column::before {
+  z-index: 1;
+}
+
 .sc-panel {
   margin-bottom: var(--sc-space-5);
   padding: var(--sc-space-5);
