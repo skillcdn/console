@@ -86,7 +86,7 @@ import {
   formatVersionLine,
   formatWork,
 } from "./format.js";
-import { COMMAND_HELP, helpFor, usage } from "./help.js";
+import { COMMAND_HELP, helpFor, ownSkillPath, usage } from "./help.js";
 import { describeInstall, type Install, updateCommandFor } from "./install.js";
 import type { NoticeStore } from "./notices.js";
 import { createServeHandler, DEFAULT_SERVE_PORT, type Listen } from "./serve.js";
@@ -339,11 +339,11 @@ async function currentRun(project: ProjectClient, values: Values): Promise<strin
   }
   if (items.length === 0) {
     throw failed(
-      "No run of yours is open in this project. Take a task first: console take <number>",
+      "run.none: no run of yours is open in this project. Take a task first: console take <number>; or name a run: --run <id>",
     );
   }
   throw failed(
-    `Several runs of yours are open; say which with --run <id>:\n${items.map((run) => `  ${formatRunLine(run)}`).join("\n")}`,
+    `run.ambiguous: several runs of yours are open in this project; say which with --run <id>:\n${items.map((run) => `  ${formatRunLine(run)}`).join("\n")}`,
   );
 }
 
@@ -851,14 +851,14 @@ const whoami: Command = async (args, io) => {
         ...(key === undefined
           ? []
           : [
-              "What this organization asks of agents: console rules. How the board is worked: the skill working-the-board, shipped with this command (console skills says where it is).",
+              `What this organization asks of agents: console rules. How the board is worked: the skill working-the-board, shipped with this command${io.skillsDir === undefined ? " (console skills says where it is)." : `: ${ownSkillPath(io.skillsDir)}`}`,
             ]),
         `This command is ${io.version ?? "of a version it does not know"}${io.install === undefined ? "" : `, ${describeInstall(io.install)}`}; ${consoleWords}.`,
         ...(verdict === "behind"
           ? [`A newer command exists. Update it: ${updateWords(io, me.console?.version)}`]
           : verdict === "ahead"
             ? [
-                `This command is newer than the console: what the console has not got yet is refused as not found. To match the console: ${updateWords(io, me.console?.version)}`,
+                `This command is newer than the console: it works, and what the console has not got yet is refused as not found; nothing to do until then. To match the console then: ${updateWords(io, me.console?.version)}`,
               ]
             : []),
       ].join("\n"),
@@ -1098,9 +1098,11 @@ const skill: Command = async (args, io) => {
     answer(io, session, { ...read, content }, () => formatSkillFile(read, content));
     return EXIT.ok;
   }
-  const path = theOne(
-    positionals,
-    "Say which skill: console skill <path of its SKILL.md>, or console skill --file <path> for a file of the pack",
+  const { path, pack } = skillPathOf(
+    theOne(
+      positionals,
+      "Say which skill: console skill <path of its SKILL.md>, or console skill --file <path> for a file of the pack",
+    ),
   );
   // The skill whole: its pages until complete, the rules first, as load_skill lays them out.
   const pages: RestSkillPage[] = [];
@@ -1120,10 +1122,35 @@ const skill: Command = async (args, io) => {
   if (last === undefined) {
     throw failed("The skill could not be read.");
   }
+  // A URI of another pack would read this pack's skill at the same path, or nothing: said instead.
+  if (pack !== undefined && last.address !== null && last.address !== pack) {
+    throw misuse(
+      `That URI is of another pack, ${pack}; this project's pack is at ${last.address}. Say the path of the SKILL.md, or a URI console skills lists.`,
+    );
+  }
   const loaded = last;
   answer(io, session, { ...loaded, pages }, () => formatSkillLoad(loaded, pages));
   return EXIT.ok;
 };
+
+/**
+ * A skill's path as given, or taken out of the URI `console skills` lists beside it
+ * (`skill://gh/<owner>/<repo>/<path>`), with the pack the URI names, for the read to check.
+ */
+function skillPathOf(given: string): { readonly path: string; readonly pack?: string } {
+  const uri = /^skill:\/\/(gh\/[^/]+\/[^/]+)\/(.+)$/.exec(given);
+  const named = uri?.[1];
+  const within = uri?.[2];
+  if (named !== undefined && within !== undefined) {
+    return { path: within, pack: `/${named}` };
+  }
+  if (given.startsWith("skill://")) {
+    throw misuse(
+      `Not a skill's URI the console knows: ${given}. Say the path of its SKILL.md from the repository's root, or the URI console skills lists.`,
+    );
+  }
+  return { path: given };
+}
 
 /** A version number given as a flag, or nothing; anything else is not understood. */
 function versionOf(given: string | undefined): number | undefined {
@@ -1487,24 +1514,32 @@ const take: Command = async (args, io) => {
   });
   // The rules come with the run, as they read for the person: everything from here acts
   // within them (ADR-0023); the task is read again, as it stands now that it is taken.
-  const [ruling, me, taken, comments] = await Promise.all([
+  const [ruling, me, taken, comments, openRuns] = await Promise.all([
     project.rules(),
     session.client.me(),
     project.task(ref),
     project.comments(found.id),
+    project.runs({ open: true, mine: true }),
   ]);
   // Taking a task with a run open on it ends that run (ADR-0020): said when it happened.
   const tookOver =
     found.openRuns > 0
       ? " A run that was open on it is over now: the board cannot know whether its agent still ran, so taking it was deciding."
       : "";
+  // Another run of this token open in the project makes every command on a run ask which
+  // (currentRun): said here, with the id to say, before the first report runs into it.
+  const others = openRuns.items.filter((item) => item.id !== run.id);
+  const elsewhere =
+    others.length === 0
+      ? ""
+      : `\nOther runs of yours are open in this project (${others.map((item) => `#${item.taskNumber}`).join(", ")}): say which run on report, hand-in, ask, finish and fail, --run ${run.id} for this one.`;
   const rules = {
     workspace: forPerson(ruling.workspace, me.language),
     project: forPerson(ruling.project, me.language),
   };
   answer(io, session, { run, task: taken, comments: comments.items, rules }, () =>
     [
-      `Run ${run.id} began on #${found.number} ${found.title}, as "${run.agent}" for ${run.person.login}. The task is in progress and theirs.${tookOver}`,
+      `Run ${run.id} began on #${found.number} ${found.title}, as "${run.agent}" for ${run.person.login}. The task is in progress and theirs.${tookOver}${elsewhere}`,
       "",
       formatTask(taken, undefined, undefined, comments.items),
       "",
@@ -2540,7 +2575,7 @@ const COMMANDS: Readonly<Record<string, Command>> = {
 
 function help(io: CliIo, name: string | undefined): number {
   if (name === undefined) {
-    io.stdout(usage(io.version));
+    io.stdout(usage(io.version, io.skillsDir));
     return EXIT.ok;
   }
   const found = helpFor(name);
@@ -2614,7 +2649,7 @@ async function noticeVersions(io: CliIo, seen: ConsoleSeen): Promise<void> {
   io.stderr(
     verdict === "behind"
       ? `A newer command exists: the console runs ${seen.version}, this command is ${io.version}. Update it: ${updateWords(io, seen.version)}\n`
-      : `This command (${io.version}) is newer than the console (${seen.version}, which takes ${seen.range ?? "an older line"}): what the console has not got yet is refused as not found. The console's operator updates it; to match the console meanwhile: ${updateWords(io, seen.version)}\n`,
+      : `This command (${io.version}) is newer than the console (${seen.version}, which takes ${seen.range ?? "an older line"}): it works, and what the console has not got yet is refused as not found; nothing to do until then. The console's operator updates it; to match the console meanwhile: ${updateWords(io, seen.version)}\n`,
   );
   await io.notices?.save({
     command: io.version,

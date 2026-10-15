@@ -296,8 +296,12 @@ export function formatSkills(skills: RestSkills, ownSkills?: string): string {
   if (skills.items.length === 0) {
     lines.push("No skills at this address.");
   }
+  // The path, which console skill takes, and the URI beside it, which a host's own connection takes.
   for (const skill of skills.items) {
-    lines.push(`${skill.name}  ${skill.description}`, `    ${skill.uri ?? skill.path}`);
+    lines.push(
+      `${skill.name}  ${skill.description}`,
+      `    ${skill.path}${skill.uri === null ? "" : `  ${skill.uri}`}`,
+    );
   }
   lines.push(
     "",

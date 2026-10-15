@@ -325,6 +325,26 @@ describe("the console command", () => {
     expect(whole.out()).not.toContain("--token-stdin reads a token");
     expect(whole.out()).not.toContain("--parent <number|id>");
     expect(whole.out().length).toBeLessThan(11_000);
+    // What holds everywhere: every exit code, the fourth included.
+    expect(whole.out()).toContain("4 the command and the\nconsole do not go together");
+    // Where the skill is, when the command knows; else where to ask.
+    expect(whole.out()).toContain("first command of a run (console whoami says where it is)");
+    const located = harness({
+      fetch,
+      skillsDir: "/usr/lib/node_modules/@skillcdn/console/skills/",
+    });
+    expect(await runCli([], located.io)).toBe(EXIT.ok);
+    expect(located.out()).toContain(
+      "first command of a run:\n/usr/lib/node_modules/@skillcdn/console/skills/working-the-board/SKILL.md",
+    );
+    // A command on a run says in its own help how the run is named, and what it refuses when it cannot tell.
+    const report = harness({ fetch });
+    expect(await runCli(["help", "report"], report.io)).toBe(EXIT.ok);
+    expect(report.out()).toContain("report - [--run <id>]");
+    expect(report.out()).toContain("run.ambiguous: several runs of yours are open");
+    expect(whole.out()).toContain(
+      "  console report <markdown>  |  report --file <path>  |  report -\n",
+    );
     const login = harness({ fetch });
     expect(await runCli(["help", "login"], login.io)).toBe(EXIT.ok);
     expect(login.out()).toContain("--token-stdin reads a token");
@@ -660,8 +680,9 @@ describe("the console command", () => {
     expect(h.out()).toContain("skills at /gh/acme/skills, served by https://skillcdn.test: ready");
     expect(h.out()).toContain("Acme  What Acme does, as skills.");
     expect(h.out()).toContain("1 skill, 12 documents: console skills <folder>");
+    // The path, which console skill takes, and beside it the URI a host's own connection takes.
     expect(h.out()).toContain(
-      "review  Reviews a change.\n    skill://gh/acme/skills/review/SKILL.md",
+      "review  Reviews a change.\n    review/SKILL.md  skill://gh/acme/skills/review/SKILL.md",
     );
     // Where a person connects an agent that has no connection, and where the console's own skills are.
     expect(h.out()).toContain("which a person makes at https://skillcdn.test/gh/acme/skills");
@@ -697,6 +718,7 @@ describe("the console command", () => {
       [`GET ${IN}/rules`]: { body: RULES },
       "GET /api/v1/me": { body: ME },
       [`GET ${IN}/tasks/${TASK.id}/comments`]: { body: { items: [COMMENT] } },
+      [OPEN_RUNS]: { body: { more: false, items: [RUN] } },
     });
     const h = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["take", "7"], h.io)).toBe(EXIT.ok);
@@ -704,8 +726,10 @@ describe("the console command", () => {
       `Run ${RUN.id} began on #7 Fix the parser, as "Claude Code" for alice`,
     );
     expect(h.out()).toContain("It fails on empty input.");
-    // Nothing was open on the task, so nothing is said of a take-over.
+    // Nothing was open on the task, so nothing is said of a take-over; no other run of the
+    // token is open in the project, so nothing of saying which run.
     expect(h.out()).not.toContain("taking it was deciding");
+    expect(h.out()).not.toContain("Other runs of yours");
     // The rules come with the run, the workspace's then the project's, before what to do next.
     expect(h.out()).toMatch(/Read these\.[\s\S]*Ask before pushing\.[\s\S]*Say how it goes/);
     // The discussion comes with the task, whole, each file with the command that reads it.
@@ -719,7 +743,7 @@ describe("the console command", () => {
     expect(calls[1]?.body).toEqual({ taskId: TASK.id });
     const named = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["take", "7", "--agent", "Codex on the laptop"], named.io)).toBe(EXIT.ok);
-    expect(calls[7]?.body).toEqual({ taskId: TASK.id, agent: "Codex on the laptop" });
+    expect(calls[8]?.body).toEqual({ taskId: TASK.id, agent: "Codex on the laptop" });
     const asJson = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["take", "7", "--json"], asJson.io)).toBe(EXIT.ok);
     expect(JSON.parse(asJson.out())).toEqual({
@@ -735,10 +759,31 @@ describe("the console command", () => {
       [`GET ${IN}/rules`]: { body: RULES },
       "GET /api/v1/me": { body: ME },
       [`GET ${IN}/tasks/${TASK.id}/comments`]: { body: { items: [] } },
+      [OPEN_RUNS]: { body: { more: false, items: [RUN] } },
     });
     const over = harness({ fetch: busy.fetch, env: SIGNED_IN });
     expect(await runCli(["take", "7"], over.io)).toBe(EXIT.ok);
     expect(over.out()).toContain("A run that was open on it is over now");
+    // Another run of the token open in the project: said, with the id to say from here on,
+    // before the first report meets the refusal.
+    const beside = fakeConsole({
+      [`GET ${IN}/tasks/7`]: { body: TASK },
+      [`POST ${IN}/runs`]: { status: 201, body: RUN },
+      [`GET ${IN}/rules`]: { body: RULES },
+      "GET /api/v1/me": { body: ME },
+      [`GET ${IN}/tasks/${TASK.id}/comments`]: { body: { items: [] } },
+      [OPEN_RUNS]: {
+        body: {
+          more: false,
+          items: [RUN, { ...RUN, id: "0199c4d8-0000-7000-8000-000000000021", taskNumber: 9 }],
+        },
+      },
+    });
+    const two = harness({ fetch: beside.fetch, env: SIGNED_IN });
+    expect(await runCli(["take", "7"], two.io)).toBe(EXIT.ok);
+    expect(two.out()).toContain(
+      `Other runs of yours are open in this project (#9): say which run on report, hand-in, ask, finish and fail, --run ${RUN.id} for this one.`,
+    );
   });
 
   it("reads the rules as they are for the person: {language} filled with the language they chose", async () => {
@@ -1897,6 +1942,19 @@ describe("the versions of the command and the console (ADR-0025)", () => {
       `alice (member) at Acme, ${ORIGIN}; project web\nWhat this organization asks of agents: console rules. How the board is worked: the skill working-the-board, shipped with this command (console skills says where it is).\nThis command is 0.1.18, installed for the machine with npm in C:/Users/alice/AppData/Roaming/npm; the console is 0.1.18 and takes >=0.1.18 <0.2.0.\n`,
     );
     expect(h.err()).toBe("");
+    // Where the skill working-the-board is, as the machine writes paths, when the command knows.
+    const located = harness({
+      fetch,
+      env: SIGNED_IN,
+      version: "0.1.18",
+      install: GLOBAL,
+      skillsDir:
+        "C:\\Users\\alice\\AppData\\Roaming\\npm\\node_modules\\@skillcdn\\console\\skills\\",
+    });
+    expect(await runCli(["whoami"], located.io)).toBe(EXIT.ok);
+    expect(located.out()).toContain(
+      "How the board is worked: the skill working-the-board, shipped with this command: C:\\Users\\alice\\AppData\\Roaming\\npm\\node_modules\\@skillcdn\\console\\skills\\working-the-board\\SKILL.md\n",
+    );
     const version = harness({ fetch, version: "0.1.18", install: GLOBAL });
     expect(await runCli(["--version"], version.io)).toBe(EXIT.ok);
     expect(version.out()).toBe(
@@ -1954,7 +2012,7 @@ describe("the versions of the command and the console (ADR-0025)", () => {
     });
     expect(await runCli(["tasks"], ahead.io)).toBe(EXIT.ok);
     expect(ahead.err()).toBe(
-      "This command (0.1.19) is newer than the console (0.1.18, which takes >=0.1.18 <0.2.0): what the console has not got yet is refused as not found. The console's operator updates it; to match the console meanwhile: npm install -g @skillcdn/console@0.1.18\n",
+      "This command (0.1.19) is newer than the console (0.1.18, which takes >=0.1.18 <0.2.0): it works, and what the console has not got yet is refused as not found; nothing to do until then. The console's operator updates it; to match the console meanwhile: npm install -g @skillcdn/console@0.1.18\n",
     );
     // The same version, or a console that says nothing of itself: nothing to say.
     const same = harness({
@@ -1982,7 +2040,7 @@ describe("the versions of the command and the console (ADR-0025)", () => {
     });
     expect(await runCli(["whoami"], who.io)).toBe(EXIT.ok);
     expect(who.out()).toContain(
-      "This command is newer than the console: what the console has not got yet is refused as not found. To match the console: npm install -g @skillcdn/console@0.1.18",
+      "This command is newer than the console: it works, and what the console has not got yet is refused as not found; nothing to do until then. To match the console then: npm install -g @skillcdn/console@0.1.18",
     );
     expect(who.err()).toBe("");
   });
@@ -2442,6 +2500,22 @@ describe("the pack of the project, through the console (ADR-0028)", () => {
     const file = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["skill", "--file", "review/guide.md"], file.io)).toBe(EXIT.ok);
     expect(file.out()).toContain("--- file: review/guide.md (14 characters) ---\nHow to review.");
+    // The URI console skills lists beside the path is taken too; one of another pack is not.
+    const byUri = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["skill", "skill://gh/acme/skills/review/SKILL.md"], byUri.io)).toBe(
+      EXIT.ok,
+    );
+    expect(byUri.out()).toContain("--- skill: review/SKILL.md ---\nRead the diff.");
+    const elsewhere = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["skill", "skill://gh/other/pack/review/SKILL.md"], elsewhere.io)).toBe(
+      EXIT.usage,
+    );
+    expect(elsewhere.err()).toContain(
+      "That URI is of another pack, /gh/other/pack; this project's pack is at /gh/acme/skills",
+    );
+    const odd = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["skill", "skill://elsewhere/review/SKILL.md"], odd.io)).toBe(EXIT.usage);
+    expect(odd.err()).toContain("Not a skill's URI the console knows");
     // Described only: named and pointed at, nothing of its body.
     const described = harness({
       fetch: fakeConsole({

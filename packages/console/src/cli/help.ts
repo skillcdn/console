@@ -60,10 +60,20 @@ const COMMON_REFUSALS = [
   "network: the console could not be reached at its address",
 ];
 
+/** How a command on a run finds its run, and what it says when it cannot: the command's own refusals. */
+const RUN_CHOICE = [
+  "run.none: no run of yours is open in the project; take a task first, or name a run with --run <id>",
+  "run.ambiguous: several runs of yours are open in the project; say which with --run <id>",
+];
+
 const RUN_REFUSALS = [
+  ...RUN_CHOICE,
   "run.not_yours: the run is another person's",
   "run.over: the run has ended already",
 ];
+
+/** What every command on a run says of the run it acts on. */
+const ON_THE_RUN = "On your one open run in the project, or the one --run <id> names.";
 
 const MARKDOWN = `Markdown, up to ${MAX_BODY_LENGTH} characters`;
 
@@ -291,7 +301,7 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     synopsis:
       "One skill of the pack whole, its rules first; or with --file a file of the pack, or what a folder holds.",
     about:
-      "One skill of the project's pack, whole, as load_skill lays it out for you: the rules of the repository from its root to the nearest manifest, the skill's body, the files it includes, each under a line that names its path; then the files it has and what it refers to. Read by the console from the SkillCDN deployment, with the pack token the project holds where the pack is private, so you need no connection of your own. <path> is the path of the SKILL.md from the repository's root, as console skills lists it. --file <path> reads a file of the pack instead, whole, or what a folder holds, and takes no skill's path beside it; console skills <folder> shows a folder with more.",
+      "One skill of the project's pack, whole, as load_skill lays it out for you: the rules of the repository from its root to the nearest manifest, the skill's body, the files it includes, each under a line that names its path; then the files it has and what it refers to. Read by the console from the SkillCDN deployment, with the pack token the project holds where the pack is private, so you need no connection of your own. <path> is the path of the SKILL.md from the repository's root, as console skills lists it, or the URI it lists beside the path (skill://gh/<owner>/<repo>/<path>). --file <path> reads a file of the pack instead, whole, or what a folder holds, and takes no skill's path beside it; console skills <folder> shows a folder with more.",
     refusals: [
       "status not_found: the pack is not served to the console; private, with no pack token on the project",
       "status token_invalid: the pack token the project holds no longer works; an owner sets a new one",
@@ -325,10 +335,11 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     ],
   },
   report: {
-    usage: "report <markdown>  |  report --file <path>  |  report -",
+    usage:
+      "report <markdown> [--run <id>]  |  report --file <path> [--run <id>]  |  report - [--run <id>]",
+    overview: "report <markdown>  |  report --file <path>  |  report -",
     synopsis: "Says how the work goes, in Markdown, on the open run.",
-    about:
-      "Says how the work goes, in Markdown: what was found, what was done, what is next. With - the report is read from standard input.",
+    about: `Says how the work goes, in Markdown: what was found, what was done, what is next. With - the report is read from standard input. ${ON_THE_RUN}`,
     limits: [
       `the report: ${MARKDOWN}, not blank`,
       `at most ${MAX_REPORTS_PER_RUN} reports on one run`,
@@ -336,10 +347,10 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     refusals: [...RUN_REFUSALS, "run.too_many_reports: the run carries as many as one may"],
   },
   "hand-in": {
-    usage: "hand-in <https url | file path> [--label <words>]",
+    usage: "hand-in <https url | file path> [--label <words>] [--run <id>]",
+    overview: "hand-in <https url | file path> [--label <words>]",
     synopsis: "Hands in what was made: an https link, or a file from this machine.",
-    about:
-      "Hands in what was made: a link (a branch, a pull request, a document, a page), or a file from this machine, which the console keeps and shows on the task; a picture is shown there small and large, and a report that names it as ![words](its name) shows it where the words are.",
+    about: `Hands in what was made: a link (a branch, a pull request, a document, a page), or a file from this machine, which the console keeps and shows on the task; a picture is shown there small and large, and a report that names it as ![words](its name) shows it where the words are. ${ON_THE_RUN}`,
     limits: [
       "a link: https only",
       `a file: up to ${MAX_FILE_BYTES} bytes, not empty; it is called by its name, without the path`,
@@ -354,17 +365,18 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   },
   ask: {
     usage:
+      'ask "<question>" --option "<label>" --option "<label>" [...] [--body <markdown>|--file <path>] [--wait <seconds>] [--run <id>]',
+    overview:
       'ask "<question>" --option "<label>" --option "<label>" [...] [--body <markdown>|--file <path>] [--wait <seconds>]',
     synopsis:
       "Raises a decision a person must make, with options, and waits a while for the answer.",
-    about:
-      "Raises a decision a person must make: the question, the options to choose from, and what they need to know. The run waits for the answer. The command waits 60 seconds for it unless --wait says otherwise, and exits with 3 if it is still to come: keep waiting with `console decision <id> --wait 100`, within what your shell gives one command. The decision's id is printed as soon as it is raised.",
+    about: `Raises a decision a person must make: the question, the options to choose from, and what they need to know. The run waits for the answer. The command waits 60 seconds for it unless --wait says otherwise, and exits with 3 if it is still to come: keep waiting with \`console decision <id> --wait 100\`, within what your shell gives one command. The decision's id is printed as soon as it is raised. ${ON_THE_RUN}`,
     limits: [
       `question: one line, up to ${MAX_QUESTION_LENGTH} characters`,
       `options: ${MIN_OPTIONS} to ${MAX_OPTIONS}, each one line up to ${MAX_OPTION_LABEL_LENGTH} characters`,
       `body: ${MARKDOWN}`,
     ],
-    refusals: ["decision.invalid_run: the run is not yours, or is over"],
+    refusals: [...RUN_CHOICE, "decision.invalid_run: the run is not yours, or is over"],
   },
   decision: {
     usage: "decision <id> [--wait <seconds>]  |  decision <id> --outcome <markdown>|--file <path>",
@@ -381,17 +393,18 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     about: `The decisions on the board, the waiting first; --open keeps only those. A page at a time: ${DEFAULT_PAGE_LIMIT} unless --limit says otherwise, from --offset on.`,
   },
   finish: {
-    usage: 'finish [--summary "<markdown>"|--file <path>]',
+    usage: 'finish [--summary "<markdown>"|--file <path>] [--run <id>]',
+    overview: 'finish [--summary "<markdown>"|--file <path>]',
     synopsis: "Ends the run: done and handed in; the task goes up for review.",
-    about:
-      "Ends the run: the work is done and handed in, and the task goes up for review. The summary says what was done and what is left; the result itself goes in a last report before, which may be much longer.",
+    about: `Ends the run: the work is done and handed in, and the task goes up for review. The summary says what was done and what is left; the result itself goes in a last report before, which may be much longer. ${ON_THE_RUN}`,
     limits: [`summary: ${`Markdown, up to ${MAX_SUMMARY_LENGTH} characters`}`],
     refusals: RUN_REFUSALS,
   },
   fail: {
-    usage: 'fail [--summary "<markdown>"|--file <path>]',
+    usage: 'fail [--summary "<markdown>"|--file <path>] [--run <id>]',
+    overview: 'fail [--summary "<markdown>"|--file <path>]',
     synopsis: "Ends the run: the work could not be done.",
-    about: "Ends the run: the work could not be done. The summary says why, and what is left.",
+    about: `Ends the run: the work could not be done. The summary says why, and what is left. ${ON_THE_RUN}`,
     limits: [`summary: Markdown, up to ${MAX_SUMMARY_LENGTH} characters`],
     refusals: RUN_REFUSALS,
   },
@@ -457,7 +470,7 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     usage: 'write <path> [--title "<title>"] --body <markdown>|--file <path> [--base <version>]',
     synopsis: "Writes a page: a new one at a path, or a new version of the page there.",
     about:
-      "Writes a page: the first version at a new path, or a new version of the page there. A link in the body whose destination is a page's path (guides/onboarding) refers to that page, and the page says what refers to it. Without --title the page keeps its title. With --base, the write is refused if the page has moved on since that version.",
+      "Writes a page: the first version at a new path, or a new version of the page there. The title is shown above the body, on the page and by console doc, so the body does not begin with it as a heading. A link in the body whose destination is a page's path (guides/onboarding) refers to that page, and the page says what refers to it. Without --title the page keeps its title. With --base, the write is refused if the page has moved on since that version.",
     limits: [
       `path: ${DOCUMENT_PATH}`,
       `title: one line, up to ${MAX_TITLE_LENGTH} characters`,
@@ -510,13 +523,24 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   },
 };
 
-/** The first lines of the usage, with the version of the command when it is known. */
-const preamble = (version: string | undefined): string =>
+/**
+ * Where the skill working-the-board is, among the console's own skills in `skillsDir`, with the
+ * separators the directory came with, so that the path reads as the machine writes paths.
+ */
+export function ownSkillPath(skillsDir: string): string {
+  const separator = skillsDir.includes("\\") ? "\\" : "/";
+  const base =
+    skillsDir.endsWith("/") || skillsDir.endsWith("\\") ? skillsDir : `${skillsDir}${separator}`;
+  return `${base}working-the-board${separator}SKILL.md`;
+}
+
+/** The first lines of the usage, with the version of the command and where its skill is, when known. */
+const preamble = (version: string | undefined, skillsDir: string | undefined): string =>
   `console${version === undefined ? "" : ` ${version}`}: the board of your organization's work with AI agents, from the command line.
 You act as the person whose token you hold; everything you send is shown to people as text.
 The rules of this organization come with the task: console take prints them; console rules reads them any time.
-How the board is worked is the skill working-the-board, installed with this command: console skills prints
-where it is; read it before the first command of a run.
+How the board is worked is the skill working-the-board, installed with this command; read it before the
+first command of a run${skillsDir === undefined ? " (console whoami says where it is)" : `:\n${ownSkillPath(skillsDir)}`}
 
 Usage: console <command> [arguments] [--json] [--url <origin>] [--project <key>]
 A command in full, every form and flag ([flags] below), the limits the console holds it to and what
@@ -532,7 +556,8 @@ with several open, say which with --run <id>. A Markdown body given as - is read
 console --version says which version of the command this is.
 
 Exit codes: 0 done; 1 the console refused, or could not be reached (the reason is on stderr);
-2 the command was not understood; 3 the decision still waits for a person.
+2 the command was not understood; 3 the decision still waits for a person; 4 the command and the
+console do not go together, and stderr says which to update and how.
 What the console refuses is printed as its code and its words. Everywhere:
 ${COMMON_REFUSALS.map((refusal) => `  ${refusal}`).join("\n")}
 
@@ -583,8 +608,8 @@ const SECTIONS: readonly { readonly title: string; readonly commands: readonly s
 ];
 
 /** The overview, as `console help` prints it: every command in a line, naming the version when it is known. */
-export function usage(version?: string): string {
-  const parts = [preamble(version)];
+export function usage(version?: string, skillsDir?: string): string {
+  const parts = [preamble(version, skillsDir)];
   for (const section of SECTIONS) {
     parts.push(`${section.title}`);
     for (const name of section.commands) {

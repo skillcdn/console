@@ -314,7 +314,7 @@ describe("the command line", () => {
     expect(await readTask(bob, task.id)).toMatchObject({ state: "in_review", openRuns: 0 });
     const late = await console_(["report", "late"]);
     expect(late.code).toBe(EXIT.failed);
-    expect(late.err).toContain("No run of yours is open");
+    expect(late.err).toContain("run.none: no run of yours is open");
     const asJson = await console_(["run", runId, "--json"]);
     expect(restRunSchema.parse(JSON.parse(asJson.out))).toMatchObject({
       status: "finished",

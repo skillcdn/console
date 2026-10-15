@@ -5,7 +5,7 @@ license: MIT
 compatibility: Needs a shell with the console command on the PATH (npm install -g @skillcdn/console, Node.js 24 or newer), signed in by a person. Nothing else; the command needs no key of its own and the agent never sees a token.
 metadata:
   author: skillcdn
-  version: "1.16"
+  version: "1.17"
 skillcdn:
   translations:
     ko:
@@ -54,7 +54,7 @@ Told which task, go to phase 2: `console take` prints the rules of the board wit
 
 ### Phase 2: Take
 
-`console take <number>`. A run begins: the task is in progress and the person's, and every report, hand-in, question and ending from here acts on this run. Taken by mistake, `console abandon` leaves it and the task stays as it was.
+`console take <number>`. A run begins, and the command says its id: the task is in progress and the person's, and every report, hand-in, question and ending from here acts on this run. With another run of the person's open in the project, which `console take` says, each of those commands names the run: `--run <id>`. Taken by mistake, `console abandon` leaves it and the task stays as it was.
 
 ### Phase 3: Work, and report at the milestones
 
@@ -78,13 +78,7 @@ After the last report, `console finish --summary "<what was done, and what is le
 
 ## Setting up, when told to
 
-A task or a person may ask for the project itself rather than work in it: a project made or changed (`console project new <key> "<name>"`, `console project edit <key>`), its mark (`console project icon <key> <file>`), its members (`console member add <login>`, `console member role`, `console member remove`), the workspace's categories (`console category new <key> "<name>"`, `console category edit`, `console category remove`), what a person is (`console person role <login> <admin|member>`), its goals (`console goal new`), and its rules (`console rules write --file <path>`, from [the example](references/project-rules.md); the workspace's with `--workspace`, for an administrator). The agent does these as its person may, an owner of the project or an administrator of the workspace ([ADR-0021](/docs/adr/0021-a-token-configures-as-its-person-does.md)); the feed names the agent beside the person on each. What the person may not, the console refuses (`auth.forbidden`): that step goes back to the person in the report, never worked around. `console people` and `console members` say who is who, by login.
-
-## The sentence a repository carries
-
-A repository whose checkouts are worked through a console says so in its agreement (AGENTS.md, or CLAUDE.md where that is the file agents read), in one sentence copied as it is and placed at the head of its workflow; a pack says it in the rules of its `SKILLCDN.md`, with `the checkout` for `this checkout`. The sentence binds the checkout to the console and says nothing of how: the command's help and this skill say how, and the repository's own agreement keeps saying how a change is committed and pushed.
-
-> **Bound to a console?** When `.skillcdn-console.json` is in this checkout, or `console whoami` names a project, work the task through that SkillCDN console (`console help` says how).
+A task or a person may ask for the project itself rather than work in it: a project made or changed, its mark, its members, the workspace's categories, what a person is, its goals, its rules. [references/setting-up.md](references/setting-up.md) says which commands do that, as the person may: an owner of the project, or an administrator of the workspace; a project's rules start from [references/project-rules.md](references/project-rules.md).
 
 ## Hard rules
 
@@ -93,9 +87,10 @@ A repository whose checkouts are worked through a console says so in its agreeme
 - The board's words are the vocabulary's own: states `idea`, `ready`, `in_progress`, `in_review`, `done` and `dropped`; priorities `low`, `normal`, `high` and `urgent`; a day is `2026-10-24`. Taking a task moves it, finishing moves it; it is not moved by hand around a run. When a task is started and when it is done, the board writes down itself: never typed.
 - The plan is the person's: a task's days, its category and its goal are changed (`console task edit`) only when the task says so or a person asks, and a goal is set or moved (`console goal new`, `console goal edit`) only when the person is an owner and said to.
 - The rules are the people's: `console rules write` only when a person asked for exactly that, and never to loosen what they ask of agents.
-- Exit codes: `0` done; `1` refused or unreachable, the reason on standard error as a code and words, which `console help <command>` names; `2` not understood; `3` a decision still waits.
+- Exit codes: `0` done; `1` refused or unreachable, the reason on standard error as a code and words, which `console help <command>` names; `2` not understood; `3` a decision still waits; `4` the command and the console do not go together, and standard error says which to update.
 - Everything sent is held to limits the console states (`console help <command>`); a refusal `request.invalid` names the field.
 
-## Terms
+## Beside this skill
 
-- **Task**: what is to be done, numbered per project, with its plan (a category, a goal, the days it starts and is due) and its moments (when it was started and done, which the board keeps). **Goal**: what the project works towards, on its roadmap, with the day it is meant to be reached by; its progress is its tasks. **Category**: a kind of work, the workspace's word for it, by key. **Run**: one agent at work on one task for one person, with its reports, what it handed in, and what it waits for. **Decision**: a question with options, which a person answers on the board. **Page**: a document of the project, Markdown at a path that does not change. **Project**: a board of its own, with its members and its skills address.
+- The sentence a repository's agreement carries to bind its checkouts to a console, and how a pack says it: [references/the-sentence.md](references/the-sentence.md).
+- The board's words, task, goal, category, run, decision, page and project, said once: [references/terms.md](references/terms.md).
