@@ -302,6 +302,7 @@ describe("projects", () => {
       description: "",
       visibility: "private",
       skillsAddress: null,
+      packToken: null,
       role: "owner",
       openDecisions: 0,
       openRuns: 1,

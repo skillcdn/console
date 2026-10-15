@@ -160,3 +160,149 @@ describe("the SkillCDN source", () => {
     expect(cut.logs.at(-1)?.msg).toBe("the SkillCDN deployment stopped answering");
   });
 });
+
+describe("the SkillCDN source, reading the pack (ADR-0028)", () => {
+  const skill = {
+    status: "ready",
+    skill: {
+      path: "review/SKILL.md",
+      name: "review",
+      directory: "review",
+      description: "Reviews a change.",
+      license: "MIT",
+      compatibility: null,
+      allowedTools: null,
+      metadata: {},
+      body: "Read the diff.",
+      files: ["review/guide.md"],
+      filesTruncated: false,
+      included: ["review/checklist.md"],
+      warnings: [],
+      translations: {},
+      rules: null,
+      ruleChain: [{ path: "SKILLCDN.md", body: "Be kind.", truncated: false }],
+      includedContents: [{ path: "review/checklist.md", content: "- tests", truncated: false }],
+      references: [{ href: "guide.md", path: "review/guide.md", status: "available" }],
+      complete: false,
+      nextCursor: "two",
+      serving: {
+        license: { kind: "permissive", name: "MIT", source: null },
+        full: true,
+        sourceUrl: "https://github.com/acme/skills/blob/main/review/SKILL.md",
+      },
+    },
+  };
+
+  it("sends the pack token as the bearer and nowhere else, and reads a skill as load_skill lays it out", async () => {
+    const sent: { url: string; init: RequestInit }[] = [];
+    const { source: skills } = source(async (url, init) => {
+      sent.push({ url, init });
+      return json(skill);
+    });
+    const loaded = await skills.load(ADDRESS, "review/SKILL.md", "one", "scdn_repo_x");
+    expect(sent[0]?.url).toBe(
+      "https://skillcdn.test/api/v1/skills/gh/acme/skills?path=review%2FSKILL.md&cursor=one",
+    );
+    expect(new Headers(sent[0]?.init.headers).get("authorization")).toBe("Bearer scdn_repo_x");
+    expect(sent[0]?.init.redirect).toBe("manual");
+    expect(loaded).toEqual({
+      status: "ready",
+      skill: {
+        path: "review/SKILL.md",
+        directory: "review",
+        name: "review",
+        description: "Reviews a change.",
+        rules: [{ path: "SKILLCDN.md", body: "Be kind.", truncated: false }],
+        body: "Read the diff.",
+        included: [{ path: "review/checklist.md", body: "- tests", truncated: false }],
+        files: ["review/guide.md"],
+        references: [{ path: "review/guide.md", status: "available" }],
+        complete: false,
+        nextCursor: "two",
+        serving: {
+          full: true,
+          license: "MIT",
+          sourceUrl: "https://github.com/acme/skills/blob/main/review/SKILL.md",
+        },
+        warnings: [],
+      },
+    });
+    // Without a token nothing is sent as one; the listing carries a token the same way.
+    const bare = source(async (url, init) => {
+      sent.push({ url, init });
+      return json(READY);
+    });
+    await bare.source.list(ADDRESS);
+    expect(new Headers(sent.at(-1)?.init.headers).has("authorization")).toBe(false);
+    await bare.source.list(ADDRESS, "scdn_repo_x");
+    expect(new Headers(sent.at(-1)?.init.headers).get("authorization")).toBe("Bearer scdn_repo_x");
+  });
+
+  it("says when the token is no good and when a file is not carried, and reads a file or a folder", async () => {
+    const refused = source(async () =>
+      json({ error: { code: "auth.invalid_token", message: "no" } }, 401),
+    );
+    expect(await refused.source.list(ADDRESS, "scdn_repo_old")).toEqual({
+      status: "token_invalid",
+      skills: [],
+    });
+    expect(
+      await refused.source.load(ADDRESS, "review/SKILL.md", undefined, "scdn_repo_old"),
+    ).toEqual({ status: "token_invalid" });
+    const waiting = source(async () =>
+      json({ error: { code: "index.indexing", message: "wait" } }, 503),
+    );
+    expect(await waiting.source.read(ADDRESS, "review/guide.md", {})).toEqual({
+      status: "indexing",
+    });
+    const big = source(async () => json({ error: { code: "file.too_large", message: "no" } }, 413));
+    expect(await big.source.read(ADDRESS, "review/big.bin", {})).toEqual({ status: "failed" });
+    const sent: string[] = [];
+    const file = source(async (url) => {
+      sent.push(url);
+      return json({
+        kind: "file",
+        path: "review/guide.md",
+        content: "How to",
+        offset: 0,
+        nextOffset: 6,
+        totalLength: 14,
+      });
+    });
+    expect(await file.source.read(ADDRESS, "review/guide.md", { offset: 0, limit: 6 })).toEqual({
+      status: "ready",
+      file: {
+        path: "review/guide.md",
+        content: "How to",
+        offset: 0,
+        nextOffset: 6,
+        totalLength: 14,
+      },
+      folder: undefined,
+    });
+    expect(sent[0]).toBe(
+      "https://skillcdn.test/api/v1/files/gh/acme/skills?path=review%2Fguide.md&offset=0&limit=6",
+    );
+    const folder = source(async () =>
+      json({
+        kind: "directory",
+        path: "review",
+        entries: [{ path: "review/SKILL.md", kind: "file", size: 120 }],
+        truncated: false,
+      }),
+    );
+    expect(await folder.source.read(ADDRESS, "review", {})).toEqual({
+      status: "ready",
+      file: undefined,
+      folder: {
+        path: "review",
+        entries: [{ path: "review/SKILL.md", kind: "file", size: 120 }],
+        truncated: false,
+      },
+    });
+    const odd = source(async () => json({ status: "ready", skill: { name: 1 } }));
+    expect(await odd.source.load(ADDRESS, "review/SKILL.md", undefined)).toEqual({
+      status: "unavailable",
+    });
+  });
+});

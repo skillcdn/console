@@ -43,6 +43,7 @@ import {
   type RestMemberPatch,
   type RestMembers,
   type RestMePatch,
+  type RestPackTokenInput,
   type RestPeople,
   type RestPerson,
   type RestPersonPatch,
@@ -59,6 +60,8 @@ import {
   type RestRunEndInput,
   type RestRunInput,
   type RestRuns,
+  type RestSkillFile,
+  type RestSkillLoad,
   type RestSkills,
   type RestTask,
   type RestTaskInput,
@@ -98,6 +101,8 @@ import {
   restRulesSchema,
   restRunSchema,
   restRunsSchema,
+  restSkillFileSchema,
+  restSkillLoadSchema,
   restSkillsSchema,
   restTaskSchema,
   restTasksSchema,
@@ -294,6 +299,18 @@ export interface ProjectClient {
   eventStreamUrl(after: number): string;
   /** The project's skills, as SkillCDN serves them at its address, or the organization's. */
   skills(signal?: AbortSignal): Promise<RestSkills>;
+  /** One skill of the pack, a page of it (`load_skill`), read by the console with the pack token the project holds (ADR-0028). */
+  skill(path: string, cursor?: string, signal?: AbortSignal): Promise<RestSkillLoad>;
+  /** A file of the pack, a page of it, or what a folder holds (`read_repo_file`). */
+  skillFile(
+    path: string,
+    page?: { readonly offset?: number | undefined; readonly limit?: number | undefined },
+    signal?: AbortSignal,
+  ): Promise<RestSkillFile>;
+  /** Sets the pack token the project reads a private pack with; for an owner. The token travels once and is answered never. */
+  setPackToken(input: RestPackTokenInput): Promise<RestProject>;
+  /** Takes the pack token away; for an owner. */
+  removePackToken(): Promise<RestProject>;
   /** The rules that hold in the project (ADR-0023): the workspace's, and what the project adds. */
   rules(signal?: AbortSignal): Promise<RestProjectRules>;
   /** A folder's pages and folders, or the pages a search finds. */
@@ -658,6 +675,30 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
       eventStreamUrl: (after) => withQuery(`${at("events")}/stream`, { after: String(after) }),
       skills: (signal) =>
         request("GET", `${base}${at("skills")}`, undefined, restSkillsSchema, signal),
+      skill: (path, cursor, signal) =>
+        request(
+          "GET",
+          withQuery(`${at("skills")}/one`, { path, cursor }),
+          undefined,
+          restSkillLoadSchema,
+          signal,
+        ),
+      skillFile: (path, page = {}, signal) =>
+        request(
+          "GET",
+          withQuery(`${at("skills")}/file`, {
+            path,
+            offset: page.offset === undefined ? undefined : String(page.offset),
+            limit: page.limit === undefined ? undefined : String(page.limit),
+          }),
+          undefined,
+          restSkillFileSchema,
+          signal,
+        ),
+      setPackToken: (input) =>
+        request("PUT", `${base}${at()}/pack-token`, input, restProjectSchema),
+      removePackToken: () =>
+        request("DELETE", `${base}${at()}/pack-token`, undefined, restProjectSchema),
       rules: (signal) =>
         request("GET", `${base}${at("rules")}`, undefined, restProjectRulesSchema, signal),
       documents: (filter = {}, signal) =>

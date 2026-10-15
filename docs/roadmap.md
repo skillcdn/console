@@ -188,6 +188,17 @@ Goal: a person whose checkouts belong to different consoles works them from one 
 - [x] The command (2026-10-14): the credentials file in its second shape, the first read as one login; `login` adding a login and `--default`; `logins`; `logout --url --account`; `use --url --account`; `--account` everywhere; a file that cannot be read never written over; the refusals naming the console and the account ([specs/cli.md](specs/cli.md)).
 - [x] The tests (2026-10-14): the resolution as a table, hostile files, two consoles told apart by what each was asked, a redirect not followed, nothing secret in a directory's file.
 
+## Milestone 19, the pack through the console (2026-10-15)
+
+Goal: an agent with the console's command and nothing else reads the project's pack, public or private, as the task names it ([ADR-0028](adr/0028-the-console-reads-a-projects-pack-through-the-deployments-rest-api-with-a-pack-token-for-a-private-one.md)), now that the main repository's deployment takes the tokens of its MCP endpoint over its REST API too.
+
+- [x] The decision (2026-10-15, [ADR-0028](adr/0028-the-console-reads-a-projects-pack-through-the-deployments-rest-api-with-a-pack-token-for-a-private-one.md)): the console reads the pack through the deployment's REST API, a private pack with a pack token an owner sets, sealed with the deployment's secret; what a token reads is held for nobody; a read is logged, never its content; one pack per project.
+- [x] The data model (2026-10-15): `pack_token` and `pack_token_set_at` on `projects`; migration 0019.
+- [x] The REST API (2026-10-15): `GET .../skills` with the token, `GET .../skills/one` and `GET .../skills/file`, `PUT` and `DELETE .../pack-token`, the status `token_invalid`, `packToken` on a project ([specs/rest.md](specs/rest.md)).
+- [x] The command (2026-10-15): `console skill <path> [--file <path>]`, the skill whole as `load_skill` lays it out; `console project pack-token <key> --stdin | --remove` ([specs/cli.md](specs/cli.md)).
+- [x] The default UI (2026-10-15): the pack token on the project's Settings, set and taken away on a form of its own; the Skills page saying how an agent reads the pack and when the token no longer works.
+- [x] The rules and the skill (2026-10-15): the console's own rules read the pack through the command first; `working-the-board` names `console skill`.
+
 ## After milestone 16
 
 Nothing is chosen yet; the list below is where the next milestone comes from. Left open by milestone 9: whether the board should end a run not heard from for a long while itself ([ADR-0020](adr/0020-the-console-does-not-claim-an-agent-is-at-work-a-run-says-when-it-was-last-heard-from-and-a-new-run-takes-over.md)); a roadmap across projects.

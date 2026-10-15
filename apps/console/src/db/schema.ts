@@ -226,6 +226,9 @@ export const projects = pgTable(
     /** The project's own image for its mark: the hash the blob store keeps it by, and its media type; null for none. */
     iconSha256: text(),
     iconContentType: text(),
+    /** The pack token a person made at the deployment for a private pack (ADR-0028), sealed with the console's secret, and when it was set; null for none. */
+    packToken: text(),
+    packTokenSetAt: instant(),
     /** The number the next task gets: tasks are numbered per project, for people to say. */
     nextTaskNumber: integer().notNull().default(1),
     createdAt: createdAt(),
@@ -244,6 +247,10 @@ export const projects = pgTable(
     check(
       "projects_icon_check",
       sql`(${table.iconSha256} is null) = (${table.iconContentType} is null)`,
+    ),
+    check(
+      "projects_pack_token_check",
+      sql`(${table.packToken} is null) = (${table.packTokenSetAt} is null)`,
     ),
   ],
 );

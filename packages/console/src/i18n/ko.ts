@@ -163,12 +163,24 @@ export const ko: Messages = {
         private: "소유자가 지정될 때까지 관리자가 소유합니다.",
       },
     },
+    packToken: {
+      aria: "팩 토큰",
+      label: "토큰",
+      hint: "사람이 SkillCDN 계정 페이지에서 팩의 저장소에 대해 만든 토큰입니다. 콘솔이 봉인해 보관하고, 프로젝트를 볼 수 있는 사람을 위해 팩을 읽는 데 쓰며, 누구에게도 보여 주지 않습니다.",
+      placeholder: "scdn_repo_…",
+      set: "토큰 넣기",
+      remove: "토큰 빼기",
+    },
     settings: {
       title: "설정",
       aria: "프로젝트 설정",
       edit: "프로젝트 편집",
       organizationsSkills: (address) => `조직의 스킬: ${address}`,
       noSkills: "없음: 콘솔에 조직의 주소가 없습니다.",
+      packToken: "팩 토큰",
+      packTokenNone: "없음: 공개 팩은 필요 없고, 비공개 팩은 읽히지 않습니다.",
+      packTokenSet: "설정됨",
+      packTokenEdit: "바꾸기",
     },
   },
 
@@ -590,13 +602,16 @@ export const ko: Messages = {
     },
     servedBy: "제공:",
     at: "주소:",
-    connect: "에이전트는 이 주소에 자기 MCP 연결로 스킬을 받습니다. 사람이 한 번 연결해 줍니다:",
+    connect:
+      "에이전트는 콘솔 명령(console skill <경로>)으로, 또는 이 주소에 자기 MCP 연결로 스킬을 받습니다. MCP 연결은 사람이 한 번 해 줍니다:",
     connectLink: "SkillCDN 페이지의 연결 안내",
     status: {
       indexing: "SkillCDN이 아직 저장소를 색인하고 있습니다. 잠시 후 다시 보세요.",
       failed: "SkillCDN이 저장소를 색인하지 못했습니다. 찾은 내용은 주소의 페이지에 있습니다.",
       not_found:
-        "SkillCDN이 이 주소를 제공하지 않거나, 그곳에 로그인한 사람에게만 제공합니다. 주소의 페이지에서 확인하세요.",
+        "SkillCDN이 이 주소를 콘솔에 제공하지 않습니다. 그곳에 아무것도 없거나, 비공개 팩인데 프로젝트에 팩 토큰이 없습니다(설정).",
+      token_invalid:
+        "프로젝트가 가진 팩 토큰이 SkillCDN에서 더 이상 통하지 않습니다. 만료되었거나 지워졌거나, 만든 사람이 저장소 권한을 잃었습니다. 소유자가 설정 페이지에서 새로 넣습니다.",
       unavailable:
         "SkillCDN에 연결할 수 없습니다. 스킬은 이전 상태 그대로입니다. 나중에 다시 보세요.",
     },

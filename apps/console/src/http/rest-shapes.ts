@@ -76,6 +76,8 @@ export function restProject(project: ProjectView): RestProject {
     color: project.color ?? null,
     symbol: project.symbol ?? null,
     icon: project.icon ?? null,
+    packToken:
+      project.packToken === undefined ? null : { setAt: project.packToken.setAt.toISOString() },
     role: project.role,
     openDecisions: project.openDecisions,
     openRuns: project.openRuns,

@@ -28,6 +28,8 @@ const READY: SkillListing = {
 function sourceOf(answers: SkillListing[]) {
   let calls = 0;
   const source: SkillSource = {
+    load: async () => ({ status: "unavailable" }),
+    read: async () => ({ status: "unavailable" }),
     async list() {
       calls += 1;
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -118,5 +120,82 @@ describe("the skills of the board", () => {
     expect(calls()).toBe(2);
     // An address that is not one, which a project should never hold, is none at all.
     expect((await skills.read("not an address")).status).toBe("none");
+  });
+
+  it("read a pack with a token every time, holding nothing, and shape a skill and a file (ADR-0028)", async () => {
+    let listed = 0;
+    const source: SkillSource = {
+      async list() {
+        listed += 1;
+        return READY;
+      },
+      async load(_address, path, cursor) {
+        return {
+          status: "ready",
+          skill: {
+            path,
+            directory: "review",
+            name: "review",
+            description: "Reviews a change.",
+            rules: [],
+            body: cursor ?? "start",
+            included: [],
+            files: [],
+            references: [],
+            complete: cursor !== undefined,
+            nextCursor: cursor === undefined ? "two" : undefined,
+            serving: { full: true, license: undefined, sourceUrl: undefined },
+            warnings: [],
+          },
+        };
+      },
+      async read(_address, path) {
+        return {
+          status: "ready",
+          file: { path, content: "x", offset: 0, nextOffset: undefined, totalLength: 1 },
+          folder: undefined,
+        };
+      },
+    };
+    const skills = new Skills({
+      config: { source: "https://skillcdn.test", address: ADDRESS },
+      source,
+      clock: { now: () => new Date(0) },
+    });
+    await skills.read(undefined, "scdn_repo_x");
+    await skills.read(undefined, "scdn_repo_x");
+    expect(listed).toBe(2);
+    await skills.read(undefined);
+    await skills.read(undefined);
+    expect(listed).toBe(3);
+    const loaded = await skills.load(
+      "/gh/acme/playbooks",
+      "review/SKILL.md",
+      undefined,
+      "scdn_repo_x",
+    );
+    expect(loaded).toMatchObject({
+      address: "/gh/acme/playbooks",
+      page: "https://skillcdn.test/gh/acme/playbooks",
+      status: "ready",
+    });
+    expect(loaded.skill).toMatchObject({
+      body: "start",
+      nextCursor: "two",
+      complete: false,
+      serving: { full: true, license: null, sourceUrl: null },
+    });
+    const file = await skills.file(undefined, "review/guide.md", {}, "scdn_repo_x");
+    expect(file).toMatchObject({
+      address: "/gh/acme/skills@v1",
+      status: "ready",
+      file: { content: "x", nextOffset: null },
+      folder: null,
+    });
+    expect(await skills.file("not an address", "x", {})).toMatchObject({
+      status: "none",
+      file: null,
+      folder: null,
+    });
   });
 });

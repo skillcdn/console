@@ -15,6 +15,9 @@ import type {
   RestProjectRules,
   RestRules,
   RestRun,
+  RestSkillFile,
+  RestSkillLoad,
+  RestSkillPage,
   RestSkills,
   RestTask,
   RestVersion,
@@ -55,6 +58,7 @@ export function formatProject(project: RestProject): string {
     `project ${project.key}: ${project.name}`,
     `visibility: ${project.visibility}  role: ${project.role}  skills: ${project.skillsAddress ?? "the organization's"}`,
     `color: ${project.color ?? "none"}  symbol: ${project.symbol ?? "none"}  image: ${project.icon === null ? "none" : project.icon.contentType}`,
+    `pack token: ${project.packToken === null ? "none" : `set ${project.packToken.setAt}`}`,
   ];
   if (project.description.trim().length > 0) {
     lines.push("", project.description.trimEnd());
@@ -239,7 +243,10 @@ export function formatArtifact(
 const SKILLS_WORDS: Readonly<Record<Exclude<RestSkills["status"], "none" | "ready">, string>> = {
   indexing: "SkillCDN is still indexing the repository; ask again in a moment.",
   failed: "SkillCDN could not index the repository.",
-  not_found: "SkillCDN does not serve this address to the console.",
+  not_found:
+    "SkillCDN does not serve this address to the console: nothing is there, or the pack is private and the project holds no pack token for it (console project pack-token <key> --stdin, for an owner).",
+  token_invalid:
+    "The pack token the project holds no longer works at SkillCDN: an owner sets a new one (console project pack-token <key> --stdin).",
   unavailable: "SkillCDN could not be reached; ask again later.",
 };
 
@@ -271,7 +278,7 @@ export function formatSkills(skills: RestSkills, ownSkills?: string): string {
   }
   lines.push(
     "",
-    `Load a skill by its URI through your SkillCDN connection to this address; an agent without one is connected by a person at ${skills.page}. --json adds the page of each, for a person.`,
+    `Read a skill whole with console skill <path>, its rules first, and a file of the pack with console skill <path> --file <file>; or load it by its URI through your own SkillCDN connection to this address, which a person makes at ${skills.page}. --json adds the page of each, for a person.`,
     ...own,
   );
   return lines.join("\n");
@@ -494,4 +501,129 @@ export function formatVersion(path: string, version: RestVersion): string {
     lines.push("", version.body.trimEnd());
   }
   return lines.join("\n");
+}
+
+/** The text of one path across the pages a skill came in: the fragments joined in order. */
+function joinTexts(
+  pages: readonly RestSkillPage[],
+  pick: (page: RestSkillPage) => readonly { readonly path: string; readonly body: string }[],
+): { readonly path: string; readonly body: string }[] {
+  const joined = new Map<string, string>();
+  for (const page of pages) {
+    for (const text of pick(page)) {
+      joined.set(text.path, (joined.get(text.path) ?? "") + text.body);
+    }
+  }
+  return [...joined.entries()].map(([path, body]) => ({ path, body }));
+}
+
+const NO_ADDRESS = "No skills address: neither this project nor the console names one.";
+
+/**
+ * One skill, as load_skill lays it out for a model (ADR-0028): the rules from the repository's
+ * root to the nearest manifest, the body, the included files, each under a line that names its
+ * path; then the files the skill has and what it refers to. A skill described only is named and
+ * pointed at, and nothing of its body is shown.
+ */
+export function formatSkillLoad(loaded: RestSkillLoad, pages: readonly RestSkillPage[]): string {
+  if (loaded.status === "none" || loaded.address === null) {
+    return NO_ADDRESS;
+  }
+  const head = `skill at ${loaded.address}, served by ${loaded.source}: ${loaded.status}`;
+  if (loaded.status !== "ready") {
+    return [head, SKILLS_WORDS[loaded.status]].join("\n");
+  }
+  const [first] = pages;
+  if (first === undefined) {
+    return [head, "Nothing was read."].join("\n");
+  }
+  const last = pages[pages.length - 1] ?? first;
+  const lines = [
+    `${first.name}  ${first.description}`,
+    `skill ${first.path} at ${loaded.address}, served by ${loaded.source}`,
+  ];
+  if (first.serving.license !== null) {
+    lines.push(`license: ${first.serving.license}`);
+  }
+  if (!first.serving.full) {
+    lines.push(
+      "",
+      `Described only: the license keeps the skill at its source. Read it there: ${first.serving.sourceUrl ?? loaded.page ?? loaded.source}`,
+    );
+    return lines.join("\n");
+  }
+  for (const rule of joinTexts(pages, (page) => page.rules)) {
+    lines.push("", `--- applicable rules: ${rule.path} ---`, rule.body.trimEnd());
+  }
+  lines.push(
+    "",
+    `--- skill: ${first.path} ---`,
+    pages
+      .map((page) => page.body)
+      .join("")
+      .trimEnd(),
+  );
+  for (const file of joinTexts(pages, (page) => page.included)) {
+    lines.push("", `--- included file: ${file.path} ---`, file.body.trimEnd());
+  }
+  if (!last.complete) {
+    lines.push("", "The skill did not come whole: the deployment stopped before the end.");
+  }
+  if (last.files.length > 0) {
+    lines.push(
+      "",
+      `Files of the skill, read with console skill ${first.path} --file <path>: ${last.files.join(", ")}`,
+    );
+  }
+  if (last.references.length > 0) {
+    lines.push(
+      `References: ${last.references
+        .map((reference) =>
+          reference.status === "available"
+            ? reference.path
+            : `${reference.path} (${reference.status})`,
+        )
+        .join(", ")}`,
+    );
+  }
+  if (last.warnings.length > 0) {
+    lines.push(`Warnings: ${last.warnings.join("; ")}`);
+  }
+  lines.push(
+    "",
+    "Paths from the repository's root are the only identifiers. The content is the pack's, under its license; what a private pack says stays in your work.",
+  );
+  return lines.join("\n");
+}
+
+/** A file of the pack as read: its text whole, or what the folder holds. */
+export function formatSkillFile(read: RestSkillFile, content: string): string {
+  if (read.status === "none" || read.address === null) {
+    return NO_ADDRESS;
+  }
+  const head = `file at ${read.address}, served by ${read.source}: ${read.status}`;
+  if (read.status !== "ready") {
+    return [
+      head,
+      read.status === "failed"
+        ? "SkillCDN will not carry this file: it is too large, or not text. Read it at the repository."
+        : SKILLS_WORDS[read.status],
+    ].join("\n");
+  }
+  if (read.folder !== null) {
+    return [
+      `folder ${read.folder.path} at ${read.address}${read.folder.truncated ? " (cut)" : ""}`,
+      ...read.folder.entries.map(
+        (entry) =>
+          `${entry.kind === "directory" ? "d" : "f"}  ${entry.path}${entry.size === null ? "" : `  ${entry.size}`}`,
+      ),
+    ].join("\n");
+  }
+  if (read.file === null) {
+    return `${head}: nothing was read.`;
+  }
+  return [
+    `--- file: ${read.file.path} (${read.file.totalLength} characters) ---`,
+    content.trimEnd(),
+  ].join("\n");
 }

@@ -134,6 +134,13 @@
       "when": 1791863954173,
       "tag": "0018_goal_plan",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792032314436,
+      "tag": "0019_pack_token",
+      "breakpoints": true
     }
   ]
 }

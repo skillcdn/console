@@ -127,6 +127,7 @@ export const SKILLS_STATUSES = [
   "indexing",
   "failed",
   "not_found",
+  "token_invalid",
   "unavailable",
 ] as const;
 

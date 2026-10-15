@@ -22,6 +22,7 @@ const PROJECT = {
   color: null,
   symbol: null,
   icon: null,
+  packToken: null,
   role: "owner",
   openDecisions: 0,
   openRuns: 0,

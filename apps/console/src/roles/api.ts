@@ -153,6 +153,7 @@ export function createApi(
       origin,
       sessions,
       tokens,
+      secrets,
       connections: new Connections({
         database,
         clock,

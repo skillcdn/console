@@ -279,6 +279,8 @@ export const restProjectSchema = z.object({
   symbol: z.nullable(z.string()),
   /** The project's own image for its mark, shown in place of the symbol, or `null` for none. */
   icon: z.nullable(restProjectIconSchema),
+  /** The pack token the project reads a private pack with (ADR-0028): when it was set, never the token; `null` for none. */
+  packToken: z.nullable(z.object({ setAt: instant })),
   /** What the asker is in it: an owner configures the project, a member works on it. */
   role: z.enum(PROJECT_ROLES),
   /** How many decisions in it wait for a person. */
@@ -908,6 +910,92 @@ export const restSkillsSchema = z.object({
   items: z.array(restSkillSchema),
 });
 export type RestSkills = z.infer<typeof restSkillsSchema>;
+
+/** `PUT .../pack-token`: the token a person made at the deployment for the project's pack (ADR-0028); from a field or standard input, never an argument. */
+export const restPackTokenInputSchema = z.object({
+  token: z
+    .string()
+    .check(z.minLength(8), z.maxLength(1024), z.regex(/^\S+$/, "must have no space in it")),
+});
+export type RestPackTokenInput = z.infer<typeof restPackTokenInputSchema>;
+
+/** A rule, the body or an included file of a skill: its path from the repository's root and its text, cut where a page ends. */
+export const restSkillTextSchema = z.object({
+  path: z.string(),
+  body: z.string(),
+  truncated: z.boolean(),
+});
+/** A skill as the deployment serves it, on one page of its context: what `load_skill` gives a model, in the console's shape. */
+export const restSkillPageSchema = z.object({
+  path: z.string(),
+  directory: z.string(),
+  name: z.string(),
+  description: z.string(),
+  /** The rules that hold for the skill, from the repository's root to the nearest manifest. */
+  rules: z.array(restSkillTextSchema),
+  body: z.string(),
+  /** The files the skill includes with its body. */
+  included: z.array(restSkillTextSchema),
+  /** The paths of the skill's own files, read with the file route. */
+  files: z.array(z.string()),
+  references: z.array(
+    z.object({
+      path: z.string(),
+      status: z.enum(["available", "blocked", "missing", "outside_mount"]),
+    }),
+  ),
+  /** Whether this page completes the skill; else the cursor of the next. */
+  complete: z.boolean(),
+  nextCursor: z.nullable(z.string()),
+  /** How the skill is served: whole, or described only, with its license and where it is read at its host. */
+  serving: z.object({
+    full: z.boolean(),
+    license: z.nullable(z.string()),
+    sourceUrl: z.nullable(z.string()),
+  }),
+  warnings: z.array(z.string()),
+});
+export type RestSkillPage = z.infer<typeof restSkillPageSchema>;
+
+/** `GET .../skills/one?path=&cursor=`: one skill of the pack, a page of it; `skill` is `null` unless `ready`. */
+export const restSkillLoadSchema = z.object({
+  address: z.nullable(z.string()),
+  source: z.string(),
+  page: z.nullable(z.string()),
+  status: z.enum(SKILLS_STATUSES),
+  skill: z.nullable(restSkillPageSchema),
+});
+export type RestSkillLoad = z.infer<typeof restSkillLoadSchema>;
+
+/** `GET .../skills/file?path=&offset=&limit=`: a page of a file of the pack, or what a folder holds; both `null` unless `ready`. */
+export const restSkillFileSchema = z.object({
+  address: z.nullable(z.string()),
+  source: z.string(),
+  status: z.enum(SKILLS_STATUSES),
+  file: z.nullable(
+    z.object({
+      path: z.string(),
+      content: z.string(),
+      offset: count,
+      nextOffset: z.nullable(count),
+      totalLength: count,
+    }),
+  ),
+  folder: z.nullable(
+    z.object({
+      path: z.string(),
+      entries: z.array(
+        z.object({
+          path: z.string(),
+          kind: z.enum(["directory", "file"]),
+          size: z.nullable(count),
+        }),
+      ),
+      truncated: z.boolean(),
+    }),
+  ),
+});
+export type RestSkillFile = z.infer<typeof restSkillFileSchema>;
 
 /**
  * A document's path (ADR-0009): segments of lowercase letters, digits and hyphens, separated

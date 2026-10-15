@@ -43,6 +43,8 @@ import {
   restProjectSchema,
   restProjectsSchema,
   restRulesSchema,
+  restSkillFileSchema,
+  restSkillLoadSchema,
   restSkillsSchema,
   restTaskSchema,
   restTasksSchema,
@@ -1718,6 +1720,12 @@ describe("roles", () => {
   });
 });
 
+/** A source that reads no skill and no file: what the tests of the listing need of them. */
+const unread = {
+  load: async () => ({ status: "unavailable" as const }),
+  read: async () => ({ status: "unavailable" as const }),
+};
+
 describe("skills", () => {
   it("are none without an address, the organization's with one, and a project's own when it names one", async () => {
     const none = restSkillsSchema.parse(await (await get(alice, `${IN}/skills`)).json());
@@ -1731,6 +1739,7 @@ describe("skills", () => {
 
     const asked: string[] = [];
     const source: SkillSource = {
+      ...unread,
       async list(address) {
         asked.push(`/gh/${address.owner}/${address.repo}`);
         return {
@@ -2796,5 +2805,151 @@ describe("the discussion on a task", () => {
     );
     expect(named.status).toBe(400);
     expect(restCommentsSchema.parse(await (await get(alice, at)).json()).items).toEqual([]);
+  });
+});
+
+describe("the pack of a project (ADR-0028)", () => {
+  it("is read through the console with the pack token an owner sets, which goes to the deployment and nowhere else", async () => {
+    const tokens: (string | undefined)[] = [];
+    const source: SkillSource = {
+      async list(_address, token) {
+        tokens.push(token);
+        if (token === "scdn_repo_bad") {
+          return { status: "token_invalid", skills: [] };
+        }
+        return {
+          status: "ready",
+          skills: [
+            {
+              name: "review",
+              description: "Reviews a change.",
+              directory: "review",
+              path: "review/SKILL.md",
+              translations: {},
+            },
+          ],
+        };
+      },
+      async load(_address, path, cursor, token) {
+        tokens.push(token);
+        if (path !== "review/SKILL.md") {
+          return { status: "not_found" };
+        }
+        return {
+          status: "ready",
+          skill: {
+            path,
+            directory: "review",
+            name: "review",
+            description: "Reviews a change.",
+            rules: [{ path: "SKILLCDN.md", body: "Be kind.", truncated: false }],
+            body: cursor === undefined ? "Read the diff. " : "Then say so.",
+            included: [],
+            files: ["review/guide.md"],
+            references: [],
+            complete: cursor !== undefined,
+            nextCursor: cursor === undefined ? "page-2" : undefined,
+            serving: { full: true, license: "MIT", sourceUrl: undefined },
+            warnings: [],
+          },
+        };
+      },
+      async read(_address, path, page, token) {
+        tokens.push(token);
+        if (path !== "review/guide.md") {
+          return { status: "not_found" };
+        }
+        return {
+          status: "ready",
+          file: {
+            path,
+            content: "How to review.",
+            offset: page.offset ?? 0,
+            nextOffset: undefined,
+            totalLength: 14,
+          },
+          folder: undefined,
+        };
+      },
+    };
+    const served = createHarness(testDatabase, {
+      providers: [createFixtureProvider()],
+      skills: { address: "/gh/Acme/skills", source },
+    });
+    const owner = await served.signIn("alice");
+    const member = await served.signIn("bob");
+    const JSON_HEADERS = { origin: SIGN_IN_URL, "content-type": "application/json" };
+    const put = (cookie: string, token: string) =>
+      served.request(`${IN}/pack-token`, {
+        method: "PUT",
+        headers: { cookie, ...JSON_HEADERS },
+        body: JSON.stringify({ token }),
+      });
+    const code = async (response: Response) =>
+      ((await response.json()) as { error: { code: string } }).error.code;
+    // A member is refused; a token the deployment refuses is refused here, and kept nowhere.
+    expect((await put(member, "scdn_repo_of_bob")).status).toBe(403);
+    const bad = await put(owner, "scdn_repo_bad");
+    expect(bad.status).toBe(400);
+    expect(await code(bad)).toBe("project.pack_token_refused");
+    expect((await put(owner, "short")).status).toBe(400);
+    const set = await put(owner, "scdn_repo_ok");
+    expect(set.status).toBe(200);
+    const project = restProjectSchema.parse(await set.json());
+    expect(project.packToken?.setAt).toEqual(expect.any(String));
+    expect(JSON.stringify(project)).not.toContain("scdn_repo");
+    // The listing and the reads go to the deployment with the token, for a member too.
+    const headers = { cookie: member };
+    const listed = restSkillsSchema.parse(
+      await (await served.request(`${IN}/skills`, { headers })).json(),
+    );
+    expect(listed.status).toBe("ready");
+    const one = restSkillLoadSchema.parse(
+      await (await served.request(`${IN}/skills/one?path=review%2FSKILL.md`, { headers })).json(),
+    );
+    expect(one.status).toBe("ready");
+    expect(one.skill?.rules).toEqual([{ path: "SKILLCDN.md", body: "Be kind.", truncated: false }]);
+    expect(one.skill?.nextCursor).toBe("page-2");
+    const next = restSkillLoadSchema.parse(
+      await (
+        await served.request(`${IN}/skills/one?path=review%2FSKILL.md&cursor=page-2`, { headers })
+      ).json(),
+    );
+    expect(next.skill).toMatchObject({ complete: true, body: "Then say so." });
+    const file = restSkillFileSchema.parse(
+      await (await served.request(`${IN}/skills/file?path=review%2Fguide.md`, { headers })).json(),
+    );
+    expect(file.file?.content).toBe("How to review.");
+    expect(tokens.filter((token) => token === "scdn_repo_ok").length).toBeGreaterThanOrEqual(5);
+    // A skill that is not there, and a read that is not asked right.
+    expect(
+      restSkillLoadSchema.parse(
+        await (
+          await served.request(`${IN}/skills/one?path=nothing%2FSKILL.md`, { headers })
+        ).json(),
+      ).status,
+    ).toBe("not_found");
+    expect((await served.request(`${IN}/skills/one`, { headers })).status).toBe(400);
+    expect((await served.request(`${IN}/skills/file?path=x&limit=0`, { headers })).status).toBe(
+      400,
+    );
+    // Taken away: the next read goes without a token, and the feed says the field changed, never the token.
+    const removed = await served.request(`${IN}/pack-token`, {
+      method: "DELETE",
+      headers: { cookie: owner, origin: SIGN_IN_URL },
+    });
+    expect(removed.status).toBe(200);
+    expect(restProjectSchema.parse(await removed.json()).packToken).toBeNull();
+    await served.request(`${IN}/skills`, { headers });
+    expect(tokens.at(-1)).toBeUndefined();
+    const events = restEventsSchema.parse(
+      await (await served.request(`${IN}/events?after=0`, { headers: { cookie: owner } })).json(),
+    );
+    const changes = events.items.filter(
+      (event) =>
+        event.kind === "project.updated" && JSON.stringify(event.data).includes("packToken"),
+    );
+    expect(changes).toHaveLength(2);
+    expect(JSON.stringify([events, served.logs])).not.toContain("scdn_repo_ok");
   });
 });

@@ -16,6 +16,9 @@ import {
   type RestClaim,
   type RestDecision,
   type RestPerson,
+  type RestSkillFile,
+  type RestSkillLoad,
+  type RestSkillPage,
   type RestTaskPatch,
 } from "../schemas.js";
 import {
@@ -70,6 +73,8 @@ import {
   formatRules,
   formatRun,
   formatRunLine,
+  formatSkillFile,
+  formatSkillLoad,
   formatSkills,
   formatTask,
   formatTaskLine,
@@ -980,6 +985,65 @@ const skills: Command = async (args, io) => {
   const project = await session.project();
   const found = await project.skills();
   answer(io, session, found, () => formatSkills(found, io.skillsDir));
+  return EXIT.ok;
+};
+
+/** How many pages of a skill, or of a file, the command follows before it stops: far above what one holds. */
+const MAX_SKILL_PAGES = 64;
+
+const skill: Command = async (args, io) => {
+  const { values, positionals } = parse(args, { file: { type: "string" } });
+  const path = theOne(
+    positionals,
+    "Say which skill: console skill <path of its SKILL.md> [--file <path>]",
+  );
+  const session = await open(io, values);
+  const project = await session.project();
+  const file = text(values, "file");
+  if (file !== undefined) {
+    // The file whole, page after page, as the console reads it from the deployment.
+    const parts: string[] = [];
+    let offset: number | undefined;
+    let last: RestSkillFile | undefined;
+    for (let pages = 0; pages < MAX_SKILL_PAGES; pages += 1) {
+      last = await project.skillFile(file, offset === undefined ? {} : { offset });
+      if (last.status !== "ready" || last.file === null) {
+        break;
+      }
+      parts.push(last.file.content);
+      if (last.file.nextOffset === null) {
+        break;
+      }
+      offset = last.file.nextOffset;
+    }
+    if (last === undefined) {
+      throw failed("The file could not be read.");
+    }
+    const read = last;
+    const content = parts.join("");
+    answer(io, session, { ...read, content }, () => formatSkillFile(read, content));
+    return EXIT.ok;
+  }
+  // The skill whole: its pages until complete, the rules first, as load_skill lays them out.
+  const pages: RestSkillPage[] = [];
+  let cursor: string | undefined;
+  let last: RestSkillLoad | undefined;
+  for (let n = 0; n < MAX_SKILL_PAGES; n += 1) {
+    last = await project.skill(path, cursor);
+    if (last.status !== "ready" || last.skill === null) {
+      break;
+    }
+    pages.push(last.skill);
+    if (last.skill.complete || last.skill.nextCursor === null) {
+      break;
+    }
+    cursor = last.skill.nextCursor;
+  }
+  if (last === undefined) {
+    throw failed("The skill could not be read.");
+  }
+  const loaded = last;
+  answer(io, session, { ...loaded, pages }, () => formatSkillLoad(loaded, pages));
   return EXIT.ok;
 };
 
@@ -2071,6 +2135,37 @@ const editProject: Command = async (args, io) => {
   return EXIT.ok;
 };
 
+/** The pack token (ADR-0028): read from standard input and never from an argument, so that no shell keeps it. */
+const projectPackToken: Command = async (args, io) => {
+  const { values, positionals } = parse(args, {
+    stdin: { type: "boolean" },
+    remove: { type: "boolean" },
+  });
+  const key = theOne(
+    positionals,
+    "Say which project: console project pack-token <key> --stdin, or console project pack-token <key> --remove",
+  );
+  if (on(values, "stdin") === on(values, "remove")) {
+    throw misuse(
+      "Say one of --stdin, which reads the token from standard input, and --remove, which takes it away.",
+    );
+  }
+  const session = await open(io, values);
+  const project = session.client.project(key);
+  if (on(values, "remove")) {
+    const changed = await project.removePackToken();
+    answer(io, session, changed, () => formatProject(changed));
+    return EXIT.ok;
+  }
+  const token = (await io.readStdin()).trim();
+  if (token.length === 0) {
+    throw failed("No token was given on standard input.");
+  }
+  const changed = await project.setPackToken({ token });
+  answer(io, session, changed, () => formatProject(changed));
+  return EXIT.ok;
+};
+
 const projectIcon: Command = async (args, io) => {
   const { values, positionals } = parse(args, { remove: { type: "boolean" } });
   const [key, file] = positionals;
@@ -2104,10 +2199,13 @@ const project: Command = async (args, io) => {
   if (args[0] === "icon") {
     return projectIcon(args.slice(1), io);
   }
+  if (args[0] === "pack-token") {
+    return projectPackToken(args.slice(1), io);
+  }
   const { values, positionals } = parse(args, {});
   const key = theOne(
     positionals,
-    "Say which project: console project <key>; or console project new, edit or icon",
+    "Say which project: console project <key>; or console project new, edit, icon or pack-token",
   );
   const session = await open(io, values);
   const found = await session.client.project(key).get();
@@ -2247,6 +2345,7 @@ const COMMANDS: Readonly<Record<string, Command>> = {
   goal,
   categories,
   skills,
+  skill,
   rules,
   people,
   person,

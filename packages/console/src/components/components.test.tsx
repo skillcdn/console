@@ -46,7 +46,14 @@ import {
   wheelFactor,
   zoomAround,
 } from "./pictures.js";
-import { keyOf, MemberList, ProjectForm, ProjectList, ProjectMark } from "./projects.js";
+import {
+  keyOf,
+  MemberList,
+  PackTokenForm,
+  ProjectForm,
+  ProjectList,
+  ProjectMark,
+} from "./projects.js";
 import { GoalTimeline, timelineBars } from "./roadmap.js";
 import { RulesForm, RulesView } from "./rules.js";
 import { RunList } from "./runs.js";
@@ -1159,6 +1166,7 @@ describe("runs", () => {
 describe("projects", () => {
   const project = (overrides: Partial<RestProject> = {}): RestProject => ({
     id: "0199c4d8-0000-7000-8000-000000000050",
+    packToken: null,
     key: "web",
     name: "The web <app>",
     description: "What we ship.",
@@ -2045,6 +2053,7 @@ describe("a run and the feed, a page at a time", () => {
     const sha256 = "b".repeat(64);
     const marked: RestProject = {
       id: "0199c4d8-0000-7000-8000-000000000001",
+      packToken: null,
       key: "web",
       name: "The web app",
       description: "",
@@ -2632,5 +2641,25 @@ describe("a card dragged to another column", () => {
     expect(columnStateOf("in_review")).toBe("in_review");
     expect(columnStateOf("archived")).toBeUndefined();
     expect(columnStateOf(undefined)).toBeUndefined();
+  });
+});
+
+describe("the pack token of a project", () => {
+  it("is given on a form that shows nothing of it, with the way to take it away once set", () => {
+    const empty = renderToStaticMarkup(<PackTokenForm set={false} onSubmit={() => undefined} />);
+    expect(empty).toContain('type="password"');
+    expect(empty).toContain('autoComplete="off"');
+    expect(empty).toContain("Set the token");
+    expect(empty).not.toContain("Remove the token");
+    const set = renderToStaticMarkup(
+      <PackTokenForm set onSubmit={() => undefined} onRemove={() => undefined} />,
+    );
+    expect(set).toContain("Remove the token");
+    const korean = renderToStaticMarkup(
+      <LanguageContext.Provider value={KOREAN}>
+        <PackTokenForm set={false} onSubmit={() => undefined} />
+      </LanguageContext.Provider>,
+    );
+    expect(korean).toContain("토큰 넣기");
   });
 });

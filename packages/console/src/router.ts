@@ -78,7 +78,7 @@ export type Route =
   | {
       readonly name: "settings";
       readonly project: string;
-      readonly form: "edit" | "rules" | undefined;
+      readonly form: "edit" | "rules" | "pack-token" | undefined;
     }
   /** The workspace's settings: its rules, its categories, its skills; or the form the rules are written on. */
   | { readonly name: "workspace-settings"; readonly form: "rules" | undefined }
@@ -373,7 +373,13 @@ export function matchRoute(pathname: string, search = ""): Route {
     return {
       name: "settings",
       project,
-      form: params.has("edit") ? "edit" : params.has("rules") ? "rules" : undefined,
+      form: params.has("edit")
+        ? "edit"
+        : params.has("rules")
+          ? "rules"
+          : params.has("pack-token")
+            ? "pack-token"
+            : undefined,
     };
   }
   const found = PLAIN_PAGES.find((candidate) => candidate === page);
@@ -403,7 +409,7 @@ export function projectHref(key: string, page?: ProjectPage): string {
 }
 
 /** Where a project's settings are read, or one of their forms is open: the project's own, or its rules. */
-export function projectSettingsHref(key: string, form?: "edit" | "rules"): string {
+export function projectSettingsHref(key: string, form?: "edit" | "rules" | "pack-token"): string {
   const base = projectHref(key, "settings");
   return form === undefined ? base : `${base}?${form}`;
 }

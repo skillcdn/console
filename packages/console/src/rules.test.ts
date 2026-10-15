@@ -35,7 +35,7 @@ describe("the console's own rules", () => {
       "console docs",
       "console ask",
       "working-the-board",
-      "load_skill",
+      "console skill <path>",
       "SKILLCDN.md",
     ]) {
       expect(REFERENCE_RULES).toContain(named);

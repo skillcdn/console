@@ -194,12 +194,24 @@ export const en = {
         private: "The administrators own it until an owner is listed.",
       },
     },
+    packToken: {
+      aria: "The pack token",
+      label: "Token",
+      hint: "A token a person made at SkillCDN for the pack's repository, on their account page there. The console keeps it sealed, reads the pack with it for whoever may see the project, and shows it to nobody.",
+      placeholder: "scdn_repo_…",
+      set: "Set the token",
+      remove: "Remove the token",
+    },
     settings: {
       title: "Settings",
       aria: "Project settings",
       edit: "Edit the project",
       organizationsSkills: (address: string) => `The organization's: ${address}`,
       noSkills: "None: the console names no address for the organization's.",
+      packToken: "Pack token",
+      packTokenNone: "None: a public pack needs none, and a private one is not read.",
+      packTokenSet: "Set",
+      packTokenEdit: "Change it",
     },
   },
 
@@ -626,13 +638,15 @@ export const en = {
     servedBy: "Served by",
     at: "at",
     connect:
-      "An agent reads these through its own MCP connection to this address, which a person makes once:",
+      "An agent reads these with the console command (console skill <path>), or through its own MCP connection to this address, which a person makes once:",
     connectLink: "how, on the address's page at SkillCDN",
     status: {
       indexing: "SkillCDN is still indexing the repository. Look again in a moment.",
       failed: "SkillCDN could not index the repository. What it found is on the address's page.",
       not_found:
-        "SkillCDN does not serve this address, or serves it only to someone signed in there. The address's page says which.",
+        "SkillCDN does not serve this address to the console: there is nothing there, or the pack is private and the project holds no pack token for it (Settings).",
+      token_invalid:
+        "The pack token the project holds no longer works at SkillCDN: it expired, was removed, or its maker lost the repository. An owner sets a new one on the Settings page.",
       unavailable: "SkillCDN could not be reached. The skills are as they were; look again later.",
     },
     none: {

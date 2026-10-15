@@ -13,7 +13,9 @@ import {
 /** What a sealed value is for. Each purpose has a key of its own, so one cannot stand in for another. */
 export type SealPurpose =
   /** What a sign-in is remembered by while the browser is away at the git host. */
-  "login";
+  | "login"
+  /** The pack token a project holds (ADR-0028), kept sealed in its row. */
+  | "pack-token";
 
 const VERSION = "v1";
 const IV_BYTES = 12;

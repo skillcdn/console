@@ -518,3 +518,71 @@ export function MemberList(props: MemberListProps) {
     </div>
   );
 }
+
+export interface PackTokenFormProps {
+  /** Whether the project holds a pack token now, so that it can be taken away. */
+  readonly set: boolean;
+  readonly busy?: boolean | undefined;
+  readonly error?: string | undefined;
+  /** Called with the token as typed or pasted; it travels to the console once and is shown nowhere after. */
+  readonly onSubmit: (token: string) => void;
+  readonly onRemove?: (() => void) | undefined;
+  readonly onCancel?: (() => void) | undefined;
+}
+
+/** Where an owner gives the project the pack token it reads a private pack with (ADR-0028), or takes it away. */
+export function PackTokenForm(props: PackTokenFormProps) {
+  const words = useWords();
+  const pack = words.projects.packToken;
+  const [token, setToken] = useState("");
+  const typed = token.trim();
+  const ready = typed.length >= 8 && !/\s/.test(typed);
+  return (
+    <form
+      className="sc-form"
+      aria-label={pack.aria}
+      onSubmit={(event: FormEvent) => {
+        event.preventDefault();
+        if (ready && props.busy !== true) {
+          props.onSubmit(typed);
+          setToken("");
+        }
+      }}
+    >
+      <p className="sc-field-hint">{pack.hint}</p>
+      <label className="sc-field">
+        <span className="sc-field-label">{pack.label}</span>
+        <input
+          className="sc-input"
+          type="password"
+          autoComplete="off"
+          spellCheck={false}
+          value={token}
+          placeholder={pack.placeholder}
+          disabled={props.busy === true}
+          onChange={(event) => setToken(event.target.value)}
+        />
+      </label>
+      {props.error !== undefined && (
+        <p className="sc-form-error" role="alert">
+          {props.error}
+        </p>
+      )}
+      <div className="sc-form-actions">
+        <Button type="submit" variant="primary" disabled={!ready || props.busy === true}>
+          {pack.set}
+        </Button>
+        {props.set && props.onRemove !== undefined && (
+          <Button variant="danger" disabled={props.busy === true} onClick={props.onRemove}>
+            {pack.remove}
+          </Button>
+        )}
+        {props.onCancel !== undefined && (
+          <Button variant="ghost" onClick={props.onCancel}>
+            {words.common.cancel}
+          </Button>
+        )}
+      </div>
+    </form>
+  );
+}

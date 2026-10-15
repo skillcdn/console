@@ -74,6 +74,9 @@ export interface ConsoleActions {
   /** Sets the image for the mark of the project the page is on, or takes it away; for an owner. */
   setProjectIcon(input: FileUpload): Promise<RestProject>;
   removeProjectIcon(): Promise<RestProject>;
+  /** Sets the pack token of the project the page is on, or takes it away; for an owner (ADR-0028). */
+  setPackToken(token: string): Promise<RestProject>;
+  removePackToken(): Promise<RestProject>;
   addMember(input: RestMemberInput): Promise<RestMember>;
   updateMember(personId: string, patch: RestMemberPatch): Promise<RestMember>;
   removeMember(personId: string): Promise<void>;
@@ -452,6 +455,16 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
         const changed = await scope().removeIcon();
         setProject(changed);
         await refreshWorkspace();
+        return changed;
+      },
+      async setPackToken(token) {
+        const changed = await scope().setPackToken({ token });
+        setProject(changed);
+        return changed;
+      },
+      async removePackToken() {
+        const changed = await scope().removePackToken();
+        setProject(changed);
         return changed;
       },
       async addMember(input) {

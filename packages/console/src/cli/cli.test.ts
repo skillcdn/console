@@ -138,6 +138,7 @@ const CONNECTION = {
   interval: 1,
 };
 const PROJECT = {
+  packToken: null,
   id: "0199c4d8-0000-7000-8000-000000000050",
   key: "web",
   name: "The web app",
@@ -643,9 +644,7 @@ describe("the console command", () => {
       "review  Reviews a change.\n    skill://gh/acme/skills/review/SKILL.md",
     );
     // Where a person connects an agent that has no connection, and where the console's own skills are.
-    expect(h.out()).toContain(
-      "an agent without one is connected by a person at https://skillcdn.test/gh/acme/skills",
-    );
+    expect(h.out()).toContain("which a person makes at https://skillcdn.test/gh/acme/skills");
     expect(h.out()).toContain(
       "The console's own skills, for working the board: /usr/lib/node_modules/@skillcdn/console/skills/",
     );
@@ -2273,5 +2272,157 @@ describe("the consoles the command is signed in to (ADR-0027)", () => {
     expect(await runCli(["login", "--url", ORIGIN, "--token-stdin"], h.io)).toBe(EXIT.failed);
     expect(h.err()).toContain("could not be read as one");
     expect(h.err()).toContain("Move it away");
+  });
+});
+
+describe("the pack of the project, through the console (ADR-0028)", () => {
+  const PAGE_ONE = {
+    address: "/gh/acme/skills",
+    source: "https://skillcdn.test",
+    page: "https://skillcdn.test/gh/acme/skills",
+    status: "ready",
+    skill: {
+      path: "review/SKILL.md",
+      directory: "review",
+      name: "review",
+      description: "Reviews a change.",
+      rules: [{ path: "SKILLCDN.md", body: "Be kind", truncated: true }],
+      body: "Read the ",
+      included: [],
+      files: ["review/guide.md"],
+      references: [{ path: "review/guide.md", status: "available" }],
+      complete: false,
+      nextCursor: "two",
+      serving: { full: true, license: "MIT", sourceUrl: null },
+      warnings: [],
+    },
+  };
+  const PAGE_TWO = {
+    ...PAGE_ONE,
+    skill: {
+      ...PAGE_ONE.skill,
+      rules: [{ path: "SKILLCDN.md", body: ".", truncated: false }],
+      body: "diff.",
+      included: [{ path: "review/checklist.md", body: "- tests", truncated: false }],
+      complete: true,
+      nextCursor: null,
+    },
+  };
+  const FILE = {
+    address: "/gh/acme/skills",
+    source: "https://skillcdn.test",
+    status: "ready",
+    folder: null,
+  };
+
+  it("reads a skill whole, its rules first, page after page, and a file of the pack", async () => {
+    const { fetch, calls } = fakeConsole({
+      [`GET ${IN}/skills/one?path=review%2FSKILL.md`]: { body: PAGE_ONE },
+      [`GET ${IN}/skills/one?path=review%2FSKILL.md&cursor=two`]: { body: PAGE_TWO },
+      [`GET ${IN}/skills/file?path=review%2Fguide.md`]: {
+        body: {
+          ...FILE,
+          file: {
+            path: "review/guide.md",
+            content: "How to ",
+            offset: 0,
+            nextOffset: 7,
+            totalLength: 14,
+          },
+        },
+      },
+      [`GET ${IN}/skills/file?path=review%2Fguide.md&offset=7`]: {
+        body: {
+          ...FILE,
+          file: {
+            path: "review/guide.md",
+            content: "review.",
+            offset: 7,
+            nextOffset: null,
+            totalLength: 14,
+          },
+        },
+      },
+    });
+    const h = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["skill", "review/SKILL.md"], h.io)).toBe(EXIT.ok);
+    const out = h.out();
+    expect(out).toContain("review  Reviews a change.");
+    expect(out).toContain("license: MIT");
+    expect(out).toContain("--- applicable rules: SKILLCDN.md ---\nBe kind.");
+    expect(out).toContain("--- skill: review/SKILL.md ---\nRead the diff.");
+    expect(out).toContain("--- included file: review/checklist.md ---\n- tests");
+    expect(out).toContain("console skill review/SKILL.md --file <path>: review/guide.md");
+    expect(calls.map((call) => call.key)).toEqual([
+      `GET ${IN}/skills/one?path=review%2FSKILL.md`,
+      `GET ${IN}/skills/one?path=review%2FSKILL.md&cursor=two`,
+    ]);
+    const file = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["skill", "review/SKILL.md", "--file", "review/guide.md"], file.io)).toBe(
+      EXIT.ok,
+    );
+    expect(file.out()).toContain("--- file: review/guide.md (14 characters) ---\nHow to review.");
+    // Described only: named and pointed at, nothing of its body.
+    const described = harness({
+      fetch: fakeConsole({
+        [`GET ${IN}/skills/one?path=review%2FSKILL.md`]: {
+          body: {
+            ...PAGE_ONE,
+            skill: {
+              ...PAGE_ONE.skill,
+              complete: true,
+              nextCursor: null,
+              body: "",
+              serving: {
+                full: false,
+                license: "BUSL-1.1",
+                sourceUrl: "https://github.com/acme/skills/blob/main/review/SKILL.md",
+              },
+            },
+          },
+        },
+      }).fetch,
+      env: SIGNED_IN,
+    });
+    expect(await runCli(["skill", "review/SKILL.md"], described.io)).toBe(EXIT.ok);
+    expect(described.out()).toContain("Described only");
+    expect(described.out()).toContain("https://github.com/acme/skills/blob/main/review/SKILL.md");
+    expect(described.out()).not.toContain("--- skill:");
+    // The token the project holds no longer works: said in words, with what an owner does.
+    const refused = harness({
+      fetch: fakeConsole({
+        [`GET ${IN}/skills/one?path=review%2FSKILL.md`]: {
+          body: { ...PAGE_ONE, status: "token_invalid", skill: null },
+        },
+      }).fetch,
+      env: SIGNED_IN,
+    });
+    expect(await runCli(["skill", "review/SKILL.md"], refused.io)).toBe(EXIT.ok);
+    expect(refused.out()).toContain("pack token");
+    expect(refused.out()).toContain("console project pack-token");
+    const nothing = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["skill"], nothing.io)).toBe(EXIT.usage);
+  });
+
+  it("gives the project its pack token from standard input and never an argument, and takes it away", async () => {
+    const { fetch, calls } = fakeConsole({
+      [`PUT ${IN}/pack-token`]: { body: { ...PROJECT, packToken: { setAt: WHEN } } },
+      [`DELETE ${IN}/pack-token`]: { body: PROJECT },
+    });
+    const h = harness({ fetch, env: SIGNED_IN, readStdin: async () => "scdn_repo_secret\n" });
+    expect(await runCli(["project", "pack-token", "web", "--stdin"], h.io)).toBe(EXIT.ok);
+    expect(calls[0]?.key).toBe(`PUT ${IN}/pack-token`);
+    expect(calls[0]?.body).toEqual({ token: "scdn_repo_secret" });
+    expect(h.out()).toContain(`pack token: set ${WHEN}`);
+    expect(h.out()).not.toContain("scdn_repo_secret");
+    const removed = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["project", "pack-token", "web", "--remove"], removed.io)).toBe(EXIT.ok);
+    expect(calls.at(-1)?.key).toBe(`DELETE ${IN}/pack-token`);
+    expect(removed.out()).toContain("pack token: none");
+    const neither = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["project", "pack-token", "web"], neither.io)).toBe(EXIT.usage);
+    const empty = harness({ fetch, env: SIGNED_IN, readStdin: async () => "\n" });
+    expect(await runCli(["project", "pack-token", "web", "--stdin"], empty.io)).toBe(EXIT.failed);
+    expect(empty.err()).toContain("No token was given");
   });
 });

@@ -86,6 +86,12 @@ describe("matchRoute", () => {
       form: "rules",
     });
     expect(projectSettingsHref("web")).toBe("/projects/web/settings");
+    expect(projectSettingsHref("web", "pack-token")).toBe("/projects/web/settings?pack-token");
+    expect(matchRoute("/projects/web/settings", "?pack-token")).toEqual({
+      name: "settings",
+      project: "web",
+      form: "pack-token",
+    });
     expect(projectSettingsHref("web", "rules")).toBe("/projects/web/settings?rules");
     expect(matchRoute("/settings")).toEqual({ name: "workspace-settings", form: undefined });
     expect(matchRoute("/settings", "?rules")).toEqual({
@@ -347,6 +353,10 @@ describe("createConsole", () => {
     update: never,
     setIcon: never,
     removeIcon: never,
+    setPackToken: never,
+    removePackToken: never,
+    skill: never,
+    skillFile: never,
     members: never,
     addMember: never,
     updateMember: never,

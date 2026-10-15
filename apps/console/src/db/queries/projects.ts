@@ -36,6 +36,8 @@ export interface ProjectRecord {
   readonly symbol: string | undefined;
   /** The project's own image for its mark, or none: then the mark is the symbol on the colour. */
   readonly icon: ProjectIcon | undefined;
+  /** The pack token the project reads a private pack with (ADR-0028), sealed, and when it was set; none for a public pack. */
+  readonly packToken: { readonly sealed: string; readonly setAt: Date } | undefined;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -105,6 +107,8 @@ const projectColumns = {
   symbol: projects.symbol,
   iconSha256: projects.iconSha256,
   iconContentType: projects.iconContentType,
+  packToken: projects.packToken,
+  packTokenSetAt: projects.packTokenSetAt,
   createdAt: projects.createdAt,
   updatedAt: projects.updatedAt,
 };
@@ -121,6 +125,8 @@ type ProjectRow = {
   readonly symbol: string | null;
   readonly iconSha256: string | null;
   readonly iconContentType: string | null;
+  readonly packToken: string | null;
+  readonly packTokenSetAt: Date | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 };
@@ -145,6 +151,10 @@ const toProject = (row: ProjectRow): ProjectRecord => ({
   color: row.color ?? undefined,
   symbol: row.symbol ?? undefined,
   icon: iconOf(row),
+  packToken:
+    row.packToken !== null && row.packTokenSetAt !== null
+      ? { sealed: row.packToken, setAt: row.packTokenSetAt }
+      : undefined,
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
 });
@@ -358,6 +368,59 @@ export async function updateProject(
       kind: "project.updated",
       actor,
       data: { key: current.key, name: next.name, fields: changed },
+      now,
+    });
+    return readView(tx, projectId, person);
+  });
+}
+
+/**
+ * Sets the pack token the project reads a private pack with (ADR-0028), sealed already, or takes
+ * it away, and tells the board which field changed; taking away what is not there writes nothing.
+ */
+export async function setPackToken(
+  database: Database,
+  input: {
+    readonly projectId: string;
+    readonly actor: Actor;
+    readonly person: PersonRecord;
+    /** The token, sealed with the console's secret; nothing to take it away. */
+    readonly sealed: string | undefined;
+    readonly now: Date;
+  },
+): Promise<ProjectView> {
+  const { projectId, actor, person, sealed, now } = input;
+  return drizzleOf(database).transaction(async (tx) => {
+    const [current] = await tx
+      .select({
+        workspaceId: projects.workspaceId,
+        key: projects.key,
+        name: projects.name,
+        packToken: projects.packToken,
+      })
+      .from(projects)
+      .where(eq(projects.id, projectId))
+      .for("update");
+    if (current === undefined) {
+      throw new ProjectError("project.not_found");
+    }
+    if (current.packToken === null && sealed === undefined) {
+      return readView(tx, projectId, person);
+    }
+    await tx
+      .update(projects)
+      .set({
+        packToken: sealed ?? null,
+        packTokenSetAt: sealed === undefined ? null : now,
+        updatedAt: now,
+      })
+      .where(eq(projects.id, projectId));
+    await recordEvent(tx, {
+      workspaceId: current.workspaceId,
+      projectId,
+      kind: "project.updated",
+      actor,
+      data: { key: current.key, name: current.name, fields: ["packToken"] },
       now,
     });
     return readView(tx, projectId, person);

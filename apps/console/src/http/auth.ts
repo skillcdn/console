@@ -15,6 +15,7 @@ import type { Connections } from "../auth/connect.js";
 import type { Login, LoginStep } from "../auth/login.js";
 import { safeReturnTo } from "../auth/login.js";
 import type { Membership } from "../auth/membership.js";
+import type { Secrets } from "../auth/secrets.js";
 import type { Sessions } from "../auth/sessions.js";
 import type { Tokens } from "../auth/tokens.js";
 import type { Database } from "../db/client.js";
@@ -35,6 +36,8 @@ export interface AppAuth {
   readonly sessions: Sessions;
   /** The tokens people made for their agents, scripts and consoles of their own. */
   readonly tokens: Tokens;
+  /** Seals what the console keeps for people: the pack token of a project (ADR-0028). */
+  readonly secrets: Secrets;
   /** Agents connecting with a code a person approves (ADR-0011). */
   readonly connections: Connections;
   /** Signing in, per provider the deployment has. */

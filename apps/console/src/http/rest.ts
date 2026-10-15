@@ -37,6 +37,8 @@ import {
   type RestProjectRules,
   type RestProjects,
   type RestRuns,
+  type RestSkillFile,
+  type RestSkillLoad,
   type RestSkills,
   type RestTasks,
   type RestTokenCreated,
@@ -61,6 +63,7 @@ import {
   restListingInputSchema,
   restMemberInputSchema,
   restMemberPatchSchema,
+  restPackTokenInputSchema,
   restPersonPatchSchema,
   restProjectInputSchema,
   restProjectPatchSchema,
@@ -80,6 +83,7 @@ import { bodyLimit } from "hono/body-limit";
 import { streamSSE } from "hono/streaming";
 import * as z from "zod";
 import type { Connections } from "../auth/connect.js";
+import type { Secrets } from "../auth/secrets.js";
 import type { Tokens } from "../auth/tokens.js";
 import type { Database } from "../db/client.js";
 import {
@@ -145,6 +149,7 @@ import {
   type ProjectRecord,
   type ProjectView,
   removeMember,
+  setPackToken,
   setProjectIcon,
   updateMember,
   updateProject,
@@ -206,6 +211,17 @@ import {
   restVersionSummary,
 } from "./rest-shapes.js";
 
+/** What a read of the pack is asked with: a path from the repository's root, bounded, and where to go on. */
+const skillQuerySchema = z.object({
+  path: z.string().min(1).max(500),
+  cursor: z.string().max(4000).optional(),
+});
+const fileQuerySchema = z.object({
+  path: z.string().min(1).max(500),
+  offset: z.coerce.number().int().nonnegative().optional(),
+  limit: z.coerce.number().int().min(1).max(100_000).optional(),
+});
+
 export interface RestDependencies {
   readonly database: Database;
   readonly workspace: () => Promise<WorkspaceRecord>;
@@ -219,6 +235,8 @@ export interface RestDependencies {
   readonly blobs: BlobStore;
   /** The skills of a project, read by address. */
   readonly skills: Skills;
+  /** Seals the pack token a project holds (ADR-0028); left out where nobody signs in, and then no project holds one. */
+  readonly secrets: Secrets | undefined;
   readonly clock: Clock;
   readonly logger: Logger;
   readonly agents: {
@@ -419,6 +437,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     feed,
     blobs,
     skills,
+    secrets,
     clock,
     logger,
     agents,
@@ -2413,14 +2432,164 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
   });
 
-  // The project's skills, as the SkillCDN deployment serves them at its address, or the organization's.
+  // The project's pack (ADR-0028): its skills as the SkillCDN deployment serves them at the
+  // project's address, or the organization's; one skill whole; a file of it. A private pack is
+  // read with the pack token the project holds, sealed in its row and shown to nobody; a read
+  // is logged, never what it read.
+  const packTokenOf = (project: ProjectRecord): string | undefined =>
+    project.packToken === undefined || secrets === undefined
+      ? undefined
+      : secrets.open("pack-token", project.packToken.sealed);
   app.get(`${PROJECT}/skills`, async (c) => {
     const found = await reading(c);
     if (found instanceof Response) {
       return found;
     }
-    const body: RestSkills = await skills.read(found.project.skillsAddress);
+    const body: RestSkills = await skills.read(
+      found.project.skillsAddress,
+      packTokenOf(found.project),
+    );
     return c.json(body);
+  });
+  app.get(`${PROJECT}/skills/one`, async (c) => {
+    const found = await reading(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    const query = skillQuerySchema.safeParse({
+      path: c.req.query("path"),
+      cursor: c.req.query("cursor"),
+    });
+    if (!query.success) {
+      return c.json(errorBody("request.invalid", `query: ${query.error.message}`), 400);
+    }
+    const body: RestSkillLoad = await skills.load(
+      found.project.skillsAddress,
+      query.data.path,
+      query.data.cursor,
+      packTokenOf(found.project),
+    );
+    logger.info(
+      {
+        person: found.person.id,
+        project: found.project.key,
+        address: body.address,
+        path: query.data.path,
+        status: body.status,
+        requestId: c.get("requestId"),
+      },
+      "a skill of the pack was read",
+    );
+    return c.json(body);
+  });
+  app.get(`${PROJECT}/skills/file`, async (c) => {
+    const found = await reading(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    const query = fileQuerySchema.safeParse({
+      path: c.req.query("path"),
+      offset: c.req.query("offset"),
+      limit: c.req.query("limit"),
+    });
+    if (!query.success) {
+      return c.json(errorBody("request.invalid", `query: ${query.error.message}`), 400);
+    }
+    const body: RestSkillFile = await skills.file(
+      found.project.skillsAddress,
+      query.data.path,
+      { offset: query.data.offset, limit: query.data.limit },
+      packTokenOf(found.project),
+    );
+    logger.info(
+      {
+        person: found.person.id,
+        project: found.project.key,
+        address: body.address,
+        path: query.data.path,
+        status: body.status,
+        requestId: c.get("requestId"),
+      },
+      "a file of the pack was read",
+    );
+    return c.json(body);
+  });
+
+  // The pack token (ADR-0028): set by an owner from a token a person made at the deployment, tried
+  // there once, kept sealed, and answered as nothing but the day it was set.
+  app.put(`${PROJECT}/pack-token`, tooLarge, async (c) => {
+    const found = await owning(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    const input = await bodyOf(c, restPackTokenInputSchema);
+    if (input instanceof Response) {
+      return input;
+    }
+    if (secrets === undefined) {
+      return c.json(
+        errorBody(
+          "project.pack_token_unsupported",
+          "The console keeps no secret to seal a pack token with: AUTH_SECRET is not set.",
+        ),
+        409,
+      );
+    }
+    const tried = await skills.read(found.project.skillsAddress, input.token);
+    if (
+      tried.status === "none" ||
+      tried.status === "not_found" ||
+      tried.status === "token_invalid"
+    ) {
+      return c.json(
+        errorBody(
+          "project.pack_token_refused",
+          tried.status === "none"
+            ? "The project names no pack to read with the token."
+            : "The deployment does not serve the pack to this token.",
+        ),
+        400,
+      );
+    }
+    if (tried.status === "unavailable") {
+      return c.json(
+        errorBody(
+          "skills.unavailable",
+          "The SkillCDN deployment could not be reached; try again later.",
+        ),
+        503,
+      );
+    }
+    try {
+      const project = await setPackToken(database, {
+        projectId: found.project.id,
+        actor: found.actor,
+        person: found.person,
+        sealed: secrets.seal("pack-token", input.token),
+        now: clock.now(),
+      });
+      return c.json(restProject(project));
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+  app.delete(`${PROJECT}/pack-token`, async (c) => {
+    const found = await owning(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    try {
+      const project = await setPackToken(database, {
+        projectId: found.project.id,
+        actor: found.actor,
+        person: found.person,
+        sealed: undefined,
+        now: clock.now(),
+      });
+      return c.json(restProject(project));
+    } catch (error) {
+      return failure(c, error);
+    }
   });
 
   // The documents of the project (ADR-0009): pages under a path, read by whoever may see the

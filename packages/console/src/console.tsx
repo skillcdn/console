@@ -48,6 +48,7 @@ import { ListingForm, PeopleList, type PeopleListProps } from "./components/peop
 import {
   MemberList,
   type MemberListProps,
+  PackTokenForm,
   ProjectForm,
   ProjectList,
   type ProjectListProps,
@@ -75,6 +76,7 @@ import {
   EmptyState,
   personName,
   Spinner,
+  Time,
 } from "./components/ui.js";
 import { WorkList, type WorkListProps } from "./components/work.js";
 import { ConnectPage } from "./connect-page.js";
@@ -1188,6 +1190,39 @@ function ProjectSettingsPage(props: {
       </>
     );
   }
+  if (route.form === "pack-token") {
+    if (!owner) {
+      return <NothingHere />;
+    }
+    return (
+      <>
+        {head}
+        {error !== undefined && <Callout tone="danger">{error}</Callout>}
+        <section className="sc-panel sc-panel-form" aria-label={words.projects.packToken.aria}>
+          <PackTokenForm
+            set={project.packToken !== null}
+            busy={busy}
+            onSubmit={(token) =>
+              void act(async () => {
+                await data.actions.setPackToken(token);
+                navigation.replace(here);
+              })
+            }
+            onRemove={
+              project.packToken === null
+                ? undefined
+                : () =>
+                    void act(async () => {
+                      await data.actions.removePackToken();
+                      navigation.replace(here);
+                    })
+            }
+            onCancel={() => navigation.back(here)}
+          />
+        </section>
+      </>
+    );
+  }
   return (
     <>
       {head}
@@ -1220,6 +1255,24 @@ function ProjectSettingsPage(props: {
                 settings.organizationsSkills(skills.address)
               ) : (
                 settings.noSkills
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt>{settings.packToken}</dt>
+            <dd>
+              {project.packToken === null ? (
+                <span className="sc-muted">{settings.packTokenNone}</span>
+              ) : (
+                <>
+                  {settings.packTokenSet} <Time iso={project.packToken.setAt} />
+                </>
+              )}
+              {owner && (
+                <>
+                  {" "}
+                  <a href={projectSettingsHref(key, "pack-token")}>{settings.packTokenEdit}</a>
+                </>
               )}
             </dd>
           </div>

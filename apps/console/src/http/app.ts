@@ -124,6 +124,7 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
     feed,
     blobs,
     skills,
+    secrets: auth?.secrets,
     clock,
     logger,
     agents: dependencies.agents,

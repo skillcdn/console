@@ -186,9 +186,9 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   },
   project: {
     usage:
-      'project <key>  |  project new <key> "<name>" [--description <markdown>|--file <path>] [--visibility workspace|private] [--skills <address>|none] [--color <name>] [--symbol <text>]  |  project edit <key> [--name "<name>"] [the same flags; none clears]  |  project icon <key> <file>  |  project icon <key> --remove',
+      'project <key>  |  project new <key> "<name>" [--description <markdown>|--file <path>] [--visibility workspace|private] [--skills <address>|none] [--color <name>] [--symbol <text>]  |  project edit <key> [--name "<name>"] [the same flags; none clears]  |  project icon <key> <file>  |  project icon <key> --remove  |  project pack-token <key> --stdin  |  project pack-token <key> --remove',
     about:
-      "One project in full; or a project made, with you as its owner, private unless --visibility workspace says everyone of the workspace works in it; or one changed, only in what the flags say, for an owner; or its image for its mark, set from a file of this machine or taken away. The organization's skills are the project's unless --skills names an address of its own.",
+      "One project in full; or a project made, with you as its owner, private unless --visibility workspace says everyone of the workspace works in it; or one changed, only in what the flags say, for an owner; or its image for its mark, set from a file of this machine or taken away; or its pack token (ADR-0028), the token a person made at SkillCDN for a private pack, read from standard input and never an argument, which the console keeps sealed to read the pack with, or taken away. The organization's skills are the project's unless --skills names an address of its own.",
     limits: [
       `key: ${KEY}, up to ${MAX_PROJECT_KEY_LENGTH} characters; it does not change once made`,
       `name: one line, up to ${MAX_PROJECT_NAME_LENGTH} characters; description: up to ${MAX_PROJECT_DESCRIPTION_LENGTH}`,
@@ -242,7 +242,17 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   skills: {
     usage: "skills",
     about:
-      "The organization's skills, as SkillCDN serves them at the project's address: each with its description and the URI you load it by through your own SkillCDN connection, which a person makes at the address's page when you have none; and where the console's own skills are on this machine. --json adds the page of each, for a person.",
+      "The skills of the project's pack, as SkillCDN serves them at the project's address: each with its description, the path of its SKILL.md, which console skill reads it by, and the URI you load it by through your own SkillCDN connection where your host has one; and where the console's own skills are on this machine. A private pack is read with the pack token the project holds (ADR-0028). --json adds the page of each, for a person.",
+  },
+  skill: {
+    usage: "skill <path> [--file <path>]",
+    about:
+      "One skill of the project's pack, whole, as load_skill lays it out for you: the rules of the repository from its root to the nearest manifest, the skill's body, the files it includes, each under a line that names its path; then the files it has and what it refers to. Read by the console from the SkillCDN deployment, with the pack token the project holds where the pack is private, so you need no connection of your own. <path> is the path of the SKILL.md from the repository's root, as console skills lists it. --file <path> reads a file of the pack instead, whole, or what a folder holds. What you read is the pack's, under its license: what a private pack says stays in your work and is not copied into reports or pages beyond what the work needs.",
+    refusals: [
+      "status not_found: the pack is not served to the console; private, with no pack token on the project",
+      "status token_invalid: the pack token the project holds no longer works; an owner sets a new one",
+      "status failed, for a file: SkillCDN will not carry it, too large or not text",
+    ],
   },
   rules: {
     usage:
@@ -481,6 +491,7 @@ const SECTIONS: readonly { readonly title: string; readonly commands: readonly s
       "runs",
       "run",
       "skills",
+      "skill",
       "rules",
     ],
   },
