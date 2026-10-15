@@ -1787,6 +1787,18 @@ describe("a person's work", () => {
           }),
         },
       ],
+      closed: [
+        {
+          project: { key: "docs", name: "The docs", color: "green", symbol: "D", icon: null },
+          task: task({
+            id: "0199c4d8-0000-7000-8000-000000000015",
+            number: 10,
+            dueOn: TODAY,
+            title: "Done today",
+            state: "done",
+          }),
+        },
+      ],
       decisions: [
         {
           project: { key: "web", name: "The web app", color: null, symbol: null, icon: null },
@@ -1820,6 +1832,12 @@ describe("a person's work", () => {
     expect(html).toMatch(
       /class="sc-calendar-task[^"]*"[^>]*><span class="sc-mark sc-mark-sm sc-category-green"[^>]*>D<\/span><span class="sc-calendar-task-title">On the day/,
     );
+    // What was done is on the week, struck through as a project's calendar shows it, and in no list.
+    expect(html).toMatch(
+      /class="sc-calendar-task[^"]*sc-calendar-over[^"]*"[^>]*>[\s\S]{0,400}?Done today/,
+    );
+    expect(html.split("Done today").length - 1).toBe(1);
+    expect(html).toContain('href="/projects/docs/tasks/10"');
     const quiet = renderToStaticMarkup(
       <WorkList
         work={{ tasks: [], decisions: [] }}
@@ -1832,6 +1850,19 @@ describe("a person's work", () => {
     expect(quiet).toContain("No decision waits.");
     expect(quiet).toContain("Nothing is planned this week.");
     expect(quiet).not.toContain('aria-label="Overdue"');
+    // Nothing open, but something closed this week: the week shows it, and the lists stay away.
+    const onlyClosed = renderToStaticMarkup(
+      <WorkList
+        work={{ tasks: [], closed: work.closed, decisions: [] }}
+        today={TODAY}
+        taskHref={(key, item) => `/projects/${key}/tasks/${item.number}`}
+        decisionHref={() => "#"}
+        weekHref={(day) => `/work?week=${day}`}
+      />,
+    );
+    expect(onlyClosed).toContain("Done today");
+    expect(onlyClosed).not.toContain("Nothing is planned this week.");
+    expect(onlyClosed).not.toContain('aria-label="Due this week"');
     // Another person's plate carries no decisions, and says nothing of them.
     const theirs = renderToStaticMarkup(
       <WorkList

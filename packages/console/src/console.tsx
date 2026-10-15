@@ -1748,9 +1748,10 @@ function PersonAgentsPage(props: {
   );
 }
 
-/** What a plate's page shows: the tasks, and the decisions waiting on the person's own. */
+/** What a plate's page shows: the tasks, open and lately closed, and the decisions waiting on the person's own. */
 interface Plate {
   readonly tasks: RestWork["tasks"];
+  readonly closed?: RestWork["closed"] | undefined;
   readonly decisions?: RestWork["decisions"] | undefined;
 }
 
@@ -1825,7 +1826,9 @@ function PlatePage(props: {
             <Spinner label={props.loading} />
           </div>
         )
-      ) : plate.tasks.length === 0 && (plate.decisions?.length ?? 0) === 0 ? (
+      ) : plate.tasks.length === 0 &&
+        (plate.closed?.length ?? 0) === 0 &&
+        (plate.decisions?.length ?? 0) === 0 ? (
         <EmptyState title={props.empty.title} body={props.empty.body} />
       ) : (
         <components.WorkList

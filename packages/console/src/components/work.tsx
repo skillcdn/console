@@ -7,14 +7,17 @@ import { TaskList } from "./task-list.js";
 import { PersonChip, Time } from "./ui.js";
 
 // What is on a person's plate (ADR-0019), across the projects they may see: the week at the
-// top, with the open tasks assigned to them on its days; below, the same tasks by when they
-// are due, and the decisions that wait for a person. Takes its data as props and nothing from
-// the network; the week shown is the address's (ADR-0010).
+// top, with the open tasks assigned to them on its days, and what of theirs was done or
+// dropped on them, as a project's calendar shows it; below, the open tasks by when they are
+// due, and the decisions that wait for a person. Takes its data as props and nothing from the
+// network; the week shown is the address's (ADR-0010).
 
 export interface WorkListProps {
   /** The tasks on the plate; and the decisions waiting on the person's own plate, left out on another's. */
   readonly work: {
     readonly tasks: RestWork["tasks"];
+    /** The person's tasks done or dropped and not yet put away: on the week, not in the lists. */
+    readonly closed?: RestWork["closed"] | undefined;
     readonly decisions?: RestWork["decisions"] | undefined;
   };
   /** The day to count from; the browser's today when left out. */
@@ -33,7 +36,8 @@ export function WorkList(props: WorkListProps) {
   const now = props.today ?? todayOf();
   const weekEnd = addDays(now, 6);
   const { tasks, decisions } = props.work;
-  const projectOf = new Map(tasks.map((item) => [item.task.id, item.project]));
+  const closed = props.work.closed ?? [];
+  const projectOf = new Map([...tasks, ...closed].map((item) => [item.task.id, item.project]));
   const hrefOf = (task: RestTask) => props.taskHref(projectOf.get(task.id)?.key ?? "", task);
   const markOf = (task: RestTask) => {
     const project = projectOf.get(task.id);
@@ -60,7 +64,7 @@ export function WorkList(props: WorkListProps) {
   return (
     <div className="sc-work">
       <Week
-        tasks={tasks.map((item) => item.task)}
+        tasks={[...tasks, ...closed].map((item) => item.task)}
         day={props.week}
         today={now}
         taskHref={hrefOf}

@@ -176,10 +176,12 @@ import {
   createTask,
   findTaskByNumber,
   getTask,
+  listClosedTasksAssignedTo,
   listTasks,
   listTasksAssignedTo,
   restoreTask,
   TaskError,
+  type TaskRecord,
   updateTask,
 } from "../db/queries/tasks.js";
 import { TokenError, type TokenRecord } from "../db/queries/tokens.js";
@@ -1247,24 +1249,28 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     };
   };
 
-  // What is on the asker's plate, across the projects they may see: their open tasks, and the
+  // What is on the asker's plate, across the projects they may see: their open tasks, what of
+  // theirs was done or dropped and is not put away yet, for the week on the plate, and the
   // decisions waiting for a person. Each with its project, for the page to say and link.
   app.get(REST_ROUTES.work, async (c) => {
     const person = await asking(c);
     if (person instanceof Response) {
       return person;
     }
-    const [projects, tasks, decisions] = await Promise.all([
+    const [projects, tasks, closed, decisions] = await Promise.all([
       listProjectsFor(database, person.workspaceId, person),
       listTasksAssignedTo(database, person.workspaceId, person, person, LIST_LIMIT),
+      listClosedTasksAssignedTo(database, person.workspaceId, person, person, LIST_LIMIT),
       listWaitingDecisionsFor(database, person.workspaceId, person, LIST_LIMIT),
     ]);
     const projectOf = projectRefsOf(projects);
+    const withProject = (task: TaskRecord) => {
+      const project = projectOf(task.projectId);
+      return project === undefined ? [] : [{ project, task: restTask(task) }];
+    };
     const body: RestWork = {
-      tasks: tasks.flatMap((task) => {
-        const project = projectOf(task.projectId);
-        return project === undefined ? [] : [{ project, task: restTask(task) }];
-      }),
+      tasks: tasks.flatMap(withProject),
+      closed: closed.flatMap(withProject),
       decisions: decisions.flatMap((decision) => {
         const project = projectOf(decision.projectId);
         return project === undefined ? [] : [{ project, decision: restDecision(decision) }];
@@ -1298,16 +1304,19 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         403,
       );
     }
-    const [projects, tasks] = await Promise.all([
+    const [projects, tasks, closed] = await Promise.all([
       listProjectsFor(database, asker.workspaceId, asker),
       listTasksAssignedTo(database, asker.workspaceId, subject, asker, LIST_LIMIT),
+      listClosedTasksAssignedTo(database, asker.workspaceId, subject, asker, LIST_LIMIT),
     ]);
     const projectOf = projectRefsOf(projects);
+    const withProject = (task: TaskRecord) => {
+      const project = projectOf(task.projectId);
+      return project === undefined ? [] : [{ project, task: restTask(task) }];
+    };
     const body: RestPersonWork = {
-      tasks: tasks.flatMap((task) => {
-        const project = projectOf(task.projectId);
-        return project === undefined ? [] : [{ project, task: restTask(task) }];
-      }),
+      tasks: tasks.flatMap(withProject),
+      closed: closed.flatMap(withProject),
     };
     return c.json(body);
   });

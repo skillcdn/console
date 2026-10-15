@@ -603,19 +603,26 @@ const projectRef = z.object({
 
 /**
  * `GET /api/v1/work`: what is on the asker's plate across the projects they may see (ADR-0019):
- * the open tasks assigned to them, and the decisions that wait for a person, each with its project.
+ * the open tasks assigned to them, and the decisions that wait for a person, each with its
+ * project; and, for the week on the plate, `closed`, the tasks assigned to them that are done
+ * or dropped and not yet put away. Left out by a console older than it.
  */
 export const restWorkSchema = z.object({
   tasks: z.array(z.object({ project: projectRef, task: restTaskSchema })),
+  closed: z.optional(z.array(z.object({ project: projectRef, task: restTaskSchema }))),
   decisions: z.array(z.object({ project: projectRef, decision: restDecisionSchema })),
 });
 export type RestWork = z.infer<typeof restWorkSchema>;
 
 /**
- * What `GET /api/v1/people/<id>/work` answers: another person's open tasks, within the projects
- * the asker may see, for whoever oversees them. No decisions, which wait for anyone.
+ * What `GET /api/v1/people/<id>/work` answers: another person's open tasks, and their closed
+ * ones for the week, within the projects the asker may see, for whoever oversees them. No
+ * decisions, which wait for anyone.
  */
-export const restPersonWorkSchema = z.object({ tasks: restWorkSchema.shape.tasks });
+export const restPersonWorkSchema = z.object({
+  tasks: restWorkSchema.shape.tasks,
+  closed: restWorkSchema.shape.closed,
+});
 export type RestPersonWork = z.infer<typeof restPersonWorkSchema>;
 
 /** What `POST /api/v1/projects/<key>/decisions` is sent: the question, its context, and the options. */

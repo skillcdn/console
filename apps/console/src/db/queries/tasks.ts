@@ -577,8 +577,9 @@ export async function listTasks(
 
 /**
  * What is on a person's plate: the open tasks assigned to `assignee`, within the projects
- * `viewer` may see and no other, the sooner due first and those with no day last. The viewer
- * is the person themselves on their own page, and whoever oversees them on theirs.
+ * `viewer` may see and no other, the sooner due first and those with no day last; a task put
+ * away is not on it (ADR-0030). The viewer is the person themselves on their own page, and
+ * whoever oversees them on theirs.
  */
 export async function listTasksAssignedTo(
   database: Database,
@@ -594,10 +595,40 @@ export async function listTasksAssignedTo(
         eq(tasks.workspaceId, workspaceId),
         eq(tasks.assigneeId, assignee.id),
         inArray(tasks.state, [...OPEN_TASK_STATES]),
+        isNull(tasks.archivedAt),
         visibleTo(viewer),
       ),
     )
     .orderBy(sql`${tasks.dueOn} asc nulls last`, desc(tasks.number))
+    .limit(limit);
+  return rows.map(toTask);
+}
+
+/**
+ * What a person's plate shows of what was: the tasks assigned to `assignee` that are done or
+ * dropped and not yet put away, within the projects `viewer` may see, the last closed first,
+ * so that the week on the plate shows them on their days as a project's calendar does.
+ */
+export async function listClosedTasksAssignedTo(
+  database: Database,
+  workspaceId: string,
+  assignee: { readonly id: string },
+  viewer: PersonRecord,
+  limit: number,
+): Promise<TaskRecord[]> {
+  const rows = await selectTasks(drizzleOf(database))
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+    .where(
+      and(
+        eq(tasks.workspaceId, workspaceId),
+        eq(tasks.assigneeId, assignee.id),
+        notInArray(tasks.state, [...OPEN_TASK_STATES]),
+        isNull(tasks.archivedAt),
+        visibleTo(viewer),
+      ),
+    )
+    // A dropped task has no moment of its own: when it was last changed is when it was dropped.
+    .orderBy(sql`coalesce(${tasks.doneAt}, ${tasks.updatedAt}) desc`, desc(tasks.number))
     .limit(limit);
   return rows.map(toTask);
 }

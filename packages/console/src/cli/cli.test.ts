@@ -1457,6 +1457,17 @@ describe("the plan on the command line", () => {
               task: TASK,
             },
           ],
+          closed: [
+            {
+              project: { key: "web", name: "The web app", color: null, symbol: null, icon: null },
+              task: {
+                ...TASK,
+                id: "0199c4d8-0000-7000-8000-000000000031",
+                number: 6,
+                state: "done",
+              },
+            },
+          ],
           decisions: [],
         },
       },
@@ -1470,6 +1481,11 @@ describe("the plan on the command line", () => {
     expect(plate.out()).toContain("tasks assigned to you:");
     expect(plate.out()).toContain("  web  #7  ready  high  Fix the parser");
     expect(plate.out()).toContain("decisions waiting: none");
+    // What was closed is for the week on the plate's page: the words keep to the open tasks, the JSON carries it.
+    expect(plate.out()).not.toContain("#6");
+    const asJson = harness({ fetch, env: { CONSOLE_URL: ORIGIN, CONSOLE_TOKEN: "cns_t_secret" } });
+    expect(await runCli(["work", "--json"], asJson.io)).toBe(EXIT.ok);
+    expect(JSON.parse(asJson.out()).closed).toHaveLength(1);
   });
 
   it("shows another person's plate by their login, for whoever oversees them", async () => {

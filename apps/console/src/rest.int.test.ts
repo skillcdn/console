@@ -11,6 +11,7 @@ import {
   MAX_TOKEN_DAYS,
   MAX_TOKEN_NAME_LENGTH,
   MAX_TOKENS_PER_PERSON,
+  OPEN_TASK_STATES,
   personTokensPath,
   personWorkPath,
   projectPath,
@@ -2023,6 +2024,17 @@ describe("the schedule and the roadmap", () => {
       assigneeId: aliceId,
       state: "done",
     });
+    const dropped = await createTask(alice, {
+      title: "Mine, dropped",
+      assigneeId: aliceId,
+      state: "dropped",
+    });
+    const putAway = await createTask(alice, {
+      title: "Mine, done and put away",
+      assigneeId: aliceId,
+      state: "done",
+    });
+    expect((await send(alice, "POST", `${IN}/tasks/${putAway.id}/archive`)).ok).toBe(true);
     const raised = restDecisionSchema.parse(
       await (
         await send(bob, "POST", `${IN}/decisions`, {
@@ -2037,6 +2049,12 @@ describe("the schedule and the roadmap", () => {
     expect(titles).toContainEqual(["docs", "Mine in the docs"]);
     expect(titles).not.toContainEqual(["web", "Bob's"]);
     expect(titles).not.toContainEqual(["web", "Mine, done"]);
+    // What was done or dropped and is not put away yet comes apart, for the week on the plate.
+    const closed = (work.closed ?? []).map((item) => item.task.id);
+    expect(closed).toContain(finished.id);
+    expect(closed).toContain(dropped.id);
+    expect(closed).not.toContain(putAway.id);
+    expect(closed).not.toContain(sooner.id);
     // The sooner due first, and what has no day after everything that has one.
     const order = work.tasks.map((item) => item.task.id);
     expect(order.indexOf(sooner.id)).toBeLessThan(order.indexOf(later.id));
@@ -2048,6 +2066,8 @@ describe("the schedule and the roadmap", () => {
     // Bob sees his own, and nothing of the docs project, which is not his to see.
     const bobWork = restWorkSchema.parse(await (await get(bob, REST_ROUTES.work)).json());
     expect(bobWork.tasks.map((item) => item.task.id)).toEqual([bobs.id]);
+    expect((bobWork.closed ?? []).every((item) => item.task.assignee?.id === bobId)).toBe(true);
+    expect((bobWork.closed ?? []).some((item) => item.task.id === finished.id)).toBe(false);
     expect(bobWork.tasks.some((item) => item.task.id === inDocs.id)).toBe(false);
     expect(bobWork.decisions.some((item) => item.decision.id === raised.id)).toBe(true);
     expect(finished.state).toBe("done");
@@ -2062,6 +2082,11 @@ describe("the schedule and the roadmap", () => {
     );
     expect(bobsPlate.tasks.map((item) => item.task.title)).toContain("Bob's");
     expect(bobsPlate.tasks.every((item) => item.task.assignee?.id === bobId)).toBe(true);
+    expect(
+      (bobsPlate.closed ?? []).every(
+        (item) => item.task.assignee?.id === bobId && !OPEN_TASK_STATES.includes(item.task.state),
+      ),
+    ).toBe(true);
     expect(bobsPlate).not.toHaveProperty("decisions");
     // Bob owns nothing yet: Alice's plate is not his to see; nor is an id that is nobody's anyone's.
     expect(await errorOf(await get(bob, personWorkPath(aliceId)))).toBe("auth.forbidden");
@@ -2080,6 +2105,8 @@ describe("the schedule and the roadmap", () => {
     expect(titles).toContainEqual(["web", "Mine, sooner"]);
     expect(titles).not.toContainEqual(["docs", "Mine in the docs"]);
     expect(titles.some(([key]) => key === "docs")).toBe(false);
+    // What she closed comes too, within the same sight, for the week on her plate.
+    expect((alicesPlate.closed ?? []).map((item) => item.task.title)).toContain("Mine, done");
     // An administrator sees everyone's, through their agent too.
     const admins = createHarness(testDatabase, {
       providers: [createFixtureProvider()],

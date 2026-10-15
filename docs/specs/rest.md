@@ -121,7 +121,7 @@ The rules of the board ([ADR-0023](../adr/0023-the-rules-of-a-board-are-pages-th
 
 ### `GET /api/v1/work`
 
-`{ "tasks": [{ "project": { "key", "name", "color", "symbol", "icon" }, "task" }, ...], "decisions": [{ "project", "decision" }, ...] }`: what is on the asker's plate across the projects they may see ([ADR-0019](../adr/0019-a-task-is-planned-in-days-the-board-keeps-its-moments-and-goals-and-categories-give-the-work-its-shape.md)): the open tasks assigned to them, the sooner due first and those with no day last, and the decisions that wait for a person, the longest waiting first; each with the project it belongs to, so that a page says and links it. At most `LIST_LIMIT` of each.
+`{ "tasks": [{ "project": { "key", "name", "color", "symbol", "icon" }, "task" }, ...], "closed": [{ "project", "task" }, ...], "decisions": [{ "project", "decision" }, ...] }`: what is on the asker's plate across the projects they may see ([ADR-0019](../adr/0019-a-task-is-planned-in-days-the-board-keeps-its-moments-and-goals-and-categories-give-the-work-its-shape.md)): the open tasks assigned to them, the sooner due first and those with no day last; `closed`, the tasks assigned to them that are done or dropped and not yet put away, the last closed first, so that the week on the plate's page shows them on their days as a project's calendar does; and the decisions that wait for a person, the longest waiting first; each with the project it belongs to, so that a page says and links it. A task put away is in neither list ([ADR-0030](../adr/0030-a-task-is-put-away-from-any-state.md)). At most `LIST_LIMIT` of each.
 
 ### `GET /api/v1/tokens` and `POST /api/v1/tokens`
 
@@ -141,7 +141,7 @@ An administrator's sight of everyone's agents ([ADR-0011](../adr/0011-an-agent-c
 
 ### `GET /api/v1/people/<id>/work`
 
-`{ "tasks": [{ "project", "task" }, ...] }`: what is on another person's plate, for whoever oversees them: an administrator, or an owner of a project the person is in (everyone of the workspace is in a project open to it; a private one holds those listed), signed in or through their agent. The person's open tasks, the sooner due first and those with no day last, within the projects the asker may see and no other, each with its project; the decisions are left out, since they wait for anyone. `auth.forbidden` for anyone else; `person.not_found` for an id that is nobody's.
+`{ "tasks": [{ "project", "task" }, ...], "closed": [{ "project", "task" }, ...] }`: what is on another person's plate, for whoever oversees them: an administrator, or an owner of a project the person is in (everyone of the workspace is in a project open to it; a private one holds those listed), signed in or through their agent. The person's open tasks, the sooner due first and those with no day last, and as `closed` their tasks done or dropped and not yet put away, both within the projects the asker may see and no other, each with its project; the decisions are left out, since they wait for anyone. `auth.forbidden` for anyone else; `person.not_found` for an id that is nobody's.
 
 ### Connecting an agent
 
