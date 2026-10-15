@@ -622,6 +622,7 @@ export const en = {
     answerIt: "answer it",
     reports: "Reports",
     handedIn: "Handed in",
+    picture: (name: string) => `The picture ${name}`,
     label: (agent: string, name: string) => `${agent} for ${name}`,
   },
 
@@ -732,6 +733,11 @@ export const en = {
       body: "Body",
       bodyPlaceholder:
         "Markdown. A link to another page's path, such as guides/onboarding, refers to that page.",
+      pictures: "Pictures",
+      addPictures: "Add pictures",
+      pictureHint:
+        "A picture pasted or chosen here is attached to the page once it is written; ![words](its name) places it in the text.",
+      removeFile: (name: string) => `Take ${name} out`,
       write: "Write the page",
       writeVersion: "Write a new version",
     },

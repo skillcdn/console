@@ -159,6 +159,22 @@ export function DocsPage(props: DocsPageProps) {
   const toDecision = (decisionId: string) => decisionHref(key, decisionId);
   /** The plain address of what the page is on. */
   const here = toDoc(path);
+  // The pictures put into the body are attached once the page is written, one request each.
+  const attachAll = async (
+    at: string,
+    files: readonly File[],
+    written: RestDocument,
+  ): Promise<RestDocument> => {
+    let page = written;
+    for (const file of files) {
+      page = await actions.attachDocumentFile(at, {
+        name: file.name,
+        bytes: file,
+        ...(file.type === "" ? {} : { contentType: file.type }),
+      });
+    }
+    return page;
+  };
   const page = document !== null && document !== undefined ? document : undefined;
   /** The folder a new page goes in: this one, or the one the page shown is in. */
   const folder = page === undefined ? path : folderOf(path);
@@ -218,6 +234,7 @@ export function DocsPage(props: DocsPageProps) {
                   title: input.title,
                   body: input.body,
                 });
+                await attachAll(written.path, input.files, written);
                 navigation.replace(toDoc(written.path));
               })
             }
@@ -255,7 +272,7 @@ export function DocsPage(props: DocsPageProps) {
                     body: input.body,
                     ...(input.baseVersion === undefined ? {} : { baseVersion: input.baseVersion }),
                   });
-                  setDocument(written);
+                  setDocument(await attachAll(page.path, input.files, written));
                   navigation.replace(here);
                 })
               }

@@ -1,0 +1,5 @@
+---
+"@skillcdn/console": patch
+---
+
+The pictures wherever they were put. A picture handed in on a run is shown on the task's page as a comment's is: a thumbnail under what the agent handed in, large over the page when pressed, and placed where a report or the summary names it as `![words](its name)` (`RunCard` resolves the names against the run's files). A picture attached to a page of the documents is shown where the body names it, as the text has it (`DocumentView` resolves the names against the page's files), and `DocumentForm` takes a picture pasted or chosen into the body, placing `![](its name)` in the text and handing the files up with `onSubmit` (`files`), which the default console attaches once the page is written. `isPicture` is exported from the package as before, now from the components' `files` module with `placed`, `placing`, `namedFile` and `unusedName` beside it; the words `docs.form.pictures`, `addPictures`, `pictureHint`, `removeFile` and `runs.picture` are added to the packs.

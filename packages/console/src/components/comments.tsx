@@ -11,6 +11,7 @@ import {
 } from "../api.js";
 import { useWords } from "../i18n/index.js";
 import { DecisionCard, type DecisionCardProps } from "./decision-list.js";
+import { isPicture, namedFile, placed, placing, unusedName } from "./files.js";
 import { Markdown } from "./markdown.js";
 import { Lightbox, PictureThumb, usePicture } from "./pictures.js";
 import { RunCard } from "./runs.js";
@@ -20,24 +21,6 @@ import { Button, formatBytes, PersonChip, personName, Time } from "./ui.js";
 // the files put in it, read in one thread with the runs on the task and the decisions about
 // it, in the order they came. A picture is a thumbnail that opens large over the page. Takes
 // its data as props and nothing from the network.
-
-/** The kinds of picture the pages show in place: what a browser renders and cannot run. */
-const PICTURE_TYPES: ReadonlySet<string> = new Set([
-  "image/png",
-  "image/jpeg",
-  "image/gif",
-  "image/webp",
-]);
-
-/** Whether a file is a picture the pages show in place, by the media type the console kept. */
-export function isPicture(contentType: string): boolean {
-  return PICTURE_TYPES.has(contentType);
-}
-
-/** Whether the text places a file by its name, as `![words](name)` or `![words](./name)`. */
-function placed(body: string, name: string): boolean {
-  return body.includes(`](${name})`) || body.includes(`](./${name})`);
-}
 
 export interface CommentCardProps {
   readonly comment: RestComment;
@@ -55,7 +38,7 @@ export function CommentCard(props: CommentCardProps) {
   // A picture the text names by its file name is shown where the text puts it; the rest of
   // the files follow the text, pictures in place and everything else as a link.
   const named = (source: string): string | undefined => {
-    const name = source.startsWith("./") ? source.slice(2) : source;
+    const name = namedFile(source);
     const file = comment.files.find(
       (candidate) => candidate.file.name === name && isPicture(candidate.file.contentType),
     );
@@ -141,23 +124,6 @@ export interface CommentFormProps {
   readonly busy?: boolean | undefined;
 }
 
-/** A name for a file among those chosen already: the same, or with a count before its extension. */
-function unusedName(name: string, taken: readonly File[]): string {
-  const names = new Set(taken.map((file) => file.name));
-  if (!names.has(name)) {
-    return name;
-  }
-  const dot = name.lastIndexOf(".");
-  const stem = dot > 0 ? name.slice(0, dot) : name;
-  const extension = dot > 0 ? name.slice(dot) : "";
-  for (let n = 2; ; n += 1) {
-    const candidate = `${stem}-${n}${extension}`;
-    if (!names.has(candidate)) {
-      return candidate;
-    }
-  }
-}
-
 export function CommentForm(props: CommentFormProps) {
   const words = useWords().comments;
   const [body, setBody] = useState("");
@@ -171,7 +137,10 @@ export function CommentForm(props: CommentFormProps) {
       if (held.length >= MAX_FILES_PER_COMMENT) {
         break;
       }
-      const name = unusedName(file.name, held);
+      const name = unusedName(
+        file.name,
+        held.map((kept) => kept.name),
+      );
       const kept = name === file.name ? file : new File([file], name, { type: file.type });
       held = [...held, kept];
       added.push(kept);
@@ -189,9 +158,11 @@ export function CommentForm(props: CommentFormProps) {
     event.preventDefault();
     const added = add(pasted);
     if (added.length > 0) {
-      const lines = added.map((file) => `![](${file.name})`).join("\n");
       setBody((current) =>
-        current.trim().length === 0 ? lines : `${current.trimEnd()}\n\n${lines}`,
+        placing(
+          current,
+          added.map((file) => file.name),
+        ),
       );
     }
   };

@@ -226,6 +226,7 @@ Goal: the board as a person uses it at a desk and on a phone, after the first da
 - [x] Cards in hand (2026-10-15): a card is dragged from anywhere on it but its title and its menu, with a mouse at once and under a finger once it has rested a moment, so that a finger that moves scrolls as before; the cursor is the standard `move`, which every platform draws itself; the state select is gone from the card, the task's page keeping the way for the keyboard.
 - [x] The card's menu (2026-10-15): three dots in the card's corner open the way to the task's form and, once the task is done or dropped, the way to put it away.
 - [x] One way to the archive (2026-10-15): the board's page leads to the archive beside the way to write a task, no longer each closed column; the archive page says nothing above its list.
+- [x] The pictures wherever they were put (2026-10-15): a picture handed in on a run is a thumbnail on the task's page that opens large, as a comment's is, and a report places it by its file name; a picture attached to a page is shown where the body names it, as the text has it, and the page's form takes a picture pasted or chosen, attaching it once the page is written.
 
 ## After milestone 16
 

@@ -1,10 +1,11 @@
-import { type FormEvent, type ReactNode, useState } from "react";
+import { type ClipboardEvent, type FormEvent, type ReactNode, useState } from "react";
 import { agentLabel } from "../agent-name.js";
 import {
   foldersAbove,
   isDocumentPath,
   MAX_DOCUMENT_LENGTH,
   MAX_DOCUMENT_PATH_LENGTH,
+  MAX_FILES_PER_DOCUMENT,
   MAX_LINK_LABEL_LENGTH,
   MAX_SEARCH_LENGTH,
   MAX_TITLE_LENGTH,
@@ -18,13 +19,16 @@ import {
   type RestVersionSummary,
 } from "../api.js";
 import { useWords } from "../i18n/index.js";
+import { isPicture, namedFile, placing, unusedName } from "./files.js";
 import { Markdown } from "./markdown.js";
 import { Badge, Button, cx, formatBytes, PersonChip, Time } from "./ui.js";
 
 // The documents of a project (ADR-0009): a folder with its pages and its folders, the way to
 // find pages by their words, one page with its versions, what it links to, what refers to it
-// and its files, and the forms to write and attach. Each takes its data as props and nothing
-// from the network; what people and agents wrote is text or Markdown rendered to elements.
+// and its files, a picture among them shown where the body names it, and the forms to write and
+// attach, a picture pasted into the body attached once the page is written. Each takes its data
+// as props and nothing from the network; what people and agents wrote is text or Markdown
+// rendered to elements.
 
 /** The folder a path is in, as crumbs from the root: the root, then each folder above, then the name. */
 export function DocumentCrumbs(props: {
@@ -194,6 +198,8 @@ export interface DocumentFormProps {
     readonly title: string;
     readonly body: string;
     readonly baseVersion?: number | undefined;
+    /** The pictures pasted or chosen into the body, to attach once the page is written. */
+    readonly files: readonly File[];
   }) => void;
   readonly onCancel?: (() => void) | undefined;
 }
@@ -208,7 +214,41 @@ export function DocumentForm(props: DocumentFormProps) {
   );
   const [title, setTitle] = useState(existing?.title ?? "");
   const [body, setBody] = useState(existing?.body ?? "");
+  const [files, setFiles] = useState<readonly File[]>([]);
   const ready = title.trim().length > 0 && (existing !== undefined || isDocumentPath(path));
+
+  // A picture pasted or chosen goes with the page, placed in the text where pictures are read,
+  // under a name no file of the page has yet; the page carries only so many files.
+  const room = MAX_FILES_PER_DOCUMENT - (existing?.files.length ?? 0);
+  const add = (chosen: readonly File[]): void => {
+    const added: string[] = [];
+    let held = files;
+    for (const file of chosen) {
+      if (!isPicture(file.type) || held.length >= room) {
+        continue;
+      }
+      const taken = [
+        ...(existing?.files.map((attached) => attached.file.name) ?? []),
+        ...held.map((kept) => kept.name),
+      ];
+      const name = unusedName(file.name, taken);
+      const kept = name === file.name ? file : new File([file], name, { type: file.type });
+      held = [...held, kept];
+      added.push(name);
+    }
+    setFiles(held);
+    if (added.length > 0) {
+      setBody((current) => placing(current, added));
+    }
+  };
+  const paste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const pasted = [...event.clipboardData.files].filter((file) => isPicture(file.type));
+    if (pasted.length === 0) {
+      return;
+    }
+    event.preventDefault();
+    add(pasted);
+  };
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -219,6 +259,7 @@ export function DocumentForm(props: DocumentFormProps) {
       path: existing?.path ?? path,
       title: title.trim(),
       body,
+      files,
       ...(existing === undefined ? {} : { baseVersion: existing.version }),
     });
   };
@@ -257,8 +298,42 @@ export function DocumentForm(props: DocumentFormProps) {
           rows={16}
           placeholder={form.bodyPlaceholder}
           onChange={(event) => setBody(event.target.value)}
+          onPaste={paste}
         />
       </label>
+      {files.length > 0 && (
+        <ul className="sc-chosen-files" aria-label={form.pictures}>
+          {files.map((file) => (
+            <li key={file.name} className="sc-chosen-file">
+              <span>{file.name}</span> <span className="sc-muted">{formatBytes(file.size)}</span>{" "}
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label={form.removeFile(file.name)}
+                onClick={() => setFiles((current) => current.filter((held) => held !== file))}
+              >
+                ×
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="sc-doc-form-pictures">
+        <label className="sc-button sc-button-ghost sc-button-sm sc-file-choice">
+          {form.addPictures}
+          <input
+            className="sc-file-input"
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={(event) => {
+              add([...(event.target.files ?? [])]);
+              event.target.value = "";
+            }}
+          />
+        </label>
+        <span className="sc-field-hint">{form.pictureHint}</span>
+      </div>
       {props.error !== undefined && (
         <p className="sc-form-error" role="alert">
           {props.error}
@@ -417,6 +492,14 @@ export function DocumentView(props: DocumentViewProps) {
   const docs = words.docs;
   const { document, version } = props;
   const archived = document.archivedAt !== null;
+  // A picture attached to the page is shown where the body names it by its file name, as it is.
+  const named = (source: string): string | undefined => {
+    const name = namedFile(source);
+    const attached = document.files.find(
+      (candidate) => candidate.file.name === name && isPicture(candidate.file.contentType),
+    );
+    return attached === undefined ? undefined : props.fileHref(attached);
+  };
   const shown = version ?? {
     number: document.version,
     title: document.title,
@@ -446,7 +529,7 @@ export function DocumentView(props: DocumentViewProps) {
             </p>
           )}
           {shown.body.trim().length > 0 ? (
-            <Markdown source={shown.body} docHref={props.docHref} />
+            <Markdown source={shown.body} docHref={props.docHref} fileSrc={named} />
           ) : (
             <p className="sc-muted">{docs.nothingOnPage}</p>
           )}

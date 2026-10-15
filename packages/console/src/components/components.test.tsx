@@ -670,6 +670,36 @@ describe("documents", () => {
     expect(archived).not.toContain(">Edit<");
   });
 
+  it("show a picture attached to the page where the body names it, as the text has it", () => {
+    const html = renderToStaticMarkup(
+      <DocumentView
+        document={document({
+          body: "# Welcome\n\n![the board](board.png) and ![elsewhere](other.png) and ![far](https://img.example/x.png)",
+          files: [
+            {
+              id: "0199c4d8-0000-7000-8000-000000000071",
+              label: null,
+              file: { name: "board.png", size: 4096, contentType: "image/png", sha256: "cd" },
+              addedBy: alice,
+              agent: null,
+              createdAt: "2026-10-10T11:00:00.000Z",
+            },
+          ],
+        })}
+        docHref={docHref}
+        folderHref={folderHref}
+        fileHref={(file) => `/api/v1/projects/web/docs/guides%2Fonboarding/files/${file.id}`}
+      />,
+    );
+    expect(html).toContain(
+      '<img src="/api/v1/projects/web/docs/guides%2Fonboarding/files/0199c4d8-0000-7000-8000-000000000071" alt="the board"',
+    );
+    expect(html).toContain('<span class="sc-prose-image-text">elsewhere</span>');
+    expect(html).toContain('src="https://img.example/x.png"');
+    // In place and as the text has it: no thumbnail that opens large.
+    expect(html).not.toContain("sc-picture-thumb");
+  });
+
   it("list a folder's folders and pages, and ask for a path, a title and a body when writing", () => {
     const folder = renderToStaticMarkup(
       <FolderView
@@ -693,6 +723,9 @@ describe("documents", () => {
     const fresh = renderToStaticMarkup(<DocumentForm folder="guides" onSubmit={() => undefined} />);
     expect(fresh).toContain('value="guides/"');
     expect(fresh).toContain("Write the page");
+    // A picture pasted or chosen goes with the page.
+    expect(fresh).toContain("Add pictures");
+    expect(fresh).toContain('accept="image/*"');
     const again = renderToStaticMarkup(
       <DocumentForm document={document()} onSubmit={() => undefined} />,
     );
@@ -1044,6 +1077,11 @@ describe("runs", () => {
         body: "Found the cause in **the parser**.",
         createdAt: "2026-10-09T10:05:00.000Z",
       },
+      {
+        id: "0199c4d8-0000-7000-8000-000000000046",
+        body: "The board after: ![after](board.png), and ![elsewhere](https://img.example/x.png).",
+        createdAt: "2026-10-09T10:05:30.000Z",
+      },
     ],
     artifacts: [
       {
@@ -1066,6 +1104,19 @@ describe("runs", () => {
           sha256: "ab".repeat(32),
         },
         createdAt: "2026-10-09T10:07:00.000Z",
+      },
+      {
+        id: "0199c4d8-0000-7000-8000-000000000044",
+        kind: "file",
+        url: null,
+        label: "the board",
+        file: {
+          name: "board.png",
+          size: 582940,
+          contentType: "image/png",
+          sha256: "cd".repeat(32),
+        },
+        createdAt: "2026-10-09T10:08:00.000Z",
       },
     ],
     waitingFor: "0199c4d8-0000-7000-8000-000000000020",
@@ -1091,6 +1142,16 @@ describe("runs", () => {
     );
     expect(html).toContain("report &lt;final&gt;.md");
     expect(html).toContain("3.4 KB");
+    // A picture handed in is a thumbnail that opens large, named under it; a report that names
+    // it by its file name shows it where the words are, and a picture over https stays as it is.
+    expect(html).toContain('class="sc-picture-thumb" aria-label="Open the picture board.png"');
+    expect(html).toContain(
+      'src="/api/v1/projects/web/files/0199c4d8-0000-7000-8000-000000000044" alt="the board"',
+    );
+    expect(html).toContain(
+      'src="/api/v1/projects/web/files/0199c4d8-0000-7000-8000-000000000044" alt="after"',
+    );
+    expect(html).toContain('src="https://img.example/x.png"');
     expect(html).toContain("Mark abandoned");
     const over = renderToStaticMarkup(
       <RunList
@@ -1114,6 +1175,9 @@ describe("runs", () => {
     const unlinked = renderToStaticMarkup(<RunList runs={[run]} />);
     expect(unlinked).not.toContain("/files/");
     expect(unlinked).toContain("report &lt;final&gt;.md");
+    expect(unlinked).not.toContain("sc-picture-thumb");
+    expect(unlinked).toContain("board.png");
+    expect(unlinked).toContain('<span class="sc-prose-image-text">after</span>');
   });
 
   it("says in the feed what an agent did; the agent itself is the line's own", () => {

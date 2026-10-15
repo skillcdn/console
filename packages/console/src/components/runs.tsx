@@ -1,11 +1,15 @@
 import type { ReactNode } from "react";
 import { agentLabel, type RestArtifact, type RestRun, type RunStatus } from "../api.js";
 import { useWords } from "../i18n/index.js";
+import { isPicture, namedFile } from "./files.js";
 import { Markdown } from "./markdown.js";
+import { Lightbox, type Picture, PictureThumb, usePicture } from "./pictures.js";
 import { Badge, Button, formatBytes, PersonChip, personName, Time } from "./ui.js";
 
 // A run: one agent at work on one task for one person, with what it reported, what it handed
-// in, and what it waits for. Takes its data as props and nothing from the network.
+// in, and what it waits for. A picture handed in is seen small where it is listed and large
+// over the page, as a picture in a comment is, and a report that names it by its file name
+// shows it where the words are. Takes its data as props and nothing from the network.
 
 /** The words of a run's status in English: the default pack's. */
 export const RUN_STATUS_LABELS: Readonly<Record<RunStatus, string>> = {
@@ -48,6 +52,19 @@ export function RunCard(props: RunCardProps) {
   const words = useWords().runs;
   const { run } = props;
   const open = run.status === "running" || run.status === "waiting";
+  const pictures = usePicture();
+  const hrefOf = (artifact: RestArtifact) => props.fileHref?.(artifact);
+  // A report that names a picture handed in, by its file name, shows it where the words are.
+  const named = (source: string): string | undefined => {
+    const name = namedFile(source);
+    const artifact = run.artifacts.find(
+      (candidate) =>
+        candidate.file !== null &&
+        candidate.file.name === name &&
+        isPicture(candidate.file.contentType),
+    );
+    return artifact === undefined ? undefined : hrefOf(artifact);
+  };
   return (
     <article className="sc-run" aria-label={words.label(run.agent, personName(run.person))}>
       <header className="sc-run-header">
@@ -97,7 +114,12 @@ export function RunCard(props: RunCardProps) {
           {run.reports.map((report) => (
             <li key={report.id} className="sc-report">
               <Time iso={report.createdAt} />
-              <Markdown source={report.body} docHref={props.docHref} />
+              <Markdown
+                source={report.body}
+                docHref={props.docHref}
+                fileSrc={named}
+                onOpenPicture={pictures.open}
+              />
             </li>
           ))}
         </ol>
@@ -106,26 +128,41 @@ export function RunCard(props: RunCardProps) {
         <ul className="sc-link-list" aria-label={words.handedIn}>
           {run.artifacts.map((artifact) => (
             <li key={artifact.id}>
-              <ArtifactLink artifact={artifact} fileHref={props.fileHref} />
+              <ArtifactItem
+                artifact={artifact}
+                href={hrefOf(artifact)}
+                onOpenPicture={pictures.open}
+              />
             </li>
           ))}
         </ul>
       )}
       {run.summary !== null && (
         <div className="sc-run-summary">
-          <Markdown source={run.summary} docHref={props.docHref} />
+          <Markdown
+            source={run.summary}
+            docHref={props.docHref}
+            fileSrc={named}
+            onOpenPicture={pictures.open}
+          />
         </div>
       )}
+      <Lightbox picture={pictures.shown} onClose={pictures.close} />
     </article>
   );
 }
 
-/** A link as it was handed in; a file by its name, with its size, read from the console. */
-function ArtifactLink(props: {
+/**
+ * What was handed in: a link as it was given; a file by its name, with its size, read from the
+ * console; a picture seen small, and large when pressed.
+ */
+function ArtifactItem(props: {
   readonly artifact: RestArtifact;
-  readonly fileHref: ((artifact: RestArtifact) => string) | undefined;
+  readonly href: string | undefined;
+  readonly onOpenPicture: (picture: Picture, opener: HTMLElement) => void;
 }) {
-  const { artifact } = props;
+  const words = useWords().runs;
+  const { artifact, href } = props;
   if (artifact.file === null) {
     return (
       <a href={artifact.url ?? ""} target="_blank" rel="noopener noreferrer nofollow ugc">
@@ -133,20 +170,41 @@ function ArtifactLink(props: {
       </a>
     );
   }
-  const href = props.fileHref?.(artifact);
+  const { file } = artifact;
+  const about = (
+    <span className="sc-muted">
+      {artifact.label === null ? "" : `${file.name}, `}
+      {formatBytes(file.size)}
+    </span>
+  );
+  if (href !== undefined && isPicture(file.contentType)) {
+    return (
+      <div className="sc-artifact-picture">
+        <PictureThumb
+          picture={{
+            src: href,
+            alt: artifact.label ?? words.picture(file.name),
+            name: file.name,
+            size: file.size,
+          }}
+          onOpen={props.onOpenPicture}
+        />
+        <span>
+          {artifact.label ?? file.name} {about}
+        </span>
+      </div>
+    );
+  }
   return (
     <>
       {href === undefined ? (
-        <span>{artifact.label ?? artifact.file.name}</span>
+        <span>{artifact.label ?? file.name}</span>
       ) : (
         <a href={href} rel="nofollow ugc">
-          {artifact.label ?? artifact.file.name}
+          {artifact.label ?? file.name}
         </a>
       )}{" "}
-      <span className="sc-muted">
-        {artifact.label === null ? "" : `${artifact.file.name}, `}
-        {formatBytes(artifact.file.size)}
-      </span>
+      {about}
     </>
   );
 }

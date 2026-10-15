@@ -294,7 +294,7 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   "hand-in": {
     usage: "hand-in <https url | file path> [--label <words>]",
     about:
-      "Hands in what was made: a link (a branch, a pull request, a document, a page), or a file from this machine, which the console keeps and shows on the task.",
+      "Hands in what was made: a link (a branch, a pull request, a document, a page), or a file from this machine, which the console keeps and shows on the task; a picture is shown there small and large, and a report that names it as ![words](its name) shows it where the words are.",
     limits: [
       "a link: https only",
       `a file: up to ${MAX_FILE_BYTES} bytes, not empty; it is called by its name, without the path`,
@@ -414,7 +414,7 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   attach: {
     usage: "attach <path> <file> [--label <words>]",
     about:
-      "Attaches a file from this machine to a page: the console keeps it, and the page shows it.",
+      "Attaches a file from this machine to a page: the console keeps it, and the page lists it; a picture is shown where the body names it as ![words](its name).",
     limits: [
       `a file: up to ${MAX_FILE_BYTES} bytes, not empty; it is called by its name, without the path`,
       `at most ${MAX_FILES_PER_DOCUMENT} files on one page`,

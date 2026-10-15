@@ -33,7 +33,6 @@ export {
   type CommentDraft,
   CommentForm,
   type CommentFormProps,
-  isPicture,
   TaskThread,
   type TaskThreadProps,
   type ThreadItem,
@@ -72,6 +71,7 @@ export {
   type FolderViewProps,
 } from "./components/documents.js";
 export { describeEvent, EventFeed, type EventFeedProps } from "./components/event-feed.js";
+export { isPicture } from "./components/files.js";
 export {
   GoalForm,
   type GoalFormProps,

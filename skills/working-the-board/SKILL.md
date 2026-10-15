@@ -5,7 +5,7 @@ license: MIT
 compatibility: Needs a shell with the console command on the PATH (npm install -g @skillcdn/console, Node.js 24 or newer), signed in by a person. Nothing else; the command needs no key of its own and the agent never sees a token.
 metadata:
   author: skillcdn
-  version: "1.12"
+  version: "1.13"
 skillcdn:
   translations:
     ko:
@@ -66,11 +66,11 @@ A choice the body does not settle, a trade-off, a cost, a change of scope: `cons
 
 ### Phase 5: Hand in
 
-`console hand-in <https url | file path> --label "<words>"`: a branch, a pull request, a page, a document, or a file from this machine, which the console keeps and shows on the task. What was made is where the person can hold it, never only described.
+`console hand-in <https url | file path> --label "<words>"`: a branch, a pull request, a page, a document, or a file from this machine, which the console keeps and shows on the task; a picture handed in is shown there small and large, and a report that names it as `![words](its name)` shows it where the words are. What was made is where the person can hold it, never only described.
 
 ### Phase 6: Write down what the next agent needs
 
-What was learned and will be needed again (how a thing is set up, why a choice was made, a how-to) goes on a page of the project's documents: `console write <path> --title "<title>" --file notes.md`, at a path where the next agent looks for it (`console docs` shows the folders), and linked from the last report. The run is the record of this work; a page is for what outlives it.
+What was learned and will be needed again (how a thing is set up, why a choice was made, a how-to) goes on a page of the project's documents: `console write <path> --title "<title>" --file notes.md`, at a path where the next agent looks for it (`console docs` shows the folders), and linked from the last report; a picture for the page is attached with `console attach <path> <file>` and placed in the body as `![words](its name)`. The run is the record of this work; a page is for what outlives it.
 
 ### Phase 7: Finish
 

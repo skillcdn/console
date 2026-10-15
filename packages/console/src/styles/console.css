@@ -2152,8 +2152,9 @@ table {
   font-size: var(--sc-text-sm);
 }
 
-/* A picture in a comment is a thumbnail, no taller than a few lines, that opens large over the
-   page; a picture that only comes over https stays where it is, as small. */
+/* A picture in a comment, or handed in on a run, is a thumbnail, no taller than a few lines, that
+   opens large over the page; a picture that only comes over https, or one on a page of the
+   documents, stays where it is, as the text has it. */
 .sc-picture-thumb {
   display: inline-block;
   padding: 0;
@@ -2265,7 +2266,8 @@ table {
   font-size: var(--sc-text-sm);
 }
 
-.sc-comment-picture {
+.sc-comment-picture,
+.sc-artifact-picture {
   display: grid;
   gap: var(--sc-space-1);
   justify-items: start;
@@ -2276,7 +2278,8 @@ table {
   gap: var(--sc-space-2);
 }
 
-.sc-comment-chosen {
+.sc-comment-chosen,
+.sc-chosen-files {
   display: flex;
   flex-wrap: wrap;
   gap: var(--sc-space-2);
@@ -2286,7 +2289,8 @@ table {
   font-size: var(--sc-text-sm);
 }
 
-.sc-comment-chosen-file {
+.sc-comment-chosen-file,
+.sc-chosen-file {
   display: inline-flex;
   align-items: center;
   gap: var(--sc-space-1);
@@ -2304,13 +2308,15 @@ table {
   gap: var(--sc-space-2);
 }
 
-.sc-comment-form-actions label {
+.sc-comment-form-actions label,
+.sc-file-choice {
   position: relative;
   cursor: pointer;
 }
 
 /* The file input is the label's: there for the keyboard and the screen reader, not seen. */
-.sc-comment-file-input {
+.sc-comment-file-input,
+.sc-file-input {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -2504,6 +2510,14 @@ table {
 
 .sc-doc-archived .sc-prose {
   opacity: 0.85;
+}
+
+/* The pictures for a page, under its body: the way to add one, and what becomes of it. */
+.sc-doc-form-pictures {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
 }
 
 .sc-doc-attach {

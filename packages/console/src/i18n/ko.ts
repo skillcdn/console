@@ -586,6 +586,7 @@ export const ko: Messages = {
     answerIt: "답변하기",
     reports: "보고",
     handedIn: "제출물",
+    picture: (name) => `그림 ${name}`,
     label: (agent, name) => `${name}을(를) 위한 ${agent}`,
   },
 
@@ -696,6 +697,11 @@ export const ko: Messages = {
       body: "본문",
       bodyPlaceholder:
         "Markdown. guides/onboarding 같은 다른 페이지의 경로로 링크하면 그 페이지를 참조합니다.",
+      pictures: "그림",
+      addPictures: "그림 추가",
+      pictureHint:
+        "여기에 붙여 넣거나 고른 그림은 페이지를 쓸 때 첨부됩니다. ![설명](파일 이름)으로 본문에 넣을 수 있습니다.",
+      removeFile: (name) => `${name} 빼기`,
       write: "페이지 쓰기",
       writeVersion: "새 버전 쓰기",
     },
