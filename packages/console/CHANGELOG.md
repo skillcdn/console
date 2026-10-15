@@ -1,5 +1,13 @@
 # @skillcdn/console
 
+## 0.1.20
+
+### Patch Changes
+
+- [`a304e8a`](https://github.com/skillcdn/console/commit/a304e8ad641719619bcfab9165fe179326926396) Thanks [@samo-lucid](https://github.com/samo-lucid)! - The board in hand. A card is dragged to another column from anywhere on it but its title and its menu: with a mouse at once, under a finger once it has rested a moment, so that a finger that moves scrolls the page as before; the cursor is the standard `move`, which every platform draws itself. The state select is gone from the card; the task's page keeps the way for the keyboard. Each card has a menu in its corner, three dots, with the way to the task's form (`Board` and `TaskCard` take `editHref` and `onEdit`) and, once the task is done or dropped, the way to put it away (`onArchive`). `Board` no longer takes `archiveHref` and no column leads to the archive; the default console leads there from the board's page, beside the way to write a task, and the archive page says nothing above its list. `TaskCard` takes `onPress` in place of `onGrip`, and the words `board.grip`, `board.moveTo` and `archive.lead` are gone from the packs, `board.menu` added.
+
+- [`dfb88e5`](https://github.com/skillcdn/console/commit/dfb88e5629df127dbfcfec65567c24cb39cbe00c) Thanks [@samo-lucid](https://github.com/samo-lucid)! - The pictures wherever they were put. A picture handed in on a run is shown on the task's page as a comment's is: a thumbnail under what the agent handed in, large over the page when pressed, and placed where a report or the summary names it as `![words](its name)` (`RunCard` resolves the names against the run's files). A picture attached to a page of the documents is shown where the body names it, as the text has it (`DocumentView` resolves the names against the page's files), and `DocumentForm` takes a picture pasted or chosen into the body, placing `![](its name)` in the text and handing the files up with `onSubmit` (`files`), which the default console attaches once the page is written. `isPicture` is exported from the package as before, now from the components' `files` module with `placed`, `placing`, `namedFile` and `unusedName` beside it; the words `docs.form.pictures`, `addPictures`, `pictureHint`, `removeFile` and `runs.picture` are added to the packs.
+
 ## 0.1.19
 
 ### Patch Changes
