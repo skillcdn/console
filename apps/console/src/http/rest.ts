@@ -22,6 +22,7 @@ import {
   type ProjectIconType,
   type ProviderKey,
   REST_ROUTES,
+  type RestArchivedTasks,
   type RestCategories,
   type RestClaim,
   type RestComments,
@@ -48,6 +49,7 @@ import {
   RULES_PATH,
   RULES_TITLE,
   restAnswerInputSchema,
+  restArchiveTasksInputSchema,
   restArtifactInputSchema,
   restCategoryInputSchema,
   restCategoryPatchSchema,
@@ -167,11 +169,14 @@ import {
   startRun,
 } from "../db/queries/runs.js";
 import {
+  archiveTask,
+  archiveTasksOfGoal,
   createTask,
   findTaskByNumber,
   getTask,
   listTasks,
   listTasksAssignedTo,
+  restoreTask,
   TaskError,
   updateTask,
 } from "../db/queries/tasks.js";
@@ -326,6 +331,7 @@ const page = {
 const tasksQuery = z.object({
   state: z.enum(TASK_STATES).optional(),
   open: z.enum(["true", "false"]).optional(),
+  archived: z.enum(["true", "false"]).optional(),
   category: z.string().max(MAX_CATEGORY_KEY_LENGTH).regex(CATEGORY_KEY).optional(),
   goal: z.string().regex(UUID).optional(),
   assignee: z.string().regex(UUID).optional(),
@@ -632,7 +638,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
   /** What a task, a decision, a run, a person or a project that could not be worked on answers with. */
   const failure = (c: Context<AppEnv>, error: unknown): Response => {
     if (error instanceof TaskError) {
-      const status = error.code === "task.not_found" ? 404 : 400;
+      const status = error.code === "task.not_found" ? 404 : error.code === "task.open" ? 409 : 400;
       return c.json(errorBody(error.code, error.message), status);
     }
     if (error instanceof DecisionError) {
@@ -1811,6 +1817,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       goalId: query.data.goal,
       assigneeId: query.data.assignee,
       dueBy: query.data.dueBy,
+      archived: query.data.archived === "true",
       limit: query.data.limit,
       offset: query.data.offset,
     });
@@ -1893,6 +1900,54 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       return failure(c, error);
     }
   });
+
+  // Putting a task away (ADR-0029): one done or dropped, by whoever may work in the project, and
+  // back again the same way; every closed task of a goal at once, by an owner. A task put away is
+  // out of the listings, the board and the calendar, and open by its id or its number still.
+  const archiving = async (c: Context<AppEnv>, archive: boolean): Promise<Response> => {
+    const found = await changing(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    // The helper is not bound to a route, so the parameter may be missing to the types; it is not.
+    const id = c.req.param("id") ?? "";
+    if (!UUID.test(id)) {
+      return noSuchTask(c);
+    }
+    const input = { scope: found.scope, actor: found.actor, taskId: id, now: clock.now() };
+    try {
+      const task = archive
+        ? await archiveTask(database, input)
+        : await restoreTask(database, input);
+      return c.json(restTask(task));
+    } catch (error) {
+      return failure(c, error);
+    }
+  };
+  app.post(`${PROJECT}/tasks/archive`, tooLarge, async (c) => {
+    const found = await owning(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    const input = await bodyOf(c, restArchiveTasksInputSchema);
+    if (input instanceof Response) {
+      return input;
+    }
+    try {
+      const archived = await archiveTasksOfGoal(database, {
+        scope: found.scope,
+        actor: found.actor,
+        goalId: input.goalId,
+        now: clock.now(),
+      });
+      const body: RestArchivedTasks = { archived };
+      return c.json(body);
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+  app.post(`${PROJECT}/tasks/:id/archive`, (c) => archiving(c, true));
+  app.post(`${PROJECT}/tasks/:id/restore`, (c) => archiving(c, false));
 
   // The discussion on a task (ADR-0024), oldest first and whole; the task by its id or its number.
   app.get(`${PROJECT}/tasks/:id/comments`, async (c) => {

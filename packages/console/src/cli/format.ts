@@ -106,6 +106,9 @@ export function formatTaskLine(task: RestTask): string {
   if (task.openDecisions > 0) {
     notes.push(`${plural(task.openDecisions, "decision")} waiting`);
   }
+  if (task.archivedAt !== null) {
+    notes.push("archived");
+  }
   return `#${task.number}  ${task.state}  ${task.priority}  ${task.title}  (${notes.join("; ")})`;
 }
 
@@ -124,6 +127,7 @@ function scheduleLines(task: RestTask): string[] {
   const happened = [
     task.startedAt === null ? undefined : `started: ${task.startedAt}`,
     task.doneAt === null ? undefined : `done: ${task.doneAt}`,
+    task.archivedAt === null ? undefined : `archived: ${task.archivedAt}`,
   ].filter((part) => part !== undefined);
   if (happened.length > 0) {
     lines.push(happened.join("  "));

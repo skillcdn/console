@@ -137,6 +137,7 @@ export function restTask(task: TaskRecord): RestTask {
     dueOn: task.dueOn ?? null,
     startedAt: task.startedAt?.toISOString() ?? null,
     doneAt: task.doneAt?.toISOString() ?? null,
+    archivedAt: task.archivedAt?.toISOString() ?? null,
     links: task.links.map((link) => ({ url: link.url, label: link.label ?? null })),
     openDecisions: task.openDecisions,
     openRuns: task.openRuns,

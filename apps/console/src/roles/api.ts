@@ -27,6 +27,7 @@ import { createClientAddressResolver } from "../http/client-address.js";
 import { LiveFeed } from "../http/live-feed.js";
 import type { AppEnv } from "../http/request-context.js";
 import { startServer } from "../http/server.js";
+import { Archivist } from "../jobs/archivist.js";
 import { Janitor } from "../jobs/janitor.js";
 import { OrganizationSync } from "../jobs/organization-sync.js";
 import type { Logger } from "../logger.js";
@@ -41,6 +42,8 @@ import { APP_NAME, APP_VERSION } from "../version.js";
 
 /** How often what time has ended is removed, when this process does the worker's work. */
 const JANITOR_INTERVAL_MS = 15 * 60_000;
+/** How often what was done or dropped long enough ago is put away (ADR-0029), the same way. */
+const ARCHIVE_INTERVAL_MS = 60 * 60_000;
 /** How often the organization is read, when this process does the worker's work. */
 export const ORGANIZATION_SYNC_INTERVAL_MS = 10 * 60_000;
 /** How long a feed subscriber waits in silence before a heartbeat: under what proxies allow idle. */
@@ -378,6 +381,16 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
     ? new Janitor({ database, clock: systemClock, logger })
     : undefined;
   janitor?.start(JANITOR_INTERVAL_MS);
+  const archivist =
+    config.worker.inProcess && config.worker.archiveAfterDays > 0
+      ? new Archivist({
+          database,
+          clock: systemClock,
+          logger,
+          afterDays: config.worker.archiveAfterDays,
+        })
+      : undefined;
+  archivist?.start(ARCHIVE_INTERVAL_MS);
   const workspace = workspaceResolver(database, systemClock, config.workspace.name);
   const sync =
     config.worker.inProcess && organization !== undefined
@@ -421,6 +434,7 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
   await server.close(config.http.shutdownGraceMs);
   await listener.close();
   await janitor?.close();
+  await archivist?.close();
   await sync?.close();
   await database.close();
   logger.info("shutdown complete");

@@ -125,19 +125,23 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   },
   tasks: {
     usage:
-      "tasks [--state <state>] [--open] [--mine] [--category <key>] [--goal <id>] [--due <day|today|week|overdue>] [--limit <n>] [--offset <n>]",
-    about: `The tasks on the board, newest first: number, state, priority, title, who owns and works on each, its category and its due day, and what waits on it. --open keeps the ones not done or dropped, --mine those assigned to you, --category and --goal those sorted into one, --due those due by a day: today, within the week, or overdue (the open ones past their day). A page at a time: ${DEFAULT_PAGE_LIMIT} unless --limit says otherwise, from --offset on; a last line says when there is more. States: idea, ready, in_progress, in_review, done, dropped.`,
+      "tasks [--state <state>] [--open] [--mine] [--category <key>] [--goal <id>] [--due <day|today|week|overdue>] [--archived] [--limit <n>] [--offset <n>]",
+    about: `The tasks on the board, newest first: number, state, priority, title, who owns and works on each, its category and its due day, and what waits on it. --open keeps the ones not done or dropped, --mine those assigned to you, --category and --goal those sorted into one, --due those due by a day: today, within the week, or overdue (the open ones past their day). The tasks put away (ADR-0029) are left out unless --archived asks for them alone. A page at a time: ${DEFAULT_PAGE_LIMIT} unless --limit says otherwise, from --offset on; a last line says when there is more. States: idea, ready, in_progress, in_review, done, dropped.`,
   },
   task: {
-    usage: `task <number|id>  |  task new <title> [--body <markdown>|--file <path>] ${TASK_FIELD_FLAGS}  |  task edit <number|id> [--title <title>] [--body <markdown>|--file <path>] ${TASK_FIELD_FLAGS}`,
+    usage: `task <number|id>  |  task new <title> [--body <markdown>|--file <path>] ${TASK_FIELD_FLAGS}  |  task edit <number|id> [--title <title>] [--body <markdown>|--file <path>] ${TASK_FIELD_FLAGS}  |  task archive <number|id>  |  task archive --goal <id>  |  task restore <number|id>`,
     about:
-      "One task in full, with its plan (category, goal, start and due days), what happened to it (when it was started and done, which the board keeps itself), the decisions about it, the runs on it and the discussion on it, each comment whole with its files; or a new task written down; or a task changed, only in what the flags say, where none clears a field (priorities: low, normal, high, urgent).",
+      "One task in full, with its plan (category, goal, start and due days), what happened to it (when it was started and done, which the board keeps itself, and when it was put away), the decisions about it, the runs on it and the discussion on it, each comment whole with its files; or a new task written down; or a task changed, only in what the flags say, where none clears a field (priorities: low, normal, high, urgent). archive puts a done or dropped task away (ADR-0029): out of the listings, the board and the calendar, open by its number still; with --goal, every done or dropped task of the goal at once, for an owner. restore brings one back.",
     limits: [
       `title: one line, up to ${MAX_TITLE_LENGTH} characters, saying what is to be done on its own; what it refers to goes in the body`,
       `body: ${MARKDOWN}`,
       ...TASK_FIELD_LIMITS,
     ],
-    refusals: ["task.not_found: no task has that number or id", ...TASK_FIELD_REFUSALS],
+    refusals: [
+      "task.not_found: no task has that number or id",
+      "task.open: an open task is not put away; one done or dropped is",
+      ...TASK_FIELD_REFUSALS,
+    ],
   },
   goals: {
     usage: "goals [--category <key>] [--state <state>]",

@@ -419,6 +419,8 @@ export const restTaskSchema = z.object({
   /** What happened: when the task was first moved past ready, and when it was moved to done; each or `null`. The board keeps both. */
   startedAt: z.nullable(instant),
   doneAt: z.nullable(instant),
+  /** When the task was put away (ADR-0029): out of the listings, the board and the calendar, open by its number; `null` while current. */
+  archivedAt: z.nullable(instant),
   links: z.array(restTaskLinkSchema),
   /** How many decisions about this task wait for a person. */
   openDecisions: count,
@@ -428,6 +430,13 @@ export const restTaskSchema = z.object({
   updatedAt: instant,
 });
 export type RestTask = z.infer<typeof restTaskSchema>;
+
+/** `POST .../tasks/archive`: every done or dropped task of a goal put away at once (ADR-0029). */
+export const restArchiveTasksInputSchema = z.object({ goalId: uuid });
+export type RestArchiveTasksInput = z.infer<typeof restArchiveTasksInputSchema>;
+/** What it answers: how many were put away. */
+export const restArchivedTasksSchema = z.object({ archived: count });
+export type RestArchivedTasks = z.infer<typeof restArchivedTasksSchema>;
 
 /** `GET /api/v1/projects/<key>/tasks`: a page of the board, newest first, and whether there is more after it. */
 export const restTasksSchema = z.object({ items: z.array(restTaskSchema), more: z.boolean() });

@@ -46,6 +46,8 @@ export interface BoardProps {
   readonly today?: string | undefined;
   /** What a column shows when it has nothing; the way to write the first task, for example. */
   readonly empty?: ReactNode;
+  /** Where the tasks put away are (ADR-0029); given, the done and dropped columns lead there. */
+  readonly archiveHref?: string | undefined;
 }
 
 /** How far a pointer travels on the grip before the card is dragged, and not pressed. */
@@ -249,7 +251,14 @@ export function Board(props: BoardProps) {
           >
             <header className="sc-column-header">
               <h2 className="sc-column-title">{words.vocabulary.state[state]}</h2>
-              <span className="sc-column-count">{tasks.length}</span>
+              <span className="sc-column-meta">
+                {props.archiveHref !== undefined && (state === "done" || state === "dropped") && (
+                  <a className="sc-column-archive" href={props.archiveHref}>
+                    {words.board.archive}
+                  </a>
+                )}
+                <span className="sc-column-count">{tasks.length}</span>
+              </span>
             </header>
             <div className="sc-column-body">
               {tasks.map((task) => (

@@ -192,6 +192,7 @@ export const ko: Messages = {
     },
     moveTo: "이동",
     grip: "끌어서 다른 열로",
+    archive: "보관함",
     decisions: (n) => `결정 ${n}건`,
     decisionsTitle: "사람을 기다리는 결정",
     filters: {
@@ -247,6 +248,10 @@ export const ko: Messages = {
             : "",
     started: "시작",
     done: "완료",
+    archived: "보관됨",
+    archivedAt: "보관",
+    archive: "보관하기",
+    restore: "되살리기",
     form: {
       title: "제목",
       titlePlaceholder: "무엇을 할지, 제목만 보고도 알 수 있게.",
@@ -377,6 +382,8 @@ export const ko: Messages = {
     state: "상태",
     nothingMore: "더 적힌 내용이 없습니다.",
     about: "이루면 무엇이 달라지나",
+    archiveTasks: "완료 작업 모두 보관",
+    archiveAsk: (n) => `이 목표의 완료·폐기 작업 ${n}건도 함께 보관할까요?`,
     view: "보기",
     views: { board: "보드", list: "목록", calendar: "캘린더" },
     timeline: {
@@ -537,6 +544,8 @@ export const ko: Messages = {
       taskUpdated: (fields, task) => `${task}의 ${fields}을(를) 바꿨습니다`,
       taskCommented: (task, excerpt) =>
         `${task}에 댓글을 남겼습니다${excerpt === undefined || excerpt === "" ? "" : `: ${excerpt}`}`,
+      taskArchived: (task) => `${task}을(를) 보관했습니다`,
+      taskRestored: (task) => `${task}을(를) 되살렸습니다`,
       decisionRaised: (question) => `질문했습니다: ${question}`,
       decisionAnswered: (question, option) => `"${question}"에 답했습니다: ${option}`,
       decisionUpdated: (fields, question) => `결정 "${question}"의 ${fields}을(를) 썼습니다`,
@@ -554,6 +563,19 @@ export const ko: Messages = {
       documentRestored: (page) => `${page}을(를) 복원했습니다`,
       fileAttached: (label, page) => `${page}에 ${label}을(를) 첨부했습니다`,
     },
+  },
+
+  archive: {
+    title: "보관함",
+    lead: "완료·폐기된 뒤 보관된 작업입니다. 보드·목록·캘린더에서는 빠지고, 번호로는 여전히 열립니다. 여기서 되살립니다.",
+    loading: "보관함을 불러오는 중",
+    empty: {
+      title: "보관된 작업이 없습니다",
+      body: "완료·폐기된 작업은 작업 페이지에서, 목표를 닫을 때 함께, 또는 일정 기간 뒤 콘솔이 보관합니다.",
+    },
+    since: "보관",
+    restore: "되살리기",
+    more: "더 보기",
   },
 
   runs: {

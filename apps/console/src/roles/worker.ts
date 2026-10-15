@@ -1,6 +1,7 @@
 import { systemClock } from "../adapters/system-clock.js";
 import type { Config } from "../config/config.js";
 import { createDatabase } from "../db/client.js";
+import { Archivist } from "../jobs/archivist.js";
 import { Janitor } from "../jobs/janitor.js";
 import { OrganizationSync } from "../jobs/organization-sync.js";
 import type { Logger } from "../logger.js";
@@ -14,6 +15,8 @@ import {
 
 /** How often what time has ended is removed. */
 const JANITOR_INTERVAL_MS = 15 * 60_000;
+/** How often what was done or dropped long enough ago is put away (ADR-0029). */
+const ARCHIVE_INTERVAL_MS = 60 * 60_000;
 
 /**
  * The `worker` role: the schedules, and later the job queue. Today that is the sweep of what
@@ -30,6 +33,15 @@ export async function runWorker(config: Config, logger: Logger): Promise<void> {
   });
   const workspace = workspaceResolver(database, systemClock, config.workspace.name);
   const janitor = new Janitor({ database, clock: systemClock, logger });
+  const archivist =
+    config.worker.archiveAfterDays > 0
+      ? new Archivist({
+          database,
+          clock: systemClock,
+          logger,
+          afterDays: config.worker.archiveAfterDays,
+        })
+      : undefined;
   const organization = organizationOf(config, `${APP_NAME}/${APP_VERSION}`);
   const sync =
     organization === undefined
@@ -50,6 +62,10 @@ export async function runWorker(config: Config, logger: Logger): Promise<void> {
   }
   await janitor.sweep();
   janitor.start(JANITOR_INTERVAL_MS);
+  if (archivist !== undefined) {
+    await archivist.sweep();
+    archivist.start(ARCHIVE_INTERVAL_MS);
+  }
   if (sync !== undefined) {
     await sync.sync();
     sync.start(ORGANIZATION_SYNC_INTERVAL_MS);
@@ -58,6 +74,7 @@ export async function runWorker(config: Config, logger: Logger): Promise<void> {
   const signal = await shutdownSignal();
   logger.info({ signal }, "shutting down");
   await janitor.close();
+  await archivist?.close();
   await sync?.close();
   await database.close();
   logger.info("shutdown complete");

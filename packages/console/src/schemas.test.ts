@@ -13,6 +13,8 @@ import {
   hostOfLogin,
   isLoginAt,
   restAnswerInputSchema,
+  restArchivedTasksSchema,
+  restArchiveTasksInputSchema,
   restCategoryInputSchema,
   restDecisionInputSchema,
   restDecisionPatchSchema,
@@ -185,6 +187,7 @@ describe("what the server answers", () => {
       dueOn: null,
       startedAt: "2026-10-21T09:00:00.000Z",
       doneAt: null,
+      archivedAt: null,
       links: [],
       openDecisions: 0,
       openRuns: 0,
@@ -514,5 +517,19 @@ describe("a project's image for its mark", () => {
     expect(
       restProjectIconSchema.safeParse({ sha256: "abc", contentType: "image/png" }).success,
     ).toBe(false);
+  });
+});
+
+describe("the archive of the board (ADR-0029)", () => {
+  it("takes a goal by its id alone, and answers how many tasks went", () => {
+    expect(restArchivedTasksSchema.parse({ archived: 3 })).toEqual({ archived: 3 });
+    expect(restArchivedTasksSchema.safeParse({ archived: -1 }).success).toBe(false);
+    expect(restArchivedTasksSchema.safeParse({}).success).toBe(false);
+    expect(
+      restArchiveTasksInputSchema.safeParse({ goalId: "0199c4d8-0000-7000-8000-000000000030" })
+        .success,
+    ).toBe(true);
+    expect(restArchiveTasksInputSchema.safeParse({ goalId: "nope" }).success).toBe(false);
+    expect(restArchiveTasksInputSchema.safeParse({}).success).toBe(false);
   });
 });

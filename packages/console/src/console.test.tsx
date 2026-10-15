@@ -68,6 +68,8 @@ describe("matchRoute", () => {
     });
     expect(matchRoute("/projects/web/decisions/")).toEqual({ name: "decisions", project: "web" });
     expect(matchRoute("/projects/web-2/feed")).toEqual({ name: "feed", project: "web-2" });
+    expect(matchRoute("/projects/web/archive")).toEqual({ name: "archive", project: "web" });
+    expect(projectHref("web", "archive")).toBe("/projects/web/archive");
     expect(matchRoute("/projects/web/skills")).toEqual({ name: "skills", project: "web" });
     expect(matchRoute("/projects/web/members")).toEqual({ name: "members", project: "web" });
     expect(matchRoute("/projects/web/settings")).toEqual({
@@ -137,6 +139,7 @@ describe("matchRoute", () => {
       "/projects/web/decisions/x",
       "/projects/web/nothing",
       "/projects/web/feed/x",
+      "/projects/web/archive/x",
       "/projects/web/roadmap/x",
       "/projects/web/roadmap/new/x",
       "/projects/web/calendar/x",
@@ -365,6 +368,9 @@ describe("createConsole", () => {
     task: never,
     createTask: never,
     updateTask: never,
+    archiveTask: never,
+    restoreTask: never,
+    archiveTasksOfGoal: never,
     decisions: never,
     decision: never,
     awaitDecision: never,

@@ -246,6 +246,8 @@ export interface GoalViewProps {
   readonly board?: ReactNode;
   /** The calendar of the goal's tasks, the same way. */
   readonly calendar?: ReactNode;
+  /** Called to put every done or dropped task of the goal away (ADR-0029); left out, it is not offered. */
+  readonly onArchiveTasks?: (() => void) | undefined;
 }
 
 export function GoalView(props: GoalViewProps) {
@@ -361,6 +363,18 @@ export function GoalView(props: GoalViewProps) {
               <a className="sc-button sc-button-secondary sc-button-sm" href={props.editHref}>
                 {words.common.edit}
               </a>
+            </div>
+          )}
+          {props.onArchiveTasks !== undefined && (
+            <div>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={props.busy === true}
+                onClick={props.onArchiveTasks}
+              >
+                {roadmap.archiveTasks}
+              </Button>
             </div>
           )}
         </dl>

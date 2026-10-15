@@ -6,6 +6,8 @@ import {
   type DocumentFilter,
   EVENT_KINDS,
   type FileUpload,
+  LIST_LIMIT,
+  type ProjectClient,
   type RestAnswerInput,
   type RestCategory,
   type RestCategoryInput,
@@ -44,6 +46,7 @@ import {
   type RestTask,
   type RestTaskInput,
   type RestTaskPatch,
+  type RestTasks,
   type RestToken,
   type RestTokenCreated,
   type RestTokenInput,
@@ -82,6 +85,18 @@ export interface ConsoleActions {
   removeMember(personId: string): Promise<void>;
   createTask(input: RestTaskInput): Promise<RestTask>;
   updateTask(id: string, patch: RestTaskPatch): Promise<RestTask>;
+  /** One task by its id or its number, asked for by itself: a task put away is not among the board's. */
+  fetchTask(ref: string, signal?: AbortSignal): Promise<RestTask>;
+  /** Puts a done or dropped task away, or brings one back (ADR-0029). */
+  archiveTask(id: string): Promise<RestTask>;
+  restoreTask(id: string): Promise<RestTask>;
+  /** Puts every done or dropped task of a goal away; for an owner. Answers how many went. */
+  archiveGoalTasks(goalId: string): Promise<number>;
+  /** A page of the tasks put away, newest first. */
+  archivedTasks(
+    page: { readonly limit: number; readonly offset: number },
+    signal?: AbortSignal,
+  ): Promise<RestTasks>;
   raiseDecision(input: RestDecisionInput): Promise<RestDecision>;
   answerDecision(id: string, input: RestAnswerInput): Promise<RestDecision>;
   /** Grows a decision's record: its context, or what followed. */
@@ -204,6 +219,32 @@ async function readFeed(
   return events.slice(-FEED_KEEP);
 }
 
+/** How many pages of the current tasks are read before the board is shown as it stands. */
+const TASKS_MAX_PAGES = 20;
+
+/**
+ * The current tasks of a project, whole: page after page while the server says there is more,
+ * so that a board past one page loses nothing without a word; the tasks put away are not among
+ * them (ADR-0029).
+ */
+async function readTasks(
+  scope: ProjectClient,
+  signal: AbortSignal | undefined,
+): Promise<{ readonly items: RestTask[] }> {
+  const items: RestTask[] = [];
+  for (let page = 0; page < TASKS_MAX_PAGES; page += 1) {
+    const result = await scope.tasks(
+      { archived: false, limit: LIST_LIMIT, offset: page * LIST_LIMIT },
+      signal,
+    );
+    items.push(...result.items);
+    if (!result.more) {
+      break;
+    }
+  }
+  return { items };
+}
+
 const wordsOf = (failure: unknown, fallback: string): string =>
   failure instanceof ApiError ? failure.message : fallback;
 
@@ -268,7 +309,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
       const [nextProject, nextTasks, nextDecisions, nextGoals, nextRuns, nextMembers] =
         await Promise.all([
           scope.get(signal),
-          scope.tasks(undefined, signal),
+          readTasks(scope, signal),
           scope.decisions(undefined, signal),
           scope.goals({}, signal),
           scope.runs(undefined, signal),
@@ -491,6 +532,23 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
         setTasks((current) => current.map((candidate) => (candidate.id === id ? task : candidate)));
         return task;
       },
+      fetchTask: (ref, signal) => scope().task(ref, signal),
+      async archiveTask(id) {
+        const task = await scope().archiveTask(id);
+        setTasks((current) => current.filter((candidate) => candidate.id !== id));
+        return task;
+      },
+      async restoreTask(id) {
+        const task = await scope().restoreTask(id);
+        setTasks((current) => [task, ...current.filter((candidate) => candidate.id !== id)]);
+        return task;
+      },
+      async archiveGoalTasks(goalId) {
+        const { archived } = await scope().archiveTasksOfGoal(goalId);
+        await refreshProject();
+        return archived;
+      },
+      archivedTasks: (page, signal) => scope().tasks({ archived: true, ...page }, signal),
       async raiseDecision(input) {
         const decision = await scope().raiseDecision(input);
         await refreshProject();

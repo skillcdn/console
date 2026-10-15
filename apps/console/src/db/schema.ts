@@ -379,6 +379,8 @@ export const tasks = pgTable(
      */
     startedAt: instant(),
     doneAt: instant(),
+    /** When the task was put away (ADR-0029): out of the listings, the board and the calendar, open by its number; null while current. */
+    archivedAt: instant(),
     /** Repositories, pull requests, documents: `https` URLs with a label, as the API checked them. */
     links: jsonb().$type<RestTaskLink[]>().notNull().default([]),
     createdAt: createdAt(),
@@ -392,6 +394,7 @@ export const tasks = pgTable(
     index("tasks_goal_idx").on(table.goalId),
     index("tasks_category_idx").on(table.categoryId),
     index("tasks_assignee_state_idx").on(table.assigneeId, table.state),
+    index("tasks_project_archived_idx").on(table.projectId, table.archivedAt),
     check("tasks_state_check", sql`${table.state} in (${sql.raw(literals(TASK_STATES))})`),
     check(
       "tasks_priority_check",

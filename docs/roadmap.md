@@ -199,6 +199,17 @@ Goal: an agent with the console's command and nothing else reads the project's p
 - [x] The default UI (2026-10-15): the pack token on the project's Settings, set and taken away on a form of its own; the Skills page saying how an agent reads the pack and when the token no longer works.
 - [x] The rules and the skill (2026-10-15): the console's own rules read the pack through the command first; `working-the-board` names `console skill`.
 
+## Milestone 20, the archive of the board (2026-10-15)
+
+Goal: a board that shows what is open and what was closed lately, and keeps the rest without losing it ([ADR-0029](adr/0029-a-task-done-or-dropped-is-put-away-out-of-the-board-and-open-by-its-number.md)): a task done or dropped is put away, out of the board, the lists and the calendar, open by its number, and brought back at any time.
+
+- [x] The decision (2026-10-15, [ADR-0029](adr/0029-a-task-done-or-dropped-is-put-away-out-of-the-board-and-open-by-its-number.md)): putting away is a moment the board keeps, not a state; three ways there, the task's page or command, a goal's closed tasks at once, and the console itself after a period; the board keeps its six columns and links to the archive; the pages read the current tasks whole, page after page.
+- [x] The data model (2026-10-15): `archived_at` on `tasks`, indexed with the project; migration 0020.
+- [x] The REST API (2026-10-15): `archived=` on the listing, `POST .../tasks/<id>/archive` and `.../restore`, `POST .../tasks/archive` for a goal's, `task.open`, `archivedAt` on a task, the events `task.archived` and `task.restored` ([specs/rest.md](specs/rest.md)).
+- [x] The worker (2026-10-15): the archivist puts away what was done or dropped and not touched for `TASK_ARCHIVE_AFTER_DAYS` (thirty unless configured, `0` never), every hour, in the `api` role too with `WORKER_IN_PROCESS`.
+- [x] The command (2026-10-15): `console tasks --archived`, `console task archive <number|id>`, `console task archive --goal <id>`, `console task restore <number|id>` ([specs/cli.md](specs/cli.md)).
+- [x] The default UI (2026-10-15): the archive page of a project, read a page at a time, each task brought back from there; the done and dropped columns leading to it; the task page saying a task is put away, putting one away and bringing one back; a goal closed offering to take its closed tasks along, and its page putting them away.
+
 ## After milestone 16
 
 Nothing is chosen yet; the list below is where the next milestone comes from. Left open by milestone 9: whether the board should end a run not heard from for a long while itself ([ADR-0020](adr/0020-the-console-does-not-claim-an-agent-is-at-work-a-run-says-when-it-was-last-heard-from-and-a-new-run-takes-over.md)); a roadmap across projects.

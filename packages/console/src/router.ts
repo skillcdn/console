@@ -72,6 +72,8 @@ export type Route =
       readonly month: string | undefined;
     }
   | { readonly name: "feed"; readonly project: string }
+  /** The archive of a project's board (ADR-0029): the tasks put away, read a page at a time. */
+  | { readonly name: "archive"; readonly project: string }
   | { readonly name: "skills"; readonly project: string }
   | { readonly name: "members"; readonly project: string }
   /** A project's settings, read; or one of its forms open: the project's own, or its rules (ADR-0023). */
@@ -114,6 +116,7 @@ export type Route =
 export type ProjectPage =
   | "docs"
   | "decisions"
+  | "archive"
   | "calendar"
   | "roadmap"
   | "feed"
@@ -154,6 +157,7 @@ const CODE_TEXT = /^[A-Za-z0-9-]{1,16}$/;
 /** The pages of a project that take nothing after their name. */
 const PLAIN_PAGES: readonly Exclude<ProjectPage, "docs" | "calendar" | "roadmap" | "settings">[] = [
   "decisions",
+  "archive",
   "feed",
   "skills",
   "members",

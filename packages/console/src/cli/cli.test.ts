@@ -34,6 +34,7 @@ const TASK = {
   dueOn: null,
   startedAt: null,
   doneAt: null,
+  archivedAt: null,
   links: [],
   openDecisions: 0,
   openRuns: 0,
@@ -2424,5 +2425,60 @@ describe("the pack of the project, through the console (ADR-0028)", () => {
     const empty = harness({ fetch, env: SIGNED_IN, readStdin: async () => "\n" });
     expect(await runCli(["project", "pack-token", "web", "--stdin"], empty.io)).toBe(EXIT.failed);
     expect(empty.err()).toContain("No token was given");
+  });
+});
+
+describe("the archive on the command line (ADR-0029)", () => {
+  const DONE = { ...TASK, state: "done", doneAt: WHEN };
+  const ARCHIVED = { ...DONE, archivedAt: "2026-10-12T10:00:00.000Z" };
+
+  it("lists the tasks put away alone, puts one away, every one of a goal, and brings one back", async () => {
+    const { fetch, calls } = fakeConsole({
+      [`GET ${IN}/tasks?archived=true&limit=50&offset=0`]: {
+        body: { more: false, items: [ARCHIVED] },
+      },
+      [`GET ${IN}/tasks/7`]: { body: DONE },
+      [`POST ${IN}/tasks/${TASK.id}/archive`]: { body: ARCHIVED },
+      [`POST ${IN}/tasks/${TASK.id}/restore`]: { body: DONE },
+      [`POST ${IN}/tasks/archive`]: { body: { archived: 3 } },
+    });
+    const listed = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["tasks", "--archived"], listed.io)).toBe(EXIT.ok);
+    expect(listed.out()).toBe("#7  done  high  Fix the parser  (owner alice; archived)\n");
+    const one = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["task", "archive", "7"], one.io)).toBe(EXIT.ok);
+    expect(calls.slice(-2).map((call) => call.key)).toEqual([
+      `GET ${IN}/tasks/7`,
+      `POST ${IN}/tasks/${TASK.id}/archive`,
+    ]);
+    expect(one.out()).toBe("#7  done  high  Fix the parser  (owner alice; archived)\n");
+    const ofGoal = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["task", "archive", "--goal", GOAL.id], ofGoal.io)).toBe(EXIT.ok);
+    expect(calls.at(-1)?.key).toBe(`POST ${IN}/tasks/archive`);
+    expect(calls.at(-1)?.body).toEqual({ goalId: GOAL.id });
+    expect(ofGoal.out()).toBe("3 tasks of the goal put away.\n");
+    const asJson = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["task", "archive", "--goal", GOAL.id, "--json"], asJson.io)).toBe(EXIT.ok);
+    expect(JSON.parse(asJson.out())).toEqual({ archived: 3 });
+    const back = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["task", "restore", "7"], back.io)).toBe(EXIT.ok);
+    expect(calls.at(-1)?.key).toBe(`POST ${IN}/tasks/${TASK.id}/restore`);
+    expect(back.out()).toBe("#7  done  high  Fix the parser  (owner alice)\n");
+  });
+
+  it("asks which task, or which goal, and not both", async () => {
+    const { fetch, calls } = fakeConsole({});
+    for (const args of [
+      ["task", "archive"],
+      ["task", "archive", "7", "--goal", GOAL.id],
+      ["task", "archive", "7", "8"],
+      ["task", "restore"],
+      ["task", "restore", "7", "8"],
+    ]) {
+      const h = harness({ fetch, env: SIGNED_IN });
+      expect(await runCli(args, h.io), args.join(" ")).toBe(EXIT.usage);
+      expect(h.err()).toContain("console task");
+    }
+    expect(calls).toHaveLength(0);
   });
 });

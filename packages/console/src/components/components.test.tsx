@@ -103,6 +103,7 @@ const task = (overrides: Partial<RestTask> = {}): RestTask => ({
   dueOn: null,
   startedAt: null,
   doneAt: null,
+  archivedAt: null,
   links: [],
   openDecisions: 1,
   openRuns: 0,
@@ -1476,6 +1477,7 @@ describe("the schedule on the board", () => {
           dueOn: "2026-10-24",
           startedAt: "2026-10-21T09:00:00.000Z",
           doneAt: null,
+          archivedAt: null,
         })}
         people={[alice, bob]}
         tasks={[task()]}
@@ -2115,6 +2117,7 @@ describe("the discussion on a task", () => {
     dueOn: null,
     startedAt: null,
     doneAt: null,
+    archivedAt: null,
     links: [],
     openDecisions: 0,
     openRuns: 0,
@@ -2661,5 +2664,120 @@ describe("the pack token of a project", () => {
       </LanguageContext.Provider>,
     );
     expect(korean).toContain("토큰 넣기");
+  });
+});
+
+describe("the archive of the board (ADR-0029)", () => {
+  it("leads from the done and dropped columns to the archive, and from nowhere else", () => {
+    const html = renderToStaticMarkup(
+      <Board
+        tasks={[task({ state: "done" })]}
+        taskHref={href}
+        onOpen={() => undefined}
+        archiveHref="/projects/web/archive"
+      />,
+    );
+    expect(
+      html.match(/class="sc-column-archive" href="\/projects\/web\/archive">Archive<\/a>/g),
+    ).toHaveLength(2);
+    const without = renderToStaticMarkup(
+      <Board tasks={[task({ state: "done" })]} taskHref={href} onOpen={() => undefined} />,
+    );
+    expect(without).not.toContain("sc-column-archive");
+    const korean = renderToStaticMarkup(
+      <LanguageContext.Provider value={KOREAN}>
+        <Board
+          tasks={[]}
+          taskHref={href}
+          onOpen={() => undefined}
+          archiveHref="/projects/web/archive"
+        />
+      </LanguageContext.Provider>,
+    );
+    expect(korean).toContain(">보관함</a>");
+  });
+
+  it("offers to put a done task away and to bring one back, and says on the task that it is put away", () => {
+    const render = (
+      overrides: Partial<RestTask>,
+      handlers: { onArchive?: () => void; onRestore?: () => void } = {},
+    ) =>
+      renderToStaticMarkup(
+        <TaskView
+          task={task(overrides)}
+          people={[alice, bob]}
+          tasks={[]}
+          decisions={[]}
+          taskHref={href}
+          formHref={(wanted) => `/projects/web/tasks/7?${wanted}`}
+          onCancel={() => undefined}
+          onChange={() => undefined}
+          onMove={() => undefined}
+          onRaiseDecision={() => undefined}
+          onAnswer={() => undefined}
+          {...handlers}
+        />,
+      );
+    const both = { onArchive: () => undefined, onRestore: () => undefined };
+    const open = render({ state: "in_progress" }, both);
+    expect(open).not.toContain(">Put away</button>");
+    expect(open).not.toContain(">Bring back</button>");
+    const done = render({ state: "done", doneAt: "2026-10-10T10:00:00.000Z" }, both);
+    expect(done).toContain(">Put away</button>");
+    expect(done).not.toContain(">Bring back</button>");
+    expect(done).not.toContain('sc-badge sc-badge-neutral">Put away<');
+    const archived = render(
+      {
+        state: "dropped",
+        archivedAt: "2026-10-12T10:00:00.000Z",
+      },
+      both,
+    );
+    expect(archived).toContain('class="sc-badge sc-badge-neutral">Put away</span>');
+    expect(archived).toContain("<dt>Put away</dt>");
+    expect(archived).toContain(">Bring back</button>");
+    expect(archived).not.toContain(">Put away</button>");
+    const readOnly = render({ state: "done", archivedAt: "2026-10-12T10:00:00.000Z" });
+    expect(readOnly).not.toContain(">Bring back</button>");
+    expect(readOnly).not.toContain(">Put away</button>");
+  });
+
+  it("puts the done tasks of a goal away from the goal's page, where the page offers it", () => {
+    const offered = renderToStaticMarkup(
+      <GoalView
+        goal={goal()}
+        tasks={[]}
+        taskHref={href}
+        today={TODAY}
+        onArchiveTasks={() => undefined}
+      />,
+    );
+    expect(offered).toContain(">Put the done tasks away</button>");
+    const plain = renderToStaticMarkup(
+      <GoalView goal={goal()} tasks={[]} taskHref={href} today={TODAY} />,
+    );
+    expect(plain).not.toContain("Put the done tasks away");
+  });
+
+  it("says in the feed what was put away and what was brought back", () => {
+    const event: RestEvent = {
+      id: 11,
+      kind: "task.archived",
+      actor: alice,
+      agent: null,
+      projectId: null,
+      taskId: "0199c4d8-0000-7000-8000-000000000010",
+      decisionId: null,
+      runId: null,
+      documentId: null,
+      goalId: null,
+      data: { number: 7, title: "Ship" },
+      createdAt: "2026-10-09T10:00:00.000Z",
+    };
+    expect(describeEvent(event)).toBe("put #7 Ship away");
+    expect(describeEvent({ ...event, kind: "task.restored" })).toBe("brought #7 Ship back");
+    // What the console did itself names nobody.
+    const own = renderToStaticMarkup(<EventFeed events={[{ ...event, actor: null }]} />);
+    expect(own).toContain("put #7 Ship away");
   });
 });

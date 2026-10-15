@@ -164,6 +164,7 @@ const environmentSchema = z.object({
     .refine((value) => !hasForbiddenCodePoint(value), "must not contain control characters")
     .default("Console"),
   WORKER_IN_PROCESS: flag(false),
+  TASK_ARCHIVE_AFTER_DAYS: integer(30, 0, 3650),
 
   PUBLIC_URL: origin.optional(),
   GITHUB_WEB_URL: origin.default("https://github.com"),
@@ -372,6 +373,8 @@ export interface Config {
   readonly worker: {
     /** Whether the `api` role runs the worker's loop as well, for a single-container install. */
     readonly inProcess: boolean;
+    /** How many days after a task was done or dropped the console puts it away (ADR-0029); 0 never. */
+    readonly archiveAfterDays: number;
   };
   /** Signing in through identity providers. Unset: nobody signs in, and the board is nobody's. */
   readonly auth: AuthConfig | undefined;
@@ -723,7 +726,7 @@ export function loadConfig(
     },
     database: { url: env.DATABASE_URL, poolMax: env.DATABASE_POOL_MAX, ca },
     workspace: { name: env.WORKSPACE_NAME },
-    worker: { inProcess: env.WORKER_IN_PROCESS },
+    worker: { inProcess: env.WORKER_IN_PROCESS, archiveAfterDays: env.TASK_ARCHIVE_AFTER_DAYS },
     auth,
     web: { root: env.WEB_ROOT },
     skills: { source: env.SKILLCDN_URL, address },

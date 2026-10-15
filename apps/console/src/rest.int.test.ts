@@ -55,10 +55,15 @@ import {
   restWorkSchema,
   rulesPath,
 } from "@skillcdn/console/api";
+import { eq } from "drizzle-orm";
 import { pino } from "pino";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { drizzleOf } from "./db/client.js";
+import { archiveStaleTasks } from "./db/queries/tasks.js";
 import { ensureWorkspace } from "./db/queries/workspaces.js";
+import { tasks } from "./db/schema.js";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "./db/testing.js";
+import { Archivist } from "./jobs/archivist.js";
 import { OrganizationSync } from "./jobs/organization-sync.js";
 import type { SkillSource } from "./ports/skill-source.js";
 import { createFixtureOrganization } from "./testing/fixture-organization.js";
@@ -1820,6 +1825,7 @@ describe("the schedule and the roadmap", () => {
       dueOn: "2026-10-24",
       startedAt: null,
       doneAt: null,
+      archivedAt: null,
       goalId: null,
       category: { key: "engineering", name: "Engineering", color: "blue" },
     });
@@ -2951,5 +2957,174 @@ describe("the pack of a project (ADR-0028)", () => {
     );
     expect(changes).toHaveLength(2);
     expect(JSON.stringify([events, served.logs])).not.toContain("scdn_repo_ok");
+  });
+});
+
+describe("the archive of the board (ADR-0029)", () => {
+  const eventsSince = async (after: number) =>
+    restEventsSchema.parse(await (await get(alice, `${IN}/events?after=${after}`)).json()).items;
+
+  it("puts a done or dropped task away and brings it back: out of the listings, open by its number", async () => {
+    const open = await createTask(alice, { title: "Still open" });
+    const refused = await send(bob, "POST", `${IN}/tasks/${open.id}/archive`);
+    expect(refused.status).toBe(409);
+    expect(await errorOf(refused)).toBe("task.open");
+    const done = await createTask(alice, { title: "Over", state: "done" });
+    const dropped = await createTask(alice, { title: "Let go", state: "dropped" });
+    const before = await latestEventIn(alice);
+    // Bob works in the project, and that is enough to put a task away.
+    const archived = restTaskSchema.parse(
+      await (await send(bob, "POST", `${IN}/tasks/${done.id}/archive`)).json(),
+    );
+    expect(archived.archivedAt).not.toBeNull();
+    expect(archived.state).toBe("done");
+    expect(archived.doneAt).toBe(done.doneAt);
+    // Again is nothing: no change, no event.
+    expect(
+      restTaskSchema.parse(
+        await (await send(bob, "POST", `${IN}/tasks/${done.id}/archive`)).json(),
+      ),
+    ).toEqual(archived);
+    const events = await eventsSince(before);
+    expect(events.map((event) => event.kind)).toEqual(["task.archived"]);
+    expect(events[0]).toMatchObject({
+      taskId: done.id,
+      data: { number: done.number, title: "Over" },
+    });
+    expect(events[0]?.actor?.login).toBe("bob");
+    // Out of the board and of every listing of it, in the archive alone, and open by id and by number.
+    const board = restTasksSchema.parse(await (await get(alice, `${IN}/tasks`)).json());
+    expect(board.items.some((task) => task.id === done.id)).toBe(false);
+    expect(board.items.some((task) => task.id === dropped.id)).toBe(true);
+    for (const query of ["archived=false", "state=done", "open=false"]) {
+      const listed = restTasksSchema.parse(await (await get(alice, `${IN}/tasks?${query}`)).json());
+      expect(
+        listed.items.some((task) => task.id === done.id),
+        query,
+      ).toBe(false);
+    }
+    const archive = restTasksSchema.parse(
+      await (await get(alice, `${IN}/tasks?archived=true`)).json(),
+    );
+    expect(archive.items.map((task) => task.id)).toContain(done.id);
+    expect(archive.items.every((task) => task.archivedAt !== null)).toBe(true);
+    expect(archive.items.some((task) => task.id === dropped.id)).toBe(false);
+    expect(restTaskSchema.parse(await (await get(bob, `${IN}/tasks/${done.id}`)).json())).toEqual(
+      archived,
+    );
+    expect(
+      restTaskSchema.parse(await (await get(bob, `${IN}/tasks/${done.number}`)).json()),
+    ).toEqual(archived);
+    // Not a task of the project, or not an id at all.
+    for (const ref of ["0199c4d8-0000-7000-8000-00000000dead", "not-an-id", String(done.number)]) {
+      const missing = await send(alice, "POST", `${IN}/tasks/${ref}/archive`);
+      expect(missing.status, ref).toBe(404);
+      expect(await errorOf(missing)).toBe("task.not_found");
+    }
+    // Back again, and once more is nothing.
+    const back = restTaskSchema.parse(
+      await (await send(alice, "POST", `${IN}/tasks/${done.id}/restore`)).json(),
+    );
+    expect(back.archivedAt).toBeNull();
+    expect(back.state).toBe("done");
+    expect(
+      restTaskSchema.parse(
+        await (await send(alice, "POST", `${IN}/tasks/${done.id}/restore`)).json(),
+      ),
+    ).toEqual(back);
+    expect((await eventsSince(before)).map((event) => event.kind)).toEqual([
+      "task.archived",
+      "task.restored",
+    ]);
+    const again = restTasksSchema.parse(await (await get(alice, `${IN}/tasks`)).json());
+    expect(again.items.some((task) => task.id === done.id)).toBe(true);
+  });
+
+  it("puts every done or dropped task of a goal away at once, for an owner, the goal counting them still", async () => {
+    const set = await send(alice, "POST", `${IN}/goals`, { title: "Wrap up", state: "active" });
+    expect(set.status).toBe(201);
+    const goal = restGoalSchema.parse(await set.json());
+    const finished = await createTask(bob, { title: "Finished", goalId: goal.id, state: "done" });
+    const letGo = await createTask(bob, { title: "Let go", goalId: goal.id, state: "dropped" });
+    const pending = await createTask(bob, { title: "Pending", goalId: goal.id, state: "ready" });
+    const elsewhere = await createTask(bob, { title: "Elsewhere", state: "done" });
+    const byMember = await send(bob, "POST", `${IN}/tasks/archive`, { goalId: goal.id });
+    expect(byMember.status).toBe(403);
+    expect(await errorOf(byMember)).toBe("auth.forbidden");
+    const malformed = await send(alice, "POST", `${IN}/tasks/archive`, { goalId: "nope" });
+    expect(malformed.status).toBe(400);
+    expect(await errorOf(malformed)).toBe("request.invalid");
+    const before = await latestEventIn(alice);
+    const response = await send(alice, "POST", `${IN}/tasks/archive`, { goalId: goal.id });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ archived: 2 });
+    const events = await eventsSince(before);
+    expect(events.map((event) => event.kind)).toEqual(["task.archived", "task.archived"]);
+    expect(new Set(events.map((event) => event.taskId))).toEqual(new Set([finished.id, letGo.id]));
+    const ofGoal = restTasksSchema.parse(
+      await (await get(alice, `${IN}/tasks?goal=${goal.id}`)).json(),
+    );
+    expect(ofGoal.items.map((task) => task.id)).toEqual([pending.id]);
+    const board = restTasksSchema.parse(await (await get(alice, `${IN}/tasks`)).json());
+    expect(board.items.some((task) => task.id === elsewhere.id)).toBe(true);
+    // The goal's progress is read from its tasks, put away or not.
+    const counted = restGoalSchema.parse(await (await get(alice, `${IN}/goals/${goal.id}`)).json());
+    expect(counted.taskCounts).toMatchObject({ done: 1, dropped: 1, ready: 1 });
+    // Nothing is left to put away; a goal of nobody's is nothing to put away either.
+    expect(
+      await (await send(alice, "POST", `${IN}/tasks/archive`, { goalId: goal.id })).json(),
+    ).toEqual({ archived: 0 });
+    expect(
+      await (
+        await send(alice, "POST", `${IN}/tasks/archive`, {
+          goalId: "0199c4d8-0000-7000-8000-00000000dead",
+        })
+      ).json(),
+    ).toEqual({ archived: 0 });
+  });
+
+  it("is kept by the console itself: what was done or dropped and not touched for the period goes, with no actor", async () => {
+    const DAY_MS = 86_400_000;
+    const stale = await createTask(alice, { title: "Long done", state: "done" });
+    const fresh = await createTask(alice, { title: "Just done", state: "done" });
+    const open = await createTask(alice, { title: "Open for long" });
+    const now = new Date();
+    const longAgo = new Date(now.getTime() - 40 * DAY_MS);
+    const handle = drizzleOf(testDatabase.database);
+    await handle.update(tasks).set({ updatedAt: longAgo }).where(eq(tasks.id, stale.id));
+    await handle.update(tasks).set({ updatedAt: longAgo }).where(eq(tasks.id, open.id));
+    const before = await latestEventIn(alice);
+    const archivist = new Archivist({
+      database: testDatabase.database,
+      clock: { now: () => now },
+      logger: pino({ level: "silent" }),
+      afterDays: 30,
+    });
+    await archivist.sweep();
+    await archivist.close();
+    const putAway = restTaskSchema.parse(
+      await (await get(alice, `${IN}/tasks/${stale.id}`)).json(),
+    );
+    expect(putAway.archivedAt).toBe(now.toISOString());
+    expect(
+      restTaskSchema.parse(await (await get(alice, `${IN}/tasks/${fresh.id}`)).json()).archivedAt,
+    ).toBeNull();
+    expect(
+      restTaskSchema.parse(await (await get(alice, `${IN}/tasks/${open.id}`)).json()).archivedAt,
+    ).toBeNull();
+    const events = await eventsSince(before);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      kind: "task.archived",
+      taskId: stale.id,
+      actor: null,
+      agent: null,
+      data: { number: stale.number, title: "Long done" },
+    });
+    // A second pass finds nothing; a task brought back is touched, and stays.
+    const cutoff = new Date(now.getTime() - 30 * DAY_MS);
+    expect(await archiveStaleTasks(testDatabase.database, { before: cutoff, now })).toBe(0);
+    await send(alice, "POST", `${IN}/tasks/${stale.id}/restore`);
+    expect(await archiveStaleTasks(testDatabase.database, { before: cutoff, now })).toBe(0);
   });
 });

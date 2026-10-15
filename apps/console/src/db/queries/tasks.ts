@@ -5,7 +5,19 @@ import {
   type TaskPriority,
   type TaskState,
 } from "@skillcdn/console/api";
-import { and, desc, eq, inArray, isNull, lte, notInArray, type SQL, sql } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  lte,
+  notInArray,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
 import { categories, decisions, goals, people, projects, runs, tasks } from "../schema.js";
@@ -43,6 +55,8 @@ export interface TaskRecord {
   /** What happened: when the task was first moved past ready, and when it was moved to done. */
   readonly startedAt: Date | undefined;
   readonly doneAt: Date | undefined;
+  /** When the task was put away (ADR-0029): out of the listings and the board, open by its number; none while current. */
+  readonly archivedAt: Date | undefined;
   readonly links: readonly RestTaskLink[];
   /** How many decisions about the task wait for a person. */
   readonly openDecisions: number;
@@ -61,7 +75,8 @@ export class TaskError extends DomainError {
       | "task.invalid_parent"
       | "task.invalid_category"
       | "task.invalid_goal"
-      | "task.invalid_dates",
+      | "task.invalid_dates"
+      | "task.open",
   ) {
     super(code, TASK_ERROR_WORDS[code]);
   }
@@ -74,6 +89,7 @@ const TASK_ERROR_WORDS = {
   "task.invalid_category": "the category is not one of the workspace",
   "task.invalid_goal": "the goal is not one of the project",
   "task.invalid_dates": "the due day is before the start",
+  "task.open": "an open task is not put away; one done or dropped is",
 } as const;
 
 export interface TaskInput {
@@ -105,6 +121,8 @@ export interface TaskFilter {
   readonly assigneeId?: string | undefined;
   /** A day: the tasks due on it or before it. */
   readonly dueBy?: string | undefined;
+  /** True for the tasks put away alone (ADR-0029); false, or left out, for the current ones. */
+  readonly archived?: boolean | undefined;
   readonly limit: number;
   readonly offset?: number | undefined;
 }
@@ -133,6 +151,7 @@ const taskColumns = {
   dueOn: tasks.dueOn,
   startedAt: tasks.startedAt,
   doneAt: tasks.doneAt,
+  archivedAt: tasks.archivedAt,
   links: tasks.links,
   createdAt: tasks.createdAt,
   updatedAt: tasks.updatedAt,
@@ -180,6 +199,7 @@ function toTask(row: TaskRow): TaskRecord {
     dueOn: row.dueOn ?? undefined,
     startedAt: row.startedAt ?? undefined,
     doneAt: row.doneAt ?? undefined,
+    archivedAt: row.archivedAt ?? undefined,
     links: row.links,
     openDecisions: row.openDecisions,
     openRuns: row.openRuns,
@@ -535,6 +555,8 @@ function narrowing(filter: Omit<TaskFilter, "limit">): (SQL | undefined)[] {
     filter.goalId === undefined ? undefined : eq(tasks.goalId, filter.goalId),
     filter.assigneeId === undefined ? undefined : eq(tasks.assigneeId, filter.assigneeId),
     filter.dueBy === undefined ? undefined : lte(tasks.dueOn, filter.dueBy),
+    // The archive and the board are two listings, never one (ADR-0029).
+    filter.archived === true ? isNotNull(tasks.archivedAt) : isNull(tasks.archivedAt),
   ];
 }
 
@@ -596,4 +618,186 @@ export async function listSubtasks(
     .orderBy(tasks.number)
     .limit(limit);
   return rows.map(toTask);
+}
+
+/** The states a task is put away in: what is over. */
+const CLOSED_STATES: readonly TaskState[] = ["done", "dropped"];
+/** How many tasks one pass of the console's own archiving puts away: enough, in a short transaction. */
+const ARCHIVE_PASS_LIMIT = 500;
+
+/**
+ * Puts a task away (ADR-0029): a moment the board keeps, not a state. Only a task done or
+ * dropped goes (`task.open`); one put away already stays as it is, and nothing is written.
+ */
+export async function archiveTask(
+  database: Database,
+  input: {
+    readonly scope: Scope;
+    readonly actor: Actor;
+    readonly taskId: string;
+    readonly now: Date;
+  },
+): Promise<TaskRecord> {
+  const { scope, actor, taskId, now } = input;
+  return drizzleOf(database).transaction(async (tx) => {
+    const [current] = await tx
+      .select({
+        number: tasks.number,
+        title: tasks.title,
+        state: tasks.state,
+        archivedAt: tasks.archivedAt,
+      })
+      .from(tasks)
+      .where(and(eq(tasks.projectId, scope.projectId), eq(tasks.id, taskId)))
+      .for("update");
+    if (current === undefined) {
+      throw new TaskError("task.not_found");
+    }
+    if (!CLOSED_STATES.includes(current.state)) {
+      throw new TaskError("task.open");
+    }
+    if (current.archivedAt === null) {
+      await tx.update(tasks).set({ archivedAt: now, updatedAt: now }).where(eq(tasks.id, taskId));
+      await recordEvent(tx, {
+        ...scope,
+        kind: "task.archived",
+        actor,
+        taskId,
+        data: { number: current.number, title: current.title },
+        now,
+      });
+    }
+    const written = await readTask(tx, scope, taskId);
+    if (written === undefined) {
+      throw new Error("the task put away was not found");
+    }
+    return written;
+  });
+}
+
+/** Brings a task back from the archive; one that is current stays as it is, and nothing is written. */
+export async function restoreTask(
+  database: Database,
+  input: {
+    readonly scope: Scope;
+    readonly actor: Actor;
+    readonly taskId: string;
+    readonly now: Date;
+  },
+): Promise<TaskRecord> {
+  const { scope, actor, taskId, now } = input;
+  return drizzleOf(database).transaction(async (tx) => {
+    const [current] = await tx
+      .select({ number: tasks.number, title: tasks.title, archivedAt: tasks.archivedAt })
+      .from(tasks)
+      .where(and(eq(tasks.projectId, scope.projectId), eq(tasks.id, taskId)))
+      .for("update");
+    if (current === undefined) {
+      throw new TaskError("task.not_found");
+    }
+    if (current.archivedAt !== null) {
+      await tx.update(tasks).set({ archivedAt: null, updatedAt: now }).where(eq(tasks.id, taskId));
+      await recordEvent(tx, {
+        ...scope,
+        kind: "task.restored",
+        actor,
+        taskId,
+        data: { number: current.number, title: current.title },
+        now,
+      });
+    }
+    const written = await readTask(tx, scope, taskId);
+    if (written === undefined) {
+      throw new Error("the task brought back was not found");
+    }
+    return written;
+  });
+}
+
+/**
+ * Puts every done or dropped task of a goal away at once, each with its own event, and answers
+ * how many went. A goal that is not the project's, or has nothing to put away, is zero.
+ */
+export async function archiveTasksOfGoal(
+  database: Database,
+  input: {
+    readonly scope: Scope;
+    readonly actor: Actor;
+    readonly goalId: string;
+    readonly now: Date;
+  },
+): Promise<number> {
+  const { scope, actor, goalId, now } = input;
+  return drizzleOf(database).transaction(async (tx) => {
+    const rows = await tx
+      .select({ id: tasks.id, number: tasks.number, title: tasks.title })
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.projectId, scope.projectId),
+          eq(tasks.goalId, goalId),
+          inArray(tasks.state, [...CLOSED_STATES]),
+          isNull(tasks.archivedAt),
+        ),
+      )
+      .for("update");
+    for (const row of rows) {
+      await tx.update(tasks).set({ archivedAt: now, updatedAt: now }).where(eq(tasks.id, row.id));
+      await recordEvent(tx, {
+        ...scope,
+        kind: "task.archived",
+        actor,
+        taskId: row.id,
+        data: { number: row.number, title: row.title },
+        now,
+      });
+    }
+    return rows.length;
+  });
+}
+
+/**
+ * What the console puts away by itself (ADR-0029): every task done or dropped and not touched
+ * since `before`, across the projects, a bounded number per pass, each with an event that names
+ * no actor. Answers how many went.
+ */
+export async function archiveStaleTasks(
+  database: Database,
+  input: { readonly before: Date; readonly now: Date },
+): Promise<number> {
+  const { before, now } = input;
+  return drizzleOf(database).transaction(async (tx) => {
+    const rows = await tx
+      .select({
+        id: tasks.id,
+        workspaceId: tasks.workspaceId,
+        projectId: tasks.projectId,
+        number: tasks.number,
+        title: tasks.title,
+      })
+      .from(tasks)
+      .where(
+        and(
+          inArray(tasks.state, [...CLOSED_STATES]),
+          isNull(tasks.archivedAt),
+          lt(tasks.updatedAt, before),
+        ),
+      )
+      .orderBy(tasks.updatedAt)
+      .limit(ARCHIVE_PASS_LIMIT)
+      .for("update");
+    for (const row of rows) {
+      await tx.update(tasks).set({ archivedAt: now, updatedAt: now }).where(eq(tasks.id, row.id));
+      await recordEvent(tx, {
+        workspaceId: row.workspaceId,
+        projectId: row.projectId,
+        kind: "task.archived",
+        actor: undefined,
+        taskId: row.id,
+        data: { number: row.number, title: row.title },
+        now,
+      });
+    }
+    return rows.length;
+  });
 }

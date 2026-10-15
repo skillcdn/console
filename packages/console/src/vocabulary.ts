@@ -167,6 +167,8 @@ export const EVENT_KINDS = [
   "task.updated",
   "task.moved",
   "task.commented",
+  "task.archived",
+  "task.restored",
   "decision.raised",
   "decision.answered",
   "decision.updated",

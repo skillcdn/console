@@ -44,6 +44,7 @@ import { DecisionForm } from "./components/decision-form.js";
 import { DecisionCard, DecisionList, type DecisionListProps } from "./components/decision-list.js";
 import { EventFeed, type EventFeedProps } from "./components/event-feed.js";
 import { GoalForm, GoalList, type GoalListProps, GoalView, goalMonth } from "./components/goals.js";
+import { PAGE_SIZE } from "./components/paged.js";
 import { ListingForm, PeopleList, type PeopleListProps } from "./components/people.js";
 import {
   MemberList,
@@ -76,6 +77,7 @@ import {
   EmptyState,
   personName,
   Spinner,
+  StateBadge,
   Time,
 } from "./components/ui.js";
 import { WorkList, type WorkListProps } from "./components/work.js";
@@ -445,6 +447,102 @@ function ProjectsPage(props: {
   );
 }
 
+/**
+ * The archive of the board (ADR-0029): the tasks put away, newest first, a page at a time from
+ * the server, each brought back from here by whoever may work in the project.
+ */
+function ArchivePage(props: { readonly project: RestProject; readonly data: ConsoleData }) {
+  const words = useWords();
+  const { project, data } = props;
+  const key = project.key;
+  const { busy, error, act } = useAction();
+  const [items, setItems] = useState<readonly RestTask[]>([]);
+  const [more, setMore] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const { archivedTasks } = data.actions;
+  const feedLength = data.events.length;
+  // The first page, read again whenever the project's feed grows: something was put away or brought back.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the feed's length is what triggers the read
+  useEffect(() => {
+    const controller = new AbortController();
+    archivedTasks({ limit: PAGE_SIZE, offset: 0 }, controller.signal)
+      .then((page) => {
+        if (!controller.signal.aborted) {
+          setItems(page.items);
+          setMore(page.more);
+          setLoaded(true);
+        }
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [archivedTasks, feedLength]);
+  const onMore = () =>
+    void archivedTasks({ limit: PAGE_SIZE, offset: items.length })
+      .then((page) => {
+        setItems((current) => [...current, ...page.items]);
+        setMore(page.more);
+      })
+      .catch(() => undefined);
+  const archive = words.archive;
+  return (
+    <>
+      <div className="sc-page-head">
+        <h1 className="sc-page-title">{archive.title}</h1>
+        <LinkButton href={projectHref(key)}>{words.nav.board}</LinkButton>
+      </div>
+      <p className="sc-lead">{archive.lead}</p>
+      {error !== undefined && <Callout tone="danger">{error}</Callout>}
+      {!loaded ? (
+        <Spinner label={archive.loading} />
+      ) : items.length === 0 ? (
+        <EmptyState title={archive.empty.title} body={archive.empty.body} />
+      ) : (
+        <>
+          <ul className="sc-task-rows" aria-label={archive.title}>
+            {items.map((task) => (
+              <li key={task.id} className="sc-task-row">
+                <a className="sc-task-row-title" href={taskHref(key, task.number)}>
+                  <span className="sc-card-number">#{task.number}</span> {task.title}
+                </a>
+                <span className="sc-task-row-meta">
+                  <StateBadge state={task.state} />
+                  {task.archivedAt !== null && (
+                    <span className="sc-muted">
+                      {archive.since} <Time iso={task.archivedAt} />
+                    </span>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() =>
+                      void act(async () => {
+                        await data.actions.restoreTask(task.id);
+                        setItems((current) =>
+                          current.filter((candidate) => candidate.id !== task.id),
+                        );
+                      })
+                    }
+                  >
+                    {archive.restore}
+                  </Button>
+                </span>
+              </li>
+            ))}
+          </ul>
+          {more && (
+            <div className="sc-show-more">
+              <Button variant="secondary" size="sm" onClick={onMore}>
+                {archive.more}
+              </Button>
+            </div>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
 function TaskPage(props: {
   readonly route: Extract<Route, { name: "task" }>;
   readonly project: RestProject;
@@ -458,10 +556,43 @@ function TaskPage(props: {
   const words = useWords();
   const { route, project, data, components, navigation, busy, error, act } = props;
   const key = project.key;
-  const task =
+  const current =
     route.number === undefined
       ? data.tasks.find((candidate) => candidate.id === route.id)
       : data.tasks.find((candidate) => candidate.number === route.number);
+  // A task put away is not among the board's (ADR-0029): it is asked for by itself.
+  const [fetched, setFetched] = useState<RestTask | undefined>(undefined);
+  const [missing, setMissing] = useState<string | undefined>(undefined);
+  const { fetchTask } = data.actions;
+  const wanted =
+    current === undefined && data.projectLoaded
+      ? route.number === undefined
+        ? route.id
+        : String(route.number)
+      : undefined;
+  useEffect(() => {
+    if (wanted === undefined) {
+      return;
+    }
+    const controller = new AbortController();
+    fetchTask(wanted, controller.signal)
+      .then((found) => {
+        if (!controller.signal.aborted) {
+          setFetched(found);
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setMissing(wanted);
+        }
+      });
+    return () => controller.abort();
+  }, [wanted, fetchTask]);
+  const task =
+    current ??
+    (fetched !== undefined && (fetched.id === route.id || fetched.number === route.number)
+      ? fetched
+      : undefined);
   const [history, setHistory] = useState<readonly RestEvent[] | undefined>(undefined);
   const [comments, setComments] = useState<readonly RestComment[] | undefined>(undefined);
   const { taskHistory, taskComments } = data.actions;
@@ -498,6 +629,9 @@ function TaskPage(props: {
     return () => controller.abort();
   }, [taskId, taskHistory, taskComments, feedLength]);
   if (task === undefined) {
+    if (wanted !== undefined && missing !== wanted) {
+      return <Spinner label={words.common.loading} />;
+    }
     return (
       <EmptyState
         title={words.task.noSuch.title}
@@ -548,6 +682,17 @@ function TaskPage(props: {
         void act(() => data.actions.updateDecision(decision.id, patch))
       }
       onAbandonRun={(run) => void act(() => data.actions.abandonRun(run.id))}
+      onArchive={(target) =>
+        void act(async () => {
+          await data.actions.archiveTask(target.id);
+          navigation.go(projectHref(key, "archive"));
+        })
+      }
+      onRestore={(target) =>
+        void act(async () => {
+          setFetched(await data.actions.restoreTask(target.id));
+        })
+      }
       onComment={(draft) =>
         void act(async () => {
           await data.actions.comment(task.id, {
@@ -618,6 +763,7 @@ function ProjectPage(props: {
           taskHref={href}
           onOpen={(task) => navigation.go(href(task))}
           onMove={onMove}
+          archiveHref={projectHref(key, "archive")}
           empty={
             data.tasks.length === 0 ? (
               <EmptyState
@@ -873,7 +1019,26 @@ function ProjectPage(props: {
           editHref={owner ? goalHref(key, goal.id, { form: "edit" }) : undefined}
           onMove={
             owner
-              ? (target, state) => void act(() => data.actions.updateGoal(target.id, { state }))
+              ? (target, state) =>
+                  void act(async () => {
+                    await data.actions.updateGoal(target.id, { state });
+                    // A goal closed takes its done and dropped tasks to the archive, if the person says so (ADR-0029).
+                    const closed = towards.filter(
+                      (task) => !OPEN_TASK_STATES.includes(task.state),
+                    ).length;
+                    if (
+                      (state === "done" || state === "dropped") &&
+                      closed > 0 &&
+                      window.confirm(roadmap.archiveAsk(closed))
+                    ) {
+                      await data.actions.archiveGoalTasks(target.id);
+                    }
+                  })
+              : undefined
+          }
+          onArchiveTasks={
+            owner && towards.some((task) => !OPEN_TASK_STATES.includes(task.state))
+              ? () => void act(() => data.actions.archiveGoalTasks(goal.id))
               : undefined
           }
           busy={busy}
@@ -886,6 +1051,7 @@ function ProjectPage(props: {
               onOpen={(task) => navigation.go(href(task))}
               onMove={onMove}
               today={now}
+              archiveHref={projectHref(key, "archive")}
               empty={
                 towards.length === 0 ? <p className="sc-muted">{roadmap.noTasks}</p> : undefined
               }
@@ -991,6 +1157,9 @@ function ProjectPage(props: {
         )}
       </>
     );
+  }
+  if (route.name === "archive") {
+    return <ArchivePage project={project} data={data} />;
   }
   if (route.name === "feed") {
     return (

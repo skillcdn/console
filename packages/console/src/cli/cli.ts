@@ -913,6 +913,7 @@ const tasks: Command = async (args, io) => {
       category: { type: "string" },
       goal: { type: "string" },
       due: { type: "string" },
+      archived: { type: "boolean" },
       ...PAGE_OPTIONS,
     },
     false,
@@ -942,6 +943,7 @@ const tasks: Command = async (args, io) => {
     ...(text(values, "category") === undefined ? {} : { category: text(values, "category") }),
     ...(text(values, "goal") === undefined ? {} : { goal: text(values, "goal") }),
     ...(dueBy === undefined ? {} : { dueBy }),
+    ...(on(values, "archived") ? { archived: true } : {}),
     ...page,
   });
   answer(io, session, found, () =>
@@ -1247,12 +1249,57 @@ const editTask: Command = async (args, io) => {
   return EXIT.ok;
 };
 
+/** Puts a task away, or every done or dropped task of a goal (ADR-0029); the task by its number or its id. */
+const taskArchive: Command = async (args, io) => {
+  const { values, positionals } = parse(args, { goal: { type: "string" } });
+  const goal = text(values, "goal");
+  if (positionals.length > 1 || (positionals.length === 0) === (goal === undefined)) {
+    throw misuse(
+      "Say which: console task archive <number|id>, or console task archive --goal <id> for every done or dropped task of a goal",
+    );
+  }
+  const session = await open(io, values);
+  const project = await session.project();
+  if (goal !== undefined) {
+    const { archived } = await project.archiveTasksOfGoal(goal);
+    answer(
+      io,
+      session,
+      { archived },
+      () => `${archived} ${archived === 1 ? "task" : "tasks"} of the goal put away.`,
+    );
+    return EXIT.ok;
+  }
+  const found = await project.task(positionals[0] ?? "");
+  const archived = await project.archiveTask(found.id);
+  answer(io, session, archived, () => formatTaskLine(archived));
+  return EXIT.ok;
+};
+
+/** Brings a task back from the archive. */
+const taskRestore: Command = async (args, io) => {
+  const { values, positionals } = parse(args, {});
+  const ref = theOne(positionals, "Say which task: console task restore <number|id>");
+  const session = await open(io, values);
+  const project = await session.project();
+  const found = await project.task(ref);
+  const restored = await project.restoreTask(found.id);
+  answer(io, session, restored, () => formatTaskLine(restored));
+  return EXIT.ok;
+};
+
 const task: Command = async (args, io) => {
   if (args[0] === "new") {
     return newTask(args.slice(1), io);
   }
   if (args[0] === "edit") {
     return editTask(args.slice(1), io);
+  }
+  if (args[0] === "archive") {
+    return taskArchive(args.slice(1), io);
+  }
+  if (args[0] === "restore") {
+    return taskRestore(args.slice(1), io);
   }
   const { values, positionals } = parse(args, {});
   const ref = theOne(positionals, "Say which task: console task <number|id>");

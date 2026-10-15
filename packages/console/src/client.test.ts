@@ -92,6 +92,7 @@ describe("createClient", () => {
       dueOn: null,
       startedAt: null,
       doneAt: null,
+      archivedAt: null,
       links: [],
       openDecisions: 0,
       openRuns: 0,
@@ -100,9 +101,10 @@ describe("createClient", () => {
     };
     const { send, calls } = fakeFetch({
       [`PATCH /api/v1/projects/web/tasks/${task.id}`]: { body: { ...task, state: "done" } },
-      "GET /api/v1/projects/web/tasks?open=true&category=engineering&assignee=p&dueBy=2026-10-20": {
-        body: { more: false, items: [task] },
-      },
+      "GET /api/v1/projects/web/tasks?archived=false&open=true&category=engineering&assignee=p&dueBy=2026-10-20":
+        {
+          body: { more: false, items: [task] },
+        },
       "GET /api/v1/categories": { body: { more: false, items: [] } },
       "GET /api/v1/work": { body: { tasks: [], decisions: [] } },
       [`GET /api/v1/people/${PERSON.id}/work`]: { body: { tasks: [] } },
@@ -114,9 +116,13 @@ describe("createClient", () => {
     expect(calls[0]?.init?.body).toBe(JSON.stringify({ state: "done" }));
     expect(new Headers(calls[0]?.init?.headers).get("content-type")).toBe("application/json");
     // The board narrowed: each filter a parameter, left out when not given.
-    const narrowed = await client
-      .project("web")
-      .tasks({ open: true, category: "engineering", assignee: "p", dueBy: "2026-10-20" });
+    const narrowed = await client.project("web").tasks({
+      open: true,
+      category: "engineering",
+      assignee: "p",
+      dueBy: "2026-10-20",
+      archived: false,
+    });
     expect(narrowed.items).toHaveLength(1);
     expect((await client.categories()).items).toEqual([]);
     expect(await client.work()).toEqual({ tasks: [], decisions: [] });

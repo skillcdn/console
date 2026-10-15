@@ -12,6 +12,7 @@ import {
 } from "./routes.js";
 import {
   type RestAnswerInput,
+  type RestArchivedTasks,
   type RestArtifactInput,
   type RestCategories,
   type RestCategory,
@@ -73,6 +74,7 @@ import {
   type RestVersion,
   type RestVersions,
   type RestWork,
+  restArchivedTasksSchema,
   restCategoriesSchema,
   restCategorySchema,
   restClaimSchema,
@@ -219,6 +221,8 @@ export interface TaskFilter extends Page {
   readonly assignee?: string | undefined;
   /** A day (`2026-10-20`): the tasks due on it or before it. */
   readonly dueBy?: string | undefined;
+  /** True for the tasks put away alone (ADR-0029); false, or left out, for the current ones. */
+  readonly archived?: boolean | undefined;
 }
 
 /** What a folder's listing, or a search, of the documents is narrowed to. */
@@ -254,6 +258,11 @@ export interface ProjectClient {
   task(ref: string, signal?: AbortSignal): Promise<RestTask>;
   createTask(input: RestTaskInput): Promise<RestTask>;
   updateTask(id: string, patch: RestTaskPatch): Promise<RestTask>;
+  /** Puts a done or dropped task away (ADR-0029), or brings one back. */
+  archiveTask(id: string): Promise<RestTask>;
+  restoreTask(id: string): Promise<RestTask>;
+  /** Puts every done or dropped task of a goal away at once; for an owner. Answers how many. */
+  archiveTasksOfGoal(goalId: string): Promise<RestArchivedTasks>;
   /** The decisions, or only those that wait, or only those about one task; a page of them. */
   decisions(
     filter?: { readonly open?: boolean; readonly task?: string } & Page,
@@ -570,6 +579,7 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
           "GET",
           withQuery(at("tasks"), {
             state: filter.state,
+            archived: flag(filter.archived),
             open: flag(filter.open),
             category: filter.category,
             goal: filter.goal,
@@ -587,6 +597,12 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
       createTask: (input) => request("POST", `${base}${at("tasks")}`, input, restTaskSchema),
       updateTask: (id, patch) =>
         request("PATCH", `${base}${at("tasks", id)}`, patch, restTaskSchema),
+      archiveTask: (id) =>
+        request("POST", `${base}${at("tasks", id)}/archive`, undefined, restTaskSchema),
+      restoreTask: (id) =>
+        request("POST", `${base}${at("tasks", id)}/restore`, undefined, restTaskSchema),
+      archiveTasksOfGoal: (goalId) =>
+        request("POST", `${base}${at("tasks")}/archive`, { goalId }, restArchivedTasksSchema),
       decisions: (filter = {}, signal) =>
         request(
           "GET",

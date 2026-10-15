@@ -16,13 +16,22 @@ import type {
 import { formatDay } from "../dates.js";
 import { useLanguage, useWords } from "../i18n/index.js";
 import type { TaskFormKind } from "../router.js";
-import { TASK_STATES } from "../vocabulary.js";
+import { OPEN_TASK_STATES, TASK_STATES } from "../vocabulary.js";
 import { type CommentDraft, TaskThread } from "./comments.js";
 import { DecisionForm } from "./decision-form.js";
 import { EventFeed } from "./event-feed.js";
 import { Markdown } from "./markdown.js";
 import { TaskForm } from "./task-form.js";
-import { CategoryBadge, DueBadge, PersonChip, PriorityBadge, StateBadge, Time } from "./ui.js";
+import {
+  Badge,
+  Button,
+  CategoryBadge,
+  DueBadge,
+  PersonChip,
+  PriorityBadge,
+  StateBadge,
+  Time,
+} from "./ui.js";
 
 // One task: what it is, who it is on, what it links to, the discussion on it, which is what was
 // said about it with the agents at work on it and the decisions about it in the order they
@@ -76,6 +85,9 @@ export interface TaskViewProps {
     | ((decision: RestDecision, patch: RestDecisionPatch) => void)
     | undefined;
   readonly onAbandonRun?: ((run: RestRun) => void) | undefined;
+  /** Called to put a done or dropped task away, and to bring one back (ADR-0029); left out, neither is offered. */
+  readonly onArchive?: ((task: RestTask) => void) | undefined;
+  readonly onRestore?: ((task: RestTask) => void) | undefined;
   /** Called with a word for the discussion, and the files put in it. Left out, nothing can be said here. */
   readonly onComment?: ((draft: CommentDraft) => void) | undefined;
 }
@@ -135,6 +147,7 @@ export function TaskView(props: TaskViewProps) {
         </h1>
         <div className="sc-task-badges">
           <StateBadge state={task.state} />
+          {task.archivedAt !== null && <Badge tone="neutral">{words.task.archived}</Badge>}
           {task.category !== null && <CategoryBadge category={task.category} />}
           <PriorityBadge priority={task.priority} />
           {task.dueOn !== null && (
@@ -312,6 +325,14 @@ export function TaskView(props: TaskViewProps) {
                 </dd>
               </div>
             )}
+            {task.archivedAt !== null && (
+              <div>
+                <dt>{words.task.archivedAt}</dt>
+                <dd>
+                  <Time iso={task.archivedAt} />
+                </dd>
+              </div>
+            )}
             <div>
               <dt>{words.task.written}</dt>
               <dd>
@@ -333,6 +354,26 @@ export function TaskView(props: TaskViewProps) {
               <a className="sc-button sc-button-secondary" href={props.formHref("ask")}>
                 {words.task.raiseDecision}
               </a>
+              {props.onArchive !== undefined &&
+                task.archivedAt === null &&
+                !OPEN_TASK_STATES.includes(task.state) && (
+                  <Button
+                    variant="secondary"
+                    disabled={props.busy === true}
+                    onClick={() => props.onArchive?.(task)}
+                  >
+                    {words.task.archive}
+                  </Button>
+                )}
+              {props.onRestore !== undefined && task.archivedAt !== null && (
+                <Button
+                  variant="secondary"
+                  disabled={props.busy === true}
+                  onClick={() => props.onRestore?.(task)}
+                >
+                  {words.task.restore}
+                </Button>
+              )}
             </div>
           )}
         </aside>

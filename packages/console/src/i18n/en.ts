@@ -223,6 +223,7 @@ export const en = {
     },
     moveTo: "Move to",
     grip: "Drag to another column",
+    archive: "Archive",
     decisions: (n: number) => count(n, "decision", "decisions"),
     decisionsTitle: "Decisions waiting for a person",
     filters: {
@@ -278,6 +279,10 @@ export const en = {
             : "",
     started: "Started",
     done: "Done",
+    archived: "Put away",
+    archivedAt: "Put away",
+    archive: "Put away",
+    restore: "Bring back",
     form: {
       title: "Title",
       titlePlaceholder: "What is to be done, in plain words that stand on their own.",
@@ -408,6 +413,9 @@ export const en = {
     state: "State",
     nothingMore: "Nothing more was written about it.",
     about: "What reaching it means",
+    archiveTasks: "Put the done tasks away",
+    archiveAsk: (n: number) =>
+      `Put the ${count(n, "task", "tasks")} done or dropped under this goal away as well?`,
     view: "View",
     views: { board: "Board", list: "List", calendar: "Calendar" },
     timeline: {
@@ -571,6 +579,8 @@ export const en = {
       taskUpdated: (fields: string, task: string) => `changed ${fields} of ${task}`,
       taskCommented: (task: string, excerpt: string | undefined) =>
         `commented on ${task}${excerpt === undefined || excerpt === "" ? "" : `: ${excerpt}`}`,
+      taskArchived: (task: string) => `put ${task} away`,
+      taskRestored: (task: string) => `brought ${task} back`,
       decisionRaised: (question: string) => `asked: ${question}`,
       decisionAnswered: (question: string, option: string) => `answered "${question}": ${option}`,
       decisionUpdated: (fields: string, question: string) =>
@@ -589,6 +599,19 @@ export const en = {
       documentRestored: (page: string) => `restored ${page}`,
       fileAttached: (label: string, page: string) => `attached ${label} to ${page}`,
     },
+  },
+
+  archive: {
+    title: "Archive",
+    lead: "Tasks done or dropped and put away: out of the board, the lists and the calendar, each still open by its number. Brought back from here.",
+    loading: "Loading the archive",
+    empty: {
+      title: "Nothing is put away",
+      body: "A task done or dropped is put away from its page, with its goal, or by the console after a while.",
+    },
+    since: "put away",
+    restore: "Bring back",
+    more: "Show more",
   },
 
   runs: {
