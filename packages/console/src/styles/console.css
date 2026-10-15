@@ -718,6 +718,34 @@ table {
   gap: var(--sc-space-2);
 }
 
+/* A page's name with a word about it beside: on one line where the window is wide, so that the
+   head stays low over the board; under the name where it is not. */
+.sc-page-heading {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: baseline;
+  min-width: 0;
+  column-gap: var(--sc-space-4);
+  row-gap: var(--sc-space-1);
+}
+
+.sc-page-lead {
+  flex: 1 1 16rem;
+  min-width: 0;
+  margin: 0;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+@media (min-width: 60rem) {
+  .sc-page-lead {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
 .sc-lead {
   max-width: var(--sc-width-prose);
   margin-bottom: var(--sc-space-5);
@@ -3768,16 +3796,16 @@ table {
   }
 }
 
-/* A card is dragged to another column from anywhere on it but its title and its menu: with a
-   mouse at once, under a finger once it has rested a moment, so that a finger that moves scrolls.
-   The cursor is the standard `move`, which every platform draws itself; the column under the
-   dragged card says it would take it, and a ghost of the card follows the pointer. */
+/* A card is dragged to another column from anywhere on it but its menu, its title included: with
+   a mouse at once, under a finger once it has rested a moment, so that a finger that moves
+   scrolls. The column under the dragged card says it would take it, and the card itself, whole,
+   follows the pointer while a faded one keeps its place. */
 .sc-card {
   position: relative;
 }
 
 .sc-card-movable {
-  cursor: move;
+  cursor: grab;
 }
 
 /* A finger resting on a card is neither selecting its words nor asking for the page's menu. */
@@ -3789,13 +3817,13 @@ table {
 }
 
 .sc-card-dragging {
-  opacity: 0.5;
+  opacity: 0.4;
 }
 
 .sc-board-dragging,
 .sc-board-dragging .sc-card,
 .sc-board-dragging .sc-card * {
-  cursor: move;
+  cursor: grabbing;
   user-select: none;
 }
 
@@ -3860,12 +3888,18 @@ table {
   z-index: 60;
   display: flex;
   flex-direction: column;
-  min-width: 10rem;
+  min-width: 8rem;
   padding: var(--sc-space-1);
   border: var(--sc-border);
-  border-radius: var(--sc-radius-lg);
+  border-radius: var(--sc-radius-md);
   background: var(--sc-color-bg-inset);
   box-shadow: var(--sc-shadow-stage);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-card-menu .sc-menu-link {
+  padding: calc(var(--sc-space-1) + 1px) var(--sc-space-2);
+  border-radius: var(--sc-radius-sm);
 }
 
 .sc-column-over {
@@ -3878,15 +3912,14 @@ table {
   top: 0;
   left: 0;
   z-index: 50;
-  max-width: 18rem;
-  padding: var(--sc-space-2) var(--sc-space-3);
-  border: 1px solid var(--sc-color-accent);
-  border-radius: var(--sc-radius-lg);
-  background: var(--sc-color-bg-raised);
-  box-shadow: var(--sc-glow);
-  color: var(--sc-color-text);
-  font-size: var(--sc-text-sm);
   pointer-events: none;
+}
+
+.sc-drag-ghost .sc-card {
+  border-color: var(--sc-color-accent);
+  background: var(--sc-color-bg-raised);
+  box-shadow: var(--sc-shadow-stage);
+  transform: scale(1.02);
 }
 
 /* A goal's page reads as the board does: the facts in a row at its head, then a switch between

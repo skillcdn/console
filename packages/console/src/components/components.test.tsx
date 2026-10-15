@@ -2714,7 +2714,7 @@ describe("a card dragged to another column", () => {
     expect(columnStateOf(undefined)).toBeUndefined();
   });
 
-  it("has a menu with the way to the form, and the way to put the task away once it is done or dropped", () => {
+  it("has a menu with the way to the form and the way to put the task away, whatever the state", () => {
     const render = (
       overrides: Partial<RestTask>,
       ways: {
@@ -2735,9 +2735,9 @@ describe("a card dragged to another column", () => {
     expect(open).not.toContain('role="menu"');
     const done = render({ state: "done" }, { onArchive: () => undefined });
     expect(done).toContain(button);
-    // An open task cannot be put away, so the way alone gives it no menu.
+    // The way to put away alone gives a menu to any task, open or not (ADR-0030).
     const openWithoutForm = render({ state: "in_progress" }, { onArchive: () => undefined });
-    expect(openWithoutForm).not.toContain("sc-card-menu-button");
+    expect(openWithoutForm).toContain(button);
     expect(render({}, {})).not.toContain("sc-card-menu-button");
     const korean = renderToStaticMarkup(
       <LanguageContext.Provider value={KOREAN}>
@@ -2769,7 +2769,7 @@ describe("the pack token of a project", () => {
 });
 
 describe("the archive of the board (ADR-0029)", () => {
-  it("offers to put a done task away and to bring one back, and says on the task that it is put away", () => {
+  it("offers to put a task away and to bring one back, and says on the task that it is put away", () => {
     const render = (
       overrides: Partial<RestTask>,
       handlers: { onArchive?: () => void; onRestore?: () => void } = {},
@@ -2791,8 +2791,9 @@ describe("the archive of the board (ADR-0029)", () => {
         />,
       );
     const both = { onArchive: () => undefined, onRestore: () => undefined };
+    // Any task not put away is put away, open or not (ADR-0030); only one put away is brought back.
     const open = render({ state: "in_progress" }, both);
-    expect(open).not.toContain(">Put away</button>");
+    expect(open).toContain(">Put away</button>");
     expect(open).not.toContain(">Bring back</button>");
     const done = render({ state: "done", doneAt: "2026-10-10T10:00:00.000Z" }, both);
     expect(done).toContain(">Put away</button>");

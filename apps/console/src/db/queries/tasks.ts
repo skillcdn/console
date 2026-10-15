@@ -75,8 +75,7 @@ export class TaskError extends DomainError {
       | "task.invalid_parent"
       | "task.invalid_category"
       | "task.invalid_goal"
-      | "task.invalid_dates"
-      | "task.open",
+      | "task.invalid_dates",
   ) {
     super(code, TASK_ERROR_WORDS[code]);
   }
@@ -89,7 +88,6 @@ const TASK_ERROR_WORDS = {
   "task.invalid_category": "the category is not one of the workspace",
   "task.invalid_goal": "the goal is not one of the project",
   "task.invalid_dates": "the due day is before the start",
-  "task.open": "an open task is not put away; one done or dropped is",
 } as const;
 
 export interface TaskInput {
@@ -623,14 +621,14 @@ export async function listSubtasks(
   return rows.map(toTask);
 }
 
-/** The states a task is put away in: what is over. */
+/** The states the console puts a task away in by itself, and a goal takes along: what is over. */
 const CLOSED_STATES: readonly TaskState[] = ["done", "dropped"];
 /** How many tasks one pass of the console's own archiving puts away: enough, in a short transaction. */
 const ARCHIVE_PASS_LIMIT = 500;
 
 /**
- * Puts a task away (ADR-0029): a moment the board keeps, not a state. Only a task done or
- * dropped goes (`task.open`); one put away already stays as it is, and nothing is written.
+ * Puts a task away (ADR-0029): a moment the board keeps, not a state, from any state by a
+ * person's hand (ADR-0030); one put away already stays as it is, and nothing is written.
  */
 export async function archiveTask(
   database: Database,
@@ -644,20 +642,12 @@ export async function archiveTask(
   const { scope, actor, taskId, now } = input;
   return drizzleOf(database).transaction(async (tx) => {
     const [current] = await tx
-      .select({
-        number: tasks.number,
-        title: tasks.title,
-        state: tasks.state,
-        archivedAt: tasks.archivedAt,
-      })
+      .select({ number: tasks.number, title: tasks.title, archivedAt: tasks.archivedAt })
       .from(tasks)
       .where(and(eq(tasks.projectId, scope.projectId), eq(tasks.id, taskId)))
       .for("update");
     if (current === undefined) {
       throw new TaskError("task.not_found");
-    }
-    if (!CLOSED_STATES.includes(current.state)) {
-      throw new TaskError("task.open");
     }
     if (current.archivedAt === null) {
       await tx.update(tasks).set({ archivedAt: now, updatedAt: now }).where(eq(tasks.id, taskId));

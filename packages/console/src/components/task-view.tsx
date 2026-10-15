@@ -16,7 +16,7 @@ import type {
 import { formatDay } from "../dates.js";
 import { useLanguage, useWords } from "../i18n/index.js";
 import type { TaskFormKind } from "../router.js";
-import { OPEN_TASK_STATES, TASK_STATES } from "../vocabulary.js";
+import { TASK_STATES } from "../vocabulary.js";
 import { type CommentDraft, TaskThread } from "./comments.js";
 import { DecisionForm } from "./decision-form.js";
 import { EventFeed } from "./event-feed.js";
@@ -354,17 +354,15 @@ export function TaskView(props: TaskViewProps) {
               <a className="sc-button sc-button-secondary" href={props.formHref("ask")}>
                 {words.task.raiseDecision}
               </a>
-              {props.onArchive !== undefined &&
-                task.archivedAt === null &&
-                !OPEN_TASK_STATES.includes(task.state) && (
-                  <Button
-                    variant="secondary"
-                    disabled={props.busy === true}
-                    onClick={() => props.onArchive?.(task)}
-                  >
-                    {words.task.archive}
-                  </Button>
-                )}
+              {props.onArchive !== undefined && task.archivedAt === null && (
+                <Button
+                  variant="secondary"
+                  disabled={props.busy === true}
+                  onClick={() => props.onArchive?.(task)}
+                >
+                  {words.task.archive}
+                </Button>
+              )}
               {props.onRestore !== undefined && task.archivedAt !== null && (
                 <Button
                   variant="secondary"

@@ -18,7 +18,6 @@ import {
 } from "../api.js";
 import { useWords } from "../i18n/index.js";
 import type { BoardFilter } from "../router.js";
-import { OPEN_TASK_STATES } from "../vocabulary.js";
 import { isPlainClick } from "./shell.js";
 import {
   Avatar,
@@ -35,12 +34,13 @@ import {
 // A card says what a person needs at a glance and nothing more: the number and the title, the
 // category, what is due, who is on it, and what blocks it. Whether an agent is at it is not
 // said, since the board cannot know (ADR-0020); the task's page shows its runs. A card is moved
-// to another column by hand: pressed anywhere but on its title and its menu, then dragged, with
-// a mouse at once and under a finger once it has rested a moment, so that a finger that moves
-// at once scrolls as it always did. The card's menu holds the rest: the way to the task's form,
-// and the way to put the task away once it is done or dropped (ADR-0029). The keyboard changes a
-// state on the task's page. The board takes its data as props and nothing from the network;
-// what it is told on a click goes back up.
+// to another column by hand: pressed anywhere but on its menu, its title included, then dragged
+// whole, with a mouse at once and under a finger once it has rested a moment, so that a finger
+// that moves at once scrolls as it always did; a click on the title opens the task as long as the
+// card was not dragged. The card's menu holds the rest: the way to the task's form, and the way to
+// put the task away (ADR-0029, ADR-0030). The keyboard changes a state on the task's page. The
+// board takes its data as props and nothing from the network; what it is told on a click goes
+// back up.
 
 export interface BoardProps {
   readonly tasks: readonly RestTask[];
@@ -57,7 +57,7 @@ export interface BoardProps {
   readonly editHref?: ((task: RestTask) => string) | undefined;
   /** Called when the menu's edit is chosen, to show the form without leaving the page; left out, the link is followed. */
   readonly onEdit?: ((task: RestTask) => void) | undefined;
-  /** Called when a task done or dropped is put away from its card's menu (ADR-0029). Left out, the menu offers nothing of it. */
+  /** Called when a task is put away from its card's menu (ADR-0029, ADR-0030). Left out, the menu offers nothing of it. */
   readonly onArchive?: ((task: RestTask) => void) | undefined;
 }
 
@@ -78,12 +78,21 @@ export function columnStateOf(value: string | null | undefined): TaskState | und
   return TASK_STATES.find((state) => state === value);
 }
 
+interface Point {
+  readonly x: number;
+  readonly y: number;
+}
+
 /** A card on its way to another column. */
 interface Drag {
   readonly task: RestTask;
-  readonly from: { readonly x: number; readonly y: number };
+  readonly from: Point;
   readonly x: number;
   readonly y: number;
+  /** Where on the card it was taken hold of, so that the card moves whole under the pointer. */
+  readonly grip: Point;
+  /** How wide the card is where it stands, so that the one in hand is the same. */
+  readonly width: number;
   /** Whether the card has come loose: the mouse has travelled, or the finger has rested. */
   readonly moving: boolean;
   /** Whether the press is a finger's, which must rest before the card comes loose. */
@@ -97,23 +106,21 @@ export interface TaskCardProps {
   readonly href: string;
   readonly onOpen: (task: RestTask) => void;
   readonly today?: string | undefined;
-  /** Called when the card is pressed anywhere but on its controls, to drag it to another column; left out, the card stays where it is. */
+  /** Called when the card is pressed anywhere but on its menu, to drag it to another column; left out, the card stays where it is. */
   readonly onPress?: ((task: RestTask, event: ReactPointerEvent<HTMLElement>) => void) | undefined;
-  /** Whether the card is on its way to another column. */
+  /** Whether the card is on its way to another column: the one left in its place is faded. */
   readonly dragging?: boolean | undefined;
   /** Where the task is edited; given, the card's menu leads there. */
   readonly editHref?: string | undefined;
   /** Called when the menu's edit is chosen, to show the form without leaving the page; left out, the link is followed. */
   readonly onEdit?: ((task: RestTask) => void) | undefined;
-  /** Called when the task is put away from the card's menu; offered once the task is done or dropped (ADR-0029). */
+  /** Called when the task is put away from the card's menu, whatever its state (ADR-0030). */
   readonly onArchive?: ((task: RestTask) => void) | undefined;
 }
 
 export function TaskCard(props: TaskCardProps) {
   const words = useWords();
   const { task, onPress } = props;
-  const closed = !OPEN_TASK_STATES.includes(task.state);
-  const archive = closed ? props.onArchive : undefined;
   return (
     <article
       className={cx(
@@ -124,12 +131,19 @@ export function TaskCard(props: TaskCardProps) {
       aria-label={`#${task.number} ${task.title}`}
       onPointerDown={onPress === undefined ? undefined : (event) => onPress(task, event)}
     >
-      {(props.editHref !== undefined || archive !== undefined) && (
-        <CardMenu task={task} editHref={props.editHref} onEdit={props.onEdit} onArchive={archive} />
+      {(props.editHref !== undefined || props.onArchive !== undefined) && (
+        <CardMenu
+          task={task}
+          editHref={props.editHref}
+          onEdit={props.onEdit}
+          onArchive={props.onArchive}
+        />
       )}
       <a
         className="sc-card-title"
         href={props.href}
+        // The card is dragged by our own hand, the title included; the browser's drag of a link is not it.
+        draggable={false}
         onClick={(event) => {
           if (isPlainClick(event)) {
             event.preventDefault();
@@ -169,7 +183,8 @@ const MENU_MARGIN = 8;
 /**
  * The card's menu: three dots in its corner, which open the ways a card has beyond being moved,
  * each given by the composition. The menu is rendered over the document, so that no column
- * clips it; a press elsewhere, the escape key, a scroll or a change of the window closes it.
+ * clips it; a press elsewhere, the escape key, a scroll or a change of the window closes it, and
+ * so does the button that opened it.
  */
 function CardMenu(props: {
   readonly task: RestTask;
@@ -194,6 +209,13 @@ function CardMenu(props: {
       right: Math.max(MENU_MARGIN, window.innerWidth - rect.right),
     });
   };
+  /** Whether the focus, or a press, is on the menu or on its button: the menu's own. */
+  const own = useCallback(
+    (target: EventTarget | null): boolean =>
+      target instanceof Node &&
+      (panel.current?.contains(target) === true || button.current?.contains(target) === true),
+    [],
+  );
   useEffect(() => {
     if (!open) {
       return;
@@ -214,14 +236,9 @@ function CardMenu(props: {
     }
     panel.current?.querySelector<HTMLElement>("[role='menuitem']")?.focus({ preventScroll: true });
     const away = (event: PointerEvent) => {
-      const target = event.target;
-      if (
-        target instanceof Node &&
-        (panel.current?.contains(target) === true || button.current?.contains(target) === true)
-      ) {
-        return;
+      if (!own(event.target)) {
+        close();
       }
-      close();
     };
     const key = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -239,7 +256,7 @@ function CardMenu(props: {
       window.removeEventListener("scroll", close, true);
       window.removeEventListener("resize", close);
     };
-  }, [open, close]);
+  }, [open, close, own]);
   // The arrow keys walk the items, around the ends.
   const walk = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp") {
@@ -283,9 +300,9 @@ function CardMenu(props: {
             aria-label={`#${task.number} ${task.title}`}
             style={{ top: place.top, right: place.right }}
             onKeyDown={walk}
+            // The focus leaving for anywhere but the menu's own button closes it; the button closes it itself.
             onBlur={(event) => {
-              const next = event.relatedTarget;
-              if (!(next instanceof Node && panel.current?.contains(next) === true)) {
+              if (!own(event.relatedTarget)) {
                 close();
               }
             }}
@@ -340,6 +357,8 @@ export function byDue(a: RestTask, b: RestTask): number {
   return b.number - a.number;
 }
 
+const nothing = () => undefined;
+
 export function Board(props: BoardProps) {
   const words = useWords();
   const { onMove } = props;
@@ -353,10 +372,10 @@ export function Board(props: BoardProps) {
   const loose = useRef(false);
 
   const press = useCallback((task: RestTask, event: ReactPointerEvent<HTMLElement>) => {
-    // The card's own controls, its title and its menu, are pressed for themselves.
+    // The card's menu is pressed for itself; everything else on the card takes hold of it.
     if (
       event.button !== 0 ||
-      (event.target instanceof Element && event.target.closest("a, button") !== null)
+      (event.target instanceof Element && event.target.closest("button") !== null)
     ) {
       return;
     }
@@ -365,14 +384,26 @@ export function Board(props: BoardProps) {
       // The press is the drag's beginning and nothing else: no text is selected on the way.
       event.preventDefault();
     }
+    const rect = event.currentTarget.getBoundingClientRect();
     const from = { x: event.clientX, y: event.clientY };
-    setDrag({ task, from, x: from.x, y: from.y, moving: false, hold, over: undefined });
+    setDrag({
+      task,
+      from,
+      x: from.x,
+      y: from.y,
+      grip: { x: from.x - rect.left, y: from.y - rect.top },
+      width: rect.width,
+      moving: false,
+      hold,
+      over: undefined,
+    });
   }, []);
 
   // While a card is held, the pointer is followed over the whole document: the column under it
   // is marked, the board scrolls when the pointer nears its edge, and the release moves the task.
   // A finger's hold is timed here, and once the card has come loose the page no longer scrolls
-  // under the finger, nor asks for the menu a long press would otherwise bring up.
+  // under the finger, nor asks for the menu a long press would otherwise bring up; the click that
+  // follows a drag opens nothing.
   const held = drag !== null;
   useEffect(() => {
     if (!held) {
@@ -421,8 +452,18 @@ export function Board(props: BoardProps) {
         return { ...before, moving: true, over: columnUnder(before.x, before.y) };
       });
     };
+    const swallow = (event: MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+    };
     const release = (event: PointerEvent) => {
       const last = current.current;
+      if (loose.current) {
+        // The click the browser sends after the pointer is let go would open the title's task:
+        // it is swallowed, and the ear for it taken down once that moment has passed.
+        window.addEventListener("click", swallow, true);
+        window.setTimeout(() => window.removeEventListener("click", swallow, true), 0);
+      }
       if (last?.moving === true && event.type === "pointerup") {
         const over = columnUnder(event.clientX, event.clientY);
         if (over !== undefined && over !== last.task.state) {
@@ -506,12 +547,21 @@ export function Board(props: BoardProps) {
         );
       })}
       {dragging !== null && (
+        // The card in hand: the whole of it, as wide as where it stands, under the pointer where it was taken hold of.
         <div
           className="sc-drag-ghost"
           aria-hidden="true"
-          style={{ transform: `translate(${dragging.x + 12}px, ${dragging.y + 12}px)` }}
+          style={{
+            width: dragging.width,
+            transform: `translate(${dragging.x - dragging.grip.x}px, ${dragging.y - dragging.grip.y}px)`,
+          }}
         >
-          <span className="sc-card-number">#{dragging.task.number}</span> {dragging.task.title}
+          <TaskCard
+            task={dragging.task}
+            href={props.taskHref(dragging.task)}
+            onOpen={nothing}
+            today={props.today}
+          />
         </div>
       )}
     </div>

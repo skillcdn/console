@@ -5,7 +5,7 @@ license: MIT
 compatibility: Needs a shell with the console command on the PATH (npm install -g @skillcdn/console, Node.js 24 or newer), signed in by a person. Nothing else; the command needs no key of its own and the agent never sees a token.
 metadata:
   author: skillcdn
-  version: "1.13"
+  version: "1.14"
 skillcdn:
   translations:
     ko:
@@ -50,7 +50,7 @@ Each phase ends with something on the board. Only phase 4 waits for a person.
 
 ### Phase 1: Read
 
-Told which task, go to phase 2: `console take` prints the rules of the board with the task, and they are read there, once. Choosing one, or checking one before taking it, `console rules` says which tasks to take and what to load, and `console task <number>` shows a task in full, with its plan, the decisions about it, the runs on it and the discussion on it, without taking it. A run open on it means another agent was at it, and may still be: the console cannot tell ([ADR-0020](/docs/adr/0020-the-console-does-not-claim-an-agent-is-at-work-a-run-says-when-it-was-last-heard-from-and-a-new-run-takes-over.md)), so read its reports and when it was last heard from, and take the task only when the person said to, since taking it ends that run as taken over; otherwise say so and stop. A task that is past its due day is still the task; the first report says so, and what the day was for is kept in mind. A task put away once done or dropped ([ADR-0029](/docs/adr/0029-a-task-done-or-dropped-is-put-away-out-of-the-board-and-open-by-its-number.md)) is out of `console tasks` unless `--archived` asks for the archive, and `console task <number>` opens it still. Read what the body links to, with `console doc <path>` for the project's pages and `console skills` for the organization's skills, before anything is made.
+Told which task, go to phase 2: `console take` prints the rules of the board with the task, and they are read there, once. Choosing one, or checking one before taking it, `console rules` says which tasks to take and what to load, and `console task <number>` shows a task in full, with its plan, the decisions about it, the runs on it and the discussion on it, without taking it. A run open on it means another agent was at it, and may still be: the console cannot tell ([ADR-0020](/docs/adr/0020-the-console-does-not-claim-an-agent-is-at-work-a-run-says-when-it-was-last-heard-from-and-a-new-run-takes-over.md)), so read its reports and when it was last heard from, and take the task only when the person said to, since taking it ends that run as taken over; otherwise say so and stop. A task that is past its due day is still the task; the first report says so, and what the day was for is kept in mind. A task put away ([ADR-0029](/docs/adr/0029-a-task-done-or-dropped-is-put-away-out-of-the-board-and-open-by-its-number.md), from any state since [ADR-0030](/docs/adr/0030-a-task-is-put-away-from-any-state.md)) is out of `console tasks` unless `--archived` asks for the archive, and `console task <number>` opens it still. Read what the body links to, with `console doc <path>` for the project's pages and `console skills` for the organization's skills, before anything is made.
 
 ### Phase 2: Take
 

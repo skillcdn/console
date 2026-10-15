@@ -639,7 +639,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
   /** What a task, a decision, a run, a person or a project that could not be worked on answers with. */
   const failure = (c: Context<AppEnv>, error: unknown): Response => {
     if (error instanceof TaskError) {
-      const status = error.code === "task.not_found" ? 404 : error.code === "task.open" ? 409 : 400;
+      const status = error.code === "task.not_found" ? 404 : 400;
       return c.json(errorBody(error.code, error.message), status);
     }
     if (error instanceof DecisionError) {

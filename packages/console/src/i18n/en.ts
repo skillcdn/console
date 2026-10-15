@@ -605,7 +605,7 @@ export const en = {
     loading: "Loading the archive",
     empty: {
       title: "Nothing is put away",
-      body: "A task done or dropped is put away from its page, with its goal, or by the console after a while.",
+      body: "A task is put away from its page or its card, with its goal once the goal is closed, or by the console a while after it was done or dropped.",
     },
     since: "put away",
     restore: "Bring back",

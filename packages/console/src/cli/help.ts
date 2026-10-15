@@ -131,17 +131,13 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   task: {
     usage: `task <number|id>  |  task new <title> [--body <markdown>|--file <path>] ${TASK_FIELD_FLAGS}  |  task edit <number|id> [--title <title>] [--body <markdown>|--file <path>] ${TASK_FIELD_FLAGS}  |  task archive <number|id>  |  task archive --goal <id>  |  task restore <number|id>`,
     about:
-      "One task in full, with its plan (category, goal, start and due days), what happened to it (when it was started and done, which the board keeps itself, and when it was put away), the decisions about it, the runs on it and the discussion on it, each comment whole with its files; or a new task written down; or a task changed, only in what the flags say, where none clears a field (priorities: low, normal, high, urgent). archive puts a done or dropped task away (ADR-0029): out of the listings, the board and the calendar, open by its number still; with --goal, every done or dropped task of the goal at once, for an owner. restore brings one back.",
+      "One task in full, with its plan (category, goal, start and due days), what happened to it (when it was started and done, which the board keeps itself, and when it was put away), the decisions about it, the runs on it and the discussion on it, each comment whole with its files; or a new task written down; or a task changed, only in what the flags say, where none clears a field (priorities: low, normal, high, urgent). archive puts a task away, whatever its state (ADR-0029, ADR-0030): out of the listings, the board and the calendar, open by its number still; with --goal, every done or dropped task of the goal at once, for an owner. restore brings one back.",
     limits: [
       `title: one line, up to ${MAX_TITLE_LENGTH} characters, saying what is to be done on its own; what it refers to goes in the body`,
       `body: ${MARKDOWN}`,
       ...TASK_FIELD_LIMITS,
     ],
-    refusals: [
-      "task.not_found: no task has that number or id",
-      "task.open: an open task is not put away; one done or dropped is",
-      ...TASK_FIELD_REFUSALS,
-    ],
+    refusals: ["task.not_found: no task has that number or id", ...TASK_FIELD_REFUSALS],
   },
   goals: {
     usage: "goals [--category <key>] [--state <state>]",

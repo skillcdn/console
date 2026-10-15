@@ -738,7 +738,14 @@ function ProjectPage(props: {
     return (
       <>
         <div className="sc-page-head">
-          <h1 className="sc-page-title">{project.name}</h1>
+          <div className="sc-page-heading">
+            <h1 className="sc-page-title">{project.name}</h1>
+            {project.description.length > 0 && (
+              <p className="sc-page-lead" title={project.description}>
+                {project.description}
+              </p>
+            )}
+          </div>
           <div className="sc-page-actions">
             <LinkButton href={projectHref(key, "archive")}>{words.board.archive}</LinkButton>
             <LinkButton href={newTaskHref(key)} variant="primary">
@@ -746,7 +753,6 @@ function ProjectPage(props: {
             </LinkButton>
           </div>
         </div>
-        {project.description.length > 0 && <p className="sc-lead">{project.description}</p>}
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
         {data.tasks.length > 0 && (
           <BoardFilters

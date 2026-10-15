@@ -2968,11 +2968,14 @@ describe("the archive of the board (ADR-0029)", () => {
   const eventsSince = async (after: number) =>
     restEventsSchema.parse(await (await get(alice, `${IN}/events?after=${after}`)).json()).items;
 
-  it("puts a done or dropped task away and brings it back: out of the listings, open by its number", async () => {
+  it("puts a task away and brings it back: out of the listings, open by its number, whatever its state", async () => {
+    // An open task is put away too (ADR-0030): it keeps its state, and is out of the board as well.
     const open = await createTask(alice, { title: "Still open" });
-    const refused = await send(bob, "POST", `${IN}/tasks/${open.id}/archive`);
-    expect(refused.status).toBe(409);
-    expect(await errorOf(refused)).toBe("task.open");
+    const stillOpen = restTaskSchema.parse(
+      await (await send(bob, "POST", `${IN}/tasks/${open.id}/archive`)).json(),
+    );
+    expect(stillOpen.state).toBe(open.state);
+    expect(stillOpen.archivedAt).not.toBeNull();
     const done = await createTask(alice, { title: "Over", state: "done" });
     const dropped = await createTask(alice, { title: "Let go", state: "dropped" });
     const before = await latestEventIn(alice);
@@ -2999,6 +3002,7 @@ describe("the archive of the board (ADR-0029)", () => {
     // Out of the board and of every listing of it, in the archive alone, and open by id and by number.
     const board = restTasksSchema.parse(await (await get(alice, `${IN}/tasks`)).json());
     expect(board.items.some((task) => task.id === done.id)).toBe(false);
+    expect(board.items.some((task) => task.id === open.id)).toBe(false);
     expect(board.items.some((task) => task.id === dropped.id)).toBe(true);
     for (const query of ["archived=false", "state=done", "open=false"]) {
       const listed = restTasksSchema.parse(await (await get(alice, `${IN}/tasks?${query}`)).json());
