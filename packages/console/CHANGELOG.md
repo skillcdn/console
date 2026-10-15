@@ -1,5 +1,17 @@
 # @skillcdn/console
 
+## 0.1.21
+
+### Patch Changes
+
+- [`f18177d`](https://github.com/skillcdn/console/commit/f18177dc4d138b698b0b0ae354831798114989e8) Thanks [@samo-lucid](https://github.com/samo-lucid)! - The board in hand, second pass. The whole card follows the pointer while it is dragged, as wide as where it stands and held where it was taken, a faded one keeping its place; the title is part of the hold, so that the card is dragged from anywhere but its menu, and a click on the title opens the task unless the card was dragged. The cursor is `grab` and `grabbing` again. The card's menu is smaller and closes from its own button. A task is put away from any state (ADR-0030): the task's page offers it for every task not put away, the card's menu for every card given `onArchive`, and `console task archive` refuses no open task any more (`task.open` is gone from the refusals, and from the console's REST API, which a console of this version expects). The board's page shows the project's description beside its name on a wide window (`.sc-page-heading`, `.sc-page-lead`).
+
+- [`4f62405`](https://github.com/skillcdn/console/commit/4f6240525b91d65f2be2c13d58d2bceb4aaabd1c) Thanks [@samo-lucid](https://github.com/samo-lucid)! - The card in hand keeps its shape. The card that follows the pointer while it is dragged carries the menu button of the one in its place, inert, so that the title keeps the room the button takes and wraps as it did; the dots are shown on it as on a hovered card.
+
+- [`6b0575e`](https://github.com/skillcdn/console/commit/6b0575e8872840ce3aea48f9cb52760a2a2f6425) Thanks [@samo-lucid](https://github.com/samo-lucid)! - A column's frame stands in front of what scrolls within it: the board's lit edge is drawn over the cards, so that a card scrolled to the edge of its column goes under the frame instead of covering it.
+
+- [`951fe48`](https://github.com/skillcdn/console/commit/951fe4877b55fb9ccc7fdbe87c798bf9602f616c) Thanks [@samo-lucid](https://github.com/samo-lucid)! - The way from the pack to the board. The console's own rules (`REFERENCE_RULES`) gain a third item under "Start here, every time": work given in chat with no task on the board yet is written on the board first (`console task new`), its number told to the person, taken and worked as any task, without asking whether to; until then the board is only read. The first item says the skill working-the-board is read before the first command of a run, with the command that prints where it is. `console help` says the same in its preamble, and `console whoami`, in a directory that works in a project, adds a line pointing to `console rules` and to the skill, so that an agent brought to the console by a pack's rules finds the next step there.
+
 ## 0.1.20
 
 ### Patch Changes
