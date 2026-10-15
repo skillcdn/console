@@ -1,5 +1,13 @@
 # @skillcdn/console
 
+## 0.1.24
+
+### Patch Changes
+
+- [`0cd727c`](https://github.com/skillcdn/console/commit/0cd727c226e672984d88d1f23f0f7caa0cb0b603) Thanks [@samo-lucid](https://github.com/samo-lucid)! - The week at the top of My work, and of another person's work page, shows the person's tasks that were done or dropped on their days, struck through as a project's calendar shows them, beside the open ones; the lists below keep to the open tasks. `GET /api/v1/work` and `GET /api/v1/people/<id>/work` carry them as `closed`, which `restWorkSchema` and `restPersonWorkSchema` take as optional, so that a console older than this one still answers; `WorkList` takes them in `work.closed`.
+
+- [`184e1b1`](https://github.com/skillcdn/console/commit/184e1b1f73fe478e46369d84557cd1aa3a705383) Thanks [@samo-lucid](https://github.com/samo-lucid)! - What an agent meeting the command for the first time ran into, fixed. `console take` names another run of yours open in the project, with the `--run <id>` to say on every command on a run from then on; `report`, `hand-in`, `ask`, `finish` and `fail` show `[--run <id>]` in their help and refuse as `run.none` and `run.ambiguous` when they cannot tell the run. `console skills` prints each skill's path, which `console skill` takes, beside the URI a host's own connection takes, and `console skill` takes that URI too. `console whoami` and `console help` print where the skill working-the-board is on this machine. The notice of a command newer than the console says that nothing is to be done until something is refused, and exit code `4` is in the help's list. `console help write` says the title is shown above the body. The console's own rules read the skill before anything is made rather than before the command that prints them, and say less of how the command works, which the help says. The skill working-the-board (1.17) moves setting up, the sentence a repository carries and the terms into its references, so that what every run reads is shorter.
+
 ## 0.1.23
 
 ### Patch Changes
