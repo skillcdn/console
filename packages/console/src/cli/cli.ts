@@ -844,6 +844,12 @@ const whoami: Command = async (args, io) => {
     () =>
       [
         `${person.login} (${person.role}) at ${me.workspace.name}, ${session.url}${key === undefined ? "; no project named here" : `; project ${key}`}`,
+        // The pack's rules send an agent here first; from here the rules and the skill are the next steps.
+        ...(key === undefined
+          ? []
+          : [
+              "What this organization asks of agents: console rules. How the board is worked: the skill working-the-board, shipped with this command (console skills says where it is).",
+            ]),
         `This command is ${io.version ?? "of a version it does not know"}${io.install === undefined ? "" : `, ${describeInstall(io.install)}`}; ${consoleWords}.`,
         ...(verdict === "behind"
           ? [`A newer command exists. Update it: ${updateWords(io, me.console?.version)}`]

@@ -540,7 +540,7 @@ describe("the console command", () => {
     });
     expect(await runCli(["whoami"], who.io)).toBe(EXIT.ok);
     expect(who.out()).toBe(
-      `alice (member) at Acme, ${ORIGIN}; project web\nThis command is of a version it does not know; the console is 0.1.18 and takes >=0.1.18 <0.2.0.\n`,
+      `alice (member) at Acme, ${ORIGIN}; project web\nWhat this organization asks of agents: console rules. How the board is worked: the skill working-the-board, shipped with this command (console skills says where it is).\nThis command is of a version it does not know; the console is 0.1.18 and takes >=0.1.18 <0.2.0.\n`,
     );
   });
 
@@ -1856,7 +1856,7 @@ describe("the versions of the command and the console (ADR-0025)", () => {
     expect(await runCli(["whoami"], h.io)).toBe(EXIT.ok);
     expect(new Headers(calls[0]?.init?.headers).get("user-agent")).toBe(userAgent);
     expect(h.out()).toBe(
-      `alice (member) at Acme, ${ORIGIN}; project web\nThis command is 0.1.18, installed for the machine with npm in C:/Users/alice/AppData/Roaming/npm; the console is 0.1.18 and takes >=0.1.18 <0.2.0.\n`,
+      `alice (member) at Acme, ${ORIGIN}; project web\nWhat this organization asks of agents: console rules. How the board is worked: the skill working-the-board, shipped with this command (console skills says where it is).\nThis command is 0.1.18, installed for the machine with npm in C:/Users/alice/AppData/Roaming/npm; the console is 0.1.18 and takes >=0.1.18 <0.2.0.\n`,
     );
     expect(h.err()).toBe("");
     const version = harness({ fetch, version: "0.1.18", install: GLOBAL });
@@ -2007,7 +2007,7 @@ describe("the versions of the command and the console (ADR-0025)", () => {
     });
     expect(await runCli(["whoami"], h.io)).toBe(EXIT.ok);
     expect(h.out()).toBe(
-      `alice (member) at Acme, ${ORIGIN}; project web\nThis command is 0.1.18; the console does not say its version, so it is older than 0.1.18.\n`,
+      `alice (member) at Acme, ${ORIGIN}; project web\nWhat this organization asks of agents: console rules. How the board is worked: the skill working-the-board, shipped with this command (console skills says where it is).\nThis command is 0.1.18; the console does not say its version, so it is older than 0.1.18.\n`,
     );
     expect(h.err()).toBe("");
   });

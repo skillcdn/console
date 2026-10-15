@@ -446,6 +446,8 @@ const preamble = (version: string | undefined): string =>
   `console${version === undefined ? "" : ` ${version}`}: the board of your organization's work with AI agents, from the command line.
 You act as the person whose token you hold; everything you send is shown to people as text.
 The rules of this organization come with the task: console take prints them; console rules reads them any time.
+How the board is worked is the skill working-the-board, installed with this command: console skills prints
+where it is; read it before the first command of a run.
 
 Usage: console <command> [arguments] [--json] [--url <origin>] [--project <key>]
 `;
