@@ -1,5 +1,13 @@
 # @skillcdn/console
 
+## 0.1.22
+
+### Patch Changes
+
+- [`e91ce53`](https://github.com/skillcdn/console/commit/e91ce53ebd7c41219aa96fe0ed97c86df7b1b9d8) Thanks [@samo-lucid](https://github.com/samo-lucid)! - The command's help in two layers. `console help` is the map: every command in a line with what it does in a sentence, a many-formed command (`task`, `goal`, `project`) listing its forms without their flags, then what holds everywhere; it is about half as long as it was. `console help <command>` is the reference: the command in full, every form and flag, the limits and the refusals, as before. What the skill working-the-board and the rules of the board say of how the work goes is no longer repeated in the help. `CommandHelp` carries a `synopsis` for the overview and, for a many-formed command, an `overview` usage beside the full one.
+
+- [`a1d32df`](https://github.com/skillcdn/console/commit/a1d32dfaf5d4a59391664473de0f20d4a0864056) Thanks [@samo-lucid](https://github.com/samo-lucid)! - The pack browsed and searched through the console, as the deployment's own tools browse and search it. `console skills <folder>` shows what a folder of the pack holds (`/` for the root): its skills, its folders with how many skills and documents each holds and the README that introduces it, its files, page after page. `console skills --search <words> [<folder>] [--limit <n>]` finds the skills and the documents the words match, in relevance order, a skill with the files of it that matched. `console skills` names the pack and counts its skills and documents. `console skill --file <path>` reads a file of the pack without a skill's path beside it; the two together are refused as not understood. On the API, `GET .../skills/browse` and `GET .../skills/find`, with `skillBrowse` and `skillFind` on a project's client and the schemas `restSkillBrowseSchema` and `restSkillFindSchema`; the listing carries `pack` and `counts` when it is ready. The console's own rules name the new commands.
+
 ## 0.1.21
 
 ### Patch Changes
