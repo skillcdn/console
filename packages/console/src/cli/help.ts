@@ -125,8 +125,8 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   },
   tasks: {
     usage:
-      "tasks [--state <state>] [--open] [--mine] [--category <key>] [--goal <id>] [--due <day|today|week|overdue>] [--archived] [--limit <n>] [--offset <n>]",
-    about: `The tasks on the board, newest first: number, state, priority, title, who owns and works on each, its category and its due day, and what waits on it. --open keeps the ones not done or dropped, --mine those assigned to you, --category and --goal those sorted into one, --due those due by a day: today, within the week, or overdue (the open ones past their day). The tasks put away (ADR-0029) are left out unless --archived asks for them alone. A page at a time: ${DEFAULT_PAGE_LIMIT} unless --limit says otherwise, from --offset on; a last line says when there is more. States: idea, ready, in_progress, in_review, done, dropped.`,
+      "tasks [--state <state>] [--open] [--mine] [--category <key>] [--goal <id>] [--due <day|today|week|overdue>] [--unassigned] [--archived] [--limit <n>] [--offset <n>]",
+    about: `The tasks on the board, newest first: number, state, priority, title, who owns and works on each, its category and its due day, and what waits on it. --open keeps the ones not done or dropped, --mine those assigned to you, --unassigned those assigned to nobody (not with --mine), --category and --goal those sorted into one, --due those due by a day: today, within the week, or overdue (the open ones past their day). The tasks put away (ADR-0029) are left out unless --archived asks for them alone. A page at a time: ${DEFAULT_PAGE_LIMIT} unless --limit says otherwise, from --offset on; a last line says when there is more. States: idea, ready, in_progress, in_review, done, dropped.`,
   },
   task: {
     usage: `task <number|id>  |  task new <title> [--body <markdown>|--file <path>] ${TASK_FIELD_FLAGS}  |  task edit <number|id> [--title <title>] [--body <markdown>|--file <path>] ${TASK_FIELD_FLAGS}  |  task archive <number|id>  |  task archive --goal <id>  |  task restore <number|id>`,
@@ -215,9 +215,9 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   },
   member: {
     usage:
-      "member add <login> [--role owner|member]  |  member role <login> <owner|member>  |  member remove <login>",
+      "member add <login> [--role owner|member] [--project <key>[,<key>...]]  |  member role <login> <owner|member>  |  member remove <login>",
     about:
-      "Lists a person of the workspace in the project, as a member unless --role says owner; changes what they are in it; or takes them off the list. For an owner of the project.",
+      "Lists a person of the workspace in the project, as a member unless --role says owner; changes what they are in it; or takes them off the list. For an owner of the project. With --project naming several keys with commas, member add lists the person in each of them in turn, one line per project; one listed already is said so, and the rest go on.",
     refusals: [
       "auth.forbidden: only an owner of the project lists its members",
       "member.invalid_person: the person is not of the workspace",

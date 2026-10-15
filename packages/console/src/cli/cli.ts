@@ -15,6 +15,7 @@ import {
   hostOfLogin,
   type RestClaim,
   type RestDecision,
+  type RestMember,
   type RestPerson,
   type RestSkillFile,
   type RestSkillLoad,
@@ -910,6 +911,7 @@ const tasks: Command = async (args, io) => {
       state: { type: "string" },
       open: { type: "boolean" },
       mine: { type: "boolean" },
+      unassigned: { type: "boolean" },
       category: { type: "string" },
       goal: { type: "string" },
       due: { type: "string" },
@@ -919,6 +921,11 @@ const tasks: Command = async (args, io) => {
     false,
   );
   const state = stateOf(text(values, "state"));
+  if (on(values, "mine") && on(values, "unassigned")) {
+    throw misuse(
+      "Say one: --mine for the tasks assigned to you, or --unassigned for those assigned to nobody",
+    );
+  }
   const page = pageOf(values);
   const session = await open(io, values);
   const project = await session.project();
@@ -940,6 +947,7 @@ const tasks: Command = async (args, io) => {
     ...(state === undefined ? {} : { state }),
     ...(on(values, "open") || due === "overdue" ? { open: true } : {}),
     ...(assignee === undefined ? {} : { assignee }),
+    ...(on(values, "unassigned") ? { unassigned: true } : {}),
     ...(text(values, "category") === undefined ? {} : { category: text(values, "category") }),
     ...(text(values, "goal") === undefined ? {} : { goal: text(values, "goal") }),
     ...(dueBy === undefined ? {} : { dueBy }),
@@ -2273,18 +2281,59 @@ const members: Command = async (args, io) => {
   return EXIT.ok;
 };
 
+/** The keys --project names with commas, each once, or nothing when it names one project or none. */
+function projectKeysOf(value: string | undefined): readonly string[] | undefined {
+  if (value === undefined || !value.includes(",")) {
+    return undefined;
+  }
+  const keys = [...new Set(value.split(",").map((key) => key.trim()))].filter((key) => key !== "");
+  if (keys.length === 0) {
+    throw misuse("Say which projects: --project <key>[,<key>...]");
+  }
+  return keys;
+}
+
 const member: Command = async (args, io) => {
   const [verb, ...rest] = args;
   if (verb === "add") {
     const { values, positionals } = parse(rest, { role: { type: "string" } });
-    const login = theOne(positionals, "Say whom: console member add <login> [--role owner|member]");
+    const login = theOne(
+      positionals,
+      "Say whom: console member add <login> [--role owner|member] [--project <key>[,<key>...]]",
+    );
     const role = text(values, "role");
     const session = await open(io, values);
-    const project = await session.project();
-    const added = await project.addMember({
+    const input = {
       personId: (await personOf(session, login)).id,
       ...(role === undefined ? {} : { role: projectRoleOf(role) }),
-    });
+    };
+    // Several projects at once, where --project names them with commas: the person is listed
+    // in each in turn, one listed already is said so, and the rest go on.
+    const keys = projectKeysOf(text(values, "project"));
+    if (keys !== undefined) {
+      const added: { readonly project: string; readonly member: RestMember | null }[] = [];
+      for (const key of keys) {
+        try {
+          added.push({ project: key, member: await session.client.project(key).addMember(input) });
+        } catch (error) {
+          if (!(error instanceof ApiError && error.code === "member.exists")) {
+            throw error;
+          }
+          added.push({ project: key, member: null });
+        }
+      }
+      answer(io, session, added, () =>
+        added
+          .map(
+            ({ project, member }) =>
+              `${project}  ${member === null ? `${login} is listed already` : formatMemberLine(member)}`,
+          )
+          .join("\n"),
+      );
+      return EXIT.ok;
+    }
+    const project = await session.project();
+    const added = await project.addMember(input);
     answer(io, session, added, () => formatMemberLine(added));
     return EXIT.ok;
   }
@@ -2319,7 +2368,7 @@ const member: Command = async (args, io) => {
     return EXIT.ok;
   }
   throw misuse(
-    "Say what to do: console member add <login> [--role owner|member], console member role <login> <owner|member>, or console member remove <login>",
+    "Say what to do: console member add <login> [--role owner|member] [--project <key>[,<key>...]], console member role <login> <owner|member>, or console member remove <login>",
   );
 };
 

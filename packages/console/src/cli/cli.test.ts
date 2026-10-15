@@ -1292,6 +1292,9 @@ describe("the plan on the command line", () => {
       [`GET ${IN}/tasks?dueBy=2026-10-17&limit=50&offset=0`]: {
         body: { more: false, items: [TASK] },
       },
+      [`GET ${IN}/tasks?unassigned=true&limit=50&offset=0`]: {
+        body: { more: false, items: [TASK] },
+      },
     });
     const overdue = harness({ fetch, env: SIGNED_IN, now: () => NOON });
     expect(await runCli(["tasks", "--mine", "--due", "overdue"], overdue.io)).toBe(EXIT.ok);
@@ -1307,6 +1310,13 @@ describe("the plan on the command line", () => {
     const bad = harness({ fetch, env: SIGNED_IN, now: () => NOON });
     expect(await runCli(["tasks", "--due", "soon"], bad.io)).toBe(EXIT.usage);
     expect(bad.err()).toContain("Not a day: soon");
+    const nobodys = harness({ fetch, env: SIGNED_IN, now: () => NOON });
+    expect(await runCli(["tasks", "--unassigned"], nobodys.io)).toBe(EXIT.ok);
+    expect(calls.at(-1)?.key).toBe(`GET ${IN}/tasks?unassigned=true&limit=50&offset=0`);
+    expect(nobodys.out()).toBe("#7  ready  high  Fix the parser  (owner alice)\n");
+    const both = harness({ fetch, env: SIGNED_IN, now: () => NOON });
+    expect(await runCli(["tasks", "--mine", "--unassigned"], both.io)).toBe(EXIT.usage);
+    expect(both.err()).toContain("--unassigned");
   });
 
   it("writes a task with its plan, and changes one in what the flags say, none clearing a field", async () => {
@@ -1721,6 +1731,14 @@ describe("configuring, as the person", () => {
       },
       [`PATCH ${IN}/members/${BOB.id}`]: { body: { person: BOB, role: "owner", addedAt: WHEN } },
       [`DELETE ${IN}/members/${BOB.id}`]: { status: 204 },
+      "POST /api/v1/projects/ops/members": {
+        status: 201,
+        body: { person: BOB, role: "owner", addedAt: WHEN },
+      },
+      "POST /api/v1/projects/dir/members": {
+        status: 409,
+        body: { error: { code: "member.exists", message: "The person is listed already." } },
+      },
     });
     const list = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["members"], list.io)).toBe(EXIT.ok);
@@ -1731,6 +1749,31 @@ describe("configuring, as the person", () => {
       personId: BOB.id,
     });
     expect(added.out()).toBe("bob  member  (since 2026-10-09)\n");
+    // Several projects at once: one listed already is said so, and the rest go on.
+    const several = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(
+        ["member", "add", "bob", "--project", "ops,dir,ops", "--role", "owner"],
+        several.io,
+      ),
+    ).toBe(EXIT.ok);
+    expect(
+      calls
+        .filter((call) => call.key === "POST /api/v1/projects/ops/members")
+        .map((call) => call.body),
+    ).toEqual([{ personId: BOB.id, role: "owner" }]);
+    expect(calls.some((call) => call.key === "POST /api/v1/projects/dir/members")).toBe(true);
+    expect(several.out()).toBe("ops  bob  owner  (since 2026-10-09)\ndir  bob is listed already\n");
+    const asJson = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(["member", "add", "bob", "--project", "ops,dir", "--json"], asJson.io),
+    ).toBe(EXIT.ok);
+    expect(JSON.parse(asJson.out())).toEqual([
+      { project: "ops", member: { person: BOB, role: "owner", addedAt: WHEN } },
+      { project: "dir", member: null },
+    ]);
+    const empty = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["member", "add", "bob", "--project", ","], empty.io)).toBe(EXIT.usage);
     const owner = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["member", "role", "bob", "owner"], owner.io)).toBe(EXIT.ok);
     expect(calls.find((call) => call.key === `PATCH ${IN}/members/${BOB.id}`)?.body).toEqual({

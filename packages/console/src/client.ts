@@ -219,6 +219,8 @@ export interface TaskFilter extends Page {
   readonly goal?: string | undefined;
   /** The id of the person the tasks are assigned to. */
   readonly assignee?: string | undefined;
+  /** True for the tasks assigned to nobody. */
+  readonly unassigned?: boolean | undefined;
   /** A day (`2026-10-20`): the tasks due on it or before it. */
   readonly dueBy?: string | undefined;
   /** True for the tasks put away alone (ADR-0029); false, or left out, for the current ones. */
@@ -584,6 +586,7 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
             category: filter.category,
             goal: filter.goal,
             assignee: filter.assignee,
+            unassigned: flag(filter.unassigned),
             dueBy: filter.dueBy,
             limit: number(filter.limit),
             offset: number(filter.offset),

@@ -119,6 +119,8 @@ export interface TaskFilter {
   readonly category?: string | undefined;
   readonly goalId?: string | undefined;
   readonly assigneeId?: string | undefined;
+  /** True for the tasks assigned to nobody. */
+  readonly unassigned?: boolean | undefined;
   /** A day: the tasks due on it or before it. */
   readonly dueBy?: string | undefined;
   /** True for the tasks put away alone (ADR-0029); false, or left out, for the current ones. */
@@ -554,6 +556,7 @@ function narrowing(filter: Omit<TaskFilter, "limit">): (SQL | undefined)[] {
     filter.category === undefined ? undefined : eq(categories.key, filter.category),
     filter.goalId === undefined ? undefined : eq(tasks.goalId, filter.goalId),
     filter.assigneeId === undefined ? undefined : eq(tasks.assigneeId, filter.assigneeId),
+    filter.unassigned === true ? isNull(tasks.assigneeId) : undefined,
     filter.dueBy === undefined ? undefined : lte(tasks.dueOn, filter.dueBy),
     // The archive and the board are two listings, never one (ADR-0029).
     filter.archived === true ? isNotNull(tasks.archivedAt) : isNull(tasks.archivedAt),

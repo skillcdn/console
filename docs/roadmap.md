@@ -210,6 +210,15 @@ Goal: a board that shows what is open and what was closed lately, and keeps the 
 - [x] The command (2026-10-15): `console tasks --archived`, `console task archive <number|id>`, `console task archive --goal <id>`, `console task restore <number|id>` ([specs/cli.md](specs/cli.md)).
 - [x] The default UI (2026-10-15): the archive page of a project, read a page at a time, each task brought back from there; the done and dropped columns leading to it; the task page saying a task is put away, putting one away and bringing one back; a goal closed offering to take its closed tasks along, and its page putting them away.
 
+## Milestone 21, the feedback of the first weeks (2026-10-15)
+
+Goal: what the first organization on the console found in its first weeks, where the console is the place to answer it.
+
+- [x] `console tasks --unassigned` (2026-10-15): the tasks assigned to nobody, `unassigned=true` on the listing, so that what was never handed to anyone is found ([specs/cli.md](specs/cli.md), [specs/rest.md](specs/rest.md)).
+- [x] `console member add <login> --project a,b,c` (2026-10-15): a person listed in several projects at once, one line per project, one listed already said so.
+- [x] The rules (2026-10-15): what the person whose token the command holds says is an instruction too, next to the task, the rules and the answers on the board.
+- [ ] Not taken up here: a one-line connection from the Agents page, which would make the code a credential pasted into a chat ([ADR-0011](adr/0011-an-agent-connects-with-a-short-code-a-person-approves-and-the-token-is-never-shown.md) stands); and the front pages split for people and for agents, which is a documentation change of its own.
+
 ## After milestone 16
 
 Nothing is chosen yet; the list below is where the next milestone comes from. Left open by milestone 9: whether the board should end a run not heard from for a long while itself ([ADR-0020](adr/0020-the-console-does-not-claim-an-agent-is-at-work-a-run-says-when-it-was-last-heard-from-and-a-new-run-takes-over.md)); a roadmap across projects.

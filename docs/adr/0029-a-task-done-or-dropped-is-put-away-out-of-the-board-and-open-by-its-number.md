@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-10-15
-- Builds on [ADR-0019](0019-a-task-is-planned-in-days-the-board-keeps-its-moments-and-goals-and-categories-give-the-work-its-shape.md) and [ADR-0020](0020-the-console-does-not-claim-an-agent-is-at-work-a-run-says-when-it-was-last-heard-from-and-a-new-run-takes-over.md). The contract is in [specs/rest.md](../specs/rest.md#get-apiv1projectskeytasksstateopenarchivedcategorygoalassigneeduebylimitoffset) and [specs/cli.md](../specs/cli.md).
+- Builds on [ADR-0019](0019-a-task-is-planned-in-days-the-board-keeps-its-moments-and-goals-and-categories-give-the-work-its-shape.md) and [ADR-0020](0020-the-console-does-not-claim-an-agent-is-at-work-a-run-says-when-it-was-last-heard-from-and-a-new-run-takes-over.md). The contract is in [specs/rest.md](../specs/rest.md#get-apiv1projectskeytasksstateopenarchivedcategorygoalassigneeunassignedduebylimitoffset) and [specs/cli.md](../specs/cli.md).
 
 ## Context
 

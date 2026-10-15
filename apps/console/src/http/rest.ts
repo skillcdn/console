@@ -335,6 +335,7 @@ const tasksQuery = z.object({
   category: z.string().max(MAX_CATEGORY_KEY_LENGTH).regex(CATEGORY_KEY).optional(),
   goal: z.string().regex(UUID).optional(),
   assignee: z.string().regex(UUID).optional(),
+  unassigned: z.enum(["true", "false"]).optional(),
   dueBy: z.string().regex(DAY).optional(),
   ...page,
 });
@@ -1816,6 +1817,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       category: query.data.category,
       goalId: query.data.goal,
       assigneeId: query.data.assignee,
+      unassigned: query.data.unassigned === "true",
       dueBy: query.data.dueBy,
       archived: query.data.archived === "true",
       limit: query.data.limit,

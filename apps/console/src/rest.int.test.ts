@@ -1857,6 +1857,10 @@ describe("the schedule and the roadmap", () => {
     expect(await ids("open=false")).toContain(planned.id);
     expect(await ids("open=true")).not.toContain(planned.id);
     expect(await ids(`assignee=${bobId}`)).toContain(planned.id);
+    const nobodys = await createTask(alice, { title: "Handed to nobody yet" });
+    expect(await ids("unassigned=true")).toContain(nobodys.id);
+    expect(await ids("unassigned=true")).not.toContain(planned.id);
+    expect(await ids(`unassigned=true&assignee=${bobId}`)).toEqual([]);
 
     for (const [body, code] of [
       [{ title: "x", startsOn: "2026-10-24", dueOn: "2026-10-20" }, "task.invalid_dates"],
