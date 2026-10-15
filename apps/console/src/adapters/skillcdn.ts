@@ -1,4 +1,11 @@
-import { restFileSchema, restMountSchema, restPath, restSkillSchema } from "@skillcdn/core";
+import {
+  restBrowseSchema,
+  restFileSchema,
+  restFindSchema,
+  restMountSchema,
+  restPath,
+  restSkillSchema,
+} from "@skillcdn/core";
 import type { Logger } from "../logger.js";
 import type {
   SkillListing,
@@ -9,8 +16,9 @@ import type {
 import { DEFAULT_TIMEOUT_MS, type FetchLike, readBody } from "./upstream.js";
 
 // The SkillCDN deployment's side of the skill source: the mount overview of an address, one
-// skill as `load_skill` answers it, and a file as `read_repo_file` does, each one read of the
-// deployment's REST API, parsed with the contracts of @skillcdn/core. A pack token a project
+// skill as `load_skill` answers it, a file as `read_repo_file` does, a folder as `browse_repo`
+// and a search as `search_repo`, each one read of the deployment's REST API, parsed with the
+// contracts of @skillcdn/core. A pack token a project
 // holds (ADR-0028) travels as the bearer of the request and nowhere else; a redirect is not
 // followed. The deployment is someone else's: what it answers is bounded and checked, and what
 // goes wrong is a status, so that the board stays up when the skills are not there.
@@ -71,6 +79,15 @@ function queryOf(entries: Record<string, string | number | undefined>): string {
   const text = query.toString();
   return text === "" ? "" : `?${text}`;
 }
+
+/** The first of the texts that says something; nothing when none does. */
+function firstOf(...texts: readonly (string | null | undefined)[]): string | undefined {
+  return texts.find((text): text is string => typeof text === "string" && text.trim() !== "");
+}
+
+/** The path of a skill's `SKILL.md`, from its directory where the deployment left the path out. */
+const skillPathOf = (path: string | undefined, directory: string): string =>
+  path ?? (directory === "" ? "SKILL.md" : `${directory}/SKILL.md`);
 
 export function createSkillCdnSource(options: SkillCdnOptions): SkillSource {
   const { logger } = options;
@@ -172,17 +189,30 @@ export function createSkillCdnSource(options: SkillCdnOptions): SkillSource {
         logger.warn("the SkillCDN deployment answered an overview in an unexpected shape");
         return nothing("unavailable");
       }
-      const { index } = parsed.data;
+      const { index, repository } = parsed.data;
       if (index.status !== "ready") {
         return nothing(index.status);
       }
+      // The pack by name, as the deployment's own instructions name it to a model: the
+      // manifest's, else its README's, else the host's.
+      const manifest = index.manifest ?? undefined;
       return {
         status: "ready",
+        pack: {
+          name: firstOf(manifest?.name, index.overview?.title, repository.name),
+          description: firstOf(
+            manifest?.description,
+            index.overview?.description,
+            repository.description,
+          ),
+          language: firstOf(manifest?.language),
+        },
+        counts: { skills: index.skillCount, documents: index.documentCount },
         skills: index.skills.map((skill) => ({
           name: skill.name,
           description: skill.description,
           directory: skill.directory,
-          path: skill.path ?? (skill.directory === "" ? "SKILL.md" : `${skill.directory}/SKILL.md`),
+          path: skillPathOf(skill.path, skill.directory),
           translations: skill.translations,
         })),
       };
@@ -238,6 +268,107 @@ export function createSkillCdnSource(options: SkillCdnOptions): SkillSource {
         warnings: skill.warnings,
       };
       return { status: "ready", skill: page };
+    },
+
+    async browse(address, page, token) {
+      const fetched = await fetchJson(
+        `${options.baseUrl}${restPath("browse", address)}${queryOf({ path: page.path, cursor: page.cursor, limit: page.limit })}`,
+        token,
+        MAX_PAGE_BYTES,
+      );
+      if (fetched.kind === "status") {
+        return { status: fetched.status };
+      }
+      const parsed = restBrowseSchema.safeParse(fetched.json);
+      if (!parsed.success) {
+        logger.warn("the SkillCDN deployment answered a folder in an unexpected shape");
+        return { status: "unavailable" };
+      }
+      if (parsed.data.status !== "ready") {
+        return { status: parsed.data.status };
+      }
+      const { data } = parsed;
+      return {
+        status: "ready",
+        folder: {
+          path: data.path,
+          overview:
+            data.overview === undefined
+              ? undefined
+              : {
+                  path: data.overview.path,
+                  title: data.overview.title ?? undefined,
+                  description: data.overview.description ?? undefined,
+                },
+          entries: data.entries.map((entry) => ({
+            kind: entry.kind,
+            path: entry.path,
+            name: entry.name ?? undefined,
+            description: entry.description ?? undefined,
+            skillCount: entry.skillCount,
+            documentCount: entry.documentCount,
+            size: entry.size ?? undefined,
+            overviewPath: entry.overviewPath,
+            license: entry.license?.name ?? undefined,
+            describedOnly: entry.describedOnly ?? false,
+          })),
+          nextCursor: data.nextCursor ?? undefined,
+        },
+      };
+    },
+
+    async find(address, query, token) {
+      const fetched = await fetchJson(
+        `${options.baseUrl}${restPath("find", address)}${queryOf({ query: query.query, path: query.path, cursor: query.cursor, limit: query.limit })}`,
+        token,
+        MAX_PAGE_BYTES,
+      );
+      if (fetched.kind === "status") {
+        return { status: fetched.status };
+      }
+      const parsed = restFindSchema.safeParse(fetched.json);
+      if (!parsed.success) {
+        logger.warn("the SkillCDN deployment answered a search in an unexpected shape");
+        return { status: "unavailable" };
+      }
+      if (parsed.data.status !== "ready") {
+        return { status: parsed.data.status };
+      }
+      const { data } = parsed;
+      return {
+        status: "ready",
+        found: {
+          query: data.query ?? query.query,
+          path: data.path ?? query.path,
+          items: data.items.map((item) =>
+            item.kind === "skill"
+              ? {
+                  kind: "skill",
+                  path: skillPathOf(item.path, item.directory),
+                  directory: item.directory,
+                  name: item.name,
+                  description: item.description,
+                  translations: item.translations,
+                  files: item.files.map((file) => ({
+                    path: file.path,
+                    title: file.title ?? undefined,
+                    summary: file.summary ?? undefined,
+                  })),
+                  moreFiles: item.moreFiles,
+                  license: item.license?.name ?? undefined,
+                  describedOnly: item.describedOnly ?? false,
+                }
+              : {
+                  kind: "document",
+                  path: item.path,
+                  title: item.title ?? undefined,
+                  summary: item.summary ?? undefined,
+                  skillDirectory: item.skillDirectory ?? undefined,
+                },
+          ),
+          nextCursor: data.nextCursor ?? undefined,
+        },
+      };
     },
 
     async read(address, path, page, token) {

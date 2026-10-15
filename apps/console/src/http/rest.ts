@@ -38,7 +38,9 @@ import {
   type RestProjectRules,
   type RestProjects,
   type RestRuns,
+  type RestSkillBrowse,
   type RestSkillFile,
+  type RestSkillFind,
   type RestSkillLoad,
   type RestSkills,
   type RestTasks,
@@ -225,6 +227,18 @@ const fileQuerySchema = z.object({
   path: z.string().min(1).max(500),
   offset: z.coerce.number().int().nonnegative().optional(),
   limit: z.coerce.number().int().min(1).max(100_000).optional(),
+});
+/** What a folder is browsed with, and what a search is asked with: the bounds the deployment states. */
+const browseQuerySchema = z.object({
+  path: z.string().max(500).optional(),
+  cursor: z.string().max(4000).optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+});
+const findQuerySchema = z.object({
+  query: z.string().min(1).max(500),
+  path: z.string().max(500).optional(),
+  cursor: z.string().max(4000).optional(),
+  limit: z.coerce.number().int().min(1).max(25).optional(),
 });
 
 export interface RestDependencies {
@@ -2568,6 +2582,71 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         requestId: c.get("requestId"),
       },
       "a file of the pack was read",
+    );
+    return c.json(body);
+  });
+
+  app.get(`${PROJECT}/skills/browse`, async (c) => {
+    const found = await reading(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    const query = browseQuerySchema.safeParse({
+      path: c.req.query("path"),
+      cursor: c.req.query("cursor"),
+      limit: c.req.query("limit"),
+    });
+    if (!query.success) {
+      return c.json(errorBody("request.invalid", `query: ${query.error.message}`), 400);
+    }
+    const body: RestSkillBrowse = await skills.browse(
+      found.project.skillsAddress,
+      query.data,
+      packTokenOf(found.project),
+    );
+    logger.info(
+      {
+        person: found.person.id,
+        project: found.project.key,
+        address: body.address,
+        path: query.data.path ?? "",
+        status: body.status,
+        requestId: c.get("requestId"),
+      },
+      "a folder of the pack was browsed",
+    );
+    return c.json(body);
+  });
+  app.get(`${PROJECT}/skills/find`, async (c) => {
+    const found = await reading(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    const query = findQuerySchema.safeParse({
+      query: c.req.query("query"),
+      path: c.req.query("path"),
+      cursor: c.req.query("cursor"),
+      limit: c.req.query("limit"),
+    });
+    if (!query.success) {
+      return c.json(errorBody("request.invalid", `query: ${query.error.message}`), 400);
+    }
+    const body: RestSkillFind = await skills.find(
+      found.project.skillsAddress,
+      query.data,
+      packTokenOf(found.project),
+    );
+    // The words searched for are the agent's own and stay out of the log; the folder and the outcome go in.
+    logger.info(
+      {
+        person: found.person.id,
+        project: found.project.key,
+        address: body.address,
+        path: query.data.path ?? "",
+        status: body.status,
+        requestId: c.get("requestId"),
+      },
+      "the pack was searched",
     );
     return c.json(body);
   });

@@ -94,6 +94,9 @@ describe("the SkillCDN source", () => {
     expect(new Headers(sent[0]?.init.headers).get("accept")).toBe("application/json");
     expect(sent[0]?.init.redirect).toBe("manual");
     expect(listing.status).toBe("ready");
+    // No manifest and no README: the pack is named after the repository, and says nothing more.
+    expect(listing.pack).toEqual({ name: "skills", description: undefined, language: undefined });
+    expect(listing.counts).toEqual({ skills: 2, documents: 0 });
     expect(listing.skills).toEqual([
       {
         name: "release-notes",
@@ -304,5 +307,196 @@ describe("the SkillCDN source, reading the pack (ADR-0028)", () => {
     expect(await odd.source.load(ADDRESS, "review/SKILL.md", undefined)).toEqual({
       status: "unavailable",
     });
+  });
+
+  it("browses a folder as browse_repo lays it out, and searches as search_repo does, the token as the bearer", async () => {
+    const sent: { url: string; init: RequestInit }[] = [];
+    const { source: skills } = source(async (url, init) => {
+      sent.push({ url, init });
+      return url.includes("/browse/")
+        ? json({
+            status: "ready",
+            commit: "0123456789abcdef0123456789abcdef01234567",
+            path: "docs",
+            overview: {
+              path: "docs/README.md",
+              title: "Documentation",
+              description: "How the docs are organized.",
+            },
+            entries: [
+              {
+                kind: "directory",
+                path: "docs/adr",
+                name: "Architecture Decision Records",
+                description: null,
+                skillCount: 0,
+                documentCount: 54,
+                size: null,
+                manifestPath: null,
+                language: null,
+                overviewPath: "docs/adr/README.md",
+              },
+              {
+                kind: "skill",
+                path: "docs/review/SKILL.md",
+                name: "review",
+                description: "Reviews a change.",
+                skillCount: 0,
+                documentCount: 0,
+                size: null,
+                manifestPath: null,
+                language: null,
+                license: { kind: "permissive", name: "MIT", source: null },
+                describedOnly: false,
+              },
+              {
+                kind: "file",
+                path: "docs/architecture.md",
+                name: "Architecture",
+                description: null,
+                skillCount: 0,
+                documentCount: 0,
+                size: 1234,
+                manifestPath: null,
+                language: null,
+              },
+            ],
+            nextCursor: "more",
+          })
+        : json({
+            status: "ready",
+            query: "review",
+            commit: "0123456789abcdef0123456789abcdef01234567",
+            path: "docs",
+            totals: { skills: 1, documents: 1 },
+            items: [
+              {
+                kind: "skill",
+                path: "docs/review/SKILL.md",
+                name: "review",
+                directory: "docs/review",
+                description: "Reviews a change.",
+                translations: {},
+                files: [{ path: "docs/review/guide.md", title: "Guide", summary: null }],
+                moreFiles: 2,
+                license: { kind: "permissive", name: "MIT", source: null },
+                describedOnly: false,
+              },
+              {
+                kind: "document",
+                path: "docs/architecture.md",
+                title: "Architecture",
+                summary: "Four properties.",
+                skillDirectory: null,
+              },
+            ],
+            nextCursor: null,
+          });
+    });
+    const browsed = await skills.browse(
+      ADDRESS,
+      { path: "docs", cursor: "c1", limit: 50 },
+      "scdn_repo_x",
+    );
+    expect(sent[0]?.url).toBe(
+      "https://skillcdn.test/api/v1/browse/gh/acme/skills?path=docs&cursor=c1&limit=50",
+    );
+    expect(new Headers(sent[0]?.init.headers).get("authorization")).toBe("Bearer scdn_repo_x");
+    expect(browsed).toEqual({
+      status: "ready",
+      folder: {
+        path: "docs",
+        overview: {
+          path: "docs/README.md",
+          title: "Documentation",
+          description: "How the docs are organized.",
+        },
+        entries: [
+          {
+            kind: "directory",
+            path: "docs/adr",
+            name: "Architecture Decision Records",
+            description: undefined,
+            skillCount: 0,
+            documentCount: 54,
+            size: undefined,
+            overviewPath: "docs/adr/README.md",
+            license: undefined,
+            describedOnly: false,
+          },
+          {
+            kind: "skill",
+            path: "docs/review/SKILL.md",
+            name: "review",
+            description: "Reviews a change.",
+            skillCount: 0,
+            documentCount: 0,
+            size: undefined,
+            overviewPath: undefined,
+            license: "MIT",
+            describedOnly: false,
+          },
+          {
+            kind: "file",
+            path: "docs/architecture.md",
+            name: "Architecture",
+            description: undefined,
+            skillCount: 0,
+            documentCount: 0,
+            size: 1234,
+            overviewPath: undefined,
+            license: undefined,
+            describedOnly: false,
+          },
+        ],
+        nextCursor: "more",
+      },
+    });
+    const found = await skills.find(ADDRESS, { query: "review", path: "docs", limit: 10 });
+    expect(sent[1]?.url).toBe(
+      "https://skillcdn.test/api/v1/find/gh/acme/skills?query=review&path=docs&limit=10",
+    );
+    expect(new Headers(sent[1]?.init.headers).has("authorization")).toBe(false);
+    expect(found).toEqual({
+      status: "ready",
+      found: {
+        query: "review",
+        path: "docs",
+        items: [
+          {
+            kind: "skill",
+            path: "docs/review/SKILL.md",
+            directory: "docs/review",
+            name: "review",
+            description: "Reviews a change.",
+            translations: {},
+            files: [{ path: "docs/review/guide.md", title: "Guide", summary: undefined }],
+            moreFiles: 2,
+            license: "MIT",
+            describedOnly: false,
+          },
+          {
+            kind: "document",
+            path: "docs/architecture.md",
+            title: "Architecture",
+            summary: "Four properties.",
+            skillDirectory: undefined,
+          },
+        ],
+        nextCursor: undefined,
+      },
+    });
+    // Still indexing, refused, or answered in a shape that is not one: a status, never a throw.
+    const waiting = source(async () => json({ status: "indexing" }));
+    expect(await waiting.source.browse(ADDRESS, {})).toEqual({ status: "indexing" });
+    expect(await waiting.source.find(ADDRESS, { query: "x" })).toEqual({ status: "indexing" });
+    const refused = source(async () =>
+      json({ error: { code: "auth.invalid_token", message: "no" } }, 401),
+    );
+    expect(await refused.source.find(ADDRESS, { query: "x" }, "scdn_repo_old")).toEqual({
+      status: "token_invalid",
+    });
+    const odd = source(async () => json({ status: "ready", entries: "no" }));
+    expect(await odd.source.browse(ADDRESS, {})).toEqual({ status: "unavailable" });
   });
 });

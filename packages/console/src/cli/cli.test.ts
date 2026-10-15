@@ -630,12 +630,14 @@ describe("the console command", () => {
     expect(words.out()).toBe("#7  ready  high  Fix the parser  (owner alice)\n");
   });
 
-  it("lists the organization's skills, each with what an agent loads it by", async () => {
+  it("lists the organization's skills, the pack by name and by count, each with what an agent loads it by", async () => {
     const skills = {
       address: "/gh/acme/skills",
       source: "https://skillcdn.test",
       page: "https://skillcdn.test/gh/acme/skills",
       status: "ready",
+      pack: { name: "Acme", description: "What Acme does, as skills.", language: "en" },
+      counts: { skills: 1, documents: 12 },
       items: [
         {
           name: "review",
@@ -656,6 +658,8 @@ describe("the console command", () => {
     });
     expect(await runCli(["skills"], h.io)).toBe(EXIT.ok);
     expect(h.out()).toContain("skills at /gh/acme/skills, served by https://skillcdn.test: ready");
+    expect(h.out()).toContain("Acme  What Acme does, as skills.");
+    expect(h.out()).toContain("1 skill, 12 documents: console skills <folder>");
     expect(h.out()).toContain(
       "review  Reviews a change.\n    skill://gh/acme/skills/review/SKILL.md",
     );
@@ -2414,15 +2418,13 @@ describe("the pack of the project, through the console (ADR-0028)", () => {
     expect(out).toContain("--- applicable rules: SKILLCDN.md ---\nBe kind.");
     expect(out).toContain("--- skill: review/SKILL.md ---\nRead the diff.");
     expect(out).toContain("--- included file: review/checklist.md ---\n- tests");
-    expect(out).toContain("console skill review/SKILL.md --file <path>: review/guide.md");
+    expect(out).toContain("console skill --file <path>: review/guide.md");
     expect(calls.map((call) => call.key)).toEqual([
       `GET ${IN}/skills/one?path=review%2FSKILL.md`,
       `GET ${IN}/skills/one?path=review%2FSKILL.md&cursor=two`,
     ]);
     const file = harness({ fetch, env: SIGNED_IN });
-    expect(await runCli(["skill", "review/SKILL.md", "--file", "review/guide.md"], file.io)).toBe(
-      EXIT.ok,
-    );
+    expect(await runCli(["skill", "--file", "review/guide.md"], file.io)).toBe(EXIT.ok);
     expect(file.out()).toContain("--- file: review/guide.md (14 characters) ---\nHow to review.");
     // Described only: named and pointed at, nothing of its body.
     const described = harness({
@@ -2464,6 +2466,163 @@ describe("the pack of the project, through the console (ADR-0028)", () => {
     expect(refused.out()).toContain("console project pack-token");
     const nothing = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["skill"], nothing.io)).toBe(EXIT.usage);
+  });
+
+  it("reads a file of the pack by --file alone, browses a folder page after page, and searches by words", async () => {
+    const AT = {
+      address: "/gh/acme/skills",
+      source: "https://skillcdn.test",
+      page: "https://skillcdn.test/gh/acme/skills",
+      status: "ready",
+    };
+    const entry = {
+      name: null,
+      description: null,
+      skillCount: 0,
+      documentCount: 0,
+      size: null,
+      overviewPath: null,
+      license: null,
+      describedOnly: false,
+    };
+    const { fetch, calls } = fakeConsole({
+      [`GET ${IN}/skills/file?path=README.md`]: {
+        body: {
+          ...FILE,
+          file: {
+            path: "README.md",
+            content: "The pack.",
+            offset: 0,
+            nextOffset: null,
+            totalLength: 9,
+          },
+        },
+      },
+      [`GET ${IN}/skills/browse?path=docs`]: {
+        body: {
+          ...AT,
+          folder: {
+            path: "docs",
+            overview: {
+              path: "docs/README.md",
+              title: "Documentation",
+              description: "How the docs are organized.",
+            },
+            entries: [
+              {
+                ...entry,
+                kind: "directory",
+                path: "docs/adr",
+                name: "Decisions",
+                documentCount: 54,
+                overviewPath: "docs/adr/README.md",
+              },
+              {
+                ...entry,
+                kind: "skill",
+                path: "docs/review/SKILL.md",
+                name: "review",
+                description: "Reviews a change.",
+                license: "MIT",
+              },
+              {
+                ...entry,
+                kind: "file",
+                path: "docs/architecture.md",
+                name: "Architecture",
+                size: 1234,
+              },
+            ],
+            nextCursor: "two",
+          },
+        },
+      },
+      [`GET ${IN}/skills/browse?path=docs&cursor=two`]: {
+        body: {
+          ...AT,
+          folder: {
+            path: "docs",
+            overview: null,
+            entries: [
+              { ...entry, kind: "file", path: "docs/roadmap.md", name: "Roadmap", size: 99 },
+            ],
+            nextCursor: null,
+          },
+        },
+      },
+      [`GET ${IN}/skills/find?query=review&path=docs&limit=5`]: {
+        body: {
+          ...AT,
+          found: {
+            query: "review",
+            path: "docs",
+            items: [
+              {
+                kind: "skill",
+                name: "review",
+                description: "Reviews a change.",
+                directory: "docs/review",
+                path: "docs/review/SKILL.md",
+                page: "https://skillcdn.test/gh/acme/skills?skill=docs%2Freview%2FSKILL.md",
+                uri: "skill://gh/acme/skills/docs/review/SKILL.md",
+                translations: {},
+                files: [{ path: "docs/review/guide.md", title: "Guide", summary: null }],
+                moreFiles: 2,
+                license: "MIT",
+                describedOnly: false,
+              },
+              {
+                kind: "document",
+                path: "docs/architecture.md",
+                title: "Architecture",
+                summary: "Four properties.",
+                skillDirectory: null,
+              },
+            ],
+            nextCursor: "more",
+          },
+        },
+      },
+    });
+    const file = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["skill", "--file", "README.md"], file.io)).toBe(EXIT.ok);
+    expect(file.out()).toContain("--- file: README.md (9 characters) ---\nThe pack.");
+    // A skill's path beside --file is a misunderstanding, said so instead of ignored.
+    const both = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["skill", "review/SKILL.md", "--file", "README.md"], both.io)).toBe(
+      EXIT.usage,
+    );
+    expect(both.err()).toContain("console skill --file <path>");
+    const folder = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["skills", "docs"], folder.io)).toBe(EXIT.ok);
+    const out = folder.out();
+    expect(out).toContain("folder docs at /gh/acme/skills");
+    expect(out).toContain(
+      "    Documentation  How the docs are organized.  (README: docs/README.md)",
+    );
+    expect(out).toContain("d  docs/adr  Decisions  (54 documents; README docs/adr/README.md)");
+    expect(out).toContain("skill  docs/review/SKILL.md  review  Reviews a change.  (MIT)");
+    expect(out).toContain("f  docs/architecture.md  Architecture  (1234 bytes)");
+    expect(out).toContain("f  docs/roadmap.md  Roadmap  (99 bytes)");
+    expect(out).not.toContain("More entries");
+    expect(calls.map((call) => call.key)).toContain(`GET ${IN}/skills/browse?path=docs&cursor=two`);
+    const search = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["skills", "docs", "--search", "review", "--limit", "5"], search.io)).toBe(
+      EXIT.ok,
+    );
+    const found = search.out();
+    expect(found).toContain('found for "review" within docs at /gh/acme/skills: 2 results');
+    expect(found).toContain("skill  docs/review/SKILL.md  review  Reviews a change.");
+    expect(found).toContain("    file  docs/review/guide.md  Guide");
+    expect(found).toContain("    and 2 more files");
+    expect(found).toContain("document  docs/architecture.md  Architecture  Four properties.");
+    expect(found).toContain("More matched");
+    const two = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["skills", "docs", "more"], two.io)).toBe(EXIT.usage);
+    const bad = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["skills", "--search", "x", "--limit", "99"], bad.io)).toBe(EXIT.usage);
+    const alone = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["skills", "--limit", "5"], alone.io)).toBe(EXIT.usage);
   });
 
   it("gives the project its pack token from standard input and never an argument, and takes it away", async () => {

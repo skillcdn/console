@@ -360,6 +360,8 @@ describe("createConsole", () => {
     removePackToken: never,
     skill: never,
     skillFile: never,
+    skillBrowse: never,
+    skillFind: never,
     members: never,
     addMember: never,
     updateMember: never,

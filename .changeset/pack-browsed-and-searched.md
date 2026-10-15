@@ -1,0 +1,5 @@
+---
+"@skillcdn/console": patch
+---
+
+The pack browsed and searched through the console, as the deployment's own tools browse and search it. `console skills <folder>` shows what a folder of the pack holds (`/` for the root): its skills, its folders with how many skills and documents each holds and the README that introduces it, its files, page after page. `console skills --search <words> [<folder>] [--limit <n>]` finds the skills and the documents the words match, in relevance order, a skill with the files of it that matched. `console skills` names the pack and counts its skills and documents. `console skill --file <path>` reads a file of the pack without a skill's path beside it; the two together are refused as not understood. On the API, `GET .../skills/browse` and `GET .../skills/find`, with `skillBrowse` and `skillFind` on a project's client and the schemas `restSkillBrowseSchema` and `restSkillFindSchema`; the listing carries `pack` and `counts` when it is ready. The console's own rules name the new commands.

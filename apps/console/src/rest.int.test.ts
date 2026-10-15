@@ -43,7 +43,9 @@ import {
   restProjectSchema,
   restProjectsSchema,
   restRulesSchema,
+  restSkillBrowseSchema,
   restSkillFileSchema,
+  restSkillFindSchema,
   restSkillLoadSchema,
   restSkillsSchema,
   restTaskSchema,
@@ -1729,6 +1731,8 @@ describe("roles", () => {
 const unread = {
   load: async () => ({ status: "unavailable" as const }),
   read: async () => ({ status: "unavailable" as const }),
+  browse: async () => ({ status: "unavailable" as const }),
+  find: async () => ({ status: "unavailable" as const }),
 };
 
 describe("skills", () => {
@@ -2881,6 +2885,56 @@ describe("the pack of a project (ADR-0028)", () => {
           folder: undefined,
         };
       },
+      async browse(_address, page, token) {
+        tokens.push(token);
+        return {
+          status: "ready",
+          folder: {
+            path: page.path ?? "",
+            overview: undefined,
+            entries: [
+              {
+                kind: "skill",
+                path: "review/SKILL.md",
+                name: "review",
+                description: "Reviews a change.",
+                skillCount: 0,
+                documentCount: 0,
+                size: undefined,
+                overviewPath: undefined,
+                license: "MIT",
+                describedOnly: false,
+              },
+            ],
+            nextCursor: undefined,
+          },
+        };
+      },
+      async find(_address, query, token) {
+        tokens.push(token);
+        return {
+          status: "ready",
+          found: {
+            query: query.query,
+            path: query.path,
+            items: [
+              {
+                kind: "skill",
+                path: "review/SKILL.md",
+                directory: "review",
+                name: "review",
+                description: "Reviews a change.",
+                translations: {},
+                files: [],
+                moreFiles: 0,
+                license: "MIT",
+                describedOnly: false,
+              },
+            ],
+            nextCursor: undefined,
+          },
+        };
+      },
     };
     const served = createHarness(testDatabase, {
       providers: [createFixtureProvider()],
@@ -2930,7 +2984,31 @@ describe("the pack of a project (ADR-0028)", () => {
       await (await served.request(`${IN}/skills/file?path=review%2Fguide.md`, { headers })).json(),
     );
     expect(file.file?.content).toBe("How to review.");
-    expect(tokens.filter((token) => token === "scdn_repo_ok").length).toBeGreaterThanOrEqual(5);
+    // A folder and a search go the same way, with the token; what is asked wrong is refused.
+    const browsed = restSkillBrowseSchema.parse(
+      await (await served.request(`${IN}/skills/browse?path=review`, { headers })).json(),
+    );
+    expect(browsed.status).toBe("ready");
+    expect(browsed.folder?.path).toBe("review");
+    expect(browsed.folder?.entries.map((entry) => `${entry.kind} ${entry.path}`)).toEqual([
+      "skill review/SKILL.md",
+    ]);
+    const found = restSkillFindSchema.parse(
+      await (await served.request(`${IN}/skills/find?query=review&limit=5`, { headers })).json(),
+    );
+    expect(found.found?.query).toBe("review");
+    expect(found.found?.items.map((item) => item.path)).toEqual(["review/SKILL.md"]);
+    expect(found.found?.items[0]).toMatchObject({
+      kind: "skill",
+      uri: "skill://gh/acme/skills/review/SKILL.md",
+      license: "MIT",
+    });
+    expect((await served.request(`${IN}/skills/find`, { headers })).status).toBe(400);
+    expect((await served.request(`${IN}/skills/find?query=x&limit=26`, { headers })).status).toBe(
+      400,
+    );
+    expect((await served.request(`${IN}/skills/browse?limit=0`, { headers })).status).toBe(400);
+    expect(tokens.filter((token) => token === "scdn_repo_ok").length).toBeGreaterThanOrEqual(7);
     // A skill that is not there, and a read that is not asked right.
     expect(
       restSkillLoadSchema.parse(

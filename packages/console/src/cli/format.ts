@@ -15,7 +15,10 @@ import type {
   RestProjectRules,
   RestRules,
   RestRun,
+  RestSkillBrowse,
+  RestSkillBrowseEntry,
   RestSkillFile,
+  RestSkillFind,
   RestSkillLoad,
   RestSkillPage,
   RestSkills,
@@ -254,10 +257,13 @@ const SKILLS_WORDS: Readonly<Record<Exclude<RestSkills["status"], "none" | "read
   unavailable: "SkillCDN could not be reached; ask again later.",
 };
 
+/** A count with its noun: `1 skill`, `2 skills`. */
+const counted = (n: number, noun: string): string => `${n} ${noun}${n === 1 ? "" : "s"}`;
+
 /**
- * The organization's skills: where they are, each with what an agent loads it by, where a
- * person connects an agent that has no connection to the address, and where the console's own
- * skills are on this machine, when the command knows.
+ * The organization's skills: where they are, the pack by name and by count, each skill with
+ * what an agent loads it by, where a person connects an agent that has no connection to the
+ * address, and where the console's own skills are on this machine, when the command knows.
  */
 export function formatSkills(skills: RestSkills, ownSkills?: string): string {
   const own =
@@ -273,16 +279,29 @@ export function formatSkills(skills: RestSkills, ownSkills?: string): string {
   if (skills.status !== "ready") {
     return [head, SKILLS_WORDS[skills.status], ...own].join("\n");
   }
-  if (skills.items.length === 0) {
-    return [head, "No skills at this address.", ...own].join("\n");
-  }
   const lines = [head];
+  if (skills.pack !== undefined) {
+    const named = [skills.pack.name, skills.pack.description]
+      .filter((text): text is string => text !== null)
+      .join("  ");
+    if (named !== "") {
+      lines.push(named);
+    }
+  }
+  if (skills.counts !== undefined) {
+    lines.push(
+      `${counted(skills.counts.skills, "skill")}, ${counted(skills.counts.documents, "document")}: console skills <folder> shows what a folder holds (/ for the root), console skills --search <words> finds skills and documents by words.`,
+    );
+  }
+  if (skills.items.length === 0) {
+    lines.push("No skills at this address.");
+  }
   for (const skill of skills.items) {
     lines.push(`${skill.name}  ${skill.description}`, `    ${skill.uri ?? skill.path}`);
   }
   lines.push(
     "",
-    `Read a skill whole with console skill <path>, its rules first, and a file of the pack with console skill <path> --file <file>; or load it by its URI through your own SkillCDN connection to this address, which a person makes at ${skills.page}. --json adds the page of each, for a person.`,
+    `Read a skill whole with console skill <path>, its rules first, and a file of the pack with console skill --file <path>; or load it by its URI through your own SkillCDN connection to this address, which a person makes at ${skills.page}. --json adds the page of each, for a person.`,
     ...own,
   );
   return lines.join("\n");
@@ -576,7 +595,7 @@ export function formatSkillLoad(loaded: RestSkillLoad, pages: readonly RestSkill
   if (last.files.length > 0) {
     lines.push(
       "",
-      `Files of the skill, read with console skill ${first.path} --file <path>: ${last.files.join(", ")}`,
+      `Files of the skill, read with console skill --file <path>: ${last.files.join(", ")}`,
     );
   }
   if (last.references.length > 0) {
@@ -621,6 +640,8 @@ export function formatSkillFile(read: RestSkillFile, content: string): string {
         (entry) =>
           `${entry.kind === "directory" ? "d" : "f"}  ${entry.path}${entry.size === null ? "" : `  ${entry.size}`}`,
       ),
+      "",
+      "console skills <folder> shows a folder with its skills marked, what each folder holds and the README that introduces it.",
     ].join("\n");
   }
   if (read.file === null) {
@@ -630,4 +651,132 @@ export function formatSkillFile(read: RestSkillFile, content: string): string {
     `--- file: ${read.file.path} (${read.file.totalLength} characters) ---`,
     content.trimEnd(),
   ].join("\n");
+}
+
+/** One entry of a browsed folder: what it is, its path, its words, and the facts of its kind. */
+function formatBrowseEntry(entry: RestSkillBrowseEntry): string {
+  const facts: string[] = [];
+  if (entry.kind === "directory") {
+    if (entry.skillCount > 0) {
+      facts.push(counted(entry.skillCount, "skill"));
+    }
+    if (entry.documentCount > 0) {
+      facts.push(counted(entry.documentCount, "document"));
+    }
+    if (entry.overviewPath !== null) {
+      facts.push(`README ${entry.overviewPath}`);
+    }
+  }
+  if (entry.kind === "skill") {
+    if (entry.license !== null) {
+      facts.push(entry.license);
+    }
+    if (entry.describedOnly) {
+      facts.push("described only");
+    }
+  }
+  if (entry.kind === "file" && entry.size !== null) {
+    facts.push(`${entry.size} bytes`);
+  }
+  const words = [entry.name, entry.description]
+    .filter((text): text is string => text !== null && text !== "")
+    .join("  ");
+  const mark = entry.kind === "skill" ? "skill" : entry.kind === "directory" ? "d" : "f";
+  return `${mark}  ${entry.path}${words === "" ? "" : `  ${words}`}${facts.length === 0 ? "" : `  (${facts.join("; ")})`}`;
+}
+
+/**
+ * What a folder of the pack holds, as browse_repo lays it out: the README that introduces the
+ * folder, then its skills, its folders with what each holds, and its files, across the pages the
+ * listing came in.
+ */
+export function formatSkillBrowse(
+  browsed: RestSkillBrowse,
+  folders: readonly NonNullable<RestSkillBrowse["folder"]>[],
+): string {
+  if (browsed.status === "none" || browsed.address === null) {
+    return NO_ADDRESS;
+  }
+  const head = `folder at ${browsed.address}, served by ${browsed.source}: ${browsed.status}`;
+  if (browsed.status !== "ready") {
+    return [head, SKILLS_WORDS[browsed.status]].join("\n");
+  }
+  const [first] = folders;
+  if (first === undefined) {
+    return [head, "Nothing was read."].join("\n");
+  }
+  const last = folders[folders.length - 1] ?? first;
+  const lines = [`folder ${first.path === "" ? "/" : first.path} at ${browsed.address}`];
+  if (first.overview !== null) {
+    const words = [first.overview.title, first.overview.description]
+      .filter((text): text is string => text !== null && text !== "")
+      .join("  ");
+    lines.push(`    ${words === "" ? "" : `${words}  `}(README: ${first.overview.path})`);
+  }
+  const entries = folders.flatMap((folder) => folder.entries);
+  if (entries.length === 0) {
+    lines.push("Nothing in this folder.");
+  }
+  for (const entry of entries) {
+    lines.push(formatBrowseEntry(entry));
+  }
+  if (last.nextCursor !== null) {
+    lines.push("More entries: the listing stopped before the end of the folder.");
+  }
+  lines.push(
+    "",
+    "Read a skill with console skill <path>; a file, or a README named above, with console skill --file <path>; a folder with console skills <folder>.",
+  );
+  return lines.join("\n");
+}
+
+/**
+ * What words found in the pack, as search_repo lays it out: skills with the files of theirs that
+ * matched, documents on their own, in relevance order; words, not meaning.
+ */
+export function formatSkillFind(found: RestSkillFind): string {
+  if (found.status === "none" || found.address === null) {
+    return NO_ADDRESS;
+  }
+  const head = `search at ${found.address}, served by ${found.source}: ${found.status}`;
+  if (found.status !== "ready") {
+    return [head, SKILLS_WORDS[found.status]].join("\n");
+  }
+  if (found.found === null) {
+    return [head, "Nothing was read."].join("\n");
+  }
+  const { query, path, items, nextCursor } = found.found;
+  const where = path === null || path === "" ? "" : ` within ${path}`;
+  const lines = [
+    `found for "${query}"${where} at ${found.address}: ${counted(items.length, "result")}`,
+  ];
+  for (const item of items) {
+    if (item.kind === "skill") {
+      lines.push(
+        `skill  ${item.path}  ${item.name}  ${item.description}${item.describedOnly ? "  (described only)" : ""}`,
+      );
+      for (const file of item.files) {
+        lines.push(`    file  ${file.path}${file.title === null ? "" : `  ${file.title}`}`);
+      }
+      if (item.moreFiles > 0) {
+        lines.push(`    and ${counted(item.moreFiles, "more file")}`);
+      }
+    } else {
+      lines.push(
+        `document  ${item.path}${item.title === null ? "" : `  ${item.title}`}${item.summary === null ? "" : `  ${item.summary}`}`,
+      );
+    }
+  }
+  if (nextCursor !== null) {
+    lines.push(
+      "More matched: narrow the words, or search within a folder (console skills <folder> --search <words>).",
+    );
+  }
+  if (items.length > 0) {
+    lines.push(
+      "",
+      "Read a skill with console skill <path>, a file or a document with console skill --file <path>.",
+    );
+  }
+  return lines.join("\n");
 }

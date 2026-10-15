@@ -275,16 +275,23 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     ],
   },
   skills: {
-    usage: "skills",
-    synopsis: "The skills of the project's pack, each with the path console skill reads it by.",
+    usage: "skills  |  skills <folder>  |  skills --search <words> [<folder>] [--limit <n>]",
+    synopsis:
+      "The project's pack: its skills; what a folder of it holds; or what words find in it.",
     about:
-      "The skills of the project's pack, as SkillCDN serves them at the project's address: each with its description, the path of its SKILL.md, which console skill reads it by, and the URI you load it by through your own SkillCDN connection where your host has one; and where the console's own skills are on this machine. A private pack is read with the pack token the project holds (ADR-0028). --json adds the page of each, for a person.",
+      "The project's pack, as SkillCDN serves it at the project's address, read by the console with the pack token the project holds where the pack is private (ADR-0028). Alone: the pack by name with how many skills and documents it has, and its skills, each with its description, the path of its SKILL.md, which console skill reads it by, and the URI you load it by through your own SkillCDN connection where your host has one; and where the console's own skills are on this machine. With a folder (/ for the root): what it holds, as browse_repo lays it out: its skills, its folders with how many skills and documents each holds and the README that introduces it, its files; whole, page after page. With --search: the skills and the documents the words find, in relevance order, a skill with the files of it that matched; words, not meaning, in the language the pack is written in; within the folder when one is named; 10 unless --limit says otherwise, up to 25, and a last line says when more matched. --json answers with the console's own JSON, the page of each skill included.",
+    limits: ["search: 1 to 500 characters; limit: 1 to 25"],
+    refusals: [
+      "status not_found: the pack is not served to the console; private, with no pack token on the project",
+      "status token_invalid: the pack token the project holds no longer works; an owner sets a new one",
+    ],
   },
   skill: {
-    usage: "skill <path> [--file <path>]",
-    synopsis: "One skill of the pack whole, its rules first; or with --file a file of the pack.",
+    usage: "skill <path>  |  skill --file <path>",
+    synopsis:
+      "One skill of the pack whole, its rules first; or with --file a file of the pack, or what a folder holds.",
     about:
-      "One skill of the project's pack, whole, as load_skill lays it out for you: the rules of the repository from its root to the nearest manifest, the skill's body, the files it includes, each under a line that names its path; then the files it has and what it refers to. Read by the console from the SkillCDN deployment, with the pack token the project holds where the pack is private, so you need no connection of your own. <path> is the path of the SKILL.md from the repository's root, as console skills lists it. --file <path> reads a file of the pack instead, whole, or what a folder holds.",
+      "One skill of the project's pack, whole, as load_skill lays it out for you: the rules of the repository from its root to the nearest manifest, the skill's body, the files it includes, each under a line that names its path; then the files it has and what it refers to. Read by the console from the SkillCDN deployment, with the pack token the project holds where the pack is private, so you need no connection of your own. <path> is the path of the SKILL.md from the repository's root, as console skills lists it. --file <path> reads a file of the pack instead, whole, or what a folder holds, and takes no skill's path beside it; console skills <folder> shows a folder with more.",
     refusals: [
       "status not_found: the pack is not served to the console; private, with no pack token on the project",
       "status token_invalid: the pack token the project holds no longer works; an owner sets a new one",

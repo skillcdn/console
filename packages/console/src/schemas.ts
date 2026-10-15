@@ -915,6 +915,16 @@ export const restSkillsSchema = z.object({
   /** Where a person browses the address, or `null` without one. */
   page: z.nullable(z.string()),
   status: z.enum(SKILLS_STATUSES),
+  /** The pack as its manifest or its README names it, when `ready`: what it is called, what it is for, the language it is written in. */
+  pack: z.optional(
+    z.object({
+      name: z.nullable(z.string()),
+      description: z.nullable(z.string()),
+      language: z.nullable(z.string()),
+    }),
+  ),
+  /** How many skills and documents the deployment indexed at the address, when `ready`. */
+  counts: z.optional(z.object({ skills: count, documents: count })),
   /** The skills, when `ready`; empty otherwise. */
   items: z.array(restSkillSchema),
 });
@@ -1005,6 +1015,106 @@ export const restSkillFileSchema = z.object({
   ),
 });
 export type RestSkillFile = z.infer<typeof restSkillFileSchema>;
+
+/** An entry of a folder of the pack, as the deployment browses it: a skill, a folder with what it holds, or a file. */
+export const restSkillBrowseEntrySchema = z.object({
+  kind: z.enum(["skill", "directory", "file"]),
+  /** The path from the repository's root: of the `SKILL.md` for a skill, of the folder, of the file. */
+  path: z.string(),
+  name: z.nullable(z.string()),
+  description: z.nullable(z.string()),
+  /** For a folder: the skills and the documents under it. */
+  skillCount: count,
+  documentCount: count,
+  /** For a file: its size in bytes. */
+  size: z.nullable(count),
+  /** For a folder: the README that introduces it, read with the file route. */
+  overviewPath: z.nullable(z.string()),
+  /** For a skill: its license, and whether the address only describes it. */
+  license: z.nullable(z.string()),
+  describedOnly: z.boolean(),
+});
+export type RestSkillBrowseEntry = z.infer<typeof restSkillBrowseEntrySchema>;
+
+/** `GET .../skills/browse?path=&cursor=&limit=`: what a folder of the pack holds, a page of it (`browse_repo`); `folder` is `null` unless `ready`. */
+export const restSkillBrowseSchema = z.object({
+  address: z.nullable(z.string()),
+  source: z.string(),
+  page: z.nullable(z.string()),
+  status: z.enum(SKILLS_STATUSES),
+  folder: z.nullable(
+    z.object({
+      path: z.string(),
+      /** The README that introduces the folder, or `null`. */
+      overview: z.nullable(
+        z.object({
+          path: z.string(),
+          title: z.nullable(z.string()),
+          description: z.nullable(z.string()),
+        }),
+      ),
+      entries: z.array(restSkillBrowseEntrySchema),
+      /** Where the listing goes on, or `null` at its end. */
+      nextCursor: z.nullable(z.string()),
+    }),
+  ),
+});
+export type RestSkillBrowse = z.infer<typeof restSkillBrowseSchema>;
+
+/** What a search of the pack found: a skill, as the listing has it, with the files of it that matched; or a document on its own. */
+export const restSkillFindItemSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("skill"),
+    name: z.string(),
+    description: z.string(),
+    directory: z.string(),
+    path: z.string(),
+    page: z.string(),
+    uri: z.nullable(z.string()),
+    translations: z.record(
+      z.string(),
+      z.object({ title: z.nullable(z.string()), description: z.nullable(z.string()) }),
+    ),
+    /** The files of the skill that matched, a few, and how many more did. */
+    files: z.array(
+      z.object({
+        path: z.string(),
+        title: z.nullable(z.string()),
+        summary: z.nullable(z.string()),
+      }),
+    ),
+    moreFiles: count,
+    license: z.nullable(z.string()),
+    describedOnly: z.boolean(),
+  }),
+  z.object({
+    kind: z.literal("document"),
+    path: z.string(),
+    title: z.nullable(z.string()),
+    summary: z.nullable(z.string()),
+    /** The folder of the skill the document belongs to, or `null` for one on its own. */
+    skillDirectory: z.nullable(z.string()),
+  }),
+]);
+export type RestSkillFindItem = z.infer<typeof restSkillFindItemSchema>;
+
+/** `GET .../skills/find?query=&path=&cursor=&limit=`: what words find in the pack, a page of it in relevance order (`search_repo`); `found` is `null` unless `ready`. */
+export const restSkillFindSchema = z.object({
+  address: z.nullable(z.string()),
+  source: z.string(),
+  page: z.nullable(z.string()),
+  status: z.enum(SKILLS_STATUSES),
+  found: z.nullable(
+    z.object({
+      query: z.string(),
+      /** The folder the search was kept to, or `null` for the whole pack. */
+      path: z.nullable(z.string()),
+      items: z.array(restSkillFindItemSchema),
+      nextCursor: z.nullable(z.string()),
+    }),
+  ),
+});
+export type RestSkillFind = z.infer<typeof restSkillFindSchema>;
 
 /**
  * A document's path (ADR-0009): segments of lowercase letters, digits and hyphens, separated

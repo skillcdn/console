@@ -30,6 +30,8 @@ function sourceOf(answers: SkillListing[]) {
   const source: SkillSource = {
     load: async () => ({ status: "unavailable" }),
     read: async () => ({ status: "unavailable" }),
+    browse: async () => ({ status: "unavailable" }),
+    find: async () => ({ status: "unavailable" }),
     async list() {
       calls += 1;
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -156,6 +158,54 @@ describe("the skills of the board", () => {
           folder: undefined,
         };
       },
+      async browse(_address, page) {
+        return {
+          status: "ready",
+          folder: {
+            path: page.path ?? "",
+            overview: undefined,
+            entries: [
+              {
+                kind: "directory",
+                path: "docs/adr",
+                name: undefined,
+                description: undefined,
+                skillCount: 0,
+                documentCount: 3,
+                size: undefined,
+                overviewPath: "docs/adr/README.md",
+                license: undefined,
+                describedOnly: false,
+              },
+            ],
+            nextCursor: undefined,
+          },
+        };
+      },
+      async find(_address, query) {
+        return {
+          status: "ready",
+          found: {
+            query: query.query,
+            path: query.path,
+            items: [
+              {
+                kind: "skill",
+                path: "review/SKILL.md",
+                directory: "review",
+                name: "review",
+                description: "Reviews a change.",
+                translations: {},
+                files: [],
+                moreFiles: 0,
+                license: undefined,
+                describedOnly: false,
+              },
+            ],
+            nextCursor: undefined,
+          },
+        };
+      },
     };
     const skills = new Skills({
       config: { source: "https://skillcdn.test", address: ADDRESS },
@@ -196,6 +246,51 @@ describe("the skills of the board", () => {
       status: "none",
       file: null,
       folder: null,
+    });
+    // A folder and a search, in the console's shape: nothing undefined, a found skill as the listing has it.
+    const browsed = await skills.browse(undefined, { path: "docs" }, "scdn_repo_x");
+    expect(browsed).toMatchObject({
+      address: "/gh/acme/skills@v1",
+      page: "https://skillcdn.test/gh/acme/skills@v1",
+      status: "ready",
+      folder: { path: "docs", overview: null, nextCursor: null },
+    });
+    expect(browsed.folder?.entries).toEqual([
+      {
+        kind: "directory",
+        path: "docs/adr",
+        name: null,
+        description: null,
+        skillCount: 0,
+        documentCount: 3,
+        size: null,
+        overviewPath: "docs/adr/README.md",
+        license: null,
+        describedOnly: false,
+      },
+    ]);
+    const found = await skills.find(undefined, { query: "review" });
+    expect(found).toMatchObject({
+      status: "ready",
+      found: { query: "review", path: null, nextCursor: null },
+    });
+    const item = found.found?.items[0];
+    expect(item).toMatchObject({
+      kind: "skill",
+      path: "review/SKILL.md",
+      files: [],
+      moreFiles: 0,
+      license: null,
+      describedOnly: false,
+    });
+    expect(item?.kind === "skill" ? item.uri : null).toMatch(/^skill:\/\/gh\/acme\/skills/);
+    expect(await skills.browse("not an address", {})).toMatchObject({
+      status: "none",
+      folder: null,
+    });
+    expect(await skills.find("not an address", { query: "x" })).toMatchObject({
+      status: "none",
+      found: null,
     });
   });
 });

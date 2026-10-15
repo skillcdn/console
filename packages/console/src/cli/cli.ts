@@ -17,6 +17,7 @@ import {
   type RestDecision,
   type RestMember,
   type RestPerson,
+  type RestSkillBrowse,
   type RestSkillFile,
   type RestSkillLoad,
   type RestSkillPage,
@@ -74,7 +75,9 @@ import {
   formatRules,
   formatRun,
   formatRunLine,
+  formatSkillBrowse,
   formatSkillFile,
+  formatSkillFind,
   formatSkillLoad,
   formatSkills,
   formatTask,
@@ -995,27 +998,82 @@ const categories: Command = async (args, io) => {
   return EXIT.ok;
 };
 
+/** How many pages of a skill, of a file or of a folder the command follows before it stops: far above what one holds. */
+const MAX_SKILL_PAGES = 64;
+/** How many results a search answers at most: what the deployment allows on one page. */
+const MAX_FIND_LIMIT = 25;
+
 const skills: Command = async (args, io) => {
-  const { values } = parse(args, {}, false);
+  const { values, positionals } = parse(args, {
+    search: { type: "string" },
+    limit: { type: "string" },
+  });
+  if (positionals.length > 1) {
+    throw misuse("Say one folder: console skills [<folder>] [--search <words>]");
+  }
+  // The root of the pack is the mounted folder, which the deployment reads as no path at all.
+  const given = positionals[0];
+  const folder = given === undefined || given === "/" || given === "." ? undefined : given;
+  const words = text(values, "search");
+  const limit = text(values, "limit");
+  if (words === undefined && limit !== undefined) {
+    throw misuse("--limit goes with --search: console skills --search <words> [--limit <n>]");
+  }
+  const atMost = limit === undefined ? undefined : Number(limit);
+  if (
+    atMost !== undefined &&
+    (!Number.isInteger(atMost) || atMost < 1 || atMost > MAX_FIND_LIMIT)
+  ) {
+    throw misuse(`Not a number of results, 1 to ${MAX_FIND_LIMIT}: ${limit}`);
+  }
   const session = await open(io, values);
   const project = await session.project();
+  if (words !== undefined) {
+    // One page of what the words find; more is said, and narrowed by the agent, not fetched.
+    const found = await project.skillFind(words, { path: folder, limit: atMost });
+    answer(io, session, found, () => formatSkillFind(found));
+    return EXIT.ok;
+  }
+  if (given !== undefined) {
+    // The folder whole: its pages until the end, as the deployment lists them.
+    const folders: NonNullable<RestSkillBrowse["folder"]>[] = [];
+    let cursor: string | undefined;
+    let last: RestSkillBrowse | undefined;
+    for (let n = 0; n < MAX_SKILL_PAGES; n += 1) {
+      last = await project.skillBrowse({ path: folder, cursor });
+      if (last.status !== "ready" || last.folder === null) {
+        break;
+      }
+      folders.push(last.folder);
+      if (last.folder.nextCursor === null) {
+        break;
+      }
+      cursor = last.folder.nextCursor;
+    }
+    if (last === undefined) {
+      throw failed("The folder could not be read.");
+    }
+    const browsed = last;
+    answer(io, session, { ...browsed, folders }, () => formatSkillBrowse(browsed, folders));
+    return EXIT.ok;
+  }
   const found = await project.skills();
   answer(io, session, found, () => formatSkills(found, io.skillsDir));
   return EXIT.ok;
 };
 
-/** How many pages of a skill, or of a file, the command follows before it stops: far above what one holds. */
-const MAX_SKILL_PAGES = 64;
-
 const skill: Command = async (args, io) => {
   const { values, positionals } = parse(args, { file: { type: "string" } });
-  const path = theOne(
-    positionals,
-    "Say which skill: console skill <path of its SKILL.md> [--file <path>]",
-  );
+  const file = text(values, "file");
+  // A file is read by its own path from the repository's root; a skill's path beside it would be
+  // ignored, which reads as if it mattered, so the two together are not understood.
+  if (file !== undefined && positionals.length > 0) {
+    throw misuse(
+      "Say one: console skill <path of its SKILL.md> for a skill, or console skill --file <path> for a file of the pack.",
+    );
+  }
   const session = await open(io, values);
   const project = await session.project();
-  const file = text(values, "file");
   if (file !== undefined) {
     // The file whole, page after page, as the console reads it from the deployment.
     const parts: string[] = [];
@@ -1040,6 +1098,10 @@ const skill: Command = async (args, io) => {
     answer(io, session, { ...read, content }, () => formatSkillFile(read, content));
     return EXIT.ok;
   }
+  const path = theOne(
+    positionals,
+    "Say which skill: console skill <path of its SKILL.md>, or console skill --file <path> for a file of the pack",
+  );
   // The skill whole: its pages until complete, the rules first, as load_skill lays them out.
   const pages: RestSkillPage[] = [];
   let cursor: string | undefined;

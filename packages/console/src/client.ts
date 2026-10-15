@@ -61,7 +61,9 @@ import {
   type RestRunEndInput,
   type RestRunInput,
   type RestRuns,
+  type RestSkillBrowse,
   type RestSkillFile,
+  type RestSkillFind,
   type RestSkillLoad,
   type RestSkills,
   type RestTask,
@@ -103,7 +105,9 @@ import {
   restRulesSchema,
   restRunSchema,
   restRunsSchema,
+  restSkillBrowseSchema,
   restSkillFileSchema,
+  restSkillFindSchema,
   restSkillLoadSchema,
   restSkillsSchema,
   restTaskSchema,
@@ -318,6 +322,25 @@ export interface ProjectClient {
     page?: { readonly offset?: number | undefined; readonly limit?: number | undefined },
     signal?: AbortSignal,
   ): Promise<RestSkillFile>;
+  /** What a folder of the pack holds, a page of it (`browse_repo`): the mounted folder when `path` is left out. */
+  skillBrowse(
+    page?: {
+      readonly path?: string | undefined;
+      readonly cursor?: string | undefined;
+      readonly limit?: number | undefined;
+    },
+    signal?: AbortSignal,
+  ): Promise<RestSkillBrowse>;
+  /** The skills and the documents of the pack that words find, a page of them in relevance order (`search_repo`), within `path` when given. */
+  skillFind(
+    query: string,
+    options?: {
+      readonly path?: string | undefined;
+      readonly cursor?: string | undefined;
+      readonly limit?: number | undefined;
+    },
+    signal?: AbortSignal,
+  ): Promise<RestSkillFind>;
   /** Sets the pack token the project reads a private pack with; for an owner. The token travels once and is answered never. */
   setPackToken(input: RestPackTokenInput): Promise<RestProject>;
   /** Takes the pack token away; for an owner. */
@@ -712,6 +735,31 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
           }),
           undefined,
           restSkillFileSchema,
+          signal,
+        ),
+      skillBrowse: (page = {}, signal) =>
+        request(
+          "GET",
+          withQuery(`${at("skills")}/browse`, {
+            path: page.path,
+            cursor: page.cursor,
+            limit: page.limit === undefined ? undefined : String(page.limit),
+          }),
+          undefined,
+          restSkillBrowseSchema,
+          signal,
+        ),
+      skillFind: (query, options = {}, signal) =>
+        request(
+          "GET",
+          withQuery(`${at("skills")}/find`, {
+            query,
+            path: options.path,
+            cursor: options.cursor,
+            limit: options.limit === undefined ? undefined : String(options.limit),
+          }),
+          undefined,
+          restSkillFindSchema,
           signal,
         ),
       setPackToken: (input) =>

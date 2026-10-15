@@ -1,4 +1,11 @@
-import type { RestSkillFile, RestSkillLoad, RestSkills } from "@skillcdn/console/api";
+import type {
+  RestSkill,
+  RestSkillBrowse,
+  RestSkillFile,
+  RestSkillFind,
+  RestSkillLoad,
+  RestSkills,
+} from "@skillcdn/console/api";
 import {
   type Address,
   formatAddress,
@@ -8,13 +15,20 @@ import {
 } from "@skillcdn/core";
 import type { Logger } from "./logger.js";
 import type { Clock } from "./ports/clock.js";
-import type { FilePage, SkillListing, SkillSource } from "./ports/skill-source.js";
+import type {
+  BrowsePage,
+  FilePage,
+  FindQuery,
+  SkillListing,
+  SkillSource,
+  SkillSummary,
+} from "./ports/skill-source.js";
 
 // A project's pack as the board shows and reads it: what the SkillCDN deployment serves at the
 // project's address, or at the organization's, with where a person reads each skill and what an
-// agent loads it by; and, for the command, a skill whole and a file of the pack, read through the
-// deployment's REST API with the pack token the project holds where the pack is private
-// (ADR-0028). The console refers to the pack by address and keeps nothing of it
+// agent loads it by; and, for the command, a skill whole, a file of the pack, what a folder of it
+// holds and what words find in it, read through the deployment's REST API with the pack token
+// the project holds where the pack is private (ADR-0028). The console refers to the pack by address and keeps nothing of it
 // (docs/architecture.md): a public listing is held for a while, since an address changes slowly
 // and the deployment is someone else's, and asked for again after; what a token reads is the
 // project's for that request and is never held.
@@ -185,6 +199,106 @@ export class Skills {
     };
   }
 
+  /** What a folder of the pack holds, a page of it, as the deployment browses it (`browse_repo`). */
+  async browse(
+    projectAddress: string | undefined,
+    page: BrowsePage,
+    token?: string,
+  ): Promise<RestSkillBrowse> {
+    const { source } = this.#config;
+    const address = this.#addressOf(projectAddress);
+    if (address === undefined) {
+      return { address: null, source, page: null, status: "none", folder: null };
+    }
+    const canonical = formatAddress(address);
+    const browsed = await this.#source.browse(address, page, token);
+    return {
+      address: canonical,
+      source,
+      page: `${source}${canonical}`,
+      status: browsed.status,
+      folder:
+        browsed.status === "ready"
+          ? {
+              path: browsed.folder.path,
+              overview:
+                browsed.folder.overview === undefined
+                  ? null
+                  : {
+                      path: browsed.folder.overview.path,
+                      title: browsed.folder.overview.title ?? null,
+                      description: browsed.folder.overview.description ?? null,
+                    },
+              entries: browsed.folder.entries.map((entry) => ({
+                kind: entry.kind,
+                path: entry.path,
+                name: entry.name ?? null,
+                description: entry.description ?? null,
+                skillCount: entry.skillCount,
+                documentCount: entry.documentCount,
+                size: entry.size ?? null,
+                overviewPath: entry.overviewPath ?? null,
+                license: entry.license ?? null,
+                describedOnly: entry.describedOnly,
+              })),
+              nextCursor: browsed.folder.nextCursor ?? null,
+            }
+          : null,
+    };
+  }
+
+  /** The skills and the documents of the pack that words find, a page of them in relevance order (`search_repo`). */
+  async find(
+    projectAddress: string | undefined,
+    query: FindQuery,
+    token?: string,
+  ): Promise<RestSkillFind> {
+    const { source } = this.#config;
+    const address = this.#addressOf(projectAddress);
+    if (address === undefined) {
+      return { address: null, source, page: null, status: "none", found: null };
+    }
+    const canonical = formatAddress(address);
+    const page = `${source}${canonical}`;
+    const found = await this.#source.find(address, query, token);
+    return {
+      address: canonical,
+      source,
+      page,
+      status: found.status,
+      found:
+        found.status === "ready"
+          ? {
+              query: found.found.query,
+              path: found.found.path ?? null,
+              items: found.found.items.map((item) =>
+                item.kind === "skill"
+                  ? {
+                      kind: "skill",
+                      ...this.#item(address, page, item),
+                      files: item.files.map((file) => ({
+                        path: file.path,
+                        title: file.title ?? null,
+                        summary: file.summary ?? null,
+                      })),
+                      moreFiles: item.moreFiles,
+                      license: item.license ?? null,
+                      describedOnly: item.describedOnly,
+                    }
+                  : {
+                      kind: "document",
+                      path: item.path,
+                      title: item.title ?? null,
+                      summary: item.summary ?? null,
+                      skillDirectory: item.skillDirectory ?? null,
+                    },
+              ),
+              nextCursor: found.found.nextCursor ?? null,
+            }
+          : null,
+    };
+  }
+
   /** The address to read: the project's, which was checked when it was written, else the organization's. */
   #addressOf(projectAddress: string | undefined): Address | undefined {
     if (projectAddress === undefined) {
@@ -201,7 +315,7 @@ export class Skills {
     return undefined;
   }
 
-  /** The listing as the board shows it: each skill with its page and the URI an agent loads it by. */
+  /** The listing as the board shows it: the pack by name and by count, each skill with its page and the URI an agent loads it by. */
   #listing(address: Address, canonical: string, listing: SkillListing): RestSkills {
     const { source } = this.#config;
     const page = `${source}${canonical}`;
@@ -210,18 +324,33 @@ export class Skills {
       source,
       page,
       status: listing.status,
-      items: listing.skills.map((skill) => {
-        const path = parseRepoPath(skill.path);
-        return {
-          name: skill.name,
-          description: skill.description,
-          directory: skill.directory,
-          path: skill.path,
-          page: `${page}?skill=${encodeURIComponent(skill.path)}`,
-          uri: path.ok ? formatSkillUri(address, path.value) : null,
-          translations: skill.translations,
-        };
-      }),
+      ...(listing.pack === undefined
+        ? {}
+        : {
+            pack: {
+              name: listing.pack.name ?? null,
+              description: listing.pack.description ?? null,
+              language: listing.pack.language ?? null,
+            },
+          }),
+      ...(listing.counts === undefined
+        ? {}
+        : { counts: { skills: listing.counts.skills, documents: listing.counts.documents } }),
+      items: listing.skills.map((skill) => this.#item(address, page, skill)),
+    };
+  }
+
+  /** One skill as the board shows it: what the repository says of it, its page, and the URI an agent loads it by. */
+  #item(address: Address, page: string, skill: SkillSummary): RestSkill {
+    const path = parseRepoPath(skill.path);
+    return {
+      name: skill.name,
+      description: skill.description,
+      directory: skill.directory,
+      path: skill.path,
+      page: `${page}?skill=${encodeURIComponent(skill.path)}`,
+      uri: path.ok ? formatSkillUri(address, path.value) : null,
+      translations: skill.translations,
     };
   }
 
