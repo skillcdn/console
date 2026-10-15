@@ -3856,6 +3856,9 @@ table {
   height: 1rem;
 }
 
+/* Shown on the card under the pointer or with the focus, while the menu is open, and on the card
+   in hand, which is the card as it was hovered: its menu's dots, and the room they take. */
+.sc-drag-ghost .sc-card-menu-button,
 .sc-card:hover .sc-card-menu-button,
 .sc-card:focus-within .sc-card-menu-button,
 .sc-card-menu-button[aria-expanded="true"] {

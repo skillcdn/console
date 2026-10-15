@@ -561,6 +561,9 @@ export function Board(props: BoardProps) {
             href={props.taskHref(dragging.task)}
             onOpen={nothing}
             today={props.today}
+            // The menu too, inert under the pointer, so that the card in hand keeps the shape of the one in its place.
+            editHref={props.editHref?.(dragging.task)}
+            onArchive={props.onArchive}
           />
         </div>
       )}
