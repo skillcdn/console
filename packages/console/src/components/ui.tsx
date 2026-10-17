@@ -9,7 +9,7 @@ import {
   type TaskPriority,
   type TaskState,
 } from "../api.js";
-import { daysBetween, formatDay, today } from "../dates.js";
+import { dayOf, daysBetween, formatDay, today } from "../dates.js";
 import { useLanguage, useWords } from "../i18n/index.js";
 
 // Small building blocks. Each one is a class in styles/console.css and nothing more. Classes
@@ -356,11 +356,24 @@ export function formatBytes(size: number): string {
   return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
 }
 
-export function Time(props: { readonly iso: string }) {
+export function Time(props: {
+  readonly iso: string;
+  /** `day` shows the day alone, with the moment as the title, where a row has no room for the hour. */
+  readonly precision?: "minute" | "day";
+}) {
   const { tag } = useLanguage();
+  const full = formatInstant(props.iso, tag);
+  if (props.precision === "day") {
+    const date = new Date(props.iso);
+    return (
+      <time className="sc-time" dateTime={props.iso} title={full}>
+        {Number.isNaN(date.getTime()) ? props.iso : formatDay(dayOf(date), tag)}
+      </time>
+    );
+  }
   return (
     <time className="sc-time" dateTime={props.iso}>
-      {formatInstant(props.iso, tag)}
+      {full}
     </time>
   );
 }

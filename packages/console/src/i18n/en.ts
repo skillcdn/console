@@ -102,6 +102,12 @@ export const en = {
     copy: "Copy",
     copied: "Copied",
     showMore: (n: number, of: number) => `Show ${n} more of ${of}`,
+    pager: {
+      label: "Pages",
+      previous: "Previous page",
+      next: "Next page",
+      range: (from: number, to: number, of: number) => `${from}-${to} of ${of}`,
+    },
   },
 
   nav: {
@@ -325,6 +331,9 @@ export const en = {
     waitingForPerson: "Waiting for a person.",
     options: "Options",
     notePlaceholder: "A word about it, if any",
+    own: "Something else",
+    ownPlaceholder: "Your answer, in a line",
+    ownAnswer: "in their own words",
     answer: "Answer",
     asked: "asked",
     askedThrough: (agent: string) => `asked through ${agent}`,

@@ -2180,6 +2180,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         actor: found.actor,
         decisionId: id,
         option: input.option,
+        own: input.own,
         note: input.note,
         now: clock.now(),
       });

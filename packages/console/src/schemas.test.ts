@@ -3,6 +3,7 @@ import {
   MAX_BODY_LENGTH,
   MAX_DOCUMENT_LENGTH,
   MAX_LINKS,
+  MAX_OPTION_LABEL_LENGTH,
   MAX_OPTIONS,
   MAX_PROJECT_KEY_LENGTH,
   MAX_TITLE_LENGTH,
@@ -158,14 +159,27 @@ describe("decision input", () => {
     ).toBe(false);
   });
 
-  it("takes an answer with or without a note, and refuses an empty option", () => {
+  it("takes an answer as an option or as the person's own line, one of the two, with or without a note", () => {
     expect(restAnswerInputSchema.parse({ option: "a" })).toEqual({ option: "a" });
     expect(restAnswerInputSchema.parse({ option: "a", note: "because" })).toEqual({
       option: "a",
       note: "because",
     });
+    expect(restAnswerInputSchema.parse({ own: " Neither: both ", note: "because" })).toEqual({
+      own: "Neither: both",
+      note: "because",
+    });
     expect(restAnswerInputSchema.safeParse({ option: "" }).success).toBe(false);
     expect(restAnswerInputSchema.safeParse({ option: "a", note: 1 }).success).toBe(false);
+    // One of the two, never both and never neither; the own line is worded as an option is.
+    expect(restAnswerInputSchema.safeParse({}).success).toBe(false);
+    expect(restAnswerInputSchema.safeParse({ note: "because" }).success).toBe(false);
+    expect(restAnswerInputSchema.safeParse({ option: "a", own: "b" }).success).toBe(false);
+    expect(restAnswerInputSchema.safeParse({ own: "  " }).success).toBe(false);
+    expect(restAnswerInputSchema.safeParse({ own: "two\nlines" }).success).toBe(false);
+    expect(
+      restAnswerInputSchema.safeParse({ own: "x".repeat(MAX_OPTION_LABEL_LENGTH + 1) }).success,
+    ).toBe(false);
   });
 });
 

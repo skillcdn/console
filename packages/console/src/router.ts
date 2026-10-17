@@ -5,7 +5,7 @@ import { isDay, isMonth } from "./dates.js";
 // route, and the hrefs below are its inverse. A project's pages live under `/projects/<key>`,
 // the word the REST API uses; an address names what it shows (a task by its number, a decision
 // by its id, a document by its path, a goal by its id), every form has one, and the query says
-// how a page is shown (`?edit`, `?ask`, `?new`, `?version=`, `?q=`, `?month=`, `?week=`, and the
+// how a page is shown (`?edit`, `?ask`, `?new`, `?version=`, `?q=`, `?month=`, `?week=`, `?page=`, and the
 // board's filters). The old addresses are taken to the new.
 
 /** How a task's page is shown: as it is, or with one of its forms open. */
@@ -49,7 +49,8 @@ export type Route =
       readonly path: string;
       readonly view: DocsView;
     }
-  | { readonly name: "decisions"; readonly project: string }
+  /** The decisions of a project: the waiting ones, and the record on one of its pages, the first when the address names none. */
+  | { readonly name: "decisions"; readonly project: string; readonly page: number | undefined }
   | { readonly name: "new-decision"; readonly project: string }
   | { readonly name: "decision"; readonly project: string; readonly id: string }
   /** The calendar of a project: the month shown, or this one when the address names none, narrowed as the board is. */
@@ -155,13 +156,10 @@ const NUMBER = /^[1-9][0-9]{0,8}$/;
 /** A code as it may be typed into an address: checked for what it is by the page. */
 const CODE_TEXT = /^[A-Za-z0-9-]{1,16}$/;
 /** The pages of a project that take nothing after their name. */
-const PLAIN_PAGES: readonly Exclude<ProjectPage, "docs" | "calendar" | "roadmap" | "settings">[] = [
-  "decisions",
-  "archive",
-  "feed",
-  "skills",
-  "members",
-];
+const PLAIN_PAGES: readonly Exclude<
+  ProjectPage,
+  "docs" | "decisions" | "calendar" | "roadmap" | "settings"
+>[] = ["archive", "feed", "skills", "members"];
 const NOT_FOUND: Route = { name: "not-found" };
 
 /** Where an address of the 0.1 line before this one leads now, or nothing for a current one. */
@@ -386,6 +384,13 @@ export function matchRoute(pathname: string, search = ""): Route {
             : undefined,
     };
   }
+  if (page === "decisions") {
+    const turned = params.get("page");
+    if (turned !== null && !NUMBER.test(turned)) {
+      return NOT_FOUND;
+    }
+    return { name: "decisions", project, page: turned === null ? undefined : Number(turned) };
+  }
   const found = PLAIN_PAGES.find((candidate) => candidate === page);
   return found === undefined ? NOT_FOUND : { name: found, project };
 }
@@ -467,6 +472,12 @@ export function newDecisionHref(key: string): string {
 /** Where one decision is read, and answered. */
 export function decisionHref(key: string, id: string): string {
   return `${PATHS.project}/${key}/decisions/${id}`;
+}
+
+/** Where a project's decisions are: the waiting ones and the record, on one of its pages, or on the first when none is named. */
+export function decisionsHref(key: string, page?: number): string {
+  const base = projectHref(key, "decisions");
+  return page === undefined || page <= 1 ? base : `${base}?page=${page}`;
 }
 
 /** Where the person's own work is, with the week of a day at the top, or this week's when none is named. */

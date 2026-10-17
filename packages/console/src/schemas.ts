@@ -548,9 +548,15 @@ export const restGoalPatchSchema = z.object({
 export type RestGoalPatch = z.infer<typeof restGoalPatchSchema>;
 
 export const restDecisionOptionSchema = z.object({
-  /** What an answer names: stable for the life of the decision. */
+  /** What an answer names: stable once given. */
   id: z.string(),
   label: z.string(),
+  /**
+   * On the one option a person's own answer became, when they answered in their own words
+   * instead of choosing (`POST .../answer` with `own`): added then, after the options given,
+   * which carry no `own`.
+   */
+  own: z.optional(z.literal(true)),
 });
 export type RestDecisionOption = z.infer<typeof restDecisionOptionSchema>;
 
@@ -646,11 +652,24 @@ export const restDecisionPatchSchema = z.object({
 });
 export type RestDecisionPatch = z.infer<typeof restDecisionPatchSchema>;
 
-/** What `POST .../decisions/<id>/answer` is sent: an option, and a word about it. */
-export const restAnswerInputSchema = z.object({
-  option: z.string().check(z.minLength(1), z.maxLength(64)),
-  note: z.optional(paragraphs(MAX_NOTE_LENGTH)),
-});
+/**
+ * What `POST .../decisions/<id>/answer` is sent: one of the options by its id, or the person's
+ * own answer in a line, one of the two; and a word about either.
+ */
+export const restAnswerInputSchema = z
+  .object({
+    /** The id of the chosen option. */
+    option: z.optional(z.string().check(z.minLength(1), z.maxLength(64))),
+    /** The person's own answer, when none of the options is it: one line, worded as an option is. */
+    own: z.optional(line(MAX_OPTION_LABEL_LENGTH)),
+    note: z.optional(paragraphs(MAX_NOTE_LENGTH)),
+  })
+  .check(
+    z.refine(
+      (input) => (input.option === undefined) !== (input.own === undefined),
+      "must name an option or give an answer of its own, one of the two",
+    ),
+  );
 export type RestAnswerInput = z.infer<typeof restAnswerInputSchema>;
 
 /**

@@ -5,7 +5,7 @@ license: MIT
 compatibility: Needs a shell with the console command on the PATH (npm install -g @skillcdn/console, Node.js 24 or newer), signed in by a person. Nothing else; the command needs no key of its own and the agent never sees a token.
 metadata:
   author: skillcdn
-  version: "1.17"
+  version: "1.18"
 skillcdn:
   translations:
     ko:
@@ -62,7 +62,7 @@ The work happens where it happens: in the repository, the document, the tool. At
 
 ### Phase 4: Ask when a person must decide
 
-A choice the body does not settle, a trade-off, a cost, a change of scope: `console ask "<question>" --option "<one>" --option "<another>" --body "<what they need to know>"`. The run waits for the answer; the command waits a minute and exits with `3` while it is still to come. Keep waiting with `console decision <id> --wait 100`, as often as needed, and meanwhile do only what does not depend on the answer. Act on the answer as given; what was answered is not asked again. Once acted on, `console decision <id> --outcome "<what followed>"` makes the decision read as a record.
+A choice the body does not settle, a trade-off, a cost, a change of scope: `console ask "<question>" --option "<one>" --option "<another>" --body "<what they need to know>"`. The run waits for the answer; the command waits a minute and exits with `3` while it is still to come. Keep waiting with `console decision <id> --wait 100`, as often as needed, and meanwhile do only what does not depend on the answer. Act on the answer as given, which may be the person's own words rather than one of the options, marked as theirs; what was answered is not asked again. Once acted on, `console decision <id> --outcome "<what followed>"` makes the decision read as a record.
 
 ### Phase 5: Hand in
 

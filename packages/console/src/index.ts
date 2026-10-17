@@ -82,7 +82,14 @@ export {
   goalMonth,
 } from "./components/goals.js";
 export { Markdown, type MarkdownProps } from "./components/markdown.js";
-export { PAGE_SIZE, ShowMore, usePaged } from "./components/paged.js";
+export {
+  PAGE_SIZE,
+  Pager,
+  pageOf,
+  RECORD_PAGE_SIZE,
+  ShowMore,
+  usePaged,
+} from "./components/paged.js";
 export {
   ListingForm,
   type ListingFormProps,
@@ -246,6 +253,7 @@ export {
   customPageHref,
   type DocsView,
   decisionHref,
+  decisionsHref,
   docHref,
   GOAL_TASK_VIEWS,
   type GoalPageOptions,

@@ -531,6 +531,7 @@ describe("decisions", () => {
         actor: bob,
         decisionId: raised.id,
         option: "3",
+        own: undefined,
         note: undefined,
         now: minutes(52),
       }),
@@ -540,6 +541,7 @@ describe("decisions", () => {
       actor: bob,
       decisionId: raised.id,
       option: "2",
+      own: undefined,
       note: "Shorter.",
       now: minutes(52),
     });
@@ -552,6 +554,7 @@ describe("decisions", () => {
         actor: alice,
         decisionId: raised.id,
         option: "1",
+        own: undefined,
         note: undefined,
         now: minutes(53),
       }),
@@ -562,6 +565,7 @@ describe("decisions", () => {
         actor: alice,
         decisionId: "0199c4d8-0000-7000-8000-000000000099",
         option: "1",
+        own: undefined,
         note: undefined,
         now: minutes(53),
       }),
@@ -571,6 +575,34 @@ describe("decisions", () => {
       (candidate) => candidate.kind === "decision.answered" && candidate.decisionId === raised.id,
     );
     expect(event?.data).toEqual({ question: "Name?", option: "Board" });
+  });
+
+  it("are answered in the person's own words, kept as one more option marked theirs", async () => {
+    const raised = await raiseDecision(database, {
+      scope,
+      actor: alice,
+      decision: { question: "Colour?", options: ["Red", "Blue"] },
+      now: minutes(60),
+    });
+    const answered = await answerDecision(database, {
+      scope,
+      actor: bob,
+      decisionId: raised.id,
+      option: undefined,
+      own: "Green",
+      note: undefined,
+      now: minutes(61),
+    });
+    expect(answered.options).toEqual([
+      { id: "1", label: "Red" },
+      { id: "2", label: "Blue" },
+      { id: "3", label: "Green", own: true },
+    ]);
+    expect(answered.answer).toEqual({ option: "3", note: undefined, by: bob, at: minutes(61) });
+    const event = (await listEventsAfter(database, scope, 0, 200)).items.find(
+      (candidate) => candidate.kind === "decision.answered" && candidate.decisionId === raised.id,
+    );
+    expect(event?.data).toEqual({ question: "Colour?", option: "Green" });
   });
 
   it("list the ones that wait first, newest first within each", async () => {

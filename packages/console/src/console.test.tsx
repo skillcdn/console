@@ -14,6 +14,7 @@ import {
   connectHref,
   customPageHref,
   decisionHref,
+  decisionsHref,
   docHref,
   goalHref,
   matchRoute,
@@ -66,7 +67,22 @@ describe("matchRoute", () => {
       month: undefined,
       filter: {},
     });
-    expect(matchRoute("/projects/web/decisions/")).toEqual({ name: "decisions", project: "web" });
+    expect(matchRoute("/projects/web/decisions/")).toEqual({
+      name: "decisions",
+      project: "web",
+      page: undefined,
+    });
+    // The record's page is in the address; the first has none, and a page that is not one is nothing.
+    expect(matchRoute("/projects/web/decisions", "?page=3")).toEqual({
+      name: "decisions",
+      project: "web",
+      page: 3,
+    });
+    expect(matchRoute("/projects/web/decisions", "?page=0")).toEqual({ name: "not-found" });
+    expect(matchRoute("/projects/web/decisions", "?page=two")).toEqual({ name: "not-found" });
+    expect(decisionsHref("web", 3)).toBe("/projects/web/decisions?page=3");
+    expect(decisionsHref("web", 1)).toBe("/projects/web/decisions");
+    expect(decisionsHref("web")).toBe("/projects/web/decisions");
     expect(matchRoute("/projects/web-2/feed")).toEqual({ name: "feed", project: "web-2" });
     expect(matchRoute("/projects/web/archive")).toEqual({ name: "archive", project: "web" });
     expect(projectHref("web", "archive")).toBe("/projects/web/archive");

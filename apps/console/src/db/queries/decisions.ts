@@ -247,9 +247,11 @@ export async function raiseDecision(
 }
 
 /**
- * Answers a decision that waits, with one of its options, and tells the board. Rejects with a
- * {@link DecisionError} for a decision that is not there, one answered already, or an option
- * that is not one of its.
+ * Answers a decision that waits, with one of its options or with the person's own words, and
+ * tells the board. The person's own answer becomes one more option, numbered after the ones
+ * given and marked `own`, and is the one chosen, so that every reader of the answer finds a
+ * label as before. Rejects with a {@link DecisionError} for a decision that is not there, one
+ * answered already, or an option that is not one of its.
  */
 export async function answerDecision(
   database: Database,
@@ -257,12 +259,15 @@ export async function answerDecision(
     readonly scope: Scope;
     readonly actor: Actor;
     readonly decisionId: string;
-    readonly option: string;
+    /** The id of the chosen option; nothing when the person wrote their own. */
+    readonly option: string | undefined;
+    /** The person's own answer, when none of the options is it. */
+    readonly own: string | undefined;
     readonly note: string | undefined;
     readonly now: Date;
   },
 ): Promise<DecisionRecord> {
-  const { scope, actor, decisionId, option, note, now } = input;
+  const { scope, actor, decisionId, option, own, note, now } = input;
   return drizzleOf(database).transaction(async (tx) => {
     const [current] = await tx
       .select({
@@ -283,13 +288,19 @@ export async function answerDecision(
     if (current.answeredAt !== null) {
       throw new DecisionError("decision.answered");
     }
-    const chosen = current.options.find((candidate) => candidate.id === option);
+    const options: RestDecisionOption[] =
+      own === undefined
+        ? current.options
+        : [...current.options, { id: String(current.options.length + 1), label: own, own: true }];
+    const chosen =
+      own === undefined ? options.find((candidate) => candidate.id === option) : options.at(-1);
     if (chosen === undefined) {
       throw new DecisionError("decision.no_such_option");
     }
     await tx
       .update(decisions)
       .set({
+        options,
         answer: chosen.id,
         answerNote: note ?? null,
         answeredById: actor.id,

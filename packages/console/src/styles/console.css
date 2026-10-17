@@ -875,7 +875,8 @@ table {
     color var(--sc-transition);
 }
 
-.sc-button:disabled {
+.sc-button:disabled,
+.sc-button[aria-disabled="true"] {
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -1573,6 +1574,10 @@ table {
 }
 
 .sc-answer-option {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
   font-weight: var(--sc-weight-bold);
 }
 
@@ -1617,6 +1622,17 @@ table {
 .sc-option input {
   margin: 0;
   accent-color: var(--sc-color-accent);
+}
+
+/* The last choice is the person's own words: the radio, its label, and the line they write on. */
+.sc-option-own {
+  flex-wrap: wrap;
+}
+
+.sc-option-own .sc-input {
+  flex: 1 1 12rem;
+  min-width: 0;
+  min-height: 2rem;
 }
 
 /* The feed: a line per event, newest first. */
@@ -3020,7 +3036,7 @@ table {
   }
 }
 
-/* The record of the decisions: a row each. */
+/* The decisions waiting on a person's plate: a row each. */
 .sc-decision-log {
   display: grid;
   gap: var(--sc-space-2);
@@ -3060,18 +3076,109 @@ table {
   color: var(--sc-color-accent);
 }
 
-.sc-decision-row-answer {
-  color: var(--sc-color-success);
-  font-weight: var(--sc-weight-medium);
-  overflow-wrap: anywhere;
-}
-
 .sc-decision-row-meta {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--sc-space-2);
   color: var(--sc-color-text-muted);
+}
+
+/* The record of the decisions: a row each, what was asked on the left and what was answered on
+   the right, each with who and when under it; one column where the window is narrow. */
+.sc-decision-record {
+  display: grid;
+  gap: var(--sc-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sc-decision-record-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sc-space-3) var(--sc-space-6);
+  padding: var(--sc-space-3) var(--sc-space-4);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-sheet);
+  font-size: var(--sc-text-sm);
+}
+
+@media (min-width: 40rem) {
+  .sc-decision-record-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+.sc-decision-record-asked,
+.sc-decision-record-answer {
+  display: grid;
+  align-content: start;
+  gap: var(--sc-space-1);
+  min-width: 0;
+}
+
+.sc-decision-record-question {
+  font-weight: var(--sc-weight-medium);
+  overflow-wrap: anywhere;
+}
+
+.sc-decision-record-question a {
+  color: var(--sc-color-text);
+  text-decoration: none;
+}
+
+.sc-decision-record-question a:hover {
+  color: var(--sc-color-accent);
+}
+
+.sc-decision-record-question .sc-card-number {
+  margin-left: var(--sc-space-2);
+}
+
+.sc-decision-record-chosen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
+  color: var(--sc-color-success);
+  font-weight: var(--sc-weight-medium);
+  overflow-wrap: anywhere;
+}
+
+/* The word given with the answer: a few lines of it here, the whole on the decision's page. */
+.sc-decision-record-note {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  color: var(--sc-color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.sc-decision-record-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-1) var(--sc-space-2);
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-xs);
+}
+
+/* The way between the pages of the record: the step before, what is shown of how many, the step after. */
+.sc-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sc-space-3);
+  margin-top: var(--sc-space-3);
+}
+
+.sc-pager-range {
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
 }
 
 /* Who has what: a small table, the late numbers in the danger colour. */

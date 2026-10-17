@@ -417,19 +417,25 @@ export function formatDecisionLine(decision: RestDecision): string {
   return `${decision.id}  ${state}  ${decision.question}  (asked by ${asker(decision)})`;
 }
 
+/** The options, one a line; the person's own answer, when they wrote one, is the last and says so. */
 export function formatOptions(decision: RestDecision): string {
-  return decision.options.map((option) => `  ${option.id}) ${option.label}`).join("\n");
+  return decision.options
+    .map(
+      (option) =>
+        `  ${option.id}) ${option.label}${option.own === true ? "  (the person's own answer, not one given)" : ""}`,
+    )
+    .join("\n");
 }
 
-/** The answer, with who gave it; or that there is none yet. */
+/** The answer, with who gave it, and that it is in their own words when it is; or that there is none yet. */
 export function formatAnswer(decision: RestDecision): string {
   const { answer } = decision;
   if (answer === null) {
     return "waits for a person.";
   }
-  const label = decision.options.find((option) => option.id === answer.option)?.label;
+  const chosen = decision.options.find((option) => option.id === answer.option);
   const lines = [
-    `Answered: ${answer.option}) ${label ?? answer.option}, by ${answer.by.login} at ${answer.at}`,
+    `Answered: ${answer.option}) ${chosen?.label ?? answer.option}${chosen?.own === true ? ", in their own words" : ""}, by ${answer.by.login} at ${answer.at}`,
   ];
   if (answer.note !== null && answer.note.length > 0) {
     lines.push(`Note: ${answer.note}`);

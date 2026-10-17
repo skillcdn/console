@@ -98,6 +98,7 @@ import {
   calendarHref,
   customPageHref,
   decisionHref,
+  decisionsHref,
   docHref,
   type GoalTaskView,
   goalHref,
@@ -1112,6 +1113,8 @@ function ProjectPage(props: {
           taskHref={href}
           docHref={toDoc}
           decisionHref={(decision) => decisionHref(key, decision.id)}
+          page={route.page}
+          pageHref={(page) => decisionsHref(key, page)}
           onAnswer={onAnswer}
           onUpdate={onUpdate}
           busy={busy}

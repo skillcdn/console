@@ -72,6 +72,12 @@ export const ko: Messages = {
     copy: "복사",
     copied: "복사됨",
     showMore: (n, of) => `${of}개 중 ${n}개 더 보기`,
+    pager: {
+      label: "페이지",
+      previous: "이전",
+      next: "다음",
+      range: (from, to, of) => `${of}건 중 ${from}-${to}`,
+    },
   },
 
   nav: {
@@ -294,6 +300,9 @@ export const ko: Messages = {
     waitingForPerson: "사람을 기다리는 중입니다.",
     options: "선택지",
     notePlaceholder: "덧붙일 말이 있다면",
+    own: "직접 입력",
+    ownPlaceholder: "원하는 답을 한 줄로",
+    ownAnswer: "직접 입력",
     answer: "답변",
     asked: "질문",
     askedThrough: (agent) => `${agent}을(를) 통해 질문`,

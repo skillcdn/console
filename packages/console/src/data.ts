@@ -245,6 +245,28 @@ async function readTasks(
   return { items };
 }
 
+/** How many pages of the decisions are read before the record is shown as it stands. */
+const DECISIONS_MAX_PAGES = 20;
+
+/**
+ * The decisions of a project, whole: page after page while the server says there is more, so
+ * that the record is read to its end and the pages turn it without asking again.
+ */
+async function readDecisions(
+  scope: ProjectClient,
+  signal: AbortSignal | undefined,
+): Promise<{ readonly items: RestDecision[] }> {
+  const items: RestDecision[] = [];
+  for (let page = 0; page < DECISIONS_MAX_PAGES; page += 1) {
+    const result = await scope.decisions({ limit: LIST_LIMIT, offset: page * LIST_LIMIT }, signal);
+    items.push(...result.items);
+    if (!result.more) {
+      break;
+    }
+  }
+  return { items };
+}
+
 const wordsOf = (failure: unknown, fallback: string): string =>
   failure instanceof ApiError ? failure.message : fallback;
 
@@ -310,7 +332,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
         await Promise.all([
           scope.get(signal),
           readTasks(scope, signal),
-          scope.decisions(undefined, signal),
+          readDecisions(scope, signal),
           scope.goals({}, signal),
           scope.runs(undefined, signal),
           scope.members(signal),

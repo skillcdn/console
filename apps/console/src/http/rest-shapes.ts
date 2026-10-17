@@ -151,7 +151,11 @@ export function restDecision(decision: DecisionRecord): RestDecision {
     id: decision.id,
     question: decision.question,
     body: decision.body,
-    options: decision.options.map((option) => ({ id: option.id, label: option.label })),
+    options: decision.options.map((option) => ({
+      id: option.id,
+      label: option.label,
+      ...(option.own === true ? { own: true as const } : {}),
+    })),
     taskId: decision.taskId ?? null,
     taskNumber: decision.taskNumber ?? null,
     raisedBy: restPerson(decision.raisedBy),

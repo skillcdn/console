@@ -322,10 +322,11 @@ describe("one task", () => {
 });
 
 describe("decisions", () => {
-  it("list the waiting ones as cards with their options, and the answered ones as the record, a row each", () => {
+  it("list the waiting ones as cards with their options and a line of one's own, and the answered ones as the record, a row each", () => {
     const answered = decision({
       id: "0199c4d8-0000-7000-8000-000000000021",
       question: "Name?",
+      run: { id: "0199c4d8-0000-7000-8000-000000000040", agent: "Claude Code" },
       answer: { option: "2", note: "Shorter.", by: bob, at: "2026-10-09T12:00:00.000Z" },
     });
     const html = renderToStaticMarkup(
@@ -339,16 +340,66 @@ describe("decisions", () => {
     );
     expect(html).toContain('aria-label="Waiting"');
     expect(html).toContain('type="radio"');
-    // The record: what was asked, what was chosen, by whom, in a row that leads to the page.
+    // The last choice is the person's own words, written on a line of their own.
+    expect(html).toContain("Something else");
+    expect(html).toContain('placeholder="Your answer, in a line"');
+    // The record: what was asked and by whom, what was chosen with the word given and by whom,
+    // in a row that leads to the page.
     expect(html).toContain('aria-label="The record"');
     expect(html).toContain(`href="/projects/web/decisions/${answered.id}"`);
     expect(html).toContain("The second");
+    expect(html).toContain("Shorter.");
+    expect(html).toContain("Alice Example");
+    expect(html).toContain("asked through Claude Code");
     expect(html).toContain("bob");
-    expect(html).not.toContain("Shorter.");
     expect(html).toContain("#7");
     const log = renderToStaticMarkup(<DecisionLog decisions={[answered]} />);
     expect(log).toContain("Name?");
     expect(log).not.toContain("<a ");
+  });
+
+  it("mark an answer in the person's own words, and turn the record by pages", () => {
+    const own = decision({
+      options: [
+        { id: "1", label: "The first" },
+        { id: "2", label: "The second" },
+        { id: "3", label: "Neither: both", own: true },
+      ],
+      answer: { option: "3", note: null, by: bob, at: "2026-10-09T12:00:00.000Z" },
+    });
+    const card = renderToStaticMarkup(<DecisionCard decision={own} />);
+    expect(card).toContain("Neither: both");
+    expect(card).toContain("in their own words");
+    expect(renderToStaticMarkup(<DecisionLog decisions={[own]} />)).toContain("in their own words");
+    // Twenty-one rows are two pages: the page named is shown, and the steps lead to the others.
+    const many = Array.from({ length: 21 }, (_, index) =>
+      decision({
+        id: `0199c4d8-0000-7000-8000-0000000001${String(index).padStart(2, "0")}`,
+        question: `Question ${index}?`,
+        answer: own.answer,
+      }),
+    );
+    const pageHref = (page: number) => `/projects/web/decisions?page=${page}`;
+    const first = renderToStaticMarkup(<DecisionLog decisions={many} pageHref={pageHref} />);
+    expect(first).toContain("Question 0?");
+    expect(first).not.toContain("Question 20?");
+    expect(first).toContain("1-20 of 21");
+    expect(first).toContain('href="/projects/web/decisions?page=2"');
+    expect(first).toContain('aria-disabled="true"');
+    const second = renderToStaticMarkup(
+      <DecisionLog decisions={many} page={2} pageHref={pageHref} />,
+    );
+    expect(second).toContain("Question 20?");
+    expect(second).not.toContain("Question 0?");
+    expect(second).toContain("21-21 of 21");
+    expect(second).toContain('href="/projects/web/decisions?page=1"');
+    // A page past the end is the last; one page needs no steps.
+    expect(
+      renderToStaticMarkup(<DecisionLog decisions={many} page={9} pageHref={pageHref} />),
+    ).toContain("Question 20?");
+    expect(
+      renderToStaticMarkup(<DecisionLog decisions={[own]} pageHref={pageHref} />),
+    ).not.toContain("sc-pager");
   });
 
   it("read as a record: the context, the rationale, and what followed, with the way to write it", () => {

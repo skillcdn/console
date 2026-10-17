@@ -370,7 +370,7 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
       'ask "<question>" --option "<label>" --option "<label>" [...] [--body <markdown>|--file <path>] [--wait <seconds>]',
     synopsis:
       "Raises a decision a person must make, with options, and waits a while for the answer.",
-    about: `Raises a decision a person must make: the question, the options to choose from, and what they need to know. The run waits for the answer. The command waits 60 seconds for it unless --wait says otherwise, and exits with 3 if it is still to come: keep waiting with \`console decision <id> --wait 100\`, within what your shell gives one command. The decision's id is printed as soon as it is raised. ${ON_THE_RUN}`,
+    about: `Raises a decision a person must make: the question, the options to choose from, and what they need to know. The run waits for the answer. The command waits 60 seconds for it unless --wait says otherwise, and exits with 3 if it is still to come: keep waiting with \`console decision <id> --wait 100\`, within what your shell gives one command. The decision's id is printed as soon as it is raised. The person chooses one of the options, or answers in their own words: the answer then names one more option, their words, marked own; act on it as given. ${ON_THE_RUN}`,
     limits: [
       `question: one line, up to ${MAX_QUESTION_LENGTH} characters`,
       `options: ${MIN_OPTIONS} to ${MAX_OPTIONS}, each one line up to ${MAX_OPTION_LABEL_LENGTH} characters`,
@@ -383,7 +383,7 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     synopsis:
       "One decision in full; waits for its answer with --wait; writes what followed with --outcome.",
     about:
-      "One decision, with its context, its options, its answer and what followed. With --wait, holds on for the answer that long, and exits with 3 if it is still to come. With --outcome, writes down what followed the decision, so that it reads as a record.",
+      "One decision, with its context, its options, its answer (one of the options, or the person's own words as one more, marked own) and what followed. With --wait, holds on for the answer that long, and exits with 3 if it is still to come. With --outcome, writes down what followed the decision, so that it reads as a record.",
     limits: [`outcome: ${MARKDOWN}`],
     refusals: ["decision.not_found: no decision has that id"],
   },

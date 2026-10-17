@@ -1315,6 +1315,19 @@ describe("the console command", () => {
     expect(h.out()).toContain("what followed:");
   });
 
+  it("reads an answer in the person's own words as one more option, marked as theirs", async () => {
+    const own = {
+      ...DECISION,
+      options: [...DECISION.options, { id: "3", label: "Keep it, but warn", own: true }],
+      answer: { option: "3", note: null, by: { ...PERSON, login: "bob" }, at: WHEN },
+    };
+    const { fetch } = fakeConsole({ [`GET ${IN}/decisions/${DECISION.id}`]: { body: own } });
+    const h = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["decision", DECISION.id], h.io)).toBe(EXIT.ok);
+    expect(h.out()).toContain("  3) Keep it, but warn  (the person's own answer, not one given)");
+    expect(h.out()).toContain("Answered: 3) Keep it, but warn, in their own words, by bob");
+  });
+
   it("says what the console refused, with its code, and hints at what to do", async () => {
     const { fetch } = fakeConsole({
       [`GET ${IN}/tasks/7`]: { body: TASK },

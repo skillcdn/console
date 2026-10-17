@@ -740,6 +740,49 @@ describe("decisions", () => {
     ).toBe("2");
   });
 
+  it("are answered in the person's own words as one more option marked theirs, with an option or own and never both", async () => {
+    const raised = await send(alice, "POST", `${IN}/decisions`, {
+      question: "Which colour?",
+      options: [{ label: "Red" }, { label: "Blue" }],
+    });
+    const decision = restDecisionSchema.parse(await raised.json());
+    const both = await send(bob, "POST", `${IN}/decisions/${decision.id}/answer`, {
+      option: "1",
+      own: "Green",
+    });
+    expect(both.status).toBe(400);
+    expect(await errorOf(both)).toBe("request.invalid");
+    const neither = await send(bob, "POST", `${IN}/decisions/${decision.id}/answer`, {
+      note: "Hm.",
+    });
+    expect(await errorOf(neither)).toBe("request.invalid");
+    const answered = await send(bob, "POST", `${IN}/decisions/${decision.id}/answer`, {
+      own: "  Green, as the brand is  ",
+      note: "Neither fits.",
+    });
+    expect(answered.status, await answered.clone().text()).toBe(200);
+    const own = restDecisionSchema.parse(await answered.json());
+    expect(own.options).toEqual([
+      { id: "1", label: "Red" },
+      { id: "2", label: "Blue" },
+      { id: "3", label: "Green, as the brand is", own: true },
+    ]);
+    expect(own.answer).toMatchObject({ option: "3", note: "Neither fits." });
+    expect(own.answer?.by.login).toBe("bob");
+    // The board hears the label, as for an option given; the record reads back the same.
+    const events = restEventsSchema.parse(
+      await (await get(alice, `${IN}/events?after=0&decision=${decision.id}`)).json(),
+    );
+    expect(events.items.find((event) => event.kind === "decision.answered")?.data.option).toBe(
+      "Green, as the brand is",
+    );
+    expect(
+      restDecisionSchema
+        .parse(await (await get(alice, `${IN}/decisions/${decision.id}`)).json())
+        .options.at(-1),
+    ).toEqual({ id: "3", label: "Green, as the brand is", own: true });
+  });
+
   it("refuse one about a task that is nothing, too few options, and an id that is nothing", async () => {
     const orphan = await send(alice, "POST", `${IN}/decisions`, {
       question: "About nothing?",
