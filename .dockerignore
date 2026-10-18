@@ -30,5 +30,10 @@
 tmp
 docs
 **/*.md
-# What the image carries of the repository itself: its license (deploy/Dockerfile).
+# What the image carries of the repository itself: its license, and the console's own pack
+# served from the image, its manifest, skills and docs (deploy/Dockerfile, ADR-0031). An
+# exception below a rule wins over it.
 !LICENSE.md
+!SKILLCDN.md
+!skills/**
+!docs/**

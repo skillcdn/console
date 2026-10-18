@@ -138,8 +138,9 @@ jobs:
           curl -fsS -D - -o /dev/null 'http://127.0.0.1:11199/p/general/decisions' | grep -qi '^content-security-policy:'
           curl -fsS 'http://127.0.0.1:11199/api/v1/me' | grep -qF '"signIn":[]'
           curl -sS -o /dev/null -w '%{http_code}' 'http://127.0.0.1:11199/api/v1/projects' | grep -q '^401$'
-          # The license ships with the image.
-          docker run --rm --entrypoint sh skillcdn-console:ci -c 'test -s /app/LICENSE.md && test -d /app/migrations'
+          # The license ships with the image, and the console's own pack (ADR-0031): the manifest,
+          # the skills and the docs they link, which .dockerignore must let into the build context.
+          docker run --rm --entrypoint sh skillcdn-console:ci -c 'test -s /app/LICENSE.md && test -d /app/migrations && test -s /app/packs/skillcdn/console/SKILLCDN.md && test -s /app/packs/skillcdn/console/skills/working-the-board/SKILL.md && test -s /app/packs/skillcdn/console/docs/architecture.md'
           docker stop --time 30 api
           test "$(docker inspect --format '{{.State.ExitCode}}' api)" -eq 0
           docker logs api 2>&1 | grep -q 'shutdown complete'
