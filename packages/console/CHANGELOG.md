@@ -1,5 +1,21 @@
 # @skillcdn/console
 
+## 0.3.0
+
+### Minor Changes
+
+- [`e3e7c13`](https://github.com/skillcdn/console/commit/e3e7c1375d0d4d3c7399cd62ef9a98e84e8d8a3a) Thanks [@samo-lucid](https://github.com/samo-lucid)! - Breaking: the pack of a project is read as the `skillcdn` command reads one (ADR-0031), and the read routes of the console's API answer what the pack answered, in the shapes of `@skillcdn/core`: `GET .../skills/one`, `.../skills/browse`, `.../skills/find` and `.../skills/file` carry it as `read` (`RestSkill`, `RestBrowse`, `RestFind`, `RestFile`), `null` unless `ready`, with the pack's own refusal beside the status as `refusal` (`restPackRefusalSchema`); `GET .../skills` keeps its `items` for the pages and carries the `mounts` answer as `mount` (`RestMount`); `source`, `page` and a skill's `page` are `null` for a pack read from a directory on the console's machine (`/local/<owner>/<name>`, `SKILLS_DIR`). `restSkillPageSchema`, `restSkillTextSchema`, `restSkillBrowseEntrySchema` and `restSkillFindItemSchema` are gone with the shapes of the console's own. The package is built on SkillCDN 0.3, `@skillcdn/core` 0.3.0.
+  
+  The command renders the pack as an MCP client's model is given it, with the renderers of `@skillcdn/core` and the reads named as the console's commands: `console skills` prints what a client is told on connect and every skill and document, `console skills <folder>` the folder whole, `console skills --search <words>` one page with `--cursor <cursor>` to continue, `console skill <path>` the skill whole with its rules first, `console skill --file <path>` the file whole; `--json` prints what the pack answered, the pages joined. The Skills page says when a pack is read from the console's machine.
+
+- [`389d56b`](https://github.com/skillcdn/console/commit/389d56b9312ea4fa935fd5add203456f8f2d2efd) Thanks [@samo-lucid](https://github.com/samo-lucid)! - The package is versioned on SkillCDN's line from here on (ADR-0034): the major and the minor are those of the one version of the main repository's packages the console is built on, `0.3` for this release, and the patch is the console's own, so `@skillcdn/console` 0.3.x is the console for SkillCDN 0.3. Within a line every release is a patch, whose entry starts with `Breaking:` where it changes or removes something that exists; the next line of SkillCDN is a minor. The packages the console is built on, `@skillcdn/core`, `@skillcdn/indexer`, `@skillcdn/reader`, `@skillcdn/client` and `@skillcdn/brand`, are taken at one version, SkillCDN 0.3.0 here.
+
+### Patch Changes
+
+- [`66f1ecb`](https://github.com/skillcdn/console/commit/66f1ecbd571d4791364c16dfcb1ed35df247810c) Thanks [@samo-lucid](https://github.com/samo-lucid)! - A decision is answered in the person's own words where none of the options fits: the answer form has a line of one's own under the options, `POST .../decisions/<id>/answer` takes `own` in place of `option` (one of the two, `restAnswerInputSchema`), and the answer becomes one more option of the decision, marked `own: true` (`restDecisionOptionSchema`) and the one chosen, so that the command, the pages and the events read a label as before; `console decision` says when an answer is in the person's own words.
+  
+  The record of the decisions (`DecisionLog`) is rebuilt: a row shows the question with its task, who asked and when, through which agent, and the answer with the word given, marked when it is the person's own, with who answered and when; it turns by pages of twenty (`Pager`, `pageOf`, `RECORD_PAGE_SIZE`), each at an address (`?page=`, `decisionsHref`, and `page` on the `decisions` route, passed to `DecisionList` as `page` and `pageHref`), and the page reads the decisions whole, so that a record past one page of the API loses nothing. Its classes are `sc-decision-record`, `sc-decision-record-row`, `-asked`, `-answer`, `-question`, `-chosen`, `-note` and `-meta`, and `sc-pager` with `sc-pager-range`; `sc-decision-log` and `sc-decision-row*` stay the plate's, and `sc-decision-row-answer` is gone; `sc-option-own` is the line of one's own on the answer form. `Time` takes `precision="day"` for the day alone, with the moment as its title.
+
 ## 0.1.24
 
 ### Patch Changes
