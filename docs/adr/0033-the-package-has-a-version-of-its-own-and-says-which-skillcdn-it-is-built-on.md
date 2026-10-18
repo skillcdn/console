@@ -1,6 +1,6 @@
 # ADR-0033: The package has a version of its own, and says which SkillCDN it is built on
 
-- Status: Accepted
+- Status: Superseded by [ADR-0034](0034-the-package-is-versioned-on-skillcdns-line-one-line-at-a-time-with-a-patch-of-its-own.md), which returns to SkillCDN's line, adopted one line at a time
 - Date: 2026-10-18
 - Supersedes [ADR-0032](0032-the-version-is-skillcdns-with-a-patch-of-its-own-and-the-packages-are-taken-at-one-version.md); amends [ADR-0007](0007-the-package-is-published-through-trusted-publishing-and-versioned-on-the-core-line.md) (points 2 and 3, the version on the line of `@skillcdn/core`) and [ADR-0025](0025-the-command-names-its-version-on-every-request-and-the-console-holds-it-to-the-range-it-takes.md) (point 3, the range before 1.0). The line the console is built on is held by `scripts/check-skillcdn-line.mjs`; what a changeset says is in [AGENTS.md](../../AGENTS.md#workflow); what the API says is in [specs/rest.md](../specs/rest.md#get-apiv1me).
 

@@ -34,8 +34,6 @@ export interface AppDependencies {
   readonly web: WebRoot | undefined;
   /** The console's version: the package's, which the command is held to (ADR-0025). */
   readonly version: string;
-  /** The SkillCDN line the console is built on, the one version of the main repository's packages (ADR-0033). */
-  readonly skillcdn: string;
   readonly clock: Clock;
   readonly logger: Logger;
   readonly requests: {
@@ -115,11 +113,7 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
     database,
     clock,
     logger,
-    console: {
-      version: version.version,
-      clientRange: version.clientRange,
-      skillcdn: dependencies.skillcdn,
-    },
+    console: { version: version.version, clientRange: version.clientRange },
   });
   registerRest(app, {
     database,

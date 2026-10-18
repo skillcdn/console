@@ -33,8 +33,6 @@ export const BASE_URL = "http://console.test";
 export const SIGN_IN_URL = "https://console.test";
 /** The console's version a harness runs as (ADR-0025), fixed so that the tests do not move with the package's. */
 export const HARNESS_VERSION = "0.1.18";
-/** The SkillCDN line a harness says it is built on (ADR-0033), fixed likewise. */
-export const HARNESS_SKILLCDN = "0.3";
 
 export interface Harness {
   readonly app: Hono<AppEnv>;
@@ -166,7 +164,6 @@ export function createHarness(testDatabase: TestDatabase, options: HarnessOption
       packDirectory: options.skills?.directory,
       blobs: options.blobs,
       version: HARNESS_VERSION,
-      skillcdn: HARNESS_SKILLCDN,
     },
   );
   const listener: EventListener | undefined =

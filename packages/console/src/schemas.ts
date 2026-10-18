@@ -209,14 +209,7 @@ export const restMeSchema = z.object({
    * Every console answers it from 0.1.18; read as optional, so that a command or a console
    * built on this package still reads an older console's answer, and says it is older.
    */
-  console: z.optional(
-    z.object({
-      version: z.string(),
-      clientRange: z.string(),
-      /** The SkillCDN line the console is built on (`0.3`); a console from before 0.3.1 says nothing of it (ADR-0033). */
-      skillcdn: z.optional(z.string()),
-    }),
-  ),
+  console: z.optional(z.object({ version: z.string(), clientRange: z.string() })),
 });
 export type RestMe = z.infer<typeof restMeSchema>;
 

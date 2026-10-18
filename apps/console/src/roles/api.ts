@@ -40,7 +40,7 @@ import type { IdentityProvider } from "../ports/identity-provider.js";
 import type { OrganizationDirectory } from "../ports/organization.js";
 import type { PackSource } from "../ports/skill-source.js";
 import { Skills, type SkillsConfig } from "../skills.js";
-import { APP_NAME, APP_SKILLCDN, APP_VERSION } from "../version.js";
+import { APP_NAME, APP_VERSION } from "../version.js";
 
 /** How often what time has ended is removed, when this process does the worker's work. */
 const JANITOR_INTERVAL_MS = 15 * 60_000;
@@ -74,8 +74,6 @@ export interface ApiPorts {
   readonly packDirectory?: PackSource | undefined;
   /** The console's version, which the command is held to (ADR-0025). The package's when left out; for tests. */
   readonly version?: string | undefined;
-  /** The SkillCDN line the console says it is built on (ADR-0033). The package's when left out; for tests. */
-  readonly skillcdn?: string | undefined;
 }
 
 export type ApiConfig = Pick<Config, "workspace"> & {
@@ -230,7 +228,6 @@ export function createApi(
     skills,
     web: ports.web,
     version: ports.version ?? APP_VERSION,
-    skillcdn: ports.skillcdn ?? APP_SKILLCDN,
     clock,
     logger,
     isShuttingDown: ports.isShuttingDown,

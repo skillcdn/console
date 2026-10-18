@@ -80,7 +80,7 @@ src/
   testing/       test support: the providers' side of signing in for a handful of made-up people,
                  and the harness that wires the app for the integration tests (not compiled)
   errors.ts      the base class of errors that cross a boundary, with their stable code
-  version.ts     what the process calls itself, its version and the SkillCDN line it is built on
+  version.ts     what the process calls itself
 web/             the default UI: one page that mounts the package's composition, built by Vite into
                  web/dist, which the api role serves from WEB_ROOT with the package's
                  @skillcdn/console/web (the files of the build, and the page for every other path,

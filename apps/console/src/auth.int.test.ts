@@ -104,7 +104,7 @@ describe("signing in", () => {
       },
       language: null,
       agent: null,
-      console: { version: "0.1.18", clientRange: ">=0.1.0 <0.2.0", skillcdn: "0.3" },
+      console: { version: "0.1.18", clientRange: ">=0.1.18 <0.2.0" },
       person: {
         id: expect.stringMatching(/^[0-9a-f-]{36}$/),
         login: "Alice",
@@ -125,7 +125,7 @@ describe("signing in", () => {
       },
       language: null,
       agent: null,
-      console: { version: "0.1.18", clientRange: ">=0.1.0 <0.2.0", skillcdn: "0.3" },
+      console: { version: "0.1.18", clientRange: ">=0.1.18 <0.2.0" },
       person: null,
       signIn: [{ key: "gh", label: "GitHub" }],
     });
@@ -405,7 +405,7 @@ describe("a deployment where nobody signs in", () => {
       },
       language: null,
       agent: null,
-      console: { version: "0.1.18", clientRange: ">=0.1.0 <0.2.0", skillcdn: "0.3" },
+      console: { version: "0.1.18", clientRange: ">=0.1.18 <0.2.0" },
       person: null,
       signIn: [],
     });

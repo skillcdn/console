@@ -895,12 +895,6 @@ describe("tokens", () => {
             id: "0199c4d8-0000-7000-8000-000000000032",
             name: "forever",
             expiresAt: null,
-            client: "0.0.9",
-          },
-          {
-            ...token,
-            id: "0199c4d8-0000-7000-8000-000000000033",
-            name: "desk",
             client: "0.1.17",
           },
         ]}
@@ -913,14 +907,12 @@ describe("tokens", () => {
     expect(html).toContain("Last active");
     expect(html).toContain("Good until");
     expect(html).toContain("Does not expire");
-    // Which version of the command each agent runs, and whether the console still takes it:
-    // another minor is refused, an older patch of the same minor is taken (ADR-0033).
+    // Which version of the command each agent runs, and whether the console still takes it.
     expect(html).toContain("console 0.1.18");
-    expect(html).toContain("console 0.0.9");
-    expect(html.split("must be updated")).toHaveLength(2);
     expect(html).toContain("console 0.1.17");
-    expect(html.split("an update is available")).toHaveLength(2);
-    expect(html.match(/>Disconnect</g)).toHaveLength(4);
+    expect(html).toContain("must be updated");
+    expect(html.split("must be updated")).toHaveLength(2);
+    expect(html.match(/>Disconnect</g)).toHaveLength(3);
     const readOnly = renderToStaticMarkup(<TokenList tokens={[token]} />);
     expect(readOnly).not.toContain("Disconnect");
     expect(renderToStaticMarkup(<TokenList tokens={[]} empty={<p>none</p>} />)).toBe("<p>none</p>");

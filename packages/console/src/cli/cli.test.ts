@@ -121,7 +121,7 @@ const ME = {
   agent: "Claude Code on laptop",
   language: null,
   signIn: [],
-  console: { version: "0.1.18", clientRange: ">=0.1.0 <0.2.0", skillcdn: "0.1" },
+  console: { version: "0.1.18", clientRange: ">=0.1.18 <0.2.0" },
 };
 const TOKEN = {
   id: "0199c4d8-0000-7000-8000-000000000030",
@@ -642,7 +642,7 @@ describe("the console command", () => {
     });
     expect(await runCli(["whoami"], who.io)).toBe(EXIT.ok);
     expect(who.out()).toBe(
-      `alice (member) at Acme, ${ORIGIN}; project web\nWhat this organization asks of agents: console rules. How the board is worked: the skill working-the-board, shipped with this command (console skills says where it is).\nThis command is of a version it does not know; the console is 0.1.18, built on SkillCDN 0.1, and takes >=0.1.0 <0.2.0.\n`,
+      `alice (member) at Acme, ${ORIGIN}; project web\nWhat this organization asks of agents: console rules. How the board is worked: the skill working-the-board, shipped with this command (console skills says where it is).\nThis command is of a version it does not know; the console is 0.1.18 and takes >=0.1.18 <0.2.0.\n`,
     );
   });
 
@@ -2026,7 +2026,7 @@ describe("configuring, as the person", () => {
 });
 
 describe("the versions of the command and the console (ADR-0025)", () => {
-  const SAYS = { version: "0.1.18", clientRange: ">=0.1.0 <0.2.0" };
+  const SAYS = { version: "0.1.18", clientRange: ">=0.1.18 <0.2.0" };
   const GLOBAL: Install = {
     kind: "global",
     manager: "npm",
@@ -2044,7 +2044,7 @@ describe("the versions of the command and the console (ADR-0025)", () => {
     expect(await runCli(["whoami"], h.io)).toBe(EXIT.ok);
     expect(new Headers(calls[0]?.init?.headers).get("user-agent")).toBe(userAgent);
     expect(h.out()).toBe(
-      `alice (member) at Acme, ${ORIGIN}; project web\nWhat this organization asks of agents: console rules. How the board is worked: the skill working-the-board, shipped with this command (console skills says where it is).\nThis command is 0.1.18, installed for the machine with npm in C:/Users/alice/AppData/Roaming/npm; the console is 0.1.18, built on SkillCDN 0.1, and takes >=0.1.0 <0.2.0.\n`,
+      `alice (member) at Acme, ${ORIGIN}; project web\nWhat this organization asks of agents: console rules. How the board is worked: the skill working-the-board, shipped with this command (console skills says where it is).\nThis command is 0.1.18, installed for the machine with npm in C:/Users/alice/AppData/Roaming/npm; the console is 0.1.18 and takes >=0.1.18 <0.2.0.\n`,
     );
     expect(h.err()).toBe("");
     // Where the skill working-the-board is, as the machine writes paths, when the command knows.
@@ -2117,20 +2117,7 @@ describe("the versions of the command and the console (ADR-0025)", () => {
     });
     expect(await runCli(["tasks"], ahead.io)).toBe(EXIT.ok);
     expect(ahead.err()).toBe(
-      "This command (0.1.19) is newer than the console (0.1.18, which takes >=0.1.0 <0.2.0): it works, and what the console has not got yet is refused as not found; nothing to do until then. The console's operator updates it; to match the console meanwhile: npm install -g @skillcdn/console@0.1.18\n",
-    );
-    // Before 1.0 a command older than the console, within the minor, is answered and told once
-    // that a newer one exists (ADR-0033).
-    const olderPatch = harness({
-      fetch: fakeConsole(NO_TASKS, SAYS).fetch,
-      env: SIGNED_IN,
-      version: "0.1.17",
-      install: GLOBAL,
-      notices: memoryNotices().store,
-    });
-    expect(await runCli(["tasks"], olderPatch.io)).toBe(EXIT.ok);
-    expect(olderPatch.err()).toBe(
-      "A newer command exists: the console runs 0.1.18, this command is 0.1.17. Update it: npm install -g @skillcdn/console@0.1.18\n",
+      "This command (0.1.19) is newer than the console (0.1.18, which takes >=0.1.18 <0.2.0): it works, and what the console has not got yet is refused as not found; nothing to do until then. The console's operator updates it; to match the console meanwhile: npm install -g @skillcdn/console@0.1.18\n",
     );
     // The same version, or a console that says nothing of itself: nothing to say.
     const same = harness({
