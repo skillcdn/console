@@ -20,7 +20,7 @@ import {
   type RestSkillBrowse,
   type RestSkillFile,
   type RestSkillLoad,
-  type RestSkillPage,
+  type RestSkills,
   type RestTaskPatch,
 } from "../schemas.js";
 import {
@@ -75,11 +75,6 @@ import {
   formatRules,
   formatRun,
   formatRunLine,
-  formatSkillBrowse,
-  formatSkillFile,
-  formatSkillFind,
-  formatSkillLoad,
-  formatSkills,
   formatTask,
   formatTaskLine,
   formatVersion,
@@ -89,6 +84,22 @@ import {
 import { COMMAND_HELP, helpFor, ownSkillPath, usage } from "./help.js";
 import { describeInstall, type Install, updateCommandFor } from "./install.js";
 import type { NoticeStore } from "./notices.js";
+import {
+  bodyOfFile,
+  bodyOfFolder,
+  bodyOfSkill,
+  formatSkillBrowse,
+  formatSkillFile,
+  formatSkillFind,
+  formatSkillLoad,
+  formatSkills,
+  joinFile,
+  joinFolder,
+  joinSkill,
+  type PackSummary,
+  skillPathIn,
+  summaryOf,
+} from "./pack.js";
 import { createServeHandler, DEFAULT_SERVE_PORT, type Listen } from "./serve.js";
 
 // The `console` command (docs/specs/cli.md): the agent's side of the console. A thin client of
@@ -1003,10 +1014,19 @@ const MAX_SKILL_PAGES = 64;
 /** How many results a search answers at most: what the deployment allows on one page. */
 const MAX_FIND_LIMIT = 25;
 
+/** The pack of the project as the console lists it, and what its reads are rendered at; none when the pack did not answer. */
+async function packOf(
+  project: ProjectClient,
+): Promise<{ readonly listing: RestSkills; readonly summary: PackSummary | undefined }> {
+  const listing = await project.skills();
+  return { listing, summary: summaryOf(listing) };
+}
+
 const skills: Command = async (args, io) => {
   const { values, positionals } = parse(args, {
     search: { type: "string" },
     limit: { type: "string" },
+    cursor: { type: "string" },
   });
   if (positionals.length > 1) {
     throw misuse("Say one folder: console skills [<folder>] [--search <words>]");
@@ -1016,8 +1036,11 @@ const skills: Command = async (args, io) => {
   const folder = given === undefined || given === "/" || given === "." ? undefined : given;
   const words = text(values, "search");
   const limit = text(values, "limit");
-  if (words === undefined && limit !== undefined) {
-    throw misuse("--limit goes with --search: console skills --search <words> [--limit <n>]");
+  const cursor = text(values, "cursor");
+  if (words === undefined && (limit !== undefined || cursor !== undefined)) {
+    throw misuse(
+      "--limit and --cursor go with --search: console skills --search <words> [--limit <n>] [--cursor <cursor>]",
+    );
   }
   const atMost = limit === undefined ? undefined : Number(limit);
   if (
@@ -1028,37 +1051,41 @@ const skills: Command = async (args, io) => {
   }
   const session = await open(io, values);
   const project = await session.project();
+  const { listing, summary } = await packOf(project);
+  // The pack as it stands; or why it does not answer, which a folder or a search would meet too.
+  if (summary === undefined || (words === undefined && given === undefined)) {
+    answer(io, session, listing, () => formatSkills(listing, io.skillsDir));
+    return EXIT.ok;
+  }
   if (words !== undefined) {
-    // One page of what the words find; more is said, and narrowed by the agent, not fetched.
-    const found = await project.skillFind(words, { path: folder, limit: atMost });
-    answer(io, session, found, () => formatSkillFind(found));
+    // One page of what the words find; more is said, and asked for with --cursor.
+    const found = await project.skillFind(words, { path: folder, limit: atMost, cursor });
+    answer(io, session, found, () => formatSkillFind(found, summary));
     return EXIT.ok;
   }
-  if (given !== undefined) {
-    // The folder whole: its pages until the end, as the deployment lists them.
-    const folders: NonNullable<RestSkillBrowse["folder"]>[] = [];
-    let cursor: string | undefined;
-    let last: RestSkillBrowse | undefined;
-    for (let n = 0; n < MAX_SKILL_PAGES; n += 1) {
-      last = await project.skillBrowse({ path: folder, cursor });
-      if (last.status !== "ready" || last.folder === null) {
-        break;
-      }
-      folders.push(last.folder);
-      if (last.folder.nextCursor === null) {
-        break;
-      }
-      cursor = last.folder.nextCursor;
+  // The folder whole: its pages until the end, as the pack lists them.
+  const pages: RestSkillBrowse[] = [];
+  let next: string | undefined;
+  let last: RestSkillBrowse | undefined;
+  for (let n = 0; n < MAX_SKILL_PAGES; n += 1) {
+    last = await project.skillBrowse({ path: folder, cursor: next });
+    if (last.read?.status !== "ready") {
+      break;
     }
-    if (last === undefined) {
-      throw failed("The folder could not be read.");
+    pages.push(last);
+    next = last.read.nextCursor ?? undefined;
+    if (next === undefined) {
+      break;
     }
-    const browsed = last;
-    answer(io, session, { ...browsed, folders }, () => formatSkillBrowse(browsed, folders));
-    return EXIT.ok;
   }
-  const found = await project.skills();
-  answer(io, session, found, () => formatSkills(found, io.skillsDir));
+  if (last === undefined) {
+    throw failed("The folder could not be read.");
+  }
+  const browsed = last;
+  const whole = joinFolder(pages, summary);
+  answer(io, session, { ...browsed, read: whole === undefined ? null : bodyOfFolder(whole) }, () =>
+    formatSkillBrowse(browsed, whole),
+  );
   return EXIT.ok;
 };
 
@@ -1074,83 +1101,72 @@ const skill: Command = async (args, io) => {
   }
   const session = await open(io, values);
   const project = await session.project();
+  const { listing, summary } = await packOf(project);
+  if (summary === undefined) {
+    answer(io, session, listing, () => formatSkills(listing, io.skillsDir));
+    return EXIT.ok;
+  }
   if (file !== undefined) {
-    // The file whole, page after page, as the console reads it from the deployment.
-    const parts: string[] = [];
+    // The file whole, page after page, as the console reads it from the pack.
+    const pages: RestSkillFile[] = [];
     let offset: number | undefined;
     let last: RestSkillFile | undefined;
-    for (let pages = 0; pages < MAX_SKILL_PAGES; pages += 1) {
+    for (let n = 0; n < MAX_SKILL_PAGES; n += 1) {
       last = await project.skillFile(file, offset === undefined ? {} : { offset });
-      if (last.status !== "ready" || last.file === null) {
+      if (last.read === null) {
         break;
       }
-      parts.push(last.file.content);
-      if (last.file.nextOffset === null) {
+      pages.push(last);
+      if (last.read.kind !== "file" || last.read.nextOffset === null) {
         break;
       }
-      offset = last.file.nextOffset;
+      offset = last.read.nextOffset;
     }
     if (last === undefined) {
       throw failed("The file could not be read.");
     }
-    const read = last;
-    const content = parts.join("");
-    answer(io, session, { ...read, content }, () => formatSkillFile(read, content));
+    const fileRead = last;
+    const whole = joinFile(pages, summary);
+    answer(io, session, { ...fileRead, read: whole === undefined ? null : bodyOfFile(whole) }, () =>
+      formatSkillFile(fileRead, whole),
+    );
     return EXIT.ok;
   }
-  const { path, pack } = skillPathOf(
+  const wanted = skillPathIn(
     theOne(
       positionals,
       "Say which skill: console skill <path of its SKILL.md>, or console skill --file <path> for a file of the pack",
     ),
+    listing.address,
   );
+  if ("error" in wanted) {
+    throw misuse(wanted.error);
+  }
   // The skill whole: its pages until complete, the rules first, as load_skill lays them out.
-  const pages: RestSkillPage[] = [];
+  const pages: RestSkillLoad[] = [];
   let cursor: string | undefined;
   let last: RestSkillLoad | undefined;
   for (let n = 0; n < MAX_SKILL_PAGES; n += 1) {
-    last = await project.skill(path, cursor);
-    if (last.status !== "ready" || last.skill === null) {
+    last = await project.skill(wanted.path, cursor);
+    if (last.read?.status !== "ready") {
       break;
     }
-    pages.push(last.skill);
-    if (last.skill.complete || last.skill.nextCursor === null) {
+    pages.push(last);
+    cursor = last.read.skill.nextCursor ?? undefined;
+    if (last.read.skill.complete === true || cursor === undefined) {
       break;
     }
-    cursor = last.skill.nextCursor;
   }
   if (last === undefined) {
     throw failed("The skill could not be read.");
   }
-  // A URI of another pack would read this pack's skill at the same path, or nothing: said instead.
-  if (pack !== undefined && last.address !== null && last.address !== pack) {
-    throw misuse(
-      `That URI is of another pack, ${pack}; this project's pack is at ${last.address}. Say the path of the SKILL.md, or a URI console skills lists.`,
-    );
-  }
   const loaded = last;
-  answer(io, session, { ...loaded, pages }, () => formatSkillLoad(loaded, pages));
+  const whole = joinSkill(pages, summary);
+  answer(io, session, { ...loaded, read: whole === undefined ? null : bodyOfSkill(whole) }, () =>
+    formatSkillLoad(loaded, whole),
+  );
   return EXIT.ok;
 };
-
-/**
- * A skill's path as given, or taken out of the URI `console skills` lists beside it
- * (`skill://gh/<owner>/<repo>/<path>`), with the pack the URI names, for the read to check.
- */
-function skillPathOf(given: string): { readonly path: string; readonly pack?: string } {
-  const uri = /^skill:\/\/(gh\/[^/]+\/[^/]+)\/(.+)$/.exec(given);
-  const named = uri?.[1];
-  const within = uri?.[2];
-  if (named !== undefined && within !== undefined) {
-    return { path: within, pack: `/${named}` };
-  }
-  if (given.startsWith("skill://")) {
-    throw misuse(
-      `Not a skill's URI the console knows: ${given}. Say the path of its SKILL.md from the repository's root, or the URI console skills lists.`,
-    );
-  }
-  return { path: given };
-}
 
 /** A version number given as a flag, or nothing; anything else is not understood. */
 function versionOf(given: string | undefined): number | undefined {

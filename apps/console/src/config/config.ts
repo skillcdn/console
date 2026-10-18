@@ -210,6 +210,7 @@ const environmentSchema = z.object({
 
   SKILLCDN_URL: origin.default("https://skillcdn.ai"),
   SKILLS_ADDRESS: z.string().trim().min(1).max(MAX_ADDRESS_LENGTH).optional(),
+  SKILLS_DIR: z.string().min(1).optional(),
 
   S3_ENDPOINT: origin.optional(),
   S3_BUCKET: z
@@ -382,10 +383,15 @@ export interface Config {
     /** Directory of a build of the default UI to serve. Unset: there is no UI, API only. */
     readonly root: string | undefined;
   };
-  /** The organization's skills: the SkillCDN deployment they are read through, and their address there, or none. */
+  /**
+   * The organization's skills: the SkillCDN deployment they are read through, their address
+   * there, or none; and the directory the packs of `local` addresses are read from, laid out as
+   * `<owner>/<name>`, or none (ADR-0031).
+   */
   readonly skills: {
     readonly source: string;
     readonly address: Address | undefined;
+    readonly directory: string | undefined;
   };
   readonly blobs: {
     /** Where the bytes of files go. Unset: the rows of the database. */
@@ -729,7 +735,7 @@ export function loadConfig(
     worker: { inProcess: env.WORKER_IN_PROCESS, archiveAfterDays: env.TASK_ARCHIVE_AFTER_DAYS },
     auth,
     web: { root: env.WEB_ROOT },
-    skills: { source: env.SKILLCDN_URL, address },
+    skills: { source: env.SKILLCDN_URL, address, directory: env.SKILLS_DIR },
     blobs: { bucket },
   };
 }

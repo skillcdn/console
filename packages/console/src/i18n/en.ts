@@ -9,6 +9,7 @@ import type {
   ProjectVisibility,
   ProviderKey,
   RunStatus,
+  SkillsStatus,
   TaskPriority,
   TaskState,
 } from "../vocabulary.js";
@@ -671,6 +672,14 @@ export const en = {
     connect:
       "An agent reads these with the console command (console skill <path>), or through its own MCP connection to this address, which a person makes once:",
     connectLink: "how, on the address's page at SkillCDN",
+    fromMachine: "Read from a directory on the console's machine, at",
+    connectLocal:
+      "An agent reads these with the console command (console skill <path>); the pack is on the console's machine and nowhere else.",
+    localStatus: {
+      not_found:
+        "No pack is served from the console's machine at this address: whoever runs the console puts it in the packs directory, as <owner>/<name>.",
+      unavailable: "The pack could not be read from the console's machine. Look again later.",
+    } as Partial<Record<SkillsStatus, string>>,
     status: {
       indexing: "SkillCDN is still indexing the repository. Look again in a moment.",
       failed: "SkillCDN could not index the repository. What it found is on the address's page.",

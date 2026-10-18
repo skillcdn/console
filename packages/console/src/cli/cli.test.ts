@@ -186,6 +186,73 @@ const RULES = {
 const ORIGIN = "https://console.test";
 const SIGNED_IN = { CONSOLE_URL: ORIGIN, CONSOLE_TOKEN: "cns_t_secret", CONSOLE_PROJECT: "web" };
 const IN = "/api/v1/projects/web";
+
+// The pack of the project, as the console answers it: what the address serves, as the
+// deployment answered (ADR-0031), and the listing the pages show.
+const COMMIT = "0123456789abcdef0123456789abcdef01234567";
+const MOUNT = {
+  address: "/gh/acme/skills",
+  repository: {
+    host: "gh",
+    owner: "acme",
+    name: "skills",
+    defaultBranch: "main",
+    description: null,
+    avatar: "https://avatars.example/acme.png",
+  },
+  ref: null,
+  pinned: false,
+  commit: COMMIT,
+  path: "",
+  verified: false,
+  image: null,
+  index: {
+    status: "ready",
+    truncated: false,
+    manifest: {
+      path: "SKILLCDN.md",
+      name: "Acme",
+      description: "What Acme does, as skills.",
+      language: "en",
+      translations: {},
+    },
+    skillCount: 1,
+    documentCount: 12,
+    skills: [
+      {
+        path: "review/SKILL.md",
+        name: "review",
+        directory: "review",
+        description: "Reviews a change.",
+        warnings: [],
+        translations: {},
+      },
+    ],
+    documents: [{ path: "docs/guide.md", title: "Guide", summary: null }],
+    diagnostics: [],
+  },
+};
+const LISTING = {
+  address: "/gh/acme/skills",
+  source: "https://skillcdn.test",
+  page: "https://skillcdn.test/gh/acme/skills",
+  status: "ready",
+  refusal: null,
+  pack: { name: "Acme", description: "What Acme does, as skills.", language: "en" },
+  counts: { skills: 1, documents: 12 },
+  items: [
+    {
+      name: "review",
+      description: "Reviews a change.",
+      directory: "review",
+      path: "review/SKILL.md",
+      page: "https://skillcdn.test/gh/acme/skills?skill=review%2FSKILL.md",
+      uri: "skill://gh/acme/skills/review/SKILL.md",
+      translations: {},
+    },
+  ],
+  mount: MOUNT,
+};
 const OPEN_RUNS = `GET ${IN}/runs?open=true&mine=true`;
 
 interface Answer {
@@ -650,43 +717,30 @@ describe("the console command", () => {
     expect(words.out()).toBe("#7  ready  high  Fix the parser  (owner alice)\n");
   });
 
-  it("lists the organization's skills, the pack by name and by count, each with what an agent loads it by", async () => {
-    const skills = {
-      address: "/gh/acme/skills",
-      source: "https://skillcdn.test",
-      page: "https://skillcdn.test/gh/acme/skills",
-      status: "ready",
-      pack: { name: "Acme", description: "What Acme does, as skills.", language: "en" },
-      counts: { skills: 1, documents: 12 },
-      items: [
-        {
-          name: "review",
-          description: "Reviews a change.",
-          directory: "review",
-          path: "review/SKILL.md",
-          page: "https://skillcdn.test/gh/acme/skills?skill=review%2FSKILL.md",
-          uri: "skill://gh/acme/skills/review/SKILL.md",
-          translations: {},
-        },
-      ],
-    };
-    const { fetch } = fakeConsole({ [`GET ${IN}/skills`]: { body: skills } });
+  it("lists the pack as a client is told of it on connect, every skill and document, and where the console's own skills are", async () => {
+    const { fetch } = fakeConsole({ [`GET ${IN}/skills`]: { body: LISTING } });
     const h = harness({
       fetch,
       env: SIGNED_IN,
       skillsDir: "/usr/lib/node_modules/@skillcdn/console/skills/",
     });
     expect(await runCli(["skills"], h.io)).toBe(EXIT.ok);
-    expect(h.out()).toContain("skills at /gh/acme/skills, served by https://skillcdn.test: ready");
-    expect(h.out()).toContain("Acme  What Acme does, as skills.");
-    expect(h.out()).toContain("1 skill, 12 documents: console skills <folder>");
-    // The path, which console skill takes, and beside it the URI a host's own connection takes.
-    expect(h.out()).toContain(
-      "review  Reviews a change.\n    review/SKILL.md  skill://gh/acme/skills/review/SKILL.md",
+    const out = h.out();
+    expect(out).toContain("skills at /gh/acme/skills, served by https://skillcdn.test: ready");
+    // What a client is told on connect, with the reads named as the console's commands.
+    expect(out).toContain("Skills and documents from acme/skills (commit 0123456)");
+    expect(out).toContain("Acme: What Acme does, as skills.");
+    expect(out).toContain("review/SKILL.md: Reviews a change.");
+    expect(out).toContain(
+      "console skills <folder> explores folders; console skills --search matches",
     );
-    // Where a person connects an agent that has no connection, and where the console's own skills are.
-    expect(h.out()).toContain("which a person makes at https://skillcdn.test/gh/acme/skills");
-    expect(h.out()).toContain(
+    expect(out).toContain("skill://gh/acme/skills/");
+    // Every skill and document, as a search without words lists them.
+    expect(out).toContain("1. skill: review (review/SKILL.md)\n   Reviews a change.");
+    expect(out).toContain("2. document: docs/guide.md - Guide");
+    // Where a person connects an agent of its own, and where the console's own skills are.
+    expect(out).toContain("a person makes at https://skillcdn.test/gh/acme/skills");
+    expect(out).toContain(
       "The console's own skills, for working the board: /usr/lib/node_modules/@skillcdn/console/skills/",
     );
     const none = fakeConsole({
@@ -696,7 +750,9 @@ describe("the console command", () => {
           source: "https://skillcdn.ai",
           page: null,
           status: "none",
+          refusal: null,
           items: [],
+          mount: null,
         },
       },
     });
@@ -704,11 +760,47 @@ describe("the console command", () => {
     expect(await runCli(["skills"], n.io)).toBe(EXIT.ok);
     expect(n.out()).toBe("No skills address: neither this project nor the console names one.\n");
     const down = fakeConsole({
-      [`GET ${IN}/skills`]: { body: { ...skills, status: "unavailable", items: [] } },
+      [`GET ${IN}/skills`]: {
+        body: {
+          ...LISTING,
+          status: "unavailable",
+          refusal: { code: "network", message: "No answer.", sourceUrl: null, directories: [] },
+          items: [],
+          mount: null,
+        },
+      },
     });
     const d = harness({ fetch: down.fetch, env: SIGNED_IN });
     expect(await runCli(["skills"], d.io)).toBe(EXIT.ok);
     expect(d.out()).toContain("could not be reached");
+    expect(d.out()).toContain("No answer.");
+    // A pack read from the console's machine has no deployment and no page.
+    const local = fakeConsole({
+      [`GET ${IN}/skills`]: {
+        body: {
+          ...LISTING,
+          address: "/local/acme/skills",
+          source: null,
+          page: null,
+          items: [
+            { ...LISTING.items[0], page: null, uri: "skill://local/acme/skills/review/SKILL.md" },
+          ],
+          mount: {
+            ...MOUNT,
+            address: "/local/acme/skills",
+            repository: { ...MOUNT.repository, host: "local", defaultBranch: "", avatar: "" },
+            verified: true,
+          },
+        },
+      },
+    });
+    const l = harness({ fetch: local.fetch, env: SIGNED_IN });
+    expect(await runCli(["skills"], l.io)).toBe(EXIT.ok);
+    expect(l.out()).toContain(
+      "skills at /local/acme/skills, read from the console's machine: ready",
+    );
+    expect(l.out()).toContain("skill://local/acme/skills/");
+    expect(l.out()).not.toContain("a person makes at");
   });
 
   it("takes a task by its number, says which run began, and prints the rules that hold", async () => {
@@ -2429,96 +2521,113 @@ describe("the consoles the command is signed in to (ADR-0027)", () => {
 });
 
 describe("the pack of the project, through the console (ADR-0028)", () => {
-  const PAGE_ONE = {
+  const AT = {
     address: "/gh/acme/skills",
     source: "https://skillcdn.test",
     page: "https://skillcdn.test/gh/acme/skills",
     status: "ready",
-    skill: {
-      path: "review/SKILL.md",
-      directory: "review",
-      name: "review",
-      description: "Reviews a change.",
-      rules: [{ path: "SKILLCDN.md", body: "Be kind", truncated: true }],
-      body: "Read the ",
-      included: [],
-      files: ["review/guide.md"],
-      references: [{ path: "review/guide.md", status: "available" }],
-      complete: false,
-      nextCursor: "two",
-      serving: { full: true, license: "MIT", sourceUrl: null },
-      warnings: [],
-    },
+    refusal: null,
   };
+  const SKILL = {
+    path: "review/SKILL.md",
+    ruleChain: [{ path: "SKILLCDN.md", body: "Be kind", truncated: true }],
+    references: [{ href: "guide.md", path: "review/guide.md", status: "available" }],
+    complete: false,
+    nextCursor: "two",
+    includedContents: [],
+    name: "review",
+    directory: "review",
+    description: "Reviews a change.",
+    license: "MIT",
+    compatibility: null,
+    allowedTools: null,
+    metadata: {},
+    body: "Read the ",
+    files: ["review/guide.md"],
+    filesTruncated: false,
+    included: [],
+    warnings: [],
+    translations: {},
+    serving: {
+      license: { kind: "permissive", name: "MIT", source: "LICENSE" },
+      full: true,
+      sourceUrl: "https://github.com/acme/skills/blob/main/review/SKILL.md",
+    },
+    rules: { path: "SKILLCDN.md", body: "Be kind", truncated: true },
+  };
+  const PAGE_ONE = { ...AT, read: { status: "ready", commit: COMMIT, skill: SKILL } };
   const PAGE_TWO = {
-    ...PAGE_ONE,
-    skill: {
-      ...PAGE_ONE.skill,
-      rules: [{ path: "SKILLCDN.md", body: ".", truncated: false }],
-      body: "diff.",
-      included: [{ path: "review/checklist.md", body: "- tests", truncated: false }],
-      complete: true,
-      nextCursor: null,
+    ...AT,
+    read: {
+      status: "ready",
+      commit: COMMIT,
+      skill: {
+        ...SKILL,
+        ruleChain: [{ path: "SKILLCDN.md", body: ".", truncated: false }],
+        body: "diff.",
+        includedContents: [{ path: "review/checklist.md", content: "- tests", truncated: false }],
+        included: ["review/checklist.md"],
+        complete: true,
+        nextCursor: null,
+      },
     },
   };
-  const FILE = {
-    address: "/gh/acme/skills",
-    source: "https://skillcdn.test",
-    status: "ready",
-    folder: null,
-  };
+  const file = (
+    path: string,
+    content: string,
+    offset: number,
+    nextOffset: number | null,
+    totalLength: number,
+  ) => ({
+    ...AT,
+    read: { kind: "file", commit: COMMIT, path, content, offset, nextOffset, totalLength },
+  });
 
-  it("reads a skill whole, its rules first, page after page, and a file of the pack", async () => {
+  it("reads a skill whole, its rules first, page after page, rendered as a model is given it; and a file of the pack", async () => {
     const { fetch, calls } = fakeConsole({
+      [`GET ${IN}/skills`]: { body: LISTING },
       [`GET ${IN}/skills/one?path=review%2FSKILL.md`]: { body: PAGE_ONE },
       [`GET ${IN}/skills/one?path=review%2FSKILL.md&cursor=two`]: { body: PAGE_TWO },
       [`GET ${IN}/skills/file?path=review%2Fguide.md`]: {
-        body: {
-          ...FILE,
-          file: {
-            path: "review/guide.md",
-            content: "How to ",
-            offset: 0,
-            nextOffset: 7,
-            totalLength: 14,
-          },
-        },
+        body: file("review/guide.md", "How to ", 0, 7, 14),
       },
       [`GET ${IN}/skills/file?path=review%2Fguide.md&offset=7`]: {
-        body: {
-          ...FILE,
-          file: {
-            path: "review/guide.md",
-            content: "review.",
-            offset: 7,
-            nextOffset: null,
-            totalLength: 14,
-          },
-        },
+        body: file("review/guide.md", "review.", 7, null, 14),
       },
     });
     const h = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["skill", "review/SKILL.md"], h.io)).toBe(EXIT.ok);
     const out = h.out();
-    expect(out).toContain("review  Reviews a change.");
-    expect(out).toContain("license: MIT");
-    expect(out).toContain("--- applicable rules: SKILLCDN.md ---\nBe kind.");
-    expect(out).toContain("--- skill: review/SKILL.md ---\nRead the diff.");
-    expect(out).toContain("--- included file: review/checklist.md ---\n- tests");
-    expect(out).toContain("console skill --file <path>: review/guide.md");
+    expect(out).toContain(
+      "Skill: review\nSource: acme/skills (commit 0123456)\nDescription: Reviews a change.",
+    );
+    expect(out).toContain("MIT");
+    expect(out).toContain(
+      "Supporting files, readable with console skill --file:\n- review/guide.md",
+    );
+    // The pages joined: the rules, the body, the included file, each whole.
+    expect(out).toContain("Be kind.");
+    expect(out).toContain("Read the diff.");
+    expect(out).toContain("review/checklist.md");
+    expect(out).toContain("- tests");
+    expect(out).not.toContain("Skill context is incomplete");
+    expect(out).toContain("review/guide.md (available)");
     expect(calls.map((call) => call.key)).toEqual([
+      `GET ${IN}/skills`,
       `GET ${IN}/skills/one?path=review%2FSKILL.md`,
       `GET ${IN}/skills/one?path=review%2FSKILL.md&cursor=two`,
     ]);
-    const file = harness({ fetch, env: SIGNED_IN });
-    expect(await runCli(["skill", "--file", "review/guide.md"], file.io)).toBe(EXIT.ok);
-    expect(file.out()).toContain("--- file: review/guide.md (14 characters) ---\nHow to review.");
+    const read = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["skill", "--file", "review/guide.md"], read.io)).toBe(EXIT.ok);
+    expect(read.out()).toContain("File: review/guide.md (14 characters)");
+    expect(read.out()).toContain("--- content ---\nHow to review.");
+    expect(read.out()).not.toContain("More follows");
     // The URI console skills lists beside the path is taken too; one of another pack is not.
     const byUri = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["skill", "skill://gh/acme/skills/review/SKILL.md"], byUri.io)).toBe(
       EXIT.ok,
     );
-    expect(byUri.out()).toContain("--- skill: review/SKILL.md ---\nRead the diff.");
+    expect(byUri.out()).toContain("Read the diff.");
     const elsewhere = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["skill", "skill://gh/other/pack/review/SKILL.md"], elsewhere.io)).toBe(
       EXIT.usage,
@@ -2532,18 +2641,22 @@ describe("the pack of the project, through the console (ADR-0028)", () => {
     // Described only: named and pointed at, nothing of its body.
     const described = harness({
       fetch: fakeConsole({
+        [`GET ${IN}/skills`]: { body: LISTING },
         [`GET ${IN}/skills/one?path=review%2FSKILL.md`]: {
           body: {
             ...PAGE_ONE,
-            skill: {
-              ...PAGE_ONE.skill,
-              complete: true,
-              nextCursor: null,
-              body: "",
-              serving: {
-                full: false,
-                license: "BUSL-1.1",
-                sourceUrl: "https://github.com/acme/skills/blob/main/review/SKILL.md",
+            read: {
+              ...PAGE_ONE.read,
+              skill: {
+                ...SKILL,
+                complete: true,
+                nextCursor: null,
+                body: "",
+                serving: {
+                  license: { kind: "restrictive", name: "BUSL-1.1", source: null },
+                  full: false,
+                  sourceUrl: "https://github.com/acme/skills/blob/main/review/SKILL.md",
+                },
               },
             },
           },
@@ -2554,12 +2667,23 @@ describe("the pack of the project, through the console (ADR-0028)", () => {
     expect(await runCli(["skill", "review/SKILL.md"], described.io)).toBe(EXIT.ok);
     expect(described.out()).toContain("Described only");
     expect(described.out()).toContain("https://github.com/acme/skills/blob/main/review/SKILL.md");
-    expect(described.out()).not.toContain("--- skill:");
+    expect(described.out()).not.toContain("Supporting files");
     // The token the project holds no longer works: said in words, with what an owner does.
     const refused = harness({
       fetch: fakeConsole({
+        [`GET ${IN}/skills`]: { body: LISTING },
         [`GET ${IN}/skills/one?path=review%2FSKILL.md`]: {
-          body: { ...PAGE_ONE, status: "token_invalid", skill: null },
+          body: {
+            ...AT,
+            status: "token_invalid",
+            refusal: {
+              code: "auth.invalid_token",
+              message: "The token is no good here.",
+              sourceUrl: null,
+              directories: [],
+            },
+            read: null,
+          },
         },
       }).fetch,
       env: SIGNED_IN,
@@ -2567,44 +2691,32 @@ describe("the pack of the project, through the console (ADR-0028)", () => {
     expect(await runCli(["skill", "review/SKILL.md"], refused.io)).toBe(EXIT.ok);
     expect(refused.out()).toContain("pack token");
     expect(refused.out()).toContain("console project pack-token");
+    expect(refused.out()).toContain("The token is no good here.");
     const nothing = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["skill"], nothing.io)).toBe(EXIT.usage);
   });
 
   it("reads a file of the pack by --file alone, browses a folder page after page, and searches by words", async () => {
-    const AT = {
-      address: "/gh/acme/skills",
-      source: "https://skillcdn.test",
-      page: "https://skillcdn.test/gh/acme/skills",
-      status: "ready",
-    };
     const entry = {
       name: null,
       description: null,
       skillCount: 0,
       documentCount: 0,
       size: null,
-      overviewPath: null,
-      license: null,
-      describedOnly: false,
+      manifestPath: null,
+      language: null,
     };
     const { fetch, calls } = fakeConsole({
+      [`GET ${IN}/skills`]: { body: LISTING },
       [`GET ${IN}/skills/file?path=README.md`]: {
-        body: {
-          ...FILE,
-          file: {
-            path: "README.md",
-            content: "The pack.",
-            offset: 0,
-            nextOffset: null,
-            totalLength: 9,
-          },
-        },
+        body: file("README.md", "The pack.", 0, null, 9),
       },
       [`GET ${IN}/skills/browse?path=docs`]: {
         body: {
           ...AT,
-          folder: {
+          read: {
+            status: "ready",
+            commit: COMMIT,
             path: "docs",
             overview: {
               path: "docs/README.md",
@@ -2626,7 +2738,7 @@ describe("the pack of the project, through the console (ADR-0028)", () => {
                 path: "docs/review/SKILL.md",
                 name: "review",
                 description: "Reviews a change.",
-                license: "MIT",
+                license: { kind: "permissive", name: "MIT", source: null },
               },
               {
                 ...entry,
@@ -2636,6 +2748,7 @@ describe("the pack of the project, through the console (ADR-0028)", () => {
                 size: 1234,
               },
             ],
+            diagnostics: [],
             nextCursor: "two",
           },
         },
@@ -2643,12 +2756,14 @@ describe("the pack of the project, through the console (ADR-0028)", () => {
       [`GET ${IN}/skills/browse?path=docs&cursor=two`]: {
         body: {
           ...AT,
-          folder: {
+          read: {
+            status: "ready",
+            commit: COMMIT,
             path: "docs",
-            overview: null,
             entries: [
               { ...entry, kind: "file", path: "docs/roadmap.md", name: "Roadmap", size: 99 },
             ],
+            diagnostics: [],
             nextCursor: null,
           },
         },
@@ -2656,76 +2771,95 @@ describe("the pack of the project, through the console (ADR-0028)", () => {
       [`GET ${IN}/skills/find?query=review&path=docs&limit=5`]: {
         body: {
           ...AT,
-          found: {
+          read: {
+            status: "ready",
+            commit: COMMIT,
             query: "review",
             path: "docs",
             items: [
               {
                 kind: "skill",
-                name: "review",
-                description: "Reviews a change.",
-                directory: "docs/review",
                 path: "docs/review/SKILL.md",
-                page: "https://skillcdn.test/gh/acme/skills?skill=docs%2Freview%2FSKILL.md",
-                uri: "skill://gh/acme/skills/docs/review/SKILL.md",
+                name: "review",
+                directory: "docs/review",
+                description: "Reviews a change.",
                 translations: {},
                 files: [{ path: "docs/review/guide.md", title: "Guide", summary: null }],
                 moreFiles: 2,
-                license: "MIT",
-                describedOnly: false,
+                license: { kind: "permissive", name: "MIT", source: null },
               },
               {
                 kind: "document",
-                path: "docs/architecture.md",
-                title: "Architecture",
-                summary: "Four properties.",
+                path: "docs/handbook.md",
+                title: "Handbook",
+                summary: "Welcome.",
                 skillDirectory: null,
               },
             ],
+            diagnostics: [],
             nextCursor: "more",
+            totals: null,
           },
         },
       },
     });
-    const file = harness({ fetch, env: SIGNED_IN });
-    expect(await runCli(["skill", "--file", "README.md"], file.io)).toBe(EXIT.ok);
-    expect(file.out()).toContain("--- file: README.md (9 characters) ---\nThe pack.");
-    // A skill's path beside --file is a misunderstanding, said so instead of ignored.
-    const both = harness({ fetch, env: SIGNED_IN });
-    expect(await runCli(["skill", "review/SKILL.md", "--file", "README.md"], both.io)).toBe(
-      EXIT.usage,
+    const read = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["skill", "--file", "README.md"], read.io)).toBe(EXIT.ok);
+    expect(read.out()).toContain("File: README.md (9 characters)");
+    expect(read.out()).toContain("--- content ---\nThe pack.");
+    // The folder whole, across its pages, as browse_repo lays it out, with the reads named as the commands.
+    const browsed = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["skills", "docs"], browsed.io)).toBe(EXIT.ok);
+    const folder = browsed.out();
+    expect(folder).toContain("Folder: docs\nSource: acme/skills (commit 0123456)");
+    expect(folder).toContain("Documentation");
+    expect(folder).toContain("Optional overview: console skill --file docs/README.md.");
+    expect(folder).toContain(
+      "- directory: docs/adr (Decisions); 0 skills, 54 documents; overview: docs/adr/README.md",
     );
-    expect(both.err()).toContain("console skill --file <path>");
-    const folder = harness({ fetch, env: SIGNED_IN });
-    expect(await runCli(["skills", "docs"], folder.io)).toBe(EXIT.ok);
-    const out = folder.out();
-    expect(out).toContain("folder docs at /gh/acme/skills");
-    expect(out).toContain(
-      "    Documentation  How the docs are organized.  (README: docs/README.md)",
-    );
-    expect(out).toContain("d  docs/adr  Decisions  (54 documents; README docs/adr/README.md)");
-    expect(out).toContain("skill  docs/review/SKILL.md  review  Reviews a change.  (MIT)");
-    expect(out).toContain("f  docs/architecture.md  Architecture  (1234 bytes)");
-    expect(out).toContain("f  docs/roadmap.md  Roadmap  (99 bytes)");
-    expect(out).not.toContain("More entries");
-    expect(calls.map((call) => call.key)).toContain(`GET ${IN}/skills/browse?path=docs&cursor=two`);
-    const search = harness({ fetch, env: SIGNED_IN });
-    expect(await runCli(["skills", "docs", "--search", "review", "--limit", "5"], search.io)).toBe(
+    expect(folder).toContain("- skill: docs/review/SKILL.md (review)");
+    expect(folder).toContain("- file: docs/architecture.md (Architecture)");
+    expect(folder).toContain("- file: docs/roadmap.md (Roadmap)");
+    expect(folder).not.toContain("nextCursor");
+    expect(calls.map((call) => call.key).filter((key) => key.includes("browse"))).toEqual([
+      `GET ${IN}/skills/browse?path=docs`,
+      `GET ${IN}/skills/browse?path=docs&cursor=two`,
+    ]);
+    // One page of a search, in relevance order, with the cursor that continues it.
+    const found = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["skills", "docs", "--search", "review", "--limit", "5"], found.io)).toBe(
       EXIT.ok,
     );
-    const found = search.out();
-    expect(found).toContain('found for "review" within docs at /gh/acme/skills: 2 results');
-    expect(found).toContain("skill  docs/review/SKILL.md  review  Reviews a change.");
-    expect(found).toContain("    file  docs/review/guide.md  Guide");
-    expect(found).toContain("    and 2 more files");
-    expect(found).toContain("document  docs/architecture.md  Architecture  Four properties.");
-    expect(found).toContain("More matched");
-    const two = harness({ fetch, env: SIGNED_IN });
-    expect(await runCli(["skills", "docs", "more"], two.io)).toBe(EXIT.usage);
-    const bad = harness({ fetch, env: SIGNED_IN });
-    expect(await runCli(["skills", "--search", "x", "--limit", "99"], bad.io)).toBe(EXIT.usage);
-    const alone = harness({ fetch, env: SIGNED_IN });
-    expect(await runCli(["skills", "--limit", "5"], alone.io)).toBe(EXIT.usage);
+    const results = found.out();
+    expect(results).toContain('2 results for "review" in acme/skills (commit 0123456):');
+    expect(results).toContain("1. skill: review (docs/review/SKILL.md)\n   Reviews a change.");
+    expect(results).toContain(
+      "   Matching files:\n   - docs/review/guide.md - Guide\n   - ... (2 more)",
+    );
+    expect(results).toContain("2. document: docs/handbook.md - Handbook\n   Welcome.");
+    expect(results).toContain('nextCursor: "more"');
+    // The same JSON the console answered, with the pages joined.
+    const json = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["skills", "docs", "--json"], json.io)).toBe(EXIT.ok);
+    const parsed = JSON.parse(json.out()) as {
+      read: { entries: { path: string }[]; nextCursor: string | null };
+    };
+    expect(parsed.read.entries.map((entry) => entry.path)).toEqual([
+      "docs/adr",
+      "docs/review/SKILL.md",
+      "docs/architecture.md",
+      "docs/roadmap.md",
+    ]);
+    expect(parsed.read.nextCursor).toBeNull();
+    expect(await runCli(["skills", "--limit", "5"], harness({ fetch, env: SIGNED_IN }).io)).toBe(
+      EXIT.usage,
+    );
+    expect(
+      await runCli(
+        ["skills", "--search", "x", "--limit", "99"],
+        harness({ fetch, env: SIGNED_IN }).io,
+      ),
+    ).toBe(EXIT.usage);
   });
 
   it("gives the project its pack token from standard input and never an argument, and takes it away", async () => {

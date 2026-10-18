@@ -2578,8 +2578,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
     const body: RestSkillFile = await skills.file(
       found.project.skillsAddress,
-      query.data.path,
-      { offset: query.data.offset, limit: query.data.limit },
+      query.data,
       packTokenOf(found.project),
     );
     logger.info(

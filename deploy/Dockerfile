@@ -39,9 +39,15 @@ WORKDIR /app
 COPY --from=build --chown=node:node /out ./
 # The default UI is static files next to the server. Unset WEB_ROOT to run without it.
 COPY --from=build --chown=node:node /repo/apps/console/web/dist ./web
+# The console's own skills as a pack served from this machine (ADR-0031): what an agent reads
+# with `console skill` where no deployment is reachable. An organization's packs mount beside it.
+COPY --from=build --chown=node:node /repo/SKILLCDN.md ./packs/skillcdn/console/
+COPY --from=build --chown=node:node /repo/skills ./packs/skillcdn/console/skills
+COPY --from=build --chown=node:node /repo/docs ./packs/skillcdn/console/docs
 # What the image is distributed under travels with it.
 COPY --from=build --chown=node:node /repo/LICENSE.md ./
-ENV WEB_ROOT=/app/web
+ENV WEB_ROOT=/app/web \
+    SKILLS_DIR=/app/packs
 USER node
 EXPOSE 11199
 ENTRYPOINT ["node", "--enable-source-maps", "dist/main.js"]

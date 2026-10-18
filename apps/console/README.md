@@ -58,13 +58,14 @@ src/
                  (ADR-0029); organization-sync.ts:
                  the organization at the git host read whole on a timer, those who left
                  deactivated and those who returned reactivated (ADR-0022)
-  skills.ts      a project's skills as the board shows them: read by address through the skill
-                 source, the project's own or the organization's, each with its page and its URI,
-                 and held per address for a minute
+  skills.ts      a project's pack as the board shows and reads it (ADR-0031): opened per request at
+                 its address through a pack source, the project's own or the organization's; the
+                 listing with each skill's page and URI, held per address for a minute; every read
+                 answered as the pack answered it, with the pack's refusal beside the status
   ports/         the interfaces the domain needs implemented: the clock, the identity provider's
                  side of signing in, the organization at the git host that says who is in, the
                  blob store for the files runs hand in and the source of the credentials it signs
-                 with, the skill source for the organization's skills
+                 with, the pack sources a project's pack is opened from (a deployment, a directory)
   adapters/      their implementations: the system clock, the GitHub and Google providers and
                  what those share (upstream.ts: a bounded request and its reply), the GitHub
                  organization read through a GitHub App (github-organization.ts: a JWT the app's
@@ -72,8 +73,10 @@ src/
                  the account's id), the blob store
                  in PostgreSQL (pg-blob-store.ts) and in a bucket through the S3 API, signing its
                  own requests (s3-blob-store.ts, ADR-0016) with keys or with the credentials the
-                 platform hands the container (container-credentials.ts, ADR-0018), and the
-                 SkillCDN deployment's side of the skill source (skillcdn.ts)
+                 platform hands the container (container-credentials.ts, ADR-0018), the SkillCDN
+                 deployment's side of the packs through @skillcdn/client (skillcdn.ts), and the packs
+                 served from this machine, a directory read as a commit and kept as an index in
+                 memory through @skillcdn/indexer and @skillcdn/reader (directory-packs.ts, ADR-0031)
   testing/       test support: the providers' side of signing in for a handful of made-up people,
                  and the harness that wires the app for the integration tests (not compiled)
   errors.ts      the base class of errors that cross a boundary, with their stable code
@@ -108,7 +111,7 @@ Read the root [`AGENTS.md`](../../AGENTS.md) first. This workspace is the compos
 
 ## Tests
 
-- Unit tests next to the code: the config module, the client address, the listener and its shutdown.
+- Unit tests next to the code: the config module, the client address, the listener and its shutdown, the skills of the board, the deployment's side of the packs, and the packs served from this machine, read from an invented pack in a directory of the run's own.
 - `src/http/app.int.test.ts` runs the app of the `api` role against real PostgreSQL: the probes in every state, the id and the address every request gets, the access log and what it leaves out.
 - `src/auth.int.test.ts` covers signing in through fixture providers, a git host and a Workspace: the round trip, the sealed cookie, where a browser may be sent back, what did not complete and why, a login nobody let in, who the operator names an administrator, sessions and their end (sign-out from the console's own pages only, time, deactivation, and the way back in by a listing), and a deployment where nobody signs in.
 - `src/adapters/github-organization.test.ts` covers the organization read through a GitHub App against a fake host: the JWT the app's key signs, checked with the public half of a key pair the test makes; the installation's token asked for, held, and asked for again near its end; the members a page at a time by the account's id; and each refusal by kind.

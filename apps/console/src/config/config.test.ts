@@ -39,7 +39,7 @@ describe("loadConfig", () => {
       worker: { inProcess: false, archiveAfterDays: 30 },
       auth: undefined,
       web: { root: undefined },
-      skills: { source: "https://skillcdn.ai", address: undefined },
+      skills: { source: "https://skillcdn.ai", address: undefined, directory: undefined },
       blobs: { bucket: undefined },
     });
   });
@@ -66,6 +66,9 @@ describe("loadConfig", () => {
     expect(config.worker.archiveAfterDays).toBe(0);
     expect(config.database.poolMax).toBe(4);
     expect(loadConfig({ DATABASE_URL, WEB_ROOT: "/app/web" }, noFiles).web.root).toBe("/app/web");
+    expect(loadConfig({ DATABASE_URL, SKILLS_DIR: "/app/packs" }, noFiles).skills.directory).toBe(
+      "/app/packs",
+    );
   });
 
   it("reads the reverse-proxy settings, and trusts no proxy unless told to", () => {

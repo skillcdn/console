@@ -1,0 +1,63 @@
+# The smallest install: the console image next to PostgreSQL on one machine, the worker inside
+# the api, the files in the database, and the packs read from a directory on this machine, so
+# that nothing of it needs the internet (README.md, "The smallest install, and a closed
+# network"). Not the cloud shape, which is the skill deploying-a-console (ADR-0017).
+#
+#   docker build -f deploy/Dockerfile -t skillcdn-console .        # or: docker load < console-images.tgz
+#   POSTGRES_PASSWORD=... docker compose -f deploy/compose.yaml up -d
+#
+# What signing in needs (PUBLIC_URL, a provider, AUTH_SECRET, ADMINS) goes in deploy/.env, which
+# git ignores, from the variables ../.env.example lists. The packs: deploy/packs/<name>, each a
+# directory in the SkillCDN Format, is served as /local/org/<name>; rename `org` below to the
+# organization's own name. The console's own skills come with the image, at /local/skillcdn/console.
+name: skillcdn-console
+
+x-console: &console
+  image: ${CONSOLE_IMAGE:-skillcdn-console}
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    DATABASE_URL: postgres://console:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/console
+    WORKER_IN_PROCESS: "true"
+    SKILLS_DIR: /app/packs
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: console
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: console
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U console -d console"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  migrate:
+    <<: *console
+    command: ["migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: *console
+    command: ["api"]
+    ports:
+      # The loopback alone unless CONSOLE_BIND says otherwise; a proxy in front terminates TLS.
+      - "${CONSOLE_BIND:-127.0.0.1}:11199:11199"
+    volumes:
+      # The organization's packs, beside the console's own: deploy/packs/<name> is /local/org/<name>.
+      - ./packs:/app/packs/org:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  postgres-data:

@@ -1,41 +1,45 @@
 import type {
+  RestPackRefusal,
   RestSkill,
   RestSkillBrowse,
   RestSkillFile,
   RestSkillFind,
   RestSkillLoad,
   RestSkills,
+  SkillsStatus,
 } from "@skillcdn/console/api";
 import {
   type Address,
   formatAddress,
   formatSkillUri,
+  LOCAL_HOST_KEY,
   parseAddress,
   parseRepoPath,
+  type RestMount,
 } from "@skillcdn/core";
 import type { Logger } from "./logger.js";
 import type { Clock } from "./ports/clock.js";
-import type {
-  BrowsePage,
-  FilePage,
-  FindQuery,
-  SkillListing,
-  SkillSource,
-  SkillSummary,
+import {
+  type BrowseQuery,
+  type FileQuery,
+  type FindQuery,
+  type Pack,
+  PackError,
+  type PackSource,
 } from "./ports/skill-source.js";
 
-// A project's pack as the board shows and reads it: what the SkillCDN deployment serves at the
-// project's address, or at the organization's, with where a person reads each skill and what an
-// agent loads it by; and, for the command, a skill whole, a file of the pack, what a folder of it
-// holds and what words find in it, read through the deployment's REST API with the pack token
-// the project holds where the pack is private (ADR-0028). The console refers to the pack by address and keeps nothing of it
-// (docs/architecture.md): a public listing is held for a while, since an address changes slowly
-// and the deployment is someone else's, and asked for again after; what a token reads is the
-// project's for that request and is never held.
+// A project's pack as the board shows and reads it (ADR-0028, ADR-0031): the pack at the
+// project's address, or at the organization's, opened at the deployment through the published
+// client with the pack token the project holds where the pack is private, or, for a `local`
+// address, in the directory the console was given; and answered as the deployment's REST API
+// answers it, in the console's envelope, so that the command renders what a deployment's tools
+// would give a model. The console refers to the pack by address and keeps nothing of it: a
+// public listing is held for a while, since an address changes slowly, and asked for again
+// after; what a token reads is the project's for that request and is never held.
 
-/** How long one answer of the deployment stands for, before it is asked again. */
+/** How long one listing stands for, before the pack is asked again. */
 export const SKILLS_CACHE_MS = 60_000;
-/** How many addresses are held at once: beyond, the oldest answer goes. */
+/** How many addresses are held at once: beyond, the oldest listing goes. */
 const MAX_HELD = 100;
 
 export interface SkillsConfig {
@@ -45,9 +49,60 @@ export interface SkillsConfig {
   readonly address: Address | undefined;
 }
 
+/** Where a pack is read, for the people's pages: the deployment and the page of the address, or nothing for a directory. */
+interface Where {
+  readonly source: string | null;
+  readonly page: string | null;
+}
+
+type Failed = Exclude<SkillsStatus, "ready" | "none">;
+
+/** The first of the texts that says something; nothing when none does. */
+function firstOf(...texts: readonly (string | null | undefined)[]): string | undefined {
+  return texts.find((text): text is string => typeof text === "string" && text.trim() !== "");
+}
+
+/** The path of a skill's `SKILL.md`, from its directory where the answer left the path out. */
+const skillPathOf = (path: string | undefined, directory: string): string =>
+  path ?? (directory === "" ? "SKILL.md" : `${directory}/SKILL.md`);
+
+/**
+ * What a pack's refusal means to the board: the token is no good there; the index is not there
+ * to read from; nothing is at the address or the path, or the pack is private and read as
+ * nobody; a file the pack will not carry; or the pack could not be read at all.
+ */
+export function failureOf(error: PackError): {
+  readonly status: Failed;
+  readonly refusal: RestPackRefusal;
+} {
+  const refusal: RestPackRefusal = {
+    code: error.code,
+    message: error.message,
+    sourceUrl: error.sourceUrl ?? null,
+    directories: [...error.directories],
+  };
+  if (error.status === 401 || error.code === "auth.invalid_token") {
+    return { status: "token_invalid", refusal };
+  }
+  if (error.code === "index.indexing") {
+    return { status: "indexing", refusal };
+  }
+  if (error.code === "index.failed") {
+    return { status: "failed", refusal };
+  }
+  if ([400, 403, 404, 409].includes(error.status)) {
+    return { status: "not_found", refusal };
+  }
+  if (error.status === 413 || error.status === 415) {
+    return { status: "failed", refusal };
+  }
+  return { status: "unavailable", refusal };
+}
+
 export class Skills {
   readonly #config: SkillsConfig;
-  readonly #source: SkillSource;
+  readonly #deployment: PackSource;
+  readonly #directory: PackSource | undefined;
   readonly #clock: Clock;
   readonly #logger: Logger | undefined;
   readonly #cacheMs: number;
@@ -56,13 +111,17 @@ export class Skills {
 
   constructor(options: {
     readonly config: SkillsConfig;
-    readonly source: SkillSource;
+    /** Where the addresses of a git host are read, and a `local` one without a directory to read it from. */
+    readonly deployment: PackSource;
+    /** Where `local` addresses are read: the directory the console was given, when it has one. */
+    readonly directory?: PackSource | undefined;
     readonly clock: Clock;
     readonly logger?: Logger | undefined;
     readonly cacheMs?: number | undefined;
   }) {
     this.#config = options.config;
-    this.#source = options.source;
+    this.#deployment = options.deployment;
+    this.#directory = options.directory;
     this.#clock = options.clock;
     this.#logger = options.logger;
     this.#cacheMs = options.cacheMs ?? SKILLS_CACHE_MS;
@@ -79,19 +138,26 @@ export class Skills {
   }
 
   /**
-   * What the board answers for a project: the skills at the project's address, as it names
-   * one, else at the organization's, as they stand; or why there are none to show. With a pack
-   * token the answer is the project's own and never held.
+   * What the board answers for a project: the pack at the project's address, as it names one,
+   * else at the organization's, as it stands; or why there is none to show. With a pack token
+   * the answer is the project's own and never held.
    */
   async read(projectAddress: string | undefined, token?: string): Promise<RestSkills> {
-    const { source } = this.#config;
     const address = this.#addressOf(projectAddress);
     if (address === undefined) {
-      return { address: null, source, page: null, status: "none", items: [] };
+      return {
+        address: null,
+        source: this.#config.source,
+        page: null,
+        status: "none",
+        refusal: null,
+        items: [],
+        mount: null,
+      };
     }
     const canonical = formatAddress(address);
     if (token !== undefined) {
-      return this.#listing(address, canonical, await this.#source.list(address, token));
+      return this.#fetch(address, canonical, token);
     }
     const now = this.#clock.now().getTime();
     const held = this.#held.get(canonical);
@@ -101,9 +167,17 @@ export class Skills {
     // One read at a time per address: whoever asks while one is under way gets its answer.
     let reading = this.#reading.get(canonical);
     if (reading === undefined) {
-      reading = this.#fetch(address, canonical).finally(() => {
-        this.#reading.delete(canonical);
-      });
+      reading = this.#fetch(address, canonical, undefined)
+        .then((value) => {
+          // A pack that could not be reached is asked again next time, not in a minute.
+          if (value.status !== "unavailable") {
+            this.#hold(canonical, value);
+          }
+          return value;
+        })
+        .finally(() => {
+          this.#reading.delete(canonical);
+        });
       this.#reading.set(canonical, reading);
     }
     return reading;
@@ -116,135 +190,59 @@ export class Skills {
     cursor: string | undefined,
     token?: string,
   ): Promise<RestSkillLoad> {
-    const { source } = this.#config;
-    const address = this.#addressOf(projectAddress);
-    if (address === undefined) {
-      return { address: null, source, page: null, status: "none", skill: null };
+    const opened = this.#open(projectAddress, token);
+    if (opened === undefined) {
+      return { ...this.#nowhere(), read: null };
     }
-    const canonical = formatAddress(address);
-    const loaded = await this.#source.load(address, path, cursor, token);
-    return {
-      address: canonical,
-      source,
-      page: `${source}${canonical}`,
-      status: loaded.status,
-      skill:
-        loaded.status === "ready"
-          ? {
-              path: loaded.skill.path,
-              directory: loaded.skill.directory,
-              name: loaded.skill.name,
-              description: loaded.skill.description,
-              rules: loaded.skill.rules.map((rule) => ({ ...rule })),
-              body: loaded.skill.body,
-              included: loaded.skill.included.map((file) => ({ ...file })),
-              files: [...loaded.skill.files],
-              references: loaded.skill.references.map((reference) => ({ ...reference })),
-              complete: loaded.skill.complete,
-              nextCursor: loaded.skill.nextCursor ?? null,
-              serving: {
-                full: loaded.skill.serving.full,
-                license: loaded.skill.serving.license ?? null,
-                sourceUrl: loaded.skill.serving.sourceUrl ?? null,
-              },
-              warnings: [...loaded.skill.warnings],
-            }
-          : null,
-    };
+    const { address, where, pack } = opened;
+    try {
+      const read = await pack.skill(path, cursor);
+      return read.status === "ready"
+        ? { ...this.#at(address, where, "ready"), read }
+        : { ...this.#at(address, where, read.status), read: null };
+    } catch (error) {
+      return { ...this.#at(address, where, this.#refused(error)), read: null };
+    }
   }
 
   /** A file of the pack, a page of it, or what a folder holds (`read_repo_file`). */
   async file(
     projectAddress: string | undefined,
-    path: string,
-    page: FilePage,
+    query: FileQuery,
     token?: string,
   ): Promise<RestSkillFile> {
-    const { source } = this.#config;
-    const address = this.#addressOf(projectAddress);
-    if (address === undefined) {
-      return { address: null, source, status: "none", file: null, folder: null };
+    const opened = this.#open(projectAddress, token);
+    if (opened === undefined) {
+      return { ...this.#nowhere(), read: null };
     }
-    const canonical = formatAddress(address);
-    const read = await this.#source.read(address, path, page, token);
-    if (read.status !== "ready") {
-      return { address: canonical, source, status: read.status, file: null, folder: null };
+    const { address, where, pack } = opened;
+    try {
+      const read = await pack.file(query);
+      return { ...this.#at(address, where, "ready"), read };
+    } catch (error) {
+      return { ...this.#at(address, where, this.#refused(error)), read: null };
     }
-    return {
-      address: canonical,
-      source,
-      status: "ready",
-      file:
-        read.file === undefined
-          ? null
-          : {
-              path: read.file.path,
-              content: read.file.content,
-              offset: read.file.offset,
-              nextOffset: read.file.nextOffset ?? null,
-              totalLength: read.file.totalLength,
-            },
-      folder:
-        read.folder === undefined
-          ? null
-          : {
-              path: read.folder.path,
-              entries: read.folder.entries.map((entry) => ({
-                path: entry.path,
-                kind: entry.kind,
-                size: entry.size ?? null,
-              })),
-              truncated: read.folder.truncated,
-            },
-    };
   }
 
   /** What a folder of the pack holds, a page of it, as the deployment browses it (`browse_repo`). */
   async browse(
     projectAddress: string | undefined,
-    page: BrowsePage,
+    query: BrowseQuery,
     token?: string,
   ): Promise<RestSkillBrowse> {
-    const { source } = this.#config;
-    const address = this.#addressOf(projectAddress);
-    if (address === undefined) {
-      return { address: null, source, page: null, status: "none", folder: null };
+    const opened = this.#open(projectAddress, token);
+    if (opened === undefined) {
+      return { ...this.#nowhere(), read: null };
     }
-    const canonical = formatAddress(address);
-    const browsed = await this.#source.browse(address, page, token);
-    return {
-      address: canonical,
-      source,
-      page: `${source}${canonical}`,
-      status: browsed.status,
-      folder:
-        browsed.status === "ready"
-          ? {
-              path: browsed.folder.path,
-              overview:
-                browsed.folder.overview === undefined
-                  ? null
-                  : {
-                      path: browsed.folder.overview.path,
-                      title: browsed.folder.overview.title ?? null,
-                      description: browsed.folder.overview.description ?? null,
-                    },
-              entries: browsed.folder.entries.map((entry) => ({
-                kind: entry.kind,
-                path: entry.path,
-                name: entry.name ?? null,
-                description: entry.description ?? null,
-                skillCount: entry.skillCount,
-                documentCount: entry.documentCount,
-                size: entry.size ?? null,
-                overviewPath: entry.overviewPath ?? null,
-                license: entry.license ?? null,
-                describedOnly: entry.describedOnly,
-              })),
-              nextCursor: browsed.folder.nextCursor ?? null,
-            }
-          : null,
-    };
+    const { address, where, pack } = opened;
+    try {
+      const read = await pack.browse(query);
+      return read.status === "ready"
+        ? { ...this.#at(address, where, "ready"), read }
+        : { ...this.#at(address, where, read.status), read: null };
+    } catch (error) {
+      return { ...this.#at(address, where, this.#refused(error)), read: null };
+    }
   }
 
   /** The skills and the documents of the pack that words find, a page of them in relevance order (`search_repo`). */
@@ -253,50 +251,19 @@ export class Skills {
     query: FindQuery,
     token?: string,
   ): Promise<RestSkillFind> {
-    const { source } = this.#config;
-    const address = this.#addressOf(projectAddress);
-    if (address === undefined) {
-      return { address: null, source, page: null, status: "none", found: null };
+    const opened = this.#open(projectAddress, token);
+    if (opened === undefined) {
+      return { ...this.#nowhere(), read: null };
     }
-    const canonical = formatAddress(address);
-    const page = `${source}${canonical}`;
-    const found = await this.#source.find(address, query, token);
-    return {
-      address: canonical,
-      source,
-      page,
-      status: found.status,
-      found:
-        found.status === "ready"
-          ? {
-              query: found.found.query,
-              path: found.found.path ?? null,
-              items: found.found.items.map((item) =>
-                item.kind === "skill"
-                  ? {
-                      kind: "skill",
-                      ...this.#item(address, page, item),
-                      files: item.files.map((file) => ({
-                        path: file.path,
-                        title: file.title ?? null,
-                        summary: file.summary ?? null,
-                      })),
-                      moreFiles: item.moreFiles,
-                      license: item.license ?? null,
-                      describedOnly: item.describedOnly,
-                    }
-                  : {
-                      kind: "document",
-                      path: item.path,
-                      title: item.title ?? null,
-                      summary: item.summary ?? null,
-                      skillDirectory: item.skillDirectory ?? null,
-                    },
-              ),
-              nextCursor: found.found.nextCursor ?? null,
-            }
-          : null,
-    };
+    const { address, where, pack } = opened;
+    try {
+      const read = await pack.find(query);
+      return read.status === "ready"
+        ? { ...this.#at(address, where, "ready"), read }
+        : { ...this.#at(address, where, read.status), read: null };
+    } catch (error) {
+      return { ...this.#at(address, where, this.#refused(error)), read: null };
+    }
   }
 
   /** The address to read: the project's, which was checked when it was written, else the organization's. */
@@ -315,60 +282,154 @@ export class Skills {
     return undefined;
   }
 
-  /** The listing as the board shows it: the pack by name and by count, each skill with its page and the URI an agent loads it by. */
-  #listing(address: Address, canonical: string, listing: SkillListing): RestSkills {
-    const { source } = this.#config;
-    const page = `${source}${canonical}`;
+  /**
+   * The pack at an address, and where it is read: a `local` address in the directory the
+   * console was given, when it has one; anything else at the deployment, with the token.
+   */
+  #packOf(address: Address, token: string | undefined): { pack: Pack; where: Where } | undefined {
+    const canonical = formatAddress(address);
+    if (address.host === LOCAL_HOST_KEY && this.#directory !== undefined) {
+      const pack = this.#directory.open(address);
+      return pack === undefined ? undefined : { pack, where: { source: null, page: null } };
+    }
+    const pack = this.#deployment.open(address, token);
+    if (pack === undefined) {
+      return undefined;
+    }
+    const url = pack.location.kind === "deployment" ? pack.location.url : null;
+    return { pack, where: { source: url, page: url === null ? null : `${url}${canonical}` } };
+  }
+
+  #open(
+    projectAddress: string | undefined,
+    token: string | undefined,
+  ): { address: Address; where: Where; pack: Pack } | undefined {
+    const address = this.#addressOf(projectAddress);
+    if (address === undefined) {
+      return undefined;
+    }
+    const opened = this.#packOf(address, token);
+    if (opened === undefined) {
+      this.#logger?.warn({ address: formatAddress(address) }, "no source serves the pack");
+      return undefined;
+    }
+    return { address, ...opened };
+  }
+
+  /** The envelope of an answer about nothing: neither the project nor the console names a pack. */
+  #nowhere() {
     return {
-      address: canonical,
-      source,
-      page,
-      status: listing.status,
-      ...(listing.pack === undefined
-        ? {}
-        : {
-            pack: {
-              name: listing.pack.name ?? null,
-              description: listing.pack.description ?? null,
-              language: listing.pack.language ?? null,
-            },
-          }),
-      ...(listing.counts === undefined
-        ? {}
-        : { counts: { skills: listing.counts.skills, documents: listing.counts.documents } }),
-      items: listing.skills.map((skill) => this.#item(address, page, skill)),
+      address: null,
+      source: this.#config.source,
+      page: null,
+      status: "none" as const,
+      refusal: null,
+    };
+  }
+
+  /** The envelope of an answer about a pack: its address, where it is read, and how the read went. */
+  #at(address: Address, where: Where, outcome: Failed | "ready" | ReturnType<typeof failureOf>) {
+    const status = typeof outcome === "string" ? outcome : outcome.status;
+    const refusal = typeof outcome === "string" ? null : outcome.refusal;
+    return {
+      address: formatAddress(address),
+      source: where.source,
+      page: where.page,
+      status,
+      refusal,
+    };
+  }
+
+  /** What a read that threw stands for; anything but a pack's own refusal is the console's fault, and is thrown on. */
+  #refused(error: unknown): ReturnType<typeof failureOf> {
+    if (error instanceof PackError) {
+      return failureOf(error);
+    }
+    throw error;
+  }
+
+  #hold(canonical: string, value: RestSkills): void {
+    this.#held.delete(canonical);
+    this.#held.set(canonical, { value, until: this.#clock.now().getTime() + this.#cacheMs });
+    while (this.#held.size > MAX_HELD) {
+      const oldest = this.#held.keys().next().value;
+      if (oldest === undefined) {
+        break;
+      }
+      this.#held.delete(oldest);
+    }
+  }
+
+  async #fetch(
+    address: Address,
+    canonical: string,
+    token: string | undefined,
+  ): Promise<RestSkills> {
+    const opened = this.#packOf(address, token);
+    if (opened === undefined) {
+      this.#logger?.warn({ address: canonical }, "no source serves the pack");
+      return {
+        ...this.#at(address, { source: null, page: null }, "not_found"),
+        items: [],
+        mount: null,
+      };
+    }
+    const { pack, where } = opened;
+    try {
+      return this.#listing(address, where, await pack.mount());
+    } catch (error) {
+      return { ...this.#at(address, where, this.#refused(error)), items: [], mount: null };
+    }
+  }
+
+  /**
+   * The listing as the board shows it, from what the address serves: the pack by name and by
+   * count, each skill with its page and the URI an agent loads it by; and the answer itself,
+   * for a program that renders what a model is given.
+   */
+  #listing(address: Address, where: Where, mount: RestMount): RestSkills {
+    const { index, repository } = mount;
+    if (index.status !== "ready") {
+      return { ...this.#at(address, where, index.status), items: [], mount };
+    }
+    // The pack by name, as the deployment's own instructions name it to a model: the
+    // manifest's, else its README's, else the host's.
+    const manifest = index.manifest ?? undefined;
+    return {
+      ...this.#at(address, where, "ready"),
+      pack: {
+        name: firstOf(manifest?.name, index.overview?.title, repository.name) ?? null,
+        description:
+          firstOf(manifest?.description, index.overview?.description, repository.description) ??
+          null,
+        language: firstOf(manifest?.language) ?? null,
+      },
+      counts: { skills: index.skillCount, documents: index.documentCount },
+      items: index.skills.map((skill) => this.#item(address, where, skill)),
+      mount,
     };
   }
 
   /** One skill as the board shows it: what the repository says of it, its page, and the URI an agent loads it by. */
-  #item(address: Address, page: string, skill: SkillSummary): RestSkill {
-    const path = parseRepoPath(skill.path);
+  #item(
+    address: Address,
+    where: Where,
+    skill: RestMount["index"] extends infer I
+      ? I extends { readonly status: "ready"; readonly skills: readonly (infer S)[] }
+        ? S
+        : never
+      : never,
+  ): RestSkill {
+    const path = skillPathOf(skill.path, skill.directory);
+    const parsed = parseRepoPath(path);
     return {
       name: skill.name,
       description: skill.description,
       directory: skill.directory,
-      path: skill.path,
-      page: `${page}?skill=${encodeURIComponent(skill.path)}`,
-      uri: path.ok ? formatSkillUri(address, path.value) : null,
+      path,
+      page: where.page === null ? null : `${where.page}?skill=${encodeURIComponent(path)}`,
+      uri: parsed.ok ? formatSkillUri(address, parsed.value) : null,
       translations: skill.translations,
     };
-  }
-
-  async #fetch(address: Address, canonical: string): Promise<RestSkills> {
-    const listing = await this.#source.list(address);
-    const value = this.#listing(address, canonical, listing);
-    // A deployment that could not be reached is asked again next time, not in a minute.
-    if (listing.status !== "unavailable") {
-      this.#held.delete(canonical);
-      this.#held.set(canonical, { value, until: this.#clock.now().getTime() + this.#cacheMs });
-      while (this.#held.size > MAX_HELD) {
-        const oldest = this.#held.keys().next().value;
-        if (oldest === undefined) {
-          break;
-        }
-        this.#held.delete(oldest);
-      }
-    }
-    return value;
   }
 }

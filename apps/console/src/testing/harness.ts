@@ -20,7 +20,7 @@ import type { AppEnv } from "../http/request-context.js";
 import type { BlobStore } from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
 import type { OrganizationDirectory } from "../ports/organization.js";
-import type { SkillSource } from "../ports/skill-source.js";
+import type { PackSource } from "../ports/skill-source.js";
 import { createApi } from "../roles/api.js";
 import type { FixtureProvider } from "./fixture-provider.js";
 
@@ -84,7 +84,14 @@ export interface HarnessOptions {
   /** How long an agent's `ask` waits for an answer. */
   readonly agents?: { readonly waitMs?: number };
   /** The organization's skills: their address, and the deployment's side of reading them. None when left out. */
-  readonly skills?: { readonly address: string; readonly source: SkillSource } | undefined;
+  readonly skills?:
+    | {
+        readonly address: string;
+        readonly source: PackSource;
+        /** Where `local` addresses are read; none when left out. */
+        readonly directory?: PackSource | undefined;
+      }
+    | undefined;
   /** Where the bytes of files go. The database when left out. */
   readonly blobs?: BlobStore | undefined;
 }
@@ -154,6 +161,7 @@ export function createHarness(testDatabase: TestDatabase, options: HarnessOption
       logger,
       isShuttingDown: () => false,
       skillSource: options.skills?.source,
+      packDirectory: options.skills?.directory,
       blobs: options.blobs,
       version: HARNESS_VERSION,
     },

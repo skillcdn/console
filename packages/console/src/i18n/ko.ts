@@ -635,6 +635,14 @@ export const ko: Messages = {
     connect:
       "에이전트는 콘솔 명령(console skill <경로>)으로, 또는 이 주소에 자기 MCP 연결로 스킬을 받습니다. MCP 연결은 사람이 한 번 해 줍니다:",
     connectLink: "SkillCDN 페이지의 연결 안내",
+    fromMachine: "콘솔 기계의 디렉터리에서 읽음, 주소:",
+    connectLocal:
+      "에이전트는 콘솔 명령(console skill <경로>)으로 읽습니다. 이 팩은 콘솔 기계에만 있습니다.",
+    localStatus: {
+      not_found:
+        "이 주소로 콘솔 기계에서 제공되는 팩이 없습니다. 콘솔 운영자가 팩 디렉터리에 <owner>/<name>으로 넣습니다.",
+      unavailable: "콘솔 기계에서 팩을 읽지 못했습니다. 나중에 다시 보세요.",
+    },
     status: {
       indexing: "SkillCDN이 아직 저장소를 색인하고 있습니다. 잠시 후 다시 보세요.",
       failed: "SkillCDN이 저장소를 색인하지 못했습니다. 찾은 내용은 주소의 페이지에 있습니다.",

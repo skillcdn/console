@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
+import { stat } from "node:fs/promises";
 import process from "node:process";
 import { EVENTS_PAGE_LIMIT, MAX_TOKENS_PER_PERSON } from "@skillcdn/console/api";
 import { loadWebRoot, type WebRoot, WebRootError } from "@skillcdn/console/web";
 import type { Hono } from "hono";
 import { createContainerCredentials } from "../adapters/container-credentials.js";
+import { createDirectorySource } from "../adapters/directory-packs.js";
 import { createGitHubProvider } from "../adapters/github-login.js";
 import { createGitHubOrganization } from "../adapters/github-organization.js";
 import { createGoogleProvider } from "../adapters/google-login.js";
@@ -36,7 +38,7 @@ import type { Clock } from "../ports/clock.js";
 import { fixedCredentials } from "../ports/credentials.js";
 import type { IdentityProvider } from "../ports/identity-provider.js";
 import type { OrganizationDirectory } from "../ports/organization.js";
-import type { SkillSource } from "../ports/skill-source.js";
+import type { PackSource } from "../ports/skill-source.js";
 import { Skills, type SkillsConfig } from "../skills.js";
 import { APP_NAME, APP_VERSION } from "../version.js";
 
@@ -66,8 +68,10 @@ export interface ApiPorts {
   readonly web?: WebRoot | undefined;
   /** Where the bytes of files handed in are kept. Left out, in the database. */
   readonly blobs?: BlobStore | undefined;
-  /** The SkillCDN deployment's side of the organization's skills. Left out, read over HTTPS from the configured deployment. */
-  readonly skillSource?: SkillSource | undefined;
+  /** The deployment's side of the packs, where the addresses of a git host are read. Left out, read over HTTPS from the configured deployment. */
+  readonly skillSource?: PackSource | undefined;
+  /** Where packs served from this machine are read (ADR-0031). Left out, the directory the configuration names; without one, a `local` address is asked of the deployment. */
+  readonly packDirectory?: PackSource | undefined;
   /** The console's version, which the command is held to (ADR-0025). The package's when left out; for tests. */
   readonly version?: string | undefined;
 }
@@ -84,8 +88,8 @@ export type ApiConfig = Pick<Config, "workspace"> & {
   readonly feed?: { readonly heartbeatMs?: number; readonly pollMs?: number } | undefined;
   /** How long a read of a decision may wait for its answer; the built-in value when left out. For tests. */
   readonly agents?: { readonly waitMs?: number } | undefined;
-  /** The organization's skills. Left out: no address, and the public deployment. */
-  readonly skills?: SkillsConfig | undefined;
+  /** The organization's skills, and the directory packs served from this machine are read from. Left out: no address, the public deployment, no directory. */
+  readonly skills?: (SkillsConfig & { readonly directory?: string | undefined }) | undefined;
 };
 
 /**
@@ -199,13 +203,18 @@ export function createApi(
   const skillsConfig = config.skills ?? { source: "https://skillcdn.ai", address: undefined };
   const skills = new Skills({
     config: skillsConfig,
-    source:
+    deployment:
       ports.skillSource ??
       createSkillCdnSource({
         baseUrl: skillsConfig.source,
         userAgent: `${APP_NAME}/${APP_VERSION}`,
         logger,
       }),
+    directory:
+      ports.packDirectory ??
+      (config.skills?.directory === undefined
+        ? undefined
+        : createDirectorySource({ root: config.skills.directory, clock, logger })),
     clock,
     logger,
   });
@@ -356,6 +365,20 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
       throw error;
     }
     logger.info({ files: web.files }, "serving the UI");
+  }
+  if (config.skills.directory !== undefined) {
+    // A setting that points at the wrong place, not a failure of the process; a pack that is
+    // not there is found out when it is read.
+    const info = await stat(config.skills.directory).catch(() => undefined);
+    if (info === undefined || !info.isDirectory()) {
+      throw new ConfigError([
+        `SKILLS_DIR: not a directory that can be read: ${config.skills.directory}`,
+      ]);
+    }
+    logger.info(
+      { directory: config.skills.directory },
+      "packs served from this machine are read from the directory",
+    );
   }
   const blobs = await blobStoreOf(config, database, logger, userAgent);
   let shuttingDown = false;

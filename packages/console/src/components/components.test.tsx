@@ -1409,22 +1409,23 @@ describe("projects", () => {
 });
 
 describe("skills", () => {
+  const review = {
+    name: "review",
+    description: "Reviews a <change>.",
+    directory: "review",
+    path: "review/SKILL.md",
+    page: "https://skillcdn.test/gh/acme/skills?skill=review%2FSKILL.md",
+    uri: "skill://gh/acme/skills/review/SKILL.md",
+    translations: {},
+  };
   const served = {
     address: "/gh/acme/skills",
     source: "https://skillcdn.test",
     page: "https://skillcdn.test/gh/acme/skills",
     status: "ready" as const,
-    items: [
-      {
-        name: "review",
-        description: "Reviews a <change>.",
-        directory: "review",
-        path: "review/SKILL.md",
-        page: "https://skillcdn.test/gh/acme/skills?skill=review%2FSKILL.md",
-        uri: "skill://gh/acme/skills/review/SKILL.md",
-        translations: {},
-      },
-    ],
+    refusal: null,
+    mount: null,
+    items: [review],
   };
 
   it("list what SkillCDN serves at the address, as text, with where each is read and loaded", () => {
@@ -1445,7 +1446,9 @@ describe("skills", () => {
           source: "https://skillcdn.ai",
           page: null,
           status: "none",
+          refusal: null,
           items: [],
+          mount: null,
         }}
       />,
     );
@@ -1455,6 +1458,37 @@ describe("skills", () => {
     );
     expect(indexing).toContain("still indexing");
     expect(indexing).toContain("/gh/acme/skills");
+  });
+
+  it("say when the pack is read from a directory on the console's machine, and link nothing then (ADR-0031)", () => {
+    const local = renderToStaticMarkup(
+      <SkillList
+        skills={{
+          ...served,
+          address: "/local/acme/skills",
+          source: null,
+          page: null,
+          items: [{ ...review, page: null, uri: "skill://local/acme/skills/review/SKILL.md" }],
+        }}
+      />,
+    );
+    expect(local).toContain("Read from a directory on the console");
+    expect(local).toContain("/local/acme/skills");
+    expect(local).toContain("skill://local/acme/skills/review/SKILL.md");
+    expect(local).not.toContain("href=");
+    const missing = renderToStaticMarkup(
+      <SkillList
+        skills={{
+          ...served,
+          address: "/local/acme/skills",
+          source: null,
+          page: null,
+          status: "not_found",
+          items: [],
+        }}
+      />,
+    );
+    expect(missing).toContain("No pack is served from the console");
   });
 });
 

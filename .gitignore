@@ -50,3 +50,6 @@ Thumbs.db
 .claude/settings.local.json
 .claude/worktrees/
 CLAUDE.local.md
+
+# The packs an organization mounts into the smallest install (deploy/compose.yaml): its own, never committed
+deploy/packs/

@@ -449,7 +449,15 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
           // No answer at all is said on the page as the deployment being out of reach,
           // rather than waited for.
           if (!signal.aborted) {
-            setSkills({ address: null, source: "", page: null, status: "unavailable", items: [] });
+            setSkills({
+              address: null,
+              source: "",
+              page: null,
+              status: "unavailable",
+              refusal: null,
+              items: [],
+              mount: null,
+            });
           }
         });
       if (typeof EventSource === "undefined") {

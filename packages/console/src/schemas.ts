@@ -2,6 +2,13 @@
 // most of what a page downloads. The server validates what it is sent with the input schemas
 // and builds the output shapes; the pages and a custom console parse answers with the rest.
 // Absent values are `null` on the wire, never missing keys. Changes within a version are additive.
+import {
+  restBrowseSchema as packBrowseSchema,
+  restFileSchema as packFileSchema,
+  restFindSchema as packFindSchema,
+  restMountSchema as packMountSchema,
+  restSkillSchema as packSkillSchema,
+} from "@skillcdn/core";
 import * as z from "zod/mini";
 import { isDocumentPath } from "./documents.js";
 import {
@@ -913,15 +920,39 @@ export const restClaimSchema = z.union([
 ]);
 export type RestClaim = z.infer<typeof restClaimSchema>;
 
-/** One of the project's skills, as the SkillCDN deployment lists it at the project's address. */
+/** Why a pack did not answer a read: the code and the words the deployment, or the console reading a directory, gave, as the main repository's API spells them. */
+export const restPackRefusalSchema = z.object({
+  code: z.string(),
+  message: z.string(),
+  /** With a file the pack will not carry: where it is at its source, or `null`. */
+  sourceUrl: z.nullable(z.string()),
+  /** With `skill.ambiguous`: the directories to choose from. */
+  directories: z.array(z.string()),
+});
+export type RestPackRefusal = z.infer<typeof restPackRefusalSchema>;
+
+/** What every answer about a pack says first: its address, where it is read, and how the read went. */
+const packEnvelope = {
+  /** The address, canonical, or `null` when neither the project nor the console names one. */
+  address: z.nullable(z.string()),
+  /** The origin of the SkillCDN deployment the pack is read at; `null` for a pack read from a directory on the console's machine (ADR-0031). */
+  source: z.nullable(z.string()),
+  /** Where a person browses the address at the deployment, or `null` without one. */
+  page: z.nullable(z.string()),
+  status: z.enum(SKILLS_STATUSES),
+  /** Why the read did not happen, in the pack's own words, when `status` says it did not; `null` otherwise. */
+  refusal: z.nullable(restPackRefusalSchema),
+};
+
+/** One of the project's skills, as the pack lists it: what the repository says of it, where a person reads it, what an agent loads it by. */
 export const restSkillSchema = z.object({
   name: z.string(),
   description: z.string(),
   /** The skill's folder in the repository (`""` for the root), and the path of its `SKILL.md`. */
   directory: z.string(),
   path: z.string(),
-  /** Where a person reads the skill: its page at the deployment. */
-  page: z.string(),
+  /** Where a person reads the skill: its page at the deployment, or `null` for a pack read from a directory. */
+  page: z.nullable(z.string()),
   /** What an agent loads the skill by, through its own SkillCDN connection; `null` when the path is not one. */
   uri: z.nullable(z.string()),
   /** The title and the description in other languages, by language tag, as the repository gives them. */
@@ -932,15 +963,9 @@ export const restSkillSchema = z.object({
 });
 export type RestSkill = z.infer<typeof restSkillSchema>;
 
-/** `GET /api/v1/projects/<key>/skills`: the project's skills, read by address through SkillCDN. */
+/** `GET /api/v1/projects/<key>/skills`: the project's pack, read by address (ADR-0028, ADR-0031). */
 export const restSkillsSchema = z.object({
-  /** The address, canonical, or `null` when neither the project nor the deployment names one. */
-  address: z.nullable(z.string()),
-  /** The origin of the SkillCDN deployment the skills are read through. */
-  source: z.string(),
-  /** Where a person browses the address, or `null` without one. */
-  page: z.nullable(z.string()),
-  status: z.enum(SKILLS_STATUSES),
+  ...packEnvelope,
   /** The pack as its manifest or its README names it, when `ready`: what it is called, what it is for, the language it is written in. */
   pack: z.optional(
     z.object({
@@ -949,10 +974,12 @@ export const restSkillsSchema = z.object({
       language: z.nullable(z.string()),
     }),
   ),
-  /** How many skills and documents the deployment indexed at the address, when `ready`. */
+  /** How many skills and documents the index found at the address, when `ready`. */
   counts: z.optional(z.object({ skills: count, documents: count })),
   /** The skills, when `ready`; empty otherwise. */
   items: z.array(restSkillSchema),
+  /** What the address serves, as the main repository's REST API answers it (`RestMount` of `@skillcdn/core`), for a program that renders what a model is given; `null` when nothing was answered. */
+  mount: z.nullable(packMountSchema),
 });
 export type RestSkills = z.infer<typeof restSkillsSchema>;
 
@@ -964,181 +991,31 @@ export const restPackTokenInputSchema = z.object({
 });
 export type RestPackTokenInput = z.infer<typeof restPackTokenInputSchema>;
 
-/** A rule, the body or an included file of a skill: its path from the repository's root and its text, cut where a page ends. */
-export const restSkillTextSchema = z.object({
-  path: z.string(),
-  body: z.string(),
-  truncated: z.boolean(),
-});
-/** A skill as the deployment serves it, on one page of its context: what `load_skill` gives a model, in the console's shape. */
-export const restSkillPageSchema = z.object({
-  path: z.string(),
-  directory: z.string(),
-  name: z.string(),
-  description: z.string(),
-  /** The rules that hold for the skill, from the repository's root to the nearest manifest. */
-  rules: z.array(restSkillTextSchema),
-  body: z.string(),
-  /** The files the skill includes with its body. */
-  included: z.array(restSkillTextSchema),
-  /** The paths of the skill's own files, read with the file route. */
-  files: z.array(z.string()),
-  references: z.array(
-    z.object({
-      path: z.string(),
-      status: z.enum(["available", "blocked", "missing", "outside_mount"]),
-    }),
-  ),
-  /** Whether this page completes the skill; else the cursor of the next. */
-  complete: z.boolean(),
-  nextCursor: z.nullable(z.string()),
-  /** How the skill is served: whole, or described only, with its license and where it is read at its host. */
-  serving: z.object({
-    full: z.boolean(),
-    license: z.nullable(z.string()),
-    sourceUrl: z.nullable(z.string()),
-  }),
-  warnings: z.array(z.string()),
-});
-export type RestSkillPage = z.infer<typeof restSkillPageSchema>;
-
-/** `GET .../skills/one?path=&cursor=`: one skill of the pack, a page of it; `skill` is `null` unless `ready`. */
+/** `GET .../skills/one?path=&cursor=`: a page of a skill's context, as the pack answers `load_skill` (`RestSkill` of `@skillcdn/core`); `read` is `null` unless `ready`. */
 export const restSkillLoadSchema = z.object({
-  address: z.nullable(z.string()),
-  source: z.string(),
-  page: z.nullable(z.string()),
-  status: z.enum(SKILLS_STATUSES),
-  skill: z.nullable(restSkillPageSchema),
+  ...packEnvelope,
+  read: z.nullable(packSkillSchema),
 });
 export type RestSkillLoad = z.infer<typeof restSkillLoadSchema>;
 
-/** `GET .../skills/file?path=&offset=&limit=`: a page of a file of the pack, or what a folder holds; both `null` unless `ready`. */
+/** `GET .../skills/file?path=&offset=&limit=`: a page of a file, or what a folder holds, as the pack answers `read_repo_file` (`RestFile` of `@skillcdn/core`); `read` is `null` unless `ready`. */
 export const restSkillFileSchema = z.object({
-  address: z.nullable(z.string()),
-  source: z.string(),
-  status: z.enum(SKILLS_STATUSES),
-  file: z.nullable(
-    z.object({
-      path: z.string(),
-      content: z.string(),
-      offset: count,
-      nextOffset: z.nullable(count),
-      totalLength: count,
-    }),
-  ),
-  folder: z.nullable(
-    z.object({
-      path: z.string(),
-      entries: z.array(
-        z.object({
-          path: z.string(),
-          kind: z.enum(["directory", "file"]),
-          size: z.nullable(count),
-        }),
-      ),
-      truncated: z.boolean(),
-    }),
-  ),
+  ...packEnvelope,
+  read: z.nullable(packFileSchema),
 });
 export type RestSkillFile = z.infer<typeof restSkillFileSchema>;
 
-/** An entry of a folder of the pack, as the deployment browses it: a skill, a folder with what it holds, or a file. */
-export const restSkillBrowseEntrySchema = z.object({
-  kind: z.enum(["skill", "directory", "file"]),
-  /** The path from the repository's root: of the `SKILL.md` for a skill, of the folder, of the file. */
-  path: z.string(),
-  name: z.nullable(z.string()),
-  description: z.nullable(z.string()),
-  /** For a folder: the skills and the documents under it. */
-  skillCount: count,
-  documentCount: count,
-  /** For a file: its size in bytes. */
-  size: z.nullable(count),
-  /** For a folder: the README that introduces it, read with the file route. */
-  overviewPath: z.nullable(z.string()),
-  /** For a skill: its license, and whether the address only describes it. */
-  license: z.nullable(z.string()),
-  describedOnly: z.boolean(),
-});
-export type RestSkillBrowseEntry = z.infer<typeof restSkillBrowseEntrySchema>;
-
-/** `GET .../skills/browse?path=&cursor=&limit=`: what a folder of the pack holds, a page of it (`browse_repo`); `folder` is `null` unless `ready`. */
+/** `GET .../skills/browse?path=&cursor=&limit=`: what a folder holds, a page of it, as the pack answers `browse_repo` (`RestBrowse` of `@skillcdn/core`); `read` is `null` unless `ready`. */
 export const restSkillBrowseSchema = z.object({
-  address: z.nullable(z.string()),
-  source: z.string(),
-  page: z.nullable(z.string()),
-  status: z.enum(SKILLS_STATUSES),
-  folder: z.nullable(
-    z.object({
-      path: z.string(),
-      /** The README that introduces the folder, or `null`. */
-      overview: z.nullable(
-        z.object({
-          path: z.string(),
-          title: z.nullable(z.string()),
-          description: z.nullable(z.string()),
-        }),
-      ),
-      entries: z.array(restSkillBrowseEntrySchema),
-      /** Where the listing goes on, or `null` at its end. */
-      nextCursor: z.nullable(z.string()),
-    }),
-  ),
+  ...packEnvelope,
+  read: z.nullable(packBrowseSchema),
 });
 export type RestSkillBrowse = z.infer<typeof restSkillBrowseSchema>;
 
-/** What a search of the pack found: a skill, as the listing has it, with the files of it that matched; or a document on its own. */
-export const restSkillFindItemSchema = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("skill"),
-    name: z.string(),
-    description: z.string(),
-    directory: z.string(),
-    path: z.string(),
-    page: z.string(),
-    uri: z.nullable(z.string()),
-    translations: z.record(
-      z.string(),
-      z.object({ title: z.nullable(z.string()), description: z.nullable(z.string()) }),
-    ),
-    /** The files of the skill that matched, a few, and how many more did. */
-    files: z.array(
-      z.object({
-        path: z.string(),
-        title: z.nullable(z.string()),
-        summary: z.nullable(z.string()),
-      }),
-    ),
-    moreFiles: count,
-    license: z.nullable(z.string()),
-    describedOnly: z.boolean(),
-  }),
-  z.object({
-    kind: z.literal("document"),
-    path: z.string(),
-    title: z.nullable(z.string()),
-    summary: z.nullable(z.string()),
-    /** The folder of the skill the document belongs to, or `null` for one on its own. */
-    skillDirectory: z.nullable(z.string()),
-  }),
-]);
-export type RestSkillFindItem = z.infer<typeof restSkillFindItemSchema>;
-
-/** `GET .../skills/find?query=&path=&cursor=&limit=`: what words find in the pack, a page of it in relevance order (`search_repo`); `found` is `null` unless `ready`. */
+/** `GET .../skills/find?query=&path=&cursor=&limit=`: what words find, a page of it in relevance order, as the pack answers `search_repo` (`RestFind` of `@skillcdn/core`); `read` is `null` unless `ready`. */
 export const restSkillFindSchema = z.object({
-  address: z.nullable(z.string()),
-  source: z.string(),
-  page: z.nullable(z.string()),
-  status: z.enum(SKILLS_STATUSES),
-  found: z.nullable(
-    z.object({
-      query: z.string(),
-      /** The folder the search was kept to, or `null` for the whole pack. */
-      path: z.nullable(z.string()),
-      items: z.array(restSkillFindItemSchema),
-      nextCursor: z.nullable(z.string()),
-    }),
-  ),
+  ...packEnvelope,
+  read: z.nullable(packFindSchema),
 });
 export type RestSkillFind = z.infer<typeof restSkillFindSchema>;
 

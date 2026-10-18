@@ -1,4 +1,7 @@
 import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   CLAIM_PATH,
   connectPath,
@@ -58,9 +61,20 @@ import {
   restWorkSchema,
   rulesPath,
 } from "@skillcdn/console/api";
+import {
+  type Address,
+  formatAddress,
+  parseAddress,
+  type RestBrowse,
+  type RestFile,
+  type RestFind,
+  type RestMount,
+  type RestSkill,
+} from "@skillcdn/core";
 import { eq } from "drizzle-orm";
 import { pino } from "pino";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createDirectorySource } from "./adapters/directory-packs.js";
 import { drizzleOf } from "./db/client.js";
 import { archiveStaleTasks } from "./db/queries/tasks.js";
 import { ensureWorkspace } from "./db/queries/workspaces.js";
@@ -68,7 +82,7 @@ import { tasks } from "./db/schema.js";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "./db/testing.js";
 import { Archivist } from "./jobs/archivist.js";
 import { OrganizationSync } from "./jobs/organization-sync.js";
-import type { SkillSource } from "./ports/skill-source.js";
+import { type Pack, PackError, type PackSource } from "./ports/skill-source.js";
 import { createFixtureOrganization } from "./testing/fixture-organization.js";
 import { createFixtureProvider } from "./testing/fixture-provider.js";
 import { createHarness, HARNESS_VERSION, type Harness, SIGN_IN_URL } from "./testing/harness.js";
@@ -105,6 +119,13 @@ const send = (cookie: string, method: "POST" | "PATCH" | "DELETE", path: string,
   });
 
 const get = (cookie: string, path: string) => h.request(path, { headers: { cookie } });
+const parseAddressOrThrow = (text: string): Address => {
+  const parsed = parseAddress(text);
+  if (!parsed.ok) {
+    throw new Error(parsed.error.message);
+  }
+  return parsed.value;
+};
 
 const errorOf = async (response: Response) =>
   restErrorSchema.parse(await response.json()).error.code;
@@ -1771,13 +1792,63 @@ describe("roles", () => {
   });
 });
 
-/** A source that reads no skill and no file: what the tests of the listing need of them. */
+/** A pack whose reads are never asked: what the tests of the listing need of them. */
 const unread = {
-  load: async () => ({ status: "unavailable" as const }),
-  read: async () => ({ status: "unavailable" as const }),
-  browse: async () => ({ status: "unavailable" as const }),
-  find: async () => ({ status: "unavailable" as const }),
+  browse: async (): Promise<RestBrowse> => {
+    throw new Error("not asked");
+  },
+  find: async (): Promise<RestFind> => {
+    throw new Error("not asked");
+  },
+  skill: async (): Promise<RestSkill> => {
+    throw new Error("not asked");
+  },
+  file: async (): Promise<RestFile> => {
+    throw new Error("not asked");
+  },
 };
+
+const COMMIT = "0123456789abcdef0123456789abcdef01234567";
+
+/** What an address serves, as a pack answers it: one skill, with a title in Korean. */
+function mountOf(address: Address): RestMount {
+  return {
+    address: formatAddress(address),
+    repository: {
+      host: address.host,
+      owner: address.owner,
+      name: address.repo,
+      defaultBranch: "main",
+      description: null,
+      avatar: "https://avatars.example/acme.png",
+    },
+    ref: address.ref?.kind === "name" ? address.ref.name : null,
+    pinned: false,
+    commit: COMMIT,
+    path: address.path,
+    verified: false,
+    image: null,
+    index: {
+      status: "ready",
+      truncated: false,
+      manifest: null,
+      skillCount: 1,
+      documentCount: 0,
+      skills: [
+        {
+          path: "review/SKILL.md",
+          name: "review",
+          directory: "review",
+          description: "Reviews a change.",
+          warnings: [],
+          translations: { ko: { title: "리뷰", description: null } },
+        },
+      ],
+      documents: [],
+      diagnostics: [],
+    },
+  };
+}
 
 describe("skills", () => {
   it("are none without an address, the organization's with one, and a project's own when it names one", async () => {
@@ -1787,25 +1858,22 @@ describe("skills", () => {
       source: "https://skillcdn.ai",
       page: null,
       status: "none",
+      refusal: null,
       items: [],
+      mount: null,
     });
 
     const asked: string[] = [];
-    const source: SkillSource = {
-      ...unread,
-      async list(address) {
-        asked.push(`/gh/${address.owner}/${address.repo}`);
+    const source: PackSource = {
+      open(address) {
         return {
-          status: "ready",
-          skills: [
-            {
-              name: "review",
-              description: "Reviews a change.",
-              directory: "review",
-              path: "review/SKILL.md",
-              translations: { ko: { title: "리뷰", description: null } },
-            },
-          ],
+          address,
+          location: { kind: "deployment", url: "https://skillcdn.test" },
+          ...unread,
+          async mount() {
+            asked.push(formatAddress(address));
+            return mountOf(address);
+          },
         };
       },
     };
@@ -1824,6 +1892,7 @@ describe("skills", () => {
       source: "https://skillcdn.test",
       page: "https://skillcdn.test/gh/acme/skills",
       status: "ready",
+      refusal: null,
     });
     expect(first.items).toEqual([
       {
@@ -1836,7 +1905,9 @@ describe("skills", () => {
         translations: { ko: { title: "리뷰", description: null } },
       },
     ]);
-    // Held for a while: a second read asks the deployment nothing.
+    // What the pack answered travels with the listing, as it was answered.
+    expect(first.mount).toEqual(mountOf(parseAddressOrThrow("/gh/acme/skills")));
+    // Held for a while: a second read asks the pack nothing.
     expect(await read()).toEqual(first);
     expect(asked).toEqual(["/gh/acme/skills"]);
     // A project that names its own address is read at it, and held on its own.
@@ -1852,6 +1923,96 @@ describe("skills", () => {
     expect(asked).toEqual(["/gh/acme/skills", "/gh/acme/writing"]);
     expect((await served.request(`${IN}/skills`)).status).toBe(401);
     await served.close();
+  });
+});
+
+describe("a pack served from the console's machine (ADR-0031)", () => {
+  it("is read from the directory the console was given, as a deployment's own reads would answer it, with no page and no token", async () => {
+    const root = await mkdtemp(join(tmpdir(), "console-packs-"));
+    try {
+      const directory = join(root, "acme", "skills");
+      await mkdir(join(directory, "review"), { recursive: true });
+      await writeFile(
+        join(directory, "SKILLCDN.md"),
+        "---\nname: Acme\ndescription: What Acme does, as skills.\n---\nBe kind.\n",
+      );
+      await writeFile(
+        join(directory, "review", "SKILL.md"),
+        "---\nname: review\ndescription: Reviews a change.\n---\nRead the diff.\n",
+      );
+      const deployment: PackSource = {
+        open: () => {
+          throw new Error("the deployment is not asked for a local address");
+        },
+      };
+      const served = createHarness(testDatabase, {
+        providers: [createFixtureProvider()],
+        skills: {
+          address: "/local/acme/skills",
+          source: deployment,
+          directory: createDirectorySource({
+            root,
+            clock: { now: () => new Date() },
+            logger: pino({ level: "silent" }),
+          }),
+        },
+      });
+      const cookie = await served.signIn("alice");
+      const headers = { cookie };
+      const listed = restSkillsSchema.parse(
+        await (await served.request(`${IN}/skills`, { headers })).json(),
+      );
+      expect(listed).toMatchObject({
+        address: "/local/acme/skills",
+        source: null,
+        page: null,
+        status: "ready",
+        refusal: null,
+        pack: { name: "Acme", description: "What Acme does, as skills." },
+        counts: { skills: 1, documents: 0 },
+        items: [
+          { path: "review/SKILL.md", page: null, uri: "skill://local/acme/skills/review/SKILL.md" },
+        ],
+      });
+      expect(listed.mount).toMatchObject({
+        verified: true,
+        repository: { host: "local", owner: "acme", name: "skills" },
+      });
+      const one = restSkillLoadSchema.parse(
+        await (await served.request(`${IN}/skills/one?path=review%2FSKILL.md`, { headers })).json(),
+      );
+      expect(one.status).toBe("ready");
+      expect(one.read?.status === "ready" ? one.read.skill.body : "").toContain("Read the diff.");
+      expect(
+        one.read?.status === "ready" ? one.read.skill.ruleChain?.map((rule) => rule.body) : [],
+      ).toEqual(["Be kind."]);
+      const found = restSkillFindSchema.parse(
+        await (await served.request(`${IN}/skills/find?query=review`, { headers })).json(),
+      );
+      expect(
+        found.read?.status === "ready" ? found.read.items.map((item) => item.path) : [],
+      ).toEqual(["review/SKILL.md"]);
+      // A pack that is not in the directory is not found, in the pack's own words; the
+      // deployment is never asked for a local address.
+      const named = await served.request("/api/v1/projects", {
+        method: "POST",
+        headers: { cookie, origin: SIGN_IN_URL, "content-type": "application/json" },
+        body: JSON.stringify({ key: "packs", name: "Packs", skillsAddress: "/local/acme/missing" }),
+      });
+      expect(named.status).toBe(201);
+      const missing = restSkillsSchema.parse(
+        await (await served.request(`${projectPath("packs")}/skills`, { headers })).json(),
+      );
+      expect(missing).toMatchObject({
+        status: "not_found",
+        refusal: { code: "mount.repo_not_found" },
+        items: [],
+        mount: null,
+      });
+      await served.close();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });
 
@@ -2893,115 +3054,110 @@ describe("the discussion on a task", () => {
 });
 
 describe("the pack of a project (ADR-0028)", () => {
-  it("is read through the console with the pack token an owner sets, which goes to the deployment and nowhere else", async () => {
+  it("is read through the console with the pack token an owner sets, which goes to the deployment and nowhere else, and answered as the pack answered it", async () => {
     const tokens: (string | undefined)[] = [];
-    const source: SkillSource = {
-      async list(_address, token) {
-        tokens.push(token);
-        if (token === "scdn_repo_bad") {
-          return { status: "token_invalid", skills: [] };
-        }
-        return {
-          status: "ready",
-          skills: [
-            {
-              name: "review",
-              description: "Reviews a change.",
-              directory: "review",
-              path: "review/SKILL.md",
-              translations: {},
-            },
-          ],
-        };
+    const page = (cursor: string | undefined): RestSkill => ({
+      status: "ready",
+      commit: COMMIT,
+      skill: {
+        path: "review/SKILL.md",
+        ruleChain: [{ path: "SKILLCDN.md", body: "Be kind.", truncated: false }],
+        references: [],
+        complete: cursor !== undefined,
+        nextCursor: cursor === undefined ? "page-2" : null,
+        includedContents: [],
+        name: "review",
+        directory: "review",
+        description: "Reviews a change.",
+        license: "MIT",
+        compatibility: null,
+        allowedTools: null,
+        metadata: {},
+        body: cursor === undefined ? "Read the diff. " : "Then say so.",
+        files: ["review/guide.md"],
+        filesTruncated: false,
+        included: [],
+        warnings: [],
+        translations: {},
+        rules: { path: "SKILLCDN.md", body: "Be kind.", truncated: false },
       },
-      async load(_address, path, cursor, token) {
+    });
+    const source: PackSource = {
+      open(address, token): Pack {
         tokens.push(token);
-        if (path !== "review/SKILL.md") {
-          return { status: "not_found" };
-        }
         return {
-          status: "ready",
-          skill: {
-            path,
-            directory: "review",
-            name: "review",
-            description: "Reviews a change.",
-            rules: [{ path: "SKILLCDN.md", body: "Be kind.", truncated: false }],
-            body: cursor === undefined ? "Read the diff. " : "Then say so.",
-            included: [],
-            files: ["review/guide.md"],
-            references: [],
-            complete: cursor !== undefined,
-            nextCursor: cursor === undefined ? "page-2" : undefined,
-            serving: { full: true, license: "MIT", sourceUrl: undefined },
-            warnings: [],
+          address,
+          location: { kind: "deployment", url: "https://skillcdn.test" },
+          async mount() {
+            if (token === "scdn_repo_bad") {
+              throw new PackError(401, "auth.invalid_token", "The token is no good here.");
+            }
+            return mountOf(address);
           },
-        };
-      },
-      async read(_address, path, page, token) {
-        tokens.push(token);
-        if (path !== "review/guide.md") {
-          return { status: "not_found" };
-        }
-        return {
-          status: "ready",
-          file: {
-            path,
-            content: "How to review.",
-            offset: page.offset ?? 0,
-            nextOffset: undefined,
-            totalLength: 14,
+          async skill(path, cursor) {
+            if (path !== "review/SKILL.md") {
+              throw new PackError(404, "skill.not_found", "No skill at that SKILL.md path.");
+            }
+            return page(cursor);
           },
-          folder: undefined,
-        };
-      },
-      async browse(_address, page, token) {
-        tokens.push(token);
-        return {
-          status: "ready",
-          folder: {
-            path: page.path ?? "",
-            overview: undefined,
-            entries: [
-              {
-                kind: "skill",
-                path: "review/SKILL.md",
-                name: "review",
-                description: "Reviews a change.",
-                skillCount: 0,
-                documentCount: 0,
-                size: undefined,
-                overviewPath: undefined,
-                license: "MIT",
-                describedOnly: false,
-              },
-            ],
-            nextCursor: undefined,
+          async file(query) {
+            if (query.path !== "review/guide.md") {
+              throw new PackError(404, "file.not_found", "No file at that path in this pack.");
+            }
+            return {
+              kind: "file",
+              commit: COMMIT,
+              path: query.path,
+              content: "How to review.",
+              offset: query.offset ?? 0,
+              nextOffset: null,
+              totalLength: 14,
+            };
           },
-        };
-      },
-      async find(_address, query, token) {
-        tokens.push(token);
-        return {
-          status: "ready",
-          found: {
-            query: query.query,
-            path: query.path,
-            items: [
-              {
-                kind: "skill",
-                path: "review/SKILL.md",
-                directory: "review",
-                name: "review",
-                description: "Reviews a change.",
-                translations: {},
-                files: [],
-                moreFiles: 0,
-                license: "MIT",
-                describedOnly: false,
-              },
-            ],
-            nextCursor: undefined,
+          async browse(query) {
+            return {
+              status: "ready",
+              commit: COMMIT,
+              path: query.path ?? "",
+              entries: [
+                {
+                  kind: "skill",
+                  path: "review/SKILL.md",
+                  name: "review",
+                  description: "Reviews a change.",
+                  skillCount: 0,
+                  documentCount: 0,
+                  size: null,
+                  manifestPath: null,
+                  language: null,
+                  license: { kind: "permissive", name: "MIT", source: null },
+                },
+              ],
+              nextCursor: null,
+            };
+          },
+          async find(query) {
+            return {
+              status: "ready",
+              commit: COMMIT,
+              query: query.query ?? null,
+              path: query.path,
+              items: [
+                {
+                  kind: "skill",
+                  path: "review/SKILL.md",
+                  directory: "review",
+                  name: "review",
+                  description: "Reviews a change.",
+                  translations: {},
+                  files: [],
+                  moreFiles: 0,
+                  license: { kind: "permissive", name: "MIT", source: null },
+                },
+              ],
+              nextCursor: null,
+              totals: null,
+            };
           },
         };
       },
@@ -3032,7 +3188,8 @@ describe("the pack of a project (ADR-0028)", () => {
     const project = restProjectSchema.parse(await set.json());
     expect(project.packToken?.setAt).toEqual(expect.any(String));
     expect(JSON.stringify(project)).not.toContain("scdn_repo");
-    // The listing and the reads go to the deployment with the token, for a member too.
+    // The listing and the reads go to the deployment with the token, for a member too, and
+    // come back as the pack answered them, in the console's envelope.
     const headers = { cookie: member };
     const listed = restSkillsSchema.parse(
       await (await served.request(`${IN}/skills`, { headers })).json(),
@@ -3041,52 +3198,57 @@ describe("the pack of a project (ADR-0028)", () => {
     const one = restSkillLoadSchema.parse(
       await (await served.request(`${IN}/skills/one?path=review%2FSKILL.md`, { headers })).json(),
     );
-    expect(one.status).toBe("ready");
-    expect(one.skill?.rules).toEqual([{ path: "SKILLCDN.md", body: "Be kind.", truncated: false }]);
-    expect(one.skill?.nextCursor).toBe("page-2");
+    expect(one).toMatchObject({
+      address: "/gh/acme/skills",
+      source: "https://skillcdn.test",
+      page: "https://skillcdn.test/gh/acme/skills",
+      status: "ready",
+      refusal: null,
+    });
+    expect(one.read).toEqual(page(undefined));
     const next = restSkillLoadSchema.parse(
       await (
         await served.request(`${IN}/skills/one?path=review%2FSKILL.md&cursor=page-2`, { headers })
       ).json(),
     );
-    expect(next.skill).toMatchObject({ complete: true, body: "Then say so." });
+    expect(next.read).toEqual(page("page-2"));
     const file = restSkillFileSchema.parse(
       await (await served.request(`${IN}/skills/file?path=review%2Fguide.md`, { headers })).json(),
     );
-    expect(file.file?.content).toBe("How to review.");
+    expect(file.read).toMatchObject({ kind: "file", content: "How to review." });
     // A folder and a search go the same way, with the token; what is asked wrong is refused.
     const browsed = restSkillBrowseSchema.parse(
       await (await served.request(`${IN}/skills/browse?path=review`, { headers })).json(),
     );
     expect(browsed.status).toBe("ready");
-    expect(browsed.folder?.path).toBe("review");
-    expect(browsed.folder?.entries.map((entry) => `${entry.kind} ${entry.path}`)).toEqual([
-      "skill review/SKILL.md",
-    ]);
+    expect(browsed.read?.status === "ready" ? browsed.read.path : undefined).toBe("review");
+    expect(
+      browsed.read?.status === "ready"
+        ? browsed.read.entries.map((entry) => `${entry.kind} ${entry.path}`)
+        : [],
+    ).toEqual(["skill review/SKILL.md"]);
     const found = restSkillFindSchema.parse(
       await (await served.request(`${IN}/skills/find?query=review&limit=5`, { headers })).json(),
     );
-    expect(found.found?.query).toBe("review");
-    expect(found.found?.items.map((item) => item.path)).toEqual(["review/SKILL.md"]);
-    expect(found.found?.items[0]).toMatchObject({
-      kind: "skill",
-      uri: "skill://gh/acme/skills/review/SKILL.md",
-      license: "MIT",
-    });
+    expect(found.read?.status === "ready" ? found.read.query : undefined).toBe("review");
+    expect(found.read?.status === "ready" ? found.read.items.map((item) => item.path) : []).toEqual(
+      ["review/SKILL.md"],
+    );
     expect((await served.request(`${IN}/skills/find`, { headers })).status).toBe(400);
     expect((await served.request(`${IN}/skills/find?query=x&limit=26`, { headers })).status).toBe(
       400,
     );
     expect((await served.request(`${IN}/skills/browse?limit=0`, { headers })).status).toBe(400);
     expect(tokens.filter((token) => token === "scdn_repo_ok").length).toBeGreaterThanOrEqual(7);
-    // A skill that is not there, and a read that is not asked right.
-    expect(
-      restSkillLoadSchema.parse(
-        await (
-          await served.request(`${IN}/skills/one?path=nothing%2FSKILL.md`, { headers })
-        ).json(),
-      ).status,
-    ).toBe("not_found");
+    // A skill that is not there, with the pack's own words; and a read that is not asked right.
+    const missing = restSkillLoadSchema.parse(
+      await (await served.request(`${IN}/skills/one?path=nothing%2FSKILL.md`, { headers })).json(),
+    );
+    expect(missing).toMatchObject({
+      status: "not_found",
+      refusal: { code: "skill.not_found", message: "No skill at that SKILL.md path." },
+      read: null,
+    });
     expect((await served.request(`${IN}/skills/one`, { headers })).status).toBe(400);
     expect((await served.request(`${IN}/skills/file?path=x&limit=0`, { headers })).status).toBe(
       400,
@@ -3108,7 +3270,7 @@ describe("the pack of a project (ADR-0028)", () => {
         event.kind === "project.updated" && JSON.stringify(event.data).includes("packToken"),
     );
     expect(changes).toHaveLength(2);
-    expect(JSON.stringify([events, served.logs])).not.toContain("scdn_repo_ok");
+    expect(JSON.stringify([events, served.logs])).not.toContain("scdn_repo");
   });
 });
 

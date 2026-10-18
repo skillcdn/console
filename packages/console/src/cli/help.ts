@@ -285,11 +285,12 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     ],
   },
   skills: {
-    usage: "skills  |  skills <folder>  |  skills --search <words> [<folder>] [--limit <n>]",
+    usage:
+      "skills  |  skills <folder>  |  skills --search <words> [<folder>] [--limit <n>] [--cursor <cursor>]",
     synopsis:
       "The project's pack: its skills; what a folder of it holds; or what words find in it.",
     about:
-      "The project's pack, as SkillCDN serves it at the project's address, read by the console with the pack token the project holds where the pack is private (ADR-0028). Alone: the pack by name with how many skills and documents it has, and its skills, each with its description, the path of its SKILL.md, which console skill reads it by, and the URI you load it by through your own SkillCDN connection where your host has one; and where the console's own skills are on this machine. With a folder (. for the root): what it holds, as browse_repo lays it out: its skills, its folders with how many skills and documents each holds and the README that introduces it, its files; whole, page after page. With --search: the skills and the documents the words find, in relevance order, a skill with the files of it that matched; words, not meaning, in the language the pack is written in; within the folder when one is named; 10 unless --limit says otherwise, up to 25, and a last line says when more matched. --json answers with the console's own JSON, the page of each skill included.",
+      "The project's pack, read by the console at the project's address, or the organization's: at a SkillCDN deployment, with the pack token the project holds where the pack is private (ADR-0028), or from a directory on the console's machine for a local address (ADR-0031). Alone: where the pack is and what a client is told of it on connect, then every skill with the path of its SKILL.md and every document, as a connection of your own would list them, and where the console's own skills are on this machine. With a folder (. for the root): what it holds, whole, as browse_repo lays it out for a model: its skills, its folders with what each holds and the README that introduces it, its files. With --search: what the words find, as search_repo does: skills first, with the files of theirs that matched, then documents, in relevance order; words, not meaning, in the language the pack is written in; within the folder when one is named; 10 unless --limit says otherwise, up to 25, and a nextCursor line says when more matched, which --cursor continues. The text is the one an MCP client's model is given, with the reads named as these commands. --json answers with the console's own JSON: what the pack answered, in the shapes of the main repository's REST API, the pages of a folder joined.",
     limits: ["search: 1 to 500 characters; limit: 1 to 25"],
     refusals: [
       "status not_found: the pack is not served to the console; private, with no pack token on the project",
@@ -301,11 +302,11 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     synopsis:
       "One skill of the pack whole, its rules first; or with --file a file of the pack, or what a folder holds.",
     about:
-      "One skill of the project's pack, whole, as load_skill lays it out for you: the rules of the repository from its root to the nearest manifest, the skill's body, the files it includes, each under a line that names its path; then the files it has and what it refers to. Read by the console from the SkillCDN deployment, with the pack token the project holds where the pack is private, so you need no connection of your own. <path> is the path of the SKILL.md from the repository's root, as console skills lists it, or the URI it lists beside the path (skill://gh/<owner>/<repo>/<path>). --file <path> reads a file of the pack instead, whole, or what a folder holds, and takes no skill's path beside it; console skills <folder> shows a folder with more.",
+      "One skill of the project's pack, whole, as load_skill lays it out for a model: the rules of the repository from its root to the nearest manifest, the skill's instructions, the files it includes, then its supporting files and what it refers to; the pages it came in are joined. Read by the console from the pack, with the pack token the project holds where the pack is private, so you need no connection of your own. <path> is the path of the SKILL.md from the repository's root, as console skills lists it, or the URI the pack names it by (skill://<host>/<owner>/<name>/<path>). --file <path> reads a file of the pack instead, whole, as read_repo_file does, or what a folder holds, and takes no skill's path beside it; console skills <folder> shows a folder with more. --json answers with what the pack answered, in the shapes of the main repository's REST API, the pages joined.",
     refusals: [
       "status not_found: the pack is not served to the console; private, with no pack token on the project",
       "status token_invalid: the pack token the project holds no longer works; an owner sets a new one",
-      "status failed, for a file: SkillCDN will not carry it, too large or not text",
+      "status failed, for a file: the pack will not carry it, too large or not text",
     ],
   },
   rules: {
