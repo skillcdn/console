@@ -9,15 +9,19 @@ import {
   type RestTask,
 } from "../api.js";
 import { useWords } from "../i18n/index.js";
+import { Picker } from "./picker.js";
+import { type TaskSearch, taskLabel } from "./task-form.js";
 import { Button } from "./ui.js";
 
 // Raising a decision: the question, what a person needs to know, and the options to choose from.
+// The task it is about is the page's, when raised from a task; otherwise it is found by searching
+// the board a page at a time (ADR-0037), never picked from the board whole.
 
 export interface DecisionFormProps {
-  /** The tasks the decision may be about. */
-  readonly tasks: readonly RestTask[];
-  /** The task it is about from the start, when raised from a task's page. */
+  /** The task it is about from the start, when raised from a task's page; the field is not shown then. */
   readonly taskId?: string | undefined;
+  /** What words find among the tasks of the project, a page at a time; left out, the decision is about no task in particular. */
+  readonly findTasks?: TaskSearch | undefined;
   readonly busy?: boolean | undefined;
   readonly error?: string | undefined;
   readonly onSubmit: (input: RestDecisionInput) => void;
@@ -29,7 +33,7 @@ export function DecisionForm(props: DecisionFormProps) {
   const form = words.decisions.form;
   const [question, setQuestion] = useState("");
   const [body, setBody] = useState("");
-  const [taskId, setTaskId] = useState(props.taskId ?? "");
+  const [about, setAbout] = useState<RestTask | undefined>(undefined);
   const [options, setOptions] = useState<readonly string[]>(["", ""]);
 
   const labels = options.map((option) => option.trim()).filter((option) => option.length > 0);
@@ -41,7 +45,7 @@ export function DecisionForm(props: DecisionFormProps) {
       question: question.trim(),
       body,
       options: labels.map((label) => ({ label })),
-      taskId: taskId === "" ? null : taskId,
+      taskId: props.taskId ?? about?.id ?? null,
     });
   };
 
@@ -68,22 +72,20 @@ export function DecisionForm(props: DecisionFormProps) {
           onChange={(event) => setBody(event.target.value)}
         />
       </label>
-      {props.taskId === undefined && props.tasks.length > 0 && (
-        <label className="sc-field">
+      {props.taskId === undefined && props.findTasks !== undefined && (
+        <div className="sc-field">
           <span className="sc-field-label">{form.about}</span>
-          <select
-            className="sc-input"
-            value={taskId}
-            onChange={(event) => setTaskId(event.target.value)}
-          >
-            <option value="">{form.noTask}</option>
-            {props.tasks.map((task) => (
-              <option key={task.id} value={task.id}>
-                #{task.number} {task.title}
-              </option>
-            ))}
-          </select>
-        </label>
+          <Picker
+            value={about}
+            search={props.findTasks}
+            keyOf={(task) => task.id}
+            render={taskLabel}
+            label={form.about}
+            placeholder={form.noTask}
+            disabled={props.busy}
+            onChange={setAbout}
+          />
+        </div>
       )}
       <fieldset className="sc-field sc-options">
         <legend className="sc-field-label">{form.options}</legend>

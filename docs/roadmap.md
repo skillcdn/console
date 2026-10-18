@@ -294,6 +294,7 @@ Goal: a task at work by several people, as the first weeks on the board had it, 
 - [x] The command (2026-10-18): `console tasks --search <words>`, `console goals --search <words> [--limit <n>] [--offset <n>]`, `console task new|edit --worker <login|me|none>` repeated or with commas; the workers on a task's line and in full ([specs/cli.md](specs/cli.md)).
 - [x] The default UI (2026-10-18): the picker, which searches a page at a time and holds what is chosen as a chip, for the task a task is part of and the goal it works towards; the workers as chips on the form, as pictures side by side on a card and a row, counted each in who has what; the words of the pages, 작업자 for 배정.
 - [x] The skill (2026-10-18): working-the-board (1.20) finds a task by the words of its title with `--search`, and its terms say what an owner and a worker are.
+- [x] The decision's task found by search too (2026-10-18): `DecisionForm` takes `findTasks` in place of every task of the board; raised from a task's page it is about that task, as before.
 - [ ] The column `assignee_id` and its index dropped, in the release after this one (expand, then contract).
 
 ## Milestone 29, the command and the console within a line, and the week (2026-10-18)

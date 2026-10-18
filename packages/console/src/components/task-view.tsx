@@ -193,7 +193,6 @@ export function TaskView(props: TaskViewProps) {
             <section className="sc-task-section" aria-label={words.task.raiseDecision}>
               <h2 className="sc-section-title">{words.task.raiseDecision}</h2>
               <DecisionForm
-                tasks={props.tasks}
                 taskId={task.id}
                 busy={props.busy}
                 onSubmit={props.onRaiseDecision}

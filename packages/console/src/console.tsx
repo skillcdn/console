@@ -1169,7 +1169,7 @@ function ProjectPage(props: {
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
         <section className="sc-panel sc-panel-form" aria-label={words.decisions.raiseAria}>
           <DecisionForm
-            tasks={data.tasks}
+            findTasks={data.actions.findTasks}
             busy={busy}
             onSubmit={(input: RestDecisionInput) =>
               void act(async () => {

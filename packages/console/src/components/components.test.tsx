@@ -31,6 +31,7 @@ import {
 import { CategoryList } from "./categories.js";
 import { CommentCard, CommentForm, TaskThread, threadOf } from "./comments.js";
 import { ConnectApproval, ConnectCodeForm, ConnectWords } from "./connect.js";
+import { DecisionForm } from "./decision-form.js";
 import { DecisionCard, DecisionList, DecisionLog } from "./decision-list.js";
 import { DocumentForm, DocumentList, DocumentView, FolderView } from "./documents.js";
 import { describeEvent, EventFeed } from "./event-feed.js";
@@ -3207,5 +3208,25 @@ describe("the workers of a task, and what a form finds by searching (ADR-0037)",
     expect(chosen).toContain("#42");
     expect(chosen).toContain('aria-label="Remove"');
     expect(chosen).not.toContain('role="combobox"');
+  });
+});
+
+describe("raising a decision about a task found by search (ADR-0037)", () => {
+  const nothing = async () => ({ items: [], more: false });
+  it("searches for the task when none is given, and asks nothing when the page's task is the one", () => {
+    const searching = renderToStaticMarkup(
+      <DecisionForm findTasks={nothing} onSubmit={() => undefined} />,
+    );
+    expect(searching).toContain("About");
+    expect(searching).toContain('role="combobox"');
+    expect(searching).toContain('placeholder="No task in particular"');
+    const fromTask = renderToStaticMarkup(
+      <DecisionForm taskId={task().id} findTasks={nothing} onSubmit={() => undefined} />,
+    );
+    expect(fromTask).not.toContain('role="combobox"');
+    expect(fromTask).not.toContain("About");
+    const bare = renderToStaticMarkup(<DecisionForm onSubmit={() => undefined} />);
+    expect(bare).not.toContain('role="combobox"');
+    expect(bare).toContain("Raise the decision");
   });
 });
