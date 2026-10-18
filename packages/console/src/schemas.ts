@@ -64,6 +64,7 @@ import {
   SKILLS_STATUSES,
   TASK_PRIORITIES,
   TASK_STATES,
+  WEEK_STARTS,
 } from "./vocabulary.js";
 
 /** A line of text a person wrote: trimmed, bounded, and free of characters that hide. */
@@ -167,6 +168,18 @@ export const restProviderSchema = z.object({
 });
 export type RestProvider = z.infer<typeof restProviderSchema>;
 
+/**
+ * A time zone's name as the IANA database spells one (`Asia/Seoul`, `UTC`): its shape here; the
+ * server knows which names are zones.
+ */
+export const timeZoneName = z
+  .string()
+  .check(
+    z.minLength(1),
+    z.maxLength(64),
+    z.regex(/^[A-Za-z0-9_+-]+(?:\/[A-Za-z0-9_+-]+)*$/, "must be a time zone name"),
+  );
+
 /** A language tag as a browser sends one (`en`, `ko-KR`): what the pages speak, by the person's choice. */
 const languageTag = z
   .string()
@@ -199,13 +212,23 @@ export const restWorkspaceSchema = z.object({
    * then, which is what it does.
    */
   peopleVisibility: z.optional(z.enum(PEOPLE_VISIBILITIES)),
+  /** The day the calendars begin a week on: the language's, Monday or Sunday. Optional as above; `auto` then. */
+  weekStart: z.optional(z.enum(WEEK_STARTS)),
+  /**
+   * The workspace's time zone, an IANA name, in which the command prints moments; `null` for
+   * none, when they stay as the API gives them, in UTC. Optional as above; none then.
+   */
+  timeZone: z.optional(z.nullable(timeZoneName)),
 });
 export type RestWorkspace = z.infer<typeof restWorkspaceSchema>;
 
-/** What `PATCH /api/v1/workspace` is sent, by an administrator: the settings to change. */
+/** What `PATCH /api/v1/workspace` is sent, by an administrator: the settings to change, at least one. */
 export const restWorkspacePatchSchema = z
   .object({
     peopleVisibility: z.optional(z.enum(PEOPLE_VISIBILITIES)),
+    weekStart: z.optional(z.enum(WEEK_STARTS)),
+    /** A zone's name, or `null` for none. */
+    timeZone: z.optional(z.nullable(timeZoneName)),
   })
   .check(
     z.refine((patch) => Object.values(patch).some((value) => value !== undefined), {

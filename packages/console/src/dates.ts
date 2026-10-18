@@ -1,3 +1,5 @@
+import type { WeekStart } from "./vocabulary.js";
+
 // Days, as the plan is made in (ADR-0019): `2026-10-20`, read and written as the strings they
 // are, so that a deadline is the same day wherever the people are. The browser's own clock says
 // which day is today; nothing here looks at it unless asked.
@@ -62,8 +64,17 @@ export function addMonths(month: string, count: number): string {
   return `${String(date.getFullYear()).padStart(4, "0")}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
-/** The weekday a week begins on where the language is spoken: 1 for Monday, 7 for Sunday. */
-export function firstDayOfWeek(language: string): number {
+/**
+ * The weekday a week begins on: as the workspace says (ADR-0035), Monday or Sunday, else where
+ * the language is spoken. 1 for Monday, 7 for Sunday.
+ */
+export function firstDayOfWeek(language: string, weekStart?: WeekStart | undefined): number {
+  if (weekStart === "monday") {
+    return 1;
+  }
+  if (weekStart === "sunday") {
+    return 7;
+  }
   try {
     const locale = new Intl.Locale(language) as Intl.Locale & {
       readonly weekInfo?: { readonly firstDay: number };

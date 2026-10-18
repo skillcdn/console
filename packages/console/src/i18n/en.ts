@@ -13,6 +13,7 @@ import type {
   SkillsStatus,
   TaskPriority,
   TaskState,
+  WeekStart,
 } from "../vocabulary.js";
 
 // Every word the default console shows, in English: the source of the keys every other pack
@@ -52,6 +53,11 @@ export const en = {
       everyone: "Everyone sees everyone",
       shared_projects: "Only the people one shares a project with",
     } satisfies Record<PeopleVisibility, string>,
+    weekStart: {
+      auto: "As the language has it",
+      monday: "Monday",
+      sunday: "Sunday",
+    } satisfies Record<WeekStart, string>,
     runStatus: {
       running: "Open",
       waiting: "Waiting for a decision",
@@ -516,6 +522,13 @@ export const en = {
       peopleVisibility: "Who sees whom",
       peopleVisibilityHint:
         "On the People page and in the pickers: everyone of the workspace, or, for a member, only the people they share a project with. An administrator always sees everyone, and a project open to the workspace has everyone in it.",
+      weekStart: "The week begins on",
+      weekStartHint:
+        "On the calendars and on My work: as the language of the pages has it, or always Monday or Sunday.",
+      timeZone: "Time zone",
+      timeZoneHint:
+        "An IANA name, such as Asia/Seoul. The console command prints moments in it; the pages keep the browser's. Empty: none, and the command prints them as the API gives them, in UTC.",
+      timeZoneNone: "None",
       edit: "Change the settings",
       save: "Save the settings",
     },
@@ -583,6 +596,8 @@ export const en = {
       state: "the state",
       color: "the colour",
       peopleVisibility: "who sees whom",
+      weekStart: "the first day of the week",
+      timeZone: "the time zone",
     } as Readonly<Record<string, string>>,
     event: {
       personJoined: () => "joined the board",

@@ -17,6 +17,7 @@ import {
   RUN_STATUSES,
   TASK_PRIORITIES,
   TASK_STATES,
+  WEEK_STARTS,
 } from "@skillcdn/console/api";
 import { sql } from "drizzle-orm";
 import {
@@ -72,6 +73,10 @@ export const workspaces = pgTable(
     membersSyncedAt: instant(),
     /** Who sees whom on the People page (ADR-0035): everyone, or those one shares a project with. */
     peopleVisibility: text({ enum: PEOPLE_VISIBILITIES }).notNull().default("everyone"),
+    /** The day the calendars begin a week on (ADR-0035): as the language has it, Monday or Sunday. */
+    weekStart: text({ enum: WEEK_STARTS }).notNull().default("auto"),
+    /** The workspace's time zone, an IANA name the command prints moments in; null for none. */
+    timeZone: text(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -80,6 +85,10 @@ export const workspaces = pgTable(
     check(
       "workspaces_people_visibility_check",
       sql`${table.peopleVisibility} in (${sql.raw(literals(PEOPLE_VISIBILITIES))})`,
+    ),
+    check(
+      "workspaces_week_start_check",
+      sql`${table.weekStart} in (${sql.raw(literals(WEEK_STARTS))})`,
     ),
   ],
 );

@@ -1,4 +1,4 @@
-import type { RestTask, RestWork } from "../api.js";
+import type { RestTask, RestWork, WeekStart } from "../api.js";
 import { addDays, today as todayOf } from "../dates.js";
 import { useWords } from "../i18n/index.js";
 import { Week } from "./calendar.js";
@@ -28,6 +28,8 @@ export interface WorkListProps {
   readonly decisionHref: (projectKey: string, decisionId: string) => string;
   /** Where the page is with the week of a day at the top. */
   readonly weekHref: (day: string) => string;
+  /** The day the week begins on, as the workspace says (ADR-0035); the language's when left out. */
+  readonly weekStart?: WeekStart | undefined;
 }
 
 export function WorkList(props: WorkListProps) {
@@ -70,6 +72,7 @@ export function WorkList(props: WorkListProps) {
         taskHref={hrefOf}
         weekHref={props.weekHref}
         markOf={markOf}
+        weekStart={props.weekStart}
       />
       <div className="sc-work-lists">
         {groups

@@ -3650,4 +3650,38 @@ describe("who sees whom (ADR-0035)", () => {
       ).toBe(200);
     }
   });
+
+  it("keeps the day the week begins on and the time zone, for an administrator, and knows a zone by its name", async () => {
+    const changed = await asAdmin("PATCH", REST_ROUTES.workspace, {
+      weekStart: "monday",
+      timeZone: "Asia/Seoul",
+    });
+    expect(changed.status).toBe(200);
+    expect(restWorkspaceSchema.parse(await changed.json())).toMatchObject({
+      weekStart: "monday",
+      timeZone: "Asia/Seoul",
+    });
+    const me = restMeSchema.parse(await (await get(member, REST_ROUTES.me)).json());
+    expect(me.workspace).toMatchObject({ weekStart: "monday", timeZone: "Asia/Seoul" });
+    const unknown = await asAdmin("PATCH", REST_ROUTES.workspace, {
+      timeZone: "Mars/Olympus_Mons",
+    });
+    expect(unknown.status).toBe(400);
+    expect(await errorOf(unknown)).toBe("request.invalid");
+    expect(
+      (await asAdmin("PATCH", REST_ROUTES.workspace, { timeZone: "not a zone!" })).status,
+    ).toBe(400);
+    expect((await asAdmin("PATCH", REST_ROUTES.workspace, { weekStart: "tuesday" })).status).toBe(
+      400,
+    );
+    const back = await asAdmin("PATCH", REST_ROUTES.workspace, {
+      weekStart: "auto",
+      timeZone: null,
+    });
+    expect(back.status).toBe(200);
+    expect(restWorkspaceSchema.parse(await back.json())).toMatchObject({
+      weekStart: "auto",
+      timeZone: null,
+    });
+  });
 });

@@ -28,6 +28,48 @@ import type {
 
 const plural = (count: number, word: string): string => `${count} ${word}${count === 1 ? "" : "s"}`;
 
+/** The time zone moments are printed in: the workspace's, as the command last learned it (ADR-0035); none leaves them as the API gives them. */
+let momentZone: string | undefined;
+
+/** Says which time zone the moments printed from now on are in, or none. */
+export function setMomentZone(zone: string | undefined): void {
+  momentZone = zone;
+}
+
+/**
+ * An instant as the command prints it: in the workspace's time zone, as ISO 8601 with its
+ * offset (`2026-10-18T15:04:17+09:00`), when a zone is known; else as the API gave it, in UTC.
+ */
+export function moment(iso: string): string {
+  if (momentZone === undefined) {
+    return iso;
+  }
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return iso;
+  }
+  let parts: Intl.DateTimeFormatPart[];
+  try {
+    parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: momentZone,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      timeZoneName: "longOffset",
+    }).formatToParts(date);
+  } catch {
+    return iso;
+  }
+  const of = (type: Intl.DateTimeFormatPartTypes): string =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  const offset = of("timeZoneName").replace("GMT", "");
+  return `${of("year")}-${of("month")}-${of("day")}T${of("hour")}:${of("minute")}:${of("second")}${offset === "" ? "Z" : offset}`;
+}
+
 const indent = (text: string): string =>
   text
     .trimEnd()
@@ -55,7 +97,7 @@ export function formatProject(project: RestProject): string {
     `project ${project.key}: ${project.name}`,
     `visibility: ${project.visibility}  role: ${project.role}  skills: ${project.skillsAddress ?? "the organization's"}`,
     `color: ${project.color ?? "none"}  symbol: ${project.symbol ?? "none"}  image: ${project.icon === null ? "none" : project.icon.contentType}`,
-    `pack token: ${project.packToken === null ? "none" : `set ${project.packToken.setAt}`}`,
+    `pack token: ${project.packToken === null ? "none" : `set ${moment(project.packToken.setAt)}`}`,
   ];
   if (project.description.trim().length > 0) {
     lines.push("", project.description.trimEnd());
@@ -79,12 +121,15 @@ export function formatListingLine(listing: RestListing): string {
   return `${listing.login}  (let in at ${HOST_NAMES[listing.host]}, not signed in yet)`;
 }
 
-/** The workspace as its Settings page shows it: what it is called, who sees whom, where the skills come from, and what tokens may last. */
+/** The workspace as its Settings page shows it: what it is called, who sees whom, the week, the time zone, where the skills come from, and what tokens may last. */
 export function formatWorkspace(workspace: RestWorkspace): string {
   const visibility = workspace.peopleVisibility ?? "everyone";
+  const zone = workspace.timeZone ?? null;
   return [
     `workspace ${workspace.name}`,
     `people visibility: ${visibility}  (${visibility === "everyone" ? "everyone sees everyone" : "a member sees only the people they share a project with; an administrator sees everyone"})`,
+    `week begins on: ${workspace.weekStart ?? "auto"}  (auto: as the language of the pages has it)`,
+    `time zone: ${zone ?? "none"}  (${zone === null ? "moments are printed as the API gives them, in UTC" : "moments are printed in it, as ISO 8601 with its offset"})`,
     `skills: ${workspace.skills.address ?? "no address of the organization's"}  at ${workspace.skills.source}`,
     `token days at most: ${workspace.tokenDaysAtMost ?? "a person chooses"}`,
   ].join("\n");
@@ -92,7 +137,7 @@ export function formatWorkspace(workspace: RestWorkspace): string {
 
 /** One member of a project: their login, what they are in it, and since when. */
 export function formatMemberLine(member: RestMember): string {
-  return `${member.person.login}  ${member.role}  (since ${member.addedAt.slice(0, 10)})`;
+  return `${member.person.login}  ${member.role}  (since ${moment(member.addedAt).slice(0, 10)})`;
 }
 
 /** The line under a page of a listing that has more after it: how to ask for the next page. */
@@ -133,9 +178,9 @@ function scheduleLines(task: RestTask): string[] {
     lines.push(plan.join("  "));
   }
   const happened = [
-    task.startedAt === null ? undefined : `started: ${task.startedAt}`,
-    task.doneAt === null ? undefined : `done: ${task.doneAt}`,
-    task.archivedAt === null ? undefined : `archived: ${task.archivedAt}`,
+    task.startedAt === null ? undefined : `started: ${moment(task.startedAt)}`,
+    task.doneAt === null ? undefined : `done: ${moment(task.doneAt)}`,
+    task.archivedAt === null ? undefined : `archived: ${moment(task.archivedAt)}`,
   ].filter((part) => part !== undefined);
   if (happened.length > 0) {
     lines.push(happened.join("  "));
@@ -193,7 +238,7 @@ export function formatTask(
 export function formatComment(comment: RestComment): string {
   const who =
     comment.agent === null ? comment.author.login : `${comment.author.login} as ${comment.agent}`;
-  const lines = [`  ${who}, ${comment.createdAt}, comment ${comment.id}:`];
+  const lines = [`  ${who}, ${moment(comment.createdAt)}, comment ${comment.id}:`];
   if (comment.body.trim().length > 0) {
     lines.push(indent(comment.body));
   }
@@ -211,7 +256,7 @@ export function formatRunLine(run: RestRun): string {
     notes.push(`waiting for decision ${run.waitingFor}`);
   }
   if (run.endedAt === null) {
-    notes.push(`last heard ${run.lastHeardAt}`);
+    notes.push(`last heard ${moment(run.lastHeardAt)}`);
   }
   return `${run.id}  ${run.status}  ${run.agent} for ${run.person.login}  task #${run.taskNumber}  (${notes.join(", ")})`;
 }
@@ -220,7 +265,7 @@ export function formatRunLine(run: RestRun): string {
 export function formatRun(run: RestRun, fileUrl?: (artifactId: string) => string): string {
   const lines = [
     formatRunLine(run),
-    `started: ${run.startedAt}${run.endedAt === null ? "" : `  ended: ${run.endedAt}`}`,
+    `started: ${moment(run.startedAt)}${run.endedAt === null ? "" : `  ended: ${moment(run.endedAt)}`}`,
   ];
   if (run.summary !== null) {
     lines.push("", "summary:", indent(run.summary));
@@ -228,7 +273,7 @@ export function formatRun(run: RestRun, fileUrl?: (artifactId: string) => string
   if (run.reports.length > 0) {
     lines.push("", "reports:");
     for (const report of run.reports) {
-      lines.push(`  [${report.createdAt}]`, indent(report.body));
+      lines.push(`  [${moment(report.createdAt)}]`, indent(report.body));
     }
   }
   if (run.artifacts.length > 0) {
@@ -258,7 +303,7 @@ function formatRulesHalf(where: "the workspace" | "this project", rules: RestRul
   const facts =
     page === null
       ? undefined
-      : `v${page.version}, by ${writer(page.updatedBy, page.agent)}; ${page.updatedAt}`;
+      : `v${page.version}, by ${writer(page.updatedBy, page.agent)}; ${moment(page.updatedAt)}`;
   if (rules.source === "none" || rules.body === null) {
     return `Rules of ${where}: none of its own; the workspace's hold.`;
   }
@@ -409,7 +454,7 @@ export function formatDocumentLine(document: RestDocumentSummary): string {
   if (document.archivedAt !== null) {
     notes.push("archived");
   }
-  return `${document.path}  ${document.title}  (${notes.join(", ")}; ${document.updatedAt})`;
+  return `${document.path}  ${document.title}  (${notes.join(", ")}; ${moment(document.updatedAt)})`;
 }
 
 /** A folder's folders and pages, or the pages a search found. */
@@ -431,7 +476,7 @@ export function formatDocument(
 ): string {
   const lines = [
     `${document.path}: ${document.title}`,
-    `version ${document.version}, by ${writer(document.updatedBy, document.agent)} at ${document.updatedAt}${document.archivedAt === null ? "" : `; archived ${document.archivedAt}`}`,
+    `version ${document.version}, by ${writer(document.updatedBy, document.agent)} at ${moment(document.updatedAt)}${document.archivedAt === null ? "" : `; archived ${moment(document.archivedAt)}`}`,
     `id: ${document.id}`,
   ];
   if (document.body.trim().length > 0) {
@@ -465,7 +510,7 @@ export function formatDocument(
 }
 
 export function formatVersionLine(version: RestVersionSummary): string {
-  return `v${version.number}  ${version.title}  (by ${writer(version.author, version.agent)}; ${version.createdAt})`;
+  return `v${version.number}  ${version.title}  (by ${writer(version.author, version.agent)}; ${moment(version.createdAt)})`;
 }
 
 /** One version of a document, with its body as it was. */

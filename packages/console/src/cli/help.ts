@@ -209,11 +209,16 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
       "The people of the workspace you see, by login, with their name where the host gives one and what they are in it: admin, who configures the workspace, or member, who works in the projects they are in; a person taken out is marked deactivated. Everyone, unless the workspace shows a member only the people they share a project with (console workspace says which; an administrator sees everyone). Then, where you see everyone, the logins an administrator let in that nobody has signed in with yet. The logins are what --assignee, member and person take; a login is found exactly, so an owner lists someone the list does not show.",
   },
   workspace: {
-    usage: "workspace  |  workspace edit --people-visibility <everyone|shared-projects>",
-    synopsis: "The workspace's settings; or one changed, for an administrator.",
+    usage:
+      "workspace  |  workspace edit [--people-visibility <everyone|shared-projects>] [--week-start <auto|monday|sunday>] [--time-zone <zone|none>]",
+    overview: "workspace  |  workspace edit [flags]",
+    synopsis: "The workspace's settings; or some changed, for an administrator.",
     about:
-      "What the workspace is called, who sees whom on the People page and in the pickers (everyone; or shared-projects: a member sees only the people they share a project with, an administrator everyone), where the organization's skills come from, and the most days a token may last. edit changes who sees whom, for an administrator; a project open to the workspace has everyone in it, so a member of one sees everyone.",
-    refusals: ["auth.forbidden: only an administrator changes the workspace's settings"],
+      "What the workspace is called; who sees whom on the People page and in the pickers (everyone; or shared-projects: a member sees only the people they share a project with, an administrator everyone; a project open to the workspace has everyone in it, so a member of one sees everyone); the day the calendars begin a week on (auto: as the language of the pages has it); the workspace's time zone, an IANA name such as Asia/Seoul, in which this command prints moments as ISO 8601 with its offset, as the login kept it at login or whoami, or none, which leaves them as the API gives them, in UTC; where the organization's skills come from; and the most days a token may last. edit changes any of the first three, for an administrator; --json leaves moments as the API gives them.",
+    refusals: [
+      "auth.forbidden: only an administrator changes the workspace's settings",
+      "request.invalid: the time zone is not a name the console knows",
+    ],
   },
   person: {
     usage:

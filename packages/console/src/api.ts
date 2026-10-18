@@ -368,4 +368,6 @@ export {
   TASK_STATES,
   type TaskPriority,
   type TaskState,
+  WEEK_STARTS,
+  type WeekStart,
 } from "./vocabulary.js";

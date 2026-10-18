@@ -197,7 +197,18 @@ export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies):
     tokenDaysAtMost: auth?.tokens.daysAtMost ?? null,
     skills: { source: skills.source, address: skills.address ?? null },
     peopleVisibility: settings.peopleVisibility,
+    weekStart: settings.weekStart,
+    timeZone: settings.timeZone,
   });
+  /** Whether the runtime knows the name as a time zone: the schema has its shape, the console the list. */
+  const isTimeZone = (name: string): boolean => {
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: name });
+      return true;
+    } catch {
+      return false;
+    }
+  };
   const meOf = async (
     caller: { readonly person: PersonRecord; readonly token: TokenRecord | undefined } | undefined,
   ): Promise<RestMe> => {
@@ -271,6 +282,13 @@ export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies):
     if (!parsed.success) {
       return c.json(
         errorBody("request.invalid", "The patch names nothing to change, or no setting."),
+        400,
+      );
+    }
+    const zone = parsed.data.timeZone;
+    if (typeof zone === "string" && !isTimeZone(zone)) {
+      return c.json(
+        errorBody("request.invalid", "timeZone: not a time zone the console knows."),
         400,
       );
     }

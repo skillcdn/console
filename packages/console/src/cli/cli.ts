@@ -42,6 +42,7 @@ import {
   TASK_STATES,
   type TaskPriority,
   type TaskState,
+  WEEK_STARTS,
 } from "../vocabulary.js";
 import { loadWebRoot, type WebRoot, WebRootError } from "../web.js";
 import {
@@ -83,6 +84,7 @@ import {
   formatVersionLine,
   formatWork,
   formatWorkspace,
+  setMomentZone,
 } from "./format.js";
 import { COMMAND_HELP, helpFor, ownSkillPath, usage } from "./help.js";
 import { describeInstall, type Install, updateCommandFor } from "./install.js";
@@ -313,6 +315,14 @@ async function open(io: CliIo, values: Values): Promise<Session> {
     throw failed(wordsOf(resolved));
   }
   const { url, token } = resolved;
+  // Moments are printed in the workspace's time zone as the login kept it (ADR-0035); the
+  // environment's pair keeps nothing, and they stay as the API gives them.
+  setMomentZone(
+    resolved.via === "login"
+      ? credentials?.logins.find((kept) => kept.url === url && kept.account === resolved.account)
+          ?.timeZone
+      : undefined,
+  );
   const client = clientOf(io, url, token);
   const projectKey = async () =>
     text(values, "project") ?? io.env.CONSOLE_PROJECT ?? directory?.project;
@@ -662,7 +672,14 @@ async function keep(
   }
   const next = withLogin(
     credentials,
-    { url, account: person.login, token, agent, since: new Date(io.now()).toISOString() },
+    {
+      url,
+      account: person.login,
+      token,
+      agent,
+      since: new Date(io.now()).toISOString(),
+      timeZone: me.workspace.timeZone ?? undefined,
+    },
     { default: asDefault },
   );
   const kept = await io.store.save(next);
@@ -836,6 +853,24 @@ function agentOf(env: CliIo["env"]): string | undefined {
   return undefined;
 }
 
+/**
+ * Keeps the workspace's time zone on the login the command used (ADR-0035), so that moments are
+ * printed in it from now on without asking; the environment's pair keeps nothing.
+ */
+async function rememberZone(io: CliIo, session: Session, zone: string | undefined): Promise<void> {
+  setMomentZone(zone);
+  if (session.via !== "login" || session.credentials === undefined) {
+    return;
+  }
+  const kept = session.credentials.logins.find(
+    (login) => login.url === session.url && login.account === session.account,
+  );
+  if (kept === undefined || kept.timeZone === zone) {
+    return;
+  }
+  await io.store.save(withLogin(session.credentials, { ...kept, timeZone: zone }));
+}
+
 const whoami: Command = async (args, io) => {
   const { values } = parse(args, {}, false);
   const session = await open(io, values);
@@ -844,6 +879,7 @@ const whoami: Command = async (args, io) => {
   if (person === null) {
     throw failed("The console does not know this token. Sign in again: console login");
   }
+  await rememberZone(io, session, me.workspace.timeZone ?? undefined);
   const key = await session.projectKey();
   const command = parseVersion(io.version);
   const server = parseVersion(me.console?.version);
@@ -2201,8 +2237,9 @@ const people: Command = async (args, io) => {
 
 // The workspace's settings (ADR-0035): read by everyone, changed by an administrator, themselves
 // on the Settings page or through their agent here (ADR-0021).
-const WORKSPACE_USAGE =
-  "Say what to do: console workspace  |  console workspace edit --people-visibility <everyone|shared-projects>";
+const WORKSPACE_FLAGS =
+  "--people-visibility <everyone|shared-projects>, --week-start <auto|monday|sunday>, --time-zone <zone|none>";
+const WORKSPACE_USAGE = `Say what to do: console workspace  |  console workspace edit [${WORKSPACE_FLAGS.replaceAll(", ", "] [")}]`;
 
 const workspace: Command = async (args, io) => {
   const [verb, ...rest] = args;
@@ -2210,19 +2247,35 @@ const workspace: Command = async (args, io) => {
     const { values } = parse(args, {}, false);
     const session = await open(io, values);
     const me = await session.client.me();
+    await rememberZone(io, session, me.workspace.timeZone ?? undefined);
     answer(io, session, me.workspace, () => formatWorkspace(me.workspace));
     return EXIT.ok;
   }
   if (verb === "edit") {
-    const { values } = parse(rest, { "people-visibility": { type: "string" } }, false);
+    const { values } = parse(
+      rest,
+      {
+        "people-visibility": { type: "string" },
+        "week-start": { type: "string" },
+        "time-zone": { type: "string" },
+      },
+      false,
+    );
     const visibility = text(values, "people-visibility");
-    if (visibility === undefined) {
-      throw misuse("Say what to change: --people-visibility <everyone|shared-projects>");
+    const weekStart = text(values, "week-start");
+    const zone = text(values, "time-zone");
+    if (visibility === undefined && weekStart === undefined && zone === undefined) {
+      throw misuse(`Say what to change: ${WORKSPACE_FLAGS}`);
     }
     const session = await open(io, values);
     const changed = await session.client.updateWorkspace({
-      peopleVisibility: peopleVisibilityOf(visibility),
+      ...(visibility === undefined ? {} : { peopleVisibility: peopleVisibilityOf(visibility) }),
+      ...(weekStart === undefined
+        ? {}
+        : { weekStart: wordOf(weekStart, WEEK_STARTS, "a day the week begins on") }),
+      ...(zone === undefined ? {} : { timeZone: zone === "none" ? null : zone }),
     });
+    await rememberZone(io, session, changed.timeZone ?? undefined);
     answer(io, session, changed, () => formatWorkspace(changed));
     return EXIT.ok;
   }

@@ -1,0 +1,5 @@
+---
+"@skillcdn/console": patch
+---
+
+The workspace keeps the day its calendars begin a week on and its time zone (ADR-0035): `weekStart` (`auto`, as the language of the pages has it, or `monday`, `sunday`; `WEEK_STARTS`) and `timeZone` (an IANA name, or `null`) on `me.workspace` (`restWorkspaceSchema`, both optional for an older console) and in `PATCH /api/v1/workspace` (`restWorkspacePatchSchema`, a zone the console knows, `request.invalid` otherwise; `timeZoneName` is the shape). `firstDayOfWeek(language, weekStart)` takes the workspace's word, and `Calendar`, `Week` and `WorkList` take `weekStart`; `weekStartOf` and `timeZoneOf` read a workspace's. The Settings page's Workspace section and form show and change both. The command prints moments in the workspace's time zone, as ISO 8601 with its offset, as its login kept it at `login`, `whoami` or `workspace` (the credentials file gains `timeZone` on a login), and as the API gives them, in UTC, while none is known or with `--json`; `moment` and `setMomentZone` are the command's; `console workspace edit` takes `--week-start` and `--time-zone`.

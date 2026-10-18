@@ -25,6 +25,7 @@ export const ko: Messages = {
       everyone: "모두가 모두를 봅니다",
       shared_projects: "같은 프로젝트에 속한 사람만 봅니다",
     },
+    weekStart: { auto: "언어의 관례대로", monday: "월요일", sunday: "일요일" },
     runStatus: {
       running: "열림",
       waiting: "결정 대기 중",
@@ -480,6 +481,12 @@ export const ko: Messages = {
       peopleVisibility: "누가 누구를 보는가",
       peopleVisibilityHint:
         "사람들 페이지와 선택 목록에서: 워크스페이스의 모두를, 또는 멤버는 같은 프로젝트에 속한 사람만 봅니다. 관리자는 언제나 모두를 보고, 워크스페이스에 공개된 프로젝트에는 모두가 속합니다.",
+      weekStart: "주의 시작 요일",
+      weekStartHint: "캘린더와 내 작업에서: 페이지 언어의 관례대로, 또는 늘 월요일이나 일요일.",
+      timeZone: "타임존",
+      timeZoneHint:
+        "Asia/Seoul 같은 IANA 이름. 콘솔 명령이 시각을 이 타임존으로 찍고, 페이지는 브라우저의 것을 씁니다. 비우면 없음이고, 명령은 API가 준 대로 UTC로 찍습니다.",
+      timeZoneNone: "없음",
       edit: "설정 바꾸기",
       save: "설정 저장",
     },
@@ -547,6 +554,8 @@ export const ko: Messages = {
       state: "상태",
       color: "색",
       peopleVisibility: "사람 목록 범위",
+      weekStart: "주의 시작 요일",
+      timeZone: "타임존",
     },
     event: {
       personJoined: () => "보드에 들어왔습니다",

@@ -1938,12 +1938,76 @@ describe("configuring, as the person", () => {
       peopleVisibility: "shared_projects",
     });
     expect(changed.out()).toContain("people visibility: shared_projects");
+    expect(changed.out()).toContain("week begins on: auto");
+    expect(changed.out()).toContain("time zone: none");
+    // The week and the time zone go the same way; none takes the zone away.
+    const planned = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(
+        ["workspace", "edit", "--week-start", "monday", "--time-zone", "Asia/Seoul"],
+        planned.io,
+      ),
+    ).toBe(EXIT.ok);
+    const cleared = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["workspace", "edit", "--time-zone", "none"], cleared.io)).toBe(EXIT.ok);
+    expect(
+      calls.filter((call) => call.key === "PATCH /api/v1/workspace").map((call) => call.body),
+    ).toEqual([
+      { peopleVisibility: "shared_projects" },
+      { weekStart: "monday", timeZone: "Asia/Seoul" },
+      { timeZone: null },
+    ]);
     const wrong = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["workspace", "edit", "--people-visibility", "friends"], wrong.io)).toBe(
       EXIT.usage,
     );
+    expect(
+      await runCli(
+        ["workspace", "edit", "--week-start", "tuesday"],
+        harness({ fetch, env: SIGNED_IN }).io,
+      ),
+    ).toBe(EXIT.usage);
     const nothing = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["workspace", "edit"], nothing.io)).toBe(EXIT.usage);
+  });
+
+  it("prints moments in the workspace's time zone as the login kept it, learned at whoami, and leaves --json as the API gives it", async () => {
+    const { fetch } = fakeConsole({
+      "GET /api/v1/me": {
+        body: { ...ME, workspace: { ...ME.workspace, timeZone: "Pacific/Kiritimati" } },
+      },
+      [`GET ${IN}/members`]: {
+        body: { items: [{ person: PERSON, role: "owner", addedAt: WHEN, listed: true }] },
+      },
+    });
+    const store = memoryStore({
+      default: ORIGIN,
+      logins: [
+        {
+          url: ORIGIN,
+          account: PERSON.login,
+          token: "cns_t_secret",
+          agent: undefined,
+          since: undefined,
+        },
+      ],
+    });
+    const env = { CONSOLE_PROJECT: "web" };
+    // Before the zone is known, a moment is as the API gave it.
+    const before = harness({ fetch, env, store: store.store });
+    expect(await runCli(["members"], before.io)).toBe(EXIT.ok);
+    expect(before.out()).toBe(`${PERSON.login}  owner  (since 2026-10-09)\n`);
+    // whoami learns the zone and keeps it on the login; from then on the moment is in it: the
+    // day after, at fourteen hours ahead.
+    const who = harness({ fetch, env, store: store.store });
+    expect(await runCli(["whoami"], who.io)).toBe(EXIT.ok);
+    expect(store.kept()?.logins[0]?.timeZone).toBe("Pacific/Kiritimati");
+    const after = harness({ fetch, env, store: store.store });
+    expect(await runCli(["members"], after.io)).toBe(EXIT.ok);
+    expect(after.out()).toBe(`${PERSON.login}  owner  (since 2026-10-10)\n`);
+    const raw = harness({ fetch, env, store: store.store });
+    expect(await runCli(["members", "--json"], raw.io)).toBe(EXIT.ok);
+    expect(raw.out()).toContain(WHEN);
   });
 
   it("says how an owner is listed in a project open to the workspace, where everyone is a member", async () => {

@@ -35,6 +35,7 @@ import {
   RULES_PATH,
   RULES_TITLE,
   type TaskState,
+  type WeekStart,
 } from "./api.js";
 import { Board, BoardFilters, type BoardProps, byDue, filterTasks } from "./components/board.js";
 import { Calendar, type CalendarProps, Workload } from "./components/calendar.js";
@@ -85,6 +86,7 @@ import {
   peopleVisibilityOf,
   WorkspaceSettingsForm,
   WorkspaceSettingsView,
+  weekStartOf,
 } from "./components/workspace.js";
 import { ConnectPage } from "./connect-page.js";
 import { type ConsoleData, useConsoleData } from "./data.js";
@@ -866,6 +868,7 @@ function ProjectPage(props: {
           tasks={shown}
           month={month}
           today={now}
+          weekStart={weekStartOf(data.me?.workspace)}
           categories={data.categories}
           goals={data.goals}
           taskHref={href}
@@ -1080,6 +1083,7 @@ function ProjectPage(props: {
               tasks={towards}
               month={month}
               today={now}
+              weekStart={weekStartOf(data.me?.workspace)}
               categories={data.categories}
               goals={[goal]}
               taskHref={href}
@@ -1834,6 +1838,8 @@ function PlatePage(props: {
   readonly empty: { readonly title: string; readonly body: string };
   /** What a refusal says where the plate may not be the asker's to see; the server's words otherwise. */
   readonly refused?: { readonly title: string; readonly body: string } | undefined;
+  /** The day the week begins on, as the workspace says (ADR-0035). */
+  readonly weekStart?: WeekStart | undefined;
 }) {
   const words = useWords();
   const { components, load, couldNotLoad, refused } = props;
@@ -1894,6 +1900,7 @@ function PlatePage(props: {
         <components.WorkList
           work={plate}
           week={props.week}
+          weekStart={props.weekStart}
           taskHref={(projectKey, task) => taskHref(projectKey, task.number)}
           decisionHref={(projectKey, decisionId) => decisionHref(projectKey, decisionId)}
           weekHref={props.weekHref}
@@ -1917,6 +1924,7 @@ function WorkPage(props: {
       load={work}
       title={words.work.title}
       week={props.week}
+      weekStart={weekStartOf(props.data.me?.workspace)}
       weekHref={workHref}
       loading={words.work.loading}
       couldNotLoad={words.work.couldNotLoad}
@@ -1945,6 +1953,7 @@ function PersonWorkPage(props: {
       title={words.people.workOf(name)}
       aside={<LinkButton href={PATHS.people}>{words.nav.people}</LinkButton>}
       week={props.week}
+      weekStart={weekStartOf(data.me?.workspace)}
       weekHref={(day) => personWorkHref(id, day)}
       loading={words.people.loadingWork}
       couldNotLoad={words.people.couldNotLoadWork}

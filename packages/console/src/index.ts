@@ -203,10 +203,12 @@ export { WorkList, type WorkListProps } from "./components/work.js";
 export {
   DEFAULT_PEOPLE_VISIBILITY,
   peopleVisibilityOf,
+  timeZoneOf,
   WorkspaceSettingsForm,
   type WorkspaceSettingsFormProps,
   WorkspaceSettingsView,
   type WorkspaceSettingsViewProps,
+  weekStartOf,
 } from "./components/workspace.js";
 export { ConnectPage, type ConnectPageProps } from "./connect-page.js";
 export {

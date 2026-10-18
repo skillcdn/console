@@ -105,6 +105,14 @@ export const PEOPLE_VISIBILITIES = ["everyone", "shared_projects"] as const;
 
 export type PeopleVisibility = (typeof PEOPLE_VISIBILITIES)[number];
 
+/**
+ * The day the calendars begin a week on (ADR-0035): as the language of the pages has it, or
+ * Monday, or Sunday, for the whole workspace.
+ */
+export const WEEK_STARTS = ["auto", "monday", "sunday"] as const;
+
+export type WeekStart = (typeof WEEK_STARTS)[number];
+
 /** What a run is doing: at work, waiting for a person's decision, or over in one of three ways. */
 export const RUN_STATUSES = ["running", "waiting", "finished", "failed", "abandoned"] as const;
 

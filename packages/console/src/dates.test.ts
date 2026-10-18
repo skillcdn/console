@@ -66,6 +66,10 @@ describe("days", () => {
     expect(weekdays(7)).toEqual([7, 1, 2, 3, 4, 5, 6]);
     expect([1, 7]).toContain(firstDayOfWeek("en-US"));
     expect(firstDayOfWeek("not a tag at all")).toBe(1);
+    // The workspace's word wins over the language's (ADR-0035); `auto` leaves it to the language.
+    expect(firstDayOfWeek("en-US", "monday")).toBe(1);
+    expect(firstDayOfWeek("de", "sunday")).toBe(7);
+    expect(firstDayOfWeek("not a tag at all", "auto")).toBe(1);
   });
 
   it("know the week a day is in, from the day the week begins on", () => {

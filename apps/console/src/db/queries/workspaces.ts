@@ -1,4 +1,4 @@
-import type { PeopleVisibility } from "@skillcdn/console/api";
+import type { PeopleVisibility, WeekStart } from "@skillcdn/console/api";
 import { eq, sql } from "drizzle-orm";
 import { type Database, drizzleOf } from "../client.js";
 import { workspaces } from "../schema.js";
@@ -20,12 +20,26 @@ export interface WorkspaceRecord {
 export interface WorkspaceSettings {
   /** Who sees whom on the People page: everyone, or those one shares a project with. */
   readonly peopleVisibility: PeopleVisibility;
+  /** The day the calendars begin a week on: as the language has it, Monday or Sunday. */
+  readonly weekStart: WeekStart;
+  /** The workspace's time zone, an IANA name, which the command prints moments in; null for none. */
+  readonly timeZone: string | null;
 }
 
 /** What a workspace is set to until an administrator says otherwise. */
-export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = { peopleVisibility: "everyone" };
+export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
+  peopleVisibility: "everyone",
+  weekStart: "auto",
+  timeZone: null,
+};
 
 export type WorkspaceSettingsPatch = Partial<WorkspaceSettings>;
+
+const settingsColumns = {
+  peopleVisibility: workspaces.peopleVisibility,
+  weekStart: workspaces.weekStart,
+  timeZone: workspaces.timeZone,
+};
 
 /**
  * The workspace the deployment runs, made at boot by whichever role comes first and renamed by
@@ -78,13 +92,11 @@ export async function readWorkspaceSettings(
   workspaceId: string,
 ): Promise<WorkspaceSettings> {
   const [row] = await drizzleOf(database)
-    .select({ peopleVisibility: workspaces.peopleVisibility })
+    .select(settingsColumns)
     .from(workspaces)
     .where(eq(workspaces.id, workspaceId))
     .limit(1);
-  return row === undefined
-    ? DEFAULT_WORKSPACE_SETTINGS
-    : { peopleVisibility: row.peopleVisibility };
+  return row ?? DEFAULT_WORKSPACE_SETTINGS;
 }
 
 /**
@@ -103,7 +115,7 @@ export async function updateWorkspaceSettings(
   const { workspaceId, actor, patch, now } = input;
   return drizzleOf(database).transaction(async (tx) => {
     const [current] = await tx
-      .select({ peopleVisibility: workspaces.peopleVisibility })
+      .select(settingsColumns)
       .from(workspaces)
       .where(eq(workspaces.id, workspaceId))
       .for("update");
@@ -112,6 +124,8 @@ export async function updateWorkspaceSettings(
     }
     const next: WorkspaceSettings = {
       peopleVisibility: patch.peopleVisibility ?? current.peopleVisibility,
+      weekStart: patch.weekStart ?? current.weekStart,
+      timeZone: patch.timeZone === undefined ? current.timeZone : patch.timeZone,
     };
     const fields = (Object.keys(next) as (keyof WorkspaceSettings)[]).filter(
       (field) => next[field] !== current[field],

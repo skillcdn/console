@@ -5,6 +5,7 @@ import {
   type RestGoal,
   type RestPerson,
   type RestTask,
+  type WeekStart,
 } from "../api.js";
 import {
   addDays,
@@ -55,6 +56,8 @@ export interface CalendarProps {
   readonly goalHref?: ((goal: RestGoal) => string) | undefined;
   /** Where the calendar is on another month. */
   readonly monthHref: (month: string) => string;
+  /** The day the weeks begin on, as the workspace says (ADR-0035); the language's when left out. */
+  readonly weekStart?: WeekStart | undefined;
 }
 
 /** One task's stretch across one week: which columns it covers, and in which lane it lies. */
@@ -469,7 +472,7 @@ export function Calendar(props: CalendarProps) {
   const { tag } = useLanguage();
   const [pointed, point, leave] = usePointed();
   const now = props.today ?? todayOf();
-  const firstDay = firstDayOfWeek(tag);
+  const firstDay = firstDayOfWeek(tag, props.weekStart);
   const weeks = monthGrid(props.month, firstDay);
   const on = onDays(props.tasks);
   const goalsOn = props.goalHref === undefined ? undefined : goalsOnDays(props.goals ?? []);
@@ -567,6 +570,8 @@ export interface WeekProps {
   readonly weekHref: (day: string) => string;
   /** What stands before a task's title where the tasks are of several projects: the project's mark. */
   readonly markOf?: ((task: RestTask) => ReactNode) | undefined;
+  /** The day the week begins on, as the workspace says (ADR-0035); the language's when left out. */
+  readonly weekStart?: WeekStart | undefined;
 }
 
 /** One week on its own: the days as columns, the tasks on them, and the weeks around a step away. */
@@ -575,7 +580,7 @@ export function Week(props: WeekProps) {
   const { tag } = useLanguage();
   const [pointed, point, leave] = usePointed();
   const now = props.today ?? todayOf();
-  const firstDay = firstDayOfWeek(tag);
+  const firstDay = firstDayOfWeek(tag, props.weekStart);
   const days = weekOf(props.day ?? now, firstDay);
   const first = days[0] ?? now;
   const last = days[days.length - 1] ?? now;
