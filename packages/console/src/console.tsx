@@ -1242,9 +1242,7 @@ function ProjectPage(props: {
         <div className="sc-page-head">
           <h1 className="sc-page-title">{members.title}</h1>
         </div>
-        <p className="sc-lead">
-          {open ? members.open : words.vocabulary.visibility[project.visibility]}
-        </p>
+        {open && <p className="sc-lead">{members.open}</p>}
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
         <components.MemberList
           members={data.members}
@@ -1410,34 +1408,48 @@ function ProjectSettingsPage(props: {
         {head}
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
         <section className="sc-panel sc-panel-form" aria-label={words.projects.packToken.aria}>
-          <PackConnect
-            onStart={data.actions.connectPackToken}
-            poll={data.actions.packTokenConnection}
-            onCancel={data.actions.cancelPackTokenConnection}
-            onConnected={() => navigation.replace(here)}
-            busy={busy}
-          />
-          <p className="sc-muted">{words.projects.packToken.connectOr}</p>
-          <PackTokenForm
-            set={project.packToken !== null}
-            busy={busy}
-            onSubmit={(token) =>
-              void act(async () => {
-                await data.actions.setPackToken(token);
-                navigation.replace(here);
-              })
-            }
-            onRemove={
-              project.packToken === null
-                ? undefined
-                : () =>
-                    void act(async () => {
-                      await data.actions.removePackToken();
-                      navigation.replace(here);
-                    })
-            }
-            onCancel={() => navigation.back(here)}
-          />
+          <h2 className="sc-section-title">{settings.packToken}</h2>
+          <p className="sc-pack-intro">{words.projects.packToken.intro}</p>
+          <div className="sc-pack-ways">
+            <section className="sc-pack-way" aria-label={words.projects.packToken.connectTitle}>
+              <h3 className="sc-pack-way-title">{words.projects.packToken.connectTitle}</h3>
+              <PackConnect
+                onStart={data.actions.connectPackToken}
+                poll={data.actions.packTokenConnection}
+                onCancel={data.actions.cancelPackTokenConnection}
+                onConnected={() => navigation.replace(here)}
+                busy={busy}
+              />
+            </section>
+            <section className="sc-pack-way" aria-label={words.projects.packToken.pasteTitle}>
+              <h3 className="sc-pack-way-title">{words.projects.packToken.pasteTitle}</h3>
+              <PackTokenForm
+                set={project.packToken !== null}
+                setAt={project.packToken?.setAt}
+                busy={busy}
+                onSubmit={(token) =>
+                  void act(async () => {
+                    await data.actions.setPackToken(token);
+                    navigation.replace(here);
+                  })
+                }
+                onRemove={
+                  project.packToken === null
+                    ? undefined
+                    : () =>
+                        void act(async () => {
+                          await data.actions.removePackToken();
+                          navigation.replace(here);
+                        })
+                }
+              />
+            </section>
+          </div>
+          <div className="sc-form-actions sc-pack-actions">
+            <Button variant="ghost" onClick={() => navigation.back(here)}>
+              {words.common.cancel}
+            </Button>
+          </div>
         </section>
       </>
     );
@@ -1654,11 +1666,18 @@ function WorkspaceSettingsPage(props: {
       {error !== undefined && <Callout tone="danger">{error}</Callout>}
       {workspace !== undefined && (
         <section className="sc-panel" aria-label={words.settings.workspace.aria}>
-          <h2 className="sc-section-title">{words.settings.workspace.title}</h2>
-          <WorkspaceSettingsView
-            workspace={workspace}
-            editHref={administrator ? settingsHref("workspace") : undefined}
-          />
+          <div className="sc-section-head">
+            <h2 className="sc-section-title">{words.settings.workspace.title}</h2>
+            {administrator && (
+              <a
+                className="sc-button sc-button-secondary sc-button-sm"
+                href={settingsHref("workspace")}
+              >
+                {words.settings.workspace.edit}
+              </a>
+            )}
+          </div>
+          <WorkspaceSettingsView workspace={workspace} />
         </section>
       )}
       <section className="sc-panel" aria-label={words.rules.title}>

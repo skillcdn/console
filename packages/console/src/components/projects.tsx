@@ -305,7 +305,7 @@ export function ProjectForm(props: ProjectFormProps) {
               onChange={(event) => setSkillsAddress(event.target.value)}
             />
           </span>
-          <span className="sc-muted">
+          <span className="sc-field-hint">
             {form.skillsAddressHint(props.organizationAddress ?? null)}
           </span>
         </label>
@@ -614,6 +614,8 @@ export function MemberList(props: MemberListProps) {
 export interface PackTokenFormProps {
   /** Whether the project holds a pack token now, so that it can be taken away. */
   readonly set: boolean;
+  /** When the token held now was set, so that an owner knows what they replace. */
+  readonly setAt?: string | undefined;
   readonly busy?: boolean | undefined;
   readonly error?: string | undefined;
   /** Called with the token as typed or pasted; it travels to the console once and is shown nowhere after. */
@@ -631,8 +633,8 @@ export function PackTokenForm(props: PackTokenFormProps) {
   const ready = typed.length >= 8 && !/\s/.test(typed);
   return (
     <form
-      className="sc-form"
-      aria-label={pack.aria}
+      className="sc-form sc-pack-token-form"
+      aria-label={pack.pasteAria}
       onSubmit={(event: FormEvent) => {
         event.preventDefault();
         if (ready && props.busy !== true) {
@@ -642,6 +644,11 @@ export function PackTokenForm(props: PackTokenFormProps) {
       }}
     >
       <p className="sc-field-hint">{pack.hint}</p>
+      {props.set && props.setAt !== undefined && (
+        <p className="sc-muted">
+          {pack.setSince} <Time iso={props.setAt} />
+        </p>
+      )}
       <label className="sc-field">
         <span className="sc-field-label">{pack.label}</span>
         <input
@@ -661,8 +668,8 @@ export function PackTokenForm(props: PackTokenFormProps) {
         </p>
       )}
       <div className="sc-form-actions">
-        <Button type="submit" variant="primary" disabled={!ready || props.busy === true}>
-          {pack.set}
+        <Button type="submit" variant="secondary" disabled={!ready || props.busy === true}>
+          {props.set ? pack.replace : pack.set}
         </Button>
         {props.set && props.onRemove !== undefined && (
           <Button variant="danger" disabled={props.busy === true} onClick={props.onRemove}>

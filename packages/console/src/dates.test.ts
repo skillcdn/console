@@ -5,6 +5,7 @@ import {
   dateOf,
   dayOf,
   daysBetween,
+  deviceLanguage,
   firstDayOfWeek,
   formatDay,
   formatDays,
@@ -70,6 +71,10 @@ describe("days", () => {
     expect(firstDayOfWeek("en-US", "monday")).toBe(1);
     expect(firstDayOfWeek("de", "sunday")).toBe(7);
     expect(firstDayOfWeek("not a tag at all", "auto")).toBe(1);
+    // The system default asks the device for its language; with no browser to ask, the fallback.
+    const browser = (globalThis as { readonly navigator?: { readonly language?: string } })
+      .navigator;
+    expect(deviceLanguage("en")).toBe(browser?.language ?? "en");
   });
 
   it("know the week a day is in, from the day the week begins on", () => {

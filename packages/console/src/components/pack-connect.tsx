@@ -6,7 +6,7 @@ import type {
   RestProject,
 } from "../api.js";
 import { useWords } from "../i18n/index.js";
-import { Button } from "./ui.js";
+import { Button, Time } from "./ui.js";
 
 // A private pack connected with a code a person approves (ADR-0036): an owner asks, the console
 // asks the deployment and shows what it answered, the code and the page, and the owner approves
@@ -123,9 +123,10 @@ export function PackConnect(props: PackConnectProps) {
       {shown.kind === "waiting" ? (
         <>
           <p className="sc-pack-connect-code">
-            <span className="sc-field-label">{pack.connectCode}</span> <code>{shown.code}</code>
+            <span className="sc-field-label">{pack.connectCode}</span>
+            <code className="sc-pack-code">{shown.code}</code>
           </p>
-          <p>
+          <div className="sc-form-actions">
             <a
               className="sc-button sc-button-primary"
               href={shown.url}
@@ -134,24 +135,29 @@ export function PackConnect(props: PackConnectProps) {
             >
               {pack.connectOpen}
             </a>
-          </p>
-          <p className="sc-muted">{pack.connectWaiting}</p>
-          <div className="sc-form-actions">
             <Button variant="ghost" disabled={props.busy === true} onClick={cancel}>
               {pack.connectCancel}
             </Button>
           </div>
+          <p className="sc-pack-connect-waiting">
+            <span className="sc-spinner" aria-hidden="true">
+              <span className="sc-spinner-ring" />
+            </span>
+            <span>
+              {pack.connectWaiting} {pack.connectExpires} <Time iso={shown.expiresAt} />
+            </span>
+          </p>
         </>
       ) : shown.kind === "connected" ? (
         <p>{pack.connectDone}</p>
       ) : (
         <>
+          <p className="sc-field-hint">{pack.connectHint}</p>
           {shown.kind === "ended" && (
             <p className="sc-form-error" role="alert">
               {pack.connectEnded[shown.reason]}
             </p>
           )}
-          <p className="sc-field-hint">{pack.connectHint}</p>
           <div className="sc-form-actions">
             <Button variant="primary" disabled={props.busy === true} onClick={start}>
               {pack.connect}

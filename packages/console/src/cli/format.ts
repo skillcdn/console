@@ -128,7 +128,7 @@ export function formatWorkspace(workspace: RestWorkspace): string {
   return [
     `workspace ${workspace.name}`,
     `people visibility: ${visibility}  (${visibility === "everyone" ? "everyone sees everyone" : "a member sees only the people they share a project with; an administrator sees everyone"})`,
-    `week begins on: ${workspace.weekStart ?? "auto"}  (auto: as the language of the pages has it)`,
+    `week begins on: ${workspace.weekStart ?? "auto"}  (auto: the system default, as each device has it)`,
     `time zone: ${zone ?? "none"}  (${zone === null ? "moments are printed as the API gives them, in UTC" : "moments are printed in it, as ISO 8601 with its offset"})`,
     `skills: ${workspace.skills.address ?? "no address of the organization's"}  at ${workspace.skills.source}`,
     `token days at most: ${workspace.tokenDaysAtMost ?? "a person chooses"}`,

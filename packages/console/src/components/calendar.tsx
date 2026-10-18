@@ -11,6 +11,7 @@ import {
   addDays,
   addMonths,
   daysBetween,
+  deviceLanguage,
   firstDayOfWeek,
   formatDay,
   formatDays,
@@ -472,7 +473,7 @@ export function Calendar(props: CalendarProps) {
   const { tag } = useLanguage();
   const [pointed, point, leave] = usePointed();
   const now = props.today ?? todayOf();
-  const firstDay = firstDayOfWeek(tag, props.weekStart);
+  const firstDay = firstDayOfWeek(deviceLanguage(tag), props.weekStart);
   const weeks = monthGrid(props.month, firstDay);
   const on = onDays(props.tasks);
   const goalsOn = props.goalHref === undefined ? undefined : goalsOnDays(props.goals ?? []);
@@ -580,7 +581,7 @@ export function Week(props: WeekProps) {
   const { tag } = useLanguage();
   const [pointed, point, leave] = usePointed();
   const now = props.today ?? todayOf();
-  const firstDay = firstDayOfWeek(tag, props.weekStart);
+  const firstDay = firstDayOfWeek(deviceLanguage(tag), props.weekStart);
   const days = weekOf(props.day ?? now, firstDay);
   const first = days[0] ?? now;
   const last = days[days.length - 1] ?? now;

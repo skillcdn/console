@@ -16,7 +16,7 @@ import type {
   RestToken,
   RestWork,
 } from "../api.js";
-import { addDays, firstDayOfWeek, weekOf } from "../dates.js";
+import { addDays, deviceLanguage, firstDayOfWeek, weekOf } from "../dates.js";
 import { KOREAN, LanguageContext } from "../i18n/index.js";
 import { Board, BoardFilters, byDue, columnStateOf, filterTasks } from "./board.js";
 import {
@@ -36,6 +36,7 @@ import { DocumentForm, DocumentList, DocumentView, FolderView } from "./document
 import { describeEvent, EventFeed } from "./event-feed.js";
 import { GoalForm, GoalList, GoalView, goalMonth } from "./goals.js";
 import { Markdown } from "./markdown.js";
+import { PackConnect } from "./pack-connect.js";
 import { ListingForm, PeopleList } from "./people.js";
 import {
   clampScale,
@@ -65,6 +66,13 @@ import { TaskView } from "./task-view.js";
 import { NewToken, TokenForm, TokenList } from "./tokens.js";
 import { Avatar, PersonChip, personName } from "./ui.js";
 import { WorkList } from "./work.js";
+import {
+  deviceTimeZone,
+  offsetOf,
+  timeZoneGroups,
+  WorkspaceSettingsForm,
+  WorkspaceSettingsView,
+} from "./workspace.js";
 
 const alice: RestPerson = {
   id: "0199c4d8-0000-7000-8000-000000000001",
@@ -1909,7 +1917,7 @@ describe("a person's work", () => {
     expect(html).toContain(`href="/projects/web/decisions/${decision().id}"`);
     expect(html).toContain("Which one?");
     // The week at the top: today's, with the project's mark before the task on its day.
-    const first = weekOf(TODAY, firstDayOfWeek("en"))[0] ?? "";
+    const first = weekOf(TODAY, firstDayOfWeek(deviceLanguage("en")))[0] ?? "";
     expect(html).toContain('aria-label="The week"');
     expect(html).toContain("sc-calendar-cell-today");
     expect(html).toContain(`href="/work?week=${addDays(first, -7)}"`);
@@ -1965,7 +1973,7 @@ describe("a person's work", () => {
   });
 
   it("shows one week on its own, the weeks around a step away, in the person's language", () => {
-    const first = weekOf("2026-10-14", firstDayOfWeek("en"))[0] ?? "";
+    const first = weekOf("2026-10-14", firstDayOfWeek(deviceLanguage("en")))[0] ?? "";
     const html = renderToStaticMarkup(
       <Week
         tasks={[
@@ -2872,15 +2880,36 @@ describe("the pack token of a project", () => {
     expect(empty).toContain("Set the token");
     expect(empty).not.toContain("Remove the token");
     const set = renderToStaticMarkup(
-      <PackTokenForm set onSubmit={() => undefined} onRemove={() => undefined} />,
+      <PackTokenForm
+        set
+        setAt="2026-10-09T10:00:00.000Z"
+        onSubmit={() => undefined}
+        onRemove={() => undefined}
+      />,
     );
     expect(set).toContain("Remove the token");
+    expect(set).toContain("Replace the token");
+    expect(set).toContain("A token has been set since");
+    expect(set).not.toContain("Set the token");
     const korean = renderToStaticMarkup(
       <LanguageContext.Provider value={KOREAN}>
         <PackTokenForm set={false} onSubmit={() => undefined} />
       </LanguageContext.Provider>,
     );
     expect(korean).toContain("토큰 넣기");
+  });
+
+  it("offers to connect with a code first, and says what the person will do", () => {
+    const html = renderToStaticMarkup(
+      <PackConnect
+        onStart={() => Promise.reject(new Error("not asked"))}
+        poll={() => Promise.resolve({ status: "none" } as const)}
+        onCancel={() => Promise.resolve()}
+      />,
+    );
+    expect(html).toContain("Connect at SkillCDN");
+    expect(html).toContain("The console asks SkillCDN for a code.");
+    expect(html).not.toContain("Stop waiting");
   });
 });
 
@@ -2968,5 +2997,68 @@ describe("the archive of the board (ADR-0029)", () => {
     // What the console did itself names nobody.
     const own = renderToStaticMarkup(<EventFeed events={[{ ...event, actor: null }]} />);
     expect(own).toContain("put #7 Ship away");
+  });
+});
+
+describe("the workspace's settings", () => {
+  const workspace = {
+    name: "Acme",
+    tokenDaysAtMost: null,
+    skills: { source: "https://skillcdn.ai", address: "/gh/acme/skills" },
+    peopleVisibility: "everyone",
+    weekStart: "auto",
+    timeZone: null,
+  } as const;
+  const at = new Date("2026-01-15T00:00:00Z");
+
+  it("groups the zones by area, the ones with none first, each with its offset", () => {
+    const groups = timeZoneGroups(["Europe/Paris", "Asia/Tokyo", "UTC", "Asia/Seoul"], at, [
+      "America/New_York",
+      undefined,
+      "",
+    ]);
+    expect(groups.map((group) => group.area)).toEqual(["", "America", "Asia", "Europe"]);
+    expect(groups[0]?.zones).toEqual([{ name: "UTC", offset: "UTC+00:00" }]);
+    expect(groups[1]?.zones).toEqual([{ name: "America/New_York", offset: "UTC-05:00" }]);
+    expect(groups[2]?.zones).toEqual([
+      { name: "Asia/Seoul", offset: "UTC+09:00" },
+      { name: "Asia/Tokyo", offset: "UTC+09:00" },
+    ]);
+    expect(offsetOf("Nowhere/Nothing", at)).toBeUndefined();
+  });
+
+  it("shows the settings as rows, the zone with its offset and the device's beside it", () => {
+    const html = renderToStaticMarkup(<WorkspaceSettingsView workspace={workspace} />);
+    expect(html).toContain("sc-settings-item");
+    expect(html).toContain("Everyone sees everyone");
+    expect(html).toContain("System default");
+    expect(html).toContain("<dd>None");
+    const seoul = renderToStaticMarkup(
+      <WorkspaceSettingsView workspace={{ ...workspace, timeZone: "Asia/Seoul" }} />,
+    );
+    expect(seoul).toContain("Asia/Seoul");
+    expect(seoul).toContain("(UTC+09:00)");
+    const device = deviceTimeZone();
+    if (device !== undefined && device !== "Asia/Seoul") {
+      expect(seoul).toContain(`This device: ${device}`);
+    }
+  });
+
+  it("offers each setting beside its words, the zones in a picker, and saves only what changed", () => {
+    const html = renderToStaticMarkup(
+      <WorkspaceSettingsForm workspace={workspace} onSubmit={() => undefined} />,
+    );
+    expect(html).toContain("sc-settings-row");
+    expect(html).toContain('<option value="monday">Monday</option>');
+    expect(html).toContain('<option value="auto" selected="">System default</option>');
+    expect(html).toContain('<option value="" selected="">None</option>');
+    expect(html).toContain('<option value="UTC">UTC (UTC+00:00)</option>');
+    expect(html).toContain('<optgroup label="Asia">');
+    expect(html).toContain("Asia/Seoul (UTC+09:00)");
+    if (deviceTimeZone() !== undefined) {
+      expect(html).toContain("Use this device");
+    }
+    // Nothing changed yet: nothing to save.
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Save the settings<\/button>/);
   });
 });

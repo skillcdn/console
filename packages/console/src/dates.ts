@@ -65,8 +65,18 @@ export function addMonths(month: string, count: number): string {
 }
 
 /**
- * The weekday a week begins on: as the workspace says (ADR-0035), Monday or Sunday, else where
- * the language is spoken. 1 for Monday, 7 for Sunday.
+ * The language and region of the device the pages are read on, as the browser says: `ko-KR`,
+ * `en-GB`. The fallback where there is no browser to ask. The week begins as this has it
+ * where the workspace leaves the choice to the system default (ADR-0035).
+ */
+export function deviceLanguage(fallback: string): string {
+  const browser = (globalThis as { readonly navigator?: { readonly language?: string } }).navigator;
+  return browser?.language ?? fallback;
+}
+
+/**
+ * The weekday a week begins on: as the workspace says (ADR-0035), Monday or Sunday, else as the
+ * language and region have it, the device's by {@link deviceLanguage}. 1 for Monday, 7 for Sunday.
  */
 export function firstDayOfWeek(language: string, weekStart?: WeekStart | undefined): number {
   if (weekStart === "monday") {
