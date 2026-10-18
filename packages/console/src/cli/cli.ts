@@ -1382,7 +1382,12 @@ const newTask: Command = async (args, io) => {
     ...(body === undefined ? {} : { body }),
     ...fields,
   });
-  answer(io, session, made, () => `Task #${made.number} written: ${made.title}\nid: ${made.id}`);
+  answer(
+    io,
+    session,
+    made,
+    () => `Task #${made.number} written: ${made.title}\ntask id: ${made.id}`,
+  );
   return EXIT.ok;
 };
 
@@ -1605,6 +1610,9 @@ const take: Command = async (args, io) => {
   answer(io, session, { run, task: taken, comments: comments.items, rules }, () =>
     [
       `Run ${run.id} began on #${found.number} ${found.title}, as "${run.agent}" for ${run.person.login}. The task is in progress and theirs.${tookOver}${elsewhere}`,
+      // The ids on a line of their own, each named: a run's and a task's begin alike, and a
+      // task has a number for people as well.
+      `run id: ${run.id}  task id: ${found.id}  (task #${found.number})`,
       "",
       formatTask(taken, undefined, undefined, comments.items),
       "",
@@ -1750,7 +1758,7 @@ const ask: Command = async (args, io) => {
   io.stdout(
     session.json
       ? `${JSON.stringify(raised, null, 2)}\n`
-      : `Decision ${raised.id} raised on run ${runId}; the run waits for a person.\n${formatOptions(raised)}\n`,
+      : `Decision ${raised.id} raised on run ${runId}; the run waits for a person.\ndecision id: ${raised.id}\n${formatOptions(raised)}\n`,
   );
   return settle(io, session, project, raised, seconds, true);
 };
@@ -1999,7 +2007,7 @@ const newGoal: Command = async (args, io) => {
     ...(startsOn === undefined ? {} : { startsOn }),
     ...(dueOn === undefined ? {} : { dueOn }),
   });
-  answer(io, session, made, () => `Goal set: ${made.title}\nid: ${made.id}`);
+  answer(io, session, made, () => `Goal set: ${made.title}\ngoal id: ${made.id}`);
   return EXIT.ok;
 };
 

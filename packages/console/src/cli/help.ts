@@ -342,7 +342,7 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     usage: "take <number|id> [--agent <name>]",
     synopsis: "Takes a task: a run begins, and the task is in progress and the person's.",
     about:
-      "Takes a task: a run begins, and the task is in progress and the person's; the rules of the board are printed with the task. A run still open on the task is taken over, since the board cannot know whether its agent still runs: it ends as abandoned, the feed says who took over, and that agent is refused on its next command; console task <number> shows the runs on a task, with when each was last heard from, before it is taken. --agent is what people see at work; left out, it is what the person called the token.",
+      "Takes a task: a run begins, and the task is in progress and the person's; the run's id and the task's id are printed on a line of their own, then the task, then the rules of the board. A run still open on the task is taken over, since the board cannot know whether its agent still runs: it ends as abandoned, the feed says who took over, and that agent is refused on its next command; console task <number> shows the runs on a task, with when each was last heard from, before it is taken. --agent is what people see at work; left out, it is what the person called the token.",
     limits: [`agent: one line, up to ${MAX_AGENT_LENGTH} characters`],
     refusals: [
       "task.not_found: no task has that number or id",

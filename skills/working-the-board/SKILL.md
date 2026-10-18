@@ -23,7 +23,7 @@ A task of the board goes in, named by its number; a run comes out: the task take
 - **Go-ahead:** the task's body is the go-ahead. A task that says what the agent may decide alone is followed within that; everything else that would change scope, cost or a trade-off is a decision.
 - **Changes mid-run:** a person changes the task or answers a decision on the board; the run takes it from there and says so in its next report. A report is never rewritten.
 - **The discussion:** what people say about the task is in its comments, which `console task <number>` and `console take` print with the task; a picture they put in is saved with `console file <id>` and looked at with the agent's own tools. An answer to what they asked there, a question that is not a decision, a remark on what was handed in, is a comment of the agent's own: `console comment <number> "<markdown>" [--attach <file>]`, which needs no run. A report is the run's record; a comment is a word to people.
-- **Work given in chat:** when a person gives work in chat, in a directory that works in a project, the agent writes it on the board first (`console task new`), tells the person the number, takes it and works it as below, so that the board holds the work and its record, and the person decides on the board.
+- **Work given in chat:** when a person gives work in chat, in a directory that works in a project, the agent writes it on the board first (`console task new`), tells the person the number the command printed, never one assumed, since other agents write on the same board and the next number is nobody's to guess, takes it by that number and works it as below, so that the board holds the work and its record, and the person decides on the board.
 - **Language:** what people read, the reports, the questions, the pages and the summaries, is in the language the rules name for the person (`console take` prints them with the task), else the task's, so that the people of the board read as they wrote.
 
 ## Requirements
@@ -54,7 +54,7 @@ Told which task, go to phase 2: `console take` prints the rules of the board wit
 
 ### Phase 2: Take
 
-`console take <number>`. A run begins, and the command says its id: the task is in progress and the person's, and every report, hand-in, question and ending from here acts on this run. With another run of the person's open in the project, which `console take` says, each of those commands names the run: `--run <id>`. Taken by mistake, `console abandon` leaves it and the task stays as it was.
+`console take <number>`. A run begins, and the command says its id and the task's on a line of their own (`run id:`, `task id:`; a task has a number for people and an id for the API, a run, a decision and a goal have ids alone, and every command that makes one prints it so, `--json` the whole answer; an id is read from there, never assumed): the task is in progress and the person's, and every report, hand-in, question and ending from here acts on this run. With another run of the person's open in the project, which `console take` says, each of those commands names the run: `--run <id>`. Taken by mistake, `console abandon` leaves it and the task stays as it was.
 
 ### Phase 3: Work, and report at the milestones
 
