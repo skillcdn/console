@@ -38,7 +38,7 @@ import { GoalForm, GoalList, GoalView, goalMonth } from "./goals.js";
 import { Markdown } from "./markdown.js";
 import { PackConnect } from "./pack-connect.js";
 import { ListingForm, PeopleList } from "./people.js";
-import { Picker } from "./picker.js";
+import { opensAbove, Picker } from "./picker.js";
 import {
   clampScale,
   FITTED,
@@ -3169,6 +3169,16 @@ describe("the workers of a task, and what a form finds by searching (ADR-0037)",
     expect(bare).not.toContain('role="combobox"');
     expect(bare).not.toContain("Part of");
     expect(bare).toContain("Nobody");
+  });
+
+  it("opens its list below the field, and above it only where the window has no room below and more above", () => {
+    const field = { top: 600, bottom: 640 };
+    // Room below: below.
+    expect(opensAbove(field, 200, 900)).toBe(false);
+    // No room below, more above: above.
+    expect(opensAbove(field, 300, 900)).toBe(true);
+    // No room either way, and more below than above: below, as a list does.
+    expect(opensAbove({ top: 100, bottom: 140 }, 300, 400)).toBe(false);
   });
 
   it("is a combobox that searches a page at a time, and a chip once something is chosen", () => {

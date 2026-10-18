@@ -1334,6 +1334,12 @@ table {
   font-size: var(--sc-text-sm);
 }
 
+/* Where the window has no room below the field, and more above, the list stands above it. */
+.sc-picker-list-above {
+  top: auto;
+  bottom: calc(100% + var(--sc-space-1));
+}
+
 .sc-picker-option {
   padding: var(--sc-space-2);
   overflow: hidden;
@@ -1362,7 +1368,7 @@ table {
 }
 
 .sc-workers-more {
-  margin-left: var(--sc-space-1);
+  margin-inline: var(--sc-space-1);
   color: var(--sc-color-text-muted);
   font-size: var(--sc-text-xs);
   font-weight: var(--sc-weight-medium);
@@ -3063,17 +3069,16 @@ table {
   border-end-end-radius: var(--sc-radius-full);
 }
 
-/* The piece of a bar that carries the title, where the bar has more days in the week: it rises
-   over the pieces after it, and the title runs along the bar as far as its days reach, less the
-   room of its end, instead of stopping at the first day's edge. The days are the piece's own
-   custom property. */
-.sc-calendar-bar-spanning {
-  z-index: 1;
-}
-
+/* The title of a bar with more days in the week runs along the bar as far as its days reach,
+   less the room of its end, instead of stopping at the first day's edge: above every piece,
+   the one under the pointer included, and under the cards; the pointer goes through it to the
+   piece of the day beneath. The days are the first piece's own custom property. */
 .sc-calendar-task-title-spanning {
+  position: relative;
+  z-index: 25;
   flex: none;
   max-width: calc(var(--sc-span, 1) * 100% - 2.25rem);
+  pointer-events: none;
 }
 
 .sc-calendar-bar.sc-calendar-late {
@@ -3516,18 +3521,12 @@ table {
   position: relative;
 }
 
-/* The item under the pointer rises above its neighbours, which would otherwise paint over its card. */
-.sc-calendar-task:hover,
-.sc-calendar-task:focus-visible,
-.sc-calendar-bar:hover,
-.sc-calendar-bar:focus-visible {
-  z-index: 20;
-}
-
+/* The card rises above its neighbours and above a title running along a bar; the item under the
+   pointer itself stays in its layer, so that nothing of it covers such a title. */
 .sc-task-tip {
   position: absolute;
   left: 0;
-  z-index: 20;
+  z-index: 30;
   width: max-content;
   max-width: 20rem;
   padding: var(--sc-space-2) var(--sc-space-3);

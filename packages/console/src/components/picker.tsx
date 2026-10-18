@@ -25,6 +25,23 @@ export type PickerSearch<T> = (
   signal: AbortSignal,
 ) => Promise<PickerPage<T>>;
 
+/** How far the list stands from the field, in pixels, as the stylesheet has it. */
+const LIST_GAP = 4;
+
+/**
+ * Whether the list opens above the field: only where the window has no room for it below the
+ * field and more room above than below; else below, as a list does.
+ */
+export function opensAbove(
+  field: { readonly top: number; readonly bottom: number },
+  listHeight: number,
+  windowHeight: number,
+): boolean {
+  const below = windowHeight - field.bottom - LIST_GAP;
+  const over = field.top - LIST_GAP;
+  return listHeight > below && over > below;
+}
+
 export interface PickerProps<T> {
   /** What is chosen, if anything. */
   readonly value: T | undefined;
@@ -52,6 +69,9 @@ export function Picker<T>(props: PickerProps<T>) {
   const [more, setMore] = useState(false);
   const [loading, setLoading] = useState(false);
   const [active, setActive] = useState(-1);
+  const [above, setAbove] = useState(false);
+  const field = useRef<HTMLInputElement>(null);
+  const list = useRef<HTMLDivElement>(null);
   // The search and the exclusion as the page last gave them, read at the moment of a request,
   // so that a page rendering again starts no search over.
   const search = useRef(props.search);
@@ -60,6 +80,22 @@ export function Picker<T>(props: PickerProps<T>) {
   exclude.current = props.exclude;
   const latest = useRef(query);
   latest.current = query;
+
+  // The list opens below the field, and above it only where the window has no room below and
+  // more above: measured once it is open, and again whenever what it holds changes its height.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the items, the loading and the more are what changes the list's height
+  useEffect(() => {
+    if (!open || field.current === null || list.current === null) {
+      return;
+    }
+    setAbove(
+      opensAbove(
+        field.current.getBoundingClientRect(),
+        list.current.offsetHeight,
+        window.innerHeight,
+      ),
+    );
+  }, [open, items, loading, more]);
 
   // The words' page once the typing rests; the first page of everything at once on entering.
   useEffect(() => {
@@ -179,6 +215,7 @@ export function Picker<T>(props: PickerProps<T>) {
   return (
     <div className="sc-picker">
       <input
+        ref={field}
         className="sc-input"
         type="text"
         role="combobox"
@@ -202,7 +239,13 @@ export function Picker<T>(props: PickerProps<T>) {
       {open && (
         // The list of a combobox: read and chosen through the input, which keeps the focus; an
         // option is chosen on the press, before the input loses its focus and the list closes.
-        <div className="sc-picker-list" id={listId} role="listbox" aria-label={props.label}>
+        <div
+          ref={list}
+          className={cx("sc-picker-list", above && "sc-picker-list-above")}
+          id={listId}
+          role="listbox"
+          aria-label={props.label}
+        >
           {items.map((item, index) => (
             <div
               key={props.keyOf(item)}
