@@ -16,6 +16,7 @@ import {
   type RestClaim,
   type RestDecision,
   type RestMember,
+  type RestPackConnectStarted,
   type RestPerson,
   type RestSkillBrowse,
   type RestSkillFile,
@@ -84,6 +85,7 @@ import {
   formatVersionLine,
   formatWork,
   formatWorkspace,
+  moment,
   setMomentZone,
 } from "./format.js";
 import { COMMAND_HELP, helpFor, ownSkillPath, usage } from "./help.js";
@@ -2247,7 +2249,7 @@ const people: Command = async (args, io) => {
 // on the Settings page or through their agent here (ADR-0021).
 const WORKSPACE_FLAGS =
   "--people-visibility <everyone|shared-projects>, --week-start <auto|monday|sunday>, --time-zone <zone|none>";
-const WORKSPACE_USAGE = `Say what to do: console workspace  |  console workspace edit [${WORKSPACE_FLAGS.replaceAll(", ", "] [")}]`;
+const WORKSPACE_USAGE = `Say what to do: console workspace  |  console workspace edit [${WORKSPACE_FLAGS.replaceAll(", ", "] [")}]  |  console workspace pack-token --connect|--stdin|--remove`;
 
 const workspace: Command = async (args, io) => {
   const [verb, ...rest] = args;
@@ -2286,6 +2288,34 @@ const workspace: Command = async (args, io) => {
     await rememberZone(io, session, changed.timeZone ?? undefined);
     answer(io, session, changed, () => formatWorkspace(changed));
     return EXIT.ok;
+  }
+  if (verb === "pack-token") {
+    const { values, positionals } = parse(rest, PACK_TOKEN_FLAGS);
+    if (positionals.length > 0) {
+      throw misuse(
+        "The workspace's token names no project: console workspace pack-token --connect, --stdin or --remove",
+      );
+    }
+    const way = wayOf(values);
+    const session = await open(io, values);
+    const { client } = session;
+    return packToken(
+      io,
+      session,
+      way,
+      {
+        set: (token) => client.setWorkspacePackToken({ token }),
+        remove: () => client.removeWorkspacePackToken(),
+        connect: () => client.connectWorkspacePackToken(),
+        async standing() {
+          const state = await client.workspacePackTokenConnection();
+          return state.status === "connected"
+            ? { status: "connected", held: state.workspace }
+            : state;
+        },
+      },
+      formatWorkspace,
+    );
   }
   throw misuse(WORKSPACE_USAGE);
 };
@@ -2421,48 +2451,61 @@ const PACK_CONNECT_ENDED = {
     "SkillCDN refused the request: the repository is not one the person may open, the pack is public and needs no token, or they hold as many tokens as one may.",
 } as const;
 
-/**
- * The pack token (ADR-0028): connected with a code a person approves at SkillCDN (ADR-0036), or
- * read from standard input and never from an argument, so that no shell keeps it.
- */
-const projectPackToken: Command = async (args, io) => {
-  const { values, positionals } = parse(args, {
-    connect: { type: "boolean" },
-    stdin: { type: "boolean" },
-    remove: { type: "boolean" },
-  });
-  const key = theOne(
-    positionals,
-    "Say which project: console project pack-token <key> --connect, --stdin or --remove",
-  );
-  const chosen = [on(values, "connect"), on(values, "stdin"), on(values, "remove")].filter(
-    Boolean,
-  ).length;
-  if (chosen !== 1) {
+/** How a SkillCDN token is to change, one of the three the flags name. */
+const wayOf = (values: Values): "connect" | "stdin" | "remove" => {
+  const ways = (["connect", "stdin", "remove"] as const).filter((way) => on(values, way));
+  const [way] = ways;
+  if (way === undefined || ways.length !== 1) {
     throw misuse(
       "Say one of --connect, which asks SkillCDN for a code a person approves; --stdin, which reads a token made by hand from standard input; and --remove, which takes the token away.",
     );
   }
-  const session = await open(io, values);
-  const project = session.client.project(key);
-  if (on(values, "remove")) {
-    const changed = await project.removePackToken();
-    answer(io, session, changed, () => formatProject(changed));
+  return way;
+};
+
+/** Whose SkillCDN token the command works: a project's, or the workspace's for the organization's pack. */
+interface TokenHolder<T> {
+  set(token: string): Promise<T>;
+  remove(): Promise<T>;
+  connect(): Promise<RestPackConnectStarted>;
+  standing(): Promise<
+    | { readonly status: "none" }
+    | { readonly status: "pending" }
+    | { readonly status: "ended"; readonly reason: keyof typeof PACK_CONNECT_ENDED }
+    | { readonly status: "connected"; readonly held: T }
+  >;
+}
+
+/**
+ * The SkillCDN token (ADR-0028): connected with a code a person approves at SkillCDN (ADR-0036),
+ * or read from standard input and never from an argument, so that no shell keeps it; or taken
+ * away. The same for a project's and for the workspace's.
+ */
+async function packToken<T>(
+  io: CliIo,
+  session: Session,
+  way: "connect" | "stdin" | "remove",
+  holder: TokenHolder<T>,
+  format: (held: T) => string,
+): Promise<number> {
+  if (way === "remove") {
+    const changed = await holder.remove();
+    answer(io, session, changed, () => format(changed));
     return EXIT.ok;
   }
-  if (on(values, "connect")) {
-    const started = await project.connectPackToken();
+  if (way === "connect") {
+    const started = await holder.connect();
     io.stdout(
-      `To connect the pack, a person who may open its repository opens ${started.url} signed in at SkillCDN, checks that the page shows the code ${started.code}, and approves; the console receives the pack token and keeps it sealed, shown to nobody.\nWaiting for that, until ${started.expiresAt}.\n`,
+      `To connect the pack, a person who may open its repository opens ${started.url} signed in at SkillCDN, checks that the page shows the code ${started.code}, and approves; the console receives the SkillCDN token and keeps it sealed, shown to nobody.\nWaiting for that, until ${moment(started.expiresAt)}.\n`,
     );
     for (;;) {
       await io.sleep(started.intervalSeconds * 1000);
-      const state = await project.packTokenConnection();
+      const state = await holder.standing();
       if (state.status === "pending") {
         continue;
       }
       if (state.status === "connected") {
-        answer(io, session, state.project, () => `Connected.\n${formatProject(state.project)}`);
+        answer(io, session, state.held, () => `Connected.\n${format(state.held)}`);
         return EXIT.ok;
       }
       if (state.status === "ended") {
@@ -2477,9 +2520,41 @@ const projectPackToken: Command = async (args, io) => {
   if (token.length === 0) {
     throw failed("No token was given on standard input.");
   }
-  const changed = await project.setPackToken({ token });
-  answer(io, session, changed, () => formatProject(changed));
+  const changed = await holder.set(token);
+  answer(io, session, changed, () => format(changed));
   return EXIT.ok;
+}
+
+const PACK_TOKEN_FLAGS = {
+  connect: { type: "boolean" },
+  stdin: { type: "boolean" },
+  remove: { type: "boolean" },
+} as const;
+
+const projectPackToken: Command = async (args, io) => {
+  const { values, positionals } = parse(args, PACK_TOKEN_FLAGS);
+  const key = theOne(
+    positionals,
+    "Say which project: console project pack-token <key> --connect, --stdin or --remove",
+  );
+  const way = wayOf(values);
+  const session = await open(io, values);
+  const project = session.client.project(key);
+  return packToken(
+    io,
+    session,
+    way,
+    {
+      set: (token) => project.setPackToken({ token }),
+      remove: () => project.removePackToken(),
+      connect: () => project.connectPackToken(),
+      async standing() {
+        const state = await project.packTokenConnection();
+        return state.status === "connected" ? { status: "connected", held: state.project } : state;
+      },
+    },
+    formatProject,
+  );
 };
 
 const projectIcon: Command = async (args, io) => {

@@ -24,6 +24,11 @@ export interface WorkspaceSettings {
   readonly weekStart: WeekStart;
   /** The workspace's time zone, an IANA name, which the command prints moments in; null for none. */
   readonly timeZone: string | null;
+  /**
+   * When the SkillCDN token the organization's pack is read with was set (ADR-0036); null for
+   * none. The token itself is {@link readWorkspacePackToken}'s to read, where it is needed.
+   */
+  readonly packTokenSetAt: Date | null;
 }
 
 /** What a workspace is set to until an administrator says otherwise. */
@@ -31,15 +36,84 @@ export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
   peopleVisibility: "everyone",
   weekStart: "auto",
   timeZone: null,
+  packTokenSetAt: null,
 };
 
-export type WorkspaceSettingsPatch = Partial<WorkspaceSettings>;
+/** The settings an administrator changes on the form; the token has routes of its own. */
+const PATCHABLE = ["peopleVisibility", "weekStart", "timeZone"] as const;
+export type WorkspaceSettingsPatch = Partial<Pick<WorkspaceSettings, (typeof PATCHABLE)[number]>>;
 
 const settingsColumns = {
   peopleVisibility: workspaces.peopleVisibility,
   weekStart: workspaces.weekStart,
   timeZone: workspaces.timeZone,
+  packTokenSetAt: workspaces.packTokenSetAt,
 };
+
+/** The SkillCDN token the organization's pack is read with (ADR-0036), sealed, and when it was set. */
+export interface WorkspacePackToken {
+  readonly sealed: string;
+  readonly setAt: Date;
+}
+
+/** The token as the row holds it, for a read of the organization's pack; nothing where none is held. */
+export async function readWorkspacePackToken(
+  database: Database,
+  workspaceId: string,
+): Promise<WorkspacePackToken | undefined> {
+  const [row] = await drizzleOf(database)
+    .select({ sealed: workspaces.packToken, setAt: workspaces.packTokenSetAt })
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId))
+    .limit(1);
+  return row?.sealed != null && row.setAt != null
+    ? { sealed: row.sealed, setAt: row.setAt }
+    : undefined;
+}
+
+/**
+ * Keeps the token, sealed, or takes it away with nothing, and tells the board which field
+ * changed and never the token; taking away what is not there writes nothing. Answers the
+ * settings as they stand.
+ */
+export async function setWorkspacePackToken(
+  database: Database,
+  input: {
+    readonly workspaceId: string;
+    readonly actor: Actor;
+    /** The token, sealed with the console's secret; nothing to take it away. */
+    readonly sealed: string | undefined;
+    readonly now: Date;
+  },
+): Promise<WorkspaceSettings> {
+  const { workspaceId, actor, sealed, now } = input;
+  return drizzleOf(database).transaction(async (tx) => {
+    const [current] = await tx
+      .select(settingsColumns)
+      .from(workspaces)
+      .where(eq(workspaces.id, workspaceId))
+      .for("update");
+    if (current === undefined) {
+      throw new Error("the workspace was not found");
+    }
+    if (current.packTokenSetAt === null && sealed === undefined) {
+      return current;
+    }
+    const setAt = sealed === undefined ? null : now;
+    await tx
+      .update(workspaces)
+      .set({ packToken: sealed ?? null, packTokenSetAt: setAt, updatedAt: now })
+      .where(eq(workspaces.id, workspaceId));
+    await recordEvent(tx, {
+      workspaceId,
+      kind: "workspace.updated",
+      actor,
+      data: { fields: ["packToken"] },
+      now,
+    });
+    return { ...current, packTokenSetAt: setAt };
+  });
+}
 
 /**
  * The workspace the deployment runs, made at boot by whichever role comes first and renamed by
@@ -126,16 +200,20 @@ export async function updateWorkspaceSettings(
       peopleVisibility: patch.peopleVisibility ?? current.peopleVisibility,
       weekStart: patch.weekStart ?? current.weekStart,
       timeZone: patch.timeZone === undefined ? current.timeZone : patch.timeZone,
+      packTokenSetAt: current.packTokenSetAt,
     };
-    const fields = (Object.keys(next) as (keyof WorkspaceSettings)[]).filter(
-      (field) => next[field] !== current[field],
-    );
+    const fields = PATCHABLE.filter((field) => next[field] !== current[field]);
     if (fields.length === 0) {
       return next;
     }
     await tx
       .update(workspaces)
-      .set({ ...next, updatedAt: now })
+      .set({
+        peopleVisibility: next.peopleVisibility,
+        weekStart: next.weekStart,
+        timeZone: next.timeZone,
+        updatedAt: now,
+      })
       .where(eq(workspaces.id, workspaceId));
     await recordEvent(tx, {
       workspaceId,

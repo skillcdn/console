@@ -3030,7 +3030,7 @@ describe("the workspace's settings", () => {
   it("shows the settings as rows, the zone with its offset and the device's beside it", () => {
     const html = renderToStaticMarkup(<WorkspaceSettingsView workspace={workspace} />);
     expect(html).toContain("sc-settings-item");
-    expect(html).toContain("Everyone sees everyone");
+    expect(html).toContain("Everyone of the workspace");
     expect(html).toContain("System default");
     expect(html).toContain("<dd>None");
     const seoul = renderToStaticMarkup(

@@ -79,6 +79,7 @@ import {
   type RestVersions,
   type RestWork,
   type RestWorkspace,
+  type RestWorkspacePackConnect,
   type RestWorkspacePatch,
   restArchivedTasksSchema,
   restCategoriesSchema,
@@ -123,6 +124,7 @@ import {
   restVersionSchema,
   restVersionsSchema,
   restWorkSchema,
+  restWorkspacePackConnectSchema,
   restWorkspaceSchema,
 } from "./schemas.js";
 import type { GoalState, TaskState } from "./vocabulary.js";
@@ -395,6 +397,17 @@ export interface ConsoleClient {
   updateMe(patch: RestMePatch): Promise<RestMe>;
   /** Changes the workspace's settings (ADR-0035); for an administrator, with a session or a token. */
   updateWorkspace(patch: RestWorkspacePatch): Promise<RestWorkspace>;
+  /**
+   * The workspace's SkillCDN token (ADR-0036), which reads the organization's pack for every
+   * project that names no address and holds no token of its own; an administrator's. Set from
+   * a token made by hand, taken away, or connected with a code a person approves at SkillCDN,
+   * asked after until the token is kept or the request ended.
+   */
+  setWorkspacePackToken(input: RestPackTokenInput): Promise<RestWorkspace>;
+  removeWorkspacePackToken(): Promise<RestWorkspace>;
+  connectWorkspacePackToken(): Promise<RestPackConnectStarted>;
+  workspacePackTokenConnection(signal?: AbortSignal): Promise<RestWorkspacePackConnect>;
+  cancelWorkspacePackTokenConnection(): Promise<void>;
   /** The people the asker may see: everyone, or those they share a project with (ADR-0035). */
   people(signal?: AbortSignal): Promise<RestPeople>;
   /**
@@ -879,6 +892,27 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
     },
     updateWorkspace: (patch) =>
       request("PATCH", `${base}${REST_ROUTES.workspace}`, patch, restWorkspaceSchema),
+    setWorkspacePackToken: (input) =>
+      request("PUT", `${base}${REST_ROUTES.workspacePackToken}`, input, restWorkspaceSchema),
+    removeWorkspacePackToken: () =>
+      request("DELETE", `${base}${REST_ROUTES.workspacePackToken}`, undefined, restWorkspaceSchema),
+    connectWorkspacePackToken: () =>
+      request(
+        "POST",
+        `${base}${REST_ROUTES.workspacePackToken}/connect`,
+        undefined,
+        restPackConnectStartedSchema,
+      ),
+    workspacePackTokenConnection: (signal) =>
+      request(
+        "GET",
+        `${base}${REST_ROUTES.workspacePackToken}/connect`,
+        undefined,
+        restWorkspacePackConnectSchema,
+        signal,
+      ),
+    cancelWorkspacePackTokenConnection: () =>
+      request("DELETE", `${base}${REST_ROUTES.workspacePackToken}/connect`, undefined, undefined),
     updatePerson: (id, patch) =>
       request("PATCH", `${base}${restPath("people", id)}`, patch, restPersonSchema),
     createListing: (input) =>

@@ -1,27 +1,31 @@
 import { useEffect, useState } from "react";
-import type {
-  PackConnectEnding,
-  RestPackConnect,
-  RestPackConnectStarted,
-  RestProject,
-} from "../api.js";
+import type { PackConnectEnding, RestPackConnect, RestPackConnectStarted } from "../api.js";
 import { useWords } from "../i18n/index.js";
 import { Button, Time } from "./ui.js";
 
-// A private pack connected with a code a person approves (ADR-0036): an owner asks, the console
-// asks the deployment and shows what it answered, the code and the page, and the owner approves
-// there; the page asks the console again at the interval the deployment named until the token
-// is kept or the request ended. Takes its data through the callbacks and keeps nothing itself.
+// A private pack connected with a code a person approves (ADR-0036): an owner, or for the
+// workspace's token an administrator, asks, the console asks the deployment and shows what it
+// answered, the code and the page, and the person approves there; the page asks the console
+// again at the interval the deployment named until the token is kept or the request ended.
+// Takes its data through the callbacks and keeps nothing itself.
+
+/**
+ * How a connection stands, as the component needs it: what the API answers for a project's
+ * token and for the workspace's both say this much, with what was connected beside it.
+ */
+export type PackConnectState =
+  | Extract<RestPackConnect, { status: "none" | "pending" | "ended" }>
+  | { readonly status: "connected" };
 
 export interface PackConnectProps {
   /** Asks the deployment to connect; answers what the person is shown. */
   readonly onStart: () => Promise<RestPackConnectStarted>;
   /** How the connection stands; the token is kept when the person approved. */
-  readonly poll: (signal?: AbortSignal) => Promise<RestPackConnect>;
+  readonly poll: (signal?: AbortSignal) => Promise<PackConnectState>;
   /** Gives the connection up. */
   readonly onCancel: () => Promise<void>;
-  /** Called once the token is kept, with the project as it stands. */
-  readonly onConnected?: ((project: RestProject) => void) | undefined;
+  /** Called once the token is kept. */
+  readonly onConnected?: (() => void) | undefined;
   readonly busy?: boolean | undefined;
 }
 
@@ -78,7 +82,7 @@ export function PackConnect(props: PackConnectProps) {
             setShown({ kind: "waiting", ...state });
           } else if (state.status === "connected") {
             setShown({ kind: "connected" });
-            onConnected?.(state.project);
+            onConnected?.();
           } else if (state.status === "ended") {
             setShown({ kind: "ended", reason: state.reason });
           } else {

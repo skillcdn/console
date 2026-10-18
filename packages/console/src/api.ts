@@ -232,6 +232,7 @@ export {
   type RestVersions,
   type RestWork,
   type RestWorkspace,
+  type RestWorkspacePackConnect,
   type RestWorkspacePatch,
   restAnswerInputSchema,
   restArchivedTasksSchema,
@@ -325,6 +326,7 @@ export {
   restVersionSummarySchema,
   restVersionsSchema,
   restWorkSchema,
+  restWorkspacePackConnectSchema,
   restWorkspacePatchSchema,
   restWorkspaceSchema,
 } from "./schemas.js";

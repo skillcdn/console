@@ -206,7 +206,16 @@ export const restWorkspaceSchema = z.object({
    * The organization's skills: the origin of the SkillCDN deployment they are read through,
    * and the address a project without one of its own reads, canonical, or `null` for none.
    */
-  skills: z.object({ source: z.string(), address: z.nullable(z.string()) }),
+  skills: z.object({
+    source: z.string(),
+    address: z.nullable(z.string()),
+    /**
+     * The SkillCDN token the organization's pack is read with, by a project that names no
+     * address and holds no token of its own (ADR-0036): when it was set, never the token; `null`
+     * for none. Optional, so that a console older than it still answers.
+     */
+    packToken: z.optional(z.nullable(z.object({ setAt: instant }))),
+  }),
   /**
    * Who sees whom on the People page (ADR-0035): everyone, or the people one shares a project
    * with. Read as optional, so that a console older than this setting still answers; `everyone`
@@ -1070,19 +1079,34 @@ export type RestPackConnectStarted = z.infer<typeof restPackConnectStartedSchema
  * person, with what they were shown; connected, the token kept and the project as it stands; or
  * ended short of a token, and why.
  */
+const packConnectNone = z.object({ status: z.literal("none") });
+const packConnectPending = z.object({
+  status: z.literal("pending"),
+  code: z.string(),
+  url: z.string(),
+  expiresAt: instant,
+  intervalSeconds: z.int().check(z.positive()),
+});
+const packConnectEnded = z.object({
+  status: z.literal("ended"),
+  reason: z.enum(PACK_CONNECT_ENDINGS),
+});
 export const restPackConnectSchema = z.union([
-  z.object({ status: z.literal("none") }),
-  z.object({
-    status: z.literal("pending"),
-    code: z.string(),
-    url: z.string(),
-    expiresAt: instant,
-    intervalSeconds: z.int().check(z.positive()),
-  }),
+  packConnectNone,
+  packConnectPending,
   z.object({ status: z.literal("connected"), project: restProjectSchema }),
-  z.object({ status: z.literal("ended"), reason: z.enum(PACK_CONNECT_ENDINGS) }),
+  packConnectEnded,
 ]);
 export type RestPackConnect = z.infer<typeof restPackConnectSchema>;
+
+/** `GET /api/v1/workspace/pack-token/connect`: the same, for the workspace's token, with the workspace as it stands once connected. */
+export const restWorkspacePackConnectSchema = z.union([
+  packConnectNone,
+  packConnectPending,
+  z.object({ status: z.literal("connected"), workspace: restWorkspaceSchema }),
+  packConnectEnded,
+]);
+export type RestWorkspacePackConnect = z.infer<typeof restWorkspacePackConnectSchema>;
 
 /** `GET .../skills/one?path=&cursor=`: a page of a skill's context, as the pack answers `load_skill` (`RestSkill` of `@skillcdn/core`); `read` is `null` unless `ready`. */
 export const restSkillLoadSchema = z.object({

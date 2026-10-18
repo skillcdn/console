@@ -84,7 +84,10 @@ export type Route =
       readonly form: "edit" | "rules" | "pack-token" | undefined;
     }
   /** The workspace's settings: its own, its rules, its categories, its skills; or the form the rules, or the settings (ADR-0035), are written on. */
-  | { readonly name: "workspace-settings"; readonly form: "rules" | "workspace" | undefined }
+  | {
+      readonly name: "workspace-settings";
+      readonly form: "rules" | "workspace" | "pack-token" | undefined;
+    }
   | { readonly name: "people" }
   /** The form where an administrator lets someone in by login (ADR-0022). */
   | { readonly name: "new-listing" }
@@ -254,7 +257,13 @@ export function matchRoute(pathname: string, search = ""): Route {
   if (path === PATHS.settings) {
     return {
       name: "workspace-settings",
-      form: params.has("workspace") ? "workspace" : params.has("rules") ? "rules" : undefined,
+      form: params.has("workspace")
+        ? "workspace"
+        : params.has("rules")
+          ? "rules"
+          : params.has("pack-token")
+            ? "pack-token"
+            : undefined,
     };
   }
   if (path === PATHS.connect) {
@@ -427,7 +436,7 @@ export function projectSettingsHref(key: string, form?: "edit" | "rules" | "pack
 }
 
 /** Where the workspace's settings are, or the form its rules, or its own settings, are written on. */
-export function settingsHref(form?: "rules" | "workspace"): string {
+export function settingsHref(form?: "rules" | "workspace" | "pack-token"): string {
   return form === undefined ? PATHS.settings : `${PATHS.settings}?${form}`;
 }
 

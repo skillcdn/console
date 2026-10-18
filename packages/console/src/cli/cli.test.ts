@@ -1971,6 +1971,47 @@ describe("configuring, as the person", () => {
     expect(await runCli(["workspace", "edit"], nothing.io)).toBe(EXIT.usage);
   });
 
+  it("sets, connects and removes the workspace's SkillCDN token for an administrator, and shows it to nobody", async () => {
+    const held = {
+      ...ME.workspace,
+      skills: { ...ME.workspace.skills, packToken: { setAt: "2026-10-18T09:00:00.000Z" } },
+    };
+    const started = {
+      code: "ABCD-EFGH",
+      url: "https://skillcdn.test/connect/ABCD-EFGH",
+      expiresAt: "2026-10-18T09:10:00.000Z",
+      intervalSeconds: 1,
+    };
+    const { fetch, calls } = fakeConsole({
+      "PUT /api/v1/workspace/pack-token": { body: held },
+      "DELETE /api/v1/workspace/pack-token": {
+        body: { ...ME.workspace, skills: { ...ME.workspace.skills, packToken: null } },
+      },
+      "POST /api/v1/workspace/pack-token/connect": { status: 201, body: started },
+      "GET /api/v1/workspace/pack-token/connect": [
+        { body: { status: "pending", ...started } },
+        { body: { status: "connected", workspace: held } },
+      ],
+    });
+    const pasted = harness({ fetch, env: SIGNED_IN, readStdin: async () => "scdn_repo_hand\n" });
+    expect(await runCli(["workspace", "pack-token", "--stdin"], pasted.io)).toBe(EXIT.ok);
+    expect(calls.find((call) => call.key === "PUT /api/v1/workspace/pack-token")?.body).toEqual({
+      token: "scdn_repo_hand",
+    });
+    expect(pasted.out()).toContain("SkillCDN token: set");
+    expect(pasted.out()).not.toContain("scdn_repo_hand");
+    const connected = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["workspace", "pack-token", "--connect"], connected.io)).toBe(EXIT.ok);
+    expect(connected.out()).toContain("ABCD-EFGH");
+    expect(connected.out()).toContain("Connected.");
+    const removed = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["workspace", "pack-token", "--remove"], removed.io)).toBe(EXIT.ok);
+    expect(removed.out()).toContain("SkillCDN token: none");
+    expect(await runCli(["workspace", "pack-token"], harness({ fetch, env: SIGNED_IN }).io)).toBe(
+      EXIT.usage,
+    );
+  });
+
   it("prints moments in the workspace's time zone as the login kept it, learned at whoami, and leaves --json as the API gives it", async () => {
     const { fetch } = fakeConsole({
       "GET /api/v1/me": {

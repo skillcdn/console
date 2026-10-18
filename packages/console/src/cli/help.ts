@@ -210,14 +210,19 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   },
   workspace: {
     usage:
-      "workspace  |  workspace edit [--people-visibility <everyone|shared-projects>] [--week-start <auto|monday|sunday>] [--time-zone <zone|none>]",
-    overview: "workspace  |  workspace edit [flags]",
-    synopsis: "The workspace's settings; or some changed, for an administrator.",
+      "workspace  |  workspace edit [--people-visibility <everyone|shared-projects>] [--week-start <auto|monday|sunday>] [--time-zone <zone|none>]  |  workspace pack-token --connect  |  workspace pack-token --stdin  |  workspace pack-token --remove",
+    overview:
+      "workspace  |  workspace edit [flags]  |  workspace pack-token --connect|--stdin|--remove",
+    synopsis:
+      "The workspace's settings; or some changed, or its SkillCDN token set, for an administrator.",
     about:
-      "What the workspace is called; who sees whom on the People page and in the pickers (everyone; or shared-projects: a member sees only the people they share a project with, an administrator everyone; a project open to the workspace has everyone in it, so a member of one sees everyone); the day the calendars begin a week on (auto: the system default, as each device has it); the workspace's time zone, an IANA name such as Asia/Seoul, in which this command prints moments as ISO 8601 with its offset, as the login kept it at login or whoami, or none, which leaves them as the API gives them, in UTC; where the organization's skills come from; and the most days a token may last. edit changes any of the first three, for an administrator; --json leaves moments as the API gives them.",
+      "What the workspace is called; who sees whom on the People page and in the pickers (everyone; or shared-projects: a member sees only the people they share a project with, an administrator everyone; a project open to the workspace has everyone in it, so a member of one sees everyone); the day the calendars begin a week on (auto: the system default, as each device has it); the workspace's time zone, an IANA name such as Asia/Seoul, in which this command prints moments as ISO 8601 with its offset, as the login kept it at login or whoami, or none, which leaves them as the API gives them, in UTC; where the organization's skills come from; and the most days a token may last. edit changes any of the first three, for an administrator; --json leaves moments as the API gives them. pack-token is the SkillCDN token the organization's pack is read with, by every project that names no address of its own and holds no token of its own (ADR-0036), for an administrator: with --connect, the console asks SkillCDN for a code, this command prints the page and the code, a person who may open the repository approves there, signed in at SkillCDN, and the console receives the token, shown to nobody; with --stdin, a token made by hand at SkillCDN is read from standard input and never an argument; --remove takes the token away.",
     refusals: [
-      "auth.forbidden: only an administrator changes the workspace's settings",
+      "auth.forbidden: only an administrator changes the workspace's settings or its token",
       "request.invalid: the time zone is not a name the console knows",
+      "workspace.pack_token_refused: SkillCDN does not serve the organization's pack to the token, or the console names no address for the organization's skills",
+      "workspace.pack_connect_refused: the console names no address for the organization's skills, the pack is on the console's machine, or SkillCDN refused to begin",
+      "workspace.pack_token_unsupported, workspace.pack_connect_unsupported: the console keeps no secret to seal a token with (AUTH_SECRET), or reaches no deployment",
     ],
   },
   person: {
@@ -240,9 +245,10 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
       'project <key>  |  project new <key> "<name>" [--description <markdown>|--file <path>] [--visibility workspace|private] [--skills <address>|none] [--color <name>] [--symbol <text>]  |  project edit <key> [--name "<name>"] [the same flags; none clears]  |  project icon <key> <file>  |  project icon <key> --remove  |  project pack-token <key> --connect  |  project pack-token <key> --stdin  |  project pack-token <key> --remove',
     overview:
       "project <key>  |  project new <key> <name> [flags]  |  project edit <key> [flags]  |  project icon <key> <file>|--remove  |  project pack-token <key> --connect|--stdin|--remove",
-    synopsis: "One project in full; or a project made, changed, given its mark or its pack token.",
+    synopsis:
+      "One project in full; or a project made, changed, given its mark or its SkillCDN token.",
     about:
-      "One project in full; or a project made, with you as its owner, private unless --visibility workspace says everyone of the workspace works in it; or one changed, only in what the flags say, for an owner; or its image for its mark, set from a file of this machine or taken away; or its pack token (ADR-0028), which the console keeps sealed to read a private pack with: with --connect, the console asks SkillCDN for a code, this command prints the page and the code, a person who may open the repository approves there, signed in at SkillCDN, and the console receives the token, shown to nobody (ADR-0036); with --stdin, a token a person made by hand at SkillCDN is read from standard input and never an argument; --remove takes the token away. The organization's skills are the project's unless --skills names an address of its own.",
+      "One project in full; or a project made, with you as its owner, private unless --visibility workspace says everyone of the workspace works in it; or one changed, only in what the flags say, for an owner; or its image for its mark, set from a file of this machine or taken away; or its SkillCDN token (pack-token, ADR-0028), which the console keeps sealed to read a private pack with, and which a project that reads the organization's pack may leave to the workspace's (console workspace pack-token): with --connect, the console asks SkillCDN for a code, this command prints the page and the code, a person who may open the repository approves there, signed in at SkillCDN, and the console receives the token, shown to nobody (ADR-0036); with --stdin, a token a person made by hand at SkillCDN is read from standard input and never an argument; --remove takes the token away. The organization's skills are the project's unless --skills names an address of its own.",
     limits: [
       `key: ${KEY}, up to ${MAX_PROJECT_KEY_LENGTH} characters; it does not change once made`,
       `name: one line, up to ${MAX_PROJECT_NAME_LENGTH} characters; description: up to ${MAX_PROJECT_DESCRIPTION_LENGTH}`,

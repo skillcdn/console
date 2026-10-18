@@ -45,13 +45,12 @@ import { DecisionForm } from "./components/decision-form.js";
 import { DecisionCard, DecisionList, type DecisionListProps } from "./components/decision-list.js";
 import { EventFeed, type EventFeedProps } from "./components/event-feed.js";
 import { GoalForm, GoalList, type GoalListProps, GoalView, goalMonth } from "./components/goals.js";
-import { PackConnect } from "./components/pack-connect.js";
+import { PackTokenWays } from "./components/pack-token.js";
 import { PAGE_SIZE } from "./components/paged.js";
 import { ListingForm, PeopleList, type PeopleListProps } from "./components/people.js";
 import {
   MemberList,
   type MemberListProps,
-  PackTokenForm,
   ProjectForm,
   ProjectList,
   type ProjectListProps,
@@ -1407,50 +1406,33 @@ function ProjectSettingsPage(props: {
       <>
         {head}
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
-        <section className="sc-panel sc-panel-form" aria-label={words.projects.packToken.aria}>
-          <h2 className="sc-section-title">{settings.packToken}</h2>
-          <p className="sc-pack-intro">{words.projects.packToken.intro}</p>
-          <div className="sc-pack-ways">
-            <section className="sc-pack-way" aria-label={words.projects.packToken.connectTitle}>
-              <h3 className="sc-pack-way-title">{words.projects.packToken.connectTitle}</h3>
-              <PackConnect
-                onStart={data.actions.connectPackToken}
-                poll={data.actions.packTokenConnection}
-                onCancel={data.actions.cancelPackTokenConnection}
-                onConnected={() => navigation.replace(here)}
-                busy={busy}
-              />
-            </section>
-            <section className="sc-pack-way" aria-label={words.projects.packToken.pasteTitle}>
-              <h3 className="sc-pack-way-title">{words.projects.packToken.pasteTitle}</h3>
-              <PackTokenForm
-                set={project.packToken !== null}
-                setAt={project.packToken?.setAt}
-                busy={busy}
-                onSubmit={(token) =>
+        <PackTokenWays
+          title={settings.packToken}
+          intro={words.projects.packToken.intro}
+          set={project.packToken !== null}
+          setAt={project.packToken?.setAt}
+          busy={busy}
+          onStart={data.actions.connectPackToken}
+          poll={data.actions.packTokenConnection}
+          onCancelConnect={data.actions.cancelPackTokenConnection}
+          onConnected={() => navigation.replace(here)}
+          onSubmit={(token) =>
+            void act(async () => {
+              await data.actions.setPackToken(token);
+              navigation.replace(here);
+            })
+          }
+          onRemove={
+            project.packToken === null
+              ? undefined
+              : () =>
                   void act(async () => {
-                    await data.actions.setPackToken(token);
+                    await data.actions.removePackToken();
                     navigation.replace(here);
                   })
-                }
-                onRemove={
-                  project.packToken === null
-                    ? undefined
-                    : () =>
-                        void act(async () => {
-                          await data.actions.removePackToken();
-                          navigation.replace(here);
-                        })
-                }
-              />
-            </section>
-          </div>
-          <div className="sc-form-actions sc-pack-actions">
-            <Button variant="ghost" onClick={() => navigation.back(here)}>
-              {words.common.cancel}
-            </Button>
-          </div>
-        </section>
+          }
+          onBack={() => navigation.back(here)}
+        />
       </>
     );
   }
@@ -1563,7 +1545,7 @@ function ProjectSettingsPage(props: {
  * from, which whoever runs the console set. Read by everyone; the rules written by an administrator.
  */
 function WorkspaceSettingsPage(props: {
-  readonly form: "rules" | "workspace" | undefined;
+  readonly form: "rules" | "workspace" | "pack-token" | undefined;
   readonly data: ConsoleData;
   readonly navigation: Navigation;
 }) {
@@ -1635,6 +1617,45 @@ function WorkspaceSettingsPage(props: {
       </>
     );
   }
+  if (form === "pack-token") {
+    if (!administrator || workspace === undefined) {
+      return <NothingHere />;
+    }
+    const held = workspace.skills.packToken ?? null;
+    return (
+      <>
+        {head}
+        {error !== undefined && <Callout tone="danger">{error}</Callout>}
+        <PackTokenWays
+          title={words.settings.skillsToken}
+          intro={words.settings.skillsTokenIntro}
+          set={held !== null}
+          setAt={held?.setAt}
+          busy={busy}
+          onStart={data.actions.connectWorkspacePackToken}
+          poll={data.actions.workspacePackTokenConnection}
+          onCancelConnect={data.actions.cancelWorkspacePackTokenConnection}
+          onConnected={() => navigation.replace(PATHS.settings)}
+          onSubmit={(token) =>
+            void act(async () => {
+              await data.actions.setWorkspacePackToken(token);
+              navigation.replace(PATHS.settings);
+            })
+          }
+          onRemove={
+            held === null
+              ? undefined
+              : () =>
+                  void act(async () => {
+                    await data.actions.removeWorkspacePackToken();
+                    navigation.replace(PATHS.settings);
+                  })
+          }
+          onBack={() => navigation.back(PATHS.settings)}
+        />
+      </>
+    );
+  }
   if (form === "workspace") {
     if (!administrator || workspace === undefined) {
       return <NothingHere />;
@@ -1673,7 +1694,7 @@ function WorkspaceSettingsPage(props: {
                 className="sc-button sc-button-secondary sc-button-sm"
                 href={settingsHref("workspace")}
               >
-                {words.settings.workspace.edit}
+                {words.common.edit}
               </a>
             )}
           </div>
@@ -1740,6 +1761,28 @@ function WorkspaceSettingsPage(props: {
                 )}
               </dd>
             </div>
+            {skills.address !== null && (
+              <div>
+                <dt>{words.settings.skillsToken}</dt>
+                <dd>
+                  {skills.packToken == null ? (
+                    <span className="sc-muted">{words.projects.settings.packTokenNone}</span>
+                  ) : (
+                    <>
+                      {words.projects.settings.packTokenSet} <Time iso={skills.packToken.setAt} />
+                    </>
+                  )}
+                  {administrator && (
+                    <>
+                      {" "}
+                      <a href={settingsHref("pack-token")}>
+                        {words.projects.settings.packTokenEdit}
+                      </a>
+                    </>
+                  )}
+                </dd>
+              </div>
+            )}
           </dl>
           <p className="sc-muted">{words.settings.skillsFromConfiguration}</p>
         </section>

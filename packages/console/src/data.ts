@@ -57,6 +57,7 @@ import {
   type RestVersions,
   type RestWork,
   type RestWorkspace,
+  type RestWorkspacePackConnect,
   type RestWorkspacePatch,
   restEventSchema,
 } from "./api.js";
@@ -144,6 +145,12 @@ export interface ConsoleActions {
   updateMe(patch: RestMePatch): Promise<RestMe>;
   /** Changes the workspace's settings (ADR-0035); for an administrator. `me` says them from then on. */
   updateWorkspace(patch: RestWorkspacePatch): Promise<RestWorkspace>;
+  /** The workspace's SkillCDN token (ADR-0036), for an administrator: set, taken away, or connected with a code. */
+  setWorkspacePackToken(token: string): Promise<RestWorkspace>;
+  removeWorkspacePackToken(): Promise<RestWorkspace>;
+  connectWorkspacePackToken(): Promise<RestPackConnectStarted>;
+  workspacePackTokenConnection(signal?: AbortSignal): Promise<RestWorkspacePackConnect>;
+  cancelWorkspacePackTokenConnection(): Promise<void>;
   /** One person of the workspace by their exact login, or nobody: what an owner lists someone the People page does not show by. */
   findPerson(login: string, signal?: AbortSignal): Promise<RestPerson | undefined>;
   /** Marks a run that will not come back as abandoned. */
@@ -674,10 +681,30 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
       async updateWorkspace(patch) {
         const workspace = await client.updateWorkspace(patch);
         setMe((current) => (current === undefined ? undefined : { ...current, workspace }));
-        // Who sees whom may have changed: the people are read again under the new setting.
+        // The member visibility may have changed: the people are read again under the new setting.
         await refreshWorkspace();
         return workspace;
       },
+      async setWorkspacePackToken(token) {
+        const workspace = await client.setWorkspacePackToken({ token });
+        setMe((current) => (current === undefined ? undefined : { ...current, workspace }));
+        return workspace;
+      },
+      async removeWorkspacePackToken() {
+        const workspace = await client.removeWorkspacePackToken();
+        setMe((current) => (current === undefined ? undefined : { ...current, workspace }));
+        return workspace;
+      },
+      connectWorkspacePackToken: () => client.connectWorkspacePackToken(),
+      async workspacePackTokenConnection(signal) {
+        const state = await client.workspacePackTokenConnection(signal);
+        if (state.status === "connected") {
+          const { workspace } = state;
+          setMe((current) => (current === undefined ? undefined : { ...current, workspace }));
+        }
+        return state;
+      },
+      cancelWorkspacePackTokenConnection: () => client.cancelWorkspacePackTokenConnection(),
       findPerson: (login, signal) => client.findPerson(login, signal),
       async abandonRun(id) {
         const run = await scope().endRun(id, { status: "abandoned" });

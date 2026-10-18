@@ -51,7 +51,7 @@ export const en = {
       private: "Private: only those listed",
     } satisfies Record<ProjectVisibility, string>,
     peopleVisibility: {
-      everyone: "Everyone sees everyone",
+      everyone: "Everyone of the workspace",
       shared_projects: "Only the people one shares a project with",
     } satisfies Record<PeopleVisibility, string>,
     weekStart: {
@@ -221,9 +221,9 @@ export const en = {
       },
     },
     packToken: {
-      aria: "The pack token",
+      aria: "The SkillCDN token",
       intro:
-        "A private pack is read with a token for its repository; a public one needs none. Connect it with a code approved at SkillCDN, or paste a token made there by hand. The console keeps the token sealed and shows it to nobody.",
+        "A private pack is read with a SkillCDN token for its repository; a public one needs none. Connect it with a code approved at SkillCDN, or paste a token made there by hand. The console keeps the token sealed and shows it to nobody. A project that reads the organization's pack may leave this to the workspace's token, on the Settings page.",
       connectTitle: "With a code approved at SkillCDN",
       pasteTitle: "With a token made by hand",
       pasteAria: "Paste a token",
@@ -256,7 +256,7 @@ export const en = {
       edit: "Edit the project",
       organizationsSkills: (address: string) => `The organization's: ${address}`,
       noSkills: "None: the console names no address for the organization's.",
-      packToken: "Pack token",
+      packToken: "SkillCDN token",
       packTokenNone: "None",
       packTokenSet: "Set",
       packTokenEdit: "Change it",
@@ -539,12 +539,15 @@ export const en = {
     noSkillsAddress: "No address: each project names its own, or has none.",
     skillsFromConfiguration:
       "Set by whoever runs the console, in its configuration: the deployment the skills are read through, and the organization's address.",
+    skillsToken: "SkillCDN token",
+    skillsTokenIntro:
+      "Every project that names no address of its own, and holds no token of its own, reads the organization's pack with this token; a public pack needs none. Connect it with a code approved at SkillCDN, or paste a token made there by hand. The console keeps the token sealed and shows it to nobody.",
     workspace: {
       title: "Workspace",
       aria: "Workspace settings",
-      peopleVisibility: "Who sees whom",
+      peopleVisibility: "Member visibility",
       peopleVisibilityHint:
-        "On the People page and in the pickers: everyone of the workspace, or, for a member, only the people they share a project with. An administrator always sees everyone, and a project open to the workspace has everyone in it.",
+        "Whom a member sees on the People page and in the pickers: everyone of the workspace, or only the people they share a project with. An administrator always sees everyone, and a project open to the workspace has everyone in it.",
       weekStart: "The week begins on",
       weekStartHint:
         "On the calendars and on My work. System default follows the language and region set on each person's device; Monday or Sunday holds for everyone.",
@@ -554,7 +557,6 @@ export const en = {
       timeZoneNone: "None",
       timeZoneDevice: (zone: string) => `This device: ${zone}`,
       timeZoneUseDevice: (zone: string) => `Use this device's: ${zone}`,
-      edit: "Change the settings",
       save: "Save the settings",
     },
   },
@@ -620,9 +622,10 @@ export const en = {
       dueOn: "the due date",
       state: "the state",
       color: "the colour",
-      peopleVisibility: "who sees whom",
+      peopleVisibility: "the member visibility",
       weekStart: "the first day of the week",
       timeZone: "the time zone",
+      packToken: "the SkillCDN token",
     } as Readonly<Record<string, string>>,
     event: {
       personJoined: () => "joined the board",
@@ -747,9 +750,9 @@ export const en = {
       indexing: "SkillCDN is still indexing the repository. Look again in a moment.",
       failed: "SkillCDN could not index the repository. What it found is on the address's page.",
       not_found:
-        "SkillCDN does not serve this address to the console: there is nothing there, or the pack is private and the project holds no pack token for it. An owner connects it on the Settings page, with a code approved at SkillCDN.",
+        "SkillCDN does not serve this address to the console: there is nothing there, or the pack is private and no SkillCDN token reads it, the project's own or the workspace's. An owner connects one on the Settings page, with a code approved at SkillCDN.",
       token_invalid:
-        "The pack token the project holds no longer works at SkillCDN: it expired, was removed, or its maker lost the repository. An owner sets a new one on the Settings page.",
+        "The SkillCDN token the pack is read with no longer works at SkillCDN: it expired, was removed, or its maker lost the repository. An owner sets a new one on the Settings page.",
       unavailable: "SkillCDN could not be reached. The skills are as they were; look again later.",
     },
     none: {

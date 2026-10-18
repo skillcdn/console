@@ -52,6 +52,8 @@ import {
   type RestTokens,
   type RestVersions,
   type RestWork,
+  type RestWorkspace,
+  type RestWorkspacePackConnect,
   RULES_PATH,
   RULES_TITLE,
   restAnswerInputSchema,
@@ -99,6 +101,7 @@ import { streamSSE } from "hono/streaming";
 import * as z from "zod";
 import type { Connections } from "../auth/connect.js";
 import {
+  configuresWorkspace,
   personFindableBy,
   personVisibleTo,
   readsListings,
@@ -211,8 +214,11 @@ import {
 import { TokenError, type TokenRecord } from "../db/queries/tokens.js";
 import {
   membersSyncedAt,
+  readWorkspacePackToken,
   readWorkspaceSettings,
+  setWorkspacePackToken,
   type WorkspaceRecord,
+  type WorkspaceSettings,
 } from "../db/queries/workspaces.js";
 import type { Logger } from "../logger.js";
 import { type BlobStore, BlobStoreError } from "../ports/blob-store.js";
@@ -248,6 +254,7 @@ import {
   restVersion,
   restVersionSummary,
 } from "./rest-shapes.js";
+import { restWorkspace } from "./workspace.js";
 
 /** What a read of the pack is asked with: a path from the repository's root, bounded, and where to go on. */
 const skillQuerySchema = z.object({
@@ -2576,10 +2583,21 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
   // project's address, or the organization's; one skill whole; a file of it. A private pack is
   // read with the pack token the project holds, sealed in its row and shown to nobody; a read
   // is logged, never what it read.
-  const packTokenOf = (project: ProjectRecord): string | undefined =>
-    project.packToken === undefined || secrets === undefined
-      ? undefined
-      : secrets.open("pack-token", project.packToken.sealed);
+  // The token a pack is read with: the project's own; else, for a project that reads the
+  // organization's pack, the workspace's (ADR-0036); nothing for a pack that needs none.
+  const packTokenFor = async (project: ProjectRecord): Promise<string | undefined> => {
+    if (secrets === undefined) {
+      return undefined;
+    }
+    if (project.packToken !== undefined) {
+      return secrets.open("pack-token", project.packToken.sealed);
+    }
+    if (project.skillsAddress !== undefined) {
+      return undefined;
+    }
+    const held = await readWorkspacePackToken(database, project.workspaceId);
+    return held === undefined ? undefined : secrets.open("pack-token", held.sealed);
+  };
   app.get(`${PROJECT}/skills`, async (c) => {
     const found = await reading(c);
     if (found instanceof Response) {
@@ -2587,7 +2605,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
     const body: RestSkills = await skills.read(
       found.project.skillsAddress,
-      packTokenOf(found.project),
+      await packTokenFor(found.project),
     );
     return c.json(body);
   });
@@ -2607,7 +2625,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       found.project.skillsAddress,
       query.data.path,
       query.data.cursor,
-      packTokenOf(found.project),
+      await packTokenFor(found.project),
     );
     logger.info(
       {
@@ -2638,7 +2656,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     const body: RestSkillFile = await skills.file(
       found.project.skillsAddress,
       query.data,
-      packTokenOf(found.project),
+      await packTokenFor(found.project),
     );
     logger.info(
       {
@@ -2670,7 +2688,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     const body: RestSkillBrowse = await skills.browse(
       found.project.skillsAddress,
       query.data,
-      packTokenOf(found.project),
+      await packTokenFor(found.project),
     );
     logger.info(
       {
@@ -2702,7 +2720,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     const body: RestSkillFind = await skills.find(
       found.project.skillsAddress,
       query.data,
-      packTokenOf(found.project),
+      await packTokenFor(found.project),
     );
     // The words searched for are the agent's own and stay out of the log; the folder and the outcome go in.
     logger.info(
@@ -2823,7 +2841,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     );
   const isAway = (error: PackError): boolean =>
     error.code === "network" || error.code === "invalid_response";
-  const pendingOf = (row: PackConnectRecord): RestPackConnect => ({
+  const pendingOf = (row: PackConnectRecord): Extract<RestPackConnect, { status: "pending" }> => ({
     status: "pending",
     code: row.code,
     url: row.url,
@@ -2868,7 +2886,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       throw error;
     }
     const row = await startPackConnect(database, {
-      projectId: found.project.id,
+      holder: { project: found.project.id },
       address: formatAddress(address),
       code: started.code,
       url: started.url,
@@ -2904,14 +2922,14 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     if (packConnector === undefined || secrets === undefined) {
       return connectUnsupported(c);
     }
-    const row = await readPackConnect(database, found.project.id);
+    const row = await readPackConnect(database, { project: found.project.id });
     if (row === undefined) {
       const body: RestPackConnect = { status: "none" };
       return c.json(body);
     }
     const now = clock.now();
     const ended = async (reason: "expired" | "declined" | "refused") => {
-      await endPackConnect(database, found.project.id);
+      await endPackConnect(database, { project: found.project.id });
       const body: RestPackConnect = { status: "ended", reason };
       return c.json(body);
     };
@@ -2944,7 +2962,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       sealed: secrets.seal("pack-token", claim.token),
       now,
     });
-    await endPackConnect(database, found.project.id);
+    await endPackConnect(database, { project: found.project.id });
     logger.info(
       {
         person: found.person.id,
@@ -2963,7 +2981,226 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     if (found instanceof Response) {
       return found;
     }
-    await endPackConnect(database, found.project.id);
+    await endPackConnect(database, { project: found.project.id });
+    return c.body(null, 204);
+  });
+
+  // The workspace's SkillCDN token (ADR-0036): what reads the organization's pack for every
+  // project that names no address of its own and holds no token of its own. An administrator's,
+  // from the console's own pages or through their agent's token, kept sealed on the workspace's
+  // row, answered as the day it was set and logged never; connected with a code as a project's is.
+  const configuring = async (c: Context<AppEnv>): Promise<Caller | Response> => {
+    const caller = await changingCaller(c);
+    if (caller instanceof Response) {
+      return caller;
+    }
+    return configuresWorkspace(caller.person) ? caller : administratorRequired(c);
+  };
+  const configuringRead = async (c: Context<AppEnv>): Promise<Caller | Response> => {
+    const caller = await askingCaller(c);
+    if (caller instanceof Response) {
+      return caller;
+    }
+    return configuresWorkspace(caller.person) ? caller : administratorRequired(c);
+  };
+  const workspaceBody = (found: WorkspaceRecord, settings: WorkspaceSettings): RestWorkspace =>
+    restWorkspace(found, settings, skills, tokens?.daysAtMost);
+  const workspaceConnectUnsupported = (c: Context<AppEnv>): Response =>
+    c.json(
+      errorBody(
+        "workspace.pack_connect_unsupported",
+        packConnector === undefined
+          ? "The console reads packs at no deployment it could connect to."
+          : "The console keeps no secret to seal a SkillCDN token with: AUTH_SECRET is not set.",
+      ),
+      409,
+    );
+  const workspaceConnectRefused = (c: Context<AppEnv>, message: string): Response =>
+    c.json(errorBody("workspace.pack_connect_refused", message), 400);
+  const WORKSPACE_PACK_CONNECT = `${REST_ROUTES.workspacePackToken}/connect`;
+
+  app.put(REST_ROUTES.workspacePackToken, tooLarge, async (c) => {
+    const caller = await configuring(c);
+    if (caller instanceof Response) {
+      return caller;
+    }
+    const input = await bodyOf(c, restPackTokenInputSchema);
+    if (input instanceof Response) {
+      return input;
+    }
+    if (secrets === undefined) {
+      return c.json(
+        errorBody(
+          "workspace.pack_token_unsupported",
+          "The console keeps no secret to seal a SkillCDN token with: AUTH_SECRET is not set.",
+        ),
+        409,
+      );
+    }
+    const tried = await skills.read(undefined, input.token);
+    if (
+      tried.status === "none" ||
+      tried.status === "not_found" ||
+      tried.status === "token_invalid"
+    ) {
+      return c.json(
+        errorBody(
+          "workspace.pack_token_refused",
+          tried.status === "none"
+            ? "The console names no address for the organization's skills to read with the token."
+            : "The deployment does not serve the organization's pack to this token.",
+        ),
+        400,
+      );
+    }
+    if (tried.status === "unavailable") {
+      return deploymentAway(c);
+    }
+    const found = await workspace();
+    const settings = await setWorkspacePackToken(database, {
+      workspaceId: found.id,
+      actor: actorOf(caller),
+      sealed: secrets.seal("pack-token", input.token),
+      now: clock.now(),
+    });
+    return c.json(workspaceBody(found, settings));
+  });
+  app.delete(REST_ROUTES.workspacePackToken, async (c) => {
+    const caller = await configuring(c);
+    if (caller instanceof Response) {
+      return caller;
+    }
+    const found = await workspace();
+    const settings = await setWorkspacePackToken(database, {
+      workspaceId: found.id,
+      actor: actorOf(caller),
+      sealed: undefined,
+      now: clock.now(),
+    });
+    return c.json(workspaceBody(found, settings));
+  });
+
+  app.post(WORKSPACE_PACK_CONNECT, async (c) => {
+    const caller = await configuring(c);
+    if (caller instanceof Response) {
+      return caller;
+    }
+    if (packConnector === undefined || secrets === undefined) {
+      return workspaceConnectUnsupported(c);
+    }
+    const address = skills.addressOf(undefined);
+    if (address === undefined) {
+      return workspaceConnectRefused(
+        c,
+        "The console names no address for the organization's skills.",
+      );
+    }
+    if (address.host === LOCAL_HOST_KEY) {
+      return workspaceConnectRefused(c, "A pack on the console's machine is read with no token.");
+    }
+    const found = await workspace();
+    let started: RestConnectStarted;
+    try {
+      started = await packConnector.connect(
+        address,
+        `${found.name} console`.slice(0, CONNECT_AGENT_MAX_LENGTH),
+      );
+    } catch (error) {
+      if (error instanceof PackError) {
+        return isAway(error) ? deploymentAway(c) : workspaceConnectRefused(c, error.message);
+      }
+      throw error;
+    }
+    const row = await startPackConnect(database, {
+      holder: { workspace: found.id },
+      address: formatAddress(address),
+      code: started.code,
+      url: started.url,
+      sealedSecret: secrets.seal("pack-connect", started.secret),
+      intervalSeconds: started.intervalSeconds,
+      startedById: caller.person.id,
+      expiresAt: new Date(started.expiresAt),
+      now: clock.now(),
+    });
+    logger.info(
+      { person: caller.person.id, address: row.address, requestId: c.get("requestId") },
+      "workspace pack connect begun",
+    );
+    const body: RestPackConnectStarted = {
+      code: row.code,
+      url: row.url,
+      expiresAt: row.expiresAt.toISOString(),
+      intervalSeconds: row.intervalSeconds,
+    };
+    return c.json(body, 201);
+  });
+  app.get(WORKSPACE_PACK_CONNECT, async (c) => {
+    const caller = await configuringRead(c);
+    if (caller instanceof Response) {
+      return caller;
+    }
+    if (packConnector === undefined || secrets === undefined) {
+      return workspaceConnectUnsupported(c);
+    }
+    const found = await workspace();
+    const holder = { workspace: found.id };
+    const row = await readPackConnect(database, holder);
+    if (row === undefined) {
+      const body: RestWorkspacePackConnect = { status: "none" };
+      return c.json(body);
+    }
+    const now = clock.now();
+    const ended = async (reason: "expired" | "declined" | "refused") => {
+      await endPackConnect(database, holder);
+      const body: RestWorkspacePackConnect = { status: "ended", reason };
+      return c.json(body);
+    };
+    if (row.expiresAt.getTime() <= now.getTime()) {
+      return ended("expired");
+    }
+    const secret = secrets.open("pack-connect", row.sealedSecret);
+    if (secret === undefined) {
+      return ended("refused");
+    }
+    let claim: RestConnectClaimed;
+    try {
+      claim = await packConnector.claim(secret);
+    } catch (error) {
+      if (error instanceof PackError) {
+        if (isAway(error)) {
+          return deploymentAway(c);
+        }
+        return ended(error.code === "connect.not_found" ? "declined" : "refused");
+      }
+      throw error;
+    }
+    if (claim.status === "pending") {
+      const body: RestWorkspacePackConnect = pendingOf(row);
+      return c.json(body);
+    }
+    const settings = await setWorkspacePackToken(database, {
+      workspaceId: found.id,
+      actor: actorOf(caller),
+      sealed: secrets.seal("pack-token", claim.token),
+      now,
+    });
+    await endPackConnect(database, holder);
+    logger.info(
+      { person: caller.person.id, address: row.address, requestId: c.get("requestId") },
+      "workspace pack token connected",
+    );
+    const body: RestWorkspacePackConnect = {
+      status: "connected",
+      workspace: workspaceBody(found, settings),
+    };
+    return c.json(body);
+  });
+  app.delete(WORKSPACE_PACK_CONNECT, async (c) => {
+    const caller = await configuring(c);
+    if (caller instanceof Response) {
+      return caller;
+    }
+    await endPackConnect(database, { workspace: (await workspace()).id });
     return c.body(null, 204);
   });
 

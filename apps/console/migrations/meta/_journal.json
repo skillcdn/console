@@ -169,6 +169,13 @@
       "when": 1792309350264,
       "tag": "0023_pack_connects",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792316662445,
+      "tag": "0024_workspace_pack_token",
+      "breakpoints": true
     }
   ]
 }

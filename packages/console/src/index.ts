@@ -82,7 +82,12 @@ export {
   goalMonth,
 } from "./components/goals.js";
 export { Markdown, type MarkdownProps } from "./components/markdown.js";
-export { PackConnect, type PackConnectProps } from "./components/pack-connect.js";
+export {
+  PackConnect,
+  type PackConnectProps,
+  type PackConnectState,
+} from "./components/pack-connect.js";
+export { PackTokenWays, type PackTokenWaysProps } from "./components/pack-token.js";
 export {
   PAGE_SIZE,
   Pager,

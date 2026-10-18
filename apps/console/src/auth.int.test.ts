@@ -100,7 +100,7 @@ describe("signing in", () => {
       workspace: {
         name: "Acme",
         tokenDaysAtMost: null,
-        skills: { source: "https://skillcdn.ai", address: null },
+        skills: { source: "https://skillcdn.ai", address: null, packToken: null },
         peopleVisibility: "everyone",
         weekStart: "auto",
         timeZone: null,
@@ -124,7 +124,7 @@ describe("signing in", () => {
       workspace: {
         name: "Acme",
         tokenDaysAtMost: null,
-        skills: { source: "https://skillcdn.ai", address: null },
+        skills: { source: "https://skillcdn.ai", address: null, packToken: null },
         peopleVisibility: "everyone",
         weekStart: "auto",
         timeZone: null,
@@ -407,7 +407,7 @@ describe("a deployment where nobody signs in", () => {
       workspace: {
         name: "Acme",
         tokenDaysAtMost: null,
-        skills: { source: "https://skillcdn.ai", address: null },
+        skills: { source: "https://skillcdn.ai", address: null, packToken: null },
         peopleVisibility: "everyone",
         weekStart: "auto",
         timeZone: null,

@@ -125,12 +125,14 @@ export function formatListingLine(listing: RestListing): string {
 export function formatWorkspace(workspace: RestWorkspace): string {
   const visibility = workspace.peopleVisibility ?? "everyone";
   const zone = workspace.timeZone ?? null;
+  const token = workspace.skills.packToken ?? null;
   return [
     `workspace ${workspace.name}`,
     `people visibility: ${visibility}  (${visibility === "everyone" ? "everyone sees everyone" : "a member sees only the people they share a project with; an administrator sees everyone"})`,
     `week begins on: ${workspace.weekStart ?? "auto"}  (auto: the system default, as each device has it)`,
     `time zone: ${zone ?? "none"}  (${zone === null ? "moments are printed as the API gives them, in UTC" : "moments are printed in it, as ISO 8601 with its offset"})`,
     `skills: ${workspace.skills.address ?? "no address of the organization's"}  at ${workspace.skills.source}`,
+    `SkillCDN token: ${token === null ? "none" : `set ${moment(token.setAt)}`}  (${token === null ? "the organization's pack is read with none" : "the organization's pack is read with it by a project with no address and no token of its own"})`,
     `token days at most: ${workspace.tokenDaysAtMost ?? "a person chooses"}`,
   ].join("\n");
 }

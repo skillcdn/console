@@ -77,6 +77,13 @@ export const workspaces = pgTable(
     weekStart: text({ enum: WEEK_STARTS }).notNull().default("auto"),
     /** The workspace's time zone, an IANA name the command prints moments in; null for none. */
     timeZone: text(),
+    /**
+     * The SkillCDN token the organization's pack is read with (ADR-0036), sealed with the
+     * console's secret, and when it was set; null for none. A project that names no address and
+     * holds no token of its own reads with it.
+     */
+    packToken: text(),
+    packTokenSetAt: instant(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -89,6 +96,10 @@ export const workspaces = pgTable(
     check(
       "workspaces_week_start_check",
       sql`${table.weekStart} in (${sql.raw(literals(WEEK_STARTS))})`,
+    ),
+    check(
+      "workspaces_pack_token_check",
+      sql`(${table.packToken} is null) = (${table.packTokenSetAt} is null)`,
     ),
   ],
 );
@@ -797,6 +808,27 @@ export const packConnects = pgTable(
     createdAt: createdAt(),
   },
   (table) => [index("pack_connects_expires_idx").on(table.expiresAt)],
+);
+
+/** The same for the workspace's own token (ADR-0036): one request at a time for the organization's pack. */
+export const workspacePackConnects = pgTable(
+  "workspace_pack_connects",
+  {
+    workspaceId: uuid()
+      .primaryKey()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    address: text().notNull(),
+    code: text().notNull(),
+    url: text().notNull(),
+    secret: text().notNull(),
+    intervalSeconds: integer().notNull(),
+    startedById: uuid()
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    expiresAt: instant().notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [index("workspace_pack_connects_expires_idx").on(table.expiresAt)],
 );
 
 /**

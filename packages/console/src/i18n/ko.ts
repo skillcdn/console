@@ -22,8 +22,8 @@ export const ko: Messages = {
     projectRole: { owner: "소유자", member: "멤버" },
     visibility: { workspace: "공개: 워크스페이스의 모두", private: "비공개: 목록에 있는 사람만" },
     peopleVisibility: {
-      everyone: "모두가 모두를 봅니다",
-      shared_projects: "같은 프로젝트에 속한 사람만 봅니다",
+      everyone: "워크스페이스의 모두",
+      shared_projects: "같은 프로젝트에 속한 사람만",
     },
     weekStart: { auto: "시스템 기본", monday: "월요일", sunday: "일요일" },
     runStatus: {
@@ -181,9 +181,9 @@ export const ko: Messages = {
       },
     },
     packToken: {
-      aria: "팩 토큰",
+      aria: "SkillCDN 토큰",
       intro:
-        "비공개 팩은 저장소에 대한 토큰으로 읽습니다. 공개 팩에는 필요 없습니다. SkillCDN에서 승인한 코드로 연결하거나, 거기서 직접 만든 토큰을 붙여 넣으세요. 콘솔은 토큰을 봉인해 보관하고 누구에게도 보여 주지 않습니다.",
+        "비공개 팩은 저장소에 대한 SkillCDN 토큰으로 읽습니다. 공개 팩에는 필요 없습니다. SkillCDN에서 승인한 코드로 연결하거나, 거기서 직접 만든 토큰을 붙여 넣으세요. 콘솔은 토큰을 봉인해 보관하고 누구에게도 보여 주지 않습니다. 조직의 팩을 읽는 프로젝트는 워크스페이스 설정의 토큰을 그대로 쓸 수 있습니다.",
       connectTitle: "SkillCDN에서 승인한 코드로",
       pasteTitle: "직접 만든 토큰으로",
       pasteAria: "토큰 붙여넣기",
@@ -216,7 +216,7 @@ export const ko: Messages = {
       edit: "프로젝트 편집",
       organizationsSkills: (address) => `조직의 스킬: ${address}`,
       noSkills: "없음: 콘솔에 조직의 주소가 없습니다.",
-      packToken: "팩 토큰",
+      packToken: "SkillCDN 토큰",
       packTokenNone: "없음",
       packTokenSet: "설정됨",
       packTokenEdit: "바꾸기",
@@ -497,12 +497,15 @@ export const ko: Messages = {
     noSkillsAddress: "주소 없음: 프로젝트마다 자기 주소를 두거나, 두지 않습니다.",
     skillsFromConfiguration:
       "콘솔을 운영하는 쪽이 설정으로 정합니다. 스킬을 읽어 오는 배포와 조직의 주소.",
+    skillsToken: "SkillCDN 토큰",
+    skillsTokenIntro:
+      "자기 주소도 자기 토큰도 없는 모든 프로젝트가 이 토큰으로 조직의 팩을 읽습니다. 공개 팩에는 필요 없습니다. SkillCDN에서 승인한 코드로 연결하거나, 거기서 직접 만든 토큰을 붙여 넣으세요. 콘솔은 토큰을 봉인해 보관하고 누구에게도 보여 주지 않습니다.",
     workspace: {
       title: "워크스페이스",
       aria: "워크스페이스 설정",
-      peopleVisibility: "누가 누구를 보는가",
+      peopleVisibility: "멤버 공개 범위",
       peopleVisibilityHint:
-        "사람들 페이지와 선택 목록에서: 워크스페이스의 모두를, 또는 멤버는 같은 프로젝트에 속한 사람만 봅니다. 관리자는 언제나 모두를 보고, 워크스페이스에 공개된 프로젝트에는 모두가 속합니다.",
+        "멤버가 사람들 페이지와 선택 목록에서 보는 범위: 워크스페이스의 모두, 또는 같은 프로젝트에 속한 사람만. 관리자는 언제나 모두를 보고, 워크스페이스에 공개된 프로젝트에는 모두가 속합니다.",
       weekStart: "주의 시작 요일",
       weekStartHint:
         "캘린더와 내 작업에서. 시스템 기본은 각 사람의 기기에 설정된 언어와 지역을 따르고, 월요일이나 일요일은 모두에게 같게 적용됩니다.",
@@ -512,7 +515,6 @@ export const ko: Messages = {
       timeZoneNone: "없음",
       timeZoneDevice: (zone) => `이 기기: ${zone}`,
       timeZoneUseDevice: (zone) => `이 기기의 타임존 쓰기: ${zone}`,
-      edit: "설정 바꾸기",
       save: "설정 저장",
     },
   },
@@ -578,9 +580,10 @@ export const ko: Messages = {
       dueOn: "기한",
       state: "상태",
       color: "색",
-      peopleVisibility: "사람 목록 범위",
+      peopleVisibility: "멤버 공개 범위",
       weekStart: "주의 시작 요일",
       timeZone: "타임존",
+      packToken: "SkillCDN 토큰",
     },
     event: {
       personJoined: () => "보드에 들어왔습니다",
@@ -702,9 +705,9 @@ export const ko: Messages = {
       indexing: "SkillCDN이 아직 저장소를 색인하고 있습니다. 잠시 후 다시 보세요.",
       failed: "SkillCDN이 저장소를 색인하지 못했습니다. 찾은 내용은 주소의 페이지에 있습니다.",
       not_found:
-        "SkillCDN이 이 주소를 콘솔에 제공하지 않습니다. 그곳에 아무것도 없거나, 비공개 팩인데 프로젝트에 팩 토큰이 없습니다. 소유자가 설정 페이지에서 SkillCDN의 승인 코드로 연결합니다.",
+        "SkillCDN이 이 주소를 콘솔에 제공하지 않습니다. 그곳에 아무것도 없거나, 비공개 팩인데 읽을 SkillCDN 토큰이 프로젝트에도 워크스페이스에도 없습니다. 소유자가 설정 페이지에서 SkillCDN의 승인 코드로 연결합니다.",
       token_invalid:
-        "프로젝트가 가진 팩 토큰이 SkillCDN에서 더 이상 통하지 않습니다. 만료되었거나 지워졌거나, 만든 사람이 저장소 권한을 잃었습니다. 소유자가 설정 페이지에서 새로 넣습니다.",
+        "이 팩을 읽는 SkillCDN 토큰이 SkillCDN에서 더 이상 통하지 않습니다. 만료되었거나 지워졌거나, 만든 사람이 저장소 권한을 잃었습니다. 소유자가 설정 페이지에서 새로 넣습니다.",
       unavailable:
         "SkillCDN에 연결할 수 없습니다. 스킬은 이전 상태 그대로입니다. 나중에 다시 보세요.",
     },

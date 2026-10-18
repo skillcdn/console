@@ -11,6 +11,8 @@ export const REST_ROUTES = {
   meToken: "/api/v1/me/token",
   /** The workspace's settings (ADR-0035), changed by an administrator; read through `me`. */
   workspace: "/api/v1/workspace",
+  /** The SkillCDN token the organization's pack is read with (ADR-0036), an administrator's; `/connect` under it connects one with a code. */
+  workspacePackToken: "/api/v1/workspace/pack-token",
   /** The people of the workspace: everyone who has signed in, and the logins let in that have not. */
   people: "/api/v1/people",
   /** The logins an administrator let in (ADR-0022), made and removed by one. */

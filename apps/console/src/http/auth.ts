@@ -36,6 +36,7 @@ import type { OrganizationDirectory } from "../ports/organization.js";
 import { errorBody } from "./app.js";
 import type { AppEnv } from "./request-context.js";
 import { restPerson } from "./rest-shapes.js";
+import { restWorkspace } from "./workspace.js";
 
 /** What signing in is made of, on a deployment where people can. */
 export interface AppAuth {
@@ -192,14 +193,8 @@ export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies):
    * name, so that a console of a person's own knows it holds one), their language, the ways in,
    * and the console's version, for a console built on the package to compare itself with.
    */
-  const workspaceOf = (found: WorkspaceRecord, settings: WorkspaceSettings): RestWorkspace => ({
-    name: found.name,
-    tokenDaysAtMost: auth?.tokens.daysAtMost ?? null,
-    skills: { source: skills.source, address: skills.address ?? null },
-    peopleVisibility: settings.peopleVisibility,
-    weekStart: settings.weekStart,
-    timeZone: settings.timeZone,
-  });
+  const workspaceOf = (found: WorkspaceRecord, settings: WorkspaceSettings): RestWorkspace =>
+    restWorkspace(found, settings, skills, auth?.tokens.daysAtMost);
   /** Whether the runtime knows the name as a time zone: the schema has its shape, the console the list. */
   const isTimeZone = (name: string): boolean => {
     try {

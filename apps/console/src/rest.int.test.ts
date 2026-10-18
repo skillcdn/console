@@ -61,6 +61,7 @@ import {
   restVersionSchema,
   restVersionsSchema,
   restWorkSchema,
+  restWorkspacePackConnectSchema,
   restWorkspaceSchema,
   rulesPath,
 } from "@skillcdn/console/api";
@@ -3845,5 +3846,187 @@ describe("a private pack connected with a code (ADR-0036)", () => {
     const gone = await connecting(unreachable, owner);
     expect(gone.status).toBe(503);
     expect(await errorOf(gone)).toBe("skills.unavailable");
+  });
+});
+
+describe("the workspace's SkillCDN token (ADR-0036)", () => {
+  const tokens: (string | undefined)[] = [];
+  const source: PackSource = {
+    open(address, token): Pack {
+      tokens.push(token);
+      const nothing = (): never => {
+        throw new PackError(404, "skill.not_found", "Nothing is read here.");
+      };
+      return {
+        address,
+        location: { kind: "deployment", url: "https://skillcdn.test" },
+        async mount() {
+          if (token === "scdn_repo_bad") {
+            throw new PackError(401, "auth.invalid_token", "The token is no good here.");
+          }
+          return mountOf(address);
+        },
+        browse: nothing,
+        find: nothing,
+        skill: nothing,
+        file: nothing,
+      };
+    },
+  };
+  const headers = (cookie: string) => ({
+    cookie,
+    origin: SIGN_IN_URL,
+    "content-type": "application/json",
+  });
+  const token = (h: Harness, cookie: string, method: "PUT" | "DELETE", body?: unknown) =>
+    h.request(REST_ROUTES.workspacePackToken, {
+      method,
+      headers: headers(cookie),
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  const connecting = (h: Harness, cookie: string, method: "POST" | "DELETE" = "POST") =>
+    h.request(`${REST_ROUTES.workspacePackToken}/connect`, { method, headers: headers(cookie) });
+  const standing = (h: Harness, cookie: string) =>
+    h.request(`${REST_ROUTES.workspacePackToken}/connect`, { headers: { cookie } });
+  const soon = () => new Date(Date.now() + 600_000).toISOString();
+
+  it("is set and taken away by an administrator, and reads the organization's pack for a project with no address and no token of its own", async () => {
+    const h = createHarness(testDatabase, {
+      providers: [createFixtureProvider()],
+      admins: ["alice"],
+      skills: { address: "/gh/Acme/skills", source },
+    });
+    const admin = await h.signIn("alice");
+    const member = await h.signIn("bob");
+    try {
+      expect((await token(h, member, "PUT", { token: "scdn_repo_fine" })).status).toBe(403);
+      expect((await token(h, member, "DELETE")).status).toBe(403);
+      expect((await token(h, admin, "PUT", { token: "scdn_repo_bad" })).status).toBe(400);
+      const set = await token(h, admin, "PUT", { token: "scdn_repo_fine" });
+      expect(set.status).toBe(200);
+      const shown = await set.text();
+      expect(shown).not.toContain("scdn_repo");
+      expect(restWorkspaceSchema.parse(JSON.parse(shown)).skills.packToken?.setAt).toEqual(
+        expect.any(String),
+      );
+      const me = restMeSchema.parse(
+        await (await h.request(REST_ROUTES.me, { headers: { cookie: member } })).json(),
+      );
+      expect(me.workspace.skills.packToken).not.toBeNull();
+
+      // A project that names no address reads the organization's pack with the workspace's
+      // token; one with an address of its own reads with none; one with a token of its own, with that.
+      await h.project(admin, { key: "ws-token-org", name: "On the organization's pack" });
+      await h.project(admin, {
+        key: "ws-token-own",
+        name: "On a pack of its own",
+        skillsAddress: "/gh/acme/other",
+      });
+      tokens.length = 0;
+      await h.request(projectPath("ws-token-org", "skills"), { headers: { cookie: admin } });
+      expect(tokens).toEqual(["scdn_repo_fine"]);
+      tokens.length = 0;
+      await h.request(projectPath("ws-token-own", "skills"), { headers: { cookie: admin } });
+      expect(tokens).toEqual([undefined]);
+      expect(
+        (
+          await h.request(`${projectPath("ws-token-org")}/pack-token`, {
+            method: "PUT",
+            headers: headers(admin),
+            body: JSON.stringify({ token: "scdn_repo_project" }),
+          })
+        ).status,
+      ).toBe(200);
+      tokens.length = 0;
+      await h.request(projectPath("ws-token-org", "skills"), { headers: { cookie: admin } });
+      expect(tokens).toEqual(["scdn_repo_project"]);
+
+      const removed = await token(h, admin, "DELETE");
+      expect(restWorkspaceSchema.parse(await removed.json()).skills.packToken).toBeNull();
+      // Taking away what is not there writes nothing, and is no error.
+      expect((await token(h, admin, "DELETE")).status).toBe(200);
+    } finally {
+      await token(h, admin, "DELETE");
+    }
+  });
+
+  it("is connected with a code an administrator approves at the deployment, as a project's is", async () => {
+    let claims = 0;
+    const connector: PackConnector = {
+      async connect(address, agent) {
+        expect(formatAddress(address)).toBe("/gh/acme/skills");
+        expect(agent).toBe("Acme console");
+        return {
+          code: "WXYZ-1234",
+          url: "https://skillcdn.test/connect/WXYZ-1234",
+          secret: "scdn_cx_workspace",
+          expiresAt: soon(),
+          intervalSeconds: 1,
+        };
+      },
+      async claim(secret) {
+        expect(secret).toBe("scdn_cx_workspace");
+        claims += 1;
+        return claims < 2
+          ? { status: "pending", expiresAt: soon() }
+          : {
+              status: "connected",
+              token: "scdn_repo_connected",
+              item: {
+                id: "token-2",
+                address: "/gh/acme/skills",
+                label: "Acme console",
+                createdAt: soon(),
+                expiresAt: soon(),
+                lastUsedAt: null,
+              },
+            };
+      },
+    };
+    const h = createHarness(testDatabase, {
+      providers: [createFixtureProvider()],
+      admins: ["alice"],
+      skills: { address: "/gh/Acme/skills", source },
+      packConnector: connector,
+    });
+    const admin = await h.signIn("alice");
+    const member = await h.signIn("bob");
+    try {
+      expect((await connecting(h, member)).status).toBe(403);
+      expect((await standing(h, member)).status).toBe(403);
+      expect(restWorkspacePackConnectSchema.parse(await (await standing(h, admin)).json())).toEqual(
+        { status: "none" },
+      );
+      const begun = await connecting(h, admin);
+      expect(begun.status).toBe(201);
+      const shown = await begun.text();
+      expect(shown).not.toContain("scdn_cx");
+      expect(restPackConnectStartedSchema.parse(JSON.parse(shown))).toMatchObject({
+        code: "WXYZ-1234",
+        intervalSeconds: 1,
+      });
+      expect(
+        restWorkspacePackConnectSchema.parse(await (await standing(h, admin)).json()),
+      ).toMatchObject({ status: "pending", code: "WXYZ-1234" });
+      const done = await standing(h, admin);
+      const body = await done.text();
+      expect(body).not.toContain("scdn_repo");
+      const state = restWorkspacePackConnectSchema.parse(JSON.parse(body));
+      expect(state.status).toBe("connected");
+      if (state.status === "connected") {
+        expect(state.workspace.skills.packToken?.setAt).toEqual(expect.any(String));
+      }
+      expect(restWorkspacePackConnectSchema.parse(await (await standing(h, admin)).json())).toEqual(
+        { status: "none" },
+      );
+      // Given up before anyone approved: nothing stands.
+      expect((await connecting(h, admin)).status).toBe(201);
+      expect((await connecting(h, admin, "DELETE")).status).toBe(204);
+      expect(restWorkspacePackConnectSchema.parse(await (await standing(h, admin)).json())).toEqual(
+        { status: "none" },
+      );
+    } finally {
+      await token(h, admin, "DELETE");
+    }
   });
 });
