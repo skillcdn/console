@@ -191,8 +191,8 @@ importers:
         specifier: ^3.0.3
         version: 3.0.3
       '@skillcdn/cli':
-        specifier: ^0.1.3
-        version: 0.1.3
+        specifier: ^0.3.0
+        version: 0.3.0
       node:
         specifier: runtime:^24.11.0
         version: runtime:24.22.0
@@ -209,8 +209,8 @@ importers:
         specifier: ^2.1.3
         version: 2.1.3(hono@4.13.13)
       '@skillcdn/brand':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.3.0
+        version: 0.3.0
       '@skillcdn/client':
         specifier: ^0.3.0
         version: 0.3.0
@@ -913,6 +913,12 @@ packages:
     peerDependencies:
       hono: ^4
 
+  '@hono/node-server@2.1.5':
+    resolution: {integrity: sha512-MgP/I06GdvsilDspMk/qmRzpk8LOUStP6jFAbSRi40W09DhoyUn+Mj7eyKICPqeYKybOjVFLVIAQzvu1bfIa7Q==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      hono: ^4 || ^5.0.0-0
+
   '@jridgewell/resolve-uri@3.1.2':
     resolution: {integrity: sha512-bRISgCIjP20/tbWSPWMEi54QVPRZExkuD9lJL+UIxUKtwVJA8wW1Trb1jMs1RFXo1CBTNZ/5hpC9QvmKWdopKw==}
     engines: {node: '>=6.0.0'}
@@ -934,6 +940,14 @@ packages:
   '@manypkg/tools@2.1.2':
     resolution: {integrity: sha512-6QEf6yqFbETdwGITKq57aYoPfX/3K8XFNwsAlx0C1M7o8cb79sv1M3w+tWuWvIcSbNqrLF7OD7YpZMVVz335hQ==}
     engines: {node: '>=20.0.0'}
+
+  '@modelcontextprotocol/core@2.3.1':
+    resolution: {integrity: sha512-laVmIhPGpWi7rG9q+0UigblRN0Hws/Yjlb6qLFtVqryXVLkc4h+yN8z731POD2LnAGQlFe7/tXhUm7Bi0YB91g==}
+    engines: {node: '>=20'}
+
+  '@modelcontextprotocol/server@2.3.1':
+    resolution: {integrity: sha512-e59MfWuSssj6DoQ96JCTqdW1AXT5/XtnTl0WWd6MU1Ka434fFUGGosCLJbGNySDhHGvxQWoRWK137FXYFkYNWw==}
+    engines: {node: '>=20'}
 
   '@oxc-project/types@0.152.0':
     resolution: {integrity: sha512-oM/5rLBm2tPkg0iBgkH/FOeR3PCDpY19GTgAZjMFM8h9WI9VW7cLgzp6nwtarYKmovavIQZ+Fe/RKX/8C8O/Rw==}
@@ -1044,11 +1058,11 @@ packages:
   '@rolldown/pluginutils@1.0.1':
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
 
-  '@skillcdn/brand@0.1.0':
-    resolution: {integrity: sha512-aB3o2M6wS9k8eBYUn2wqmDiBkukDjFrpl4V+PogawEDHAHXM5R6iePeoSX6RUsLAHAYB7UZ/1XeTA9el6XzJvA==}
+  '@skillcdn/brand@0.3.0':
+    resolution: {integrity: sha512-uVXgrcvfvGqIf/Mzg0y1VRRUfwEjjPLzW4Sf0DyjfVEqK9naFXn//+Vxe8toBiRa1nG/3r0zBerHaEv7TA/qhg==}
 
-  '@skillcdn/cli@0.1.3':
-    resolution: {integrity: sha512-djZjNIEo1CkcyxW5GBglgRNKqt3DA14X1E5ELHjq1RPK0KOWe9IkVA2MZU1uru7BX9rTlO6rmXuGz9npyy96Mw==}
+  '@skillcdn/cli@0.3.0':
+    resolution: {integrity: sha512-9wQYsHiV4umpmGqKRCggUG3khNwdfvSUtJlkeCC+ZaJ2qA1o9nlzv+BDkXbVVdJQXN+7EkrX8JscXJ4ynjJF5Q==}
     engines: {node: '>=24'}
     hasBin: true
 
@@ -1056,16 +1070,8 @@ packages:
     resolution: {integrity: sha512-xOVRqGznglyTxSqsPSIlmNFTNT/ggw2e+URzOVhULvNyNU2pHQMpPvfZUejrgPmvVytJvvXOKgJV5dEfkeF3rg==}
     engines: {node: '>=24'}
 
-  '@skillcdn/core@0.2.0':
-    resolution: {integrity: sha512-CSD6qk/NMwOMc+ibJFxw1EaSei7U3WdJNzTXw5ELb82Zhjt38QDOpmLK1M9U8MOa4JabECFs7RHwdTnQLQVRlw==}
-    engines: {node: '>=24'}
-
   '@skillcdn/core@0.3.0':
     resolution: {integrity: sha512-N2eMsmmscoIJ71n6GBpqRvinS1Z/sL1WoRl5QQ97Tmj7LN51aqWPE6SD52IUvVa/bVKNEnyzmYme9x1eFWN7mA==}
-    engines: {node: '>=24'}
-
-  '@skillcdn/indexer@0.2.2':
-    resolution: {integrity: sha512-JRy9PEpc+th3qfoxX9m+c5fmRiDa2jXugsLE2UP328RXg0w6Kih+O5LmSk+Iyo25huraWS6vyaxwIvEEEZjFnw==}
     engines: {node: '>=24'}
 
   '@skillcdn/indexer@0.3.0':
@@ -1074,6 +1080,10 @@ packages:
 
   '@skillcdn/reader@0.3.0':
     resolution: {integrity: sha512-eq7rEObvgddNZIi7R5XK1RnYkPMwrRKLaUrNa87RkaqgkhcpRSou/C51fSzwWcnKFV26PZkcOcDzHdNMX55Dbw==}
+    engines: {node: '>=24'}
+
+  '@skillcdn/serve@0.3.0':
+    resolution: {integrity: sha512-rnY98H/+0XljHBgbwY65QbxhWZrcqy/osdrYeVwE+or7Ls+NfEgzDjbRjKHniunsO85ljsZEkx5Xil+wuzVgCw==}
     engines: {node: '>=24'}
 
   '@turbo/darwin-64@2.11.7':
@@ -2689,6 +2699,10 @@ snapshots:
     dependencies:
       hono: 4.13.13
 
+  '@hono/node-server@2.1.5(hono@4.13.13)':
+    dependencies:
+      hono: 4.13.13
+
   '@jridgewell/resolve-uri@3.1.2': {}
 
   '@jridgewell/sourcemap-codec@1.6.0': {}
@@ -2712,6 +2726,15 @@ snapshots:
       jju: 1.4.0
       tinyglobby: 0.2.17
       yaml: 2.9.1
+
+  '@modelcontextprotocol/core@2.3.1':
+    dependencies:
+      zod: 4.6.5
+
+  '@modelcontextprotocol/server@2.3.1':
+    dependencies:
+      '@modelcontextprotocol/core': 2.3.1
+      zod: 4.6.5
 
   '@oxc-project/types@0.152.0': {}
 
@@ -2766,29 +2789,24 @@ snapshots:
 
   '@rolldown/pluginutils@1.0.1': {}
 
-  '@skillcdn/brand@0.1.0': {}
+  '@skillcdn/brand@0.3.0': {}
 
-  '@skillcdn/cli@0.1.3':
+  '@skillcdn/cli@0.3.0':
     dependencies:
-      '@skillcdn/indexer': 0.2.2
+      '@skillcdn/client': 0.3.0
+      '@skillcdn/core': 0.3.0
+      '@skillcdn/indexer': 0.3.0
+      '@skillcdn/reader': 0.3.0
+      '@skillcdn/serve': 0.3.0
 
   '@skillcdn/client@0.3.0':
     dependencies:
       '@skillcdn/core': 0.3.0
 
-  '@skillcdn/core@0.2.0':
-    dependencies:
-      yaml: 2.9.1
-      zod: 4.6.5
-
   '@skillcdn/core@0.3.0':
     dependencies:
       yaml: 2.9.1
       zod: 4.6.5
-
-  '@skillcdn/indexer@0.2.2':
-    dependencies:
-      '@skillcdn/core': 0.2.0
 
   '@skillcdn/indexer@0.3.0':
     dependencies:
@@ -2797,6 +2815,15 @@ snapshots:
   '@skillcdn/reader@0.3.0':
     dependencies:
       '@skillcdn/core': 0.3.0
+
+  '@skillcdn/serve@0.3.0':
+    dependencies:
+      '@hono/node-server': 2.1.5(hono@4.13.13)
+      '@modelcontextprotocol/server': 2.3.1
+      '@skillcdn/core': 0.3.0
+      '@skillcdn/reader': 0.3.0
+      hono: 4.13.13
+      zod: 4.6.5
 
   '@turbo/darwin-64@2.11.7':
     optional: true

@@ -8,7 +8,7 @@
   <a href="https://github.com/skillcdn/console/blob/main/LICENSE.md"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-3a6dd4"></a>
 </p>
 
-**Pre-1.0.** Published from `main` by the release workflow, from changesets, through the registry's trusted publishing; the version's major and minor are those of the `@skillcdn/core` line the console is built on, its patch the console's own, and the changelog says what each release changed ([ADR-0007](https://github.com/skillcdn/console/blob/main/docs/adr/0007-the-package-is-published-through-trusted-publishing-and-versioned-on-the-core-line.md)). All three layers are here, and the command: the contract of the REST API, the components, the composition of the default console, and `console`, what an agent works the board with.
+**Pre-1.0.** Published from `main` by the release workflow, from changesets, through the registry's trusted publishing ([ADR-0007](https://github.com/skillcdn/console/blob/main/docs/adr/0007-the-package-is-published-through-trusted-publishing-and-versioned-on-the-core-line.md)); the version's major and minor are SkillCDN's, the one version the main repository's packages share, its patch the console's own, and the changelog says what each release changed, first as `Breaking:` where it changed what existed ([ADR-0032](https://github.com/skillcdn/console/blob/main/docs/adr/0032-the-version-is-skillcdns-with-a-patch-of-its-own-and-the-packages-are-taken-at-one-version.md)). All three layers are here, and the command: the contract of the REST API, the components, the composition of the default console, and `console`, what an agent works the board with.
 
 ## What it exports
 
