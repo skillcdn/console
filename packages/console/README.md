@@ -41,7 +41,7 @@ const { items } = await client.tasks({ state: "ready" });
 npm install -g @skillcdn/console                 # where the agent runs
 console login --url https://console.example      # shows an address and a code; a person approves, and the token arrives here
 console project new web "The web app"            # a project of your own, as on the pages; member, category and person role do the rest
-console use web                                  # the project this directory works in; .skillcdn-console.json, committed
+console use web                                  # the project this directory works in; .skillcdn-console.json, committed; prints the sentence for AGENTS.md
 console take 7                                   # a run begins on task #7 of the project, for the person the token is
 console report "Found the cause: the parser trusts its input."
 console hand-in ./report.md --label "the report"  # a file the console keeps, or an https link

@@ -15,6 +15,15 @@ import * as z from "zod/mini";
 /** The file's name, in the working directory or one above it. */
 export const DIRECTORY_FILE = ".skillcdn-console.json";
 
+/**
+ * The sentence a checkout's agreement carries to send the agents working there to the console:
+ * the one the skill working-the-board keeps (references/the-sentence.md) and this repository's
+ * own agreement carries. `console use` prints it, since nothing tells an agent to look until the
+ * checkout says so, as `skillcdn use` prints the sentence for a pack.
+ */
+export const THE_SENTENCE =
+  "**Bound to a console?** When `.skillcdn-console.json` is in this checkout, or `console whoami` names a project, work the task through that SkillCDN console (`console help` says how).";
+
 /** How large the file may be before it is not read: a few names, never more. */
 const MAX_FILE_CHARS = 16 * 1024;
 

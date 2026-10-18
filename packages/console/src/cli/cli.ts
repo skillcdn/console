@@ -53,7 +53,7 @@ import {
   withLogin,
   withoutLogin,
 } from "./credentials.js";
-import type { DirectorySettings, DirectoryStore } from "./directory.js";
+import { type DirectorySettings, type DirectoryStore, THE_SENTENCE } from "./directory.js";
 import {
   formatAnswer,
   formatCategoryLine,
@@ -914,12 +914,15 @@ const use: Command = async (args, io) => {
   const bound = pinUrl
     ? ` at ${session.url}${pinAccount && session.account !== undefined ? ` as ${session.account}` : ""}`
     : "";
-  answer(
-    io,
-    session,
-    project,
-    () =>
+  answer(io, session, project, () =>
+    [
       `Working in ${project.name} (${project.key})${bound} from this directory on: kept in ${kept}, which is meant to be committed in a private repository and left out of a public one. What its people ask of agents: console rules.`,
+      // Nothing sends an agent to the console until the checkout says so; the sentence is the
+      // skill's (references/the-sentence.md), printed here as `skillcdn use` prints its own.
+      "Then put this sentence into the checkout's agreement (AGENTS.md, or CLAUDE.md where that is the file agents read), as it is, so that every agent working here is sent to the console:",
+      "",
+      THE_SENTENCE,
+    ].join("\n"),
   );
   return EXIT.ok;
 };

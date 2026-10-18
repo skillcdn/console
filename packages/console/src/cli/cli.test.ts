@@ -632,6 +632,9 @@ describe("the console command", () => {
     expect(used.out()).toContain("Working in The web app (web) from this directory on");
     expect(used.out()).toContain("left out of a public one");
     expect(used.out()).toContain("/work/app/.skillcdn-console.json");
+    expect(used.out()).toContain(
+      "**Bound to a console?** When `.skillcdn-console.json` is in this checkout, or `console whoami` names a project",
+    );
     expect(directory.kept()).toEqual({ project: "web" });
     const unknown = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["use", "nothing"], unknown.io)).toBe(EXIT.failed);

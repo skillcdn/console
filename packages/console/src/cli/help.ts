@@ -136,9 +136,10 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   },
   use: {
     usage: "use <key> [--url <origin>] [--account <login>]",
-    synopsis: "Binds this directory to a project: writes .skillcdn-console.json here.",
+    synopsis:
+      "Binds this directory to a project: writes .skillcdn-console.json here, and prints the sentence for the checkout's agreement.",
     about:
-      "Says which project this directory works in: writes .skillcdn-console.json here, which the commands read from this directory or one above it, and which is meant to be committed in a private repository and left out of a public one. The file names the project; and the console, where that is not the default login here or --url says so; and the account, where the console has several logins or --account says so. Never a token. --project <key> on any command, or CONSOLE_PROJECT in the environment, wins over the project it names.",
+      "Says which project this directory works in: writes .skillcdn-console.json here, which the commands read from this directory or one above it, and which is meant to be committed in a private repository and left out of a public one. The file names the project; and the console, where that is not the default login here or --url says so; and the account, where the console has several logins or --account says so. Never a token. --project <key> on any command, or CONSOLE_PROJECT in the environment, wins over the project it names. Then prints the sentence for the checkout's agreement (AGENTS.md, or CLAUDE.md where that is the file agents read), to be copied as it is, since nothing sends an agent to the console until the checkout says so.",
     refusals: ["project.not_found: no project has the key, or it is not yours to see"],
   },
   work: {
