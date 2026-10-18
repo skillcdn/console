@@ -1,7 +1,0 @@
----
-"@skillcdn/console": patch
----
-
-A decision is answered in the person's own words where none of the options fits: the answer form has a line of one's own under the options, `POST .../decisions/<id>/answer` takes `own` in place of `option` (one of the two, `restAnswerInputSchema`), and the answer becomes one more option of the decision, marked `own: true` (`restDecisionOptionSchema`) and the one chosen, so that the command, the pages and the events read a label as before; `console decision` says when an answer is in the person's own words.
-
-The record of the decisions (`DecisionLog`) is rebuilt: a row shows the question with its task, who asked and when, through which agent, and the answer with the word given, marked when it is the person's own, with who answered and when; it turns by pages of twenty (`Pager`, `pageOf`, `RECORD_PAGE_SIZE`), each at an address (`?page=`, `decisionsHref`, and `page` on the `decisions` route, passed to `DecisionList` as `page` and `pageHref`), and the page reads the decisions whole, so that a record past one page of the API loses nothing. Its classes are `sc-decision-record`, `sc-decision-record-row`, `-asked`, `-answer`, `-question`, `-chosen`, `-note` and `-meta`, and `sc-pager` with `sc-pager-range`; `sc-decision-log` and `sc-decision-row*` stay the plate's, and `sc-decision-row-answer` is gone; `sc-option-own` is the line of one's own on the answer form. `Time` takes `precision="day"` for the day alone, with the moment as its title.

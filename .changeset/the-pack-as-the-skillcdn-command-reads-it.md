@@ -1,7 +1,0 @@
----
-"@skillcdn/console": minor
----
-
-Breaking: the pack of a project is read as the `skillcdn` command reads one (ADR-0031), and the read routes of the console's API answer what the pack answered, in the shapes of `@skillcdn/core`: `GET .../skills/one`, `.../skills/browse`, `.../skills/find` and `.../skills/file` carry it as `read` (`RestSkill`, `RestBrowse`, `RestFind`, `RestFile`), `null` unless `ready`, with the pack's own refusal beside the status as `refusal` (`restPackRefusalSchema`); `GET .../skills` keeps its `items` for the pages and carries the `mounts` answer as `mount` (`RestMount`); `source`, `page` and a skill's `page` are `null` for a pack read from a directory on the console's machine (`/local/<owner>/<name>`, `SKILLS_DIR`). `restSkillPageSchema`, `restSkillTextSchema`, `restSkillBrowseEntrySchema` and `restSkillFindItemSchema` are gone with the shapes of the console's own. The package is built on SkillCDN 0.3, `@skillcdn/core` 0.3.0.
-
-The command renders the pack as an MCP client's model is given it, with the renderers of `@skillcdn/core` and the reads named as the console's commands: `console skills` prints what a client is told on connect and every skill and document, `console skills <folder>` the folder whole, `console skills --search <words>` one page with `--cursor <cursor>` to continue, `console skill <path>` the skill whole with its rules first, `console skill --file <path>` the file whole; `--json` prints what the pack answered, the pages joined. The Skills page says when a pack is read from the console's machine.
