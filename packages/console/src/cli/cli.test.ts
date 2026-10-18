@@ -371,6 +371,8 @@ function harness(overrides: Partial<CliIo> & { readonly fetch: CliIo["fetch"] })
     directory: memoryDirectory().store,
     sleep: async () => undefined,
     now: () => 0,
+    // The fakes here say what version they like: the command's floor stands aside unless a test sets it.
+    consoleAtLeast: "0.0.0",
     ...overrides,
   };
   return { io, out: () => out.join(""), err: () => err.join("") };
@@ -645,7 +647,7 @@ describe("the console command", () => {
     });
     expect(await runCli(["whoami"], who.io)).toBe(EXIT.ok);
     expect(who.out()).toBe(
-      `alice (member) at Acme, ${ORIGIN}; project web\nWhat this organization asks of agents: console rules. How the board is worked: the skill working-the-board, shipped with this command (console skills says where it is).\nThis command is of a version it does not know; the console is 0.1.18 and takes >=0.1.18 <0.2.0.\n`,
+      `alice (member) at Acme, ${ORIGIN}; project web\nWhat this organization asks of agents: console rules. How the board is worked: the skill working-the-board, shipped with this command (console skills says where it is).\nThis command is of a version it does not know; the console is 0.1.18 and takes >=0.1.18 <0.2.0; this command works with a console from 0.0.0 on.\n`,
     );
   });
 
@@ -2241,7 +2243,7 @@ describe("the versions of the command and the console (ADR-0025)", () => {
     expect(await runCli(["whoami"], h.io)).toBe(EXIT.ok);
     expect(new Headers(calls[0]?.init?.headers).get("user-agent")).toBe(userAgent);
     expect(h.out()).toBe(
-      `alice (member) at Acme, ${ORIGIN}; project web\nWhat this organization asks of agents: console rules. How the board is worked: the skill working-the-board, shipped with this command (console skills says where it is).\nThis command is 0.1.18, installed for the machine with npm in C:/Users/alice/AppData/Roaming/npm; the console is 0.1.18 and takes >=0.1.18 <0.2.0.\n`,
+      `alice (member) at Acme, ${ORIGIN}; project web\nWhat this organization asks of agents: console rules. How the board is worked: the skill working-the-board, shipped with this command (console skills says where it is).\nThis command is 0.1.18, installed for the machine with npm in C:/Users/alice/AppData/Roaming/npm; the console is 0.1.18 and takes >=0.1.18 <0.2.0; this command works with a console from 0.1.0 on.\n`,
     );
     expect(h.err()).toBe("");
     // Where the skill working-the-board is, as the machine writes paths, when the command knows.
@@ -3172,5 +3174,43 @@ describe("the archive on the command line (ADR-0029)", () => {
       expect(h.err()).toContain("console task");
     }
     expect(calls).toHaveLength(0);
+  });
+});
+
+describe("the console the command works with (ADR-0038)", () => {
+  it("refuses a console older than its floor itself, in the console's form, and works with one at it", async () => {
+    const routes = {
+      "GET /api/v1/me": { body: ME },
+      "GET /api/v1/projects": { body: { items: [] } },
+    };
+    const old = harness({
+      fetch: fakeConsole(routes, { version: "0.3.1", clientRange: ">=0.3.0 <0.4.0" }).fetch,
+      env: SIGNED_IN,
+      version: "0.3.5",
+      consoleAtLeast: "0.3.2",
+      install: { kind: "global", manager: "npm", root: "C:/Users/alice/AppData/Roaming/npm" },
+    });
+    expect(await runCli(["projects"], old.io)).toBe(EXIT.incompatible);
+    expect(old.err()).toContain(
+      "console.outdated: This console, 0.3.1, is older than this command (0.3.5) works with (>=0.3.2 <0.4.0).",
+    );
+    expect(old.err()).toContain(
+      "Install the console's version: npm install -g @skillcdn/console@0.3.1",
+    );
+    const fine = harness({
+      fetch: fakeConsole(routes, { version: "0.3.2", clientRange: ">=0.3.2 <0.4.0" }).fetch,
+      env: SIGNED_IN,
+      version: "0.3.5",
+      consoleAtLeast: "0.3.2",
+    });
+    expect(await runCli(["projects"], fine.io)).toBe(EXIT.ok);
+    const who = harness({
+      fetch: fakeConsole(routes, { version: "0.3.2" }).fetch,
+      env: SIGNED_IN,
+      version: "0.3.5",
+      consoleAtLeast: "0.3.2",
+    });
+    expect(await runCli(["whoami"], who.io)).toBe(EXIT.ok);
+    expect(who.out()).toContain("this command works with a console from 0.3.2 on");
   });
 });

@@ -1,14 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
   CLIENT_POLICY,
+  CONSOLE_AT_LEAST,
   clientRange,
   clientVersionOf,
   commonRange,
   compareVersions,
+  consoleRange,
   formatRange,
   formatVersion,
   inRange,
   judgeClient,
+  judgeConsole,
   parseRange,
   parseVersion,
   userAgentOf,
@@ -69,7 +72,7 @@ describe("versions", () => {
 
 describe("the common rule", () => {
   it("before 1.0 takes the console's version on, within its minor", () => {
-    expect(formatRange(commonRange(v("0.1.18")))).toBe(">=0.1.18 <0.2.0");
+    expect(formatRange(commonRange(v("0.1.18")))).toBe(">=0.1.0 <0.2.0");
     expect(formatRange(commonRange(v("0.0.0")))).toBe(">=0.0.0 <0.1.0");
   });
 
@@ -80,25 +83,31 @@ describe("the common rule", () => {
   });
 
   it("is narrowed by the policy's floor only where the floor is within it", () => {
-    expect(CLIENT_POLICY).toEqual({});
+    expect(CLIENT_POLICY).toEqual({ atLeast: "0.3.2" });
+    expect(CONSOLE_AT_LEAST).toBe("0.3.2");
     expect(formatRange(clientRange(v("1.4.2"), { atLeast: "1.4.1" }))).toBe(">=1.4.1 <1.6.0");
     expect(formatRange(clientRange(v("1.4.2"), { atLeast: "1.2.0" }))).toBe(">=1.3.0 <1.6.0");
     expect(formatRange(clientRange(v("1.4.2"), { atLeast: "1.6.0" }))).toBe(">=1.3.0 <1.6.0");
     expect(formatRange(clientRange(v("1.4.2"), { atLeast: "nonsense" }))).toBe(">=1.3.0 <1.6.0");
     expect(formatRange(clientRange(v("0.1.18"), { atLeast: "0.1.20" }))).toBe(">=0.1.20 <0.2.0");
+    expect(formatRange(clientRange(v("0.1.18"), { atLeast: "0.0.5" }))).toBe(">=0.1.0 <0.2.0");
   });
 });
 
 describe("judging a command", () => {
-  it("before 1.0 refuses anything older than the console, and anything of another minor", () => {
+  it("before 1.0 takes the console's line, and refuses another minor (ADR-0038)", () => {
     const server = v("0.1.18");
     expect(judgeClient(v("0.1.18"), server).verdict).toBe("current");
     expect(judgeClient(v("0.1.19"), server).verdict).toBe("ahead");
-    expect(judgeClient(v("0.1.17"), server).verdict).toBe("outdated");
+    expect(judgeClient(v("0.1.17"), server).verdict).toBe("behind");
+    expect(judgeClient(v("0.1.0"), server).verdict).toBe("behind");
     expect(judgeClient(v("0.2.0"), server).verdict).toBe("too_new");
     expect(judgeClient(v("0.0.9"), server).verdict).toBe("outdated");
     expect(judgeClient(v("1.0.0"), server).verdict).toBe("too_new");
-    expect(formatRange(judgeClient(v("0.1.17"), server).range)).toBe(">=0.1.18 <0.2.0");
+    expect(formatRange(judgeClient(v("0.1.17"), server).range)).toBe(">=0.1.0 <0.2.0");
+    // The floor of the console's policy, where it is within the line.
+    expect(judgeClient(v("0.3.1"), v("0.3.4")).verdict).toBe("outdated");
+    expect(judgeClient(v("0.3.2"), v("0.3.4")).verdict).toBe("behind");
   });
 
   it("from 1.0 answers a minor within one and refuses the rest", () => {
@@ -119,6 +128,24 @@ describe("judging a command", () => {
     expect(judgeClient(v("1.4.1"), v("1.4.2"), policy).verdict).toBe("outdated");
     expect(judgeClient(v("1.5.3"), v("1.4.2"), policy).verdict).toBe("too_new");
     expect(judgeClient(v("1.5.2"), v("1.4.2"), policy).verdict).toBe("ahead");
+  });
+});
+
+describe("judging a console (ADR-0038)", () => {
+  it("works with the command's line from the command's floor on, and refuses an older console itself", () => {
+    const command = v("0.3.5");
+    expect(judgeConsole(v("0.3.5"), command, "0.3.2").verdict).toBe("current");
+    expect(judgeConsole(v("0.3.2"), command, "0.3.2").verdict).toBe("behind");
+    expect(judgeConsole(v("0.3.9"), command, "0.3.2").verdict).toBe("ahead");
+    expect(judgeConsole(v("0.3.1"), command, "0.3.2").verdict).toBe("outdated");
+    expect(judgeConsole(v("0.2.9"), command, "0.3.2").verdict).toBe("outdated");
+    expect(judgeConsole(v("0.4.0"), command, "0.3.2").verdict).toBe("too_new");
+    expect(formatRange(consoleRange(command, "0.3.2"))).toBe(">=0.3.2 <0.4.0");
+    // A floor outside the line is no floor; from 1.0 the line is a minor either way.
+    expect(formatRange(consoleRange(command, "0.2.0"))).toBe(">=0.3.0 <0.4.0");
+    expect(judgeConsole(v("1.3.0"), v("1.4.2"), "1.0.0").verdict).toBe("behind");
+    expect(judgeConsole(v("1.6.0"), v("1.4.2"), "1.0.0").verdict).toBe("too_new");
+    expect(judgeConsole(v("1.2.0"), v("1.4.2"), "1.0.0").verdict).toBe("outdated");
   });
 });
 

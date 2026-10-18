@@ -7,7 +7,17 @@ import {
   type FetchLike,
   type ProjectClient,
 } from "../client.js";
-import { CLIENT_RANGE_HEADER, judgeClient, parseVersion, VERSION_HEADER } from "../compat.js";
+import {
+  CLIENT_RANGE_HEADER,
+  CONSOLE_AT_LEAST,
+  consoleRange,
+  formatRange,
+  judgeClient,
+  judgeConsole,
+  parseVersion,
+  VERSION_HEADER,
+  formatVersion as versionText,
+} from "../compat.js";
 import { addDays, dayOf as dayOfDate, isDay } from "../dates.js";
 import { DEFAULT_PAGE_LIMIT, LIST_LIMIT, MAX_OPTIONS, MIN_OPTIONS } from "../limits.js";
 import { fillRules, RULES_PATH, RULES_TITLE } from "../rules.js";
@@ -168,6 +178,8 @@ export interface CliIo {
   readonly install?: Install | undefined;
   /** What the command last said of the versions; left out, it says it every time. */
   readonly notices?: NoticeStore | undefined;
+  /** The oldest console this command works with (ADR-0038); left out, the package's own floor. */
+  readonly consoleAtLeast?: string | undefined;
   /** Where the console's own skills are on this machine, shipped with the package; nothing when they are not there. */
   readonly skillsDir?: string | undefined;
   /** How `serve` listens on the loopback (ADR-0014); left out, the command cannot serve. */
@@ -889,11 +901,15 @@ const whoami: Command = async (args, io) => {
     command === undefined || server === undefined
       ? undefined
       : judgeClient(command, server).verdict;
+  // The oldest console this command works with (ADR-0038), as it stands within the command's line.
+  const atLeast = io.consoleAtLeast ?? CONSOLE_AT_LEAST;
+  const floor =
+    command === undefined ? atLeast : versionText(consoleRange(command, atLeast).atLeast);
   // A console from before the rule says nothing of itself; the command says so instead.
   const consoleWords =
     me.console === undefined
       ? "the console does not say its version, so it is older than 0.1.18"
-      : `the console is ${me.console.version} and takes ${me.console.clientRange}`;
+      : `the console is ${me.console.version} and takes ${me.console.clientRange}; this command works with a console from ${floor} on`;
   answer(
     io,
     session,
@@ -2941,11 +2957,39 @@ async function noticeVersions(io: CliIo, seen: ConsoleSeen): Promise<void> {
   });
 }
 
+/**
+ * The refusal of a console older than this command works with (ADR-0038), in a console's own
+ * form: a `426` the command reads as it reads the console's, before it acts on anything the
+ * console answered.
+ */
+function consoleRefusal(io: CliIo, seen: ConsoleSeen): Response | undefined {
+  const command = parseVersion(io.version);
+  const server = parseVersion(seen.version);
+  if (command === undefined || server === undefined) {
+    return undefined;
+  }
+  const { verdict, range } = judgeConsole(server, command, io.consoleAtLeast ?? CONSOLE_AT_LEAST);
+  if (verdict !== "outdated") {
+    return undefined;
+  }
+  return Response.json(
+    {
+      error: {
+        code: "console.outdated",
+        message: `This console, ${seen.version}, is older than this command (${io.version}) works with (${formatRange(range)}).`,
+      },
+    },
+    { status: 426 },
+  );
+}
+
 /** What a refusal of the console is followed by, when there is something to do about it. */
 function hintFor(error: ApiError, io: CliIo, seen: ConsoleSeen): string {
   switch (error.code) {
     case "client.outdated":
       return `Update the command: ${updateWords(io, seen.version)}\n`;
+    case "console.outdated":
+      return `Install the console's version: ${updateWords(io, seen.version)}; or ask the console's operator to update the console.\n`;
     case "client.too_new":
       return `Install the console's version: ${updateWords(io, seen.version)}; or ask the console's operator to update the console.\n`;
     case "auth.required":
@@ -3021,7 +3065,13 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
       const response = await io.fetch(input, init);
       seen.version = response.headers.get(VERSION_HEADER) ?? seen.version;
       seen.range = response.headers.get(CLIENT_RANGE_HEADER) ?? seen.range;
-      return response;
+      // A console older than this command works with is refused here (ADR-0038); `serve`
+      // carries the pages' own requests, which are not the command's to judge.
+      // A refusal of the console's own is passed on as it is.
+      return (
+        (name === "serve" || response.status === 426 ? undefined : consoleRefusal(io, seen)) ??
+        response
+      );
     },
   };
   try {
@@ -3053,7 +3103,9 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
     }
     if (error instanceof ApiError) {
       io.stderr(`${error.code}: ${error.message}\n${hintFor(error, io, seen)}`);
-      return error.code === "client.outdated" || error.code === "client.too_new"
+      return error.code === "client.outdated" ||
+        error.code === "client.too_new" ||
+        error.code === "console.outdated"
         ? EXIT.incompatible
         : EXIT.failed;
     }

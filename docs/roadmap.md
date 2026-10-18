@@ -296,6 +296,13 @@ Goal: a task at work by several people, as the first weeks on the board had it, 
 - [x] The skill (2026-10-18): working-the-board (1.20) finds a task by the words of its title with `--search`, and its terms say what an owner and a worker are.
 - [ ] The column `assignee_id` and its index dropped, in the release after this one (expand, then contract).
 
+## Milestone 29, the command and the console within a line, and the week (2026-10-18)
+
+Goal: the first weeks on the published console asked for two rules read again: every deployment of a patch made every agent's command update, where most patches change nothing the command reads or sends; and what the pages counted as soon, seven days from today, where the organization plans its work in weeks.
+
+- [x] The decision (2026-10-18, [ADR-0038](adr/0038-the-command-and-the-console-go-together-within-a-line-and-a-release-that-changes-what-passes-between-them-raises-the-floors.md)): within a line of SkillCDN the command and the console go together whatever the patch; each side names the oldest version of the other it works with, raised only by a release that changed what passes between them, with a `Breaking:` changeset; the command refuses a console older than it works with itself.
+- [x] The rule (2026-10-18): `commonRange` is the line before 1.0, `CLIENT_POLICY.atLeast` and `CONSOLE_AT_LEAST` the floors, both 0.3.2 for the workers; `judgeConsole` and `consoleRange` beside `judgeClient`; the command answers `console.outdated` in the console's form, exit code `4`, naming the command to install; `whoami` says the floor; `pnpm check:version` holds the floors to the line and to the version the pending changesets make ([specs/rest.md](specs/rest.md), [specs/cli.md](specs/cli.md)).
+
 ## After milestone 16
 
 Nothing is chosen yet; the list below is where the next milestone comes from. Left open by milestone 9: whether the board should end a run not heard from for a long while itself ([ADR-0020](adr/0020-the-console-does-not-claim-an-agent-is-at-work-a-run-says-when-it-was-last-heard-from-and-a-new-run-takes-over.md)); a roadmap across projects.

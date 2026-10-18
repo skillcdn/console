@@ -1,9 +1,10 @@
-// Whether the command and the console go together (ADR-0025). The command names its version on
+// Whether the command and the console go together (ADR-0025, ADR-0038). The command names its version on
 // every request, in the product token of its user-agent; the console answers every request of
 // the API with its own version and the range of command versions it takes, and refuses a
 // command outside the range with `426` and the words to update. One rule for both sides, kept
 // here so that the command and the console read the same one, and narrowed by the console's
-// policy below only, never widened: what the rule promises stays predictable.
+// policy below only, never widened: what the rule promises stays predictable. The command holds
+// the console to a floor of its own the same way (ADR-0038).
 
 /** The product token the command names itself with: `skillcdn-console/<version>`. */
 export const CLIENT_PRODUCT = "skillcdn-console";
@@ -74,15 +75,19 @@ export function inRange(version: Version, range: VersionRange): boolean {
 }
 
 /**
- * The common rule. Before 1.0, a command from the console's own version on and within the
- * console's minor (`^0.1.18`): any release may change the contract until then (ADR-0034), so the
- * console's own version is the floor, and the minor is the line. From 1.0, the console's major
- * and a minor within one of the console's, either way, whatever the patch: a minor adds and a
- * major breaks, as the version promises from then on.
+ * The common rule. Before 1.0, the line: a command and a console of one major.minor go
+ * together whatever the patch, since the minor is SkillCDN's line and a patch is a release of
+ * the console's own (ADR-0034), and a release that changes what passes between them raises the
+ * floors below instead (ADR-0038). From 1.0, the console's major and a minor within one of the
+ * console's, either way, whatever the patch: a minor adds and a major breaks, as the version
+ * promises from then on.
  */
 export function commonRange(server: Version): VersionRange {
   if (server.major === 0) {
-    return { atLeast: server, below: { major: 0, minor: server.minor + 1, patch: 0 } };
+    return {
+      atLeast: { major: 0, minor: server.minor, patch: 0 },
+      below: { major: 0, minor: server.minor + 1, patch: 0 },
+    };
   }
   return {
     atLeast: { major: server.major, minor: Math.max(0, server.minor - 1), patch: 0 },
@@ -103,18 +108,40 @@ export interface ClientPolicy {
   readonly refused?: readonly string[] | undefined;
 }
 
-/** The console's policy today: the common rule as it is. */
-export const CLIENT_POLICY: ClientPolicy = {};
+/**
+ * The console's policy: the oldest command this console answers, raised by the release that
+ * last changed what the command reads or sends (ADR-0038), whose changelog entry begins with
+ * `Breaking:`; `pnpm check` holds it to a version the package has, or is about to have.
+ */
+export const CLIENT_POLICY: ClientPolicy = { atLeast: "0.3.2" };
 
-/** The range of command versions a console of `server` takes: the common rule, narrowed by the policy's floor where that floor is within it. */
-export function clientRange(server: Version, policy: ClientPolicy = CLIENT_POLICY): VersionRange {
-  const common = commonRange(server);
-  const floor = parseVersion(policy.atLeast);
+/**
+ * The oldest console this command works with (ADR-0038): raised by the release that last
+ * changed what the command asks of the console, whose changelog entry begins with `Breaking:`.
+ * The command compares it with the version every answer names and refuses a console below it
+ * itself, naming the command to install instead; `pnpm check` holds it as it holds the
+ * console's floor.
+ */
+export const CONSOLE_AT_LEAST = "0.3.2";
+
+/** `common` from `atLeast` on, where that floor is within it; `common` as it is otherwise. */
+function narrowed(common: VersionRange, atLeast: string | undefined): VersionRange {
+  const floor = parseVersion(atLeast);
   return floor !== undefined &&
     compareVersions(floor, common.atLeast) > 0 &&
     compareVersions(floor, common.below) < 0
     ? { atLeast: floor, below: common.below }
     : common;
+}
+
+/** The range of command versions a console of `server` takes: the common rule, narrowed by the policy's floor where that floor is within it. */
+export function clientRange(server: Version, policy: ClientPolicy = CLIENT_POLICY): VersionRange {
+  return narrowed(commonRange(server), policy.atLeast);
+}
+
+/** The range of console versions a command of `client` works with: the common rule, narrowed by the command's floor where that floor is within it. */
+export function consoleRange(client: Version, atLeast: string = CONSOLE_AT_LEAST): VersionRange {
+  return narrowed(commonRange(client), atLeast);
 }
 
 /**
@@ -149,6 +176,28 @@ export function judgeClient(
   if (compareVersions(client, range.below) >= 0) {
     return { verdict: "too_new", range };
   }
+  return { verdict: order === 0 ? "current" : order < 0 ? "behind" : "ahead", range };
+}
+
+/**
+ * What a console of one version is to a command of another (ADR-0038): within the range the
+ * command works with, the same (`current`), older (`behind`) or newer (`ahead`); below it
+ * (`outdated`), which the command refuses itself, naming the command to install; or beyond it
+ * (`too_new`), which the console refuses the command for.
+ */
+export function judgeConsole(
+  server: Version,
+  client: Version,
+  atLeast: string = CONSOLE_AT_LEAST,
+): ClientJudgement {
+  const range = consoleRange(client, atLeast);
+  if (compareVersions(server, range.atLeast) < 0) {
+    return { verdict: "outdated", range };
+  }
+  if (compareVersions(server, range.below) >= 0) {
+    return { verdict: "too_new", range };
+  }
+  const order = compareVersions(server, client);
   return { verdict: order === 0 ? "current" : order < 0 ? "behind" : "ahead", range };
 }
 

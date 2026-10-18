@@ -62,24 +62,29 @@ describe("the api role", () => {
     const me = await h.request("/api/v1/me");
     expect(me.status).toBe(200);
     expect(me.headers.get("console-version")).toBe("0.1.18");
-    expect(me.headers.get("console-client-range")).toBe(">=0.1.18 <0.2.0");
+    expect(me.headers.get("console-client-range")).toBe(">=0.1.0 <0.2.0");
     expect(restMeSchema.parse(await me.json()).console).toEqual({
       version: "0.1.18",
-      clientRange: ">=0.1.18 <0.2.0",
+      clientRange: ">=0.1.0 <0.2.0",
     });
     const current = await h.request("/api/v1/me", {
       headers: { "user-agent": "skillcdn-console/0.1.18 (cli; node 24.11.0; linux)" },
     });
     expect(current.status).toBe(200);
-    const old = await h.request("/api/v1/me", {
+    // Within the line an older command is answered (ADR-0038); of an older line, it is refused.
+    const behind = await h.request("/api/v1/me", {
       headers: { "user-agent": "skillcdn-console/0.1.17 (cli; node 24.11.0; linux)" },
+    });
+    expect(behind.status).toBe(200);
+    const old = await h.request("/api/v1/me", {
+      headers: { "user-agent": "skillcdn-console/0.0.9 (cli; node 24.11.0; linux)" },
     });
     expect(old.status).toBe(426);
     expect(old.headers.get("console-version")).toBe("0.1.18");
     expect(((await old.json()) as { error: { code: string } }).error.code).toBe("client.outdated");
     // The refusal is a request like any other to the access log, with the command named.
     const logged = h.logs.find((line) => line.status === 426);
-    expect(logged?.userAgent).toBe("skillcdn-console/0.1.17 (cli; node 24.11.0; linux)");
+    expect(logged?.userAgent).toBe("skillcdn-console/0.0.9 (cli; node 24.11.0; linux)");
   });
 
   it("is alive, and ready once the database answers with the schema of this build", async () => {

@@ -121,6 +121,68 @@ if (own !== undefined && line !== undefined && own !== line) {
   }
 }
 
+// The floors of the compat module (ADR-0038): the oldest command the console answers and the
+// oldest console the command works with, each raised by the release that changed what passes
+// between them. Each is a version of the package's line, no later than the version the pending
+// changesets make, and one raised to that version comes with a changeset that says `Breaking:`.
+const COMPAT = "packages/console/src/compat.ts";
+const compareVersions = (a, b) => {
+  const [x, y] = [a, b].map((text) => text.split(".").map(Number));
+  return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+};
+/** The version the pending changesets make of `current`: the next patch, minor or major, or `current` with none pending. */
+function nextVersion(current, bump) {
+  const [major, minor, patch] = current.split(".").map(Number);
+  if (bump === "major") return `${major + 1}.0.0`;
+  if (bump === "minor") return `${major}.${minor + 1}.0`;
+  if (bump === "patch") return `${major}.${minor}.${patch + 1}`;
+  return current;
+}
+/** Whether a pending changeset's words begin with `Breaking:`: a release that changes what exists (ADR-0034). */
+function pendingBreaking() {
+  for (const name of readdirSync(CHANGESETS)) {
+    if (!name.endsWith(".md") || name === "README.md") continue;
+    const text = readFileSync(`${CHANGESETS}/${name}`, "utf8");
+    if (
+      text
+        .replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, "")
+        .trim()
+        .startsWith("Breaking:")
+    )
+      return true;
+  }
+  return false;
+}
+const compat = readFileSync(COMPAT, "utf8");
+const floors = [
+  ["CLIENT_POLICY.atLeast", /CLIENT_POLICY: ClientPolicy = \{ atLeast: "(\d+\.\d+\.\d+)" \}/],
+  ["CONSOLE_AT_LEAST", /CONSOLE_AT_LEAST = "(\d+\.\d+\.\d+)"/],
+].map(([name, pattern]) => ({ name, value: pattern.exec(compat)?.[1] }));
+const next = nextVersion(version, pendingBump());
+const lineStart = `${own}.0`;
+const breaking = pendingBreaking();
+for (const floor of floors) {
+  if (floor.value === undefined) {
+    problems.push(`${COMPAT} does not name ${floor.name} as a version`);
+    continue;
+  }
+  if (compareVersions(floor.value, lineStart) < 0) {
+    problems.push(
+      `${COMPAT}: ${floor.name} is ${floor.value}, below the line's first version, ${lineStart}`,
+    );
+  }
+  if (compareVersions(floor.value, next) > 0) {
+    problems.push(
+      `${COMPAT}: ${floor.name} is ${floor.value}, later than ${next}, the version the pending changesets make`,
+    );
+  }
+  if (floor.value === next && next !== version && !breaking) {
+    problems.push(
+      `${COMPAT}: ${floor.name} is raised to ${next}, but no pending changeset says \`Breaking:\` first`,
+    );
+  }
+}
+
 if (problems.length > 0) {
   process.stderr.write("the package's version does not follow SkillCDN's line (ADR-0034):\n");
   for (const problem of problems) process.stderr.write(`- ${problem}\n`);
@@ -129,5 +191,7 @@ if (problems.length > 0) {
 process.stdout.write(
   `version line: ${PACKAGE} ${version} on SkillCDN ${line}${adopting === undefined ? "" : ` (adopting it: a ${adopting} changeset is pending)`}, as ${declared
     .map((found) => `${found.name} ${found.spec}`)
-    .join(", ")} declare it, resolved to ${versions.join(", ") || "nothing yet"}\n`,
+    .join(
+      ", ",
+    )} declare it, resolved to ${versions.join(", ") || "nothing yet"}; the console answers the command from ${floors[0]?.value}, the command works with the console from ${floors[1]?.value} (ADR-0038)\n`,
 );

@@ -905,7 +905,7 @@ describe("tokens", () => {
             id: "0199c4d8-0000-7000-8000-000000000032",
             name: "forever",
             expiresAt: null,
-            client: "0.1.17",
+            client: "0.0.9",
           },
         ]}
         consoleVersion="0.1.18"
@@ -919,7 +919,8 @@ describe("tokens", () => {
     expect(html).toContain("Does not expire");
     // Which version of the command each agent runs, and whether the console still takes it.
     expect(html).toContain("console 0.1.18");
-    expect(html).toContain("console 0.1.17");
+    // Of an older line, the console no longer takes it; within the line it would be behind (ADR-0038).
+    expect(html).toContain("console 0.0.9");
     expect(html).toContain("must be updated");
     expect(html.split("must be updated")).toHaveLength(2);
     expect(html.match(/>Disconnect</g)).toHaveLength(3);

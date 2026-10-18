@@ -5,7 +5,7 @@ license: MIT
 compatibility: Needs a shell with the console command on the PATH (npm install -g @skillcdn/console, Node.js 24 or newer), signed in by a person. Nothing else; the command needs no key of its own and the agent never sees a token.
 metadata:
   author: skillcdn
-  version: "1.20"
+  version: "1.21"
 skillcdn:
   translations:
     ko:
@@ -31,7 +31,7 @@ A task of the board goes in, named by its number; a run comes out: the task take
 | Need | How | When missing |
 |---|---|---|
 | The `console` command, signed in | `console whoami` says as whom, at which console, and in which project this directory works; and whether the command and the console go together. `console logins` lists the consoles this machine is signed in to; a directory bound to another console (`.skillcdn-console.json`) needs a login there, and a token never goes to a console it was not made at ([ADR-0027](/docs/adr/0027-the-command-keeps-a-login-per-console-and-a-token-goes-only-to-the-console-that-issued-it.md)). | Stop and tell the person what to do: `npm install -g @skillcdn/console`; `console login --url <the console's address>`, which shows an address and a code the person approves on the console's own pages; `console use <key>` once in the directory, to name the project. Never look for a token. |
-| The command at a version the console takes | A command the console refuses as outdated, or as too new, exits with `4` and prints the command that updates it where it is installed ([ADR-0025](/docs/adr/0025-the-command-names-its-version-on-every-request-and-the-console-holds-it-to-the-range-it-takes.md)). | Run the update command it printed, then go on; where the machine refuses the update, stop and tell the person. A line on stderr that a newer command exists, while the console still answers, is read and left for later. |
+| The command at a version the console takes | A command the console refuses as outdated, or as too new, exits with `4` and prints the command that updates it where it is installed; so does a command that refuses the console as older than it works with, printing the command that installs the console's version ([ADR-0025](/docs/adr/0025-the-command-names-its-version-on-every-request-and-the-console-holds-it-to-the-range-it-takes.md), [ADR-0038](/docs/adr/0038-the-command-and-the-console-go-together-within-a-line-and-a-release-that-changes-what-passes-between-them-raises-the-floors.md)). Within a line of SkillCDN the two go together whatever the patch, until a release says otherwise. | Run the update command it printed, then go on; where the machine refuses the update, stop and tell the person. A line on stderr that a newer command exists, while the console still answers, is read and left for later. |
 | The command's own words | `console help` lists every command in a line, read once; `console help <command>` says one in full, every form and flag, the limits the console holds it to, and the refusals it may meet, by code, read when the command is about to be used. | They are the reference at run time. This skill says how the work goes, not what each flag means. |
 
 The full contract is the [specification of the command line](/docs/specs/cli.md); the command is a thin client of the [REST API](/docs/specs/rest.md), which a script may use directly.
