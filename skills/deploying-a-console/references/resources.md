@@ -251,7 +251,7 @@ The task definition of the `api` role with the tunnel's connector beside it, in 
       "portMappings": [{ "containerPort": 11199, "protocol": "tcp" }],
       "environment": [
         { "name": "PUBLIC_URL", "value": "https://<hostname>" },
-        { "name": "WORKSPACE_NAME", "value": "<the board's name>" },
+        { "name": "WORKSPACE_NAME", "value": "<the board's name, such as Acme Console>" },
         { "name": "WORKER_IN_PROCESS", "value": "true" },
         { "name": "TRUSTED_PROXIES", "value": "127.0.0.1,::1" },
         { "name": "CLIENT_IP_HEADER", "value": "cf-connecting-ip" },

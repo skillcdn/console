@@ -281,6 +281,7 @@ Goal: a private pack connected without a token copied through a clipboard, now t
 Goal: a console deployed by an agent for an organization with a website comes up in the organization's own look, not in the default pages with SkillCDN's marks, since a deployment asked for through the pack never had its design customized.
 
 - [x] The skills (2026-10-18): deploying-a-console asks for the organization's website and, given one, plans the look and builds the organization's own console into the image as `console-ui/` with building-a-console, whose inputs take the marks and the colours from the site as [the-look-from-a-website.md](../skills/building-a-console/references/the-look-from-a-website.md) says: what to read on the site, how it maps onto the dark pages, the contrast checked, the type taken only as the bundling rules allow, and what is left alone. The README's quick start names the website.
+- [x] The board's name by convention (2026-10-18): the organization or the person the console is for, then Console, as SkillCDN Console is named; deploying-a-console (1.4) suggests it from the request or the website and has the person confirm it, the deploy README and `.env.example` say the same of `WORKSPACE_NAME`, and the console calls itself by that name at SkillCDN, Console once.
 - [ ] Tried on a deployment with a website, and what the first run found folded in: waits for the next deployment.
 
 ## After milestone 16

@@ -3705,7 +3705,7 @@ describe("a private pack connected with a code (ADR-0036)", () => {
     item: {
       id: "token-1",
       address: "/gh/acme/skills",
-      label: "Acme console",
+      label: "Acme Console",
       createdAt: soon(),
       expiresAt: soon(),
       lastUsedAt: null,
@@ -3722,7 +3722,7 @@ describe("a private pack connected with a code (ADR-0036)", () => {
     const connector: PackConnector = {
       async connect(address, agent) {
         expect(formatAddress(address)).toBe("/gh/acme/skills");
-        expect(agent).toBe("Acme console");
+        expect(agent).toBe("Acme Console");
         return started();
       },
       async claim(secret) {
@@ -3955,7 +3955,7 @@ describe("the workspace's SkillCDN token (ADR-0036)", () => {
     const connector: PackConnector = {
       async connect(address, agent) {
         expect(formatAddress(address)).toBe("/gh/acme/skills");
-        expect(agent).toBe("Acme console");
+        expect(agent).toBe("Acme Console");
         return {
           code: "WXYZ-1234",
           url: "https://skillcdn.test/connect/WXYZ-1234",
@@ -3975,7 +3975,7 @@ describe("the workspace's SkillCDN token (ADR-0036)", () => {
               item: {
                 id: "token-2",
                 address: "/gh/acme/skills",
-                label: "Acme console",
+                label: "Acme Console",
                 createdAt: soon(),
                 expiresAt: soon(),
                 lastUsedAt: null,

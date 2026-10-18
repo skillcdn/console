@@ -5,7 +5,7 @@ license: MIT
 compatibility: Needs a shell with Node.js 24 or newer, git, curl, jq and the AWS CLI v2, the gh command signed in or an empty repository the person made, network access to AWS, Cloudflare, GitHub and npm, an AWS account and a domain on Cloudflare the person can create a key and a token for, and a browser on any device for the few steps only a signed-in person can take. Works in any agent that can run a shell and write files; on Windows, in Git Bash with path conversion off.
 metadata:
   author: skillcdn
-  version: "1.3"
+  version: "1.4"
 skillcdn:
   translations:
     ko:
@@ -43,7 +43,7 @@ Check these before the first message. Without the AWS CLI, offer to install it (
 | Input | Source |
 |---|---|
 | How many people | Asked: "How many people will use the console within a year: just you, up to 10, up to 30, or up to 100?" The answer picks the size ([sizing.md](references/sizing.md)). |
-| The board's name | Asked, with the organization's name as the suggestion when the request gives one: "What should the board be called? Usually the organization's name." |
+| The board's name | Suggested from the convention and confirmed, never invented: the organization or the person the console is for, then Console, as `SkillCDN Console` is named. With the organization's name in the request or on its website: "The board will be called `Acme Console`, as consoles are named: the organization's name, then Console. Keep it, or say another?" Without one: "Whose console is this, your organization's or yours? Its name, then Console, is what the board is called." It goes to `WORKSPACE_NAME`, one line of up to 100 characters: what the pages say after the SkillCDN mark, and what the console calls itself at SkillCDN when it connects a pack. |
 | The web address | Asked: "Which web address should the console have? A domain you already own, and where it is registered (I set it up on Cloudflare; you change its nameservers there once, and I give you the steps), or should I find one to buy (I show the price before buying)? I suggest `console.<domain>`." A domain is needed: the tunnel has no free hostname. A domain that already serves the organization's site is fine: only the console's hostname is added to its zone, and nothing of the site is touched (resources.md "A zone that serves other hosts"). |
 | How people sign in, and who | Asked: "How should people sign in: with GitHub, with Google (Workspace), or both? Who configures the console (you, at least): their GitHub login or Google address. With GitHub, everyone of your organization can be in, as the organization has them: say which organization. With a Google Workspace, everyone of the domain is in. Anyone else, an administrator lets in on the People page once the console runs." |
 | The organization's skills | Asked: "Where are your organization's skills on SkillCDN, if anywhere yet? An address like `/gh/<owner>/<repo>`. Is that repository private?" Default: none; a project names one later on its Settings page. A private one is connected in phase 6, with a code the person approves at SkillCDN ([ADR-0036](/docs/adr/0036-a-private-pack-is-connected-with-a-code-a-person-approves-from-the-projects-settings.md)); nothing of it is needed before. |

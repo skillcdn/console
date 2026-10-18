@@ -5,7 +5,7 @@ license: MIT
 compatibility: A shell with Node.js 24 or newer and npm or pnpm, and an agent that reads and writes files. For looking at the pages against a board, the console command signed in by a person. A browser the agent can drive is optional. No key of the agent's own is needed, and it never sees a token.
 metadata:
   author: skillcdn
-  version: "1.4"
+  version: "1.5"
 skillcdn:
   translations:
     ko:
@@ -53,7 +53,7 @@ Nothing here restates them: they are the contract, current at the version instal
 | The marks | From the organization's website when the request, or deploying-a-console, names one: its symbol and wordmark read from the site as [the-look-from-a-website.md](references/the-look-from-a-website.md) says, the light version or, with the person's word, the one-colour mark recoloured, shown at the plan. Else asked for a console that shows marks of its own, for the half the request leaves open: "Which picture should the pages show beside the board's name: a small square mark, the name as lettering, or both? Where is the file? The pages are dark, so it should be a light one." `brand` takes either or both. The symbol's slot is a square of one line's height (`.sc-brand-symbol`, 1rem): a wide mark, a lettermark of three or four times its height, is a wordmark and goes in as one, alone or beside a square symbol. A mark drawn in a dark colour vanishes on the dark pages: ask for a light version, or, with the person's word, recolour it when it is one colour. Default without a site: the board's name alone and no marks, which is the honest console. |
 | The colour | From the website's own colours when one is named, as the reference says, its primary colour read from the theme colour, the stylesheet's properties or the primary button. Else asked when the request names none and marks are wanted: "Which colour, or which mood?" A colour comes as words or a value; the value is the mark's own fill when it has one, else chosen and shown. A light colour becomes the accent (`--sc-color-accent` and its family); a dark one tints the field and its light (`--sc-color-field`, `--sc-color-light-*`), with a lighter shade of it as the accent, since an accent must read on the dark field. The mapping is shown at the plan, with the contrast checked. |
 | The languages | Asked when the organization's language is not among the packs: "Which languages should the pages speak?" Default: the packs the package ships, chosen by the browser; a Korean organization gets Pretendard loaded, as the default console does. |
-| The name | Not asked: the server names the board (`WORKSPACE_NAME`), and `title` is only what the page says until the server answers. `index.html` gets the organization's `<title>` and `lang`. |
+| The name | Not asked: the server names the board (`WORKSPACE_NAME`, conventionally the organization or the person it is for, then Console: `Acme Console`), and `title` is only what the page says until the server answers. `index.html` gets the organization's `<title>` and `lang`. |
 | The console's address | For running one's own, what `console whoami` says. A script takes `CONSOLE_URL` and `CONSOLE_TOKEN` from the environment, never from a file in the repository. |
 
 ## Workflow

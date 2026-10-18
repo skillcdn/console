@@ -2831,6 +2831,18 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     );
   const connectRefused = (c: Context<AppEnv>, message: string): Response =>
     c.json(errorBody("project.pack_connect_refused", message), 400);
+  /**
+   * What the console calls itself at the deployment, shown to the person who approves there:
+   * the workspace's name, and Console after it once, since a workspace is conventionally
+   * named `<Organization> Console` already.
+   */
+  const consoleAgentName = (name: string): string => {
+    const trimmed = name.trim();
+    const lower = trimmed.toLowerCase();
+    const named =
+      lower === "console" || lower.endsWith(" console") ? trimmed : `${trimmed} Console`;
+    return named.slice(0, CONNECT_AGENT_MAX_LENGTH);
+  };
   const deploymentAway = (c: Context<AppEnv>): Response =>
     c.json(
       errorBody(
@@ -2875,10 +2887,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     const name = (await workspace()).name;
     let started: RestConnectStarted;
     try {
-      started = await packConnector.connect(
-        address,
-        `${name} console`.slice(0, CONNECT_AGENT_MAX_LENGTH),
-      );
+      started = await packConnector.connect(address, consoleAgentName(name));
     } catch (error) {
       if (error instanceof PackError) {
         return isAway(error) ? deploymentAway(c) : connectRefused(c, error.message);
@@ -3101,10 +3110,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     const found = await workspace();
     let started: RestConnectStarted;
     try {
-      started = await packConnector.connect(
-        address,
-        `${found.name} console`.slice(0, CONNECT_AGENT_MAX_LENGTH),
-      );
+      started = await packConnector.connect(address, consoleAgentName(found.name));
     } catch (error) {
       if (error instanceof PackError) {
         return isAway(error) ? deploymentAway(c) : workspaceConnectRefused(c, error.message);
