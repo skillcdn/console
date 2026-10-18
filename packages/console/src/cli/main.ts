@@ -60,6 +60,7 @@ process.exitCode = await runCli(process.argv.slice(2), {
     exists: existsSync,
   }),
   notices: createNoticeStore(configDir),
+  locale: Intl.DateTimeFormat().resolvedOptions().locale,
   skillsDir: existsSync(skillsDir) ? skillsDir : undefined,
   listen: listenOn,
 });

@@ -1,6 +1,6 @@
 import type { RestTask, RestWork, WeekStart } from "../api.js";
-import { addDays, today as todayOf } from "../dates.js";
-import { useWords } from "../i18n/index.js";
+import { deviceLanguage, firstDayOfWeek, today as todayOf, weekOf } from "../dates.js";
+import { useLanguage, useWords } from "../i18n/index.js";
 import { Week } from "./calendar.js";
 import { ProjectMark } from "./projects.js";
 import { TaskList } from "./task-list.js";
@@ -35,8 +35,10 @@ export interface WorkListProps {
 export function WorkList(props: WorkListProps) {
   const words = useWords();
   const work = words.work;
+  const { tag } = useLanguage();
   const now = props.today ?? todayOf();
-  const weekEnd = addDays(now, 6);
+  // This week ends with the week's last day, as the workspace begins its weeks (ADR-0039).
+  const weekEnd = weekOf(now, firstDayOfWeek(deviceLanguage(tag), props.weekStart)).at(-1) ?? now;
   const { tasks, decisions } = props.work;
   const closed = props.work.closed ?? [];
   const projectOf = new Map([...tasks, ...closed].map((item) => [item.task.id, item.project]));

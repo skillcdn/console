@@ -932,6 +932,7 @@ function ProjectPage(props: {
             <Workload
               tasks={shown}
               today={now}
+              weekStart={weekStartOf(data.me?.workspace)}
               personHref={(person) =>
                 boardHref(key, person === undefined ? {} : { person: person.id })
               }

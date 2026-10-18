@@ -3214,3 +3214,34 @@ describe("the console the command works with (ADR-0038)", () => {
     expect(who.out()).toContain("this command works with a console from 0.3.2 on");
   });
 });
+
+describe("this week on the command line (ADR-0039)", () => {
+  it("ends the week as the workspace begins it, else as the person's language has it, else as the machine's", async () => {
+    // Noon on Sunday 2026-10-11 by this machine's clock.
+    const NOON = Date.parse("2026-10-11T12:00:00");
+    const nothing = { body: { more: false, items: [] } };
+    const monday = fakeConsole({
+      "GET /api/v1/me": { body: { ...ME, workspace: { ...ME.workspace, weekStart: "monday" } } },
+      [`GET ${IN}/tasks?dueBy=2026-10-11&limit=50&offset=0`]: nothing,
+    });
+    const m = harness({ fetch: monday.fetch, env: SIGNED_IN, now: () => NOON });
+    expect(await runCli(["tasks", "--due", "week"], m.io)).toBe(EXIT.ok);
+    expect(monday.calls.at(-1)?.key).toBe(`GET ${IN}/tasks?dueBy=2026-10-11&limit=50&offset=0`);
+    // Left to the language, a Korean week begins on Sunday: the week of the 11th ends on the 17th.
+    const korean = fakeConsole({
+      "GET /api/v1/me": { body: { ...ME, language: "ko" } },
+      [`GET ${IN}/tasks?dueBy=2026-10-17&limit=50&offset=0`]: nothing,
+    });
+    const k = harness({ fetch: korean.fetch, env: SIGNED_IN, now: () => NOON, locale: "en-GB" });
+    expect(await runCli(["tasks", "--due", "week"], k.io)).toBe(EXIT.ok);
+    expect(korean.calls.at(-1)?.key).toBe(`GET ${IN}/tasks?dueBy=2026-10-17&limit=50&offset=0`);
+    // No language chosen: the machine's, a British one beginning on Monday.
+    const british = fakeConsole({
+      "GET /api/v1/me": { body: ME },
+      [`GET ${IN}/tasks?dueBy=2026-10-11&limit=50&offset=0`]: nothing,
+    });
+    const b = harness({ fetch: british.fetch, env: SIGNED_IN, now: () => NOON, locale: "en-GB" });
+    expect(await runCli(["tasks", "--due", "week"], b.io)).toBe(EXIT.ok);
+    expect(british.calls.at(-1)?.key).toBe(`GET ${IN}/tasks?dueBy=2026-10-11&limit=50&offset=0`);
+  });
+});

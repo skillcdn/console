@@ -672,14 +672,19 @@ export interface WorkloadRow {
   readonly person: RestPerson | undefined;
   readonly open: number;
   readonly inProgress: number;
-  /** Open, and due within the next seven days from today. */
-  readonly dueSoon: number;
+  /** Open, and due from today through the last day of this week, as the workspace begins its weeks (ADR-0039). */
+  readonly dueThisWeek: number;
   /** Open, and past its day. */
   readonly overdue: number;
 }
 
-/** Who has what, from the open tasks: a task counted for each of its workers, by name, and the tasks with none last. */
-export function workloadOf(tasks: readonly RestTask[], today: string): WorkloadRow[] {
+/**
+ * Who has what, from the open tasks: a task counted for each of its workers, by name, and the
+ * tasks with none last; this week is the days from today through the week's last day, the week
+ * beginning on `firstDay` (1 for Monday, 7 for Sunday).
+ */
+export function workloadOf(tasks: readonly RestTask[], today: string, firstDay = 1): WorkloadRow[] {
+  const weekEnd = weekOf(today, firstDay).at(-1) ?? today;
   const rows = new Map<string, { person: RestPerson | undefined; tasks: RestTask[] }>();
   for (const task of tasks.filter(isOpen)) {
     const workers: readonly (RestPerson | undefined)[] =
@@ -698,13 +703,9 @@ export function workloadOf(tasks: readonly RestTask[], today: string): WorkloadR
     open: list.length,
     inProgress: list.filter((task) => task.state === "in_progress" || task.state === "in_review")
       .length,
-    dueSoon: list.filter((task) => {
-      if (task.dueOn === null) {
-        return false;
-      }
-      const days = daysBetween(today, task.dueOn);
-      return days >= 0 && days <= 7;
-    }).length,
+    dueThisWeek: list.filter(
+      (task) => task.dueOn !== null && task.dueOn >= today && task.dueOn <= weekEnd,
+    ).length,
     overdue: list.filter((task) => task.dueOn !== null && task.dueOn < today).length,
   });
   return [...rows.values()]
@@ -723,14 +724,21 @@ export function workloadOf(tasks: readonly RestTask[], today: string): WorkloadR
 export interface WorkloadProps {
   readonly tasks: readonly RestTask[];
   readonly today?: string | undefined;
+  /** The day the week begins on, as the workspace says (ADR-0035); the language's when left out. */
+  readonly weekStart?: WeekStart | undefined;
   /** Where the board is, narrowed to one person's tasks, or to those with no worker. */
   readonly personHref?: ((person: RestPerson | undefined) => string) | undefined;
 }
 
-/** Who has what: a row per person, and what of theirs is late or due soon. */
+/** Who has what: a row per person, and what of theirs is late or due this week. */
 export function Workload(props: WorkloadProps) {
   const words = useWords().calendar.workload;
-  const rows = workloadOf(props.tasks, props.today ?? todayOf());
+  const { tag } = useLanguage();
+  const rows = workloadOf(
+    props.tasks,
+    props.today ?? todayOf(),
+    firstDayOfWeek(deviceLanguage(tag), props.weekStart),
+  );
   if (rows.length === 0) {
     return null;
   }
@@ -741,7 +749,7 @@ export function Workload(props: WorkloadProps) {
           <th scope="col">{words.person}</th>
           <th scope="col">{words.open}</th>
           <th scope="col">{words.inProgress}</th>
-          <th scope="col">{words.dueSoon}</th>
+          <th scope="col">{words.dueThisWeek}</th>
           <th scope="col">{words.overdue}</th>
         </tr>
       </thead>
@@ -759,7 +767,7 @@ export function Workload(props: WorkloadProps) {
               <th scope="row">{href === undefined ? who : <a href={href}>{who}</a>}</th>
               <td>{row.open}</td>
               <td>{row.inProgress}</td>
-              <td className={cx(row.dueSoon > 0 && "sc-workload-soon")}>{row.dueSoon}</td>
+              <td className={cx(row.dueThisWeek > 0 && "sc-workload-soon")}>{row.dueThisWeek}</td>
               <td className={cx(row.overdue > 0 && "sc-workload-late")}>{row.overdue}</td>
             </tr>
           );

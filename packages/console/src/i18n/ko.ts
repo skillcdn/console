@@ -393,7 +393,7 @@ export const ko: Messages = {
       person: "사람",
       open: "열림",
       inProgress: "진행 중",
-      dueSoon: "7일 내 마감",
+      dueThisWeek: "이번 주 마감",
       overdue: "기한 지남",
       unassigned: "아직 작업자 없음",
     },

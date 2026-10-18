@@ -1740,10 +1740,13 @@ describe("the calendar", () => {
       task({ id: "0199c4d8-0000-7000-8000-000000000013", workers: [alice], state: "done" }),
       task({ id: "0199c4d8-0000-7000-8000-000000000014", workers: [alice], dueOn: "2026-10-30" }),
     ];
-    const rows = workloadOf(tasks, TODAY);
+    // The week from Sunday the 11th: Thursday the 15th is this week's.
+    const rows = workloadOf(tasks, TODAY, 7);
     expect(rows.map((row) => row.person?.login ?? null)).toEqual(["alice", "bob", null]);
-    expect(rows[1]).toMatchObject({ open: 2, inProgress: 1, dueSoon: 1, overdue: 1 });
-    expect(rows[0]).toMatchObject({ open: 1, inProgress: 0, dueSoon: 0, overdue: 0 });
+    expect(rows[1]).toMatchObject({ open: 2, inProgress: 1, dueThisWeek: 1, overdue: 1 });
+    expect(rows[0]).toMatchObject({ open: 1, inProgress: 0, dueThisWeek: 0, overdue: 0 });
+    // The week from Monday: Sunday the 11th ends it, and the 15th is next week's (ADR-0039).
+    expect(workloadOf(tasks, TODAY, 1)[1]).toMatchObject({ dueThisWeek: 0 });
     expect(rows[2]).toMatchObject({ open: 1 });
     const html = renderToStaticMarkup(
       <Workload

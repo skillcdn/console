@@ -433,7 +433,7 @@ export const en = {
       person: "Person",
       open: "Open",
       inProgress: "In progress",
-      dueSoon: "Due in 7 days",
+      dueThisWeek: "Due this week",
       overdue: "Overdue",
       unassigned: "Nobody's yet",
     },

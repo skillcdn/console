@@ -18,7 +18,7 @@ import {
   VERSION_HEADER,
   formatVersion as versionText,
 } from "../compat.js";
-import { addDays, dayOf as dayOfDate, isDay } from "../dates.js";
+import { addDays, dayOf as dayOfDate, firstDayOfWeek, isDay, weekOf } from "../dates.js";
 import { DEFAULT_PAGE_LIMIT, LIST_LIMIT, MAX_OPTIONS, MIN_OPTIONS } from "../limits.js";
 import { fillRules, RULES_PATH, RULES_TITLE } from "../rules.js";
 import {
@@ -180,6 +180,8 @@ export interface CliIo {
   readonly notices?: NoticeStore | undefined;
   /** The oldest console this command works with (ADR-0038); left out, the package's own floor. */
   readonly consoleAtLeast?: string | undefined;
+  /** The language and region of this machine (`ko-KR`), for what follows a language where the person chose none; left out, English. */
+  readonly locale?: string | undefined;
   /** Where the console's own skills are on this machine, shipped with the package; nothing when they are not there. */
   readonly skillsDir?: string | undefined;
   /** How `serve` listens on the loopback (ADR-0014); left out, the command cannot serve. */
@@ -991,6 +993,16 @@ const use: Command = async (args, io) => {
   return EXIT.ok;
 };
 
+/**
+ * The last day of this week (ADR-0039): the week begins as the workspace says, or, left to the
+ * language, as the person's language has it, else this machine's.
+ */
+async function endOfWeek(io: CliIo, session: Session, today: string): Promise<string> {
+  const me = await session.client.me();
+  const language = me.language ?? io.locale ?? "en";
+  return weekOf(today, firstDayOfWeek(language, me.workspace.weekStart ?? "auto")).at(-1) ?? today;
+}
+
 const tasks: Command = async (args, io) => {
   const { values } = parse(
     args,
@@ -1026,7 +1038,7 @@ const tasks: Command = async (args, io) => {
       : due === "overdue"
         ? addDays(today, -1)
         : due === "week"
-          ? addDays(today, 6)
+          ? await endOfWeek(io, session, today)
           : (dayOf(io, due) ?? undefined);
   const worker = on(values, "mine") ? ((await personIdOf(session, "me")) ?? undefined) : undefined;
   const search = text(values, "search")?.trim();
