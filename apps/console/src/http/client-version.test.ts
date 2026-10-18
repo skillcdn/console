@@ -17,7 +17,7 @@ describe("the gate on the command's version", () => {
   it("states the console's version and the range it takes, and knows a version that is not one", () => {
     expect(versionFactsOf("0.1.18")).toMatchObject({
       version: "0.1.18",
-      clientRange: ">=0.1.18 <0.2.0",
+      clientRange: ">=0.1.0 <0.2.0",
     });
     expect(versionFactsOf("1.4.2").clientRange).toBe(">=1.3.0 <1.6.0");
     expect(versionFactsOf("1.4.2", { atLeast: "1.4.1" }).clientRange).toBe(">=1.4.1 <1.6.0");
@@ -38,7 +38,7 @@ describe("the gate on the command's version", () => {
       const answer = await request("/api/v1/me", agent);
       expect(answer.status, String(agent)).toBe(200);
       expect(answer.headers.get("console-version")).toBe("0.1.18");
-      expect(answer.headers.get("console-client-range")).toBe(">=0.1.18 <0.2.0");
+      expect(answer.headers.get("console-client-range")).toBe(">=0.1.0 <0.2.0");
     }
     const probe = await request("/healthz", "skillcdn-console/0.0.1");
     expect(probe.status).toBe(200);
@@ -47,16 +47,19 @@ describe("the gate on the command's version", () => {
 
   it("refuses a command outside the range with 426, the code, the words and the headers", async () => {
     const request = gated("0.1.18");
-    const older = await request("/api/v1/me", "skillcdn-console/0.1.17 (cli)");
+    const older = await request("/api/v1/me", "skillcdn-console/0.0.9 (cli)");
     expect(older.status).toBe(426);
     expect(older.headers.get("console-version")).toBe("0.1.18");
-    expect(older.headers.get("console-client-range")).toBe(">=0.1.18 <0.2.0");
+    expect(older.headers.get("console-client-range")).toBe(">=0.1.0 <0.2.0");
     expect(older.headers.get("cache-control")).toBe("no-store");
     const refused = (await older.json()) as { error: { code: string; message: string } };
     expect(refused.error.code).toBe("client.outdated");
-    expect(refused.error.message).toContain("0.1.17");
-    expect(refused.error.message).toContain(">=0.1.18 <0.2.0");
+    expect(refused.error.message).toContain("0.0.9");
+    expect(refused.error.message).toContain(">=0.1.0 <0.2.0");
     expect(refused.error.message).toContain("Update it to 0.1.18");
+    // An older patch of the console's minor is answered: a patch changes nothing that exists.
+    const olderPatch = await request("/api/v1/me", "skillcdn-console/0.1.17 (cli)");
+    expect(olderPatch.status).toBe(200);
     const newer = await request("/api/v1/me", "skillcdn-console/0.2.0");
     expect(newer.status).toBe(426);
     expect(((await newer.json()) as { error: { code: string } }).error.code).toBe("client.too_new");

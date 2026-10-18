@@ -1,6 +1,6 @@
 # ADR-0025: The command names its version on every request, and the console holds it to the range it takes
 
-- Status: Accepted
+- Status: Accepted; point 3 before 1.0 is amended by [ADR-0033](0033-the-package-has-a-version-of-its-own-and-says-which-skillcdn-it-is-built-on.md): a command of the console's minor, whatever the patch
 - Date: 2026-10-13
 
 ## Context

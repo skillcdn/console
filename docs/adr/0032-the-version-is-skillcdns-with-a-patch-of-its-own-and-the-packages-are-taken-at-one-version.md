@@ -1,6 +1,6 @@
 # ADR-0032: The package's major and minor are SkillCDN's, its patch its own, and the packages it is built on are taken at one version
 
-- Status: Accepted
+- Status: Superseded by [ADR-0033](0033-the-package-has-a-version-of-its-own-and-says-which-skillcdn-it-is-built-on.md), which gives the package a version of its own and keeps the packages taken at one version
 - Date: 2026-10-18
 - Amends [ADR-0007](0007-the-package-is-published-through-trusted-publishing-and-versioned-on-the-core-line.md), whose points 2 and 3 followed the line of `@skillcdn/core` alone; the rest of it stands. The rule is held by `scripts/check-version-line.mjs`; what a changeset says is in [AGENTS.md](../../AGENTS.md#workflow).
 

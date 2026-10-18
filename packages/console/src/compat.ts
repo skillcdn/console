@@ -74,15 +74,18 @@ export function inRange(version: Version, range: VersionRange): boolean {
 }
 
 /**
- * The common rule. Before 1.0, a command from the console's own version on and within the
- * console's minor (`^0.1.18`): any release may change the contract until then (ADR-0007), so the
- * console's own version is the floor, and the minor is the line. From 1.0, the console's major
- * and a minor within one of the console's, either way, whatever the patch: a minor adds and a
- * major breaks, as the version promises from then on.
+ * The common rule. Before 1.0, a command of the console's minor, whatever the patch
+ * (`>=0.2.0 <0.3.0`): a patch changes nothing that exists and a minor may (ADR-0033), so the
+ * minor is the line. From 1.0, the console's major and a minor within one of the console's,
+ * either way, whatever the patch: a minor adds and a major breaks, as the version promises from
+ * then on.
  */
 export function commonRange(server: Version): VersionRange {
   if (server.major === 0) {
-    return { atLeast: server, below: { major: 0, minor: server.minor + 1, patch: 0 } };
+    return {
+      atLeast: { major: 0, minor: server.minor, patch: 0 },
+      below: { major: 0, minor: server.minor + 1, patch: 0 },
+    };
   }
   return {
     atLeast: { major: server.major, minor: Math.max(0, server.minor - 1), patch: 0 },

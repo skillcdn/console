@@ -25,7 +25,7 @@ cp .env.example .env
 2. Commit with [Conventional Commits](https://www.conventionalcommits.org/): `type(scope): summary`.
 3. Run `pnpm check`.
 4. **Maintainers** currently push directly to `main` (`git pull --rebase` first); a pull-request flow will replace this later. **Everyone else:** fork, open a pull request against `main` and fill in the checklist.
-5. A change to the package is released from its changeset: the release workflow turns the pending changesets into one version pull request, and a maintainer merging it publishes ([ADR-0007](docs/adr/0007-the-package-is-published-through-trusted-publishing-and-versioned-on-the-core-line.md)). The bump is `patch` unless the change adopts the next line of SkillCDN; an entry that changes what exists starts with `Breaking:` ([ADR-0032](docs/adr/0032-the-version-is-skillcdns-with-a-patch-of-its-own-and-the-packages-are-taken-at-one-version.md)).
+5. A change to the package is released from its changeset: the release workflow turns the pending changesets into one version pull request, and a maintainer merging it publishes ([ADR-0007](docs/adr/0007-the-package-is-published-through-trusted-publishing-and-versioned-on-the-core-line.md)). The bump is `patch` for a fix or an addition that changes nothing that exists, and `minor` for a change of what exists, whose entry starts with `Breaking:` ([ADR-0033](docs/adr/0033-the-package-has-a-version-of-its-own-and-says-which-skillcdn-it-is-built-on.md)).
 
 Found a security problem? Do not open an issue. Follow [`SECURITY.md`](SECURITY.md).
 

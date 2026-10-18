@@ -68,8 +68,8 @@ describe("versions", () => {
 });
 
 describe("the common rule", () => {
-  it("before 1.0 takes the console's version on, within its minor", () => {
-    expect(formatRange(commonRange(v("0.1.18")))).toBe(">=0.1.18 <0.2.0");
+  it("before 1.0 takes the console's minor, whatever the patch", () => {
+    expect(formatRange(commonRange(v("0.1.18")))).toBe(">=0.1.0 <0.2.0");
     expect(formatRange(commonRange(v("0.0.0")))).toBe(">=0.0.0 <0.1.0");
   });
 
@@ -90,15 +90,16 @@ describe("the common rule", () => {
 });
 
 describe("judging a command", () => {
-  it("before 1.0 refuses anything older than the console, and anything of another minor", () => {
+  it("before 1.0 answers the console's minor, whatever the patch, and refuses another minor", () => {
     const server = v("0.1.18");
     expect(judgeClient(v("0.1.18"), server).verdict).toBe("current");
     expect(judgeClient(v("0.1.19"), server).verdict).toBe("ahead");
-    expect(judgeClient(v("0.1.17"), server).verdict).toBe("outdated");
+    expect(judgeClient(v("0.1.17"), server).verdict).toBe("behind");
+    expect(judgeClient(v("0.1.0"), server).verdict).toBe("behind");
     expect(judgeClient(v("0.2.0"), server).verdict).toBe("too_new");
     expect(judgeClient(v("0.0.9"), server).verdict).toBe("outdated");
     expect(judgeClient(v("1.0.0"), server).verdict).toBe("too_new");
-    expect(formatRange(judgeClient(v("0.1.17"), server).range)).toBe(">=0.1.18 <0.2.0");
+    expect(formatRange(judgeClient(v("0.0.9"), server).range)).toBe(">=0.1.0 <0.2.0");
   });
 
   it("from 1.0 answers a minor within one and refuses the rest", () => {

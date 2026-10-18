@@ -1,0 +1,5 @@
+---
+"@skillcdn/console": minor
+---
+
+Breaking: a console takes a command of its own minor whatever the patch (`>=0.2.0 <0.3.0`), since a patch changes nothing that exists: a command older than the console within the minor is answered and told once that a newer one exists, instead of being refused, and `judgeClient` says `behind` of it, not `outdated`. The package has a version of its own from here on (ADR-0033), read as the main repository reads a 0.x line: a patch changes nothing that exists, a minor may change or remove a public surface and says so first in its entry, as `Breaking:`. The number says nothing of SkillCDN; which SkillCDN a release is built on is in the README's table, and a running console says it: `GET /api/v1/me` answers `console.skillcdn`, the line (`0.3`), and `console whoami` prints it. The packages the console is built on, `@skillcdn/core`, `@skillcdn/indexer`, `@skillcdn/reader`, `@skillcdn/client` and `@skillcdn/brand`, are taken at one version, SkillCDN 0.3.0 for this release.

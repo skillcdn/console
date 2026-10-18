@@ -845,7 +845,7 @@ const whoami: Command = async (args, io) => {
   const consoleWords =
     me.console === undefined
       ? "the console does not say its version, so it is older than 0.1.18"
-      : `the console is ${me.console.version} and takes ${me.console.clientRange}`;
+      : `the console is ${me.console.version}${me.console.skillcdn === undefined ? "" : `, built on SkillCDN ${me.console.skillcdn},`} and takes ${me.console.clientRange}`;
   answer(
     io,
     session,

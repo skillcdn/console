@@ -351,7 +351,7 @@ describe("the command line", () => {
     expect((await console_(["projects"])).out).not.toContain("secret");
     const who = await console_(["whoami"]);
     expect(who.out).toBe(
-      `Alice (member) at Acme, ${SIGN_IN_URL}; project web\nWhat this organization asks of agents: console rules. How the board is worked: the skill working-the-board, shipped with this command (console skills says where it is).\nThis command is of a version it does not know; the console is 0.1.18 and takes >=0.1.18 <0.2.0.\n`,
+      `Alice (member) at Acme, ${SIGN_IN_URL}; project web\nWhat this organization asks of agents: console rules. How the board is worked: the skill working-the-board, shipped with this command (console skills says where it is).\nThis command is of a version it does not know; the console is 0.1.18, built on SkillCDN 0.3, and takes >=0.1.0 <0.2.0.\n`,
     );
   });
 
@@ -473,7 +473,7 @@ describe("the command line", () => {
     expect(theirs.out).toBe("No runs.\n");
     const whoami = await console_(["whoami"], bobToken);
     expect(whoami.out).toBe(
-      `bob (member) at Acme, ${SIGN_IN_URL}; project web\nWhat this organization asks of agents: console rules. How the board is worked: the skill working-the-board, shipped with this command (console skills says where it is).\nThis command is of a version it does not know; the console is 0.1.18 and takes >=0.1.18 <0.2.0.\n`,
+      `bob (member) at Acme, ${SIGN_IN_URL}; project web\nWhat this organization asks of agents: console rules. How the board is worked: the skill working-the-board, shipped with this command (console skills says where it is).\nThis command is of a version it does not know; the console is 0.1.18, built on SkillCDN 0.3, and takes >=0.1.0 <0.2.0.\n`,
     );
   });
 

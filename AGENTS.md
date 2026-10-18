@@ -61,7 +61,7 @@ Run everything from the repository root through pnpm. Do not use `npm`, `npx` or
 | Record what a change means to the published package | `pnpm changeset` (writes `.changeset/<name>.md`; a file written by hand does the same) |
 | No control or invisible characters in tracked files, new files included (part of `pnpm check`) | `pnpm check:text` |
 | The skills and the manifest are in the SkillCDN Format as the indexer reads it, and name commands, routes and files that exist (part of `pnpm check`) | `pnpm check:skills` |
-| The package's version follows the `@skillcdn/core` line (part of `pnpm check`) | `pnpm check:version` |
+| Every `@skillcdn` package is taken at one version, as the manifests declare it and the lockfile resolves it (part of `pnpm check`) | `pnpm check:skillcdn` |
 | Local PostgreSQL, and a bucket with the S3 API for the tests of the blob store | `docker compose -f deploy/compose.dev.yaml up -d` |
 
 Packages compile to `dist/` and consume each other's compiled output. Going through `turbo` builds upstream packages first; calling a package script directly can test against a stale `dist/`.
@@ -78,7 +78,7 @@ Packages compile to `dist/` and consume each other's compiled output. Going thro
 
 - `pnpm check` passes.
 - New behavior has tests; a bug fix starts with a failing regression test.
-- A change to `packages/console` carries a changeset, written for whoever installs it: `patch` for a fix or an addition, and for a change of what exists, whose entry then starts with `Breaking:`; `minor` only to adopt the next line of SkillCDN ([ADR-0032](docs/adr/0032-the-version-is-skillcdns-with-a-patch-of-its-own-and-the-packages-are-taken-at-one-version.md)).
+- A change to `packages/console` carries a changeset, written for whoever installs it: `patch` for a fix or an addition that changes nothing that exists; `minor` for a change of a public surface, whose entry starts with `Breaking:`, and for the next line of SkillCDN; never `major` while the major is 0 ([ADR-0033](docs/adr/0033-the-package-has-a-version-of-its-own-and-says-which-skillcdn-it-is-built-on.md)).
 - Docs are updated per the table below, in the same change.
 - No secrets, no operations details, no business logic (rules 1, 6, 8).
 - The change is safe to deploy on its own: `main` is always releasable and every push may ship.
@@ -90,7 +90,7 @@ Packages compile to `dist/` and consume each other's compiled output. Going thro
 - **For now, maintainers commit and push directly to `main`.** There is no pull-request gate and no branch protection yet. Do not create branches or open pull requests unless asked. Run `pnpm check` first, `git pull --rebase` before pushing, keep commits small, and treat a red CI run on `main` as the first thing to fix.
 - Never force-push or rewrite `main`, skip hooks with `--no-verify`, or commit build output.
 - Keep the `Co-Authored-By` trailer your agent adds, so AI-authored changes stay traceable.
-- **Releases.** `@skillcdn/console` is versioned from changesets and published by the release workflow through the registry's trusted publishing ([ADR-0007](docs/adr/0007-the-package-is-published-through-trusted-publishing-and-versioned-on-the-core-line.md)): pending changesets become one version pull request, and merging it publishes. The version's major and minor are SkillCDN's, the one version the main repository's packages share, and the packages are taken at that version and moved together ([ADR-0032](docs/adr/0032-the-version-is-skillcdns-with-a-patch-of-its-own-and-the-packages-are-taken-at-one-version.md)); a change is a `patch` unless it adopts the next line, and `pnpm check` holds the rule. The first version is published by a maintainer by hand ([deploy/README.md](deploy/README.md#repository-settings-checklist)). Images are not published from here.
+- **Releases.** `@skillcdn/console` is versioned from changesets and published by the release workflow through the registry's trusted publishing ([ADR-0007](docs/adr/0007-the-package-is-published-through-trusted-publishing-and-versioned-on-the-core-line.md)): pending changesets become one version pull request, and merging it publishes. The version is the package's own; which SkillCDN the console is built on is the one version of the main repository's packages, declared in every manifest and resolved by the lockfile, which `pnpm check` holds and `GET /api/v1/me` says ([ADR-0033](docs/adr/0033-the-package-has-a-version-of-its-own-and-says-which-skillcdn-it-is-built-on.md)). The first version is published by a maintainer by hand ([deploy/README.md](deploy/README.md#repository-settings-checklist)). Images are not published from here.
 
 ## Documentation protocol
 
