@@ -1,4 +1,4 @@
-import { type ReactNode, type SyntheticEvent, useState } from "react";
+import { type CSSProperties, type ReactNode, type SyntheticEvent, useState } from "react";
 import {
   OPEN_TASK_STATES,
   type RestCategory,
@@ -362,6 +362,9 @@ function goalsOnDays(goals: readonly RestGoal[]): ReadonlyMap<string, readonly R
   return on;
 }
 
+/** How many days a bar has in the week, for its title to run along: a custom property the stylesheet reads. */
+const spanStyle = (span: number): CSSProperties => ({ "--sc-span": span }) as CSSProperties;
+
 /** One week as a row of cells: the bars across the days in their lanes, then the tasks on each day. */
 function WeekRow(props: WeekRowProps) {
   const { week, segments, now } = props;
@@ -417,6 +420,11 @@ function WeekRow(props: WeekRowProps) {
               return <span key={lane} className="sc-calendar-lane" aria-hidden="true" />;
             }
             const { task } = segment;
+            // The first piece carries the title; with more days in the week, the title runs along
+            // the bar as far as they reach, over the pieces after it, instead of stopping at the
+            // first day's edge.
+            const span = segment.to - segment.from + 1;
+            const spanning = segment.from === column && span > 1;
             return (
               <a
                 key={task.id}
@@ -425,8 +433,10 @@ function WeekRow(props: WeekRowProps) {
                   `sc-category-${task.category?.color ?? "gray"}`,
                   segment.from === column && segment.begins && "sc-calendar-bar-begins",
                   segment.to === column && segment.ends && "sc-calendar-bar-ends",
+                  spanning && "sc-calendar-bar-spanning",
                   tone(task, now),
                 )}
+                style={spanning ? spanStyle(span) : undefined}
                 href={props.taskHref(task)}
                 {...pointing(task, cell.day)}
               >
@@ -434,7 +444,14 @@ function WeekRow(props: WeekRowProps) {
                   <>
                     {props.markOf?.(task)}
                     {who(task)}
-                    <span className="sc-calendar-task-title">{task.title}</span>
+                    <span
+                      className={cx(
+                        "sc-calendar-task-title",
+                        spanning && "sc-calendar-task-title-spanning",
+                      )}
+                    >
+                      {task.title}
+                    </span>
                   </>
                 )}
                 {tipIn(task, cell.day)}

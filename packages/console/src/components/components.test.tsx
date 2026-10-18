@@ -2099,6 +2099,14 @@ describe("a task planned across days", () => {
     );
     expect(html).toContain("sc-calendar-bar sc-category-gray sc-calendar-bar-begins");
     expect(html).toContain("sc-calendar-bar-ends");
+    // The title of a bar with more than one day in the week runs along it from the first piece,
+    // which says how many days it has; a bar of one day keeps the title within it.
+    expect(html).toContain("sc-calendar-bar-spanning");
+    expect(html).toMatch(/style="--sc-span:[2-7]"/);
+    expect(html).toContain("sc-calendar-task-title sc-calendar-task-title-spanning");
+    expect(html.match(/sc-calendar-bar-spanning/g)).toHaveLength(
+      html.match(/--sc-span:/g)?.length ?? 0,
+    );
     expect(html).toContain("sc-calendar-lane");
     expect(html).toContain('aria-label="Category colours"');
     expect(html).toContain("Engineering");
