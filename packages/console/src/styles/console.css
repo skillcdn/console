@@ -3050,8 +3050,10 @@ table {
   white-space: nowrap;
 }
 
-/* Lit a little under the pointer by its colour, not by a filter, which would light the card within it too. */
-.sc-calendar-bar:hover {
+/* The task under the pointer is lit a little by its colour, in every piece of its bar and in
+   every week it crosses, never one piece alone; by its colour and not by a filter, which would
+   light the card within it too. */
+.sc-calendar-bar-pointed {
   background: color-mix(in srgb, var(--sc-category-fill), white 12%);
 }
 

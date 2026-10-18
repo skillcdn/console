@@ -425,6 +425,8 @@ function WeekRow(props: WeekRowProps) {
             // first day's edge.
             const span = segment.to - segment.from + 1;
             const spanning = segment.from === column && span > 1;
+            // Every piece of the task under the pointer lights together, in every week it crosses.
+            const pointed = props.pointed !== null && props.pointed.task.id === task.id;
             return (
               <a
                 key={task.id}
@@ -434,6 +436,7 @@ function WeekRow(props: WeekRowProps) {
                   segment.from === column && segment.begins && "sc-calendar-bar-begins",
                   segment.to === column && segment.ends && "sc-calendar-bar-ends",
                   spanning && "sc-calendar-bar-spanning",
+                  pointed && "sc-calendar-bar-pointed",
                   tone(task, now),
                 )}
                 style={spanning ? spanStyle(span) : undefined}

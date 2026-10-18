@@ -1,4 +1,12 @@
-import { type KeyboardEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
+import {
+  type KeyboardEvent,
+  type ReactNode,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { useWords } from "../i18n/index.js";
 import { cx } from "./ui.js";
 
@@ -82,9 +90,10 @@ export function Picker<T>(props: PickerProps<T>) {
   latest.current = query;
 
   // The list opens below the field, and above it only where the window has no room below and
-  // more above: measured once it is open, and again whenever what it holds changes its height.
+  // more above: measured before anything is painted, once it is open and again whenever what it
+  // holds changes its height, so that it never shows below for a frame on its way up.
   // biome-ignore lint/correctness/useExhaustiveDependencies: the items, the loading and the more are what changes the list's height
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open || field.current === null || list.current === null) {
       return;
     }
