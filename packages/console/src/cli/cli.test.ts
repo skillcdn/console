@@ -2993,6 +2993,44 @@ describe("the pack of the project, through the console (ADR-0028)", () => {
     ).toBe(EXIT.usage);
   });
 
+  it("connects the pack with a code a person approves at SkillCDN, printing the page and the code and waiting", async () => {
+    const started = {
+      code: "ABCD-EFGH",
+      url: "https://skillcdn.test/connect/ABCD-EFGH",
+      expiresAt: WHEN,
+      intervalSeconds: 1,
+    };
+    const { fetch, calls } = fakeConsole({
+      [`POST ${IN}/pack-token/connect`]: { status: 201, body: started },
+      [`GET ${IN}/pack-token/connect`]: [
+        { body: { status: "pending", ...started } },
+        { body: { status: "connected", project: { ...PROJECT, packToken: { setAt: WHEN } } } },
+      ],
+    });
+    const h = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["project", "pack-token", "web", "--connect"], h.io)).toBe(EXIT.ok);
+    expect(h.out()).toContain("the code ABCD-EFGH");
+    expect(h.out()).toContain("https://skillcdn.test/connect/ABCD-EFGH");
+    expect(h.out()).toContain("Connected.");
+    expect(h.out()).toContain("pack token: set");
+    expect(calls.filter((call) => call.key === `GET ${IN}/pack-token/connect`)).toHaveLength(2);
+    const declined = harness({
+      fetch: fakeConsole({
+        [`POST ${IN}/pack-token/connect`]: { status: 201, body: started },
+        [`GET ${IN}/pack-token/connect`]: { body: { status: "ended", reason: "declined" } },
+      }).fetch,
+      env: SIGNED_IN,
+    });
+    expect(await runCli(["project", "pack-token", "web", "--connect"], declined.io)).toBe(
+      EXIT.failed,
+    );
+    expect(declined.err()).toContain("declined");
+    const both = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["project", "pack-token", "web", "--connect", "--stdin"], both.io)).toBe(
+      EXIT.usage,
+    );
+  });
+
   it("gives the project its pack token from standard input and never an argument, and takes it away", async () => {
     const { fetch, calls } = fakeConsole({
       [`PUT ${IN}/pack-token`]: { body: { ...PROJECT, packToken: { setAt: WHEN } } },

@@ -35,6 +35,8 @@ import {
   type RestEvents,
   type RestGoals,
   type RestMembers,
+  type RestPackConnect,
+  type RestPackConnectStarted,
   type RestPeople,
   type RestPersonWork,
   type RestProjectRules,
@@ -83,7 +85,14 @@ import {
   rulesPath,
   TASK_STATES,
 } from "@skillcdn/console/api";
-import { formatAddress, parseAddress } from "@skillcdn/core";
+import {
+  CONNECT_AGENT_MAX_LENGTH,
+  formatAddress,
+  LOCAL_HOST_KEY,
+  parseAddress,
+  type RestConnectClaimed,
+  type RestConnectStarted,
+} from "@skillcdn/core";
 import type { Context, Hono, MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { streamSSE } from "hono/streaming";
@@ -138,6 +147,12 @@ import {
 } from "../db/queries/documents.js";
 import { type Actor, latestEventId, listEventsAfter, type Scope } from "../db/queries/events.js";
 import { createGoal, GoalError, getGoal, listGoals, updateGoal } from "../db/queries/goals.js";
+import {
+  endPackConnect,
+  type PackConnectRecord,
+  readPackConnect,
+  startPackConnect,
+} from "../db/queries/pack-connects.js";
 import {
   createListing,
   deleteListing,
@@ -202,6 +217,7 @@ import {
 import type { Logger } from "../logger.js";
 import { type BlobStore, BlobStoreError } from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
+import { type PackConnector, PackError } from "../ports/skill-source.js";
 import type { Skills } from "../skills.js";
 import { errorBody } from "./app.js";
 import {
@@ -269,6 +285,8 @@ export interface RestDependencies {
   readonly blobs: BlobStore;
   /** The skills of a project, read by address. */
   readonly skills: Skills;
+  /** Connecting a project's pack with a code at the deployment (ADR-0036); left out where no deployment is reached. */
+  readonly packConnector: PackConnector | undefined;
   /** Seals the pack token a project holds (ADR-0028); left out where nobody signs in, and then no project holds one. */
   readonly secrets: Secrets | undefined;
   readonly clock: Clock;
@@ -473,6 +491,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     feed,
     blobs,
     skills,
+    packConnector,
     secrets,
     clock,
     logger,
@@ -2775,6 +2794,177 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     } catch (error) {
       return failure(c, error);
     }
+  });
+
+  // A private pack connected with a code a person approves (ADR-0036): the console asks the
+  // deployment to connect, as the skillcdn command does, shows the owner the code and the page,
+  // and claims the pack token once the person approved there. The deployment's secret is kept
+  // sealed while the request stands, the token sealed on the project once claimed, and neither
+  // is answered or logged.
+  const connectUnsupported = (c: Context<AppEnv>): Response =>
+    c.json(
+      errorBody(
+        "project.pack_connect_unsupported",
+        packConnector === undefined
+          ? "The console reads packs at no deployment it could connect to."
+          : "The console keeps no secret to seal a pack token with: AUTH_SECRET is not set.",
+      ),
+      409,
+    );
+  const connectRefused = (c: Context<AppEnv>, message: string): Response =>
+    c.json(errorBody("project.pack_connect_refused", message), 400);
+  const deploymentAway = (c: Context<AppEnv>): Response =>
+    c.json(
+      errorBody(
+        "skills.unavailable",
+        "The SkillCDN deployment could not be reached; try again later.",
+      ),
+      503,
+    );
+  const isAway = (error: PackError): boolean =>
+    error.code === "network" || error.code === "invalid_response";
+  const pendingOf = (row: PackConnectRecord): RestPackConnect => ({
+    status: "pending",
+    code: row.code,
+    url: row.url,
+    expiresAt: row.expiresAt.toISOString(),
+    intervalSeconds: row.intervalSeconds,
+  });
+  /** Reading how the connection stands, or giving it up, is an owner's, as beginning it is. */
+  const owningRead = async (c: Context<AppEnv>): Promise<InProject | Response> => {
+    const found = await reading(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    return found.project.role === "owner" ? found : ownerRequired(c);
+  };
+
+  app.post(`${PROJECT}/pack-token/connect`, async (c) => {
+    const found = await owning(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    if (packConnector === undefined || secrets === undefined) {
+      return connectUnsupported(c);
+    }
+    const address = skills.addressOf(found.project.skillsAddress);
+    if (address === undefined) {
+      return connectRefused(c, "The project names no pack to connect.");
+    }
+    if (address.host === LOCAL_HOST_KEY) {
+      return connectRefused(c, "A pack on the console's machine is read with no token.");
+    }
+    const name = (await workspace()).name;
+    let started: RestConnectStarted;
+    try {
+      started = await packConnector.connect(
+        address,
+        `${name} console`.slice(0, CONNECT_AGENT_MAX_LENGTH),
+      );
+    } catch (error) {
+      if (error instanceof PackError) {
+        return isAway(error) ? deploymentAway(c) : connectRefused(c, error.message);
+      }
+      throw error;
+    }
+    const row = await startPackConnect(database, {
+      projectId: found.project.id,
+      address: formatAddress(address),
+      code: started.code,
+      url: started.url,
+      sealedSecret: secrets.seal("pack-connect", started.secret),
+      intervalSeconds: started.intervalSeconds,
+      startedById: found.person.id,
+      expiresAt: new Date(started.expiresAt),
+      now: clock.now(),
+    });
+    logger.info(
+      {
+        person: found.person.id,
+        project: found.project.id,
+        address: row.address,
+        requestId: c.get("requestId"),
+      },
+      "pack connect begun",
+    );
+    const body: RestPackConnectStarted = {
+      code: row.code,
+      url: row.url,
+      expiresAt: row.expiresAt.toISOString(),
+      intervalSeconds: row.intervalSeconds,
+    };
+    return c.json(body, 201);
+  });
+
+  app.get(`${PROJECT}/pack-token/connect`, async (c) => {
+    const found = await owningRead(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    if (packConnector === undefined || secrets === undefined) {
+      return connectUnsupported(c);
+    }
+    const row = await readPackConnect(database, found.project.id);
+    if (row === undefined) {
+      const body: RestPackConnect = { status: "none" };
+      return c.json(body);
+    }
+    const now = clock.now();
+    const ended = async (reason: "expired" | "declined" | "refused") => {
+      await endPackConnect(database, found.project.id);
+      const body: RestPackConnect = { status: "ended", reason };
+      return c.json(body);
+    };
+    if (row.expiresAt.getTime() <= now.getTime()) {
+      return ended("expired");
+    }
+    const secret = secrets.open("pack-connect", row.sealedSecret);
+    if (secret === undefined) {
+      return ended("refused");
+    }
+    let claim: RestConnectClaimed;
+    try {
+      claim = await packConnector.claim(secret);
+    } catch (error) {
+      if (error instanceof PackError) {
+        if (isAway(error)) {
+          return deploymentAway(c);
+        }
+        return ended(error.code === "connect.not_found" ? "declined" : "refused");
+      }
+      throw error;
+    }
+    if (claim.status === "pending") {
+      return c.json(pendingOf(row));
+    }
+    const project = await setPackToken(database, {
+      projectId: found.project.id,
+      actor: found.actor,
+      person: found.person,
+      sealed: secrets.seal("pack-token", claim.token),
+      now,
+    });
+    await endPackConnect(database, found.project.id);
+    logger.info(
+      {
+        person: found.person.id,
+        project: found.project.id,
+        address: row.address,
+        requestId: c.get("requestId"),
+      },
+      "pack token connected",
+    );
+    const body: RestPackConnect = { status: "connected", project: restProject(project) };
+    return c.json(body);
+  });
+
+  app.delete(`${PROJECT}/pack-token/connect`, async (c) => {
+    const found = await owning(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    await endPackConnect(database, found.project.id);
+    return c.body(null, 204);
   });
 
   // The documents of the project (ADR-0009): pages under a path, read by whoever may see the

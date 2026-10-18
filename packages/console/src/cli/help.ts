@@ -237,12 +237,12 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   },
   project: {
     usage:
-      'project <key>  |  project new <key> "<name>" [--description <markdown>|--file <path>] [--visibility workspace|private] [--skills <address>|none] [--color <name>] [--symbol <text>]  |  project edit <key> [--name "<name>"] [the same flags; none clears]  |  project icon <key> <file>  |  project icon <key> --remove  |  project pack-token <key> --stdin  |  project pack-token <key> --remove',
+      'project <key>  |  project new <key> "<name>" [--description <markdown>|--file <path>] [--visibility workspace|private] [--skills <address>|none] [--color <name>] [--symbol <text>]  |  project edit <key> [--name "<name>"] [the same flags; none clears]  |  project icon <key> <file>  |  project icon <key> --remove  |  project pack-token <key> --connect  |  project pack-token <key> --stdin  |  project pack-token <key> --remove',
     overview:
-      "project <key>  |  project new <key> <name> [flags]  |  project edit <key> [flags]  |  project icon <key> <file>|--remove  |  project pack-token <key> --stdin|--remove",
+      "project <key>  |  project new <key> <name> [flags]  |  project edit <key> [flags]  |  project icon <key> <file>|--remove  |  project pack-token <key> --connect|--stdin|--remove",
     synopsis: "One project in full; or a project made, changed, given its mark or its pack token.",
     about:
-      "One project in full; or a project made, with you as its owner, private unless --visibility workspace says everyone of the workspace works in it; or one changed, only in what the flags say, for an owner; or its image for its mark, set from a file of this machine or taken away; or its pack token (ADR-0028), the token a person made at SkillCDN for a private pack, read from standard input and never an argument, which the console keeps sealed to read the pack with, or taken away. The organization's skills are the project's unless --skills names an address of its own.",
+      "One project in full; or a project made, with you as its owner, private unless --visibility workspace says everyone of the workspace works in it; or one changed, only in what the flags say, for an owner; or its image for its mark, set from a file of this machine or taken away; or its pack token (ADR-0028), which the console keeps sealed to read a private pack with: with --connect, the console asks SkillCDN for a code, this command prints the page and the code, a person who may open the repository approves there, signed in at SkillCDN, and the console receives the token, shown to nobody (ADR-0036); with --stdin, a token a person made by hand at SkillCDN is read from standard input and never an argument; --remove takes the token away. The organization's skills are the project's unless --skills names an address of its own.",
     limits: [
       `key: ${KEY}, up to ${MAX_PROJECT_KEY_LENGTH} characters; it does not change once made`,
       `name: one line, up to ${MAX_PROJECT_NAME_LENGTH} characters; description: up to ${MAX_PROJECT_DESCRIPTION_LENGTH}`,
@@ -256,6 +256,9 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
       "project.invalid_address: the skills address is not one as SkillCDN spells it",
       "project.invalid_icon: the file is not an image of those kinds, by its bytes",
       "request.too_large: the image is over the limit",
+      "project.pack_connect_unsupported: the console reaches no deployment, or keeps no secret to seal a token with",
+      "project.pack_connect_refused: the project names no pack, the pack is on the console's machine, or SkillCDN refused to begin",
+      "skills.unavailable: SkillCDN could not be reached; try again later",
     ],
   },
   members: {

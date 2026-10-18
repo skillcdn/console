@@ -6,6 +6,7 @@ import type { WorkspaceRecord } from "../db/queries/workspaces.js";
 import type { Logger } from "../logger.js";
 import type { BlobStore } from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
+import type { PackConnector } from "../ports/skill-source.js";
 import type { Skills } from "../skills.js";
 import { type AppAuth, createAccess, registerAuth } from "./auth.js";
 import type { ClientAddressResolver } from "./client-address.js";
@@ -30,6 +31,8 @@ export interface AppDependencies {
   readonly blobs: BlobStore;
   /** The organization's skills, read by address. */
   readonly skills: Skills;
+  /** Connecting a project's pack with a code at the deployment (ADR-0036). Left out, no pack connects that way. */
+  readonly packConnector?: PackConnector | undefined;
   /** A build of the default UI to serve. Left out, the server is API only. */
   readonly web: WebRoot | undefined;
   /** The console's version: the package's, which the command is held to (ADR-0025). */
@@ -124,6 +127,7 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
     feed,
     blobs,
     skills,
+    packConnector: dependencies.packConnector,
     secrets: auth?.secrets,
     clock,
     logger,

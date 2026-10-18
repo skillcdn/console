@@ -266,6 +266,15 @@ Goal: a console that runs the organization's own work beside outside participant
 - [x] The members of a project open to the workspace (2026-10-18): everyone of the workspace, each with their role and whether a listing holds them; an owner made from a row, nobody added or removed; `member.open_project`; the command's `members` and `member` follow.
 - [x] The week and the time zone (2026-10-18): `week_start` and `time_zone` on the workspace (migration 0022), changed on the Settings page and with `console workspace edit`; the calendars and My work begin the week as the workspace says, else as the language has it; the command prints moments in the workspace's time zone, as ISO 8601 with its offset, as its login kept it at `login`, `whoami` or `workspace`, and as the API gives them, in UTC, while none is known or with `--json`; the pages keep the browser's. The rule of where a setting lives, the environment, the Settings page or the person, is in [architecture.md](architecture.md).
 
+## Milestone 26, the private pack connected (2026-10-18)
+
+Goal: a private pack connected without a token copied through a clipboard, now that the main repository's deployment connects a program with a code a person approves ([ADR-0036](adr/0036-a-private-pack-is-connected-with-a-code-a-person-approves-from-the-projects-settings.md)), and the way written where a person first meets a private pack.
+
+- [x] The decision (2026-10-18, [ADR-0036](adr/0036-a-private-pack-is-connected-with-a-code-a-person-approves-from-the-projects-settings.md)): the console connects as the `skillcdn` command does, one request per project at a time, the deployment's secret sealed while it stands, the paste kept for a token made by hand.
+- [x] The console (2026-10-18): the connector port on the deployment adapter, the `pack_connects` row (migration 0023), `POST`, `GET` and `DELETE .../pack-token/connect`, the token kept as ADR-0028 keeps one ([specs/rest.md](specs/rest.md)).
+- [x] The pages and the command (2026-10-18): the Settings page's pack token form connects first and pastes second, asking the console again until the token is kept; `console project pack-token <key> --connect` prints the page and the code and waits ([specs/cli.md](specs/cli.md)).
+- [x] Written where a private pack is first met (2026-10-18): the README, [deploy/README.md](../deploy/README.md), the skill deploying-a-console, which asks whether the repository is private and connects it with the first project, and the skill working-the-board's setting-up reference; the Skills page says an owner connects it on the Settings page.
+
 ## After milestone 16
 
 Nothing is chosen yet; the list below is where the next milestone comes from. Left open by milestone 9: whether the board should end a run not heard from for a long while itself ([ADR-0020](adr/0020-the-console-does-not-claim-an-agent-is-at-work-a-run-says-when-it-was-last-heard-from-and-a-new-run-takes-over.md)); a roadmap across projects.

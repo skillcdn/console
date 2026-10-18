@@ -143,7 +143,7 @@ export class Skills {
    * the answer is the project's own and never held.
    */
   async read(projectAddress: string | undefined, token?: string): Promise<RestSkills> {
-    const address = this.#addressOf(projectAddress);
+    const address = this.addressOf(projectAddress);
     if (address === undefined) {
       return {
         address: null,
@@ -267,7 +267,7 @@ export class Skills {
   }
 
   /** The address to read: the project's, which was checked when it was written, else the organization's. */
-  #addressOf(projectAddress: string | undefined): Address | undefined {
+  addressOf(projectAddress: string | undefined): Address | undefined {
     if (projectAddress === undefined) {
       return this.#config.address;
     }
@@ -304,7 +304,7 @@ export class Skills {
     projectAddress: string | undefined,
     token: string | undefined,
   ): { address: Address; where: Where; pack: Pack } | undefined {
-    const address = this.#addressOf(projectAddress);
+    const address = this.addressOf(projectAddress);
     if (address === undefined) {
       return undefined;
     }

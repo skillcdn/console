@@ -1,4 +1,13 @@
-import type { Address, RestBrowse, RestFile, RestFind, RestMount, RestSkill } from "@skillcdn/core";
+import type {
+  Address,
+  RestBrowse,
+  RestConnectClaimed,
+  RestConnectStarted,
+  RestFile,
+  RestFind,
+  RestMount,
+  RestSkill,
+} from "@skillcdn/core";
 
 // A pack as the console reads one for a project (ADR-0028, ADR-0031): the five reads of the
 // main repository's REST API, answered in its shapes, so that the console's own API passes them
@@ -87,4 +96,18 @@ export interface Pack {
  */
 export interface PackSource {
   open(address: Address, token?: string): Pack | undefined;
+}
+
+/**
+ * The deployment's side of connecting with a code (its ADR-0059), which the console uses to
+ * connect a project's pack token as the `skillcdn` command connects (ADR-0036): the console asks
+ * as nobody, a person approves on the deployment's own pages, and the console claims the token
+ * with the secret it was handed. What the deployment refuses, or what went wrong on the way, is
+ * a PackError with the code the API gave it.
+ */
+export interface PackConnector {
+  /** Begins: the code and the page for the person, the secret for the console, and until when. */
+  connect(address: Address, agent: string): Promise<RestConnectStarted>;
+  /** Claims: wait, while the person has not answered; or the token, this once. */
+  claim(secret: string): Promise<RestConnectClaimed>;
 }

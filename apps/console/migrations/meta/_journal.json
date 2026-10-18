@@ -162,6 +162,13 @@
       "when": 1792308196527,
       "tag": "0022_week_and_time_zone",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1792309350264,
+      "tag": "0023_pack_connects",
+      "breakpoints": true
     }
   ]
 }

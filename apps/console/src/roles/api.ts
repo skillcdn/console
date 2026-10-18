@@ -11,7 +11,7 @@ import { createGitHubOrganization } from "../adapters/github-organization.js";
 import { createGoogleProvider } from "../adapters/google-login.js";
 import { createPgBlobStore } from "../adapters/pg-blob-store.js";
 import { createS3BlobStore } from "../adapters/s3-blob-store.js";
-import { createSkillCdnSource } from "../adapters/skillcdn.js";
+import { createSkillCdnConnector, createSkillCdnSource } from "../adapters/skillcdn.js";
 import { systemClock } from "../adapters/system-clock.js";
 import { Connections } from "../auth/connect.js";
 import { Login } from "../auth/login.js";
@@ -38,7 +38,7 @@ import type { Clock } from "../ports/clock.js";
 import { fixedCredentials } from "../ports/credentials.js";
 import type { IdentityProvider } from "../ports/identity-provider.js";
 import type { OrganizationDirectory } from "../ports/organization.js";
-import type { PackSource } from "../ports/skill-source.js";
+import type { PackConnector, PackSource } from "../ports/skill-source.js";
 import { Skills, type SkillsConfig } from "../skills.js";
 import { APP_NAME, APP_VERSION } from "../version.js";
 
@@ -72,6 +72,8 @@ export interface ApiPorts {
   readonly skillSource?: PackSource | undefined;
   /** Where packs served from this machine are read (ADR-0031). Left out, the directory the configuration names; without one, a `local` address is asked of the deployment. */
   readonly packDirectory?: PackSource | undefined;
+  /** The deployment's side of connecting a pack with a code (ADR-0036). Left out, the configured deployment's, over HTTPS. */
+  readonly packConnector?: PackConnector | undefined;
   /** The console's version, which the command is held to (ADR-0025). The package's when left out; for tests. */
   readonly version?: string | undefined;
 }
@@ -226,6 +228,13 @@ export function createApi(
     feed,
     blobs: ports.blobs ?? createPgBlobStore(database),
     skills,
+    packConnector:
+      ports.packConnector ??
+      createSkillCdnConnector({
+        baseUrl: skillsConfig.source,
+        userAgent: `${APP_NAME}/${APP_VERSION}`,
+        logger,
+      }),
     web: ports.web,
     version: ports.version ?? APP_VERSION,
     clock,

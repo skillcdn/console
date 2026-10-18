@@ -772,6 +772,34 @@ export const connectRequests = pgTable(
 );
 
 /**
+ * A project's pack asking to be connected at the deployment (ADR-0036): what the person was
+ * shown, the code and the page, the secret the deployment handed the console to claim the token
+ * with, sealed with the console's secret, who asked, and until when. One at a time per project;
+ * the row goes when the token is claimed, when the request ends, or when an owner gives it up.
+ * The token goes to the project's row, sealed, and is never here.
+ */
+export const packConnects = pgTable(
+  "pack_connects",
+  {
+    projectId: uuid()
+      .primaryKey()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    /** The address asked to connect, canonical. */
+    address: text().notNull(),
+    code: text().notNull(),
+    url: text().notNull(),
+    secret: text().notNull(),
+    intervalSeconds: integer().notNull(),
+    startedById: uuid()
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    expiresAt: instant().notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [index("pack_connects_expires_idx").on(table.expiresAt)],
+);
+
+/**
  * Everything that happened to the board, in order: the live feed and the audit trail. Append
  * only. Numbered rather than keyed by uuid, since the feed is read from a point on and a number
  * says where; the row's own time is kept for people.

@@ -44,6 +44,8 @@ import {
   type RestMemberPatch,
   type RestMembers,
   type RestMePatch,
+  type RestPackConnect,
+  type RestPackConnectStarted,
   type RestPackTokenInput,
   type RestPeople,
   type RestPerson,
@@ -98,6 +100,8 @@ import {
   restMemberSchema,
   restMembersSchema,
   restMeSchema,
+  restPackConnectSchema,
+  restPackConnectStartedSchema,
   restPeopleSchema,
   restPersonSchema,
   restPersonWorkSchema,
@@ -348,6 +352,12 @@ export interface ProjectClient {
   setPackToken(input: RestPackTokenInput): Promise<RestProject>;
   /** Takes the pack token away; for an owner. */
   removePackToken(): Promise<RestProject>;
+  /** Asks the deployment to connect the project's pack with a code a person approves (ADR-0036); for an owner. */
+  connectPackToken(): Promise<RestPackConnectStarted>;
+  /** How that connection stands; the token is kept when the person approved. For an owner. */
+  packTokenConnection(signal?: AbortSignal): Promise<RestPackConnect>;
+  /** Gives the connection up; for an owner. */
+  cancelPackTokenConnection(): Promise<void>;
   /** The rules that hold in the project (ADR-0023): the workspace's, and what the project adds. */
   rules(signal?: AbortSignal): Promise<RestProjectRules>;
   /** A folder's pages and folders, or the pages a search finds. */
@@ -777,6 +787,23 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
         request("PUT", `${base}${at()}/pack-token`, input, restProjectSchema),
       removePackToken: () =>
         request("DELETE", `${base}${at()}/pack-token`, undefined, restProjectSchema),
+      connectPackToken: () =>
+        request(
+          "POST",
+          `${base}${at()}/pack-token/connect`,
+          undefined,
+          restPackConnectStartedSchema,
+        ),
+      packTokenConnection: (signal) =>
+        request(
+          "GET",
+          `${base}${at()}/pack-token/connect`,
+          undefined,
+          restPackConnectSchema,
+          signal,
+        ),
+      cancelPackTokenConnection: () =>
+        request("DELETE", `${base}${at()}/pack-token/connect`, undefined, undefined),
       rules: (signal) =>
         request("GET", `${base}${at("rules")}`, undefined, restProjectRulesSchema, signal),
       documents: (filter = {}, signal) =>

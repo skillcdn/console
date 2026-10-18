@@ -32,6 +32,8 @@ import {
   type RestMemberPatch,
   type RestMePatch,
   type RestOrganization,
+  type RestPackConnect,
+  type RestPackConnectStarted,
   type RestPerson,
   type RestPersonPatch,
   type RestPersonWork,
@@ -82,6 +84,11 @@ export interface ConsoleActions {
   /** Sets the pack token of the project the page is on, or takes it away; for an owner (ADR-0028). */
   setPackToken(token: string): Promise<RestProject>;
   removePackToken(): Promise<RestProject>;
+  /** Asks the deployment to connect the project's pack with a code a person approves (ADR-0036); for an owner. */
+  connectPackToken(): Promise<RestPackConnectStarted>;
+  /** How that connection stands; once connected, the project is the one answered. */
+  packTokenConnection(signal?: AbortSignal): Promise<RestPackConnect>;
+  cancelPackTokenConnection(): Promise<void>;
   addMember(input: RestMemberInput): Promise<RestMember>;
   updateMember(personId: string, patch: RestMemberPatch): Promise<RestMember>;
   removeMember(personId: string): Promise<void>;
@@ -544,6 +551,15 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
         setProject(changed);
         return changed;
       },
+      connectPackToken: () => scope().connectPackToken(),
+      async packTokenConnection(signal) {
+        const state = await scope().packTokenConnection(signal);
+        if (state.status === "connected") {
+          setProject(state.project);
+        }
+        return state;
+      },
+      cancelPackTokenConnection: () => scope().cancelPackTokenConnection(),
       async addMember(input) {
         const member = await scope().addMember(input);
         await refreshProject();

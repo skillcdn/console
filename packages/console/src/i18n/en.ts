@@ -3,6 +3,7 @@ import type {
   CategoryColor,
   GoalState,
   MembershipSource,
+  PackConnectEnding,
   PeopleVisibility,
   PersonRole,
   PersonStatus,
@@ -224,6 +225,21 @@ export const en = {
       label: "Token",
       hint: "A token a person made at SkillCDN for the pack's repository, on their account page there. The console keeps it sealed, reads the pack with it for whoever may see the project, and shows it to nobody.",
       placeholder: "scdn_repo_…",
+      connect: "Connect at SkillCDN",
+      connectHint:
+        "The console asks SkillCDN for a code. Open the page it gives, signed in at SkillCDN as someone who may open the repository, check that it shows the same code, and approve. The token comes to the console once and is shown to nobody.",
+      connectCode: "Code",
+      connectOpen: "Open the page at SkillCDN",
+      connectWaiting: "Waiting for the approval at SkillCDN. The page keeps asking.",
+      connectCancel: "Stop waiting",
+      connectDone: "Connected: the console reads the pack with the token from now on.",
+      connectOr: "Or a token made by hand, on the account page at SkillCDN:",
+      connectEnded: {
+        expired: "The code expired before anyone approved it. Connect again for a new one.",
+        declined: "The request was declined at SkillCDN, or the code was spent.",
+        refused:
+          "SkillCDN refused the request: the repository is not one the person may open, the pack is public and needs no token, or they hold as many tokens as one may.",
+      } satisfies Record<PackConnectEnding, string>,
       set: "Set the token",
       remove: "Remove the token",
     },
@@ -722,7 +738,7 @@ export const en = {
       indexing: "SkillCDN is still indexing the repository. Look again in a moment.",
       failed: "SkillCDN could not index the repository. What it found is on the address's page.",
       not_found:
-        "SkillCDN does not serve this address to the console: there is nothing there, or the pack is private and the project holds no pack token for it (Settings).",
+        "SkillCDN does not serve this address to the console: there is nothing there, or the pack is private and the project holds no pack token for it. An owner connects it on the Settings page, with a code approved at SkillCDN.",
       token_invalid:
         "The pack token the project holds no longer works at SkillCDN: it expired, was removed, or its maker lost the repository. An owner sets a new one on the Settings page.",
       unavailable: "SkillCDN could not be reached. The skills are as they were; look again later.",

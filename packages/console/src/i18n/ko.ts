@@ -185,6 +185,21 @@ export const ko: Messages = {
       label: "토큰",
       hint: "사람이 SkillCDN 계정 페이지에서 팩의 저장소에 대해 만든 토큰입니다. 콘솔이 봉인해 보관하고, 프로젝트를 볼 수 있는 사람을 위해 팩을 읽는 데 쓰며, 누구에게도 보여 주지 않습니다.",
       placeholder: "scdn_repo_…",
+      connect: "SkillCDN에서 연결",
+      connectHint:
+        "콘솔이 SkillCDN에 코드를 요청합니다. 안내된 페이지를 저장소를 볼 수 있는 사람으로 SkillCDN에 로그인해 열고, 같은 코드가 보이는지 확인한 뒤 승인하세요. 토큰은 콘솔에 한 번 전달되고 누구에게도 보이지 않습니다.",
+      connectCode: "코드",
+      connectOpen: "SkillCDN 페이지 열기",
+      connectWaiting: "SkillCDN에서 승인을 기다리고 있습니다. 페이지가 계속 확인합니다.",
+      connectCancel: "기다리기 중단",
+      connectDone: "연결되었습니다. 콘솔이 이제 이 토큰으로 팩을 읽습니다.",
+      connectOr: "또는 SkillCDN 계정 페이지에서 직접 만든 토큰:",
+      connectEnded: {
+        expired: "승인되기 전에 코드가 만료되었습니다. 다시 연결해 새 코드를 받으세요.",
+        declined: "SkillCDN에서 요청이 거절되었거나 코드가 이미 쓰였습니다.",
+        refused:
+          "SkillCDN이 요청을 거부했습니다. 그 사람이 볼 수 없는 저장소이거나, 공개 팩이라 토큰이 필요 없거나, 토큰을 더 만들 수 없습니다.",
+      },
       set: "토큰 넣기",
       remove: "토큰 빼기",
     },
@@ -677,7 +692,7 @@ export const ko: Messages = {
       indexing: "SkillCDN이 아직 저장소를 색인하고 있습니다. 잠시 후 다시 보세요.",
       failed: "SkillCDN이 저장소를 색인하지 못했습니다. 찾은 내용은 주소의 페이지에 있습니다.",
       not_found:
-        "SkillCDN이 이 주소를 콘솔에 제공하지 않습니다. 그곳에 아무것도 없거나, 비공개 팩인데 프로젝트에 팩 토큰이 없습니다(설정).",
+        "SkillCDN이 이 주소를 콘솔에 제공하지 않습니다. 그곳에 아무것도 없거나, 비공개 팩인데 프로젝트에 팩 토큰이 없습니다. 소유자가 설정 페이지에서 SkillCDN의 승인 코드로 연결합니다.",
       token_invalid:
         "프로젝트가 가진 팩 토큰이 SkillCDN에서 더 이상 통하지 않습니다. 만료되었거나 지워졌거나, 만든 사람이 저장소 권한을 잃었습니다. 소유자가 설정 페이지에서 새로 넣습니다.",
       unavailable:

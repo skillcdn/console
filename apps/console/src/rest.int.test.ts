@@ -40,6 +40,8 @@ import {
   restMemberSchema,
   restMembersSchema,
   restMeSchema,
+  restPackConnectSchema,
+  restPackConnectStartedSchema,
   restPeopleSchema,
   restPersonSchema,
   restPersonWorkSchema,
@@ -83,7 +85,7 @@ import { tasks } from "./db/schema.js";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "./db/testing.js";
 import { Archivist } from "./jobs/archivist.js";
 import { OrganizationSync } from "./jobs/organization-sync.js";
-import { type Pack, PackError, type PackSource } from "./ports/skill-source.js";
+import { type Pack, type PackConnector, PackError, type PackSource } from "./ports/skill-source.js";
 import { createFixtureOrganization } from "./testing/fixture-organization.js";
 import { createFixtureProvider } from "./testing/fixture-provider.js";
 import { createHarness, HARNESS_VERSION, type Harness, SIGN_IN_URL } from "./testing/harness.js";
@@ -3683,5 +3685,165 @@ describe("who sees whom (ADR-0035)", () => {
       weekStart: "auto",
       timeZone: null,
     });
+  });
+});
+
+describe("a private pack connected with a code (ADR-0036)", () => {
+  const unserved: PackSource = { open: () => undefined };
+  const soon = () => new Date(Date.now() + 600_000).toISOString();
+  const started = (expiresAt = soon()) => ({
+    code: "ABCD-EFGH",
+    url: "https://skillcdn.test/connect/ABCD-EFGH",
+    secret: "scdn_cx_secret",
+    expiresAt,
+    intervalSeconds: 1,
+  });
+  const connected = {
+    status: "connected" as const,
+    token: "scdn_repo_connected",
+    item: {
+      id: "token-1",
+      address: "/gh/acme/skills",
+      label: "Acme console",
+      createdAt: soon(),
+      expiresAt: soon(),
+      lastUsedAt: null,
+    },
+  };
+  const headers = (cookie: string) => ({ cookie, origin: SIGN_IN_URL });
+  const connecting = (h: Harness, cookie: string, method: "POST" | "DELETE" = "POST") =>
+    h.request(`${IN}/pack-token/connect`, { method, headers: headers(cookie) });
+  const standing = (h: Harness, cookie: string) =>
+    h.request(`${IN}/pack-token/connect`, { headers: { cookie } });
+
+  it("asks the deployment as nobody, shows the owner the code and the page, and keeps the token once approved", async () => {
+    let claims = 0;
+    const connector: PackConnector = {
+      async connect(address, agent) {
+        expect(formatAddress(address)).toBe("/gh/acme/skills");
+        expect(agent).toBe("Acme console");
+        return started();
+      },
+      async claim(secret) {
+        expect(secret).toBe("scdn_cx_secret");
+        claims += 1;
+        return claims < 2 ? { status: "pending", expiresAt: soon() } : connected;
+      },
+    };
+    const served = createHarness(testDatabase, {
+      providers: [createFixtureProvider()],
+      skills: { address: "/gh/Acme/skills", source: unserved },
+      packConnector: connector,
+    });
+    const owner = await served.signIn("alice");
+    const member = await served.signIn("bob");
+    expect((await connecting(served, member)).status).toBe(403);
+    expect((await standing(served, member)).status).toBe(403);
+    expect(restPackConnectSchema.parse(await (await standing(served, owner)).json())).toEqual({
+      status: "none",
+    });
+    const begun = await connecting(served, owner);
+    expect(begun.status).toBe(201);
+    const shown = await begun.text();
+    expect(shown).not.toContain("scdn_cx");
+    expect(restPackConnectStartedSchema.parse(JSON.parse(shown))).toMatchObject({
+      code: "ABCD-EFGH",
+      url: "https://skillcdn.test/connect/ABCD-EFGH",
+      intervalSeconds: 1,
+    });
+    // Asked once, the person has not approved; asked again, the token is kept and gone from here.
+    expect(restPackConnectSchema.parse(await (await standing(served, owner)).json())).toMatchObject(
+      { status: "pending", code: "ABCD-EFGH" },
+    );
+    const done = await standing(served, owner);
+    const body = await done.text();
+    expect(body).not.toContain("scdn_repo");
+    const state = restPackConnectSchema.parse(JSON.parse(body));
+    expect(state.status).toBe("connected");
+    if (state.status === "connected") {
+      expect(state.project.packToken?.setAt).toEqual(expect.any(String));
+    }
+    expect(restPackConnectSchema.parse(await (await standing(served, owner)).json())).toEqual({
+      status: "none",
+    });
+    expect(
+      restProjectSchema.parse(
+        await (await served.request(IN, { headers: { cookie: owner } })).json(),
+      ).packToken,
+    ).not.toBeNull();
+    // Given up before anyone approved: nothing stands.
+    expect((await connecting(served, owner)).status).toBe(201);
+    expect((await connecting(served, owner, "DELETE")).status).toBe(204);
+    expect(restPackConnectSchema.parse(await (await standing(served, owner)).json())).toEqual({
+      status: "none",
+    });
+  });
+
+  it("says how a connection ended, passes the deployment's refusals on, and connects nothing without a deployment or a secret", async () => {
+    const declining: PackConnector = {
+      connect: async () => started(),
+      claim: async () => {
+        throw new PackError(404, "connect.not_found", "no such request");
+      },
+    };
+    const declined = createHarness(testDatabase, {
+      providers: [createFixtureProvider()],
+      skills: { address: "/gh/Acme/skills", source: unserved },
+      packConnector: declining,
+    });
+    const owner = await declined.signIn("alice");
+    expect((await connecting(declined, owner)).status).toBe(201);
+    expect(restPackConnectSchema.parse(await (await standing(declined, owner)).json())).toEqual({
+      status: "ended",
+      reason: "declined",
+    });
+    expect(restPackConnectSchema.parse(await (await standing(declined, owner)).json())).toEqual({
+      status: "none",
+    });
+
+    const expiring: PackConnector = {
+      connect: async () => started(new Date(Date.now() - 1000).toISOString()),
+      claim: async () => connected,
+    };
+    const expired = createHarness(testDatabase, {
+      providers: [createFixtureProvider()],
+      skills: { address: "/gh/Acme/skills", source: unserved },
+      packConnector: expiring,
+    });
+    expect((await connecting(expired, owner)).status).toBe(201);
+    expect(restPackConnectSchema.parse(await (await standing(expired, owner)).json())).toEqual({
+      status: "ended",
+      reason: "expired",
+    });
+
+    const refusing: PackConnector = {
+      connect: async () => {
+        throw new PackError(400, "token.public_repository", "everyone reads it");
+      },
+      claim: async () => connected,
+    };
+    const refused = createHarness(testDatabase, {
+      providers: [createFixtureProvider()],
+      skills: { address: "/gh/Acme/skills", source: unserved },
+      packConnector: refusing,
+    });
+    const refusal = await connecting(refused, owner);
+    expect(refusal.status).toBe(400);
+    expect(await errorOf(refusal)).toBe("project.pack_connect_refused");
+
+    const away: PackConnector = {
+      connect: async () => {
+        throw new PackError(0, "network", "away");
+      },
+      claim: async () => connected,
+    };
+    const unreachable = createHarness(testDatabase, {
+      providers: [createFixtureProvider()],
+      skills: { address: "/gh/Acme/skills", source: unserved },
+      packConnector: away,
+    });
+    const gone = await connecting(unreachable, owner);
+    expect(gone.status).toBe(503);
+    expect(await errorOf(gone)).toBe("skills.unavailable");
   });
 });

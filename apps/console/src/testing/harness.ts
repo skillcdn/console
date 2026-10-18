@@ -20,7 +20,7 @@ import type { AppEnv } from "../http/request-context.js";
 import type { BlobStore } from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
 import type { OrganizationDirectory } from "../ports/organization.js";
-import type { PackSource } from "../ports/skill-source.js";
+import type { PackConnector, PackSource } from "../ports/skill-source.js";
 import { createApi } from "../roles/api.js";
 import type { FixtureProvider } from "./fixture-provider.js";
 
@@ -94,6 +94,8 @@ export interface HarnessOptions {
     | undefined;
   /** Where the bytes of files go. The database when left out. */
   readonly blobs?: BlobStore | undefined;
+  /** The deployment's side of connecting a pack with a code (ADR-0036). None when left out. */
+  readonly packConnector?: PackConnector | undefined;
 }
 
 /** The skills as the api role is configured with them, at a deployment of the tests' own. */
@@ -162,6 +164,7 @@ export function createHarness(testDatabase: TestDatabase, options: HarnessOption
       isShuttingDown: () => false,
       skillSource: options.skills?.source,
       packDirectory: options.skills?.directory,
+      packConnector: options.packConnector,
       blobs: options.blobs,
       version: HARNESS_VERSION,
     },

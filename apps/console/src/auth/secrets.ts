@@ -15,7 +15,9 @@ export type SealPurpose =
   /** What a sign-in is remembered by while the browser is away at the git host. */
   | "login"
   /** The pack token a project holds (ADR-0028), kept sealed in its row. */
-  | "pack-token";
+  | "pack-token"
+  /** The secret the deployment handed the console to claim a pack token with (ADR-0036), while the person has not approved. */
+  | "pack-connect";
 
 const VERSION = "v1";
 const IV_BYTES = 12;

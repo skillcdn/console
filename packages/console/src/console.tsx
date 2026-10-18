@@ -45,6 +45,7 @@ import { DecisionForm } from "./components/decision-form.js";
 import { DecisionCard, DecisionList, type DecisionListProps } from "./components/decision-list.js";
 import { EventFeed, type EventFeedProps } from "./components/event-feed.js";
 import { GoalForm, GoalList, type GoalListProps, GoalView, goalMonth } from "./components/goals.js";
+import { PackConnect } from "./components/pack-connect.js";
 import { PAGE_SIZE } from "./components/paged.js";
 import { ListingForm, PeopleList, type PeopleListProps } from "./components/people.js";
 import {
@@ -1409,6 +1410,14 @@ function ProjectSettingsPage(props: {
         {head}
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
         <section className="sc-panel sc-panel-form" aria-label={words.projects.packToken.aria}>
+          <PackConnect
+            onStart={data.actions.connectPackToken}
+            poll={data.actions.packTokenConnection}
+            onCancel={data.actions.cancelPackTokenConnection}
+            onConnected={() => navigation.replace(here)}
+            busy={busy}
+          />
+          <p className="sc-muted">{words.projects.packToken.connectOr}</p>
           <PackTokenForm
             set={project.packToken !== null}
             busy={busy}

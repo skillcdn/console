@@ -50,6 +50,7 @@ import {
   GOAL_STATES,
   LINK_SOURCES,
   MEMBERSHIP_SOURCES,
+  PACK_CONNECT_ENDINGS,
   PEOPLE_VISIBILITIES,
   PERSON_ROLES,
   PERSON_STATUSES,
@@ -1050,6 +1051,38 @@ export const restPackTokenInputSchema = z.object({
     .check(z.minLength(8), z.maxLength(1024), z.regex(/^\S+$/, "must have no space in it")),
 });
 export type RestPackTokenInput = z.infer<typeof restPackTokenInputSchema>;
+
+/**
+ * `POST .../pack-token/connect` (ADR-0036): what the person is shown, as the deployment said it,
+ * the code and the page to approve it on, until when, and how often the console asks again. The
+ * secret the console claims the token with stays with the console.
+ */
+export const restPackConnectStartedSchema = z.object({
+  code: z.string(),
+  url: z.string(),
+  expiresAt: instant,
+  intervalSeconds: z.int().check(z.positive()),
+});
+export type RestPackConnectStarted = z.infer<typeof restPackConnectStartedSchema>;
+
+/**
+ * `GET .../pack-token/connect`: how the connection stands. Nothing asked; waiting for the
+ * person, with what they were shown; connected, the token kept and the project as it stands; or
+ * ended short of a token, and why.
+ */
+export const restPackConnectSchema = z.union([
+  z.object({ status: z.literal("none") }),
+  z.object({
+    status: z.literal("pending"),
+    code: z.string(),
+    url: z.string(),
+    expiresAt: instant,
+    intervalSeconds: z.int().check(z.positive()),
+  }),
+  z.object({ status: z.literal("connected"), project: restProjectSchema }),
+  z.object({ status: z.literal("ended"), reason: z.enum(PACK_CONNECT_ENDINGS) }),
+]);
+export type RestPackConnect = z.infer<typeof restPackConnectSchema>;
 
 /** `GET .../skills/one?path=&cursor=`: a page of a skill's context, as the pack answers `load_skill` (`RestSkill` of `@skillcdn/core`); `read` is `null` unless `ready`. */
 export const restSkillLoadSchema = z.object({

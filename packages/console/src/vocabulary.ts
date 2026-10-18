@@ -113,6 +113,14 @@ export const WEEK_STARTS = ["auto", "monday", "sunday"] as const;
 
 export type WeekStart = (typeof WEEK_STARTS)[number];
 
+/**
+ * How a private pack's connection ended short of a token (ADR-0036): the code expired before
+ * anyone approved, the person declined at the deployment, or the deployment refused the request.
+ */
+export const PACK_CONNECT_ENDINGS = ["expired", "declined", "refused"] as const;
+
+export type PackConnectEnding = (typeof PACK_CONNECT_ENDINGS)[number];
+
 /** What a run is doing: at work, waiting for a person's decision, or over in one of three ways. */
 export const RUN_STATUSES = ["running", "waiting", "finished", "failed", "abandoned"] as const;
 

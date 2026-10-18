@@ -2413,19 +2413,34 @@ const editProject: Command = async (args, io) => {
   return EXIT.ok;
 };
 
-/** The pack token (ADR-0028): read from standard input and never from an argument, so that no shell keeps it. */
+/** How a pack's connection ended short of a token (ADR-0036), in words for the person. */
+const PACK_CONNECT_ENDED = {
+  expired: "The code expired before anyone approved it. Run the command again for a new one.",
+  declined: "The request was declined at SkillCDN, or the code was spent.",
+  refused:
+    "SkillCDN refused the request: the repository is not one the person may open, the pack is public and needs no token, or they hold as many tokens as one may.",
+} as const;
+
+/**
+ * The pack token (ADR-0028): connected with a code a person approves at SkillCDN (ADR-0036), or
+ * read from standard input and never from an argument, so that no shell keeps it.
+ */
 const projectPackToken: Command = async (args, io) => {
   const { values, positionals } = parse(args, {
+    connect: { type: "boolean" },
     stdin: { type: "boolean" },
     remove: { type: "boolean" },
   });
   const key = theOne(
     positionals,
-    "Say which project: console project pack-token <key> --stdin, or console project pack-token <key> --remove",
+    "Say which project: console project pack-token <key> --connect, --stdin or --remove",
   );
-  if (on(values, "stdin") === on(values, "remove")) {
+  const chosen = [on(values, "connect"), on(values, "stdin"), on(values, "remove")].filter(
+    Boolean,
+  ).length;
+  if (chosen !== 1) {
     throw misuse(
-      "Say one of --stdin, which reads the token from standard input, and --remove, which takes it away.",
+      "Say one of --connect, which asks SkillCDN for a code a person approves; --stdin, which reads a token made by hand from standard input; and --remove, which takes the token away.",
     );
   }
   const session = await open(io, values);
@@ -2434,6 +2449,29 @@ const projectPackToken: Command = async (args, io) => {
     const changed = await project.removePackToken();
     answer(io, session, changed, () => formatProject(changed));
     return EXIT.ok;
+  }
+  if (on(values, "connect")) {
+    const started = await project.connectPackToken();
+    io.stdout(
+      `To connect the pack, a person who may open its repository opens ${started.url} signed in at SkillCDN, checks that the page shows the code ${started.code}, and approves; the console receives the pack token and keeps it sealed, shown to nobody.\nWaiting for that, until ${started.expiresAt}.\n`,
+    );
+    for (;;) {
+      await io.sleep(started.intervalSeconds * 1000);
+      const state = await project.packTokenConnection();
+      if (state.status === "pending") {
+        continue;
+      }
+      if (state.status === "connected") {
+        answer(io, session, state.project, () => `Connected.\n${formatProject(state.project)}`);
+        return EXIT.ok;
+      }
+      if (state.status === "ended") {
+        throw failed(PACK_CONNECT_ENDED[state.reason]);
+      }
+      throw failed(
+        "The console no longer waits for the connection; run the command again for a new code.",
+      );
+    }
   }
   const token = (await io.readStdin()).trim();
   if (token.length === 0) {

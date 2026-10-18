@@ -44,6 +44,8 @@ People sign in through GitHub, Google Workspace, or both ([deploy/README.md](dep
 
 **On one machine, or in a closed network.** [`deploy/compose.yaml`](deploy/compose.yaml) runs the image next to PostgreSQL with the worker inside it, the files in the database and the packs in a directory, so that nothing of it needs the internet; what a closed network carries in, the images, the package for the agents' machines and the packs, is in [deploy/README.md](deploy/README.md#the-smallest-install-and-a-closed-network) ([ADR-0031](docs/adr/0031-the-console-reads-a-pack-as-the-skillcdn-command-does-and-a-local-one-from-a-directory.md)).
 
+**A private pack.** A project whose skills are a private repository holds a pack token the console reads them with, sealed ([ADR-0028](docs/adr/0028-the-console-reads-a-projects-pack-through-the-deployments-rest-api-with-a-pack-token-for-a-private-one.md)). An owner connects it from the project's Settings page, or with `console project pack-token <key> --connect`: the console asks SkillCDN for a code, the owner opens the page SkillCDN gives, signed in there as someone who may open the repository, checks the code and approves, and the token comes to the console, shown to nobody ([ADR-0036](docs/adr/0036-a-private-pack-is-connected-with-a-code-a-person-approves-from-the-projects-settings.md)). A token made by hand on the account page at SkillCDN is pasted there instead. The console needs `AUTH_SECRET` to keep either.
+
 **The command, where an agent runs.** `@skillcdn/console` ships `console`, the agent's side of the console: a thin client of the REST API, which a person signs in once with a token from their Agents page.
 
 ```sh
