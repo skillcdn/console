@@ -103,6 +103,13 @@ export {
   type PeopleListProps,
 } from "./components/people.js";
 export {
+  PICKER_PAGE_LIMIT,
+  Picker,
+  type PickerPage,
+  type PickerProps,
+  type PickerSearch,
+} from "./components/picker.js";
+export {
   clampScale,
   FITTED,
   Lightbox,
@@ -168,7 +175,14 @@ export {
 } from "./components/shell.js";
 export { SignIn, type SignInProps } from "./components/sign-in.js";
 export { SkillList, type SkillListProps } from "./components/skills.js";
-export { TaskForm, type TaskFormProps } from "./components/task-form.js";
+export {
+  type GoalSearch,
+  goalLabel,
+  TaskForm,
+  type TaskFormProps,
+  type TaskSearch,
+  taskLabel,
+} from "./components/task-form.js";
 export { TaskList, type TaskListProps } from "./components/task-list.js";
 export { TaskView, type TaskViewProps } from "./components/task-view.js";
 export {
@@ -204,6 +218,7 @@ export {
   STATE_LABELS,
   StateBadge,
   Time,
+  Workers,
 } from "./components/ui.js";
 export { WorkList, type WorkListProps } from "./components/work.js";
 export {

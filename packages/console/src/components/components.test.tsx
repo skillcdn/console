@@ -38,6 +38,7 @@ import { GoalForm, GoalList, GoalView, goalMonth } from "./goals.js";
 import { Markdown } from "./markdown.js";
 import { PackConnect } from "./pack-connect.js";
 import { ListingForm, PeopleList } from "./people.js";
+import { Picker } from "./picker.js";
 import {
   clampScale,
   FITTED,
@@ -61,10 +62,11 @@ import { RunList } from "./runs.js";
 import { Shell } from "./shell.js";
 import { SignIn } from "./sign-in.js";
 import { SkillList } from "./skills.js";
+import { TaskForm } from "./task-form.js";
 import { TaskList } from "./task-list.js";
 import { TaskView } from "./task-view.js";
 import { NewToken, TokenForm, TokenList } from "./tokens.js";
-import { Avatar, PersonChip, personName } from "./ui.js";
+import { Avatar, PersonChip, personName, Workers } from "./ui.js";
 import { WorkList } from "./work.js";
 import {
   deviceTimeZone,
@@ -103,7 +105,7 @@ const task = (overrides: Partial<RestTask> = {}): RestTask => ({
   state: "ready",
   priority: "high",
   owner: alice,
-  assignee: bob,
+  workers: [bob],
   parentId: null,
   category: null,
   goalId: null,
@@ -500,9 +502,9 @@ describe("the feed", () => {
     ).toBe("moved #7 Ship from Idea to In progress");
     expect(
       describeEvent(
-        event({ kind: "task.updated", data: { number: 7, fields: ["title", "assigneeId"] } }),
+        event({ kind: "task.updated", data: { number: 7, fields: ["title", "workers"] } }),
       ),
-    ).toBe("changed the title, the assignee of #7");
+    ).toBe("changed the title, the workers of #7");
     expect(describeEvent(event({ kind: "decision.raised", data: { question: "Which?" } }))).toBe(
       "asked: Which?",
     );
@@ -1565,7 +1567,7 @@ describe("the schedule on the board", () => {
     const mine = task({
       id: "0199c4d8-0000-7000-8000-000000000015",
       number: 5,
-      assignee: alice,
+      workers: [alice, bob],
       category: engineering,
       goalId: goal().id,
     });
@@ -1576,6 +1578,8 @@ describe("the schedule on the board", () => {
     expect(filterTasks(all, { goal: goal().id })).toEqual([mine]);
     expect(filterTasks(all, { goal: "" })).toEqual([a]);
     expect(filterTasks(all, { person: alice.id })).toEqual([mine]);
+    // A task is kept for any of its workers.
+    expect(filterTasks(all, { person: bob.id })).toEqual([a, mine]);
     expect(filterTasks(all, { mine: true }, alice)).toEqual([mine]);
     expect(filterTasks(all, { mine: true })).toEqual([]);
     const html = renderToStaticMarkup(
@@ -1729,11 +1733,11 @@ describe("the calendar", () => {
 
   it("says who has what, with the late and the soon due counted, and nobody's last", () => {
     const tasks = [
-      task({ assignee: bob, dueOn: "2026-10-09", state: "in_progress" }),
-      task({ id: "0199c4d8-0000-7000-8000-000000000011", assignee: bob, dueOn: "2026-10-15" }),
-      task({ id: "0199c4d8-0000-7000-8000-000000000012", assignee: null, dueOn: null }),
-      task({ id: "0199c4d8-0000-7000-8000-000000000013", assignee: alice, state: "done" }),
-      task({ id: "0199c4d8-0000-7000-8000-000000000014", assignee: alice, dueOn: "2026-10-30" }),
+      task({ workers: [bob], dueOn: "2026-10-09", state: "in_progress" }),
+      task({ id: "0199c4d8-0000-7000-8000-000000000011", workers: [bob], dueOn: "2026-10-15" }),
+      task({ id: "0199c4d8-0000-7000-8000-000000000012", workers: [], dueOn: null }),
+      task({ id: "0199c4d8-0000-7000-8000-000000000013", workers: [alice], state: "done" }),
+      task({ id: "0199c4d8-0000-7000-8000-000000000014", workers: [alice], dueOn: "2026-10-30" }),
     ];
     const rows = workloadOf(tasks, TODAY);
     expect(rows.map((row) => row.person?.login ?? null)).toEqual(["alice", "bob", null]);
@@ -2111,7 +2115,7 @@ describe("a task planned across days", () => {
     );
     const nobody = renderToStaticMarkup(
       <Calendar
-        tasks={[task({ dueOn: "2026-10-14", assignee: null })]}
+        tasks={[task({ dueOn: "2026-10-14", workers: [] })]}
         month="2026-10"
         today={TODAY}
         taskHref={href}
@@ -2164,7 +2168,7 @@ describe("a task planned across days", () => {
     expect(html).toContain("Ship v1 &lt;b&gt;now&lt;/b&gt;");
     expect(html).toContain("<dt>Owner</dt>");
     expect(html).toContain("Alice Example");
-    expect(html).toContain("<dt>Assignee</dt>");
+    expect(html).toContain("<dt>Workers</dt>");
     expect(html).toContain("bob");
     expect(html).toContain("<dt>Plan</dt>");
     expect(html).toContain("<dt>Started</dt>");
@@ -2174,7 +2178,7 @@ describe("a task planned across days", () => {
     // Across projects the goals are unknown and the row is left out; what is not set is no row.
     const bare = renderToStaticMarkup(
       <TaskTip
-        task={task({ assignee: null, goalId: goal().id })}
+        task={task({ workers: [], goalId: goal().id })}
         place={{ side: "below", shift: 0 }}
       />,
     );
@@ -2298,7 +2302,7 @@ describe("the discussion on a task", () => {
     state: "in_progress",
     priority: "normal",
     owner: alice,
-    assignee: null,
+    workers: [],
     parentId: null,
     category: null,
     goalId: null,
@@ -3060,5 +3064,126 @@ describe("the workspace's settings", () => {
     }
     // Nothing changed yet: nothing to save.
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Save the settings<\/button>/);
+  });
+});
+
+describe("the workers of a task, and what a form finds by searching (ADR-0037)", () => {
+  const carol: RestPerson = {
+    ...bob,
+    id: "0199c4d8-0000-7000-8000-000000000003",
+    login: "carol",
+    name: "Carol",
+  };
+  const dave: RestPerson = {
+    ...bob,
+    id: "0199c4d8-0000-7000-8000-000000000004",
+    login: "dave",
+    name: null,
+  };
+  const nothing = async () => ({ items: [], more: false });
+  const view = (item: RestTask) =>
+    renderToStaticMarkup(
+      <TaskView
+        task={item}
+        people={[alice, bob]}
+        tasks={[]}
+        decisions={[]}
+        taskHref={href}
+        onChange={() => undefined}
+        onMove={() => undefined}
+        onRaiseDecision={() => undefined}
+        onAnswer={() => undefined}
+      />,
+    );
+
+  it("shows the workers as pictures side by side with a count of the rest, and names them on the task", () => {
+    const crew = renderToStaticMarkup(<Workers workers={[alice, bob, carol, dave]} />);
+    expect(crew.match(/class="sc-avatar/g)).toHaveLength(3);
+    expect(crew).toContain("+1");
+    expect(crew).toContain('title="Alice Example, bob, Carol, dave"');
+    expect(renderToStaticMarkup(<Workers workers={[]} />)).toBe("");
+    const crewed = view(task({ workers: [alice, carol] }));
+    expect(crewed).toContain("<dt>Workers</dt>");
+    expect(crewed).toContain("Alice Example");
+    expect(crewed).toContain("Carol");
+    expect(view(task({ workers: [] }))).toContain("Nobody");
+  });
+
+  it("counts a task for each of its workers in who has what", () => {
+    const rows = workloadOf(
+      [
+        task({ workers: [alice, bob] }),
+        task({ id: "0199c4d8-0000-7000-8000-000000000011", workers: [] }),
+      ],
+      TODAY,
+    );
+    expect(rows.map((row) => [row.person?.login ?? null, row.open])).toEqual([
+      ["alice", 1],
+      ["bob", 1],
+      [null, 1],
+    ]);
+  });
+
+  it("offers the workers as chips with a way to add one, and finds the parent and the goal by searching", () => {
+    const parent = task({ id: "0199c4d8-0000-7000-8000-000000000012", number: 1, title: "Launch" });
+    const html = renderToStaticMarkup(
+      <TaskForm
+        people={[alice, bob, carol]}
+        task={task({ workers: [bob], parentId: parent.id })}
+        parent={parent}
+        findTasks={nothing}
+        findGoals={nothing}
+        onSubmit={() => undefined}
+      />,
+    );
+    // Bob is a chip; Alice and Carol are who can be added.
+    expect(html).toContain('aria-label="Remove: bob"');
+    expect(html).not.toContain('aria-label="Remove: Alice Example"');
+    expect(html).toMatch(/<select[^>]*aria-label="Add a worker"[^>]*>(?:(?!<\/select>).)*Carol/s);
+    // The parent stands in the field's place; the goal, none yet, is searched for.
+    expect(html).toContain("sc-picker-chosen");
+    expect(html).toContain("Launch");
+    expect(html).toContain('placeholder="Search by title"');
+    expect(html).not.toContain('placeholder="Search by number or title"');
+    // A parent the page has not read back yet is held, not dropped.
+    const held = renderToStaticMarkup(
+      <TaskForm
+        people={[]}
+        task={task({ parentId: parent.id })}
+        findTasks={nothing}
+        onSubmit={() => undefined}
+      />,
+    );
+    expect(held).toContain("sc-picker-chosen");
+    expect(held).toContain("\u2026");
+    // Without a search given, neither field is offered; a new task starts with nobody on it.
+    const bare = renderToStaticMarkup(<TaskForm people={[alice]} onSubmit={() => undefined} />);
+    expect(bare).not.toContain('role="combobox"');
+    expect(bare).not.toContain("Part of");
+    expect(bare).toContain("Nobody");
+  });
+
+  it("is a combobox that searches a page at a time, and a chip once something is chosen", () => {
+    const picker = (value: RestTask | undefined) =>
+      renderToStaticMarkup(
+        <Picker
+          value={value}
+          search={nothing}
+          keyOf={(item) => item.id}
+          render={(item) => <span>#{item.number}</span>}
+          label="Part of"
+          placeholder="Search"
+          onChange={() => undefined}
+        />,
+      );
+    const empty = picker(undefined);
+    expect(empty).toContain('role="combobox"');
+    expect(empty).toContain('aria-expanded="false"');
+    expect(empty).toContain('placeholder="Search"');
+    expect(empty).not.toContain('role="listbox"');
+    const chosen = picker(task({ number: 42 }));
+    expect(chosen).toContain("#42");
+    expect(chosen).toContain('aria-label="Remove"');
+    expect(chosen).not.toContain('role="combobox"');
   });
 });

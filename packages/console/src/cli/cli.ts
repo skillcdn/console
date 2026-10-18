@@ -986,6 +986,7 @@ const tasks: Command = async (args, io) => {
       category: { type: "string" },
       goal: { type: "string" },
       due: { type: "string" },
+      search: { type: "string" },
       archived: { type: "boolean" },
       ...PAGE_OPTIONS,
     },
@@ -994,7 +995,7 @@ const tasks: Command = async (args, io) => {
   const state = stateOf(text(values, "state"));
   if (on(values, "mine") && on(values, "unassigned")) {
     throw misuse(
-      "Say one: --mine for the tasks assigned to you, or --unassigned for those assigned to nobody",
+      "Say one: --mine for the tasks you work on, or --unassigned for those nobody works on",
     );
   }
   const page = pageOf(values);
@@ -1011,17 +1012,20 @@ const tasks: Command = async (args, io) => {
         : due === "week"
           ? addDays(today, 6)
           : (dayOf(io, due) ?? undefined);
-  const assignee = on(values, "mine")
-    ? ((await personIdOf(session, "me")) ?? undefined)
-    : undefined;
+  const worker = on(values, "mine") ? ((await personIdOf(session, "me")) ?? undefined) : undefined;
+  const search = text(values, "search")?.trim();
+  if (search === "") {
+    throw misuse("Say what to search for: console tasks --search <words>");
+  }
   const found = await project.tasks({
     ...(state === undefined ? {} : { state }),
     ...(on(values, "open") || due === "overdue" ? { open: true } : {}),
-    ...(assignee === undefined ? {} : { assignee }),
+    ...(worker === undefined ? {} : { worker }),
     ...(on(values, "unassigned") ? { unassigned: true } : {}),
     ...(text(values, "category") === undefined ? {} : { category: text(values, "category") }),
     ...(text(values, "goal") === undefined ? {} : { goal: text(values, "goal") }),
     ...(dueBy === undefined ? {} : { dueBy }),
+    ...(search === undefined ? {} : { q: search }),
     ...(on(values, "archived") ? { archived: true } : {}),
     ...page,
   });
@@ -1335,9 +1339,41 @@ const TASK_FIELDS: OptionSpec = {
   goal: { type: "string" },
   starts: { type: "string" },
   due: { type: "string" },
-  assignee: { type: "string" },
+  worker: { type: "string", multiple: true },
   parent: { type: "string" },
 };
+
+/**
+ * The people `--worker` names, each a login or `me`, given again or with commas between for
+ * several, in place of those there were; `none` alone for nobody; nothing when the flag was
+ * not given.
+ */
+async function workerIdsOf(
+  session: Session,
+  given: readonly string[],
+): Promise<string[] | undefined> {
+  if (given.length === 0) {
+    return undefined;
+  }
+  const names = given
+    .flatMap((value) => value.split(","))
+    .map((name) => name.trim())
+    .filter((name) => name.length > 0);
+  if (names.includes("none")) {
+    if (names.length > 1) {
+      throw misuse("Say --worker none alone, for nobody; or the logins of the workers.");
+    }
+    return [];
+  }
+  const ids: string[] = [];
+  for (const name of names) {
+    const id = await personIdOf(session, name);
+    if (typeof id === "string" && !ids.includes(id)) {
+      ids.push(id);
+    }
+  }
+  return ids;
+}
 
 /** What the flags say of a task's fields, as the API takes them; `none` clears a field. */
 async function taskFieldsOf(
@@ -1352,7 +1388,7 @@ async function taskFieldsOf(
   const goalId = orNone(text(values, "goal"));
   const startsOn = dayOf(io, text(values, "starts"), true);
   const dueOn = dayOf(io, text(values, "due"), true);
-  const assigneeId = await personIdOf(session, text(values, "assignee"));
+  const workerIds = await workerIdsOf(session, texts(values, "worker"));
   const parent = text(values, "parent");
   const parentId =
     parent === undefined ? undefined : parent === "none" ? null : (await project.task(parent)).id;
@@ -1363,7 +1399,7 @@ async function taskFieldsOf(
     ...(goalId === undefined ? {} : { goalId }),
     ...(startsOn === undefined ? {} : { startsOn }),
     ...(dueOn === undefined ? {} : { dueOn }),
-    ...(assigneeId === undefined ? {} : { assigneeId }),
+    ...(workerIds === undefined ? {} : { workerIds }),
     ...(parentId === undefined ? {} : { parentId }),
   };
 }
@@ -1415,7 +1451,7 @@ const editTask: Command = async (args, io) => {
   };
   if (Object.keys(patch).length === 0) {
     throw misuse(
-      "Say what to change: --title, --body, --state, --priority, --category, --goal, --starts, --due, --assignee or --parent; none clears a field.",
+      "Say what to change: --title, --body, --state, --priority, --category, --goal, --starts, --due, --worker or --parent; none clears a field.",
     );
   }
   const found = await project.task(ref);
@@ -1956,23 +1992,36 @@ const restore: Command = async (args, io) => {
 const goals: Command = async (args, io) => {
   const { values } = parse(
     args,
-    { category: { type: "string" }, state: { type: "string" } },
+    {
+      category: { type: "string" },
+      state: { type: "string" },
+      search: { type: "string" },
+      ...PAGE_OPTIONS,
+    },
     false,
   );
   const state = goalStateOf(text(values, "state"));
   const category = text(values, "category");
+  const search = text(values, "search")?.trim();
+  if (search === "") {
+    throw misuse("Say what to search for: console goals --search <words>");
+  }
+  const page = pageOf(values);
   const session = await open(io, values);
   const project = await session.project();
   const found = await project.goals({
     ...(state === undefined ? {} : { state }),
     ...(category === undefined ? {} : { category }),
+    ...(search === undefined ? {} : { q: search }),
+    ...page,
   });
   answer(io, session, found, () =>
     found.items.length === 0
-      ? state === undefined && category === undefined
+      ? state === undefined && category === undefined && search === undefined
         ? "No goals. An owner sets one: console goal new <title> --due <day>"
         : "No goal matches."
-      : found.items.map(formatGoalLine).join("\n"),
+      : found.items.map(formatGoalLine).join("\n") +
+        formatMore(found.more, page.limit, page.offset),
   );
   return EXIT.ok;
 };

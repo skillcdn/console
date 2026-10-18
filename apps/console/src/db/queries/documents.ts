@@ -16,6 +16,7 @@ import {
 } from "../schema.js";
 import { type Actor, recordEvent, type Scope } from "./events.js";
 import { type PersonRecord, personColumns, toPerson } from "./people.js";
+import { escapeLike } from "./search.js";
 
 // The documents of a project (ADR-0009): pages of Markdown under a path, each write a version,
 // the links a text makes recorded both ways, archived rather than deleted, with files attached.
@@ -190,7 +191,6 @@ const eventScope = (scope: DocumentScope) => ({
 });
 
 /** `%`, `_` and `\` as themselves in a `like` pattern. Paths carry none; words may. */
-const escapeLike = (value: string): string => value.replace(/[\\%_]/g, (char) => `\\${char}`);
 
 /**
  * A folder's pages, by title, and the folders in it, by name: what the paths say, since a

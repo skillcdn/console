@@ -600,6 +600,28 @@ function TaskPage(props: {
     (fetched !== undefined && (fetched.id === route.id || fetched.number === route.number)
       ? fetched
       : undefined);
+  // The task this one is part of: among the board's, or asked for by itself when it was put away.
+  const parentId = task?.parentId ?? null;
+  const parentOnBoard =
+    parentId === null ? undefined : data.tasks.find((candidate) => candidate.id === parentId);
+  const [parentFetched, setParentFetched] = useState<RestTask | undefined>(undefined);
+  const parentWanted =
+    parentId !== null && parentOnBoard === undefined && data.projectLoaded ? parentId : undefined;
+  useEffect(() => {
+    if (parentWanted === undefined) {
+      return;
+    }
+    const controller = new AbortController();
+    fetchTask(parentWanted, controller.signal)
+      .then((found) => {
+        if (!controller.signal.aborted) {
+          setParentFetched(found);
+        }
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [parentWanted, fetchTask]);
+  const parent = parentOnBoard ?? (parentFetched?.id === parentId ? parentFetched : undefined);
   const [history, setHistory] = useState<readonly RestEvent[] | undefined>(undefined);
   const [comments, setComments] = useState<readonly RestComment[] | undefined>(undefined);
   const { taskHistory, taskComments } = data.actions;
@@ -653,6 +675,9 @@ function TaskPage(props: {
       task={task}
       people={data.people.filter(inWorkspace)}
       tasks={data.tasks}
+      parent={parent}
+      findTasks={data.actions.findTasks}
+      findGoals={data.actions.findGoals}
       decisions={data.decisions}
       runs={data.runs}
       comments={comments}
@@ -805,9 +830,9 @@ function ProjectPage(props: {
         <section className="sc-panel sc-panel-form" aria-label={words.task.newAria}>
           <TaskForm
             people={data.people.filter(inWorkspace)}
-            parents={data.tasks}
+            findTasks={data.actions.findTasks}
             categories={data.categories}
-            goals={data.goals}
+            findGoals={data.actions.findGoals}
             busy={busy}
             onSubmit={(input: RestTaskInput) =>
               void act(async () => {
@@ -1796,7 +1821,7 @@ function WorkspaceSettingsPage(props: {
 }
 
 /** A file a person chose, as the client sends it: its name, its bytes and the type the browser says. */
-/** Whether a person is in: who a picker of assignees and of members offers (ADR-0022). */
+/** Whether a person is in: who a picker of workers and of members offers (ADR-0022). */
 const inWorkspace = (person: { readonly status: "active" | "deactivated" }): boolean =>
   person.status === "active";
 

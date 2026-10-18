@@ -39,6 +39,7 @@ import {
   MAX_TOKEN_DAYS,
   MAX_TOKEN_NAME_LENGTH,
   MAX_URL_LENGTH,
+  MAX_WORKERS,
   MIN_OPTIONS,
 } from "./limits.js";
 import { hasForbiddenCodePoint } from "./text.js";
@@ -480,8 +481,10 @@ export const restTaskSchema = z.object({
   body: z.string(),
   state: z.enum(TASK_STATES),
   priority: z.enum(TASK_PRIORITIES),
+  /** Whose task it is: one person, whoever wrote it. */
   owner: restPersonSchema,
-  assignee: z.nullable(restPersonSchema),
+  /** The people at work on it (ADR-0037), in the order they came to it; `[]` while nobody is. */
+  workers: z.array(restPersonSchema),
   /** The task this one is part of, or `null`. */
   parentId: z.nullable(uuid),
   /** The category the task is sorted into, as the workspace keeps it, or `null`. */
@@ -530,7 +533,8 @@ export const restTaskInputSchema = z.object({
   body: z.optional(body),
   state: z.optional(z.enum(TASK_STATES)),
   priority: z.optional(z.enum(TASK_PRIORITIES)),
-  assigneeId: z.optional(z.nullable(uuid)),
+  /** The people to be at work on it, each one who may work in the project, in place of those there were; `[]` for nobody. */
+  workerIds: z.optional(z.array(uuid).check(z.maxLength(MAX_WORKERS))),
   parentId: z.optional(z.nullable(uuid)),
   /** The key of a category of the workspace, or `null` for none. */
   category: z.optional(z.nullable(categoryKey)),
@@ -549,7 +553,7 @@ export const restTaskPatchSchema = z.object({
   body: z.optional(body),
   state: z.optional(z.enum(TASK_STATES)),
   priority: z.optional(z.enum(TASK_PRIORITIES)),
-  assigneeId: z.optional(z.nullable(uuid)),
+  workerIds: z.optional(z.array(uuid).check(z.maxLength(MAX_WORKERS))),
   parentId: z.optional(z.nullable(uuid)),
   category: z.optional(z.nullable(categoryKey)),
   goalId: z.optional(z.nullable(uuid)),
@@ -596,8 +600,8 @@ export const restGoalSchema = z.object({
 });
 export type RestGoal = z.infer<typeof restGoalSchema>;
 
-/** `GET /api/v1/projects/<key>/goals`: the roadmap, the active goals first. */
-export const restGoalsSchema = z.object({ items: z.array(restGoalSchema) });
+/** `GET /api/v1/projects/<key>/goals`: a page of the roadmap, the active goals first, and whether there is more after it. */
+export const restGoalsSchema = z.object({ items: z.array(restGoalSchema), more: z.boolean() });
 export type RestGoals = z.infer<typeof restGoalsSchema>;
 
 /** What `POST /api/v1/projects/<key>/goals` is sent: the title, and the rest with defaults. */
@@ -686,8 +690,8 @@ const projectRef = z.object({
 
 /**
  * `GET /api/v1/work`: what is on the asker's plate across the projects they may see (ADR-0019):
- * the open tasks assigned to them, and the decisions that wait for a person, each with its
- * project; and, for the week on the plate, `closed`, the tasks assigned to them that are done
+ * the open tasks they work on, and the decisions that wait for a person, each with its
+ * project; and, for the week on the plate, `closed`, the tasks they work on that are done
  * or dropped and not yet put away. Left out by a console older than it.
  */
 export const restWorkSchema = z.object({

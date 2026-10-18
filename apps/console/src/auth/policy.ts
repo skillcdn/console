@@ -44,12 +44,13 @@ export function projectVisibleTo(person: PersonRecord): SQL {
 }
 
 /**
- * Whether `personId` may work in `projectId`, which is what an assignee of a task in it must
+ * Whether `person` may work in `projectId`, which is what a worker of a task in it must
  * satisfy: an active person of the workspace who is a member of the project, or an administrator.
- * Nobody out of the workspace (ADR-0022).
+ * Nobody out of the workspace (ADR-0022). Given a column, it is one of an alias of `people`,
+ * since the condition reads `people` itself.
  */
-export function mayWorkIn(projectId: string, personId: string): SQL {
-  return sql`exists (select 1 from ${people} where ${people.id} = ${personId} and ${people.status} = 'active') and exists (select 1 from ${projects} where ${projects.id} = ${projectId} and (${memberOfProject(personId)} or exists (select 1 from ${people} where ${people.id} = ${personId} and ${people.role} = 'admin')))`;
+export function mayWorkIn(projectId: string, person: PersonRef): SQL {
+  return sql`exists (select 1 from ${people} where ${people.id} = ${person} and ${people.status} = 'active') and exists (select 1 from ${projects} where ${projects.id} = ${projectId} and (${memberOfProject(person)} or exists (select 1 from ${people} where ${people.id} = ${person} and ${people.role} = 'admin')))`;
 }
 
 /**

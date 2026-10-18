@@ -9,6 +9,8 @@ export const MAX_QUESTION_LENGTH = 500;
 export const MAX_BODY_LENGTH = 20_000;
 /** The links of a task: a repository, a pull request, a document. */
 export const MAX_LINKS = 20;
+/** How many people may be at work on one task at a time (ADR-0037): a crew, not a mailing list. */
+export const MAX_WORKERS = 20;
 export const MAX_LINK_LABEL_LENGTH = 120;
 export const MAX_URL_LENGTH = 2048;
 /** The options of a decision, and how a person words each. */

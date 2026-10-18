@@ -147,10 +147,14 @@ export function formatMore(more: boolean, limit: number, offset: number): string
   return more ? `\n... more: --offset ${offset + limit}` : "";
 }
 
+/** The logins of the people at work on a task, in the order they came to it. */
+const logins = (people: readonly RestPerson[]): string =>
+  people.map((person) => person.login).join(", ");
+
 export function formatTaskLine(task: RestTask): string {
   const notes = [`owner ${task.owner.login}`];
-  if (task.assignee !== null) {
-    notes.push(`assigned to ${task.assignee.login}`);
+  if (task.workers.length > 0) {
+    notes.push(`workers ${logins(task.workers)}`);
   }
   if (task.category !== null) {
     notes.push(task.category.key);
@@ -199,7 +203,7 @@ export function formatTask(
 ): string {
   const lines = [
     `#${task.number} ${task.title}`,
-    `state: ${task.state}  priority: ${task.priority}  owner: ${task.owner.login}  assignee: ${task.assignee?.login ?? "nobody"}`,
+    `state: ${task.state}  priority: ${task.priority}  owner: ${task.owner.login}  workers: ${task.workers.length === 0 ? "nobody" : logins(task.workers)}`,
     `id: ${task.id}${task.parentId === null ? "" : `  part of: ${task.parentId}`}`,
     ...scheduleLines(task),
   ];
@@ -375,9 +379,9 @@ export function formatCategoryLine(category: RestCategory): string {
 export function formatWork(work: RestWork): string {
   const lines: string[] = [];
   if (work.tasks.length === 0) {
-    lines.push("No open task is assigned to you.");
+    lines.push("No open task is on your plate.");
   } else {
-    lines.push("tasks assigned to you:");
+    lines.push("tasks you work on:");
     for (const { project, task } of work.tasks) {
       lines.push(`  ${project.key}  ${formatTaskLine(task)}`);
     }
@@ -392,10 +396,10 @@ export function formatWork(work: RestWork): string {
 /** Another person's plate: their open tasks, each with its project; no decisions, which wait for anyone. */
 export function formatPersonWork(person: RestPerson, work: RestPersonWork): string {
   if (work.tasks.length === 0) {
-    return `No open task is assigned to ${person.login}.`;
+    return `No open task is on ${person.login}'s plate.`;
   }
   return [
-    `tasks assigned to ${person.login}:`,
+    `tasks ${person.login} works on:`,
     ...work.tasks.map(({ project, task }) => `  ${project.key}  ${formatTaskLine(task)}`),
   ].join("\n");
 }

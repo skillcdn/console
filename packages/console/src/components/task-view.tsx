@@ -21,7 +21,7 @@ import { type CommentDraft, TaskThread } from "./comments.js";
 import { DecisionForm } from "./decision-form.js";
 import { EventFeed } from "./event-feed.js";
 import { Markdown } from "./markdown.js";
-import { TaskForm } from "./task-form.js";
+import { type GoalSearch, TaskForm, type TaskSearch } from "./task-form.js";
 import {
   Badge,
   Button,
@@ -44,8 +44,13 @@ import {
 export interface TaskViewProps {
   readonly task: RestTask;
   readonly people: readonly RestPerson[];
-  /** Every task of the board, for the breakdown and for what this one may be part of. */
+  /** The current tasks of the board, for the breakdown and for naming what this one is part of. */
   readonly tasks: readonly RestTask[];
+  /** The task this one is part of, when the page has it: one put away is not among `tasks`. Left out, it is looked for among them. */
+  readonly parent?: RestTask | undefined;
+  /** What words find among the tasks and the open goals of the project, for the form (ADR-0037); left out, the form offers neither. */
+  readonly findTasks?: TaskSearch | undefined;
+  readonly findGoals?: GoalSearch | undefined;
   readonly decisions: readonly RestDecision[];
   /** The runs of the board, or of this task; the ones on this task are shown. */
   readonly runs?: readonly RestRun[] | undefined;
@@ -97,9 +102,10 @@ export function TaskView(props: TaskViewProps) {
   const { tag } = useLanguage();
   const { task } = props;
   const parent =
-    task.parentId === null
+    props.parent ??
+    (task.parentId === null
       ? undefined
-      : props.tasks.find((candidate) => candidate.id === task.parentId);
+      : props.tasks.find((candidate) => candidate.id === task.parentId));
   const subtasks = props.tasks.filter((candidate) => candidate.parentId === task.id);
   const about = props.decisions.filter((decision) => decision.taskId === task.id);
   const runs = (props.runs ?? []).filter((run) => run.taskId === task.id);
@@ -119,9 +125,11 @@ export function TaskView(props: TaskViewProps) {
         <TaskForm
           people={props.people}
           task={task}
-          parents={props.tasks}
+          parent={parent}
+          findTasks={props.findTasks}
           categories={props.categories}
-          goals={props.goals}
+          goal={goal}
+          findGoals={props.findGoals}
           busy={props.busy}
           error={props.error}
           onSubmit={(input) => props.onChange(task, input)}
@@ -289,12 +297,18 @@ export function TaskView(props: TaskViewProps) {
               </dd>
             </div>
             <div>
-              <dt>{words.task.assignee}</dt>
+              <dt>{words.task.workers}</dt>
               <dd>
-                {task.assignee === null ? (
+                {task.workers.length === 0 ? (
                   <span className="sc-muted">{words.common.nobody}</span>
                 ) : (
-                  <PersonChip person={task.assignee} />
+                  <ul className="sc-worker-list">
+                    {task.workers.map((worker) => (
+                      <li key={worker.id}>
+                        <PersonChip person={worker} />
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </dd>
             </div>

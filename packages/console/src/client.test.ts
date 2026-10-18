@@ -84,7 +84,7 @@ describe("createClient", () => {
       state: "ready",
       priority: "normal",
       owner: PERSON,
-      assignee: null,
+      workers: [],
       parentId: null,
       category: null,
       goalId: null,
@@ -101,7 +101,7 @@ describe("createClient", () => {
     };
     const { send, calls } = fakeFetch({
       [`PATCH /api/v1/projects/web/tasks/${task.id}`]: { body: { ...task, state: "done" } },
-      "GET /api/v1/projects/web/tasks?archived=false&open=true&category=engineering&assignee=p&dueBy=2026-10-20":
+      "GET /api/v1/projects/web/tasks?archived=false&open=true&category=engineering&worker=p&dueBy=2026-10-20&q=parser":
         {
           body: { more: false, items: [task] },
         },
@@ -119,9 +119,10 @@ describe("createClient", () => {
     const narrowed = await client.project("web").tasks({
       open: true,
       category: "engineering",
-      assignee: "p",
+      worker: "p",
       dueBy: "2026-10-20",
       archived: false,
+      q: "parser",
     });
     expect(narrowed.items).toHaveLength(1);
     expect((await client.categories()).items).toEqual([]);

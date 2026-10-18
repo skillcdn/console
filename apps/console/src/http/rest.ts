@@ -203,9 +203,9 @@ import {
   createTask,
   findTaskByNumber,
   getTask,
-  listClosedTasksAssignedTo,
+  listClosedTasksOf,
   listTasks,
-  listTasksAssignedTo,
+  listTasksOf,
   restoreTask,
   TaskError,
   type TaskRecord,
@@ -388,9 +388,10 @@ const tasksQuery = z.object({
   archived: z.enum(["true", "false"]).optional(),
   category: z.string().max(MAX_CATEGORY_KEY_LENGTH).regex(CATEGORY_KEY).optional(),
   goal: z.string().regex(UUID).optional(),
-  assignee: z.string().regex(UUID).optional(),
+  worker: z.string().regex(UUID).optional(),
   unassigned: z.enum(["true", "false"]).optional(),
   dueBy: z.string().regex(DAY).optional(),
+  q: z.string().trim().min(1).max(MAX_SEARCH_LENGTH).optional(),
   ...page,
 });
 const decisionsQuery = z.object({
@@ -400,7 +401,10 @@ const decisionsQuery = z.object({
 });
 const goalsQuery = z.object({
   state: z.enum(GOAL_STATES).optional(),
+  open: z.enum(["true", "false"]).optional(),
   category: z.string().max(MAX_CATEGORY_KEY_LENGTH).regex(CATEGORY_KEY).optional(),
+  q: z.string().trim().min(1).max(MAX_SEARCH_LENGTH).optional(),
+  ...page,
 });
 const decisionQuery = z.object({
   wait: z.coerce.number().int().min(0).max(MAX_WAIT_SECONDS).default(0),
@@ -1321,8 +1325,8 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
     const [projects, tasks, closed, decisions] = await Promise.all([
       listProjectsFor(database, person.workspaceId, person),
-      listTasksAssignedTo(database, person.workspaceId, person, person, LIST_LIMIT),
-      listClosedTasksAssignedTo(database, person.workspaceId, person, person, LIST_LIMIT),
+      listTasksOf(database, person.workspaceId, person, person, LIST_LIMIT),
+      listClosedTasksOf(database, person.workspaceId, person, person, LIST_LIMIT),
       listWaitingDecisionsFor(database, person.workspaceId, person, LIST_LIMIT),
     ]);
     const projectOf = projectRefsOf(projects);
@@ -1368,8 +1372,8 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
     const [projects, tasks, closed] = await Promise.all([
       listProjectsFor(database, asker.workspaceId, asker),
-      listTasksAssignedTo(database, asker.workspaceId, subject, asker, LIST_LIMIT),
-      listClosedTasksAssignedTo(database, asker.workspaceId, subject, asker, LIST_LIMIT),
+      listTasksOf(database, asker.workspaceId, subject, asker, LIST_LIMIT),
+      listClosedTasksOf(database, asker.workspaceId, subject, asker, LIST_LIMIT),
     ]);
     const projectOf = projectRefsOf(projects);
     const withProject = (task: TaskRecord) => {
@@ -1905,9 +1909,10 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       open: query.data.open === undefined ? undefined : query.data.open === "true",
       category: query.data.category,
       goalId: query.data.goal,
-      assigneeId: query.data.assignee,
+      workerId: query.data.worker,
       unassigned: query.data.unassigned === "true",
       dueBy: query.data.dueBy,
+      query: query.data.q,
       archived: query.data.archived === "true",
       limit: query.data.limit,
       offset: query.data.offset,
@@ -2505,14 +2510,15 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     if (found instanceof Response) {
       return found;
     }
-    const body: RestGoals = {
-      items: (
-        await listGoals(database, found.scope, LIST_LIMIT, {
-          state: query.data.state,
-          category: query.data.category,
-        })
-      ).map(restGoal),
-    };
+    const page = await listGoals(database, found.scope, {
+      state: query.data.state,
+      open: query.data.open === undefined ? undefined : query.data.open === "true",
+      category: query.data.category,
+      query: query.data.q,
+      limit: query.data.limit,
+      offset: query.data.offset,
+    });
+    const body: RestGoals = { items: page.items.map(restGoal), more: page.more };
     return c.json(body);
   });
 

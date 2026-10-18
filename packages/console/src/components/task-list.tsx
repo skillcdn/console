@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type { RestTask } from "../api.js";
 import { useWords } from "../i18n/index.js";
 import { ShowMore, usePaged } from "./paged.js";
-import { Avatar, Badge, CategoryBadge, DueBadge, StateBadge } from "./ui.js";
+import { Badge, CategoryBadge, DueBadge, StateBadge, Workers } from "./ui.js";
 
 // A list of tasks as rows, where the board's columns are not the point: the calendar's late
 // and unscheduled tasks, a goal's tasks, a person's own work. Each row says what a card says,
@@ -52,7 +52,7 @@ export function TaskList(props: TaskListProps) {
                 {task.dueOn !== null && (
                   <DueBadge dueOn={task.dueOn} state={task.state} today={props.today} />
                 )}
-                {task.assignee !== null && <Avatar person={task.assignee} size="sm" />}
+                <Workers workers={task.workers} size="sm" />
               </span>
             </li>
           );

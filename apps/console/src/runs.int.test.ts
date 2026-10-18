@@ -125,7 +125,7 @@ describe("runs", () => {
     expect(run.person.login).toBe("Alice");
     const atWork = await readTask(task.id);
     expect(atWork).toMatchObject({ state: "in_progress", openRuns: 1 });
-    expect(atWork.assignee?.login).toBe("Alice");
+    expect(atWork.workers.map((worker) => worker.login)).toEqual(["Alice"]);
     expect(run.lastHeardAt).toBe(run.startedAt);
 
     // It reports and hands in; a report says something, and only https is handed in.
@@ -599,5 +599,21 @@ describe("a run open on a task", () => {
     );
     expect(rest.items.map((run) => run.id)).toEqual([first.id]);
     expect(rest.more).toBe(false);
+  });
+});
+
+describe("the workers of a task taken (ADR-0037)", () => {
+  it("puts the person beside the workers the task had, each once", async () => {
+    const bobs = await writeTask(bob, { title: "Whose id this learns" });
+    const crewed = await writeTask(bob, { title: "Crewed by Bob", workerIds: [bobs.owner.id] });
+    expect(crewed.workers.map((worker) => worker.login)).toEqual(["bob"]);
+    const run = await startRun(aliceToken, crewed.id);
+    expect(run.taskId).toBe(crewed.id);
+    const taken = await readTask(crewed.id);
+    expect(taken.state).toBe("in_progress");
+    expect(taken.workers.map((worker) => worker.login).sort()).toEqual(["Alice", "bob"]);
+    // Taken again by the same person, nobody is put on it twice.
+    await startRun(aliceToken, crewed.id);
+    expect((await readTask(crewed.id)).workers).toHaveLength(2);
   });
 });

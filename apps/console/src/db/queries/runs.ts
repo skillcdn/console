@@ -6,7 +6,7 @@ import { type Database, drizzleOf, type Transaction } from "../client.js";
 import { artifacts, decisions, people, reports, runs, tasks } from "../schema.js";
 import { type Actor, recordEvent, type Scope } from "./events.js";
 import { type PersonRecord, personColumns, toPerson } from "./people.js";
-import { updateTaskIn } from "./tasks.js";
+import { updateTaskIn, workerIdsOf } from "./tasks.js";
 
 // One agent at work on one task for one person: started when the agent takes the task, grown
 // by what it reports and hands in, waiting while a decision it raised waits, and over when the
@@ -377,11 +377,12 @@ export async function startRun(
       data: { number: task.number, title: task.title, agent },
       now,
     });
+    // The person the agent works for is at work on the task now, beside whoever was already.
     await updateTaskIn(tx, {
       scope,
       actor: runner,
       taskId,
-      patch: { state: "in_progress", assigneeId: actor.id },
+      patch: { state: "in_progress", workerIds: [...(await workerIdsOf(tx, taskId)), actor.id] },
       now,
     });
     const written = await readRun(tx, scope, inserted.id);

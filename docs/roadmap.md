@@ -284,6 +284,18 @@ Goal: a console deployed by an agent for an organization with a website comes up
 - [x] The board's name by convention (2026-10-18): the organization or the person the console is for, then Console, as SkillCDN Console is named; deploying-a-console (1.4) suggests it from the request or the website and has the person confirm it, the deploy README and `.env.example` say the same of `WORKSPACE_NAME`, and the console calls itself by that name at SkillCDN, Console once.
 - [ ] Tried on a deployment with a website, and what the first run found folded in: waits for the next deployment.
 
+## Milestone 28, the workers of a task, and what a form finds by search (2026-10-18)
+
+Goal: a task at work by several people, as the first weeks on the board had it, and a form that costs the same whatever the board holds: the one assignee becomes any number of workers beside the one owner, and the task a new one is part of and the goal it works towards are found by searching, a page at a time, instead of being offered whole ([ADR-0037](adr/0037-a-task-has-one-owner-and-any-number-of-workers-and-a-parent-or-a-goal-is-found-by-search.md)).
+
+- [x] The decision (2026-10-18, [ADR-0037](adr/0037-a-task-has-one-owner-and-any-number-of-workers-and-a-parent-or-a-goal-is-found-by-search.md)): one owner and any number of workers, taken whole and checked as newcomers; what is set on a task found by the words of its title, a page at a time; the pages still reading the current tasks whole; the assignee's column kept one release.
+- [x] The data model (2026-10-18): `task_workers`, each assignee copied into it; migration 0025.
+- [x] The REST API (2026-10-18): `workers` on a task and `workerIds` on its input, `worker=`, `unassigned=` and `q=` on the listing, `task.invalid_worker`, `workers` among the fields of `task.updated`, a run taking a task putting its person among the workers; the roadmap paged with `more` and narrowed by `open=` and `q=` ([specs/rest.md](specs/rest.md)).
+- [x] The command (2026-10-18): `console tasks --search <words>`, `console goals --search <words> [--limit <n>] [--offset <n>]`, `console task new|edit --worker <login|me|none>` repeated or with commas; the workers on a task's line and in full ([specs/cli.md](specs/cli.md)).
+- [x] The default UI (2026-10-18): the picker, which searches a page at a time and holds what is chosen as a chip, for the task a task is part of and the goal it works towards; the workers as chips on the form, as pictures side by side on a card and a row, counted each in who has what; the words of the pages, 작업자 for 배정.
+- [x] The skill (2026-10-18): working-the-board (1.20) finds a task by the words of its title with `--search`, and its terms say what an owner and a worker are.
+- [ ] The column `assignee_id` and its index dropped, in the release after this one (expand, then contract).
+
 ## After milestone 16
 
 Nothing is chosen yet; the list below is where the next milestone comes from. Left open by milestone 9: whether the board should end a run not heard from for a long while itself ([ADR-0020](adr/0020-the-console-does-not-claim-an-agent-is-at-work-a-run-says-when-it-was-last-heard-from-and-a-new-run-takes-over.md)); a roadmap across projects.

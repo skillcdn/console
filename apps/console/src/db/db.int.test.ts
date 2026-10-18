@@ -256,7 +256,7 @@ describe("tasks", () => {
         body: "# Plan",
         state: "ready",
         priority: "high",
-        assigneeId: alice.id,
+        workerIds: [alice.id],
         links: [{ url: "https://github.com/acme/app/pull/1", label: null }],
       },
       now: minutes(11),
@@ -268,7 +268,7 @@ describe("tasks", () => {
       state: "idea",
       priority: "normal",
       owner: alice,
-      assignee: undefined,
+      workers: [],
       parentId: undefined,
       links: [],
       openDecisions: 0,
@@ -278,7 +278,7 @@ describe("tasks", () => {
       state: "ready",
       priority: "high",
       owner: bob,
-      assignee: alice,
+      workers: [alice],
       links: [{ url: "https://github.com/acme/app/pull/1", label: null }],
     });
     expect(await getTask(database, scope, second.id)).toEqual(second);
@@ -297,15 +297,15 @@ describe("tasks", () => {
     expect(secondPage.more).toBe(false);
   });
 
-  it("refuse an assignee who is not of the workspace, and a parent that is not a task", async () => {
+  it("refuse a worker who is not of the workspace, and a parent that is not a task", async () => {
     await expect(
       createTask(database, {
         scope,
         actor: alice,
-        task: { title: "x", assigneeId: "0199c4d8-0000-7000-8000-000000000099" },
+        task: { title: "x", workerIds: ["0199c4d8-0000-7000-8000-000000000099"] },
         now: T0,
       }),
-    ).rejects.toMatchObject({ code: "task.invalid_assignee" });
+    ).rejects.toMatchObject({ code: "task.invalid_worker" });
     await expect(
       createTask(database, {
         scope,
@@ -327,14 +327,14 @@ describe("tasks", () => {
       createTask(database, {
         scope: inOwn,
         actor: alice,
-        task: { title: "x", assigneeId: bob.id },
+        task: { title: "x", workerIds: [bob.id] },
         now: T0,
       }),
-    ).rejects.toMatchObject({ code: "task.invalid_assignee" });
+    ).rejects.toMatchObject({ code: "task.invalid_worker" });
     const first = await createTask(database, {
       scope: inOwn,
       actor: alice,
-      task: { title: "The first of its own", assigneeId: alice.id },
+      task: { title: "The first of its own", workerIds: [alice.id] },
       now: T0,
     });
     expect(first.number).toBe(1);
@@ -365,10 +365,10 @@ describe("tasks", () => {
       scope,
       actor: bob,
       taskId: task.id,
-      patch: { title: "Review the design, again", assigneeId: bob.id, priority: "urgent" },
+      patch: { title: "Review the design, again", workerIds: [bob.id], priority: "urgent" },
       now: minutes(22),
     });
-    expect(edited).toMatchObject({ title: "Review the design, again", assignee: bob });
+    expect(edited).toMatchObject({ title: "Review the design, again", workers: [bob] });
 
     const same = await updateTask(database, {
       scope,
@@ -390,7 +390,7 @@ describe("tasks", () => {
         {
           number: task.number,
           title: "Review the design, again",
-          fields: ["title", "priority", "assigneeId"],
+          fields: ["title", "priority", "workers"],
         },
       ],
     ]);
@@ -905,7 +905,7 @@ describe("runs", () => {
     ]);
     const taken = await getTask(database, scope, task.id);
     expect(taken).toMatchObject({ state: "in_progress", openRuns: 1 });
-    expect(taken?.assignee?.id).toBe(alice.id);
+    expect(taken?.workers.map((worker) => worker.id)).toEqual([alice.id]);
     expect(run.lastHeardAt).toEqual(minutes(101));
     // The board cannot know whether Codex still runs: a second take takes the task over, and
     // the first run ends as abandoned, with a word that says so and an event that says who.
@@ -1200,11 +1200,9 @@ describe("goals", () => {
       now: minutes(62),
     });
     // The active first, the sooner due first among them, and a goal with no day last.
-    expect((await listGoals(database, scope, 10)).map((goal) => goal.title)).toEqual([
-      "Ship v1",
-      "Hire",
-      "Launch v2",
-    ]);
+    expect(
+      (await listGoals(database, scope, { limit: 10 })).items.map((goal) => goal.title),
+    ).toEqual(["Ship v1", "Hire", "Launch v2"]);
     for (const [title, state] of [
       ["Define it", "done"],
       ["Build it", "in_progress"],
@@ -1312,11 +1310,13 @@ describe("goals", () => {
       }),
     ).rejects.toMatchObject({ code: "goal.invalid_dates" });
     expect(
-      (await listGoals(database, scope, 10, { category: "engineering" })).map((goal) => goal.id),
+      (await listGoals(database, scope, { limit: 10, category: "engineering" })).items.map(
+        (goal) => goal.id,
+      ),
     ).toEqual([planned.id]);
-    expect(await listGoals(database, scope, 10, { state: "planned", category: "design" })).toEqual(
-      [],
-    );
+    expect(
+      (await listGoals(database, scope, { limit: 10, state: "planned", category: "design" })).items,
+    ).toEqual([]);
     const before = await latestEventId(database, workspaceId);
     const moved = await updateGoal(database, {
       scope,

@@ -502,7 +502,7 @@ describe("the command line", () => {
       "2026-10-20",
       "--due",
       "2026-10-24",
-      "--assignee",
+      "--worker",
       "me",
     ]);
     expect(written.code, written.err).toBe(EXIT.ok);
@@ -511,7 +511,7 @@ describe("the command line", () => {
     expect(shown.out).toContain(
       `category: engineering  goal: ${goalId}  starts: 2026-10-20  due: 2026-10-24`,
     );
-    expect(shown.out).toContain("assignee: Alice");
+    expect(shown.out).toContain("workers: Alice");
     const narrowed = await console_(["tasks", "--category", "engineering", "--mine"]);
     expect(narrowed.out).toContain(`#${number}`);
     expect(narrowed.out).toContain("engineering; due 2026-10-24");

@@ -162,9 +162,9 @@ const toListing = (row: {
   createdAt: row.createdAt,
 });
 
-/** Tables joined for the owner and the assignee of a task, the raiser of a decision. */
+/** Tables joined for the owner and the workers of a task, the raiser of a decision. */
 export const owners = alias(people, "owners");
-export const assignees = alias(people, "assignees");
+export const workers = alias(people, "workers");
 export const raisers = alias(people, "raisers");
 export const answerers = alias(people, "answerers");
 export const actors = alias(people, "actors");

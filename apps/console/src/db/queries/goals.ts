@@ -1,10 +1,16 @@
-import type { CategoryColor, GoalState, RestTaskCounts } from "@skillcdn/console/api";
-import { and, eq, type SQL, sql } from "drizzle-orm";
+import {
+  type CategoryColor,
+  type GoalState,
+  OPEN_GOAL_STATES,
+  type RestTaskCounts,
+} from "@skillcdn/console/api";
+import { and, asc, eq, inArray, notInArray, type SQL, sql } from "drizzle-orm";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
 import { categories, goals, tasks } from "../schema.js";
 import { type Actor, recordEvent, type Scope } from "./events.js";
 import { type PersonRecord, personColumns, raisers, toPerson } from "./people.js";
+import { titleMatches } from "./search.js";
 
 // The roadmap of a project (ADR-0019): its goals, what it works towards and by when. A goal is
 // planned in days as a task is, a start and a target, and sorted into a category of the
@@ -60,11 +66,17 @@ export interface GoalInput {
 /** Only what changes; a key that is absent leaves the field as it is. */
 export type GoalPatch = Partial<GoalInput>;
 
-/** What the roadmap is narrowed by: the goals in one state, or sorted into one category. */
+/** What the roadmap is narrowed by, and which page of it, as the API takes it. */
 export interface GoalFilter {
   readonly state?: GoalState | undefined;
+  /** True for the goals planned or active; false for the reached and the dropped. */
+  readonly open?: boolean | undefined;
   /** The key of a category. */
   readonly category?: string | undefined;
+  /** Words of the title, each found in it whatever the case. */
+  readonly query?: string | undefined;
+  readonly limit: number;
+  readonly offset?: number | undefined;
 }
 
 type Handle = Transaction | ReturnType<typeof drizzleOf>;
@@ -105,6 +117,13 @@ const STATE_RANK: Readonly<Record<GoalState, number>> = {
   done: 2,
   dropped: 3,
 };
+
+/** That order, for the database to sort a page by; the states are the package's literals, never input. */
+const stateRank = sql`case ${goals.state} ${sql.raw(
+  Object.entries(STATE_RANK)
+    .map(([state, rank]) => `when '${state}' then ${rank}`)
+    .join(" "),
+)} else 9 end`;
 
 type GoalRow = Awaited<ReturnType<typeof selectGoals>>[number];
 
@@ -163,29 +182,33 @@ export function getGoal(
   return readGoal(drizzleOf(database), scope, goalId);
 }
 
-/** The roadmap, or what the filter keeps of it: the active goals first, then the planned, the reached and the dropped; the sooner due first within each, then the older. */
+/**
+ * A page of the roadmap, or of what the filter keeps of it: the active goals first, then the
+ * planned, the reached and the dropped; the sooner due first within each, then the older; and
+ * whether there is more after the page.
+ */
 export async function listGoals(
   database: Database,
   scope: Scope,
-  limit: number,
-  filter: GoalFilter = {},
-): Promise<GoalRecord[]> {
+  filter: GoalFilter,
+): Promise<{ readonly items: GoalRecord[]; readonly more: boolean }> {
   const conditions = [
     eq(goals.projectId, scope.projectId),
     filter.state === undefined ? undefined : eq(goals.state, filter.state),
+    filter.open === undefined
+      ? undefined
+      : filter.open
+        ? inArray(goals.state, [...OPEN_GOAL_STATES])
+        : notInArray(goals.state, [...OPEN_GOAL_STATES]),
     filter.category === undefined ? undefined : eq(categories.key, filter.category),
+    filter.query === undefined ? undefined : titleMatches(goals.title, filter.query),
   ].filter((condition): condition is SQL => condition !== undefined);
   const rows = await selectGoals(drizzleOf(database))
     .where(and(...conditions))
-    .limit(limit);
-  return rows
-    .map(toGoal)
-    .sort(
-      (a, b) =>
-        STATE_RANK[a.state] - STATE_RANK[b.state] ||
-        (a.dueOn ?? "9999-12-31").localeCompare(b.dueOn ?? "9999-12-31") ||
-        a.createdAt.getTime() - b.createdAt.getTime(),
-    );
+    .orderBy(stateRank, sql`${goals.dueOn} asc nulls last`, asc(goals.createdAt))
+    .limit(filter.limit + 1)
+    .offset(filter.offset ?? 0);
+  return { items: rows.slice(0, filter.limit).map(toGoal), more: rows.length > filter.limit };
 }
 
 /** The category, named by its key, must be one of the workspace: its id, or `null` for none, or as it was. */

@@ -25,7 +25,7 @@ import {
   weekOf,
 } from "../dates.js";
 import { useLanguage, useWords } from "../i18n/index.js";
-import { Avatar, CategoryBadge, cx, PersonChip, personName, StateBadge, Time } from "./ui.js";
+import { CategoryBadge, cx, PersonChip, personName, StateBadge, Time, Workers } from "./ui.js";
 
 // The calendar of a project (ADR-0019): the month as a grid, or one week on its own. A task
 // planned from a start to a due day lies across its days as a bar, in a lane of its own within
@@ -262,12 +262,18 @@ export function TaskTip(props: TaskTipProps) {
           </dd>
         </div>
         <div>
-          <dt>{words.task.assignee}</dt>
+          <dt>{words.task.workers}</dt>
           <dd>
-            {task.assignee === null ? (
+            {task.workers.length === 0 ? (
               <span className="sc-muted">{words.common.nobody}</span>
             ) : (
-              <PersonChip person={task.assignee} />
+              <ul className="sc-worker-list">
+                {task.workers.map((worker) => (
+                  <li key={worker.id}>
+                    <PersonChip person={worker} />
+                  </li>
+                ))}
+              </ul>
             )}
           </dd>
         </div>
@@ -371,9 +377,7 @@ function WeekRow(props: WeekRowProps) {
       <TaskTip task={task} goals={props.goals} place={props.pointed.place} />
     ) : null;
   const who = (task: RestTask): ReactNode =>
-    props.people === true && task.assignee !== null ? (
-      <Avatar person={task.assignee} size="xs" />
-    ) : null;
+    props.people === true ? <Workers workers={task.workers} size="xs" shown={2} /> : null;
   const lanes = segments.reduce((most, segment) => Math.max(most, segment.lane + 1), 0);
   return (
     <tr>
@@ -644,7 +648,7 @@ export function Week(props: WeekProps) {
 
 /** One person's share of the open work, as the table of who has what says it. */
 export interface WorkloadRow {
-  /** The person, or nobody for the tasks assigned to no one. */
+  /** The person, or nobody for the tasks with no worker. */
   readonly person: RestPerson | undefined;
   readonly open: number;
   readonly inProgress: number;
@@ -654,16 +658,20 @@ export interface WorkloadRow {
   readonly overdue: number;
 }
 
-/** Who has what, from the open tasks: by login, with the unassigned last. */
+/** Who has what, from the open tasks: a task counted for each of its workers, by name, and the tasks with none last. */
 export function workloadOf(tasks: readonly RestTask[], today: string): WorkloadRow[] {
   const rows = new Map<string, { person: RestPerson | undefined; tasks: RestTask[] }>();
   for (const task of tasks.filter(isOpen)) {
-    const key = task.assignee?.id ?? "";
-    const row = rows.get(key);
-    if (row === undefined) {
-      rows.set(key, { person: task.assignee ?? undefined, tasks: [task] });
-    } else {
-      row.tasks.push(task);
+    const workers: readonly (RestPerson | undefined)[] =
+      task.workers.length === 0 ? [undefined] : task.workers;
+    for (const worker of workers) {
+      const key = worker?.id ?? "";
+      const row = rows.get(key);
+      if (row === undefined) {
+        rows.set(key, { person: worker, tasks: [task] });
+      } else {
+        row.tasks.push(task);
+      }
     }
   }
   const count = (list: readonly RestTask[]): Omit<WorkloadRow, "person"> => ({
@@ -695,7 +703,7 @@ export function workloadOf(tasks: readonly RestTask[], today: string): WorkloadR
 export interface WorkloadProps {
   readonly tasks: readonly RestTask[];
   readonly today?: string | undefined;
-  /** Where the board is, narrowed to one person's tasks, or to the unassigned. */
+  /** Where the board is, narrowed to one person's tasks, or to those with no worker. */
   readonly personHref?: ((person: RestPerson | undefined) => string) | undefined;
 }
 

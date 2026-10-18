@@ -23,9 +23,11 @@ import {
   MAX_QUESTION_LENGTH,
   MAX_REPORTS_PER_RUN,
   MAX_RULES_LENGTH,
+  MAX_SEARCH_LENGTH,
   MAX_SUMMARY_LENGTH,
   MAX_TITLE_LENGTH,
   MAX_VERSIONS_PER_DOCUMENT,
+  MAX_WORKERS,
   MIN_OPTIONS,
 } from "../limits.js";
 import { COLOR_NAMES } from "../vocabulary.js";
@@ -84,17 +86,17 @@ const DAY = "a day as 2026-10-24, today, tomorrow, or +7 for seven days from tod
 const COLORS = `one of ${COLOR_NAMES.join(", ")}`;
 const KEY = "lowercase letters, digits and hyphens";
 const TASK_FIELD_FLAGS =
-  "[--state <state>] [--priority <priority>] [--category <key>] [--goal <id>] [--starts <day>] [--due <day>] [--assignee <login|me>] [--parent <number|id>]";
+  "[--state <state>] [--priority <priority>] [--category <key>] [--goal <id>] [--starts <day>] [--due <day>] [--worker <login|me|none>]... [--parent <number|id>]";
 const TASK_FIELD_LIMITS = [
   `starts, due: ${DAY}; the due day is not before the start`,
   "category: the key of one of the workspace's categories (console categories); goal: the id of one of the project's goals (console goals)",
-  "assignee: a login of the workspace, or me; parent: a task of the project",
+  `worker: a login of the workspace, or me; given again, or with commas between, for several, up to ${MAX_WORKERS}, in place of the workers there were; none alone for nobody. parent: a task of the project, by its number or its id; console tasks --search <words> finds one by its title`,
 ];
 const TASK_FIELD_REFUSALS = [
   "task.invalid_category: no category has that key",
   "task.invalid_goal: the goal is not one of this project",
   "task.invalid_dates: the due day is before the start",
-  "task.invalid_assignee: the person may not work in the project",
+  "task.invalid_worker: a person named as a worker may not work in the project",
   "task.invalid_parent: the parent is not a task of the project, or would make a loop",
 ];
 
@@ -147,14 +149,15 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     synopsis:
       "What is on your plate across your projects: your open tasks, and the decisions waiting.",
     about:
-      "What is on your plate across the projects you may see: the open tasks assigned to you, the sooner due first, each with its project; and the decisions waiting for a person. Needs no project. --person <login> shows another person's plate, for an administrator or for an owner of a project they are in: their open tasks within the projects you may see, without the decisions, which wait for anyone.",
+      "What is on your plate across the projects you may see: the open tasks you work on, the sooner due first, each with its project; and the decisions waiting for a person. Needs no project. --person <login> shows another person's plate, for an administrator or for an owner of a project they are in: the open tasks they work on within the projects you may see, without the decisions, which wait for anyone.",
   },
   tasks: {
     usage:
-      "tasks [--state <state>] [--open] [--mine] [--category <key>] [--goal <id>] [--due <day|today|week|overdue>] [--unassigned] [--archived] [--limit <n>] [--offset <n>]",
+      "tasks [--state <state>] [--open] [--mine] [--category <key>] [--goal <id>] [--due <day|today|week|overdue>] [--unassigned] [--search <words>] [--archived] [--limit <n>] [--offset <n>]",
     synopsis:
-      "The tasks on the board, newest first, narrowed by state, owner, category, goal or due day.",
-    about: `The tasks on the board, newest first: number, state, priority, title, who owns and works on each, its category and its due day, and what waits on it. --open keeps the ones not done or dropped, --mine those assigned to you, --unassigned those assigned to nobody (not with --mine), --category and --goal those sorted into one, --due those due by a day: today, within the week, or overdue (the open ones past their day). The tasks put away (ADR-0029) are left out unless --archived asks for them alone. A page at a time: ${DEFAULT_PAGE_LIMIT} unless --limit says otherwise, from --offset on; a last line says when there is more. States: idea, ready, in_progress, in_review, done, dropped.`,
+      "The tasks on the board, newest first, narrowed by state, worker, category, goal, due day or words of the title.",
+    about: `The tasks on the board, newest first: number, state, priority, title, who owns and who works on each, its category and its due day, and what waits on it. --open keeps the ones not done or dropped, --mine those you work on, --unassigned those nobody works on (not with --mine), --category and --goal those sorted into one, --due those due by a day: today, within the week, or overdue (the open ones past their day), --search those whose title has every word given, whatever the case, and the task of that number for a number (12 or #12): how a task is found by its title, as a parent or otherwise. The tasks put away (ADR-0029) are left out unless --archived asks for them alone. A page at a time: ${DEFAULT_PAGE_LIMIT} unless --limit says otherwise, from --offset on; a last line says when there is more. States: idea, ready, in_progress, in_review, done, dropped.`,
+    limits: [`search: 1 to ${MAX_SEARCH_LENGTH} characters`],
   },
   task: {
     usage: `task <number|id>  |  task new <title> [--body <markdown>|--file <path>] ${TASK_FIELD_FLAGS}  |  task edit <number|id> [--title <title>] [--body <markdown>|--file <path>] ${TASK_FIELD_FLAGS}  |  task archive <number|id>  |  task archive --goal <id>  |  task restore <number|id>`,
@@ -171,10 +174,11 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     refusals: ["task.not_found: no task has that number or id", ...TASK_FIELD_REFUSALS],
   },
   goals: {
-    usage: "goals [--category <key>] [--state <state>]",
+    usage:
+      "goals [--category <key>] [--state <state>] [--search <words>] [--limit <n>] [--offset <n>]",
     synopsis: "The roadmap: the project's goals, with their state, their days and how far each is.",
-    about:
-      "The roadmap of the project: its goals, the active first, each with its id, its state (planned, active, done, dropped), its category, the days it starts and is meant to be reached by, and how far it is, counted from the tasks that work towards it. --category keeps those sorted into one, --state those in one state.",
+    about: `The roadmap of the project: its goals, the active first, each with its id, its state (planned, active, done, dropped), its category, the days it starts and is meant to be reached by, and how far it is, counted from the tasks that work towards it. --category keeps those sorted into one, --state those in one state, --search those whose title has every word given, whatever the case: how a goal's id is found for --goal. A page at a time: ${DEFAULT_PAGE_LIMIT} unless --limit says otherwise, from --offset on; a last line says when there is more.`,
+    limits: [`search: 1 to ${MAX_SEARCH_LENGTH} characters`],
   },
   goal: {
     usage:
@@ -206,7 +210,7 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     usage: "people",
     synopsis: "The people you see, by login, with what each is in the workspace.",
     about:
-      "The people of the workspace you see, by login, with their name where the host gives one and what they are in it: admin, who configures the workspace, or member, who works in the projects they are in; a person taken out is marked deactivated. Everyone, unless the workspace shows a member only the people they share a project with (console workspace says which; an administrator sees everyone). Then, where you see everyone, the logins an administrator let in that nobody has signed in with yet. The logins are what --assignee, member and person take; a login is found exactly, so an owner lists someone the list does not show.",
+      "The people of the workspace you see, by login, with their name where the host gives one and what they are in it: admin, who configures the workspace, or member, who works in the projects they are in; a person taken out is marked deactivated. Everyone, unless the workspace shows a member only the people they share a project with (console workspace says which; an administrator sees everyone). Then, where you see everyone, the logins an administrator let in that nobody has signed in with yet. The logins are what --worker, member and person take; a login is found exactly, so an owner lists someone the list does not show.",
   },
   workspace: {
     usage:

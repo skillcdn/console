@@ -214,14 +214,18 @@ export interface Page {
   readonly offset?: number | undefined;
 }
 
-/** What the board is narrowed to: one state, the open ones, a category, a goal, an assignee, or what is due by a day. */
-/** What the roadmap is narrowed by: the goals in one state, or sorted into one category (ADR-0026). */
-export interface GoalFilter {
+/** What the roadmap is narrowed by: the goals in one state, the open ones, those sorted into one category (ADR-0026), or those whose title has some words; and which page of it. */
+export interface GoalFilter extends Page {
   readonly state?: GoalState | undefined;
+  /** True for the goals planned or active; false for the reached and the dropped. */
+  readonly open?: boolean | undefined;
   /** The key of a category of the workspace. */
   readonly category?: string | undefined;
+  /** Words of the title, each found in it whatever the case. */
+  readonly q?: string | undefined;
 }
 
+/** What the board is narrowed to: one state, the open ones, a category, a goal, a worker, what is due by a day, or words of the title; and which page of it. */
 export interface TaskFilter extends Page {
   readonly state?: TaskState | undefined;
   /** True for the tasks not done or dropped; false for the rest. */
@@ -230,10 +234,12 @@ export interface TaskFilter extends Page {
   readonly category?: string | undefined;
   /** The id of a goal. */
   readonly goal?: string | undefined;
-  /** The id of the person the tasks are assigned to. */
-  readonly assignee?: string | undefined;
-  /** True for the tasks assigned to nobody. */
+  /** The id of a person among the workers of the tasks. */
+  readonly worker?: string | undefined;
+  /** True for the tasks with no worker. */
   readonly unassigned?: boolean | undefined;
+  /** Words of the title, each found in it whatever the case; `#12` or `12` finds the task of that number too. */
+  readonly q?: string | undefined;
   /** A day (`2026-10-20`): the tasks due on it or before it. */
   readonly dueBy?: string | undefined;
   /** True for the tasks put away alone (ADR-0029); false, or left out, for the current ones. */
@@ -380,8 +386,7 @@ export interface ProjectClient {
   attachFile(path: string, input: FileUpload): Promise<RestDocument>;
   /** Where the bytes of a file attached to a document are read, by the file's id. */
   documentFileUrl(path: string, fileId: string): string;
-  /** The roadmap (ADR-0019): the goals, the active first, each with its tasks counted by state. */
-  /** The roadmap, or what the filter keeps of it: the active goals first. */
+  /** The roadmap (ADR-0019), or what the filter keeps of it, a page at a time: the active goals first, each with its tasks counted by state. */
   goals(filter?: GoalFilter, signal?: AbortSignal): Promise<RestGoals>;
   goal(id: string, signal?: AbortSignal): Promise<RestGoal>;
   /** Sets a goal; for an owner, with a session or a token. */
@@ -642,9 +647,10 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
             open: flag(filter.open),
             category: filter.category,
             goal: filter.goal,
-            assignee: filter.assignee,
+            worker: filter.worker,
             unassigned: flag(filter.unassigned),
             dueBy: filter.dueBy,
+            q: filter.q,
             limit: number(filter.limit),
             offset: number(filter.offset),
           }),
@@ -862,7 +868,14 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
       goals: (filter = {}, signal) =>
         request(
           "GET",
-          withQuery(at("goals"), { state: filter.state, category: filter.category }),
+          withQuery(at("goals"), {
+            state: filter.state,
+            open: flag(filter.open),
+            category: filter.category,
+            q: filter.q,
+            limit: number(filter.limit),
+            offset: number(filter.offset),
+          }),
           undefined,
           restGoalsSchema,
           signal,

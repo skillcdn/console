@@ -7,7 +7,7 @@ import { TaskList } from "./task-list.js";
 import { PersonChip, Time } from "./ui.js";
 
 // What is on a person's plate (ADR-0019), across the projects they may see: the week at the
-// top, with the open tasks assigned to them on its days, and what of theirs was done or
+// top, with the open tasks they work on on its days, and what of theirs was done or
 // dropped on them, as a project's calendar shows it; below, the open tasks by when they are
 // due, and the decisions that wait for a person. Takes its data as props and nothing from the
 // network; the week shown is the address's (ADR-0010).

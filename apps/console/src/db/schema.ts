@@ -387,11 +387,14 @@ export const tasks = pgTable(
     body: text().notNull().default(""),
     state: text({ enum: TASK_STATES }).notNull().default("idea"),
     priority: text({ enum: TASK_PRIORITIES }).notNull().default("normal"),
-    /** The person the task is on, which is who wrote it unless it is handed over. */
+    /** The person the task is on, which is who wrote it unless it is handed over: one, where the workers (`task_workers`) are any number. */
     ownerId: uuid()
       .notNull()
       .references(() => people.id),
-    /** The person at work on it, or nobody. An agent acting for a person arrives later. */
+    /**
+     * The one person at work on the task before the workers came (ADR-0037); unused, kept with
+     * its index until the next release, as the rollout contract asks (expand, then contract).
+     */
     assigneeId: uuid().references(() => people.id),
     /** The task this one is part of, for a breakdown. */
     parentId: uuid().references((): AnyPgColumn => tasks.id),
@@ -429,6 +432,28 @@ export const tasks = pgTable(
       "tasks_priority_check",
       sql`${table.priority} in (${sql.raw(literals(TASK_PRIORITIES))})`,
     ),
+  ],
+);
+
+/**
+ * The people at work on a task (ADR-0037): any number, each once, in the order they came to
+ * it; the owner stays one, on the task's row. A person who may work in the project, checked
+ * when they are put on the task; a run taking the task puts its person on it.
+ */
+export const taskWorkers = pgTable(
+  "task_workers",
+  {
+    taskId: uuid()
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    personId: uuid()
+      .notNull()
+      .references(() => people.id),
+    addedAt: createdAt(),
+  },
+  (table) => [
+    primaryKey({ name: "task_workers_pkey", columns: [table.taskId, table.personId] }),
+    index("task_workers_person_idx").on(table.personId),
   ],
 );
 

@@ -24,6 +24,7 @@ import {
   type RestGoal,
   type RestGoalInput,
   type RestGoalPatch,
+  type RestGoals,
   type RestListing,
   type RestListingInput,
   type RestMe,
@@ -107,6 +108,18 @@ export interface ConsoleActions {
     page: { readonly limit: number; readonly offset: number },
     signal?: AbortSignal,
   ): Promise<RestTasks>;
+  /** What words find among the current tasks of the project, a page at a time, for a picker (ADR-0037); the first page of them for no words. */
+  findTasks(
+    query: string,
+    page: { readonly limit: number; readonly offset: number },
+    signal?: AbortSignal,
+  ): Promise<RestTasks>;
+  /** What words find among the open goals of the project, a page at a time, for a picker. */
+  findGoals(
+    query: string,
+    page: { readonly limit: number; readonly offset: number },
+    signal?: AbortSignal,
+  ): Promise<RestGoals>;
   raiseDecision(input: RestDecisionInput): Promise<RestDecision>;
   answerDecision(id: string, input: RestAnswerInput): Promise<RestDecision>;
   /** Grows a decision's record: its context, or what followed. */
@@ -265,6 +278,32 @@ async function readTasks(
   return { items };
 }
 
+/** How many pages of the roadmap are read before it is shown as it stands. */
+const GOALS_MAX_PAGES = 20;
+
+/**
+ * The goals of a project, whole: page after page while the server says there is more, since
+ * the roadmap, the calendar and the filters draw them all.
+ */
+async function readGoals(
+  scope: ProjectClient,
+  signal: AbortSignal | undefined,
+): Promise<{ readonly items: RestGoal[] }> {
+  const items: RestGoal[] = [];
+  for (let page = 0; page < GOALS_MAX_PAGES; page += 1) {
+    const result = await scope.goals({ limit: LIST_LIMIT, offset: page * LIST_LIMIT }, signal);
+    items.push(...result.items);
+    if (!result.more) {
+      break;
+    }
+  }
+  return { items };
+}
+
+/** The words of a search as the API takes them: none for a blank. */
+const searchWordsOf = (query: string): { readonly q?: string } =>
+  query.trim() === "" ? {} : { q: query.trim() };
+
 /** How many pages of the decisions are read before the record is shown as it stands. */
 const DECISIONS_MAX_PAGES = 20;
 
@@ -353,7 +392,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
           scope.get(signal),
           readTasks(scope, signal),
           readDecisions(scope, signal),
-          scope.goals({}, signal),
+          readGoals(scope, signal),
           scope.runs(undefined, signal),
           scope.members(signal),
         ]);
@@ -608,6 +647,10 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
         return archived;
       },
       archivedTasks: (page, signal) => scope().tasks({ archived: true, ...page }, signal),
+      findTasks: (query, page, signal) =>
+        scope().tasks({ archived: false, ...searchWordsOf(query), ...page }, signal),
+      findGoals: (query, page, signal) =>
+        scope().goals({ open: true, ...searchWordsOf(query), ...page }, signal),
       async raiseDecision(input) {
         const decision = await scope().raiseDecision(input);
         await refreshProject();

@@ -1238,6 +1238,144 @@ table {
   justify-self: start;
 }
 
+/* The workers of a task on its form: each a chip with the way to take them off, and the way to add one. */
+.sc-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
+}
+
+.sc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sc-space-1);
+  min-height: var(--sc-control-size);
+  padding: 0 var(--sc-space-1) 0 var(--sc-space-2);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-bg-inset);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-chip-remove,
+.sc-picker-clear {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 0;
+  border-radius: var(--sc-radius-sm);
+  background: transparent;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-md);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.sc-chip-remove:hover:not(:disabled),
+.sc-picker-clear:hover:not(:disabled) {
+  background: var(--sc-color-bg-raised);
+  color: var(--sc-color-text);
+}
+
+.sc-chip-remove:focus-visible,
+.sc-picker-clear:focus-visible {
+  outline: var(--sc-focus-ring);
+}
+
+.sc-chips .sc-chip-add {
+  width: auto;
+  min-width: 10rem;
+}
+
+/* A picker: the field that searches a listing, its page of results under it, and the choice in its place. */
+.sc-picker {
+  position: relative;
+  min-width: 0;
+}
+
+.sc-picker-chosen {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-space-2);
+  min-height: var(--sc-control-size);
+  padding: var(--sc-space-1) var(--sc-space-1) var(--sc-space-1) var(--sc-space-3);
+  border: 1px solid var(--sc-color-border-strong);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-field);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-picker-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-picker-list {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + var(--sc-space-1));
+  right: 0;
+  left: 0;
+  max-height: 18rem;
+  margin: 0;
+  padding: var(--sc-space-1);
+  overflow-y: auto;
+  list-style: none;
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-bg-inset);
+  box-shadow: var(--sc-shadow-stage);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-picker-option {
+  padding: var(--sc-space-2);
+  overflow: hidden;
+  border-radius: var(--sc-radius-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.sc-picker-option-active {
+  background: var(--sc-color-bg-raised);
+}
+
+.sc-picker-note {
+  padding: var(--sc-space-2);
+}
+
+/* The workers of a task on a card or a row: pictures side by side, and how many more. */
+.sc-workers {
+  display: inline-flex;
+  align-items: center;
+}
+
+.sc-workers > * + * {
+  margin-left: -0.375rem;
+}
+
+.sc-workers-more {
+  margin-left: var(--sc-space-1);
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-xs);
+  font-weight: var(--sc-weight-medium);
+}
+
+.sc-worker-list {
+  display: grid;
+  gap: var(--sc-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 .sc-form-actions {
   display: flex;
   flex-wrap: wrap;

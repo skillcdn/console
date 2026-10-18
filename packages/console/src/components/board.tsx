@@ -20,7 +20,6 @@ import { useWords } from "../i18n/index.js";
 import type { BoardFilter } from "../router.js";
 import { isPlainClick } from "./shell.js";
 import {
-  Avatar,
   Badge,
   Button,
   CategoryBadge,
@@ -28,6 +27,7 @@ import {
   DueBadge,
   PriorityBadge,
   personName,
+  Workers,
 } from "./ui.js";
 
 // The board: one column per state, the tasks in it, the sooner due first and the newest after.
@@ -165,7 +165,7 @@ export function TaskCard(props: TaskCardProps) {
           </Badge>
         )}
         <span className="sc-card-spacer" />
-        {task.assignee !== null && <Avatar person={task.assignee} size="sm" />}
+        <Workers workers={task.workers} size="sm" />
       </div>
     </article>
   );
@@ -584,10 +584,16 @@ export function filterTasks(
     if (filter.goal !== undefined && (task.goalId ?? "") !== filter.goal) {
       return false;
     }
-    if (filter.person !== undefined && task.assignee?.id !== filter.person) {
+    if (
+      filter.person !== undefined &&
+      !task.workers.some((worker) => worker.id === filter.person)
+    ) {
       return false;
     }
-    if (filter.mine === true && (me === undefined || task.assignee?.id !== me.id)) {
+    if (
+      filter.mine === true &&
+      (me === undefined || !task.workers.some((worker) => worker.id === me.id))
+    ) {
       return false;
     }
     return true;

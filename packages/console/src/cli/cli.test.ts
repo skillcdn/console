@@ -26,7 +26,7 @@ const TASK = {
   state: "ready",
   priority: "high",
   owner: PERSON,
-  assignee: null,
+  workers: [],
   parentId: null,
   category: null,
   goalId: null,
@@ -1455,7 +1455,7 @@ describe("the plan on the command line", () => {
   it("narrows the tasks by what is due, one's own, a category and a goal", async () => {
     const { fetch, calls } = fakeConsole({
       "GET /api/v1/me": { body: ME },
-      [`GET ${IN}/tasks?open=true&assignee=${PERSON.id}&dueBy=2026-10-10&limit=50&offset=0`]: {
+      [`GET ${IN}/tasks?open=true&worker=${PERSON.id}&dueBy=2026-10-10&limit=50&offset=0`]: {
         body: { more: false, items: [{ ...TASK, dueOn: "2026-10-01" }] },
       },
       [`GET ${IN}/tasks?category=engineering&goal=${GOAL.id}&limit=50&offset=0`]: {
@@ -1465,6 +1465,9 @@ describe("the plan on the command line", () => {
         body: { more: false, items: [TASK] },
       },
       [`GET ${IN}/tasks?unassigned=true&limit=50&offset=0`]: {
+        body: { more: false, items: [TASK] },
+      },
+      [`GET ${IN}/tasks?q=fix+parser&limit=50&offset=0`]: {
         body: { more: false, items: [TASK] },
       },
     });
@@ -1489,6 +1492,14 @@ describe("the plan on the command line", () => {
     const both = harness({ fetch, env: SIGNED_IN, now: () => NOON });
     expect(await runCli(["tasks", "--mine", "--unassigned"], both.io)).toBe(EXIT.usage);
     expect(both.err()).toContain("--unassigned");
+    // The words of a title find a task, as a parent is found (ADR-0037); blank words are no search.
+    const searched = harness({ fetch, env: SIGNED_IN, now: () => NOON });
+    expect(await runCli(["tasks", "--search", "fix parser"], searched.io)).toBe(EXIT.ok);
+    expect(calls.at(-1)?.key).toBe(`GET ${IN}/tasks?q=fix+parser&limit=50&offset=0`);
+    expect(searched.out()).toContain("#7");
+    const blank = harness({ fetch, env: SIGNED_IN, now: () => NOON });
+    expect(await runCli(["tasks", "--search", "  "], blank.io)).toBe(EXIT.usage);
+    expect(blank.err()).toContain("--search <words>");
   });
 
   it("writes a task with its plan, and changes one in what the flags say, none clearing a field", async () => {
@@ -1502,7 +1513,7 @@ describe("the plan on the command line", () => {
       [`POST ${IN}/tasks`]: { status: 201, body: { ...TASK, dueOn: "2026-10-24" } },
       [`GET ${IN}/tasks/7`]: { body: TASK },
       [`GET ${IN}/tasks/3`]: { body: { ...TASK, id: parentId, number: 3 } },
-      [`PATCH ${IN}/tasks/${TASK.id}`]: { body: { ...TASK, assignee: PERSON } },
+      [`PATCH ${IN}/tasks/${TASK.id}`]: { body: { ...TASK, workers: [PERSON, BOB] } },
     });
     const h = harness({ fetch, env: SIGNED_IN, now: () => NOON });
     expect(
@@ -1519,8 +1530,10 @@ describe("the plan on the command line", () => {
           "today",
           "--due",
           "+13",
-          "--assignee",
-          "bob",
+          "--worker",
+          "bob,me",
+          "--worker",
+          "Bob",
           "--parent",
           "3",
           "--priority",
@@ -1536,34 +1549,41 @@ describe("the plan on the command line", () => {
       goalId: GOAL.id,
       startsOn: "2026-10-11",
       dueOn: "2026-10-24",
-      assigneeId: BOB.id,
+      workerIds: [BOB.id, PERSON.id],
       parentId,
     });
     expect(h.out()).toContain("Task #7 written");
     const edit = harness({ fetch, env: SIGNED_IN, now: () => NOON });
     expect(
       await runCli(
-        ["task", "edit", "7", "--due", "none", "--assignee", "me", "--category", "none"],
+        ["task", "edit", "7", "--due", "none", "--worker", "me", "--category", "none"],
         edit.io,
       ),
     ).toBe(EXIT.ok);
     expect(calls.find((call) => call.key === `PATCH ${IN}/tasks/${TASK.id}`)?.body).toEqual({
       category: null,
       dueOn: null,
-      assigneeId: PERSON.id,
+      workerIds: [PERSON.id],
     });
-    expect(edit.out()).toContain("assignee: alice");
+    expect(edit.out()).toContain("workers: alice, bob");
+    const cleared = harness({ fetch, env: SIGNED_IN, now: () => NOON });
+    expect(await runCli(["task", "edit", "7", "--worker", "none"], cleared.io)).toBe(EXIT.ok);
+    expect(calls.at(-1)?.body).toEqual({ workerIds: [] });
+    const mixed = harness({ fetch, env: SIGNED_IN, now: () => NOON });
+    expect(await runCli(["task", "edit", "7", "--worker", "none,bob"], mixed.io)).toBe(EXIT.usage);
+    expect(mixed.err()).toContain("--worker none alone");
     const nothing = harness({ fetch, env: SIGNED_IN, now: () => NOON });
     expect(await runCli(["task", "edit", "7"], nothing.io)).toBe(EXIT.usage);
     expect(nothing.err()).toContain("Say what to change");
     const nobody = harness({ fetch, env: SIGNED_IN, now: () => NOON });
-    expect(await runCli(["task", "edit", "7", "--assignee", "carol"], nobody.io)).toBe(EXIT.usage);
+    expect(await runCli(["task", "edit", "7", "--worker", "carol"], nobody.io)).toBe(EXIT.usage);
     expect(nobody.err()).toContain("Nobody of the workspace is called carol");
   });
 
   it("lists the roadmap, reads a goal with its tasks, sets one and changes one", async () => {
     const { fetch, calls } = fakeConsole({
-      [`GET ${IN}/goals`]: { body: { more: false, items: [GOAL] } },
+      [`GET ${IN}/goals?limit=50&offset=0`]: { body: { more: false, items: [GOAL] } },
+      [`GET ${IN}/goals?q=ship&limit=1&offset=0`]: { body: { more: true, items: [GOAL] } },
       [`GET ${IN}/goals/${GOAL.id}`]: { body: GOAL },
       [`GET ${IN}/tasks?goal=${GOAL.id}`]: { body: { more: false, items: [TASK] } },
       [`POST ${IN}/goals`]: { status: 201, body: GOAL },
@@ -1574,6 +1594,11 @@ describe("the plan on the command line", () => {
     expect(list.out()).toBe(
       `${GOAL.id}  active  Ship v1  (due 2026-11-15; 2/4 done, 1 in progress)\n`,
     );
+    // The roadmap searched by the words of a title, a page at a time.
+    const found = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["goals", "--search", "ship", "--limit", "1"], found.io)).toBe(EXIT.ok);
+    expect(found.out()).toContain("Ship v1");
+    expect(found.out()).toContain("... more: --offset 1");
     const one = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["goal", GOAL.id], one.io)).toBe(EXIT.ok);
     expect(one.out()).toContain("What it means.");
@@ -1634,7 +1659,7 @@ describe("the plan on the command line", () => {
     // No project is needed: the plate spans them all.
     const plate = harness({ fetch, env: { CONSOLE_URL: ORIGIN, CONSOLE_TOKEN: "cns_t_secret" } });
     expect(await runCli(["work"], plate.io)).toBe(EXIT.ok);
-    expect(plate.out()).toContain("tasks assigned to you:");
+    expect(plate.out()).toContain("tasks you work on:");
     expect(plate.out()).toContain("  web  #7  ready  high  Fix the parser");
     expect(plate.out()).toContain("decisions waiting: none");
     // What was closed is for the week on the plate's page: the words keep to the open tasks, the JSON carries it.
@@ -1655,7 +1680,7 @@ describe("the plan on the command line", () => {
           tasks: [
             {
               project: { key: "web", name: "The web app", color: null, symbol: null, icon: null },
-              task: { ...TASK, assignee: bob },
+              task: { ...TASK, workers: [bob] },
             },
           ],
         },
@@ -1663,7 +1688,7 @@ describe("the plan on the command line", () => {
     });
     const seen = harness({ fetch, env: { CONSOLE_URL: ORIGIN, CONSOLE_TOKEN: "cns_t_secret" } });
     expect(await runCli(["work", "--person", "Bob"], seen.io)).toBe(EXIT.ok);
-    expect(seen.out()).toContain("tasks assigned to bob:");
+    expect(seen.out()).toContain("tasks bob works on:");
     expect(seen.out()).toContain("  web  #7  ready  high  Fix the parser");
     expect(seen.out()).not.toContain("decisions waiting");
     const nobody = harness({ fetch, env: { CONSOLE_URL: ORIGIN, CONSOLE_TOKEN: "cns_t_secret" } });
@@ -2395,10 +2420,10 @@ describe("the plan of a goal (ADR-0026)", () => {
 
   it("sets and changes the days and the category, and narrows the roadmap by them", async () => {
     const { fetch, calls } = fakeConsole({
-      [`GET ${IN}/goals?state=active&category=engineering`]: {
+      [`GET ${IN}/goals?state=active&category=engineering&limit=50&offset=0`]: {
         body: { more: false, items: [PLANNED] },
       },
-      [`GET ${IN}/goals?category=design`]: { body: { more: false, items: [] } },
+      [`GET ${IN}/goals?category=design&limit=50&offset=0`]: { body: { more: false, items: [] } },
       [`POST ${IN}/goals`]: { status: 201, body: PLANNED },
       [`PATCH ${IN}/goals/${GOAL.id}`]: { body: { ...PLANNED, category: null, startsOn: null } },
     });

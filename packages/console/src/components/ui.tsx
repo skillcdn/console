@@ -145,6 +145,31 @@ export function PersonChip(props: { readonly person: RestPerson; readonly size?:
   );
 }
 
+/** How many of a task's workers are shown as pictures before the rest are a count. */
+const WORKERS_SHOWN = 3;
+
+/** The people at work on a task (ADR-0037), as pictures side by side with a count of the rest; nothing while nobody is. */
+export function Workers(props: {
+  readonly workers: readonly RestPerson[];
+  readonly size?: "xs" | "sm";
+  /** How many are shown as pictures; the rest are a count. */
+  readonly shown?: number;
+}) {
+  if (props.workers.length === 0) {
+    return null;
+  }
+  const shown = props.shown ?? WORKERS_SHOWN;
+  const rest = props.workers.length - shown;
+  return (
+    <span className="sc-workers" title={props.workers.map(personName).join(", ")}>
+      {props.workers.slice(0, shown).map((worker) => (
+        <Avatar key={worker.id} person={worker} size={props.size ?? "sm"} />
+      ))}
+      {rest > 0 && <span className="sc-workers-more">+{rest}</span>}
+    </span>
+  );
+}
+
 /** The words of the vocabulary as people read them, in English: the default pack's. */
 export const STATE_LABELS: Readonly<Record<TaskState, string>> = {
   idea: "Idea",

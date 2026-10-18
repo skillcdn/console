@@ -83,6 +83,11 @@ export const ko: Messages = {
       next: "다음",
       range: (from, to, of) => `${of}건 중 ${from}-${to}`,
     },
+    picker: {
+      nothingFound: "맞는 것이 없습니다",
+      searching: "검색 중",
+      more: "더 보기",
+    },
   },
 
   nav: {
@@ -264,7 +269,7 @@ export const ko: Messages = {
     },
     partOf: "상위 작업:",
     owner: "담당자",
-    assignee: "배정",
+    workers: "작업자",
     written: "작성",
     changed: "변경",
     state: "상태",
@@ -298,8 +303,11 @@ export const ko: Messages = {
       bodyPlaceholder: "무엇을 할지, Markdown으로.",
       state: "상태",
       priority: "우선순위",
-      assignee: "배정",
+      workers: "작업자",
+      addWorker: "작업자 추가",
       partOf: "상위 작업",
+      searchTasks: "번호나 제목으로 검색",
+      searchGoals: "제목으로 검색",
       category: "카테고리",
       noCategory: "카테고리 없음",
       goal: "목표",
@@ -387,7 +395,7 @@ export const ko: Messages = {
       inProgress: "진행 중",
       dueSoon: "7일 내 마감",
       overdue: "기한 지남",
-      unassigned: "아직 배정 없음",
+      unassigned: "아직 작업자 없음",
     },
   },
 
@@ -456,8 +464,8 @@ export const ko: Messages = {
     loading: "내 작업을 불러오는 중",
     couldNotLoad: "내 작업을 불러올 수 없습니다.",
     empty: {
-      title: "내게 배정된 작업이 없습니다",
-      body: "볼 수 있는 어느 프로젝트에서든 내게 배정된 작업이 여기에 나타납니다.",
+      title: "내가 맡은 작업이 없습니다",
+      body: "볼 수 있는 어느 프로젝트에서든 내가 작업자인 작업이 여기에 나타납니다.",
     },
     overdue: "기한 지남",
     thisWeek: "이번 주 마감",
@@ -567,7 +575,7 @@ export const ko: Messages = {
       title: "제목",
       body: "본문",
       priority: "우선순위",
-      assigneeId: "배정",
+      workers: "작업자",
       parentId: "상위 작업",
       links: "링크",
       name: "이름",
@@ -816,8 +824,8 @@ export const ko: Messages = {
     loadingWork: "작업을 불러오는 중",
     couldNotLoadWork: "작업을 불러올 수 없습니다.",
     noWork: {
-      title: (name) => `${name}에게 배정된 작업이 없습니다`,
-      body: "내가 볼 수 있는 프로젝트에서 그 사람에게 배정된 열린 작업이 여기에 나타납니다.",
+      title: (name) => `${name}에게 맡겨진 작업이 없습니다`,
+      body: "내가 볼 수 있는 프로젝트에서 그 사람이 작업자인 열린 작업이 여기에 나타납니다.",
     },
     notOverseen: {
       title: "볼 수 없는 작업입니다",

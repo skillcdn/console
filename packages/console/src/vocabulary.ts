@@ -30,6 +30,9 @@ export const GOAL_STATES = ["planned", "active", "done", "dropped"] as const;
 
 export type GoalState = (typeof GOAL_STATES)[number];
 
+/** The states a goal is still open in: planned, or being worked towards. */
+export const OPEN_GOAL_STATES: readonly GoalState[] = ["planned", "active"];
+
 /**
  * The colours a category, or a project's mark, may be shown in: names, so that a custom console
  * paints them in its own tokens and no value a person typed reaches a stylesheet.

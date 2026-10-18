@@ -18,18 +18,29 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import * as z from "zod";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
-import { categories, decisions, goals, people, projects, runs, tasks } from "../schema.js";
+import {
+  categories,
+  decisions,
+  goals,
+  people,
+  projects,
+  runs,
+  tasks,
+  taskWorkers,
+} from "../schema.js";
 import { recordLinks } from "./documents.js";
 import { type Actor, recordEvent, type Scope } from "./events.js";
-import { assignees, owners, type PersonRecord, personColumns, toPerson } from "./people.js";
+import { owners, type PersonRecord, personColumns, toPerson, workers } from "./people.js";
 import { mayWorkIn, visibleTo } from "./projects.js";
+import { titleMatches } from "./search.js";
 
 // The work on the board of a project. Every change is one transaction with the event that
 // records it, and every read is scoped to the project: a task of another is not found. The
 // plan of a task is two days people set; what happened to it is two moments the board keeps
-// itself (ADR-0019).
+// itself (ADR-0019). A task has one owner and any number of workers (ADR-0037).
 
 export interface TaskRecord {
   readonly id: string;
@@ -41,7 +52,8 @@ export interface TaskRecord {
   readonly state: TaskState;
   readonly priority: TaskPriority;
   readonly owner: PersonRecord;
-  readonly assignee: PersonRecord | undefined;
+  /** The people at work on it, in the order they came to it; none while nobody is. */
+  readonly workers: readonly PersonRecord[];
   readonly parentId: string | undefined;
   /** The category the task is sorted into, as the workspace keeps it. */
   readonly category:
@@ -71,7 +83,7 @@ export class TaskError extends DomainError {
   constructor(
     code:
       | "task.not_found"
-      | "task.invalid_assignee"
+      | "task.invalid_worker"
       | "task.invalid_parent"
       | "task.invalid_category"
       | "task.invalid_goal"
@@ -83,7 +95,7 @@ export class TaskError extends DomainError {
 
 const TASK_ERROR_WORDS = {
   "task.not_found": "the task was not found",
-  "task.invalid_assignee": "the assignee is not a person of the project",
+  "task.invalid_worker": "a worker is not a person who may work in the project",
   "task.invalid_parent": "the parent is not a task of the project, or would make a loop",
   "task.invalid_category": "the category is not one of the workspace",
   "task.invalid_goal": "the goal is not one of the project",
@@ -95,7 +107,8 @@ export interface TaskInput {
   readonly body?: string;
   readonly state?: TaskState;
   readonly priority?: TaskPriority;
-  readonly assigneeId?: string | null;
+  /** The people to be at work on it, in place of those there were; `[]` for nobody. */
+  readonly workerIds?: readonly string[];
   readonly parentId?: string | null;
   /** The key of a category of the workspace, or none. */
   readonly category?: string | null;
@@ -116,11 +129,14 @@ export interface TaskFilter {
   /** The key of a category. */
   readonly category?: string | undefined;
   readonly goalId?: string | undefined;
-  readonly assigneeId?: string | undefined;
-  /** True for the tasks assigned to nobody. */
+  /** A person among the workers of the tasks. */
+  readonly workerId?: string | undefined;
+  /** True for the tasks with no worker. */
   readonly unassigned?: boolean | undefined;
   /** A day: the tasks due on it or before it. */
   readonly dueBy?: string | undefined;
+  /** Words of the title, each found in it whatever the case; `#12` or `12` finds the task of that number too. */
+  readonly query?: string | undefined;
   /** True for the tasks put away alone (ADR-0029); false, or left out, for the current ones. */
   readonly archived?: boolean | undefined;
   readonly limit: number;
@@ -135,6 +151,39 @@ const STARTED_STATES: readonly TaskState[] = ["in_progress", "in_review", "done"
 
 const openDecisionsOf = sql<number>`(select count(*) from ${decisions} where ${decisions.taskId} = ${tasks.id} and ${decisions.answeredAt} is null)`;
 const openRunsOf = sql<number>`(select count(*) from ${runs} where ${runs.taskId} = ${tasks.id} and ${runs.status} in ('running', 'waiting'))`;
+
+/** A worker as the database hands one back inside the task's row: the person's columns, as JSON. */
+const workerRow = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  host: z.string(),
+  hostAccountId: z.string(),
+  login: z.string(),
+  name: z.nullable(z.string()),
+  avatarUrl: z.nullable(z.string()),
+  role: z.string(),
+  status: z.string(),
+  source: z.string(),
+  deactivatedAt: z.nullable(z.string()),
+});
+const workerRows = z.array(workerRow);
+
+/** The workers of a task, read back from the JSON the row carries them in. */
+function toWorkers(value: unknown): PersonRecord[] {
+  const parsed: unknown = typeof value === "string" ? JSON.parse(value) : value;
+  return workerRows.parse(parsed ?? []).map((row) =>
+    toPerson({
+      ...row,
+      deactivatedAt: row.deactivatedAt === null ? null : new Date(row.deactivatedAt),
+    }),
+  );
+}
+
+/**
+ * The workers of the task being read, in the order they came to it, as one JSON array: a page of
+ * tasks stays one query, however many people are on each.
+ */
+const workersOf = sql<unknown>`(select coalesce(json_agg(json_build_object('id', ${people.id}, 'workspaceId', ${people.workspaceId}, 'host', ${people.host}, 'hostAccountId', ${people.hostAccountId}, 'login', ${people.login}, 'name', ${people.name}, 'avatarUrl', ${people.avatarUrl}, 'role', ${people.role}, 'status', ${people.status}, 'source', ${people.source}, 'deactivatedAt', ${people.deactivatedAt}) order by ${taskWorkers.addedAt}, ${people.login}), '[]'::json) from ${taskWorkers} join ${people} on ${people.id} = ${taskWorkers.personId} where ${taskWorkers.taskId} = ${tasks.id})`;
 
 const taskColumns = {
   id: tasks.id,
@@ -156,7 +205,7 @@ const taskColumns = {
   createdAt: tasks.createdAt,
   updatedAt: tasks.updatedAt,
   owner: personColumns(owners),
-  assignee: personColumns(assignees),
+  workers: workersOf.mapWith(toWorkers),
   categoryKey: categories.key,
   categoryName: categories.name,
   categoryColor: categories.color,
@@ -173,7 +222,6 @@ function selectTasks(handle: Handle) {
     .select(taskColumns)
     .from(tasks)
     .innerJoin(owners, eq(owners.id, tasks.ownerId))
-    .leftJoin(assignees, eq(assignees.id, tasks.assigneeId))
     .leftJoin(categories, eq(categories.id, tasks.categoryId));
 }
 
@@ -188,7 +236,7 @@ function toTask(row: TaskRow): TaskRecord {
     state: row.state,
     priority: row.priority,
     owner: toPerson(row.owner),
-    assignee: row.assignee === null ? undefined : toPerson(row.assignee),
+    workers: row.workers,
     parentId: row.parentId ?? undefined,
     category:
       row.categoryKey === null || row.categoryName === null || row.categoryColor === null
@@ -219,28 +267,67 @@ async function readTask(
   return row === undefined ? undefined : toTask(row);
 }
 
-/** The assignee must be a person of the workspace who may work in the project. */
-async function checkAssignee(
+/** The ids of the people at work on a task, in the order they came to it. */
+export async function workerIdsOf(handle: Handle, taskId: string): Promise<string[]> {
+  const rows = await handle
+    .select({ personId: taskWorkers.personId })
+    .from(taskWorkers)
+    .innerJoin(people, eq(people.id, taskWorkers.personId))
+    .where(eq(taskWorkers.taskId, taskId))
+    .orderBy(taskWorkers.addedAt, people.login);
+  return rows.map((row) => row.personId);
+}
+
+/** Each id once, in the order first given. */
+const unique = (ids: readonly string[]): string[] => [...new Set(ids)];
+
+/**
+ * Everyone put on a task must be a person of the workspace who may work in the project. Only
+ * the newcomers are asked: a person already on the task stays what they are, deactivated or
+ * not, since they are a fact of the task.
+ */
+async function checkWorkers(
   tx: Transaction,
   scope: Scope,
-  assigneeId: string | null | undefined,
+  newcomers: readonly string[],
 ): Promise<void> {
-  if (assigneeId === undefined || assigneeId === null) {
+  if (newcomers.length === 0) {
     return;
   }
-  const [row] = await tx
-    .select({ id: people.id })
-    .from(people)
+  const rows = await tx
+    .select({ id: workers.id })
+    .from(workers)
     .where(
       and(
-        eq(people.workspaceId, scope.workspaceId),
-        eq(people.id, assigneeId),
-        mayWorkIn(scope.projectId, assigneeId),
+        eq(workers.workspaceId, scope.workspaceId),
+        inArray(workers.id, [...newcomers]),
+        mayWorkIn(scope.projectId, workers.id),
       ),
-    )
-    .limit(1);
-  if (row === undefined) {
-    throw new TaskError("task.invalid_assignee");
+    );
+  if (rows.length !== newcomers.length) {
+    throw new TaskError("task.invalid_worker");
+  }
+}
+
+/** Puts the newcomers on the task, and takes off those who are no longer named; the rest keep their place. */
+async function setWorkers(
+  tx: Transaction,
+  taskId: string,
+  current: readonly string[],
+  next: readonly string[],
+  now: Date,
+): Promise<void> {
+  const gone = current.filter((id) => !next.includes(id));
+  const added = next.filter((id) => !current.includes(id));
+  if (gone.length > 0) {
+    await tx
+      .delete(taskWorkers)
+      .where(and(eq(taskWorkers.taskId, taskId), inArray(taskWorkers.personId, gone)));
+  }
+  if (added.length > 0) {
+    await tx
+      .insert(taskWorkers)
+      .values(added.map((personId) => ({ taskId, personId, addedAt: now })));
   }
 }
 
@@ -335,7 +422,8 @@ export async function createTask(
 ): Promise<TaskRecord> {
   const { scope, actor, task, now } = input;
   return drizzleOf(database).transaction(async (tx) => {
-    await checkAssignee(tx, scope, task.assigneeId);
+    const workerIds = unique(task.workerIds ?? []);
+    await checkWorkers(tx, scope, workerIds);
     await checkParent(tx, scope, undefined, task.parentId);
     const categoryId = await categoryIdOf(tx, scope, task.category);
     await checkGoal(tx, scope, task.goalId);
@@ -362,7 +450,6 @@ export async function createTask(
         state,
         priority: task.priority ?? "normal",
         ownerId: actor.id,
-        assigneeId: task.assigneeId ?? null,
         parentId: task.parentId ?? null,
         categoryId: categoryId ?? null,
         goalId: task.goalId ?? null,
@@ -379,6 +466,7 @@ export async function createTask(
     if (inserted === undefined) {
       throw new Error("task insert returned no row");
     }
+    await setWorkers(tx, inserted.id, [], workerIds, now);
     await recordLinks(tx, scope, { kind: "task", id: inserted.id }, [task.body ?? ""], now);
     await recordEvent(tx, {
       ...scope,
@@ -422,7 +510,6 @@ export async function updateTaskIn(tx: Transaction, input: TaskUpdate): Promise<
       body: tasks.body,
       state: tasks.state,
       priority: tasks.priority,
-      assigneeId: tasks.assigneeId,
       parentId: tasks.parentId,
       categoryId: tasks.categoryId,
       goalId: tasks.goalId,
@@ -439,7 +526,13 @@ export async function updateTaskIn(tx: Transaction, input: TaskUpdate): Promise<
   if (current === undefined) {
     throw new TaskError("task.not_found");
   }
-  await checkAssignee(tx, scope, patch.assigneeId);
+  const currentWorkers = await workerIdsOf(tx, taskId);
+  const nextWorkers = patch.workerIds === undefined ? currentWorkers : unique(patch.workerIds);
+  await checkWorkers(
+    tx,
+    scope,
+    nextWorkers.filter((id) => !currentWorkers.includes(id)),
+  );
   await checkParent(tx, scope, taskId, patch.parentId);
   const categoryId = await categoryIdOf(tx, scope, patch.category);
   await checkGoal(tx, scope, patch.goalId);
@@ -450,7 +543,6 @@ export async function updateTaskIn(tx: Transaction, input: TaskUpdate): Promise<
     body: patch.body ?? current.body,
     state: patch.state ?? current.state,
     priority: patch.priority ?? current.priority,
-    assigneeId: patch.assigneeId === undefined ? current.assigneeId : patch.assigneeId,
     parentId: patch.parentId === undefined ? current.parentId : patch.parentId,
     categoryId: categoryId === undefined ? current.categoryId : categoryId,
     goalId: patch.goalId === undefined ? current.goalId : patch.goalId,
@@ -459,10 +551,17 @@ export async function updateTaskIn(tx: Transaction, input: TaskUpdate): Promise<
     links: patch.links === undefined ? current.links : [...patch.links],
   };
   checkDates(next.startsOn, next.dueOn);
-  for (const field of ["title", "body", "priority", "assigneeId", "parentId"] as const) {
+  for (const field of ["title", "body", "priority", "parentId"] as const) {
     if (next[field] !== current[field]) {
       changed.push(field);
     }
+  }
+  // The workers are a set: the same people in another order are the same workers.
+  const workersChanged =
+    nextWorkers.length !== currentWorkers.length ||
+    nextWorkers.some((id) => !currentWorkers.includes(id));
+  if (workersChanged) {
+    changed.push("workers");
   }
   // Named on the wire as the API takes them, so that a feed says what a person changed.
   if (next.categoryId !== current.categoryId) {
@@ -492,6 +591,9 @@ export async function updateTaskIn(tx: Transaction, input: TaskUpdate): Promise<
     .update(tasks)
     .set({ ...next, startedAt, doneAt, updatedAt: now })
     .where(eq(tasks.id, taskId));
+  if (workersChanged) {
+    await setWorkers(tx, taskId, currentWorkers, nextWorkers, now);
+  }
   if (changed.includes("body")) {
     await recordLinks(tx, scope, { kind: "task", id: taskId }, [next.body], now);
   }
@@ -542,6 +644,23 @@ export function getTask(
   return readTask(drizzleOf(database), scope, taskId);
 }
 
+/** On the task being read: whether `personId` is among its workers. */
+const hasWorker = (personId: string): SQL =>
+  sql`exists (select 1 from ${taskWorkers} where ${taskWorkers.taskId} = ${tasks.id} and ${taskWorkers.personId} = ${personId})`;
+
+/** On the task being read: whether nobody is at work on it. */
+const hasNoWorker: SQL = sql`not exists (select 1 from ${taskWorkers} where ${taskWorkers.taskId} = ${tasks.id})`;
+
+/** A task's number as a query names one: `12` or `#12`; nothing for any other text. */
+const NUMBER_QUERY = /^#?(\d{1,9})$/;
+
+/** On the task being read: whether the title holds the words of the query, or the number is the query's. */
+function matching(query: string): SQL {
+  const number = NUMBER_QUERY.exec(query.trim());
+  const byTitle = titleMatches(tasks.title, query);
+  return number === null ? byTitle : sql`(${byTitle} or ${tasks.number} = ${Number(number[1])})`;
+}
+
 /** The conditions a filter adds to a read of the board. */
 function narrowing(filter: Omit<TaskFilter, "limit">): (SQL | undefined)[] {
   return [
@@ -553,9 +672,10 @@ function narrowing(filter: Omit<TaskFilter, "limit">): (SQL | undefined)[] {
         : notInArray(tasks.state, [...OPEN_TASK_STATES]),
     filter.category === undefined ? undefined : eq(categories.key, filter.category),
     filter.goalId === undefined ? undefined : eq(tasks.goalId, filter.goalId),
-    filter.assigneeId === undefined ? undefined : eq(tasks.assigneeId, filter.assigneeId),
-    filter.unassigned === true ? isNull(tasks.assigneeId) : undefined,
+    filter.workerId === undefined ? undefined : hasWorker(filter.workerId),
+    filter.unassigned === true ? hasNoWorker : undefined,
     filter.dueBy === undefined ? undefined : lte(tasks.dueOn, filter.dueBy),
+    filter.query === undefined ? undefined : matching(filter.query),
     // The archive and the board are two listings, never one (ADR-0029).
     filter.archived === true ? isNotNull(tasks.archivedAt) : isNull(tasks.archivedAt),
   ];
@@ -576,15 +696,15 @@ export async function listTasks(
 }
 
 /**
- * What is on a person's plate: the open tasks assigned to `assignee`, within the projects
+ * What is on a person's plate: the open tasks `worker` is at work on, within the projects
  * `viewer` may see and no other, the sooner due first and those with no day last; a task put
  * away is not on it (ADR-0030). The viewer is the person themselves on their own page, and
  * whoever oversees them on theirs.
  */
-export async function listTasksAssignedTo(
+export async function listTasksOf(
   database: Database,
   workspaceId: string,
-  assignee: { readonly id: string },
+  worker: { readonly id: string },
   viewer: PersonRecord,
   limit: number,
 ): Promise<TaskRecord[]> {
@@ -593,7 +713,7 @@ export async function listTasksAssignedTo(
     .where(
       and(
         eq(tasks.workspaceId, workspaceId),
-        eq(tasks.assigneeId, assignee.id),
+        hasWorker(worker.id),
         inArray(tasks.state, [...OPEN_TASK_STATES]),
         isNull(tasks.archivedAt),
         visibleTo(viewer),
@@ -605,14 +725,14 @@ export async function listTasksAssignedTo(
 }
 
 /**
- * What a person's plate shows of what was: the tasks assigned to `assignee` that are done or
+ * What a person's plate shows of what was: the tasks `worker` was at work on that are done or
  * dropped and not yet put away, within the projects `viewer` may see, the last closed first,
  * so that the week on the plate shows them on their days as a project's calendar does.
  */
-export async function listClosedTasksAssignedTo(
+export async function listClosedTasksOf(
   database: Database,
   workspaceId: string,
-  assignee: { readonly id: string },
+  worker: { readonly id: string },
   viewer: PersonRecord,
   limit: number,
 ): Promise<TaskRecord[]> {
@@ -621,7 +741,7 @@ export async function listClosedTasksAssignedTo(
     .where(
       and(
         eq(tasks.workspaceId, workspaceId),
-        eq(tasks.assigneeId, assignee.id),
+        hasWorker(worker.id),
         notInArray(tasks.state, [...OPEN_TASK_STATES]),
         isNull(tasks.archivedAt),
         visibleTo(viewer),

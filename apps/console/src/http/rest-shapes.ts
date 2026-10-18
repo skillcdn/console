@@ -130,7 +130,7 @@ export function restTask(task: TaskRecord): RestTask {
     state: task.state,
     priority: task.priority,
     owner: restPerson(task.owner),
-    assignee: task.assignee === undefined ? null : restPerson(task.assignee),
+    workers: task.workers.map(restPerson),
     parentId: task.parentId ?? null,
     category: task.category ?? null,
     goalId: task.goalId ?? null,

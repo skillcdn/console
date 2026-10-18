@@ -14,6 +14,7 @@ import {
   MAX_TOKEN_DAYS,
   MAX_TOKEN_NAME_LENGTH,
   MAX_TOKENS_PER_PERSON,
+  MAX_WORKERS,
   OPEN_TASK_STATES,
   personTokensPath,
   personWorkPath,
@@ -532,7 +533,7 @@ describe("tasks", () => {
       state: "idea",
       priority: "normal",
       body: "",
-      assignee: null,
+      workers: [],
       parentId: null,
       links: [],
       openDecisions: 0,
@@ -543,11 +544,11 @@ describe("tasks", () => {
       body: "# Plan\n",
       state: "ready",
       priority: "high",
-      assigneeId: first.owner.id,
+      workerIds: [first.owner.id],
       links: [{ url: "https://github.com/acme/app/pull/1", label: "the pull request" }],
     });
     expect(second.number).toBe(first.number + 1);
-    expect(second.assignee?.login).toBe("Alice");
+    expect(second.workers.map((worker) => worker.login)).toEqual(["Alice"]);
     // Another project numbers its own from one, and does not find this one's.
     const elsewhere = await createTask(
       alice,
@@ -597,7 +598,7 @@ describe("tasks", () => {
       [{ title: "t".repeat(MAX_TITLE_LENGTH + 1) }, /title/],
       [{ title: "ok", state: "started" }, /state/],
       [{ title: "ok", links: [{ url: "javascript:alert(1)" }] }, /links/],
-      [{ title: "ok", assigneeId: "alice" }, /assigneeId/],
+      [{ title: "ok", workerIds: ["alice"] }, /workerIds/],
       ["not json", /readable/],
     ] as const) {
       const response = await h.request(`${IN}/tasks`, {
@@ -619,22 +620,22 @@ describe("tasks", () => {
     expect(await errorOf(huge)).toBe("request.too_large");
   });
 
-  it("refuse an assignee who may not work in the project, and a parent that is not its task", async () => {
+  it("refuse a worker who may not work in the project, and a parent that is not its task", async () => {
     const stranger = await send(alice, "POST", `${IN}/tasks`, {
       title: "ok",
-      assigneeId: "0199c4d8-0000-7000-8000-000000000099",
+      workerIds: ["0199c4d8-0000-7000-8000-000000000099"],
     });
     expect(stranger.status).toBe(400);
-    expect(await errorOf(stranger)).toBe("task.invalid_assignee");
-    // Bob is not in the private docs project: not an assignee there, though a person of the workspace.
+    expect(await errorOf(stranger)).toBe("task.invalid_worker");
+    // Bob is not in the private docs project: not a worker there, though a person of the workspace.
     const people = restPeopleSchema.parse(await (await get(alice, REST_ROUTES.people)).json());
     const bobId = people.items.find((person) => person.login === "bob")?.id ?? "";
     const outsider = await send(alice, "POST", `${projectPath("docs")}/tasks`, {
       title: "ok",
-      assigneeId: bobId,
+      workerIds: [bobId],
     });
     expect(outsider.status).toBe(400);
-    expect(await errorOf(outsider)).toBe("task.invalid_assignee");
+    expect(await errorOf(outsider)).toBe("task.invalid_worker");
     const orphan = await send(alice, "POST", `${IN}/tasks`, {
       title: "ok",
       parentId: "0199c4d8-0000-7000-8000-000000000099",
@@ -2047,7 +2048,7 @@ describe("the schedule and the roadmap", () => {
       await (
         await send(bob, "PATCH", `${IN}/tasks/${planned.id}`, {
           state: "in_progress",
-          assigneeId: bobId,
+          workerIds: [bobId],
         })
       ).json(),
     );
@@ -2069,11 +2070,11 @@ describe("the schedule and the roadmap", () => {
     expect(await ids("dueBy=2026-10-23")).not.toContain(planned.id);
     expect(await ids("open=false")).toContain(planned.id);
     expect(await ids("open=true")).not.toContain(planned.id);
-    expect(await ids(`assignee=${bobId}`)).toContain(planned.id);
+    expect(await ids(`worker=${bobId}`)).toContain(planned.id);
     const nobodys = await createTask(alice, { title: "Handed to nobody yet" });
     expect(await ids("unassigned=true")).toContain(nobodys.id);
     expect(await ids("unassigned=true")).not.toContain(planned.id);
-    expect(await ids(`unassigned=true&assignee=${bobId}`)).toEqual([]);
+    expect(await ids(`unassigned=true&worker=${bobId}`)).toEqual([]);
 
     for (const [body, code] of [
       [{ title: "x", startsOn: "2026-10-24", dueOn: "2026-10-20" }, "task.invalid_dates"],
@@ -2087,11 +2088,71 @@ describe("the schedule and the roadmap", () => {
       expect(response.status, JSON.stringify(body)).toBe(400);
       expect(await errorOf(response)).toBe(code);
     }
-    for (const query of ["dueBy=soon", "goal=7", "assignee=bob", "category=Not%20A%20Key"]) {
+    for (const query of ["dueBy=soon", "goal=7", "worker=bob", "category=Not%20A%20Key", "q="]) {
       const response = await get(alice, `${IN}/tasks?${query}`);
       expect(response.status, query).toBe(400);
       expect(await errorOf(response)).toBe("request.invalid");
     }
+  });
+
+  it("put several people at work on a task, and find a task by the words of its title or its number (ADR-0037)", async () => {
+    const aliceId = await personId("Alice");
+    const bobId = await personId("bob");
+    const crewed = await createTask(alice, {
+      title: "Crew the launch tower",
+      workerIds: [bobId, aliceId, bobId],
+    });
+    // Each person once, however often named.
+    expect(crewed.workers.map((worker) => worker.id).sort()).toEqual([aliceId, bobId].sort());
+    const ids = async (query: string) =>
+      restTasksSchema
+        .parse(await (await get(bob, `${IN}/tasks?${query}`)).json())
+        .items.map((task) => task.id);
+    expect(await ids(`worker=${aliceId}`)).toContain(crewed.id);
+    expect(await ids(`worker=${bobId}`)).toContain(crewed.id);
+    expect(await ids("unassigned=true")).not.toContain(crewed.id);
+    // The words of the title, whatever their case and order; a number, with or without its sign;
+    // a character `like` would read as a pattern is a character.
+    expect(await ids("q=TOWER%20crew")).toContain(crewed.id);
+    expect(await ids("q=tower%20moon")).not.toContain(crewed.id);
+    expect(await ids(`q=${crewed.number}`)).toContain(crewed.id);
+    expect(await ids(`q=%23${crewed.number}`)).toEqual([crewed.id]);
+    expect(await ids("q=%25")).not.toContain(crewed.id);
+    // The patch names the workers whole: the same people in another order change nothing, and
+    // those left out go.
+    const latest = await latestEventIn(alice);
+    const same = restTaskSchema.parse(
+      await (
+        await send(alice, "PATCH", `${IN}/tasks/${crewed.id}`, {
+          workerIds: [aliceId, bobId].reverse(),
+        })
+      ).json(),
+    );
+    expect(same.workers).toHaveLength(2);
+    expect(await latestEventIn(alice)).toBe(latest);
+    const fewer = restTaskSchema.parse(
+      await (await send(alice, "PATCH", `${IN}/tasks/${crewed.id}`, { workerIds: [bobId] })).json(),
+    );
+    expect(fewer.workers.map((worker) => worker.id)).toEqual([bobId]);
+    const since = restEventsSchema.parse(
+      await (await get(alice, `${IN}/events?after=${latest}`)).json(),
+    );
+    expect(since.items.map((event) => event.data)).toEqual([
+      { number: crewed.number, title: crewed.title, fields: ["workers"] },
+    ]);
+    expect(await ids(`worker=${aliceId}`)).not.toContain(crewed.id);
+    // Nobody at all; and more than a task takes.
+    const nobody = restTaskSchema.parse(
+      await (await send(alice, "PATCH", `${IN}/tasks/${crewed.id}`, { workerIds: [] })).json(),
+    );
+    expect(nobody.workers).toEqual([]);
+    expect(await ids("unassigned=true")).toContain(crewed.id);
+    const tooMany = await send(alice, "POST", `${IN}/tasks`, {
+      title: "x",
+      workerIds: Array(MAX_WORKERS + 1).fill(aliceId),
+    });
+    expect(tooMany.status).toBe(400);
+    expect(await errorOf(tooMany)).toBe("request.invalid");
   });
 
   it("set goals by an owner, count their tasks live, and refuse a member", async () => {
@@ -2207,39 +2268,73 @@ describe("the schedule and the roadmap", () => {
     ]);
   });
 
+  it("page the roadmap, and keep the open goals or those whose title has the words", async () => {
+    const page = async (query: string) =>
+      restGoalsSchema.parse(
+        await (await get(bob, `${IN}/goals${query === "" ? "" : `?${query}`}`)).json(),
+      );
+    const set = await send(alice, "POST", `${IN}/goals`, { title: "Reach the Moon Base" });
+    expect(set.status).toBe(201);
+    const moon = restGoalSchema.parse(await set.json());
+    const whole = await page("");
+    expect(whole.more).toBe(false);
+    expect(whole.items.length).toBeGreaterThan(1);
+    const first = await page("limit=1");
+    expect(first.items.map((goal) => goal.id)).toEqual([whole.items[0]?.id]);
+    expect(first.more).toBe(true);
+    const second = await page("limit=1&offset=1");
+    expect(second.items.map((goal) => goal.id)).toEqual([whole.items[1]?.id]);
+    const open = await page("open=true");
+    expect(open.items.every((goal) => goal.state === "planned" || goal.state === "active")).toBe(
+      true,
+    );
+    expect(open.items.map((goal) => goal.id)).toContain(moon.id);
+    const closed = await page("open=false");
+    expect(closed.items.every((goal) => goal.state === "done" || goal.state === "dropped")).toBe(
+      true,
+    );
+    expect((await page("q=moon%20BASE")).items.map((goal) => goal.id)).toEqual([moon.id]);
+    expect((await page("q=mars")).items).toEqual([]);
+    for (const query of ["q=", "limit=0", "open=maybe", "offset=-1"]) {
+      const response = await get(alice, `${IN}/goals?${query}`);
+      expect(response.status, query).toBe(400);
+      expect(await errorOf(response)).toBe("request.invalid");
+    }
+  });
+
   it("list what is on a person's plate across the projects they may see", async () => {
     const aliceId = await personId("Alice");
     const bobId = await personId("bob");
     const later = await createTask(alice, {
       title: "Mine, later",
-      assigneeId: aliceId,
+      workerIds: [aliceId],
       dueOn: "2026-12-01",
     });
     const sooner = await createTask(alice, {
       title: "Mine, sooner",
-      assigneeId: aliceId,
+      workerIds: [aliceId],
       dueOn: "2026-10-01",
     });
-    const undated = await createTask(alice, { title: "Mine, some day", assigneeId: aliceId });
+    const undated = await createTask(alice, { title: "Mine, some day", workerIds: [aliceId] });
     const inDocs = await createTask(
       alice,
-      { title: "Mine in the docs", assigneeId: aliceId },
+      { title: "Mine in the docs", workerIds: [aliceId] },
       projectPath("docs"),
     );
-    const bobs = await createTask(alice, { title: "Bob's", assigneeId: bobId });
+    const bobs = await createTask(alice, { title: "Bob's", workerIds: [bobId] });
     const finished = await createTask(alice, {
       title: "Mine, done",
-      assigneeId: aliceId,
+      workerIds: [aliceId],
       state: "done",
     });
     const dropped = await createTask(alice, {
       title: "Mine, dropped",
-      assigneeId: aliceId,
+      workerIds: [aliceId],
       state: "dropped",
     });
     const putAway = await createTask(alice, {
       title: "Mine, done and put away",
-      assigneeId: aliceId,
+      workerIds: [aliceId],
       state: "done",
     });
     expect((await send(alice, "POST", `${IN}/tasks/${putAway.id}/archive`)).ok).toBe(true);
@@ -2274,7 +2369,9 @@ describe("the schedule and the roadmap", () => {
     // Bob sees his own, and nothing of the docs project, which is not his to see.
     const bobWork = restWorkSchema.parse(await (await get(bob, REST_ROUTES.work)).json());
     expect(bobWork.tasks.map((item) => item.task.id)).toEqual([bobs.id]);
-    expect((bobWork.closed ?? []).every((item) => item.task.assignee?.id === bobId)).toBe(true);
+    expect(
+      (bobWork.closed ?? []).every((item) => item.task.workers.some((w) => w.id === bobId)),
+    ).toBe(true);
     expect((bobWork.closed ?? []).some((item) => item.task.id === finished.id)).toBe(false);
     expect(bobWork.tasks.some((item) => item.task.id === inDocs.id)).toBe(false);
     expect(bobWork.decisions.some((item) => item.decision.id === raised.id)).toBe(true);
@@ -2289,10 +2386,14 @@ describe("the schedule and the roadmap", () => {
       await (await get(alice, personWorkPath(bobId))).json(),
     );
     expect(bobsPlate.tasks.map((item) => item.task.title)).toContain("Bob's");
-    expect(bobsPlate.tasks.every((item) => item.task.assignee?.id === bobId)).toBe(true);
+    expect(bobsPlate.tasks.every((item) => item.task.workers.some((w) => w.id === bobId))).toBe(
+      true,
+    );
     expect(
       (bobsPlate.closed ?? []).every(
-        (item) => item.task.assignee?.id === bobId && !OPEN_TASK_STATES.includes(item.task.state),
+        (item) =>
+          item.task.workers.some((w) => w.id === bobId) &&
+          !OPEN_TASK_STATES.includes(item.task.state),
       ),
     ).toBe(true);
     expect(bobsPlate).not.toHaveProperty("decisions");
@@ -2587,10 +2688,10 @@ describe("who is in", () => {
     expect((await get(bob, REST_ROUTES.people)).status).toBe(401);
     const assigned = await send(alice, "POST", `${IN}/tasks`, {
       title: "For nobody",
-      assigneeId: bobId,
+      workerIds: [bobId],
     });
     expect(assigned.status).toBe(400);
-    expect(await errorOf(assigned)).toBe("task.invalid_assignee");
+    expect(await errorOf(assigned)).toBe("task.invalid_worker");
     const project = await h.project(alice, {
       key: "closed",
       name: "Closed",

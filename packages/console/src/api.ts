@@ -101,6 +101,7 @@ export {
   MAX_TOKENS_PER_PERSON,
   MAX_URL_LENGTH,
   MAX_VERSIONS_PER_DOCUMENT,
+  MAX_WORKERS,
   MIN_OPTIONS,
 } from "./limits.js";
 export { projectColorOf, projectSymbolOf } from "./marks.js";
@@ -347,6 +348,7 @@ export {
   type LinkSource,
   MEMBERSHIP_SOURCES,
   type MembershipSource,
+  OPEN_GOAL_STATES,
   OPEN_TASK_STATES,
   PACK_CONNECT_ENDINGS,
   type PackConnectEnding,

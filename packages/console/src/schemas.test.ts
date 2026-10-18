@@ -9,6 +9,7 @@ import {
   MAX_TITLE_LENGTH,
   MAX_TOKEN_DAYS,
   MAX_TOKEN_NAME_LENGTH,
+  MAX_WORKERS,
 } from "./limits.js";
 import {
   hostOfLogin,
@@ -66,7 +67,7 @@ describe("task input", () => {
       body: "# Plan\n\n- step one\n- step two\n",
       state: "ready",
       priority: "high",
-      assigneeId: PERSON.id,
+      workerIds: [PERSON.id],
       parentId: null,
       links: [{ url: "https://github.com/acme/app/pull/1", label: "the pull request" }],
     });
@@ -86,7 +87,9 @@ describe("task input", () => {
     ["a body with a NUL", { title: "t", body: `a${String.fromCodePoint(0)}b` }],
     ["a state that is not one", { title: "t", state: "started" }],
     ["a priority that is not one", { title: "t", priority: "p0" }],
-    ["an assignee that is not an id", { title: "t", assigneeId: "alice" }],
+    ["a worker that is not an id", { title: "t", workerIds: ["alice"] }],
+    ["a worker alone, not in a list", { title: "t", workerIds: PERSON.id }],
+    ["too many workers", { title: "t", workerIds: Array(MAX_WORKERS + 1).fill(PERSON.id) }],
     ["a link that is not https", { title: "t", links: [{ url: "http://example.com/" }] }],
     ["a link that runs", { title: "t", links: [{ url: "javascript:alert(1)" }] }],
     ["too many links", { title: "t", links: Array(MAX_LINKS + 1).fill({ url: "https://a.b/" }) }],
@@ -193,7 +196,7 @@ describe("what the server answers", () => {
       state: "in_progress",
       priority: "normal",
       owner: PERSON,
-      assignee: null,
+      workers: [PERSON],
       parentId: null,
       category: { key: "engineering", name: "Engineering", color: "blue" },
       goalId: null,
