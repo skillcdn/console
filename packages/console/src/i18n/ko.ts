@@ -220,6 +220,7 @@ export const ko: Messages = {
       packTokenNone: "없음",
       packTokenSet: "설정됨",
       packTokenEdit: "바꾸기",
+      packTokenAdd: "등록",
     },
   },
 

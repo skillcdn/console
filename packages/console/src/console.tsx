@@ -1484,7 +1484,9 @@ function ProjectSettingsPage(props: {
               {owner && (
                 <>
                   {" "}
-                  <a href={projectSettingsHref(key, "pack-token")}>{settings.packTokenEdit}</a>
+                  <a href={projectSettingsHref(key, "pack-token")}>
+                    {project.packToken === null ? settings.packTokenAdd : settings.packTokenEdit}
+                  </a>
                 </>
               )}
             </dd>
@@ -1776,7 +1778,9 @@ function WorkspaceSettingsPage(props: {
                     <>
                       {" "}
                       <a href={settingsHref("pack-token")}>
-                        {words.projects.settings.packTokenEdit}
+                        {skills.packToken == null
+                          ? words.projects.settings.packTokenAdd
+                          : words.projects.settings.packTokenEdit}
                       </a>
                     </>
                   )}

@@ -260,6 +260,7 @@ export const en = {
       packTokenNone: "None",
       packTokenSet: "Set",
       packTokenEdit: "Change it",
+      packTokenAdd: "Set one",
     },
   },
 
