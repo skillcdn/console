@@ -28,7 +28,9 @@ import {
   type ColorName,
   GOAL_STATES,
   type GoalState,
+  PEOPLE_VISIBILITIES,
   PERSON_ROLES,
+  type PeopleVisibility,
   type PersonRole,
   PROJECT_ROLES,
   PROJECT_VISIBILITIES,
@@ -80,6 +82,7 @@ import {
   formatVersion,
   formatVersionLine,
   formatWork,
+  formatWorkspace,
 } from "./format.js";
 import { COMMAND_HELP, helpFor, ownSkillPath, usage } from "./help.js";
 import { describeInstall, type Install, updateCommandFor } from "./install.js";
@@ -484,17 +487,24 @@ async function personIdOf(
   return (await personOf(session, value)).id;
 }
 
-/** The person a login names, among the workspace's; the logins are as people sign in. */
+/**
+ * The person a login names, among the workspace's, found by their exact login as people sign in
+ * (ADR-0035): whom the console shows the person, and, for an owner of a project, anyone of the
+ * workspace, so that someone the People page does not show can still be listed.
+ */
 async function personOf(session: Session, login: string): Promise<RestPerson> {
-  const { items } = await session.client.people();
-  const found = items.find((person) => person.login.toLowerCase() === login.toLowerCase());
+  const found = await session.client.findPerson(login);
   if (found === undefined) {
     throw misuse(
-      `Nobody of the workspace is called ${login}. console people lists everyone, by login.`,
+      `Nobody of the workspace is called ${login}, or they are not yours to see. console people lists whom you see, by login.`,
     );
   }
   return found;
 }
+
+/** Who sees whom, as the command takes it: with a hyphen or an underscore. */
+const peopleVisibilityOf = (value: string): PeopleVisibility =>
+  wordOf(value.replaceAll("-", "_"), PEOPLE_VISIBILITIES, "who sees whom");
 
 /** One word of a vocabulary, or the refusal to understand. */
 function wordOf<T extends string>(value: string, words: readonly T[], what: string): T {
@@ -2189,6 +2199,36 @@ const people: Command = async (args, io) => {
   return EXIT.ok;
 };
 
+// The workspace's settings (ADR-0035): read by everyone, changed by an administrator, themselves
+// on the Settings page or through their agent here (ADR-0021).
+const WORKSPACE_USAGE =
+  "Say what to do: console workspace  |  console workspace edit --people-visibility <everyone|shared-projects>";
+
+const workspace: Command = async (args, io) => {
+  const [verb, ...rest] = args;
+  if (verb === undefined || verb.startsWith("--")) {
+    const { values } = parse(args, {}, false);
+    const session = await open(io, values);
+    const me = await session.client.me();
+    answer(io, session, me.workspace, () => formatWorkspace(me.workspace));
+    return EXIT.ok;
+  }
+  if (verb === "edit") {
+    const { values } = parse(rest, { "people-visibility": { type: "string" } }, false);
+    const visibility = text(values, "people-visibility");
+    if (visibility === undefined) {
+      throw misuse("Say what to change: --people-visibility <everyone|shared-projects>");
+    }
+    const session = await open(io, values);
+    const changed = await session.client.updateWorkspace({
+      peopleVisibility: peopleVisibilityOf(visibility),
+    });
+    answer(io, session, changed, () => formatWorkspace(changed));
+    return EXIT.ok;
+  }
+  throw misuse(WORKSPACE_USAGE);
+};
+
 const PERSON_USAGE =
   "Say what to do: console person role <login> <admin|member>  |  person add <login> [--host gh|google]  |  person remove <login>  |  person deactivate <login>  |  person reactivate <login>";
 
@@ -2567,6 +2607,7 @@ const COMMANDS: Readonly<Record<string, Command>> = {
   rules,
   people,
   person,
+  workspace,
   project,
   members,
   member,
@@ -2718,6 +2759,8 @@ function hintFor(error: ApiError, io: CliIo, seen: ConsoleSeen): string {
       return "The person is listed already. console member role <login> <owner|member> changes what they are.\n";
     case "member.not_found":
       return "The person is not listed in the project. console members lists those who are.\n";
+    case "member.open_project":
+      return "The project is open to the workspace, so everyone of it is a member already. console member add <login> --role owner lists an owner; console member role <login> member takes one back to member.\n";
     case "category.key_taken":
       return "A category has that key already. console categories lists them.\n";
     case "category.not_found":

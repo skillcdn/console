@@ -97,6 +97,14 @@ export const PROJECT_VISIBILITIES = ["workspace", "private"] as const;
 
 export type ProjectVisibility = (typeof PROJECT_VISIBILITIES)[number];
 
+/**
+ * Who sees whom on the People page and in the pickers (ADR-0035): everyone of the workspace,
+ * or only the people one shares a project with; an administrator always sees everyone.
+ */
+export const PEOPLE_VISIBILITIES = ["everyone", "shared_projects"] as const;
+
+export type PeopleVisibility = (typeof PEOPLE_VISIBILITIES)[number];
+
 /** What a run is doing: at work, waiting for a person's decision, or over in one of three ways. */
 export const RUN_STATUSES = ["running", "waiting", "finished", "failed", "abandoned"] as const;
 
@@ -153,6 +161,7 @@ export const EVENT_KINDS = [
   "person.unlisted",
   "person.deactivated",
   "person.reactivated",
+  "workspace.updated",
   "category.created",
   "category.updated",
   "category.removed",

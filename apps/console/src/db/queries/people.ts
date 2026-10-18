@@ -4,7 +4,7 @@ import type {
   PersonStatus,
   ProviderKey,
 } from "@skillcdn/console/api";
-import { and, asc, count, eq, inArray, isNull, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNull, notInArray, or, type SQL, sql } from "drizzle-orm";
 import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
@@ -631,12 +631,30 @@ export async function setLanguage(
     .where(eq(people.id, personId));
 }
 
-/** Everyone of the workspace, those in first, by login. */
-export async function listPeople(database: Database, workspaceId: string): Promise<PersonRecord[]> {
+/** What narrows the people read: the policy's condition, and a login looked up. */
+export interface PeopleQuery {
+  /** On a `people` row: whether the asker may see the person (auth/policy.ts). */
+  readonly visible: SQL;
+  /** One person, by their exact login, compared without regard to case. */
+  readonly login?: string | undefined;
+}
+
+/** The people of the workspace the asker may see, those in first, by login. */
+export async function listPeople(
+  database: Database,
+  workspaceId: string,
+  query: PeopleQuery,
+): Promise<PersonRecord[]> {
   const rows = await drizzleOf(database)
     .select(personColumns(people))
     .from(people)
-    .where(eq(people.workspaceId, workspaceId))
+    .where(
+      and(
+        eq(people.workspaceId, workspaceId),
+        query.visible,
+        query.login === undefined ? undefined : sql`lower(${people.login}) = lower(${query.login})`,
+      ),
+    )
     .orderBy(asc(people.status), asc(sql`lower(${people.login})`), asc(people.id));
   return rows.map(toPerson);
 }

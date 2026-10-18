@@ -76,6 +76,8 @@ import {
   type RestVersion,
   type RestVersions,
   type RestWork,
+  type RestWorkspace,
+  type RestWorkspacePatch,
   restArchivedTasksSchema,
   restCategoriesSchema,
   restCategorySchema,
@@ -117,6 +119,7 @@ import {
   restVersionSchema,
   restVersionsSchema,
   restWorkSchema,
+  restWorkspaceSchema,
 } from "./schemas.js";
 import type { GoalState, TaskState } from "./vocabulary.js";
 
@@ -380,7 +383,15 @@ export interface ConsoleClient {
   giveUpToken(): Promise<void>;
   /** Keeps the person's choice of language, or none; for a person signed in. */
   updateMe(patch: RestMePatch): Promise<RestMe>;
+  /** Changes the workspace's settings (ADR-0035); for an administrator, with a session or a token. */
+  updateWorkspace(patch: RestWorkspacePatch): Promise<RestWorkspace>;
+  /** The people the asker may see: everyone, or those they share a project with (ADR-0035). */
   people(signal?: AbortSignal): Promise<RestPeople>;
+  /**
+   * One person of the workspace by their exact login, compared without regard to case, or
+   * nobody: what an owner lists someone by when the People page does not show them.
+   */
+  findPerson(login: string, signal?: AbortSignal): Promise<RestPerson | undefined>;
   /** Changes what a person is, or whether they are in; for an administrator. */
   updatePerson(id: string, patch: RestPersonPatch): Promise<RestPerson>;
   /** Lets a login in (ADR-0022): whoever signs in with that account becomes a person; for an administrator. */
@@ -829,6 +840,18 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
     giveUpToken: () => request("DELETE", `${base}${REST_ROUTES.meToken}`, undefined, undefined),
     people: (signal) =>
       request("GET", `${base}${REST_ROUTES.people}`, undefined, restPeopleSchema, signal),
+    findPerson: async (login, signal) => {
+      const found = await request(
+        "GET",
+        withQuery(REST_ROUTES.people, { login }),
+        undefined,
+        restPeopleSchema,
+        signal,
+      );
+      return found.items[0];
+    },
+    updateWorkspace: (patch) =>
+      request("PATCH", `${base}${REST_ROUTES.workspace}`, patch, restWorkspaceSchema),
     updatePerson: (id, patch) =>
       request("PATCH", `${base}${restPath("people", id)}`, patch, restPersonSchema),
     createListing: (input) =>

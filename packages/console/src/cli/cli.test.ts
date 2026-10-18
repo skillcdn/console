@@ -1496,6 +1496,9 @@ describe("the plan on the command line", () => {
     const { fetch, calls } = fakeConsole({
       "GET /api/v1/me": { body: ME },
       "GET /api/v1/people": { body: { items: [PERSON, BOB], listed: [], organization: null } },
+      "GET /api/v1/people?login=bob": { body: { items: [BOB], listed: [], organization: null } },
+      "GET /api/v1/people?login=Bob": { body: { items: [BOB], listed: [], organization: null } },
+      "GET /api/v1/people?login=carol": { body: { items: [], listed: [], organization: null } },
       [`POST ${IN}/tasks`]: { status: 201, body: { ...TASK, dueOn: "2026-10-24" } },
       [`GET ${IN}/tasks/7`]: { body: TASK },
       [`GET ${IN}/tasks/3`]: { body: { ...TASK, id: parentId, number: 3 } },
@@ -1645,6 +1648,8 @@ describe("the plan on the command line", () => {
     const bob = { ...PERSON, id: "0199c4d8-0000-7000-8000-000000000002", login: "bob" };
     const { fetch } = fakeConsole({
       "GET /api/v1/people": { body: { items: [PERSON, bob], listed: [], organization: null } },
+      "GET /api/v1/people?login=Bob": { body: { items: [bob], listed: [], organization: null } },
+      "GET /api/v1/people?login=dave": { body: { items: [], listed: [], organization: null } },
       [`GET /api/v1/people/${bob.id}/work`]: {
         body: {
           tasks: [
@@ -1744,6 +1749,9 @@ describe("configuring, as the person", () => {
           organization: null,
         },
       },
+      "GET /api/v1/people?login=Bob": { body: { items: [BOB], listed: [], organization: null } },
+      "GET /api/v1/people?login=bob": { body: { items: [BOB], listed: [], organization: null } },
+      "GET /api/v1/people?login=carol": { body: { items: [], listed: [], organization: null } },
       [`PATCH /api/v1/people/${BOB.id}`]: { body: { ...BOB, role: "admin" } },
     });
     const list = harness({ fetch, env: SIGNED_IN });
@@ -1775,6 +1783,8 @@ describe("configuring, as the person", () => {
     };
     const { fetch, calls } = fakeConsole({
       "GET /api/v1/people": { body: { items: [PERSON, BOB], listed: [dana], organization: null } },
+      "GET /api/v1/people?login=Bob": { body: { items: [BOB], listed: [], organization: null } },
+      "GET /api/v1/people?login=bob": { body: { items: [BOB], listed: [], organization: null } },
       "POST /api/v1/listings": { status: 201, body: dana },
       [`DELETE /api/v1/listings/${dana.id}`]: { status: 204 },
       [`PATCH /api/v1/people/${BOB.id}`]: {
@@ -1907,9 +1917,63 @@ describe("configuring, as the person", () => {
     }
   });
 
+  it("shows the workspace's settings, and changes who sees whom for an administrator", async () => {
+    const { fetch, calls } = fakeConsole({
+      "GET /api/v1/me": {
+        body: { ...ME, workspace: { ...ME.workspace, peopleVisibility: "everyone" } },
+      },
+      "PATCH /api/v1/workspace": {
+        body: { ...ME.workspace, peopleVisibility: "shared_projects" },
+      },
+    });
+    const shown = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["workspace"], shown.io)).toBe(EXIT.ok);
+    expect(shown.out()).toContain("workspace Acme");
+    expect(shown.out()).toContain("people visibility: everyone");
+    const changed = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(["workspace", "edit", "--people-visibility", "shared-projects"], changed.io),
+    ).toBe(EXIT.ok);
+    expect(calls.find((call) => call.key === "PATCH /api/v1/workspace")?.body).toEqual({
+      peopleVisibility: "shared_projects",
+    });
+    expect(changed.out()).toContain("people visibility: shared_projects");
+    const wrong = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["workspace", "edit", "--people-visibility", "friends"], wrong.io)).toBe(
+      EXIT.usage,
+    );
+    const nothing = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["workspace", "edit"], nothing.io)).toBe(EXIT.usage);
+  });
+
+  it("says how an owner is listed in a project open to the workspace, where everyone is a member", async () => {
+    const { fetch } = fakeConsole({
+      "GET /api/v1/people?login=bob": { body: { items: [BOB], listed: [], organization: null } },
+      [`POST ${IN}/members`]: {
+        status: 409,
+        body: { error: { code: "member.open_project", message: "Everyone is a member." } },
+      },
+    });
+    const refused = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["member", "add", "bob"], refused.io)).toBe(EXIT.failed);
+    expect(refused.err()).toContain("open to the workspace");
+    expect(refused.err()).toContain("--role owner");
+    // A login nobody of the workspace has, or one not the person's to see, is said so.
+    const nobody = harness({
+      fetch: fakeConsole({
+        "GET /api/v1/people?login=zed": { body: { items: [], listed: [], organization: null } },
+      }).fetch,
+      env: SIGNED_IN,
+    });
+    expect(await runCli(["member", "add", "zed"], nobody.io)).toBe(EXIT.usage);
+    expect(nobody.err()).toContain("not yours to see");
+  });
+
   it("lists the members, adds one, changes what they are, and takes them off the list", async () => {
     const { fetch, calls } = fakeConsole({
       "GET /api/v1/people": { body: { items: [PERSON, BOB], listed: [], organization: null } },
+      "GET /api/v1/people?login=bob": { body: { items: [BOB], listed: [], organization: null } },
+      "GET /api/v1/people?login=carol": { body: { items: [], listed: [], organization: null } },
       [`GET ${IN}/members`]: {
         body: { items: [{ person: PERSON, role: "owner", addedAt: WHEN }] },
       },

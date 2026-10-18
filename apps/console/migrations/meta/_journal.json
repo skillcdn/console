@@ -148,6 +148,13 @@
       "when": 1792034575897,
       "tag": "0020_task_archive",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1792306084420,
+      "tag": "0021_people_visibility",
+      "breakpoints": true
     }
   ]
 }

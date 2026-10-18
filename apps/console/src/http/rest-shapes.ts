@@ -91,6 +91,7 @@ export function restMember(member: MemberRecord): RestMember {
     person: restPerson(member.person),
     role: member.role,
     addedAt: member.addedAt.toISOString(),
+    listed: member.listed,
   };
 }
 

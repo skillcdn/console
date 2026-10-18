@@ -19,6 +19,7 @@ import type {
   RestVersion,
   RestVersionSummary,
   RestWork,
+  RestWorkspace,
 } from "../schemas.js";
 
 // What the command prints: one line per thing in a list, a few lines for one thing in full.
@@ -76,6 +77,17 @@ const HOST_NAMES = { gh: "GitHub", google: "Google" } as const;
 /** One login let in that nobody has signed in with yet (ADR-0022). */
 export function formatListingLine(listing: RestListing): string {
   return `${listing.login}  (let in at ${HOST_NAMES[listing.host]}, not signed in yet)`;
+}
+
+/** The workspace as its Settings page shows it: what it is called, who sees whom, where the skills come from, and what tokens may last. */
+export function formatWorkspace(workspace: RestWorkspace): string {
+  const visibility = workspace.peopleVisibility ?? "everyone";
+  return [
+    `workspace ${workspace.name}`,
+    `people visibility: ${visibility}  (${visibility === "everyone" ? "everyone sees everyone" : "a member sees only the people they share a project with; an administrator sees everyone"})`,
+    `skills: ${workspace.skills.address ?? "no address of the organization's"}  at ${workspace.skills.source}`,
+    `token days at most: ${workspace.tokenDaysAtMost ?? "a person chooses"}`,
+  ].join("\n");
 }
 
 /** One member of a project: their login, what they are in it, and since when. */

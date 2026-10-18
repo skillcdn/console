@@ -204,9 +204,16 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   },
   people: {
     usage: "people",
-    synopsis: "Everyone of the workspace, by login, with what each is in it.",
+    synopsis: "The people you see, by login, with what each is in the workspace.",
     about:
-      "Everyone of the workspace, by login, with their name where the host gives one and what they are in it: admin, who configures the workspace, or member, who works in the projects they are in; a person taken out is marked deactivated. Then the logins an administrator let in that nobody has signed in with yet. The logins are what --assignee, member and person take.",
+      "The people of the workspace you see, by login, with their name where the host gives one and what they are in it: admin, who configures the workspace, or member, who works in the projects they are in; a person taken out is marked deactivated. Everyone, unless the workspace shows a member only the people they share a project with (console workspace says which; an administrator sees everyone). Then, where you see everyone, the logins an administrator let in that nobody has signed in with yet. The logins are what --assignee, member and person take; a login is found exactly, so an owner lists someone the list does not show.",
+  },
+  workspace: {
+    usage: "workspace  |  workspace edit --people-visibility <everyone|shared-projects>",
+    synopsis: "The workspace's settings; or one changed, for an administrator.",
+    about:
+      "What the workspace is called, who sees whom on the People page and in the pickers (everyone; or shared-projects: a member sees only the people they share a project with, an administrator everyone), where the organization's skills come from, and the most days a token may last. edit changes who sees whom, for an administrator; a project open to the workspace has everyone in it, so a member of one sees everyone.",
+    refusals: ["auth.forbidden: only an administrator changes the workspace's settings"],
   },
   person: {
     usage:
@@ -248,9 +255,9 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   },
   members: {
     usage: "members",
-    synopsis: "Those listed in the project, with what each is in it.",
+    synopsis: "The members of the project, with what each is in it.",
     about:
-      "Those listed in the project, by login, with what each is in it (owner, who configures it; member, who works on it) and since when. A project open to the workspace has everyone of it as a member besides, and an administrator owns every project.",
+      "The members of the project, by login, with what each is in it (owner, who configures it; member, who works on it) and since when. In a private project, those listed; in one open to the workspace, everyone of it, an owner where listed as one or an administrator, a member otherwise. An administrator owns every project.",
   },
   member: {
     usage:
@@ -258,11 +265,12 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     synopsis:
       "Lists a person in the project, changes what they are in it, or takes them off; for an owner.",
     about:
-      "Lists a person of the workspace in the project, as a member unless --role says owner; changes what they are in it; or takes them off the list. For an owner of the project. With --project naming several keys with commas, member add lists the person in each of them in turn, one line per project; one listed already is said so, and the rest go on.",
+      "Lists a person of the workspace in the project, as a member unless --role says owner; changes what they are in it; or takes them off the list. For an owner of the project. In a project open to the workspace everyone is a member already: only an owner is listed (member add --role owner, or member role <login> owner), and an owner made a member again stays the member everyone is. With --project naming several keys with commas, member add lists the person in each of them in turn, one line per project; one listed already is said so, and the rest go on.",
     refusals: [
       "auth.forbidden: only an owner of the project lists its members",
       "member.invalid_person: the person is not of the workspace",
       "member.exists: the person is listed already; member role changes what they are",
+      "member.open_project: the project is open to the workspace, so everyone is a member already; list an owner with --role owner",
       "member.not_found: the person is not listed in the project",
     ],
   },
@@ -605,7 +613,7 @@ const SECTIONS: readonly { readonly title: string; readonly commands: readonly s
   {
     title:
       "Configuring, as the person: what an administrator or an owner does on the pages, their agent does here, named on it",
-    commands: ["people", "person", "project", "members", "member", "category"],
+    commands: ["workspace", "people", "person", "project", "members", "member", "category"],
   },
 ];
 

@@ -1,0 +1,2 @@
+ALTER TABLE "workspaces" ADD COLUMN "people_visibility" text DEFAULT 'everyone' NOT NULL;--> statement-breakpoint
+ALTER TABLE "workspaces" ADD CONSTRAINT "workspaces_people_visibility_check" CHECK ("workspaces"."people_visibility" in ('everyone', 'shared_projects'));

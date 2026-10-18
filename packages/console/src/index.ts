@@ -200,6 +200,14 @@ export {
   Time,
 } from "./components/ui.js";
 export { WorkList, type WorkListProps } from "./components/work.js";
+export {
+  DEFAULT_PEOPLE_VISIBILITY,
+  peopleVisibilityOf,
+  WorkspaceSettingsForm,
+  type WorkspaceSettingsFormProps,
+  WorkspaceSettingsView,
+  type WorkspaceSettingsViewProps,
+} from "./components/workspace.js";
 export { ConnectPage, type ConnectPageProps } from "./connect-page.js";
 export {
   type ConsoleApp,

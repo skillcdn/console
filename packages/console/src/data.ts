@@ -54,6 +54,8 @@ import {
   type RestVersion,
   type RestVersions,
   type RestWork,
+  type RestWorkspace,
+  type RestWorkspacePatch,
   restEventSchema,
 } from "./api.js";
 
@@ -133,6 +135,10 @@ export interface ConsoleActions {
   removeListing(id: string): Promise<void>;
   /** Keeps the person's own choice of language (ADR-0012). */
   updateMe(patch: RestMePatch): Promise<RestMe>;
+  /** Changes the workspace's settings (ADR-0035); for an administrator. `me` says them from then on. */
+  updateWorkspace(patch: RestWorkspacePatch): Promise<RestWorkspace>;
+  /** One person of the workspace by their exact login, or nobody: what an owner lists someone the People page does not show by. */
+  findPerson(login: string, signal?: AbortSignal): Promise<RestPerson | undefined>;
   /** Marks a run that will not come back as abandoned. */
   abandonRun(id: string): Promise<RestRun>;
   /** Everything that happened to one task of the project, oldest first. */
@@ -649,6 +655,14 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
         setMe(answer);
         return answer;
       },
+      async updateWorkspace(patch) {
+        const workspace = await client.updateWorkspace(patch);
+        setMe((current) => (current === undefined ? undefined : { ...current, workspace }));
+        // Who sees whom may have changed: the people are read again under the new setting.
+        await refreshWorkspace();
+        return workspace;
+      },
+      findPerson: (login, signal) => client.findPerson(login, signal),
       async abandonRun(id) {
         const run = await scope().endRun(id, { status: "abandoned" });
         await refreshProject();

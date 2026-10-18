@@ -2,6 +2,7 @@ import {
   CLAIM_PATH,
   EVENTS_PAGE_LIMIT,
   GOAL_STATES,
+  hasForbiddenCodePoint,
   isDocumentPath,
   isFolderPath,
   LIST_LIMIT,
@@ -12,6 +13,7 @@ import {
   MAX_FILE_BYTES,
   MAX_FILES_PER_COMMENT,
   MAX_FILES_PER_DOCUMENT,
+  MAX_LOGIN_LENGTH,
   MAX_PROJECT_ICON_BYTES,
   MAX_PROJECT_KEY_LENGTH,
   MAX_REPORTS_PER_RUN,
@@ -87,6 +89,12 @@ import { bodyLimit } from "hono/body-limit";
 import { streamSSE } from "hono/streaming";
 import * as z from "zod";
 import type { Connections } from "../auth/connect.js";
+import {
+  personFindableBy,
+  personVisibleTo,
+  readsListings,
+  readsWorkspaceEvents,
+} from "../auth/policy.js";
 import type { Secrets } from "../auth/secrets.js";
 import type { Tokens } from "../auth/tokens.js";
 import type { Database } from "../db/client.js";
@@ -148,6 +156,7 @@ import {
   findProjectFor,
   listMembers,
   listProjectsFor,
+  ownsAProject,
   ownsProjectWith,
   ProjectError,
   type ProjectRecord,
@@ -185,7 +194,11 @@ import {
   updateTask,
 } from "../db/queries/tasks.js";
 import { TokenError, type TokenRecord } from "../db/queries/tokens.js";
-import { membersSyncedAt, type WorkspaceRecord } from "../db/queries/workspaces.js";
+import {
+  membersSyncedAt,
+  readWorkspaceSettings,
+  type WorkspaceRecord,
+} from "../db/queries/workspaces.js";
 import type { Logger } from "../logger.js";
 import { type BlobStore, BlobStoreError } from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
@@ -928,21 +941,44 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
 
   // The workspace: its people, its projects, its own events, and the tokens.
 
+  // Who sees whom is the policy's (ADR-0035): the people the asker may see, or, with `login`, the
+  // one person they may find by that login, so as to list them in a project they configure. The
+  // logins let in and the organization's reading say who is in beyond that, so they go with the
+  // listing only, and only to whom the policy shows everyone.
   app.get(REST_ROUTES.people, async (c) => {
     const person = await asking(c);
     if (person instanceof Response) {
       return person;
     }
+    const login = c.req.query("login");
+    if (
+      login !== undefined &&
+      (login.trim().length === 0 || login.length > MAX_LOGIN_LENGTH || hasForbiddenCodePoint(login))
+    ) {
+      return invalid(c, "login: must be a login");
+    }
+    const settings = await readWorkspaceSettings(database, person.workspaceId);
+    const visible =
+      login === undefined
+        ? personVisibleTo(person, settings)
+        : personFindableBy(
+            person,
+            settings,
+            await ownsAProject(database, person.workspaceId, person.id),
+          );
+    const whole = login === undefined && readsListings(person, settings);
     const [items, listed, syncedAt] = await Promise.all([
-      listPeople(database, person.workspaceId),
-      listListings(database, person.workspaceId),
-      organization === undefined ? undefined : membersSyncedAt(database, person.workspaceId),
+      listPeople(database, person.workspaceId, { visible, login: login?.trim() }),
+      whole ? listListings(database, person.workspaceId) : [],
+      whole && organization !== undefined
+        ? membersSyncedAt(database, person.workspaceId)
+        : undefined,
     ]);
     const body: RestPeople = {
       items: items.map(restPerson),
       listed: listed.map(restListing),
       organization:
-        organization === undefined
+        organization === undefined || !whole
           ? null
           : {
               host: organization.host,
@@ -1321,7 +1357,8 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     return c.json(body);
   });
 
-  // The workspace's own events: what happened to its people, which no project holds.
+  // The workspace's own events: what happened to its people, which no project holds; read by
+  // whom the policy shows everyone (ADR-0035).
   app.get(REST_ROUTES.events, async (c) => {
     const query = eventsQuery.safeParse(c.req.query());
     if (!query.success) {
@@ -1330,6 +1367,9 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     const person = await asking(c);
     if (person instanceof Response) {
       return person;
+    }
+    if (!readsWorkspaceEvents(person, await readWorkspaceSettings(database, person.workspaceId))) {
+      return administratorRequired(c);
     }
     const page = await listEventsAfter(
       database,
@@ -1727,7 +1767,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       return found;
     }
     const body: RestMembers = {
-      items: (await listMembers(database, found.project.id)).map(restMember),
+      items: (await listMembers(database, found.project)).map(restMember),
     };
     return c.json(body);
   });

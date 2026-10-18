@@ -9,6 +9,8 @@ export const REST_ROUTES = {
   me: "/api/v1/me",
   /** The token a request is made with, for it to give itself up. */
   meToken: "/api/v1/me/token",
+  /** The workspace's settings (ADR-0035), changed by an administrator; read through `me`. */
+  workspace: "/api/v1/workspace",
   /** The people of the workspace: everyone who has signed in, and the logins let in that have not. */
   people: "/api/v1/people",
   /** The logins an administrator let in (ADR-0022), made and removed by one. */

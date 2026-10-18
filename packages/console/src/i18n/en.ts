@@ -3,6 +3,7 @@ import type {
   CategoryColor,
   GoalState,
   MembershipSource,
+  PeopleVisibility,
   PersonRole,
   PersonStatus,
   ProjectRole,
@@ -47,6 +48,10 @@ export const en = {
       workspace: "Everyone of the workspace",
       private: "Only those listed",
     } satisfies Record<ProjectVisibility, string>,
+    peopleVisibility: {
+      everyone: "Everyone sees everyone",
+      shared_projects: "Only the people one shares a project with",
+    } satisfies Record<PeopleVisibility, string>,
     runStatus: {
       running: "Open",
       waiting: "Waiting for a decision",
@@ -195,6 +200,13 @@ export const en = {
       chooseSomeone: "Choose someone",
       as: "As",
       add: "Add",
+      open: "Everyone of the workspace is a member. The owners configure the project; an owner is made from this list.",
+      addByLoginAria: "Add a member by login",
+      login: "Login",
+      addByLogin: "Add by login",
+      lookupHint:
+        "Someone the list does not show: their login at the git host, or their address, exactly.",
+      nobodyCalled: (login: string) => `Nobody of the workspace is called ${login}.`,
       empty: {
         title: "Nobody is listed",
         workspace: "Everyone of the workspace is in; the administrators own it.",
@@ -498,6 +510,15 @@ export const en = {
     noSkillsAddress: "No address: each project names its own, or has none.",
     skillsFromConfiguration:
       "Set by whoever runs the console, in its configuration: the deployment the skills are read through, and the organization's address.",
+    workspace: {
+      title: "Workspace",
+      aria: "Workspace settings",
+      peopleVisibility: "Who sees whom",
+      peopleVisibilityHint:
+        "On the People page and in the pickers: everyone of the workspace, or, for a member, only the people they share a project with. An administrator always sees everyone, and a project open to the workspace has everyone in it.",
+      edit: "Change the settings",
+      save: "Save the settings",
+    },
   },
 
   rules: {
@@ -561,9 +582,11 @@ export const en = {
       dueOn: "the due date",
       state: "the state",
       color: "the colour",
+      peopleVisibility: "who sees whom",
     } as Readonly<Record<string, string>>,
     event: {
       personJoined: () => "joined the board",
+      workspaceUpdated: (fields: string) => `changed ${fields} of the workspace`,
       roleChanged: (login: string, role: string) => `made ${login} ${role}`,
       personListed: (login: string) => `added ${login}`,
       personUnlisted: (login: string) => `took ${login} off the list`,
@@ -764,6 +787,7 @@ export const en = {
   people: {
     title: "People",
     list: "People",
+    narrowed: "The people you share a project with, and the administrators.",
     roleOf: (name: string) => `Role of ${name}`,
     letIn: "Add a person",
     letInAria: "Add a person",

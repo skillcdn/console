@@ -1,7 +1,9 @@
+import type { PeopleVisibility } from "@skillcdn/console/api";
 import { eq, sql } from "drizzle-orm";
 import { type Database, drizzleOf } from "../client.js";
 import { workspaces } from "../schema.js";
 import { seedCategories } from "./categories.js";
+import { type Actor, recordEvent } from "./events.js";
 
 /** The one board of this deployment, until a second workspace is needed. */
 export const DEFAULT_WORKSPACE_KEY = "default";
@@ -10,6 +12,20 @@ export interface WorkspaceRecord {
   readonly id: string;
   readonly name: string;
 }
+
+/**
+ * What an administrator keeps on the Settings page (ADR-0035), as the row has it: read on every
+ * request that depends on it, never kept, so that a change holds from the next request on.
+ */
+export interface WorkspaceSettings {
+  /** Who sees whom on the People page: everyone, or those one shares a project with. */
+  readonly peopleVisibility: PeopleVisibility;
+}
+
+/** What a workspace is set to until an administrator says otherwise. */
+export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = { peopleVisibility: "everyone" };
+
+export type WorkspaceSettingsPatch = Partial<WorkspaceSettings>;
 
 /**
  * The workspace the deployment runs, made at boot by whichever role comes first and renamed by
@@ -54,4 +70,66 @@ export async function membersSyncedAt(
     .where(eq(workspaces.id, workspaceId))
     .limit(1);
   return row?.syncedAt ?? undefined;
+}
+
+/** The settings as the row has them now; the defaults for a row that is not there, which a person signed in never meets. */
+export async function readWorkspaceSettings(
+  database: Database,
+  workspaceId: string,
+): Promise<WorkspaceSettings> {
+  const [row] = await drizzleOf(database)
+    .select({ peopleVisibility: workspaces.peopleVisibility })
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId))
+    .limit(1);
+  return row === undefined
+    ? DEFAULT_WORKSPACE_SETTINGS
+    : { peopleVisibility: row.peopleVisibility };
+}
+
+/**
+ * Changes the settings an administrator keeps, and tells the board which; what is already so
+ * writes nothing.
+ */
+export async function updateWorkspaceSettings(
+  database: Database,
+  input: {
+    readonly workspaceId: string;
+    readonly actor: Actor;
+    readonly patch: WorkspaceSettingsPatch;
+    readonly now: Date;
+  },
+): Promise<WorkspaceSettings> {
+  const { workspaceId, actor, patch, now } = input;
+  return drizzleOf(database).transaction(async (tx) => {
+    const [current] = await tx
+      .select({ peopleVisibility: workspaces.peopleVisibility })
+      .from(workspaces)
+      .where(eq(workspaces.id, workspaceId))
+      .for("update");
+    if (current === undefined) {
+      throw new Error("the workspace was not found");
+    }
+    const next: WorkspaceSettings = {
+      peopleVisibility: patch.peopleVisibility ?? current.peopleVisibility,
+    };
+    const fields = (Object.keys(next) as (keyof WorkspaceSettings)[]).filter(
+      (field) => next[field] !== current[field],
+    );
+    if (fields.length === 0) {
+      return next;
+    }
+    await tx
+      .update(workspaces)
+      .set({ ...next, updatedAt: now })
+      .where(eq(workspaces.id, workspaceId));
+    await recordEvent(tx, {
+      workspaceId,
+      kind: "workspace.updated",
+      actor,
+      data: { fields },
+      now,
+    });
+    return next;
+  });
 }

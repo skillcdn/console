@@ -383,8 +383,19 @@ export interface MemberListProps {
   readonly people: readonly RestPerson[];
   /** Whoever is looking, so that their own row says so. */
   readonly me?: RestPerson | undefined;
+  /**
+   * Whether the project is open to the workspace (ADR-0035): everyone of it is a member, the
+   * list is everyone, nobody is added or removed, and an owner is made from a row.
+   */
+  readonly open?: boolean | undefined;
   /** Called with a person to list, and what they are to be. Left out, the list is read here, not changed. */
   readonly onAdd?: ((input: RestMemberInput) => void) | undefined;
+  /**
+   * Finds a person of the workspace by their exact login, or nobody: given to an owner whose
+   * People page shows only whom they share a project with, so that they list someone it does
+   * not show (ADR-0035). With `onAdd` only.
+   */
+  readonly lookup?: ((login: string) => Promise<RestPerson | undefined>) | undefined;
   readonly onChangeRole?: ((member: RestMember, role: ProjectRole) => void) | undefined;
   readonly onRemove?: ((member: RestMember) => void) | undefined;
   /** Where a member's work is seen; given to the project's owners. */
@@ -400,6 +411,30 @@ export function MemberList(props: MemberListProps) {
   const candidates = props.people.filter((person) => !listed.has(person.id));
   const [personId, setPersonId] = useState("");
   const [role, setRole] = useState<ProjectRole>("member");
+  const [login, setLogin] = useState("");
+  const [notFound, setNotFound] = useState<string | undefined>(undefined);
+  const [looking, setLooking] = useState(false);
+  const addByLogin = async () => {
+    const wanted = login.trim();
+    if (wanted === "" || props.lookup === undefined) {
+      return;
+    }
+    setLooking(true);
+    try {
+      const found = await props.lookup(wanted);
+      if (found === undefined) {
+        setNotFound(wanted);
+        return;
+      }
+      setNotFound(undefined);
+      setLogin("");
+      props.onAdd?.({ personId: found.id, role });
+    } catch {
+      setNotFound(wanted);
+    } finally {
+      setLooking(false);
+    }
+  };
   return (
     <div className="sc-members">
       {props.members.length === 0 ? (
@@ -419,8 +454,14 @@ export function MemberList(props: MemberListProps) {
                   {members.since} <Time iso={member.addedAt} />
                 </span>
               </span>
-              {props.onChangeRole === undefined ? (
-                <ProjectRoleBadge role={member.role} />
+              {props.onChangeRole === undefined || member.person.role === "admin" ? (
+                // An administrator owns every project by office: nothing here changes that.
+                <span className="sc-member-role">
+                  <ProjectRoleBadge role={member.role} />
+                  {member.person.role === "admin" && (
+                    <span className="sc-muted"> {words.vocabulary.role.admin}</span>
+                  )}
+                </span>
               ) : (
                 <label className="sc-field sc-field-inline">
                   <span className="sc-visually-hidden">
@@ -447,7 +488,7 @@ export function MemberList(props: MemberListProps) {
                   {words.people.work}
                 </a>
               )}
-              {props.onRemove !== undefined && (
+              {props.onRemove !== undefined && props.open !== true && (
                 <Button
                   variant="danger"
                   size="sm"
@@ -461,7 +502,7 @@ export function MemberList(props: MemberListProps) {
           ))}
         </ul>
       )}
-      {props.onAdd !== undefined && candidates.length > 0 && (
+      {props.onAdd !== undefined && props.open !== true && candidates.length > 0 && (
         <form
           className="sc-form sc-member-form"
           aria-label={members.addAria}
@@ -513,6 +554,57 @@ export function MemberList(props: MemberListProps) {
               </Button>
             </div>
           </div>
+        </form>
+      )}
+      {props.onAdd !== undefined && props.lookup !== undefined && props.open !== true && (
+        <form
+          className="sc-form sc-member-form sc-member-lookup"
+          aria-label={members.addByLoginAria}
+          onSubmit={(event) => {
+            event.preventDefault();
+            void addByLogin();
+          }}
+        >
+          <div className="sc-field-row">
+            <label className="sc-field">
+              <span className="sc-field-label">{members.login}</span>
+              <input
+                className="sc-input"
+                value={login}
+                autoComplete="off"
+                onChange={(event) => {
+                  setLogin(event.target.value);
+                  setNotFound(undefined);
+                }}
+              />
+            </label>
+            <label className="sc-field">
+              <span className="sc-field-label">{members.as}</span>
+              <select
+                className="sc-input"
+                value={role}
+                onChange={(event) => setRole(event.target.value as ProjectRole)}
+              >
+                {PROJECT_ROLES.map((candidate) => (
+                  <option key={candidate} value={candidate}>
+                    {words.vocabulary.projectRole[candidate]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="sc-form-actions">
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={props.busy === true || looking || login.trim() === ""}
+              >
+                {members.addByLogin}
+              </Button>
+            </div>
+          </div>
+          <p className="sc-field-hint">
+            {notFound === undefined ? members.lookupHint : members.nobodyCalled(notFound)}
+          </p>
         </form>
       )}
     </div>

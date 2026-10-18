@@ -46,6 +46,8 @@ export function describeEvent(event: RestEvent, words: Messages = en): string {
       return feed.event.personDeactivated(login);
     case "person.reactivated":
       return feed.event.personReactivated(login);
+    case "workspace.updated":
+      return feed.event.workspaceUpdated(fields);
     case "project.created":
       return feed.event.projectCreated(project);
     case "project.updated":

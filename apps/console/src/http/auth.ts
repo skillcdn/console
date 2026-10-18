@@ -8,20 +8,28 @@ import {
   RETURN_TO_PARAM,
   type RestMe,
   type RestProvider,
+  type RestWorkspace,
   restMePatchSchema,
+  restWorkspacePatchSchema,
 } from "@skillcdn/console/api";
 import type { Context, Hono } from "hono";
 import type { Connections } from "../auth/connect.js";
 import type { Login, LoginStep } from "../auth/login.js";
 import { safeReturnTo } from "../auth/login.js";
 import type { Membership } from "../auth/membership.js";
+import { configuresWorkspace } from "../auth/policy.js";
 import type { Secrets } from "../auth/secrets.js";
 import type { Sessions } from "../auth/sessions.js";
 import type { Tokens } from "../auth/tokens.js";
 import type { Database } from "../db/client.js";
 import { languageOf, type PersonRecord, setLanguage } from "../db/queries/people.js";
 import type { TokenRecord } from "../db/queries/tokens.js";
-import type { WorkspaceRecord } from "../db/queries/workspaces.js";
+import {
+  readWorkspaceSettings,
+  updateWorkspaceSettings,
+  type WorkspaceRecord,
+  type WorkspaceSettings,
+} from "../db/queries/workspaces.js";
 import type { Logger } from "../logger.js";
 import type { Clock } from "../ports/clock.js";
 import type { OrganizationDirectory } from "../ports/organization.js";
@@ -184,17 +192,19 @@ export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies):
    * name, so that a console of a person's own knows it holds one), their language, the ways in,
    * and the console's version, for a console built on the package to compare itself with.
    */
+  const workspaceOf = (found: WorkspaceRecord, settings: WorkspaceSettings): RestWorkspace => ({
+    name: found.name,
+    tokenDaysAtMost: auth?.tokens.daysAtMost ?? null,
+    skills: { source: skills.source, address: skills.address ?? null },
+    peopleVisibility: settings.peopleVisibility,
+  });
   const meOf = async (
     caller: { readonly person: PersonRecord; readonly token: TokenRecord | undefined } | undefined,
   ): Promise<RestMe> => {
     const found = await workspace();
     const person = caller?.person;
     return {
-      workspace: {
-        name: found.name,
-        tokenDaysAtMost: auth?.tokens.daysAtMost ?? null,
-        skills: { source: skills.source, address: skills.address ?? null },
-      },
+      workspace: workspaceOf(found, await readWorkspaceSettings(database, found.id)),
       person: person === undefined ? null : restPerson(person),
       agent: caller?.token?.name ?? null,
       language: person === undefined ? null : ((await languageOf(database, person.id)) ?? null),
@@ -235,6 +245,46 @@ export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies):
     }
     await setLanguage(database, person.id, parsed.data.language ?? undefined, clock.now());
     return c.json(await meOf({ person, token: undefined }));
+  });
+
+  // The workspace's settings (ADR-0035): an administrator's, from the console's own pages or
+  // through their agent's token (ADR-0021); answered as `me` describes the workspace.
+  app.patch(REST_ROUTES.workspace, async (c) => {
+    c.header("cache-control", "no-store");
+    if (!access.presentsToken(c) && !access.fromOwnPages(c)) {
+      return foreignOrigin(c);
+    }
+    const caller = await access.caller(c);
+    if (caller === undefined) {
+      return signInRequired(c);
+    }
+    if (!configuresWorkspace(caller.person)) {
+      return administratorRequired(c);
+    }
+    let json: unknown;
+    try {
+      json = await c.req.json();
+    } catch {
+      return c.json(errorBody("request.invalid", "The request body is not readable JSON."), 400);
+    }
+    const parsed = restWorkspacePatchSchema.safeParse(json);
+    if (!parsed.success) {
+      return c.json(
+        errorBody("request.invalid", "The patch names nothing to change, or no setting."),
+        400,
+      );
+    }
+    const found = await workspace();
+    const settings = await updateWorkspaceSettings(database, {
+      workspaceId: found.id,
+      actor:
+        caller.token === undefined
+          ? { id: caller.person.id }
+          : { id: caller.person.id, agent: caller.token.name },
+      patch: parsed.data,
+      now: clock.now(),
+    });
+    return c.json(workspaceOf(found, settings));
   });
 
   if (auth === undefined) {

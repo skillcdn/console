@@ -6,6 +6,7 @@ import {
   type ProjectVisibility,
 } from "@skillcdn/console/api";
 import { and, asc, eq, type SQL, sql } from "drizzle-orm";
+import { memberOfProject, projectVisibleTo } from "../../auth/policy.js";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
 import { decisions, people, projectMembers, projects, runs, workspaces } from "../schema.js";
@@ -13,8 +14,11 @@ import { type Actor, recordEvent } from "./events.js";
 import { type PersonRecord, personColumns, toPerson } from "./people.js";
 
 // The projects of the workspace (ADR-0008): the unit of work and of permission. What a person
-// is in a project, and whether they are in it at all, is decided here, on every request, from
-// the project's visibility, its members and the person's role in the workspace.
+// is in a project, and whether they are in it at all, is decided on every request, from the
+// project's visibility, its members and the person's role in the workspace, with the conditions
+// of auth/policy.ts (ADR-0035), which every query here applies and none restates.
+
+export { mayWorkIn } from "../../auth/policy.js";
 
 /** A project's own image for its mark: the bytes are the blob store's, by their hash. */
 export interface ProjectIcon {
@@ -49,10 +53,18 @@ export interface ProjectView extends ProjectRecord {
   readonly openRuns: number;
 }
 
+/**
+ * A member of a project: a person listed in it, or, in a project open to the workspace, anyone
+ * of the workspace (ADR-0035), with what they are in it.
+ */
 export interface MemberRecord {
   readonly person: PersonRecord;
+  /** An owner as listed or as an administrator, else a member. */
   readonly role: ProjectRole;
+  /** The listing's day; for a member without one, the later of the project's making and their joining. */
   readonly addedAt: Date;
+  /** Whether a listing holds them in the project. */
+  readonly listed: boolean;
 }
 
 /** What is wrong with a project, or a member, a person asked for. `code` is what the API answers with. */
@@ -63,7 +75,8 @@ export class ProjectError extends DomainError {
       | "project.key_taken"
       | "member.not_found"
       | "member.exists"
-      | "member.invalid_person",
+      | "member.invalid_person"
+      | "member.open_project",
   ) {
     super(code, PROJECT_ERROR_WORDS[code]);
   }
@@ -75,6 +88,8 @@ const PROJECT_ERROR_WORDS = {
   "member.not_found": "the person is not listed in the project",
   "member.exists": "the person is listed in the project already",
   "member.invalid_person": "the person is not one of the workspace",
+  "member.open_project":
+    "the project is open to the workspace, so everyone of it is a member already; an owner is listed with the role owner",
 } as const;
 
 export interface ProjectInput {
@@ -160,15 +175,11 @@ const toProject = (row: ProjectRow): ProjectRecord => ({
 });
 
 /**
- * The condition under which `person` may see the project of a row: an administrator sees
- * every project; a project open to the workspace is seen by everyone of it; a private one by
- * those listed. For queries that must not find what a person may not see.
+ * The condition under which `person` may see the project of a row, for queries that must not
+ * find what a person may not see: the policy's (auth/policy.ts).
  */
 export function visibleTo(person: PersonRecord): SQL {
-  if (person.role === "admin") {
-    return sql`true`;
-  }
-  return sql`(${projects.visibility} = 'workspace' or exists (select 1 from ${projectMembers} where ${projectMembers.projectId} = ${projects.id} and ${projectMembers.personId} = ${person.id}))`;
+  return projectVisibleTo(person);
 }
 
 /** The role `person` has in a project they may see: an owner, as listed or as an administrator, or a member. */
@@ -482,19 +493,77 @@ const members = {
   person: personColumns(people),
 };
 
-/** Those listed in the project, by login. */
-export async function listMembers(database: Database, projectId: string): Promise<MemberRecord[]> {
-  const rows = await drizzleOf(database)
-    .select(members)
-    .from(projectMembers)
-    .innerJoin(people, eq(people.id, projectMembers.personId))
-    .where(eq(projectMembers.projectId, projectId))
+/** What the members are read against: the project's visibility, and when it was made. */
+export interface MemberProject {
+  readonly id: string;
+  readonly workspaceId: string;
+  readonly visibility: ProjectVisibility;
+  readonly createdAt: Date;
+}
+
+const later = (one: Date, other: Date): Date => (one > other ? one : other);
+
+/** A member without a listing, in a project open to the workspace: what everyone of it is in it. */
+const unlistedMember = (
+  person: PersonRecord,
+  joinedAt: Date,
+  project: MemberProject,
+): MemberRecord => ({
+  person,
+  role: person.role === "admin" ? "owner" : "member",
+  addedAt: later(joinedAt, project.createdAt),
+  listed: false,
+});
+
+/**
+ * The members of the project, by login (ADR-0035): those listed, in a private project; in one
+ * open to the workspace everyone active of it, an owner where a listing or the role of
+ * administrator says so, a member otherwise.
+ */
+export async function listMembers(
+  database: Database,
+  project: MemberProject,
+): Promise<MemberRecord[]> {
+  const handle = drizzleOf(database);
+  if (project.visibility === "private") {
+    const rows = await handle
+      .select(members)
+      .from(projectMembers)
+      .innerJoin(people, eq(people.id, projectMembers.personId))
+      .where(eq(projectMembers.projectId, project.id))
+      .orderBy(asc(sql`lower(${people.login})`), asc(people.id));
+    return rows.map((row) => ({
+      person: toPerson(row.person),
+      role: row.role,
+      addedAt: row.addedAt,
+      listed: true,
+    }));
+  }
+  const rows = await handle
+    .select({
+      person: personColumns(people),
+      joinedAt: people.createdAt,
+      role: projectMembers.role,
+      addedAt: projectMembers.createdAt,
+    })
+    .from(people)
+    .leftJoin(
+      projectMembers,
+      and(eq(projectMembers.projectId, project.id), eq(projectMembers.personId, people.id)),
+    )
+    .where(and(eq(people.workspaceId, project.workspaceId), eq(people.status, "active")))
     .orderBy(asc(sql`lower(${people.login})`), asc(people.id));
-  return rows.map((row) => ({
-    person: toPerson(row.person),
-    role: row.role,
-    addedAt: row.addedAt,
-  }));
+  return rows.map((row) => {
+    const person = toPerson(row.person);
+    return row.role === null || row.addedAt === null
+      ? unlistedMember(person, row.joinedAt, project)
+      : {
+          person,
+          role: person.role === "admin" ? "owner" : row.role,
+          addedAt: row.addedAt,
+          listed: true,
+        };
+  });
 }
 
 async function readMember(
@@ -510,10 +579,42 @@ async function readMember(
     .limit(1);
   return row === undefined
     ? undefined
-    : { person: toPerson(row.person), role: row.role, addedAt: row.addedAt };
+    : { person: toPerson(row.person), role: row.role, addedAt: row.addedAt, listed: true };
 }
 
-/** Lists a person of the workspace in the project, and tells the board. */
+/** An active person of the workspace, with when they joined it, or nothing. */
+async function readActivePerson(
+  handle: Handle,
+  workspaceId: string,
+  personId: string,
+): Promise<{ readonly person: PersonRecord; readonly joinedAt: Date } | undefined> {
+  const [row] = await handle
+    .select({ person: personColumns(people), joinedAt: people.createdAt })
+    .from(people)
+    .where(
+      and(
+        eq(people.workspaceId, workspaceId),
+        eq(people.id, personId),
+        eq(people.status, "active"),
+      ),
+    )
+    .limit(1);
+  return row === undefined ? undefined : { person: toPerson(row.person), joinedAt: row.joinedAt };
+}
+
+const memberProjectColumns = {
+  id: projects.id,
+  workspaceId: projects.workspaceId,
+  key: projects.key,
+  name: projects.name,
+  visibility: projects.visibility,
+  createdAt: projects.createdAt,
+};
+
+/**
+ * Lists a person of the workspace in the project, and tells the board. In a project open to the
+ * workspace everyone of it is a member already, so only an owner is listed (`member.open_project`).
+ */
 export async function addMember(
   database: Database,
   input: {
@@ -528,12 +629,15 @@ export async function addMember(
   const { workspaceId, projectId, actor, personId, role, now } = input;
   return drizzleOf(database).transaction(async (tx) => {
     const [project] = await tx
-      .select({ key: projects.key, name: projects.name })
+      .select(memberProjectColumns)
       .from(projects)
       .where(eq(projects.id, projectId))
       .for("update");
     if (project === undefined) {
       throw new ProjectError("project.not_found");
+    }
+    if (project.visibility === "workspace" && role === "member") {
+      throw new ProjectError("member.open_project");
     }
     // A person out of the workspace (ADR-0022) is listed nowhere.
     const [person] = await tx
@@ -570,7 +674,13 @@ export async function addMember(
   });
 }
 
-/** Says what a listed person is in the project, and tells the board; a change to what is already so writes nothing. */
+/**
+ * Says what a person is in the project, and tells the board; a change to what is already so
+ * writes nothing. In a private project the person must be listed. In a project open to the
+ * workspace anyone of it may be made an owner, which lists them, and an owner made a member
+ * again loses the listing and stays the member everyone is (ADR-0035); an administrator owns
+ * every project whatever is asked.
+ */
 export async function updateMember(
   database: Database,
   input: {
@@ -585,29 +695,57 @@ export async function updateMember(
   const { workspaceId, projectId, actor, personId, role, now } = input;
   return drizzleOf(database).transaction(async (tx) => {
     const [project] = await tx
-      .select({ key: projects.key, name: projects.name })
+      .select(memberProjectColumns)
       .from(projects)
       .where(eq(projects.id, projectId))
       .for("update");
-    const current = await readMember(tx, projectId, personId);
-    if (project === undefined || current === undefined) {
+    if (project === undefined) {
       throw new ProjectError("member.not_found");
+    }
+    const current = await readMember(tx, projectId, personId);
+    const changed = (login: string) =>
+      recordEvent(tx, {
+        workspaceId,
+        projectId,
+        kind: "project.member_changed",
+        actor,
+        data: { key: project.key, name: project.name, login, role },
+        now,
+      });
+    if (current === undefined) {
+      if (project.visibility !== "workspace") {
+        throw new ProjectError("member.not_found");
+      }
+      const found = await readActivePerson(tx, project.workspaceId, personId);
+      if (found === undefined) {
+        throw new ProjectError("member.not_found");
+      }
+      const unlisted = unlistedMember(found.person, found.joinedAt, project);
+      if (role === "member" || found.person.role === "admin") {
+        return unlisted;
+      }
+      await tx.insert(projectMembers).values({ projectId, personId, role, createdAt: now });
+      await changed(found.person.login);
+      return { ...unlisted, role, addedAt: now, listed: true };
     }
     if (current.role === role) {
       return current;
+    }
+    if (project.visibility === "workspace" && role === "member") {
+      await tx
+        .delete(projectMembers)
+        .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.personId, personId)));
+      await changed(current.person.login);
+      const found = await readActivePerson(tx, project.workspaceId, personId);
+      return found === undefined
+        ? { ...current, role, listed: false }
+        : unlistedMember(found.person, found.joinedAt, project);
     }
     await tx
       .update(projectMembers)
       .set({ role })
       .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.personId, personId)));
-    await recordEvent(tx, {
-      workspaceId,
-      projectId,
-      kind: "project.member_changed",
-      actor,
-      data: { key: project.key, name: project.name, login: current.person.login, role },
-      now,
-    });
+    await changed(current.person.login);
     return { ...current, role };
   });
 }
@@ -649,18 +787,9 @@ export async function removeMember(
 }
 
 /**
- * The condition under which `personId` may work in `projectId`: what an assignee of a task
- * in it must satisfy. An administrator may everywhere; everyone of the workspace in a project
- * open to it; those listed in a private one. Nobody out of the workspace (ADR-0022).
- */
-export function mayWorkIn(projectId: string, personId: string): SQL {
-  return sql`exists (select 1 from ${people} where ${people.id} = ${personId} and ${people.status} = 'active') and exists (select 1 from ${projects} where ${projects.id} = ${projectId} and (${projects.visibility} = 'workspace' or exists (select 1 from ${projectMembers} where ${projectMembers.projectId} = ${projects.id} and ${projectMembers.personId} = ${personId}) or exists (select 1 from ${people} where ${people.id} = ${personId} and ${people.role} = 'admin')))`;
-}
-
-/**
  * Whether `ownerId` is listed as an owner of a project `personId` is in: what the sight of
- * another person's work asks of someone who is not an administrator. Everyone of the workspace
- * is in a project open to it; a private one holds those listed.
+ * another person's work asks of someone who is not an administrator. Who is in a project is the
+ * policy's condition (auth/policy.ts).
  */
 export async function ownsProjectWith(
   database: Database,
@@ -679,12 +808,29 @@ export async function ownsProjectWith(
         eq(projectMembers.role, "owner"),
       ),
     )
-    .where(
+    .where(and(eq(projects.workspaceId, workspaceId), memberOfProject(personId)))
+    .limit(1);
+  return rows.length > 0;
+}
+
+/** Whether `personId` is listed as an owner of any project of the workspace: what lets them find anyone by login (ADR-0035). */
+export async function ownsAProject(
+  database: Database,
+  workspaceId: string,
+  personId: string,
+): Promise<boolean> {
+  const rows = await drizzleOf(database)
+    .select({ id: projects.id })
+    .from(projects)
+    .innerJoin(
+      projectMembers,
       and(
-        eq(projects.workspaceId, workspaceId),
-        sql`(${projects.visibility} = 'workspace' or exists (select 1 from ${projectMembers} where ${projectMembers.projectId} = ${projects.id} and ${projectMembers.personId} = ${personId}))`,
+        eq(projectMembers.projectId, projects.id),
+        eq(projectMembers.personId, personId),
+        eq(projectMembers.role, "owner"),
       ),
     )
+    .where(eq(projects.workspaceId, workspaceId))
     .limit(1);
   return rows.length > 0;
 }

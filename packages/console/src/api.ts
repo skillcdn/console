@@ -229,6 +229,8 @@ export {
   type RestVersionSummary,
   type RestVersions,
   type RestWork,
+  type RestWorkspace,
+  type RestWorkspacePatch,
   restAnswerInputSchema,
   restArchivedTasksSchema,
   restArchiveTasksInputSchema,
@@ -319,6 +321,8 @@ export {
   restVersionSummarySchema,
   restVersionsSchema,
   restWorkSchema,
+  restWorkspacePatchSchema,
+  restWorkspaceSchema,
 } from "./schemas.js";
 export { hasForbiddenCodePoint } from "./text.js";
 export {
@@ -338,8 +342,10 @@ export {
   MEMBERSHIP_SOURCES,
   type MembershipSource,
   OPEN_TASK_STATES,
+  PEOPLE_VISIBILITIES,
   PERSON_ROLES,
   PERSON_STATUSES,
+  type PeopleVisibility,
   type PersonRole,
   type PersonStatus,
   PROJECT_ICON_TYPES,

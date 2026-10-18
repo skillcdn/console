@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "./client.js";
@@ -178,10 +179,11 @@ describe("people", () => {
     expect(await findPerson(database, workspaceId, "0199c4d8-0000-7000-8000-000000000099")).toBe(
       undefined,
     );
-    expect((await listPeople(database, workspaceId)).map((person) => person.login)).toEqual([
-      "Alice",
-      "bob",
-    ]);
+    expect(
+      (await listPeople(database, workspaceId, { visible: sql`true` })).map(
+        (person) => person.login,
+      ),
+    ).toEqual(["Alice", "bob"]);
   });
 
   it("are told to the board when they join, and not again", async () => {
@@ -760,7 +762,7 @@ describe("projects", () => {
     ).rejects.toMatchObject({ code: "project.key_taken" });
     // Bob is listed; Alice is not, and a private project she is not in is not there for her.
     expect(
-      (await listMembers(database, made.id)).map((member) => [member.person.id, member.role]),
+      (await listMembers(database, made)).map((member) => [member.person.id, member.role]),
     ).toEqual([[bob.id, "owner"]]);
     expect(await findProjectFor(database, workspaceId, "ops", alice)).toBeUndefined();
     expect((await findProjectFor(database, workspaceId, "ops", bob))?.role).toBe("owner");

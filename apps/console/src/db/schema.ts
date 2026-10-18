@@ -5,6 +5,7 @@ import {
   GOAL_STATES,
   LINK_SOURCES,
   MEMBERSHIP_SOURCES,
+  PEOPLE_VISIBILITIES,
   PERSON_ROLES,
   PERSON_STATUSES,
   PROJECT_ROLES,
@@ -69,10 +70,18 @@ export const workspaces = pgTable(
     nextTaskNumber: integer().notNull().default(1),
     /** When the organization at the git host was last read whole (ADR-0022); null until it is. */
     membersSyncedAt: instant(),
+    /** Who sees whom on the People page (ADR-0035): everyone, or those one shares a project with. */
+    peopleVisibility: text({ enum: PEOPLE_VISIBILITIES }).notNull().default("everyone"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (table) => [uniqueIndex("workspaces_key_key").on(table.key)],
+  (table) => [
+    uniqueIndex("workspaces_key_key").on(table.key),
+    check(
+      "workspaces_people_visibility_check",
+      sql`${table.peopleVisibility} in (${sql.raw(literals(PEOPLE_VISIBILITIES))})`,
+    ),
+  ],
 );
 
 /** Someone who signed in through an identity provider and is a member of the workspace. */

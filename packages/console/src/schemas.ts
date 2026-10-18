@@ -50,6 +50,7 @@ import {
   GOAL_STATES,
   LINK_SOURCES,
   MEMBERSHIP_SOURCES,
+  PEOPLE_VISIBILITIES,
   PERSON_ROLES,
   PERSON_STATUSES,
   PROJECT_ICON_TYPES,
@@ -179,21 +180,47 @@ export const restMePatchSchema = z.object({ language: z.nullable(languageTag) })
 export type RestMePatch = z.infer<typeof restMePatchSchema>;
 
 /**
+ * The workspace as `GET /api/v1/me` describes it, and as `PATCH /api/v1/workspace` answers: what
+ * the board is called, what the deployment's configuration says of it, and the settings an
+ * administrator keeps on the Settings page (ADR-0035).
+ */
+export const restWorkspaceSchema = z.object({
+  name: z.string(),
+  /** The most days a token may be good for here, or `null` when a person chooses. */
+  tokenDaysAtMost: z.nullable(z.int().check(z.positive())),
+  /**
+   * The organization's skills: the origin of the SkillCDN deployment they are read through,
+   * and the address a project without one of its own reads, canonical, or `null` for none.
+   */
+  skills: z.object({ source: z.string(), address: z.nullable(z.string()) }),
+  /**
+   * Who sees whom on the People page (ADR-0035): everyone, or the people one shares a project
+   * with. Read as optional, so that a console older than this setting still answers; `everyone`
+   * then, which is what it does.
+   */
+  peopleVisibility: z.optional(z.enum(PEOPLE_VISIBILITIES)),
+});
+export type RestWorkspace = z.infer<typeof restWorkspaceSchema>;
+
+/** What `PATCH /api/v1/workspace` is sent, by an administrator: the settings to change. */
+export const restWorkspacePatchSchema = z
+  .object({
+    peopleVisibility: z.optional(z.enum(PEOPLE_VISIBILITIES)),
+  })
+  .check(
+    z.refine((patch) => Object.values(patch).some((value) => value !== undefined), {
+      message: "names nothing to change",
+    }),
+  );
+export type RestWorkspacePatch = z.infer<typeof restWorkspacePatchSchema>;
+
+/**
  * `GET /api/v1/me`: the workspace, who the session cookie says is signed in (or `null`), the
  * language they chose (or `null`), and the identity providers people sign in through, none
  * where nobody can.
  */
 export const restMeSchema = z.object({
-  workspace: z.object({
-    name: z.string(),
-    /** The most days a token may be good for here, or `null` when a person chooses. */
-    tokenDaysAtMost: z.nullable(z.int().check(z.positive())),
-    /**
-     * The organization's skills: the origin of the SkillCDN deployment they are read through,
-     * and the address a project without one of its own reads, canonical, or `null` for none.
-     */
-    skills: z.object({ source: z.string(), address: z.nullable(z.string()) }),
-  }),
+  workspace: restWorkspaceSchema,
   person: z.nullable(restPersonSchema),
   /**
    * What the token asking is called by its person, when a token asks: how a console of a
@@ -329,15 +356,25 @@ export const restProjectPatchSchema = z.object({
 });
 export type RestProjectPatch = z.infer<typeof restProjectPatchSchema>;
 
-/** A person listed in a project, with what they are in it. */
+/**
+ * A member of a project, with what they are in it: a person listed in it, or, in a project open
+ * to the workspace, anyone of the workspace, who is a member of it without a listing (ADR-0035).
+ */
 export const restMemberSchema = z.object({
   person: restPersonSchema,
+  /** What they are in it: an owner as listed or as an administrator, else a member. */
   role: z.enum(PROJECT_ROLES),
+  /** Since when: the listing's day, or, for a member without one, the later of the project's making and their joining. */
   addedAt: instant,
+  /**
+   * Whether a listing holds them in the project. Read as optional, so that a console older than
+   * this field still answers; everyone it lists is listed.
+   */
+  listed: z.optional(z.boolean()),
 });
 export type RestMember = z.infer<typeof restMemberSchema>;
 
-/** `GET /api/v1/projects/<key>/members`: those listed, by login. */
+/** `GET /api/v1/projects/<key>/members`: the members, by login; everyone of the workspace in a project open to it. */
 export const restMembersSchema = z.object({ items: z.array(restMemberSchema) });
 export type RestMembers = z.infer<typeof restMembersSchema>;
 

@@ -81,6 +81,11 @@ import {
   Time,
 } from "./components/ui.js";
 import { WorkList, type WorkListProps } from "./components/work.js";
+import {
+  peopleVisibilityOf,
+  WorkspaceSettingsForm,
+  WorkspaceSettingsView,
+} from "./components/workspace.js";
 import { ConnectPage } from "./connect-page.js";
 import { type ConsoleData, useConsoleData } from "./data.js";
 import { monthOf, today } from "./dates.js";
@@ -1220,19 +1225,36 @@ function ProjectPage(props: {
     const me = data.me?.person ?? undefined;
     const configures = owner;
     const members = words.projects.members;
+    // In a project open to the workspace everyone is a member already (ADR-0035): the list is
+    // everyone, nobody is added or removed, and an owner is made from a row. Where the People
+    // page shows a member only whom they share a project with, an owner lists someone the list
+    // does not show by their login.
+    const open = project.visibility === "workspace";
+    const narrowed =
+      peopleVisibilityOf(data.me?.workspace) === "shared_projects" && me?.role !== "admin";
     return (
       <>
         <div className="sc-page-head">
           <h1 className="sc-page-title">{members.title}</h1>
         </div>
-        <p className="sc-lead">{words.vocabulary.visibility[project.visibility]}</p>
+        <p className="sc-lead">
+          {open ? members.open : words.vocabulary.visibility[project.visibility]}
+        </p>
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
         <components.MemberList
           members={data.members}
           people={data.people.filter(inWorkspace)}
           me={me}
+          open={open}
           busy={busy}
-          onAdd={configures ? (input) => void act(() => data.actions.addMember(input)) : undefined}
+          onAdd={
+            configures && !open
+              ? (input) => void act(() => data.actions.addMember(input))
+              : undefined
+          }
+          lookup={
+            configures && !open && narrowed ? (login) => data.actions.findPerson(login) : undefined
+          }
           onChangeRole={
             configures
               ? (member, role) =>
@@ -1240,7 +1262,7 @@ function ProjectPage(props: {
               : undefined
           }
           onRemove={
-            configures
+            configures && !open
               ? (member) => void act(() => data.actions.removeMember(member.person.id))
               : undefined
           }
@@ -1516,7 +1538,7 @@ function ProjectSettingsPage(props: {
  * from, which whoever runs the console set. Read by everyone; the rules written by an administrator.
  */
 function WorkspaceSettingsPage(props: {
-  readonly form: "rules" | undefined;
+  readonly form: "rules" | "workspace" | undefined;
   readonly data: ConsoleData;
   readonly navigation: Navigation;
 }) {
@@ -1524,7 +1546,8 @@ function WorkspaceSettingsPage(props: {
   const { form, data, navigation } = props;
   const { busy, error, act } = useAction();
   const administrator = data.me?.person?.role === "admin";
-  const skills = data.me?.workspace.skills;
+  const workspace = data.me?.workspace;
+  const skills = workspace?.skills;
   const [rules, setRules] = useState<RestRules | undefined>(undefined);
   useEffect(() => {
     const controller = new AbortController();
@@ -1587,10 +1610,44 @@ function WorkspaceSettingsPage(props: {
       </>
     );
   }
+  if (form === "workspace") {
+    if (!administrator || workspace === undefined) {
+      return <NothingHere />;
+    }
+    return (
+      <>
+        {head}
+        {error !== undefined && <Callout tone="danger">{error}</Callout>}
+        <section className="sc-panel sc-panel-form" aria-label={words.settings.workspace.aria}>
+          <h2 className="sc-section-title">{words.settings.workspace.title}</h2>
+          <WorkspaceSettingsForm
+            workspace={workspace}
+            busy={busy}
+            onSubmit={(patch) =>
+              void act(async () => {
+                await data.actions.updateWorkspace(patch);
+                navigation.replace(PATHS.settings);
+              })
+            }
+            onCancel={() => navigation.back(PATHS.settings)}
+          />
+        </section>
+      </>
+    );
+  }
   return (
     <>
       {head}
       {error !== undefined && <Callout tone="danger">{error}</Callout>}
+      {workspace !== undefined && (
+        <section className="sc-panel" aria-label={words.settings.workspace.aria}>
+          <h2 className="sc-section-title">{words.settings.workspace.title}</h2>
+          <WorkspaceSettingsView
+            workspace={workspace}
+            editHref={administrator ? settingsHref("workspace") : undefined}
+          />
+        </section>
+      )}
       <section className="sc-panel" aria-label={words.rules.title}>
         <h2 className="sc-section-title">{words.rules.title}</h2>
         {rules === undefined ? (
@@ -1958,6 +2015,8 @@ function WorkspacePage(props: {
     const making = route.name === "new-listing" && administrator;
     // An owner sees the work of the people in their projects; the console refuses the rest.
     const oversees = administrator || data.projects.some((project) => project.role === "owner");
+    // The list is what the policy shows (ADR-0035): everyone, or the people one shares a project with.
+    const narrowed = peopleVisibilityOf(data.me?.workspace) === "shared_projects" && !administrator;
     return (
       <>
         <div className="sc-page-head">
@@ -1968,6 +2027,7 @@ function WorkspacePage(props: {
             </LinkButton>
           )}
         </div>
+        {narrowed && <p className="sc-lead">{words.people.narrowed}</p>}
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
         {making && (
           <section className="sc-panel sc-panel-form" aria-label={words.people.letInAria}>

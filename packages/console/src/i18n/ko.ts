@@ -21,6 +21,10 @@ export const ko: Messages = {
     status: { active: "활성", deactivated: "비활성화" },
     projectRole: { owner: "소유자", member: "멤버" },
     visibility: { workspace: "워크스페이스의 모두", private: "목록에 있는 사람만" },
+    peopleVisibility: {
+      everyone: "모두가 모두를 봅니다",
+      shared_projects: "같은 프로젝트에 속한 사람만 봅니다",
+    },
     runStatus: {
       running: "열림",
       waiting: "결정 대기 중",
@@ -163,6 +167,12 @@ export const ko: Messages = {
       chooseSomeone: "선택하세요",
       as: "역할",
       add: "추가",
+      open: "워크스페이스의 모두가 멤버입니다. 소유자가 프로젝트를 설정하며, 소유자는 이 목록에서 지정합니다.",
+      addByLoginAria: "로그인으로 멤버 추가",
+      login: "로그인",
+      addByLogin: "로그인으로 추가",
+      lookupHint: "목록에 보이지 않는 사람: 깃 호스트의 로그인이나 주소를 정확히 적습니다.",
+      nobodyCalled: (login) => `워크스페이스에 ${login}이라는 사람이 없습니다.`,
       empty: {
         title: "목록에 아무도 없습니다",
         workspace: "워크스페이스의 모두가 속해 있고, 관리자가 소유합니다.",
@@ -464,6 +474,15 @@ export const ko: Messages = {
     noSkillsAddress: "주소 없음: 프로젝트마다 자기 주소를 두거나, 두지 않습니다.",
     skillsFromConfiguration:
       "콘솔을 운영하는 쪽이 설정으로 정합니다. 스킬을 읽어 오는 배포와 조직의 주소.",
+    workspace: {
+      title: "워크스페이스",
+      aria: "워크스페이스 설정",
+      peopleVisibility: "누가 누구를 보는가",
+      peopleVisibilityHint:
+        "사람들 페이지와 선택 목록에서: 워크스페이스의 모두를, 또는 멤버는 같은 프로젝트에 속한 사람만 봅니다. 관리자는 언제나 모두를 보고, 워크스페이스에 공개된 프로젝트에는 모두가 속합니다.",
+      edit: "설정 바꾸기",
+      save: "설정 저장",
+    },
   },
 
   rules: {
@@ -527,9 +546,11 @@ export const ko: Messages = {
       dueOn: "기한",
       state: "상태",
       color: "색",
+      peopleVisibility: "사람 목록 범위",
     },
     event: {
       personJoined: () => "보드에 들어왔습니다",
+      workspaceUpdated: (fields) => `워크스페이스의 ${fields}을(를) 바꿨습니다`,
       roleChanged: (login, role) => `${login}을(를) ${role}(으)로 지정했습니다`,
       personListed: (login) => `${login}을(를) 추가했습니다`,
       personUnlisted: (login) => `${login}을(를) 목록에서 뺐습니다`,
@@ -727,6 +748,7 @@ export const ko: Messages = {
   people: {
     title: "사람들",
     list: "사람들",
+    narrowed: "같은 프로젝트에 속한 사람들과 관리자입니다.",
     roleOf: (name) => `${name}의 역할`,
     letIn: "사람 추가",
     letInAria: "사람 추가",

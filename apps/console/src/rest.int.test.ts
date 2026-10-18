@@ -59,6 +59,7 @@ import {
   restVersionSchema,
   restVersionsSchema,
   restWorkSchema,
+  restWorkspaceSchema,
   rulesPath,
 } from "@skillcdn/console/api";
 import {
@@ -3444,5 +3445,209 @@ describe("the archive of the board (ADR-0029)", () => {
     expect(await archiveStaleTasks(testDatabase.database, { before: cutoff, now })).toBe(0);
     await send(alice, "POST", `${IN}/tasks/${stale.id}/restore`);
     expect(await archiveStaleTasks(testDatabase.database, { before: cutoff, now })).toBe(0);
+  });
+});
+
+describe("who sees whom (ADR-0035)", () => {
+  let named: Harness;
+  let admin: string;
+  let owner: string;
+  let member: string;
+  let ownerId: string;
+  let memberId: string;
+  let adminId: string;
+  const asAdmin = (method: "POST" | "PATCH" | "DELETE", path: string, body?: unknown) =>
+    named.request(path, {
+      method,
+      headers: {
+        cookie: admin,
+        origin: SIGN_IN_URL,
+        ...(body === undefined ? {} : { "content-type": "application/json" }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+
+  beforeAll(async () => {
+    named = createHarness(testDatabase, {
+      providers: [createFixtureProvider()],
+      admins: ["carol"],
+    });
+    admin = await named.signIn("carol");
+    owner = alice;
+    member = bob;
+    const people = restPeopleSchema.parse(await (await get(owner, REST_ROUTES.people)).json());
+    const idOf = (login: string) => people.items.find((person) => person.login === login)?.id ?? "";
+    ownerId = idOf("Alice");
+    memberId = idOf("bob");
+    adminId = idOf("carol");
+  });
+
+  it("lists everyone of the workspace as a member of a project open to it, and lists only owners there", async () => {
+    const before = await latestEventIn(owner);
+    const everyone = restMembersSchema.parse(await (await get(member, `${IN}/members`)).json());
+    expect(everyone.items.map((item) => [item.person.login, item.role, item.listed])).toEqual([
+      ["Alice", "owner", true],
+      ["bob", "member", false],
+      ["carol", "owner", false],
+    ]);
+    // A member without a listing is one since the later of the project's making and their joining.
+    const project = restProjectSchema.parse(await (await get(owner, IN)).json());
+    const bobsRow = everyone.items.find((item) => item.person.login === "bob");
+    expect(bobsRow?.addedAt).toBe(project.createdAt);
+    // Everyone is a member already: only an owner is listed.
+    const asMember = await send(owner, "POST", `${IN}/members`, { personId: memberId });
+    expect(asMember.status).toBe(409);
+    expect(await errorOf(asMember)).toBe("member.open_project");
+    const promoted = await send(owner, "PATCH", `${IN}/members/${memberId}`, { role: "owner" });
+    expect(promoted.status).toBe(200);
+    expect(restMemberSchema.parse(await promoted.json())).toMatchObject({
+      person: { login: "bob" },
+      role: "owner",
+      listed: true,
+    });
+    expect(restProjectSchema.parse(await (await get(member, IN)).json()).role).toBe("owner");
+    // Back to a member: the listing goes, the membership stays.
+    const demoted = await send(owner, "PATCH", `${IN}/members/${memberId}`, { role: "member" });
+    expect(demoted.status).toBe(200);
+    expect(restMemberSchema.parse(await demoted.json())).toMatchObject({
+      person: { login: "bob" },
+      role: "member",
+      listed: false,
+    });
+    expect(restProjectSchema.parse(await (await get(member, IN)).json()).role).toBe("member");
+    expect((await send(owner, "DELETE", `${IN}/members/${memberId}`)).status).toBe(404);
+    // An administrator owns every project whatever is asked, and is listed by nothing.
+    const stillOwner = await send(owner, "PATCH", `${IN}/members/${adminId}`, { role: "member" });
+    expect(stillOwner.status).toBe(200);
+    expect(restMemberSchema.parse(await stillOwner.json())).toMatchObject({
+      role: "owner",
+      listed: false,
+    });
+    const since = restEventsSchema.parse(
+      await (await get(owner, `${IN}/events?after=${before}`)).json(),
+    );
+    expect(since.items.map((event) => [event.kind, event.data.login, event.data.role])).toEqual([
+      ["project.member_changed", "bob", "owner"],
+      ["project.member_changed", "bob", "member"],
+    ]);
+  });
+
+  it("narrows the people a member sees to those they share a project with, when an administrator says so", async () => {
+    const team = projectPath("team");
+    // Alice is an administrator by now, after the tests of the roles; here she is a member who
+    // owns her projects, and every project open to the workspace is private for the while, so
+    // that Bob, listed nowhere, shares no project with her.
+    expect(
+      (await asAdmin("PATCH", `${REST_ROUTES.people}/${ownerId}`, { role: "member" })).status,
+    ).toBe(200);
+    const all = restProjectsSchema.parse(
+      await (await named.request(REST_ROUTES.projects, { headers: { cookie: admin } })).json(),
+    );
+    const open = all.items
+      .filter((project) => project.visibility === "workspace")
+      .map((project) => project.key);
+    for (const key of open) {
+      expect((await asAdmin("PATCH", projectPath(key), { visibility: "private" })).status).toBe(
+        200,
+      );
+    }
+    await named.project(owner, { key: "team", name: "The team", visibility: "private" });
+    const unlisted: { readonly key: string; readonly role: "owner" | "member" }[] = [];
+    try {
+      // Where Bob is listed with Alice by an earlier test, she is taken off for the while.
+      const his = restProjectsSchema.parse(await (await get(member, REST_ROUTES.projects)).json());
+      for (const project of his.items) {
+        const theirs = restMembersSchema.parse(
+          await (await get(member, `${projectPath(project.key)}/members`)).json(),
+        );
+        const hers = theirs.items.find((item) => item.person.login === "Alice");
+        if (hers !== undefined) {
+          expect(
+            (await asAdmin("DELETE", `${projectPath(project.key)}/members/${ownerId}`)).status,
+          ).toBe(204);
+          unlisted.push({ key: project.key, role: hers.role });
+        }
+      }
+      // The setting is an administrator's, from the pages or through a token; a member may not.
+      const byMember = await send(member, "PATCH", REST_ROUTES.workspace, {
+        peopleVisibility: "shared_projects",
+      });
+      expect(byMember.status).toBe(403);
+      expect(await errorOf(byMember)).toBe("auth.forbidden");
+      expect((await asAdmin("PATCH", REST_ROUTES.workspace, {})).status).toBe(400);
+      const changed = await asAdmin("PATCH", REST_ROUTES.workspace, {
+        peopleVisibility: "shared_projects",
+      });
+      expect(changed.status).toBe(200);
+      expect(restWorkspaceSchema.parse(await changed.json()).peopleVisibility).toBe(
+        "shared_projects",
+      );
+      const me = restMeSchema.parse(await (await get(member, REST_ROUTES.me)).json());
+      expect(me.workspace.peopleVisibility).toBe("shared_projects");
+
+      // Bob shares no project with Alice now: he sees himself and the administrators, and
+      // neither the logins let in nor the organization's reading; an administrator sees all.
+      const narrowed = restPeopleSchema.parse(await (await get(member, REST_ROUTES.people)).json());
+      expect(narrowed.items.map((person) => person.login)).toEqual(["bob", "carol"]);
+      expect(narrowed.listed).toEqual([]);
+      const whole = restPeopleSchema.parse(
+        await (await named.request(REST_ROUTES.people, { headers: { cookie: admin } })).json(),
+      );
+      expect(whole.items.map((person) => person.login)).toEqual(["Alice", "bob", "carol"]);
+      // Alice, an owner, finds Bob by his exact login, so as to list him; Bob, who owns a project
+      // of his own, finds Alice the same way though his list does not show her; nobody is nobody.
+      const found = restPeopleSchema.parse(
+        await (await get(owner, `${REST_ROUTES.people}?login=BOB`)).json(),
+      );
+      expect(found.items.map((person) => person.login)).toEqual(["bob"]);
+      const byOwner = restPeopleSchema.parse(
+        await (await get(member, `${REST_ROUTES.people}?login=alice`)).json(),
+      );
+      expect(byOwner.items.map((person) => person.login)).toEqual(["Alice"]);
+      expect(byOwner.listed).toEqual([]);
+      const nobody = restPeopleSchema.parse(
+        await (await get(member, `${REST_ROUTES.people}?login=nobody`)).json(),
+      );
+      expect(nobody.items).toEqual([]);
+      expect((await get(member, `${REST_ROUTES.people}?login=`)).status).toBe(400);
+      // The workspace's own events say who is in: not Bob's to read while narrowed.
+      const events = await get(member, `${REST_ROUTES.events}?after=0`);
+      expect(events.status).toBe(403);
+      expect(await errorOf(events)).toBe("auth.forbidden");
+      // Listed in Alice's project, Bob sees her.
+      expect((await send(owner, "POST", `${team}/members`, { personId: memberId })).status).toBe(
+        201,
+      );
+      const shared = restPeopleSchema.parse(await (await get(member, REST_ROUTES.people)).json());
+      expect(shared.items.map((person) => person.login)).toEqual(["Alice", "bob", "carol"]);
+      // The change is told to the workspace, by its field.
+      const own = restEventsSchema.parse(
+        await (
+          await named.request(`${REST_ROUTES.events}?after=0`, { headers: { cookie: admin } })
+        ).json(),
+      );
+      expect(own.items.at(-1)).toMatchObject({
+        kind: "workspace.updated",
+        data: { fields: ["peopleVisibility"] },
+      });
+    } finally {
+      expect(
+        (await asAdmin("PATCH", REST_ROUTES.workspace, { peopleVisibility: "everyone" })).status,
+      ).toBe(200);
+      for (const key of open) {
+        expect((await asAdmin("PATCH", projectPath(key), { visibility: "workspace" })).status).toBe(
+          200,
+        );
+      }
+      for (const { key, role } of unlisted) {
+        expect(
+          (await asAdmin("POST", `${projectPath(key)}/members`, { personId: ownerId, role }))
+            .status,
+        ).toBe(201);
+      }
+      expect(
+        (await asAdmin("PATCH", `${REST_ROUTES.people}/${ownerId}`, { role: "admin" })).status,
+      ).toBe(200);
+    }
   });
 });
