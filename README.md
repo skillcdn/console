@@ -20,9 +20,9 @@ The console holds the work to be done, which agent (Claude Code, Codex, any agen
 
 Open [skillcdn.ai/gh/skillcdn/console](https://skillcdn.ai/gh/skillcdn/console), connect it to your agent as the page shows, and say:
 
-> Set up a SkillCDN console for my organization.
+> Set up a SkillCDN console for my organization. Our website is example.com.
 
-The agent asks for what it needs and does the rest.
+The agent asks for what it needs and does the rest. Given the website, the console comes up in the organization's own look, its marks, colours and type, and in the default pages otherwise ([deploying-a-console](skills/deploying-a-console/SKILL.md)).
 
 ## Install
 

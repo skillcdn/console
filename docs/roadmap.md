@@ -275,6 +275,13 @@ Goal: a private pack connected without a token copied through a clipboard, now t
 - [x] The pages and the command (2026-10-18): the Settings page's pack token form connects first and pastes second, asking the console again until the token is kept; `console project pack-token <key> --connect` prints the page and the code and waits ([specs/cli.md](specs/cli.md)).
 - [x] Written where a private pack is first met (2026-10-18): the README, [deploy/README.md](../deploy/README.md), the skill deploying-a-console, which asks whether the repository is private and connects it with the first project, and the skill working-the-board's setting-up reference; the Skills page says an owner connects it on the Settings page.
 
+## Milestone 27, the organization's look by default (2026-10-18)
+
+Goal: a console deployed by an agent for an organization with a website comes up in the organization's own look, not in the default pages with SkillCDN's marks, since a deployment asked for through the pack never had its design customized.
+
+- [x] The skills (2026-10-18): deploying-a-console asks for the organization's website and, given one, plans the look and builds the organization's own console into the image as `console-ui/` with building-a-console, whose inputs take the marks and the colours from the site as [the-look-from-a-website.md](../skills/building-a-console/references/the-look-from-a-website.md) says: what to read on the site, how it maps onto the dark pages, the contrast checked, the type taken only as the bundling rules allow, and what is left alone. The README's quick start names the website.
+- [ ] Tried on a deployment with a website, and what the first run found folded in: waits for the next deployment.
+
 ## After milestone 16
 
 Nothing is chosen yet; the list below is where the next milestone comes from. Left open by milestone 9: whether the board should end a run not heard from for a long while itself ([ADR-0020](adr/0020-the-console-does-not-claim-an-agent-is-at-work-a-run-says-when-it-was-last-heard-from-and-a-new-run-takes-over.md)); a roadmap across projects.
