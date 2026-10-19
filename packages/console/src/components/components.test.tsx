@@ -2628,6 +2628,11 @@ describe("the roadmap as months (ADR-0026)", () => {
     expect(html).toContain('href="/projects/web/roadmap?from=2026-09"');
     expect(html).toContain('href="/projects/web/roadmap?from=2026-11"');
     expect(html).toContain(`href="/projects/web/roadmap/${planned.id}"`);
+    // The label keeps to one line beside its bar, so a long title is cut short and said in full on
+    // hover, as text: what was typed never becomes markup there either.
+    expect(html).toContain(
+      `<a class="sc-timeline-goal" href="/projects/web/roadmap/${planned.id}" title="Ship v1 &lt;b&gt;now&lt;/b&gt;">`,
+    );
     const empty = renderToStaticMarkup(
       <GoalTimeline
         goals={[]}

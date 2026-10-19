@@ -3892,12 +3892,17 @@ table {
   gap: var(--sc-space-2);
 }
 
+/* A label keeps to one line, so that every row is as tall as its bar and the labels line up with
+   the bars: a long title is cut short, said in full on hover, and the state stays beside it. */
 .sc-timeline-label {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: var(--sc-space-2);
   min-width: 0;
+}
+
+.sc-timeline-label .sc-badge {
+  flex: none;
 }
 
 .sc-timeline-goal {
@@ -3905,6 +3910,13 @@ table {
   font-size: var(--sc-text-sm);
   text-decoration: none;
   overflow-wrap: anywhere;
+}
+
+.sc-timeline-label .sc-timeline-goal {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sc-timeline-goal:hover {
@@ -4059,6 +4071,11 @@ table {
 @media (max-width: 40rem) {
   .sc-timeline-row {
     grid-template-columns: minmax(6rem, 8rem) minmax(16rem, 1fr);
+  }
+
+  /* A narrow label is the title's: the goal's state is on its card below the months. */
+  .sc-timeline-label .sc-badge {
+    display: none;
   }
 }
 

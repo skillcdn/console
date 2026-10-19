@@ -157,7 +157,7 @@ export function GoalTimeline(props: GoalTimelineProps) {
           return (
             <div key={goal.id} className={cx("sc-timeline-row", `sc-goal-${goal.state}`)}>
               <div className="sc-timeline-label">
-                <a className="sc-timeline-goal" href={props.goalHref(goal)}>
+                <a className="sc-timeline-goal" href={props.goalHref(goal)} title={goal.title}>
                   {goal.title}
                 </a>
                 <GoalStateBadge state={goal.state} />
