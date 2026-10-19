@@ -164,6 +164,8 @@
   --sc-brand-size-compact: 0.875rem;
   --sc-control-size: 2.5rem;
   --sc-focus-ring: 2px solid var(--sc-color-accent);
+  /* A scrollbar's thumb: a light grey, there when it is needed and quiet otherwise. */
+  --sc-scrollbar-thumb: color-mix(in srgb, var(--sc-color-border-strong) 45%, transparent);
   /* A select's chevron: a thin stroke in a grey that reads on a light field and a dark one. */
   --sc-select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%235a6371' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --sc-transition: 120ms ease-out;
@@ -188,6 +190,7 @@ html {
   /* The room for a scrollbar is kept on every page, so that a page that scrolls and one that does
      not put the header and the page at the same place. */
   scrollbar-gutter: stable;
+  scrollbar-color: var(--sc-scrollbar-thumb) transparent;
   scroll-padding-top: calc(var(--sc-header-height) + var(--sc-space-6));
 }
 
@@ -1459,7 +1462,7 @@ select.sc-input {
   overflow-x: auto;
   scroll-snap-type: x proximity;
   scrollbar-width: thin;
-  scrollbar-color: var(--sc-color-border-strong) transparent;
+  scrollbar-color: var(--sc-scrollbar-thumb) transparent;
 }
 
 .sc-column {
@@ -1524,7 +1527,7 @@ select.sc-input {
   padding: var(--sc-space-2);
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: var(--sc-color-border-strong) transparent;
+  scrollbar-color: var(--sc-scrollbar-thumb) transparent;
 }
 
 .sc-card {
