@@ -1218,14 +1218,27 @@ table {
   cursor: not-allowed;
 }
 
-/* A select draws its own chevron, in the muted text colour, as far from the edge as the words
-   are from the other one: the browser's own arrow sits on the border and takes no padding. */
+/* A select draws the browser's chevron itself, a thin stroke in the text colour, as far from the
+   edge as the words are from the other one: the browser's own arrow sits on the border and
+   takes no padding. Two hairline diagonals, one in each half, make the chevron. */
 select.sc-input {
   appearance: none;
   padding-right: calc(var(--sc-space-3) * 2 + 0.625rem);
   background-image:
-    linear-gradient(45deg, transparent 50%, var(--sc-color-text-muted) 50%),
-    linear-gradient(135deg, var(--sc-color-text-muted) 50%, transparent 50%);
+    linear-gradient(
+      45deg,
+      transparent calc(50% - 0.75px),
+      var(--sc-color-text) calc(50% - 0.75px),
+      var(--sc-color-text) calc(50% + 0.75px),
+      transparent calc(50% + 0.75px)
+    ),
+    linear-gradient(
+      135deg,
+      transparent calc(50% - 0.75px),
+      var(--sc-color-text) calc(50% - 0.75px),
+      var(--sc-color-text) calc(50% + 0.75px),
+      transparent calc(50% + 0.75px)
+    );
   background-position:
     right calc(var(--sc-space-3) + 0.3125rem) center,
     right var(--sc-space-3) center;
