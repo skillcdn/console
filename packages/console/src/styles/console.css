@@ -49,9 +49,9 @@
   /* The ground: a pale field with two lights in it, a far one low and wide and a near one high
      and soft, so the field has distance in it. The default UI
      provides the field's face (the shell); a custom console may paint its own. */
-  --sc-color-sky: #e9eefb;
+  --sc-color-sky: #f6f8fe;
   /* The field's gradient, in one direction from the top; the lights below are drawn over it. */
-  --sc-field-gradient: linear-gradient(180deg, #e6edfc 0%, #eef1fb 55%, #f6f5fd 100%);
+  --sc-field-gradient: linear-gradient(180deg, #e8eefc 0%, #f4f6fd 38%, #fcfcff 100%);
   --sc-color-far: transparent;
   --sc-color-far-turn: transparent;
   --sc-color-vignette: transparent;
@@ -67,25 +67,30 @@
 
   /* Glass: what a pane over the field is made of. A wide blur with the colour behind pushed, a
      white veil, a bright edge, and a soft stand-off from the field. */
-  --sc-glass-backdrop: blur(24px) saturate(1.8);
-  --sc-color-glass: #ffffff99;
-  --sc-color-glass-hover: #ffffffb8;
-  --sc-color-glass-edge: #ffffffa6;
-  --sc-glass-surface: linear-gradient(var(--sc-color-glass), var(--sc-color-glass)) padding-box;
-  --sc-glass-surface-hover: linear-gradient(
-      var(--sc-color-glass-hover),
-      var(--sc-color-glass-hover)
-    )
-    padding-box;
-  --sc-glass-sheen: inset 0 1px 0 #ffffffcc;
-  --sc-glass-lift: 0 1rem 2.5rem -1rem #2a3c7a40, 0 1px 2px #2a3c7a14;
-  --sc-glass-lens: blur(4px) brightness(1.15) saturate(1.4);
+  --sc-glass-backdrop: blur(20px) saturate(1.8);
+  --sc-color-glass: #ffffff61;
+  --sc-color-glass-hover: #ffffffb3;
+  --sc-color-glass-edge: #ffffffd9;
+  /* The light that falls down a pane's face, from its top edge. */
+  --sc-glass-highlight: #ffffffeb;
+  --sc-glass-surface:
+    linear-gradient(180deg, var(--sc-glass-highlight), transparent 42%) padding-box,
+    linear-gradient(var(--sc-color-glass), var(--sc-color-glass)) padding-box;
+  --sc-glass-surface-hover:
+    linear-gradient(180deg, var(--sc-glass-highlight), transparent 42%) padding-box,
+    linear-gradient(var(--sc-color-glass-hover), var(--sc-color-glass-hover)) padding-box;
+  --sc-glass-sheen: inset 0 1px 0 #ffffff, inset 1px 0 0 #ffffff80, inset -1px 0 0 #ffffff40;
+  --sc-glass-lift: 0 1rem 2.5rem -1rem #1e2b6642, 0 2px 6px -2px #1e2b661a;
+  --sc-glass-lens: blur(4px) brightness(1.2) saturate(1.5);
   --sc-glass-lens-width: 1px;
   --sc-glass-lens-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   /* A surface inside a pane: no blur of its own, white with a little of the pane let through. */
-  --sc-color-sheet: color-mix(in srgb, var(--sc-color-bg-raised) 72%, transparent);
-  --sc-color-sheet-hover: color-mix(in srgb, var(--sc-color-bg-raised) 92%, transparent);
+  --sc-color-sheet: color-mix(in srgb, var(--sc-color-bg-raised) 80%, transparent);
+  --sc-color-sheet-hover: var(--sc-color-bg-raised);
   --sc-color-field: var(--sc-color-bg-raised);
+  /* A sheet's edge, lighter than a border so that it reads as glass, and the lift under it. */
+  --sc-sheet-edge: 1px solid color-mix(in srgb, var(--sc-color-border) 60%, #ffffff);
+  --sc-sheet-lift: 0 1px 2px #1e2b660f, 0 2px 8px -4px #1e2b661a;
 
   /* A lit thing casts the accent's own colour downward, in layers that fall off the way
      brightness does. */
@@ -124,6 +129,9 @@
      box lands low; a box that centres a label takes this off the top and gives it to the
      bottom. Not for anything that can wrap. */
   --sc-label-lift: 0.067em;
+  /* Hangul fills more of its box than Latin capitals and sits higher in it, so a label in Korean is
+     lifted less: on a page in Korean the labels read this one. */
+  --sc-label-lift-hangul: calc(var(--sc-label-lift) - 0.15em);
 
   /* Space: a 4px grid. */
   --sc-space-1: 0.25rem;
@@ -158,6 +166,11 @@
   --sc-transition: 120ms ease-out;
 }
 
+/* A page in Korean lifts its labels as Hangul needs (the pages say their language on <html>). */
+:root:lang(ko) {
+  --sc-label-lift-text: var(--sc-label-lift-hangul);
+}
+
 /* Reset: only what the pages need. */
 
 *,
@@ -169,6 +182,9 @@
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  /* The room for a scrollbar is kept on every page, so that a page that scrolls and one that does
+     not put the header and the page at the same place. */
+  scrollbar-gutter: stable;
   scroll-padding-top: calc(var(--sc-header-height) + var(--sc-space-6));
 }
 
@@ -616,8 +632,8 @@ table {
   display: block;
   width: 100%;
   padding-inline: var(--sc-space-3);
-  padding-block: calc(var(--sc-space-2) - var(--sc-label-lift))
-    calc(var(--sc-space-2) + var(--sc-label-lift));
+  padding-block: calc(var(--sc-space-2) - var(--sc-label-lift-text, var(--sc-label-lift)))
+    calc(var(--sc-space-2) + var(--sc-label-lift-text, var(--sc-label-lift)));
   border: 0;
   border-radius: var(--sc-radius-md);
   background: none;
@@ -666,7 +682,11 @@ table {
 /* Leaving is apart from the pages one goes to. */
 .sc-menu-out {
   margin-top: var(--sc-space-1);
-  padding-top: calc(var(--sc-space-2) + var(--sc-space-1) - var(--sc-label-lift));
+  padding-top: calc(
+    var(--sc-space-2) +
+    var(--sc-space-1) -
+    var(--sc-label-lift-text, var(--sc-label-lift))
+  );
   border-top: var(--sc-border);
   border-radius: 0 0 var(--sc-radius-md) var(--sc-radius-md);
 }
@@ -700,7 +720,14 @@ table {
 /* A page as wide as the window: the board, whose columns want every bit of it. */
 .sc-main-wide {
   max-width: none;
-  padding: var(--sc-space-5) var(--sc-space-4) var(--sc-space-4);
+  padding: var(--sc-space-5) var(--sc-space-5) var(--sc-space-4);
+}
+
+/* A page that takes the whole window takes the header with it, so that the lockup, the tabs and
+   the page start on one line, as they do on every other page. */
+.sc-shell:has(> .sc-main-wide) .sc-header-inner,
+.sc-shell:has(> .sc-main-wide) .sc-tabs {
+  max-width: none;
 }
 
 .sc-page-head {
@@ -848,8 +875,9 @@ table {
 .sc-option,
 .sc-answer,
 .sc-report-list {
-  border: var(--sc-border);
+  border: var(--sc-sheet-edge);
   background: var(--sc-color-sheet);
+  box-shadow: var(--sc-sheet-lift);
 }
 
 .sc-loading {
@@ -945,8 +973,8 @@ table {
   align-items: center;
   gap: var(--sc-space-1);
   padding-inline: var(--sc-space-2);
-  padding-block: calc(var(--sc-space-1) - var(--sc-label-lift))
-    calc(var(--sc-space-1) + var(--sc-label-lift));
+  padding-block: calc(var(--sc-space-1) - var(--sc-label-lift-text, var(--sc-label-lift)))
+    calc(var(--sc-space-1) + var(--sc-label-lift-text, var(--sc-label-lift)));
   border: 1px solid var(--sc-color-border);
   border-radius: var(--sc-radius-full);
   font-size: var(--sc-text-xs);
@@ -1547,6 +1575,12 @@ select.sc-input {
 
 .sc-card-spacer {
   flex: 1;
+}
+
+/* The people at work stay at the end of the row, also when the badges push them onto a line of
+   their own. */
+.sc-card-meta .sc-workers {
+  margin-inline-start: auto;
 }
 
 /* One task, and a page of the documents: the text in a column for reading, the facts beside it
@@ -3167,6 +3201,16 @@ select.sc-input {
   height: 2rem;
   border-radius: var(--sc-radius-md);
   font-size: var(--sc-text-sm);
+}
+
+/* The mark hangs in the margin, so that what wraps onto a second line, a badge most often,
+   starts under the name rather than under the mark. */
+.sc-project-head:has(> .sc-mark-md) {
+  padding-inline-start: calc(2rem + var(--sc-space-3));
+}
+
+.sc-project-head > .sc-mark-md {
+  margin-inline-start: calc(-2rem - var(--sc-space-3));
 }
 
 .sc-mark-lg {
