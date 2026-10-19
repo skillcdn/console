@@ -13,6 +13,12 @@ const css = readFileSync(new URL("./console.css", import.meta.url), "utf8").repl
 const SET_INLINE = new Set(["--sc-span"]);
 
 describe("console.css", () => {
+  it("draws a select's chevron itself, inset from the edge", () => {
+    const rule = css.match(/select\.sc-input\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(rule).toContain("appearance: none");
+    expect(rule).toMatch(/background-position:[^;]*right var\(--sc-space-3\) center/);
+  });
+
   it("is light by default (ADR-0040)", () => {
     expect(css).toMatch(/:root\s*\{\s*color-scheme:\s*light;/);
   });

@@ -1218,6 +1218,21 @@ table {
   cursor: not-allowed;
 }
 
+/* A select draws its own chevron, in the muted text colour, as far from the edge as the words
+   are from the other one: the browser's own arrow sits on the border and takes no padding. */
+select.sc-input {
+  appearance: none;
+  padding-right: calc(var(--sc-space-3) * 2 + 0.625rem);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--sc-color-text-muted) 50%),
+    linear-gradient(135deg, var(--sc-color-text-muted) 50%, transparent 50%);
+  background-position:
+    right calc(var(--sc-space-3) + 0.3125rem) center,
+    right var(--sc-space-3) center;
+  background-size: 0.3125rem 0.3125rem;
+  background-repeat: no-repeat;
+}
+
 /* What people write is prose first, so the box they write in is set in the page's own face. */
 .sc-textarea {
   min-height: 6rem;
