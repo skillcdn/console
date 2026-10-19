@@ -23,7 +23,7 @@
   /* Text: the site's own ink on white. */
   --sc-color-text: #14141a;
   --sc-color-text-muted: #5a6371;
-  --sc-color-text-faint: #636b79;
+  --sc-color-text-faint: #5f6774;
 
   /* The one accent: the blue that text and lines are drawn in, and the deeper blue a surface
      is filled with so that a white label reads on it. */
@@ -39,7 +39,7 @@
   --sc-color-selection: color-mix(in srgb, var(--sc-color-accent-solid) 25%, transparent);
 
   /* Status. */
-  --sc-color-success: #1c7c51;
+  --sc-color-success: #1b784f;
   --sc-color-success-subtle: #e4f5ec;
   --sc-color-warning: #8a6100;
   --sc-color-warning-subtle: #fcf3dc;
@@ -49,9 +49,9 @@
   /* The ground: a pale field with two lights in it, a far one low and wide and a near one high
      and soft, so the field has distance in it. The default UI
      provides the field's face (the shell); a custom console may paint its own. */
-  --sc-color-sky: #f6f8fe;
+  --sc-color-sky: #eef2fd;
   /* The field's gradient, in one direction from the top; the lights below are drawn over it. */
-  --sc-field-gradient: linear-gradient(180deg, #e8eefc 0%, #f4f6fd 38%, #fcfcff 100%);
+  --sc-field-gradient: linear-gradient(160deg, #d9e5ff 0%, #e9eefe 38%, #f6f5ff 72%, #ffffff 100%);
   --sc-color-far: transparent;
   --sc-color-far-turn: transparent;
   --sc-color-vignette: transparent;
@@ -67,30 +67,33 @@
 
   /* Glass: what a pane over the field is made of. A wide blur with the colour behind pushed, a
      white veil, a bright edge, and a soft stand-off from the field. */
-  --sc-glass-backdrop: blur(20px) saturate(1.8);
-  --sc-color-glass: #ffffff61;
-  --sc-color-glass-hover: #ffffffb3;
-  --sc-color-glass-edge: #ffffffd9;
+  --sc-glass-backdrop: blur(24px) saturate(2);
+  --sc-color-glass: #ffffff40;
+  --sc-color-glass-hover: #ffffff66;
+  --sc-color-glass-edge: #ffffff;
   /* The light that falls down a pane's face, from its top edge. */
-  --sc-glass-highlight: #ffffffeb;
+  --sc-glass-highlight: #ffffffcc;
   --sc-glass-surface:
-    linear-gradient(180deg, var(--sc-glass-highlight), transparent 42%) padding-box,
+    linear-gradient(170deg, var(--sc-glass-highlight), transparent 38%) padding-box,
     linear-gradient(var(--sc-color-glass), var(--sc-color-glass)) padding-box;
   --sc-glass-surface-hover:
-    linear-gradient(180deg, var(--sc-glass-highlight), transparent 42%) padding-box,
+    linear-gradient(170deg, var(--sc-glass-highlight), transparent 38%) padding-box,
     linear-gradient(var(--sc-color-glass-hover), var(--sc-color-glass-hover)) padding-box;
-  --sc-glass-sheen: inset 0 1px 0 #ffffff, inset 1px 0 0 #ffffff80, inset -1px 0 0 #ffffff40;
-  --sc-glass-lift: 0 1rem 2.5rem -1rem #1e2b6642, 0 2px 6px -2px #1e2b661a;
-  --sc-glass-lens: blur(4px) brightness(1.2) saturate(1.5);
+  --sc-glass-sheen: inset 0 1px 0 #ffffff;
+  --sc-glass-lift: 0 0.5rem 2rem #1f268726, 0 1px 2px #1f268714;
+  --sc-glass-lens: blur(2px) brightness(1.3) saturate(1.6);
   --sc-glass-lens-width: 1px;
   --sc-glass-lens-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   /* A surface inside a pane: no blur of its own, white with a little of the pane let through. */
-  --sc-color-sheet: color-mix(in srgb, var(--sc-color-bg-raised) 80%, transparent);
-  --sc-color-sheet-hover: var(--sc-color-bg-raised);
+  --sc-color-sheet: color-mix(in srgb, var(--sc-color-bg-raised) 62%, transparent);
+  --sc-color-sheet-hover: color-mix(in srgb, var(--sc-color-bg-raised) 88%, transparent);
   --sc-color-field: var(--sc-color-bg-raised);
+  /* A sheet's own blur, so that a card reads as a tile of glass on the pane. */
+  --sc-sheet-backdrop: blur(12px) saturate(1.6);
   /* A sheet's edge, lighter than a border so that it reads as glass, and the lift under it. */
-  --sc-sheet-edge: 1px solid color-mix(in srgb, var(--sc-color-border) 60%, #ffffff);
-  --sc-sheet-lift: 0 1px 2px #1e2b660f, 0 2px 8px -4px #1e2b661a;
+  --sc-sheet-edge: 1px solid
+    color-mix(in srgb, var(--sc-color-bg-raised) 85%, var(--sc-color-border));
+  --sc-sheet-lift: 0 1px 2px #1f268712, 0 4px 14px -6px #1f268724;
 
   /* A lit thing casts the accent's own colour downward, in layers that fall off the way
      brightness does. */
@@ -878,6 +881,7 @@ table {
   border: var(--sc-sheet-edge);
   background: var(--sc-color-sheet);
   box-shadow: var(--sc-sheet-lift);
+  backdrop-filter: var(--sc-sheet-backdrop);
 }
 
 .sc-loading {
