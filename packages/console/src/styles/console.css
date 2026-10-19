@@ -49,15 +49,17 @@
   /* The ground: a pale field with two lights in it, a far one low and wide and a near one high
      and soft, so the field has distance in it. The default UI
      provides the field's face (the shell); a custom console may paint its own. */
-  --sc-color-sky: #e6ecfa;
-  --sc-color-far: #5b8cff40;
-  --sc-color-far-turn: #9c8cff3d;
-  --sc-color-vignette: #c7d3f159;
+  --sc-color-sky: #e9eefb;
+  /* The field's gradient, in one direction from the top; the lights below are drawn over it. */
+  --sc-field-gradient: linear-gradient(180deg, #e6edfc 0%, #eef1fb 55%, #f6f5fd 100%);
+  --sc-color-far: transparent;
+  --sc-color-far-turn: transparent;
+  --sc-color-vignette: transparent;
   --sc-color-light-core: #ffffff;
   --sc-color-light-body: #bcd2ff;
   --sc-color-light-mid: #a99df4a0;
   --sc-color-light-halo: #5f8dff7a;
-  --sc-light-strength: 0.7;
+  --sc-light-strength: 0;
   --sc-light-top: -14rem;
   --sc-light-height: 56rem;
   --sc-light-inset: -6%;
@@ -68,17 +70,17 @@
   --sc-glass-backdrop: blur(24px) saturate(1.8);
   --sc-color-glass: #ffffff99;
   --sc-color-glass-hover: #ffffffb8;
-  --sc-color-glass-edge: #ffffffe6;
+  --sc-color-glass-edge: #ffffffa6;
   --sc-glass-surface: linear-gradient(var(--sc-color-glass), var(--sc-color-glass)) padding-box;
   --sc-glass-surface-hover: linear-gradient(
       var(--sc-color-glass-hover),
       var(--sc-color-glass-hover)
     )
     padding-box;
-  --sc-glass-sheen: inset 0 1px 0 #ffffff, inset 0 0 0 1px #ffffff8c, inset 0 -1px 0 #ffffff40;
+  --sc-glass-sheen: inset 0 1px 0 #ffffffcc;
   --sc-glass-lift: 0 1rem 2.5rem -1rem #2a3c7a40, 0 1px 2px #2a3c7a14;
   --sc-glass-lens: blur(4px) brightness(1.15) saturate(1.4);
-  --sc-glass-lens-width: 2px;
+  --sc-glass-lens-width: 1px;
   --sc-glass-lens-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   /* A surface inside a pane: no blur of its own, white with a little of the pane let through. */
   --sc-color-sheet: color-mix(in srgb, var(--sc-color-bg-raised) 72%, transparent);
@@ -322,12 +324,14 @@ table {
   overflow-x: clip;
   background-color: var(--sc-color-sky);
   /* The far light: low, wide and vague, which is what distance does to a light. */
-  background-image: radial-gradient(
-    ellipse 120% 64% at 50% 92%,
-    var(--sc-color-far),
-    var(--sc-color-far-turn) 48%,
-    transparent 72%
-  );
+  background-image:
+    radial-gradient(
+      ellipse 120% 64% at 50% 92%,
+      var(--sc-color-far),
+      var(--sc-color-far-turn) 48%,
+      transparent 72%
+    ),
+    var(--sc-field-gradient);
   background-attachment: fixed;
 }
 
