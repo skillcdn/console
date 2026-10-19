@@ -1,7 +1,7 @@
 // The marks of the brand come from the main repository's package, never from a copy here
-// (ADR-0013); the build gives back their addresses. The pages are dark, so the wordmark is white.
+// (ADR-0013); the build gives back their addresses. The pages are light, so the wordmark is black.
 import symbol from "@skillcdn/brand/symbol.svg";
-import wordmark from "@skillcdn/brand/wordmark-white.svg";
+import wordmark from "@skillcdn/brand/wordmark-black.svg";
 import { createConsole } from "@skillcdn/console";
 // The styles ship with the package; the build bundles them next to the script.
 import "@skillcdn/console/console.css";

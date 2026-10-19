@@ -12,17 +12,17 @@ Fetch the homepage as HTML, with the agent's own tools, and read, in this order:
 | The wordmark | The same header: the name as lettering, wide, often an SVG beside or instead of the symbol | `brand.wordmark`, alone or beside the symbol. A mark three or four times wider than high is a wordmark, not a symbol. |
 | The colours | `<meta name="theme-color">`; custom properties on `:root` in the site's stylesheet (`--color-primary`, `--brand`, `--accent` and their kin); the fill of the primary button and the colour of links | One primary colour, as a value; a second where the site plainly has two. |
 | The type | `font-family` of the body and of the headings, in the stylesheet | The names, to tell the person; a face is loaded only as the rules below allow. |
-| The mood | The site itself: dark or light, flat or glassy, round or square corners | Whether the field stays dark (the pages are dark, and stay so), and whether the radii follow the site (`--sc-radius-*`). |
+| The mood | The site itself: dark or light, flat or glassy, round or square corners | Whether the field stays light (the pages are light by default, ADR-0040; a dark site is said at the plan, and darkening the pages is the person's word, not the default), and whether the radii follow the site (`--sc-radius-*`). |
 
 A site that cannot be fetched (a login wall, a block, no site after all) ends the reading: say so in one line and ask the person for the files, or keep the honest default.
 
 ## Mapping onto the pages
 
-The pages are dark: a field with a light in it, and panes of glass over it. The mapping is shown at the plan as a table, value by value, before a file is written.
+The pages are light: a pale field with a light in it, and panes of frosted glass over it. The mapping is shown at the plan as a table, value by value, before a file is written.
 
-- **A mark drawn in a dark colour vanishes** on the dark pages. Look for the site's light or white variant first (a footer, a dark-mode asset, a `prefers-color-scheme` rule). Found none, and the mark is one colour: recolour it to the pages' text colour, with the person's word, since the mark is theirs. A mark of several colours on a dark fill: keep its fill as a rounded square behind it.
-- **A light primary colour** becomes the accent: `--sc-color-accent` and its family (`-hover`, `-subtle`, the point), as the package's README lists them.
-- **A dark primary colour** tints the field and its light: `--sc-color-field` and `--sc-color-light-*`, with a lighter shade of it as the accent, since an accent must read on the dark field.
+- **A mark drawn in a light colour vanishes** on the light pages. Take the site's dark or black variant first (its header on a light page, a light-mode asset, a `prefers-color-scheme` rule). Found none, and the mark is one colour: recolour it to the pages' text colour, with the person's word, since the mark is theirs. A mark of several colours on a light fill: keep its fill as a rounded square behind it.
+- **A dark or saturated primary colour** becomes the accent: `--sc-color-accent` and its family (`-hover`, `-solid`, `-subtle`, the point), as the package's README lists them.
+- **A pale primary colour** tints the field and its light: `--sc-color-sky`, `--sc-color-far*` and `--sc-color-light-*`, with a darker shade of it as the accent, since an accent must read on the light field.
 - **Contrast is checked**, not assumed: the accent on the field, and text on the panes, at the 4.5:1 of WCAG AA for text; a shade is moved until it passes, and the plan says which.
 - **The type follows the rules of the skill**: scripts, styles and fonts are bundled, never loaded from a CDN or written inline. A face the organization owns, or one under a license that allows bundling, is put in the repository and named in `--sc-font-sans`; otherwise the system faces stay, and the plan says that the site's face was not taken and why. Pretendard stays for Korean, as the default console has it.
 - **The name** stays the server's (`WORKSPACE_NAME`): the look is the marks, the colours and the type, never the words.

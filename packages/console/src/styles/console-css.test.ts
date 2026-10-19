@@ -13,6 +13,10 @@ const css = readFileSync(new URL("./console.css", import.meta.url), "utf8").repl
 const SET_INLINE = new Set(["--sc-span"]);
 
 describe("console.css", () => {
+  it("is light by default (ADR-0040)", () => {
+    expect(css).toMatch(/:root\s*\{\s*color-scheme:\s*light;/);
+  });
+
   it("reads only the custom properties it defines", () => {
     const defined = new Set([...css.matchAll(/(--sc-[\w-]+)\s*:/g)].map((match) => match[1] ?? ""));
     const read = new Set(

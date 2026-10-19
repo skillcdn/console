@@ -3,98 +3,99 @@
  * per building block, all prefixed `sc-` so that a custom console's own styles never collide
  * with them. Re-skinning starts and mostly ends with the tokens.
  *
- * The look is SkillCDN's own: dark only, one blue accent and one warm point colour, the page a
- * dark field with a soft light high in it, and the surfaces panes of glass over that field, so
- * that the console reads as part of the same product as the site it is built for.
+ * The look is SkillCDN's own, on a light ground: one blue accent and one warm point colour, the
+ * page a pale field with a soft light high in it, and the surfaces panes of frosted glass over
+ * that field, so that the console reads as part of the same product as the site it is built for
+ * (ADR-0040).
  */
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 
-  /* Surfaces: the page's own dark, and the steps above it. */
-  --sc-color-bg: #0b1019;
-  --sc-color-bg-subtle: #0f1520;
-  --sc-color-bg-inset: #151d2b;
-  --sc-color-bg-raised: #192232;
-  --sc-color-border: #263042;
-  --sc-color-border-strong: #3b4960;
+  /* Surfaces: the page's own pale ground, the steps into it, and white above it. */
+  --sc-color-bg: #f5f7fb;
+  --sc-color-bg-subtle: #eff2f7;
+  --sc-color-bg-inset: #e9eef5;
+  --sc-color-bg-raised: #ffffff;
+  --sc-color-border: #dde3ec;
+  --sc-color-border-strong: #7d899e;
 
-  /* Text. */
-  --sc-color-text: #e8ebf0;
-  --sc-color-text-muted: #9aa4b2;
-  --sc-color-text-faint: #8b97a9;
+  /* Text: the site's own ink on white. */
+  --sc-color-text: #14141a;
+  --sc-color-text-muted: #5a6371;
+  --sc-color-text-faint: #646c7a;
 
   /* The one accent: the blue that text and lines are drawn in, and the deeper blue a surface
      is filled with so that a white label reads on it. */
-  --sc-color-accent: #6ea1ff;
-  --sc-color-accent-hover: #8fb6ff;
+  --sc-color-accent: #2c5bc4;
+  --sc-color-accent-hover: #1f4aa8;
   --sc-color-accent-solid: #3b6fd4;
-  --sc-color-accent-solid-hover: #4171d8;
+  --sc-color-accent-solid-hover: #2f62c6;
   --sc-color-accent-contrast: #ffffff;
-  --sc-color-accent-subtle: #111a2b;
+  --sc-color-accent-subtle: #e8efff;
   /* The point: the only warm colour, for what should be looked at first, never for a control. */
-  --sc-color-point: #ffb13a;
-  --sc-color-point-subtle: #2a1a0e;
-  --sc-color-selection: color-mix(in srgb, var(--sc-color-accent-solid) 60%, transparent);
+  --sc-color-point: #ab5a00;
+  --sc-color-point-subtle: #fff1de;
+  --sc-color-selection: color-mix(in srgb, var(--sc-color-accent-solid) 25%, transparent);
 
   /* Status. */
-  --sc-color-success: #4cc38a;
-  --sc-color-success-subtle: #0d1a13;
-  --sc-color-warning: #e3b341;
-  --sc-color-warning-subtle: #201a0c;
-  --sc-color-danger: #ff7b85;
-  --sc-color-danger-subtle: #230f12;
+  --sc-color-success: #1c7c51;
+  --sc-color-success-subtle: #e4f5ec;
+  --sc-color-warning: #8a6100;
+  --sc-color-warning-subtle: #fcf3dc;
+  --sc-color-danger: #c42f40;
+  --sc-color-danger-subtle: #fdebed;
 
-  /* The ground: a dark field with two lights in it, a far one low and wide and a near one high
-     and soft, and the corners taken down, so the field has distance in it. The default UI
+  /* The ground: a pale field with two lights in it, a far one low and wide and a near one high
+     and soft, so the field has distance in it. The default UI
      provides the field's face (the shell); a custom console may paint its own. */
-  --sc-color-sky: #0d1730;
-  --sc-color-far: #2b4d9455;
-  --sc-color-far-turn: #3c3f8e3d;
-  --sc-color-vignette: #04071199;
-  --sc-color-light-core: #dbe7ff;
-  --sc-color-light-body: #93b4f2;
-  --sc-color-light-mid: #7f7ae8b8;
-  --sc-color-light-halo: #3a5fd488;
-  --sc-light-strength: 0.3;
+  --sc-color-sky: #eef3fc;
+  --sc-color-far: #b9cdf640;
+  --sc-color-far-turn: #cdc9f62e;
+  --sc-color-vignette: #ffffff00;
+  --sc-color-light-core: #ffffff;
+  --sc-color-light-body: #dde8ff;
+  --sc-color-light-mid: #cfcaf7a6;
+  --sc-color-light-halo: #a9c1f266;
+  --sc-light-strength: 0.55;
   --sc-light-top: -18rem;
   --sc-light-height: 34rem;
   --sc-light-inset: 8%;
   --sc-light-blur: 4rem;
 
-  /* Glass: what a pane over the field is made of. A wide blur with the colour behind pushed, an
-     even veil of the page's own dark, a thin lit edge, and a soft stand-off from the field. */
-  --sc-glass-backdrop: blur(24px) saturate(1.8);
-  --sc-color-glass: #111a2e66;
-  --sc-color-glass-hover: #18243f73;
-  --sc-color-glass-edge: #ffffff1c;
+  /* Glass: what a pane over the field is made of. A wide blur with the colour behind pushed, a
+     white veil, a bright edge, and a soft stand-off from the field. */
+  --sc-glass-backdrop: blur(28px) saturate(1.6);
+  --sc-color-glass: #ffffffb8;
+  --sc-color-glass-hover: #ffffffe0;
+  --sc-color-glass-edge: #ffffffcc;
   --sc-glass-surface: linear-gradient(var(--sc-color-glass), var(--sc-color-glass)) padding-box;
   --sc-glass-surface-hover: linear-gradient(
       var(--sc-color-glass-hover),
       var(--sc-color-glass-hover)
     )
     padding-box;
-  --sc-glass-sheen: inset 0 1px 0 #ffffff4d, inset 0 0 0 1px #ffffff10, inset 0 3px 6px #ffffff12;
-  --sc-glass-lift: 0 0.75rem 2rem -0.75rem #00000059;
-  --sc-glass-lens: blur(4px) brightness(1.4) saturate(1.5) hue-rotate(-6deg);
+  --sc-glass-sheen: inset 0 1px 0 #ffffff, inset 0 0 0 1px #0f1b3314;
+  --sc-glass-lift: 0 0.75rem 2rem -0.75rem #1a2b5530;
+  --sc-glass-lens: blur(4px) brightness(1.04) saturate(1.2);
   --sc-glass-lens-width: 2px;
   --sc-glass-lens-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  /* A surface inside a pane: no blur of its own, a little of the page's dark let through. */
-  --sc-color-sheet: color-mix(in srgb, var(--sc-color-bg) 72%, transparent);
-  --sc-color-sheet-hover: color-mix(in srgb, var(--sc-color-bg-raised) 80%, transparent);
-  --sc-color-field: color-mix(in srgb, var(--sc-color-bg) 78%, transparent);
+  /* A surface inside a pane: no blur of its own, white with a little of the pane let through. */
+  --sc-color-sheet: color-mix(in srgb, var(--sc-color-bg-raised) 82%, transparent);
+  --sc-color-sheet-hover: var(--sc-color-bg-raised);
+  --sc-color-field: var(--sc-color-bg-raised);
 
-  /* Light falls from above: a lit thing spills downward, in the accent's own colour, in layers
-     that fall off the way brightness does. */
+  /* A lit thing casts the accent's own colour downward, in layers that fall off the way
+     brightness does. */
   --sc-glow:
-    0 0.125rem 0.5rem -0.25rem color-mix(in srgb, var(--sc-color-accent-hover) 38%, transparent),
-    0 0.5rem 1.25rem -0.5rem color-mix(in srgb, var(--sc-color-accent) 22%, transparent),
-    0 1.25rem 3rem -1rem color-mix(in srgb, var(--sc-color-accent) 11%, transparent);
+    0 0.125rem 0.5rem -0.25rem color-mix(in srgb, var(--sc-color-accent-solid) 40%, transparent),
+    0 0.5rem 1.25rem -0.5rem color-mix(in srgb, var(--sc-color-accent-solid) 22%, transparent),
+    0 1.25rem 3rem -1rem color-mix(in srgb, var(--sc-color-accent-solid) 11%, transparent);
   --sc-glow-bright:
-    0 0.125rem 0.5rem -0.25rem color-mix(in srgb, var(--sc-color-accent-hover) 70%, transparent),
-    0 0.5rem 1.25rem -0.5rem color-mix(in srgb, var(--sc-color-accent) 45%, transparent),
-    0 1.25rem 3rem -1rem color-mix(in srgb, var(--sc-color-accent) 24%, transparent);
-  --sc-shadow-stage: 0 1.5rem 5rem #00000033;
+    0 0.125rem 0.5rem -0.25rem color-mix(in srgb, var(--sc-color-accent-solid) 60%, transparent),
+    0 0.5rem 1.25rem -0.5rem color-mix(in srgb, var(--sc-color-accent-solid) 36%, transparent),
+    0 1.25rem 3rem -1rem color-mix(in srgb, var(--sc-color-accent-solid) 18%, transparent);
+  --sc-shadow-stage: 0 1.25rem 3.5rem #1a2b552e;
 
   /* Type. The Korean face comes first where the page provides it; the Latin stays with the
      system's faces. */
@@ -2800,43 +2801,43 @@ table {
 /* The colours a category may be shown in: names, painted here and nowhere else. Each is a
    dark fill with a light line and text, so that a badge reads on the glass. */
 .sc-category-gray {
-  --sc-category-line: #aeb7c4;
-  --sc-category-fill: #2a3240;
+  --sc-category-line: #586274;
+  --sc-category-fill: #eceff4;
 }
 
 .sc-category-blue {
-  --sc-category-line: #8fb6ff;
-  --sc-category-fill: #1a2d52;
+  --sc-category-line: #2c5bc4;
+  --sc-category-fill: #e4ecff;
 }
 
 .sc-category-green {
-  --sc-category-line: #6fd3a0;
-  --sc-category-fill: #143326;
+  --sc-category-line: #1c7b51;
+  --sc-category-fill: #e0f3e9;
 }
 
 .sc-category-orange {
-  --sc-category-line: #ffb77a;
-  --sc-category-fill: #3a2414;
+  --sc-category-line: #a85400;
+  --sc-category-fill: #ffeedb;
 }
 
 .sc-category-pink {
-  --sc-category-line: #ff9ac2;
-  --sc-category-fill: #3b1a2b;
+  --sc-category-line: #b8336f;
+  --sc-category-fill: #fde6f0;
 }
 
 .sc-category-purple {
-  --sc-category-line: #c4a4ff;
-  --sc-category-fill: #2b1f4a;
+  --sc-category-line: #6542bb;
+  --sc-category-fill: #eee8fd;
 }
 
 .sc-category-teal {
-  --sc-category-line: #7ad7d4;
-  --sc-category-fill: #10343a;
+  --sc-category-line: #0d7672;
+  --sc-category-fill: #dff3f2;
 }
 
 .sc-category-yellow {
-  --sc-category-line: #f0d36a;
-  --sc-category-fill: #3a3012;
+  --sc-category-line: #7d6200;
+  --sc-category-fill: #faf1d2;
 }
 
 .sc-badge-category {
@@ -3054,7 +3055,7 @@ table {
    every week it crosses, never one piece alone; by its colour and not by a filter, which would
    light the card within it too. */
 .sc-calendar-bar-pointed {
-  background: color-mix(in srgb, var(--sc-category-fill), white 12%);
+  background: color-mix(in srgb, var(--sc-category-fill), var(--sc-category-line) 14%);
 }
 
 .sc-calendar-bar-begins {
@@ -3983,7 +3984,7 @@ table {
 }
 
 .sc-timeline-bar:hover {
-  background: color-mix(in srgb, var(--sc-category-fill), white 12%);
+  background: color-mix(in srgb, var(--sc-category-fill), var(--sc-category-line) 14%);
 }
 
 .sc-timeline-bar.sc-timeline-bar-begins {

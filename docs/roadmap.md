@@ -306,6 +306,10 @@ Goal: the first weeks on the published console asked for two rules read again: e
 - [x] The week (2026-10-18, [ADR-0039](adr/0039-this-week-is-the-plans-unit-and-the-week-begins-as-the-workspace-says.md)): who has what counts what is due this week, through the week's last day, in place of seven days; My work's bucket and `console tasks --due week` the same; the week begins as the workspace's `week_start` says, `auto` following the person's language, the command reading it from `me` and falling back to the machine's locale ([specs/cli.md](specs/cli.md)).
 - [ ] A snapshot of the REST schemas compared between releases, so that a release that breaks what passes between the command and the console without raising the floors fails `pnpm check` instead of failing an older command on an answer it cannot read: only what breaks, a field removed, renamed, made required or narrowed, never an addition, which the other side ignores ([ADR-0038](adr/0038-the-command-and-the-console-go-together-within-a-line-and-a-release-that-changes-what-passes-between-them-raises-the-floors.md), point 4): when the need comes.
 
+## Milestone 30, the light pages (2026-10-19)
+
+- [x] The pages are light by default ([ADR-0040](adr/0040-the-pages-are-light-by-default.md)): the colour tokens take light values that keep SkillCDN's branding, with text at 4.5:1 and a control's edge at 3:1, and no token, class or markup renamed; the default console shows the black wordmark; building-a-console maps a website onto light pages.
+
 ## After milestone 16
 
 Nothing is chosen yet; the list below is where the next milestone comes from. Left open by milestone 9: whether the board should end a run not heard from for a long while itself ([ADR-0020](adr/0020-the-console-does-not-claim-an-agent-is-at-work-a-run-says-when-it-was-last-heard-from-and-a-new-run-takes-over.md)); a roadmap across projects.

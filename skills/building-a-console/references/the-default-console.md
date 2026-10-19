@@ -10,7 +10,7 @@ The four files of the default UI, `apps/console/web/` in the console's repositor
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="dark" />
+    <meta name="color-scheme" content="light" />
     <title>Console</title>
   </head>
   <body>
@@ -24,9 +24,9 @@ The four files of the default UI, `apps/console/web/` in the console's repositor
 
 ```tsx
 // The marks of the brand come from the main repository's package, never from a copy here
-// (ADR-0013); the build gives back their addresses. The pages are dark, so the wordmark is white.
+// (ADR-0013); the build gives back their addresses. The pages are light, so the wordmark is black.
 import symbol from "@skillcdn/brand/symbol.svg";
-import wordmark from "@skillcdn/brand/wordmark-white.svg";
+import wordmark from "@skillcdn/brand/wordmark-black.svg";
 import { createConsole } from "@skillcdn/console";
 // The styles ship with the package; the build bundles them next to the script.
 import "@skillcdn/console/console.css";
@@ -137,4 +137,4 @@ export default defineConfig({
 }
 ```
 
-What a console of one's own changes. In the page: its `<title>` and `lang`, and its icons, linked directly in the page or through the plugin, for its own. In the script: the `title` it passes; the two `@skillcdn/brand` imports, for its own symbol and wordmark (a light one, since the pages are dark), or none; the face it loads, for its languages (`npm install pretendard` for Korean). In the build: the proxy's target, `http://127.0.0.1:11197` with `changeOrigin: true` for `console serve`; the default console's own proxy points at the `api` role's development port, which a console of one's own does not have, and its plugin reads the icons from the brand package, which a console of one's own replaces with files of its own. In the compiler's settings: `jsx`, `moduleResolution` and the `vite/client` types stay, which make an imported picture a module; `extends` and `references` are the repository's and go, with `"strict": true` of the console's own in their place. One thing to add in the build: `build: { assetsInlineLimit: 0 }`, so that every picture and font stays a file; Vite inlines an asset under 4 KB as a `data:` address, which the policy allows for a picture and refuses for a font (`font-src 'self'`), and the default console gets by only because none of its assets is that small.
+What a console of one's own changes. In the page: its `<title>` and `lang`, and its icons, linked directly in the page or through the plugin, for its own. In the script: the `title` it passes; the two `@skillcdn/brand` imports, for its own symbol and wordmark (a dark one, since the pages are light), or none; the face it loads, for its languages (`npm install pretendard` for Korean). In the build: the proxy's target, `http://127.0.0.1:11197` with `changeOrigin: true` for `console serve`; the default console's own proxy points at the `api` role's development port, which a console of one's own does not have, and its plugin reads the icons from the brand package, which a console of one's own replaces with files of its own. In the compiler's settings: `jsx`, `moduleResolution` and the `vite/client` types stay, which make an imported picture a module; `extends` and `references` are the repository's and go, with `"strict": true` of the console's own in their place. One thing to add in the build: `build: { assetsInlineLimit: 0 }`, so that every picture and font stays a file; Vite inlines an asset under 4 KB as a `data:` address, which the policy allows for a picture and refuses for a font (`font-src 'self'`), and the default console gets by only because none of its assets is that small.
