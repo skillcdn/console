@@ -2361,7 +2361,7 @@ table {
 }
 
 .sc-picture-thumb:focus-visible {
-  outline: 2px solid var(--sc-color-accent);
+  outline: var(--sc-focus-ring);
   outline-offset: 2px;
 }
 
@@ -3875,7 +3875,7 @@ table {
 
 .sc-timeline-title {
   margin: 0;
-  font-size: var(--sc-text-base);
+  font-size: var(--sc-text-md);
   font-weight: var(--sc-weight-medium);
 }
 
@@ -4138,7 +4138,7 @@ table {
 }
 
 .sc-card-menu-button:focus-visible {
-  outline: 2px solid var(--sc-color-accent);
+  outline: var(--sc-focus-ring);
   outline-offset: 1px;
 }
 
@@ -4172,7 +4172,7 @@ table {
 }
 
 .sc-column-over {
-  outline: 2px solid var(--sc-color-accent);
+  outline: var(--sc-focus-ring);
   outline-offset: -2px;
 }
 
