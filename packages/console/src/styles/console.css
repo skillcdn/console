@@ -153,6 +153,8 @@
   --sc-brand-size-compact: 0.875rem;
   --sc-control-size: 2.5rem;
   --sc-focus-ring: 2px solid var(--sc-color-accent);
+  /* A select's chevron: a thin stroke in a grey that reads on a light field and a dark one. */
+  --sc-select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%235a6371' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --sc-transition: 120ms ease-out;
 }
 
@@ -1218,31 +1220,15 @@ table {
   cursor: not-allowed;
 }
 
-/* A select draws the browser's chevron itself, a thin stroke in the text colour, as far from the
-   edge as the words are from the other one: the browser's own arrow sits on the border and
-   takes no padding. Two hairline diagonals, one in each half, make the chevron. */
+/* A select draws the browser's chevron itself, a thin stroke, as far from the edge as the words
+   are from the other one: the browser's own arrow sits on the border and takes no padding. The
+   chevron is a picture held in a token, so that a console of its own may draw its own. */
 select.sc-input {
   appearance: none;
   padding-right: calc(var(--sc-space-3) * 2 + 0.625rem);
-  background-image:
-    linear-gradient(
-      45deg,
-      transparent calc(50% - 0.75px),
-      var(--sc-color-text) calc(50% - 0.75px),
-      var(--sc-color-text) calc(50% + 0.75px),
-      transparent calc(50% + 0.75px)
-    ),
-    linear-gradient(
-      135deg,
-      transparent calc(50% - 0.75px),
-      var(--sc-color-text) calc(50% - 0.75px),
-      var(--sc-color-text) calc(50% + 0.75px),
-      transparent calc(50% + 0.75px)
-    );
-  background-position:
-    right calc(var(--sc-space-3) + 0.3125rem) center,
-    right var(--sc-space-3) center;
-  background-size: 0.3125rem 0.3125rem;
+  background-image: var(--sc-select-chevron);
+  background-position: right var(--sc-space-3) center;
+  background-size: 0.625rem 0.375rem;
   background-repeat: no-repeat;
 }
 
