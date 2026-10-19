@@ -49,9 +49,9 @@
   /* The ground: a pale field with two lights in it, a far one low and wide and a near one high
      and soft, so the field has distance in it. The default UI
      provides the field's face (the shell); a custom console may paint its own. */
-  --sc-color-sky: #eef2fd;
+  --sc-color-sky: #e9e8fd;
   /* The field's gradient, in one direction from the top; the lights below are drawn over it. */
-  --sc-field-gradient: linear-gradient(160deg, #d9e5ff 0%, #e9eefe 38%, #f6f5ff 72%, #ffffff 100%);
+  --sc-field-gradient: linear-gradient(180deg, #fbfbff 0%, #eef1ff 22%, #d9dcfd 58%, #c9c5fb 100%);
   --sc-color-far: transparent;
   --sc-color-far-turn: transparent;
   --sc-color-vignette: transparent;
@@ -67,27 +67,37 @@
 
   /* Glass: what a pane over the field is made of. A wide blur with the colour behind pushed, a
      white veil, a bright edge, and a soft stand-off from the field. */
-  --sc-glass-backdrop: blur(24px) saturate(2);
-  --sc-color-glass: #ffffff40;
-  --sc-color-glass-hover: #ffffff66;
+  --sc-glass-backdrop: blur(28px) saturate(1.9);
+  --sc-color-glass: #ffffff99;
+  --sc-color-glass-hover: #ffffffb8;
   --sc-color-glass-edge: #ffffff;
+  /* The rim: the edge colour, lit from the top left, fading round, and catching the light again
+     at the bottom right, as a curved pane of glass does. */
+  --sc-glass-rim: linear-gradient(
+    135deg,
+    var(--sc-color-glass-edge) 0%,
+    color-mix(in srgb, var(--sc-color-glass-edge) 25%, transparent) 38%,
+    color-mix(in srgb, var(--sc-color-glass-edge) 10%, transparent) 62%,
+    color-mix(in srgb, var(--sc-color-glass-edge) 70%, transparent) 100%
+  );
   /* The light that falls down a pane's face, from its top edge. */
-  --sc-glass-highlight: #ffffffcc;
+  --sc-glass-highlight: #ffffffd9;
   --sc-glass-surface:
-    linear-gradient(170deg, var(--sc-glass-highlight), transparent 38%) padding-box,
+    linear-gradient(170deg, var(--sc-glass-highlight), transparent 40%) padding-box,
     linear-gradient(var(--sc-color-glass), var(--sc-color-glass)) padding-box;
   --sc-glass-surface-hover:
-    linear-gradient(170deg, var(--sc-glass-highlight), transparent 38%) padding-box,
+    linear-gradient(170deg, var(--sc-glass-highlight), transparent 40%) padding-box,
     linear-gradient(var(--sc-color-glass-hover), var(--sc-color-glass-hover)) padding-box;
-  --sc-glass-sheen: inset 0 1px 0 #ffffff;
-  --sc-glass-lift: 0 0.5rem 2rem #1f268726, 0 1px 2px #1f268714;
+  --sc-glass-sheen:
+    inset 0 1px 1px #ffffffe6, inset 0 -1px 1px #ffffff4d, inset 0 0 1.5rem #ffffff40;
+  --sc-glass-lift: 0 0.75rem 2.25rem -0.75rem #1f268740, 0 2px 6px #1f26870f;
   --sc-glass-lens: blur(2px) brightness(1.3) saturate(1.6);
   --sc-glass-lens-width: 1px;
   --sc-glass-lens-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   /* A surface inside a pane: no blur of its own, white with a little of the pane let through. */
   --sc-color-sheet: color-mix(in srgb, var(--sc-color-bg-raised) 62%, transparent);
   --sc-color-sheet-hover: color-mix(in srgb, var(--sc-color-bg-raised) 88%, transparent);
-  --sc-color-field: var(--sc-color-bg-raised);
+  --sc-color-field: color-mix(in srgb, var(--sc-color-bg-raised) 72%, transparent);
   /* A sheet's own blur, so that a card reads as a tile of glass on the pane. */
   --sc-sheet-backdrop: blur(12px) saturate(1.6);
   /* A sheet's edge, lighter than a border so that it reads as glass, and the lift under it. */
@@ -149,8 +159,8 @@
   /* Shape. */
   --sc-radius-sm: 4px;
   --sc-radius-md: 8px;
-  --sc-radius-lg: 12px;
-  --sc-radius-xl: 20px;
+  --sc-radius-lg: 16px;
+  --sc-radius-xl: 24px;
   --sc-radius-full: 999px;
   --sc-border: 1px solid var(--sc-color-border);
 
@@ -413,9 +423,9 @@ table {
   position: sticky;
   top: 0;
   z-index: 10;
-  border-bottom: var(--sc-border);
-  background: color-mix(in srgb, var(--sc-color-bg) 82%, transparent);
-  backdrop-filter: blur(12px) saturate(1.4);
+  border-bottom: 1px solid color-mix(in srgb, var(--sc-color-border) 60%, transparent);
+  background: color-mix(in srgb, var(--sc-color-bg-raised) 62%, transparent);
+  backdrop-filter: var(--sc-glass-backdrop);
 }
 
 .sc-header-inner {
@@ -844,7 +854,7 @@ table {
   z-index: -1;
   padding: var(--sc-glass-lens-width);
   border-radius: inherit;
-  background: var(--sc-color-glass-edge);
+  background: var(--sc-glass-rim);
   backdrop-filter: var(--sc-glass-lens);
   mask: var(--sc-glass-lens-mask);
   mask-composite: exclude;
@@ -939,6 +949,8 @@ table {
 }
 
 .sc-button-secondary {
+  backdrop-filter: blur(12px) saturate(1.6);
+  box-shadow: inset 0 1px 0 #ffffffcc;
   background: var(--sc-color-field);
   border-color: var(--sc-color-border-strong);
   color: var(--sc-color-text);
@@ -1228,6 +1240,7 @@ table {
   background: var(--sc-color-field);
   color: var(--sc-color-text);
   font-size: var(--sc-text-sm);
+  backdrop-filter: blur(12px) saturate(1.6);
   transition:
     border-color var(--sc-transition),
     background var(--sc-transition);
