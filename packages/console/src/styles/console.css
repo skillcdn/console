@@ -4308,7 +4308,12 @@ select.sc-input {
 }
 
 /* The facts of a thing inside a panel: a list in the panel, not a pane of their own. */
+/* The facts on a settings page, inside a pane of their own: a table, a row per fact with its
+   name in a column on the left and its value beside it, a hairline between rows; the name over
+   the value where the window is narrow. */
 .sc-facts-plain {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -4319,6 +4324,44 @@ select.sc-input {
 
 .sc-facts-plain::before {
   content: none;
+}
+
+.sc-facts-plain > * {
+  display: grid;
+  grid-template-columns: minmax(8rem, 12rem) minmax(0, 1fr);
+  gap: var(--sc-space-1) var(--sc-space-5);
+  align-items: baseline;
+  padding: var(--sc-space-3) 0;
+  border-top: var(--sc-hairline);
+}
+
+.sc-facts-plain > :first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.sc-facts-plain > :last-child {
+  padding-bottom: 0;
+}
+
+.sc-facts-plain dt {
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+  font-weight: var(--sc-weight-medium);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.sc-facts-plain dd {
+  margin-top: 0;
+  font-size: var(--sc-text-md);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 40rem) {
+  .sc-facts-plain > * {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* A fact that needs the whole row: a description. */
