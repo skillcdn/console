@@ -720,8 +720,6 @@ table {
   flex: 1;
   flex-direction: column;
   width: 100%;
-  max-width: var(--sc-width-page);
-  margin-inline: auto;
   padding: var(--sc-space-6) var(--sc-space-5) var(--sc-space-8);
 }
 
