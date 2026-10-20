@@ -2331,8 +2331,14 @@ select.sc-input {
 }
 
 .sc-person-row > .sc-person {
-  flex: 1 1 100%;
+  flex: 0 1 auto;
   min-width: 0;
+}
+
+/* That this person is the reader: beside the name on the first line. */
+.sc-person-you {
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-xs);
 }
 
 .sc-person-name {

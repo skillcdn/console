@@ -444,11 +444,11 @@ export function MemberList(props: MemberListProps) {
           {props.members.map((member) => (
             <li key={member.person.id} className="sc-person-row">
               <PersonChip person={member.person} size="md" />
+              {props.me?.id === member.person.id && (
+                <span className="sc-person-you">{words.common.you}</span>
+              )}
               <span className="sc-person-name">
                 {member.person.name ?? ""}
-                {props.me?.id === member.person.id && (
-                  <span className="sc-muted"> {words.common.you}</span>
-                )}
                 <span className="sc-muted">
                   {" "}
                   {members.since} <Time iso={member.addedAt} />

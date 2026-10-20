@@ -75,9 +75,11 @@ export function PeopleList(props: PeopleListProps) {
         {active.map((person) => (
           <li key={person.id} className="sc-person-row">
             <PersonChip person={person} size="md" />
+            {props.me?.id === person.id && (
+              <span className="sc-person-you">{words.common.you}</span>
+            )}
             <span className="sc-person-name sc-muted">
               {person.name === null ? "" : person.login}
-              {props.me?.id === person.id && <span> {words.common.you}</span>}
               <span className="sc-person-note"> {people.source[person.source]}</span>
             </span>
             {props.onChangeRole === undefined ? (
