@@ -1714,7 +1714,13 @@ select.sc-input {
 .sc-decisions {
   display: grid;
   gap: var(--sc-space-6);
-  max-width: var(--sc-width-prose);
+  align-items: start;
+}
+
+@media (min-width: 64rem) {
+  .sc-decisions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .sc-decision {
@@ -1845,7 +1851,6 @@ select.sc-input {
 .sc-feed {
   display: grid;
   gap: var(--sc-space-2);
-  max-width: var(--sc-width-prose);
 }
 
 .sc-feed-item {
@@ -2843,11 +2848,20 @@ select.sc-input {
   gap: var(--sc-space-2);
 }
 
-/* Under the wide layout a task's facts come first: changing its state and reaching its forms is
-   what a phone is opened for, and two to a row they stay short. A document keeps its text first. */
+/* Under the wide layout a task reads its text first, then its facts and the ways to its forms, two
+   to a row so that they stay short, then the discussion and what happened: the text says what the
+   task is, and its state is changed right under it. A document keeps its text first. */
 @media (max-width: 63.99rem) {
+  .sc-task .sc-task-main {
+    display: contents;
+  }
+
   .sc-task .sc-task-aside {
-    order: -1;
+    order: 1;
+  }
+
+  .sc-task .sc-task-main > .sc-task-section {
+    order: 2;
   }
 
   .sc-task .sc-task-aside .sc-facts {
@@ -2936,6 +2950,24 @@ select.sc-input {
 
 .sc-filters-count {
   font-size: var(--sc-text-sm);
+}
+
+@media (max-width: 40rem) {
+  .sc-filters {
+    flex-wrap: nowrap;
+    margin-inline: calc(-1 * var(--sc-space-4));
+    padding-inline: var(--sc-space-4);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .sc-filters > * {
+    flex: none;
+  }
+
+  .sc-filters-count {
+    white-space: nowrap;
+  }
 }
 
 /* Tasks as rows, where the columns are not the point. */
@@ -3462,8 +3494,8 @@ select.sc-input {
 /* The roadmap: a goal a pane, with how far it is as a bar. */
 .sc-goals {
   display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 30rem), 1fr));
   gap: var(--sc-space-3);
-  max-width: var(--sc-width-prose);
   margin: 0;
   padding: 0;
   list-style: none;
