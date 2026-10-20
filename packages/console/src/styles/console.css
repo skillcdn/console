@@ -1585,14 +1585,17 @@ select.sc-input {
   writing-mode: vertical-rl;
 }
 
+/* The cards of a column scroll within it; where more of them are below, the last one in view
+   fades at the foot rather than being cut, the room below the cards keeping a whole one clear. */
 .sc-column-body {
   display: grid;
   flex: 1;
   align-content: start;
   gap: var(--sc-space-2);
   min-height: 0;
-  padding: var(--sc-space-2);
+  padding: var(--sc-space-2) var(--sc-space-2) var(--sc-space-6);
   overflow-y: auto;
+  mask-image: linear-gradient(to bottom, #000 calc(100% - var(--sc-space-6)), transparent);
   scrollbar-width: thin;
   scrollbar-color: var(--sc-scrollbar-thumb) transparent;
 }
