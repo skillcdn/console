@@ -880,7 +880,6 @@ table {
 .sc-person-row,
 .sc-skill,
 .sc-doc-row,
-.sc-feed-item,
 .sc-card,
 .sc-option,
 .sc-answer,
@@ -1932,19 +1931,90 @@ select.sc-input {
 
 /* The feed: a line per event, newest first. */
 
+/* The feed by days: a heading per day with a line after it; under it, runs of events by the
+   same hands, each headed once by the person and the agent, with a row per event under the name,
+   the hour and the sentence, parted by hairlines rather than boxed. */
 .sc-feed {
+  display: grid;
+  gap: var(--sc-space-5);
+}
+
+.sc-feed-day {
   display: grid;
   gap: var(--sc-space-2);
 }
 
-.sc-feed-item {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+.sc-feed-day-title {
+  display: flex;
   align-items: center;
   gap: var(--sc-space-3);
-  padding: var(--sc-space-2) var(--sc-space-3);
-  border-radius: var(--sc-radius-md);
+  margin: 0;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-xs);
+  font-weight: var(--sc-weight-medium);
+  letter-spacing: var(--sc-tracking-wide);
+  text-transform: uppercase;
+}
+
+.sc-feed-day-title::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--sc-color-border);
+}
+
+.sc-feed-day-list,
+.sc-feed-run-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sc-feed-day-list {
+  gap: var(--sc-space-3);
+}
+
+.sc-feed-run {
+  display: grid;
+  gap: var(--sc-space-1);
+}
+
+/* The rows of a run line up under the name, past the picture of the person. */
+.sc-feed-run-list {
+  padding-inline-start: calc(1.5rem + var(--sc-space-2));
+}
+
+.sc-feed-actor {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sc-space-2);
+  min-width: 0;
+}
+
+.sc-feed-agent {
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-xs);
+}
+
+.sc-feed-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--sc-space-3);
+  padding: var(--sc-space-1) 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--sc-color-border) 60%, transparent);
   font-size: var(--sc-text-sm);
+}
+
+.sc-feed-item:last-child {
+  border-bottom: 0;
+}
+
+.sc-feed-clock {
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-xs);
+  font-variant-numeric: tabular-nums;
 }
 
 .sc-feed-words {
@@ -1953,16 +2023,12 @@ select.sc-input {
 
 .sc-feed-words a {
   color: var(--sc-color-text);
+  text-decoration: none;
 }
 
 .sc-feed-words a:hover {
   color: var(--sc-color-accent);
-}
-
-.sc-feed-agent {
-  margin-left: var(--sc-space-2);
-  color: var(--sc-color-text-muted);
-  font-size: var(--sc-text-sm);
+  text-decoration: underline;
 }
 
 /* Signing in: one pane in the light, with the mark on a small stage of its own. */
@@ -3970,9 +4036,9 @@ select.sc-input {
     position: static;
   }
 
-  .sc-feed-item {
-    grid-template-columns: 1fr;
-    gap: var(--sc-space-1);
+  /* The rows of a run use the whole width. */
+  .sc-feed-run-list {
+    padding-inline-start: 0;
   }
 
   .sc-sign-in {

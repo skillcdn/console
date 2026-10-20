@@ -583,6 +583,43 @@ describe("the feed", () => {
     expect(html.match(/sc-feed-agent/g)).toHaveLength(1);
   });
 
+  it("heads the events by the day they fell on, each row with its hour", () => {
+    const html = renderToStaticMarkup(
+      <EventFeed
+        events={[
+          event({
+            id: 1,
+            createdAt: "2026-10-09T10:00:00.000Z",
+            data: { number: 1, title: "First" },
+          }),
+          event({
+            id: 2,
+            createdAt: "2026-10-09T11:30:00.000Z",
+            data: { number: 2, title: "Second" },
+          }),
+          event({
+            id: 3,
+            createdAt: "2026-10-12T09:00:00.000Z",
+            data: { number: 3, title: "Third" },
+          }),
+        ]}
+      />,
+    );
+    expect(html.match(/<section class="sc-feed-day">/g)).toHaveLength(2);
+    expect(html.match(/<li class="sc-feed-item/g)).toHaveLength(3);
+    expect(html).toContain('<h3 class="sc-feed-day-title"><time dateTime="2026-10-12">');
+    // The newest day first, and within it the newest event first; a row says its hour, not its day.
+    expect(html.indexOf('dateTime="2026-10-12"')).toBeLessThan(
+      html.indexOf('dateTime="2026-10-09"'),
+    );
+    expect(html.indexOf("wrote #2 Second")).toBeLessThan(html.indexOf("wrote #1 First"));
+    expect(html).toContain('class="sc-time sc-feed-clock" dateTime="2026-10-09T11:30:00.000Z"');
+    expect(html).not.toContain("sc-feed-item sc-time");
+    // Two events by the same hands in a day make one run, headed by the name once.
+    expect(html.match(/<li class="sc-feed-run">/g)).toHaveLength(2);
+    expect(html.match(/sc-feed-actor/g)).toHaveLength(2);
+  });
+
   it("says what happened to a project, and who was added to it as what", () => {
     const project = { key: "web", name: "The web app" };
     expect(describeEvent(event({ kind: "project.created", data: project }))).toBe(
