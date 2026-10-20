@@ -2010,8 +2010,15 @@ select.sc-input {
 }
 
 .sc-feed-agent {
+  margin-inline-start: var(--sc-space-2);
   color: var(--sc-color-text-faint);
   font-size: var(--sc-text-xs);
+}
+
+/* Where the agent is laid out beside the name by a gap, it needs no margin of its own. */
+.sc-feed-actor .sc-feed-agent,
+.sc-doc-meta .sc-feed-agent {
+  margin-inline-start: 0;
 }
 
 .sc-feed-item {
@@ -2916,11 +2923,13 @@ select.sc-input {
   list-style: none;
 }
 
+/* A page in a list reads on two lines: its title, with a mark if it is archived, and under it
+   where it lives, its version, who wrote it last and when, each a step apart. */
 .sc-doc-row {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--sc-space-2) var(--sc-space-3);
+  align-items: center;
+  gap: var(--sc-space-1) var(--sc-space-2);
   padding: var(--sc-space-3) var(--sc-space-4);
   border-radius: var(--sc-radius-lg);
   transition: border-color var(--sc-transition);
@@ -2932,7 +2941,9 @@ select.sc-input {
 
 .sc-doc-title {
   color: var(--sc-color-text);
-  font-weight: var(--sc-weight-medium);
+  font-size: var(--sc-text-md);
+  font-weight: var(--sc-weight-bold);
+  line-height: var(--sc-leading-snug);
   text-decoration: none;
 }
 
@@ -2941,8 +2952,17 @@ select.sc-input {
 }
 
 .sc-doc-meta {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-1) var(--sc-space-2);
   color: var(--sc-color-text-muted);
-  font-size: var(--sc-text-sm);
+  font-size: var(--sc-text-xs);
+}
+
+.sc-doc-meta .sc-person-login {
+  font-weight: var(--sc-weight-normal);
 }
 
 .sc-doc-path {
