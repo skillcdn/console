@@ -13,11 +13,11 @@
   color-scheme: light;
 
   /* Surfaces: the page's own pale ground, the steps into it, and white above it. */
-  --sc-color-bg: #f5f7fb;
-  --sc-color-bg-subtle: #eff2f7;
-  --sc-color-bg-inset: #e9eef5;
+  --sc-color-bg: #f9fafd;
+  --sc-color-bg-subtle: #f3f5f9;
+  --sc-color-bg-inset: #edf0f6;
   --sc-color-bg-raised: #ffffff;
-  --sc-color-border: #dde3ec;
+  --sc-color-border: #e4e8ef;
   --sc-color-border-strong: #7d899e;
 
   /* Text: the site's own ink on white. */
@@ -49,9 +49,9 @@
   /* The ground: a pale field with two lights in it, a far one low and wide and a near one high
      and soft, so the field has distance in it. The default UI
      provides the field's face (the shell); a custom console may paint its own. */
-  --sc-color-sky: #eef2fd;
+  --sc-color-sky: #f3f6fd;
   /* The field's gradient, in one direction from the top; the lights below are drawn over it. */
-  --sc-field-gradient: linear-gradient(160deg, #d9e5ff 0%, #e9eefe 38%, #f6f5ff 72%, #ffffff 100%);
+  --sc-field-gradient: linear-gradient(160deg, #e9eefc 0%, #f3f5fd 38%, #fafafe 72%, #ffffff 100%);
   --sc-color-far: transparent;
   --sc-color-far-turn: transparent;
   --sc-color-vignette: transparent;
@@ -67,9 +67,9 @@
 
   /* Glass: what a pane over the field is made of. A wide blur with the colour behind pushed, a
      white veil, a bright edge, and a soft stand-off from the field. */
-  --sc-glass-backdrop: blur(24px) saturate(2);
-  --sc-color-glass: #ffffff8c;
-  --sc-color-glass-hover: #ffffffb3;
+  --sc-glass-backdrop: blur(24px) saturate(1.4);
+  --sc-color-glass: #ffffffb3;
+  --sc-color-glass-hover: #ffffffd9;
   --sc-color-glass-edge: #ffffff;
   /* The light that falls down a pane's face, from its top edge. */
   --sc-glass-highlight: transparent;
