@@ -1644,6 +1644,13 @@ select.sc-input {
   font-weight: var(--sc-weight-normal);
 }
 
+/* On a card the number stands on a line of its own above the title, rather than in its run. */
+.sc-card-title .sc-card-number {
+  display: block;
+  margin-bottom: var(--sc-space-1);
+  line-height: 1;
+}
+
 .sc-card-meta {
   display: flex;
   flex-wrap: wrap;
