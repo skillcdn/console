@@ -23,7 +23,7 @@
   /* Text: the site's own ink on white. */
   --sc-color-text: #14141a;
   --sc-color-text-muted: #4b5563;
-  --sc-color-text-faint: #5f6774;
+  --sc-color-text-faint: #525b69;
 
   /* The one accent: the blue that text and lines are drawn in, and the deeper blue a surface
      is filled with so that a white label reads on it. */
@@ -115,8 +115,8 @@
     ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", "D2Coding",
     monospace;
 
-  --sc-text-xs: 0.75rem;
-  --sc-text-sm: 0.875rem;
+  --sc-text-xs: 0.8125rem;
+  --sc-text-sm: 0.9375rem;
   --sc-text-md: 1rem;
   --sc-text-lg: 1.125rem;
   --sc-text-xl: 1.375rem;
@@ -124,7 +124,7 @@
   --sc-leading-tight: 1.2;
   --sc-leading-normal: 1.6;
   --sc-leading-code: 1.7;
-  --sc-leading-snug: 1.4;
+  --sc-leading-snug: 1.45;
   --sc-tracking-tight: -0.02em;
   --sc-tracking-wide: 0.04em;
   --sc-tracking-code: 0.12em;
@@ -179,6 +179,8 @@
 /* A page in Korean lifts its labels as Hangul needs (the pages say their language on <html>). */
 :root:lang(ko) {
   --sc-label-lift-text: var(--sc-label-lift-hangul);
+  --sc-tracking-tight: 0;
+  --sc-tracking-wide: 0;
 }
 
 /* Reset: only what the pages need. */
@@ -1505,10 +1507,8 @@ select.sc-input {
 }
 
 .sc-column-header h2 {
-  font-size: var(--sc-text-xs);
+  font-size: var(--sc-text-sm);
   font-weight: var(--sc-weight-bold);
-  letter-spacing: var(--sc-tracking-wide);
-  text-transform: uppercase;
 }
 
 /* The name of a column stands first; its count and the way to fold it keep to the end. */
@@ -1568,13 +1568,12 @@ select.sc-input {
   justify-content: center;
   min-width: 1.5rem;
   padding-inline: var(--sc-space-2);
-  border: var(--sc-border);
   border-radius: var(--sc-radius-full);
-  background: var(--sc-color-bg-raised);
+  background: color-mix(in srgb, var(--sc-color-text-muted) 12%, transparent);
   color: var(--sc-color-text-muted);
   font-size: var(--sc-text-xs);
   font-weight: var(--sc-weight-medium);
-  line-height: calc(1.5rem - 2px);
+  line-height: 1.5rem;
 }
 
 .sc-column-in_progress .sc-column-title,
