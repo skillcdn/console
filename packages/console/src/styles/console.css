@@ -161,6 +161,7 @@
 
   /* Layout. */
   --sc-width-page: 84rem;
+  --sc-gutter: var(--sc-space-7);
   --sc-width-prose: 46rem;
   --sc-width-aside: 18rem;
   --sc-column-width: 13.5rem;
@@ -434,7 +435,7 @@ table {
   gap: var(--sc-space-4);
   width: 100%;
   height: var(--sc-header-height);
-  padding-inline: var(--sc-space-5);
+  padding-inline: var(--sc-gutter);
 }
 
 /* The brand: the lockup of the symbol and the wordmark where the console has marks, the name
@@ -508,7 +509,7 @@ table {
 .sc-tabs {
   width: 100%;
   margin-bottom: -1px;
-  padding-inline: var(--sc-space-5);
+  padding-inline: var(--sc-gutter);
   overflow: auto hidden;
   scrollbar-width: none;
 }
@@ -720,14 +721,14 @@ table {
   flex: 1;
   flex-direction: column;
   width: 100%;
-  padding: var(--sc-space-6) var(--sc-space-5) var(--sc-space-8);
+  padding: var(--sc-space-6) var(--sc-gutter) var(--sc-space-8);
 }
 
 /* A page as wide as the window: the board, whose columns want every bit of it. It starts at the
    same height as the other pages and, being as tall as the window, ends with the same room. */
 .sc-main-wide {
   max-width: none;
-  padding: var(--sc-space-6) var(--sc-space-5);
+  padding: var(--sc-space-6) var(--sc-gutter);
 }
 
 /* A page that takes the whole window takes the header with it, so that the lockup, the tabs and
