@@ -72,7 +72,7 @@
   --sc-color-glass-hover: #ffffff66;
   --sc-color-glass-edge: #ffffff;
   /* The light that falls down a pane's face, from its top edge. */
-  --sc-glass-highlight: #ffffffcc;
+  --sc-glass-highlight: transparent;
   --sc-glass-surface:
     linear-gradient(170deg, var(--sc-glass-highlight), transparent 38%) padding-box,
     linear-gradient(var(--sc-color-glass), var(--sc-color-glass)) padding-box;
@@ -81,7 +81,7 @@
     linear-gradient(var(--sc-color-glass-hover), var(--sc-color-glass-hover)) padding-box;
   --sc-glass-sheen: inset 0 1px 0 #ffffff;
   --sc-glass-lift: 0 0.5rem 2rem #1f268726, 0 1px 2px #1f268714;
-  --sc-glass-lens: blur(2px) brightness(1.3) saturate(1.6);
+  --sc-glass-lens: none;
   --sc-glass-lens-width: 1px;
   --sc-glass-lens-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   /* A surface inside a pane: no blur of its own, white with a little of the pane let through. */
@@ -89,11 +89,10 @@
   --sc-color-sheet-hover: color-mix(in srgb, var(--sc-color-bg-raised) 88%, transparent);
   --sc-color-field: var(--sc-color-bg-raised);
   /* A sheet's own blur, so that a card reads as a tile of glass on the pane. */
-  --sc-sheet-backdrop: blur(12px) saturate(1.6);
+  --sc-sheet-backdrop: none;
   /* A sheet's edge, lighter than a border so that it reads as glass, and the lift under it. */
-  --sc-sheet-edge: 1px solid
-    color-mix(in srgb, var(--sc-color-bg-raised) 85%, var(--sc-color-border));
-  --sc-sheet-lift: 0 1px 2px #1f268712, 0 4px 14px -6px #1f268724;
+  --sc-sheet-edge: var(--sc-border);
+  --sc-sheet-lift: none;
 
   /* A lit thing casts the accent's own colour downward, in layers that fall off the way
      brightness does. */
@@ -125,6 +124,10 @@
   --sc-leading-tight: 1.2;
   --sc-leading-normal: 1.6;
   --sc-leading-code: 1.7;
+  --sc-leading-snug: 1.4;
+  --sc-tracking-tight: -0.02em;
+  --sc-tracking-wide: 0.04em;
+  --sc-tracking-code: 0.12em;
   --sc-weight-normal: 400;
   --sc-weight-medium: 500;
   --sc-weight-bold: 650;
@@ -153,6 +156,8 @@
   --sc-radius-xl: 20px;
   --sc-radius-full: 999px;
   --sc-border: 1px solid var(--sc-color-border);
+  --sc-border-strong: 1px solid var(--sc-color-border-strong);
+  --sc-border-accent: 2px solid var(--sc-color-accent);
 
   /* Layout. */
   --sc-width-page: 84rem;
@@ -232,7 +237,7 @@ h3,
 h4 {
   line-height: var(--sc-leading-tight);
   font-weight: var(--sc-weight-bold);
-  letter-spacing: -0.01em;
+  letter-spacing: var(--sc-tracking-tight);
   text-wrap: balance;
 }
 
@@ -418,7 +423,7 @@ table {
   z-index: 10;
   border-bottom: var(--sc-border);
   background: color-mix(in srgb, var(--sc-color-bg) 82%, transparent);
-  backdrop-filter: blur(12px) saturate(1.4);
+  backdrop-filter: var(--sc-glass-backdrop);
 }
 
 .sc-header-inner {
@@ -441,7 +446,7 @@ table {
   gap: var(--sc-space-2);
   color: var(--sc-color-text);
   font-weight: var(--sc-weight-bold);
-  letter-spacing: -0.01em;
+  letter-spacing: var(--sc-tracking-tight);
   text-decoration: none;
   white-space: nowrap;
 }
@@ -676,7 +681,7 @@ table {
   color: var(--sc-color-text-faint);
   font-size: var(--sc-text-xs);
   font-weight: var(--sc-weight-medium);
-  letter-spacing: 0.04em;
+  letter-spacing: var(--sc-tracking-wide);
   text-transform: uppercase;
 }
 
@@ -706,7 +711,6 @@ table {
 
 .sc-live-on {
   background: var(--sc-color-success);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--sc-color-success) 25%, transparent);
 }
 
 /* The page. */
@@ -747,7 +751,7 @@ table {
 
 .sc-page-title {
   font-size: var(--sc-text-2xl);
-  letter-spacing: -0.02em;
+  letter-spacing: var(--sc-tracking-tight);
 }
 
 /* The ways a page offers at its head, side by side. */
@@ -938,13 +942,12 @@ table {
 .sc-button-primary:hover:not(:disabled) {
   background: var(--sc-color-accent-solid-hover);
   color: var(--sc-color-accent-contrast);
-  box-shadow: var(--sc-glow-bright);
+  box-shadow: var(--sc-glow);
 }
 
 .sc-button-secondary {
   background: var(--sc-color-field);
   border-color: var(--sc-color-border);
-  box-shadow: var(--sc-sheet-lift);
   color: var(--sc-color-text);
 }
 
@@ -984,11 +987,11 @@ table {
   padding-inline: var(--sc-space-2);
   padding-block: calc(var(--sc-space-1) - var(--sc-label-lift-text, var(--sc-label-lift)))
     calc(var(--sc-space-1) + var(--sc-label-lift-text, var(--sc-label-lift)));
-  border: 1px solid var(--sc-color-border);
+  border: var(--sc-border);
   border-radius: var(--sc-radius-full);
   font-size: var(--sc-text-xs);
   font-weight: var(--sc-weight-medium);
-  line-height: 1.25;
+  line-height: var(--sc-leading-snug);
   white-space: nowrap;
 }
 
@@ -1097,7 +1100,7 @@ table {
   gap: var(--sc-space-4);
   margin-bottom: var(--sc-space-4);
   padding: var(--sc-space-4);
-  border: 1px solid var(--sc-color-border-strong);
+  border: var(--sc-border);
   border-radius: var(--sc-radius-md);
   background: var(--sc-color-sheet);
   font-size: var(--sc-text-sm);
@@ -1131,7 +1134,7 @@ table {
 
 .sc-empty {
   padding: var(--sc-space-7) var(--sc-space-5);
-  border: 1px dashed var(--sc-color-border-strong);
+  border: 1px dashed var(--sc-color-border);
   border-radius: var(--sc-radius-lg);
   text-align: center;
 }
@@ -1213,7 +1216,7 @@ table {
   color: var(--sc-color-text-muted);
   font-size: var(--sc-text-xs);
   font-weight: var(--sc-weight-medium);
-  letter-spacing: 0.04em;
+  letter-spacing: var(--sc-tracking-wide);
   text-transform: uppercase;
 }
 
@@ -1228,7 +1231,7 @@ table {
   width: 100%;
   min-height: var(--sc-control-size);
   padding: var(--sc-space-2) var(--sc-space-3);
-  border: 1px solid var(--sc-color-border-strong);
+  border: var(--sc-border-strong);
   border-radius: var(--sc-radius-md);
   background: var(--sc-color-field);
   color: var(--sc-color-text);
@@ -1253,7 +1256,7 @@ table {
 }
 
 .sc-input:disabled {
-  opacity: 0.6;
+  opacity: 0.55;
   cursor: not-allowed;
 }
 
@@ -1358,7 +1361,7 @@ select.sc-input {
   gap: var(--sc-space-2);
   min-height: var(--sc-control-size);
   padding: var(--sc-space-1) var(--sc-space-1) var(--sc-space-1) var(--sc-space-3);
-  border: 1px solid var(--sc-color-border-strong);
+  border: var(--sc-border);
   border-radius: var(--sc-radius-md);
   background: var(--sc-color-field);
   font-size: var(--sc-text-sm);
@@ -1489,7 +1492,7 @@ select.sc-input {
 .sc-column-header h2 {
   font-size: var(--sc-text-xs);
   font-weight: var(--sc-weight-bold);
-  letter-spacing: 0.06em;
+  letter-spacing: var(--sc-tracking-wide);
   text-transform: uppercase;
 }
 
@@ -1610,7 +1613,7 @@ select.sc-input {
   color: var(--sc-color-text);
   font-size: var(--sc-text-sm);
   font-weight: var(--sc-weight-medium);
-  line-height: 1.4;
+  line-height: var(--sc-leading-snug);
   text-decoration: none;
   overflow-wrap: anywhere;
 }
@@ -1715,7 +1718,7 @@ select.sc-input {
 
 .sc-task-title {
   font-size: var(--sc-text-2xl);
-  letter-spacing: -0.02em;
+  letter-spacing: var(--sc-tracking-tight);
   overflow-wrap: anywhere;
 }
 
@@ -1743,7 +1746,7 @@ select.sc-input {
   color: var(--sc-color-text-faint);
   font-size: var(--sc-text-xs);
   font-weight: var(--sc-weight-medium);
-  letter-spacing: 0.04em;
+  letter-spacing: var(--sc-tracking-wide);
   text-transform: uppercase;
 }
 
@@ -1829,7 +1832,6 @@ select.sc-input {
   margin-right: var(--sc-space-2);
   border-radius: var(--sc-radius-full);
   background: var(--sc-color-point);
-  box-shadow: 0 0 0.75rem color-mix(in srgb, var(--sc-color-point) 60%, transparent);
   vertical-align: 0.1em;
 }
 
@@ -1852,7 +1854,7 @@ select.sc-input {
   display: grid;
   gap: var(--sc-space-1);
   padding: var(--sc-space-3) var(--sc-space-4);
-  border-left: 3px solid var(--sc-color-success);
+  border-left: var(--sc-border-accent);
   border-radius: 0 var(--sc-radius-md) var(--sc-radius-md) 0;
 }
 
@@ -1993,17 +1995,17 @@ select.sc-input {
   place-items: center;
   width: 3.5rem;
   height: 3.5rem;
-  border: 1px solid var(--sc-color-border-strong);
+  border: var(--sc-border);
   border-radius: var(--sc-radius-xl);
   background: var(--sc-color-bg);
-  box-shadow: 0 0.5rem 2rem -0.25rem color-mix(in srgb, var(--sc-color-accent) 55%, transparent);
+  box-shadow: var(--sc-glass-lift);
 }
 
 .sc-sign-in-badge::after {
   content: "";
   position: absolute;
   inset: 0;
-  border: 1px solid var(--sc-color-accent);
+  border: var(--sc-border-accent);
   border-radius: inherit;
   opacity: 0;
   pointer-events: none;
@@ -2018,7 +2020,7 @@ select.sc-input {
 @keyframes sc-ring {
   0% {
     transform: scale(1);
-    opacity: 0.6;
+    opacity: 0.55;
   }
   100% {
     transform: scale(2.6);
@@ -2123,7 +2125,7 @@ select.sc-input {
 
 .sc-prose blockquote {
   padding-left: var(--sc-space-4);
-  border-left: 2px solid var(--sc-color-accent);
+  border-left: var(--sc-border-accent);
   color: var(--sc-color-text-muted);
 }
 
@@ -2266,7 +2268,7 @@ select.sc-input {
 }
 
 .sc-person-row-out .sc-person {
-  opacity: 0.7;
+  opacity: 0.55;
 }
 
 .sc-listing-form .sc-field-row {
@@ -2454,7 +2456,7 @@ select.sc-input {
   display: grid;
   gap: var(--sc-space-1);
   padding-left: var(--sc-space-3);
-  border-left: 2px solid var(--sc-color-border-strong);
+  border-left: var(--sc-border-accent);
   font-size: var(--sc-text-sm);
 }
 
@@ -2531,7 +2533,7 @@ select.sc-input {
   grid-template-rows: auto minmax(0, 1fr) auto;
   inset: 0;
   background: color-mix(in srgb, var(--sc-color-bg) 90%, transparent);
-  backdrop-filter: blur(12px);
+  backdrop-filter: var(--sc-glass-backdrop);
 }
 
 .sc-overlay-bar {
@@ -2704,13 +2706,13 @@ select.sc-input {
   max-width: 12rem;
   font-family: var(--sc-font-mono);
   font-size: var(--sc-text-lg);
-  letter-spacing: 0.12em;
+  letter-spacing: var(--sc-tracking-code);
   text-transform: uppercase;
 }
 
 .sc-code-shown {
   font-size: var(--sc-text-md);
-  letter-spacing: 0.1em;
+  letter-spacing: var(--sc-tracking-code);
 }
 
 /* Documents: a folder's pages, one page with its versions, its links both ways and its files. */
@@ -2846,7 +2848,7 @@ select.sc-input {
 }
 
 .sc-doc-archived .sc-prose {
-  opacity: 0.85;
+  opacity: 0.55;
 }
 
 /* The pictures for a page, under its body: the way to add one, and what becomes of it. */
@@ -2892,7 +2894,7 @@ select.sc-input {
   color: var(--sc-color-text-faint);
   font-size: var(--sc-text-xs);
   font-weight: var(--sc-weight-medium);
-  letter-spacing: 0.04em;
+  letter-spacing: var(--sc-tracking-wide);
   text-transform: uppercase;
 }
 
@@ -2916,7 +2918,7 @@ select.sc-input {
   color: var(--sc-color-text-faint);
   font-size: var(--sc-text-xs);
   font-weight: var(--sc-weight-medium);
-  letter-spacing: 0.04em;
+  letter-spacing: var(--sc-tracking-wide);
   text-transform: uppercase;
 }
 
@@ -3129,7 +3131,7 @@ select.sc-input {
   color: var(--sc-color-text-faint);
   font-size: var(--sc-text-xs);
   font-weight: var(--sc-weight-medium);
-  letter-spacing: 0.04em;
+  letter-spacing: var(--sc-tracking-wide);
   text-align: left;
   text-transform: uppercase;
 }
@@ -3150,7 +3152,6 @@ select.sc-input {
 
 .sc-calendar-cell-today {
   border-color: var(--sc-color-accent);
-  box-shadow: inset 0 0 0 1px var(--sc-color-accent);
 }
 
 .sc-calendar-day {
@@ -3175,7 +3176,7 @@ select.sc-input {
   color: var(--sc-color-text-muted);
   font-size: var(--sc-text-xs);
   font-weight: var(--sc-weight-medium);
-  line-height: 1.4;
+  line-height: var(--sc-leading-snug);
   text-align: start;
 }
 
@@ -3193,7 +3194,7 @@ select.sc-input {
   border-radius: var(--sc-radius-sm);
   color: var(--sc-color-text);
   font-size: var(--sc-text-xs);
-  line-height: 1.4;
+  line-height: var(--sc-leading-snug);
   text-decoration: none;
 }
 
@@ -3572,7 +3573,7 @@ select.sc-input {
   color: var(--sc-color-text-faint);
   font-size: var(--sc-text-xs);
   font-weight: var(--sc-weight-medium);
-  letter-spacing: 0.04em;
+  letter-spacing: var(--sc-tracking-wide);
   text-transform: uppercase;
 }
 
@@ -3623,7 +3624,7 @@ select.sc-input {
 }
 
 .sc-goal-done {
-  opacity: 0.75;
+  opacity: 0.55;
 }
 
 .sc-goal-dropped {
@@ -3685,7 +3686,7 @@ select.sc-input {
   color: var(--sc-color-text-faint);
   font-size: var(--sc-text-xs);
   font-weight: var(--sc-weight-medium);
-  letter-spacing: 0.04em;
+  letter-spacing: var(--sc-tracking-wide);
   text-transform: uppercase;
 }
 
@@ -3752,7 +3753,7 @@ select.sc-input {
   color: var(--sc-color-text);
   font-size: var(--sc-text-xs);
   font-weight: var(--sc-weight-normal);
-  line-height: 1.4;
+  line-height: var(--sc-leading-snug);
   text-align: left;
   text-decoration: none;
   white-space: normal;
@@ -3990,7 +3991,7 @@ select.sc-input {
   display: inline-flex;
   align-items: center;
   padding: 0 var(--sc-space-3);
-  border: 1px solid var(--sc-color-border-strong);
+  border: var(--sc-border-strong);
   border-right: 0;
   border-radius: var(--sc-radius-md) 0 0 var(--sc-radius-md);
   background: color-mix(in srgb, var(--sc-color-field) 60%, var(--sc-color-border));
@@ -4174,7 +4175,7 @@ select.sc-input {
   width: 2px;
   margin-left: -1px;
   background: var(--sc-color-accent);
-  opacity: 0.7;
+  opacity: 0.55;
 }
 
 .sc-timeline-today-mark {
@@ -4240,12 +4241,12 @@ select.sc-input {
 
 .sc-goal-done .sc-timeline-bar,
 .sc-goal-done .sc-timeline-point {
-  opacity: 0.6;
+  opacity: 0.55;
 }
 
 .sc-goal-dropped .sc-timeline-bar,
 .sc-goal-dropped .sc-timeline-point {
-  opacity: 0.4;
+  opacity: 0.55;
 }
 
 .sc-timeline-undated {
@@ -4267,7 +4268,7 @@ select.sc-input {
   color: var(--sc-category-line, var(--sc-color-text));
   font-size: var(--sc-text-xs);
   font-weight: var(--sc-weight-medium);
-  line-height: 1.2;
+  line-height: var(--sc-leading-tight);
   text-decoration: none;
 }
 
@@ -4316,7 +4317,7 @@ select.sc-input {
 }
 
 .sc-card-dragging {
-  opacity: 0.4;
+  opacity: 0.55;
 }
 
 .sc-board-dragging,
@@ -4657,7 +4658,7 @@ select.sc-input {
 
 .sc-pack-code {
   font-size: var(--sc-text-xl);
-  letter-spacing: 0.12em;
+  letter-spacing: var(--sc-tracking-code);
 }
 
 .sc-pack-connect-waiting {
