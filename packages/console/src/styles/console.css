@@ -995,6 +995,16 @@ table {
   white-space: nowrap;
 }
 
+/* Where the browser can fit a line box to the glyphs, a badge's words are centred on their
+   cap height and baseline, whatever script they are in; the lift above is for where it cannot. */
+@supports (text-box: trim-both cap alphabetic) {
+  .sc-badge {
+    padding-block: calc(var(--sc-space-2) - 1px) calc(var(--sc-space-2) - 2px);
+    line-height: 1;
+    text-box: trim-both cap alphabetic;
+  }
+}
+
 .sc-badge-neutral {
   background: var(--sc-color-bg-subtle);
   color: var(--sc-color-text-muted);
