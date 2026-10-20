@@ -3253,46 +3253,56 @@ select.sc-input {
 /* The schedule, the roadmap and the categories (ADR-0019). */
 
 /* The colours a category may be shown in: names, painted here and nowhere else. Each is a
-   light fill with its words dark in the same hue, the eight hues spread around the wheel so
-   that no two are taken for each other at a glance. */
+   light fill with its words dark in the same hue, and a mark, a clear mid-tone of the hue, for
+   the dots, flags and bars where the colour stands alone; the eight hues spread around the
+   wheel so that no two are taken for each other at a glance. A console that sets only the line
+   and the fill gets its line where the mark would be. */
 .sc-category-gray {
   --sc-category-line: #4a5468;
   --sc-category-fill: #e0e4eb;
+  --sc-category-mark: #7b8597;
 }
 
 .sc-category-blue {
   --sc-category-line: #1d4fcb;
   --sc-category-fill: #d2e0ff;
+  --sc-category-mark: #2f6ae8;
 }
 
 .sc-category-green {
   --sc-category-line: #176d26;
   --sc-category-fill: #cdf0cc;
+  --sc-category-mark: #22a04a;
 }
 
 .sc-category-orange {
   --sc-category-line: #a33405;
   --sc-category-fill: #ffd6b0;
+  --sc-category-mark: #f0731a;
 }
 
 .sc-category-pink {
   --sc-category-line: #b2176a;
   --sc-category-fill: #fdd2e5;
+  --sc-category-mark: #e63d94;
 }
 
 .sc-category-purple {
   --sc-category-line: #6434c2;
   --sc-category-fill: #e6d8fc;
+  --sc-category-mark: #8457e6;
 }
 
 .sc-category-teal {
   --sc-category-line: #08667a;
   --sc-category-fill: #c6edf4;
+  --sc-category-mark: #0f9bb0;
 }
 
 .sc-category-yellow {
   --sc-category-line: #664d00;
   --sc-category-fill: #f7e68a;
+  --sc-category-mark: #d9a400;
 }
 
 .sc-badge-category {
@@ -3308,7 +3318,7 @@ select.sc-input {
   width: 0.625rem;
   height: 0.625rem;
   border-radius: var(--sc-radius-full);
-  background: var(--sc-category-line, var(--sc-color-text-faint));
+  background: var(--sc-category-mark, var(--sc-category-line, var(--sc-color-text-faint)));
 }
 
 /* The filters above the board: a quiet row of controls, as wide as its words. */
@@ -3551,7 +3561,8 @@ select.sc-input {
 .sc-calendar-bar {
   margin-inline: calc(-1 * var(--sc-space-2) - 0.125rem - 1px);
   padding-inline: var(--sc-space-2);
-  border-block: 1px solid color-mix(in srgb, var(--sc-category-line) 45%, transparent);
+  border-block: 1px solid
+    color-mix(in srgb, var(--sc-category-mark, var(--sc-category-line)) 60%, transparent);
   background: var(--sc-category-fill);
   color: var(--sc-category-line);
   font-size: var(--sc-text-xs);
@@ -3569,14 +3580,16 @@ select.sc-input {
 
 .sc-calendar-bar-begins {
   margin-left: 0;
-  border-left: 1px solid color-mix(in srgb, var(--sc-category-line) 45%, transparent);
+  border-left: 1px solid
+    color-mix(in srgb, var(--sc-category-mark, var(--sc-category-line)) 60%, transparent);
   border-start-start-radius: var(--sc-radius-full);
   border-end-start-radius: var(--sc-radius-full);
 }
 
 .sc-calendar-bar-ends {
   margin-right: 0;
-  border-right: 1px solid color-mix(in srgb, var(--sc-category-line) 45%, transparent);
+  border-right: 1px solid
+    color-mix(in srgb, var(--sc-category-mark, var(--sc-category-line)) 60%, transparent);
   border-start-end-radius: var(--sc-radius-full);
   border-end-end-radius: var(--sc-radius-full);
 }
@@ -4562,7 +4575,8 @@ select.sc-input {
   display: flex;
   align-items: center;
   overflow: hidden;
-  border-block: 1px solid color-mix(in srgb, var(--sc-category-line) 45%, transparent);
+  border-block: 1px solid
+    color-mix(in srgb, var(--sc-category-mark, var(--sc-category-line)) 60%, transparent);
   background: var(--sc-category-fill);
   color: var(--sc-category-line);
   font-size: var(--sc-text-xs);
@@ -4575,13 +4589,15 @@ select.sc-input {
 }
 
 .sc-timeline-bar.sc-timeline-bar-begins {
-  border-left: 1px solid color-mix(in srgb, var(--sc-category-line) 45%, transparent);
+  border-left: 1px solid
+    color-mix(in srgb, var(--sc-category-mark, var(--sc-category-line)) 60%, transparent);
   border-start-start-radius: var(--sc-radius-full);
   border-end-start-radius: var(--sc-radius-full);
 }
 
 .sc-timeline-bar.sc-timeline-bar-ends {
-  border-right: 1px solid color-mix(in srgb, var(--sc-category-line) 45%, transparent);
+  border-right: 1px solid
+    color-mix(in srgb, var(--sc-category-mark, var(--sc-category-line)) 60%, transparent);
   border-start-end-radius: var(--sc-radius-full);
   border-end-end-radius: var(--sc-radius-full);
 }
@@ -4591,7 +4607,7 @@ select.sc-input {
   top: 0;
   bottom: 0;
   left: 0;
-  background: color-mix(in srgb, var(--sc-category-line) 35%, transparent);
+  background: color-mix(in srgb, var(--sc-category-mark, var(--sc-category-line)) 40%, transparent);
 }
 
 .sc-timeline-words {
@@ -4606,7 +4622,8 @@ select.sc-input {
   height: 0.75rem;
   margin-left: -0.375rem;
   transform: translateY(-50%) rotate(45deg);
-  border: 1px solid color-mix(in srgb, var(--sc-category-line) 60%, transparent);
+  border: 1px solid
+    color-mix(in srgb, var(--sc-category-mark, var(--sc-category-line)) 75%, transparent);
   background: var(--sc-category-fill);
 }
 
@@ -4654,7 +4671,7 @@ select.sc-input {
   width: 0.5rem;
   height: 0.5rem;
   transform: rotate(45deg);
-  background: var(--sc-category-line, var(--sc-color-text-faint));
+  background: var(--sc-category-mark, var(--sc-category-line, var(--sc-color-text-faint)));
 }
 
 @media (max-width: 40rem) {
