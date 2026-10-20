@@ -32,19 +32,19 @@
   --sc-color-accent-solid: #3b6fd4;
   --sc-color-accent-solid-hover: #2f62c6;
   --sc-color-accent-contrast: #ffffff;
-  --sc-color-accent-subtle: #dbe5ff;
+  --sc-color-accent-subtle: #dbe6ff;
   /* The point: the only warm colour, for what should be looked at first, never for a control. */
-  --sc-color-point: #a84300;
-  --sc-color-point-subtle: #ffdbc0;
+  --sc-color-point: #a63f00;
+  --sc-color-point-subtle: #ffdcc4;
   --sc-color-selection: color-mix(in srgb, var(--sc-color-accent-solid) 25%, transparent);
 
   /* Status. */
-  --sc-color-success: #166a45;
-  --sc-color-success-subtle: #d6eee0;
-  --sc-color-warning: #7c5200;
-  --sc-color-warning-subtle: #fbe7a3;
-  --sc-color-danger: #b5283a;
-  --sc-color-danger-subtle: #fadde1;
+  --sc-color-success: #146b44;
+  --sc-color-success-subtle: #d4efe1;
+  --sc-color-warning: #7a5500;
+  --sc-color-warning-subtle: #fbecb0;
+  --sc-color-danger: #b0273a;
+  --sc-color-danger-subtle: #fadadf;
 
   /* The ground: a pale field with two lights in it, a far one low and wide and a near one high
      and soft, so the field has distance in it. The default UI
@@ -1019,43 +1019,44 @@ table {
  * The tones of a badge, each a meaning: neutral for what merely is; accent (blue) for what is at
  * work; success (green) for what is done; warning (amber) for what wants attention soon; point
  * (orange) for what presses now, or is someone's; danger (red) for what is late or has failed.
- * Each is a tint with its words and a faint edge in the same hue, so that the tones read as one
- * set and each stands off the sheet it is on.
+ * Each is a soft fill with its words in the same hue and no line around it, the categories
+ * alike, so that every badge on a page is one kind of pill; the fills are deep enough to stand
+ * off the sheet on their own.
  */
 .sc-badge-neutral {
-  border-color: color-mix(in srgb, currentColor 30%, transparent);
-  background: #e6e9f0;
-  color: #3d4654;
+  border-color: transparent;
+  background: #dfe3eb;
+  color: #3f4756;
 }
 
 .sc-badge-accent {
   background: var(--sc-color-accent-subtle);
-  border-color: color-mix(in srgb, currentColor 30%, transparent);
+  border-color: transparent;
   color: var(--sc-color-accent);
 }
 
 /* The point: a count, or that a thing is someone's; the one filled warm pill on a page. */
 .sc-badge-point {
   background: var(--sc-color-point-subtle);
-  border-color: color-mix(in srgb, currentColor 30%, transparent);
+  border-color: transparent;
   color: var(--sc-color-point);
 }
 
 .sc-badge-success {
   background: var(--sc-color-success-subtle);
-  border-color: color-mix(in srgb, currentColor 30%, transparent);
+  border-color: transparent;
   color: var(--sc-color-success);
 }
 
 .sc-badge-warning {
   background: var(--sc-color-warning-subtle);
-  border-color: color-mix(in srgb, currentColor 30%, transparent);
+  border-color: transparent;
   color: var(--sc-color-warning);
 }
 
 .sc-badge-danger {
   background: var(--sc-color-danger-subtle);
-  border-color: color-mix(in srgb, currentColor 30%, transparent);
+  border-color: transparent;
   color: var(--sc-color-danger);
 }
 
@@ -3249,46 +3250,46 @@ select.sc-input {
    dark fill with a light line and text, so that a badge reads on the glass. */
 .sc-category-gray {
   --sc-category-line: #586274;
-  --sc-category-fill: #eceff4;
+  --sc-category-fill: #e3e7ee;
 }
 
 .sc-category-blue {
   --sc-category-line: #2c5bc4;
-  --sc-category-fill: #e4ecff;
+  --sc-category-fill: #d9e5ff;
 }
 
 .sc-category-green {
   --sc-category-line: #1c7b51;
-  --sc-category-fill: #e0f3e9;
+  --sc-category-fill: #d3eee0;
 }
 
 .sc-category-orange {
   --sc-category-line: #a85400;
-  --sc-category-fill: #ffeedb;
+  --sc-category-fill: #ffe3c9;
 }
 
 .sc-category-pink {
   --sc-category-line: #b8336f;
-  --sc-category-fill: #fde6f0;
+  --sc-category-fill: #fcdbe9;
 }
 
 .sc-category-purple {
   --sc-category-line: #6542bb;
-  --sc-category-fill: #eee8fd;
+  --sc-category-fill: #e7dffb;
 }
 
 .sc-category-teal {
   --sc-category-line: #0d7672;
-  --sc-category-fill: #dff3f2;
+  --sc-category-fill: #d2ecea;
 }
 
 .sc-category-yellow {
   --sc-category-line: #7d6200;
-  --sc-category-fill: #faf1d2;
+  --sc-category-fill: #f8ecb8;
 }
 
 .sc-badge-category {
-  border-color: color-mix(in srgb, var(--sc-category-line) 45%, transparent);
+  border-color: transparent;
   background: var(--sc-category-fill);
   color: var(--sc-category-line);
 }
