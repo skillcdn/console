@@ -433,9 +433,7 @@ table {
   align-items: center;
   gap: var(--sc-space-4);
   width: 100%;
-  max-width: var(--sc-width-page);
   height: var(--sc-header-height);
-  margin-inline: auto;
   padding-inline: var(--sc-space-5);
 }
 
@@ -509,8 +507,6 @@ table {
    the tabs scroll sideways where they do not fit, and nothing in the bar ever scrolls down. */
 .sc-tabs {
   width: 100%;
-  max-width: var(--sc-width-page);
-  margin-inline: auto;
   margin-bottom: -1px;
   padding-inline: var(--sc-space-5);
   overflow: auto hidden;
@@ -738,11 +734,6 @@ table {
 
 /* A page that takes the whole window takes the header with it, so that the lockup, the tabs and
    the page start on one line, as they do on every other page. */
-.sc-shell:has(> .sc-main-wide) .sc-header-inner,
-.sc-shell:has(> .sc-main-wide) .sc-tabs {
-  max-width: none;
-}
-
 .sc-page-head {
   display: flex;
   flex-wrap: wrap;
