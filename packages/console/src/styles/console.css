@@ -3247,45 +3247,46 @@ select.sc-input {
 /* The schedule, the roadmap and the categories (ADR-0019). */
 
 /* The colours a category may be shown in: names, painted here and nowhere else. Each is a
-   dark fill with a light line and text, so that a badge reads on the glass. */
+   light fill with its words dark in the same hue, the eight hues spread around the wheel so
+   that no two are taken for each other at a glance. */
 .sc-category-gray {
-  --sc-category-line: #586274;
-  --sc-category-fill: #e3e7ee;
+  --sc-category-line: #4a5468;
+  --sc-category-fill: #e0e4eb;
 }
 
 .sc-category-blue {
-  --sc-category-line: #2c5bc4;
-  --sc-category-fill: #d9e5ff;
+  --sc-category-line: #1d4fcb;
+  --sc-category-fill: #d2e0ff;
 }
 
 .sc-category-green {
-  --sc-category-line: #1c7b51;
-  --sc-category-fill: #d3eee0;
+  --sc-category-line: #176d26;
+  --sc-category-fill: #cdf0cc;
 }
 
 .sc-category-orange {
-  --sc-category-line: #a85400;
-  --sc-category-fill: #ffe3c9;
+  --sc-category-line: #a33405;
+  --sc-category-fill: #ffd6b0;
 }
 
 .sc-category-pink {
-  --sc-category-line: #b8336f;
-  --sc-category-fill: #fcdbe9;
+  --sc-category-line: #b2176a;
+  --sc-category-fill: #fdd2e5;
 }
 
 .sc-category-purple {
-  --sc-category-line: #6542bb;
-  --sc-category-fill: #e7dffb;
+  --sc-category-line: #6434c2;
+  --sc-category-fill: #e6d8fc;
 }
 
 .sc-category-teal {
-  --sc-category-line: #0d7672;
-  --sc-category-fill: #d2ecea;
+  --sc-category-line: #08667a;
+  --sc-category-fill: #c6edf4;
 }
 
 .sc-category-yellow {
-  --sc-category-line: #7d6200;
-  --sc-category-fill: #f8ecb8;
+  --sc-category-line: #664d00;
+  --sc-category-fill: #f7e68a;
 }
 
 .sc-badge-category {
