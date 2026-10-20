@@ -565,7 +565,7 @@ table {
   display: flex;
   flex: none;
   align-items: center;
-  gap: var(--sc-space-3);
+  gap: var(--sc-space-1);
   margin-left: auto;
 }
 
@@ -1091,6 +1091,12 @@ table {
 
 .sc-person-login {
   font-weight: var(--sc-weight-medium);
+}
+
+/* The picture in the menu's label sits in the control with a little room around it. */
+.sc-menu-summary .sc-avatar {
+  width: 1.75rem;
+  height: 1.75rem;
 }
 
 /* In the menu's label a long name gives way before the header runs out of room. */
@@ -2337,6 +2343,7 @@ select.sc-input {
 
 /* That this person is the reader: beside the name on the first line. */
 .sc-person-you {
+  margin-inline-start: calc(var(--sc-space-1) - var(--sc-space-3));
   color: var(--sc-color-text-faint);
   font-size: var(--sc-text-xs);
 }
@@ -2453,6 +2460,14 @@ select.sc-input {
 .sc-members {
   display: grid;
   gap: var(--sc-space-4);
+}
+
+/* What a member is in the project, and their office in the organization beside it, small. */
+.sc-member-role {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sc-space-2);
+  font-size: var(--sc-text-sm);
 }
 
 .sc-member-form .sc-field-row {
