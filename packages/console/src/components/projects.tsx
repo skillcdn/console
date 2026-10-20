@@ -93,7 +93,7 @@ export const VISIBILITY_LABELS: Readonly<Record<ProjectVisibility, string>> = {
 export function ProjectRoleBadge(props: { readonly role: ProjectRole }) {
   const words = useWords();
   return (
-    <Badge tone={props.role === "owner" ? "point" : "neutral"}>
+    <Badge tone={props.role === "owner" ? "accent" : "neutral"}>
       {words.vocabulary.projectRole[props.role]}
     </Badge>
   );

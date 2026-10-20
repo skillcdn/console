@@ -195,7 +195,7 @@ export const ROLE_LABELS: Readonly<Record<PersonRole, string>> = {
 export function RoleBadge(props: { readonly role: PersonRole }) {
   const words = useWords();
   return (
-    <Badge tone={props.role === "admin" ? "point" : "neutral"}>
+    <Badge tone={props.role === "admin" ? "accent" : "neutral"}>
       {words.vocabulary.role[props.role]}
     </Badge>
   );
@@ -276,14 +276,14 @@ export function DueBadge(props: {
     );
   }
   if (days === 0) {
-    return <Badge tone="warning">{words.board.due.today}</Badge>;
+    return <Badge tone="point">{words.board.due.today}</Badge>;
   }
   if (days === 1) {
-    return <Badge tone="warning">{words.board.due.tomorrow}</Badge>;
+    return <Badge tone="point">{words.board.due.tomorrow}</Badge>;
   }
   if (days <= 7) {
     return (
-      <Badge tone="point" title={day}>
+      <Badge tone="warning" title={day}>
         {words.board.due.inDays(days)}
       </Badge>
     );
