@@ -127,7 +127,6 @@
   --sc-leading-code: 1.7;
   --sc-weight-normal: 400;
   --sc-weight-medium: 500;
-  --sc-weight-semibold: 600;
   --sc-weight-bold: 650;
   /* Every face leaves more room above a line than below it, so a one-line label centred in a
      box lands low; a box that centres a label takes this off the top and gives it to the
@@ -1610,7 +1609,7 @@ select.sc-input {
 .sc-card-title {
   color: var(--sc-color-text);
   font-size: var(--sc-text-sm);
-  font-weight: var(--sc-weight-semibold);
+  font-weight: var(--sc-weight-medium);
   line-height: 1.4;
   text-decoration: none;
   overflow-wrap: anywhere;
