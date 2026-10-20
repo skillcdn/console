@@ -68,8 +68,8 @@
   /* Glass: what a pane over the field is made of. A wide blur with the colour behind pushed, a
      white veil, a bright edge, and a soft stand-off from the field. */
   --sc-glass-backdrop: blur(24px) saturate(2);
-  --sc-color-glass: #ffffff40;
-  --sc-color-glass-hover: #ffffff66;
+  --sc-color-glass: #ffffff8c;
+  --sc-color-glass-hover: #ffffffb3;
   --sc-color-glass-edge: #ffffff;
   /* The light that falls down a pane's face, from its top edge. */
   --sc-glass-highlight: transparent;
@@ -85,8 +85,8 @@
   --sc-glass-lens-width: 1px;
   --sc-glass-lens-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   /* A surface inside a pane: no blur of its own, white with a little of the pane let through. */
-  --sc-color-sheet: color-mix(in srgb, var(--sc-color-bg-raised) 62%, transparent);
-  --sc-color-sheet-hover: color-mix(in srgb, var(--sc-color-bg-raised) 88%, transparent);
+  --sc-color-sheet: color-mix(in srgb, var(--sc-color-bg-raised) 92%, transparent);
+  --sc-color-sheet-hover: var(--sc-color-bg-raised);
   --sc-color-field: var(--sc-color-bg-raised);
   /* A sheet's own blur, so that a card reads as a tile of glass on the pane. */
   --sc-sheet-backdrop: none;
