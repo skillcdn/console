@@ -13,7 +13,7 @@
   color-scheme: light;
 
   /* Surfaces: the page's own pale ground, the steps into it, and white above it. */
-  --sc-color-bg: #f9fafd;
+  --sc-color-bg: #fbfcfe;
   --sc-color-bg-subtle: #f3f5f9;
   --sc-color-bg-inset: #edf0f6;
   --sc-color-bg-raised: #ffffff;
@@ -49,9 +49,9 @@
   /* The ground: a pale field with two lights in it, a far one low and wide and a near one high
      and soft, so the field has distance in it. The default UI
      provides the field's face (the shell); a custom console may paint its own. */
-  --sc-color-sky: #f3f6fd;
+  --sc-color-sky: #fbfcfe;
   /* The field's gradient, in one direction from the top; the lights below are drawn over it. */
-  --sc-field-gradient: linear-gradient(160deg, #e9eefc 0%, #f3f5fd 38%, #fafafe 72%, #ffffff 100%);
+  --sc-field-gradient: linear-gradient(180deg, #f2f4f9 0%, #fafbfd 50%, #ffffff 100%);
   --sc-color-far: transparent;
   --sc-color-far-turn: transparent;
   --sc-color-vignette: transparent;
@@ -68,8 +68,8 @@
   /* Glass: what a pane over the field is made of. A wide blur with the colour behind pushed, a
      white veil, a bright edge, and a soft stand-off from the field. */
   --sc-glass-backdrop: blur(24px) saturate(1.4);
-  --sc-color-glass: #ffffffb3;
-  --sc-color-glass-hover: #ffffffd9;
+  --sc-color-glass: #ffffffd9;
+  --sc-color-glass-hover: #ffffff;
   --sc-color-glass-edge: #ffffff;
   /* The light that falls down a pane's face, from its top edge. */
   --sc-glass-highlight: transparent;
@@ -85,7 +85,7 @@
   --sc-glass-lens-width: 1px;
   --sc-glass-lens-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   /* A surface inside a pane: no blur of its own, white with a little of the pane let through. */
-  --sc-color-sheet: color-mix(in srgb, var(--sc-color-bg-raised) 92%, transparent);
+  --sc-color-sheet: var(--sc-color-bg-raised);
   --sc-color-sheet-hover: var(--sc-color-bg-raised);
   --sc-color-field: var(--sc-color-bg-raised);
   /* A sheet's own blur, so that a card reads as a tile of glass on the pane. */
@@ -858,6 +858,8 @@ table {
 }
 
 .sc-column {
+  background: var(--sc-color-bg-subtle);
+  backdrop-filter: none;
   box-shadow: none;
 }
 
