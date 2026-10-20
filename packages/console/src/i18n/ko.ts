@@ -239,6 +239,8 @@ export const ko: Messages = {
     menu: "작업 메뉴",
     decisions: (n) => `결정 ${n}건`,
     decisionsTitle: "사람을 기다리는 결정",
+    unfold: (column) => `${column} 펼치기`,
+    fold: (column) => `${column} 접기`,
     filters: {
       aria: "보드 좁혀 보기",
       everyone: "모두",
@@ -381,6 +383,8 @@ export const ko: Messages = {
     nothingOverdue: "기한이 지난 작업이 없습니다.",
     unscheduled: "날짜 없음",
     allScheduled: "열린 작업마다 날짜가 있습니다.",
+    more: (n) => `${n}개 더`,
+    fewer: "접기",
     week: {
       title: "이 주",
       previous: "이전 주",

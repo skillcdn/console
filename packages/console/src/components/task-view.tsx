@@ -142,26 +142,56 @@ export function TaskView(props: TaskViewProps) {
   return (
     <div className="sc-task">
       <header className="sc-task-header">
-        {parent !== undefined && (
-          <p className="sc-task-parent">
-            {words.task.partOf}{" "}
-            <a href={props.taskHref(parent)}>
-              #{parent.number} {parent.title}
-            </a>
-          </p>
-        )}
-        <h1 className="sc-task-title">
-          <span className="sc-card-number">#{task.number}</span> {task.title}
-        </h1>
-        <div className="sc-task-badges">
-          <StateBadge state={task.state} />
-          {task.archivedAt !== null && <Badge tone="neutral">{words.task.archived}</Badge>}
-          {task.category !== null && <CategoryBadge category={task.category} />}
-          <PriorityBadge priority={task.priority} />
-          {task.dueOn !== null && (
-            <DueBadge dueOn={task.dueOn} state={task.state} today={props.today} />
+        <div className="sc-task-heading">
+          {parent !== undefined && (
+            <p className="sc-task-parent">
+              {words.task.partOf}{" "}
+              <a href={props.taskHref(parent)}>
+                #{parent.number} {parent.title}
+              </a>
+            </p>
           )}
+          <h1 className="sc-task-title">
+            <span className="sc-card-number">#{task.number}</span> {task.title}
+          </h1>
+          <div className="sc-task-badges">
+            <StateBadge state={task.state} />
+            {task.archivedAt !== null && <Badge tone="neutral">{words.task.archived}</Badge>}
+            {task.category !== null && <CategoryBadge category={task.category} />}
+            <PriorityBadge priority={task.priority} />
+            {task.dueOn !== null && (
+              <DueBadge dueOn={task.dueOn} state={task.state} today={props.today} />
+            )}
+          </div>
         </div>
+        {props.formHref !== undefined && (
+          <div className="sc-task-actions">
+            <a className="sc-button sc-button-secondary" href={props.formHref("edit")}>
+              {words.common.edit}
+            </a>
+            <a className="sc-button sc-button-secondary" href={props.formHref("ask")}>
+              {words.task.raiseDecision}
+            </a>
+            {props.onArchive !== undefined && task.archivedAt === null && (
+              <Button
+                variant="secondary"
+                disabled={props.busy === true}
+                onClick={() => props.onArchive?.(task)}
+              >
+                {words.task.archive}
+              </Button>
+            )}
+            {props.onRestore !== undefined && task.archivedAt !== null && (
+              <Button
+                variant="secondary"
+                disabled={props.busy === true}
+                onClick={() => props.onRestore?.(task)}
+              >
+                {words.task.restore}
+              </Button>
+            )}
+          </div>
+        )}
       </header>
       <div className="sc-task-body">
         <div className="sc-task-main">
@@ -359,34 +389,6 @@ export function TaskView(props: TaskViewProps) {
               </dd>
             </div>
           </dl>
-          {props.formHref !== undefined && (
-            <div className="sc-task-actions">
-              <a className="sc-button sc-button-secondary" href={props.formHref("edit")}>
-                {words.common.edit}
-              </a>
-              <a className="sc-button sc-button-secondary" href={props.formHref("ask")}>
-                {words.task.raiseDecision}
-              </a>
-              {props.onArchive !== undefined && task.archivedAt === null && (
-                <Button
-                  variant="secondary"
-                  disabled={props.busy === true}
-                  onClick={() => props.onArchive?.(task)}
-                >
-                  {words.task.archive}
-                </Button>
-              )}
-              {props.onRestore !== undefined && task.archivedAt !== null && (
-                <Button
-                  variant="secondary"
-                  disabled={props.busy === true}
-                  onClick={() => props.onRestore?.(task)}
-                >
-                  {words.task.restore}
-                </Button>
-              )}
-            </div>
-          )}
         </aside>
       </div>
     </div>

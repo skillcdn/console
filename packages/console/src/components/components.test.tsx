@@ -226,10 +226,48 @@ describe("the board", () => {
     expect(html).toContain("1 decision");
     expect(html).toContain("High");
     expect(html).toContain('href="/projects/web/tasks/7"');
-    // The second task's column, with its count; no menu without a way to edit or to put away.
-    expect(html).toContain('class="sc-column sc-column-done"');
+    // The second task's column, folded with its count; no menu without a way to edit or to put away.
+    expect(html).toContain('class="sc-column sc-column-done sc-column-folded"');
     expect(html).not.toContain("sc-card-menu-button");
     expect(html).not.toContain("<select");
+  });
+
+  it("folds the columns of finished work until they are opened, and folds none when told", () => {
+    const tasks = [
+      task(),
+      task({
+        id: "0199c4d8-0000-7000-8000-000000000011",
+        number: 8,
+        title: "Shipped",
+        state: "done",
+      }),
+      task({
+        id: "0199c4d8-0000-7000-8000-000000000014",
+        number: 9,
+        title: "Let go",
+        state: "dropped",
+      }),
+    ];
+    const html = renderToStaticMarkup(
+      <Board tasks={tasks} taskHref={href} onOpen={() => undefined} />,
+    );
+    // Done and Dropped are strips: their name, their count and the way to open them, no cards.
+    expect(html).toContain('class="sc-column sc-column-done sc-column-folded"');
+    expect(html).toContain('class="sc-column sc-column-dropped sc-column-folded"');
+    expect(html).toContain('aria-expanded="false" aria-label="Open Done"');
+    expect(html).toContain('aria-expanded="false" aria-label="Open Dropped"');
+    expect(html).not.toContain("Shipped");
+    expect(html).not.toContain("Let go");
+    // The work at hand is not foldable, and keeps its cards.
+    expect(html).toContain('class="sc-column sc-column-ready"');
+    expect(html).toContain("#7");
+    const open = renderToStaticMarkup(
+      <Board tasks={tasks} taskHref={href} onOpen={() => undefined} folded={[]} />,
+    );
+    expect(open).not.toContain("sc-column-folded");
+    expect(open).not.toContain("sc-column-toggle");
+    expect(open).toContain("Shipped");
+    expect(open).toContain("Let go");
   });
 });
 
@@ -322,6 +360,14 @@ describe("one task", () => {
     const plain = render(undefined);
     expect(plain).toContain('href="/projects/web/tasks/7?edit"');
     expect(plain).toContain('href="/projects/web/tasks/7?ask"');
+    // The ways to the forms stand in the task's head, beside its title, not at the foot of its facts.
+    const head = plain.slice(
+      plain.indexOf('<header class="sc-task-header">'),
+      plain.indexOf("</header>"),
+    );
+    expect(head).toContain('<div class="sc-task-heading">');
+    expect(head).toContain('<div class="sc-task-actions">');
+    expect(plain.slice(plain.indexOf("<aside"))).not.toContain("sc-task-actions");
     expect(plain).not.toContain('aria-label="Raise a decision"');
     const asking = render("ask");
     expect(asking).toContain('aria-label="Raise a decision"');
@@ -1550,6 +1596,7 @@ describe("the schedule on the board", () => {
           today={TODAY}
           taskHref={href}
           onOpen={() => undefined}
+          folded={[]}
         />,
       );
     expect(words("2026-10-11")).toContain("Due today");
@@ -2645,6 +2692,40 @@ describe("the roadmap as months (ADR-0026)", () => {
     expect(empty).toContain("No goal is planned in these months.");
   });
 
+  it("shows a day's first tasks and the way to the rest, so that a busy week stays as tall as the others", () => {
+    const due = (n: number) =>
+      task({
+        id: `0199c4d8-0000-7000-8000-0000000004${String(n).padStart(2, "0")}`,
+        number: 40 + n,
+        title: `Due ${n}`,
+        dueOn: "2026-11-12",
+        openDecisions: 0,
+      });
+    const html = renderToStaticMarkup(
+      <Calendar
+        tasks={[1, 2, 3, 4, 5, 6].map(due)}
+        month="2026-11"
+        today={TODAY}
+        taskHref={href}
+        monthHref={() => "#"}
+      />,
+    );
+    expect(html.split('sc-calendar-task-title">Due ').length - 1).toBe(3);
+    expect(html).toContain('class="sc-calendar-more" aria-expanded="false">3 more</button>');
+    // One more than the day shows is shown whole: a button would take the room of the task.
+    const four = renderToStaticMarkup(
+      <Calendar
+        tasks={[1, 2, 3, 4].map(due)}
+        month="2026-11"
+        today={TODAY}
+        taskHref={href}
+        monthHref={() => "#"}
+      />,
+    );
+    expect(four.split('sc-calendar-task-title">Due ').length - 1).toBe(4);
+    expect(four).not.toContain("sc-calendar-more");
+  });
+
   it("marks the target day of a goal on the calendar when told where its page is", () => {
     const html = renderToStaticMarkup(
       <Calendar
@@ -2869,7 +2950,13 @@ describe("a card dragged to another column", () => {
       },
     ) =>
       renderToStaticMarkup(
-        <Board tasks={[task(overrides)]} taskHref={href} onOpen={() => undefined} {...ways} />,
+        <Board
+          tasks={[task(overrides)]}
+          taskHref={href}
+          onOpen={() => undefined}
+          folded={[]}
+          {...ways}
+        />,
       );
     const button = 'aria-label="Task menu" aria-haspopup="menu" aria-expanded="false"';
     const open = render(

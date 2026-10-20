@@ -1452,11 +1452,9 @@ select.sc-input {
    scroll sideways when it is not, and each column scrolls within itself. */
 
 .sc-board {
-  display: grid;
+  display: flex;
   flex: 1 1 0;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(var(--sc-column-width), 1fr);
-  grid-template-rows: minmax(0, 1fr);
+  align-items: stretch;
   gap: var(--sc-space-3);
   min-height: 24rem;
   overflow-x: auto;
@@ -1467,7 +1465,9 @@ select.sc-input {
 
 .sc-column {
   display: flex;
+  flex: 1 0 var(--sc-column-width);
   flex-direction: column;
+  min-width: 0;
   min-height: 0;
   /* The body scrolls; the column clips, so that nothing of it reaches the board's own scrolling. */
   overflow: hidden;
@@ -1489,6 +1489,57 @@ select.sc-input {
   font-weight: var(--sc-weight-bold);
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+/* The name of a column stands first; its count and the way to fold it keep to the end. */
+.sc-column-header > .sc-column-title {
+  margin-inline-end: auto;
+}
+
+/* The way to fold a column of finished work, or to open it again. */
+.sc-column-toggle {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--sc-radius-sm);
+  background: transparent;
+  color: var(--sc-color-text-muted);
+  transition:
+    background var(--sc-transition),
+    color var(--sc-transition);
+}
+
+.sc-column-toggle:hover {
+  background: var(--sc-color-bg-inset);
+  color: var(--sc-color-text);
+}
+
+.sc-column-toggle svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* A folded column is a strip: the way to open it on top, its name down its length, its count. */
+.sc-column-folded {
+  flex: 0 0 auto;
+  width: 3.25rem;
+}
+
+.sc-column-folded .sc-column-header {
+  flex: 1;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: var(--sc-space-3);
+  padding: var(--sc-space-3) var(--sc-space-1);
+  border-bottom: 0;
+}
+
+.sc-column-folded .sc-column-toggle {
+  order: -1;
 }
 
 .sc-column-count {
@@ -1516,6 +1567,11 @@ select.sc-input {
 
 .sc-column-dropped .sc-column-title {
   color: var(--sc-color-text-faint);
+}
+
+.sc-column-folded .sc-column-header > .sc-column-title {
+  margin-inline-end: 0;
+  writing-mode: vertical-rl;
 }
 
 .sc-column-body {
@@ -1636,8 +1692,18 @@ select.sc-input {
 }
 
 .sc-task-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sc-space-3) var(--sc-space-5);
+}
+
+.sc-task-heading {
   display: grid;
+  flex: 1 1 28rem;
   gap: var(--sc-space-2);
+  min-width: 0;
 }
 
 .sc-task-parent {
@@ -1688,6 +1754,10 @@ select.sc-input {
   flex-wrap: wrap;
   align-items: end;
   gap: var(--sc-space-2);
+}
+
+.sc-task-header > .sc-task-actions {
+  flex: none;
 }
 
 .sc-task-section {
@@ -3087,6 +3157,26 @@ select.sc-input {
   color: var(--sc-color-accent);
 }
 
+.sc-calendar-more {
+  display: block;
+  width: 100%;
+  margin-top: 2px;
+  padding: 1px var(--sc-space-1);
+  border: 0;
+  border-radius: var(--sc-radius-sm);
+  background: transparent;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-xs);
+  font-weight: var(--sc-weight-medium);
+  line-height: 1.4;
+  text-align: start;
+}
+
+.sc-calendar-more:hover {
+  background: var(--sc-color-bg-inset);
+  color: var(--sc-color-text);
+}
+
 .sc-calendar-task {
   display: flex;
   align-items: center;
@@ -3749,15 +3839,18 @@ select.sc-input {
     display: none;
   }
 
-  /* Tabs that do not fit wrap, so that none is hidden off the edge. */
+  /* Tabs that do not fit stay on one line and scroll sideways, the edge fading where more of them
+     are; the current one is brought into view by the shell. */
   .sc-tabs {
     padding-inline: var(--sc-space-4);
-    overflow: visible;
+    mask-image: linear-gradient(to right, #000 calc(100% - var(--sc-space-6)), transparent);
   }
 
   .sc-tabs-inner {
-    flex-wrap: wrap;
-    gap: 0 var(--sc-space-4);
+    gap: var(--sc-space-4);
+    /* As wide as the tabs and some room past the last, so that it scrolls clear of the fading edge. */
+    width: max-content;
+    padding-inline-end: var(--sc-space-6);
   }
 
   .sc-menu-summary .sc-person-login {

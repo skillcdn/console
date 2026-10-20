@@ -279,6 +279,8 @@ export const en = {
     menu: "Task menu",
     decisions: (n: number) => count(n, "decision", "decisions"),
     decisionsTitle: "Decisions waiting for a person",
+    unfold: (column: string) => `Open ${column}`,
+    fold: (column: string) => `Fold ${column}`,
     filters: {
       aria: "Narrow the board",
       everyone: "Everyone",
@@ -421,6 +423,8 @@ export const en = {
     nothingOverdue: "Nothing is overdue.",
     unscheduled: "No day set",
     allScheduled: "Every open task has a day.",
+    more: (n: number) => `${n} more`,
+    fewer: "Fewer",
     week: {
       title: "The week",
       previous: "The week before",

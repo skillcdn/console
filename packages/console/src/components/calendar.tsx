@@ -365,9 +365,25 @@ function goalsOnDays(goals: readonly RestGoal[]): ReadonlyMap<string, readonly R
 /** How many days a bar has in the week, for its title to run along: a custom property the stylesheet reads. */
 const spanStyle = (span: number): CSSProperties => ({ "--sc-span": span }) as CSSProperties;
 
+/** How many of a day's own tasks a cell shows before the way to the rest. */
+export const DAY_SHOWN = 3;
+
 /** One week as a row of cells: the bars across the days in their lanes, then the tasks on each day. */
 function WeekRow(props: WeekRowProps) {
   const { week, segments, now } = props;
+  const words = useWords().calendar;
+  // The days a person opened in this week, each showing all of its tasks.
+  const [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set());
+  const toggle = (day: string) =>
+    setOpened((before) => {
+      const after = new Set(before);
+      if (after.has(day)) {
+        after.delete(day);
+      } else {
+        after.add(day);
+      }
+      return after;
+    });
   const pointing = (task: RestTask, day: string) => ({
     onMouseEnter: (event: SyntheticEvent<HTMLElement>) =>
       props.onPoint(task, day, event.currentTarget),
@@ -461,31 +477,50 @@ function WeekRow(props: WeekRowProps) {
               </a>
             );
           })}
-          {(props.on.get(cell.day) ?? []).map((task) => {
-            const mark = props.markOf?.(task);
+          {(() => {
+            const all = props.on.get(cell.day) ?? [];
+            const open = opened.has(cell.day);
+            const shown = open || all.length <= DAY_SHOWN + 1 ? all : all.slice(0, DAY_SHOWN);
             return (
-              <a
-                key={task.id}
-                className={cx("sc-calendar-task", tone(task, now))}
-                href={props.taskHref(task)}
-                {...pointing(task, cell.day)}
-              >
-                {mark === undefined || mark === null ? (
-                  <span
-                    className={cx(
-                      "sc-calendar-dot",
-                      `sc-category-${task.category?.color ?? "gray"}`,
-                    )}
-                  />
-                ) : (
-                  mark
+              <>
+                {shown.map((task) => {
+                  const mark = props.markOf?.(task);
+                  return (
+                    <a
+                      key={task.id}
+                      className={cx("sc-calendar-task", tone(task, now))}
+                      href={props.taskHref(task)}
+                      {...pointing(task, cell.day)}
+                    >
+                      {mark === undefined || mark === null ? (
+                        <span
+                          className={cx(
+                            "sc-calendar-dot",
+                            `sc-category-${task.category?.color ?? "gray"}`,
+                          )}
+                        />
+                      ) : (
+                        mark
+                      )}
+                      {who(task)}
+                      <span className="sc-calendar-task-title">{task.title}</span>
+                      {tipIn(task, cell.day)}
+                    </a>
+                  );
+                })}
+                {all.length > DAY_SHOWN + 1 && (
+                  <button
+                    type="button"
+                    className="sc-calendar-more"
+                    aria-expanded={open}
+                    onClick={() => toggle(cell.day)}
+                  >
+                    {open ? words.fewer : words.more(all.length - DAY_SHOWN)}
+                  </button>
                 )}
-                {who(task)}
-                <span className="sc-calendar-task-title">{task.title}</span>
-                {tipIn(task, cell.day)}
-              </a>
+              </>
             );
-          })}
+          })()}
         </td>
       ))}
     </tr>

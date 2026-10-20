@@ -11,6 +11,7 @@ export {
   type BoardProps,
   byDue,
   columnStateOf,
+  FOLDED_STATES,
   filterTasks,
   TaskCard,
 } from "./components/board.js";

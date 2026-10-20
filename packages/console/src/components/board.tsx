@@ -59,7 +59,16 @@ export interface BoardProps {
   readonly onEdit?: ((task: RestTask) => void) | undefined;
   /** Called when a task is put away from its card's menu (ADR-0029, ADR-0030). Left out, the menu offers nothing of it. */
   readonly onArchive?: ((task: RestTask) => void) | undefined;
+  /**
+   * The columns folded to a strip until a person opens them, with their count and the way to open
+   * them; a folded column still takes a card dragged onto it. What is finished, by default, so that
+   * the work at hand has the room; `[]` folds none.
+   */
+  readonly folded?: readonly TaskState[] | undefined;
 }
+
+/** The columns a board folds unless told otherwise: the work that is over. */
+export const FOLDED_STATES: readonly TaskState[] = ["done", "dropped"];
 
 /** How far a mouse travels on a card before the press is a drag and not a click. */
 const DRAG_SLACK = 4;
@@ -364,6 +373,19 @@ export function Board(props: BoardProps) {
   const { onMove } = props;
   const board = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
+  // The foldable columns a person has opened on this board; the others of them stay folded.
+  const [opened, setOpened] = useState<ReadonlySet<TaskState>>(() => new Set());
+  const foldable = props.folded ?? FOLDED_STATES;
+  const toggle = (state: TaskState) =>
+    setOpened((before) => {
+      const after = new Set(before);
+      if (after.has(state)) {
+        after.delete(state);
+      } else {
+        after.add(state);
+      }
+      return after;
+    });
   // What the pointer's release reads, so that the move is made outside a state update.
   const current = useRef<Drag | null>(null);
   current.current = drag;
@@ -511,38 +533,65 @@ export function Board(props: BoardProps) {
     >
       {TASK_STATES.map((state) => {
         const tasks = props.tasks.filter((task) => task.state === state).sort(byDue);
+        const name = words.vocabulary.state[state];
+        const canFold = foldable.includes(state);
+        const folded = canFold && !opened.has(state);
         return (
           <section
             key={state}
             className={cx(
               "sc-column",
               `sc-column-${state}`,
+              folded && "sc-column-folded",
               dragging?.over === state && "sc-column-over",
             )}
-            aria-label={words.vocabulary.state[state]}
+            aria-label={name}
             data-column={state}
           >
             <header className="sc-column-header">
-              <h2 className="sc-column-title">{words.vocabulary.state[state]}</h2>
+              <h2 className="sc-column-title">{name}</h2>
               <span className="sc-column-count">{tasks.length}</span>
+              {canFold && (
+                <button
+                  type="button"
+                  className="sc-column-toggle"
+                  aria-expanded={!folded}
+                  aria-label={folded ? words.board.unfold(name) : words.board.fold(name)}
+                  title={folded ? words.board.unfold(name) : words.board.fold(name)}
+                  onClick={() => toggle(state)}
+                >
+                  <svg viewBox="0 0 16 16" aria-hidden="true">
+                    <path
+                      d={folded ? "M6 4l4 4-4 4" : "M10 4l-4 4 4 4"}
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+              )}
             </header>
-            <div className="sc-column-body">
-              {tasks.map((task) => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  href={props.taskHref(task)}
-                  onOpen={props.onOpen}
-                  today={props.today}
-                  onPress={onMove === undefined ? undefined : press}
-                  dragging={dragging?.task.id === task.id}
-                  editHref={props.editHref?.(task)}
-                  onEdit={props.onEdit}
-                  onArchive={props.onArchive}
-                />
-              ))}
-              {tasks.length === 0 && state === "idea" && props.empty}
-            </div>
+            {!folded && (
+              <div className="sc-column-body">
+                {tasks.map((task) => (
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    href={props.taskHref(task)}
+                    onOpen={props.onOpen}
+                    today={props.today}
+                    onPress={onMove === undefined ? undefined : press}
+                    dragging={dragging?.task.id === task.id}
+                    editHref={props.editHref?.(task)}
+                    onEdit={props.onEdit}
+                    onArchive={props.onArchive}
+                  />
+                ))}
+                {tasks.length === 0 && state === "idea" && props.empty}
+              </div>
+            )}
           </section>
         );
       })}

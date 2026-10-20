@@ -186,6 +186,41 @@ function PersonMenu(props: {
 
 export function Shell(props: ShellProps) {
   const words = useWords();
+  // Where the tabs scroll sideways, the current one is brought into the bar's view.
+  const tabs = useRef<HTMLElement>(null);
+  const current = props.nav.find((item) => item.current)?.href;
+  useEffect(() => {
+    const bar = tabs.current;
+    if (current === undefined || bar === null) {
+      return;
+    }
+    const bring = () => {
+      const tab = bar.querySelector<HTMLElement>(".sc-tab-current");
+      if (tab === null) {
+        return;
+      }
+      const left = tab.offsetLeft - bar.offsetLeft;
+      // The last part of the bar fades where it scrolls (the stylesheet's mask): a tab there
+      // counts as out of view.
+      const seen = bar.scrollWidth > bar.clientWidth ? bar.clientWidth * 0.85 : bar.clientWidth;
+      if (left < bar.scrollLeft || left + tab.offsetWidth > bar.scrollLeft + seen) {
+        bar.scrollLeft = left - (bar.clientWidth - tab.offsetWidth) / 2;
+      }
+    };
+    bring();
+    // The tabs grow once the page's face has loaded, and the bar narrows with the window: either
+    // may put the current tab out of view again.
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+    const watch = new ResizeObserver(bring);
+    watch.observe(bar);
+    const inner = bar.firstElementChild;
+    if (inner !== null) {
+      watch.observe(inner);
+    }
+    return () => watch.disconnect();
+  }, [current]);
   const follow = (href: string) => (event: React.MouseEvent) => {
     if (isPlainClick(event)) {
       event.preventDefault();
@@ -259,7 +294,7 @@ export function Shell(props: ShellProps) {
           </div>
         </div>
         {props.nav.length > 0 && (
-          <nav className="sc-tabs" aria-label={words.shell.pages}>
+          <nav ref={tabs} className="sc-tabs" aria-label={words.shell.pages}>
             <div className="sc-tabs-inner">
               {props.nav.map((item) => (
                 <a
