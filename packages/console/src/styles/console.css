@@ -1568,12 +1568,13 @@ select.sc-input {
   justify-content: center;
   min-width: 1.5rem;
   padding-inline: var(--sc-space-2);
+  border: var(--sc-border);
   border-radius: var(--sc-radius-full);
-  background: var(--sc-color-bg-inset);
+  background: var(--sc-color-bg-raised);
   color: var(--sc-color-text-muted);
   font-size: var(--sc-text-xs);
   font-weight: var(--sc-weight-medium);
-  line-height: 1.5rem;
+  line-height: calc(1.5rem - 2px);
 }
 
 .sc-column-in_progress .sc-column-title,
