@@ -1821,13 +1821,38 @@ select.sc-input {
   gap: var(--sc-space-3);
 }
 
-.sc-link-list li + li,
-.sc-subtasks li + li {
-  margin-top: var(--sc-space-2);
+.sc-link-list,
+.sc-subtasks {
+  display: grid;
+  gap: var(--sc-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sc-link-list > li,
+.sc-subtasks > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2) var(--sc-space-3);
+  padding: var(--sc-space-3) var(--sc-space-4);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-sheet);
+  font-size: var(--sc-text-sm);
+  overflow-wrap: anywhere;
+}
+
+.sc-subtasks .sc-badge {
+  margin-inline-start: auto;
 }
 
 .sc-subtasks a {
+  flex: 1 1 14rem;
+  min-width: 0;
   color: var(--sc-color-text);
+  font-weight: var(--sc-weight-medium);
   text-decoration: none;
 }
 
@@ -2596,11 +2621,14 @@ select.sc-input {
 
 .sc-skills {
   display: grid;
-  gap: var(--sc-space-2);
+  grid-template-columns: repeat(auto-fill, minmax(26rem, 1fr));
+  gap: var(--sc-space-3);
 }
 
 .sc-skill {
-  padding: var(--sc-space-3) var(--sc-space-4);
+  display: grid;
+  align-content: start;
+  padding: var(--sc-space-4) var(--sc-space-5);
   border-radius: var(--sc-radius-lg);
 }
 
@@ -2613,11 +2641,13 @@ select.sc-input {
 }
 
 .sc-skill-name {
-  font-weight: var(--sc-weight-medium);
+  font-size: var(--sc-text-md);
+  font-weight: var(--sc-weight-bold);
 }
 
+/* The folder a skill is in: a line of its own under the name, in the code face. */
 .sc-skill-head > .sc-muted {
-  margin-inline-start: auto;
+  flex: 1 1 100%;
   font-family: var(--sc-font-mono);
   font-size: var(--sc-text-xs);
 }
@@ -2630,7 +2660,9 @@ select.sc-input {
 
 .sc-skill-uri {
   display: block;
-  margin-top: var(--sc-space-2);
+  margin-top: var(--sc-space-3);
+  padding-top: var(--sc-space-2);
+  border-top: var(--sc-hairline);
   color: var(--sc-color-text-faint);
   font-size: var(--sc-text-xs);
   word-break: break-all;
@@ -4779,23 +4811,38 @@ select.sc-input {
 .sc-facts-row {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sc-space-2) var(--sc-space-5);
+  align-items: stretch;
+  gap: var(--sc-space-3) 0;
   margin: 0;
   font-size: var(--sc-text-sm);
 }
 
 .sc-facts-row > div {
-  display: flex;
-  align-items: center;
-  gap: var(--sc-space-2);
+  display: grid;
+  align-content: start;
+  gap: var(--sc-space-1);
+  padding-inline: var(--sc-space-4);
+  border-inline-start: var(--sc-hairline);
+}
+
+.sc-facts-row > div:first-child {
+  padding-inline-start: 0;
+  border-inline-start: 0;
 }
 
 .sc-facts-row dt {
-  color: var(--sc-color-text-muted);
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-xs);
+  font-weight: var(--sc-weight-medium);
+  letter-spacing: var(--sc-tracking-wide);
+  text-transform: uppercase;
 }
 
 .sc-facts-row dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
   margin: 0;
 }
 
