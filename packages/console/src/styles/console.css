@@ -1535,17 +1535,17 @@ select.sc-input {
 }
 
 /* A folded column is a strip: the way to open it on top, its name down its length, its count. */
+/* A folded column is its header alone, the height of a header and as wide as its name: the way
+   to open it, the name and the count in a row, at the top of the board. */
 .sc-column-folded {
   flex: 0 0 auto;
-  width: 3.25rem;
+  align-self: flex-start;
+  width: auto;
 }
 
 .sc-column-folded .sc-column-header {
-  flex: 1;
-  flex-direction: column;
-  justify-content: flex-start;
-  gap: var(--sc-space-3);
-  padding: var(--sc-space-3) var(--sc-space-1);
+  gap: var(--sc-space-2);
+  padding: var(--sc-space-3) var(--sc-space-4) var(--sc-space-3) var(--sc-space-3);
   border-bottom: 0;
 }
 
@@ -1582,7 +1582,6 @@ select.sc-input {
 
 .sc-column-folded .sc-column-header > .sc-column-title {
   margin-inline-end: 0;
-  writing-mode: vertical-rl;
 }
 
 /* The cards of a column scroll within it; where more of them are below, the last one in view
