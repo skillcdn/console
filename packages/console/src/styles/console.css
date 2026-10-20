@@ -1596,6 +1596,13 @@ select.sc-input {
   overflow-y: auto;
   mask-image: linear-gradient(to bottom, #000 calc(100% - var(--sc-space-6)), transparent);
   scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+/* The scrollbar of a column shows only while the pointer is over the column; the fade at the foot
+   says there is more. */
+.sc-column:hover .sc-column-body,
+.sc-column-body:focus-within {
   scrollbar-color: var(--sc-scrollbar-thumb) transparent;
 }
 
