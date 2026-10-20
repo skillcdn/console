@@ -729,10 +729,11 @@ table {
   padding: var(--sc-space-6) var(--sc-space-5) var(--sc-space-8);
 }
 
-/* A page as wide as the window: the board, whose columns want every bit of it. */
+/* A page as wide as the window: the board, whose columns want every bit of it. It starts at the
+   same height as the other pages and, being as tall as the window, ends with the same room. */
 .sc-main-wide {
   max-width: none;
-  padding: var(--sc-space-5);
+  padding: var(--sc-space-6) var(--sc-space-5);
 }
 
 /* A page that takes the whole window takes the header with it, so that the lockup, the tabs and
@@ -745,7 +746,7 @@ table {
 .sc-page-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   gap: var(--sc-space-3);
   margin-bottom: var(--sc-space-4);
