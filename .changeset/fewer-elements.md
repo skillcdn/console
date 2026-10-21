@@ -1,5 +1,0 @@
----
-"@skillcdn/console": patch
----
-
-Fewer visual elements, the same names. Two surfaces: a pane of glass and a flat sheet, the sheet's blur and lift off by default (`--sc-sheet-backdrop: none`, `--sc-sheet-lift: none`, `--sc-sheet-edge` the border) and the pane without its face highlight and lens; the bar and the picture overlay blur as the panes do. Four shadows: the stage, the pane, the glow and the focus ring, the rings and glows of the live dot, a waiting decision and the sign-in mark gone, the primary button's hover the same glow. Three borders as tokens: `--sc-border`, `--sc-border-strong` (new, for inputs) and `--sc-border-accent` (new, the marking line of a quote, an answer and a report), the callout, the sign-in mark and a chosen pick on the plain one. Two opacities: hidden, and faded at 0.55 for everything over or put away. Tokens for the leading (`--sc-leading-snug`, new, 1.4) and the tracking (`--sc-tracking-tight`, `--sc-tracking-wide`, `--sc-tracking-code`, new), every rule reading them.
