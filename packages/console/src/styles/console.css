@@ -3405,7 +3405,8 @@ select.sc-input {
    - a category: a soft fill, no line (above);
    - a state: a soft fill with a line of its own hue;
    - a priority: a line of its own hue, nothing filled;
-   - a due day: a medium fill deepening as the day nears, dark words of its own hue. */
+   - a due day: a fill whose hue says how near the day is, grey to yellow to orange to coral,
+     and solid red once late. */
 .sc-badge-kind-state {
   border-color: color-mix(in srgb, currentColor 40%, transparent);
 }
@@ -3418,8 +3419,8 @@ select.sc-input {
 
 .sc-badge-kind-due {
   border-color: transparent;
-  background: #d3dae6;
-  color: #2f3a4d;
+  background: #e1e6ee;
+  color: #3a4558;
   font-variant-numeric: tabular-nums;
 }
 
@@ -3433,27 +3434,28 @@ select.sc-input {
   color: #0d4a2e;
 }
 
-/* Due within the week. */
+/* Due within the week: yellow. */
 .sc-badge-kind-due.sc-badge-warning {
-  background: #feeaa6;
-  color: #7a5300;
+  background: #fce9a6;
+  color: #6b4a00;
 }
 
-/* Due tomorrow, and today a step deeper. */
+/* Due tomorrow: light orange. */
 .sc-badge-kind-due.sc-badge-point {
-  background: #fdbb88;
-  color: #5c2100;
+  background: #ffd4a8;
+  color: #7a3300;
 }
 
+/* Due today: a deep coral. */
 .sc-badge-kind-due.sc-badge-due-today {
-  background: #fcae7a;
-  color: #551e00;
+  background: #ffa47a;
+  color: #5a1a00;
 }
 
-/* Late. */
+/* Late: solid red, white words. */
 .sc-badge-kind-due.sc-badge-danger {
-  background: #f8a5ae;
-  color: #5e0b18;
+  background: #c92a3a;
+  color: #ffffff;
 }
 
 .sc-badge-kind-count {
