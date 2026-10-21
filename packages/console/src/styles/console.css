@@ -3699,8 +3699,17 @@ select.sc-input {
   color: var(--sc-color-danger);
 }
 
+/* A bar of a task that is over: paler in its own colour, not see-through, so that every piece
+   of it is one shade whatever lies under it, and the card of the task under the pointer,
+   which lies within the piece, stays solid. */
 .sc-calendar-bar.sc-calendar-over {
-  opacity: 0.55;
+  border-color: color-mix(
+    in srgb,
+    var(--sc-category-mark, var(--sc-category-line)) 30%,
+    transparent
+  );
+  background: color-mix(in srgb, var(--sc-category-fill) 50%, var(--sc-color-bg-raised));
+  color: color-mix(in srgb, var(--sc-category-line) 55%, var(--sc-color-bg-raised));
 }
 
 .sc-calendar-legend {
@@ -4260,7 +4269,7 @@ select.sc-input {
   padding: var(--sc-space-2) var(--sc-space-3);
   border: var(--sc-border);
   border-radius: var(--sc-radius-md);
-  background: var(--sc-color-bg-inset);
+  background: var(--sc-color-bg-raised);
   box-shadow: var(--sc-shadow-stage);
   color: var(--sc-color-text);
   font-size: var(--sc-text-xs);
