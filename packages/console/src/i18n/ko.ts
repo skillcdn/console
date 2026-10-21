@@ -777,6 +777,8 @@ export const ko: Messages = {
     decisionPrefix: "결정: ",
     files: "파일",
     fileToAttach: "첨부할 파일",
+    chooseFile: "파일 선택",
+    noFileChosen: "선택된 파일 없음",
     labelPlaceholder: "파일 이름 대신 부를 이름",
     attach: "첨부",
     by: "첨부:",

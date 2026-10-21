@@ -3193,22 +3193,35 @@ select.sc-input {
   gap: var(--sc-space-2);
 }
 
+/* The attach form: a button to choose the file with the chosen file's name beside it, the
+   name to call it under that, and the attach button across the bottom, all one height. */
 .sc-doc-attach {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--sc-space-2);
-  align-items: stretch;
   margin-top: var(--sc-space-3);
 }
 
-.sc-doc-attach > .sc-input[type="file"] {
-  grid-column: 1 / -1;
+.sc-doc-attach-file {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-space-3);
+  min-width: 0;
+}
+
+.sc-doc-attach-file > .sc-button {
+  flex: none;
+}
+
+.sc-doc-attach-chosen {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--sc-text-sm);
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .sc-doc-attach > .sc-button {
-  min-height: var(--sc-control-size);
-  padding-inline: var(--sc-space-4);
-  font-size: var(--sc-text-sm);
+  width: 100%;
 }
 
 .sc-versions {

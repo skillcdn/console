@@ -440,12 +440,21 @@ export function DocumentFiles(props: DocumentFilesProps) {
             }
           }}
         >
-          <input
-            className="sc-input"
-            type="file"
-            aria-label={words.fileToAttach}
-            onChange={(event) => setChosen(event.target.files?.[0] ?? undefined)}
-          />
+          <div className="sc-doc-attach-file">
+            <label className="sc-button sc-button-secondary sc-file-choice">
+              {words.chooseFile}
+              <input
+                key={chosen === undefined ? "none" : "some"}
+                className="sc-file-input"
+                type="file"
+                aria-label={words.fileToAttach}
+                onChange={(event) => setChosen(event.target.files?.[0] ?? undefined)}
+              />
+            </label>
+            <span className={cx("sc-doc-attach-chosen", chosen === undefined && "sc-muted")}>
+              {chosen === undefined ? words.noFileChosen : chosen.name}
+            </span>
+          </div>
           <input
             className="sc-input"
             placeholder={words.labelPlaceholder}
@@ -453,7 +462,11 @@ export function DocumentFiles(props: DocumentFilesProps) {
             value={label}
             onChange={(event) => setLabel(event.target.value)}
           />
-          <Button type="submit" size="sm" disabled={chosen === undefined || props.busy === true}>
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={chosen === undefined || props.busy === true}
+          >
             {words.attach}
           </Button>
         </form>

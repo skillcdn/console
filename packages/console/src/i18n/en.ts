@@ -821,6 +821,8 @@ export const en = {
     decisionPrefix: "Decision: ",
     files: "Files",
     fileToAttach: "A file to attach",
+    chooseFile: "Choose a file",
+    noFileChosen: "No file chosen",
     labelPlaceholder: "What to call it, if not its name",
     attach: "Attach",
     by: "by",
