@@ -68,7 +68,15 @@ import { TaskForm } from "./task-form.js";
 import { TaskList } from "./task-list.js";
 import { TaskView } from "./task-view.js";
 import { NewToken, TokenForm, TokenList } from "./tokens.js";
-import { Avatar, PersonChip, personName, Workers } from "./ui.js";
+import {
+  Avatar,
+  DueBadge,
+  PersonChip,
+  PriorityBadge,
+  personName,
+  StateBadge,
+  Workers,
+} from "./ui.js";
 import { WorkList } from "./work.js";
 import {
   deviceTimeZone,
@@ -1761,6 +1769,21 @@ describe("the schedule on the board", () => {
     );
     expect(bare).not.toContain("<dt>Plan</dt>");
     expect(bare).not.toContain("<dt>Category</dt>");
+  });
+});
+
+describe("a badge's kind", () => {
+  it("is in its class, so that the stylesheet shapes a state, a priority and a due day apart", () => {
+    const html = renderToStaticMarkup(
+      <>
+        <StateBadge state="in_progress" />
+        <PriorityBadge priority="high" />
+        <DueBadge dueOn={TODAY} state="ready" today={TODAY} />
+      </>,
+    );
+    expect(html).toContain('class="sc-badge sc-badge-accent sc-badge-kind-state"');
+    expect(html).toContain('class="sc-badge sc-badge-point sc-badge-kind-priority"');
+    expect(html).toContain('class="sc-badge sc-badge-point sc-badge-kind-due"');
   });
 });
 

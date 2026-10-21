@@ -32,7 +32,11 @@ export function RunStatusBadge(props: { readonly status: RunStatus }) {
           : props.status === "failed"
             ? "danger"
             : "neutral";
-  return <Badge tone={tone}>{words.vocabulary.runStatus[props.status]}</Badge>;
+  return (
+    <Badge tone={tone} kind="state">
+      {words.vocabulary.runStatus[props.status]}
+    </Badge>
+  );
 }
 
 export interface RunCardProps {

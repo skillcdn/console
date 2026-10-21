@@ -169,7 +169,7 @@ export function TaskCard(props: TaskCardProps) {
           <DueBadge dueOn={task.dueOn} state={task.state} today={props.today} />
         )}
         {task.openDecisions > 0 && (
-          <Badge tone="warning" title={words.board.decisionsTitle}>
+          <Badge tone="warning" kind="count" title={words.board.decisionsTitle}>
             {words.board.decisions(task.openDecisions)}
           </Badge>
         )}

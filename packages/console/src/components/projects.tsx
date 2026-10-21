@@ -143,7 +143,9 @@ export function ProjectList(props: ProjectListProps) {
           )}
           {project.openDecisions > 0 && (
             <p className="sc-project-meta">
-              <Badge tone="warning">{words.decisionsWaiting(project.openDecisions)}</Badge>
+              <Badge tone="warning" kind="count">
+                {words.decisionsWaiting(project.openDecisions)}
+              </Badge>
             </p>
           )}
         </li>

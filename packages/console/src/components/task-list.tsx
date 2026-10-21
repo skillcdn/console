@@ -45,7 +45,7 @@ export function TaskList(props: TaskListProps) {
                 {task.category !== null && <CategoryBadge category={task.category} />}
                 {props.showState === true && <StateBadge state={task.state} />}
                 {task.openDecisions > 0 && (
-                  <Badge tone="warning" title={words.board.decisionsTitle}>
+                  <Badge tone="warning" kind="count" title={words.board.decisionsTitle}>
                     {words.board.decisions(task.openDecisions)}
                   </Badge>
                 )}

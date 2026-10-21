@@ -3399,6 +3399,36 @@ select.sc-input {
   color: var(--sc-category-line);
 }
 
+/* A badge's kind in its shape, so that a category, a state, a priority and a due day beside
+   each other are not taken for four of one thing: a category is the soft pill above; a state
+   carries a dot of its colour; a priority is outlined, nothing filled; a due day is a tag with
+   square corners and figures that line up; a count of decisions keeps the pill, its figures
+   lined up. */
+.sc-badge-kind-state::before {
+  content: "";
+  flex: none;
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: var(--sc-radius-full);
+  background: currentColor;
+  opacity: 0.85;
+}
+
+.sc-badge-kind-priority {
+  border-color: color-mix(in srgb, currentColor 45%, transparent);
+  background: transparent;
+  font-weight: var(--sc-weight-bold);
+}
+
+.sc-badge-kind-due {
+  border-radius: var(--sc-radius-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.sc-badge-kind-count {
+  font-variant-numeric: tabular-nums;
+}
+
 .sc-category-swatch,
 .sc-calendar-dot {
   display: inline-block;

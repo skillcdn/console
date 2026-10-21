@@ -43,11 +43,20 @@ export function Button(
 
 export function Badge(props: {
   readonly tone?: "neutral" | "accent" | "point" | "success" | "warning" | "danger";
+  /** What the badge says, which the stylesheet shows in its shape: a state carries a dot, a priority is outlined, a due day is a square-cornered tag, a count is figures. */
+  readonly kind?: "state" | "priority" | "due" | "count" | undefined;
   readonly title?: string;
   readonly children: ReactNode;
 }) {
   return (
-    <span className={cx("sc-badge", `sc-badge-${props.tone ?? "neutral"}`)} title={props.title}>
+    <span
+      className={cx(
+        "sc-badge",
+        `sc-badge-${props.tone ?? "neutral"}`,
+        props.kind !== undefined && `sc-badge-kind-${props.kind}`,
+      )}
+      title={props.title}
+    >
       {props.children}
     </span>
   );
@@ -211,7 +220,11 @@ export function StateBadge(props: { readonly state: TaskState }) {
         : props.state === "in_progress" || props.state === "in_review"
           ? "accent"
           : "neutral";
-  return <Badge tone={tone}>{words.vocabulary.state[props.state]}</Badge>;
+  return (
+    <Badge tone={tone} kind="state">
+      {words.vocabulary.state[props.state]}
+    </Badge>
+  );
 }
 
 export function PriorityBadge(props: { readonly priority: TaskPriority }) {
@@ -221,7 +234,11 @@ export function PriorityBadge(props: { readonly priority: TaskPriority }) {
   }
   const tone =
     props.priority === "urgent" ? "danger" : props.priority === "high" ? "point" : "neutral";
-  return <Badge tone={tone}>{words.vocabulary.priority[props.priority]}</Badge>;
+  return (
+    <Badge tone={tone} kind="priority">
+      {words.vocabulary.priority[props.priority]}
+    </Badge>
+  );
 }
 
 /** A category as a badge, in its colour: a class the stylesheet paints, never a value typed by hand. */
@@ -245,7 +262,11 @@ export function GoalStateBadge(props: { readonly state: GoalState }) {
         : props.state === "dropped"
           ? "neutral"
           : "neutral";
-  return <Badge tone={tone}>{words.vocabulary.goalState[props.state]}</Badge>;
+  return (
+    <Badge tone={tone} kind="state">
+      {words.vocabulary.goalState[props.state]}
+    </Badge>
+  );
 }
 
 /**
@@ -266,29 +287,45 @@ export function DueBadge(props: {
   const days = daysBetween(now, props.dueOn);
   const day = formatDay(props.dueOn, tag);
   if (!open) {
-    return <Badge tone="neutral">{words.board.due.on(day)}</Badge>;
+    return (
+      <Badge tone="neutral" kind="due">
+        {words.board.due.on(day)}
+      </Badge>
+    );
   }
   if (days < 0) {
     return (
-      <Badge tone="danger" title={day}>
+      <Badge tone="danger" kind="due" title={day}>
         {words.board.due.overdue(-days)}
       </Badge>
     );
   }
   if (days === 0) {
-    return <Badge tone="point">{words.board.due.today}</Badge>;
+    return (
+      <Badge tone="point" kind="due">
+        {words.board.due.today}
+      </Badge>
+    );
   }
   if (days === 1) {
-    return <Badge tone="point">{words.board.due.tomorrow}</Badge>;
+    return (
+      <Badge tone="point" kind="due">
+        {words.board.due.tomorrow}
+      </Badge>
+    );
   }
   if (days <= 7) {
     return (
-      <Badge tone="warning" title={day}>
+      <Badge tone="warning" kind="due" title={day}>
         {words.board.due.inDays(days)}
       </Badge>
     );
   }
-  return <Badge tone="neutral">{words.board.due.on(day)}</Badge>;
+  return (
+    <Badge tone="neutral" kind="due">
+      {words.board.due.on(day)}
+    </Badge>
+  );
 }
 
 /** How far a goal is, read from its tasks: the done ones, the ones at work, and the rest. */
