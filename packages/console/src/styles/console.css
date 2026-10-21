@@ -3388,9 +3388,9 @@ select.sc-input {
 }
 
 .sc-category-yellow {
-  --sc-category-line: #664d00;
-  --sc-category-fill: #f7e68a;
-  --sc-category-mark: #d9a400;
+  --sc-category-line: #805600;
+  --sc-category-fill: #ffeb94;
+  --sc-category-mark: #f2b705;
 }
 
 .sc-badge-category {
