@@ -5550,3 +5550,15 @@ select.sc-input {
     margin-top: var(--sc-space-3);
   }
 }
+
+/* The end of a phone's header: the live dot, the avatar and the caret close together. */
+@media (max-width: 40rem) {
+  .sc-header-end {
+    gap: 0;
+  }
+
+  .sc-menu-summary {
+    gap: var(--sc-space-1);
+    padding-inline: var(--sc-space-1);
+  }
+}
