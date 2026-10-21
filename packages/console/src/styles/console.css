@@ -5369,3 +5369,59 @@ select.sc-input {
     grid-template-columns: minmax(5.5rem, 7rem) minmax(14rem, 1fr);
   }
 }
+
+/* A phone's month: a dot per task per day. */
+@media (max-width: 40rem) {
+  .sc-calendar-cell {
+    height: auto;
+    min-height: 3.25rem;
+    padding: 2px var(--sc-space-1) var(--sc-space-1);
+    /* The rows of dots as tall as the dots, not as tall as a line of text. */
+    line-height: 0;
+  }
+
+  .sc-calendar-day,
+  .sc-calendar-more {
+    line-height: var(--sc-leading-snug);
+  }
+
+  .sc-calendar-lane {
+    display: none;
+  }
+
+  /* A task planned across days: a dot on each of its days, in its category's colour, the
+     late one in the danger colour; nothing of the bar remains. */
+  .sc-calendar-bar,
+  .sc-calendar-bar-begins,
+  .sc-calendar-bar-ends {
+    display: inline-block;
+    width: 0.5rem;
+    height: 0.5rem;
+    margin: 2px 3px 0 0;
+    padding: 0;
+    border: 0;
+    border-radius: var(--sc-radius-full);
+    background: var(--sc-category-mark, var(--sc-category-line));
+    vertical-align: top;
+  }
+
+  .sc-calendar-bar.sc-calendar-late {
+    background: var(--sc-color-danger);
+  }
+
+  /* A task on its day: the same dot. */
+  .sc-calendar-task {
+    margin: 2px 3px 0 0;
+    vertical-align: top;
+  }
+
+  .sc-calendar-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+  }
+
+  .sc-calendar-more {
+    margin-top: 2px;
+    text-align: left;
+  }
+}
