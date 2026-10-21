@@ -3431,8 +3431,10 @@ select.sc-input {
   background: var(--sc-color-point);
 }
 
+/* Due within the week: a clear amber, too light for white words, so its words are dark. */
 .sc-badge-kind-due.sc-badge-warning {
-  background: var(--sc-color-warning);
+  background: #ffc21a;
+  color: #4a3300;
 }
 
 .sc-badge-kind-due.sc-badge-danger {
