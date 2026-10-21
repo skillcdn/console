@@ -393,7 +393,7 @@ export const ko: Messages = {
       nothing: "이 주에 잡힌 작업이 없습니다.",
     },
     workload: {
-      title: "누가 무엇을",
+      title: "담당자별 작업 현황",
       person: "사람",
       open: "열림",
       inProgress: "진행 중",
