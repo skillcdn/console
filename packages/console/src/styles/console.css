@@ -1054,10 +1054,11 @@ table {
   color: var(--sc-color-success);
 }
 
+/* Words on a yellow fill are a warm charcoal: a dark yellow reads as a muddy brown. */
 .sc-badge-warning {
   background: var(--sc-color-warning-subtle);
   border-color: transparent;
-  color: var(--sc-color-warning);
+  color: #44403c;
 }
 
 .sc-badge-danger {
@@ -3388,7 +3389,7 @@ select.sc-input {
 }
 
 .sc-category-yellow {
-  --sc-category-line: #8a5c00;
+  --sc-category-line: #44403c;
   --sc-category-fill: #fff0b3;
   --sc-category-mark: #f2b705;
 }
@@ -3437,7 +3438,7 @@ select.sc-input {
 /* Due within the week: yellow. */
 .sc-badge-kind-due.sc-badge-warning {
   background: #fce9a6;
-  color: #6b4a00;
+  color: #44403c;
 }
 
 /* Due tomorrow: light orange. */
