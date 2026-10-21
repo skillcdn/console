@@ -2628,7 +2628,7 @@ select.sc-input {
 
 .sc-skills {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(26rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 26rem), 1fr));
   gap: var(--sc-space-3);
 }
 
@@ -4006,7 +4006,21 @@ select.sc-input {
 
   .sc-workload th,
   .sc-workload td {
-    padding-inline: var(--sc-space-3);
+    padding-inline: var(--sc-space-2);
+  }
+
+  .sc-workload thead th {
+    white-space: normal;
+    word-break: keep-all;
+    line-height: var(--sc-leading-tight);
+  }
+
+  .sc-workload tbody th {
+    word-break: keep-all;
+  }
+
+  .sc-workload td {
+    font-size: var(--sc-text-sm);
   }
 }
 
@@ -4911,6 +4925,10 @@ select.sc-input {
   font-size: var(--sc-text-sm);
 }
 
+.sc-goal-progress .sc-progress-words {
+  display: none;
+}
+
 .sc-facts-row {
   display: flex;
   flex-wrap: wrap;
@@ -5164,4 +5182,72 @@ select.sc-input {
 
 .sc-task-aside .sc-facts > * + * {
   border-top: var(--sc-hairline);
+}
+
+/* A phone's pages, one by one. */
+@media (max-width: 40rem) {
+  /* The board: a column nearly as wide as the window, so that a card's title has room and one
+     column is read at a time, the next peeking in from the side. */
+  .sc-column {
+    flex-basis: min(18rem, 82vw);
+  }
+
+  /* The filters scroll as a row; a select with long choices keeps to a width of its own. */
+  .sc-filters .sc-input {
+    max-width: 11rem;
+  }
+
+  /* A task's facts: one to a row, as on the wide layout's side, instead of two abreast with
+     the select and the dates pressed against each other. */
+  .sc-task .sc-task-aside .sc-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sc-facts .sc-input {
+    max-width: 100%;
+  }
+
+  /* A goal's card: the badges on one line, the span of days on a line of its own. */
+  .sc-goal-days {
+    flex: 1 1 100%;
+    margin-inline-start: 0;
+  }
+
+  /* The goal page's progress: the words under the bar. */
+  .sc-goal-progress {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sc-space-1);
+  }
+
+  /* The roadmap's months: too narrow for the year and the month on one line, so the two
+     stand one over the other, small. */
+  .sc-timeline-month {
+    padding-inline: var(--sc-space-1);
+    font-size: 0.65rem;
+    line-height: var(--sc-leading-tight);
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+  }
+
+  /* A bar on the month reaches over the gap between the cells, which is narrower here. */
+  .sc-calendar-bar {
+    margin-inline: calc(-1 * var(--sc-space-1) - 2px - 1px);
+  }
+
+  .sc-calendar-bar-begins {
+    margin-left: 0;
+  }
+
+  .sc-calendar-bar-ends {
+    margin-right: 0;
+  }
+
+  /* "N more" on a day keeps to one line. */
+  .sc-calendar-more {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
 }
