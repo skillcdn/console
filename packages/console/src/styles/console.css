@@ -5222,13 +5222,13 @@ select.sc-input {
   /* The roadmap's months: too narrow for the year and the month on one line, so the two
      stand one over the other, small. */
   .sc-timeline-month {
-    padding-inline: var(--sc-space-1);
-    font-size: 0.65rem;
+    padding-inline: 2px;
+    font-size: 0.6rem;
     line-height: var(--sc-leading-tight);
     white-space: normal;
+    word-break: keep-all;
     overflow: visible;
     text-overflow: clip;
-    overflow-wrap: anywhere;
   }
 
   /* A bar on the month reaches over the gap between the cells, which is narrower here. */
@@ -5244,10 +5244,128 @@ select.sc-input {
     margin-right: 0;
   }
 
-  /* "N more" on a day keeps to one line. */
+  /* "N more" on a day keeps to one line, small enough for the cell. */
   .sc-calendar-more {
+    padding-inline: 0;
+    font-size: 0.65rem;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+  }
+
+  /* A bar reaching past the week stops at the edge of the month. */
+  .sc-calendar-grid {
+    clip-path: inset(0);
+  }
+}
+
+/* A phone's pages as one design. */
+@media (max-width: 40rem) {
+  /* Every page's head: the name, a word about it under the name, and the ways the page offers
+     as a row of equal buttons under those, so that no head differs from another. */
+  .sc-page-head {
+    display: grid;
+    justify-content: stretch;
+    gap: var(--sc-space-3);
+    margin-bottom: var(--sc-space-5);
+  }
+
+  .sc-page-heading {
+    display: grid;
+    row-gap: var(--sc-space-1);
+  }
+
+  .sc-page-lead {
+    flex: none;
+  }
+
+  .sc-page-actions {
+    flex-wrap: nowrap;
+    width: 100%;
+  }
+
+  .sc-page-actions > * {
+    flex: 1 1 0;
+    justify-content: center;
+    min-width: 0;
+  }
+
+  /* A head with one way alone gives it the whole width too. */
+  .sc-page-head > .sc-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* The tabs snap tab by tab, the first keeping its room from the edge. */
+  .sc-tabs {
+    scroll-snap-type: x proximity;
+    scroll-padding-inline: var(--sc-space-4);
+  }
+
+  .sc-tab {
+    scroll-snap-align: start;
+  }
+
+  /* The panes: one padding and one radius for all of them. */
+  .sc-project,
+  .sc-goal,
+  .sc-skill,
+  .sc-run,
+  .sc-decision,
+  .sc-comment,
+  .sc-facts {
+    padding: var(--sc-space-4);
+    border-radius: var(--sc-radius-lg);
+  }
+
+  /* The board scrolls from edge to edge of the window, its columns snapping into place. */
+  .sc-board {
+    min-height: 0;
+    margin-inline: calc(-1 * var(--sc-space-4));
+    padding-inline: var(--sc-space-4);
+    scroll-padding-inline: var(--sc-space-4);
+  }
+
+  .sc-filters {
+    margin-bottom: var(--sc-space-4);
+  }
+
+  /* A task's head: the parent on one line, the title, the badges, then the ways as a row of
+     equal buttons. */
+  .sc-task-header {
+    display: grid;
+    justify-content: stretch;
+    gap: var(--sc-space-3);
+  }
+
+  .sc-task-parent {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .sc-task-actions {
+    flex-wrap: nowrap;
+    align-items: stretch;
+  }
+
+  .sc-task-actions > * {
+    flex: 1 1 0;
+    justify-content: center;
+    min-width: 0;
+  }
+
+  /* The calendar's legend, tighter; what is under the month, further apart. */
+  .sc-calendar-legend {
+    gap: var(--sc-space-1) var(--sc-space-3);
+  }
+
+  .sc-calendar-below {
+    gap: var(--sc-space-6);
+  }
+
+  /* The roadmap's label column, narrower, so that the months have the room. */
+  .sc-timeline-row {
+    grid-template-columns: minmax(5.5rem, 7rem) minmax(14rem, 1fr);
   }
 }
