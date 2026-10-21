@@ -5425,3 +5425,128 @@ select.sc-input {
     text-align: left;
   }
 }
+
+/* A day's number is a button: pressed, the day's tasks are listed under the month. */
+.sc-calendar-day[type="button"] {
+  width: auto;
+  margin-inline-start: calc(-1 * var(--sc-space-1));
+  padding: 0 var(--sc-space-1);
+  border: 0;
+  border-radius: var(--sc-radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--sc-text-xs);
+  font-weight: var(--sc-weight-medium);
+  line-height: var(--sc-leading-snug);
+  text-align: left;
+  cursor: pointer;
+}
+
+.sc-calendar-day[type="button"]:hover {
+  background: var(--sc-color-sheet-hover);
+}
+
+.sc-calendar-day[aria-pressed="true"] {
+  background: var(--sc-color-accent);
+  color: #ffffff;
+}
+
+.sc-calendar-cell-picked {
+  border-color: var(--sc-color-accent);
+  background: color-mix(in srgb, var(--sc-color-accent) 6%, var(--sc-color-sheet));
+}
+
+/* The tasks of the picked day, under the month: a pane with the day over the rows. */
+.sc-calendar-day-list {
+  display: grid;
+  gap: var(--sc-space-3);
+  margin-top: var(--sc-space-4);
+  padding: var(--sc-space-4);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-lg);
+  background: var(--sc-color-sheet);
+}
+
+.sc-calendar-day-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sc-space-2);
+}
+
+.sc-calendar-day-list-title {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-space-2);
+  margin: 0;
+  font-size: var(--sc-text-md);
+  font-weight: var(--sc-weight-bold);
+}
+
+/* How many a day holds: said on a phone, where the day shows three dots and no more. */
+.sc-calendar-count {
+  display: none;
+}
+
+@media (max-width: 40rem) {
+  /* The number covers the whole day, so that a finger anywhere on it lists the day's tasks;
+     the dots and the count under it are a picture, not targets. */
+  .sc-calendar-cell {
+    position: relative;
+    padding-top: 1.375rem;
+  }
+
+  .sc-calendar-day[type="button"] {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+    width: auto;
+    margin: 0;
+    padding: 2px var(--sc-space-1);
+    border-radius: var(--sc-radius-md);
+  }
+
+  /* No pointer rests on a phone; a finger that tapped must not leave a sheet over the dots. */
+  .sc-calendar-day[type="button"]:hover {
+    background: transparent;
+  }
+
+  .sc-calendar-day[aria-pressed="true"] {
+    background: transparent;
+    color: var(--sc-color-accent);
+    font-weight: var(--sc-weight-bold);
+  }
+
+  .sc-calendar-cell > a,
+  .sc-calendar-cell > .sc-calendar-more {
+    pointer-events: none;
+  }
+
+  .sc-calendar-cell > a:nth-of-type(n + 4),
+  .sc-calendar-cell > .sc-calendar-more {
+    display: none;
+  }
+
+  .sc-calendar-count {
+    display: block;
+    width: fit-content;
+    min-width: 1rem;
+    margin-top: 3px;
+    padding: 0 4px;
+    border-radius: var(--sc-radius-full);
+    background: color-mix(in srgb, var(--sc-color-text-muted) 14%, transparent);
+    color: var(--sc-color-text-muted);
+    font-size: 0.625rem;
+    font-weight: var(--sc-weight-medium);
+    line-height: 1rem;
+    text-align: center;
+  }
+
+  .sc-calendar-day-list {
+    margin-top: var(--sc-space-3);
+  }
+}

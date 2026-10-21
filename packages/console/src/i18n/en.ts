@@ -425,6 +425,9 @@ export const en = {
     allScheduled: "Every open task has a day.",
     more: (n: number) => `${n} more`,
     fewer: "Fewer",
+    onDay: (day: string) => `Tasks on ${day}`,
+    nothingOnDay: "Nothing is on this day.",
+    close: "Close",
     week: {
       title: "The week",
       previous: "The week before",

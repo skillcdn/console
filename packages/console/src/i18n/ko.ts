@@ -385,6 +385,9 @@ export const ko: Messages = {
     allScheduled: "열린 작업마다 날짜가 있습니다.",
     more: (n) => `${n}개 더`,
     fewer: "접기",
+    onDay: (day) => `${day}의 작업`,
+    nothingOnDay: "이 날에 잡힌 작업이 없습니다.",
+    close: "닫기",
     week: {
       title: "이 주",
       previous: "이전 주",

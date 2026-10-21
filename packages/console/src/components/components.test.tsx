@@ -23,6 +23,7 @@ import {
   Calendar,
   placeTip,
   TaskTip,
+  tasksOn,
   Week,
   Workload,
   weekSegments,
@@ -1764,6 +1765,48 @@ describe("the schedule on the board", () => {
 });
 
 describe("the calendar", () => {
+  it("lists a day's tasks once its number is pressed: those on the day and those lying across it, the open ones first", () => {
+    const across = task({
+      id: "0199c4d8-0000-7000-8000-000000000021",
+      number: 2,
+      title: "Across",
+      startsOn: "2026-10-12",
+      dueOn: "2026-10-16",
+    });
+    const onIt = task({
+      id: "0199c4d8-0000-7000-8000-000000000022",
+      number: 5,
+      title: "On it",
+      dueOn: "2026-10-14",
+      state: "done",
+    });
+    const elsewhere = task({
+      id: "0199c4d8-0000-7000-8000-000000000023",
+      number: 7,
+      title: "Elsewhere",
+      dueOn: "2026-10-15",
+    });
+    expect(tasksOn("2026-10-14", [elsewhere, onIt, across]).map((one) => one.number)).toEqual([
+      2, 5,
+    ]);
+    expect(tasksOn("2026-10-11", [elsewhere, onIt, across])).toEqual([]);
+    const html = renderToStaticMarkup(
+      <Calendar
+        tasks={[across, onIt, elsewhere]}
+        month="2026-10"
+        today={TODAY}
+        taskHref={href}
+        monthHref={() => "#"}
+      />,
+    );
+    // Every number is a button, none pressed, and no day is listed until one is.
+    expect(html).toContain('class="sc-calendar-day" aria-pressed="false"');
+    expect(html).not.toContain('aria-pressed="true"');
+    expect(html).not.toContain("sc-calendar-day-list");
+    // A phone's count, where a day holds more than it shows: the bar and the task on the 14th are two, under the three.
+    expect(html).not.toContain("sc-calendar-count");
+  });
+
   it("lays the month out with each task on its day, late ones marked, and the neighbours' days greyed", () => {
     const html = renderToStaticMarkup(
       <Calendar
