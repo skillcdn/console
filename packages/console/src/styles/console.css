@@ -3446,8 +3446,8 @@ select.sc-input {
 }
 
 .sc-badge-kind-due.sc-badge-due-today {
-  background: #fa9a5a;
-  color: #4a1600;
+  background: #fcae7a;
+  color: #551e00;
 }
 
 /* Late. */
