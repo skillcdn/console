@@ -3887,31 +3887,49 @@ select.sc-input {
   font-size: var(--sc-text-sm);
 }
 
-/* Who has what: a small table, the late numbers in the danger colour. */
+/* Who has what: a table on a sheet of its own, a quiet band for the headings, a hairline
+   between people, the numbers in columns of their own on the right in the display size; the
+   one due this week and the one late carry a dot of their colour before them. */
 .sc-workload {
   width: 100%;
   max-width: var(--sc-width-prose);
-  border-collapse: collapse;
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-lg);
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--sc-color-sheet);
+  box-shadow: var(--sc-glass-lift);
   font-size: var(--sc-text-sm);
 }
 
 .sc-workload th,
 .sc-workload td {
-  padding: var(--sc-space-2) var(--sc-space-3);
-  border-bottom: var(--sc-border);
+  padding: var(--sc-space-3) var(--sc-space-4);
   text-align: left;
 }
 
 .sc-workload thead th {
+  padding-block: var(--sc-space-2);
+  border-bottom: var(--sc-border);
+  background: var(--sc-color-bg-subtle);
   color: var(--sc-color-text-faint);
   font-size: var(--sc-text-xs);
   font-weight: var(--sc-weight-medium);
   letter-spacing: var(--sc-tracking-wide);
   text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.sc-workload thead th:first-child {
+  border-start-start-radius: var(--sc-radius-lg);
+}
+
+.sc-workload thead th:last-child {
+  border-start-end-radius: var(--sc-radius-lg);
 }
 
 .sc-workload tbody th {
-  font-weight: var(--sc-weight-normal);
+  font-weight: var(--sc-weight-medium);
 }
 
 .sc-workload tbody th a {
@@ -3923,8 +3941,34 @@ select.sc-input {
   color: var(--sc-color-accent);
 }
 
+/* The numbers: a narrow column each, lined up on the right. */
+.sc-workload th:not(:first-child),
 .sc-workload td {
+  width: 6.5rem;
+  text-align: right;
+}
+
+.sc-workload td {
+  font-size: var(--sc-text-md);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.sc-workload-soon,
+.sc-workload-late {
+  font-weight: var(--sc-weight-bold);
+}
+
+.sc-workload-soon::before,
+.sc-workload-late::before {
+  content: "";
+  display: inline-block;
+  width: 0.4rem;
+  height: 0.4rem;
+  margin-inline-end: var(--sc-space-2);
+  border-radius: var(--sc-radius-full);
+  background: currentColor;
+  vertical-align: 0.1em;
 }
 
 .sc-workload-soon {
@@ -3933,7 +3977,29 @@ select.sc-input {
 
 .sc-workload-late {
   color: var(--sc-color-danger);
-  font-weight: var(--sc-weight-bold);
+}
+
+/* A hairline between people, and the row under the pointer lit a little. */
+.sc-workload tbody tr + tr > th,
+.sc-workload tbody tr + tr > td {
+  border-top: var(--sc-hairline);
+}
+
+.sc-workload tbody tr:hover > th,
+.sc-workload tbody tr:hover > td {
+  background: color-mix(in srgb, var(--sc-color-accent) 4%, transparent);
+}
+
+@media (max-width: 40rem) {
+  .sc-workload th:not(:first-child),
+  .sc-workload td {
+    width: auto;
+  }
+
+  .sc-workload th,
+  .sc-workload td {
+    padding-inline: var(--sc-space-3);
+  }
 }
 
 /* The roadmap: a goal a pane, with how far it is as a bar. */
