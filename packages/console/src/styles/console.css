@@ -3399,10 +3399,17 @@ select.sc-input {
   color: var(--sc-category-line);
 }
 
-/* A badge's kind, so that a category, a priority and a due day beside each other are not
-   taken for three of one thing: a category and a state are the soft pill above; a priority is
-   outlined, nothing filled; a due day and a count of decisions keep the pill, their figures
-   lined up. The pill is the shape of them all. */
+/* A badge's kind in how it is filled, so that a category, a state, a priority and a due day
+   beside each other are four kinds and not four of one thing; the pill is the shape of them
+   all and nothing stands before the words:
+   - a category: a soft fill, no line (above);
+   - a state: a soft fill with a line of its own hue;
+   - a priority: a line of its own hue, nothing filled;
+   - a due day: a solid fill of its tone, the words white. */
+.sc-badge-kind-state {
+  border-color: color-mix(in srgb, currentColor 40%, transparent);
+}
+
 .sc-badge-kind-priority {
   border-color: color-mix(in srgb, currentColor 45%, transparent);
   background: transparent;
@@ -3410,7 +3417,30 @@ select.sc-input {
 }
 
 .sc-badge-kind-due {
+  border-color: transparent;
+  background: #5d6678;
+  color: #ffffff;
   font-variant-numeric: tabular-nums;
+}
+
+.sc-badge-kind-due.sc-badge-accent {
+  background: var(--sc-color-accent);
+}
+
+.sc-badge-kind-due.sc-badge-point {
+  background: var(--sc-color-point);
+}
+
+.sc-badge-kind-due.sc-badge-warning {
+  background: var(--sc-color-warning);
+}
+
+.sc-badge-kind-due.sc-badge-danger {
+  background: var(--sc-color-danger);
+}
+
+.sc-badge-kind-due.sc-badge-success {
+  background: var(--sc-color-success);
 }
 
 .sc-badge-kind-count {
