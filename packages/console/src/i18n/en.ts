@@ -808,6 +808,7 @@ export const en = {
     version: (n: number) => `v${n}`,
     versionWord: "version",
     writtenBy: "written by",
+    author: "Written by",
     versionOf: (n: number, of: number) => `Version ${n} of ${of}`,
     showLatest: "Show the latest",
     archivedNotice: "This page is archived: out of the folders and the search, and not written to.",

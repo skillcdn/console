@@ -1285,6 +1285,38 @@ table {
   color: var(--sc-color-text-faint);
 }
 
+/* A file field: as tall as any other field, what it holds on one line with its button, and
+   the button the browser gives it drawn as a small button of the console's own. */
+.sc-input[type="file"] {
+  display: flex;
+  align-items: center;
+  padding-block: 0;
+  color: var(--sc-color-text-muted);
+  line-height: var(--sc-leading-snug);
+  cursor: pointer;
+}
+
+.sc-input[type="file"]::file-selector-button {
+  margin-inline-end: var(--sc-space-3);
+  padding: calc(var(--sc-space-1) + 1px) var(--sc-space-3);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-sm);
+  background: var(--sc-color-sheet);
+  color: var(--sc-color-text);
+  font: inherit;
+  font-size: var(--sc-text-xs);
+  font-weight: var(--sc-weight-medium);
+  cursor: pointer;
+  transition:
+    background var(--sc-transition),
+    border-color var(--sc-transition);
+}
+
+.sc-input[type="file"]:hover::file-selector-button {
+  border-color: var(--sc-color-border-strong);
+  background: var(--sc-color-sheet-hover);
+}
+
 .sc-input:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--sc-color-border-strong) 60%, var(--sc-color-accent));
 }
@@ -3162,10 +3194,21 @@ select.sc-input {
 }
 
 .sc-doc-attach {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--sc-space-2);
+  align-items: stretch;
   margin-top: var(--sc-space-3);
+}
+
+.sc-doc-attach > .sc-input[type="file"] {
+  grid-column: 1 / -1;
+}
+
+.sc-doc-attach > .sc-button {
+  min-height: var(--sc-control-size);
+  padding-inline: var(--sc-space-4);
+  font-size: var(--sc-text-sm);
 }
 
 .sc-versions {
@@ -3174,15 +3217,47 @@ select.sc-input {
   list-style: none;
 }
 
+.sc-version {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: var(--sc-space-3);
+  row-gap: var(--sc-space-1);
+  align-items: baseline;
+  padding-block: var(--sc-space-2);
+  font-size: var(--sc-text-sm);
+}
+
 .sc-version + .sc-version {
-  margin-top: var(--sc-space-2);
+  border-top: var(--sc-hairline);
 }
 
 .sc-version-number {
-  display: inline-block;
-  min-width: 2.5rem;
+  min-width: 2rem;
   font-family: var(--sc-font-mono);
   font-size: var(--sc-text-sm);
+}
+
+.sc-version-title {
+  font-weight: var(--sc-weight-medium);
+  overflow-wrap: anywhere;
+}
+
+.sc-version-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-1) var(--sc-space-2);
+  grid-column: 2;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-xs);
+}
+
+.sc-version-meta .sc-person-login {
+  font-weight: var(--sc-weight-normal);
+}
+
+.sc-version-meta .sc-feed-agent {
+  margin-inline-start: 0;
 }
 
 /* In the aside of a task or a page, the facts stack and the sections are small. */
@@ -3711,7 +3786,6 @@ select.sc-input {
 }
 
 .sc-input-file {
-  padding-block: calc(var(--sc-space-2) - 2px);
   font-size: var(--sc-text-sm);
 }
 
@@ -5561,4 +5635,13 @@ select.sc-input {
     gap: var(--sc-space-1);
     padding-inline: var(--sc-space-1);
   }
+}
+
+/* The ways under a comment's field stand on one row at one height, the small file button
+   included, so that none sits lower than the one beside it. */
+.sc-comment-form-actions > .sc-button,
+.sc-comment-form-actions > label {
+  min-height: var(--sc-control-size);
+  padding-inline: var(--sc-space-4);
+  font-size: var(--sc-text-sm);
 }

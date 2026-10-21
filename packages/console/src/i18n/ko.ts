@@ -764,6 +764,7 @@ export const ko: Messages = {
     version: (n) => `v${n}`,
     versionWord: "버전",
     writtenBy: "작성:",
+    author: "작성",
     versionOf: (n, of) => `버전 ${n} / ${of}`,
     showLatest: "최신 버전 보기",
     archivedNotice: "이 페이지는 보관됐습니다. 폴더와 검색에서 빠지고, 쓸 수 없습니다.",

@@ -555,7 +555,7 @@ export function DocumentView(props: DocumentViewProps) {
               </dd>
             </div>
             <div>
-              <dt>{docs.writtenBy}</dt>
+              <dt>{docs.author}</dt>
               <dd>
                 <Writer by={shown.author} agent={shown.agent} /> <Time iso={shown.createdAt} />
               </dd>
@@ -641,9 +641,12 @@ export function DocumentView(props: DocumentViewProps) {
                       >
                         {docs.version(entry.number)}
                       </a>
-                    )}{" "}
-                    {entry.title} · <Writer by={entry.author} agent={entry.agent} />{" "}
-                    <Time iso={entry.createdAt} />
+                    )}
+                    <span className="sc-version-title">{entry.title}</span>
+                    <span className="sc-version-meta">
+                      <Writer by={entry.author} agent={entry.agent} />{" "}
+                      <Time iso={entry.createdAt} />
+                    </span>
                   </li>
                 ))}
               </ol>
