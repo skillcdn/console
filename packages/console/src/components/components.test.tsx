@@ -1783,7 +1783,11 @@ describe("a badge's kind", () => {
     );
     expect(html).toContain('class="sc-badge sc-badge-accent sc-badge-kind-state"');
     expect(html).toContain('class="sc-badge sc-badge-point sc-badge-kind-priority"');
-    expect(html).toContain('class="sc-badge sc-badge-point sc-badge-kind-due"');
+    expect(html).toContain('class="sc-badge sc-badge-point sc-badge-kind-due sc-badge-due-today"');
+    const tomorrow = renderToStaticMarkup(
+      <DueBadge dueOn="2026-10-12" state="ready" today={TODAY} />,
+    );
+    expect(tomorrow).toContain('class="sc-badge sc-badge-point sc-badge-kind-due"');
   });
 });
 

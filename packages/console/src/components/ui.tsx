@@ -45,6 +45,8 @@ export function Badge(props: {
   readonly tone?: "neutral" | "accent" | "point" | "success" | "warning" | "danger";
   /** What the badge says, which the stylesheet shows in its shape: a state carries a dot, a priority is outlined, a due day is a square-cornered tag, a count is figures. */
   readonly kind?: "state" | "priority" | "due" | "count" | undefined;
+  /** A class of the badge's own beside the tone's and the kind's, for a step within a kind. */
+  readonly className?: string | undefined;
   readonly title?: string;
   readonly children: ReactNode;
 }) {
@@ -54,6 +56,7 @@ export function Badge(props: {
         "sc-badge",
         `sc-badge-${props.tone ?? "neutral"}`,
         props.kind !== undefined && `sc-badge-kind-${props.kind}`,
+        props.className,
       )}
       title={props.title}
     >
@@ -302,7 +305,7 @@ export function DueBadge(props: {
   }
   if (days === 0) {
     return (
-      <Badge tone="point" kind="due">
+      <Badge tone="point" kind="due" className="sc-badge-due-today">
         {words.board.due.today}
       </Badge>
     );

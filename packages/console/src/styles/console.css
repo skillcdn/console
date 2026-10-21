@@ -41,8 +41,8 @@
   /* Status. */
   --sc-color-success: #146b44;
   --sc-color-success-subtle: #d4efe1;
-  --sc-color-warning: #7a5500;
-  --sc-color-warning-subtle: #fbecb0;
+  --sc-color-warning: #8f6100;
+  --sc-color-warning-subtle: #fff4cc;
   --sc-color-danger: #b0273a;
   --sc-color-danger-subtle: #fadadf;
 
@@ -3388,8 +3388,8 @@ select.sc-input {
 }
 
 .sc-category-yellow {
-  --sc-category-line: #805600;
-  --sc-category-fill: #ffeb94;
+  --sc-category-line: #8a5c00;
+  --sc-category-fill: #fff0b3;
   --sc-category-mark: #f2b705;
 }
 
@@ -3435,14 +3435,19 @@ select.sc-input {
 
 /* Due within the week. */
 .sc-badge-kind-due.sc-badge-warning {
-  background: #f6d98c;
-  color: #5a3e00;
+  background: #feeaa6;
+  color: #7a5300;
 }
 
-/* Due today or tomorrow. */
+/* Due tomorrow, and today a step deeper. */
 .sc-badge-kind-due.sc-badge-point {
   background: #fdbb88;
   color: #5c2100;
+}
+
+.sc-badge-kind-due.sc-badge-due-today {
+  background: #fa9a5a;
+  color: #4a1600;
 }
 
 /* Late. */
