@@ -3727,6 +3727,7 @@ select.sc-input {
 @media (min-width: 64rem) {
   .sc-calendar-below {
     grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto 1fr;
   }
 
   .sc-calendar-below > :last-child {
