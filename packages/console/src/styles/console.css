@@ -3405,9 +3405,9 @@ select.sc-input {
    of them all and nothing stands before the words:
    - a plain badge (a role, a count, public or private): a soft fill with a line of its hue;
    - a category and a state: a soft fill, no line;
-   - a priority: a fill whose depth says how pressing it is, low a grey, high a light orange,
-     urgent a solid red with white words;
-   - a due day: a line in the hue of how near the day is, nothing filled, the words bold. */
+   - a priority: a soft fill with dark words of its hue, low a grey, high an orange, urgent a red;
+   - a due day: a line with nothing filled and dark bold words, the line's colour saying how
+     near the day is. */
 .sc-badge:not(.sc-badge-category) {
   border-color: color-mix(in srgb, currentColor 40%, transparent);
 }
@@ -3428,51 +3428,46 @@ select.sc-input {
 }
 
 .sc-badge.sc-badge-kind-priority.sc-badge-danger {
-  background: #c92a3a;
-  color: #ffffff;
+  background: #fdbcc3;
+  color: #7d0e1d;
 }
 
+/* A due day: one line weight and one dark word colour for every one; the line's colour says
+   how near the day is. */
 .sc-badge.sc-badge-kind-due {
-  border-color: #9aa3b2;
+  border: 1.5px solid #a3acba;
   background: transparent;
-  color: #4b5563;
+  color: #2f3542;
   font-weight: var(--sc-weight-bold);
   font-variant-numeric: tabular-nums;
 }
 
 .sc-badge.sc-badge-kind-due.sc-badge-accent {
   border-color: #6f93e8;
-  color: #1d4ed8;
 }
 
 .sc-badge.sc-badge-kind-due.sc-badge-success {
   border-color: #5fb488;
-  color: #146b44;
 }
 
-/* Due within the week: a gold line. */
+/* Within the week. */
 .sc-badge.sc-badge-kind-due.sc-badge-warning {
   border-color: #e0b100;
-  color: #44403c;
 }
 
-/* Due tomorrow: an orange line. */
+/* Tomorrow. */
 .sc-badge.sc-badge-kind-due.sc-badge-point {
   border-color: #f59e3c;
-  color: #b45309;
 }
 
-/* Due today: a coral line. */
+/* Today. */
 .sc-badge.sc-badge-kind-due.sc-badge-due-today {
   border-color: #f26b4a;
-  color: #c2330f;
 }
 
-/* Late: a red line, a step heavier. */
+/* Late. */
 .sc-badge.sc-badge-kind-due.sc-badge-danger {
-  border-color: #c92a3a;
-  box-shadow: inset 0 0 0 0.5px #c92a3a;
-  color: #c92a3a;
+  border-color: #d33a47;
 }
 
 .sc-badge-kind-count {
