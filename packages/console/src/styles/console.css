@@ -34,8 +34,8 @@
   --sc-color-accent-contrast: #ffffff;
   --sc-color-accent-subtle: #dbe6ff;
   /* The point: the only warm colour, for what should be looked at first, never for a control. */
-  --sc-color-point: #a63f00;
-  --sc-color-point-subtle: #ffdcc4;
+  --sc-color-point: #c2410c;
+  --sc-color-point-subtle: #fff1e6;
   --sc-color-selection: color-mix(in srgb, var(--sc-color-accent-solid) 25%, transparent);
 
   /* Status. */
@@ -3364,8 +3364,8 @@ select.sc-input {
 }
 
 .sc-category-orange {
-  --sc-category-line: #a33405;
-  --sc-category-fill: #ffd6b0;
+  --sc-category-line: #b83c00;
+  --sc-category-fill: #ffe6d1;
   --sc-category-mark: #f0731a;
 }
 
@@ -3427,8 +3427,10 @@ select.sc-input {
   background: var(--sc-color-accent);
 }
 
+/* Due today or tomorrow: a soft orange, its words dark, as the week's is a soft amber. */
 .sc-badge-kind-due.sc-badge-point {
-  background: var(--sc-color-point);
+  background: #fdb27a;
+  color: #5c2100;
 }
 
 /* Due within the week: a soft clear amber, light enough not to shout, so its words are dark. */
