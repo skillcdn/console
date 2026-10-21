@@ -913,6 +913,19 @@ function ProjectPage(props: {
               empty={<p className="sc-muted">{calendar.nothingOverdue}</p>}
             />
           </section>
+          {open.length > 0 && (
+            <section className="sc-task-section" aria-label={calendar.workload.title}>
+              <h2 className="sc-section-title">{calendar.workload.title}</h2>
+              <Workload
+                tasks={shown}
+                today={now}
+                weekStart={weekStartOf(data.me?.workspace)}
+                personHref={(person) =>
+                  boardHref(key, person === undefined ? {} : { person: person.id })
+                }
+              />
+            </section>
+          )}
           <section className="sc-task-section" aria-label={calendar.unscheduled}>
             <h2 className="sc-section-title">
               {calendar.unscheduled} <span className="sc-column-count">{unscheduled.length}</span>
@@ -926,19 +939,6 @@ function ProjectPage(props: {
             />
           </section>
         </div>
-        {open.length > 0 && (
-          <section className="sc-task-section" aria-label={calendar.workload.title}>
-            <h2 className="sc-section-title">{calendar.workload.title}</h2>
-            <Workload
-              tasks={shown}
-              today={now}
-              weekStart={weekStartOf(data.me?.workspace)}
-              personHref={(person) =>
-                boardHref(key, person === undefined ? {} : { person: person.id })
-              }
-            />
-          </section>
-        )}
       </>
     );
   }

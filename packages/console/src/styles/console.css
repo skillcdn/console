@@ -3715,6 +3715,8 @@ select.sc-input {
   font-size: var(--sc-text-sm);
 }
 
+/* Under the month: what is late and who has what on the left, one under the other, and what
+   has no day yet, the long list, down the right; one column where the window is narrow. */
 .sc-calendar-below {
   display: grid;
   align-items: start;
@@ -3725,6 +3727,11 @@ select.sc-input {
 @media (min-width: 64rem) {
   .sc-calendar-below {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .sc-calendar-below > :last-child {
+    grid-column: 2;
+    grid-row: 1 / span 2;
   }
 }
 
