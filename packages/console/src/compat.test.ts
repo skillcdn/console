@@ -83,8 +83,9 @@ describe("the common rule", () => {
   });
 
   it("is narrowed by the policy's floor only where the floor is within it", () => {
-    expect(CLIENT_POLICY).toEqual({ atLeast: "0.3.2" });
-    expect(CONSOLE_AT_LEAST).toBe("0.3.2");
+    // The line's first version on both sides: the 0.4 line was adopted whole (ADR-0034, ADR-0038).
+    expect(CLIENT_POLICY).toEqual({ atLeast: "0.4.0" });
+    expect(CONSOLE_AT_LEAST).toBe("0.4.0");
     expect(formatRange(clientRange(v("1.4.2"), { atLeast: "1.4.1" }))).toBe(">=1.4.1 <1.6.0");
     expect(formatRange(clientRange(v("1.4.2"), { atLeast: "1.2.0" }))).toBe(">=1.3.0 <1.6.0");
     expect(formatRange(clientRange(v("1.4.2"), { atLeast: "1.6.0" }))).toBe(">=1.3.0 <1.6.0");
@@ -106,8 +107,12 @@ describe("judging a command", () => {
     expect(judgeClient(v("1.0.0"), server).verdict).toBe("too_new");
     expect(formatRange(judgeClient(v("0.1.17"), server).range)).toBe(">=0.1.0 <0.2.0");
     // The floor of the console's policy, where it is within the line.
-    expect(judgeClient(v("0.3.1"), v("0.3.4")).verdict).toBe("outdated");
-    expect(judgeClient(v("0.3.2"), v("0.3.4")).verdict).toBe("behind");
+    expect(judgeClient(v("0.3.1"), v("0.3.4"), { atLeast: "0.3.2" }).verdict).toBe("outdated");
+    expect(judgeClient(v("0.3.2"), v("0.3.4"), { atLeast: "0.3.2" }).verdict).toBe("behind");
+    // The console's own policy: a command of the line before is refused, one of the line answered.
+    expect(judgeClient(v("0.3.9"), v("0.4.1")).verdict).toBe("outdated");
+    expect(judgeClient(v("0.4.0"), v("0.4.1")).verdict).toBe("behind");
+    expect(formatRange(judgeClient(v("0.4.0"), v("0.4.1")).range)).toBe(">=0.4.0 <0.5.0");
   });
 
   it("from 1.0 answers a minor within one and refuses the rest", () => {

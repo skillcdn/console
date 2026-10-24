@@ -20,7 +20,7 @@ describe("the gate on the command's version", () => {
       version: "0.1.18",
       clientRange: ">=0.1.0 <0.2.0",
     });
-    expect(versionFactsOf("0.3.4").clientRange).toBe(">=0.3.2 <0.4.0");
+    expect(versionFactsOf("0.4.3").clientRange).toBe(">=0.4.0 <0.5.0");
     expect(versionFactsOf("1.4.2").clientRange).toBe(">=1.3.0 <1.6.0");
     expect(versionFactsOf("1.4.2", { atLeast: "1.4.1" }).clientRange).toBe(">=1.4.1 <1.6.0");
     expect(() => versionFactsOf("0.0.0-dev")).toThrow("not one");

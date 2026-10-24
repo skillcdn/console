@@ -113,7 +113,7 @@ export interface ClientPolicy {
  * last changed what the command reads or sends (ADR-0038), whose changelog entry begins with
  * `Breaking:`; `pnpm check` holds it to a version the package has, or is about to have.
  */
-export const CLIENT_POLICY: ClientPolicy = { atLeast: "0.3.2" };
+export const CLIENT_POLICY: ClientPolicy = { atLeast: "0.4.0" };
 
 /**
  * The oldest console this command works with (ADR-0038): raised by the release that last
@@ -122,7 +122,7 @@ export const CLIENT_POLICY: ClientPolicy = { atLeast: "0.3.2" };
  * itself, naming the command to install instead; `pnpm check` holds it as it holds the
  * console's floor.
  */
-export const CONSOLE_AT_LEAST = "0.3.2";
+export const CONSOLE_AT_LEAST = "0.4.0";
 
 /** `common` from `atLeast` on, where that floor is within it; `common` as it is otherwise. */
 function narrowed(common: VersionRange, atLeast: string | undefined): VersionRange {

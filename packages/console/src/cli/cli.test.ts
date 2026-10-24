@@ -737,7 +737,10 @@ describe("the console command", () => {
     expect(out).toContain("Acme: What Acme does, as skills.");
     expect(out).toContain("review/SKILL.md: Reviews a change.");
     expect(out).toContain(
-      "console skills <folder> explores folders; console skills --search matches",
+      "console skills <folder> explores folders and outlines a file by its headings; console skills --search matches original words (usually English) and names the sections that matched. console skill loads an exact SKILL.md path",
+    );
+    expect(out).toContain(
+      "console skill --file reads optional references, or one section by its offset and limit.",
     );
     expect(out).toContain("skill://gh/acme/skills/");
     // Every skill and document, as a search without words lists them.
