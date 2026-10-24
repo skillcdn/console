@@ -1172,8 +1172,37 @@ const skills: Command = async (args, io) => {
   return EXIT.ok;
 };
 
+/** The most characters one read of a file asks for: what the console's API allows on one page. */
+const MAX_FILE_LIMIT = 100_000;
+
+/** A count given as a flag, within its bounds, or nothing; anything else is not understood. */
+function countOf(
+  given: string | undefined,
+  name: string,
+  bounds: { readonly least: number; readonly most?: number },
+): number | undefined {
+  if (given === undefined) {
+    return undefined;
+  }
+  const count = Number(given);
+  if (
+    !Number.isInteger(count) ||
+    count < bounds.least ||
+    (bounds.most !== undefined && count > bounds.most)
+  ) {
+    const range =
+      bounds.most === undefined ? `${bounds.least} or more` : `${bounds.least} to ${bounds.most}`;
+    throw misuse(`Not a number for --${name}, ${range}: ${given}`);
+  }
+  return count;
+}
+
 const skill: Command = async (args, io) => {
-  const { values, positionals } = parse(args, { file: { type: "string" } });
+  const { values, positionals } = parse(args, {
+    file: { type: "string" },
+    offset: { type: "string" },
+    limit: { type: "string" },
+  });
   const file = text(values, "file");
   // A file is read by its own path from the repository's root; a skill's path beside it would be
   // ignored, which reads as if it mattered, so the two together are not understood.
@@ -1182,11 +1211,32 @@ const skill: Command = async (args, io) => {
       "Say one: console skill <path of its SKILL.md> for a skill, or console skill --file <path> for a file of the pack.",
     );
   }
+  // A section is a page of a file read as asked (SkillCDN 0.4): the flags mean nothing without one.
+  if (
+    file === undefined &&
+    (text(values, "offset") !== undefined || text(values, "limit") !== undefined)
+  ) {
+    throw misuse(
+      "--offset and --limit go with --file: console skill --file <path> [--offset <n>] [--limit <n>]",
+    );
+  }
+  const offset = countOf(text(values, "offset"), "offset", { least: 0 });
+  const limit = countOf(text(values, "limit"), "limit", { least: 1, most: MAX_FILE_LIMIT });
   const session = await open(io, values);
   const project = await session.project();
   const { listing, summary } = await packOf(project);
   if (summary === undefined) {
     answer(io, session, listing, () => formatSkills(listing, io.skillsDir));
+    return EXIT.ok;
+  }
+  if (file !== undefined && (offset !== undefined || limit !== undefined)) {
+    // One page as asked, the section a search or an outline named; the result says where the
+    // file continues, and asks for nothing.
+    const page = await project.skillFile(file, { offset, limit });
+    const section = page.read === null ? undefined : joinFile([page], summary, limit);
+    answer(io, session, { ...page, read: section === undefined ? null : bodyOfFile(section) }, () =>
+      formatSkillFile(page, section),
+    );
     return EXIT.ok;
   }
   if (file !== undefined) {

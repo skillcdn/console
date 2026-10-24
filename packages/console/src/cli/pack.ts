@@ -264,11 +264,20 @@ export function joinFolder(
   if (first === undefined || last === undefined) {
     return undefined;
   }
+  // A file's path answers its outline (SkillCDN 0.4), its headings paged as a folder's entries are.
+  const outline =
+    first.outline === undefined
+      ? undefined
+      : {
+          ...first.outline,
+          headings: results.flatMap((result) => result.outline?.headings ?? []),
+        };
   return {
     ...first,
     mount: last.mount,
     entries: results.flatMap((result) => result.entries),
     nextCursor: last.nextCursor,
+    ...(outline === undefined ? {} : { outline }),
   };
 }
 
@@ -304,10 +313,16 @@ export function formatSkillFind(found: RestSkillFind, summary: PackSummary | und
   return renderFindResult(findResultOf(found.read, summary), CONSOLE_WORDS);
 }
 
-/** The pages of a file, as the console answered them, as the file whole; or the folder the path named. */
+/**
+ * The pages of a file, as the console answered them, as the file whole; or the folder the path
+ * named. With `requested`, the one page is a section read as asked (`--offset`, `--limit`): the
+ * result carries the length asked for, so that the renderer says where the file continues rather
+ * than asking for the rest.
+ */
 export function joinFile(
   pages: readonly RestSkillFile[],
   summary: PackSummary,
+  requested?: number,
 ): FileResult | DirectoryResult | undefined {
   const reads = pages.flatMap((page) => (page.read === null ? [] : [page.read]));
   const first = reads[0];
@@ -331,6 +346,7 @@ export function joinFile(
     content: files.map((file) => file.content).join(""),
     nextOffset: closing.nextOffset,
     totalLength: closing.totalLength,
+    ...(requested === undefined ? {} : { requestedLength: requested }),
   };
 }
 

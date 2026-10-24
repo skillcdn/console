@@ -3064,6 +3064,95 @@ describe("the pack of the project, through the console (ADR-0028)", () => {
     ).toBe(EXIT.usage);
   });
 
+  it("outlines a document of the pack across its pages, and reads one section of it as asked (SkillCDN 0.4)", async () => {
+    const outline = (headings: unknown[], nextCursor: string | null) => ({
+      ...AT,
+      read: {
+        status: "ready",
+        commit: COMMIT,
+        path: "docs/guide.md",
+        outline: { path: "docs/guide.md", size: 400, totalLength: 390, headings, truncated: false },
+        entries: [],
+        diagnostics: [],
+        nextCursor,
+      },
+    });
+    const { fetch, calls } = fakeConsole({
+      [`GET ${IN}/skills`]: { body: LISTING },
+      [`GET ${IN}/skills/browse?path=docs%2Fguide.md`]: {
+        body: outline([{ level: 1, text: "Guide", offset: 0, length: 120 }], "two"),
+      },
+      [`GET ${IN}/skills/browse?path=docs%2Fguide.md&cursor=two`]: {
+        body: outline([{ level: 2, text: "Setup", offset: 120, length: 270 }], null),
+      },
+      [`GET ${IN}/skills/file?path=docs%2Fguide.md&offset=120&limit=5`]: {
+        body: file("docs/guide.md", "Setup", 120, 125, 390),
+      },
+      [`GET ${IN}/skills/file?path=docs%2Fguide.md&limit=400`]: {
+        body: file("docs/guide.md", "Whole.", 0, null, 6),
+      },
+    });
+    // The outline whole, its pages joined, with the read that takes a section named as the command.
+    const outlined = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["skills", "docs/guide.md"], outlined.io)).toBe(EXIT.ok);
+    const printed = outlined.out();
+    expect(printed).toContain(
+      "File: docs/guide.md (390 characters; 2 headings)\nSource: acme/skills (commit 0123456)",
+    );
+    expect(printed).toContain(
+      "Outline; a section is read with console skill --file: the path, its offset and its limit.\n- # Guide (offset 0, limit 120)\n  - ## Setup (offset 120, limit 270)",
+    );
+    expect(printed).not.toContain("nextCursor");
+    expect(calls.map((call) => call.key).filter((key) => key.includes("browse"))).toEqual([
+      `GET ${IN}/skills/browse?path=docs%2Fguide.md`,
+      `GET ${IN}/skills/browse?path=docs%2Fguide.md&cursor=two`,
+    ]);
+    const json = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["skills", "docs/guide.md", "--json"], json.io)).toBe(EXIT.ok);
+    const parsed = JSON.parse(json.out()) as {
+      read: {
+        outline: { headings: { text: string }[] };
+        entries: unknown[];
+        nextCursor: string | null;
+      };
+    };
+    expect(parsed.read.outline.headings.map((heading) => heading.text)).toEqual(["Guide", "Setup"]);
+    expect(parsed.read.entries).toEqual([]);
+    expect(parsed.read.nextCursor).toBeNull();
+    // One section as the outline named it: the page as asked, saying where the file continues.
+    const section = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(
+        ["skill", "--file", "docs/guide.md", "--offset", "120", "--limit", "5"],
+        section.io,
+      ),
+    ).toBe(EXIT.ok);
+    expect(section.out()).toContain(
+      "File: docs/guide.md (characters 120 to 125 of 390)\nSource: acme/skills (commit 0123456)\nThe file continues at offset 125.",
+    );
+    expect(section.out()).toContain("--- content ---\nSetup");
+    expect(section.out()).not.toContain("More follows");
+    // A limit that reaches the end of the file asks for nothing more.
+    const whole = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["skill", "--file", "docs/guide.md", "--limit", "400"], whole.io)).toBe(
+      EXIT.ok,
+    );
+    expect(whole.out()).toContain("File: docs/guide.md (6 characters)");
+    expect(whole.out()).not.toContain("continues");
+    // The flags go with --file, within their bounds.
+    for (const args of [
+      ["skill", "review/SKILL.md", "--offset", "1"],
+      ["skill", "--limit", "5"],
+      ["skill", "--file", "docs/guide.md", "--limit", "0"],
+      ["skill", "--file", "docs/guide.md", "--limit", "100001"],
+      ["skill", "--file", "docs/guide.md", "--offset", "x"],
+      ["skill", "--file", "docs/guide.md", "--offset", "1.5"],
+    ]) {
+      const h = harness({ fetch, env: SIGNED_IN });
+      expect(await runCli(args, h.io), args.join(" ")).toBe(EXIT.usage);
+    }
+  });
+
   it("connects the pack with a code a person approves at SkillCDN, printing the page and the code and waiting", async () => {
     const started = {
       code: "ABCD-EFGH",
