@@ -165,7 +165,7 @@ const environmentSchema = z.object({
     .default("Console"),
   WORKER_IN_PROCESS: flag(false),
   TASK_ARCHIVE_AFTER_DAYS: integer(30, 0, 3650),
-  RUN_ENDED_AFTER_HOURS: integer(24, 0, 8760),
+  RUN_ENDED_AFTER_HOURS: integer(12, 0, 8760),
 
   PUBLIC_URL: origin.optional(),
   GITHUB_WEB_URL: origin.default("https://github.com"),

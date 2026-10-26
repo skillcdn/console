@@ -36,7 +36,7 @@ describe("loadConfig", () => {
       },
       database: { url: DATABASE_URL, poolMax: 10, ca: undefined },
       workspace: { name: "Console" },
-      worker: { inProcess: false, archiveAfterDays: 30, endRunsAfterHours: 24 },
+      worker: { inProcess: false, archiveAfterDays: 30, endRunsAfterHours: 12 },
       auth: undefined,
       web: { root: undefined },
       skills: { source: "https://skillcdn.ai", address: undefined, directory: undefined },
