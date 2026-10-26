@@ -4,17 +4,15 @@
  * with them. Re-skinning starts and mostly ends with the tokens.
  *
  * The look is SkillCDN's own, on a light ground: one blue accent and one warm point colour, the
- * page a pale field with a soft light high in it, and the surfaces panes of frosted glass over
- * that field, so that the console reads as part of the same product as the site it is built for
- * (ADR-0040).
+ * page a pale field, and the surfaces panes of frosted glass over it, so that the console reads as
+ * part of the same product as the site it is built for (ADR-0040).
  */
 
 :root {
   color-scheme: light;
 
-  /* Surfaces: the page's own pale ground, the steps into it, and white above it. */
+  /* Surfaces: the page's own pale ground, the step into it, and white above it. */
   --sc-color-bg: #f7f8fc;
-  --sc-color-bg-subtle: #f3f5f9;
   --sc-color-bg-inset: #edf0f6;
   --sc-color-bg-raised: #ffffff;
   --sc-color-border: #e4e8ef;
@@ -23,20 +21,18 @@
   /* Text: the site's own ink on white. */
   --sc-color-text: #14141a;
   --sc-color-text-muted: #4b5563;
-  --sc-color-text-faint: #525b69;
+  --sc-color-text-faint: #666c7c;
 
   /* The one accent: the blue that text and lines are drawn in, and the deeper blue a surface
-     is filled with so that a white label reads on it. */
+     is filled with so that a white label reads on it. Under the pointer each is mixed a little
+     towards black where it is drawn. */
   --sc-color-accent: #2c5bc4;
-  --sc-color-accent-hover: #1f4aa8;
   --sc-color-accent-solid: #3b6fd4;
-  --sc-color-accent-solid-hover: #2f62c6;
   --sc-color-accent-contrast: #ffffff;
   --sc-color-accent-subtle: #dbe6ff;
   /* The point: the only warm colour, for what should be looked at first, never for a control. */
   --sc-color-point: #c2410c;
   --sc-color-point-subtle: #fff1e6;
-  --sc-color-selection: color-mix(in srgb, var(--sc-color-accent-solid) 25%, transparent);
 
   /* Status. */
   --sc-color-success: #146b44;
@@ -46,30 +42,16 @@
   --sc-color-danger: #b0273a;
   --sc-color-danger-subtle: #fadadf;
 
-  /* The ground: a pale field with two lights in it, a far one low and wide and a near one high
-     and soft, so the field has distance in it. The default UI
-     provides the field's face (the shell); a custom console may paint its own. */
-  --sc-color-sky: #f3f5fa;
-  /* The field's gradient, in one direction from the top; the lights below are drawn over it. */
+  /* The ground: a pale field, one gradient from the top. The default UI provides the field's
+     face (the shell); a custom console may paint its own. */
   --sc-field-gradient: linear-gradient(160deg, #e3e9f7 0%, #eef1f9 42%, #f9fafd 100%);
-  --sc-color-far: transparent;
-  --sc-color-far-turn: transparent;
-  --sc-color-vignette: transparent;
-  --sc-color-light-core: #ffffff;
-  --sc-color-light-body: #bcd2ff;
-  --sc-color-light-mid: #a99df4a0;
-  --sc-color-light-halo: #5f8dff7a;
-  --sc-light-strength: 0;
-  --sc-light-top: -14rem;
-  --sc-light-height: 56rem;
-  --sc-light-inset: -6%;
-  --sc-light-blur: 5rem;
 
   /* Glass: what a pane over the field is made of. A wide blur with the colour behind pushed, a
      white veil, a bright edge, and a soft stand-off from the field. */
   --sc-glass-backdrop: blur(20px) saturate(1.6);
   --sc-color-glass: #ffffff99;
   --sc-color-glass-hover: #ffffffbf;
+  /* The rim: a hair of white along a pane's edge, its border. */
   --sc-color-glass-edge: #ffffff;
   /* The light that falls down a pane's face, from its top edge. */
   --sc-glass-highlight: #ffffffb3;
@@ -81,18 +63,9 @@
     linear-gradient(var(--sc-color-glass-hover), var(--sc-color-glass-hover)) padding-box;
   --sc-glass-sheen: inset 0 1px 0 #ffffff;
   --sc-glass-lift: 0 0.5rem 1.5rem #1f268714, 0 1px 2px #1f26870f;
-  --sc-glass-lens: none;
-  --sc-glass-lens-width: 1px;
-  --sc-glass-lens-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   /* A surface inside a pane: no blur of its own, white with a little of the pane let through. */
   --sc-color-sheet: color-mix(in srgb, var(--sc-color-bg-raised) 82%, transparent);
   --sc-color-sheet-hover: color-mix(in srgb, var(--sc-color-bg-raised) 96%, transparent);
-  --sc-color-field: var(--sc-color-bg-raised);
-  /* A sheet's own blur, so that a card reads as a tile of glass on the pane. */
-  --sc-sheet-backdrop: blur(12px);
-  /* A sheet's edge, lighter than a border so that it reads as glass, and the lift under it. */
-  --sc-sheet-edge: var(--sc-border);
-  --sc-sheet-lift: 0 1px 2px #1f26870f;
 
   /* A lit thing casts the accent's own colour downward, in layers that fall off the way
      brightness does. */
@@ -100,10 +73,6 @@
     0 0.125rem 0.5rem -0.25rem color-mix(in srgb, var(--sc-color-accent-solid) 40%, transparent),
     0 0.5rem 1.25rem -0.5rem color-mix(in srgb, var(--sc-color-accent-solid) 22%, transparent),
     0 1.25rem 3rem -1rem color-mix(in srgb, var(--sc-color-accent-solid) 11%, transparent);
-  --sc-glow-bright:
-    0 0.125rem 0.5rem -0.25rem color-mix(in srgb, var(--sc-color-accent-solid) 60%, transparent),
-    0 0.5rem 1.25rem -0.5rem color-mix(in srgb, var(--sc-color-accent-solid) 36%, transparent),
-    0 1.25rem 3rem -1rem color-mix(in srgb, var(--sc-color-accent-solid) 18%, transparent);
   --sc-shadow-stage: 0 1.25rem 3.5rem #1a2b552e;
 
   /* Type. The Korean face comes first where the page provides it; the Latin stays with the
@@ -135,9 +104,6 @@
      box lands low; a box that centres a label takes this off the top and gives it to the
      bottom. Not for anything that can wrap. */
   --sc-label-lift: 0.067em;
-  /* Hangul fills more of its box than Latin capitals and sits higher in it, so a label in Korean is
-     lifted less: on a page in Korean the labels read this one. */
-  --sc-label-lift-hangul: calc(var(--sc-label-lift) - 0.15em);
 
   /* Space: a 4px grid. */
   --sc-space-1: 0.25rem;
@@ -158,10 +124,8 @@
   --sc-border: 1px solid var(--sc-color-border);
   --sc-hairline: 1px solid color-mix(in srgb, var(--sc-color-border) 70%, transparent);
   --sc-border-strong: 1px solid var(--sc-color-border-strong);
-  --sc-border-accent: 2px solid var(--sc-color-accent);
 
   /* Layout. */
-  --sc-width-page: 84rem;
   --sc-gutter: var(--sc-space-7);
   --sc-width-prose: 46rem;
   --sc-width-aside: 18rem;
@@ -183,9 +147,10 @@
   --sc-transition: 120ms ease-out;
 }
 
-/* A page in Korean lifts its labels as Hangul needs (the pages say their language on <html>). */
+/* A page in Korean (the pages say their language on <html>): Hangul fills more of its box than
+   Latin capitals and sits higher in it, so a label is lifted less, and the tracking is off. */
 :root:lang(ko) {
-  --sc-label-lift-text: var(--sc-label-lift-hangul);
+  --sc-label-lift: -0.083em;
   --sc-tracking-tight: 0;
   --sc-tracking-wide: 0;
 }
@@ -263,7 +228,7 @@ a {
 }
 
 a:hover {
-  color: var(--sc-color-accent-hover);
+  color: color-mix(in srgb, var(--sc-color-accent) 85%, #000);
 }
 
 code,
@@ -303,7 +268,7 @@ table {
 }
 
 ::selection {
-  background: var(--sc-color-selection);
+  background: color-mix(in srgb, var(--sc-color-accent-solid) 25%, transparent);
   color: var(--sc-color-accent-contrast);
 }
 
@@ -360,53 +325,10 @@ table {
   flex-direction: column;
   min-height: 100dvh;
   overflow-x: clip;
-  background-color: var(--sc-color-sky);
-  /* The far light: low, wide and vague, which is what distance does to a light. */
-  background-image:
-    radial-gradient(
-      ellipse 120% 64% at 50% 92%,
-      var(--sc-color-far),
-      var(--sc-color-far-turn) 48%,
-      transparent 72%
-    ),
-    var(--sc-field-gradient);
+  background-color: var(--sc-color-bg);
+  /* Fixed to the window, so that the page travels over the field and the field stays. */
+  background-image: var(--sc-field-gradient);
   background-attachment: fixed;
-}
-
-/* The near light, high behind the header: an ellipse that is blurred rather than a gradient,
-   because a blur falls off the way light does. Fixed to the window, so that the page travels
-   through the light and the light stays where it is. */
-.sc-shell::before {
-  content: "";
-  position: fixed;
-  z-index: -1;
-  top: var(--sc-light-top);
-  left: var(--sc-light-inset);
-  right: var(--sc-light-inset);
-  height: var(--sc-light-height);
-  background: radial-gradient(
-    ellipse closest-side,
-    var(--sc-color-light-core) 0%,
-    var(--sc-color-light-body) 14%,
-    var(--sc-color-light-mid) 42%,
-    var(--sc-color-light-halo) 70%,
-    transparent 100%
-  );
-  filter: blur(var(--sc-light-blur));
-  opacity: var(--sc-light-strength);
-  pointer-events: none;
-}
-
-/* The air over both lights: the corners and the foot of the window taken down. */
-.sc-shell::after {
-  content: "";
-  position: fixed;
-  z-index: -1;
-  inset: 0;
-  background-image:
-    linear-gradient(to bottom, transparent 60%, var(--sc-color-vignette)),
-    radial-gradient(ellipse 130% 110% at 50% 30%, transparent 36%, var(--sc-color-vignette) 100%);
-  pointer-events: none;
 }
 
 .sc-skip {
@@ -649,8 +571,8 @@ table {
   display: block;
   width: 100%;
   padding-inline: var(--sc-space-3);
-  padding-block: calc(var(--sc-space-2) - var(--sc-label-lift-text, var(--sc-label-lift)))
-    calc(var(--sc-space-2) + var(--sc-label-lift-text, var(--sc-label-lift)));
+  padding-block: calc(var(--sc-space-2) - var(--sc-label-lift))
+    calc(var(--sc-space-2) + var(--sc-label-lift));
   border: 0;
   border-radius: var(--sc-radius-md);
   background: none;
@@ -681,14 +603,30 @@ table {
   border-top: var(--sc-border);
 }
 
-.sc-menu-heading {
-  display: block;
-  padding: var(--sc-space-1) var(--sc-space-3);
+/* The small capitals over a group: a menu's heading, a field's label, a fact's name, a day of the
+   feed, a table's head. `.sc-eyebrow` is the class for a label of your own. */
+.sc-eyebrow,
+.sc-menu-heading,
+.sc-field-label,
+.sc-facts dt,
+.sc-feed-day-title,
+.sc-report > .sc-time,
+.sc-task-aside .sc-section-title,
+.sc-decision-label,
+.sc-calendar-grid th,
+.sc-workload thead th,
+.sc-goal-tasks-state,
+.sc-facts-row dt {
   color: var(--sc-color-text-faint);
   font-size: var(--sc-text-xs);
   font-weight: var(--sc-weight-medium);
   letter-spacing: var(--sc-tracking-wide);
   text-transform: uppercase;
+}
+
+.sc-menu-heading {
+  display: block;
+  padding: var(--sc-space-1) var(--sc-space-3);
 }
 
 .sc-menu-chosen {
@@ -699,11 +637,7 @@ table {
 /* Leaving is apart from the pages one goes to. */
 .sc-menu-out {
   margin-top: var(--sc-space-1);
-  padding-top: calc(
-    var(--sc-space-2) +
-    var(--sc-space-1) -
-    var(--sc-label-lift-text, var(--sc-label-lift))
-  );
+  padding-top: calc(var(--sc-space-2) + var(--sc-space-1) - var(--sc-label-lift));
   border-top: var(--sc-border);
   border-radius: 0 0 var(--sc-radius-md) var(--sc-radius-md);
 }
@@ -844,40 +778,16 @@ table {
 .sc-facts {
   position: relative;
   isolation: isolate;
-  border: 1px solid transparent;
+  border: 1px solid var(--sc-color-glass-edge);
   background: var(--sc-glass-surface);
   backdrop-filter: var(--sc-glass-backdrop);
   box-shadow: var(--sc-glass-sheen), var(--sc-glass-lift);
 }
 
-.sc-panel::before,
-.sc-column::before,
-.sc-project::before,
-.sc-decision::before,
-.sc-run::before,
-.sc-comment::before,
-.sc-sign-in::before,
-.sc-facts::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  padding: var(--sc-glass-lens-width);
-  border-radius: inherit;
-  background: var(--sc-color-glass-edge);
-  backdrop-filter: var(--sc-glass-lens);
-  mask: var(--sc-glass-lens-mask);
-  mask-composite: exclude;
-  pointer-events: none;
-}
-
-/* A column of the board has no lit rim: its glass and its shadow alone part it from the field, so
-   that no line runs down its sides. The other panes keep the rim under the content. */
-.sc-column::before {
-  content: none;
-}
-
+/* A column of the board has no rim and no lift: its glass alone parts it from the field, so that
+   no line runs down its sides and the gaps between columns stay as light as the field. */
 .sc-column {
+  border-color: transparent;
   box-shadow: var(--sc-glass-sheen);
 }
 
@@ -901,10 +811,9 @@ table {
 .sc-option,
 .sc-answer,
 .sc-report-list {
-  border: var(--sc-sheet-edge);
+  border: var(--sc-border);
   background: var(--sc-color-sheet);
-  box-shadow: var(--sc-sheet-lift);
-  backdrop-filter: var(--sc-sheet-backdrop);
+  box-shadow: 0 1px 2px #1f26870f;
 }
 
 .sc-loading {
@@ -956,13 +865,13 @@ table {
 }
 
 .sc-button-primary:hover:not(:disabled) {
-  background: var(--sc-color-accent-solid-hover);
+  background: color-mix(in srgb, var(--sc-color-accent-solid) 90%, #000);
   color: var(--sc-color-accent-contrast);
   box-shadow: var(--sc-glow);
 }
 
 .sc-button-secondary {
-  background: var(--sc-color-field);
+  background: var(--sc-color-bg-raised);
   border-color: var(--sc-color-border);
   color: var(--sc-color-text);
 }
@@ -1001,8 +910,8 @@ table {
   align-items: center;
   gap: var(--sc-space-1);
   padding-inline: var(--sc-space-2);
-  padding-block: calc(var(--sc-space-1) - var(--sc-label-lift-text, var(--sc-label-lift)))
-    calc(var(--sc-space-1) + var(--sc-label-lift-text, var(--sc-label-lift)));
+  padding-block: calc(var(--sc-space-1) - var(--sc-label-lift))
+    calc(var(--sc-space-1) + var(--sc-label-lift));
   border: var(--sc-border);
   border-radius: var(--sc-radius-full);
   font-size: var(--sc-text-xs);
@@ -1255,10 +1164,6 @@ table {
 
 .sc-field-label {
   color: var(--sc-color-text-muted);
-  font-size: var(--sc-text-xs);
-  font-weight: var(--sc-weight-medium);
-  letter-spacing: var(--sc-tracking-wide);
-  text-transform: uppercase;
 }
 
 .sc-field-row {
@@ -1274,7 +1179,7 @@ table {
   padding: var(--sc-space-2) var(--sc-space-3);
   border: var(--sc-border-strong);
   border-radius: var(--sc-radius-md);
-  background: var(--sc-color-field);
+  background: var(--sc-color-bg-raised);
   color: var(--sc-color-text);
   font-size: var(--sc-text-sm);
   transition:
@@ -1436,7 +1341,7 @@ select.sc-input {
   padding: var(--sc-space-1) var(--sc-space-1) var(--sc-space-1) var(--sc-space-3);
   border: var(--sc-border);
   border-radius: var(--sc-radius-md);
-  background: var(--sc-color-field);
+  background: var(--sc-color-bg-raised);
   font-size: var(--sc-text-sm);
 }
 
@@ -1833,14 +1738,6 @@ select.sc-input {
   font-size: var(--sc-text-sm);
 }
 
-.sc-facts dt {
-  color: var(--sc-color-text-faint);
-  font-size: var(--sc-text-xs);
-  font-weight: var(--sc-weight-medium);
-  letter-spacing: var(--sc-tracking-wide);
-  text-transform: uppercase;
-}
-
 .sc-facts dd {
   margin-top: var(--sc-space-1);
 }
@@ -1993,7 +1890,7 @@ select.sc-input {
   display: grid;
   gap: var(--sc-space-1);
   padding: var(--sc-space-3) var(--sc-space-4);
-  border-left: var(--sc-border-accent);
+  border-left: 2px solid var(--sc-color-accent);
   border-radius: 0 var(--sc-radius-md) var(--sc-radius-md) 0;
 }
 
@@ -2080,10 +1977,6 @@ select.sc-input {
   gap: var(--sc-space-3);
   margin: 0;
   color: var(--sc-color-text-muted);
-  font-size: var(--sc-text-xs);
-  font-weight: var(--sc-weight-medium);
-  letter-spacing: var(--sc-tracking-wide);
-  text-transform: uppercase;
 }
 
 .sc-feed-day-title::after {
@@ -2218,7 +2111,7 @@ select.sc-input {
   content: "";
   position: absolute;
   inset: 0;
-  border: var(--sc-border-accent);
+  border: 2px solid var(--sc-color-accent);
   border-radius: inherit;
   opacity: 0;
   pointer-events: none;
@@ -2338,7 +2231,7 @@ select.sc-input {
 
 .sc-prose blockquote {
   padding-left: var(--sc-space-4);
-  border-left: var(--sc-border-accent);
+  border-left: 2px solid var(--sc-color-accent);
   color: var(--sc-color-text-muted);
 }
 
@@ -2770,17 +2663,11 @@ select.sc-input {
   display: grid;
   gap: var(--sc-space-1);
   padding-left: var(--sc-space-3);
-  border-left: var(--sc-border-accent);
+  border-left: 2px solid var(--sc-color-accent);
   font-size: var(--sc-text-sm);
 }
 
 /* The hour of a report heads it, small and apart from its words. */
-.sc-report > .sc-time {
-  font-weight: var(--sc-weight-medium);
-  letter-spacing: var(--sc-tracking-wide);
-  text-transform: uppercase;
-}
-
 .sc-run-summary {
   padding-top: var(--sc-space-3);
   border-top: var(--sc-border);
@@ -3001,7 +2888,7 @@ select.sc-input {
   padding: var(--sc-space-3) var(--sc-space-4);
   border: var(--sc-border);
   border-radius: var(--sc-radius-md);
-  background: var(--sc-color-field);
+  background: var(--sc-color-bg-raised);
   font-family: var(--sc-font-mono);
   font-size: var(--sc-text-sm);
   line-height: var(--sc-leading-code);
@@ -3282,11 +3169,6 @@ select.sc-input {
 
 .sc-task-aside .sc-section-title {
   margin-bottom: var(--sc-space-1);
-  color: var(--sc-color-text-faint);
-  font-size: var(--sc-text-xs);
-  font-weight: var(--sc-weight-medium);
-  letter-spacing: var(--sc-tracking-wide);
-  text-transform: uppercase;
 }
 
 .sc-task-aside .sc-task-section {
@@ -3306,11 +3188,6 @@ select.sc-input {
 
 .sc-decision-label {
   margin: 0 0 var(--sc-space-1);
-  color: var(--sc-color-text-faint);
-  font-size: var(--sc-text-xs);
-  font-weight: var(--sc-weight-medium);
-  letter-spacing: var(--sc-tracking-wide);
-  text-transform: uppercase;
 }
 
 .sc-outcome-form {
@@ -3633,12 +3510,7 @@ select.sc-input {
 
 .sc-calendar-grid th {
   padding: var(--sc-space-1);
-  color: var(--sc-color-text-faint);
-  font-size: var(--sc-text-xs);
-  font-weight: var(--sc-weight-medium);
-  letter-spacing: var(--sc-tracking-wide);
   text-align: left;
-  text-transform: uppercase;
 }
 
 .sc-calendar-cell {
@@ -4102,12 +3974,7 @@ select.sc-input {
 .sc-workload thead th {
   padding-block: var(--sc-space-2);
   border-bottom: var(--sc-border);
-  background: var(--sc-color-bg-subtle);
-  color: var(--sc-color-text-faint);
-  font-size: var(--sc-text-xs);
-  font-weight: var(--sc-weight-medium);
-  letter-spacing: var(--sc-tracking-wide);
-  text-transform: uppercase;
+  background: var(--sc-color-bg-inset);
   white-space: nowrap;
 }
 
@@ -4287,11 +4154,6 @@ select.sc-input {
 
 .sc-goal-tasks-state {
   margin-bottom: var(--sc-space-2);
-  color: var(--sc-color-text-faint);
-  font-size: var(--sc-text-xs);
-  font-weight: var(--sc-weight-medium);
-  letter-spacing: var(--sc-tracking-wide);
-  text-transform: uppercase;
 }
 
 /* The categories: a row each, with its name and its colour open to an administrator. */
@@ -4606,7 +4468,7 @@ select.sc-input {
   border: var(--sc-border-strong);
   border-right: 0;
   border-radius: var(--sc-radius-md) 0 0 var(--sc-radius-md);
-  background: color-mix(in srgb, var(--sc-color-field) 60%, var(--sc-color-border));
+  background: color-mix(in srgb, var(--sc-color-bg-raised) 60%, var(--sc-color-border));
   color: var(--sc-color-text-muted);
   font-size: var(--sc-text-sm);
   white-space: nowrap;
@@ -5132,14 +4994,6 @@ select.sc-input {
 .sc-facts-row > div:first-child {
   padding-inline-start: 0;
   border-inline-start: 0;
-}
-
-.sc-facts-row dt {
-  color: var(--sc-color-text-faint);
-  font-size: var(--sc-text-xs);
-  font-weight: var(--sc-weight-medium);
-  letter-spacing: var(--sc-tracking-wide);
-  text-transform: uppercase;
 }
 
 .sc-facts-row dd {

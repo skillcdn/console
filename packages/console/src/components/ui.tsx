@@ -442,3 +442,16 @@ export function Time(props: {
     </time>
   );
 }
+
+/** A link that reads as a button: where a form is, for instance. */
+export function LinkButton(props: {
+  readonly href: string;
+  readonly variant?: "primary" | "secondary";
+  readonly children: ReactNode;
+}) {
+  return (
+    <a className={`sc-button sc-button-${props.variant ?? "secondary"}`} href={props.href}>
+      {props.children}
+    </a>
+  );
+}

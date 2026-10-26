@@ -18,11 +18,11 @@ A site that cannot be fetched (a login wall, a block, no site after all) ends th
 
 ## Mapping onto the pages
 
-The pages are light: a pale field with a light in it, and panes of frosted glass over it. The mapping is shown at the plan as a table, value by value, before a file is written.
+The pages are light: a pale field, and panes of frosted glass over it. The mapping is shown at the plan as a table, value by value, before a file is written.
 
 - **A mark drawn in a light colour vanishes** on the light pages. Take the site's dark or black variant first (its header on a light page, a light-mode asset, a `prefers-color-scheme` rule). Found none, and the mark is one colour: recolour it to the pages' text colour, with the person's word, since the mark is theirs. A mark of several colours on a light fill: keep its fill as a rounded square behind it.
-- **A dark or saturated primary colour** becomes the accent: `--sc-color-accent` and its family (`-hover`, `-solid`, `-subtle`, the point), as the package's README lists them.
-- **A pale primary colour** tints the field and its light: `--sc-color-sky`, `--sc-color-far*` and `--sc-color-light-*`, with a darker shade of it as the accent, since an accent must read on the light field.
+- **A dark or saturated primary colour** becomes the accent: `--sc-color-accent` and its family (`-solid`, `-contrast`, `-subtle`, the point), as the package's README lists them.
+- **A pale primary colour** tints the field: `--sc-field-gradient`, with a darker shade of it as the accent, since an accent must read on the light field.
 - **Contrast is checked**, not assumed: the accent on the field, and text on the panes, at the 4.5:1 of WCAG AA for text; a shade is moved until it passes, and the plan says which.
 - **The type follows the rules of the skill**: scripts, styles and fonts are bundled, never loaded from a CDN or written inline. A face the organization owns, or one under a license that allows bundling, is put in the repository and named in `--sc-font-sans`; otherwise the system faces stay, and the plan says that the site's face was not taken and why. Pretendard stays for Korean, as the default console has it.
 - **The name** stays the server's (`WORKSPACE_NAME`): the look is the marks, the colours and the type, never the words.

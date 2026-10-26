@@ -208,6 +208,7 @@ export {
   formatBytes,
   formatInstant,
   GoalStateBadge,
+  LinkButton,
   PersonChip,
   PRIORITY_LABELS,
   PriorityBadge,

@@ -76,6 +76,7 @@ import {
   Callout,
   CategoryBadge,
   EmptyState,
+  LinkButton,
   personName,
   Spinner,
   StateBadge,
@@ -383,19 +384,6 @@ export function onlyOnOwnPages(route: Route): boolean {
 function NotWithToken() {
   const words = useWords().common.notWithToken;
   return <EmptyState title={words.title} body={words.body} />;
-}
-
-/** A link that reads as a button: where a form is, for instance. */
-function LinkButton(props: {
-  readonly href: string;
-  readonly variant?: "primary" | "secondary";
-  readonly children: React.ReactNode;
-}) {
-  return (
-    <a className={`sc-button sc-button-${props.variant ?? "secondary"}`} href={props.href}>
-      {props.children}
-    </a>
-  );
 }
 
 function ProjectsPage(props: {
