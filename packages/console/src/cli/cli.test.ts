@@ -1268,6 +1268,7 @@ describe("the console command", () => {
         body: { items: [{ project: web, decision: { ...DECISION, decider: BOB } }], more: false },
       },
       "GET /api/v1/decisions?open=true&limit=50&offset=0": { body: { items: [], more: false } },
+      "GET /api/v1/decisions?raised=true&limit=50&offset=0": { body: { items: [], more: false } },
     });
     const h = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["decisions", "--mine"], h.io)).toBe(EXIT.ok);
@@ -1276,8 +1277,41 @@ describe("the console command", () => {
     const open = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["decisions", "--mine", "--open"], open.io)).toBe(EXIT.ok);
     expect(open.out()).toContain("No decisions of yours.");
+    const raised = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["decisions", "--raised"], raised.io)).toBe(EXIT.ok);
+    expect(raised.out()).toContain("No decisions you asked of others.");
+    expect(
+      calls.some((call) => call.key === "GET /api/v1/decisions?raised=true&limit=50&offset=0"),
+    ).toBe(true);
     // Needs no project: nothing of the project's was asked for.
     expect(calls.every((call) => !call.key.includes("/projects/"))).toBe(true);
+  });
+
+  it("writes a person's answer on a decision in their name, an option or their own words (ADR-0042)", async () => {
+    const { fetch, calls } = fakeConsole({
+      [`POST ${IN}/decisions/${DECISION.id}/answer`]: { status: 200, body: ANSWERED },
+    });
+    const h = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(
+        ["answer", DECISION.id, "--option", "2", "--note", "Said in chat on the 26th."],
+        h.io,
+      ),
+    ).toBe(EXIT.ok);
+    expect(calls[0]?.body).toEqual({ option: "2", note: "Said in chat on the 26th." });
+    expect(h.out()).toContain("Answered: 2) Change it, by bob");
+    const own = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["answer", DECISION.id, "--own", "Neither: wait a week"], own.io)).toBe(
+      EXIT.ok,
+    );
+    expect(calls[1]?.body).toEqual({ own: "Neither: wait a week" });
+    // One of the two, not both and not neither.
+    const neither = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["answer", DECISION.id], neither.io)).toBe(EXIT.usage);
+    const both = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["answer", DECISION.id, "--option", "1", "--own", "x"], both.io)).toBe(
+      EXIT.usage,
+    );
   });
 
   it("waits for a decision for as long as it is told, a request at a time", async () => {

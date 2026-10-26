@@ -13,6 +13,7 @@ import {
   MAX_FILES_PER_COMMENT,
   MAX_FILES_PER_DOCUMENT,
   MAX_LINK_LABEL_LENGTH,
+  MAX_NOTE_LENGTH,
   MAX_OPTION_LABEL_LENGTH,
   MAX_OPTIONS,
   MAX_PROJECT_DESCRIPTION_LENGTH,
@@ -412,6 +413,21 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
       "decision.invalid_decider: the person named may not work in the project",
     ],
   },
+  answer: {
+    usage: 'answer <id> --option <n>|--own "<answer>" [--note <markdown>|--file <path>]',
+    synopsis: "Writes a person's answer on a decision: the option they chose, or their own words.",
+    about:
+      "Writes on the board the answer a person gave: one of the decision's options by its number, or their own words, which become one more option of the decision marked as theirs; and a note about it. The answer is the person's, written in their name through you (ADR-0021): a choice they made in chat, in a meeting or by changing the task is written here, with where and when they made it in the note, so that the record is whole and a run that waited goes on. A decision is answered once; what followed is written with console decision <id> --outcome.",
+    limits: [
+      `own: one line, up to ${MAX_OPTION_LABEL_LENGTH} characters`,
+      `note: Markdown, up to ${MAX_NOTE_LENGTH} characters`,
+    ],
+    refusals: [
+      "decision.not_found: no decision has that id",
+      "decision.answered: the decision has an answer already",
+      "decision.no_such_option: the option is not one of the decision's",
+    ],
+  },
   decision: {
     usage: "decision <id> [--wait <seconds>]  |  decision <id> --outcome <markdown>|--file <path>",
     synopsis:
@@ -422,9 +438,9 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     refusals: ["decision.not_found: no decision has that id"],
   },
   decisions: {
-    usage: "decisions [--open] [--mine] [--limit <n>] [--offset <n>]",
+    usage: "decisions [--open] [--mine|--raised] [--limit <n>] [--offset <n>]",
     synopsis: "The decisions on the board, the waiting first; or your own across the projects.",
-    about: `The decisions on the board, the waiting first; --open keeps only those. --mine lists the decisions addressed to you instead (ADR-0042), across the projects you may see, each with its project's key, and needs no project. A page at a time: ${DEFAULT_PAGE_LIMIT} unless --limit says otherwise, from --offset on.`,
+    about: `The decisions on the board, the waiting first; --open keeps only those. --mine lists the decisions addressed to you instead (ADR-0042), and --raised those you asked of someone else, through your agent or yourself, each across the projects you may see with its project's key; neither needs a project. A page at a time: ${DEFAULT_PAGE_LIMIT} unless --limit says otherwise, from --offset on.`,
   },
   finish: {
     usage: 'finish [--summary "<markdown>"|--file <path>] [--run <id>]',
@@ -628,7 +644,18 @@ const SECTIONS: readonly { readonly title: string; readonly commands: readonly s
   },
   {
     title: "Working",
-    commands: ["take", "report", "hand-in", "comment", "file", "ask", "finish", "fail", "abandon"],
+    commands: [
+      "take",
+      "report",
+      "hand-in",
+      "comment",
+      "file",
+      "ask",
+      "answer",
+      "finish",
+      "fail",
+      "abandon",
+    ],
   },
   {
     title: "The documents: the project's pages of Markdown, in folders, by path",

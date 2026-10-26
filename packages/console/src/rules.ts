@@ -41,7 +41,7 @@ export const REFERENCE_RULES = [
   "",
   "## Decide alone, or ask",
   "",
-  "Alone: how to do what the task settles, which skill to load, what to write on pages, and a commit or a push where the repository's agreement allows it. On the board, with `console ask`: a trade-off the task leaves open, a change of scope or of the plan, anything that costs money, anything that deletes. Answered once, never asked again.",
+  "Alone: how to do what the task settles, which skill to load, what to write on pages, and a commit or a push where the repository's agreement allows it. On the board, with `console ask`: a trade-off the task leaves open, a change of scope or of the plan, anything that costs money, anything that deletes. Answered once, never asked again. A decision is the record of a choice that is a person's to make, wherever they make it: an answer given to you in chat, in a meeting or by changing the task is written on the decision in the person's name (`console answer`), with where it was said, so that the board shows as waiting only what is still open and a run waits on the record, not on memory. Asked what is on a person's plate, or for a briefing, start from the decisions waiting for their answer (`console work`), each with what waits on it and since when, before the tasks.",
   "",
   "## Reports",
   "",

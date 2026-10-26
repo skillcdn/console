@@ -29,6 +29,8 @@ export interface DecisionCardProps {
   readonly docHref?: ((path: string) => string) | undefined;
   /** Where the decision's own page is; given, the question leads to it. */
   readonly href?: string | undefined;
+  /** The project the decision is in, named where a page shows the decisions of several. */
+  readonly project?: React.ReactNode;
   /** Called with the person's answer. Left out, a waiting decision cannot be answered here. */
   readonly onAnswer?: ((decision: RestDecision, input: RestAnswerInput) => void) | undefined;
   /** Called to grow the record, with what followed. Left out, it cannot be written here. */
@@ -51,10 +53,18 @@ function Asked(props: { readonly decision: RestDecision; readonly day?: boolean 
         : words.decisions.askedThrough(agentLabel(decision.run.agent))}{" "}
       <Time iso={decision.createdAt} precision={props.day === true ? "day" : "minute"} />
       {decision.decider.id !== decision.raisedBy.id && (
-        <>
-          {" "}
-          {words.decisions.forPerson} <PersonChip person={decision.decider} />
-        </>
+        <span className="sc-decision-for">
+          <span className="sc-visually-hidden">
+            {words.decisions.peopleLabel(
+              personName(decision.raisedBy),
+              personName(decision.decider),
+            )}
+          </span>
+          <span className="sc-decision-arrow" aria-hidden="true">
+            →
+          </span>{" "}
+          <PersonChip person={decision.decider} />
+        </span>
       )}
     </>
   );
@@ -273,6 +283,7 @@ export function DecisionCard(props: DecisionCardProps) {
               )}
             </>
           )}
+          {props.project}
         </p>
       </header>
       {decision.body.length > 0 && (
@@ -345,6 +356,8 @@ export interface DecisionLogProps {
   readonly page?: number | undefined;
   /** Where each page of the record is, so that a page has an address; left out, the pages turn in place. */
   readonly pageHref?: ((page: number) => string) | undefined;
+  /** The project a decision is in, named where the record holds the decisions of several. */
+  readonly projectOf?: ((decision: RestDecision) => React.ReactNode) | undefined;
 }
 
 /** One row of the record: what was asked, by whom and when; what was answered, with the word given, by whom and when. */
@@ -354,6 +367,7 @@ function RecordRow(props: {
   readonly taskHref: ((task: RestTask) => string) | undefined;
   readonly href: string | undefined;
   readonly docHref: ((path: string) => string) | undefined;
+  readonly project?: React.ReactNode;
 }) {
   const words = useWords();
   const { decision, task } = props;
@@ -378,6 +392,7 @@ function RecordRow(props: {
         </p>
         <p className="sc-decision-record-meta">
           <Asked decision={decision} day />
+          {props.project}
         </p>
       </div>
       {answer !== null && (
@@ -423,6 +438,7 @@ export function DecisionLog(props: DecisionLogProps) {
             taskHref={props.taskHref}
             href={props.decisionHref?.(decision)}
             docHref={props.docHref}
+            project={props.projectOf?.(decision)}
           />
         ))}
       </ol>

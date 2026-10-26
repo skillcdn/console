@@ -2399,6 +2399,11 @@ describe("the schedule and the roadmap", () => {
       await (await get(alice, REST_ROUTES.decisions)).json(),
     );
     expect(alicesOwn.items.some((item) => item.decision.id === forBob.id)).toBe(false);
+    // What Alice asked of others is read with `raised=true`: Bob's, and nothing of Bob's own asking.
+    const alicesAsked = restMyDecisionsSchema.parse(
+      await (await get(alice, `${REST_ROUTES.decisions}?raised=true`)).json(),
+    );
+    expect(alicesAsked.items.map((item) => item.decision.id)).toEqual([forBob.id]);
     // Bob sees his own, and nothing of the docs project, which is not his to see.
     const bobWork = restWorkSchema.parse(await (await get(bob, REST_ROUTES.work)).json());
     expect(bobWork.tasks.map((item) => item.task.id)).toEqual([bobs.id]);

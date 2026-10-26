@@ -123,6 +123,8 @@ export interface ConsoleActions {
   ): Promise<RestGoals>;
   raiseDecision(input: RestDecisionInput): Promise<RestDecision>;
   answerDecision(id: string, input: RestAnswerInput): Promise<RestDecision>;
+  /** Answers a decision of any project the person may see, by its project's key: for the person's own page of decisions (ADR-0042). */
+  answerDecisionIn(projectKey: string, id: string, input: RestAnswerInput): Promise<RestDecision>;
   /** Grows a decision's record: its context, or what followed. */
   updateDecision(id: string, patch: RestDecisionPatch): Promise<RestDecision>;
   /** Sets a goal on the roadmap of the project the page is on; for an owner. */
@@ -132,7 +134,13 @@ export interface ConsoleActions {
   work(signal?: AbortSignal): Promise<RestWork>;
   /** The decisions addressed to the person (ADR-0042) across their projects, a page at a time, read when the page asks. */
   myDecisions(
-    filter: { readonly open?: boolean; readonly limit: number; readonly offset: number },
+    filter: {
+      readonly open?: boolean;
+      /** Those the person raised for someone else, in place of those addressed to them. */
+      readonly raised?: boolean;
+      readonly limit: number;
+      readonly offset: number;
+    },
     signal?: AbortSignal,
   ): Promise<RestMyDecisions>;
   /** The categories tasks are sorted into: kept by an administrator. */
@@ -662,6 +670,8 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
         await refreshProject();
         return decision;
       },
+      answerDecisionIn: (projectKey, id, input) =>
+        client.project(projectKey).answerDecision(id, input),
       async answerDecision(id, input) {
         const decision = await scope().answerDecision(id, input);
         await refreshProject();

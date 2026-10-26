@@ -4,7 +4,7 @@
 - **Goal**: what the project works towards, on its roadmap, with the day it is meant to be reached by; its progress is its tasks.
 - **Category**: a kind of work, the workspace's word for it, by key.
 - **Run**: one agent at work on one task for one person, with its reports, what it handed in, and what it waits for.
-- **Decision**: a question with options, which a person answers on the board.
+- **Decision**: a choice that is a person's to make, kept as a record on the board: the question, the options, whom it is for ([ADR-0042](/docs/adr/0042-a-decision-is-addressed-to-a-person-its-raiser-unless-another-is-named.md)), the answer with who gave it and when, and what followed. It is answered on the board whoever decided it where: a person who answers in chat, in a meeting or by changing the task has decided, and the agent writes that answer down for them (`console answer`), so that the board shows as waiting only what is still open.
 - **Page**: a document of the project, Markdown at a path that does not change.
 - **Project**: a board of its own, with its members and its skills address.
 - **SkillCDN token**: what the console reads a private pack with, `pack-token` in the API and the command: a project's own, or the workspace's for the organization's pack, which a project reads when it names no address of its own; connected with a code a person approves at SkillCDN, or made there by hand, and shown to nobody.

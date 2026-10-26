@@ -1887,6 +1887,40 @@ const ask: Command = async (args, io) => {
   return settle(io, session, project, raised, seconds, true);
 };
 
+/**
+ * Writes a person's answer on a decision, in their name through the agent (ADR-0021): the
+ * option they chose, or their own words, and a note about it, so that a choice made in chat
+ * or in passing reaches the record the run waits on.
+ */
+const answering: Command = async (args, io) => {
+  const { values, positionals } = parse(args, {
+    option: { type: "string" },
+    own: { type: "string" },
+    note: { type: "string" },
+    file: { type: "string" },
+  });
+  const id = theOne(
+    positionals,
+    'Say which decision: console answer <id> --option <n>|--own "<answer>" [--note <markdown>|--file <path>]',
+  );
+  const option = text(values, "option");
+  const own = text(values, "own");
+  if ((option === undefined) === (own === undefined)) {
+    throw misuse(
+      'Say the option chosen, --option <n>, or the person\'s own answer, --own "<words>": one of the two.',
+    );
+  }
+  const note = await bodyOf(io, values, text(values, "note"));
+  const session = await open(io, values);
+  const project = await session.project();
+  const answered = await project.answerDecision(id, {
+    ...(own === undefined ? { option } : { own }),
+    ...(note === undefined ? {} : { note }),
+  });
+  answer(io, session, answered, () => formatDecision(answered));
+  return EXIT.ok;
+};
+
 const decision: Command = async (args, io) => {
   const { values, positionals } = parse(args, {
     wait: { type: "string" },
@@ -2199,18 +2233,27 @@ const goal: Command = async (args, io) => {
 const decisions: Command = async (args, io) => {
   const { values } = parse(
     args,
-    { open: { type: "boolean" }, mine: { type: "boolean" }, ...PAGE_OPTIONS },
+    {
+      open: { type: "boolean" },
+      mine: { type: "boolean" },
+      raised: { type: "boolean" },
+      ...PAGE_OPTIONS,
+    },
     false,
   );
   const page = pageOf(values);
   const session = await open(io, values);
   const open_ = on(values, "open") ? { open: true } : {};
-  if (on(values, "mine")) {
-    // One's own across the projects (ADR-0042): the waiting first, each with its project's key.
-    const found = await session.client.myDecisions({ ...open_, ...page });
+  if (on(values, "mine") || on(values, "raised")) {
+    // One's own across the projects (ADR-0042), addressed to the person or raised by them for
+    // someone else: the waiting first, each with its project's key.
+    const raised = on(values, "raised");
+    const found = await session.client.myDecisions({ ...open_, raised, ...page });
     answer(io, session, found, () =>
       found.items.length === 0
-        ? "No decisions of yours."
+        ? raised
+          ? "No decisions you asked of others."
+          : "No decisions of yours."
         : found.items
             .map(({ project, decision }) => `${project.key}  ${formatDecisionLine(decision)}`)
             .join("\n") + formatMore(found.more, page.limit, page.offset),
@@ -2941,6 +2984,7 @@ const COMMANDS: Readonly<Record<string, Command>> = {
   comment,
   file,
   ask,
+  answer: answering,
   decision,
   decisions,
   finish: ending("finished"),

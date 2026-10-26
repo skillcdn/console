@@ -498,6 +498,10 @@ describe("decisions", () => {
     expect(alices.items.map((item) => item.id)).toContain(own.id);
     expect(alices.items.map((item) => item.id)).not.toContain(forBob.id);
     expect(alices.more).toBe(false);
+    // What Alice asked of others is the other list: Bob's, and not her own.
+    const asked = await listDecisionsFor(database, workspaceId, alice, { limit: 10, raised: true });
+    expect(asked.items.map((item) => item.id)).toContain(forBob.id);
+    expect(asked.items.map((item) => item.id)).not.toContain(own.id);
     // Anyone of the project may still answer: the answered one leaves what waits for Bob.
     await answerDecision(database, {
       scope,

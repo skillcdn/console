@@ -1,5 +1,5 @@
 import type { RestDecisionOption } from "@skillcdn/console/api";
-import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, ne, sql } from "drizzle-orm";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
 import { decisions, projects, runs, tasks } from "../schema.js";
@@ -492,9 +492,10 @@ export async function listWaitingDecisionsFor(
 }
 
 /**
- * A page of the decisions addressed to `person` (ADR-0042) across the projects they may see:
- * the ones that wait first, oldest first among them, since those are theirs to answer; then
- * the answered, newest first, as the record; or only those that wait. And whether there is more.
+ * A page of the decisions addressed to `person` (ADR-0042) across the projects they may see,
+ * or, with `raised`, of those they raised, through their agent or not, for someone else: the
+ * ones that wait first, oldest first among them, since those are the ones to answer; then the
+ * answered, newest first, as the record; or only those that wait. And whether there is more.
  */
 export async function listDecisionsFor(
   database: Database,
@@ -502,6 +503,8 @@ export async function listDecisionsFor(
   person: PersonRecord,
   filter: {
     readonly open?: boolean | undefined;
+    /** The decisions the person raised for someone else, in place of those addressed to them. */
+    readonly raised?: boolean | undefined;
     readonly limit: number;
     readonly offset?: number | undefined;
   },
@@ -511,7 +514,9 @@ export async function listDecisionsFor(
     .where(
       and(
         eq(decisions.workspaceId, workspaceId),
-        eq(decisions.deciderId, person.id),
+        filter.raised === true
+          ? and(eq(decisions.raisedById, person.id), ne(decisions.deciderId, person.id))
+          : eq(decisions.deciderId, person.id),
         filter.open === true ? isNull(decisions.answeredAt) : undefined,
         visibleTo(person),
       ),

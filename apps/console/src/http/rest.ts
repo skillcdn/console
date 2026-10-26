@@ -403,6 +403,7 @@ const decisionsQuery = z.object({
 });
 const myDecisionsQuery = z.object({
   open: z.enum(["true", "false"]).optional(),
+  raised: z.enum(["true", "false"]).optional(),
   ...page,
 });
 const goalsQuery = z.object({
@@ -1339,6 +1340,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       listProjectsFor(database, person.workspaceId, person),
       listDecisionsFor(database, person.workspaceId, person, {
         open: query.data.open === undefined ? undefined : query.data.open === "true",
+        raised: query.data.raised === "true",
         limit: query.data.limit,
         offset: query.data.offset,
       }),

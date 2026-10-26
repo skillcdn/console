@@ -453,9 +453,9 @@ export interface ConsoleClient {
   removeCategory(key: string): Promise<void>;
   /** What is on the asker's plate across the projects they may see: their open tasks, and the decisions waiting for them. */
   work(signal?: AbortSignal): Promise<RestWork>;
-  /** The decisions addressed to the asker (ADR-0042) across the projects they may see: a page, the waiting first; or only those. */
+  /** The decisions addressed to the asker (ADR-0042) across the projects they may see, or with `raised` those they raised for someone else: a page, the waiting first; or only those. */
   myDecisions(
-    filter?: { readonly open?: boolean } & Page,
+    filter?: { readonly open?: boolean; readonly raised?: boolean } & Page,
     signal?: AbortSignal,
   ): Promise<RestMyDecisions>;
   /** Another person's plate, within what the asker may see: for an administrator, or an owner of a project they are in. */
@@ -973,6 +973,7 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
         "GET",
         withQuery(REST_ROUTES.decisions, {
           open: flag(filter.open),
+          raised: filter.raised === true ? "true" : undefined,
           limit: number(filter.limit),
           offset: number(filter.offset),
         }),

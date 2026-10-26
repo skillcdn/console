@@ -2007,11 +2007,23 @@ function PlatePage(props: {
 /** How many of a person's decisions are read at a time. */
 const MY_DECISIONS_PAGE = 50;
 
-/** The decisions addressed to the person (ADR-0042): the waiting first, then the record, more on request. */
-function MyDecisionsPage(props: { readonly data: ConsoleData }) {
-  const words = useWords();
-  const { myDecisions } = props.data.actions;
-  const { couldNotLoad } = words.myDecisions;
+/** One kind of a person's decisions, read a page at a time, as the page shows it. */
+interface DecisionsRead {
+  readonly items: RestMyDecisions["items"] | undefined;
+  readonly more: boolean;
+  readonly busy: boolean;
+  readonly problem: string | undefined;
+  readonly readMore: () => void;
+  /** Reads the first page again, after an answer changed what waits. */
+  readonly reload: () => void;
+}
+
+/** The decisions addressed to the person, or, with `raised`, those they raised for someone else (ADR-0042). */
+function useMyDecisions(
+  myDecisions: ConsoleData["actions"]["myDecisions"],
+  raised: boolean,
+  couldNotLoad: string,
+): DecisionsRead {
   const [items, setItems] = useState<RestMyDecisions["items"] | undefined>(undefined);
   const [more, setMore] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -2020,7 +2032,7 @@ function MyDecisionsPage(props: { readonly data: ConsoleData }) {
     async (offset: number, signal?: AbortSignal) => {
       setBusy(true);
       try {
-        const page = await myDecisions({ limit: MY_DECISIONS_PAGE, offset }, signal);
+        const page = await myDecisions({ raised, limit: MY_DECISIONS_PAGE, offset }, signal);
         if (signal?.aborted === true) {
           return;
         }
@@ -2036,7 +2048,7 @@ function MyDecisionsPage(props: { readonly data: ConsoleData }) {
         }
       }
     },
-    [myDecisions, couldNotLoad],
+    [myDecisions, raised, couldNotLoad],
   );
   useEffect(() => {
     const controller = new AbortController();
@@ -2045,27 +2057,49 @@ function MyDecisionsPage(props: { readonly data: ConsoleData }) {
     void read(0, controller.signal);
     return () => controller.abort();
   }, [read]);
+  const readMore = useCallback(() => void read(items?.length ?? 0), [read, items]);
+  const reload = useCallback(() => void read(0), [read]);
+  return { items, more, busy, problem, readMore, reload };
+}
+
+/**
+ * A person's decisions (ADR-0042), laid out as a project's decisions page is: those waiting for
+ * their answer, answered here, those they asked of others, and the record of both.
+ */
+function MyDecisionsPage(props: { readonly data: ConsoleData }) {
+  const words = useWords();
+  const { myDecisions, answerDecisionIn } = props.data.actions;
+  const addressed = useMyDecisions(myDecisions, false, words.myDecisions.couldNotLoad);
+  const raised = useMyDecisions(myDecisions, true, words.myDecisions.couldNotLoad);
+  const { busy, error, act } = useAction();
+  const problem = addressed.problem ?? raised.problem ?? error;
+  const onAnswer = (projectKey: string, decision: RestDecision, input: RestAnswerInput) =>
+    void act(async () => {
+      await answerDecisionIn(projectKey, decision.id, input);
+      addressed.reload();
+      raised.reload();
+    });
   return (
     <>
       <div className="sc-page-head">
         <h1 className="sc-page-title">{words.myDecisions.title}</h1>
       </div>
       {problem !== undefined && <Callout tone="danger">{problem}</Callout>}
-      {items === undefined ? (
+      {addressed.items === undefined || raised.items === undefined ? (
         problem === undefined && (
           <div className="sc-loading">
             <Spinner label={words.myDecisions.loading} />
           </div>
         )
-      ) : items.length === 0 ? (
+      ) : addressed.items.length === 0 && raised.items.length === 0 ? (
         <EmptyState title={words.myDecisions.empty.title} body={words.myDecisions.empty.body} />
       ) : (
         <MyDecisions
-          items={items}
-          more={more}
-          busy={busy}
-          onMore={() => void read(items.length)}
+          addressed={{ items: addressed.items, more: addressed.more, onMore: addressed.readMore }}
+          raised={{ items: raised.items, more: raised.more, onMore: raised.readMore }}
           decisionHref={decisionHref}
+          onAnswer={onAnswer}
+          busy={busy || addressed.busy || raised.busy}
         />
       )}
     </>

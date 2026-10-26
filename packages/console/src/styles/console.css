@@ -1811,6 +1811,13 @@ select.sc-input {
   }
 }
 
+/* A person's own decisions: the sections of what waits, stacked in the first column. */
+.sc-decisions-waiting {
+  display: grid;
+  gap: var(--sc-space-6);
+  align-content: start;
+}
+
 .sc-decision {
   display: grid;
   gap: var(--sc-space-3);
@@ -3847,6 +3854,26 @@ select.sc-input {
   align-items: center;
   gap: var(--sc-space-2);
   color: var(--sc-color-text-muted);
+}
+
+/* Who asked and who answers (ADR-0042): the two people side by side, an arrow from the one to
+   the other, so that the asker and the decider are never read as one. */
+.sc-decision-people,
+.sc-decision-for {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sc-space-1);
+  white-space: nowrap;
+}
+
+.sc-decision-arrow {
+  color: var(--sc-color-text-faint);
+  font-weight: var(--sc-weight-medium);
+}
+
+.sc-decision-row-answer {
+  color: var(--sc-color-text);
+  font-weight: var(--sc-weight-medium);
 }
 
 /* The record of the decisions: a row each, what was asked on the left and what was answered on

@@ -393,10 +393,11 @@ describe("decisions", () => {
   it("say whom a decision is for, take whom to address one to, and list a person's own (ADR-0042)", () => {
     const forBob = decision({ decider: bob });
     const card = renderToStaticMarkup(<DecisionCard decision={forBob} />);
-    expect(card).toMatch(/<\/time> for </);
+    expect(card).toContain("sc-decision-arrow");
+    expect(card).toContain("asked by Alice Example, for bob");
     expect(card).toContain("Waiting for bob.");
     const ownCard = renderToStaticMarkup(<DecisionCard decision={decision()} />);
-    expect(ownCard).not.toMatch(/<\/time> for </);
+    expect(ownCard).not.toContain("sc-decision-arrow");
     expect(ownCard).toContain("Waiting for Alice Example.");
     const form = renderToStaticMarkup(
       <DecisionForm deciders={[alice, bob]} me={alice} onSubmit={() => undefined} />,
@@ -409,27 +410,57 @@ describe("decisions", () => {
     const web = { key: "web", name: "The web app", color: null, symbol: null, icon: null };
     const mine = renderToStaticMarkup(
       <MyDecisions
-        items={[
-          { project: web, decision: decision() },
-          {
-            project: web,
-            decision: decision({
-              id: "0199c4d8-0000-7000-8000-000000000022",
-              answer: { option: "2", note: null, by: bob, at: "2026-10-10T10:00:00.000Z" },
-            }),
-          },
-        ]}
-        more
-        onMore={() => undefined}
+        addressed={{
+          items: [
+            { project: web, decision: decision() },
+            {
+              project: web,
+              decision: decision({
+                id: "0199c4d8-0000-7000-8000-000000000022",
+                answer: { option: "2", note: null, by: bob, at: "2026-10-10T10:00:00.000Z" },
+              }),
+            },
+          ],
+          more: true,
+          onMore: () => undefined,
+        }}
+        raised={{
+          items: [
+            {
+              project: web,
+              decision: decision({ id: "0199c4d8-0000-7000-8000-000000000023", decider: bob }),
+            },
+          ],
+        }}
         decisionHref={(key, id) => `/projects/${key}/decisions/${id}`}
+        onAnswer={() => undefined}
       />,
     );
     expect(mine).toContain("Waiting for you");
-    expect(mine).toContain("Answered");
+    expect(mine).toContain("Asked of others");
+    expect(mine).toContain("The record");
     expect(mine).toContain("The second");
+    // A decision waiting for the person is answered here; one asked of someone else says whom it waits for.
+    expect(mine).toContain('role="radiogroup"');
+    expect(mine).toContain("Waiting for bob.");
     expect(mine).toContain("Show more");
     expect(mine).toContain("/projects/web/decisions/0199c4d8-0000-7000-8000-000000000022");
+    expect(mine).toContain("/projects/web/decisions/0199c4d8-0000-7000-8000-000000000023");
     expect(mine).toContain("in The web app");
+    // Every row names who asked and who answers, the one before the arrow, the other after.
+    // One arrow per decision asked of someone else; none where the asker answers.
+    expect(mine.match(/sc-decision-arrow/g)?.length).toBe(1);
+    expect(mine).toContain("asked by Alice Example, for bob");
+    const nothing = renderToStaticMarkup(
+      <MyDecisions
+        addressed={{ items: [] }}
+        raised={{ items: [] }}
+        decisionHref={(key, id) => `/projects/${key}/decisions/${id}`}
+      />,
+    );
+    expect(nothing).toContain("Nothing waits for your answer.");
+    expect(nothing).toContain("You have asked nothing of others.");
+    expect(nothing).toContain("Nothing answered yet.");
   });
 
   it("list the waiting ones as cards with their options and a line of one's own, and the answered ones as the record, a row each", () => {
