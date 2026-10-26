@@ -1,5 +1,0 @@
----
-"@skillcdn/console": patch
----
-
-A phone's pages as one design. Every page's head is laid out the same way, the name over a word about it over the ways the page offers as a row of equal buttons, with one padding and radius for the panes. The board scrolls edge to edge, its columns nearly as wide as the window, and the tabs snap tab by tab; the board's filters stay on one line and scroll sideways. A task's head is stacked, its parent on one line and its ways as equal buttons, its facts one to a row. The month is clipped at its edge, its bars reach exactly over the narrower gap, "N more" on a day keeps to one line, and a day shows a dot per task in rows under its number, a task planned across days a dot of its category's colour on each of them, the day growing to hold them; the number covers the whole day, so that a finger anywhere on it lists the day's tasks. The roadmap's months read as the year over the month, a goal card's span of days stands on a line of its own, and the goal page says its progress once, under the bar. The workload table's headings wrap at spaces and its cells are tighter, and a skill's card is never wider than the window.
