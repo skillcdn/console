@@ -386,7 +386,10 @@ export function formatWork(work: RestWork): string {
       lines.push(`  ${project.key}  ${formatTaskLine(task)}`);
     }
   }
-  lines.push("", work.decisions.length === 0 ? "decisions waiting: none" : "decisions waiting:");
+  lines.push(
+    "",
+    work.decisions.length === 0 ? "decisions waiting for you: none" : "decisions waiting for you:",
+  );
   for (const { project, decision } of work.decisions) {
     lines.push(`  ${project.key}  ${formatDecisionLine(decision)}`);
   }
@@ -404,9 +407,13 @@ export function formatPersonWork(person: RestPerson, work: RestPersonWork): stri
   ].join("\n");
 }
 
+/** Whom a decision is for, where that is not the one who asked (ADR-0042). */
+const addressed = (decision: RestDecision): string =>
+  decision.decider.id === decision.raisedBy.id ? "" : `, for ${decision.decider.login}`;
+
 export function formatDecisionLine(decision: RestDecision): string {
   const state = decision.answer === null ? "waiting" : `answered ${decision.answer.option}`;
-  return `${decision.id}  ${state}  ${decision.question}  (asked by ${asker(decision)})`;
+  return `${decision.id}  ${state}  ${decision.question}  (asked by ${asker(decision)}${addressed(decision)})`;
 }
 
 /** The options, one a line; the person's own answer, when they wrote one, is the last and says so. */
@@ -423,7 +430,7 @@ export function formatOptions(decision: RestDecision): string {
 export function formatAnswer(decision: RestDecision): string {
   const { answer } = decision;
   if (answer === null) {
-    return "waits for a person.";
+    return `waits for ${decision.decider.login}.`;
   }
   const chosen = decision.options.find((option) => option.id === answer.option);
   const lines = [
@@ -438,7 +445,7 @@ export function formatAnswer(decision: RestDecision): string {
 export function formatDecision(decision: RestDecision): string {
   const lines = [
     `decision ${decision.id}: ${decision.question}`,
-    `asked by ${asker(decision)}${decision.taskNumber === null ? "" : `, about task #${decision.taskNumber}`}`,
+    `asked by ${asker(decision)}${addressed(decision)}${decision.taskNumber === null ? "" : `, about task #${decision.taskNumber}`}`,
   ];
   if (decision.body.trim().length > 0) {
     lines.push("", decision.body.trimEnd());

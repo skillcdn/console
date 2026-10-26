@@ -41,6 +41,7 @@ import {
   restMemberSchema,
   restMembersSchema,
   restMeSchema,
+  restMyDecisionsSchema,
   restPackConnectSchema,
   restPackConnectStartedSchema,
   restPeopleSchema,
@@ -2362,10 +2363,42 @@ describe("the schedule and the roadmap", () => {
     const order = work.tasks.map((item) => item.task.id);
     expect(order.indexOf(sooner.id)).toBeLessThan(order.indexOf(later.id));
     expect(order.indexOf(later.id)).toBeLessThan(order.indexOf(undated.id));
-    expect(
-      work.decisions.some((item) => item.decision.id === raised.id && item.project.key === "web"),
-    ).toBe(true);
+    // The decisions on a plate are those addressed to the person (ADR-0042): Bob's own is not Alice's.
+    expect(work.decisions.some((item) => item.decision.id === raised.id)).toBe(false);
     expect(work.decisions.every((item) => item.decision.answer === null)).toBe(true);
+    const forBob = restDecisionSchema.parse(
+      await (
+        await send(alice, "POST", `${IN}/decisions`, {
+          question: "On Bob's plate?",
+          options: [{ label: "Yes" }, { label: "No" }],
+          deciderId: bobId,
+        })
+      ).json(),
+    );
+    expect(forBob.decider.id).toBe(bobId);
+    expect(raised.decider.id).toBe(bobId);
+    const wrong = await send(alice, "POST", `${IN}/decisions`, {
+      question: "On nobody's plate?",
+      options: [{ label: "Yes" }, { label: "No" }],
+      deciderId: "0199c4d8-0000-7000-8000-0000000000de",
+    });
+    expect(wrong.status).toBe(400);
+    expect(await errorOf(wrong)).toBe("decision.invalid_decider");
+    const bobsOwn = restMyDecisionsSchema.parse(
+      await (await get(bob, REST_ROUTES.decisions)).json(),
+    );
+    expect(bobsOwn.items.map((item) => [item.project.key, item.decision.id])).toEqual(
+      expect.arrayContaining([
+        ["web", raised.id],
+        ["web", forBob.id],
+      ]),
+    );
+    expect(bobsOwn.items.every((item) => item.decision.decider.id === bobId)).toBe(true);
+    expect(bobsOwn.more).toBe(false);
+    const alicesOwn = restMyDecisionsSchema.parse(
+      await (await get(alice, REST_ROUTES.decisions)).json(),
+    );
+    expect(alicesOwn.items.some((item) => item.decision.id === forBob.id)).toBe(false);
     // Bob sees his own, and nothing of the docs project, which is not his to see.
     const bobWork = restWorkSchema.parse(await (await get(bob, REST_ROUTES.work)).json());
     expect(bobWork.tasks.map((item) => item.task.id)).toEqual([bobs.id]);

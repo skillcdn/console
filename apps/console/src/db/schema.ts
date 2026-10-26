@@ -626,6 +626,10 @@ export const decisions = pgTable(
     raisedById: uuid()
       .notNull()
       .references(() => people.id),
+    /** Who is to answer (ADR-0042): the raiser, unless another person of the project was named. */
+    deciderId: uuid()
+      .notNull()
+      .references(() => people.id),
     answeredById: uuid().references(() => people.id),
     /** The id of the chosen option. */
     answer: text(),
@@ -639,6 +643,7 @@ export const decisions = pgTable(
   },
   (table) => [
     index("decisions_project_open_idx").on(table.projectId, table.answeredAt),
+    index("decisions_decider_open_idx").on(table.deciderId, table.answeredAt),
     index("decisions_task_idx").on(table.taskId),
     index("decisions_run_idx").on(table.runId),
   ],

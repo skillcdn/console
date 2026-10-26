@@ -160,6 +160,7 @@ export function restDecision(decision: DecisionRecord): RestDecision {
     taskId: decision.taskId ?? null,
     taskNumber: decision.taskNumber ?? null,
     raisedBy: restPerson(decision.raisedBy),
+    decider: restPerson(decision.decider),
     run: decision.run === undefined ? null : { id: decision.run.id, agent: decision.run.agent },
     answer:
       decision.answer === undefined

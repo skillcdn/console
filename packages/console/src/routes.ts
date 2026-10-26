@@ -27,8 +27,10 @@ export const REST_ROUTES = {
   connect: "/api/v1/connect",
   /** The categories tasks are sorted into (ADR-0019): the workspace's vocabulary, kept by an administrator. */
   categories: "/api/v1/categories",
-  /** What is on the asker's plate across the projects they may see: their open tasks, and the decisions waiting. */
+  /** What is on the asker's plate across the projects they may see: their open tasks, and the decisions waiting for them. */
   work: "/api/v1/work",
+  /** The decisions addressed to the asker (ADR-0042) across the projects they may see: the waiting first, then the record. */
+  decisions: "/api/v1/decisions",
   /** The rules of the board (ADR-0023): the console's own until an administrator writes the organization's. */
   rules: "/api/v1/rules",
 } as const;

@@ -22,6 +22,7 @@ import {
   type RestDecisionInput,
   type RestDecisionPatch,
   type RestEvent,
+  type RestMyDecisions,
   type RestProject,
   type RestProjectInput,
   type RestProjectPatch,
@@ -45,6 +46,7 @@ import { DecisionForm } from "./components/decision-form.js";
 import { DecisionCard, DecisionList, type DecisionListProps } from "./components/decision-list.js";
 import { EventFeed, type EventFeedProps } from "./components/event-feed.js";
 import { GoalForm, GoalList, type GoalListProps, GoalView, goalMonth } from "./components/goals.js";
+import { MyDecisions } from "./components/my-decisions.js";
 import { PackTokenWays } from "./components/pack-token.js";
 import { PAGE_SIZE } from "./components/paged.js";
 import { ListingForm, PeopleList, type PeopleListProps } from "./components/people.js";
@@ -1158,6 +1160,8 @@ function ProjectPage(props: {
         <section className="sc-panel sc-panel-form" aria-label={words.decisions.raiseAria}>
           <DecisionForm
             findTasks={data.actions.findTasks}
+            deciders={data.members.map((member) => member.person)}
+            me={data.me?.person ?? undefined}
             busy={busy}
             onSubmit={(input: RestDecisionInput) =>
               void act(async () => {
@@ -2000,6 +2004,74 @@ function PlatePage(props: {
 }
 
 /** What is on the person's own plate, across their projects. */
+/** How many of a person's decisions are read at a time. */
+const MY_DECISIONS_PAGE = 50;
+
+/** The decisions addressed to the person (ADR-0042): the waiting first, then the record, more on request. */
+function MyDecisionsPage(props: { readonly data: ConsoleData }) {
+  const words = useWords();
+  const { myDecisions } = props.data.actions;
+  const { couldNotLoad } = words.myDecisions;
+  const [items, setItems] = useState<RestMyDecisions["items"] | undefined>(undefined);
+  const [more, setMore] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | undefined>(undefined);
+  const read = useCallback(
+    async (offset: number, signal?: AbortSignal) => {
+      setBusy(true);
+      try {
+        const page = await myDecisions({ limit: MY_DECISIONS_PAGE, offset }, signal);
+        if (signal?.aborted === true) {
+          return;
+        }
+        setItems((before) => (offset === 0 ? page.items : [...(before ?? []), ...page.items]));
+        setMore(page.more);
+      } catch (failure: unknown) {
+        if (signal?.aborted !== true) {
+          setProblem(errorWords(failure, couldNotLoad));
+        }
+      } finally {
+        if (signal?.aborted !== true) {
+          setBusy(false);
+        }
+      }
+    },
+    [myDecisions, couldNotLoad],
+  );
+  useEffect(() => {
+    const controller = new AbortController();
+    setItems(undefined);
+    setProblem(undefined);
+    void read(0, controller.signal);
+    return () => controller.abort();
+  }, [read]);
+  return (
+    <>
+      <div className="sc-page-head">
+        <h1 className="sc-page-title">{words.myDecisions.title}</h1>
+      </div>
+      {problem !== undefined && <Callout tone="danger">{problem}</Callout>}
+      {items === undefined ? (
+        problem === undefined && (
+          <div className="sc-loading">
+            <Spinner label={words.myDecisions.loading} />
+          </div>
+        )
+      ) : items.length === 0 ? (
+        <EmptyState title={words.myDecisions.empty.title} body={words.myDecisions.empty.body} />
+      ) : (
+        <MyDecisions
+          items={items}
+          more={more}
+          busy={busy}
+          onMore={() => void read(items.length)}
+          decisionHref={decisionHref}
+        />
+      )}
+    </>
+  );
+}
+
 function WorkPage(props: {
   readonly data: ConsoleData;
   readonly components: ConsoleComponents;
@@ -2065,6 +2137,9 @@ function WorkspacePage(props: {
 
   if (route.name === "work") {
     return <WorkPage data={data} components={components} week={route.week} />;
+  }
+  if (route.name === "my-decisions") {
+    return <MyDecisionsPage data={data} />;
   }
   if (route.name === "person-work") {
     return <PersonWorkPage id={route.id} data={data} components={components} week={route.week} />;
@@ -2309,6 +2384,11 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
           current: route.name === "projects" || route.name === "new-project",
         },
         { href: PATHS.work, label: words.nav.work, current: route.name === "work" },
+        {
+          href: PATHS.decisions,
+          label: words.nav.myDecisions,
+          current: route.name === "my-decisions",
+        },
         {
           href: PATHS.people,
           label: words.nav.people,

@@ -15,6 +15,8 @@ import {
   DecisionError,
   getDecision,
   listDecisions,
+  listDecisionsFor,
+  listWaitingDecisionsFor,
   raiseDecision,
 } from "./queries/decisions.js";
 import { EVENTS_CHANNEL, latestEventId, listEventsAfter, type Scope } from "./queries/events.js";
@@ -461,6 +463,57 @@ describe("tasks", () => {
 });
 
 describe("decisions", () => {
+  it("are addressed to the raiser unless another of the project is named, and listed for whom they are for (ADR-0042)", async () => {
+    const own = await raiseDecision(database, {
+      scope,
+      actor: alice,
+      decision: { question: "Mine to answer?", options: ["Yes", "No"] },
+      now: minutes(30),
+    });
+    expect(own.decider.id).toBe(alice.id);
+    const forBob = await raiseDecision(database, {
+      scope,
+      actor: alice,
+      decision: { question: "Bob's to answer?", options: ["Yes", "No"], deciderId: bob.id },
+      now: minutes(31),
+    });
+    expect(forBob.decider.id).toBe(bob.id);
+    expect(forBob.raisedBy.id).toBe(alice.id);
+    await expect(
+      raiseDecision(database, {
+        scope,
+        actor: alice,
+        decision: {
+          question: "Nobody's?",
+          options: ["a", "b"],
+          deciderId: "0199c4d8-0000-7000-8000-0000000000de",
+        },
+        now: minutes(32),
+      }),
+    ).rejects.toMatchObject({ code: "decision.invalid_decider" });
+    const bobs = await listWaitingDecisionsFor(database, workspaceId, bob, 10);
+    expect(bobs.map((item) => item.id)).toContain(forBob.id);
+    expect(bobs.map((item) => item.id)).not.toContain(own.id);
+    const alices = await listDecisionsFor(database, workspaceId, alice, { limit: 10 });
+    expect(alices.items.map((item) => item.id)).toContain(own.id);
+    expect(alices.items.map((item) => item.id)).not.toContain(forBob.id);
+    expect(alices.more).toBe(false);
+    // Anyone of the project may still answer: the answered one leaves what waits for Bob.
+    await answerDecision(database, {
+      scope,
+      actor: alice,
+      decisionId: forBob.id,
+      option: "1",
+      own: undefined,
+      note: undefined,
+      now: minutes(33),
+    });
+    const record = await listDecisionsFor(database, workspaceId, bob, { limit: 10 });
+    expect(record.items.find((item) => item.id === forBob.id)?.answer?.by.id).toBe(alice.id);
+    const waiting = await listDecisionsFor(database, workspaceId, bob, { limit: 10, open: true });
+    expect(waiting.items.map((item) => item.id)).not.toContain(forBob.id);
+  });
+
   it("are raised with numbered options, about a task or not, and counted on the task", async () => {
     const task = await createTask(database, {
       scope,

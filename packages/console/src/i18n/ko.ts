@@ -93,6 +93,7 @@ export const ko: Messages = {
   nav: {
     projects: "프로젝트",
     work: "내 작업",
+    myDecisions: "내 결정",
     people: "사람들",
     agents: "에이전트",
     board: "보드",
@@ -343,6 +344,8 @@ export const ko: Messages = {
     record: "기록",
     openRecord: "열기",
     waitingForPerson: "사람을 기다리는 중입니다.",
+    waitingFor: (name) => `${name}의 답을 기다리는 중입니다.`,
+    forPerson: "답할 사람:",
     options: "선택지",
     notePlaceholder: "덧붙일 말이 있다면",
     own: "직접 입력",
@@ -365,11 +368,28 @@ export const ko: Messages = {
       contextPlaceholder: "답하려면 알아야 할 것, Markdown으로.",
       about: "관련 작업",
       noTask: "특정 작업 없음",
+      decider: "결정할 사람",
+      deciderPlaceholder: "지정하지 않으면 본인",
+      me: "(나)",
       options: "선택지",
       option: (n) => `선택지 ${n}`,
       addOption: "선택지 추가",
       raise: "결정 요청하기",
     },
+  },
+
+  myDecisions: {
+    title: "내 결정",
+    loading: "내 결정을 불러오는 중",
+    couldNotLoad: "내 결정을 불러올 수 없습니다.",
+    empty: {
+      title: "내가 답할 결정이 없습니다",
+      body: "내가, 내 에이전트가, 또는 나를 지정한 사람이 올린 결정이 여기에 모입니다.",
+    },
+    waiting: "내 답을 기다리는 중",
+    noneWaiting: "내 답을 기다리는 결정이 없습니다.",
+    answered: "답변됨",
+    more: "더 보기",
   },
 
   calendar: {
@@ -479,8 +499,8 @@ export const ko: Messages = {
     thisWeek: "이번 주 마감",
     later: "그 뒤",
     noDay: "날짜 없음",
-    decisions: "사람을 기다리는 결정",
-    noDecisions: "기다리는 결정이 없습니다.",
+    decisions: "내 답을 기다리는 결정",
+    noDecisions: "내 답을 기다리는 결정이 없습니다.",
     inProject: (project) => `${project}에서`,
   },
 

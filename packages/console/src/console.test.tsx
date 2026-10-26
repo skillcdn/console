@@ -50,6 +50,7 @@ describe("matchRoute", () => {
     expect(matchRoute("/work", "?week=2026-10-12")).toEqual({ name: "work", week: "2026-10-12" });
     expect(matchRoute("/work", "?week=next")).toEqual({ name: "not-found" });
     expect(workHref()).toBe("/work");
+    expect(matchRoute("/decisions")).toEqual({ name: "my-decisions" });
     expect(workHref("2026-10-12")).toBe("/work?week=2026-10-12");
     expect(matchRoute("/categories")).toEqual({ name: "categories" });
     expect(matchRoute("/projects/web/roadmap")).toEqual({ name: "roadmap", project: "web" });
@@ -477,6 +478,7 @@ describe("createConsole", () => {
     giveUpToken: never,
     work: never,
     personWork: never,
+    myDecisions: never,
   };
 
   it("assembles an app from the default components, and the ones a team replaces", () => {

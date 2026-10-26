@@ -12,7 +12,7 @@ import {
 import { useWords } from "../i18n/index.js";
 import { Markdown } from "./markdown.js";
 import { Pager, pageOf, RECORD_PAGE_SIZE } from "./paged.js";
-import { Badge, Button, cx, PersonChip, Time } from "./ui.js";
+import { Badge, Button, cx, PersonChip, personName, Time } from "./ui.js";
 
 // The decisions: the ones that wait, each a card with the way to answer it, since they are what
 // a person came for; and the ones answered, the record, a row each, since they are read back
@@ -36,7 +36,10 @@ export interface DecisionCardProps {
   readonly busy?: boolean | undefined;
 }
 
-/** Who asked, and when: the person, through their agent when a run asked. */
+/**
+ * Who asked, and when: the person, through their agent when a run asked; and whom the decision
+ * is for, where that is someone else (ADR-0042).
+ */
 function Asked(props: { readonly decision: RestDecision; readonly day?: boolean }) {
   const words = useWords();
   const { decision } = props;
@@ -47,6 +50,12 @@ function Asked(props: { readonly decision: RestDecision; readonly day?: boolean 
         ? words.decisions.asked
         : words.decisions.askedThrough(agentLabel(decision.run.agent))}{" "}
       <Time iso={decision.createdAt} precision={props.day === true ? "day" : "minute"} />
+      {decision.decider.id !== decision.raisedBy.id && (
+        <>
+          {" "}
+          {words.decisions.forPerson} <PersonChip person={decision.decider} />
+        </>
+      )}
     </>
   );
 }
@@ -288,7 +297,9 @@ export function DecisionCard(props: DecisionCardProps) {
           </p>
         </div>
       ) : props.onAnswer === undefined ? (
-        <p className="sc-decision-waiting">{words.decisions.waitingForPerson}</p>
+        <p className="sc-decision-waiting">
+          {words.decisions.waitingFor(personName(decision.decider))}
+        </p>
       ) : (
         <AnswerForm decision={decision} onAnswer={props.onAnswer} busy={props.busy} />
       )}

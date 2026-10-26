@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useMemo, useState } from "react";
 import {
   MAX_BODY_LENGTH,
   MAX_OPTION_LABEL_LENGTH,
@@ -6,26 +6,49 @@ import {
   MAX_QUESTION_LENGTH,
   MIN_OPTIONS,
   type RestDecisionInput,
+  type RestPerson,
   type RestTask,
 } from "../api.js";
 import { useWords } from "../i18n/index.js";
-import { Picker } from "./picker.js";
+import { Picker, type PickerSearch } from "./picker.js";
 import { type TaskSearch, taskLabel } from "./task-form.js";
-import { Button } from "./ui.js";
+import { Button, PersonChip, personName } from "./ui.js";
 
-// Raising a decision: the question, what a person needs to know, and the options to choose from.
-// The task it is about is the page's, when raised from a task; otherwise it is found by searching
-// the board a page at a time (ADR-0037), never picked from the board whole.
+// Raising a decision: the question, what a person needs to know, the options to choose from,
+// and who is to answer (ADR-0042): the person raising it, unless they name another of the
+// project. The task it is about is the page's, when raised from a task; otherwise it is found
+// by searching the board a page at a time (ADR-0037), never picked from the board whole.
 
 export interface DecisionFormProps {
   /** The task it is about from the start, when raised from a task's page; the field is not shown then. */
   readonly taskId?: string | undefined;
   /** What words find among the tasks of the project, a page at a time; left out, the decision is about no task in particular. */
   readonly findTasks?: TaskSearch | undefined;
+  /** Who may be named to answer: the people of the project; left out, the field is not shown and the raiser answers. */
+  readonly deciders?: readonly RestPerson[] | undefined;
+  /** Whoever raises it: who answers unless another is named. */
+  readonly me?: RestPerson | undefined;
   readonly busy?: boolean | undefined;
   readonly error?: string | undefined;
   readonly onSubmit: (input: RestDecisionInput) => void;
   readonly onCancel?: (() => void) | undefined;
+}
+
+/** The people of the project found by the words typed, a page at a time, as a picker searches. */
+export function peopleSearch(people: readonly RestPerson[]): PickerSearch<RestPerson> {
+  return async (query, page) => {
+    const words = query.trim().toLowerCase();
+    const found = people.filter(
+      (person) =>
+        words.length === 0 ||
+        personName(person).toLowerCase().includes(words) ||
+        person.login.toLowerCase().includes(words),
+    );
+    return {
+      items: found.slice(page.offset, page.offset + page.limit),
+      more: found.length > page.offset + page.limit,
+    };
+  };
 }
 
 export function DecisionForm(props: DecisionFormProps) {
@@ -35,6 +58,8 @@ export function DecisionForm(props: DecisionFormProps) {
   const [body, setBody] = useState("");
   const [about, setAbout] = useState<RestTask | undefined>(undefined);
   const [options, setOptions] = useState<readonly string[]>(["", ""]);
+  const [decider, setDecider] = useState<RestPerson | undefined>(props.me);
+  const findDeciders = useMemo(() => peopleSearch(props.deciders ?? []), [props.deciders]);
 
   const labels = options.map((option) => option.trim()).filter((option) => option.length > 0);
   const ready = question.trim().length > 0 && labels.length >= MIN_OPTIONS;
@@ -46,6 +71,7 @@ export function DecisionForm(props: DecisionFormProps) {
       body,
       options: labels.map((label) => ({ label })),
       taskId: props.taskId ?? about?.id ?? null,
+      ...(decider === undefined || decider.id === props.me?.id ? {} : { deciderId: decider.id }),
     });
   };
 
@@ -84,6 +110,26 @@ export function DecisionForm(props: DecisionFormProps) {
             placeholder={form.noTask}
             disabled={props.busy}
             onChange={setAbout}
+          />
+        </div>
+      )}
+      {props.deciders !== undefined && (
+        <div className="sc-field">
+          <span className="sc-field-label">{form.decider}</span>
+          <Picker
+            value={decider}
+            search={findDeciders}
+            keyOf={(person) => person.id}
+            render={(person) => (
+              <>
+                <PersonChip person={person} size="sm" />
+                {person.id === props.me?.id && <span className="sc-muted"> {form.me}</span>}
+              </>
+            )}
+            label={form.decider}
+            placeholder={form.deciderPlaceholder}
+            disabled={props.busy}
+            onChange={(person) => setDecider(person ?? props.me)}
           />
         </div>
       )}

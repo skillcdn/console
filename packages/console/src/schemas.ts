@@ -652,6 +652,8 @@ export const restDecisionSchema = z.object({
   /** The task's number, when there is a task, or `null`. */
   taskNumber: z.nullable(z.int()),
   raisedBy: restPersonSchema,
+  /** Who is to answer (ADR-0042): the raiser, unless another person of the project was named. */
+  decider: restPersonSchema,
   /** The run that raised it, as the agent asked, or `null` when a person did. */
   run: z.nullable(z.object({ id: uuid, agent: z.string() })),
   /** The answer, with who gave it and when; `null` while the decision waits. */
@@ -690,9 +692,9 @@ const projectRef = z.object({
 
 /**
  * `GET /api/v1/work`: what is on the asker's plate across the projects they may see (ADR-0019):
- * the open tasks they work on, and the decisions that wait for a person, each with its
- * project; and, for the week on the plate, `closed`, the tasks they work on that are done
- * or dropped and not yet put away. Left out by a console older than it.
+ * the open tasks they work on, and the decisions that wait for their answer (ADR-0042), each
+ * with its project; and, for the week on the plate, `closed`, the tasks they work on that are
+ * done or dropped and not yet put away. Left out by a console older than it.
  */
 export const restWorkSchema = z.object({
   tasks: z.array(z.object({ project: projectRef, task: restTaskSchema })),
@@ -700,6 +702,17 @@ export const restWorkSchema = z.object({
   decisions: z.array(z.object({ project: projectRef, decision: restDecisionSchema })),
 });
 export type RestWork = z.infer<typeof restWorkSchema>;
+
+/**
+ * `GET /api/v1/decisions`: a page of the decisions addressed to the asker (ADR-0042) across the
+ * projects they may see, each with its project: the ones that wait first, oldest first among
+ * them, then the answered, newest first; and whether there is more.
+ */
+export const restMyDecisionsSchema = z.object({
+  items: z.array(z.object({ project: projectRef, decision: restDecisionSchema })),
+  more: z.boolean(),
+});
+export type RestMyDecisions = z.infer<typeof restMyDecisionsSchema>;
 
 /**
  * What `GET /api/v1/people/<id>/work` answers: another person's open tasks, and their closed
@@ -722,6 +735,8 @@ export const restDecisionInputSchema = z.object({
   taskId: z.optional(z.nullable(uuid)),
   /** The run that asks, when an agent does: the decision is about its task, and it waits for the answer. */
   runId: z.optional(z.nullable(uuid)),
+  /** Who is to answer (ADR-0042): a person who may work in the project; the asker when left out. */
+  deciderId: z.optional(uuid),
 });
 export type RestDecisionInput = z.infer<typeof restDecisionInputSchema>;
 

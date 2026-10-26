@@ -44,6 +44,7 @@ import {
   type RestMemberPatch,
   type RestMembers,
   type RestMePatch,
+  type RestMyDecisions,
   type RestPackConnect,
   type RestPackConnectStarted,
   type RestPackTokenInput,
@@ -101,6 +102,7 @@ import {
   restMemberSchema,
   restMembersSchema,
   restMeSchema,
+  restMyDecisionsSchema,
   restPackConnectSchema,
   restPackConnectStartedSchema,
   restPeopleSchema,
@@ -449,8 +451,13 @@ export interface ConsoleClient {
   updateCategory(key: string, patch: RestCategoryPatch): Promise<RestCategory>;
   /** Removes a category no task uses; for an administrator signed in. */
   removeCategory(key: string): Promise<void>;
-  /** What is on the asker's plate across the projects they may see: their open tasks, and the decisions waiting. */
+  /** What is on the asker's plate across the projects they may see: their open tasks, and the decisions waiting for them. */
   work(signal?: AbortSignal): Promise<RestWork>;
+  /** The decisions addressed to the asker (ADR-0042) across the projects they may see: a page, the waiting first; or only those. */
+  myDecisions(
+    filter?: { readonly open?: boolean } & Page,
+    signal?: AbortSignal,
+  ): Promise<RestMyDecisions>;
   /** Another person's plate, within what the asker may see: for an administrator, or an owner of a project they are in. */
   personWork(personId: string, signal?: AbortSignal): Promise<RestPersonWork>;
   /** The tokens of whoever asks. */
@@ -961,6 +968,18 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
     removeCategory: (key) => request("DELETE", `${base}${categoryPath(key)}`, undefined, undefined),
     work: (signal) =>
       request("GET", `${base}${REST_ROUTES.work}`, undefined, restWorkSchema, signal),
+    myDecisions: (filter = {}, signal) =>
+      request(
+        "GET",
+        withQuery(REST_ROUTES.decisions, {
+          open: flag(filter.open),
+          limit: number(filter.limit),
+          offset: number(filter.offset),
+        }),
+        undefined,
+        restMyDecisionsSchema,
+        signal,
+      ),
     personWork: (personId, signal) =>
       request("GET", `${base}${personWorkPath(personId)}`, undefined, restPersonWorkSchema, signal),
     tokens: (signal) =>

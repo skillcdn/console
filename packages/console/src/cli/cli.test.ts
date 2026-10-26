@@ -87,6 +87,7 @@ const DECISION = {
   taskId: TASK.id,
   taskNumber: TASK.number,
   raisedBy: PERSON,
+  decider: PERSON,
   run: { id: RUN.id, agent: "Claude Code" },
   answer: null,
   outcome: null,
@@ -1223,6 +1224,60 @@ describe("the console command", () => {
 
     const few = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["ask", "Alone?", "--option", "a"], few.io)).toBe(EXIT.usage);
+
+    // Addressed to another person of the project (ADR-0042): the login is looked up, the id sent.
+    const BOB = {
+      ...PERSON,
+      id: "0199c4d8-0000-7000-8000-000000000002",
+      login: "bob",
+      name: "Bob",
+    };
+    const addressed = fakeConsole({
+      [OPEN_RUNS]: { body: { more: false, items: [RUN] } },
+      "GET /api/v1/people?login=bob": { body: { items: [BOB], listed: [], organization: null } },
+      [`POST ${IN}/decisions`]: { status: 201, body: { ...DECISION, decider: BOB } },
+      [`GET ${IN}/decisions/${DECISION.id}?wait=50`]: { body: { ...ANSWERED, decider: BOB } },
+    });
+    const a = harness({ fetch: addressed.fetch, env: SIGNED_IN });
+    expect(
+      await runCli(["ask", "Which?", "--option", "a", "--option", "b", "--to", "bob"], a.io),
+    ).toBe(EXIT.ok);
+    expect(addressed.calls.find((call) => call.key === `POST ${IN}/decisions`)?.body).toEqual({
+      question: "Which?",
+      options: [{ label: "a" }, { label: "b" }],
+      runId: RUN.id,
+      deciderId: BOB.id,
+    });
+    expect(a.out()).toContain(`the run waits for ${BOB.login}.`);
+    const nobody = harness({ fetch: addressed.fetch, env: SIGNED_IN });
+    expect(
+      await runCli(["ask", "Which?", "--option", "a", "--option", "b", "--to", "none"], nobody.io),
+    ).toBe(EXIT.usage);
+  });
+
+  it("lists one's own decisions across the projects with --mine, the waiting first (ADR-0042)", async () => {
+    const web = { key: "web", name: "The web app", color: null, symbol: null, icon: null };
+    const BOB = {
+      ...PERSON,
+      id: "0199c4d8-0000-7000-8000-000000000002",
+      login: "bob",
+      name: "Bob",
+    };
+    const { fetch, calls } = fakeConsole({
+      "GET /api/v1/decisions?limit=50&offset=0": {
+        body: { items: [{ project: web, decision: { ...DECISION, decider: BOB } }], more: false },
+      },
+      "GET /api/v1/decisions?open=true&limit=50&offset=0": { body: { items: [], more: false } },
+    });
+    const h = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["decisions", "--mine"], h.io)).toBe(EXIT.ok);
+    expect(h.out()).toContain(`web  ${DECISION.id}  waiting  ${DECISION.question}`);
+    expect(h.out()).toContain(`for ${BOB.login})`);
+    const open = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["decisions", "--mine", "--open"], open.io)).toBe(EXIT.ok);
+    expect(open.out()).toContain("No decisions of yours.");
+    // Needs no project: nothing of the project's was asked for.
+    expect(calls.every((call) => !call.key.includes("/projects/"))).toBe(true);
   });
 
   it("waits for a decision for as long as it is told, a request at a time", async () => {
@@ -1242,7 +1297,7 @@ describe("the console command", () => {
     ]);
     const shown = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["decision", DECISION.id], shown.io)).toBe(EXIT.ok);
-    expect(shown.out()).toContain("waits for a person.");
+    expect(shown.out()).toContain(`waits for ${PERSON.login}.`);
   });
 
   it("ends a run as finished, failed or abandoned", async () => {
@@ -1666,7 +1721,7 @@ describe("the plan on the command line", () => {
     expect(await runCli(["work"], plate.io)).toBe(EXIT.ok);
     expect(plate.out()).toContain("tasks you work on:");
     expect(plate.out()).toContain("  web  #7  ready  high  Fix the parser");
-    expect(plate.out()).toContain("decisions waiting: none");
+    expect(plate.out()).toContain("decisions waiting for you: none");
     // What was closed is for the week on the plate's page: the words keep to the open tasks, the JSON carries it.
     expect(plate.out()).not.toContain("#6");
     const asJson = harness({ fetch, env: { CONSOLE_URL: ORIGIN, CONSOLE_TOKEN: "cns_t_secret" } });

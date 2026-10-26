@@ -1,0 +1,5 @@
+---
+"@skillcdn/console": patch
+---
+
+A decision is addressed to a person (ADR-0042): whoever raises it, or the person an agent asks for, unless another person of the project is named, and the decision carries them as `decider`. My decisions, a page beside My work (`/decisions`), lists the decisions addressed to the person across their projects, the ones that wait first and then the answered as the record, a page at a time (`MyDecisions`, `client.myDecisions`); My work's decisions are those waiting for the person's own answer. `DecisionForm` takes `deciders`, the people who may be named, found by typing, and `me`, the default; a decision card says whom it is for where that is not the one who asked, and a waiting decision says whom it waits for. `console ask --to <login|me>` names the decider and `console decisions --mine` lists one's own across the projects; `console work` says the decisions waiting for you. The REST API takes `deciderId` on a decision raised (`decision.invalid_decider` for a person who may not work in the project) and answers `GET /api/v1/decisions?open=&limit=&offset=`.

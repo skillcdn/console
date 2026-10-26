@@ -35,6 +35,7 @@ import {
   type RestEvents,
   type RestGoals,
   type RestMembers,
+  type RestMyDecisions,
   type RestPackConnect,
   type RestPackConnectStarted,
   type RestPeople,
@@ -130,6 +131,7 @@ import {
   type DecisionRecord,
   getDecision,
   listDecisions,
+  listDecisionsFor,
   listWaitingDecisionsFor,
   raiseDecision,
   updateDecision,
@@ -397,6 +399,10 @@ const tasksQuery = z.object({
 const decisionsQuery = z.object({
   open: z.enum(["true", "false"]).optional(),
   task: z.string().regex(UUID).optional(),
+  ...page,
+});
+const myDecisionsQuery = z.object({
+  open: z.enum(["true", "false"]).optional(),
   ...page,
 });
 const goalsQuery = z.object({
@@ -1318,6 +1324,36 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
   // What is on the asker's plate, across the projects they may see: their open tasks, what of
   // theirs was done or dropped and is not put away yet, for the week on the plate, and the
   // decisions waiting for a person. Each with its project, for the page to say and link.
+  // The decisions addressed to the asker (ADR-0042) across the projects they may see: a page,
+  // the waiting first, each with its project, for the person's own page of them.
+  app.get(REST_ROUTES.decisions, async (c) => {
+    const query = myDecisionsQuery.safeParse(c.req.query());
+    if (!query.success) {
+      return invalid(c, firstProblem(query));
+    }
+    const person = await asking(c);
+    if (person instanceof Response) {
+      return person;
+    }
+    const [projects, page] = await Promise.all([
+      listProjectsFor(database, person.workspaceId, person),
+      listDecisionsFor(database, person.workspaceId, person, {
+        open: query.data.open === undefined ? undefined : query.data.open === "true",
+        limit: query.data.limit,
+        offset: query.data.offset,
+      }),
+    ]);
+    const projectOf = projectRefsOf(projects);
+    const body: RestMyDecisions = {
+      items: page.items.flatMap((decision) => {
+        const project = projectOf(decision.projectId);
+        return project === undefined ? [] : [{ project, decision: restDecision(decision) }];
+      }),
+      more: page.more,
+    };
+    return c.json(body);
+  });
+
   app.get(REST_ROUTES.work, async (c) => {
     const person = await asking(c);
     if (person instanceof Response) {
@@ -2163,6 +2199,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
           // Raised from a run, the decision is about the run's task and nothing else.
           taskId: fromRun ? undefined : input.taskId,
           runId: fromRun ? (input.runId ?? undefined) : undefined,
+          deciderId: input.deciderId,
         },
         now: clock.now(),
       });

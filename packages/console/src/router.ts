@@ -105,6 +105,8 @@ export type Route =
   /** What is on the person's plate across their projects. */
   /** What is on the person's plate: a day of the week shown at the top, or today's when the address names none. */
   | { readonly name: "work"; readonly week: string | undefined }
+  /** The decisions addressed to the person (ADR-0042), across the projects they may see. */
+  | { readonly name: "my-decisions" }
   /** The categories tasks are sorted into; an administrator keeps them here. */
   | { readonly name: "categories" }
   /** Where a person approves an agent's connection, by the code it showed, or types one. */
@@ -141,6 +143,8 @@ export const PATHS = {
   newProject: "/projects/new",
   /** What is on the person's plate, across the projects they may see. */
   work: "/work",
+  /** The decisions addressed to the person (ADR-0042), across the projects they may see. */
+  decisions: "/decisions",
   people: "/people",
   /** The form where an administrator lets someone in by login. */
   newListing: "/people/new",
@@ -245,6 +249,9 @@ export function matchRoute(pathname: string, search = ""): Route {
   if (path === PATHS.work) {
     const shown = weekShown(params);
     return shown === undefined ? NOT_FOUND : { name: "work", ...shown };
+  }
+  if (path === PATHS.decisions) {
+    return { name: "my-decisions" };
   }
   if (path === PATHS.people) {
     return { name: "people" };

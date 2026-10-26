@@ -190,6 +190,13 @@
       "when": 1792977523993,
       "tag": "0026_task_assignee_dropped",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1792981728376,
+      "tag": "0027_decision_decider",
+      "breakpoints": true
     }
   ]
 }

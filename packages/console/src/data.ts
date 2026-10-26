@@ -32,6 +32,7 @@ import {
   type RestMemberInput,
   type RestMemberPatch,
   type RestMePatch,
+  type RestMyDecisions,
   type RestOrganization,
   type RestPackConnect,
   type RestPackConnectStarted,
@@ -129,6 +130,11 @@ export interface ConsoleActions {
   updateGoal(id: string, patch: RestGoalPatch): Promise<RestGoal>;
   /** What is on the person's plate across their projects, read when the page asks. */
   work(signal?: AbortSignal): Promise<RestWork>;
+  /** The decisions addressed to the person (ADR-0042) across their projects, a page at a time, read when the page asks. */
+  myDecisions(
+    filter: { readonly open?: boolean; readonly limit: number; readonly offset: number },
+    signal?: AbortSignal,
+  ): Promise<RestMyDecisions>;
   /** The categories tasks are sorted into: kept by an administrator. */
   createCategory(input: RestCategoryInput): Promise<RestCategory>;
   updateCategory(key: string, patch: RestCategoryPatch): Promise<RestCategory>;
@@ -679,6 +685,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
         return goal;
       },
       work: (signal) => client.work(signal),
+      myDecisions: (filter, signal) => client.myDecisions(filter, signal),
       async createCategory(input) {
         const category = await client.createCategory(input);
         setCategories((await client.categories()).items);

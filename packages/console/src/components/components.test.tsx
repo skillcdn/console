@@ -38,6 +38,7 @@ import { DocumentForm, DocumentList, DocumentView, FolderView } from "./document
 import { describeEvent, EventFeed } from "./event-feed.js";
 import { GoalForm, GoalList, GoalView, goalMonth } from "./goals.js";
 import { Markdown } from "./markdown.js";
+import { MyDecisions } from "./my-decisions.js";
 import { PackConnect } from "./pack-connect.js";
 import { ListingForm, PeopleList } from "./people.js";
 import { opensAbove, Picker } from "./picker.js";
@@ -169,6 +170,7 @@ const decision = (overrides: Partial<RestDecision> = {}): RestDecision => ({
   taskId: "0199c4d8-0000-7000-8000-000000000010",
   taskNumber: 1,
   raisedBy: alice,
+  decider: alice,
   run: null,
   answer: null,
   outcome: null,
@@ -388,6 +390,48 @@ describe("one task", () => {
 });
 
 describe("decisions", () => {
+  it("say whom a decision is for, take whom to address one to, and list a person's own (ADR-0042)", () => {
+    const forBob = decision({ decider: bob });
+    const card = renderToStaticMarkup(<DecisionCard decision={forBob} />);
+    expect(card).toMatch(/<\/time> for </);
+    expect(card).toContain("Waiting for bob.");
+    const ownCard = renderToStaticMarkup(<DecisionCard decision={decision()} />);
+    expect(ownCard).not.toMatch(/<\/time> for </);
+    expect(ownCard).toContain("Waiting for Alice Example.");
+    const form = renderToStaticMarkup(
+      <DecisionForm deciders={[alice, bob]} me={alice} onSubmit={() => undefined} />,
+    );
+    expect(form).toContain("Who decides");
+    expect(form).toContain("(you)");
+    expect(renderToStaticMarkup(<DecisionForm onSubmit={() => undefined} />)).not.toContain(
+      "Who decides",
+    );
+    const web = { key: "web", name: "The web app", color: null, symbol: null, icon: null };
+    const mine = renderToStaticMarkup(
+      <MyDecisions
+        items={[
+          { project: web, decision: decision() },
+          {
+            project: web,
+            decision: decision({
+              id: "0199c4d8-0000-7000-8000-000000000022",
+              answer: { option: "2", note: null, by: bob, at: "2026-10-10T10:00:00.000Z" },
+            }),
+          },
+        ]}
+        more
+        onMore={() => undefined}
+        decisionHref={(key, id) => `/projects/${key}/decisions/${id}`}
+      />,
+    );
+    expect(mine).toContain("Waiting for you");
+    expect(mine).toContain("Answered");
+    expect(mine).toContain("The second");
+    expect(mine).toContain("Show more");
+    expect(mine).toContain("/projects/web/decisions/0199c4d8-0000-7000-8000-000000000022");
+    expect(mine).toContain("in The web app");
+  });
+
   it("list the waiting ones as cards with their options and a line of one's own, and the answered ones as the record, a row each", () => {
     const answered = decision({
       id: "0199c4d8-0000-7000-8000-000000000021",
@@ -2112,7 +2156,7 @@ describe("a person's work", () => {
         weekHref={(day) => `/work?week=${day}`}
       />,
     );
-    expect(quiet).toContain("No decision waits.");
+    expect(quiet).toContain("No decision waits for your answer.");
     expect(quiet).toContain("Nothing is planned this week.");
     expect(quiet).not.toContain('aria-label="Overdue"');
     // Nothing open, but something closed this week: the week shows it, and the lists stay away.
@@ -2139,9 +2183,9 @@ describe("a person's work", () => {
       />,
     );
     expect(theirs).toContain('aria-label="Overdue"');
-    expect(theirs).not.toContain('aria-label="Decisions waiting for a person"');
-    expect(theirs).not.toContain("No decision waits.");
-    expect(quiet).toContain('aria-label="Decisions waiting for a person"');
+    expect(theirs).not.toContain('aria-label="Decisions waiting for you"');
+    expect(theirs).not.toContain("No decision waits for your answer.");
+    expect(quiet).toContain('aria-label="Decisions waiting for you"');
   });
 
   it("shows one week on its own, the weeks around a step away, in the person's language", () => {
@@ -2576,6 +2620,7 @@ describe("the discussion on a task", () => {
       taskId: task.id,
       taskNumber: 7,
       raisedBy: alice,
+      decider: alice,
       run: { id: run.id, agent: "Claude Code" },
       answer: null,
       outcome: null,

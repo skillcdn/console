@@ -147,9 +147,9 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   work: {
     usage: "work [--person <login>]",
     synopsis:
-      "What is on your plate across your projects: your open tasks, and the decisions waiting.",
+      "What is on your plate across your projects: your open tasks, and the decisions waiting for you.",
     about:
-      "What is on your plate across the projects you may see: the open tasks you work on, the sooner due first, each with its project; and the decisions waiting for a person. Needs no project. --person <login> shows another person's plate, for an administrator or for an owner of a project they are in: the open tasks they work on within the projects you may see, without the decisions, which wait for anyone.",
+      "What is on your plate across the projects you may see: the open tasks you work on, the sooner due first, each with its project; and the decisions waiting for your answer (ADR-0042). Needs no project. --person <login> shows another person's plate, for an administrator or for an owner of a project they are in: the open tasks they work on within the projects you may see, without the decisions.",
   },
   tasks: {
     usage:
@@ -394,18 +394,23 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   },
   ask: {
     usage:
-      'ask "<question>" --option "<label>" --option "<label>" [...] [--body <markdown>|--file <path>] [--wait <seconds>] [--run <id>]',
+      'ask "<question>" --option "<label>" --option "<label>" [...] [--body <markdown>|--file <path>] [--to <login|me>] [--wait <seconds>] [--run <id>]',
     overview:
-      'ask "<question>" --option "<label>" --option "<label>" [...] [--body <markdown>|--file <path>] [--wait <seconds>]',
+      'ask "<question>" --option "<label>" --option "<label>" [...] [--body <markdown>|--file <path>] [--to <login|me>] [--wait <seconds>]',
     synopsis:
       "Raises a decision a person must make, with options, and waits a while for the answer.",
-    about: `Raises a decision a person must make: the question, the options to choose from, and what they need to know. The run waits for the answer. The command waits 60 seconds for it unless --wait says otherwise, and exits with 3 if it is still to come: keep waiting with \`console decision <id> --wait 100\`, within what your shell gives one command. The decision's id is printed as soon as it is raised. The person chooses one of the options, or answers in their own words: the answer then names one more option, their words, marked own; act on it as given. ${ON_THE_RUN}`,
+    about: `Raises a decision a person must make: the question, the options to choose from, and what they need to know. It is for the person you work for unless --to names another of the project, who then finds it among their decisions (ADR-0042); anyone of the project may still answer. The run waits for the answer. The command waits 60 seconds for it unless --wait says otherwise, and exits with 3 if it is still to come: keep waiting with \`console decision <id> --wait 100\`, within what your shell gives one command. The decision's id is printed as soon as it is raised. The person chooses one of the options, or answers in their own words: the answer then names one more option, their words, marked own; act on it as given. ${ON_THE_RUN}`,
     limits: [
       `question: one line, up to ${MAX_QUESTION_LENGTH} characters`,
       `options: ${MIN_OPTIONS} to ${MAX_OPTIONS}, each one line up to ${MAX_OPTION_LABEL_LENGTH} characters`,
       `body: ${MARKDOWN}`,
+      "to: a login of the project, or me",
     ],
-    refusals: [...RUN_CHOICE, "decision.invalid_run: the run is not yours, or is over"],
+    refusals: [
+      ...RUN_CHOICE,
+      "decision.invalid_run: the run is not yours, or is over",
+      "decision.invalid_decider: the person named may not work in the project",
+    ],
   },
   decision: {
     usage: "decision <id> [--wait <seconds>]  |  decision <id> --outcome <markdown>|--file <path>",
@@ -417,9 +422,9 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     refusals: ["decision.not_found: no decision has that id"],
   },
   decisions: {
-    usage: "decisions [--open] [--limit <n>] [--offset <n>]",
-    synopsis: "The decisions on the board, the waiting first.",
-    about: `The decisions on the board, the waiting first; --open keeps only those. A page at a time: ${DEFAULT_PAGE_LIMIT} unless --limit says otherwise, from --offset on.`,
+    usage: "decisions [--open] [--mine] [--limit <n>] [--offset <n>]",
+    synopsis: "The decisions on the board, the waiting first; or your own across the projects.",
+    about: `The decisions on the board, the waiting first; --open keeps only those. --mine lists the decisions addressed to you instead (ADR-0042), across the projects you may see, each with its project's key, and needs no project. A page at a time: ${DEFAULT_PAGE_LIMIT} unless --limit says otherwise, from --offset on.`,
   },
   finish: {
     usage: 'finish [--summary "<markdown>"|--file <path>] [--run <id>]',

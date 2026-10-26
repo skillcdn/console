@@ -5,11 +5,19 @@ import { type Database, drizzleOf, type Transaction } from "../client.js";
 import { decisions, projects, runs, tasks } from "../schema.js";
 import { recordLinks } from "./documents.js";
 import { type Actor, recordEvent, type Scope } from "./events.js";
-import { answerers, type PersonRecord, personColumns, raisers, toPerson } from "./people.js";
-import { visibleTo } from "./projects.js";
+import {
+  answerers,
+  deciders,
+  type PersonRecord,
+  personColumns,
+  raisers,
+  toPerson,
+} from "./people.js";
+import { mayWorkIn, visibleTo } from "./projects.js";
 
 // The questions that need a person. A decision is raised once and answered once; both are
-// one transaction with the event that records them. Every read is scoped to the project.
+// one transaction with the event that records them. Every read is scoped to the project, but
+// for a person's own decisions, read across the projects they may see (ADR-0042).
 
 export interface DecisionRecord {
   readonly id: string;
@@ -22,6 +30,8 @@ export interface DecisionRecord {
   readonly body: string;
   readonly options: readonly RestDecisionOption[];
   readonly raisedBy: PersonRecord;
+  /** Who is to answer (ADR-0042): the raiser, unless another person of the project was named. */
+  readonly decider: PersonRecord;
   /** The run that raised it, when an agent asked. */
   readonly run: { readonly id: string; readonly agent: string } | undefined;
   readonly answer:
@@ -47,7 +57,8 @@ export class DecisionError extends DomainError {
       | "decision.invalid_task"
       | "decision.answered"
       | "decision.no_such_option"
-      | "decision.invalid_run",
+      | "decision.invalid_run"
+      | "decision.invalid_decider",
   ) {
     super(
       code,
@@ -59,7 +70,9 @@ export class DecisionError extends DomainError {
             ? "the decision has been answered"
             : code === "decision.no_such_option"
               ? "the option is not one of the decision's"
-              : "the run is not the asker's, or is over",
+              : code === "decision.invalid_run"
+                ? "the run is not the asker's, or is over"
+                : "the person named to decide may not work in the project",
     );
   }
 }
@@ -80,6 +93,7 @@ const decisionColumns = {
   createdAt: decisions.createdAt,
   updatedAt: decisions.updatedAt,
   raisedBy: personColumns(raisers),
+  decider: personColumns(deciders),
   answeredBy: personColumns(answerers),
   runId: decisions.runId,
   runAgent: runs.agent,
@@ -93,6 +107,7 @@ function selectDecisions(handle: Handle) {
     .select(decisionColumns)
     .from(decisions)
     .innerJoin(raisers, eq(raisers.id, decisions.raisedById))
+    .innerJoin(deciders, eq(deciders.id, decisions.deciderId))
     .leftJoin(answerers, eq(answerers.id, decisions.answeredById))
     .leftJoin(runs, eq(runs.id, decisions.runId))
     .leftJoin(tasks, eq(tasks.id, decisions.taskId));
@@ -118,6 +133,7 @@ function toDecision(row: DecisionRow): DecisionRecord {
     body: row.body,
     options: row.options,
     raisedBy: toPerson(row.raisedBy),
+    decider: toPerson(row.decider),
     run:
       row.runId !== null && row.runAgent !== null
         ? { id: row.runId, agent: row.runAgent }
@@ -156,12 +172,25 @@ export async function raiseDecision(
       readonly options: readonly string[];
       readonly taskId?: string | null;
       readonly runId?: string | undefined;
+      /** Who is to answer: a person who may work in the project; the actor when left out. */
+      readonly deciderId?: string | undefined;
     };
     readonly now: Date;
   },
 ): Promise<DecisionRecord> {
   const { scope, actor, decision, now } = input;
   return drizzleOf(database).transaction(async (tx) => {
+    const deciderId = decision.deciderId ?? actor.id;
+    if (deciderId !== actor.id) {
+      const [able] = await tx
+        .select({ id: deciders.id })
+        .from(deciders)
+        .where(and(eq(deciders.id, deciderId), mayWorkIn(scope.projectId, deciders.id)))
+        .limit(1);
+      if (able === undefined) {
+        throw new DecisionError("decision.invalid_decider");
+      }
+    }
     let runId: string | null = null;
     let agent: string | undefined;
     let taskOfRun: string | undefined;
@@ -219,6 +248,7 @@ export async function raiseDecision(
         body: decision.body ?? "",
         options,
         raisedById: actor.id,
+        deciderId,
         createdAt: now,
         updatedAt: now,
       })
@@ -437,8 +467,8 @@ export function getDecision(
 }
 
 /**
- * The decisions that wait for a person across the projects `person` may see, the oldest first:
- * what has waited longest comes first on a person's own page of what is theirs to do.
+ * The decisions that wait for `person`'s answer (ADR-0042) across the projects they may see, the
+ * oldest first: what has waited longest comes first on their own page of what is theirs to do.
  */
 export async function listWaitingDecisionsFor(
   database: Database,
@@ -449,11 +479,52 @@ export async function listWaitingDecisionsFor(
   const rows = await selectDecisions(drizzleOf(database))
     .innerJoin(projects, eq(projects.id, decisions.projectId))
     .where(
-      and(eq(decisions.workspaceId, workspaceId), isNull(decisions.answeredAt), visibleTo(person)),
+      and(
+        eq(decisions.workspaceId, workspaceId),
+        eq(decisions.deciderId, person.id),
+        isNull(decisions.answeredAt),
+        visibleTo(person),
+      ),
     )
     .orderBy(asc(decisions.createdAt), asc(decisions.id))
     .limit(limit);
   return rows.map(toDecision);
+}
+
+/**
+ * A page of the decisions addressed to `person` (ADR-0042) across the projects they may see:
+ * the ones that wait first, oldest first among them, since those are theirs to answer; then
+ * the answered, newest first, as the record; or only those that wait. And whether there is more.
+ */
+export async function listDecisionsFor(
+  database: Database,
+  workspaceId: string,
+  person: PersonRecord,
+  filter: {
+    readonly open?: boolean | undefined;
+    readonly limit: number;
+    readonly offset?: number | undefined;
+  },
+): Promise<{ readonly items: DecisionRecord[]; readonly more: boolean }> {
+  const rows = await selectDecisions(drizzleOf(database))
+    .innerJoin(projects, eq(projects.id, decisions.projectId))
+    .where(
+      and(
+        eq(decisions.workspaceId, workspaceId),
+        eq(decisions.deciderId, person.id),
+        filter.open === true ? isNull(decisions.answeredAt) : undefined,
+        visibleTo(person),
+      ),
+    )
+    .orderBy(
+      asc(sql`(${decisions.answeredAt} is not null)`),
+      sql`case when ${decisions.answeredAt} is null then ${decisions.createdAt} end asc`,
+      desc(decisions.createdAt),
+      desc(decisions.id),
+    )
+    .limit(filter.limit + 1)
+    .offset(filter.offset ?? 0);
+  return { items: rows.slice(0, filter.limit).map(toDecision), more: rows.length > filter.limit };
 }
 
 /** A page of the decisions of the project, the ones that wait first and newest first within each, or only those that wait; and whether there is more. */

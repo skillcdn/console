@@ -83,6 +83,7 @@ export {
   goalMonth,
 } from "./components/goals.js";
 export { Markdown, type MarkdownProps } from "./components/markdown.js";
+export { MyDecisions, type MyDecisionsProps } from "./components/my-decisions.js";
 export {
   PackConnect,
   type PackConnectProps,

@@ -1850,11 +1850,16 @@ const ask: Command = async (args, io) => {
     file: { type: "string" },
     run: { type: "string" },
     wait: { type: "string" },
+    to: { type: "string" },
   });
   const question = theOne(
     positionals,
     'Say the question: console ask "<question>" --option "<label>" --option "<label>"',
   );
+  const to = text(values, "to");
+  if (to === "none") {
+    throw misuse("Say whom the decision is for: --to <login|me>.");
+  }
   const options = texts(values, "option");
   if (options.length < MIN_OPTIONS || options.length > MAX_OPTIONS) {
     throw misuse(`Give ${MIN_OPTIONS} to ${MAX_OPTIONS} options, one --option each.`);
@@ -1864,17 +1869,20 @@ const ask: Command = async (args, io) => {
   const session = await open(io, values);
   const project = await session.project();
   const runId = await currentRun(project, values);
+  // Whom the decision is for (ADR-0042): the person the agent works for, unless --to names another.
+  const deciderId = await personIdOf(session, to);
   const raised = await project.raiseDecision({
     question,
     options: options.map((label) => ({ label })),
     runId,
     ...(body === undefined ? {} : { body }),
+    ...(typeof deciderId === "string" ? { deciderId } : {}),
   });
   // The id is printed before any waiting, so that a wait cut short loses nothing.
   io.stdout(
     session.json
       ? `${JSON.stringify(raised, null, 2)}\n`
-      : `Decision ${raised.id} raised on run ${runId}; the run waits for a person.\ndecision id: ${raised.id}\n${formatOptions(raised)}\n`,
+      : `Decision ${raised.id} raised on run ${runId}; the run waits for ${raised.decider.login}.\ndecision id: ${raised.id}\n${formatOptions(raised)}\n`,
   );
   return settle(io, session, project, raised, seconds, true);
 };
@@ -2189,14 +2197,28 @@ const goal: Command = async (args, io) => {
 };
 
 const decisions: Command = async (args, io) => {
-  const { values } = parse(args, { open: { type: "boolean" }, ...PAGE_OPTIONS }, false);
+  const { values } = parse(
+    args,
+    { open: { type: "boolean" }, mine: { type: "boolean" }, ...PAGE_OPTIONS },
+    false,
+  );
   const page = pageOf(values);
   const session = await open(io, values);
+  const open_ = on(values, "open") ? { open: true } : {};
+  if (on(values, "mine")) {
+    // One's own across the projects (ADR-0042): the waiting first, each with its project's key.
+    const found = await session.client.myDecisions({ ...open_, ...page });
+    answer(io, session, found, () =>
+      found.items.length === 0
+        ? "No decisions of yours."
+        : found.items
+            .map(({ project, decision }) => `${project.key}  ${formatDecisionLine(decision)}`)
+            .join("\n") + formatMore(found.more, page.limit, page.offset),
+    );
+    return EXIT.ok;
+  }
   const project = await session.project();
-  const found = await project.decisions({
-    ...(on(values, "open") ? { open: true } : {}),
-    ...page,
-  });
+  const found = await project.decisions({ ...open_, ...page });
   answer(io, session, found, () =>
     found.items.length === 0
       ? "No decisions."

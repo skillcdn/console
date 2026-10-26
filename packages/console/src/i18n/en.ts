@@ -131,6 +131,7 @@ export const en = {
   nav: {
     projects: "Projects",
     work: "My work",
+    myDecisions: "My decisions",
     people: "People",
     agents: "Agents",
     board: "Board",
@@ -383,6 +384,8 @@ export const en = {
     record: "The record",
     openRecord: "Open",
     waitingForPerson: "Waiting for a person.",
+    waitingFor: (name: string) => `Waiting for ${name}.`,
+    forPerson: "for",
     options: "Options",
     notePlaceholder: "A word about it, if any",
     own: "Something else",
@@ -405,11 +408,28 @@ export const en = {
       contextPlaceholder: "What a person needs to know to answer, in Markdown.",
       about: "About",
       noTask: "No task in particular",
+      decider: "Who decides",
+      deciderPlaceholder: "You, unless you name someone",
+      me: "(you)",
       options: "Options",
       option: (n: number) => `Option ${n}`,
       addOption: "Add an option",
       raise: "Raise the decision",
     },
+  },
+
+  myDecisions: {
+    title: "My decisions",
+    loading: "Loading your decisions",
+    couldNotLoad: "Your decisions could not be loaded.",
+    empty: {
+      title: "No decision is yours to make",
+      body: "A decision raised for you, by you or your agent or by someone who named you, shows up here.",
+    },
+    waiting: "Waiting for you",
+    noneWaiting: "Nothing waits for your answer.",
+    answered: "Answered",
+    more: "Show more",
   },
 
   calendar: {
@@ -520,8 +540,8 @@ export const en = {
     thisWeek: "Due this week",
     later: "Later",
     noDay: "No day set",
-    decisions: "Decisions waiting for a person",
-    noDecisions: "No decision waits.",
+    decisions: "Decisions waiting for you",
+    noDecisions: "No decision waits for your answer.",
     inProject: (project: string) => `in ${project}`,
   },
 
