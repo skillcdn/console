@@ -325,6 +325,12 @@ Goal: the main repository's 0.4.0 serves packs of documents through their struct
 - [x] The contract kept (2026-10-26): the task's `assignee_id` column and its index dropped by migration 0026, the release after the workers came, as milestone 28 planned (expand, then contract).
 - [ ] The search by meaning for a pack the console reads from a directory, with the inference variables the `skillcdn` command takes: when a deployment on a closed network asks for it.
 
+## Milestone 32, the board found by words, the run that fell silent, and the decision addressed (2026-10-26)
+
+Goal: three things the first weeks of use asked for. A board is found by typing, not by choosing from lists; a run whose agent was closed does not stay open on the board for ever; and a decision says who is to answer it, so that a person finds the decisions that wait for them in one place.
+
+- [x] The board found by words (2026-10-26): a field at the head of the filters, with no button, keeps the cards whose title, number, owner, workers or category contain every word typed, whatever the case, and the count says how many it keeps; the words are in the board's address (`?q=`) as the other filters are, so that a narrowed board is a link.
+
 ## After milestone 16
 
 Nothing is chosen yet; the list below is where the next milestone comes from. Left open by milestone 9: whether the board should end a run not heard from for a long while itself ([ADR-0020](adr/0020-the-console-does-not-claim-an-agent-is-at-work-a-run-says-when-it-was-last-heard-from-and-a-new-run-takes-over.md)); a roadmap across projects.

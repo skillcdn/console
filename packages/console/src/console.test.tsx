@@ -250,6 +250,15 @@ describe("matchRoute", () => {
     expect(matchRoute("/projects/web", "?category=&goal=")).toMatchObject({
       filter: { category: "", goal: "" },
     });
+    // The words typed travel as they are, bounded; blank ones are no narrowing.
+    expect(matchRoute("/projects/web", "?q=alice%20%235")).toMatchObject({
+      filter: { words: "alice #5" },
+    });
+    expect(matchRoute("/projects/web", "?q=%20%20")).toMatchObject({ filter: {} });
+    expect(
+      matchRoute("/projects/web", `?q=${"x".repeat(300)}`) as { filter: { words: string } },
+    ).toMatchObject({ filter: { words: "x".repeat(200) } });
+    expect(boardHref("web", { words: "alice #5" })).toBe("/projects/web?q=alice%20%235");
     expect(boardHref("web", {})).toBe("/projects/web");
     expect(boardHref("web", { category: "engineering", mine: true })).toBe(
       "/projects/web?category=engineering&mine",

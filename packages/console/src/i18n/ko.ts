@@ -243,6 +243,7 @@ export const ko: Messages = {
     fold: (column) => `${column} 접기`,
     filters: {
       aria: "보드 좁혀 보기",
+      words: "제목, 번호, 사람",
       everyone: "모두",
       mine: "내 작업",
       anyCategory: "모든 카테고리",

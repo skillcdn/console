@@ -21,14 +21,19 @@ export type DocsView =
 /**
  * What the board is narrowed to (ADR-0019), from the query: a category by its key (`""` for
  * the tasks with none), a goal by its id (`""` for the tasks with none), a person by their id,
- * or the person's own.
+ * the person's own, or words (`q`), as they are typed, each of which a task's title, number,
+ * owner, worker or category must contain.
  */
 export interface BoardFilter {
   readonly category?: string | undefined;
   readonly goal?: string | undefined;
   readonly person?: string | undefined;
   readonly mine?: boolean | undefined;
+  readonly words?: string | undefined;
 }
+
+/** As much of the words as the address keeps: enough for any search, bounded as every input is. */
+const BOARD_WORDS_LENGTH = 200;
 
 export type Route =
   | { readonly name: "projects" }
@@ -187,11 +192,13 @@ const boardFilterOf = (params: URLSearchParams): BoardFilter => {
   const category = params.get("category");
   const goal = params.get("goal");
   const person = params.get("person");
+  const q = params.get("q");
   return {
     ...(category !== null && (category === "" || PROJECT_KEY.test(category)) ? { category } : {}),
     ...(goal !== null && (goal === "" || UUID.test(goal)) ? { goal } : {}),
     ...(person !== null && UUID.test(person) ? { person } : {}),
     ...(params.has("mine") ? { mine: true } : {}),
+    ...(q !== null && q.trim() !== "" ? { words: q.slice(0, BOARD_WORDS_LENGTH) } : {}),
   };
 };
 
@@ -461,6 +468,9 @@ function filterParts(filter: BoardFilter): string[] {
   }
   if (filter.mine === true) {
     parts.push("mine");
+  }
+  if (filter.words !== undefined) {
+    parts.push(`q=${encodeURIComponent(filter.words)}`);
   }
   return parts;
 }

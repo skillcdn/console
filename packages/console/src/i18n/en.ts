@@ -283,6 +283,7 @@ export const en = {
     fold: (column: string) => `Fold ${column}`,
     filters: {
       aria: "Narrow the board",
+      words: "Title, number or person",
       everyone: "Everyone",
       mine: "Mine",
       anyCategory: "Any category",

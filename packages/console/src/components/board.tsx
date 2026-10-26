@@ -620,13 +620,43 @@ export function Board(props: BoardProps) {
   );
 }
 
-/** What the filter keeps of the board: a category or none, a goal or none, a person, one's own. */
+/** What a task is found by: its title, its number, its owner and its workers, its category. */
+function wordsOf(task: RestTask): string {
+  return [
+    task.title,
+    `#${task.number}`,
+    personName(task.owner),
+    task.owner.login,
+    ...task.workers.flatMap((worker) => [personName(worker), worker.login]),
+    task.category?.name ?? "",
+  ]
+    .join("\n")
+    .toLowerCase();
+}
+
+/**
+ * What the filter keeps of the board: a category or none, a goal or none, a person, one's own,
+ * and the tasks that contain every word typed, whatever the case.
+ */
 export function filterTasks(
   tasks: readonly RestTask[],
   filter: BoardFilter,
   me?: RestPerson | undefined,
 ): RestTask[] {
+  const wanted =
+    filter.words === undefined
+      ? []
+      : filter.words
+          .toLowerCase()
+          .split(/\s+/)
+          .filter((word) => word.length > 0);
   return tasks.filter((task) => {
+    if (wanted.length > 0) {
+      const found = wordsOf(task);
+      if (!wanted.every((word) => found.includes(word))) {
+        return false;
+      }
+    }
     if (filter.category !== undefined && (task.category?.key ?? "") !== filter.category) {
       return false;
     }
@@ -682,6 +712,20 @@ export function BoardFilters(props: BoardFiltersProps) {
       aria-label={words.aria}
       onSubmit={(event) => event.preventDefault()}
     >
+      <label className="sc-field sc-field-inline sc-filters-words">
+        <span className="sc-visually-hidden">{words.words}</span>
+        <input
+          className="sc-input"
+          type="search"
+          placeholder={words.words}
+          value={filter.words ?? ""}
+          onChange={(event) =>
+            event.target.value.trim() === ""
+              ? change({}, "words")
+              : change({ words: event.target.value })
+          }
+        />
+      </label>
       <label className="sc-field sc-field-inline">
         <span className="sc-visually-hidden">{words.anyCategory}</span>
         <select

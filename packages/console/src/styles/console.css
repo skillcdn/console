@@ -3392,6 +3392,16 @@ select.sc-input {
   font-size: var(--sc-text-sm);
 }
 
+/* The words the board is narrowed by: a field that takes what room the row has, up to a point. */
+.sc-filters-words {
+  flex: 1 1 12rem;
+  max-width: 22rem;
+}
+
+.sc-filters-words .sc-input {
+  width: 100%;
+}
+
 .sc-filters-count {
   font-size: var(--sc-text-sm);
 }

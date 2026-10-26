@@ -1677,6 +1677,13 @@ describe("the schedule on the board", () => {
     expect(filterTasks(all, { person: bob.id })).toEqual([a, mine]);
     expect(filterTasks(all, { mine: true }, alice)).toEqual([mine]);
     expect(filterTasks(all, { mine: true })).toEqual([]);
+    // Words, as they are typed: every one of them in the title, the number, a person or the
+    // category, whatever the case; a worker's login and an owner's name count.
+    expect(filterTasks(all, { words: "ALICE" })).toEqual([a, mine]);
+    expect(filterTasks(all, { words: "#5" })).toEqual([mine]);
+    expect(filterTasks(all, { words: " ship  #1 " })).toEqual([a]);
+    expect(filterTasks(all, { words: "engineering bob" })).toEqual([mine]);
+    expect(filterTasks(all, { words: "nobody" })).toEqual([]);
     const html = renderToStaticMarkup(
       <BoardFilters
         filter={{ category: "engineering" }}
@@ -1693,6 +1700,8 @@ describe("the schedule on the board", () => {
       />,
     );
     expect(html).toContain('aria-label="Narrow the board"');
+    expect(html).toContain('type="search"');
+    expect(html).toContain('placeholder="Title, number or person"');
     expect(html).toContain("1 of 2 tasks");
     expect(html).toContain("Show everything");
     expect(html).toContain("Ship v1");
