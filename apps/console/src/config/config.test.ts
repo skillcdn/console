@@ -36,7 +36,7 @@ describe("loadConfig", () => {
       },
       database: { url: DATABASE_URL, poolMax: 10, ca: undefined },
       workspace: { name: "Console" },
-      worker: { inProcess: false, archiveAfterDays: 30 },
+      worker: { inProcess: false, archiveAfterDays: 30, endRunsAfterHours: 24 },
       auth: undefined,
       web: { root: undefined },
       skills: { source: "https://skillcdn.ai", address: undefined, directory: undefined },
@@ -54,6 +54,7 @@ describe("loadConfig", () => {
         WORKSPACE_NAME: "  Acme  ",
         WORKER_IN_PROCESS: "true",
         TASK_ARCHIVE_AFTER_DAYS: "0",
+        RUN_ENDED_AFTER_HOURS: "48",
         DATABASE_POOL_MAX: "4",
       },
       noFiles,
@@ -64,6 +65,7 @@ describe("loadConfig", () => {
     expect(config.workspace.name).toBe("Acme");
     expect(config.worker.inProcess).toBe(true);
     expect(config.worker.archiveAfterDays).toBe(0);
+    expect(config.worker.endRunsAfterHours).toBe(48);
     expect(config.database.poolMax).toBe(4);
     expect(loadConfig({ DATABASE_URL, WEB_ROOT: "/app/web" }, noFiles).web.root).toBe("/app/web");
     expect(loadConfig({ DATABASE_URL, SKILLS_DIR: "/app/packs" }, noFiles).skills.directory).toBe(

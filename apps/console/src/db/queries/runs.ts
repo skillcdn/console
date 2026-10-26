@@ -1,5 +1,5 @@
 import type { ArtifactKind, RunEnding, RunStatus } from "@skillcdn/console/api";
-import { and, asc, count, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, lt, notInArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
@@ -555,6 +555,64 @@ export async function endRun(
       throw new RunError("run.not_found");
     }
     return written;
+  });
+}
+
+/** How many runs one pass ends: a pass stays quick, and the next one takes the rest. */
+const END_PASS_LIMIT = 200;
+
+/**
+ * What the console ends by itself (ADR-0041): every run open, not waiting for an answer, and
+ * not changed since `before`, which is the last it was heard from or the answer to what it
+ * asked, across the projects, a bounded number per pass, each ended as abandoned with the
+ * summary given and an event that names no actor and the reason. The task stays as it is.
+ * Answers how many were ended.
+ */
+export async function endUnheardRuns(
+  database: Database,
+  input: { readonly before: Date; readonly now: Date; readonly summary: string },
+): Promise<number> {
+  const { before, now, summary } = input;
+  return drizzleOf(database).transaction(async (tx) => {
+    const rows = await tx
+      .select({
+        id: runs.id,
+        workspaceId: runs.workspaceId,
+        projectId: runs.projectId,
+        taskId: runs.taskId,
+        agent: runs.agent,
+        number: tasks.number,
+        title: tasks.title,
+      })
+      .from(runs)
+      .innerJoin(tasks, eq(tasks.id, runs.taskId))
+      .where(and(eq(runs.status, "running"), lt(runs.updatedAt, before)))
+      .orderBy(runs.updatedAt)
+      .limit(END_PASS_LIMIT)
+      .for("update", { of: runs });
+    for (const row of rows) {
+      await tx
+        .update(runs)
+        .set({ status: "abandoned", summary, endedAt: now, updatedAt: now })
+        .where(eq(runs.id, row.id));
+      await recordEvent(tx, {
+        workspaceId: row.workspaceId,
+        projectId: row.projectId,
+        kind: "run.ended",
+        actor: undefined,
+        taskId: row.taskId,
+        runId: row.id,
+        data: {
+          number: row.number,
+          title: row.title,
+          agent: row.agent,
+          status: "abandoned",
+          reason: "unheard",
+        },
+        now,
+      });
+    }
+    return rows.length;
   });
 }
 

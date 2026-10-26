@@ -104,7 +104,9 @@ export function describeEvent(event: RestEvent, words: Messages = en): string {
         ? feed.event.runFinished(task)
         : data.status === "failed"
           ? feed.event.runFailed(task)
-          : feed.event.runAbandoned(task);
+          : data.reason === "unheard"
+            ? feed.event.runUnheard(task, data.agent ?? feed.someone)
+            : feed.event.runAbandoned(task);
     case "document.written":
       return feed.event.documentWritten(page, data.version);
     case "document.archived":

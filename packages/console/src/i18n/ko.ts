@@ -640,6 +640,8 @@ export const ko: Messages = {
       runFinished: (task) => `${task}을(를) 끝냈습니다`,
       runFailed: (task) => `${task}에 실패했습니다`,
       runAbandoned: (task) => `${task}을(를) 포기했습니다`,
+      runUnheard: (task, agent) =>
+        `${task}의 ${agent} 런을 끝냈습니다. 너무 오래 소식이 없었습니다`,
       documentWritten: (page, version) =>
         `${page}을(를) 썼습니다${version === undefined ? "" : `, 버전 ${version}`}`,
       documentArchived: (page) => `${page}을(를) 보관했습니다`,

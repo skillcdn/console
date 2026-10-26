@@ -779,8 +779,9 @@ export const restEventDataSchema = z.object({
   name: z.optional(z.string()),
   /** For what an agent did: what it calls itself. */
   agent: z.optional(z.string()),
-  /** For `run.ended`: how. */
+  /** For `run.ended`: how, and, when the console ended the run itself, why (ADR-0041). */
   status: z.optional(z.enum(RUN_STATUSES)),
+  reason: z.optional(z.literal("unheard")),
   /** For `run.handed_in`: what the artifact is called. */
   label: z.optional(z.string()),
   /** For `run.reported` and `task.commented`: the first words of what was written. */

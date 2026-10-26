@@ -31,7 +31,15 @@ import {
   updateMember,
   updateProject,
 } from "./queries/projects.js";
-import { endRun, excerptOf, listRuns, RunError, startRun } from "./queries/runs.js";
+import {
+  endRun,
+  endUnheardRuns,
+  excerptOf,
+  getRun,
+  listRuns,
+  RunError,
+  startRun,
+} from "./queries/runs.js";
 import {
   createSession,
   deleteExpiredSessions,
@@ -984,6 +992,76 @@ describe("runs", () => {
         now: minutes(105),
       }),
     ).rejects.toMatchObject({ code: "run.task_closed" });
+  });
+
+  it("are ended by the console when not heard from for long enough, unless waiting for an answer (ADR-0041)", async () => {
+    const quietTask = await createTask(database, {
+      scope,
+      actor: bob,
+      task: { title: "Quiet work", state: "ready" },
+      now: minutes(200),
+    });
+    const quiet = await startRun(database, {
+      scope,
+      actor: alice,
+      tokenId: undefined,
+      taskId: quietTask.id,
+      agent: "Codex",
+      now: minutes(201),
+    });
+    const askingTask = await createTask(database, {
+      scope,
+      actor: bob,
+      task: { title: "Asked work", state: "ready" },
+      now: minutes(200),
+    });
+    const asking = await startRun(database, {
+      scope,
+      actor: alice,
+      tokenId: undefined,
+      taskId: askingTask.id,
+      agent: "Codex",
+      now: minutes(202),
+    });
+    await raiseDecision(database, {
+      scope,
+      actor: alice,
+      decision: { question: "Go on?", options: ["Yes", "No"], runId: asking.id },
+      now: minutes(203),
+    });
+    const recentTask = await createTask(database, {
+      scope,
+      actor: bob,
+      task: { title: "Fresh work", state: "ready" },
+      now: minutes(200),
+    });
+    const recent = await startRun(database, {
+      scope,
+      actor: alice,
+      tokenId: undefined,
+      taskId: recentTask.id,
+      agent: "Claude Code",
+      now: minutes(1700),
+    });
+    const summary = "Not heard from for 24 hours; the console ended the run.";
+    // A day after the quiet run began: it goes; the one waiting for an answer and the fresh one stay.
+    const before = minutes(201 + 24 * 60);
+    expect(await endUnheardRuns(database, { before, now: minutes(1800), summary })).toBe(1);
+    expect(await endUnheardRuns(database, { before, now: minutes(1801), summary })).toBe(0);
+    expect(await getRun(database, scope, quiet.id)).toMatchObject({
+      status: "abandoned",
+      summary,
+      endedAt: minutes(1800),
+    });
+    expect((await getRun(database, scope, asking.id))?.status).toBe("waiting");
+    expect((await getRun(database, scope, recent.id))?.status).toBe("running");
+    const ofQuiet = (await listEventsAfter(database, { ...scope, runId: quiet.id }, 0, 100)).items;
+    expect(ofQuiet.map((event) => [event.kind, event.actor?.id, event.data.reason])).toEqual([
+      ["run.started", alice.id, undefined],
+      ["run.ended", undefined, "unheard"],
+    ]);
+    // The task stays as the run left it.
+    expect((await getTask(database, scope, quietTask.id))?.state).toBe("in_progress");
   });
 
   it("say the first words of a report, in one line, bounded", () => {

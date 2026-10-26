@@ -32,6 +32,7 @@ import { startServer } from "../http/server.js";
 import { Archivist } from "../jobs/archivist.js";
 import { Janitor } from "../jobs/janitor.js";
 import { OrganizationSync } from "../jobs/organization-sync.js";
+import { RunCloser } from "../jobs/run-closer.js";
 import type { Logger } from "../logger.js";
 import { type BlobStore, BlobStoreError } from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
@@ -46,6 +47,8 @@ import { APP_NAME, APP_VERSION } from "../version.js";
 const JANITOR_INTERVAL_MS = 15 * 60_000;
 /** How often what was done or dropped long enough ago is put away (ADR-0029), the same way. */
 const ARCHIVE_INTERVAL_MS = 60 * 60_000;
+/** How often a run not heard from for long enough is ended (ADR-0041), the same way. */
+const RUN_CLOSE_INTERVAL_MS = 15 * 60_000;
 /** How often the organization is read, when this process does the worker's work. */
 export const ORGANIZATION_SYNC_INTERVAL_MS = 10 * 60_000;
 /** How long a feed subscriber waits in silence before a heartbeat: under what proxies allow idle. */
@@ -423,6 +426,16 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
         })
       : undefined;
   archivist?.start(ARCHIVE_INTERVAL_MS);
+  const runCloser =
+    config.worker.inProcess && config.worker.endRunsAfterHours > 0
+      ? new RunCloser({
+          database,
+          clock: systemClock,
+          logger,
+          afterHours: config.worker.endRunsAfterHours,
+        })
+      : undefined;
+  runCloser?.start(RUN_CLOSE_INTERVAL_MS);
   const workspace = workspaceResolver(database, systemClock, config.workspace.name);
   const sync =
     config.worker.inProcess && organization !== undefined
@@ -467,6 +480,7 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
   await listener.close();
   await janitor?.close();
   await archivist?.close();
+  await runCloser?.close();
   await sync?.close();
   await database.close();
   logger.info("shutdown complete");

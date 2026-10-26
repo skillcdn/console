@@ -4,6 +4,7 @@ import { createDatabase } from "../db/client.js";
 import { Archivist } from "../jobs/archivist.js";
 import { Janitor } from "../jobs/janitor.js";
 import { OrganizationSync } from "../jobs/organization-sync.js";
+import { RunCloser } from "../jobs/run-closer.js";
 import type { Logger } from "../logger.js";
 import { APP_NAME, APP_VERSION } from "../version.js";
 import {
@@ -17,6 +18,8 @@ import {
 const JANITOR_INTERVAL_MS = 15 * 60_000;
 /** How often what was done or dropped long enough ago is put away (ADR-0029). */
 const ARCHIVE_INTERVAL_MS = 60 * 60_000;
+/** How often a run not heard from for long enough is ended (ADR-0041). */
+const RUN_CLOSE_INTERVAL_MS = 15 * 60_000;
 
 /**
  * The `worker` role: the schedules, and later the job queue. Today that is the sweep of what
@@ -40,6 +43,15 @@ export async function runWorker(config: Config, logger: Logger): Promise<void> {
           clock: systemClock,
           logger,
           afterDays: config.worker.archiveAfterDays,
+        })
+      : undefined;
+  const runCloser =
+    config.worker.endRunsAfterHours > 0
+      ? new RunCloser({
+          database,
+          clock: systemClock,
+          logger,
+          afterHours: config.worker.endRunsAfterHours,
         })
       : undefined;
   const organization = organizationOf(config, `${APP_NAME}/${APP_VERSION}`);
@@ -66,6 +78,10 @@ export async function runWorker(config: Config, logger: Logger): Promise<void> {
     await archivist.sweep();
     archivist.start(ARCHIVE_INTERVAL_MS);
   }
+  if (runCloser !== undefined) {
+    await runCloser.sweep();
+    runCloser.start(RUN_CLOSE_INTERVAL_MS);
+  }
   if (sync !== undefined) {
     await sync.sync();
     sync.start(ORGANIZATION_SYNC_INTERVAL_MS);
@@ -75,6 +91,7 @@ export async function runWorker(config: Config, logger: Logger): Promise<void> {
   logger.info({ signal }, "shutting down");
   await janitor.close();
   await archivist?.close();
+  await runCloser?.close();
   await sync?.close();
   await database.close();
   logger.info("shutdown complete");

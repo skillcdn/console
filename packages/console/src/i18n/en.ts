@@ -685,6 +685,8 @@ export const en = {
       runFinished: (task: string) => `finished ${task}`,
       runFailed: (task: string) => `failed on ${task}`,
       runAbandoned: (task: string) => `gave up on ${task}`,
+      runUnheard: (task: string, agent: string) =>
+        `ended the run of ${agent} on ${task}, not heard from for too long`,
       documentWritten: (page: string, version: number | undefined) =>
         `wrote ${page}${version === undefined ? "" : `, version ${version}`}`,
       documentArchived: (page: string) => `archived ${page}`,

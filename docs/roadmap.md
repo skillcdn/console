@@ -253,7 +253,7 @@ Goal: the main repository made the pieces the console imitated into published pa
 - [x] The command (2026-10-18): `console skills` prints what a client is told on connect and every skill and document, the folder and the skill whole, the search a page with `--cursor`, every read rendered as a model is given it with the reads named as the console's commands; `--json` the pack's answer with the pages joined ([specs/cli.md](specs/cli.md)).
 - [x] The default UI (2026-10-18): the Skills page says when a pack is read from the console's machine, and links nothing then.
 - [x] The image and the smallest install (2026-10-18): the console's own skills at `/app/packs/skillcdn/console` under `SKILLS_DIR=/app/packs`; `deploy/compose.yaml` for one machine; what a closed network carries in, in [deploy/README.md](../deploy/README.md#the-smallest-install-and-a-closed-network). A network with no identity provider stays an open question.
-- [x] SkillCDN 0.3.1 (2026-10-18): the packages taken at 0.3.1, whose `skillcdn` command connects to a deployment with a code a person approves and keeps a repository token it never shows, binds a checkout to a directory as well as to an address, and prints the sentence for the checkout's agreement; `console use` prints the console's own sentence the same way ([specs/cli.md](specs/cli.md)). A private pack connected that way from the project's Settings, in place of a pasted pack token ([ADR-0028](adr/0028-the-console-reads-a-projects-pack-through-the-deployments-rest-api-with-a-pack-token-for-a-private-one.md)), is left open.
+- [x] SkillCDN 0.3.1 (2026-10-18): the packages taken at 0.3.1, whose `skillcdn` command connects to a deployment with a code a person approves and keeps a repository token it never shows, binds a checkout to a directory as well as to an address, and prints the sentence for the checkout's agreement; `console use` prints the console's own sentence the same way ([specs/cli.md](specs/cli.md)). A private pack connected that way from the project's Settings, in place of a pasted pack token ([ADR-0028](adr/0028-the-console-reads-a-projects-pack-through-the-deployments-rest-api-with-a-pack-token-for-a-private-one.md)), came with milestone 26.
 
 ## Milestone 25, who sees whom (2026-10-18)
 
@@ -330,10 +330,11 @@ Goal: the main repository's 0.4.0 serves packs of documents through their struct
 Goal: three things the first weeks of use asked for. A board is found by typing, not by choosing from lists; a run whose agent was closed does not stay open on the board for ever; and a decision says who is to answer it, so that a person finds the decisions that wait for them in one place.
 
 - [x] The board found by words (2026-10-26): a field at the head of the filters, with no button, keeps the cards whose title, number, owner, workers or category contain every word typed, whatever the case, and the count says how many it keeps; the words are in the board's address (`?q=`) as the other filters are, so that a narrowed board is a link.
+- [x] The run that fell silent (2026-10-26, [ADR-0041](adr/0041-a-run-not-heard-from-for-a-day-is-ended-by-the-console.md)): a run open, not waiting for an answer and not heard from for a day (`RUN_ENDED_AFTER_HOURS`, 24; 0 never) is ended as abandoned by the worker, its summary saying so and `run.ended` naming no actor and the reason; a run waiting for an answer waits on, and the day is counted from the answer; the feed reads it as the console's doing, and working-the-board (1.23) tells an agent to report, to wait with `--wait` and to take the task again. A roadmap across projects, left open by milestone 9 with it, is not planned.
 
 ## After milestone 16
 
-Nothing is chosen yet; the list below is where the next milestone comes from. Left open by milestone 9: whether the board should end a run not heard from for a long while itself ([ADR-0020](adr/0020-the-console-does-not-claim-an-agent-is-at-work-a-run-says-when-it-was-last-heard-from-and-a-new-run-takes-over.md)); a roadmap across projects.
+Nothing is chosen yet; the list below is where the next milestone comes from.
 
 ## Later, undecided
 

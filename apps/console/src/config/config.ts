@@ -165,6 +165,7 @@ const environmentSchema = z.object({
     .default("Console"),
   WORKER_IN_PROCESS: flag(false),
   TASK_ARCHIVE_AFTER_DAYS: integer(30, 0, 3650),
+  RUN_ENDED_AFTER_HOURS: integer(24, 0, 8760),
 
   PUBLIC_URL: origin.optional(),
   GITHUB_WEB_URL: origin.default("https://github.com"),
@@ -376,6 +377,8 @@ export interface Config {
     readonly inProcess: boolean;
     /** How many days after a task was done or dropped the console puts it away (ADR-0029); 0 never. */
     readonly archiveAfterDays: number;
+    /** How many hours a run goes unheard, and not waiting for an answer, before the console ends it (ADR-0041); 0 never. */
+    readonly endRunsAfterHours: number;
   };
   /** Signing in through identity providers. Unset: nobody signs in, and the board is nobody's. */
   readonly auth: AuthConfig | undefined;
@@ -732,7 +735,11 @@ export function loadConfig(
     },
     database: { url: env.DATABASE_URL, poolMax: env.DATABASE_POOL_MAX, ca },
     workspace: { name: env.WORKSPACE_NAME },
-    worker: { inProcess: env.WORKER_IN_PROCESS, archiveAfterDays: env.TASK_ARCHIVE_AFTER_DAYS },
+    worker: {
+      inProcess: env.WORKER_IN_PROCESS,
+      archiveAfterDays: env.TASK_ARCHIVE_AFTER_DAYS,
+      endRunsAfterHours: env.RUN_ENDED_AFTER_HOURS,
+    },
     auth,
     web: { root: env.WEB_ROOT },
     skills: { source: env.SKILLCDN_URL, address, directory: env.SKILLS_DIR },

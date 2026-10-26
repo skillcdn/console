@@ -5,7 +5,7 @@ license: MIT
 compatibility: Needs a shell with the console command on the PATH (npm install -g @skillcdn/console, Node.js 24 or newer), signed in by a person. Nothing else; the command needs no key of its own and the agent never sees a token.
 metadata:
   author: skillcdn
-  version: "1.22"
+  version: "1.23"
 skillcdn:
   translations:
     ko:
@@ -54,7 +54,7 @@ Told which task, go to phase 2: `console take` prints the rules of the board wit
 
 ### Phase 2: Take
 
-`console take <number>`. A run begins, and the command says its id and the task's on a line of their own (`run id:`, `task id:`; a task has a number for people and an id for the API, a run, a decision and a goal have ids alone, and every command that makes one prints it so, `--json` the whole answer; an id is read from there, never assumed): the task is in progress and the person's, and every report, hand-in, question and ending from here acts on this run. With another run of the person's open in the project, which `console take` says, each of those commands names the run: `--run <id>`. Taken by mistake, `console abandon` leaves it and the task stays as it was.
+`console take <number>`. A run begins, and the command says its id and the task's on a line of their own (`run id:`, `task id:`; a task has a number for people and an id for the API, a run, a decision and a goal have ids alone, and every command that makes one prints it so, `--json` the whole answer; an id is read from there, never assumed): the task is in progress and the person's, and every report, hand-in, question and ending from here acts on this run. With another run of the person's open in the project, which `console take` says, each of those commands names the run: `--run <id>`. Taken by mistake, `console abandon` leaves it and the task stays as it was. A run the board has not heard from for a day (what the deployment sets), and that is not waiting for an answer, is ended by the board itself as abandoned (ADR-0041): report at the milestones, wait for a decision with `--wait` or come back for it, and, refused with `run.over` on a run ended that way, take the task again.
 
 ### Phase 3: Work, and report at the milestones
 
