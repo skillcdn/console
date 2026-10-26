@@ -391,11 +391,6 @@ export const tasks = pgTable(
     ownerId: uuid()
       .notNull()
       .references(() => people.id),
-    /**
-     * The one person at work on the task before the workers came (ADR-0037); unused, kept with
-     * its index until the next release, as the rollout contract asks (expand, then contract).
-     */
-    assigneeId: uuid().references(() => people.id),
     /** The task this one is part of, for a breakdown. */
     parentId: uuid().references((): AnyPgColumn => tasks.id),
     /** The category the task is sorted into, or none; a category in use cannot be removed. */
@@ -425,7 +420,6 @@ export const tasks = pgTable(
     index("tasks_project_due_idx").on(table.projectId, table.dueOn),
     index("tasks_goal_idx").on(table.goalId),
     index("tasks_category_idx").on(table.categoryId),
-    index("tasks_assignee_state_idx").on(table.assigneeId, table.state),
     index("tasks_project_archived_idx").on(table.projectId, table.archivedAt),
     check("tasks_state_check", sql`${table.state} in (${sql.raw(literals(TASK_STATES))})`),
     check(

@@ -295,7 +295,7 @@ Goal: a task at work by several people, as the first weeks on the board had it, 
 - [x] The default UI (2026-10-18): the picker, which searches a page at a time and holds what is chosen as a chip, for the task a task is part of and the goal it works towards; the workers as chips on the form, as pictures side by side on a card and a row, counted each in who has what; the words of the pages, 작업자 for 배정.
 - [x] The skill (2026-10-18): working-the-board (1.20) finds a task by the words of its title with `--search`, and its terms say what an owner and a worker are.
 - [x] The decision's task found by search too (2026-10-18): `DecisionForm` takes `findTasks` in place of every task of the board; raised from a task's page it is about that task, as before.
-- [ ] The column `assignee_id` and its index dropped, in the release after this one (expand, then contract).
+- [x] The column `assignee_id` and its index dropped (2026-10-26): migration 0026, a release after the workers came (expand, then contract).
 
 ## Milestone 29, the command and the console within a line, and the week (2026-10-18)
 
@@ -322,6 +322,7 @@ Goal: the main repository's 0.4.0 serves packs of documents through their struct
 - [x] The floors (2026-10-24, [ADR-0038](adr/0038-the-command-and-the-console-go-together-within-a-line-and-a-release-that-changes-what-passes-between-them-raises-the-floors.md)): `CLIENT_POLICY.atLeast` and `CONSOLE_AT_LEAST` at 0.4.0, the line's first version: a 0.4 console refuses a 0.3 command (`client.outdated`) and a 0.4 command a 0.3 console (`console.outdated`), each naming the version to install, so that a deployment of this line has every agent's command updated once.
 - [x] The command (2026-10-24): `console skills <file>` prints a document's outline, its pages joined; `console skill --file <path> --offset <n> --limit <n>` reads one section as a search or an outline names it, and says where the file continues; a search prints the sections of a document that matched, and how the page was ranked where the deployment searches by meaning; the skill working-the-board (1.22) names the two reads ([specs/cli.md](specs/cli.md)).
 - [x] Checked, and left as they were (2026-10-24): a repository token without an end (the main repository's ADR-0060), the index served while the newest is built (ADR-0068), the search by meaning (ADR-0064) and the search across a deployment (ADR-0070) touch nothing the console reads or sends; a pack the console reads from a directory is searched by words, as the `skillcdn` command searches one without an inference server.
+- [x] The contract kept (2026-10-26): the task's `assignee_id` column and its index dropped by migration 0026, the release after the workers came, as milestone 28 planned (expand, then contract).
 - [ ] The search by meaning for a pack the console reads from a directory, with the inference variables the `skillcdn` command takes: when a deployment on a closed network asks for it.
 
 ## After milestone 16

@@ -183,6 +183,13 @@
       "when": 1792325976927,
       "tag": "0025_task_workers",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792977523993,
+      "tag": "0026_task_assignee_dropped",
+      "breakpoints": true
     }
   ]
 }
