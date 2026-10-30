@@ -151,7 +151,13 @@ import {
   setArchived,
   writeDocument,
 } from "../db/queries/documents.js";
-import { type Actor, latestEventId, listEventsAfter, type Scope } from "../db/queries/events.js";
+import {
+  type Actor,
+  latestEventId,
+  listEventsAfter,
+  listLatestEvents,
+  type Scope,
+} from "../db/queries/events.js";
 import { createGoal, GoalError, getGoal, listGoals, updateGoal } from "../db/queries/goals.js";
 import {
   endPackConnect,
@@ -432,6 +438,8 @@ const runsQuery = z.object({
 });
 const eventsQuery = z.object({
   after: z.coerce.number().int().min(0).default(0),
+  /** `true` for the newest events, oldest first, and whether there are earlier ones; `after` is not looked at then. */
+  latest: z.enum(["true", "false"]).optional(),
   limit: z.coerce.number().int().min(1).max(EVENTS_PAGE_LIMIT).default(EVENTS_PAGE_LIMIT),
   task: z.string().regex(UUID).optional(),
   run: z.string().regex(UUID).optional(),
@@ -1500,12 +1508,11 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     if (!readsWorkspaceEvents(person, await readWorkspaceSettings(database, person.workspaceId))) {
       return administratorRequired(c);
     }
-    const page = await listEventsAfter(
-      database,
-      { workspaceId: person.workspaceId, projectId: null },
-      query.data.after,
-      query.data.limit,
-    );
+    const scope = { workspaceId: person.workspaceId, projectId: null };
+    const page =
+      query.data.latest === "true"
+        ? await listLatestEvents(database, scope, query.data.limit)
+        : await listEventsAfter(database, scope, query.data.after, query.data.limit);
     const body: RestEvents = { items: page.items.map(restEvent), more: page.more };
     return c.json(body);
   });
@@ -3691,19 +3698,18 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     if (found instanceof Response) {
       return found;
     }
-    const page = await listEventsAfter(
-      database,
-      {
-        ...found.scope,
-        taskId: query.data.task,
-        runId: query.data.run,
-        decisionId: query.data.decision,
-        documentId: query.data.document,
-        goalId: query.data.goal,
-      },
-      query.data.after,
-      query.data.limit,
-    );
+    const scope = {
+      ...found.scope,
+      taskId: query.data.task,
+      runId: query.data.run,
+      decisionId: query.data.decision,
+      documentId: query.data.document,
+      goalId: query.data.goal,
+    };
+    const page =
+      query.data.latest === "true"
+        ? await listLatestEvents(database, scope, query.data.limit)
+        : await listEventsAfter(database, scope, query.data.after, query.data.limit);
     const body: RestEvents = { items: page.items.map(restEvent), more: page.more };
     return c.json(body);
   });

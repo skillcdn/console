@@ -208,6 +208,8 @@ export interface EventFilter {
   readonly run?: string | undefined;
   readonly decision?: string | undefined;
   readonly document?: string | undefined;
+  /** True for the newest events, oldest first, and whether there are earlier ones; `after` is not looked at then. */
+  readonly latest?: boolean | undefined;
 }
 
 /** One page of a listing: how many items, from which one on; the server's bounds apply. */
@@ -761,6 +763,7 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
           "GET",
           withQuery(at("events"), {
             after: String(after),
+            latest: filter.latest === true ? "true" : undefined,
             task: filter.task,
             run: filter.run,
             decision: filter.decision,

@@ -66,12 +66,12 @@ import {
 
 // What the console shows, and how it stays current: the workspace (who is signed in, the
 // projects, the people, the tokens) is loaded once; the project the page is on is loaded whole,
-// its feed from the beginning, and from then on the project's stream says when something
+// its feed as it stands, the newest page, and from then on the project's stream says when something
 // changed: on every event the lists are loaded again, which is the boring way to be right.
 
 /** How many events the feed keeps on the page. */
 const FEED_KEEP = 200;
-/** How many pages of the feed are read at the start before the stream takes over. */
+/** How many pages of a task's own events are read for its thread, which is read from the beginning. */
 const FEED_MAX_PAGES = 20;
 /** How long changes that arrive together are gathered before the lists are loaded once. */
 const RELOAD_DELAY_MS = 150;
@@ -250,23 +250,18 @@ export interface ConsoleData {
   reload(): void;
 }
 
-/** The whole feed of a project from the beginning, page by page, bounded. */
+/**
+ * The feed of a project as it stands: its newest page, oldest first, from which the stream
+ * goes on. Read in one request, where reading it from the beginning was a round trip per
+ * hundred events, each waited for before the board was shown.
+ */
 async function readFeed(
   client: ConsoleClient,
   key: string,
   signal: AbortSignal,
 ): Promise<RestEvent[]> {
-  const events: RestEvent[] = [];
-  let after = 0;
-  for (let page = 0; page < FEED_MAX_PAGES; page += 1) {
-    const result = await client.project(key).events(after, {}, signal);
-    events.push(...result.items);
-    after = result.items.at(-1)?.id ?? after;
-    if (!result.more) {
-      break;
-    }
-  }
-  return events.slice(-FEED_KEEP);
+  const result = await client.project(key).events(0, { latest: true }, signal);
+  return result.items.slice(-FEED_KEEP);
 }
 
 /** How many pages of the current tasks are read before the board is shown as it stands. */
@@ -471,7 +466,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
     return () => controller.abort();
   }, [client, generation, refreshWorkspace]);
 
-  // The project the page is on: its lists, its feed from the beginning, and its stream from
+  // The project the page is on: its lists, its feed as it stands, the newest page, and its stream from
   // where the feed ends. Another project, or none, starts over.
   // biome-ignore lint/correctness/useExhaustiveDependencies: `generation` is the trigger
   useEffect(() => {

@@ -1553,6 +1553,34 @@ describe("the quotas", () => {
   });
 });
 
+describe("the feed read from the end", () => {
+  it("answers the newest events, oldest first, and says whether there are earlier ones", async () => {
+    const all: { id: number }[] = [];
+    for (let after = 0; ; ) {
+      const page = restEventsSchema.parse(
+        await (await get(alice, `${IN}/events?after=${after}&limit=100`)).json(),
+      );
+      all.push(...page.items);
+      after = page.items.at(-1)?.id ?? after;
+      if (!page.more) {
+        break;
+      }
+    }
+    expect(all.length).toBeGreaterThan(2);
+    const newest = restEventsSchema.parse(
+      await (await get(alice, `${IN}/events?latest=true&limit=2`)).json(),
+    );
+    expect(newest.items.map((event) => event.id)).toEqual(all.slice(-2).map((event) => event.id));
+    expect(newest.more).toBe(true);
+    const page = restEventsSchema.parse(
+      await (await get(alice, `${IN}/events?latest=true&after=5`)).json(),
+    );
+    expect(page.items.map((event) => event.id)).toEqual(all.slice(-100).map((event) => event.id));
+    expect(page.more).toBe(all.length > 100);
+    expect((await get(alice, `${IN}/events?latest=maybe`)).status).toBe(400);
+  });
+});
+
 describe("pictures from elsewhere (ADR-0048)", () => {
   const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 

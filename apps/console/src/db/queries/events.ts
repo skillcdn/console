@@ -1,5 +1,5 @@
 import type { EventKind, RestEventData } from "@skillcdn/console/api";
-import { and, asc, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNull, sql } from "drizzle-orm";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
 import { events } from "../schema.js";
 import { actors, type PersonRecord, personColumns, toPerson } from "./people.js";
@@ -103,17 +103,10 @@ export async function recordEvent(
   return row.id;
 }
 
-/**
- * What happened within `scope` after event number `after`, oldest first, at most `limit` of
- * it, and whether there is more. `0` is the beginning.
- */
-export async function listEventsAfter(
-  database: Database,
-  scope: EventScope,
-  after: number,
-  limit: number,
-): Promise<{ readonly items: EventRecord[]; readonly more: boolean }> {
-  const rows = await drizzleOf(database)
+/** For this file only: the select every read of the feed shares. */
+function selectEvents(database: Database) {
+  // Built per read: this module and the people's import each other, so nothing of theirs is called while the modules load.
+  return drizzleOf(database)
     .select({
       id: events.id,
       workspaceId: events.workspaceId,
@@ -130,40 +123,74 @@ export async function listEventsAfter(
       actor: personColumns(actors),
     })
     .from(events)
-    .leftJoin(actors, eq(actors.id, events.actorId))
-    .where(
-      and(
-        eq(events.workspaceId, scope.workspaceId),
-        scope.projectId === null ? isNull(events.projectId) : eq(events.projectId, scope.projectId),
-        scope.taskId === undefined ? undefined : eq(events.taskId, scope.taskId),
-        scope.runId === undefined ? undefined : eq(events.runId, scope.runId),
-        scope.decisionId === undefined ? undefined : eq(events.decisionId, scope.decisionId),
-        scope.documentId === undefined ? undefined : eq(events.documentId, scope.documentId),
-        scope.goalId === undefined ? undefined : eq(events.goalId, scope.goalId),
-        gt(events.id, after),
-      ),
-    )
+    .leftJoin(actors, eq(actors.id, events.actorId));
+}
+
+type EventRow = Awaited<ReturnType<typeof selectEvents>>[number];
+
+/** The events of one scope: the workspace's own, or a project's, narrowed to one subject when asked. */
+function within(scope: EventScope) {
+  return and(
+    eq(events.workspaceId, scope.workspaceId),
+    scope.projectId === null ? isNull(events.projectId) : eq(events.projectId, scope.projectId),
+    scope.taskId === undefined ? undefined : eq(events.taskId, scope.taskId),
+    scope.runId === undefined ? undefined : eq(events.runId, scope.runId),
+    scope.decisionId === undefined ? undefined : eq(events.decisionId, scope.decisionId),
+    scope.documentId === undefined ? undefined : eq(events.documentId, scope.documentId),
+    scope.goalId === undefined ? undefined : eq(events.goalId, scope.goalId),
+  );
+}
+
+function toEvent(row: EventRow): EventRecord {
+  return {
+    id: row.id,
+    workspaceId: row.workspaceId,
+    projectId: row.projectId ?? undefined,
+    kind: row.kind as EventKind,
+    actor: row.actor === null ? undefined : toPerson(row.actor),
+    agent: row.agent ?? undefined,
+    taskId: row.taskId ?? undefined,
+    decisionId: row.decisionId ?? undefined,
+    runId: row.runId ?? undefined,
+    documentId: row.documentId ?? undefined,
+    goalId: row.goalId ?? undefined,
+    data: row.data,
+    createdAt: row.createdAt,
+  };
+}
+
+/**
+ * What happened within `scope` after event number `after`, oldest first, at most `limit` of
+ * it, and whether there is more. `0` is the beginning.
+ */
+export async function listEventsAfter(
+  database: Database,
+  scope: EventScope,
+  after: number,
+  limit: number,
+): Promise<{ readonly items: EventRecord[]; readonly more: boolean }> {
+  const rows = await selectEvents(database)
+    .where(and(within(scope), gt(events.id, after)))
     .orderBy(asc(events.id))
     .limit(limit + 1);
-  const more = rows.length > limit;
-  return {
-    items: rows.slice(0, limit).map((row) => ({
-      id: row.id,
-      workspaceId: row.workspaceId,
-      projectId: row.projectId ?? undefined,
-      kind: row.kind as EventKind,
-      actor: row.actor === null ? undefined : toPerson(row.actor),
-      agent: row.agent ?? undefined,
-      taskId: row.taskId ?? undefined,
-      decisionId: row.decisionId ?? undefined,
-      runId: row.runId ?? undefined,
-      documentId: row.documentId ?? undefined,
-      goalId: row.goalId ?? undefined,
-      data: row.data,
-      createdAt: row.createdAt,
-    })),
-    more,
-  };
+  return { items: rows.slice(0, limit).map(toEvent), more: rows.length > limit };
+}
+
+/**
+ * The newest `limit` events within `scope`, oldest first, and whether there are earlier ones:
+ * how a page shows the feed as it stands without reading it from the beginning, which on a
+ * board with a long history was a round trip per hundred events.
+ */
+export async function listLatestEvents(
+  database: Database,
+  scope: EventScope,
+  limit: number,
+): Promise<{ readonly items: EventRecord[]; readonly more: boolean }> {
+  const rows = await selectEvents(database)
+    .where(within(scope))
+    .orderBy(desc(events.id))
+    .limit(limit + 1);
+  return { items: rows.slice(0, limit).reverse().map(toEvent), more: rows.length > limit };
 }
 
 /** The number of the newest event of the workspace, or `0` when nothing has happened yet. */
