@@ -1276,13 +1276,29 @@ describe("people", () => {
         people={[
           { ...alice, source: "organization" },
           { ...dave, name: "Dave Example" },
+          {
+            ...bob,
+            id: "0199c4d8-0000-7000-8000-000000000005",
+            login: "erin@acme.test",
+            name: "Erin Example",
+            source: "domain",
+          },
         ]}
         organization={{ host: "gh", name: "acme", syncedAt: null }}
       />,
     );
     expect(ofIt).toContain('alice · <span class="sc-person-note">Member of acme</span>');
     expect(ofIt).toContain('dave · <span class="sc-person-note">Left the organization');
+    expect(ofIt).toContain(
+      'erin@acme.test · <span class="sc-person-note">Account at acme.test</span>',
+    );
     expect(ofIt).not.toContain("Of the organization");
+    expect(ofIt).not.toContain("Of the domain");
+    // Without the organization named by the console, the plain words stand.
+    const plain = renderToStaticMarkup(
+      <PeopleList people={[{ ...alice, source: "organization" }]} />,
+    );
+    expect(plain).toContain("Of the organization");
   });
 
   it("lets someone in by a login spelled as its host spells one", () => {

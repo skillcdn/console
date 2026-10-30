@@ -899,6 +899,8 @@ export const en = {
     } satisfies Record<MembershipSource, string>,
     /** A person the organization let in, by the organization's name: never read as their own. */
     ofOrganization: (name: string) => `Member of ${name}`,
+    /** A person a Workspace domain let in, by the domain of their login. */
+    ofDomain: (domain: string) => `Account at ${domain}`,
     at: { gh: "at GitHub", google: "at Google" } satisfies Record<ProviderKey, string>,
     organization: (name: string) => `The organization ${name} at GitHub says who is in.`,
     organizationRead: "Last read",

@@ -57,6 +57,19 @@ export function PeopleList(props: PeopleListProps) {
     person.source !== "organization" &&
     props.me?.id !== person.id;
   const organization = props.organization ?? undefined;
+  /** What let the person in, by its name: the organization, the domain of their login, or an administrator. */
+  const noteOf = (person: RestPerson): string => {
+    if (person.source === "organization") {
+      return organization === undefined
+        ? people.source.organization
+        : people.ofOrganization(organization.name);
+    }
+    if (person.source === "domain") {
+      const at = person.login.lastIndexOf("@");
+      return at === -1 ? people.source.domain : people.ofDomain(person.login.slice(at + 1));
+    }
+    return people.source.listed;
+  };
   return (
     <div className="sc-people-page">
       {organization !== undefined && (
@@ -80,11 +93,7 @@ export function PeopleList(props: PeopleListProps) {
             )}
             <span className="sc-person-name sc-muted">
               {person.name !== null && <>{person.login} · </>}
-              <span className="sc-person-note">
-                {person.source === "organization" && organization !== undefined
-                  ? people.ofOrganization(organization.name)
-                  : people.source[person.source]}
-              </span>
+              <span className="sc-person-note">{noteOf(person)}</span>
             </span>
             {props.onChangeRole === undefined ? (
               <RoleBadge role={person.role} />
@@ -169,9 +178,7 @@ export function PeopleList(props: PeopleListProps) {
                 <span className="sc-person-name sc-muted">
                   {person.name !== null && <>{person.login} · </>}
                   <span className="sc-person-note">
-                    {person.source === "organization"
-                      ? people.leftOrganization
-                      : people.source[person.source]}
+                    {person.source === "organization" ? people.leftOrganization : noteOf(person)}
                     {person.deactivatedAt !== null && (
                       <>
                         {" "}
