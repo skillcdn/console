@@ -1376,7 +1376,8 @@ describe("tokens", () => {
     ).toBe(200);
 
     // Membership is decided on every request, for a token as for a session (ADR-0022):
-    // deactivated, Bob's token is nothing; back in, it is Bob again.
+    // deactivated, Bob's token is kept and refused with the reason (ADR-0044); back in, it is
+    // Bob again, with nothing to connect anew.
     const { secret: whileIn } = await make(bob, { name: "while in" });
     const admins = createHarness(testDatabase, {
       providers: [createFixtureProvider()],
@@ -1394,7 +1395,20 @@ describe("tokens", () => {
     const out = await h.request(`${IN}/tasks`, {
       headers: { authorization: `Bearer ${whileIn}` },
     });
-    expect(out.status).toBe(401);
+    expect(out.status).toBe(403);
+    expect(await errorOf(out)).toBe("auth.deactivated");
+    // `me` says why too, where nobody is otherwise an answer; a token the console does not
+    // know is nobody there still.
+    const who = await h.request(REST_ROUTES.me, {
+      headers: { authorization: `Bearer ${whileIn}` },
+    });
+    expect(who.status).toBe(403);
+    expect(restErrorSchema.parse(await who.json()).error.message).toContain("deactivated");
+    const unknown = await h.request(REST_ROUTES.me, {
+      headers: { authorization: "Bearer cns_t_not-a-token-the-console-knows-0000000000000000" },
+    });
+    expect(unknown.status).toBe(200);
+    expect(restMeSchema.parse(await unknown.json()).person).toBeNull();
     expect((await standing("active")).status).toBe(200);
     const back = await h.request(`${IN}/tasks`, {
       headers: { authorization: `Bearer ${whileIn}` },

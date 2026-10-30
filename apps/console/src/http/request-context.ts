@@ -1,4 +1,5 @@
 import { createMiddleware } from "hono/factory";
+import type { AccessRefusal } from "../auth/membership.js";
 import type { Logger } from "../logger.js";
 import { acceptRequestId, type ClientAddressResolver } from "./client-address.js";
 
@@ -7,6 +8,8 @@ export interface AppEnv {
     /** Taken from a trusted proxy, or made here. Returned as `x-request-id` and logged. */
     requestId: string;
     clientAddress: string | undefined;
+    /** Why the token presented, one the console knows, is refused: its person is out (ADR-0044). */
+    refusal: AccessRefusal | undefined;
   };
 }
 

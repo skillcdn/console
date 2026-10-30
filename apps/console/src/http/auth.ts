@@ -16,7 +16,7 @@ import type { Context, Hono } from "hono";
 import type { Connections } from "../auth/connect.js";
 import type { Login, LoginStep } from "../auth/login.js";
 import { safeReturnTo } from "../auth/login.js";
-import type { Membership } from "../auth/membership.js";
+import { type Membership, refusalOf } from "../auth/membership.js";
 import { configuresWorkspace } from "../auth/policy.js";
 import type { Secrets } from "../auth/secrets.js";
 import type { Sessions } from "../auth/sessions.js";
@@ -77,7 +77,8 @@ export interface Access {
   person(c: Context<AppEnv>): Promise<PersonRecord | undefined>;
   /**
    * Who is asking and with what: the token when one is presented, so that an agent is told
-   * apart from its person's browser.
+   * apart from its person's browser. A token the console knows, for a person who is out, is
+   * nobody, and leaves why on the request for `signInRequired` to answer (ADR-0044).
    */
   caller(
     c: Context<AppEnv>,
@@ -111,10 +112,16 @@ export function createAccess(auth: AppAuth | undefined): Access {
           authorization,
           client === undefined ? undefined : formatVersion(client),
         );
-        // Membership is decided on every request, for a token as for a session.
-        return found === undefined || !auth.membership.allows(found.person)
-          ? undefined
-          : { person: found.person, token: found.token };
+        if (found === undefined) {
+          return undefined;
+        }
+        // Membership is decided on every request, for a token as for a session. A token the
+        // console knows, for a person who is out, is kept and refused with the reason (ADR-0044).
+        if (!auth.membership.allows(found.person)) {
+          c.set("refusal", refusalOf(found.person));
+          return undefined;
+        }
+        return { person: found.person, token: found.token };
       }
       const person = await auth.sessions.resolve(c.req.header("cookie"));
       if (person === undefined) {
@@ -144,8 +151,16 @@ export function createAccess(auth: AppAuth | undefined): Access {
   };
 }
 
-export const signInRequired = (c: Context<AppEnv>): Response =>
-  c.json(errorBody("auth.required", "Sign in to continue."), 401);
+/**
+ * What nobody is answered: to sign in; or, for a token the console knows whose person is out,
+ * why it is refused (ADR-0044), so that the agent can tell its person.
+ */
+export const signInRequired = (c: Context<AppEnv>): Response => {
+  const refusal = c.get("refusal");
+  return refusal === undefined
+    ? c.json(errorBody("auth.required", "Sign in to continue."), 401)
+    : c.json(errorBody(refusal.code, refusal.message), 403);
+};
 
 export const foreignOrigin = (c: Context<AppEnv>): Response =>
   c.json(
@@ -222,10 +237,15 @@ export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies):
     };
   };
 
-  // Whoever is signed in, for the pages. Nobody is an answer too.
+  // Whoever is signed in, for the pages. Nobody is an answer too; a token refused for its
+  // person's sake is told why instead (ADR-0044).
   app.get(REST_ROUTES.me, async (c) => {
     c.header("cache-control", "no-store");
-    return c.json(await meOf(await access.caller(c)));
+    const caller = await access.caller(c);
+    if (caller === undefined && c.get("refusal") !== undefined) {
+      return signInRequired(c);
+    }
+    return c.json(await meOf(caller));
   });
 
   // The person's own choice of language (ADR-0012): theirs to keep, from the console's own

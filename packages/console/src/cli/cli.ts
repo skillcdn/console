@@ -801,13 +801,19 @@ const logout: Command = async (args, io) => {
   }
   // The token is given up at the console first, so that it is good for nothing from now on;
   // one the console no longer knows is gone already. A console out of reach leaves it to the
-  // Agents page, and the person is told so.
-  let gone = true;
+  // Agents page, and the person is told so. A console that keeps it because the person is out
+  // (ADR-0044) is told so too: the token is theirs again when they are back in.
+  let outcome: "gone" | "kept" | "left" = "gone";
   try {
     await clientOf(io, url, login.token).giveUpToken();
   } catch (error) {
-    if (!(error instanceof ApiError && error.code === "auth.required")) {
-      gone = false;
+    if (
+      error instanceof ApiError &&
+      (error.code === "auth.deactivated" || error.code === "auth.not_admitted")
+    ) {
+      outcome = "kept";
+    } else if (!(error instanceof ApiError && error.code === "auth.required")) {
+      outcome = "left";
     }
   }
   const next = withoutLogin(credentials, url, login.account);
@@ -818,9 +824,11 @@ const logout: Command = async (args, io) => {
   }
   const whom = login.account === undefined ? "" : ` as ${login.account}`;
   io.stdout(
-    gone
+    outcome === "gone"
       ? `Signed out of ${url}${whom}: the token is given up at the console and forgotten here.\n`
-      : `Signed out of ${url}${whom} here, but the console could not be reached to give the token up: a person removes it on the Agents page.\n`,
+      : outcome === "kept"
+        ? `Signed out of ${url}${whom} here: the console keeps the token while the person is out, for when they are back in.\n`
+        : `Signed out of ${url}${whom} here, but the console could not be reached to give the token up: a person removes it on the Agents page.\n`,
   );
   envNote();
   return EXIT.ok;
@@ -3122,6 +3130,10 @@ function hintFor(error: ApiError, io: CliIo, seen: ConsoleSeen): string {
       return `Install the console's version: ${updateWords(io, seen.version)}; or ask the console's operator to update the console.\n`;
     case "auth.required":
       return "The token is not one the console knows, any more or at all. A person signs the command in again: console login\n";
+    case "auth.deactivated":
+      return "Tell the person: they are taken back in on the People page, by an administrator or by their organization, and this token works again then. console logout forgets it here meanwhile.\n";
+    case "auth.not_admitted":
+      return "Tell the person: they are back in when what let them in is named again, or when an administrator lists their login and they sign in again, and this token works again then. console logout forgets it here meanwhile.\n";
     case "project.not_found":
       return "No project has this key, or it is not yours to see. console projects lists the projects you may work in.\n";
     case "document.not_found":

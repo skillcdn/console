@@ -133,3 +133,28 @@ export class Membership {
     return this.#admins.has(login.trim().toLowerCase());
   }
 }
+
+/**
+ * Why a person the console knows is refused, for whoever presents their token (ADR-0044):
+ * deactivated, by an administrator or by the organization that took them out; or no longer let
+ * in, because what let them in, the domain or the organization, is no longer named. The token
+ * is kept either way, and is the person's again when they are back in.
+ */
+export interface AccessRefusal {
+  readonly code: "auth.deactivated" | "auth.not_admitted";
+  readonly message: string;
+}
+
+export function refusalOf(person: PersonRecord): AccessRefusal {
+  return person.status === "deactivated"
+    ? {
+        code: "auth.deactivated",
+        message:
+          "The person this token acts as is deactivated. The token is kept, and works again when they are taken back in.",
+      }
+    : {
+        code: "auth.not_admitted",
+        message:
+          "The person this token acts as is no longer let in: what let them in, the domain or the organization, is no longer named here. The token is kept, and works again when they are back in.",
+      };
+}

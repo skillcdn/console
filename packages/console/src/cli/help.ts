@@ -59,6 +59,7 @@ export interface CommandHelp {
 /** The refusals any command may meet, said once in the overview. */
 const COMMON_REFUSALS = [
   "auth.required: the token is not one the console knows, any more or at all; a person signs the command in again",
+  "auth.deactivated, auth.not_admitted: the person this token acts as is out, deactivated or no longer let in; the console keeps the token, and it works again when they are back in",
   "request.invalid: what was sent is over a limit or malformed; the message names the field",
   "network: the console could not be reached at its address",
 ];

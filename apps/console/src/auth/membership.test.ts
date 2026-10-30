@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PersonRecord } from "../db/queries/people.js";
 import { createFixtureOrganization } from "../testing/fixture-organization.js";
-import { domainOf, Membership } from "./membership.js";
+import { domainOf, Membership, refusalOf } from "./membership.js";
 
 const person = (fields: Partial<PersonRecord>): PersonRecord => ({
   id: "0199c4d8-0000-7000-8000-000000000001",
@@ -25,6 +25,15 @@ describe("Membership", () => {
     expect(members.allows(person({ status: "deactivated", deactivatedAt: new Date() }))).toBe(
       false,
     );
+  });
+
+  it("says why a person it keeps out is refused: deactivated, or no longer let in (ADR-0044)", () => {
+    expect(refusalOf(person({ status: "deactivated", deactivatedAt: new Date() }))).toMatchObject({
+      code: "auth.deactivated",
+    });
+    expect(
+      refusalOf(person({ host: "google", login: "alice@other.test", source: "domain" })),
+    ).toMatchObject({ code: "auth.not_admitted" });
   });
 
   it("keeps a domain's people in while the domain is named, whatever the case of the address", () => {

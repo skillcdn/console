@@ -583,7 +583,19 @@ describe("the console command", () => {
     const nobody = harness({ fetch });
     expect(await runCli(["logout"], nobody.io)).toBe(EXIT.ok);
     expect(nobody.out()).toContain("nothing to forget");
-    expect(h.out() + down.out()).not.toContain("cns_");
+    // The console keeps the token of a person who is out, for when they are back (ADR-0044).
+    const refusing = fakeConsole({
+      "DELETE /api/v1/me/token": {
+        status: 403,
+        body: { error: { code: "auth.deactivated", message: "The person is deactivated." } },
+      },
+    });
+    const kept = memoryStore(one(ORIGIN, "cns_t_kept"));
+    const outside = harness({ fetch: refusing.fetch, store: kept.store });
+    expect(await runCli(["logout"], outside.io)).toBe(EXIT.ok);
+    expect(kept.kept()).toBeUndefined();
+    expect(outside.out()).toContain("keeps the token while the person is out");
+    expect(h.out() + down.out() + outside.out()).not.toContain("cns_");
   });
 
   it("works in the project the flag, the environment or the directory names, and says so when none does", async () => {
@@ -1538,6 +1550,18 @@ describe("the console command", () => {
     expect(await runCli(["tasks"], o.io)).toBe(EXIT.failed);
     expect(o.err()).toContain("auth.required");
     expect(o.err()).toContain("console login");
+    // A token the console knows, for a person who is out, is told why and what to do (ADR-0044).
+    const refused = fakeConsole({
+      [`GET ${IN}/tasks?limit=50&offset=0`]: {
+        status: 403,
+        body: { error: { code: "auth.deactivated", message: "The person is deactivated." } },
+      },
+    });
+    const r = harness({ fetch: refused.fetch, env: SIGNED_IN });
+    expect(await runCli(["tasks"], r.io)).toBe(EXIT.failed);
+    expect(r.err()).toContain("auth.deactivated: The person is deactivated.");
+    expect(r.err()).toContain("People page");
+    expect(r.err()).toContain("console logout");
   });
 });
 

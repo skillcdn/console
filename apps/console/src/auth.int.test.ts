@@ -1,4 +1,10 @@
-import { AUTH_ROUTES, REST_ROUTES, restMeSchema } from "@skillcdn/console/api";
+import {
+  AUTH_ROUTES,
+  REST_ROUTES,
+  restErrorSchema,
+  restMeSchema,
+  restTokenCreatedSchema,
+} from "@skillcdn/console/api";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { listEventsAfter } from "./db/queries/events.js";
 import { ensureWorkspace } from "./db/queries/workspaces.js";
@@ -395,10 +401,28 @@ describe("the organization at the git host", () => {
     );
     expect(waits.headers.get("location")).toBe("/?sign_in=refused");
     organization.unreachable(false);
-    // The organization taken out of the configuration takes its people with it at once.
+    // The organization taken out of the configuration takes its people with it at once; a
+    // token of theirs is kept, and refused with the reason (ADR-0044).
     const carol = await h.signIn("carol");
+    const made = await h.request(REST_ROUTES.tokens, {
+      method: "POST",
+      headers: { cookie: carol, origin: SIGN_IN_URL, "content-type": "application/json" },
+      body: JSON.stringify({ name: "an agent of Carol" }),
+    });
+    expect(made.status).toBe(201);
+    const { secret } = restTokenCreatedSchema.parse(await made.json());
     const without = createHarness(testDatabase, { providers: [login], listed: ["bob"] });
     expect((await me(without, carol)).person).toBeNull();
+    const refused = await without.request(REST_ROUTES.me, {
+      headers: { authorization: `Bearer ${secret}` },
+    });
+    expect(refused.status).toBe(403);
+    expect(restErrorSchema.parse(await refused.json()).error.code).toBe("auth.not_admitted");
+    // Named again, the organization's people are back in, and the token with them.
+    const back = await h.request(REST_ROUTES.me, {
+      headers: { authorization: `Bearer ${secret}` },
+    });
+    expect(restMeSchema.parse(await back.json()).person?.login).toBe("carol");
   });
 });
 
