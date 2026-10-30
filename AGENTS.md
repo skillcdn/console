@@ -62,6 +62,7 @@ Run everything from the repository root through pnpm. Do not use `npm`, `npx` or
 | No control or invisible characters in tracked files, new files included (part of `pnpm check`) | `pnpm check:text` |
 | The skills and the manifest are in the SkillCDN Format as the indexer reads it, and name commands, routes and files that exist (part of `pnpm check`) | `pnpm check:skills` |
 | The package's version is on SkillCDN's line, and every `@skillcdn` package is taken at that one version (part of `pnpm check`) | `pnpm check:version` |
+| The REST schemas as built break nothing of the snapshot taken at the floors: a field removed, made required or narrowed on what the command sends, widened on what it reads, fails unless the floors moved (part of `pnpm check`, after the build; [ADR-0043](docs/adr/0043-the-rest-contract-is-held-to-a-snapshot-taken-at-the-floors.md)) | `pnpm check:rest`; `pnpm snapshot:rest` takes the snapshot again, in the change that moves a floor |
 | Local PostgreSQL, and a bucket with the S3 API for the tests of the blob store | `docker compose -f deploy/compose.dev.yaml up -d` |
 
 Packages compile to `dist/` and consume each other's compiled output. Going through `turbo` builds upstream packages first; calling a package script directly can test against a stale `dist/`.
