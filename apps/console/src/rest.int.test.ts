@@ -14,6 +14,7 @@ import {
   MAX_TOKEN_DAYS,
   MAX_TOKEN_NAME_LENGTH,
   MAX_TOKENS_PER_PERSON,
+  MAX_URL_LENGTH,
   MAX_WORKERS,
   OPEN_TASK_STATES,
   personTokensPath,
@@ -89,6 +90,7 @@ import { tasks } from "./db/schema.js";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "./db/testing.js";
 import { Archivist } from "./jobs/archivist.js";
 import { OrganizationSync } from "./jobs/organization-sync.js";
+import type { PictureSource } from "./ports/picture-source.js";
 import { type Pack, type PackConnector, PackError, type PackSource } from "./ports/skill-source.js";
 import { createFixtureOrganization } from "./testing/fixture-organization.js";
 import { createFixtureProvider } from "./testing/fixture-provider.js";
@@ -1548,6 +1550,77 @@ describe("the quotas", () => {
       await bounded.close();
     }
     expect(bounded.feed.streams).toBe(0);
+  });
+});
+
+describe("pictures from elsewhere (ADR-0048)", () => {
+  const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+  it("are fetched by the console for whoever is signed in, kept, and refused where the console never fetches from", async () => {
+    const fetched: string[] = [];
+    const source: PictureSource = {
+      async fetch(request) {
+        fetched.push(request.url);
+        if (request.url.endsWith("inside.png")) {
+          return { kind: "refused", reason: "private_address" };
+        }
+        if (request.url.endsWith("gone.png")) {
+          return { kind: "refused", reason: "upstream" };
+        }
+        return {
+          kind: "picture",
+          bytes: PNG,
+          contentType: "image/png",
+          etag: '"v1"',
+          lastModified: undefined,
+        };
+      },
+    };
+    const served = createHarness(testDatabase, {
+      providers: [createFixtureProvider()],
+      pictures: source,
+    });
+    const at = (src: string) => `${REST_ROUTES.pictures}?src=${encodeURIComponent(src)}`;
+    expect((await served.request(at("https://img.example/x.png"))).status).toBe(401);
+    for (const bad of [
+      "http://img.example/x.png",
+      "https://u:p@img.example/x.png",
+      "https://img.example:8443/x.png",
+      "",
+      `https://img.example/${"x".repeat(MAX_URL_LENGTH)}`,
+    ]) {
+      const refused = await served.request(at(bad), { headers: { cookie: alice } });
+      expect(refused.status, bad).toBe(400);
+      expect(await errorOf(refused)).toBe("request.invalid");
+    }
+    const shown = await served.request(at("https://img.example/x.png"), {
+      headers: { cookie: alice },
+    });
+    expect(shown.status).toBe(200);
+    expect(shown.headers.get("content-type")).toBe("image/png");
+    expect(shown.headers.get("cache-control")).toBe("private, max-age=86400");
+    expect(shown.headers.get("content-security-policy")).toContain("sandbox");
+    expect(shown.headers.get("x-content-type-options")).toBe("nosniff");
+    const etag = shown.headers.get("etag") ?? "";
+    expect(etag).toMatch(/^"[0-9a-f]{64}"$/);
+    expect(new Uint8Array(await shown.arrayBuffer())).toEqual(PNG);
+    // Kept: a second look fetches nothing, and a browser that holds the picture is told so.
+    const again = await served.request(at("https://img.example/x.png"), {
+      headers: { cookie: alice, "if-none-match": etag },
+    });
+    expect(again.status).toBe(304);
+    expect(fetched).toEqual(["https://img.example/x.png"]);
+    const inside = await served.request(at("https://inside.example/inside.png"), {
+      headers: { cookie: alice },
+    });
+    expect(inside.status).toBe(403);
+    expect(await errorOf(inside)).toBe("picture.refused");
+    const gone = await served.request(at("https://img.example/gone.png"), {
+      headers: { cookie: alice },
+    });
+    expect(gone.status).toBe(502);
+    expect(await errorOf(gone)).toBe("picture.unavailable");
+    expect(gone.headers.get("cache-control")).toBe("no-store");
   });
 });
 

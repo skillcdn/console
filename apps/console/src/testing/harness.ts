@@ -25,6 +25,7 @@ import { restProject } from "../http/rest-shapes.js";
 import type { BlobStore } from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
 import type { OrganizationDirectory } from "../ports/organization.js";
+import type { PictureSource } from "../ports/picture-source.js";
 import type { PackConnector, PackSource } from "../ports/skill-source.js";
 import { createApi } from "../roles/api.js";
 import type { FixtureProvider } from "./fixture-provider.js";
@@ -110,6 +111,8 @@ export interface HarnessOptions {
   readonly blobs?: BlobStore | undefined;
   /** The deployment's side of connecting a pack with a code (ADR-0036). None when left out. */
   readonly packConnector?: PackConnector | undefined;
+  /** Where a picture from elsewhere is fetched (ADR-0048). Over HTTPS when left out, which no test wants. */
+  readonly pictures?: PictureSource | undefined;
 }
 
 /** The skills as the api role is configured with them, at a deployment of the tests' own. */
@@ -180,6 +183,7 @@ export function createHarness(testDatabase: TestDatabase, options: HarnessOption
       skillSource: options.skills?.source,
       packDirectory: options.skills?.directory,
       packConnector: options.packConnector,
+      pictures: options.pictures,
       blobs: options.blobs,
       version: HARNESS_VERSION,
     },

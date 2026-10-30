@@ -32,14 +32,15 @@ const CONTENT_TYPES: Readonly<Record<string, string>> = {
 
 /**
  * Pages show what people and agents wrote, which is untrusted. Nothing inline runs, nothing
- * loads from elsewhere but pictures over https, and nobody frames the page.
+ * loads from elsewhere, a picture from elsewhere coming through the console (ADR-0048), and
+ * nobody frames the page.
  */
 const PAGE_HEADERS: Readonly<Record<string, string>> = {
   "content-security-policy": [
     "default-src 'self'",
     "script-src 'self'",
     "style-src 'self'",
-    "img-src 'self' data: https:",
+    "img-src 'self' data:",
     "font-src 'self'",
     "connect-src 'self'",
     "object-src 'none'",

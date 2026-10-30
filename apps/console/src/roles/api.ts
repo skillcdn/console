@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { stat } from "node:fs/promises";
 import process from "node:process";
-import { EVENTS_PAGE_LIMIT, MAX_TOKENS_PER_PERSON } from "@skillcdn/console/api";
+import { EVENTS_PAGE_LIMIT, MAX_FILE_BYTES, MAX_TOKENS_PER_PERSON } from "@skillcdn/console/api";
 import { loadWebRoot, type WebRoot, WebRootError } from "@skillcdn/console/web";
 import type { Hono } from "hono";
 import { createContainerCredentials } from "../adapters/container-credentials.js";
@@ -9,6 +9,7 @@ import { createDirectorySource } from "../adapters/directory-packs.js";
 import { createGitHubProvider } from "../adapters/github-login.js";
 import { createGitHubOrganization } from "../adapters/github-organization.js";
 import { createGoogleProvider } from "../adapters/google-login.js";
+import { createHttpsPictures } from "../adapters/https-pictures.js";
 import { createPgBlobStore } from "../adapters/pg-blob-store.js";
 import { createS3BlobStore } from "../adapters/s3-blob-store.js";
 import { createSkillCdnConnector, createSkillCdnSource } from "../adapters/skillcdn.js";
@@ -27,6 +28,7 @@ import { createApp } from "../http/app.js";
 import type { AppAuth } from "../http/auth.js";
 import { createClientAddressResolver } from "../http/client-address.js";
 import { LiveFeed } from "../http/live-feed.js";
+import { PictureCache } from "../http/pictures.js";
 import { DEFAULT_QUOTAS, type Quotas } from "../http/quotas.js";
 import type { AppEnv } from "../http/request-context.js";
 import { startServer } from "../http/server.js";
@@ -40,6 +42,7 @@ import type { Clock } from "../ports/clock.js";
 import { fixedCredentials } from "../ports/credentials.js";
 import type { IdentityProvider } from "../ports/identity-provider.js";
 import type { OrganizationDirectory } from "../ports/organization.js";
+import type { PictureSource } from "../ports/picture-source.js";
 import type { PackConnector, PackSource } from "../ports/skill-source.js";
 import { Skills, type SkillsConfig } from "../skills.js";
 import { APP_NAME, APP_VERSION } from "../version.js";
@@ -58,6 +61,15 @@ const FEED_HEARTBEAT_MS = 25_000;
 const FEED_POLL_MS = 15_000;
 /** How long a read of a decision may hold its request for the answer: under what proxies allow. */
 const DECISION_WAIT_MS = 50_000;
+/**
+ * The pictures from elsewhere kept in memory (ADR-0048): how much room they have, how long one
+ * is served before the origin is asked again, how long it is still served when the origin is
+ * away, and how long a refusal holds.
+ */
+const PICTURE_CACHE_BYTES = 64 * 1024 * 1024;
+const PICTURE_FRESH_MS = 60 * 60_000;
+const PICTURE_STALE_MS = 24 * 60 * 60_000;
+const PICTURE_REFUSED_MS = 5 * 60_000;
 
 export interface ApiPorts {
   readonly database: Database;
@@ -72,6 +84,8 @@ export interface ApiPorts {
   readonly web?: WebRoot | undefined;
   /** Where the bytes of files handed in are kept. Left out, in the database. */
   readonly blobs?: BlobStore | undefined;
+  /** Where a picture from elsewhere is fetched (ADR-0048). Left out, over HTTPS from the public address it names. */
+  readonly pictures?: PictureSource | undefined;
   /** The deployment's side of the packs, where the addresses of a git host are read. Left out, read over HTTPS from the configured deployment. */
   readonly skillSource?: PackSource | undefined;
   /** Where packs served from this machine are read (ADR-0031). Left out, the directory the configuration names; without one, a `local` address is asked of the deployment. */
@@ -247,6 +261,17 @@ export function createApi(
     auth,
     feed,
     quotas: { ...DEFAULT_QUOTAS, ...config.quotas },
+    pictures: new PictureCache({
+      source:
+        ports.pictures ??
+        createHttpsPictures({ userAgent: `${APP_NAME}/${APP_VERSION}`, maxBytes: MAX_FILE_BYTES }),
+      clock,
+      maxBytes: PICTURE_CACHE_BYTES,
+      maxEntryBytes: MAX_FILE_BYTES,
+      freshMs: PICTURE_FRESH_MS,
+      staleMs: PICTURE_STALE_MS,
+      refusedMs: PICTURE_REFUSED_MS,
+    }),
     blobs: ports.blobs ?? createPgBlobStore(database),
     skills,
     packConnector:

@@ -448,6 +448,7 @@ describe("createConsole", () => {
     connectWorkspacePackToken: never,
     workspacePackTokenConnection: never,
     claimWorkspacePackTokenConnection: never,
+    pictureUrl: (url: string) => `/api/v1/pictures?src=${encodeURIComponent(url)}`,
     cancelWorkspacePackTokenConnection: never,
     people: never,
     findPerson: never,

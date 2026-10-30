@@ -443,6 +443,8 @@ export interface ConsoleClient {
   project(key: string): ProjectClient;
   /** The workspace's own events, the ones about no project, after event number `after`. */
   events(after: number, signal?: AbortSignal): Promise<RestEvents>;
+  /** Where a picture from elsewhere is read through the console (ADR-0048), given the https URL that names it. */
+  pictureUrl(url: string): string;
   /** The categories tasks are sorted into (ADR-0019), by name. */
   categories(signal?: AbortSignal): Promise<RestCategories>;
   /** The workspace's rules (ADR-0023): the console's own until an administrator writes the organization's. */
@@ -975,6 +977,7 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
         restEventsSchema,
         signal,
       ),
+    pictureUrl: (url) => withQuery(REST_ROUTES.pictures, { src: url }),
     categories: (signal) =>
       request("GET", `${base}${REST_ROUTES.categories}`, undefined, restCategoriesSchema, signal),
     rules: (signal) =>

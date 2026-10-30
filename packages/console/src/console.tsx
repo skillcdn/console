@@ -58,6 +58,7 @@ import {
   type ProjectListProps,
   ProjectMark,
 } from "./components/projects.js";
+import { type RemotePictureSrc, RemotePicturesContext } from "./components/remote-pictures.js";
 import { GoalTimeline } from "./components/roadmap.js";
 import { RulesForm, RulesView } from "./components/rules.js";
 import {
@@ -2344,6 +2345,8 @@ function WorkspacePage(props: {
 export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
   const components: ConsoleComponents = { ...DEFAULT_COMPONENTS, ...config.components };
   const client = config.client ?? createClient({ baseUrl: config.baseUrl ?? "" });
+  /** Where the pages read a picture from elsewhere (ADR-0048): through this client's console. */
+  const pictureSrc: RemotePictureSrc = (url) => client.pictureUrl(url);
   const fallbackTitle = config.title ?? "Console";
   const languages = config.languages ?? DEFAULT_LANGUAGES;
   const pages = config.pages ?? [];
@@ -2638,7 +2641,13 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
         </components.Shell>
       );
     }
-    return <LanguageContext.Provider value={pack}>{content}</LanguageContext.Provider>;
+    return (
+      <LanguageContext.Provider value={pack}>
+        <RemotePicturesContext.Provider value={pictureSrc}>
+          {content}
+        </RemotePicturesContext.Provider>
+      </LanguageContext.Provider>
+    );
   }
 
   return {

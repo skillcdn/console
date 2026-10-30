@@ -9,6 +9,8 @@ export const REST_ROUTES = {
   me: "/api/v1/me",
   /** The token a request is made with, for it to give itself up. */
   meToken: "/api/v1/me/token",
+  /** A picture from elsewhere, fetched by the console for a page (ADR-0048); `?src=` names it. */
+  pictures: "/api/v1/pictures",
   /** The workspace's settings (ADR-0035), changed by an administrator; read through `me`. */
   workspace: "/api/v1/workspace",
   /** The SkillCDN token the organization's pack is read with (ADR-0036), an administrator's; `/connect` under it connects one with a code. */

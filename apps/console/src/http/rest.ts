@@ -19,6 +19,7 @@ import {
   MAX_REPORTS_PER_RUN,
   MAX_RULES_LENGTH,
   MAX_SEARCH_LENGTH,
+  MAX_URL_LENGTH,
   MAX_VERSIONS_PER_DOCUMENT,
   normalizeConnectCode,
   type ProjectIconType,
@@ -225,6 +226,7 @@ import {
 import type { Logger } from "../logger.js";
 import { type BlobStore, BlobStoreError } from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
+import { pictureUrlOf } from "../ports/picture-source.js";
 import { type PackConnector, PackError } from "../ports/skill-source.js";
 import type { Skills } from "../skills.js";
 import { errorBody } from "./app.js";
@@ -236,6 +238,7 @@ import {
   signInRequired,
 } from "./auth.js";
 import type { LiveFeed } from "./live-feed.js";
+import type { PictureCache } from "./pictures.js";
 import type { Quotas } from "./quotas.js";
 import type { AppEnv } from "./request-context.js";
 import {
@@ -293,6 +296,8 @@ export interface RestDependencies {
   readonly feed: LiveFeed;
   /** How much of the board a workspace, a project, a task or a person holds at once. */
   readonly quotas: Quotas;
+  /** The pictures from elsewhere the pages show, fetched by the console and kept a while (ADR-0048). */
+  readonly pictures: PictureCache;
   /** Where the bytes of files handed in are kept. */
   readonly blobs: BlobStore;
   /** The skills of a project, read by address. */
@@ -511,6 +516,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     connections,
     feed,
     quotas,
+    pictures,
     blobs,
     skills,
     packConnector,
@@ -988,6 +994,45 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
   };
 
   // The workspace: its people, its projects, its own events, and the tokens.
+
+  // A picture from elsewhere, for a page that shows one (ADR-0048): fetched by the console and
+  // kept a while, so that the person's browser reaches nobody's server; for whoever is signed
+  // in, with a session or a token. The address is in the query, which the access log leaves out.
+  app.get(REST_ROUTES.pictures, async (c) => {
+    const person = await asking(c);
+    if (person instanceof Response) {
+      return person;
+    }
+    const src = c.req.query("src") ?? "";
+    if (src.length > MAX_URL_LENGTH || pictureUrlOf(src) === undefined) {
+      return invalid(c, "src: an https URL, on its default port and without credentials");
+    }
+    const answer = await pictures.get(src);
+    if (answer.kind === "refused") {
+      const never = answer.reason === "private_address" || answer.reason === "not_https";
+      return c.json(
+        errorBody(
+          never ? "picture.refused" : "picture.unavailable",
+          never
+            ? "The console fetches no picture from that address."
+            : "The picture could not be fetched from where it is named.",
+        ),
+        never ? 403 : 502,
+      );
+    }
+    const etag = `"${answer.picture.sha256}"`;
+    c.header("etag", etag);
+    c.header("cache-control", "private, max-age=86400");
+    c.header("x-content-type-options", "nosniff");
+    c.header("content-security-policy", "default-src 'none'; sandbox");
+    c.header("cross-origin-resource-policy", "same-origin");
+    if (c.req.header("if-none-match") === etag) {
+      return c.body(null, 304);
+    }
+    c.header("content-type", answer.picture.contentType);
+    // A copy of its own: what the cache holds may be a view of a larger buffer.
+    return c.body(new Uint8Array(answer.picture.bytes).buffer);
+  });
 
   // Who sees whom is the policy's (ADR-0035): the people the asker may see, or, with `login`, the
   // one person they may find by that login, so as to list them in a project they configure. The

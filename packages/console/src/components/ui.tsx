@@ -11,6 +11,7 @@ import {
 } from "../api.js";
 import { dayOf, daysBetween, formatDay, today } from "../dates.js";
 import { useLanguage, useWords } from "../i18n/index.js";
+import { useRemotePictureSrc } from "./remote-pictures.js";
 
 // Small building blocks. Each one is a class in styles/console.css and nothing more. Classes
 // are prefixed `sc-` so that a custom console's own styles never collide with them. The words
@@ -96,13 +97,15 @@ export function personName(person: {
 }
 
 /**
- * A person's picture as the git host serves it: loaded lazily, without a referrer, and gone as
- * a whole when there is none or it cannot be loaded, leaving the initial of the name instead.
+ * A person's picture as the git host serves it, read through the console (ADR-0048): loaded
+ * lazily, without a referrer, and gone as a whole when there is none or it cannot be loaded,
+ * leaving the initial of the name instead.
  */
 export function Avatar(props: {
   readonly person: RestPerson;
   readonly size?: "xs" | "sm" | "md" | "lg";
 }) {
+  const remote = useRemotePictureSrc();
   const size = props.size ?? "md";
   const initial = personName(props.person).slice(0, 1).toUpperCase();
   if (props.person.avatar === null) {
@@ -118,7 +121,7 @@ export function Avatar(props: {
   return (
     <img
       className={cx("sc-avatar", `sc-avatar-${size}`)}
-      src={props.person.avatar}
+      src={remote(props.person.avatar)}
       alt=""
       loading="lazy"
       decoding="async"

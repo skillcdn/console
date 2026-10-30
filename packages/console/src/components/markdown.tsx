@@ -2,11 +2,13 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { isDocumentPath } from "../documents.js";
 import { type Picture, PictureThumb } from "./pictures.js";
+import { useRemotePictureSrc } from "./remote-pictures.js";
 
 // What people and agents write is untrusted. It is rendered as React elements, never as HTML:
 // raw HTML in the source stays text, links are limited to a few schemes and open elsewhere,
-// and pictures come over https only, lazily and without a referrer. A link whose destination
-// is a document's path (ADR-0009) leads to the document's page, when the page knows where.
+// and a picture from elsewhere, named over https, is read through the console (ADR-0048),
+// lazily and without a referrer. A link whose destination is a document's path (ADR-0009)
+// leads to the document's page, when the page knows where.
 
 const SAFE_LINK = /^(https?:|mailto:)/i;
 const SAFE_IMAGE = /^https:\/\//i;
@@ -29,6 +31,7 @@ export interface MarkdownProps {
 }
 
 export function Markdown(props: MarkdownProps) {
+  const remote = useRemotePictureSrc();
   return (
     <div className="sc-prose">
       <ReactMarkdown
@@ -62,7 +65,7 @@ export function Markdown(props: MarkdownProps) {
           img({ src, alt, title }) {
             const named = typeof src === "string" ? props.fileSrc?.(src) : undefined;
             const url =
-              named ?? (typeof src === "string" && SAFE_IMAGE.test(src) ? src : undefined);
+              named ?? (typeof src === "string" && SAFE_IMAGE.test(src) ? remote(src) : undefined);
             if (url === undefined) {
               return <span className="sc-prose-image-text">{alt ?? ""}</span>;
             }

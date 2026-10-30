@@ -58,6 +58,9 @@ describe("a web root", () => {
       expect(page?.headers.get("content-type")).toBe("text/html; charset=utf-8");
       expect(page?.headers.get("content-security-policy")).toContain("script-src 'self'");
       expect(page?.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
+      // A picture from elsewhere comes through the console (ADR-0048), not from elsewhere.
+      expect(page?.headers.get("content-security-policy")).toContain("img-src 'self' data:;");
+      expect(page?.headers.get("content-security-policy")).not.toContain("https:");
       expect(page?.headers.get("x-frame-options")).toBe("DENY");
       expect(await page?.text()).toContain("<title>Console</title>");
     }

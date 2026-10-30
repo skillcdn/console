@@ -59,6 +59,7 @@ import {
   ProjectList,
   ProjectMark,
 } from "./projects.js";
+import { RemotePicturesContext } from "./remote-pictures.js";
 import { GoalTimeline, timelineBars } from "./roadmap.js";
 import { RulesForm, RulesView } from "./rules.js";
 import { RunList } from "./runs.js";
@@ -748,8 +749,16 @@ describe("Markdown", () => {
     expect(html).toContain('rel="noopener noreferrer nofollow ugc"');
     expect(html).not.toContain("javascript:");
     expect(html).not.toContain("http://insecure");
-    expect(html).toContain('src="https://img.example/x.png"');
+    // A picture from elsewhere is read through the console (ADR-0048), never from elsewhere.
+    expect(html).not.toContain('src="https://img.example/x.png"');
+    expect(html).toContain('src="/api/v1/pictures?src=https%3A%2F%2Fimg.example%2Fx.png"');
     expect(html.toLowerCase()).toContain('referrerpolicy="no-referrer"');
+    const provided = renderToStaticMarkup(
+      <RemotePicturesContext.Provider value={(url) => `/pictures/${encodeURIComponent(url)}`}>
+        <Markdown source="![ok](https://img.example/x.png)" />
+      </RemotePicturesContext.Provider>,
+    );
+    expect(provided).toContain('src="/pictures/https%3A%2F%2Fimg.example%2Fx.png"');
   });
 
   it("leads a link to a page's path to the page, when it knows where, and leaves it text otherwise", () => {
@@ -924,7 +933,7 @@ describe("documents", () => {
       '<img src="/api/v1/projects/web/docs/guides%2Fonboarding/files/0199c4d8-0000-7000-8000-000000000071" alt="the board"',
     );
     expect(html).toContain('<span class="sc-prose-image-text">elsewhere</span>');
-    expect(html).toContain('src="https://img.example/x.png"');
+    expect(html).toContain('src="/api/v1/pictures?src=https%3A%2F%2Fimg.example%2Fx.png"');
     // In place and as the text has it: no thumbnail that opens large.
     expect(html).not.toContain("sc-picture-thumb");
   });
@@ -1434,7 +1443,7 @@ describe("runs", () => {
     expect(html).toContain(
       'src="/api/v1/projects/web/files/0199c4d8-0000-7000-8000-000000000044" alt="after"',
     );
-    expect(html).toContain('src="https://img.example/x.png"');
+    expect(html).toContain('src="/api/v1/pictures?src=https%3A%2F%2Fimg.example%2Fx.png"');
     expect(html).toContain("Mark abandoned");
     const over = renderToStaticMarkup(
       <RunList

@@ -90,9 +90,9 @@ Produces the **checked build** and the delivery. `npx tsc --noEmit` and `npx vit
 
 ## Hard rules
 
-- What people and agents wrote is untrusted: shown with the package's `Markdown` (elements, never HTML), never with `dangerouslySetInnerHTML`, never as a script or a style; pictures over https only.
+- What people and agents wrote is untrusted: shown with the package's `Markdown` (elements, never HTML), never with `dangerouslySetInnerHTML`, never as a script or a style; a picture from elsewhere is read through the console (`RemotePicturesContext`, which the composition provides from the client; [ADR-0048](/docs/adr/0048-a-picture-from-elsewhere-is-read-through-the-console-from-a-public-address-and-kept-a-while.md)).
 - A token never goes into a page, a bundle, a configuration file or a repository: `console serve` carries it, and a script reads it from the environment.
-- The policy stays: a build is served under a content security policy that runs nothing inline and loads nothing from elsewhere but pictures over https. Scripts, styles and fonts are bundled, never loaded from a CDN or written inline.
+- The policy stays: a build is served under a content security policy that runs nothing inline and loads nothing from elsewhere, pictures included, which come through the console. Scripts, styles and fonts are bundled, never loaded from a CDN or written inline, and a picture of the console's own pages is in the build or reached through `GET /api/v1/pictures`.
 - The package is pinned by version: the API is `/api/v1`, the schemas in the package are the contract of the version it was built against, and a console is rebuilt to take a new one.
 - The marks of SkillCDN are trademarks, not part of the MIT license: a console of one's own shows its own marks through `brand`, or none.
 - Nothing of the server is rebuilt: a console shows the organization's board and holds nothing of its own. A second database is not a console.
