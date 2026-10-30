@@ -138,7 +138,8 @@ export class Connections {
       now: clock.now(),
     });
     if (approved !== undefined) {
-      logger.info({ person: person.id, code }, "a connection was approved");
+      // The code stays out of the log: it is the credential a person approves, for its half hour.
+      logger.info({ person: person.id, request: approved.id }, "a connection was approved");
     }
     return approved;
   }

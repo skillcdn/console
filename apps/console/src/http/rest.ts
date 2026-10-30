@@ -1616,7 +1616,8 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
     try {
       const begun = await connections.begin(input.agent);
-      logger.info({ code: begun.code, requestId: c.get("requestId") }, "an agent asked to connect");
+      // The code is what a person approves: a credential for its half hour, kept out of the log.
+      logger.info({ requestId: c.get("requestId") }, "an agent asked to connect");
       const body: RestConnection = {
         code: begun.code,
         url: begun.url,
@@ -1701,10 +1702,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     if (code === undefined || connections === undefined || !(await connections.deny(code))) {
       return noSuchConnection(c);
     }
-    logger.info(
-      { person: person.id, code, requestId: c.get("requestId") },
-      "a connection was denied",
-    );
+    logger.info({ person: person.id, requestId: c.get("requestId") }, "a connection was denied");
     return c.body(null, 204);
   });
 
@@ -3623,6 +3621,21 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         : query.data.after;
     await workspace();
     const subscription = feed.subscribe(after, found.scope);
+    /**
+     * Whether the subscriber may still read the project: asked again before every delivery
+     * and every heartbeat, since a stream outlives the request that opened it, and a person
+     * taken off the project, deactivated, or whose token went would otherwise keep reading it
+     * for as long as they kept the connection. Nothing is answered on refusal: the stream ends,
+     * and whoever still may read reconnects, as a browser does on its own.
+     */
+    const stillReads = async (): Promise<boolean> => {
+      try {
+        const again = await reading(c);
+        return !(again instanceof Response) && again.project.id === found.project.id;
+      } catch {
+        return false;
+      }
+    };
     // A proxy that buffers would hold the events back; this header asks it not to.
     c.header("x-accel-buffering", "no");
     return streamSSE(
@@ -3630,6 +3643,10 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       async (stream) => {
         stream.onAbort(() => subscription.end());
         for await (const message of subscription) {
+          if (!(await stillReads())) {
+            subscription.end();
+            break;
+          }
           if (message.kind === "heartbeat") {
             await stream.write(": ping\n\n");
             continue;

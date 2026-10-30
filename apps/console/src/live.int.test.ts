@@ -2,6 +2,7 @@ import {
   projectPath,
   REST_ROUTES,
   restEventSchema,
+  restMeSchema,
   restTokenCreatedSchema,
 } from "@skillcdn/console/api";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -41,23 +42,28 @@ function tail(response: Response) {
   }
   const decoder = new TextDecoder();
   let text = "";
+  let ended = false;
   return {
-    /** Waits until the stream has carried `predicate` true, or the deadline passes. */
+    /** Waits until the stream has carried `predicate` true, or it ended, or the deadline passes. */
     async until(predicate: (text: string) => boolean, timeoutMs = 5000): Promise<string> {
       const deadline = Date.now() + timeoutMs;
-      while (!predicate(text)) {
+      while (!predicate(text) && !ended) {
         if (Date.now() > deadline) {
           throw new Error(`the stream did not carry what was waited for:\n${text}`);
         }
-        const { done, value } = await Promise.race([
-          reader.read(),
-          new Promise<{ done: true; value: undefined }>((resolve) =>
-            setTimeout(() => resolve({ done: true, value: undefined }), deadline - Date.now()),
+        const { done, value, timedOut } = await Promise.race([
+          reader.read().then((read) => ({ ...read, timedOut: false })),
+          new Promise<{ done: true; value: undefined; timedOut: true }>((resolve) =>
+            setTimeout(
+              () => resolve({ done: true, value: undefined, timedOut: true }),
+              deadline - Date.now(),
+            ),
           ),
         ]);
         if (value !== undefined) {
           text += decoder.decode(value, { stream: true });
         } else if (done) {
+          ended = !timedOut;
           break;
         }
       }
@@ -66,6 +72,10 @@ function tail(response: Response) {
     cancel: () => reader.cancel(),
     get text() {
       return text;
+    },
+    /** Whether the server ended the stream, as against the deadline passing. */
+    get ended() {
+      return ended;
     },
   };
 }
@@ -151,6 +161,41 @@ describe("the live feed of a project", () => {
       headers: { cookie: alice },
     });
     expect(nowhere.status).toBe(404);
+  });
+
+  it("ends for a subscriber who may no longer read the project, by the next delivery or heartbeat", async () => {
+    // Bob reads a private project as its member, with a token of his own.
+    const bob = await h.signIn("bob");
+    await h.project(alice, { key: "vault", name: "The vault", visibility: "private" });
+    const bobId = restMeSchema.parse(
+      await (await h.request(REST_ROUTES.me, { headers: { cookie: bob } })).json(),
+    ).person?.id;
+    const vault = projectPath("vault");
+    const asAlice = (path: string, method: string, body?: unknown) =>
+      h.request(path, {
+        method,
+        headers: { cookie: alice, origin: SIGN_IN_URL, "content-type": "application/json" },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+    expect((await asAlice(`${vault}/members`, "POST", { personId: bobId })).ok).toBe(true);
+    const made = await h.request(REST_ROUTES.tokens, {
+      method: "POST",
+      headers: { cookie: bob, origin: SIGN_IN_URL, "content-type": "application/json" },
+      body: JSON.stringify({ name: "a watcher" }),
+    });
+    const { secret } = restTokenCreatedSchema.parse(await made.json());
+    const stream = await h.request(`${vault}/events/stream?after=0`, {
+      headers: { authorization: `Bearer ${secret}`, accept: "text/event-stream" },
+    });
+    expect(stream.status).toBe(200);
+    const reading = tail(stream);
+    await reading.until((seen) => seen.includes("project.created"));
+    // Taken off the project, Bob's stream ends; what happens in it after is not his to read.
+    expect((await asAlice(`${vault}/members/${bobId}`, "DELETE")).ok).toBe(true);
+    expect((await asAlice(`${vault}/tasks`, "POST", { title: "After Bob left" })).ok).toBe(true);
+    const text = await reading.until(() => false, 5000);
+    expect(reading.ended).toBe(true);
+    expect(text).not.toContain("After Bob left");
   });
 
   it("ends every stream when the feed closes, so that shutdown can finish", async () => {

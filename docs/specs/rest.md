@@ -321,7 +321,7 @@ A file attached to the page, sent and read back exactly as a run hands one in ([
 
 ### `GET /api/v1/projects/<key>/events/stream?after=`
 
-The same events as they happen, as server-sent events: one message per event, with `id` the event's number, `event` its kind and `data` the event as JSON; a comment (`: ping`) every 25 seconds of silence. A browser that reconnects sends `Last-Event-ID`, which wins over `after`, so that nothing is missed. The stream ends when the server shuts down; an `EventSource` reconnects on its own.
+The same events as they happen, as server-sent events: one message per event, with `id` the event's number, `event` its kind and `data` the event as JSON; a comment (`: ping`) every 25 seconds of silence. A browser that reconnects sends `Last-Event-ID`, which wins over `after`, so that nothing is missed. The stream ends when the server shuts down, and when the person may no longer read the project, which is asked again before every delivery and every heartbeat: a member taken off a private project, a person deactivated or a token revoked stops reading within a heartbeat. An `EventSource` reconnects on its own, and is answered as any request is.
 
 The feed is written in the same transaction as the change it records, so what a stream carries happened, and what happened is carried; every process of the deployment learns of a change through the database's own channel, so a board with several `api` replicas is one board.
 
