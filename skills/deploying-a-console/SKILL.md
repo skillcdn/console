@@ -5,7 +5,7 @@ license: MIT
 compatibility: Needs a shell with Node.js 24 or newer, git, curl, jq and the AWS CLI v2, the gh command signed in or an empty repository the person made, network access to AWS, Cloudflare, GitHub and npm, an AWS account and a domain on Cloudflare the person can create a key and a token for, and a browser on any device for the few steps only a signed-in person can take. Works in any agent that can run a shell and write files; on Windows, in Git Bash with path conversion off.
 metadata:
   author: skillcdn
-  version: "1.5"
+  version: "1.6"
 skillcdn:
   translations:
     ko:
@@ -94,7 +94,7 @@ Produces **`DEPLOY.md`** in the repository, from the template in resources.md: w
 
 ### Running it again
 
-The same skill, from phase 2, with the plan naming only what changes: a new version of the console (the next release tag's commit as `CONSOLE_REF` in `deploy/console.env`, `console-ui/` moved to the same version of the package when there is one, a push); a new connector (`CLOUDFLARED_VERSION` there, a push); the next size (the numbers in the task definitions and a push; the database's class with one command, sizing.md "Growing"); a person let in or taken out (on the People page, or `console person add <login>` and `console person deactivate <login>`, by an administrator; no push); a secret rotated (the parameter overwritten, the service rolled); a console shared with outside teams or customers, each in projects of their own (the settings of [deploy/README.md](/deploy/README.md#a-shared-console): who sees whom, the bytes a project's files may hold together, tokens that end, as lines of the task definition or on the Settings page, and a push); the console paused or removed (resources.md "Removing"). Each is confirmed at the plan, and the record is updated with it.
+The same skill, from phase 2, with the plan naming only what changes and its price: a new version of the console or of the connector, the next size, a person let in or taken out, a secret rotated, a console shared with outside teams or customers, the console paused or removed. What each takes is in [running-it-again.md](references/running-it-again.md); each is confirmed at the plan, and the record is updated with it.
 
 ### Verdicts
 
@@ -120,15 +120,10 @@ The same skill, from phase 2, with the plan naming only what changes: a new vers
 
 | Term | Meaning |
 |---|---|
-| Size | `small`, `medium` or `large`: the numbers of sizing.md, chosen by how many people. |
-| The deployer | The IAM user whose key the agent acts with, as the profile `console` of the AWS CLI. |
-| The task's role | The role the containers run as, `console-task`, whose credentials the platform hands them and renews: it may read and write the bucket, and nothing else; no key exists for the files. |
-| The run's folder | The folder the person chose, which becomes the deployment repository; `scratch/`, the key file and the token file in it never enter git; the secrets file is beside it, in the folder above. |
+| The deployer | The IAM user whose key the agent acts with, the profile `console` of the AWS CLI. |
+| The task's role | `console-task`, the role the containers run as, with credentials the platform hands them and renews: it may read and write the bucket, and nothing else; no key exists for the files. |
+| The run's folder | The folder the person chose, which becomes the deployment repository; `scratch/`, the key file and the token file in it never enter git. |
 | The tunnel | The Cloudflare Tunnel whose connector runs beside the `api` container; the hostname's traffic comes in through it and nothing else does. |
-| Task, service | On ECS, a task is the containers of one role running together; a service keeps the wanted number of tasks running and rolls them to a new definition. |
-| Parameter | A value in SSM Parameter Store that a task reads as an environment variable at start. |
-| The deployment repository | The private repository of the task definitions, the workflow and the record; a push to it is a deployment. |
-| `DEPLOY.md` | The record: what exists under which names, how it is run, what is owed, what it costs. |
-| Later | A secret the person did not supply; the way of signing in it serves stays off, and the record says so. |
-| The secrets file | `console-secrets.json` in the folder above the run's folder: the values the person holds and the run generates, each stored as a parameter, deleted at the end on the person's word (access.md). |
-| The key file, the token file | `.aws-key.csv` and `.cf-token` in the run's folder, saved there by the person, read by the agent into the profile and the header file, never into git, deleted when the run is over. |
+| Task, service, parameter | On ECS, a task is the containers of one role running together, and a service keeps the wanted number of tasks running and rolls them to a new definition; a parameter is a value in SSM Parameter Store that a task reads as an environment variable at start. |
+| The deployment repository, the record | The private repository of the task definitions, the workflow and `DEPLOY.md`, the record of what exists under which names, how it is run, what is owed and what it costs; a push to it is a deployment. |
+| The secrets file; the key file and the token file | `console-secrets.json` in the folder above the run's folder, the values the person holds and the run generates, each stored as a parameter (access.md); `.aws-key.csv` and `.cf-token` in the run's folder, saved there by the person and read by the agent into the profile and the header file. None enters git, and each is deleted when the run is over, the secrets file on the person's word. |
