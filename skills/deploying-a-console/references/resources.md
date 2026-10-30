@@ -9,13 +9,13 @@ The run's folder is the deployment repository to be; `scratch/` in it holds the 
 ```bash
 export MSYS_NO_PATHCONV=1                 # Git Bash on Windows: keep /console and the like as written
 export AWS_PROFILE=console AWS_REGION=<region>
-export CLOUDFLARE_API_TOKEN=$(tr -d '\r\n ' < .cf-token)
-cf() { curl -sS "https://api.cloudflare.com/client/v4$1" -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json" "${@:2}"; }
+printf 'Authorization: Bearer %s\n' "$(tr -d '\r\n ' < .cf-token)" > scratch/auth.txt   # the header from a file, never on a command line
+cf() { curl -sS "https://api.cloudflare.com/client/v4$1" -H @scratch/auth.txt -H "Content-Type: application/json" "${@:2}"; }
 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
 SECRETS=../console-secrets.json          # outside the repository; made by the first `set` below, never a copy of assets/secrets.example.json
 ```
 
-Every id the run makes or finds (`CF_ACCOUNT`, `ZONE`, `VPC`, `SUBNETS`, `TASKS_SG`, `DB_SG`, `ENDPOINT`, `BUCKET`, `TUNNEL`, the rules' ids) goes into `scratch/notes.md` as it is made, as a line `NAME=value`, and a new shell sets them again from there (`set -a; . scratch/notes.md; set +a` when the file holds nothing but such lines): phases 5 to 7 come after a ten-minute watch, or after a pause of hours, almost always in a new shell.
+Every id the run makes or finds (`CF_ACCOUNT`, `ZONE`, `VPC`, `SUBNETS`, `TASKS_SG`, `DB_SG`, `ENDPOINT`, `BUCKET`, `TUNNEL`, the rules' ids) goes into `scratch/notes.md` as it is made, as a line `NAME=value`, and a new shell sets them again from there (`set -a; . scratch/notes.md; set +a` when the file holds nothing but such lines): phases 5 to 7 come after a ten-minute watch, or after a pause of hours, almost always in a new shell. Where every command runs in a new shell, as some agents' tools do, the lines above go in `scratch/env.sh`, sourced at the start of every command; a wait longer than one command may take (the database, the workflow's run, a sign-in) runs in the background or is polled.
 
 A value that must not be seen goes through a file or a pipe, never a command line: `aws ... --cli-input-json file://scratch/<file>` for a request that carries one, and the two scripts of this skill ([import-aws-key.mjs](../scripts/import-aws-key.mjs), [store-secrets.mjs](../scripts/store-secrets.mjs)), copied to `scratch/`, for the key and the parameters. A response that carries one is piped straight into the secrets file:
 
@@ -30,8 +30,8 @@ node -e "process.stdout.write(require('node:crypto').randomBytes(36).toString('b
 2. The command and the scripts: `npm install -g @skillcdn/console`, then copy `$(npm root -g)/@skillcdn/console/skills/deploying-a-console/scripts/*.mjs` into `scratch/` (or write them there from the connection's copy of the skill).
 3. The key: the person saved `.aws-key.csv` in the folder ([access.md](access.md)). `node scratch/import-aws-key.mjs .aws-key.csv console` writes the profile and deletes the file. Then `aws configure set region <region> --profile console`.
 4. `aws sts get-caller-identity`: the account id and `user/console-deployer`. A refusal means the key is wrong or not yet active (a minute after creation).
-5. The network: `aws ec2 describe-vpcs --filters Name=is-default,Values=true --query 'Vpcs[0].VpcId' --output text`. `None`: `aws ec2 create-default-vpc`. Then the subnets: `aws ec2 describe-subnets --filters Name=vpc-id,Values=<vpc> Name=default-for-az,Values=true --query 'Subnets[].SubnetId' --output text`.
-6. The token: `cf /user/tokens/verify` answers `"status": "active"`; `cf "/zones?name=<domain>" > scratch/zone.json` the zone, with its id, its `status` and its account (`ZONE=$(jq -r '.result[0].id' scratch/zone.json)`, `CF_ACCOUNT=$(jq -r '.result[0].account.id' scratch/zone.json)`), or an empty list when the domain is not on Cloudflare yet, in which case `CF_ACCOUNT=$(cf /accounts | jq -r '.result[0].id')` and `ZONE` waits for phase 3. A zone that exists: `cf "/zones/$ZONE/dns_records" | jq '.result | length'`; records of its own mean the zone serves the organization's site already, which the access record says and phase 3 "A zone that serves other hosts" acts on.
+5. The network: `aws ec2 describe-vpcs --filters Name=is-default,Values=true --query 'Vpcs[0].VpcId' --output text`. `None`: phase 3 "The network" makes one. Then the subnets, once there is a VPC: `aws ec2 describe-subnets --filters Name=vpc-id,Values=<vpc> Name=default-for-az,Values=true --query 'Subnets[].SubnetId' --output text`.
+6. The token: `cf /user/tokens/verify` answers `"status": "active"`; `cf "/zones?name=<domain>" > scratch/zone.json` the zone, with its id, its `status` and its account (`ZONE=$(jq -r '.result[0].id' scratch/zone.json)`, `CF_ACCOUNT=$(jq -r '.result[0].account.id' scratch/zone.json)`), or an empty list when the domain is not on Cloudflare yet, in which case `CF_ACCOUNT=$(cf /accounts | jq -r '.result[0].id')` and the zone is made now, as "The zone, first" says: the one thing made before the plan, since it costs nothing, is undone as easily, and its nameservers must reach the person in the second message. A zone that exists: `cf "/zones/$ZONE/dns_records" | jq '.result | length'`; records of its own mean the zone serves the organization's site already, which the access record says and phase 3 "A zone that serves other hosts" acts on.
 7. The git host: `gh auth status`; the owner the person named is theirs or an organization they are in (`gh api user`, `gh api user/orgs`).
 8. The tools: `node --version` (24 or newer), `git --version`, `jq --version`, `curl --version`.
 
@@ -39,7 +39,7 @@ Report what is missing in one message, with the row of access.md to add, before 
 
 ## Phase 2: Plan and estimate
 
-Nothing is created. The size from the answer and its numbers ([sizing.md](sizing.md) "The sizes"); the prices read and the estimate computed ("Reading today's prices"); the names:
+Nothing is created, but for the zone of phase 1, which costs nothing. The size from the answer and its numbers ([sizing.md](sizing.md) "The sizes"); the prices read and the estimate computed ("Reading today's prices"); the names:
 
 | Resource | Name |
 |---|---|
@@ -59,9 +59,11 @@ The plan message is the estimate message of sizing.md followed by the line in th
 
 ### The zone, first
 
-Not on Cloudflare yet: `cf /zones -X POST --data '{"name":"<domain>","account":{"id":"'$CF_ACCOUNT'"},"type":"full"}'`, then `ZONE=$(cf "/zones?name=<domain>" | jq -r '.result[0].id')`. Before the nameservers change, the zone must carry what the domain serves already (its site, its mail), or that stops working at the switch: `cf "/zones/$ZONE/dns_records/scan" -X POST` has Cloudflare find the common records and add them (checked 2026-10), `cf "/zones/$ZONE/dns_records" | jq -r '.result[] | "\(.type) \(.name) \(.content)"'` lists what the zone now has, and the list goes to the person with the nameserver steps: "Compare this with the DNS page at your registrar and send me anything that is missing", each missing one added with `cf "/zones/$ZONE/dns_records" -X POST --data '{"type":"<MX | A | CNAME | TXT>","name":"<name>","content":"<value>","priority":<MX only>,"ttl":1}'`. The answer's `name_servers` go to the person with the steps for their registrar (access.md "The domain"), the run goes on, and the hostname answers once `cf "/zones?name=<domain>"` says `"status": "active"`. A domain to buy: `cf "/accounts/$CF_ACCOUNT/registrar/domain-search?q=<words>"` to find one, `cf "/accounts/$CF_ACCOUNT/registrar/domain-check" -X POST --data '{"domains":["<domain>"]}'` for the live price, the checkpoint with the price and the renewal, then `cf "/accounts/$CF_ACCOUNT/registrar/registrations" -X POST --data '{"domain_name":"<domain>"}'`; a `202` is polled at `.../registrations/<domain>/registration-status`. Buying through the API was in beta when checked (2026-10) and is not open to every account: `extension_not_supported_via_api`, a `404` or a route error means the person buys in the dashboard (Domain Registration, Register Domains), with the price in front of them there. A bought domain's zone is active at once, and `ZONE` is read as above.
+Not on Cloudflare yet, and not made in phase 1: `cf /zones -X POST --data '{"name":"<domain>","account":{"id":"'$CF_ACCOUNT'"},"type":"full"}' > scratch/zone.json`, then `ZONE=$(jq -r .result.id scratch/zone.json)`, and the nameservers are `jq -r '.result.name_servers[]' scratch/zone.json`. Before the nameservers change, the zone must carry what the domain serves already (its site, its mail), or that stops working at the switch: `cf "/zones/$ZONE/dns_records/scan" -X POST` has Cloudflare find the common records and add them (checked 2026-10), `cf "/zones/$ZONE/dns_records" | jq -r '.result[] | "\(.type) \(.name) \(.content)"'` lists what the zone now has, and the list goes to the person with the nameserver steps: "Compare this with the DNS page at your registrar and send me anything that is missing", each missing one added with `cf "/zones/$ZONE/dns_records" -X POST --data '{"type":"<MX | A | CNAME | TXT>","name":"<name>","content":"<value>","priority":<MX only>,"ttl":1}'`. Each record the scan added is checked for `proxied` (`cf "/zones/$ZONE/dns_records" | jq -r '.result[] | "\(.id) \(.name) \(.proxied)"'`): a record of the organization's site or mail is set `"proxied":false` (`cf "/zones/$ZONE/dns_records/<id>" -X PATCH --data '{"proxied":false}'`), so that it comes over as it is and nothing of the site passes through Cloudflare until the person asks for that; and the zone's SSL mode (`cf "/zones/$ZONE/settings/ssl"`) is read and said at the plan, since a site proxied later needs `full` or `strict` to keep serving its own certificate. The answer's `name_servers` go to the person with the steps for their registrar (access.md "The domain"), the run goes on, and the hostname answers once `cf "/zones?name=<domain>"` says `"status": "active"`. A domain to buy: `cf "/accounts/$CF_ACCOUNT/registrar/domain-search?q=<words>"` to find one, `cf "/accounts/$CF_ACCOUNT/registrar/domain-check" -X POST --data '{"domains":["<domain>"]}'` for the live price, the checkpoint with the price and the renewal, then `cf "/accounts/$CF_ACCOUNT/registrar/registrations" -X POST --data '{"domain_name":"<domain>"}'`; a `202` is polled at `.../registrations/<domain>/registration-status`. Buying through the API was in beta when checked (2026-10) and is not open to every account: `extension_not_supported_via_api`, a `404` or a route error means the person buys in the dashboard (Domain Registration, Register Domains), with the price in front of them there. A bought domain's zone is active at once, and `ZONE` is read as above.
 
 ### The network
+
+No default VPC (phase 1 found `None`): `aws ec2 create-default-vpc` first, free of charge, then its subnets as phase 1 reads them.
 
 ```sh
 VPC=<vpc>; SUBNETS=<subnet ids, comma-separated>
@@ -213,7 +215,7 @@ In the run's folder, write:
 ```sh
 CONSOLE_REPOSITORY=https://github.com/skillcdn/console.git
 CONSOLE_REF=<the commit of the release tag pinned at the plan>
-CLOUDFLARED_VERSION=<the connector's release, such as 2026.10.0, from github.com/cloudflare/cloudflared/releases>
+CLOUDFLARED_VERSION=<the connector's newest release, which gh api repos/cloudflare/cloudflared/releases/latest --jq .tag_name prints>
 AWS_ACCOUNT_ID=<account id>
 AWS_REGION=<region>
 ECR_REPOSITORY=console
@@ -225,7 +227,7 @@ WORKER_COUNT=<0 | 0 | 1>
 PLATFORM=linux/amd64
 ```
 
-`PLATFORM=linux/arm64` with `cpuArchitecture` `ARM64` in the task definitions when the organization's builds run on ARM runners (sizing.md "Options").
+`PLATFORM=linux/arm64` with `cpuArchitecture` `ARM64` in the task definitions when the organization's builds run on ARM runners (sizing.md "Options the plan offers").
 
 ### `deploy/api.task.json`
 
@@ -431,6 +433,10 @@ aws iam put-role-policy --role-name console-github-deploy --policy-name console-
 
 `scratch/deploy-policy.json`: `ecr:GetAuthorizationToken` on `*`; `ecr:BatchCheckLayerAvailability`, `ecr:InitiateLayerUpload`, `ecr:UploadLayerPart`, `ecr:CompleteLayerUpload`, `ecr:PutImage`, `ecr:BatchGetImage`, `ecr:DescribeImages` on `arn:aws:ecr:<region>:<account>:repository/console`; `ecs:RegisterTaskDefinition`, `ecs:DescribeTaskDefinition`, `ecs:RunTask`, `ecs:DescribeTasks`, `ecs:DescribeServices`, `ecs:CreateService`, `ecs:UpdateService`, `ecs:ListTasks` on `*`; `iam:PassRole` on the two task roles; `logs:DescribeLogStreams`, `logs:GetLogEvents`, `logs:FilterLogEvents` on `arn:aws:logs:<region>:<account>:log-group:/console:*`.
 
+### The organization's own console
+
+`console-ui/`, when the organization has a look of its own: a console made with building-a-console at the plan's look, depending on `@skillcdn/console` at the version of the release `CONSOLE_REF` pins, with a `package-lock.json` (the workflow runs `npm ci`), a `build` script that runs `vite build` into `dist/`, and a `vite.config.ts` that sends `/api` to `console serve` while it is built; the workflow builds it on every push and lays `console-ui/dist/` over the image's web root. Absent, the image's default pages serve.
+
 ### The rest of the repository
 
 - `README.md`, in the organization's language: what this repository is (the deployment of the organization's console), that a push to `main` deploys, where the record is, and where the skill that made it lives (`skillcdn.ai/gh/skillcdn/console`).
@@ -542,6 +548,7 @@ Only on request, each step confirmed, in this order, after a last snapshot of th
 | `aws rds create-db-instance` refuses the engine version | The region has no PostgreSQL 18 yet | `describe-db-engine-versions --engine postgres` and take the newest major it lists |
 | `create-bucket` says the name is taken | Bucket names are global | Add a short suffix and update the task definition and the files policy |
 | `POST /zones` is refused with a permission error | The token lacks Zone Edit | Add the row (access.md) and run the step again |
+| `POST /zones` answers that the domain is on Cloudflare already, in another account | The organization's zone lives under another Cloudflare account | The person signs in there and moves the domain to this account, or makes the token under that account; the run then reads the zone as phase 1 does |
 | The migration task exits `78` | A variable refused; the log names it, never its value | Fix the parameter or the environment entry, push again |
 | The migration task exits `1` with a connection error | The tasks' group is not allowed into the database's, or the URL's host is wrong | Check the `authorize-security-group-ingress` and the endpoint in `DATABASE_URL` |
 | `ResourceInitializationError` on a task: unable to pull secrets | The execution role cannot read `/console/*` | Check `console-parameters` on `console-task-execution` and the parameter ARNs |

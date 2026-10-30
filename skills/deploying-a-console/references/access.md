@@ -44,26 +44,28 @@ The first answers with the account id the plan names; the second with the defaul
 | Zone | Zone WAF | Edit | The rate limiting rule |
 | Account | Registrar | Edit | Only when a domain is to be bought in the run |
 
-Zone Resources: Include, All zones, so that a zone made in the run is covered. Account Resources: the one account. Client IP filtering: none. TTL: none, or a year. Continue to summary, Create Token, copy the secret once. Read where Edit is needed is the mistake to look for: a token with Read lists tunnels and rules and fails only at the first creation, with `403` and code `10000` (resources.md "When a step fails").
+Ask for every row at once, Registrar excepted, which is asked only when a domain is to be bought: whether the zone serves other hosts, which decides between Zone Settings and Dynamic URL Redirects, is learned only once the token exists. Zone Resources: Include, All zones, so that a zone made in the run is covered. Account Resources: the one account. Client IP filtering: none. TTL: none, or a year. Continue to summary, Create Token, copy the secret once. Read where Edit is needed is the mistake to look for: a token with Read lists tunnels and rules and fails only at the first creation, with `403` and code `10000` (resources.md "When a step fails").
 
 **How it reaches the agent.** Save it in a file named `.cf-token` in the run's folder (a file without an extension: in Notepad, "All files" as the type, so that it is not `.cf-token.txt`), and tell the agent; the agent reads it into the environment for each call and never prints it. The file is listed in the deployment repository's `.gitignore` from the first commit, and deleted at the end of the run on the person's word. A token pasted into the chat is written into the file with the agent's file tool and never repeated, and the person is told to make a new token once the run is over, since the chat kept a copy.
 
 **Verify:**
 
 ```sh
-CLOUDFLARE_API_TOKEN=$(tr -d '\r\n ' < .cf-token)
-curl -s https://api.cloudflare.com/client/v4/user/tokens/verify -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"
-curl -s https://api.cloudflare.com/client/v4/zones -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"
-curl -s https://api.cloudflare.com/client/v4/accounts -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+printf 'Authorization: Bearer %s\n' "$(tr -d '\r\n ' < .cf-token)" > scratch/auth.txt
+curl -s https://api.cloudflare.com/client/v4/user/tokens/verify -H @scratch/auth.txt
+curl -s https://api.cloudflare.com/client/v4/zones -H @scratch/auth.txt
+curl -s https://api.cloudflare.com/client/v4/accounts -H @scratch/auth.txt
 ```
 
-`"status": "active"`, the zones the token sees (the domain among them, or none yet), and the account with its id; the last call is refused without Account Settings Read, which is fine when the zone exists and carries the id. The file carries a carriage return on Windows; the `tr` strips it. These calls prove the token is live, not what it may change: Read lists exactly what Edit lists.
+`"status": "active"`, the zones the token sees (the domain among them, or none yet), and the account with its id; the last call is refused without Account Settings Read, which is fine when the zone exists and carries the id. The file carries a carriage return on Windows; the `tr` strips it, and the header goes to `curl` from a file in `scratch/`, never on a command line. These calls prove the token is live, not what it may change: Read lists exactly what Edit lists.
 
 ## The git host
 
 **The deployment repository.** The organization's deployment lives in a private repository on GitHub: the task definitions, the workflow that builds and deploys, the record. The agent makes it with the `gh` command signed in (`gh auth status`; `gh auth login` otherwise, which opens the browser for the person) under the owner the person names: their account, or an organization. Without `gh`, the person creates an empty private repository in the browser (New repository, private, no README) and gives its address, and the agent pushes to it.
 
-**The GitHub App, for signing in with GitHub, and for the organization to say who is in.** One app does both ([ADR-0022](/docs/adr/0022-who-is-in-is-the-consoles-own-record-and-an-administrator-keeps-it.md)): its client signs people in, and, installed on the organization, it lets the console read who is a member, at sign-in and every ten minutes after. Once the console's address is known, the person, signed in to GitHub as an owner of the organization (checked 2026-10): Your organizations, Settings next to the organization, Developer settings, GitHub Apps, New GitHub App.
+### The GitHub App, for signing in with GitHub, and for the organization to say who is in
+
+One app does both ([ADR-0022](/docs/adr/0022-who-is-in-is-the-consoles-own-record-and-an-administrator-keeps-it.md)): its client signs people in, and, installed on the organization, it lets the console read who is a member, at sign-in and every ten minutes after. Once the console's address is known, the person, signed in to GitHub as an owner of the organization (checked 2026-10): Your organizations, Settings next to the organization, Developer settings, GitHub Apps, New GitHub App.
 
 - GitHub App name: the board's name (34 characters at most, unique across GitHub).
 - Homepage URL: the console's address, `https://<hostname>`.
@@ -71,12 +73,14 @@ curl -s https://api.cloudflare.com/client/v4/accounts -H "Authorization: Bearer 
 - Webhook: untick Active. The console takes no webhooks.
 - Permissions: under Organization permissions, Members: Read-only. Nothing else, and no repository permission: the console reads who is in, and nothing of the code.
 - Where can this GitHub App be installed?: Only on this account.
-- Create GitHub App. The app's page shows the **App ID** and the **Client ID**: copy both into the chat (neither is secret). Under Client secrets, Generate a new client secret, and save it to the secrets file as `GITHUB_CLIENT_SECRET` (below), as the line the agent shows. Under Private keys, Generate a private key: a `.pem` file downloads; save its content to the secrets file as `GITHUB_APP_PRIVATE_KEY`, the file's lines joined with `\n`, as the line the agent shows (the agent writes it from the file when told where it is, and deletes the file on the person's word). A secret pasted into the chat instead is written into the file by the agent's file tool and never repeated, and the person generates a new one once the run is over, since the chat kept a copy; the new one goes in as "a secret rotated" of the record.
+- Create GitHub App. The app's page shows the **App ID** and the **Client ID**: copy both into the chat (neither is secret). Under Client secrets, Generate a new client secret, and save it to the secrets file as `GITHUB_CLIENT_SECRET` (below), as the line the agent shows. Under Private keys, Generate a private key: a `.pem` file downloads; tell the agent where the file is, and it writes the key into the secrets file as `GITHUB_APP_PRIVATE_KEY` whole and deletes the file on the person's word; by hand instead, the file's lines joined with `\n`, as the line the agent shows. A secret pasted into the chat instead is written into the file by the agent's file tool and never repeated, and the person generates a new one once the run is over, since the chat kept a copy; the new one goes in as "a secret rotated" of the record.
 - Install App, in the app's left sidebar: Install next to the organization, and confirm. No repository access is asked for, since the app has no repository permission. Everyone of the organization is in from then on, as the organization has them; the plan's `GITHUB_ORG` is the organization's login, as it reads in `github.com/<login>`.
 
 Without an organization, an OAuth app signs people in as well (Developer settings, OAuth Apps, New OAuth App: the same name, homepage and callback; Register application; the Client ID and a client secret), and an administrator lets each person in on the People page. No scopes are needed either way: the console asks only who the person is.
 
-**The OAuth client, for signing in with Google.** In the Google Cloud console, a project of the organization's, Google Auth Platform (checked 2026-10): if the project has not registered with Google Auth yet, the Overview asks for the app's name, a support address and the audience (Internal, for a Workspace organization), once. Then Clients, Create client, Application type **Web application**, name it, under Authorized redirect URIs add `https://<hostname>/auth/google/callback`, Create. Copy the **Client ID** into the chat; the client secret is shown once: save it to the secrets file as `GOOGLE_CLIENT_SECRET`, as the line the agent shows (pasted instead: written to the file by the agent, never repeated, and replaced after the run, as with GitHub's). The Workspace domain, when everyone of it is a member, is the plan's `GOOGLE_WORKSPACE_DOMAIN`. Changes take from minutes to hours to be effective at Google.
+### The OAuth client, for signing in with Google
+
+In the Google Cloud console, a project of the organization's, Google Auth Platform (checked 2026-10): if the project has not registered with Google Auth yet, the Overview asks for the app's name, a support address and the audience (Internal, for a Workspace organization), once. Then Clients, Create client, Application type **Web application**, name it, under Authorized redirect URIs add `https://<hostname>/auth/google/callback`, Create. Copy the **Client ID** into the chat; the client secret is shown once: save it to the secrets file as `GOOGLE_CLIENT_SECRET`, as the line the agent shows (pasted instead: written to the file by the agent, never repeated, and replaced after the run, as with GitHub's). The Workspace domain, when everyone of it is a member, is the plan's `GOOGLE_WORKSPACE_DOMAIN`. Changes take from minutes to hours to be effective at Google.
 
 ## The secrets file
 
