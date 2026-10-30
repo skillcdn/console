@@ -1,7 +1,7 @@
 {
   "floors": {
-    "client": "0.4.0",
-    "console": "0.4.0"
+    "client": "0.4.1",
+    "console": "0.4.1"
   },
   "schemas": {
     "restAnswerInputSchema": {

@@ -1107,9 +1107,10 @@ export const restPackConnectStartedSchema = z.object({
 export type RestPackConnectStarted = z.infer<typeof restPackConnectStartedSchema>;
 
 /**
- * `GET .../pack-token/connect`: how the connection stands. Nothing asked; waiting for the
- * person, with what they were shown; connected, the token kept and the project as it stands; or
- * ended short of a token, and why.
+ * `GET .../pack-token/connect` and `POST .../pack-token/connect/claim`: how the connection
+ * stands. Nothing asked; waiting for the person, with what they were shown; connected, which
+ * only the claim answers (ADR-0046), the token kept and the project as it stands; or ended
+ * short of a token, and why.
  */
 const packConnectNone = z.object({ status: z.literal("none") });
 const packConnectPending = z.object({
@@ -1131,7 +1132,7 @@ export const restPackConnectSchema = z.union([
 ]);
 export type RestPackConnect = z.infer<typeof restPackConnectSchema>;
 
-/** `GET /api/v1/workspace/pack-token/connect`: the same, for the workspace's token, with the workspace as it stands once connected. */
+/** `GET /api/v1/workspace/pack-token/connect` and `POST .../connect/claim`: the same, for the workspace's token, with the workspace as it stands once connected. */
 export const restWorkspacePackConnectSchema = z.union([
   packConnectNone,
   packConnectPending,

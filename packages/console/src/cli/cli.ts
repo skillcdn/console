@@ -2507,8 +2507,8 @@ const workspace: Command = async (args, io) => {
         set: (token) => client.setWorkspacePackToken({ token }),
         remove: () => client.removeWorkspacePackToken(),
         connect: () => client.connectWorkspacePackToken(),
-        async standing() {
-          const state = await client.workspacePackTokenConnection();
+        async claim() {
+          const state = await client.claimWorkspacePackTokenConnection();
           return state.status === "connected"
             ? { status: "connected", held: state.workspace }
             : state;
@@ -2668,7 +2668,8 @@ interface TokenHolder<T> {
   set(token: string): Promise<T>;
   remove(): Promise<T>;
   connect(): Promise<RestPackConnectStarted>;
-  standing(): Promise<
+  /** Asks the console to claim the token at the deployment (ADR-0046), and answers how it stands. */
+  claim(): Promise<
     | { readonly status: "none" }
     | { readonly status: "pending" }
     | { readonly status: "ended"; readonly reason: keyof typeof PACK_CONNECT_ENDED }
@@ -2700,7 +2701,7 @@ async function packToken<T>(
     );
     for (;;) {
       await io.sleep(started.intervalSeconds * 1000);
-      const state = await holder.standing();
+      const state = await holder.claim();
       if (state.status === "pending") {
         continue;
       }
@@ -2748,8 +2749,8 @@ const projectPackToken: Command = async (args, io) => {
       set: (token) => project.setPackToken({ token }),
       remove: () => project.removePackToken(),
       connect: () => project.connectPackToken(),
-      async standing() {
-        const state = await project.packTokenConnection();
+      async claim() {
+        const state = await project.claimPackTokenConnection();
         return state.status === "connected" ? { status: "connected", held: state.project } : state;
       },
     },

@@ -2970,8 +2970,30 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     return c.json(body, 201);
   });
 
+  // Reading how the connection stands changes nothing (ADR-0046): a GET the browser follows
+  // from anywhere carries the session, so it is not what claims the token.
   app.get(`${PROJECT}/pack-token/connect`, async (c) => {
     const found = await owningRead(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    if (packConnector === undefined || secrets === undefined) {
+      return connectUnsupported(c);
+    }
+    const row = await readPackConnect(database, { project: found.project.id });
+    const body: RestPackConnect =
+      row === undefined
+        ? { status: "none" }
+        : row.expiresAt.getTime() <= clock.now().getTime()
+          ? { status: "ended", reason: "expired" }
+          : pendingOf(row);
+    return c.json(body);
+  });
+
+  // The claim is a request of its own, from the console's own pages or with a token (ADR-0046):
+  // the console asks the deployment, and keeps the token once the person approved.
+  app.post(`${PROJECT}/pack-token/connect/claim`, async (c) => {
+    const found = await owning(c);
     if (found instanceof Response) {
       return found;
     }
@@ -3189,6 +3211,23 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
   });
   app.get(WORKSPACE_PACK_CONNECT, async (c) => {
     const caller = await configuringRead(c);
+    if (caller instanceof Response) {
+      return caller;
+    }
+    if (packConnector === undefined || secrets === undefined) {
+      return workspaceConnectUnsupported(c);
+    }
+    const row = await readPackConnect(database, { workspace: (await workspace()).id });
+    const body: RestWorkspacePackConnect =
+      row === undefined
+        ? { status: "none" }
+        : row.expiresAt.getTime() <= clock.now().getTime()
+          ? { status: "ended", reason: "expired" }
+          : pendingOf(row);
+    return c.json(body);
+  });
+  app.post(`${WORKSPACE_PACK_CONNECT}/claim`, async (c) => {
+    const caller = await configuring(c);
     if (caller instanceof Response) {
       return caller;
     }

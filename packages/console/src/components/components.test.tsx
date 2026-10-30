@@ -3258,6 +3258,7 @@ describe("the pack token of a project", () => {
       <PackConnect
         onStart={() => Promise.reject(new Error("not asked"))}
         poll={() => Promise.resolve({ status: "none" } as const)}
+        claim={() => Promise.reject(new Error("not claimed"))}
         onCancel={() => Promise.resolve()}
       />,
     );

@@ -1440,6 +1440,7 @@ function ProjectSettingsPage(props: {
           busy={busy}
           onStart={data.actions.connectPackToken}
           poll={data.actions.packTokenConnection}
+          claim={data.actions.claimPackTokenConnection}
           onCancelConnect={data.actions.cancelPackTokenConnection}
           onConnected={() => navigation.replace(here)}
           onSubmit={(token) =>
@@ -1662,6 +1663,7 @@ function WorkspaceSettingsPage(props: {
           busy={busy}
           onStart={data.actions.connectWorkspacePackToken}
           poll={data.actions.workspacePackTokenConnection}
+          claim={data.actions.claimWorkspacePackTokenConnection}
           onCancelConnect={data.actions.cancelWorkspacePackTokenConnection}
           onConnected={() => navigation.replace(PATHS.settings)}
           onSubmit={(token) =>

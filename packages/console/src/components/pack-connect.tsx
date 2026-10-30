@@ -6,8 +6,9 @@ import { Button, Time } from "./ui.js";
 // A private pack connected with a code a person approves (ADR-0036): an owner, or for the
 // workspace's token an administrator, asks, the console asks the deployment and shows what it
 // answered, the code and the page, and the person approves there; the page asks the console
-// again at the interval the deployment named until the token is kept or the request ended.
-// Takes its data through the callbacks and keeps nothing itself.
+// to claim the token at the interval the deployment named, until the token is kept or the
+// request ended; reading how the request stands, when the page opens, changes nothing
+// (ADR-0046). Takes its data through the callbacks and keeps nothing itself.
 
 /**
  * How a connection stands, as the component needs it: what the API answers for a project's
@@ -20,8 +21,10 @@ export type PackConnectState =
 export interface PackConnectProps {
   /** Asks the deployment to connect; answers what the person is shown. */
   readonly onStart: () => Promise<RestPackConnectStarted>;
-  /** How the connection stands; the token is kept when the person approved. */
+  /** How the connection stands, read when the page opens; changes nothing. */
   readonly poll: (signal?: AbortSignal) => Promise<PackConnectState>;
+  /** Asks the console to claim the token at the deployment: pending still, connected, or ended. */
+  readonly claim: (signal?: AbortSignal) => Promise<PackConnectState>;
   /** Gives the connection up. */
   readonly onCancel: () => Promise<void>;
   /** Called once the token is kept. */
@@ -47,7 +50,7 @@ const MIN_INTERVAL_SECONDS = 2;
 export function PackConnect(props: PackConnectProps) {
   const words = useWords();
   const pack = words.projects.packToken;
-  const { poll, onConnected } = props;
+  const { poll, claim, onConnected } = props;
   const [shown, setShown] = useState<Shown>({ kind: "idle" });
   const [problem, setProblem] = useState<string | undefined>(undefined);
 
@@ -64,7 +67,7 @@ export function PackConnect(props: PackConnectProps) {
     return () => controller.abort();
   }, [poll]);
 
-  // While waiting, the console is asked again at the interval the deployment named; a new
+  // While waiting, the console is asked to claim at the interval the deployment named; a new
   // answer, pending still, is a new state, which schedules the next asking.
   useEffect(() => {
     if (shown.kind !== "waiting") {
@@ -72,7 +75,7 @@ export function PackConnect(props: PackConnectProps) {
     }
     const controller = new AbortController();
     const timer = setTimeout(() => {
-      poll(controller.signal)
+      claim(controller.signal)
         .then((state) => {
           if (controller.signal.aborted) {
             return;
@@ -102,7 +105,7 @@ export function PackConnect(props: PackConnectProps) {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [shown, poll, onConnected]);
+  }, [shown, claim, onConnected]);
 
   const start = () => {
     setProblem(undefined);

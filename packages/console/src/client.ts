@@ -364,8 +364,14 @@ export interface ProjectClient {
   removePackToken(): Promise<RestProject>;
   /** Asks the deployment to connect the project's pack with a code a person approves (ADR-0036); for an owner. */
   connectPackToken(): Promise<RestPackConnectStarted>;
-  /** How that connection stands; the token is kept when the person approved. For an owner. */
+  /** How that connection stands, read and changed nothing: pending, ended, or none; for an owner. */
   packTokenConnection(signal?: AbortSignal): Promise<RestPackConnect>;
+  /**
+   * Asks the console to claim the token at the deployment (ADR-0046): pending while the person
+   * has not approved, connected once, the token kept and the project as it stands, or ended;
+   * for an owner.
+   */
+  claimPackTokenConnection(signal?: AbortSignal): Promise<RestPackConnect>;
   /** Gives the connection up; for an owner. */
   cancelPackTokenConnection(): Promise<void>;
   /** The rules that hold in the project (ADR-0023): the workspace's, and what the project adds. */
@@ -414,6 +420,7 @@ export interface ConsoleClient {
   removeWorkspacePackToken(): Promise<RestWorkspace>;
   connectWorkspacePackToken(): Promise<RestPackConnectStarted>;
   workspacePackTokenConnection(signal?: AbortSignal): Promise<RestWorkspacePackConnect>;
+  claimWorkspacePackTokenConnection(signal?: AbortSignal): Promise<RestWorkspacePackConnect>;
   cancelWorkspacePackTokenConnection(): Promise<void>;
   /** The people the asker may see: everyone, or those they share a project with (ADR-0035). */
   people(signal?: AbortSignal): Promise<RestPeople>;
@@ -828,6 +835,14 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
           restPackConnectSchema,
           signal,
         ),
+      claimPackTokenConnection: (signal) =>
+        request(
+          "POST",
+          `${base}${at()}/pack-token/connect/claim`,
+          undefined,
+          restPackConnectSchema,
+          signal,
+        ),
       cancelPackTokenConnection: () =>
         request("DELETE", `${base}${at()}/pack-token/connect`, undefined, undefined),
       rules: (signal) =>
@@ -927,6 +942,14 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
       request(
         "GET",
         `${base}${REST_ROUTES.workspacePackToken}/connect`,
+        undefined,
+        restWorkspacePackConnectSchema,
+        signal,
+      ),
+    claimWorkspacePackTokenConnection: (signal) =>
+      request(
+        "POST",
+        `${base}${REST_ROUTES.workspacePackToken}/connect/claim`,
         undefined,
         restWorkspacePackConnectSchema,
         signal,

@@ -3845,6 +3845,8 @@ describe("a private pack connected with a code (ADR-0036)", () => {
     h.request(`${IN}/pack-token/connect`, { method, headers: headers(cookie) });
   const standing = (h: Harness, cookie: string) =>
     h.request(`${IN}/pack-token/connect`, { headers: { cookie } });
+  const claiming = (h: Harness, cookie: string) =>
+    h.request(`${IN}/pack-token/connect/claim`, { method: "POST", headers: headers(cookie) });
 
   it("asks the deployment as nobody, shows the owner the code and the page, and keeps the token once approved", async () => {
     let claims = 0;
@@ -3869,6 +3871,7 @@ describe("a private pack connected with a code (ADR-0036)", () => {
     const member = await served.signIn("bob");
     expect((await connecting(served, member)).status).toBe(403);
     expect((await standing(served, member)).status).toBe(403);
+    expect((await claiming(served, member)).status).toBe(403);
     expect(restPackConnectSchema.parse(await (await standing(served, owner)).json())).toEqual({
       status: "none",
     });
@@ -3881,11 +3884,15 @@ describe("a private pack connected with a code (ADR-0036)", () => {
       url: "https://skillcdn.test/connect/ABCD-EFGH",
       intervalSeconds: 1,
     });
-    // Asked once, the person has not approved; asked again, the token is kept and gone from here.
+    // Read, the request stands and the deployment is not asked (ADR-0046); claimed once, the
+    // person has not approved; claimed again, the token is kept and gone from here.
     expect(restPackConnectSchema.parse(await (await standing(served, owner)).json())).toMatchObject(
       { status: "pending", code: "ABCD-EFGH" },
     );
-    const done = await standing(served, owner);
+    expect(restPackConnectSchema.parse(await (await claiming(served, owner)).json())).toMatchObject(
+      { status: "pending", code: "ABCD-EFGH" },
+    );
+    const done = await claiming(served, owner);
     const body = await done.text();
     expect(body).not.toContain("scdn_repo");
     const state = restPackConnectSchema.parse(JSON.parse(body));
@@ -3923,7 +3930,7 @@ describe("a private pack connected with a code (ADR-0036)", () => {
     });
     const owner = await declined.signIn("alice");
     expect((await connecting(declined, owner)).status).toBe(201);
-    expect(restPackConnectSchema.parse(await (await standing(declined, owner)).json())).toEqual({
+    expect(restPackConnectSchema.parse(await (await claiming(declined, owner)).json())).toEqual({
       status: "ended",
       reason: "declined",
     });
@@ -3941,9 +3948,17 @@ describe("a private pack connected with a code (ADR-0036)", () => {
       packConnector: expiring,
     });
     expect((await connecting(expired, owner)).status).toBe(201);
+    // Read, the request is said to have expired and stays; claimed, it goes.
     expect(restPackConnectSchema.parse(await (await standing(expired, owner)).json())).toEqual({
       status: "ended",
       reason: "expired",
+    });
+    expect(restPackConnectSchema.parse(await (await claiming(expired, owner)).json())).toEqual({
+      status: "ended",
+      reason: "expired",
+    });
+    expect(restPackConnectSchema.parse(await (await standing(expired, owner)).json())).toEqual({
+      status: "none",
     });
 
     const refusing: PackConnector = {
@@ -4017,6 +4032,11 @@ describe("the workspace's SkillCDN token (ADR-0036)", () => {
     h.request(`${REST_ROUTES.workspacePackToken}/connect`, { method, headers: headers(cookie) });
   const standing = (h: Harness, cookie: string) =>
     h.request(`${REST_ROUTES.workspacePackToken}/connect`, { headers: { cookie } });
+  const claiming = (h: Harness, cookie: string) =>
+    h.request(`${REST_ROUTES.workspacePackToken}/connect/claim`, {
+      method: "POST",
+      headers: headers(cookie),
+    });
   const soon = () => new Date(Date.now() + 600_000).toISOString();
 
   it("is set and taken away by an administrator, and reads the organization's pack for a project with no address and no token of its own", async () => {
@@ -4123,6 +4143,7 @@ describe("the workspace's SkillCDN token (ADR-0036)", () => {
     try {
       expect((await connecting(h, member)).status).toBe(403);
       expect((await standing(h, member)).status).toBe(403);
+      expect((await claiming(h, member)).status).toBe(403);
       expect(restWorkspacePackConnectSchema.parse(await (await standing(h, admin)).json())).toEqual(
         { status: "none" },
       );
@@ -4137,7 +4158,10 @@ describe("the workspace's SkillCDN token (ADR-0036)", () => {
       expect(
         restWorkspacePackConnectSchema.parse(await (await standing(h, admin)).json()),
       ).toMatchObject({ status: "pending", code: "WXYZ-1234" });
-      const done = await standing(h, admin);
+      expect(
+        restWorkspacePackConnectSchema.parse(await (await claiming(h, admin)).json()),
+      ).toMatchObject({ status: "pending", code: "WXYZ-1234" });
+      const done = await claiming(h, admin);
       const body = await done.text();
       expect(body).not.toContain("scdn_repo");
       const state = restWorkspacePackConnectSchema.parse(JSON.parse(body));

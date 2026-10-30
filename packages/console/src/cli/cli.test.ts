@@ -2131,7 +2131,7 @@ describe("configuring, as the person", () => {
         body: { ...ME.workspace, skills: { ...ME.workspace.skills, packToken: null } },
       },
       "POST /api/v1/workspace/pack-token/connect": { status: 201, body: started },
-      "GET /api/v1/workspace/pack-token/connect": [
+      "POST /api/v1/workspace/pack-token/connect/claim": [
         { body: { status: "pending", ...started } },
         { body: { status: "connected", workspace: held } },
       ],
@@ -3275,7 +3275,7 @@ describe("the pack of the project, through the console (ADR-0028)", () => {
     };
     const { fetch, calls } = fakeConsole({
       [`POST ${IN}/pack-token/connect`]: { status: 201, body: started },
-      [`GET ${IN}/pack-token/connect`]: [
+      [`POST ${IN}/pack-token/connect/claim`]: [
         { body: { status: "pending", ...started } },
         { body: { status: "connected", project: { ...PROJECT, packToken: { setAt: WHEN } } } },
       ],
@@ -3286,11 +3286,13 @@ describe("the pack of the project, through the console (ADR-0028)", () => {
     expect(h.out()).toContain("https://skillcdn.test/connect/ABCD-EFGH");
     expect(h.out()).toContain("Connected.");
     expect(h.out()).toContain("pack token: set");
-    expect(calls.filter((call) => call.key === `GET ${IN}/pack-token/connect`)).toHaveLength(2);
+    expect(calls.filter((call) => call.key === `POST ${IN}/pack-token/connect/claim`)).toHaveLength(
+      2,
+    );
     const declined = harness({
       fetch: fakeConsole({
         [`POST ${IN}/pack-token/connect`]: { status: 201, body: started },
-        [`GET ${IN}/pack-token/connect`]: { body: { status: "ended", reason: "declined" } },
+        [`POST ${IN}/pack-token/connect/claim`]: { body: { status: "ended", reason: "declined" } },
       }).fetch,
       env: SIGNED_IN,
     });

@@ -89,8 +89,10 @@ export interface ConsoleActions {
   removePackToken(): Promise<RestProject>;
   /** Asks the deployment to connect the project's pack with a code a person approves (ADR-0036); for an owner. */
   connectPackToken(): Promise<RestPackConnectStarted>;
-  /** How that connection stands; once connected, the project is the one answered. */
+  /** How that connection stands, read and changed nothing. */
   packTokenConnection(signal?: AbortSignal): Promise<RestPackConnect>;
+  /** Asks the console to claim the token at the deployment (ADR-0046); once connected, the project is the one answered. */
+  claimPackTokenConnection(signal?: AbortSignal): Promise<RestPackConnect>;
   cancelPackTokenConnection(): Promise<void>;
   addMember(input: RestMemberInput): Promise<RestMember>;
   updateMember(personId: string, patch: RestMemberPatch): Promise<RestMember>;
@@ -177,6 +179,7 @@ export interface ConsoleActions {
   removeWorkspacePackToken(): Promise<RestWorkspace>;
   connectWorkspacePackToken(): Promise<RestPackConnectStarted>;
   workspacePackTokenConnection(signal?: AbortSignal): Promise<RestWorkspacePackConnect>;
+  claimWorkspacePackTokenConnection(signal?: AbortSignal): Promise<RestWorkspacePackConnect>;
   cancelWorkspacePackTokenConnection(): Promise<void>;
   /** One person of the workspace by their exact login, or nobody: what an owner lists someone the People page does not show by. */
   findPerson(login: string, signal?: AbortSignal): Promise<RestPerson | undefined>;
@@ -612,8 +615,9 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
         return changed;
       },
       connectPackToken: () => scope().connectPackToken(),
-      async packTokenConnection(signal) {
-        const state = await scope().packTokenConnection(signal);
+      packTokenConnection: (signal) => scope().packTokenConnection(signal),
+      async claimPackTokenConnection(signal) {
+        const state = await scope().claimPackTokenConnection(signal);
         if (state.status === "connected") {
           setProject(state.project);
         }
@@ -756,8 +760,9 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
         return workspace;
       },
       connectWorkspacePackToken: () => client.connectWorkspacePackToken(),
-      async workspacePackTokenConnection(signal) {
-        const state = await client.workspacePackTokenConnection(signal);
+      workspacePackTokenConnection: (signal) => client.workspacePackTokenConnection(signal),
+      async claimWorkspacePackTokenConnection(signal) {
+        const state = await client.claimWorkspacePackTokenConnection(signal);
         if (state.status === "connected") {
           const { workspace } = state;
           setMe((current) => (current === undefined ? undefined : { ...current, workspace }));

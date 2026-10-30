@@ -20,8 +20,10 @@ export interface PackTokenWaysProps {
   readonly busy?: boolean | undefined;
   /** Asks the deployment to connect; answers what the person is shown. */
   readonly onStart: () => Promise<RestPackConnectStarted>;
-  /** How the connection stands; the token is kept when the person approved. */
+  /** How the connection stands, read when the page opens; changes nothing. */
   readonly poll: (signal?: AbortSignal) => Promise<PackConnectState>;
+  /** Asks the console to claim the token at the deployment (ADR-0046). */
+  readonly claim: (signal?: AbortSignal) => Promise<PackConnectState>;
   /** Gives the connection up. */
   readonly onCancelConnect: () => Promise<void>;
   /** Called once the token is kept. */
@@ -46,6 +48,7 @@ export function PackTokenWays(props: PackTokenWaysProps) {
           <PackConnect
             onStart={props.onStart}
             poll={props.poll}
+            claim={props.claim}
             onCancel={props.onCancelConnect}
             onConnected={props.onConnected}
             busy={props.busy}
