@@ -1,5 +1,19 @@
 # @skillcdn/console
 
+## 0.4.2
+
+### Patch Changes
+
+- [`f6aff72`](https://github.com/skillcdn/console/commit/f6aff72dc752c3d63a12f35dc3c1c9630ae28dd4) Thanks [@samo-lucid](https://github.com/samo-lucid)! - `building-a-console` and `deploying-a-console`, read against the authoring guide and dry-read by a fresh agent. The building skill keeps its configuration in `references/configuring.md`, installs the package at the version the deployment pins before it plans, asks where the deployment repository is, and commits in it as its agreement says without pushing, since a push there deploys. The deploying skill makes the zone before the plan, since it costs nothing and its nameservers must reach the person early, checks what the scan of a live domain brought over before the switch, carries the section on the organization's own console its phase 4 named, asks for the organization's name and the people's place in plain words, and names the settings of a shared console among what a second run changes.
+
+- [`d2351be`](https://github.com/skillcdn/console/commit/d2351be32fc67a2916c6831184518b26e223b88f) Thanks [@samo-lucid](https://github.com/samo-lucid)! - A card held near the board's edge carries the board on. While a card is dragged, the board scrolls on every frame the pointer is within the edge, with a mouse or a finger, still or moving, the nearer the edge the faster, as an icon held at the edge of a phone's screen turns the page; before, the board moved only as the pointer did, so that a card held still at the edge went nowhere. `edgeScrollOf` meters it and is exported from the board's module for a board of your own.
+
+- [`6fdedd0`](https://github.com/skillcdn/console/commit/6fdedd025c303e568d109b0d231bc66f1c98c055) Thanks [@samo-lucid](https://github.com/samo-lucid)! - The skills the package carries, read again against the authoring guide of the reference pack. `planning-the-board` is new, for the work a person puts on the board and the project they set up: tasks written from what they say or plan, with their days, categories, goals, parents and workers; goals on the roadmap; a project made or changed, with its members and its rules; the workspace's categories, people and settings; a private pack connected. It is split from `working-the-board`, which works one task to its end, reads the task in full before taking it, names the quotas and the refusal of a person who is out where a run meets them, and reads the project's pack as its reference `the-pack.md` says. Both descriptions say what comes out, then when to use the skill in the words people say, then which neighbouring skill to use instead; the manifest says what an instruction is and what is material.
+
+- [`4eaa358`](https://github.com/skillcdn/console/commit/4eaa3589728641569c6178afb7a617c9ebd7521a) Thanks [@samo-lucid](https://github.com/samo-lucid)! - The deploying skill reads in two pages of `load_skill` with room to grow: what a later run changes (a new version, a new connector, the next size, a member, a secret, a shared console, a pause or removal) is `references/running-it-again.md`, read when such a run comes, and the terms are the few the body does not define itself.
+
+- [`67bb4f4`](https://github.com/skillcdn/console/commit/67bb4f4d6459ed647f42115d353a2195de5ecdfc) Thanks [@samo-lucid](https://github.com/samo-lucid)! - The Settings page says which version the console is. The first row of the workspace's settings names it, with the range of command versions it takes, as `GET /api/v1/me` answers them in `console` (ADR-0025), so that whoever keeps the agents' commands up to date reads there what they must match; `WorkspaceSettingsView` takes them as `console`, and says nothing when the console is one from before the answer. Both packs carry the words.
+
 ## 0.4.1
 
 ### Patch Changes
