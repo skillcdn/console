@@ -76,7 +76,7 @@
     "vitest": "catalog:"
   },
   "dependencies": {
-    "@skillcdn/core": "^0.4.0",
+    "@skillcdn/core": "^0.4.1",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "zod": "catalog:"
