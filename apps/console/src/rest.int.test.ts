@@ -81,6 +81,7 @@ import { eq } from "drizzle-orm";
 import { pino } from "pino";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDirectorySource } from "./adapters/directory-packs.js";
+import { MAX_WAITING_PER_ADDRESS } from "./auth/connect.js";
 import { drizzleOf } from "./db/client.js";
 import { archiveStaleTasks } from "./db/queries/tasks.js";
 import { ensureWorkspace } from "./db/queries/workspaces.js";
@@ -1459,6 +1460,39 @@ describe("connecting an agent", () => {
   };
   const claim = (secret: string) =>
     h.request(CLAIM_PATH, { method: "POST", headers: JSON_ONLY, body: JSON.stringify({ secret }) });
+
+  it("holds a bounded number of requests from one address, the oldest not yet approved making way (ADR-0047)", async () => {
+    const from = (peer: string) =>
+      h.request(
+        REST_ROUTES.connect,
+        { method: "POST", headers: JSON_ONLY, body: JSON.stringify({ agent: "an agent" }) },
+        { peer },
+      );
+    const first = restConnectionSchema.parse(await (await from("203.0.113.7")).json());
+    // Approved, it stays whatever comes after it from the same address: it is about to be claimed.
+    const approve = await send(bob, "POST", connectPath(first.code, "approve"), {
+      name: "kept",
+      expiresInDays: 30,
+    });
+    expect(approve.status).toBe(200);
+    const second = restConnectionSchema.parse(await (await from("203.0.113.7")).json());
+    for (let made = 2; made < MAX_WAITING_PER_ADDRESS; made += 1) {
+      expect((await from("203.0.113.7")).status).toBe(201);
+    }
+    // One past the bound from the same address: the second, the oldest not approved, goes.
+    expect((await from("203.0.113.7")).status).toBe(201);
+    expect(await errorOf(await claim(second.secret))).toBe("connect.not_found");
+    const kept = await claim(first.secret);
+    expect(kept.status).toBe(200);
+    const connected = restClaimSchema.parse(await kept.json());
+    if (connected.status === "connected") {
+      expect(
+        (await send(bob, "DELETE", `${REST_ROUTES.tokens}/${connected.token.id}`)).status,
+      ).toBe(204);
+    }
+    // Another address has room of its own.
+    expect((await from("203.0.113.8")).status).toBe(201);
+  });
 
   it("is begun by nobody, approved by a person signed in, claimed once with the secret, and acts as the approver", async () => {
     const connection = await begin("  Claude Code on the laptop  ");

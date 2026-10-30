@@ -29,6 +29,12 @@ const REQUEST_TTL_MS = 30 * 60_000;
 const CLAIM_INTERVAL_SECONDS = 3;
 /** How many requests a workspace holds at once: an unauthenticated route is bounded. */
 const MAX_WAITING = 100;
+/**
+ * How many requests one address holds at once (ADR-0047): a machine's agents, or an office's
+ * behind one address, each asking within the half hour; past it, the oldest not yet approved
+ * makes way, so that one address fills nobody's room.
+ */
+export const MAX_WAITING_PER_ADDRESS = 10;
 const DAY_MS = 86_400_000;
 const GROUP = CONNECT_CODE_LENGTH / 2;
 
@@ -77,8 +83,11 @@ export class Connections {
     this.#options = options;
   }
 
-  /** Begins a connection for an agent that says what it calls itself and where it runs. */
-  async begin(agent: string): Promise<Connection> {
+  /**
+   * Begins a connection for an agent that says what it calls itself and where it runs, from
+   * the address the request came from, or from nowhere the console could tell.
+   */
+  async begin(agent: string, clientAddress: string | undefined): Promise<Connection> {
     const { database, clock, pageFor } = this.#options;
     const now = clock.now();
     const expiresAt = new Date(now.getTime() + REQUEST_TTL_MS);
@@ -93,9 +102,11 @@ export class Connections {
           code,
           secretHash: hashToken(secret),
           agent,
+          clientAddress,
           expiresAt,
           now,
           limit: MAX_WAITING,
+          perAddressLimit: MAX_WAITING_PER_ADDRESS,
         });
         return {
           code: made.code,

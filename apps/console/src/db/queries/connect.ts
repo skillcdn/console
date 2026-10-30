@@ -1,4 +1,4 @@
-import { and, count, eq, gt, isNull, lte } from "drizzle-orm";
+import { and, asc, count, eq, gt, inArray, isNull, lte } from "drizzle-orm";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf } from "../client.js";
 import { connectRequests, workspaces } from "../schema.js";
@@ -13,6 +13,8 @@ export interface ConnectRequestRecord {
   readonly code: string;
   /** What the agent calls itself, and where it runs, as the command said. */
   readonly agent: string;
+  /** The address the request came from, as the trusted proxies resolve it; nothing when the console could not tell. */
+  readonly clientAddress: string | undefined;
   /** The person who approved, once one did. */
   readonly approvedById: string | undefined;
   /** What the token is to be called, once approved. */
@@ -43,6 +45,7 @@ const columns = {
   workspaceId: connectRequests.workspaceId,
   code: connectRequests.code,
   agent: connectRequests.agent,
+  clientAddress: connectRequests.clientAddress,
   approvedById: connectRequests.approvedById,
   name: connectRequests.name,
   tokenDays: connectRequests.tokenDays,
@@ -56,6 +59,7 @@ interface Row {
   readonly workspaceId: string;
   readonly code: string;
   readonly agent: string;
+  readonly clientAddress: string | null;
   readonly approvedById: string | null;
   readonly name: string | null;
   readonly tokenDays: number | null;
@@ -69,6 +73,7 @@ const toRecord = (row: Row): ConnectRequestRecord => ({
   workspaceId: row.workspaceId,
   code: row.code,
   agent: row.agent,
+  clientAddress: row.clientAddress ?? undefined,
   approvedById: row.approvedById ?? undefined,
   name: row.name ?? undefined,
   tokenDays: row.tokenDays ?? undefined,
@@ -81,9 +86,12 @@ const toRecord = (row: Row): ConnectRequestRecord => ({
 const live = (now: Date) => gt(connectRequests.expiresAt, now);
 
 /**
- * Writes a request down, unless the workspace holds as many live ones as it may. The count and
- * the insert happen under the lock on the workspace's row, so that two asked at once cannot
- * both be the last one allowed. A code taken by a live request fails the insert.
+ * Writes a request down, unless the workspace holds as many live ones as it may. An address
+ * holds a bounded number too (ADR-0047): at its bound, the oldest of its requests not yet
+ * approved makes way for the new one, since an approved request is about to be claimed and
+ * stays; an address whose requests are all approved is refused. The counts and the insert
+ * happen under the lock on the workspace's row, so that two asked at once cannot both be the
+ * last one allowed. A code taken by a live request fails the insert.
  */
 export async function createConnectRequest(
   database: Database,
@@ -92,10 +100,14 @@ export async function createConnectRequest(
     readonly code: string;
     readonly secretHash: string;
     readonly agent: string;
+    /** The address the request came from; nothing when the console could not tell, which bounds it by the workspace alone. */
+    readonly clientAddress: string | undefined;
     readonly expiresAt: Date;
     readonly now: Date;
     /** How many requests may wait at once in the workspace, this one included. */
     readonly limit: number;
+    /** How many requests may wait at once from one address, this one included. */
+    readonly perAddressLimit: number;
   },
 ): Promise<ConnectRequestRecord> {
   return drizzleOf(database).transaction(async (tx) => {
@@ -106,6 +118,32 @@ export async function createConnectRequest(
       .for("update");
     if (workspace === undefined) {
       throw new Error("the workspace was not found");
+    }
+    if (request.clientAddress !== undefined) {
+      const fromAddress = and(
+        eq(connectRequests.workspaceId, request.workspaceId),
+        eq(connectRequests.clientAddress, request.clientAddress),
+        live(request.now),
+      );
+      const [theirs] = await tx.select({ count: count() }).from(connectRequests).where(fromAddress);
+      const excess = (theirs?.count ?? 0) - request.perAddressLimit + 1;
+      if (excess > 0) {
+        const oldest = await tx
+          .select({ id: connectRequests.id })
+          .from(connectRequests)
+          .where(and(fromAddress, isNull(connectRequests.approvedAt)))
+          .orderBy(asc(connectRequests.createdAt), asc(connectRequests.id))
+          .limit(excess);
+        if (oldest.length < excess) {
+          throw new ConnectError("connect.too_many");
+        }
+        await tx.delete(connectRequests).where(
+          inArray(
+            connectRequests.id,
+            oldest.map((row) => row.id),
+          ),
+        );
+      }
     }
     const [held] = await tx
       .select({ count: count() })
@@ -131,6 +169,7 @@ export async function createConnectRequest(
         code: request.code,
         secretHash: request.secretHash,
         agent: request.agent,
+        clientAddress: request.clientAddress ?? null,
         expiresAt: request.expiresAt,
         createdAt: request.now,
       })

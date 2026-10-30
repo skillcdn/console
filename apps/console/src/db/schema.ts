@@ -777,10 +777,12 @@ export const documentFiles = pgTable(
 
 /**
  * An agent asking to connect (ADR-0011): the `code` a person approves, the SHA-256 of the
- * secret the command claims the token with (`secret_hash`), what the agent calls itself, and
- * the approval once given: who, what the token is to be called, and for how many days (null,
- * once approved, for a token that does not expire). The row goes when the token is claimed or
- * the request expires; the token itself is never here.
+ * secret the command claims the token with (`secret_hash`), what the agent calls itself, the
+ * address the request came from (`client_address`, as the trusted proxies resolve it; null when
+ * the console could not tell), by which the requests are bounded (ADR-0047), and the approval
+ * once given: who, what the token is to be called, and for how many days (null, once approved,
+ * for a token that does not expire). The row goes when the token is claimed or the request
+ * expires; the token itself is never here.
  */
 export const connectRequests = pgTable(
   "connect_requests",
@@ -792,6 +794,7 @@ export const connectRequests = pgTable(
     code: text().notNull(),
     secretHash: text().notNull(),
     agent: text().notNull(),
+    clientAddress: text(),
     approvedById: uuid().references(() => people.id, { onDelete: "cascade" }),
     name: text(),
     tokenDays: integer(),

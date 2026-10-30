@@ -1619,7 +1619,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       return input;
     }
     try {
-      const begun = await connections.begin(input.agent);
+      const begun = await connections.begin(input.agent, c.get("clientAddress"));
       // The code is what a person approves: a credential for its half hour, kept out of the log.
       logger.info({ requestId: c.get("requestId") }, "an agent asked to connect");
       const body: RestConnection = {

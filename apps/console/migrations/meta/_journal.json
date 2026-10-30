@@ -197,6 +197,13 @@
       "when": 1792981728376,
       "tag": "0027_decision_decider",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1793346298734,
+      "tag": "0028_connect_client_address",
+      "breakpoints": true
     }
   ]
 }

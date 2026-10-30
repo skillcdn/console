@@ -46,7 +46,8 @@ export interface Harness {
   readonly logs: Record<string, unknown>[];
   /** The subscribers of the feed, for a test to close or count. */
   readonly feed: LiveFeed;
-  request(path: string, init?: RequestInit): Promise<Response>;
+  /** A request to the API; `peer` is the address it comes from, as a socket would carry it, none when left out. */
+  request(path: string, init?: RequestInit, options?: RequestOptions): Promise<Response>;
   /**
    * Signs a person of a fixture provider in as their browser would, and answers with the Cookie
    * header that carries the session.
@@ -60,6 +61,11 @@ export interface Harness {
   project(cookie: string, input: RestProjectInput): Promise<RestProject>;
   /** Ends the feed and the listener, for a harness that was given `live`. */
   close(): Promise<void>;
+}
+
+export interface RequestOptions {
+  /** The address of the peer on the socket; without it, the console cannot tell where a request came from. */
+  readonly peer?: string | undefined;
 }
 
 export interface HarnessOptions {
@@ -211,11 +217,15 @@ export function createHarness(testDatabase: TestDatabase, options: HarnessOption
     })();
     return seeded;
   };
-  const request = async (path: string, init?: RequestInit) => {
+  const request = async (path: string, init?: RequestInit, options?: RequestOptions) => {
     if (providers.length > 0) {
       await seed();
     }
-    return app.fetch(new Request(`${origin}${path}`, init));
+    const env =
+      options?.peer === undefined
+        ? undefined
+        : { incoming: { socket: { remoteAddress: options.peer } } };
+    return app.fetch(new Request(`${origin}${path}`, init), env);
   };
   return {
     app,
