@@ -37,6 +37,7 @@ describe("loadConfig", () => {
       database: { url: DATABASE_URL, poolMax: 10, ca: undefined },
       workspace: { name: "Console" },
       worker: { inProcess: false, archiveAfterDays: 30, endRunsAfterHours: 12 },
+      quotas: { fileBytesPerProject: undefined },
       auth: undefined,
       web: { root: undefined },
       skills: { source: "https://skillcdn.ai", address: undefined, directory: undefined },
@@ -71,6 +72,17 @@ describe("loadConfig", () => {
     expect(loadConfig({ DATABASE_URL, SKILLS_DIR: "/app/packs" }, noFiles).skills.directory).toBe(
       "/app/packs",
     );
+  });
+
+  it("reads the bound on a project's files in bytes, and refuses what is not a count of them", () => {
+    expect(
+      loadConfig({ DATABASE_URL, PROJECT_FILE_BYTES_AT_MOST: "1073741824" }, noFiles).quotas,
+    ).toEqual({ fileBytesPerProject: 1_073_741_824 });
+    for (const value of ["0", "-1", "1.5", "1GB"]) {
+      expect(problemsOf({ DATABASE_URL, PROJECT_FILE_BYTES_AT_MOST: value }).problems[0]).toContain(
+        "PROJECT_FILE_BYTES_AT_MOST",
+      );
+    }
   });
 
   it("reads the reverse-proxy settings, and trusts no proxy unless told to", () => {

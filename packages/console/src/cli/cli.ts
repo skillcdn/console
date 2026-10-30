@@ -3161,6 +3161,8 @@ function hintFor(error: ApiError, io: CliIo, seen: ConsoleSeen): string {
       return "A project has that key already. console projects lists them.\n";
     case "project.too_many":
       return "The workspace holds as many projects as one may. Work goes on in a project there is.\n";
+    case "project.too_many_bytes":
+      return "The project's files hold as many bytes together as this console allows. Hand in a link to where the file is instead, and say so in the report.\n";
     case "task.too_many":
       return "The project holds as many tasks as one may, those put away counted. The work goes on in another project; ask the person which.\n";
     case "goal.too_many":

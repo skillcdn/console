@@ -158,6 +158,7 @@ import {
   listLatestEvents,
   type Scope,
 } from "../db/queries/events.js";
+import { fileBytesOf } from "../db/queries/files.js";
 import { createGoal, GoalError, getGoal, listGoals, updateGoal } from "../db/queries/goals.js";
 import {
   endPackConnect,
@@ -719,6 +720,15 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     maxSize: MAX_PROJECT_ICON_BYTES + FORM_OVERHEAD_BYTES,
     onError: iconTooLarge,
   });
+
+  /**
+   * Whether the project's files, with these bytes added, would hold more together than the
+   * deployment allows one project (`fileBytesPerProject`): asked before any byte is kept, so
+   * that a file over the bound costs nothing; nothing is asked where no bound is set.
+   */
+  const overFileBytes = async (scope: Scope, bytes: number): Promise<boolean> =>
+    Number.isFinite(quotas.fileBytesPerProject) &&
+    (await fileBytesOf(database, scope)) + bytes > quotas.fileBytesPerProject;
 
   /** What a task, a decision, a run, a person or a project that could not be worked on answers with. */
   const failure = (c: Context<AppEnv>, error: unknown): Response => {
@@ -2201,6 +2211,15 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     if (body.trim().length === 0 && sent.length === 0) {
       return invalid(c, "body: say something, or put a file in.");
     }
+    if (
+      sent.length > 0 &&
+      (await overFileBytes(
+        found.scope,
+        sent.reduce((total, file) => total + file.part.size, 0),
+      ))
+    ) {
+      return failure(c, new ProjectError("project.too_many_bytes"));
+    }
     try {
       const files = [];
       for (const file of sent) {
@@ -2520,6 +2539,9 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
     if (!OPEN_RUN_STATUSES.includes(run.status)) {
       return failure(c, new RunError("run.over"));
+    }
+    if (await overFileBytes(found.scope, sent.part.size)) {
+      return failure(c, new ProjectError("project.too_many_bytes"));
     }
     try {
       const kept = await blobs.put(new Uint8Array(await sent.part.arrayBuffer()), clock.now());
@@ -3649,6 +3671,9 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
     if (document.files.length >= MAX_FILES_PER_DOCUMENT) {
       return failure(c, new DocumentError("document.too_many_files"));
+    }
+    if (await overFileBytes(found.scope, sent.part.size)) {
+      return failure(c, new ProjectError("project.too_many_bytes"));
     }
     try {
       const kept = await blobs.put(new Uint8Array(await sent.part.arrayBuffer()), clock.now());

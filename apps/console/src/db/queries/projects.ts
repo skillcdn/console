@@ -75,6 +75,7 @@ export class ProjectError extends DomainError {
       | "project.not_found"
       | "project.key_taken"
       | "project.too_many"
+      | "project.too_many_bytes"
       | "member.not_found"
       | "member.exists"
       | "member.invalid_person"
@@ -88,6 +89,7 @@ const PROJECT_ERROR_WORDS = {
   "project.not_found": "the project was not found",
   "project.key_taken": "a project with this key exists already",
   "project.too_many": "the workspace holds as many projects as one may",
+  "project.too_many_bytes": "the project's files hold as many bytes together as one may",
   "member.not_found": "the person is not listed in the project",
   "member.exists": "the person is listed in the project already",
   "member.invalid_person": "the person is not one of the workspace",

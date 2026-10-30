@@ -411,6 +411,7 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
       ...RUN_REFUSALS,
       "run.too_many_artifacts: the run carries as many as one may",
       "request.too_large: the file is over the limit",
+      "project.too_many_bytes: the project's files hold as many bytes together as this console allows; hand in a link instead",
     ],
   },
   ask: {
@@ -516,6 +517,7 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
       "comment.too_many: the task carries as many comments as one may",
       "comment.too_many_files: more files than one comment may carry",
       "request.too_large: the files are over the limit together",
+      "project.too_many_bytes: the project's files hold as many bytes together as this console allows; say where the file is instead",
     ],
   },
   file: {
@@ -571,6 +573,7 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
       "document.archived: the page is archived; restore it first",
       "document.too_many_files: the page carries as many files as one may",
       "request.too_large: the file is over the limit",
+      "project.too_many_bytes: the project's files hold as many bytes together as this console allows; link to where the file is instead",
     ],
   },
   archive: {

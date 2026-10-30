@@ -52,6 +52,7 @@ import {
   restProjectSchema,
   restProjectsSchema,
   restRulesSchema,
+  restRunSchema,
   restSkillBrowseSchema,
   restSkillFileSchema,
   restSkillFindSchema,
@@ -1550,6 +1551,79 @@ describe("the quotas", () => {
       await bounded.close();
     }
     expect(bounded.feed.streams).toBe(0);
+  });
+
+  it("bound the bytes of a project's files together where the deployment says, before any byte is kept", async () => {
+    const bounded = createHarness(testDatabase, {
+      providers: [createFixtureProvider()],
+      admins: ["carol"],
+      quotas: { fileBytesPerProject: 12 },
+    });
+    try {
+      const admin = await bounded.signIn("carol");
+      const headers = { cookie: admin, origin: SIGN_IN_URL };
+      const json = (method: "POST" | "PUT", path: string, body: unknown) =>
+        bounded.request(path, {
+          method,
+          headers: { ...headers, "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      const file = (path: string, bytes: number, body?: string) => {
+        const form = new FormData();
+        if (body !== undefined) {
+          form.set("body", body);
+        }
+        form.set(
+          "file",
+          new File(["x".repeat(bytes)], "notes.txt", { type: "text/plain" }),
+          "notes.txt",
+        );
+        return bounded.request(path, { method: "POST", headers, body: form });
+      };
+      const project = async (key: string) => {
+        const made = await json("POST", REST_ROUTES.projects, {
+          key,
+          name: key,
+          visibility: "workspace",
+        });
+        expect(made.status, await made.clone().text()).toBe(201);
+        const at = projectPath(key);
+        const task = restTaskSchema.parse(
+          await (await json("POST", `${at}/tasks`, { title: "Draw" })).json(),
+        );
+        const run = restRunSchema.parse(
+          await (await json("POST", `${at}/runs`, { taskId: task.id })).json(),
+        );
+        return { at, task, run };
+      };
+      const { at, task, run } = await project("bounded-bytes");
+      // A run hands in eight bytes; eight more would be sixteen.
+      expect((await file(`${at}/runs/${run.id}/files`, 8)).status).toBe(201);
+      const over = await file(`${at}/runs/${run.id}/files`, 8);
+      expect(over.status).toBe(409);
+      expect(await errorOf(over)).toBe("project.too_many_bytes");
+      // A comment's files count the same: four fill the bound, one more is over it.
+      expect((await file(`${at}/tasks/${task.id}/comments`, 4, "Here.")).status).toBe(201);
+      const commentOver = await file(`${at}/tasks/${task.id}/comments`, 1, "And here.");
+      expect(commentOver.status).toBe(409);
+      expect(await errorOf(commentOver)).toBe("project.too_many_bytes");
+      // A page's file too, and nothing of it is kept.
+      expect(
+        (await json("PUT", `${at}/docs/notes`, { title: "Notes", body: "Some." })).status,
+      ).toBe(201);
+      const attached = await file(`${at}/docs/notes/files`, 1);
+      expect(attached.status).toBe(409);
+      expect(await errorOf(attached)).toBe("project.too_many_bytes");
+      const page = restDocumentSchema.parse(
+        await (await bounded.request(`${at}/docs/notes`, { headers: { cookie: admin } })).json(),
+      );
+      expect(page.files).toHaveLength(0);
+      // The bound is each project's own.
+      const other = await project("bounded-bytes-2");
+      expect((await file(`${other.at}/runs/${other.run.id}/files`, 8)).status).toBe(201);
+    } finally {
+      await bounded.close();
+    }
   });
 });
 

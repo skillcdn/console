@@ -166,6 +166,12 @@ const environmentSchema = z.object({
   WORKER_IN_PROCESS: flag(false),
   TASK_ARCHIVE_AFTER_DAYS: integer(30, 0, 3650),
   RUN_ENDED_AFTER_HOURS: integer(12, 0, 8760),
+  PROJECT_FILE_BYTES_AT_MOST: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(Number.MAX_SAFE_INTEGER)
+    .optional(),
 
   PUBLIC_URL: origin.optional(),
   GITHUB_WEB_URL: origin.default("https://github.com"),
@@ -379,6 +385,11 @@ export interface Config {
     readonly archiveAfterDays: number;
     /** How many hours a run goes unheard, and not waiting for an answer, before the console ends it (ADR-0041); 0 never. */
     readonly endRunsAfterHours: number;
+  };
+  /** The bounds the deployment sets beyond the package's own; each nothing where it set none. */
+  readonly quotas: {
+    /** How many bytes the files of one project may hold together: handed in, put in comments and attached to pages. */
+    readonly fileBytesPerProject: number | undefined;
   };
   /** Signing in through identity providers. Unset: nobody signs in, and the board is nobody's. */
   readonly auth: AuthConfig | undefined;
@@ -740,6 +751,7 @@ export function loadConfig(
       archiveAfterDays: env.TASK_ARCHIVE_AFTER_DAYS,
       endRunsAfterHours: env.RUN_ENDED_AFTER_HOURS,
     },
+    quotas: { fileBytesPerProject: env.PROJECT_FILE_BYTES_AT_MOST },
     auth,
     web: { root: env.WEB_ROOT },
     skills: { source: env.SKILLCDN_URL, address, directory: env.SKILLS_DIR },

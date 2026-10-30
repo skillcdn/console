@@ -29,7 +29,7 @@ import type { AppAuth } from "../http/auth.js";
 import { createClientAddressResolver } from "../http/client-address.js";
 import { LiveFeed } from "../http/live-feed.js";
 import { PictureCache } from "../http/pictures.js";
-import { DEFAULT_QUOTAS, type Quotas } from "../http/quotas.js";
+import { type Quotas, quotasOf } from "../http/quotas.js";
 import type { AppEnv } from "../http/request-context.js";
 import { startServer } from "../http/server.js";
 import { Archivist } from "../jobs/archivist.js";
@@ -260,7 +260,7 @@ export function createApi(
     workspace,
     auth,
     feed,
-    quotas: { ...DEFAULT_QUOTAS, ...config.quotas },
+    quotas: quotasOf(config.quotas),
     pictures: new PictureCache({
       source:
         ports.pictures ??
