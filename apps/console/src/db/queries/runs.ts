@@ -1,4 +1,9 @@
-import type { ArtifactKind, RunEnding, RunStatus } from "@skillcdn/console/api";
+import {
+  type ArtifactKind,
+  MAX_RUNS_PER_TASK,
+  type RunEnding,
+  type RunStatus,
+} from "@skillcdn/console/api";
 import { and, asc, count, desc, eq, inArray, lt, notInArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { DomainError } from "../../errors.js";
@@ -78,6 +83,7 @@ export class RunError extends DomainError {
       | "run.task_closed"
       | "run.not_yours"
       | "run.over"
+      | "run.too_many"
       | "run.too_many_reports"
       | "run.too_many_artifacts",
   ) {
@@ -91,6 +97,7 @@ const RUN_ERROR_WORDS = {
   "run.task_closed": "the task is done or dropped",
   "run.not_yours": "the run is another person's",
   "run.over": "the run is over",
+  "run.too_many": "the task has been taken as many times as one may",
   "run.too_many_reports": "the run carries as many reports as one may",
   "run.too_many_artifacts": "the run carries as many artifacts as one may",
 } as const;
@@ -307,6 +314,8 @@ export async function startRun(
     readonly tokenId: string | undefined;
     readonly taskId: string;
     readonly agent: string;
+    /** How many runs the task may carry, this one included; the package's bound when left out. */
+    readonly limit?: number | undefined;
     readonly now: Date;
   },
 ): Promise<RunRecord> {
@@ -322,6 +331,11 @@ export async function startRun(
     }
     if (task.state === "done" || task.state === "dropped") {
       throw new RunError("run.task_closed");
+    }
+    // Counted under the lock on the task's row taken above.
+    const [held] = await tx.select({ count: count() }).from(runs).where(eq(runs.taskId, taskId));
+    if ((held?.count ?? 0) >= (input.limit ?? MAX_RUNS_PER_TASK)) {
+      throw new RunError("run.too_many");
     }
     const runner = asAgent(actor, agent);
     const open = await tx

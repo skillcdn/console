@@ -1,5 +1,5 @@
-import type { RestDecisionOption } from "@skillcdn/console/api";
-import { and, asc, desc, eq, isNull, ne, sql } from "drizzle-orm";
+import { MAX_DECISIONS_PER_PROJECT, type RestDecisionOption } from "@skillcdn/console/api";
+import { and, asc, count, desc, eq, isNull, ne, sql } from "drizzle-orm";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
 import { decisions, projects, runs, tasks } from "../schema.js";
@@ -58,24 +58,22 @@ export class DecisionError extends DomainError {
       | "decision.answered"
       | "decision.no_such_option"
       | "decision.invalid_run"
-      | "decision.invalid_decider",
+      | "decision.invalid_decider"
+      | "decision.too_many",
   ) {
-    super(
-      code,
-      code === "decision.not_found"
-        ? "the decision was not found"
-        : code === "decision.invalid_task"
-          ? "the task is not one of the project"
-          : code === "decision.answered"
-            ? "the decision has been answered"
-            : code === "decision.no_such_option"
-              ? "the option is not one of the decision's"
-              : code === "decision.invalid_run"
-                ? "the run is not the asker's, or is over"
-                : "the person named to decide may not work in the project",
-    );
+    super(code, DECISION_ERROR_WORDS[code]);
   }
 }
+
+const DECISION_ERROR_WORDS = {
+  "decision.not_found": "the decision was not found",
+  "decision.invalid_task": "the task is not one of the project",
+  "decision.answered": "the decision has been answered",
+  "decision.no_such_option": "the option is not one of the decision's",
+  "decision.invalid_run": "the run is not the asker's, or is over",
+  "decision.invalid_decider": "the person named to decide may not work in the project",
+  "decision.too_many": "the project holds as many decisions as one may",
+} as const;
 
 const decisionColumns = {
   id: decisions.id,
@@ -175,11 +173,26 @@ export async function raiseDecision(
       /** Who is to answer: a person who may work in the project; the actor when left out. */
       readonly deciderId?: string | undefined;
     };
+    /** How many decisions the project may hold, this one included; the package's bound when left out. */
+    readonly limit?: number | undefined;
     readonly now: Date;
   },
 ): Promise<DecisionRecord> {
   const { scope, actor, decision, now } = input;
   return drizzleOf(database).transaction(async (tx) => {
+    // Counted under the lock on the project's row, so that two raised at once cannot both be the last one allowed.
+    await tx
+      .select({ id: projects.id })
+      .from(projects)
+      .where(eq(projects.id, scope.projectId))
+      .for("update");
+    const [held] = await tx
+      .select({ count: count() })
+      .from(decisions)
+      .where(eq(decisions.projectId, scope.projectId));
+    if ((held?.count ?? 0) >= (input.limit ?? MAX_DECISIONS_PER_PROJECT)) {
+      throw new DecisionError("decision.too_many");
+    }
     const deciderId = decision.deciderId ?? actor.id;
     if (deciderId !== actor.id) {
       const [able] = await tx

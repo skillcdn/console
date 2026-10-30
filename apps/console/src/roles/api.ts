@@ -27,6 +27,7 @@ import { createApp } from "../http/app.js";
 import type { AppAuth } from "../http/auth.js";
 import { createClientAddressResolver } from "../http/client-address.js";
 import { LiveFeed } from "../http/live-feed.js";
+import { DEFAULT_QUOTAS, type Quotas } from "../http/quotas.js";
 import type { AppEnv } from "../http/request-context.js";
 import { startServer } from "../http/server.js";
 import { Archivist } from "../jobs/archivist.js";
@@ -93,6 +94,8 @@ export type ApiConfig = Pick<Config, "workspace"> & {
   readonly feed?: { readonly heartbeatMs?: number; readonly pollMs?: number } | undefined;
   /** How long a read of a decision may wait for its answer; the built-in value when left out. For tests. */
   readonly agents?: { readonly waitMs?: number } | undefined;
+  /** How much of the board a workspace, a project, a task or a person holds at once; the package's bounds where left out. For tests. */
+  readonly quotas?: Partial<Quotas> | undefined;
   /** The organization's skills, and the directory packs served from this machine are read from. Left out: no address, the public deployment, no directory. */
   readonly skills?: (SkillsConfig & { readonly directory?: string | undefined }) | undefined;
 };
@@ -243,6 +246,7 @@ export function createApi(
     workspace,
     auth,
     feed,
+    quotas: { ...DEFAULT_QUOTAS, ...config.quotas },
     blobs: ports.blobs ?? createPgBlobStore(database),
     skills,
     packConnector:

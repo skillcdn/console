@@ -1447,6 +1447,110 @@ describe("tokens", () => {
   });
 });
 
+describe("the quotas", () => {
+  it("bound what a workspace, a project, a task and a person hold at once, and say so", async () => {
+    // An administrator, so that the workspace's own bound is met by making projects.
+    const counting = createHarness(testDatabase, {
+      providers: [createFixtureProvider()],
+      admins: ["carol"],
+    });
+    const admin = await counting.signIn("carol");
+    const seen = restProjectsSchema.parse(
+      await (await counting.request(REST_ROUTES.projects, { headers: { cookie: admin } })).json(),
+    ).items.length;
+    const bounded = createHarness(testDatabase, {
+      providers: [createFixtureProvider()],
+      admins: ["carol"],
+      quotas: {
+        projectsPerWorkspace: seen + 1,
+        tasksPerProject: 2,
+        goalsPerProject: 1,
+        decisionsPerProject: 1,
+        documentsPerProject: 1,
+        runsPerTask: 1,
+        streamsPerPerson: 1,
+        streams: 2,
+      },
+    });
+    const as = (cookie: string, method: "POST" | "PUT", path: string, body: unknown) =>
+      bounded.request(path, {
+        method,
+        headers: { cookie, origin: SIGN_IN_URL, "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    try {
+      // Projects, per workspace.
+      const made = await as(admin, "POST", REST_ROUTES.projects, {
+        key: "bounded",
+        name: "Bounded",
+        visibility: "workspace",
+      });
+      expect(made.status).toBe(201);
+      const oneMore = await as(admin, "POST", REST_ROUTES.projects, {
+        key: "bounded-2",
+        name: "x",
+      });
+      expect(oneMore.status).toBe(409);
+      expect(await errorOf(oneMore)).toBe("project.too_many");
+      const at = projectPath("bounded");
+      // Tasks, per project, those put away counted.
+      const first = restTaskSchema.parse(
+        await (await as(admin, "POST", `${at}/tasks`, { title: "One" })).json(),
+      );
+      expect((await as(admin, "POST", `${at}/tasks`, { title: "Two" })).status).toBe(201);
+      const third = await as(admin, "POST", `${at}/tasks`, { title: "Three" });
+      expect(third.status).toBe(409);
+      expect(await errorOf(third)).toBe("task.too_many");
+      // Goals and decisions, per project.
+      expect((await as(admin, "POST", `${at}/goals`, { title: "Ship" })).status).toBe(201);
+      const goal = await as(admin, "POST", `${at}/goals`, { title: "Ship again" });
+      expect(goal.status).toBe(409);
+      expect(await errorOf(goal)).toBe("goal.too_many");
+      const ask = { question: "Which?", options: [{ label: "a" }, { label: "b" }] };
+      expect((await as(admin, "POST", `${at}/decisions`, ask)).status).toBe(201);
+      const decision = await as(admin, "POST", `${at}/decisions`, ask);
+      expect(decision.status).toBe(409);
+      expect(await errorOf(decision)).toBe("decision.too_many");
+      // Pages, per project: a new version of a page is not a new page.
+      const page = { title: "Guide", body: "First." };
+      expect((await as(admin, "PUT", `${at}/docs/guide`, page)).status).toBe(201);
+      expect(
+        (await as(admin, "PUT", `${at}/docs/guide`, { title: "Guide", body: "Second." })).status,
+      ).toBe(200);
+      const another = await as(admin, "PUT", `${at}/docs/other`, page);
+      expect(another.status).toBe(409);
+      expect(await errorOf(another)).toBe("document.too_many");
+      // Runs, per task.
+      expect((await as(admin, "POST", `${at}/runs`, { taskId: first.id })).status).toBe(201);
+      const run = await as(admin, "POST", `${at}/runs`, { taskId: first.id });
+      expect(run.status).toBe(409);
+      expect(await errorOf(run)).toBe("run.too_many");
+      // Streams of the feed: per person, and per process for everyone.
+      const stream = (cookie: string) =>
+        bounded.request(`${at}/events/stream?after=0`, {
+          headers: { cookie, accept: "text/event-stream" },
+        });
+      const admins = await stream(admin);
+      expect(admins.status).toBe(200);
+      const adminsSecond = await stream(admin);
+      expect(adminsSecond.status).toBe(429);
+      expect(adminsSecond.headers.get("retry-after")).toBe("30");
+      expect(await errorOf(adminsSecond)).toBe("feed.too_many");
+      const alices = await stream(alice);
+      expect(alices.status).toBe(200);
+      const bobs = await stream(bob);
+      expect(bobs.status).toBe(429);
+      expect(await errorOf(bobs)).toBe("feed.too_many");
+      expect(bounded.feed.streams).toBe(2);
+      await admins.body?.cancel();
+      await alices.body?.cancel();
+    } finally {
+      await bounded.close();
+    }
+    expect(bounded.feed.streams).toBe(0);
+  });
+});
+
 describe("connecting an agent", () => {
   const JSON_ONLY = { "content-type": "application/json" };
   const begin = async (agent: string) => {

@@ -24,7 +24,7 @@ function sleep(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-/** One subscriber: a cursor, the scope of the feed it reads, and the way to wake it. */
+/** One subscriber: a cursor, the scope of the feed it reads, whose stream it is, and the way to wake it. */
 export class Subscription implements AsyncIterable<FeedMessage> {
   #cursor: number;
   #wake: (() => void) | undefined;
@@ -33,17 +33,30 @@ export class Subscription implements AsyncIterable<FeedMessage> {
   readonly #scope: EventScope;
   readonly #options: LiveFeedOptions;
   readonly #onEnd: () => void;
+  readonly #owner: string | undefined;
 
-  constructor(after: number, scope: EventScope, options: LiveFeedOptions, onEnd: () => void) {
+  constructor(
+    after: number,
+    scope: EventScope,
+    options: LiveFeedOptions,
+    onEnd: () => void,
+    owner?: string,
+  ) {
     this.#cursor = after;
     this.#scope = scope;
     this.#options = options;
     this.#onEnd = onEnd;
+    this.#owner = owner;
   }
 
   /** The number of the last event sent. */
   get cursor(): number {
     return this.#cursor;
+  }
+
+  /** The person whose stream this is, for one a person opened; nothing for the console's own waiting. */
+  get owner(): string | undefined {
+    return this.#owner;
   }
 
   /** Asks the subscriber to look again. A wake-up that arrives while it looks is not lost. */
@@ -131,6 +144,8 @@ export class Subscription implements AsyncIterable<FeedMessage> {
 export class LiveFeed {
   readonly #options: LiveFeedOptions;
   readonly #subscriptions = new Set<Subscription>();
+  /** How many streams each person holds, for the bound on them; a person with none is not here. */
+  readonly #streams = new Map<string, number>();
   #closed = false;
 
   constructor(options: LiveFeedOptions) {
@@ -141,21 +156,54 @@ export class LiveFeed {
     return this.#subscriptions.size;
   }
 
+  /** How many streams people hold in this process: the subscriptions with an owner. */
+  get streams(): number {
+    let total = 0;
+    for (const held of this.#streams.values()) {
+      total += held;
+    }
+    return total;
+  }
+
+  /** How many streams one person holds in this process. */
+  streamsOf(owner: string): number {
+    return this.#streams.get(owner) ?? 0;
+  }
+
   nudge(): void {
     for (const subscription of this.#subscriptions) {
       subscription.wake();
     }
   }
 
-  /** A subscription to one scope of the feed from event number `after` on; ended at once when the feed is closed. */
-  subscribe(after: number, scope: EventScope): Subscription {
-    const subscription = new Subscription(after, scope, this.#options, () => {
-      this.#subscriptions.delete(subscription);
-    });
+  /**
+   * A subscription to one scope of the feed from event number `after` on, counted as a stream
+   * of `owner` when a person opened it; ended at once when the feed is closed.
+   */
+  subscribe(after: number, scope: EventScope, owner?: string): Subscription {
+    const subscription = new Subscription(
+      after,
+      scope,
+      this.#options,
+      () => {
+        if (this.#subscriptions.delete(subscription) && owner !== undefined) {
+          const held = (this.#streams.get(owner) ?? 1) - 1;
+          if (held > 0) {
+            this.#streams.set(owner, held);
+          } else {
+            this.#streams.delete(owner);
+          }
+        }
+      },
+      owner,
+    );
     if (this.#closed) {
       subscription.end();
     } else {
       this.#subscriptions.add(subscription);
+      if (owner !== undefined) {
+        this.#streams.set(owner, (this.#streams.get(owner) ?? 0) + 1);
+      }
     }
     return subscription;
   }

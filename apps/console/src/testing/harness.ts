@@ -19,6 +19,7 @@ import { ensureWorkspace } from "../db/queries/workspaces.js";
 import { listings } from "../db/schema.js";
 import type { TestDatabase } from "../db/testing.js";
 import type { LiveFeed } from "../http/live-feed.js";
+import type { Quotas } from "../http/quotas.js";
 import type { AppEnv } from "../http/request-context.js";
 import { restProject } from "../http/rest-shapes.js";
 import type { BlobStore } from "../ports/blob-store.js";
@@ -94,6 +95,8 @@ export interface HarnessOptions {
   readonly feed?: { readonly heartbeatMs?: number; readonly pollMs?: number };
   /** How long an agent's `ask` waits for an answer. */
   readonly agents?: { readonly waitMs?: number };
+  /** How much of the board a workspace, a project, a task or a person holds at once; the package's bounds where left out. */
+  readonly quotas?: Partial<Quotas> | undefined;
   /** The organization's skills: their address, and the deployment's side of reading them. None when left out. */
   readonly skills?:
     | {
@@ -152,6 +155,7 @@ export function createHarness(testDatabase: TestDatabase, options: HarnessOption
       },
       feed: options.feed,
       agents: options.agents,
+      quotas: options.quotas,
       skills: skillsOf(options.skills),
       ...(providers.length === 0
         ? {}

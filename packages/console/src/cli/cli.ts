@@ -3159,6 +3159,18 @@ function hintFor(error: ApiError, io: CliIo, seen: ConsoleSeen): string {
       return "What was asked is an administrator's, or an owner's of the project, and the person this token acts as is not one here. Hand the step to them.\n";
     case "project.key_taken":
       return "A project has that key already. console projects lists them.\n";
+    case "project.too_many":
+      return "The workspace holds as many projects as one may. Work goes on in a project there is.\n";
+    case "task.too_many":
+      return "The project holds as many tasks as one may, those put away counted. The work goes on in another project; ask the person which.\n";
+    case "goal.too_many":
+      return "The project holds as many goals as one may. console goals lists them; one done or dropped is still a goal.\n";
+    case "decision.too_many":
+      return "The project holds as many decisions as one may. Ask the person in the report instead.\n";
+    case "document.too_many":
+      return "The project holds as many pages as one may. Write on a page there is: console docs lists them.\n";
+    case "run.too_many":
+      return "The task has been taken as many times as one may. Write a new task for what is left, and take that.\n";
     case "project.invalid_address":
       return "The skills address is not one as SkillCDN spells it; none makes the organization's skills the project's.\n";
     case "project.invalid_icon":

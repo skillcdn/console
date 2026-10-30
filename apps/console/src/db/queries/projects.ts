@@ -1,11 +1,12 @@
 import {
   type ColorName,
+  MAX_PROJECTS_PER_WORKSPACE,
   PROJECT_ICON_TYPES,
   type ProjectIconType,
   type ProjectRole,
   type ProjectVisibility,
 } from "@skillcdn/console/api";
-import { and, asc, eq, type SQL, sql } from "drizzle-orm";
+import { and, asc, count, eq, type SQL, sql } from "drizzle-orm";
 import { memberOfProject, projectVisibleTo } from "../../auth/policy.js";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
@@ -73,6 +74,7 @@ export class ProjectError extends DomainError {
     code:
       | "project.not_found"
       | "project.key_taken"
+      | "project.too_many"
       | "member.not_found"
       | "member.exists"
       | "member.invalid_person"
@@ -85,6 +87,7 @@ export class ProjectError extends DomainError {
 const PROJECT_ERROR_WORDS = {
   "project.not_found": "the project was not found",
   "project.key_taken": "a project with this key exists already",
+  "project.too_many": "the workspace holds as many projects as one may",
   "member.not_found": "the person is not listed in the project",
   "member.exists": "the person is listed in the project already",
   "member.invalid_person": "the person is not one of the workspace",
@@ -279,6 +282,8 @@ export async function createProject(
     readonly actor: Actor;
     readonly person: PersonRecord;
     readonly project: ProjectInput;
+    /** How many projects the workspace may hold, this one included; the package's bound when left out. */
+    readonly limit?: number | undefined;
     readonly now: Date;
   },
 ): Promise<ProjectView> {
@@ -296,6 +301,13 @@ export async function createProject(
       .limit(1);
     if (taken !== undefined) {
       throw new ProjectError("project.key_taken");
+    }
+    const [held] = await tx
+      .select({ count: count() })
+      .from(projects)
+      .where(eq(projects.workspaceId, workspaceId));
+    if ((held?.count ?? 0) >= (input.limit ?? MAX_PROJECTS_PER_WORKSPACE)) {
+      throw new ProjectError("project.too_many");
     }
     const [inserted] = await tx
       .insert(projects)

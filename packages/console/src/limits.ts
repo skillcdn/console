@@ -79,3 +79,17 @@ export const MAX_PROJECT_SYMBOL_LENGTH = 8;
 export const MAX_PROJECT_ICON_BYTES = 512 * 1024;
 /** How many items a listing answers with when none is asked for, and the most one may ask for. */
 export const DEFAULT_PAGE_LIMIT = 50;
+/**
+ * How many projects one workspace holds, how many tasks, goals, decisions and pages one project
+ * holds, and how many runs one task carries, those put away included: bounds a runaway script
+ * meets and real work does not.
+ */
+export const MAX_PROJECTS_PER_WORKSPACE = 500;
+export const MAX_TASKS_PER_PROJECT = 20_000;
+export const MAX_GOALS_PER_PROJECT = 1_000;
+export const MAX_DECISIONS_PER_PROJECT = 20_000;
+export const MAX_DOCUMENTS_PER_PROJECT = 5_000;
+export const MAX_RUNS_PER_TASK = 500;
+/** How many streams of the live feed one person holds at once, across their tabs, and how many one process of the console holds for everyone. */
+export const MAX_STREAMS_PER_PERSON = 20;
+export const MAX_STREAMS = 1_000;

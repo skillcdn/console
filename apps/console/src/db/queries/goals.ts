@@ -1,13 +1,14 @@
 import {
   type CategoryColor,
   type GoalState,
+  MAX_GOALS_PER_PROJECT,
   OPEN_GOAL_STATES,
   type RestTaskCounts,
 } from "@skillcdn/console/api";
-import { and, asc, eq, inArray, notInArray, type SQL, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, notInArray, type SQL, sql } from "drizzle-orm";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
-import { categories, goals, tasks } from "../schema.js";
+import { categories, goals, projects, tasks } from "../schema.js";
 import { type Actor, recordEvent, type Scope } from "./events.js";
 import { type PersonRecord, personColumns, raisers, toPerson } from "./people.js";
 import { titleMatches } from "./search.js";
@@ -42,7 +43,9 @@ export interface GoalRecord {
 
 /** What is wrong with a goal a person asked for. `code` is what the API answers with. */
 export class GoalError extends DomainError {
-  constructor(code: "goal.not_found" | "goal.invalid_category" | "goal.invalid_dates") {
+  constructor(
+    code: "goal.not_found" | "goal.invalid_category" | "goal.invalid_dates" | "goal.too_many",
+  ) {
     super(code, GOAL_ERROR_WORDS[code]);
   }
 }
@@ -51,6 +54,7 @@ const GOAL_ERROR_WORDS = {
   "goal.not_found": "the goal was not found",
   "goal.invalid_category": "the category is not one of the workspace",
   "goal.invalid_dates": "the target day is before the start",
+  "goal.too_many": "the project holds as many goals as one may",
 } as const;
 
 export interface GoalInput {
@@ -245,11 +249,26 @@ export async function createGoal(
     readonly scope: Scope;
     readonly actor: Actor;
     readonly goal: GoalInput;
+    /** How many goals the project may hold, this one included; the package's bound when left out. */
+    readonly limit?: number | undefined;
     readonly now: Date;
   },
 ): Promise<GoalRecord> {
   const { scope, actor, goal, now } = input;
   return drizzleOf(database).transaction(async (tx) => {
+    // Counted under the lock on the project's row, so that two set at once cannot both be the last one allowed.
+    await tx
+      .select({ id: projects.id })
+      .from(projects)
+      .where(eq(projects.id, scope.projectId))
+      .for("update");
+    const [held] = await tx
+      .select({ count: count() })
+      .from(goals)
+      .where(eq(goals.projectId, scope.projectId));
+    if ((held?.count ?? 0) >= (input.limit ?? MAX_GOALS_PER_PROJECT)) {
+      throw new GoalError("goal.too_many");
+    }
     const categoryId = await categoryIdOf(tx, scope, goal.category);
     checkDates(goal.startsOn ?? null, goal.dueOn ?? null);
     const [inserted] = await tx

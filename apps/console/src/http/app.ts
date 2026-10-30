@@ -12,6 +12,7 @@ import { type AppAuth, createAccess, registerAuth } from "./auth.js";
 import type { ClientAddressResolver } from "./client-address.js";
 import { clientVersionGate, versionFactsOf } from "./client-version.js";
 import type { LiveFeed } from "./live-feed.js";
+import type { Quotas } from "./quotas.js";
 import { type AppEnv, requestContext } from "./request-context.js";
 import { registerRest } from "./rest.js";
 
@@ -27,6 +28,8 @@ export interface AppDependencies {
   readonly auth: AppAuth | undefined;
   /** The subscribers of the feed in this process. */
   readonly feed: LiveFeed;
+  /** How much of the board a workspace, a project, a task or a person holds at once. */
+  readonly quotas: Quotas;
   /** Where the bytes of files handed in are kept. */
   readonly blobs: BlobStore;
   /** The organization's skills, read by address. */
@@ -125,6 +128,7 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
     tokens: auth?.tokens,
     connections: auth?.connections,
     feed,
+    quotas: dependencies.quotas,
     blobs,
     skills,
     packConnector: dependencies.packConnector,

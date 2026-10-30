@@ -236,6 +236,7 @@ import {
   signInRequired,
 } from "./auth.js";
 import type { LiveFeed } from "./live-feed.js";
+import type { Quotas } from "./quotas.js";
 import type { AppEnv } from "./request-context.js";
 import {
   restCategory,
@@ -290,6 +291,8 @@ export interface RestDependencies {
   /** Agents connecting with a code (ADR-0011); left out where nobody signs in. */
   readonly connections: Connections | undefined;
   readonly feed: LiveFeed;
+  /** How much of the board a workspace, a project, a task or a person holds at once. */
+  readonly quotas: Quotas;
   /** Where the bytes of files handed in are kept. */
   readonly blobs: BlobStore;
   /** The skills of a project, read by address. */
@@ -507,6 +510,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     tokens,
     connections,
     feed,
+    quotas,
     blobs,
     skills,
     packConnector,
@@ -705,12 +709,17 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
   /** What a task, a decision, a run, a person or a project that could not be worked on answers with. */
   const failure = (c: Context<AppEnv>, error: unknown): Response => {
     if (error instanceof TaskError) {
-      const status = error.code === "task.not_found" ? 404 : 400;
+      const status =
+        error.code === "task.not_found" ? 404 : error.code === "task.too_many" ? 409 : 400;
       return c.json(errorBody(error.code, error.message), status);
     }
     if (error instanceof DecisionError) {
       const status =
-        error.code === "decision.not_found" ? 404 : error.code === "decision.answered" ? 409 : 400;
+        error.code === "decision.not_found"
+          ? 404
+          : error.code === "decision.answered" || error.code === "decision.too_many"
+            ? 409
+            : 400;
       return c.json(errorBody(error.code, error.message), status);
     }
     if (error instanceof PersonError) {
@@ -740,7 +749,9 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
           ? 404
           : error.code === "run.not_yours"
             ? 403
-            : error.code === "run.over" || error.code === "run.task_closed"
+            : error.code === "run.over" ||
+                error.code === "run.task_closed" ||
+                error.code === "run.too_many"
               ? 409
               : 400;
       return c.json(errorBody(error.code, error.message), status);
@@ -770,7 +781,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     if (error instanceof GoalError) {
       return c.json(
         errorBody(error.code, error.message),
-        error.code === "goal.not_found" ? 404 : 400,
+        error.code === "goal.not_found" ? 404 : error.code === "goal.too_many" ? 409 : 400,
       );
     }
     if (error instanceof CategoryError) {
@@ -1182,6 +1193,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     try {
       const project = await createProject(database, {
         workspaceId: person.workspaceId,
+        limit: quotas.projectsPerWorkspace,
         actor: actorOf(caller),
         person,
         project: { ...input, skillsAddress: skillsAddress ?? null },
@@ -1973,6 +1985,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     try {
       const task = await createTask(database, {
         scope: found.scope,
+        limit: quotas.tasksPerProject,
         actor: found.actor,
         task: {
           ...input,
@@ -2195,6 +2208,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     try {
       const decision = await raiseDecision(database, {
         scope: found.scope,
+        limit: quotas.decisionsPerProject,
         actor: found.actor,
         decision: {
           question: input.question,
@@ -2344,6 +2358,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     try {
       const run = await startRun(database, {
         scope: found.scope,
+        limit: quotas.runsPerTask,
         actor: found.actor,
         tokenId: token?.id,
         taskId: input.taskId,
@@ -2575,6 +2590,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     try {
       const goal = await createGoal(database, {
         scope: found.scope,
+        limit: quotas.goalsPerProject,
         actor: found.actor,
         goal: input,
         now: clock.now(),
@@ -3462,6 +3478,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     try {
       const { document, created } = await writeDocument(database, {
         scope: found.scope,
+        maxDocuments: quotas.documentsPerProject,
         actor: found.actor,
         path,
         title: rules ? RULES_TITLE : input.title,
@@ -3662,8 +3679,23 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       Number.isInteger(lastSeen) && lastSeen >= 0
         ? Math.max(lastSeen, query.data.after)
         : query.data.after;
+    // A stream is bounded per person and per process: a browser with a tab too many, or a
+    // script that opens streams and never closes them, is told to close one or try again later.
+    if (
+      feed.streamsOf(found.person.id) >= quotas.streamsPerPerson ||
+      feed.streams >= quotas.streams
+    ) {
+      c.header("retry-after", "30");
+      return c.json(
+        errorBody(
+          "feed.too_many",
+          "As many streams of the feed are open as one may hold at once. Close one, or try again later.",
+        ),
+        429,
+      );
+    }
     await workspace();
-    const subscription = feed.subscribe(after, found.scope);
+    const subscription = feed.subscribe(after, found.scope, found.person.id);
     /**
      * Whether the subscriber may still read the project: asked again before every delivery
      * and every heartbeat, since a stream outlives the request that opened it, and a person

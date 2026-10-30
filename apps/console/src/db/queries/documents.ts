@@ -1,5 +1,5 @@
 import { documentPathsIn, type LinkSource, RULES_PATH } from "@skillcdn/console/api";
-import { and, asc, desc, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNull, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
@@ -108,7 +108,8 @@ export class DocumentError extends DomainError {
       | "document.conflict"
       | "document.archived"
       | "document.too_many_versions"
-      | "document.too_many_files",
+      | "document.too_many_files"
+      | "document.too_many",
   ) {
     super(code, DOCUMENT_ERROR_WORDS[code]);
   }
@@ -121,6 +122,7 @@ const DOCUMENT_ERROR_WORDS = {
   "document.archived": "the page is archived",
   "document.too_many_versions": "the page carries as many versions as one may",
   "document.too_many_files": "the page carries as many files as one may",
+  "document.too_many": "the project holds as many pages as one may",
 } as const;
 
 type Handle = Transaction | ReturnType<typeof drizzleOf>;
@@ -480,6 +482,8 @@ export async function writeDocument(
     readonly baseVersion?: number | undefined;
     readonly restoreArchived?: boolean | undefined;
     readonly maxVersions: number;
+    /** How many pages the project may hold, this one included; left out, a first write is not counted (the workspace's own page). */
+    readonly maxDocuments?: number | undefined;
     readonly now: Date;
   },
 ): Promise<{ readonly document: DocumentRecord; readonly created: boolean }> {
@@ -524,6 +528,12 @@ export async function writeDocument(
         .limit(1);
       if (again !== undefined) {
         throw new DocumentError("document.conflict");
+      }
+      if (input.maxDocuments !== undefined) {
+        const [held] = await tx.select({ count: count() }).from(documents).where(inScope(scope));
+        if ((held?.count ?? 0) >= input.maxDocuments) {
+          throw new DocumentError("document.too_many");
+        }
       }
       const [inserted] = await tx
         .insert(documents)

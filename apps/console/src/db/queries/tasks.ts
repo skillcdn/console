@@ -1,5 +1,6 @@
 import {
   type CategoryColor,
+  MAX_TASKS_PER_PROJECT,
   OPEN_TASK_STATES,
   type RestTaskLink,
   type TaskPriority,
@@ -7,6 +8,7 @@ import {
 } from "@skillcdn/console/api";
 import {
   and,
+  count,
   desc,
   eq,
   inArray,
@@ -87,7 +89,8 @@ export class TaskError extends DomainError {
       | "task.invalid_parent"
       | "task.invalid_category"
       | "task.invalid_goal"
-      | "task.invalid_dates",
+      | "task.invalid_dates"
+      | "task.too_many",
   ) {
     super(code, TASK_ERROR_WORDS[code]);
   }
@@ -100,6 +103,7 @@ const TASK_ERROR_WORDS = {
   "task.invalid_category": "the category is not one of the workspace",
   "task.invalid_goal": "the goal is not one of the project",
   "task.invalid_dates": "the due day is before the start",
+  "task.too_many": "the project holds as many tasks as one may",
 } as const;
 
 export interface TaskInput {
@@ -417,11 +421,27 @@ export async function createTask(
     readonly scope: Scope;
     readonly actor: Actor;
     readonly task: TaskInput;
+    /** How many tasks the project may hold, those put away included, this one too; the package's bound when left out. */
+    readonly limit?: number | undefined;
     readonly now: Date;
   },
 ): Promise<TaskRecord> {
   const { scope, actor, task, now } = input;
   return drizzleOf(database).transaction(async (tx) => {
+    // The count is taken under the lock on the project's row, which numbering the task takes
+    // below anyway, so that two written at once cannot both be the last one allowed.
+    await tx
+      .select({ id: projects.id })
+      .from(projects)
+      .where(eq(projects.id, scope.projectId))
+      .for("update");
+    const [held] = await tx
+      .select({ count: count() })
+      .from(tasks)
+      .where(eq(tasks.projectId, scope.projectId));
+    if ((held?.count ?? 0) >= (input.limit ?? MAX_TASKS_PER_PROJECT)) {
+      throw new TaskError("task.too_many");
+    }
     const workerIds = unique(task.workerIds ?? []);
     await checkWorkers(tx, scope, workerIds);
     await checkParent(tx, scope, undefined, task.parentId);
