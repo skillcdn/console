@@ -336,6 +336,19 @@ Goal: three things the first weeks of use asked for. A board is found by typing,
 - [x] The choice made elsewhere (2026-10-26): `console answer` writes a person's answer on a decision in their name through the agent, as they gave it in chat or in passing; the skill working-the-board (1.25), its terms and the console's own rules say what a decision is, that an answer given elsewhere is written there before the work goes on, and that a briefing starts from the decisions waiting for the person.
 - [x] The cards compact again (2026-10-26): the line the renewal drew under a card's title is gone, the card's vertical room is smaller and a badge is a lower pill everywhere, the people as they were, since a column holds many and what is due must read at a glance.
 
+## Milestone 33, the console shared (2026-10-30)
+
+Goal: the console runs an organization's own work beside outside builders and their projects, each with a seat and a pack of their own. What one person or one script may hold or do is bounded, a member learns nothing of a project that is not theirs, and what the pages fetch from elsewhere passes through the console.
+
+- [x] The review (2026-10-30): the deployed console read again as code, project by project and token by token, from the connection code to the sign-in flow and the edges every input crosses; nothing high. A stream of the feed asks again before every delivery and every heartbeat whether its reader may still read, and a connection code is written to no log.
+- [x] A token of a person who is out (2026-10-30, [ADR-0044](adr/0044-a-token-of-a-person-who-is-out-is-kept-and-refused-with-the-reason-until-they-are-back-in.md)): kept, refused with the reason on every route, `auth.deactivated` or `auth.not_admitted` (`403`), and theirs again when they are back in.
+- [x] A project is made by an administrator (2026-10-30, [ADR-0045](adr/0045-a-project-is-made-by-an-administrator.md)): `POST /api/v1/projects` is an administrator's, so that a key taken tells a member of no private project; the pages, the command and the skills say so.
+- [x] The claim is a request of its own (2026-10-30, [ADR-0046](adr/0046-the-claim-of-a-pack-token-is-a-request-of-its-own-and-reading-how-the-connection-stands-changes-nothing.md)): the claim of a pack token is `POST .../pack-token/connect/claim`, and a `GET` changes nothing; the floors at 0.4.1 with a `Breaking:` changeset, and the snapshot taken again.
+- [x] A connection request is bounded per address (2026-10-30, [ADR-0047](adr/0047-a-connection-request-is-bounded-per-address-and-the-oldest-not-yet-approved-makes-way.md)): ten live requests from one address, as the trusted proxies resolve it, the oldest not yet approved making way for the next; migration 0028 keeps the address.
+- [x] The quotas (2026-10-30): what a workspace, a project, a task and a person hold at once, those put away counted, refused as `project.too_many`, `task.too_many`, `goal.too_many`, `decision.too_many`, `document.too_many` and `run.too_many` (`409`) and `feed.too_many` (`429`), at the package's bounds, which the `api` role takes as `quotas` ([specs/rest.md](specs/rest.md)).
+- [x] A picture from elsewhere (2026-10-30, [ADR-0048](adr/0048-a-picture-from-elsewhere-is-read-through-the-console-from-a-public-address-and-kept-a-while.md)): fetched by the console from a public address under a guard of its own, kept a while and shown from `GET /api/v1/pictures?src=`; the pages load nothing from elsewhere themselves (`img-src 'self' data:`).
+- [x] The feed read from the end (2026-10-30): `GET .../events?latest=true` answers the newest page, and the pages read that one page before showing the board, instead of walking the feed from its first event.
+
 ## After milestone 16
 
 Nothing is chosen yet; the list below is where the next milestone comes from.
