@@ -161,6 +161,8 @@ export function createApi(
       limit: MAX_TOKENS_PER_PERSON,
       daysAtMost: config.auth.tokenDaysAtMost,
     });
+    // Read here: the narrowing of `config.auth` above does not reach into a callback.
+    const domains = [...config.auth.domains];
     auth = {
       origin,
       sessions,
@@ -194,7 +196,19 @@ export function createApi(
           }),
         ]),
       ),
-      providers: providers.map((provider) => ({ key: provider.key, label: provider.label })),
+      // The sign-in page says under each button who gets in through it: the organization at the
+      // git host, the Workspace domains, or only the logins an administrator listed.
+      providers: providers.map((provider) => ({
+        key: provider.key,
+        label: provider.label,
+        admits: {
+          organization:
+            provider.key === "gh" && ports.organization !== undefined
+              ? ports.organization.name
+              : null,
+          domains: provider.key === "google" ? domains : [],
+        },
+      })),
     };
   }
 

@@ -1020,8 +1020,12 @@ describe("the shell and signing in", () => {
       <SignIn
         title="Acme"
         providers={[
-          { key: "gh", label: "GitHub" },
-          { key: "google", label: "Google" },
+          { key: "gh", label: "GitHub", admits: { organization: "acme", domains: [] } },
+          {
+            key: "google",
+            label: "Google",
+            admits: { organization: null, domains: ["example.com"] },
+          },
         ]}
         returnTo="/decisions"
         failure="refused"
@@ -1029,8 +1033,27 @@ describe("the shell and signing in", () => {
     );
     expect(html).toContain('href="/auth/gh/login?return_to=%2Fdecisions"');
     expect(html).toContain('href="/auth/google/login?return_to=%2Fdecisions"');
-    expect(html).toContain("Continue with Google");
+    expect(html).toContain("Sign in with GitHub");
+    expect(html).toContain("Sign in with Google");
+    // Each button carries the provider's mark, and says under it who gets in through it.
+    expect(html.match(/class="sc-sign-in-mark/g)).toHaveLength(2);
+    expect(html).toContain("For the members of acme, the organization at GitHub.");
+    expect(html).toContain("For accounts at example.com.");
+    expect(html).not.toContain("aria-busy");
     expect(html).toContain("not a member");
+    // An older console says nothing of who gets in; a way with neither names the listings.
+    const plain = renderToStaticMarkup(
+      <SignIn
+        title="Acme"
+        providers={[
+          { key: "gh", label: "GitHub" },
+          { key: "google", label: "Google", admits: { organization: null, domains: [] } },
+        ]}
+        returnTo="/"
+      />,
+    );
+    expect(plain.match(/sc-sign-in-admits/g)).toHaveLength(1);
+    expect(plain).toContain("For the people an administrator added.");
     const marked = renderToStaticMarkup(
       <SignIn
         title="Acme"

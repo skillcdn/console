@@ -167,6 +167,18 @@ export const restProviderSchema = z.object({
   key: z.enum(PROVIDER_KEYS),
   /** What people read on the button. */
   label: z.string(),
+  /**
+   * Who this way in lets in, for the line under the button: the organization at the git host
+   * whose members are in, the Workspace domains whose accounts are, or neither, where only the
+   * logins an administrator listed get in. Answered from 0.4.1; read as optional, so that a
+   * console built on this package reads an older console's answer.
+   */
+  admits: z.optional(
+    z.object({
+      organization: z.nullable(z.string()),
+      domains: z.array(z.string()),
+    }),
+  ),
 });
 export type RestProvider = z.infer<typeof restProviderSchema>;
 

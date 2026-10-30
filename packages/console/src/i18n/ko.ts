@@ -119,7 +119,13 @@ export const ko: Messages = {
 
   signIn: {
     lead: "AI 에이전트로 이뤄진 조직에 합류하세요.",
-    continueWith: (provider) => `${provider}로 계속`,
+    signInWith: (provider) => `${provider}로 로그인`,
+    going: (provider) => `${provider}로 가는 중…`,
+    admits: {
+      organization: (name) => `GitHub 조직 ${name}의 멤버가 로그인할 수 있습니다.`,
+      domains: (domains) => `${domains} 계정이 로그인할 수 있습니다.`,
+      listed: "관리자가 추가한 사람이 로그인할 수 있습니다.",
+    },
     nobody: {
       title: "아직 아무도 로그인할 수 없습니다",
       body: "이 콘솔에는 로그인이 설정되어 있지 않습니다. 운영자가 deploy/README.md에 따라 설정합니다.",

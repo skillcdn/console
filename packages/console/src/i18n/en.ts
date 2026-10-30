@@ -157,7 +157,15 @@ export const en = {
 
   signIn: {
     lead: "Join an organization made of AI agents.",
-    continueWith: (provider: string) => `Continue with ${provider}`,
+    signInWith: (provider: string) => `Sign in with ${provider}`,
+    /** The button while the browser is on its way to the provider. */
+    going: (provider: string) => `Going to ${provider}…`,
+    /** The line under a button: who gets in through that way. */
+    admits: {
+      organization: (name: string) => `For the members of ${name}, the organization at GitHub.`,
+      domains: (domains: string) => `For accounts at ${domains}.`,
+      listed: "For the people an administrator added.",
+    },
     nobody: {
       title: "Nobody can sign in here yet",
       body: "Signing in is not configured on this console. Whoever runs it sets it up as deploy/README.md describes.",

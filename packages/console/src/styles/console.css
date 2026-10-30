@@ -2168,15 +2168,67 @@ select.sc-input {
   text-align: left;
 }
 
+/* The ways in, one under the other, each a button with who gets in through it under it. */
 .sc-sign-in-ways {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--sc-space-3);
+  display: grid;
+  justify-items: center;
+  gap: var(--sc-space-4);
+  margin-top: var(--sc-space-2);
 }
 
+.sc-sign-in-way {
+  display: grid;
+  justify-items: center;
+  gap: var(--sc-space-2);
+  width: 100%;
+}
+
+/* The button is the page's one call: wide, a step taller than a control, the provider's mark
+   before its words. */
 .sc-sign-in-button {
-  justify-self: center;
+  width: 100%;
+  max-width: 20rem;
+  min-height: 2.75rem;
+  gap: var(--sc-space-3);
+  font-size: var(--sc-text-md);
+}
+
+.sc-sign-in-button:focus-visible {
+  outline: var(--sc-focus-ring);
+  outline-offset: 3px;
+  border-radius: var(--sc-radius-md);
+}
+
+/* On the way to the provider: the button keeps its color and turns its ring in the text's color. */
+.sc-sign-in-button-going {
+  cursor: progress;
+}
+
+.sc-sign-in-spinner .sc-spinner-ring {
+  width: 1rem;
+  height: 1rem;
+  border-color: color-mix(in srgb, var(--sc-color-accent-contrast) 40%, transparent);
+  border-top-color: var(--sc-color-accent-contrast);
+}
+
+.sc-sign-in-mark {
+  flex: none;
+}
+
+/* A mark in colors of its own sits on a light tile, whatever the button's color. */
+.sc-sign-in-mark-tile {
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-color-accent-contrast);
+}
+
+.sc-sign-in-admits {
+  margin: 0;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-xs);
 }
 
 /* Prose: what people and agents write, rendered from Markdown. Element selectors on purpose. */

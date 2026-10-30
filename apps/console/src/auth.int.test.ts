@@ -118,7 +118,7 @@ describe("signing in", () => {
         source: "listed",
         deactivatedAt: null,
       },
-      signIn: [{ key: "gh", label: "GitHub" }],
+      signIn: [{ key: "gh", label: "GitHub", admits: { organization: null, domains: [] } }],
     });
     expect(await me(h)).toEqual({
       workspace: {
@@ -133,7 +133,7 @@ describe("signing in", () => {
       agent: null,
       console: { version: "0.1.18", clientRange: ">=0.1.0 <0.2.0" },
       person: null,
-      signIn: [{ key: "gh", label: "GitHub" }],
+      signIn: [{ key: "gh", label: "GitHub", admits: { organization: null, domains: [] } }],
     });
   });
 
@@ -373,6 +373,8 @@ describe("the organization at the git host", () => {
       organization,
       listed: ["bob"],
     });
+    // The sign-in page is told whose members get in through the host.
+    expect((await me(h)).signIn[0]?.admits).toEqual({ organization: "acme", domains: [] });
     // Carol is in by the organization alone, never listed; Alice by it too; Bob by his listing.
     expect((await me(h, await h.signIn("carol"))).person).toMatchObject({
       login: "carol",
@@ -432,9 +434,10 @@ describe("a Workspace as a second provider", () => {
       listed: ["alice"],
       domains: ["acme.test"],
     });
+    // Each way in says who gets in through it, for the line under its button.
     expect((await me(h)).signIn).toEqual([
-      { key: "gh", label: "GitHub" },
-      { key: "google", label: "Google" },
+      { key: "gh", label: "GitHub", admits: { organization: null, domains: [] } },
+      { key: "google", label: "Google", admits: { organization: null, domains: ["acme.test"] } },
     ]);
     const dave = await h.signIn("dave");
     expect((await me(h, dave)).person).toMatchObject({
