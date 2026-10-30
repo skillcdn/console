@@ -107,7 +107,7 @@ Who may sign in, by login ([ADR-0022](../adr/0022-who-is-in-is-the-consoles-own-
 
 ### `POST /api/v1/projects`
 
-Takes `key` and `name`, and optionally `description`, `visibility` (default `private`), `skillsAddress` (checked as the standard spells one, kept canonical; `project.invalid_address`), `color` and `symbol`. For whoever is signed in, or their agent with their token; they become the project's owner. Answers `201` with the project and writes a `project.created` event in it, with `key` and `name`. A key taken is `project.key_taken`.
+Takes `key` and `name`, and optionally `description`, `visibility` (default `private`), `skillsAddress` (checked as the standard spells one, kept canonical; `project.invalid_address`), `color` and `symbol`. For an administrator, signed in or through their agent with their token ([ADR-0045](../adr/0045-a-project-is-made-by-an-administrator.md)); they become the project's owner, and list another as owner from there. A member is refused with `auth.forbidden`. Answers `201` with the project and writes a `project.created` event in it, with `key` and `name`. A key taken is `project.key_taken`.
 
 ### `GET /api/v1/events?after=&limit=`
 

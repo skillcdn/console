@@ -396,14 +396,18 @@ function ProjectsPage(props: {
   readonly making: boolean;
 }) {
   const words = useWords().projects;
-  const { data, components, navigation, making } = props;
+  const { data, components, navigation } = props;
   const { busy, error, act } = useAction();
   const href = (project: RestProject) => projectHref(project.key);
+  // A project is made by an administrator (ADR-0045): a member sees the list alone, the form's
+  // address included.
+  const administrator = data.me?.person?.role === "admin";
+  const making = props.making && administrator;
   return (
     <>
       <div className="sc-page-head">
         <h1 className="sc-page-title">{words.title}</h1>
-        {!making && (
+        {administrator && !making && (
           <LinkButton href={PATHS.newProject} variant="primary">
             {words.newProject}
           </LinkButton>
@@ -436,8 +440,12 @@ function ProjectsPage(props: {
         empty={
           <EmptyState
             title={words.empty.title}
-            body={words.empty.body}
-            action={<LinkButton href={PATHS.newProject}>{words.newProject}</LinkButton>}
+            body={administrator ? words.empty.body : words.empty.bodyMember}
+            action={
+              administrator ? (
+                <LinkButton href={PATHS.newProject}>{words.newProject}</LinkButton>
+              ) : undefined
+            }
           />
         }
       />

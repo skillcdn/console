@@ -187,17 +187,19 @@ describe("who may ask", () => {
 });
 
 describe("projects", () => {
-  it("are made on the console's own pages by whoever is signed in, who owns them, and listed as each may see", async () => {
-    const made = await send(alice, "POST", REST_ROUTES.projects, {
+  it("are made for a person as an administrator makes them (ADR-0045), owned by them, and listed as each may see", async () => {
+    // A member makes none; the making itself is tested in projects.int.test.ts.
+    const byMember = await send(alice, "POST", REST_ROUTES.projects, { key: "docs", name: "x" });
+    expect(byMember.status).toBe(403);
+    expect(await errorOf(byMember)).toBe("auth.forbidden");
+    const docs = await h.project(alice, {
       key: "docs",
-      name: "  The docs  ",
+      name: "The docs",
       description: "What we write.",
       skillsAddress: "/gh/Acme/Writing@main",
       color: "teal",
       symbol: "Dx",
     });
-    expect(made.status).toBe(201);
-    const docs = restProjectSchema.parse(await made.json());
     expect(docs).toMatchObject({
       key: "docs",
       name: "The docs",
@@ -318,34 +320,6 @@ describe("projects", () => {
     expect((await send(bob, "DELETE", `${IN}/icon`)).status).toBe(403);
   });
 
-  it("refuse a key taken, one that is not a key, and an address that is not one", async () => {
-    const taken = await send(alice, "POST", REST_ROUTES.projects, { key: "web", name: "Again" });
-    expect(taken.status).toBe(409);
-    expect(await errorOf(taken)).toBe("project.key_taken");
-    for (const body of [
-      { key: "Web", name: "x" },
-      { key: "the web", name: "x" },
-      { key: "web-", name: "x" },
-      { key: "", name: "x" },
-      { key: "ok" },
-      { key: "ok", name: "x", visibility: "public" },
-      { key: "ok", name: "x", color: "red" },
-      { key: "ok", name: "x", symbol: "a b" },
-      { key: "ok", name: "x", symbol: "123456789" },
-    ]) {
-      const response = await send(alice, "POST", REST_ROUTES.projects, body);
-      expect(response.status, JSON.stringify(body)).toBe(400);
-      expect(await errorOf(response)).toBe("request.invalid");
-    }
-    const address = await send(alice, "POST", REST_ROUTES.projects, {
-      key: "ok",
-      name: "x",
-      skillsAddress: "github.com/acme/skills",
-    });
-    expect(address.status).toBe(400);
-    expect(await errorOf(address)).toBe("project.invalid_address");
-  });
-
   it("are configured by an owner signed in: never by a member, never with a token", async () => {
     const changed = await send(alice, "PATCH", projectPath("docs"), {
       name: "Documentation",
@@ -404,21 +378,23 @@ describe("projects", () => {
     expect(
       (await send(alice, "PATCH", projectPath("docs"), { name: "Documentation" })).status,
     ).toBe(200);
-    const madeByToken = await h.request(REST_ROUTES.projects, {
+    // A member's agent makes no project, as its member may not (ADR-0045); an administrator's
+    // does, as its administrator does (projects.int.test.ts).
+    const notByToken = await h.request(REST_ROUTES.projects, {
       method: "POST",
       headers: auth,
       body: JSON.stringify({ key: "by-agent", name: "Made by an agent" }),
     });
-    expect(madeByToken.status).toBe(201);
-    expect(restProjectSchema.parse(await madeByToken.json())).toMatchObject({
-      key: "by-agent",
-      role: "owner",
-    });
+    expect(notByToken.status).toBe(403);
+    expect(await errorOf(notByToken)).toBe("auth.forbidden");
+    expect((await h.project(alice, { key: "by-agent", name: "Made by an agent" })).role).toBe(
+      "owner",
+    );
     const made = restEventsSchema.parse(
       await (await get(alice, `${projectPath("by-agent")}/events?after=0`)).json(),
     ).items;
     expect(made).toHaveLength(1);
-    expect(made[0]).toMatchObject({ kind: "project.created", agent: "an owner's agent" });
+    expect(made[0]).toMatchObject({ kind: "project.created", agent: null });
     const bobs = restTokenCreatedSchema.parse(
       await (await send(bob, "POST", REST_ROUTES.tokens, { name: "a member's agent" })).json(),
     );

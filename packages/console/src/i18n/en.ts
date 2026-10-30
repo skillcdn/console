@@ -184,6 +184,8 @@ export const en = {
     empty: {
       title: "No projects yet",
       body: "Make the first one: what it is for, and who is in it. Or ask an owner to add you to theirs.",
+      bodyMember:
+        "An administrator makes the projects. Ask one for the first, or an owner to add you to theirs.",
     },
     list: "Projects",
     private: "Private",

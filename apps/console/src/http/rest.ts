@@ -1160,13 +1160,17 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     return c.json(body);
   });
 
-  // A project is made by a person, themselves or through their agent, who becomes its owner.
+  // A project is made by an administrator (ADR-0045), themselves or through their agent, who
+  // becomes its owner.
   app.post(REST_ROUTES.projects, tooLarge, async (c) => {
     const caller = await changingCaller(c);
     if (caller instanceof Response) {
       return caller;
     }
     const { person } = caller;
+    if (person.role !== "admin") {
+      return administratorRequired(c);
+    }
     const input = await bodyOf(c, restProjectInputSchema);
     if (input instanceof Response) {
       return input;

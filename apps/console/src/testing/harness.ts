@@ -4,19 +4,23 @@ import {
   REST_ROUTES,
   type RestProject,
   type RestProjectInput,
+  restMeSchema,
   restProjectSchema,
 } from "@skillcdn/console/api";
-import { parseAddress } from "@skillcdn/core";
+import { formatAddress, parseAddress } from "@skillcdn/core";
 import { and, eq, isNull, notInArray, sql } from "drizzle-orm";
 import type { Hono } from "hono";
 import { pino } from "pino";
 import { drizzleOf } from "../db/client.js";
 import { type EventListener, startEventListener } from "../db/listener.js";
+import { findPerson } from "../db/queries/people.js";
+import { createProject } from "../db/queries/projects.js";
 import { ensureWorkspace } from "../db/queries/workspaces.js";
 import { listings } from "../db/schema.js";
 import type { TestDatabase } from "../db/testing.js";
 import type { LiveFeed } from "../http/live-feed.js";
 import type { AppEnv } from "../http/request-context.js";
+import { restProject } from "../http/rest-shapes.js";
 import type { BlobStore } from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
 import type { OrganizationDirectory } from "../ports/organization.js";
@@ -49,8 +53,9 @@ export interface Harness {
    */
   signIn(person: string): Promise<string>;
   /**
-   * Makes a project from the console's own pages, as the person whose session the cookie
-   * carries, and answers it: what every test of the board needs first.
+   * Makes a project for the person whose session the cookie carries, whatever their role,
+   * written as an administrator's `POST /api/v1/projects` writes one (ADR-0045), and answers
+   * it: what every test of the board needs first, without making everyone an administrator.
    */
   project(cookie: string, input: RestProjectInput): Promise<RestProject>;
   /** Ends the feed and the listener, for a harness that was given `live`. */
@@ -232,15 +237,35 @@ export function createHarness(testDatabase: TestDatabase, options: HarnessOption
       return cookieOf(done, "console_session");
     },
     async project(cookie, input) {
-      const response = await request(REST_ROUTES.projects, {
-        method: "POST",
-        headers: { cookie, origin, "content-type": "application/json" },
-        body: JSON.stringify(input),
-      });
-      if (response.status !== 201) {
-        throw new Error(`the project was not made: ${response.status} ${await response.text()}`);
+      const me = await request(REST_ROUTES.me, { headers: { cookie } });
+      const { person } = restMeSchema.parse(await me.json());
+      if (person === null) {
+        throw new Error("the cookie carries nobody's session");
       }
-      return restProjectSchema.parse(await response.json());
+      const workspace = await ensureWorkspace(testDatabase.database, {
+        name: "Acme",
+        now: new Date(),
+      });
+      const owner = await findPerson(testDatabase.database, workspace.id, person.id);
+      if (owner === undefined) {
+        throw new Error(`nobody of the workspace has the id ${person.id}`);
+      }
+      let skillsAddress: string | null = null;
+      if (typeof input.skillsAddress === "string") {
+        const parsed = parseAddress(input.skillsAddress);
+        if (!parsed.ok) {
+          throw new Error(parsed.error.message);
+        }
+        skillsAddress = formatAddress(parsed.value);
+      }
+      const made = await createProject(testDatabase.database, {
+        workspaceId: workspace.id,
+        actor: { id: owner.id },
+        person: owner,
+        project: { ...input, skillsAddress },
+        now: (options.clock ?? { now: () => new Date() }).now(),
+      });
+      return restProjectSchema.parse(restProject(made));
     },
     async close() {
       feed.close();
