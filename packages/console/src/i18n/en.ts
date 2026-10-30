@@ -889,6 +889,8 @@ export const en = {
       domain: "Of the domain",
       listed: "Added by an administrator",
     } satisfies Record<MembershipSource, string>,
+    /** A person the organization let in, by the organization's name: never read as their own. */
+    ofOrganization: (name: string) => `Member of ${name}`,
     at: { gh: "at GitHub", google: "at Google" } satisfies Record<ProviderKey, string>,
     organization: (name: string) => `The organization ${name} at GitHub says who is in.`,
     organizationRead: "Last read",

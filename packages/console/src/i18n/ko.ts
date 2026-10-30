@@ -844,6 +844,7 @@ export const ko: Messages = {
       domain: "도메인의 계정",
       listed: "관리자가 추가함",
     },
+    ofOrganization: (name) => `${name} 조직의 구성원`,
     at: { gh: "GitHub", google: "Google" },
     organization: (name) => `GitHub 조직 ${name}이(가) 구성원을 정합니다.`,
     organizationRead: "마지막으로 읽음",

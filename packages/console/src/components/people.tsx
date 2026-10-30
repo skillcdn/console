@@ -79,8 +79,12 @@ export function PeopleList(props: PeopleListProps) {
               <span className="sc-person-you">{words.common.you}</span>
             )}
             <span className="sc-person-name sc-muted">
-              {person.name === null ? "" : person.login}
-              <span className="sc-person-note"> {people.source[person.source]}</span>
+              {person.name !== null && <>{person.login} · </>}
+              <span className="sc-person-note">
+                {person.source === "organization" && organization !== undefined
+                  ? people.ofOrganization(organization.name)
+                  : people.source[person.source]}
+              </span>
             </span>
             {props.onChangeRole === undefined ? (
               <RoleBadge role={person.role} />
@@ -163,9 +167,8 @@ export function PeopleList(props: PeopleListProps) {
               <li key={person.id} className="sc-person-row sc-person-row-out">
                 <PersonChip person={person} size="md" />
                 <span className="sc-person-name sc-muted">
-                  {person.name === null ? "" : person.login}
+                  {person.name !== null && <>{person.login} · </>}
                   <span className="sc-person-note">
-                    {" "}
                     {person.source === "organization"
                       ? people.leftOrganization
                       : people.source[person.source]}

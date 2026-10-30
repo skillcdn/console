@@ -1246,6 +1246,20 @@ describe("people", () => {
     );
     expect(synced).toContain("Last read");
     expect(synced).toContain("<time");
+    // A person the organization let in is of it by the organization's name, set apart from
+    // their own login, so that the login is never read as the organization's name.
+    const ofIt = renderToStaticMarkup(
+      <PeopleList
+        people={[
+          { ...alice, source: "organization" },
+          { ...dave, name: "Dave Example" },
+        ]}
+        organization={{ host: "gh", name: "acme", syncedAt: null }}
+      />,
+    );
+    expect(ofIt).toContain('alice · <span class="sc-person-note">Member of acme</span>');
+    expect(ofIt).toContain('dave · <span class="sc-person-note">Left the organization');
+    expect(ofIt).not.toContain("Of the organization");
   });
 
   it("lets someone in by a login spelled as its host spells one", () => {
