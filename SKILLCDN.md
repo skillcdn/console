@@ -1,12 +1,12 @@
 ---
 name: SkillCDN Console
-description: "The skills of the SkillCDN Console, the board where an organization runs its work with AI agents: how an agent works a task on the board with the console command, how an agent builds a console of a person's own, or an organization's, from the @skillcdn/console package, and how an agent deploys a console for an organization on AWS behind Cloudflare, from one person to a hundred. With the console's documentation: the architecture, the decisions, and the specifications of the REST API and the command line."
+description: "SkillCDN Console, the board where people decide and AI agents work: tasks, runs, decisions. Connect it to your AI and it guides you from setup to everyday use."
 license: MIT
 language: en
 translations:
   ko:
     name: SkillCDN 콘솔
-    description: "SkillCDN 콘솔(조직이 AI 에이전트와 일을 돌리는 보드)의 스킬: 에이전트가 console 명령으로 보드의 작업을 하는 법, @skillcdn/console 패키지로 개인 콘솔이나 조직 콘솔을 만드는 법, 그리고 조직의 콘솔을 AWS와 Cloudflare에 1인부터 100인 규모까지 배포하는 법. 콘솔의 문서(아키텍처, 결정 기록, REST API와 명령줄의 명세)도 함께 제공합니다."
+    description: "SkillCDN 콘솔: 사람은 정하고 AI 에이전트는 일하는 작업 보드입니다. 작업과 런과 결정이 한곳에 있고, AI에 연결하면 설치부터 매일 쓰는 법까지 콘솔이 안내합니다."
 documents:
   - docs
 exclude:
