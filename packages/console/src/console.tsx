@@ -1729,7 +1729,7 @@ function WorkspaceSettingsPage(props: {
               </a>
             )}
           </div>
-          <WorkspaceSettingsView workspace={workspace} />
+          <WorkspaceSettingsView workspace={workspace} console={data.me?.console} />
         </section>
       )}
       <section className="sc-panel" aria-label={words.rules.title}>

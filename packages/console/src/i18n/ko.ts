@@ -551,6 +551,8 @@ export const ko: Messages = {
     workspace: {
       title: "워크스페이스",
       aria: "워크스페이스 설정",
+      consoleVersion: "콘솔 버전",
+      consoleTakes: (range) => `받는 console 명령: ${range}`,
       peopleVisibility: "멤버 공개 범위",
       peopleVisibilityHint:
         "멤버가 사람들 페이지와 선택 목록에서 보는 범위: 워크스페이스의 모두, 또는 같은 프로젝트에 속한 사람만. 관리자는 언제나 모두를 보고, 워크스페이스에 공개된 프로젝트에는 모두가 속합니다.",

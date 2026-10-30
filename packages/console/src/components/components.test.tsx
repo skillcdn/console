@@ -3408,6 +3408,20 @@ describe("the workspace's settings", () => {
     }
   });
 
+  it("names the console's version first, with the commands it takes, where the page knows it", () => {
+    const html = renderToStaticMarkup(
+      <WorkspaceSettingsView
+        workspace={workspace}
+        console={{ version: "0.4.1", clientRange: ">=0.4.1 <0.5.0" }}
+      />,
+    );
+    expect(html.indexOf("Console version")).toBeLessThan(html.indexOf("Member visibility"));
+    expect(html).toContain('<dd>0.4.1<span class="sc-settings-note">');
+    expect(html).toContain("Takes the console command &gt;=0.4.1 &lt;0.5.0");
+    const unknown = renderToStaticMarkup(<WorkspaceSettingsView workspace={workspace} />);
+    expect(unknown).not.toContain("Console version");
+  });
+
   it("offers each setting beside its words, the zones in a picker, and saves only what changed", () => {
     const html = renderToStaticMarkup(
       <WorkspaceSettingsForm workspace={workspace} onSubmit={() => undefined} />,

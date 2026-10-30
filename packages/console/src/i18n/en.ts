@@ -595,6 +595,8 @@ export const en = {
     workspace: {
       title: "Workspace",
       aria: "Workspace settings",
+      consoleVersion: "Console version",
+      consoleTakes: (range: string) => `Takes the console command ${range}`,
       peopleVisibility: "Member visibility",
       peopleVisibilityHint:
         "Whom a member sees on the People page and in the pickers: everyone of the workspace, or only the people they share a project with. An administrator always sees everyone, and a project open to the workspace has everyone in it.",

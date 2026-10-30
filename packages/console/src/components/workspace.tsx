@@ -2,6 +2,7 @@ import { type FormEvent, useId, useMemo, useState } from "react";
 import {
   PEOPLE_VISIBILITIES,
   type PeopleVisibility,
+  type RestMe,
   type RestWorkspace,
   type RestWorkspacePatch,
   WEEK_STARTS,
@@ -117,6 +118,12 @@ const labelOf = (zone: TimeZoneOption): string =>
 
 export interface WorkspaceSettingsViewProps {
   readonly workspace: RestWorkspace;
+  /**
+   * The console's version with the range of command versions it takes, as `GET /api/v1/me`
+   * says them (ADR-0025): shown first, so that whoever keeps the agents' commands up to date
+   * reads here which console they must match. Left out, nothing is said.
+   */
+  readonly console?: RestMe["console"];
 }
 
 /** The settings as they stand, one row each; where they are changed is the page's business. */
@@ -128,6 +135,17 @@ export function WorkspaceSettingsView(props: WorkspaceSettingsViewProps) {
   const offset = zone === undefined ? undefined : offsetOf(zone, new Date());
   return (
     <dl className="sc-settings-list">
+      {props.console !== undefined && (
+        <div className="sc-settings-item">
+          <dt>{settings.consoleVersion}</dt>
+          <dd>
+            {props.console.version}
+            <span className="sc-settings-note">
+              {settings.consoleTakes(props.console.clientRange)}
+            </span>
+          </dd>
+        </div>
+      )}
       <div className="sc-settings-item">
         <dt>{settings.peopleVisibility}</dt>
         <dd>{words.vocabulary.peopleVisibility[peopleVisibilityOf(props.workspace)]}</dd>
