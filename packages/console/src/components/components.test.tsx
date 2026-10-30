@@ -18,7 +18,7 @@ import type {
 } from "../api.js";
 import { addDays, deviceLanguage, firstDayOfWeek, weekOf } from "../dates.js";
 import { KOREAN, LanguageContext } from "../i18n/index.js";
-import { Board, BoardFilters, byDue, columnStateOf, filterTasks } from "./board.js";
+import { Board, BoardFilters, byDue, columnStateOf, edgeScrollOf, filterTasks } from "./board.js";
 import {
   Calendar,
   placeTip,
@@ -3193,6 +3193,28 @@ describe("a card dragged to another column", () => {
     expect(columnStateOf("in_review")).toBe("in_review");
     expect(columnStateOf("archived")).toBeUndefined();
     expect(columnStateOf(undefined)).toBeUndefined();
+  });
+
+  it("carries the board on while the pointer is near an edge, the nearer the faster, and not elsewhere", () => {
+    const frame = 16;
+    // Away from both edges, nothing; within the edge, towards it.
+    expect(edgeScrollOf(500, 0, 1000, frame)).toBe(0);
+    expect(edgeScrollOf(48, 0, 1000, frame)).toBe(0);
+    expect(edgeScrollOf(47, 0, 1000, frame)).toBeLessThan(0);
+    expect(edgeScrollOf(953, 0, 1000, frame)).toBeGreaterThan(0);
+    // At the edge itself, the full speed for the frame: 720 pixels a second; halfway in, half.
+    expect(edgeScrollOf(1000, 0, 1000, frame)).toBeCloseTo(11.52);
+    expect(edgeScrollOf(976, 0, 1000, frame)).toBeCloseTo(5.76);
+    expect(edgeScrollOf(0, 0, 1000, frame)).toBeCloseTo(-11.52);
+    // Beyond the edge, outside the board, no faster than at it; a longer frame carries further,
+    // but a frame counts for 64 milliseconds at most, and one that runs backwards for nothing.
+    expect(edgeScrollOf(-300, 0, 1000, frame)).toBeCloseTo(-11.52);
+    expect(edgeScrollOf(1000, 0, 1000, 2 * frame)).toBeCloseTo(23.04);
+    expect(edgeScrollOf(1000, 0, 1000, 5000)).toBeCloseTo(edgeScrollOf(1000, 0, 1000, 64));
+    expect(edgeScrollOf(1000, 0, 1000, -frame)).toBe(0);
+    // A board narrower than two edges scrolls towards the nearer one.
+    expect(edgeScrollOf(10, 0, 60, frame)).toBeLessThan(0);
+    expect(edgeScrollOf(50, 0, 60, frame)).toBeGreaterThan(0);
   });
 
   it("has a menu with the way to the form and the way to put the task away, whatever the state", () => {

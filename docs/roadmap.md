@@ -352,6 +352,7 @@ Goal: the console runs an organization's own work beside outside builders and th
 - [x] The files of a project bounded in bytes (2026-10-30): where a deployment sets `PROJECT_FILE_BYTES_AT_MOST`, the files handed in, put in comments and attached to the pages of one project hold at most that many bytes together, the one more refused as `project.too_many_bytes` before any byte is kept; no bound unless set, since a console of one organization needs none ([deploy/README.md](../deploy/README.md#a-shared-console)).
 - [x] The pack's own words (2026-10-30): the description of `SKILLCDN.md`, which SkillCDN serves as the MCP server's description and the head of its instructions, shows on the pack's page and offers as the words an app's connection form asks for, says in one breath what the console is and whom it is for, within the shortest of those budgets, so that an agent choosing among servers reads the whole of it; before, it was cut everywhere.
 - [x] The console's version on the Settings page (2026-10-30): the first row of the workspace's settings names the console's version and the range of command versions it takes, from `me.console`, where whoever keeps the agents' commands current reads what they must match.
+- [x] The board carried on at its edge (2026-10-30): a card held near the board's edge, still or moving, with a mouse or a finger, scrolls the board on every frame, the nearer the edge the faster, where before the board moved only as the pointer did.
 
 ## After milestone 16
 

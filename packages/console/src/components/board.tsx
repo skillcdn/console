@@ -80,7 +80,28 @@ const HOLD_MS = 300;
 const HOLD_SLACK = 8;
 /** How near the pointer comes to the board's edge before the board scrolls to show more columns. */
 const EDGE = 48;
-const EDGE_STEP = 12;
+/** How fast the board scrolls, in pixels a second, with the pointer at the edge itself; slower further in. */
+const EDGE_SPEED = 720;
+/** The most a frame counts for, so that a tab that was away does not leap when it is back. */
+const FRAME_AT_MOST_MS = 64;
+
+/**
+ * How far the board scrolls in one frame for a pointer at `x`, the board spanning `left` to
+ * `right` on the screen: nothing away from the edges; towards the edge the pointer is near, the
+ * nearer the faster, and no faster beyond it. Asked every frame while a card is held, not only
+ * when the pointer moves, so that a card held still at the edge carries the board on, as an icon
+ * held at the edge of a phone's screen turns the page. Negative is leftwards.
+ */
+export function edgeScrollOf(x: number, left: number, right: number, elapsedMs: number): number {
+  const ms = Math.min(Math.max(elapsedMs, 0), FRAME_AT_MOST_MS);
+  const depth = (distance: number) => Math.min(1, Math.max(0, (EDGE - distance) / EDGE));
+  const leftward = depth(x - left);
+  const rightward = depth(right - x);
+  if (leftward === 0 && rightward === 0) {
+    return 0;
+  }
+  return ((leftward > rightward ? -leftward : rightward) * EDGE_SPEED * ms) / 1000;
+}
 
 /** The state a column stands for, read off its `data-column`; nothing for a value that is not one. */
 export function columnStateOf(value: string | null | undefined): TaskState | undefined {
@@ -422,10 +443,10 @@ export function Board(props: BoardProps) {
   }, []);
 
   // While a card is held, the pointer is followed over the whole document: the column under it
-  // is marked, the board scrolls when the pointer nears its edge, and the release moves the task.
-  // A finger's hold is timed here, and once the card has come loose the page no longer scrolls
-  // under the finger, nor asks for the menu a long press would otherwise bring up; the click that
-  // follows a drag opens nothing.
+  // is marked, the board scrolls while the pointer is near its edge, moving or still, and the
+  // release moves the task. A finger's hold is timed here, and once the card has come loose the
+  // page no longer scrolls under the finger, nor asks for the menu a long press would otherwise
+  // bring up; the click that follows a drag opens nothing.
   const held = drag !== null;
   useEffect(() => {
     if (!held) {
@@ -435,8 +456,42 @@ export function Board(props: BoardProps) {
       columnStateOf(
         document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-column]")?.dataset.column,
       );
+    // Where the pointer last was, for the frames between its moves.
+    const pointer = { x: current.current?.x ?? 0, y: current.current?.y ?? 0 };
+    // The board is carried on every frame the loose card is near its edge; what a frame's share
+    // comes to short of a whole pixel is kept for the next, since a scroll position holds whole
+    // ones, and the column under the pointer is marked again where the board moved under it.
+    let frame = 0;
+    let at: number | undefined;
+    let rest = 0;
+    const carry = (now: number) => {
+      frame = window.requestAnimationFrame(carry);
+      const elapsed = at === undefined ? 0 : now - at;
+      at = now;
+      const element = board.current;
+      if (element === null || !loose.current) {
+        return;
+      }
+      const rect = element.getBoundingClientRect();
+      const share = edgeScrollOf(pointer.x, rect.left, rect.right, elapsed) + rest;
+      const whole = Math.trunc(share);
+      rest = share - whole;
+      if (whole === 0) {
+        return;
+      }
+      const was = element.scrollLeft;
+      element.scrollLeft = was + whole;
+      if (element.scrollLeft !== was) {
+        const over = columnUnder(pointer.x, pointer.y);
+        setDrag((before) =>
+          before === null || before.over === over ? before : { ...before, over },
+        );
+      }
+    };
     const follow = (event: PointerEvent) => {
       const { clientX: x, clientY: y } = event;
+      pointer.x = x;
+      pointer.y = y;
       setDrag((before) => {
         if (before === null) {
           return before;
@@ -455,15 +510,6 @@ export function Board(props: BoardProps) {
         }
         return { ...before, x, y, moving: true, over: columnUnder(x, y) };
       });
-      const element = board.current;
-      if (element !== null && loose.current) {
-        const rect = element.getBoundingClientRect();
-        if (x < rect.left + EDGE) {
-          element.scrollLeft -= EDGE_STEP;
-        } else if (x > rect.right - EDGE) {
-          element.scrollLeft += EDGE_STEP;
-        }
-      }
     };
     const loosen = () => {
       setDrag((before) => {
@@ -502,6 +548,7 @@ export function Board(props: BoardProps) {
     };
     const quiet = (event: Event) => event.preventDefault();
     const timer = current.current?.hold === true ? window.setTimeout(loosen, HOLD_MS) : undefined;
+    frame = window.requestAnimationFrame(carry);
     window.addEventListener("pointermove", follow);
     window.addEventListener("pointerup", release);
     window.addEventListener("pointercancel", release);
@@ -511,6 +558,7 @@ export function Board(props: BoardProps) {
       if (timer !== undefined) {
         window.clearTimeout(timer);
       }
+      window.cancelAnimationFrame(frame);
       window.removeEventListener("pointermove", follow);
       window.removeEventListener("pointerup", release);
       window.removeEventListener("pointercancel", release);
