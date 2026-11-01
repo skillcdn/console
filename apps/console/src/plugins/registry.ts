@@ -1759,6 +1759,37 @@ export class Plugins {
     return named.sort((a, b) => a.key.localeCompare(b.key));
   }
 
+  /**
+   * The web bundle of an enabled plugin (ADR-0054): the directory of its files, its version, which
+   * the files are served under, and the keys of its pages and widgets; nothing for a plugin
+   * without pages, or not enabled.
+   */
+  async webOf(key: string): Promise<
+    | {
+        readonly dir: string;
+        readonly version: string;
+        readonly pages: readonly string[];
+        readonly widgets: readonly string[];
+      }
+    | undefined
+  > {
+    const entry = this.entries.get(key);
+    if (entry?.manifest?.web === undefined || entry.dir === undefined) {
+      return undefined;
+    }
+    const workspace = await this.options.workspace();
+    const install = await findInstall(this.options.database, workspace.id, key);
+    if (install?.state !== "enabled") {
+      return undefined;
+    }
+    return {
+      dir: join(entry.dir, entry.manifest.web),
+      version: entry.version,
+      pages: entry.manifest.pages.map((page) => page.key),
+      widgets: entry.manifest.widgets.map((widget) => widget.key),
+    };
+  }
+
   /** Where a plugin's skills are read from: its package, for a plugin that ships skills; nothing otherwise. */
   skillsRootOf(key: string): string | undefined {
     const entry = this.entries.get(key);

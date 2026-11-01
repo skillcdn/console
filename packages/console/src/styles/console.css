@@ -41,6 +41,18 @@
   --sc-color-warning-subtle: #fff4cc;
   --sc-color-danger: #b0273a;
   --sc-color-danger-subtle: #fadadf;
+  /* For the plugins' pages (ADR-0054): a state that informs, one neither good nor bad, a palette for figures, tabular numerals. */
+  --sc-color-info: #1d4ed8;
+  --sc-color-info-subtle: #dbe6ff;
+  --sc-color-neutral: #4b5563;
+  --sc-color-neutral-subtle: #e7eaf0;
+  --sc-series-1: #2c5bc4;
+  --sc-series-2: #c2410c;
+  --sc-series-3: #146b44;
+  --sc-series-4: #8f6100;
+  --sc-series-5: #7c3aed;
+  --sc-series-6: #0e7490;
+  --sc-numeric: "tnum" 1, "lnum" 1;
 
   /* The ground: a pale field, one gradient from the top. The default UI provides the field's
      face (the shell); a custom console may paint its own. */
@@ -471,6 +483,125 @@ table {
 .sc-tab-current {
   border-bottom-color: var(--sc-color-accent);
   color: var(--sc-color-text);
+}
+
+/* A tab that opens a list of pages: a group of several plugins (ADR-0054). */
+
+.sc-tab-group {
+  position: relative;
+}
+
+.sc-tab-summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.sc-tab-summary::-webkit-details-marker {
+  display: none;
+}
+
+.sc-tab-group-panel {
+  right: auto;
+  left: 0;
+  top: 100%;
+}
+
+/* The sub-tabs of a plugin with several pages, above its frame. */
+
+.sc-subtabs {
+  display: flex;
+  gap: var(--sc-space-4);
+  margin-bottom: var(--sc-space-4);
+  border-bottom: var(--sc-border);
+  overflow: auto hidden;
+}
+
+/* A plugin's frame: the width of the page, as tall as the frame says. */
+
+.sc-plugin-frame {
+  display: block;
+  width: 100%;
+  min-height: 2.5rem;
+  border: 0;
+  border-radius: var(--sc-radius-lg);
+  background: transparent;
+}
+
+/* The widgets of the front page: a grid of six columns. */
+
+.sc-widgets {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--sc-space-4);
+  margin-block: var(--sc-space-5);
+}
+
+.sc-widget {
+  grid-column: span 6;
+  padding: var(--sc-space-3);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-lg);
+  background: var(--sc-color-bg-raised);
+}
+
+.sc-widget-title {
+  margin: 0 0 var(--sc-space-2);
+  font-size: var(--sc-text-sm);
+  font-weight: var(--sc-weight-medium);
+  color: var(--sc-color-text-muted);
+}
+
+@media (min-width: 48rem) {
+  .sc-widget-third {
+    grid-column: span 2;
+  }
+
+  .sc-widget-half {
+    grid-column: span 3;
+  }
+
+  .sc-widget-full {
+    grid-column: span 6;
+  }
+}
+
+/* The plugins' settings: a capability's two lines, a role's grant, a row of radios, a form in a line. */
+
+.sc-list {
+  margin: 0;
+  padding-left: var(--sc-space-5);
+}
+
+.sc-check {
+  display: inline-block;
+  padding-block: var(--sc-space-1);
+}
+
+.sc-radio-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-4);
+  margin-block: var(--sc-space-2);
+}
+
+.sc-inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
+  margin-top: var(--sc-space-3);
+}
+
+.sc-inline-form .sc-input {
+  width: auto;
+  min-width: 10rem;
+}
+
+/* The plugins' settings: a capability's two lines, a role's grant. */
+
+.sc-capability-reach {
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-xs);
 }
 
 /* What waits, beside a tab's name: a count in the point colour, so it reads before the words. */

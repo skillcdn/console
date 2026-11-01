@@ -47,6 +47,8 @@ const PAGE_HEADERS: Readonly<Record<string, string>> = {
     "base-uri 'none'",
     "form-action 'self'",
     "frame-ancestors 'none'",
+    // The plugins' frames (ADR-0054): documents of this origin, sandboxed by their own policy.
+    "frame-src 'self'",
   ].join("; "),
   "referrer-policy": "strict-origin-when-cross-origin",
   "x-content-type-options": "nosniff",

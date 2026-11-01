@@ -121,6 +121,24 @@ export type Route =
       readonly project: string;
       readonly page: string;
     }
+  /** A plugin's page (docs/specs/plugins.md, "Tabs, sub-tabs and addresses"): the first when the address names none; `rest` is what follows the page, handed to the frame. */
+  | {
+      readonly name: "plugin";
+      readonly level: "workspace";
+      readonly plugin: string;
+      readonly page: string | undefined;
+      readonly rest: string;
+    }
+  | {
+      readonly name: "plugin";
+      readonly level: "project";
+      readonly project: string;
+      readonly plugin: string;
+      readonly page: string | undefined;
+      readonly rest: string;
+    }
+  /** The plugins' settings, for an administrator: the list, or one plugin by its key. */
+  | { readonly name: "plugins-settings"; readonly plugin: string | undefined }
   | { readonly name: "not-found" };
 
 /** The pages of a project, after its key. */
@@ -158,12 +176,34 @@ export const PATHS = {
   settings: "/settings",
   /** Where the pages a console adds of its own are: `/pages/<key>`, and `/projects/<key>/pages/<page>` on a project. */
   pages: "/pages",
+  /** Where the plugins' pages are: `/plugins/<key>[/<page>[/<rest>]]`, and `/projects/<key>/plugins/<key>...` on a project (ADR-0054). */
+  plugins: "/plugins",
+  /** The plugins' settings, for an administrator: the list, and `/settings/plugins/<key>` for one. */
+  pluginSettings: "/settings/plugins",
   /** Where an agent's connection is approved (ADR-0011): `/connect/<code>`, or the code typed. */
   connect: "/connect",
 } as const;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PROJECT_KEY = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
+/** A plugin's key, and a page's: as the manifest spells them. */
+const PLUGIN_KEY = /^[a-z][a-z0-9-]{1,31}$/;
+
+/** A plugin's address after its key: the page, if any, and what follows it for the frame. */
+function pluginRouteOf(
+  segments: readonly string[],
+):
+  | { readonly plugin: string; readonly page: string | undefined; readonly rest: string }
+  | undefined {
+  const [plugin, page, ...rest] = segments;
+  if (plugin === undefined || !PLUGIN_KEY.test(plugin)) {
+    return undefined;
+  }
+  if (page !== undefined && !PLUGIN_KEY.test(page)) {
+    return undefined;
+  }
+  return { plugin, page, rest: rest.length === 0 ? "" : `/${rest.join("/")}` };
+}
 const NUMBER = /^[1-9][0-9]{0,8}$/;
 /** A code as it may be typed into an address: checked for what it is by the page. */
 const CODE_TEXT = /^[A-Za-z0-9-]{1,16}$/;
@@ -268,6 +308,15 @@ export function matchRoute(pathname: string, search = ""): Route {
   if (path === PATHS.categories) {
     return { name: "categories" };
   }
+  if (path === PATHS.pluginSettings) {
+    return { name: "plugins-settings", plugin: undefined };
+  }
+  if (path.startsWith(`${PATHS.pluginSettings}/`)) {
+    const [plugin, ...more] = path.slice(PATHS.pluginSettings.length + 1).split("/");
+    return plugin !== undefined && PLUGIN_KEY.test(plugin) && more.length === 0
+      ? { name: "plugins-settings", plugin }
+      : NOT_FOUND;
+  }
   if (path === PATHS.settings) {
     return {
       name: "workspace-settings",
@@ -307,6 +356,10 @@ export function matchRoute(pathname: string, search = ""): Route {
       ? { name: "custom", level: "workspace", page }
       : NOT_FOUND;
   }
+  if (path.startsWith(`${PATHS.plugins}/`)) {
+    const found = pluginRouteOf(path.slice(PATHS.plugins.length + 1).split("/"));
+    return found === undefined ? NOT_FOUND : { name: "plugin", level: "workspace", ...found };
+  }
   if (!path.startsWith(`${PATHS.project}/`)) {
     return NOT_FOUND;
   }
@@ -330,6 +383,12 @@ export function matchRoute(pathname: string, search = ""): Route {
     return third !== undefined && PROJECT_KEY.test(third) && rest.length === 0
       ? { name: "custom", level: "project", project, page: third }
       : NOT_FOUND;
+  }
+  if (page === "plugins") {
+    const found = pluginRouteOf([third, ...rest].filter((segment) => segment !== undefined));
+    return found === undefined
+      ? NOT_FOUND
+      : { name: "plugin", level: "project", project, ...found };
   }
   if (rest.length > 0) {
     return NOT_FOUND;
@@ -524,6 +583,20 @@ export function calendarHref(key: string, month?: string, filter: BoardFilter = 
 /** Where a page a console adds of its own is: on the workspace, or on a project when its key is given. */
 export function customPageHref(page: string, project?: string): string {
   return project === undefined ? `${PATHS.pages}/${page}` : `${projectHref(project)}/pages/${page}`;
+}
+
+/** Where a plugin's page is (ADR-0054): its first page, or the one named, with what follows it; on a project when its key is given. */
+export function pluginHref(plugin: string, page?: string, project?: string, rest = ""): string {
+  const base =
+    project === undefined
+      ? `${PATHS.plugins}/${plugin}`
+      : `${projectHref(project)}/plugins/${plugin}`;
+  return page === undefined ? base : `${base}/${page}${rest}`;
+}
+
+/** Where the plugins' settings are, or one plugin's. */
+export function pluginSettingsHref(plugin?: string): string {
+  return plugin === undefined ? PATHS.pluginSettings : `${PATHS.pluginSettings}/${plugin}`;
 }
 
 /** Where a goal is set: the form. */

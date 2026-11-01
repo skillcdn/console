@@ -132,6 +132,15 @@ export {
   zoomAround,
 } from "./components/pictures.js";
 export {
+  BridgeRefusal,
+  PluginFrame,
+  type PluginFrameProps,
+  PluginWidgets,
+  type PluginWidgetsProps,
+  performBridgeCall,
+  readTheme,
+} from "./components/plugin-frame.js";
+export {
   keyOf,
   MemberList,
   type MemberListProps,
@@ -303,6 +312,8 @@ export {
   type ProjectPage,
   personAgentsHref,
   personWorkHref,
+  pluginHref,
+  pluginSettingsHref,
   projectHref,
   projectSettingsHref,
   type Route,
@@ -314,4 +325,5 @@ export {
   withoutSignInParam,
   workHref,
 } from "./router.js";
+export { CONSOLE_TOKENS } from "./tokens.js";
 export { errorWords, useAction } from "./use-action.js";

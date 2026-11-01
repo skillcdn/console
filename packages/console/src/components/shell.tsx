@@ -13,6 +13,8 @@ export interface NavItem {
   readonly current: boolean;
   /** A count beside the label: the decisions waiting, for example. */
   readonly count?: number | undefined;
+  /** The pages the tab opens a list of, as a group of plugins does (ADR-0054); the tab itself leads to the first. */
+  readonly children?: readonly NavItem[] | undefined;
 }
 
 /** The addresses of a brand's marks (ADR-0013): shown beside the workspace's name, and above it when signing in. */
@@ -65,6 +67,68 @@ export function isPlainClick(event: {
   readonly altKey: boolean;
 }): boolean {
   return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+}
+
+/** A tab that opens a list of pages, as a group of several plugins does: a details, as the person's menu is. Closes once used. */
+function TabGroup(props: { readonly item: NavItem; readonly onNavigate: (href: string) => void }) {
+  const details = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const onClick = (event: MouseEvent) => {
+      const element = details.current;
+      if (
+        element?.open === true &&
+        !(event.target instanceof Node && element.contains(event.target))
+      ) {
+        element.open = false;
+      }
+    };
+    document.addEventListener("click", onClick);
+    return () => document.removeEventListener("click", onClick);
+  }, []);
+  const { item } = props;
+  return (
+    <details className="sc-tab-group" ref={details}>
+      <summary
+        className={cx("sc-tab", "sc-tab-summary", item.current && "sc-tab-current")}
+        aria-current={item.current ? "page" : undefined}
+      >
+        {item.label}
+        <svg className="sc-menu-caret" viewBox="0 0 16 16" aria-hidden="true">
+          <path
+            d="M4 6l4 4 4-4"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </summary>
+      <div className="sc-menu-panel sc-tab-group-panel">
+        <div className="sc-menu-list">
+          {(item.children ?? []).map((child) => (
+            <a
+              key={child.href}
+              href={child.href}
+              className="sc-menu-link"
+              aria-current={child.current ? "page" : undefined}
+              onClick={(event) => {
+                if (isPlainClick(event)) {
+                  event.preventDefault();
+                  if (details.current !== null) {
+                    details.current.open = false;
+                  }
+                  props.onNavigate(child.href);
+                }
+              }}
+            >
+              {child.label}
+            </a>
+          ))}
+        </div>
+      </div>
+    </details>
+  );
 }
 
 /** The person's menu: who they are, the workspace's pages, the languages, and the way out. Closes once used. */
@@ -296,20 +360,24 @@ export function Shell(props: ShellProps) {
         {props.nav.length > 0 && (
           <nav ref={tabs} className="sc-tabs" aria-label={words.shell.pages}>
             <div className="sc-tabs-inner">
-              {props.nav.map((item) => (
-                <a
-                  key={item.href}
-                  href={item.href}
-                  className={cx("sc-tab", item.current && "sc-tab-current")}
-                  aria-current={item.current ? "page" : undefined}
-                  onClick={follow(item.href)}
-                >
-                  {item.label}
-                  {item.count !== undefined && item.count > 0 && (
-                    <span className="sc-nav-count">{item.count}</span>
-                  )}
-                </a>
-              ))}
+              {props.nav.map((item) =>
+                item.children !== undefined && item.children.length > 0 ? (
+                  <TabGroup key={item.href} item={item} onNavigate={props.onNavigate} />
+                ) : (
+                  <a
+                    key={item.href}
+                    href={item.href}
+                    className={cx("sc-tab", item.current && "sc-tab-current")}
+                    aria-current={item.current ? "page" : undefined}
+                    onClick={follow(item.href)}
+                  >
+                    {item.label}
+                    {item.count !== undefined && item.count > 0 && (
+                      <span className="sc-nav-count">{item.count}</span>
+                    )}
+                  </a>
+                ),
+              )}
             </div>
           </nav>
         )}

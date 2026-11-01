@@ -23,6 +23,7 @@ import {
   type RestDecisionPatch,
   type RestEvent,
   type RestMyDecisions,
+  type RestPluginDetail,
   type RestProject,
   type RestProjectInput,
   type RestProjectPatch,
@@ -50,6 +51,8 @@ import { MyDecisions } from "./components/my-decisions.js";
 import { PackTokenWays } from "./components/pack-token.js";
 import { PAGE_SIZE } from "./components/paged.js";
 import { ListingForm, PeopleList, type PeopleListProps } from "./components/people.js";
+import { PluginFrame, PluginWidgets } from "./components/plugin-frame.js";
+import { PluginSettingsList, PluginSettingsView } from "./components/plugin-settings.js";
 import {
   MemberList,
   type MemberListProps,
@@ -104,6 +107,7 @@ import {
   type Messages,
   useWords,
 } from "./i18n/index.js";
+import { pluginNavItems, pluginPagesAt, pluginWordOf } from "./plugin-nav.js";
 import {
   boardHref,
   calendarHref,
@@ -121,6 +125,8 @@ import {
   PATHS,
   personAgentsHref,
   personWorkHref,
+  pluginHref,
+  pluginSettingsHref,
   projectHref,
   projectSettingsHref,
   type Route,
@@ -393,11 +399,27 @@ function ProjectsPage(props: {
   readonly data: ConsoleData;
   readonly components: ConsoleComponents;
   readonly navigation: Navigation;
+  readonly client: ConsoleClient;
+  readonly language: string;
   /** Whether the form for a new project is open: the page is at its address. */
   readonly making: boolean;
 }) {
   const words = useWords().projects;
-  const { data, components, navigation } = props;
+  const { data, components, navigation, client, language } = props;
+  const me = data.me;
+  /** The plugins' widgets at a place of this page (ADR-0054), for the person's roles. */
+  const widgets = (place: "home:top" | "home:bottom") =>
+    me === undefined ? null : (
+      <PluginWidgets
+        plugins={data.plugins}
+        place={place}
+        me={me}
+        language={language}
+        client={client}
+        navigation={navigation}
+        nameOf={(name) => pluginWordOf(name, language)}
+      />
+    );
   const { busy, error, act } = useAction();
   const href = (project: RestProject) => projectHref(project.key);
   // A project is made by an administrator (ADR-0045): a member sees the list alone, the form's
@@ -415,6 +437,7 @@ function ProjectsPage(props: {
         )}
       </div>
       {error !== undefined && <Callout tone="danger">{error}</Callout>}
+      {widgets("home:top")}
       {making && (
         <section className="sc-panel sc-panel-form" aria-label={words.form.aria}>
           <ProjectForm
@@ -450,7 +473,147 @@ function ProjectsPage(props: {
           />
         }
       />
+      {widgets("home:bottom")}
     </>
+  );
+}
+
+/**
+ * A plugin's page (ADR-0054): the sub-tabs of its pages at the level, where it has several, above
+ * the frame of the one shown, the first when the address names none. Nothing for a plugin the
+ * person has no page of, or that is not on the project.
+ */
+function PluginPage(props: {
+  readonly route: Extract<Route, { name: "plugin" }>;
+  readonly data: ConsoleData;
+  readonly project: RestProject | undefined;
+  readonly client: ConsoleClient;
+  readonly language: string;
+  readonly navigation: Navigation;
+}) {
+  const words = useWords();
+  const { route, data, project, client, language, navigation } = props;
+  const plugin = data.plugins.find(
+    (candidate) => candidate.key === route.plugin && candidate.state === "enabled",
+  );
+  const bound =
+    route.level === "workspace" ||
+    data.projectPlugins.some((candidate) => candidate.key === route.plugin);
+  const pages = plugin === undefined ? [] : pluginPagesAt(plugin, route.level);
+  const page = route.page === undefined ? pages[0] : pages.find((p) => p.key === route.page);
+  if (plugin === undefined || !bound || page === undefined || data.me === undefined) {
+    return <EmptyState title={words.plugins.noPage.title} body={words.plugins.noPage.body} />;
+  }
+  const projectKey = route.level === "project" ? route.project : undefined;
+  return (
+    <>
+      {pages.length > 1 && (
+        <nav className="sc-subtabs" aria-label={pluginWordOf(plugin.name, language)}>
+          {pages.map((candidate) => (
+            <a
+              key={candidate.key}
+              href={pluginHref(plugin.key, candidate.key, projectKey)}
+              className={candidate.key === page.key ? "sc-tab sc-tab-current" : "sc-tab"}
+              aria-current={candidate.key === page.key ? "page" : undefined}
+            >
+              {pluginWordOf(candidate.name, language)}
+            </a>
+          ))}
+        </nav>
+      )}
+      <PluginFrame
+        key={`${plugin.key}:${page.key}:${projectKey ?? ""}`}
+        plugin={plugin}
+        page={page.key}
+        project={project}
+        path={route.rest}
+        me={data.me}
+        language={language}
+        client={client}
+        navigation={navigation}
+        events={project === undefined ? undefined : data.events}
+        title={words.plugins.frame(pluginWordOf(page.name, language))}
+      />
+    </>
+  );
+}
+
+/**
+ * The plugins' settings (docs/specs/plugins.md, "The settings pages"): the list, or one plugin
+ * whole, read again after every change; for an administrator.
+ */
+function PluginSettingsPage(props: {
+  readonly plugin: string | undefined;
+  readonly data: ConsoleData;
+  readonly client: ConsoleClient;
+  readonly language: string;
+  readonly navigation: Navigation;
+}) {
+  const words = useWords();
+  const { data, client, language, navigation } = props;
+  const settings = words.plugins.settings;
+  const administrator = data.me?.person?.role === "admin";
+  const [detail, setDetail] = useState<RestPluginDetail | undefined>(undefined);
+  const [failure, setFailure] = useState<string | undefined>(undefined);
+  const key = props.plugin;
+  const read = useCallback(async () => {
+    if (key === undefined) {
+      return;
+    }
+    try {
+      setDetail(await client.plugin(key).get());
+      setFailure(undefined);
+    } catch (error) {
+      setFailure(error instanceof ApiError ? error.message : words.common.somethingWentWrong);
+    }
+  }, [client, key, words.common.somethingWentWrong]);
+  useEffect(() => {
+    setDetail(undefined);
+    void read();
+  }, [read]);
+  if (!administrator) {
+    return <NothingHere />;
+  }
+  if (key === undefined) {
+    return (
+      <>
+        <div className="sc-page-head">
+          <h1 className="sc-page-title">{settings.title}</h1>
+        </div>
+        <p className="sc-lead">{settings.intro}</p>
+        <PluginSettingsList
+          plugins={data.plugins}
+          language={language}
+          href={(plugin) => pluginSettingsHref(plugin.key)}
+        />
+      </>
+    );
+  }
+  if (failure !== undefined) {
+    return <EmptyState title={words.common.somethingWentWrong} body={failure} />;
+  }
+  if (detail === undefined) {
+    return (
+      <div className="sc-loading">
+        <Spinner label={words.common.loading} />
+      </div>
+    );
+  }
+  return (
+    <PluginSettingsView
+      detail={detail}
+      projects={data.projects}
+      language={language}
+      client={client}
+      onChanged={async () => {
+        await read();
+        await data.actions.refreshPlugins();
+      }}
+      onPurged={() => {
+        void data.actions.refreshPlugins();
+        navigation.replace(pluginSettingsHref());
+      }}
+    />
   );
 }
 
@@ -747,6 +910,8 @@ function ProjectPage(props: {
   readonly data: ConsoleData;
   readonly components: ConsoleComponents;
   readonly navigation: Navigation;
+  readonly client: ConsoleClient;
+  readonly language: string;
 }) {
   const words = useWords();
   const { route, project, data, components, navigation } = props;
@@ -1313,6 +1478,18 @@ function ProjectPage(props: {
       <ProjectSettingsPage route={route} project={project} data={data} navigation={navigation} />
     );
   }
+  if (route.name === "plugin") {
+    return (
+      <PluginPage
+        route={route}
+        data={data}
+        project={project}
+        client={props.client}
+        language={props.language}
+        navigation={navigation}
+      />
+    );
+  }
   return <NothingHere />;
 }
 
@@ -1753,6 +1930,13 @@ function WorkspaceSettingsPage(props: {
           />
         )}
       </section>
+      {administrator && (
+        <section className="sc-panel" aria-label={words.plugins.settings.title}>
+          <h2 className="sc-section-title">{words.plugins.settings.title}</h2>
+          <p className="sc-settings-hint">{words.plugins.settings.intro}</p>
+          <LinkButton href={pluginSettingsHref()}>{words.plugins.settings.title}</LinkButton>
+        </section>
+      )}
       <section className="sc-panel" aria-label={words.settings.categories}>
         <h2 className="sc-section-title">{words.settings.categories}</h2>
         {data.categories.length > 0 && (
@@ -2174,11 +2358,36 @@ function WorkspacePage(props: {
   readonly data: ConsoleData;
   readonly components: ConsoleComponents;
   readonly navigation: Navigation;
+  readonly client: ConsoleClient;
+  readonly language: string;
 }) {
   const words = useWords();
-  const { route, data, components, navigation } = props;
+  const { route, data, components, navigation, client, language } = props;
   const [fresh, setFresh] = useState<RestTokenCreated | undefined>(undefined);
   const { busy, error, act } = useAction();
+  if (route.name === "plugin" && route.level === "workspace") {
+    return (
+      <PluginPage
+        route={route}
+        data={data}
+        project={undefined}
+        client={client}
+        language={language}
+        navigation={navigation}
+      />
+    );
+  }
+  if (route.name === "plugins-settings") {
+    return (
+      <PluginSettingsPage
+        plugin={route.plugin}
+        data={data}
+        client={client}
+        language={language}
+        navigation={navigation}
+      />
+    );
+  }
 
   if (route.name === "work") {
     return <WorkPage data={data} components={components} week={route.week} />;
@@ -2470,6 +2679,17 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
               route.level === "workspace" &&
               route.page === candidate.key,
           })),
+        // The plugins' tabs (ADR-0054): the groups that hold a plugin the person has a page of.
+        ...pluginNavItems({
+          plugins: data.plugins,
+          level: "workspace",
+          current: {
+            plugin:
+              route.name === "plugin" && route.level === "workspace" ? route.plugin : undefined,
+          },
+          words,
+          language: pack.tag,
+        }),
       ];
       const nav: NavItem[] =
         projectKey === undefined
@@ -2537,6 +2757,17 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
                     route.level === "project" &&
                     route.page === candidate.key,
                 })),
+              ...pluginNavItems({
+                plugins: data.plugins,
+                level: "project",
+                project: { key: projectKey, plugins: data.projectPlugins },
+                current: {
+                  plugin:
+                    route.name === "plugin" && route.level === "project" ? route.plugin : undefined,
+                },
+                words,
+                language: pack.tag,
+              }),
             ];
       /** A page of the console's own at the address, or nothing there. */
       const customPageOf = (key: string, level: CustomPage["level"]): ReactNode => {
@@ -2562,6 +2793,8 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
             data={data}
             components={components}
             navigation={navigation}
+            client={client}
+            language={pack.tag}
             making={route.name === "new-project"}
           />
         );
@@ -2574,6 +2807,8 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
             data={data}
             components={components}
             navigation={navigation}
+            client={client}
+            language={pack.tag}
           />
         );
       } else if (data.projectError !== undefined) {
@@ -2600,6 +2835,8 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
             data={data}
             components={components}
             navigation={navigation}
+            client={client}
+            language={pack.tag}
           />
         );
       }
@@ -2632,7 +2869,17 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
             route.name === "calendar" ||
             (route.name === "goal" && route.form === undefined) ||
             (route.name === "custom" &&
-              pages.some((candidate) => candidate.key === route.page && candidate.wide === true))
+              pages.some((candidate) => candidate.key === route.page && candidate.wide === true)) ||
+            (route.name === "plugin" &&
+              data.plugins.some(
+                (candidate) =>
+                  candidate.key === route.plugin &&
+                  pluginPagesAt(candidate, route.level).some(
+                    (candidate, index) =>
+                      candidate.wide &&
+                      (route.page === undefined ? index === 0 : candidate.key === route.page),
+                  ),
+              ))
           }
           onNavigate={(href) => navigation.go(href)}
           onSignOut={viaToken ? undefined : () => void data.actions.signOut()}

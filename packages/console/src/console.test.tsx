@@ -24,6 +24,8 @@ import {
   newTaskHref,
   personAgentsHref,
   personWorkHref,
+  pluginHref,
+  pluginSettingsHref,
   projectHref,
   projectSettingsHref,
   roadmapHref,
@@ -347,6 +349,49 @@ describe("matchRoute", () => {
     expect(customPageLabel({ ...page, label: "Reports" }, "fr")).toBe("Reports");
     expect(customPageLabel({ ...page, label: { de: "Berichte" } }, "fr")).toBe("Berichte");
     expect(customPageLabel({ ...page, label: {} }, "fr")).toBe("reports");
+  });
+
+  it("knows the plugins' pages and settings (ADR-0054): the first page, a page, what follows it, on a project too", () => {
+    expect(matchRoute("/plugins/leave")).toEqual({
+      name: "plugin",
+      level: "workspace",
+      plugin: "leave",
+      page: undefined,
+      rest: "",
+    });
+    expect(matchRoute("/plugins/leave/requests/2026/11")).toEqual({
+      name: "plugin",
+      level: "workspace",
+      plugin: "leave",
+      page: "requests",
+      rest: "/2026/11",
+    });
+    expect(matchRoute("/projects/web/plugins/leave/board")).toEqual({
+      name: "plugin",
+      level: "project",
+      project: "web",
+      plugin: "leave",
+      page: "board",
+      rest: "",
+    });
+    expect(matchRoute("/plugins/Leave")).toEqual({ name: "not-found" });
+    expect(matchRoute("/plugins/leave/Nope")).toEqual({ name: "not-found" });
+    expect(pluginHref("leave")).toBe("/plugins/leave");
+    expect(pluginHref("leave", "requests", undefined, "/2026")).toBe(
+      "/plugins/leave/requests/2026",
+    );
+    expect(pluginHref("leave", "board", "web")).toBe("/projects/web/plugins/leave/board");
+    expect(matchRoute("/settings/plugins")).toEqual({
+      name: "plugins-settings",
+      plugin: undefined,
+    });
+    expect(matchRoute("/settings/plugins/leave")).toEqual({
+      name: "plugins-settings",
+      plugin: "leave",
+    });
+    expect(matchRoute("/settings/plugins/leave/more")).toEqual({ name: "not-found" });
+    expect(pluginSettingsHref()).toBe("/settings/plugins");
+    expect(pluginSettingsHref("leave")).toBe("/settings/plugins/leave");
   });
 
   it("takes the addresses of the line before to the new ones", () => {

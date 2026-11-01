@@ -1,9 +1,14 @@
 // The plugins' routes (docs/specs/plugins.md, "REST"): what a member may know of the plugins,
 // and what an administrator does with them. Every route runs as the board's do: parse, ask who
 // is asking and whether they may, then do the work; what a member may not know of is not found.
+
+import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { extname, resolve, sep } from "node:path";
 import {
   EVENTS_PAGE_LIMIT,
   MAX_FILE_BYTES,
+  pluginPath,
   REST_ROUTES,
   type RestEvents,
   type RestPluginEvents,
@@ -54,9 +59,42 @@ export interface PluginsRestDependencies {
   readonly access: Access;
   readonly clock: Clock;
   readonly logger: Logger;
+  /** The origin of the console's own pages (`PUBLIC_URL`), which may embed the plugins' frames; nothing where nobody signs in. */
+  readonly ownOrigin: string | undefined;
 }
 
 const MAX_BODY_BYTES = 256 * 1024;
+/** Where the console's own stylesheet is served for the plugins' frames (ADR-0054). */
+const PLUGIN_RUNTIME = "/api/v1/plugin-runtime";
+/** The package's stylesheet, as this app resolves it. */
+const CONSOLE_STYLESHEET = createRequire(import.meta.url).resolve("@skillcdn/console/console.css");
+/** A person's own console, served on this machine by the command (ADR-0014): it may embed a frame too. */
+const LOOPBACK_ORIGIN = /^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/;
+/** What a bundle's files are served as, by extension; anything else as bytes. */
+const BUNDLE_TYPES: Readonly<Record<string, string>> = {
+  ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".map": "application/json; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".txt": "text/plain; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".ico": "image/x-icon",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+};
+/** A value as an HTML attribute carries it. */
+const attribute = (value: string): string =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PLUGIN = `${REST_ROUTES.plugins}/:key`;
 
@@ -162,7 +200,7 @@ export function registerPluginsRest(
   app: Hono<AppEnv>,
   dependencies: PluginsRestDependencies,
 ): void {
-  const { plugins, access, clock, logger } = dependencies;
+  const { plugins, access, clock, logger, ownOrigin } = dependencies;
 
   const asking = async (c: Context<AppEnv>) => (await access.caller(c)) ?? signInRequired(c);
   /** An administrator, from the console's own pages or with a token, or the refusal. */
@@ -1055,5 +1093,134 @@ export function registerPluginsRest(
         ? { ...noPack, read: null }
         : await pluginSkills.find(pluginSkillsAddress(key), query.data);
     return c.json(body);
+  });
+
+  // ---- The frame of a page or a widget, and the files of the bundle (ADR-0054, "The frame").
+
+  /** The origin of the page that embeds a frame: the console's own, or a loopback where a person's own console is served (ADR-0014); nothing for any other. */
+  const embedderOf = (c: Context<AppEnv>): string | undefined => {
+    const referer = c.req.header("referer");
+    if (referer === undefined || !URL.canParse(referer)) {
+      return undefined;
+    }
+    const origin = new URL(referer).origin;
+    return origin === ownOrigin || LOOPBACK_ORIGIN.test(origin) ? origin : undefined;
+  };
+
+  app.get(`${PLUGIN}/frame`, async (c) => {
+    const key = keyOf(c);
+    const origin = embedderOf(c);
+    const page = c.req.query("page");
+    const widget = c.req.query("widget");
+    const name = page ?? widget;
+    if (
+      key === undefined ||
+      origin === undefined ||
+      name === undefined ||
+      (page !== undefined && widget !== undefined) ||
+      !PLUGIN_KEY_PATTERN.test(name)
+    ) {
+      return notFound(c);
+    }
+    const web = await plugins.webOf(key);
+    if (web === undefined || !(page === undefined ? web.widgets : web.pages).includes(name)) {
+      return notFound(c);
+    }
+    const bundle = `${origin}${pluginPath(key, "web", web.version)}`;
+    const runtime = `${origin}${PLUGIN_RUNTIME}`;
+    const html = [
+      "<!doctype html>",
+      `<html lang="en" data-console="${attribute(origin)}" data-plugin="${attribute(key)}" data-${page === undefined ? "widget" : "page"}="${attribute(name)}">`,
+      "<head>",
+      '<meta charset="utf-8">',
+      '<meta name="viewport" content="width=device-width, initial-scale=1">',
+      `<link rel="stylesheet" href="${attribute(`${runtime}/console.css`)}">`,
+      `<link rel="stylesheet" href="${attribute(`${bundle}/index.css`)}">`,
+      "</head>",
+      `<body><div id="root"></div><script type="module" src="${attribute(`${bundle}/index.js`)}"></script></body>`,
+      "</html>",
+      "",
+    ].join("\n");
+    const webPath = `${origin}${pluginPath(key, "web")}/`;
+    c.header(
+      "content-security-policy",
+      [
+        "default-src 'none'",
+        `script-src ${webPath}`,
+        `style-src ${webPath} ${runtime}/`,
+        `img-src ${webPath} data: blob:`,
+        `font-src ${webPath} ${runtime}/`,
+        "connect-src 'none'",
+        `frame-ancestors ${origin}`,
+        "base-uri 'none'",
+        "form-action 'none'",
+        "sandbox allow-scripts",
+      ].join("; "),
+    );
+    c.header("referrer-policy", "no-referrer");
+    c.header("x-content-type-options", "nosniff");
+    c.header("cache-control", "no-store");
+    return c.html(html);
+  });
+
+  app.get(`${PLUGIN}/web/:version/*`, async (c) => {
+    const key = keyOf(c);
+    const version = c.req.param("version") ?? "";
+    const web = key === undefined ? undefined : await plugins.webOf(key);
+    if (key === undefined || web === undefined || version !== web.version) {
+      return notFound(c);
+    }
+    const prefix = `${pluginPath(key, "web", version)}/`;
+    let relative: string;
+    try {
+      relative = decodeURIComponent(c.req.path.slice(prefix.length));
+    } catch {
+      return notFound(c);
+    }
+    const segments = relative.split("/");
+    if (
+      relative.length === 0 ||
+      relative.includes("\0") ||
+      segments.some((segment) => segment.length === 0 || segment === "." || segment === "..")
+    ) {
+      return notFound(c);
+    }
+    const root = resolve(web.dir);
+    const file = resolve(root, ...segments);
+    if (!file.startsWith(`${root}${sep}`)) {
+      return notFound(c);
+    }
+    let bytes: Uint8Array;
+    try {
+      bytes = await readFile(file);
+    } catch {
+      return notFound(c);
+    }
+    const type = BUNDLE_TYPES[extname(file).toLowerCase()] ?? "application/octet-stream";
+    c.header("content-type", type);
+    c.header("content-length", String(bytes.byteLength));
+    c.header("cache-control", "public, max-age=31536000, immutable");
+    c.header("cross-origin-resource-policy", "cross-origin");
+    c.header("x-content-type-options", "nosniff");
+    return c.body(new Uint8Array(bytes).buffer);
+  });
+
+  app.get(`${PLUGIN_RUNTIME}/console.css`, async (c) => {
+    let bytes: Uint8Array;
+    try {
+      bytes = await readFile(CONSOLE_STYLESHEET);
+    } catch (error) {
+      logger.error(
+        { err: error },
+        "the console's stylesheet for the plugins' frames was not found",
+      );
+      return c.json(errorBody("plugin.unavailable", "The stylesheet is not available."), 503);
+    }
+    c.header("content-type", "text/css; charset=utf-8");
+    c.header("content-length", String(bytes.byteLength));
+    c.header("cache-control", "public, max-age=3600");
+    c.header("cross-origin-resource-policy", "cross-origin");
+    c.header("x-content-type-options", "nosniff");
+    return c.body(new Uint8Array(bytes).buffer);
   });
 }

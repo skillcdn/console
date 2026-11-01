@@ -152,7 +152,13 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
         : { host: auth.organization.host, name: auth.organization.name },
   });
 
-  registerPluginsRest(app, { plugins: dependencies.plugins, access, clock, logger });
+  registerPluginsRest(app, {
+    plugins: dependencies.plugins,
+    access,
+    clock,
+    logger,
+    ownOrigin: auth?.origin,
+  });
 
   // After the API: a file of the build, or the page for every other path, which routes in the
   // browser. The API's own paths answer their own not-found.

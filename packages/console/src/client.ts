@@ -56,6 +56,7 @@ import {
   type RestPluginCommandInput,
   type RestPluginDetail,
   type RestPluginEnableInput,
+  type RestPluginEvents,
   type RestPluginFileHandle,
   type RestPluginGrant,
   type RestPluginGrantInput,
@@ -124,6 +125,7 @@ import {
   restPersonSchema,
   restPersonWorkSchema,
   restPluginDetailSchema,
+  restPluginEventsSchema,
   restPluginFileHandleSchema,
   restPluginGrantSchema,
   restPluginGrantsSchema,
@@ -493,6 +495,21 @@ export interface PluginClient {
   ): Promise<RestPluginRecordVersions>;
   /** Where a record's file is read, by its id. */
   fileUrl(fileId: string): string;
+  /** The bytes of a record's file, with the name and the type the console says. */
+  readFile(fileId: string, signal?: AbortSignal): Promise<FileRead>;
+  /** Where the frame of a page or a widget is (ADR-0054), on a project when its key is given. */
+  frameUrl(options: {
+    readonly page?: string | undefined;
+    readonly widget?: string | undefined;
+    readonly project?: string | undefined;
+  }): string;
+  /** The events the plugin emitted after number `after`, oldest first: what a frame hears. */
+  pluginEvents(
+    page: { readonly after: number; readonly limit: number },
+    signal?: AbortSignal,
+  ): Promise<RestPluginEvents>;
+  /** Removes everything the console keeps of a disabled plugin, the key named again; for an administrator. */
+  purge(confirm: string): Promise<void>;
   /** The plugin's skills, a pack of its own read from its package, as a project's five reads. */
   skills(signal?: AbortSignal): Promise<RestSkills>;
   skill(path: string, cursor?: string, signal?: AbortSignal): Promise<RestSkillLoad>;
@@ -1106,6 +1123,22 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
           signal,
         ),
       fileUrl: (fileId) => `${base}${at("files", fileId)}`,
+      readFile: (fileId, signal) => read(`${base}${at("files", fileId)}`, fileId, signal),
+      frameUrl: (options) =>
+        withQuery(at("frame"), {
+          page: options.page,
+          widget: options.widget,
+          project: options.project,
+        }),
+      pluginEvents: (page, signal) =>
+        request(
+          "GET",
+          withQuery(at("plugin-events"), { after: String(page.after), limit: String(page.limit) }),
+          undefined,
+          restPluginEventsSchema,
+          signal,
+        ),
+      purge: (confirm) => request("POST", `${base}${at("purge")}`, { confirm }, undefined),
       skills: (signal) =>
         request("GET", `${base}${at("skills")}`, undefined, restSkillsSchema, signal),
       skill: (path, cursor, signal) =>

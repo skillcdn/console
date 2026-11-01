@@ -39,12 +39,14 @@ import {
   type RestPerson,
   type RestPersonPatch,
   type RestPersonWork,
+  type RestPlugin,
   type RestProject,
   type RestProjectInput,
   type RestProjectPatch,
   type RestProjectRules,
   type RestRules,
   type RestRulesInput,
+  type RestRulesPlugin,
   type RestRun,
   type RestSkills,
   type RestTask,
@@ -198,6 +200,8 @@ export interface ConsoleActions {
   connectRequest(code: string, signal?: AbortSignal): Promise<RestConnectRequest>;
   approveConnection(code: string, input: RestTokenInput): Promise<RestConnectRequest>;
   denyConnection(code: string): Promise<void>;
+  /** Reads the plugins again: after one was enabled, configured or disabled on the settings. */
+  refreshPlugins(): Promise<void>;
   /** Another person's plate: for an administrator, or an owner of a project they are in. */
   personWork(personId: string, signal?: AbortSignal): Promise<RestPersonWork>;
   /** The tokens of another person, and the way to take one away: for an administrator. */
@@ -223,6 +227,8 @@ export interface ConsoleData {
   readonly organization: RestOrganization | null;
   /** The categories tasks are sorted into, by name. */
   readonly categories: readonly RestCategory[];
+  /** The plugins the person may know of (docs/specs/plugins.md), by key: the enabled ones, every one for an administrator. */
+  readonly plugins: readonly RestPlugin[];
   /** The tokens of whoever is signed in, newest first. */
   readonly tokens: readonly RestToken[];
   /** The project the page is on, once loaded; `undefined` while loading, or when the page is on none. */
@@ -245,6 +251,8 @@ export interface ConsoleData {
   readonly members: readonly RestMember[];
   /** The project's skills, as the console answered; `undefined` until it has. */
   readonly skills: RestSkills | undefined;
+  /** The plugins bound to the project that the person holds a role in, as the rules name them. */
+  readonly projectPlugins: readonly RestRulesPlugin[];
   readonly actions: ConsoleActions;
   /** Asks everything again, from who is signed in on. */
   reload(): void;
@@ -354,6 +362,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
   const [listed, setListed] = useState<readonly RestListing[]>([]);
   const [organization, setOrganization] = useState<RestOrganization | null>(null);
   const [categories, setCategories] = useState<readonly RestCategory[]>([]);
+  const [plugins, setPlugins] = useState<readonly RestPlugin[]>([]);
   const [tokens, setTokens] = useState<readonly RestToken[]>([]);
   const [project, setProject] = useState<RestProject | undefined>(undefined);
   const [projectLoaded, setProjectLoaded] = useState(false);
@@ -366,6 +375,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
   const [events, setEvents] = useState<readonly RestEvent[]>([]);
   const [members, setMembers] = useState<readonly RestMember[]>([]);
   const [skills, setSkills] = useState<RestSkills | undefined>(undefined);
+  const [projectPlugins, setProjectPlugins] = useState<readonly RestRulesPlugin[]>([]);
   const [generation, setGeneration] = useState(0);
   const lastEvent = useRef(0);
   const signedIn = me?.person !== null && me !== undefined;
@@ -375,10 +385,12 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
   /** Loads the workspace's lists again. What fails stays as it was. */
   const refreshWorkspace = useCallback(
     async (signal?: AbortSignal) => {
-      const [nextProjects, nextPeople, nextCategories] = await Promise.all([
+      const [nextProjects, nextPeople, nextCategories, nextPlugins] = await Promise.all([
         client.projects(signal),
         client.people(signal),
         client.categories(signal),
+        // A console without plugins answers none; one older than them answers nothing, which is none too.
+        client.plugins(signal).catch(() => ({ items: [], sql: false })),
       ]);
       if (signal?.aborted === true) {
         return;
@@ -388,6 +400,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
       setListed(nextPeople.listed);
       setOrganization(nextPeople.organization);
       setCategories(nextCategories.items);
+      setPlugins(nextPlugins.items);
     },
     [client],
   );
@@ -399,7 +412,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
         return;
       }
       const scope = client.project(projectKey);
-      const [nextProject, nextTasks, nextDecisions, nextGoals, nextRuns, nextMembers] =
+      const [nextProject, nextTasks, nextDecisions, nextGoals, nextRuns, nextMembers, nextPlugins] =
         await Promise.all([
           scope.get(signal),
           readTasks(scope, signal),
@@ -407,6 +420,11 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
           readGoals(scope, signal),
           scope.runs(undefined, signal),
           scope.members(signal),
+          // The plugins bound to the project come with its rules; a console older than them names none.
+          scope
+            .rules(signal)
+            .then((rules) => rules.plugins ?? [])
+            .catch((): readonly RestRulesPlugin[] => []),
         ]);
       if (signal?.aborted === true) {
         return;
@@ -417,6 +435,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
       setGoals(nextGoals.items);
       setRuns(nextRuns.items);
       setMembers(nextMembers.items);
+      setProjectPlugins(nextPlugins);
     },
     [client, projectKey],
   );
@@ -480,6 +499,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
     setEvents([]);
     setMembers([]);
     setSkills(undefined);
+    setProjectPlugins([]);
     setLive(false);
     if (projectKey === undefined || !signedIn) {
       return;
@@ -766,6 +786,9 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
       },
       cancelWorkspacePackTokenConnection: () => client.cancelWorkspacePackTokenConnection(),
       findPerson: (login, signal) => client.findPerson(login, signal),
+      async refreshPlugins() {
+        setPlugins((await client.plugins()).items);
+      },
       async abandonRun(id) {
         const run = await scope().endRun(id, { status: "abandoned" });
         await refreshProject();
@@ -822,6 +845,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
     listed,
     organization,
     categories,
+    plugins,
     tokens,
     project,
     projectLoaded,
@@ -834,6 +858,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
     events,
     members,
     skills,
+    projectPlugins,
     actions,
     reload,
   };

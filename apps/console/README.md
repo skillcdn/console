@@ -86,7 +86,9 @@ src/
                  with backoff, then a plugin.failed event), scheduler.ts (the jobs: every and at in
                  the workspace's zone, a lock per job, a failure told once an hour); the queries are
                  db/queries/plugins.ts and db/queries/plugin-board.ts, the routes
-                 http/plugins-rest.ts; the api role runs the dispatcher and the scheduler with
+                 http/plugins-rest.ts (the plugins' routes, the frame document under its own
+                 policy for the console's own origin and a loopback, the bundle's files under their
+                 version, the stylesheet for frames); the api role runs the dispatcher and the scheduler with
                  WORKER_IN_PROCESS, the worker role otherwise, in a host of its own
   skills.ts      a project's pack as the board shows and reads it (ADR-0031): opened per request at
                  its address through a pack source, the project's own or the organization's; the
