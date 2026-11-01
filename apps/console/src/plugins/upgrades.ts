@@ -12,6 +12,7 @@ import type { Logger } from "../logger.js";
 import type { Clock } from "../ports/clock.js";
 import type { Discovery } from "./discovery.js";
 import type { PluginHost } from "./host.js";
+import type { PluginSqlService } from "./sql.js";
 
 export interface UpgradeOptions {
   readonly database: Database;
@@ -21,6 +22,8 @@ export interface UpgradeOptions {
   readonly memoryMb: number;
   readonly clock: Clock;
   readonly logger: Logger;
+  /** The schemas plugins have of their own; their migrations are applied before the upgrades. None where left out. */
+  readonly sql?: PluginSqlService | undefined;
 }
 
 /** Runs the pending upgrades of every enabled plugin; answers how many steps ran. */
@@ -35,6 +38,31 @@ export async function runPluginUpgrades(options: UpgradeOptions): Promise<number
     const plugin = discovery.plugins.find((candidate) => candidate.key === install.key);
     if (plugin === undefined) {
       continue;
+    }
+    if (install.consent.includes("storage:sql") && options.sql !== undefined) {
+      try {
+        await options.sql.provision(plugin.key);
+        if (plugin.manifest.migrations !== undefined) {
+          const applied = await options.sql.applyMigrations(
+            plugin.key,
+            join(plugin.dir, plugin.manifest.migrations),
+          );
+          if (applied > 0) {
+            logger.info({ plugin: plugin.key, applied }, "the plugin's migrations were applied");
+          }
+        }
+      } catch (error) {
+        const problem = `the plugin's schema or migrations failed: ${error instanceof Error ? error.message : String(error)}`;
+        logger.error({ plugin: plugin.key }, problem);
+        await recordPluginFailure(database, {
+          workspaceId: workspace.id,
+          key: plugin.key,
+          projectId: install.boardProjectId,
+          problem,
+          now: clock.now(),
+        });
+        continue;
+      }
     }
     const target = plugin.manifest.dataVersion;
     if (install.dataVersion >= target && install.version === plugin.version) {

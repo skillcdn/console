@@ -1,0 +1,9 @@
+{
+  "key": "tally",
+  "name": { "en": "Tally" },
+  "description": { "en": "Keeps a tally in a schema of its own, for the tests of storage:sql." },
+  "pluginApi": 1,
+  "server": "server/index.js",
+  "migrations": "migrations",
+  "capabilities": ["storage:sql"]
+}

@@ -73,6 +73,7 @@ import type { ContextCall, PluginHost } from "./host.js";
 import type { CallResult, PluginCall } from "./protocol.js";
 import type { RecordScope, RecordStore, Visibility, Writer } from "./records.js";
 import { mayUse, rolesHeld } from "./roles.js";
+import type { PluginSqlService } from "./sql.js";
 
 /** A plugin as the registry knows it at runtime: the package read, and the module loaded or not. */
 interface Entry {
@@ -102,6 +103,8 @@ export interface PluginsOptions {
   readonly sqlAvailable?: boolean | undefined;
   /** Where the plugins' records live; none, and every record is unavailable, where left out. */
   readonly records?: RecordStore | undefined;
+  /** The schemas and roles plugins may have of their own (`storage:sql`); none where left out. */
+  readonly sql?: PluginSqlService | undefined;
   /** How long plugin code gets, in milliseconds; the package's bounds when left out, shorter in tests. */
   readonly timeouts?:
     | { readonly command?: number; readonly query?: number; readonly lifecycle?: number }
@@ -271,6 +274,8 @@ export class Plugins {
   private readonly options: PluginsOptions;
   private readonly entries = new Map<string, Entry>();
   private started = false;
+  /** Whether this deployment gives a plugin a schema of its own: the SQL service, and a database user that may make roles. */
+  private sqlAvailable = false;
 
   constructor(options: PluginsOptions) {
     this.options = options;
@@ -308,6 +313,7 @@ export class Plugins {
     }
     this.started = true;
     const { discovery, host, logger } = this.options;
+    this.sqlAvailable = (await this.options.sql?.available()) ?? false;
     for (const failed of discovery.failed) {
       this.entries.set(failed.key, {
         key: failed.key,
@@ -392,6 +398,22 @@ export class Plugins {
           );
         }
       }
+      if (
+        entry.manifest !== undefined &&
+        install.state === "enabled" &&
+        install.consent.includes("storage:sql")
+      ) {
+        // The role's password is drawn anew at every boot; a schema that is not there is made.
+        try {
+          await this.provisionSql(entry as Entry & { manifest: PluginManifest });
+        } catch (error) {
+          logger.error(
+            { err: error, plugin: install.key },
+            "the plugin's schema could not be provisioned",
+          );
+          entry.problems.push("the plugin's schema could not be provisioned");
+        }
+      }
       if (entry.problems.length > 0 && install.state === "enabled") {
         await recordPluginFailure(this.options.database, {
           workspaceId: workspace.id,
@@ -405,7 +427,35 @@ export class Plugins {
   }
 
   async stop(): Promise<void> {
+    await this.options.sql?.stop();
     await this.options.host?.stop();
+  }
+
+  /**
+   * Makes the plugin's schema and role, draws the role's password, and applies the plugin's
+   * migrations as the role (docs/specs/plugins.md, "SQL"). Needs the SQL service and `storage:sql`.
+   */
+  private async provisionSql(entry: Entry & { manifest: PluginManifest }): Promise<void> {
+    const sql = this.options.sql;
+    if (sql === undefined || !this.sqlAvailable) {
+      throw new PluginRefusal(
+        "plugin.unavailable",
+        "storage:sql is not available in this deployment",
+      );
+    }
+    await sql.provision(entry.key);
+    if (entry.manifest.migrations !== undefined && entry.dir !== undefined) {
+      const applied = await sql.applyMigrations(
+        entry.key,
+        join(entry.dir, entry.manifest.migrations),
+      );
+      if (applied > 0) {
+        this.options.logger.info(
+          { plugin: entry.key, applied },
+          "the plugin's migrations were applied",
+        );
+      }
+    }
   }
 
   /** Whether this console has any plugin at all. */
@@ -532,7 +582,7 @@ export class Plugins {
       }
       items.push(await this.restOf(entry, install, person));
     }
-    return { items, sql: this.options.sqlAvailable === true };
+    return { items, sql: this.sqlAvailable };
   }
 
   private operationsOf(description: PluginDescription | undefined): RestPluginOperation[] {
@@ -772,7 +822,7 @@ export class Plugins {
         `consent names ${unknown.join(", ")}, which the plugin does not ask`,
       );
     }
-    if (manifest.capabilities.includes("storage:sql") && this.options.sqlAvailable !== true) {
+    if (manifest.capabilities.includes("storage:sql") && !this.sqlAvailable) {
       throw new PluginRefusal(
         "plugin.unavailable",
         "storage:sql is not available in this deployment",
@@ -859,6 +909,19 @@ export class Plugins {
       actor: by.actor,
       now,
     });
+    if (input.consent.includes("storage:sql")) {
+      try {
+        await this.provisionSql(entry);
+      } catch (error) {
+        await disableInstall(database, {
+          workspaceId: workspace.id,
+          key,
+          actor: by.actor,
+          now: this.options.clock.now(),
+        });
+        throw error;
+      }
+    }
     if (entry.description.onEnable) {
       const result = await this.host().call(key, {
         kind: "enable",
@@ -1277,9 +1340,32 @@ export class Plugins {
         );
         return null;
       }
-      case "sql":
+      case "sql": {
         needs("storage:sql");
-        return notYet("SQL");
+        const sql = this.options.sql;
+        if (sql === undefined || !this.sqlAvailable) {
+          return notYet("SQL");
+        }
+        switch (method) {
+          case "query":
+            return sql.query(
+              call.plugin,
+              typeof args[0] === "string" ? args[0] : "",
+              Array.isArray(args[1]) ? args[1] : [],
+              typeof args[2] === "string" ? args[2] : undefined,
+            );
+          case "begin":
+            return sql.begin(call.plugin);
+          case "commit":
+            await sql.commit(typeof args[0] === "string" ? args[0] : "");
+            return null;
+          case "rollback":
+            await sql.rollback(typeof args[0] === "string" ? args[0] : "");
+            return null;
+          default:
+            throw new PluginRefusal("plugin.invalid_args", `sql.${method} is not a call`);
+        }
+      }
       case "fetch": {
         const url = typeof args[0] === "string" ? args[0] : "";
         let host: string;
@@ -1660,6 +1746,9 @@ export class Plugins {
       throw new PluginRefusal("plugin.conflict", "the plugin is enabled; disable it first");
     }
     const removed = await this.options.records?.purge(workspace.id, key);
+    if (this.options.sql !== undefined && this.sqlAvailable) {
+      await this.options.sql.purge(key);
+    }
     await purgeInstall(this.options.database, {
       workspaceId: workspace.id,
       key,

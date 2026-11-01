@@ -1,0 +1,8 @@
+{
+  "name": "console-plugin-tally",
+  "version": "0.0.1",
+  "private": true,
+  "description": "A fixture: a plugin with a schema of its own.",
+  "license": "MIT",
+  "type": "module"
+}

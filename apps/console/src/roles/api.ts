@@ -42,6 +42,7 @@ import { PluginHost } from "../plugins/host.js";
 import { allowedReadRoots, HOST_ENTRY } from "../plugins/paths.js";
 import { RecordStore } from "../plugins/records.js";
 import { Plugins } from "../plugins/registry.js";
+import { PluginSqlService } from "../plugins/sql.js";
 import { type BlobStore, BlobStoreError } from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
 import { fixedCredentials } from "../ports/credentials.js";
@@ -593,6 +594,12 @@ export async function pluginsOf(
       blobs,
       clock: systemClock,
       fileBytesAtMost: config.plugins.fileBytesAtMost,
+    }),
+    sql: new PluginSqlService({
+      database,
+      connectionString: config.database.url,
+      ca: config.database.ca,
+      logger,
     }),
     clock: systemClock,
     logger,

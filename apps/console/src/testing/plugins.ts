@@ -70,3 +70,6 @@ export function hostEnvironment(
   }
   return kept;
 }
+
+/** The fixture with a schema of its own, for the tests of `storage:sql`. */
+export const SQL_PLUGIN_DIR = fileURLToPath(new URL("./fixtures/plugin-sql/", import.meta.url));

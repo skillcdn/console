@@ -7,6 +7,7 @@ import type { Logger } from "../logger.js";
 import { discoverPlugins } from "../plugins/discovery.js";
 import { PluginHost } from "../plugins/host.js";
 import { allowedReadRoots, HOST_ENTRY } from "../plugins/paths.js";
+import { PluginSqlService } from "../plugins/sql.js";
 import { runPluginUpgrades } from "../plugins/upgrades.js";
 import { APP_NAME } from "../version.js";
 
@@ -45,9 +46,16 @@ async function upgradePlugins(config: Config, dir: string, logger: Logger): Prom
       // reaches nothing.
       onContext: () => Promise.reject(new Error("ctx is not available during an upgrade yet")),
     });
+    const sql = new PluginSqlService({
+      database,
+      connectionString: config.database.url,
+      ca: config.database.ca,
+      logger,
+    });
     await host.start();
     try {
       const steps = await runPluginUpgrades({
+        sql: (await sql.available()) ? sql : undefined,
         database,
         workspace,
         host,
@@ -61,6 +69,7 @@ async function upgradePlugins(config: Config, dir: string, logger: Logger): Prom
         "plugin upgrades applied",
       );
     } finally {
+      await sql.stop();
       await host.stop();
     }
   } finally {
