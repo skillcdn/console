@@ -765,6 +765,52 @@ export async function readSecret(
   return row?.sealed;
 }
 
+/**
+ * Removes what the console keeps of a plugin beside its records: the grants, the secrets and the
+ * install, in one transaction with the event, which goes to the board project the install had.
+ */
+export async function purgeInstall(
+  database: Database,
+  input: {
+    readonly workspaceId: string;
+    readonly key: string;
+    readonly boardProjectId: string | undefined;
+    readonly actor: Actor;
+    readonly now: Date;
+  },
+): Promise<void> {
+  await drizzleOf(database).transaction(async (tx) => {
+    await lockWorkspace(tx, input.workspaceId);
+    await tx
+      .delete(pluginGrants)
+      .where(
+        and(eq(pluginGrants.workspaceId, input.workspaceId), eq(pluginGrants.pluginKey, input.key)),
+      );
+    await tx
+      .delete(pluginSecrets)
+      .where(
+        and(
+          eq(pluginSecrets.workspaceId, input.workspaceId),
+          eq(pluginSecrets.pluginKey, input.key),
+        ),
+      );
+    await tx
+      .delete(pluginInstalls)
+      .where(
+        and(eq(pluginInstalls.workspaceId, input.workspaceId), eq(pluginInstalls.key, input.key)),
+      );
+    await recordEvent(tx, {
+      workspaceId: input.workspaceId,
+      projectId: input.boardProjectId,
+      kind: "plugin.purged",
+      actor: input.actor,
+      plugin: input.key,
+      data: { key: input.key },
+      now: input.now,
+    });
+  });
+}
+
 /** Which secrets are set, and when: what the pages may show of them. */
 export async function listSecrets(
   database: Database,

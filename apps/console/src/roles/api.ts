@@ -40,6 +40,7 @@ import type { Logger } from "../logger.js";
 import { discoverPlugins } from "../plugins/discovery.js";
 import { PluginHost } from "../plugins/host.js";
 import { allowedReadRoots, HOST_ENTRY } from "../plugins/paths.js";
+import { RecordStore } from "../plugins/records.js";
 import { Plugins } from "../plugins/registry.js";
 import { type BlobStore, BlobStoreError } from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
@@ -445,7 +446,7 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
   }
   const blobs = await blobStoreOf(config, database, logger, userAgent);
   const plugins =
-    config.plugins.dir === undefined ? undefined : await pluginsOf(config, database, logger);
+    config.plugins.dir === undefined ? undefined : await pluginsOf(config, database, blobs, logger);
   let shuttingDown = false;
   const { app, feed } = createApi(config, {
     database,
@@ -550,6 +551,7 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
 export async function pluginsOf(
   config: Config,
   database: Database,
+  blobs: BlobStore,
   logger: Logger,
 ): Promise<Plugins> {
   const dir = config.plugins.dir;
@@ -586,6 +588,12 @@ export async function pluginsOf(
     discovery,
     memoryMb: config.plugins.memoryMb,
     secrets: config.auth === undefined ? undefined : createSecrets(config.auth.secret),
+    records: new RecordStore({
+      database,
+      blobs,
+      clock: systemClock,
+      fileBytesAtMost: config.plugins.fileBytesAtMost,
+    }),
     clock: systemClock,
     logger,
   });

@@ -748,6 +748,7 @@ export const en = {
         `brought the plugin ${plugin} to ${version}`,
       pluginCommand: (command: string, plugin: string, outcome: string) =>
         `ran ${command} of the plugin ${plugin}: ${outcome}`,
+      pluginPurged: (plugin: string) => `purged the plugin ${plugin}: everything it kept is gone`,
       pluginFailed: (plugin: string, problem: string) => `the plugin ${plugin} failed: ${problem}`,
     },
   },

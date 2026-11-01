@@ -1003,3 +1003,162 @@ export const pluginSecrets = pgTable(
   },
   (table) => [primaryKey({ columns: [table.workspaceId, table.pluginKey, table.name] })],
 );
+
+/**
+ * A plugin's record (ADR-0051, docs/specs/plugins.md, "Records"): one document of a collection
+ * the plugin declared, kept by the console. `data` is the plugin's, checked against the
+ * collection's schema in the plugin's thread on every write; `search_text` is what the
+ * collection's search fields held at the write, which the database indexes; `project_id` is the
+ * project the record is linked to, where the collection has one; `owner_id` the person the
+ * collection's owner field names. Nothing is deleted but by purge: `archived_at` keeps a record
+ * out of the lists.
+ */
+export const pluginRecords = pgTable(
+  "plugin_records",
+  {
+    id: id(),
+    workspaceId: uuid()
+      .notNull()
+      .references(() => workspaces.id),
+    pluginKey: text().notNull(),
+    collection: text().notNull(),
+    projectId: uuid().references(() => projects.id),
+    ownerId: uuid().references(() => people.id),
+    data: jsonb().$type<Record<string, unknown>>().notNull(),
+    searchText: text().notNull().default(""),
+    search: tsvector().generatedAlwaysAs(sql`to_tsvector('simple', "search_text")`),
+    version: integer().notNull().default(1),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    /** Who caused the write, and through which agent; nobody for the console's own doing. */
+    createdById: uuid().references(() => people.id),
+    createdAgent: text(),
+    updatedById: uuid().references(() => people.id),
+    updatedAgent: text(),
+    archivedAt: instant(),
+  },
+  (table) => [
+    index("plugin_records_collection_idx").on(
+      table.workspaceId,
+      table.pluginKey,
+      table.collection,
+      table.id,
+    ),
+    index("plugin_records_project_idx").on(table.pluginKey, table.collection, table.projectId),
+    index("plugin_records_owner_idx").on(table.pluginKey, table.collection, table.ownerId),
+    index("plugin_records_data_idx").using("gin", sql`${table.data} jsonb_path_ops`),
+    index("plugin_records_search_idx").using("gin", table.search),
+  ],
+);
+
+/** A version of a record before a write, where the collection keeps history: the data as it was, when, and by whom. */
+export const pluginRecordVersions = pgTable(
+  "plugin_record_versions",
+  {
+    recordId: uuid()
+      .notNull()
+      .references(() => pluginRecords.id, { onDelete: "cascade" }),
+    version: integer().notNull(),
+    data: jsonb().$type<Record<string, unknown>>().notNull(),
+    at: instant().notNull(),
+    byId: uuid().references(() => people.id),
+    agent: text(),
+  },
+  (table) => [primaryKey({ columns: [table.recordId, table.version] })],
+);
+
+/** A file on a record, as a run hands one in: its name, size and type, and the hash its bytes are kept under in the blob store. */
+export const pluginRecordFiles = pgTable(
+  "plugin_record_files",
+  {
+    id: id(),
+    workspaceId: uuid()
+      .notNull()
+      .references(() => workspaces.id),
+    pluginKey: text().notNull(),
+    recordId: uuid()
+      .notNull()
+      .references(() => pluginRecords.id, { onDelete: "cascade" }),
+    fileName: text().notNull(),
+    fileSize: integer().notNull(),
+    contentType: text().notNull(),
+    sha256: text().notNull(),
+    createdAt: createdAt(),
+    createdById: uuid().references(() => people.id),
+    agent: text(),
+  },
+  (table) => [
+    index("plugin_record_files_record_idx").on(table.recordId),
+    index("plugin_record_files_plugin_idx").on(table.workspaceId, table.pluginKey),
+  ],
+);
+
+/**
+ * A file uploaded for a plugin's command and not yet attached to a record: the handle a command
+ * is given, good for an hour, by the person who uploaded it. The bytes are the blob store's;
+ * the janitor removes what expired.
+ */
+export const pluginUploads = pgTable(
+  "plugin_uploads",
+  {
+    id: id(),
+    workspaceId: uuid()
+      .notNull()
+      .references(() => workspaces.id),
+    pluginKey: text().notNull(),
+    personId: uuid()
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    fileName: text().notNull(),
+    fileSize: integer().notNull(),
+    contentType: text().notNull(),
+    sha256: text().notNull(),
+    createdAt: createdAt(),
+    expiresAt: instant().notNull(),
+  },
+  (table) => [
+    index("plugin_uploads_expires_idx").on(table.expiresAt),
+    index("plugin_uploads_plugin_idx").on(table.workspaceId, table.pluginKey),
+  ],
+);
+
+/**
+ * What a plugin's record refers to, and what a plugin made on the board (ADR-0052): a record to
+ * a task, a decision, a document, a project, a run or a record of any plugin; or, with no record,
+ * an item of the board the plugin made, by which the board shows "through <plugin>" and the plugin
+ * is held to its own items.
+ */
+export const pluginLinks = pgTable(
+  "plugin_links",
+  {
+    id: id(),
+    workspaceId: uuid()
+      .notNull()
+      .references(() => workspaces.id),
+    pluginKey: text().notNull(),
+    recordId: uuid().references(() => pluginRecords.id, { onDelete: "cascade" }),
+    targetKind: text().notNull(),
+    targetId: uuid().notNull(),
+    /** For a record of another plugin: whose, and which collection. */
+    targetPlugin: text(),
+    targetCollection: text(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex("plugin_links_record_target_key").on(
+      table.recordId,
+      table.targetKind,
+      table.targetId,
+    ),
+    index("plugin_links_target_idx").on(
+      table.workspaceId,
+      table.pluginKey,
+      table.targetKind,
+      table.targetId,
+    ),
+    check(
+      "plugin_links_kind_check",
+      sql`${table.targetKind} in ('task', 'decision', 'document', 'project', 'run', 'record')`,
+    ),
+  ],
+);

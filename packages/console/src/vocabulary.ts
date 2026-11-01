@@ -217,6 +217,7 @@ export const EVENT_KINDS = [
   "plugin.upgraded",
   "plugin.command",
   "plugin.failed",
+  "plugin.purged",
 ] as const;
 
 export type EventKind = (typeof EVENT_KINDS)[number];

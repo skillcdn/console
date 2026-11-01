@@ -2869,7 +2869,8 @@
             "plugin.revoked",
             "plugin.upgraded",
             "plugin.command",
-            "plugin.failed"
+            "plugin.failed",
+            "plugin.purged"
           ]
         },
         "actor": {
@@ -3250,7 +3251,8 @@
                   "plugin.revoked",
                   "plugin.upgraded",
                   "plugin.command",
-                  "plugin.failed"
+                  "plugin.failed",
+                  "plugin.purged"
                 ]
               },
               "actor": {

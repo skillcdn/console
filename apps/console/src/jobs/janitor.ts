@@ -3,6 +3,7 @@ import { deleteExpiredConnectRequests } from "../db/queries/connect.js";
 import { deleteExpiredSessions } from "../db/queries/sessions.js";
 import { deleteExpiredTokens } from "../db/queries/tokens.js";
 import type { Logger } from "../logger.js";
+import { deleteExpiredUploads } from "../plugins/records.js";
 import type { Clock } from "../ports/clock.js";
 
 /**
@@ -36,8 +37,12 @@ export class Janitor {
         const sessions = await deleteExpiredSessions(this.#database, now);
         const tokens = await deleteExpiredTokens(this.#database, now);
         const requests = await deleteExpiredConnectRequests(this.#database, now);
-        if (sessions > 0 || tokens > 0 || requests > 0) {
-          this.#logger.info({ sessions, tokens, requests }, "what time has ended was removed");
+        const uploads = await deleteExpiredUploads(this.#database, now);
+        if (sessions > 0 || tokens > 0 || requests > 0 || uploads > 0) {
+          this.#logger.info(
+            { sessions, tokens, requests, uploads },
+            "what time has ended was removed",
+          );
         }
       } catch (error) {
         this.#logger.warn({ err: error }, "what time has ended was not removed");

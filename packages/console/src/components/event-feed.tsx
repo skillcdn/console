@@ -145,6 +145,8 @@ export function describeEvent(event: RestEvent, words: Messages = en): string {
         plugin,
         feed.outcome[data.outcome ?? ""] ?? data.outcome ?? feed.something,
       );
+    case "plugin.purged":
+      return feed.event.pluginPurged(plugin);
     case "plugin.failed":
       return feed.event.pluginFailed(plugin, data.problem ?? feed.something);
   }

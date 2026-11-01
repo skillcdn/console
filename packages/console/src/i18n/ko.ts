@@ -699,6 +699,7 @@ export const ko: Messages = {
       pluginUpgraded: (plugin, version) => `플러그인 ${plugin}을(를) ${version}으로 올렸습니다`,
       pluginCommand: (command, plugin, outcome) =>
         `플러그인 ${plugin}의 ${command}을(를) 실행했습니다: ${outcome}`,
+      pluginPurged: (plugin) => `플러그인 ${plugin}을(를) 완전히 지웠습니다`,
       pluginFailed: (plugin, problem) => `플러그인 ${plugin}이(가) 실패했습니다: ${problem}`,
     },
   },

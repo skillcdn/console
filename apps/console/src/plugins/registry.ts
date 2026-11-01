@@ -18,16 +18,24 @@ import type {
 import {
   type ArgDescription,
   argsProblem,
+  type CollectionDescription,
+  type LinkTarget,
   outboundAllows,
   PLUGIN_COMMAND_MS,
   PLUGIN_LIFECYCLE_MS,
   PLUGIN_QUERY_MS,
   type PluginCaller,
   type PluginDescription,
+  type PluginFileHandle,
   type PluginInfo,
   type PluginManifest,
+  type PluginRecord,
   PluginRefusal,
   type PluginSetting,
+  type RecordAggregation,
+  type RecordPage,
+  type RecordQuery,
+  type RecordVersion,
 } from "@skillcdn/console/plugin";
 import { configuresPlugins } from "../auth/policy.js";
 import type { Secrets } from "../auth/secrets.js";
@@ -46,6 +54,7 @@ import {
   listSecrets,
   type PluginGrantRecord,
   type PluginInstallRecord,
+  purgeInstall,
   readSecret,
   recordPluginCommand,
   recordPluginFailure,
@@ -62,6 +71,7 @@ import type { Clock } from "../ports/clock.js";
 import type { Discovery } from "./discovery.js";
 import type { ContextCall, PluginHost } from "./host.js";
 import type { CallResult, PluginCall } from "./protocol.js";
+import type { RecordScope, RecordStore, Visibility, Writer } from "./records.js";
 import { mayUse, rolesHeld } from "./roles.js";
 
 /** A plugin as the registry knows it at runtime: the package read, and the module loaded or not. */
@@ -90,6 +100,8 @@ export interface PluginsOptions {
   readonly logger: Logger;
   /** Whether a plugin may have a schema of its own (`storage:sql`); not yet. */
   readonly sqlAvailable?: boolean | undefined;
+  /** Where the plugins' records live; none, and every record is unavailable, where left out. */
+  readonly records?: RecordStore | undefined;
   /** How long plugin code gets, in milliseconds; the package's bounds when left out, shorter in tests. */
   readonly timeouts?:
     | { readonly command?: number; readonly query?: number; readonly lifecycle?: number }
@@ -1255,9 +1267,16 @@ export class Plugins {
       case "secrets":
         return this.secretCall(call.plugin, workspace.id, method, args);
       case "records":
-        return notYet("the record store");
-      case "events":
-        return notYet("a plugin's own events");
+        return this.recordCall(entry, install, call);
+      case "events": {
+        // A plugin's own events are not kept yet; what it emits is taken, and dropped, so that a
+        // plugin that emits runs on. The log says so once per call.
+        this.options.logger.debug(
+          { plugin: call.plugin, kind: typeof args[0] === "string" ? args[0] : undefined },
+          "a plugin emitted an event; events are not kept yet",
+        );
+        return null;
+      }
       case "sql":
         needs("storage:sql");
         return notYet("SQL");
@@ -1305,6 +1324,350 @@ export class Plugins {
       default:
         throw new PluginRefusal("plugin.invalid_args", `${member}.${method} is not a call on ctx`);
     }
+  }
+
+  private store(): RecordStore {
+    const store = this.options.records;
+    if (store === undefined) {
+      throw new PluginRefusal("plugin.unavailable", "this console keeps no records for plugins");
+    }
+    return store;
+  }
+
+  private collectionOf(entry: Entry, name: unknown): CollectionDescription {
+    const found =
+      typeof name === "string"
+        ? entry.description?.collections.find((candidate) => candidate.name === name)
+        : undefined;
+    if (found === undefined) {
+      throw new PluginRefusal(
+        "plugin.not_found",
+        `the plugin defines no collection ${String(name)}`,
+      );
+    }
+    return found;
+  }
+
+  /** A plugin's own call on its records: the collection named first, then what the method takes. */
+  private async recordCall(
+    entry: Entry,
+    install: PluginInstallRecord | undefined,
+    call: ContextCall,
+  ): Promise<unknown> {
+    const store = this.store();
+    const workspace = await this.options.workspace();
+    const [name, ...rest] = call.args;
+    const collection = this.collectionOf(entry, name);
+    const scope: RecordScope = { workspaceId: workspace.id, plugin: entry.key, collection };
+    const caller = call.call.caller;
+    const writer: Writer =
+      caller.kind === "person"
+        ? { personId: caller.person.id, agent: caller.agent ?? undefined }
+        : { personId: undefined, agent: undefined };
+    const text = (value: unknown, what: string): string => {
+      if (typeof value !== "string") {
+        throw new PluginRefusal("plugin.invalid_args", `${what} is text`);
+      }
+      return value;
+    };
+    const object = (value: unknown): Record<string, unknown> =>
+      typeof value === "object" && value !== null && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : {};
+    const files = () => {
+      if (!(install?.consent ?? []).includes("files")) {
+        throw new PluginRefusal(
+          "plugin.forbidden",
+          "the plugin has not been given the capability files",
+        );
+      }
+    };
+    switch (call.method) {
+      case "create":
+        return store.create(
+          scope,
+          object(rest[0]),
+          object(rest[1]) as { project?: string; owner?: string },
+          writer,
+        );
+      case "get":
+        return (await store.get(scope, text(rest[0], "id"))) ?? null;
+      case "update": {
+        const id = text(rest[0], "id");
+        const options = object(rest[2]) as { baseVersion?: number };
+        const current = await store.get(scope, id);
+        if (current === undefined) {
+          throw new PluginRefusal("plugin.not_found", `${collection.name}: no record ${id}`);
+        }
+        if (options.baseVersion !== undefined && options.baseVersion !== current.version) {
+          throw new PluginRefusal(
+            "plugin.conflict",
+            `${collection.name}: the record is at version ${current.version}, not ${options.baseVersion}`,
+          );
+        }
+        // The merged record goes back to the plugin's thread to be checked against the schema.
+        const checked = await this.host().call(entry.key, {
+          kind: "validate",
+          name: collection.name,
+          payload: { collection: collection.name, data: { ...current.data, ...object(rest[1]) } },
+          info: call.call.info,
+          caller,
+          language: call.call.language,
+          timeoutMs: this.options.timeouts?.query ?? PLUGIN_QUERY_MS,
+        });
+        if (!checked.ok) {
+          throw new PluginRefusal(checked.error.code, checked.error.message, checked.error.data);
+        }
+        return store.update(
+          scope,
+          id,
+          object(checked.value),
+          { baseVersion: current.version },
+          writer,
+        );
+      }
+      case "archive":
+        await store.archive(scope, text(rest[0], "id"));
+        return null;
+      case "restore":
+        await store.restore(scope, text(rest[0], "id"));
+        return null;
+      case "list":
+        return store.list(scope, object(rest[0]) as RecordQuery);
+      case "search":
+        return store.search(
+          scope,
+          text(rest[0], "words"),
+          object(rest[1]) as Pick<RecordQuery, "where" | "limit" | "project">,
+        );
+      case "aggregate":
+        return store.aggregate(scope, object(rest[0]) as RecordAggregation);
+      case "versions":
+        return store.versions(scope, text(rest[0], "id"));
+      case "link":
+        await store.link(scope, text(rest[0], "id"), rest[1] as LinkTarget);
+        return null;
+      case "unlink":
+        await store.unlink(scope, text(rest[0], "id"), rest[1] as LinkTarget);
+        return null;
+      case "links":
+        return store.links(scope, text(rest[0], "id"));
+      case "files.attach":
+        files();
+        return store.attachFile(
+          scope,
+          text(rest[0], "id"),
+          rest[1] as PluginFileHandle | string,
+          object(rest[2]) as { name?: string; type?: string },
+          writer,
+        );
+      case "files.list":
+        files();
+        return store.listFiles(scope, text(rest[0], "id"));
+      case "files.remove":
+        files();
+        await store.removeFile(scope, text(rest[0], "id"), text(rest[1], "fileId"));
+        return null;
+      default:
+        throw new PluginRefusal("plugin.invalid_args", `records.${call.method} is not a call`);
+    }
+  }
+
+  /** The plugin, enabled, as a person's read of its records needs it. */
+  private async enabledFor(
+    key: string,
+    person: PersonRecord,
+  ): Promise<{
+    entry: Entry & { manifest: PluginManifest; description: PluginDescription };
+    install: PluginInstallRecord;
+  }> {
+    const entry = this.runnable(key);
+    const workspace = await this.options.workspace();
+    const install = await findInstall(this.options.database, workspace.id, key);
+    if (install?.state !== "enabled") {
+      if (configuresPlugins(person)) {
+        throw new PluginRefusal("plugin.disabled", "the plugin is not enabled");
+      }
+      throw new PluginRefusal("plugin.not_found", "no plugin has this key");
+    }
+    return { entry, install };
+  }
+
+  /**
+   * What a person may read of a collection through the console's routes: everything, with a
+   * `read` role or as an administrator; their own records, with a `readOwn` role; else nothing.
+   * Within the projects they may see, always.
+   */
+  private async visibilityOf(
+    entry: Entry & { manifest: PluginManifest },
+    collection: CollectionDescription,
+    person: PersonRecord,
+  ): Promise<Visibility> {
+    if (configuresPlugins(person)) {
+      return {};
+    }
+    const held = await this.rolesOf(entry.key, person);
+    if (collection.read.some((role) => held.includes(role))) {
+      return { person };
+    }
+    if (collection.readOwn.some((role) => held.includes(role))) {
+      return { ownOnly: person.id, person };
+    }
+    throw new PluginRefusal(
+      "plugin.forbidden",
+      `reading ${collection.name} needs a role you do not hold in the plugin`,
+    );
+  }
+
+  /** A page of a collection, as a person may read it. */
+  async readRecords(
+    key: string,
+    collectionName: string,
+    query: RecordQuery & { readonly q?: string | undefined },
+    person: PersonRecord,
+  ): Promise<RecordPage<Record<string, unknown>>> {
+    const { entry } = await this.enabledFor(key, person);
+    const collection = this.collectionOf(entry, collectionName);
+    const visibility = await this.visibilityOf(entry, collection, person);
+    const workspace = await this.options.workspace();
+    const scope: RecordScope = { workspaceId: workspace.id, plugin: key, collection };
+    if (query.q !== undefined) {
+      return this.store().search(scope, query.q, query, visibility);
+    }
+    return this.store().list(scope, query, visibility);
+  }
+
+  /** One record, or one version of it, as a person may read it; none when there is none they may. */
+  async readRecord(
+    key: string,
+    collectionName: string,
+    id: string,
+    version: number | undefined,
+    person: PersonRecord,
+  ): Promise<PluginRecord | RecordVersion | undefined> {
+    const { entry } = await this.enabledFor(key, person);
+    const collection = this.collectionOf(entry, collectionName);
+    const visibility = await this.visibilityOf(entry, collection, person);
+    const workspace = await this.options.workspace();
+    const scope: RecordScope = { workspaceId: workspace.id, plugin: key, collection };
+    return version === undefined
+      ? this.store().get(scope, id, visibility)
+      : this.store().version(scope, id, version, visibility);
+  }
+
+  async readVersions(
+    key: string,
+    collectionName: string,
+    id: string,
+    person: PersonRecord,
+  ): Promise<RecordVersion[]> {
+    const { entry } = await this.enabledFor(key, person);
+    const collection = this.collectionOf(entry, collectionName);
+    const visibility = await this.visibilityOf(entry, collection, person);
+    const workspace = await this.options.workspace();
+    return this.store().versions(
+      { workspaceId: workspace.id, plugin: key, collection },
+      id,
+      visibility,
+    );
+  }
+
+  /** Keeps a file a person uploads for a command of the plugin, and answers its handle. */
+  async upload(
+    key: string,
+    person: PersonRecord,
+    bytes: Uint8Array,
+    name: string,
+    contentType: string,
+  ): Promise<PluginFileHandle> {
+    const { entry, install } = await this.enabledFor(key, person);
+    if (!install.consent.includes("files")) {
+      throw new PluginRefusal(
+        "plugin.forbidden",
+        "the plugin has not been given the capability files",
+      );
+    }
+    const held = await this.rolesOf(key, person);
+    if (!mayUse(null, held, Object.keys(entry.manifest.roles))) {
+      throw new PluginRefusal(
+        "plugin.forbidden",
+        "uploading a file for the plugin needs a role in it",
+      );
+    }
+    const workspace = await this.options.workspace();
+    return this.store().upload(workspace.id, key, person.id, bytes, name, contentType);
+  }
+
+  /** A file on a record, read under the record's rule: its bytes, name and type, or none. */
+  async fileFor(
+    key: string,
+    fileId: string,
+    person: PersonRecord,
+  ): Promise<
+    { readonly name: string; readonly contentType: string; readonly bytes: Uint8Array } | undefined
+  > {
+    const { entry } = await this.enabledFor(key, person);
+    const workspace = await this.options.workspace();
+    const file = await this.store().fileOf(workspace.id, key, fileId);
+    if (file === undefined) {
+      return undefined;
+    }
+    const collection = this.collectionOf(entry, file.collection);
+    const visibility = await this.visibilityOf(entry, collection, person);
+    const record = await this.store().get(
+      { workspaceId: workspace.id, plugin: key, collection },
+      file.recordId,
+      visibility,
+    );
+    if (record === undefined) {
+      return undefined;
+    }
+    const bytes = await this.store().bytesOf(file.sha256);
+    return bytes === undefined
+      ? undefined
+      : { name: file.name, contentType: file.contentType, bytes };
+  }
+
+  /** Everything the console keeps of the plugin, as JSON Lines: the install, the grants, then the records. An administrator's. */
+  async *exportLines(key: string): AsyncGenerator<string> {
+    this.entryOf(key);
+    const workspace = await this.options.workspace();
+    const install = await findInstall(this.options.database, workspace.id, key);
+    if (install !== undefined) {
+      yield `${JSON.stringify({ type: "install", key, version: install.version, dataVersion: install.dataVersion, state: install.state, consent: install.consent, projects: install.projects, settings: install.settings, enabledAt: install.enabledAt?.toISOString() ?? null })}\n`;
+    }
+    for (const grant of await listGrants(this.options.database, workspace.id, key)) {
+      yield `${JSON.stringify({ type: "grant", ...this.restGrant(grant) })}\n`;
+    }
+    if (this.options.records !== undefined) {
+      yield* this.options.records.exportLines(workspace.id, key);
+    }
+  }
+
+  /**
+   * Removes everything the console keeps of the plugin: its records with their versions, files
+   * and links, its uploads, its grants, its secrets and its install. The plugin must be disabled,
+   * and the key named again. What it put on the board stays, marked.
+   */
+  async purge(key: string, confirm: string, by: Administrator): Promise<void> {
+    this.entryOf(key);
+    if (confirm !== key) {
+      throw new PluginRefusal("plugin.invalid_args", "confirm names the plugin's key again");
+    }
+    const workspace = await this.options.workspace();
+    const install = await findInstall(this.options.database, workspace.id, key);
+    if (install?.state === "enabled") {
+      throw new PluginRefusal("plugin.conflict", "the plugin is enabled; disable it first");
+    }
+    const removed = await this.options.records?.purge(workspace.id, key);
+    await purgeInstall(this.options.database, {
+      workspaceId: workspace.id,
+      key,
+      boardProjectId: install?.boardProjectId,
+      actor: by.actor,
+      now: this.options.clock.now(),
+    });
+    this.options.logger.info({ person: by.person.id, plugin: key, ...removed }, "plugin purged");
   }
 
   private async secretCall(
