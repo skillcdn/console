@@ -90,6 +90,17 @@
           }
         }
       }
+    },
+    {
+      "includes": ["apps/console/src/testing/fixtures/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noDefaultExport": "off",
+            "noProcessEnv": "off"
+          }
+        }
+      }
     }
   ]
 }

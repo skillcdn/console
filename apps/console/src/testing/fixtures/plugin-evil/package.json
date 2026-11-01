@@ -1,0 +1,8 @@
+{
+  "name": "console-plugin-evil",
+  "version": "0.0.1",
+  "private": true,
+  "description": "A fixture: a plugin that tries what the ceiling refuses.",
+  "license": "MIT",
+  "type": "module"
+}

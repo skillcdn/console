@@ -114,6 +114,9 @@ export {
 export {
   FORBIDDEN_BUILTINS,
   forbiddenImportsIn,
+  forbiddingResolve,
+  type HardenedThread,
+  hardenThread,
   isForbiddenBuiltin,
   REMOVED_GLOBALS,
   removedGlobalsIn,

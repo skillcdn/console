@@ -1,0 +1,7 @@
+{
+  "key": "evil",
+  "name": { "en": "Evil" },
+  "description": { "en": "Tries everything a plugin may not do, for the tests of the host." },
+  "pluginApi": 1,
+  "server": "server/index.js"
+}

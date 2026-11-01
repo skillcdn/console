@@ -58,6 +58,13 @@ src/
                  (ADR-0029); organization-sync.ts:
                  the organization at the git host read whole on a timer, those who left
                  deactivated and those who returned reactivated (ADR-0022)
+  plugins/       the plugins (ADR-0050, docs/specs/plugins.md): discovery.ts (what PLUGINS_DIR holds, read
+                 as data and ordered by what each requires), host.ts (the parent's side of the plugin host:
+                 spawned under Node's permission model with an empty environment, loaded, called, every
+                 call on ctx decided here, restarted when it dies), plugin-host.ts (the child process: a
+                 worker thread per plugin, timeouts, memory bounds, messages carried), plugin-worker.ts
+                 (the thread: hardened, the module loaded and described, ctx as messages), protocol.ts
+                 (the messages and their bound)
   skills.ts      a project's pack as the board shows and reads it (ADR-0031): opened per request at
                  its address through a pack source, the project's own or the organization's; the
                  listing with each skill's page and URI, held per address for a minute; every read

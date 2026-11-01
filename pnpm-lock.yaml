@@ -257,6 +257,9 @@ importers:
       '@vitejs/plugin-react':
         specifier: ^6.1.2
         version: 6.1.2(vite@8.3.3(@types/node@24.19.1)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+      console-plugin-hello:
+        specifier: workspace:*
+        version: link:../../examples/plugin-hello
       drizzle-kit:
         specifier: ^0.31.11
         version: 0.31.11
