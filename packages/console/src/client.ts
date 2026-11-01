@@ -5,6 +5,7 @@ import {
   connectPath,
   personTokensPath,
   personWorkPath,
+  pluginPath,
   projectPath,
   REST_ROUTES,
   restPath,
@@ -52,6 +53,20 @@ import {
   type RestPerson,
   type RestPersonPatch,
   type RestPersonWork,
+  type RestPluginCommandInput,
+  type RestPluginDetail,
+  type RestPluginEnableInput,
+  type RestPluginFileHandle,
+  type RestPluginGrant,
+  type RestPluginGrantInput,
+  type RestPluginGrants,
+  type RestPluginInvocation,
+  type RestPluginInvokeInput,
+  type RestPluginRecordPage,
+  type RestPluginRecordRead,
+  type RestPluginRecordVersions,
+  type RestPluginSettingsPatch,
+  type RestPlugins,
   type RestProject,
   type RestProjectInput,
   type RestProjectPatch,
@@ -108,6 +123,15 @@ import {
   restPeopleSchema,
   restPersonSchema,
   restPersonWorkSchema,
+  restPluginDetailSchema,
+  restPluginFileHandleSchema,
+  restPluginGrantSchema,
+  restPluginGrantsSchema,
+  restPluginInvocationSchema,
+  restPluginRecordPageSchema,
+  restPluginRecordReadSchema,
+  restPluginRecordVersionsSchema,
+  restPluginsSchema,
   restProjectRulesSchema,
   restProjectSchema,
   restProjectsSchema,
@@ -404,6 +428,111 @@ export interface ProjectClient {
   updateGoal(id: string, patch: RestGoalPatch): Promise<RestGoal>;
 }
 
+/** What a read of a plugin's collection is narrowed by (docs/specs/plugins.md, "Records"). */
+export interface RecordFilter {
+  /** Conditions on indexed fields, as `ctx.records().list` takes them. */
+  readonly where?: Readonly<Record<string, unknown>> | undefined;
+  /** A field, with `-` before it for descending. */
+  readonly order?: string | undefined;
+  readonly limit?: number | undefined;
+  /** The cursor the last page answered with. */
+  readonly after?: string | undefined;
+  /** Words to search the collection's search fields for. */
+  readonly q?: string | undefined;
+  /** The key of a project, for the records linked to it. */
+  readonly project?: string | undefined;
+  readonly archived?: boolean | undefined;
+}
+
+/**
+ * The client of one plugin (docs/specs/plugins.md, "REST"): its commands and queries run as the
+ * person the client acts as, its records read within their roles, its skills, its events; and,
+ * for an administrator, enabling, configuring and granting. Every answer is in the console's
+ * generic shapes; what a command or a query itself answers is the plugin's own.
+ */
+export interface PluginClient {
+  readonly key: string;
+  /** The plugin whole: its commands and queries with their arguments, its skills, its settings. */
+  get(signal?: AbortSignal): Promise<RestPluginDetail>;
+  /** Runs a command or a query by the words as typed, which the console parses against the definition. */
+  invoke(input: RestPluginInvokeInput): Promise<RestPluginInvocation>;
+  /** Runs a command with its arguments as JSON, by name, for a page. */
+  command(name: string, input: RestPluginCommandInput): Promise<RestPluginInvocation>;
+  /** Runs a query with its arguments as JSON; the answer is the query's own JSON. */
+  query(
+    name: string,
+    args: Readonly<Record<string, unknown>>,
+    options?: { readonly project?: string | undefined },
+    signal?: AbortSignal,
+  ): Promise<unknown>;
+  /** Where a query's answer is read as bytes, for one that answers a file. */
+  queryUrl(
+    name: string,
+    args: Readonly<Record<string, unknown>>,
+    options?: { readonly project?: string | undefined },
+  ): string;
+  /** Uploads a file for a command, with the `files` capability: the handle a `file` argument takes, good for an hour. */
+  upload(input: FileUpload): Promise<RestPluginFileHandle>;
+  /** A page of a collection's records, as the person may read them. */
+  records(
+    collection: string,
+    filter?: RecordFilter,
+    signal?: AbortSignal,
+  ): Promise<RestPluginRecordPage>;
+  /** One record, or one version of it. */
+  record(
+    collection: string,
+    id: string,
+    version?: number,
+    signal?: AbortSignal,
+  ): Promise<RestPluginRecordRead>;
+  recordVersions(
+    collection: string,
+    id: string,
+    signal?: AbortSignal,
+  ): Promise<RestPluginRecordVersions>;
+  /** Where a record's file is read, by its id. */
+  fileUrl(fileId: string): string;
+  /** The plugin's skills, a pack of its own read from its package, as a project's five reads. */
+  skills(signal?: AbortSignal): Promise<RestSkills>;
+  skill(path: string, cursor?: string, signal?: AbortSignal): Promise<RestSkillLoad>;
+  skillFile(
+    path: string,
+    page?: { readonly offset?: number | undefined; readonly limit?: number | undefined },
+    signal?: AbortSignal,
+  ): Promise<RestSkillFile>;
+  skillBrowse(
+    page?: {
+      readonly path?: string | undefined;
+      readonly cursor?: string | undefined;
+      readonly limit?: number | undefined;
+    },
+    signal?: AbortSignal,
+  ): Promise<RestSkillBrowse>;
+  skillFind(
+    query: string,
+    options?: {
+      readonly path?: string | undefined;
+      readonly cursor?: string | undefined;
+      readonly limit?: number | undefined;
+    },
+    signal?: AbortSignal,
+  ): Promise<RestSkillFind>;
+  /** The plugin's events, newest first, a page at a time. */
+  events(page?: Page, signal?: AbortSignal): Promise<RestEvents>;
+  /** Enables the plugin, with consent to every capability it asks; for an administrator. */
+  enable(input: RestPluginEnableInput): Promise<RestPluginDetail>;
+  disable(): Promise<RestPluginDetail>;
+  /** Changes the settings' values, without secrets; `null` clears one. */
+  updateSettings(patch: RestPluginSettingsPatch): Promise<RestPluginDetail>;
+  /** Seals a secret for the plugin; it is answered by nothing from then on. */
+  setSecret(name: string, value: string): Promise<void>;
+  removeSecret(name: string): Promise<void>;
+  grants(signal?: AbortSignal): Promise<RestPluginGrants>;
+  grant(input: RestPluginGrantInput): Promise<RestPluginGrant>;
+  revoke(grantId: string): Promise<RestPluginGrant>;
+}
+
 export interface ConsoleClient {
   me(signal?: AbortSignal): Promise<RestMe>;
   /** Gives up the token this client acts with, so that it is good for nothing from now on: what `console logout` does. For a token; a session has none. */
@@ -443,6 +572,10 @@ export interface ConsoleClient {
   createProject(input: RestProjectInput): Promise<RestProject>;
   /** The board of one project. */
   project(key: string): ProjectClient;
+  /** The plugins the asker may know of: the enabled ones, every one for an administrator. */
+  plugins(signal?: AbortSignal): Promise<RestPlugins>;
+  /** One plugin, by its key. */
+  plugin(key: string): PluginClient;
   /** The workspace's own events, the ones about no project, after event number `after`. */
   events(after: number, signal?: AbortSignal): Promise<RestEvents>;
   /** Where a picture from elsewhere is read through the console (ADR-0048), given the https URL that names it. */
@@ -915,6 +1048,131 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
     };
   };
 
+  /** A schema that takes whatever JSON came: a query's own answer. */
+  const anything: Schema<unknown> = { safeParse: (data) => ({ success: true, data }) };
+
+  const pluginClient = (key: string): PluginClient => {
+    const at = (...parts: readonly string[]) => pluginPath(key, ...parts);
+    const skillsQuery = (part: string, params: Record<string, string | undefined>): string =>
+      withQuery(at("skills", part), params);
+    const queryUrl = (
+      name: string,
+      args: Readonly<Record<string, unknown>>,
+      options: { readonly project?: string | undefined } = {},
+    ): string =>
+      withQuery(at("queries", name), { args: JSON.stringify(args), project: options.project });
+    return {
+      key,
+      get: (signal) => request("GET", `${base}${at()}`, undefined, restPluginDetailSchema, signal),
+      invoke: (input) =>
+        request("POST", `${base}${at("invoke")}`, input, restPluginInvocationSchema),
+      command: (name, input) =>
+        request("POST", `${base}${at("commands", name)}`, input, restPluginInvocationSchema),
+      query: (name, args, options = {}, signal) =>
+        request("GET", queryUrl(name, args, options), undefined, anything, signal),
+      queryUrl,
+      upload: (input) =>
+        request("POST", `${base}${at("files")}`, formOf(input), restPluginFileHandleSchema),
+      records: (collection, filter = {}, signal) =>
+        request(
+          "GET",
+          withQuery(at("records", collection), {
+            where: filter.where === undefined ? undefined : JSON.stringify(filter.where),
+            order: filter.order,
+            limit: number(filter.limit),
+            after: filter.after,
+            q: filter.q,
+            project: filter.project,
+            archived: flag(filter.archived),
+          }),
+          undefined,
+          restPluginRecordPageSchema,
+          signal,
+        ),
+      record: (collection, id, version, signal) =>
+        request(
+          "GET",
+          withQuery(at("records", collection, id), { version: number(version) }),
+          undefined,
+          restPluginRecordReadSchema,
+          signal,
+        ),
+      recordVersions: (collection, id, signal) =>
+        request(
+          "GET",
+          `${base}${at("records", collection, id, "versions")}`,
+          undefined,
+          restPluginRecordVersionsSchema,
+          signal,
+        ),
+      fileUrl: (fileId) => `${base}${at("files", fileId)}`,
+      skills: (signal) =>
+        request("GET", `${base}${at("skills")}`, undefined, restSkillsSchema, signal),
+      skill: (path, cursor, signal) =>
+        request(
+          "GET",
+          skillsQuery("one", { path, cursor }),
+          undefined,
+          restSkillLoadSchema,
+          signal,
+        ),
+      skillFile: (path, page = {}, signal) =>
+        request(
+          "GET",
+          skillsQuery("file", { path, offset: number(page.offset), limit: number(page.limit) }),
+          undefined,
+          restSkillFileSchema,
+          signal,
+        ),
+      skillBrowse: (page = {}, signal) =>
+        request(
+          "GET",
+          skillsQuery("browse", {
+            path: page.path,
+            cursor: page.cursor,
+            limit: number(page.limit),
+          }),
+          undefined,
+          restSkillBrowseSchema,
+          signal,
+        ),
+      skillFind: (query, options = {}, signal) =>
+        request(
+          "GET",
+          skillsQuery("find", {
+            query,
+            path: options.path,
+            cursor: options.cursor,
+            limit: number(options.limit),
+          }),
+          undefined,
+          restSkillFindSchema,
+          signal,
+        ),
+      events: (page = {}, signal) =>
+        request(
+          "GET",
+          withQuery(at("events"), { limit: number(page.limit), offset: number(page.offset) }),
+          undefined,
+          restEventsSchema,
+          signal,
+        ),
+      enable: (input) => request("POST", `${base}${at("enable")}`, input, restPluginDetailSchema),
+      disable: () => request("POST", `${base}${at("disable")}`, undefined, restPluginDetailSchema),
+      updateSettings: (patch) =>
+        request("PATCH", `${base}${at("settings")}`, patch, restPluginDetailSchema),
+      setSecret: (name, value) =>
+        request("PUT", `${base}${at("secrets", name)}`, { value }, undefined),
+      removeSecret: (name) =>
+        request("DELETE", `${base}${at("secrets", name)}`, undefined, undefined),
+      grants: (signal) =>
+        request("GET", `${base}${at("grants")}`, undefined, restPluginGrantsSchema, signal),
+      grant: (input) => request("POST", `${base}${at("grants")}`, input, restPluginGrantSchema),
+      revoke: (grantId) =>
+        request("DELETE", `${base}${at("grants", grantId)}`, undefined, restPluginGrantSchema),
+    };
+  };
+
   return {
     me: (signal) => request("GET", `${base}${REST_ROUTES.me}`, undefined, restMeSchema, signal),
     giveUpToken: () => request("DELETE", `${base}${REST_ROUTES.meToken}`, undefined, undefined),
@@ -972,6 +1230,9 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
     createProject: (input) =>
       request("POST", `${base}${REST_ROUTES.projects}`, input, restProjectSchema),
     project: projectClient,
+    plugins: (signal) =>
+      request("GET", `${base}${REST_ROUTES.plugins}`, undefined, restPluginsSchema, signal),
+    plugin: pluginClient,
     events: (after, signal) =>
       request(
         "GET",

@@ -30,6 +30,11 @@ export const MAX_PLUGIN_RECORD_VERSIONS = 100;
 export const MAX_PLUGIN_MESSAGE_BYTES = 4 * 1024 * 1024;
 /** What an endpoint takes in. */
 export const MAX_PLUGIN_ENDPOINT_BODY_BYTES = 1024 * 1024;
+/** The words of one command line sent to `invoke`, and the characters of one word. */
+export const MAX_PLUGIN_ARGV_WORDS = 200;
+export const MAX_PLUGIN_ARGV_WORD_LENGTH = 50_000;
+/** The files one command takes at once. */
+export const MAX_PLUGIN_COMMAND_FILES = 20;
 /** An event of the plugin's own, how many are kept, and for how long. */
 export const MAX_PLUGIN_EVENT_BYTES = 16 * 1024;
 export const PLUGIN_EVENTS_KEPT = 100_000;
@@ -39,6 +44,7 @@ export const PLUGIN_LIST_LIMIT = 200;
 /** How long plugin code may run: a command; a query or an endpoint; a hook; a job; `onEnable`, `onDisable` and an upgrade. */
 export const PLUGIN_COMMAND_MS = 30_000;
 export const PLUGIN_QUERY_MS = 10_000;
+export const PLUGIN_ENDPOINT_MS = 10_000;
 export const PLUGIN_HOOK_MS = 30_000;
 export const PLUGIN_JOB_MS = 5 * 60_000;
 export const PLUGIN_LIFECYCLE_MS = 10 * 60_000;

@@ -11,6 +11,11 @@ import {
 import { PLUGIN_STATES } from "../vocabulary.js";
 import { ARG_TYPES } from "./args.js";
 import {
+  MAX_PLUGIN_ARGV_WORD_LENGTH,
+  MAX_PLUGIN_ARGV_WORDS,
+  MAX_PLUGIN_COMMAND_FILES,
+} from "./limits.js";
+import {
   PLUGIN_BOARD_NEEDS,
   PLUGIN_KEY_PATTERN,
   PLUGIN_PAGE_LEVELS,
@@ -169,6 +174,8 @@ export const restPluginDetailSchema = z.extend(restPluginSchema, {
   operations: z.array(restPluginOperationSchema),
   /** Where the plugin's skills are read, or `null` for none. */
   skills: z.nullable(z.string()),
+  /** The board project the manifest proposes, for an administrator who makes it; `null` where it proposes none. */
+  boardDefaults: z.nullable(z.object({ key: z.string(), name: localized, description: localized })),
   settings: z.array(restPluginSettingSchema),
   /** The grants, to an administrator; `null` to a member. */
   grants: z.nullable(z.array(restPluginGrantSchema)),
@@ -231,6 +238,99 @@ export const restPluginGrantInputSchema = z
     ),
   );
 export type RestPluginGrantInput = z.infer<typeof restPluginGrantInputSchema>;
+
+/** A file a person uploaded for a command (`POST .../files`): the handle a `file` argument takes, good for an hour. */
+export const restPluginFileHandleSchema = z.object({
+  handle: z.string(),
+  name: z.string(),
+  type: z.string(),
+  bytes: z.int(),
+});
+export type RestPluginFileHandle = z.infer<typeof restPluginFileHandleSchema>;
+
+/** A handle as a command line names one: what `POST .../files` answered. */
+const handle = z.string().check(z.minLength(1), z.maxLength(254));
+
+/**
+ * What `POST /api/v1/plugins/<key>/invoke` is sent: the words as typed, the command's or the
+ * query's name first, the handles of the files uploaded for it, the project the call is on, and
+ * the run it is for where the caller has several open.
+ */
+export const restPluginInvokeInputSchema = z.object({
+  argv: z
+    .array(z.string().check(z.maxLength(MAX_PLUGIN_ARGV_WORD_LENGTH)))
+    .check(z.minLength(1), z.maxLength(MAX_PLUGIN_ARGV_WORDS)),
+  files: z.optional(z.array(handle).check(z.maxLength(MAX_PLUGIN_COMMAND_FILES))),
+  project: z.optional(projectKey),
+  run: z.optional(uuid),
+});
+export type RestPluginInvokeInput = z.infer<typeof restPluginInvokeInputSchema>;
+
+/** What `POST /api/v1/plugins/<key>/commands/<name>` is sent: the arguments as JSON, by name. */
+export const restPluginCommandInputSchema = z.object({
+  args: z.record(z.string(), z.unknown()),
+  project: z.optional(projectKey),
+  run: z.optional(uuid),
+});
+export type RestPluginCommandInput = z.infer<typeof restPluginCommandInputSchema>;
+
+/**
+ * What a command or a query answered: `text` is what the command prints, `data` what `--json`
+ * prints (a query's whole answer), `waiting` the id of a decision the caller now waits for.
+ */
+export const restPluginInvocationSchema = z.object({
+  kind: z.enum(["command", "query"]),
+  text: z.string(),
+  data: z.unknown(),
+  waiting: z.nullable(z.string()),
+});
+export type RestPluginInvocation = z.infer<typeof restPluginInvocationSchema>;
+
+/** A record of a plugin's collection, as `GET .../records/<collection>` lists them. */
+export const restPluginRecordSchema = z.object({
+  id: uuid,
+  collection: z.string(),
+  /** The id of the project the record is linked to, or `null`. */
+  project: z.nullable(z.string()),
+  /** The id of the person the record is about, where the collection has an owner. */
+  owner: z.nullable(z.string()),
+  data: z.record(z.string(), z.unknown()),
+  version: z.int(),
+  createdAt: instant,
+  updatedAt: instant,
+  createdBy: z.nullable(z.string()),
+  updatedBy: z.nullable(z.string()),
+  archivedAt: z.nullable(instant),
+});
+export type RestPluginRecord = z.infer<typeof restPluginRecordSchema>;
+
+/** A page of records, and the cursor `after` continues with, or `null` on the last. */
+export const restPluginRecordPageSchema = z.object({
+  items: z.array(restPluginRecordSchema),
+  after: z.nullable(z.string()),
+});
+export type RestPluginRecordPage = z.infer<typeof restPluginRecordPageSchema>;
+
+/** One version of a record, as it was. */
+export const restPluginRecordVersionSchema = z.object({
+  version: z.int(),
+  data: z.record(z.string(), z.unknown()),
+  at: instant,
+  by: z.nullable(z.string()),
+});
+export type RestPluginRecordVersion = z.infer<typeof restPluginRecordVersionSchema>;
+
+/** What `GET .../records/<collection>/<id>[?version=]` answers: the record, or one version of it. */
+export const restPluginRecordReadSchema = z.union([
+  restPluginRecordSchema,
+  restPluginRecordVersionSchema,
+]);
+export type RestPluginRecordRead = z.infer<typeof restPluginRecordReadSchema>;
+
+export const restPluginRecordVersionsSchema = z.object({
+  items: z.array(restPluginRecordVersionSchema),
+});
+export type RestPluginRecordVersions = z.infer<typeof restPluginRecordVersionsSchema>;
 
 /** What `POST /api/v1/plugins/<key>/purge` is sent: the key again. */
 export const restPluginPurgeInputSchema = z.object({ confirm: pluginKey });

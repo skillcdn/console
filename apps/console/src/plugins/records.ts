@@ -887,6 +887,45 @@ export class RecordStore {
     return { handle: row.id, name, type: contentType, bytes: kept.size };
   }
 
+  /** An upload by its handle, for a `file` argument: the caller's own, of this plugin, not yet expired; or nothing. */
+  async uploadOf(
+    workspaceId: string,
+    plugin: string,
+    handle: string,
+    personId: string,
+  ): Promise<PluginFileHandle | undefined> {
+    if (!UUID.test(handle)) {
+      return undefined;
+    }
+    const [upload] = await drizzleOf(this.database)
+      .select({
+        id: pluginUploads.id,
+        fileName: pluginUploads.fileName,
+        fileSize: pluginUploads.fileSize,
+        contentType: pluginUploads.contentType,
+        expiresAt: pluginUploads.expiresAt,
+      })
+      .from(pluginUploads)
+      .where(
+        and(
+          eq(pluginUploads.id, handle),
+          eq(pluginUploads.workspaceId, workspaceId),
+          eq(pluginUploads.pluginKey, plugin),
+          eq(pluginUploads.personId, personId),
+        ),
+      )
+      .limit(1);
+    if (upload === undefined || upload.expiresAt.getTime() <= this.clock.now().getTime()) {
+      return undefined;
+    }
+    return {
+      handle: upload.id,
+      name: upload.fileName,
+      type: upload.contentType,
+      bytes: upload.fileSize,
+    };
+  }
+
   /** Attaches an uploaded file to a record: the handle's, uploaded by the caller, not yet expired. */
   async attachFile(
     scope: RecordScope,

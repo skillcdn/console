@@ -18,9 +18,11 @@ export {
   argsProblem,
   argUsage,
   argValueFromWord,
+  type ParsedArgv,
   type PluginFileHandle,
   type PluginPersonRef,
   type PluginProjectRef,
+  parseArgv,
 } from "./plugin/args.js";
 export {
   CAPABILITY_WORDS,

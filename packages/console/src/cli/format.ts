@@ -1,3 +1,4 @@
+import { argUsage } from "../plugin/args.js";
 import type {
   RestArtifact,
   RestCategory,
@@ -11,9 +12,22 @@ import type {
   RestMember,
   RestPerson,
   RestPersonWork,
+  RestPlugin,
+  RestPluginArg,
+  RestPluginDetail,
+  RestPluginGrant,
+  RestPluginInvocation,
+  RestPluginOperation,
+  RestPluginRecord,
+  RestPluginRecordPage,
+  RestPluginRecordRead,
+  RestPluginRecordVersions,
+  RestPluginSetting,
+  RestPlugins,
   RestProject,
   RestProjectRules,
   RestRules,
+  RestRulesPlugin,
   RestRun,
   RestTask,
   RestVersion,
@@ -320,16 +334,26 @@ function formatRulesHalf(where: "the workspace" | "this project", rules: RestRul
   return `${head}\n\n${rules.body.trimEnd()}`;
 }
 
-/** The rules that hold: the workspace's, and what the project adds when the command works in one. */
-export function formatRules(rules: RestProjectRules | RestRules): string {
-  if ("workspace" in rules) {
-    return [
-      formatRulesHalf("the workspace", rules.workspace),
-      "",
-      formatRulesHalf("this project", rules.project),
-    ].join("\n");
+/**
+ * The rules that hold: the workspace's, and what the project adds when the command works in one;
+ * then the plugins the console names after them, a line each, where there are any.
+ */
+export function formatRules(
+  rules: RestProjectRules | RestRules,
+  language?: string | null | undefined,
+): string {
+  const parts =
+    "workspace" in rules
+      ? [
+          formatRulesHalf("the workspace", rules.workspace),
+          "",
+          formatRulesHalf("this project", rules.project),
+        ]
+      : [formatRulesHalf("the workspace", rules)];
+  if (rules.plugins !== undefined && rules.plugins.length > 0) {
+    parts.push("", formatRulesPlugins(rules.plugins, language));
   }
-  return formatRulesHalf("the workspace", rules);
+  return parts.join("\n");
 }
 
 /** How far a goal is, from its tasks: the done, the at work, and the rest, in one phrase. */
@@ -536,3 +560,326 @@ export function formatVersion(path: string, version: RestVersion): string {
 }
 
 /** The text of one path across the pages a skill came in: the fragments joined in order. */
+
+// ---- The plugins (docs/specs/plugins.md, "The command") ----
+
+/** A text in the person's language, else in English, else the first the manifest has; nothing for none. */
+export function localized(
+  texts: Readonly<Record<string, string>> | null | undefined,
+  language: string | null | undefined,
+): string {
+  if (texts === null || texts === undefined) {
+    return "";
+  }
+  const tag = language ?? "en";
+  return texts[tag] ?? texts[tag.split("-")[0] ?? tag] ?? texts.en ?? Object.values(texts)[0] ?? "";
+}
+
+/** One plugin in a line: its key, its name and version, its state, the roles held in it, its problems. */
+export function formatPluginLine(plugin: RestPlugin, language: string | null | undefined): string {
+  const notes = [
+    plugin.roles.length === 0 ? undefined : `roles: ${plugin.roles.join(", ")}`,
+    plugin.problems.length === 0 ? undefined : `problems: ${plugin.problems.join("; ")}`,
+  ].filter((note): note is string => note !== undefined);
+  return `${plugin.key}  ${localized(plugin.name, language)} ${plugin.version}  ${plugin.state}${notes.length === 0 ? "" : `  ${notes.join("  ")}`}`;
+}
+
+/** The plugins one may use, a line each, and how to go on. */
+export function formatPlugins(plugins: RestPlugins, language: string | null | undefined): string {
+  if (plugins.items.length === 0) {
+    return "This console has no plugins you may use.";
+  }
+  return [
+    ...plugins.items.map((plugin) => formatPluginLine(plugin, language)),
+    "",
+    "One plugin, with its commands: console plugin <key>. One command in full: console plugin <key> help <command>.",
+  ].join("\n");
+}
+
+/** How a command or a query of a plugin is given, as help prints it: the positionals, then the flags. */
+export function formatOperationUsage(key: string, operation: RestPluginOperation): string {
+  const entries = Object.entries(operation.args);
+  const usage = [
+    ...entries.filter(([, arg]) => arg.positional).map(([name, arg]) => argUsage(name, arg)),
+    ...entries.filter(([, arg]) => !arg.positional).map(([name, arg]) => argUsage(name, arg)),
+  ];
+  return `console plugin ${key} ${operation.name}${usage.map((part) => ` ${part}`).join("")}`;
+}
+
+/** What an argument takes, in a line: its form, its type with its bounds, and what it is for. */
+function formatArgLine(name: string, arg: RestPluginArg): string {
+  const kind = (description: RestPluginArg): string => {
+    switch (description.type) {
+      case "text":
+      case "markdown":
+        return `${description.type}${description.max === undefined ? "" : `, up to ${description.max} characters`}${description.secret === true ? ", hidden in the event" : ""}`;
+      case "number": {
+        const bounds = [
+          description.integer === true ? "whole" : undefined,
+          description.min === undefined ? undefined : `from ${description.min}`,
+          description.max === undefined ? undefined : `to ${description.max}`,
+        ].filter((bound): bound is string => bound !== undefined);
+        return `number${bounds.length === 0 ? "" : ` (${bounds.join(", ")})`}`;
+      }
+      case "boolean":
+        return "true or false; the flag alone is true";
+      case "enum":
+        return `one of ${(description.options ?? []).join(", ")}`;
+      case "day":
+        return "a day as YYYY-MM-DD";
+      case "person":
+        return "a login, or me";
+      case "project":
+        return "a project's key";
+      case "record":
+        return `the id of a record of ${description.collection ?? "a collection"}`;
+      case "file":
+        return "a file: --file <path>, or - for standard input";
+      case "list":
+        return `a list of ${description.of === undefined ? "items" : kind(description.of)}${description.max === undefined ? "" : `, up to ${description.max}`}; the flag given again, or commas between`;
+      default:
+        return description.type;
+    }
+  };
+  const about = arg.about === undefined ? "" : `: ${arg.about}`;
+  return `  ${argUsage(name, arg)}  ${kind(arg)}${arg.optional ? ", optional" : ""}${about}`;
+}
+
+/** The refusals a plugin's command or query may meet, as `console help` words them. */
+const PLUGIN_COMMAND_REFUSALS = [
+  "plugin.invalid_args: a word does not fit the definition; the message names the first at fault",
+  "plugin.forbidden: the command needs a role you do not hold in the plugin",
+  "plugin.disabled, plugin.unavailable: the plugin is not enabled, or cannot run right now",
+  "plugin.timeout: the plugin ran past its time",
+  "plugin.<key>.<code>: the plugin's own refusal, in its own words",
+];
+
+/** One command or query of a plugin in full, as `console help <command>` prints one; or every one in a line. */
+export function formatPluginHelp(detail: RestPluginDetail, name: string | undefined): string {
+  if (name === undefined) {
+    if (detail.operations.length === 0) {
+      return `${detail.key} has no command or query you may run.`;
+    }
+    return [
+      ...detail.operations.flatMap((operation) => [
+        formatOperationUsage(detail.key, operation),
+        `    ${operation.kind === "query" ? "[query] " : ""}${operation.about}`,
+      ]),
+      "",
+      `One in full: console plugin ${detail.key} help <command>.`,
+    ].join("\n");
+  }
+  const operation = detail.operations.find((candidate) => candidate.name === name);
+  if (operation === undefined) {
+    return `${detail.key} has no command or query ${name} you may run.`;
+  }
+  const args = Object.entries(operation.args);
+  const parts = [
+    formatOperationUsage(detail.key, operation),
+    "",
+    `${operation.kind === "query" ? "A query: reads only, and answers JSON. " : "A command. "}${operation.about}`,
+  ];
+  if (args.length > 0) {
+    parts.push(
+      "",
+      "Arguments (a positional one by its place, the others as --<name> <value> or --<name>=<value>):",
+      ...args.map(([argName, arg]) => formatArgLine(argName, arg)),
+    );
+  }
+  if (operation.roles !== null) {
+    parts.push("", `Roles: ${operation.roles.join(", ")}`);
+  }
+  parts.push(
+    "",
+    operation.kind === "query"
+      ? "Prints the answer as JSON; a query that answers a file saves it under its name."
+      : "Prints what the command says; --json prints its data. A command that raised a decision prints its id and exits with 3: console decision <id> --wait 100 waits for the answer.",
+    "",
+    "Refusals:",
+    ...PLUGIN_COMMAND_REFUSALS.map((refusal) => `  ${refusal}`),
+  );
+  return parts.join("\n");
+}
+
+/** A setting in a line: its key and type, what it holds or whether it is set, and its name. */
+export function formatPluginSettingLine(
+  setting: RestPluginSetting,
+  language: string | null | undefined,
+): string {
+  const holds =
+    setting.type === "secret"
+      ? setting.set
+        ? `set${setting.setAt === null ? "" : ` ${moment(setting.setAt)}`}`
+        : "not set"
+      : setting.set
+        ? setting.value === null
+          ? "set"
+          : JSON.stringify(setting.value)
+        : setting.default === null
+          ? "not set"
+          : `default ${JSON.stringify(setting.default)}`;
+  return `  ${setting.key} (${setting.type}${setting.required ? ", required" : ""}): ${holds}  ${localized(setting.name, language)}`;
+}
+
+/** A grant in a line: its id, the role, whom it is to, since when. */
+export function formatPluginGrantLine(grant: RestPluginGrant): string {
+  const whom =
+    grant.person !== null
+      ? `person ${grant.person.login}`
+      : grant.project !== null
+        ? `the members of ${grant.project.key}`
+        : "everyone";
+  return `${grant.id}  ${grant.role} to ${whom}  since ${moment(grant.createdAt)}`;
+}
+
+/** One plugin in full: what it is, how it stands, what one may run, its skills and its settings. */
+export function formatPlugin(
+  detail: RestPluginDetail,
+  language: string | null | undefined,
+): string {
+  const name = localized(detail.name, language);
+  const lines = [`${detail.key}: ${name} ${detail.version}, ${detail.state}`];
+  const description = localized(detail.description, language);
+  if (description.length > 0) {
+    lines.push(description);
+  }
+  const note = localized(detail.agentNote, language);
+  if (note.length > 0) {
+    lines.push(`For agents: ${note}`);
+  }
+  if (detail.problems.length > 0) {
+    lines.push(`problems: ${detail.problems.join("; ")}`);
+  }
+  lines.push(
+    detail.roles.length === 0
+      ? "You hold no role in it."
+      : `Your roles in it: ${detail.roles.join(", ")}.`,
+  );
+  if (detail.board !== null) {
+    lines.push(`Board project: ${detail.board.key} (${detail.board.name}).`);
+  } else if (detail.boardNeeds !== "none") {
+    lines.push("Board project: none yet.");
+  }
+  lines.push("");
+  if (detail.operations.length === 0) {
+    lines.push("No command or query you may run.");
+  } else {
+    lines.push("Commands and queries:");
+    for (const operation of detail.operations) {
+      lines.push(
+        `  ${formatOperationUsage(detail.key, operation)}`,
+        `      ${operation.kind === "query" ? "[query] " : ""}${operation.about}`,
+      );
+    }
+    lines.push(`One in full: console plugin ${detail.key} help <command>.`);
+  }
+  if (detail.skills !== null) {
+    lines.push(
+      "",
+      `Skills: console plugin ${detail.key} skills lists them; console plugin ${detail.key} skill <path> reads one. Read the one that fits before the first command.`,
+    );
+  }
+  if (detail.settings.length > 0) {
+    lines.push(
+      "",
+      "Settings:",
+      ...detail.settings.map((setting) => formatPluginSettingLine(setting, language)),
+    );
+  }
+  if (detail.grants !== null) {
+    lines.push(
+      "",
+      detail.grants.length === 0
+        ? "Grants: none; the default role, where the manifest names one, is everyone's."
+        : "Grants:",
+      ...detail.grants.map((grant) => `  ${formatPluginGrantLine(grant)}`),
+    );
+  }
+  return lines.join("\n");
+}
+
+/** What a command or a query answered, as the command prints it. */
+export function formatInvocation(result: RestPluginInvocation): string {
+  if (result.kind === "query") {
+    return result.data === undefined ? "null" : JSON.stringify(result.data, null, 2);
+  }
+  const text = result.text.length === 0 ? "Done." : result.text;
+  return result.waiting === null
+    ? text
+    : `${text}\ndecision id: ${result.waiting}\nThe decision waits for a person: console decision ${result.waiting} --wait 100`;
+}
+
+/** A record's data on one line, cut where it runs long. */
+function compactData(data: Readonly<Record<string, unknown>>): string {
+  const text = JSON.stringify(data);
+  return text.length > 200 ? `${text.slice(0, 197)}...` : text;
+}
+
+/** A record in a line: its id, its version, when it last changed, whether it is put away, its data. */
+export function formatPluginRecordLine(record: RestPluginRecord): string {
+  return `${record.id}  v${record.version}  ${moment(record.updatedAt)}${record.archivedAt === null ? "" : "  archived"}  ${compactData(record.data)}`;
+}
+
+/** A page of records, and how the next is asked for. */
+export function formatPluginRecords(page: RestPluginRecordPage): string {
+  if (page.items.length === 0) {
+    return "No records.";
+  }
+  const lines = page.items.map(formatPluginRecordLine);
+  if (page.after !== null) {
+    lines.push(`More: --after ${page.after}`);
+  }
+  return lines.join("\n");
+}
+
+/** One record in full, or one version of it as it was. */
+export function formatPluginRecord(record: RestPluginRecordRead): string {
+  if (!("id" in record)) {
+    return [
+      `version ${record.version}, ${moment(record.at)}, by ${record.by ?? "the console"}`,
+      JSON.stringify(record.data, null, 2),
+    ].join("\n");
+  }
+  const facts = [
+    `id: ${record.id}  collection: ${record.collection}  version: ${record.version}`,
+    `created: ${moment(record.createdAt)} by ${record.createdBy ?? "the console"}  updated: ${moment(record.updatedAt)} by ${record.updatedBy ?? "the console"}`,
+  ];
+  if (record.project !== null) {
+    facts.push(`project: ${record.project}`);
+  }
+  if (record.owner !== null) {
+    facts.push(`owner: ${record.owner}`);
+  }
+  if (record.archivedAt !== null) {
+    facts.push(`archived: ${moment(record.archivedAt)}`);
+  }
+  return [...facts, JSON.stringify(record.data, null, 2)].join("\n");
+}
+
+/** The versions of a record, newest first, a line each. */
+export function formatPluginRecordVersions(versions: RestPluginRecordVersions): string {
+  if (versions.items.length === 0) {
+    return "No versions.";
+  }
+  return versions.items
+    .map(
+      (version) =>
+        `v${version.version}  ${moment(version.at)}  by ${version.by ?? "the console"}  ${compactData(version.data)}`,
+    )
+    .join("\n");
+}
+
+/** The plugins named after the rules: a line each, with the sentence for agents and where to start. */
+export function formatRulesPlugins(
+  plugins: readonly RestRulesPlugin[],
+  language: string | null | undefined,
+): string {
+  return [
+    "## Plugins",
+    "",
+    ...plugins.map((plugin) => {
+      const note = localized(plugin.agentNote, language) || localized(plugin.description, language);
+      return `- ${plugin.key} (${localized(plugin.name, language)}): ${note} Start with console plugin ${plugin.key}.`;
+    }),
+  ].join("\n");
+}

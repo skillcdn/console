@@ -43,6 +43,11 @@ export interface DirectoryPacksOptions {
   readonly clock: Clock;
   readonly logger: Logger;
   readonly cacheMs?: number | undefined;
+  /**
+   * Where the directory of an address is, when it is not `<root>/<owner>/<name>`: the plugins'
+   * packs are each at their package. Nothing for an address this source does not serve.
+   */
+  readonly locate?: ((address: Address) => string | undefined) | undefined;
 }
 
 /** A mount of a directory: the context the reader needs, and where the files are. */
@@ -113,8 +118,14 @@ export function createDirectorySource(options: DirectoryPacksOptions): PackSourc
     // The grammar of a local address allows no separator, no leading dot and no `..` as a
     // name, so the directory is under the root; checked once more, since the root is a trust
     // boundary.
-    const directory = resolve(join(root, address.owner, address.repo));
-    if (!directory.startsWith(`${root}${sep}`)) {
+    const directory =
+      options.locate === undefined
+        ? resolve(join(root, address.owner, address.repo))
+        : options.locate(address);
+    if (
+      directory === undefined ||
+      (options.locate === undefined && !directory.startsWith(`${root}${sep}`))
+    ) {
       throw new PackError(404, "mount.repo_not_found", "No such pack is served from this machine.");
     }
     const info = await stat(directory).catch(() => undefined);

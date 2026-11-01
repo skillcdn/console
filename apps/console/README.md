@@ -66,14 +66,18 @@ src/
                  (the thread: hardened, the module loaded and described, ctx as messages), protocol.ts
                  (the messages and their bound), registry.ts (the plugins as the console holds them:
                  states, enabling with consent, settings, secrets, grants, the roles a person holds, a
-                 command or a query run as a person with its event, and every call on ctx decided by
-                 the capabilities consented to), roles.ts (who may use what, pure), paths.ts (what the
+                 command or a query run as a person, by its words parsed against the definition or
+                 by name, its arguments resolved, with its event on the caller's run, an endpoint's
+                 request as a person's or a webhook's, the plugins the rules name, and every call on
+                 ctx decided by the capabilities consented to), roles.ts (who may use what, pure), paths.ts (what the
                  host may read), upgrades.ts (the migrate role's upgrades of a plugin's records),
                  records.ts (the record store: a collection's rules, the quotas, reads by role and
                  project, versions, links, files, export and purge), sql.ts (a plugin's schema and
                  login role: made, its password drawn at boot, its migrations applied as the role, its
-                 statements run on the role's pool within the bounds, dropped on purge); the
-                 queries are db/queries/plugins.ts, the routes http/plugins-rest.ts
+                 statements run on the role's pool within the bounds, dropped on purge), rate.ts (a bound
+                 a minute by key: the webhooks a plugin takes), skills.ts (a plugin's skills as a
+                 pack of its own, located at its package and read as a local pack); the queries are
+                 db/queries/plugins.ts, the routes http/plugins-rest.ts
   skills.ts      a project's pack as the board shows and reads it (ADR-0031): opened per request at
                  its address through a pack source, the project's own or the organization's; the
                  listing with each skill's page and URI, held per address for a minute; every read

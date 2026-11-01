@@ -10,6 +10,7 @@ A project's pack is the organization's skills and documents: a repository in the
 | Read a skill | `console skill <path>` | The skill whole, as `load_skill` gives it to a model: the rules of the repository from its root to the nearest manifest, the instructions, the files it includes, then its supporting files and what it refers to. `<path>` is the `SKILL.md`'s path as `console skills` lists it, or the URI the pack names it by (`skill://<host>/<owner>/<name>/<path>`). |
 | Read a file of it | `console skill --file <path>` | The file whole, as `read_repo_file` does, or what a folder holds. |
 | Read one section | `console skills <file>`, then `console skill --file <file> --offset <n> --limit <n>` | The file's outline, every heading with the offset and limit that read its section; then that section alone, as a search or the outline named it, with where the file continues. |
+| Read a plugin's skills | `console plugin <key> skills`, `console plugin <key> skill <path>` | The same reads, of the pack a plugin ships in its package, when the rules name the plugin. |
 
 `--json` on any of them answers with what the pack answered, in the shapes of the main repository's REST API.
 

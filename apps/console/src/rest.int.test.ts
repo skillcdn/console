@@ -3199,10 +3199,12 @@ describe("the rules", () => {
     // Bob was taken out and back in above, which ended his session: a new one.
     const bob = await h.signIn("bob");
     expect((await h.request(RULES)).status).toBe(401);
+    // With the rules, the plugins the person may use: none, since this console has none.
     expect(await rulesOf(await get(bob, RULES))).toEqual({
       source: "reference",
       body: REFERENCE_RULES,
       page: null,
+      plugins: [],
     });
     expect(restVersionsSchema.parse(await (await get(bob, rulesPath("versions"))).json())).toEqual({
       items: [],

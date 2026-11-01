@@ -1,0 +1,35 @@
+{
+  "key": "gate",
+  "name": { "en": "Gate" },
+  "description": {
+    "en": "Takes requests at its endpoints and plans, for the tests of the command and the routes."
+  },
+  "agentNote": {
+    "en": "Plans things with the command plan; a webhook and a person's endpoint for the tests."
+  },
+  "pluginApi": 1,
+  "server": "server/index.js",
+  "skills": "skills",
+  "capabilities": ["endpoints", "files"],
+  "roles": {
+    "clerk": { "name": { "en": "Clerk" }, "description": { "en": "Plans and reads." } },
+    "boss": { "name": { "en": "Boss" }, "description": { "en": "Decides." } }
+  },
+  "defaultRole": "clerk",
+  "board": {
+    "needs": "optional",
+    "defaults": {
+      "key": "gate-board",
+      "name": { "en": "Gate board" },
+      "description": { "en": "Where the gate's decisions go." }
+    }
+  },
+  "settings": [
+    {
+      "key": "signing",
+      "type": "secret",
+      "name": { "en": "Signing secret" },
+      "description": { "en": "What the webhook's signature is verified with." }
+    }
+  ]
+}

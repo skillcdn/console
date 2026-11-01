@@ -91,6 +91,16 @@ export const RESERVED_PLUGIN_KEYS: readonly string[] = [
 /** Words a page's key may not be: the routes beside the pages under a plugin's path. */
 export const RESERVED_PAGE_KEYS: readonly string[] = ["frame", "web", "x"];
 
+/** Words an argument may not be named: the flags `console plugin <key> <command>` keeps for itself. */
+export const RESERVED_ARG_NAMES: readonly string[] = [
+  "json",
+  "url",
+  "account",
+  "project",
+  "file",
+  "run",
+];
+
 /** Words a command's or a query's name may not be: the subcommands of `console plugin <key>`. */
 export const RESERVED_COMMAND_NAMES: readonly string[] = [
   "help",

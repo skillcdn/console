@@ -14,16 +14,21 @@ import type {
   RestPluginOperation,
   RestPluginSetting,
   RestPlugins,
+  RestRulesPlugin,
 } from "@skillcdn/console/api";
 import {
   type ArgDescription,
   argsProblem,
   type CollectionDescription,
+  type EndpointRequest,
+  type EndpointResponse,
   type LinkTarget,
   outboundAllows,
   PLUGIN_COMMAND_MS,
+  PLUGIN_ENDPOINT_MS,
   PLUGIN_LIFECYCLE_MS,
   PLUGIN_QUERY_MS,
+  PLUGIN_WEBHOOKS_PER_MINUTE,
   type PluginCaller,
   type PluginDescription,
   type PluginFileHandle,
@@ -32,16 +37,17 @@ import {
   type PluginRecord,
   PluginRefusal,
   type PluginSetting,
+  parseArgv,
   type RecordAggregation,
   type RecordPage,
   type RecordQuery,
   type RecordVersion,
 } from "@skillcdn/console/plugin";
-import { configuresPlugins } from "../auth/policy.js";
+import { configuresPlugins, personVisibleTo } from "../auth/policy.js";
 import type { Secrets } from "../auth/secrets.js";
 import type { Database } from "../db/client.js";
 import { type Actor, type EventRecord, listEventsOfPlugin } from "../db/queries/events.js";
-import type { PersonRecord } from "../db/queries/people.js";
+import { languageOf, listPeople, type PersonRecord } from "../db/queries/people.js";
 import {
   addGrant,
   disableInstall,
@@ -65,12 +71,14 @@ import {
   updateInstallSettings,
 } from "../db/queries/plugins.js";
 import { createProject, findProjectFor, type ProjectView } from "../db/queries/projects.js";
-import type { WorkspaceRecord } from "../db/queries/workspaces.js";
+import { listRuns } from "../db/queries/runs.js";
+import { readWorkspaceSettings, type WorkspaceRecord } from "../db/queries/workspaces.js";
 import type { Logger } from "../logger.js";
 import type { Clock } from "../ports/clock.js";
 import type { Discovery } from "./discovery.js";
 import type { ContextCall, PluginHost } from "./host.js";
 import type { CallResult, PluginCall } from "./protocol.js";
+import { createRateLimiter, type RateLimiter } from "./rate.js";
 import type { RecordScope, RecordStore, Visibility, Writer } from "./records.js";
 import { mayUse, rolesHeld } from "./roles.js";
 import type { PluginSqlService } from "./sql.js";
@@ -107,8 +115,21 @@ export interface PluginsOptions {
   readonly sql?: PluginSqlService | undefined;
   /** How long plugin code gets, in milliseconds; the package's bounds when left out, shorter in tests. */
   readonly timeouts?:
-    | { readonly command?: number; readonly query?: number; readonly lifecycle?: number }
+    | {
+        readonly command?: number;
+        readonly query?: number;
+        readonly endpoint?: number;
+        readonly lifecycle?: number;
+      }
     | undefined;
+  /** The webhook requests one plugin takes a minute; the package's bound when left out, lower in tests. */
+  readonly webhooksPerMinute?: number | undefined;
+}
+
+/** Who presents a request: the person, and the token where an agent acts. */
+export interface Caller {
+  readonly person: PersonRecord;
+  readonly token: { readonly id: string; readonly name: string } | undefined;
 }
 
 /** Who asks for something administrative: the person, and how the change is attributed. */
@@ -138,6 +159,51 @@ export interface Invocation {
 }
 
 const EMPTY_DISCOVERY: Discovery = { plugins: [], failed: [] };
+/** The headers an endpoint may set on its answer. */
+const RESPONSE_HEADERS: ReadonlySet<string> = new Set([
+  "content-type",
+  "location",
+  "cache-control",
+]);
+
+/** What an endpoint answered, held to its shape: a status, the headers the contract allows, a body of text or JSON. */
+function responseOf(value: unknown): EndpointResponse {
+  const answer = (typeof value === "object" && value !== null ? value : {}) as {
+    status?: unknown;
+    headers?: unknown;
+    body?: unknown;
+  };
+  if (
+    typeof answer.status !== "number" ||
+    !Number.isInteger(answer.status) ||
+    answer.status < 200 ||
+    answer.status > 599
+  ) {
+    throw new PluginRefusal("plugin.failed", "the endpoint answered without a status");
+  }
+  const headers: Record<string, string> = {};
+  if (typeof answer.headers === "object" && answer.headers !== null) {
+    for (const [header, text] of Object.entries(answer.headers as Record<string, unknown>)) {
+      if (
+        RESPONSE_HEADERS.has(header) &&
+        typeof text === "string" &&
+        /^[\x20-\x7e]{1,500}$/.test(text)
+      ) {
+        headers[header] = text;
+      }
+    }
+  }
+  const body = answer.body;
+  return {
+    status: answer.status,
+    headers,
+    ...(body === undefined || body === null
+      ? {}
+      : typeof body === "string" || typeof body === "object"
+        ? { body: body as string | Record<string, unknown> | unknown[] }
+        : { body: String(body) }),
+  };
+}
 const DAY = /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/;
 
 /** The arguments as the event keeps them: a secret one as `[hidden]`. */
@@ -276,9 +342,15 @@ export class Plugins {
   private started = false;
   /** Whether this deployment gives a plugin a schema of its own: the SQL service, and a database user that may make roles. */
   private sqlAvailable = false;
+  /** The webhook requests each plugin took this minute. */
+  private readonly webhooks: RateLimiter;
 
   constructor(options: PluginsOptions) {
     this.options = options;
+    this.webhooks = createRateLimiter({
+      perMinute: options.webhooksPerMinute ?? PLUGIN_WEBHOOKS_PER_MINUTE,
+      clock: options.clock,
+    });
   }
 
   /** A console without plugins: nothing installed, no host, every plugin not found. */
@@ -678,6 +750,14 @@ export class Plugins {
             ),
       ),
       skills: entry.manifest?.skills === undefined ? null : `/api/v1/plugins/${key}/skills`,
+      boardDefaults:
+        entry.manifest?.board.defaults === undefined
+          ? null
+          : {
+              key: entry.manifest.board.defaults.key,
+              name: entry.manifest.board.defaults.name,
+              description: entry.manifest.board.defaults.description,
+            },
       settings: await this.settingsOf(entry, install, admin),
       grants: admin
         ? (await listGrants(this.options.database, workspace.id, key)).map((grant) =>
@@ -1216,6 +1296,7 @@ export class Plugins {
     if (problem !== undefined) {
       throw new PluginRefusal("plugin.invalid_args", problem);
     }
+    const payload = await this.resolveArgs(key, operation.args, args, by);
     const info = await this.infoOf(entry, install);
     const caller: PluginCaller = {
       kind: "person",
@@ -1237,7 +1318,7 @@ export class Plugins {
     const call: PluginCall = {
       kind,
       name,
-      payload: args,
+      payload,
       info,
       caller,
       language: by.language,
@@ -1291,6 +1372,352 @@ export class Plugins {
       data: value.data ?? null,
       waiting: typeof value.waiting === "string" ? value.waiting : null,
     };
+  }
+
+  /**
+   * A command or a query by the words as typed (docs/specs/plugins.md, "The command"): the first
+   * word names it, among the commands and the queries alike; the rest is parsed against its
+   * arguments, with the handles of the files uploaded for it, and then checked as any call is.
+   */
+  async invokeArgv(
+    key: string,
+    argv: readonly string[],
+    files: readonly string[],
+    by: Invoker,
+  ): Promise<Invocation> {
+    const [name, ...words] = argv;
+    if (name === undefined || name.startsWith("-")) {
+      throw new PluginRefusal(
+        "plugin.invalid_args",
+        "the first word names the command or the query",
+      );
+    }
+    const entry = this.runnable(key);
+    const commands = entry.description.commands;
+    const queries = entry.description.queries;
+    const found = Object.hasOwn(commands, name)
+      ? { kind: "command" as const, operation: commands[name] }
+      : Object.hasOwn(queries, name)
+        ? { kind: "query" as const, operation: queries[name] }
+        : undefined;
+    if (found?.operation === undefined) {
+      throw new PluginRefusal("plugin.not_found", `the plugin has no command or query ${name}`);
+    }
+    const parsed = parseArgv(found.operation.args, words, files);
+    if (parsed.problem !== undefined) {
+      throw new PluginRefusal("plugin.invalid_args", parsed.problem);
+    }
+    return this.invoke(key, found.kind, name, parsed.values ?? {}, by);
+  }
+
+  /**
+   * The arguments as `run` receives them: a person by login, or `me`, as one the caller may see;
+   * a project by key as one they may see; a file by the handle of an upload of theirs for this
+   * plugin; everything else as checked. The first that resolves to nothing is the refusal.
+   */
+  private async resolveArgs(
+    key: string,
+    definitions: Readonly<Record<string, ArgDescription>>,
+    values: Readonly<Record<string, unknown>>,
+    by: Invoker,
+  ): Promise<Record<string, unknown>> {
+    const resolved: Record<string, unknown> = {};
+    for (const [name, value] of Object.entries(values)) {
+      const description = definitions[name];
+      if (description === undefined || value === undefined) {
+        continue;
+      }
+      const of = description.of;
+      resolved[name] =
+        description.type === "list" && of !== undefined && Array.isArray(value)
+          ? await Promise.all(
+              value.map((item, index) => this.resolveArg(key, `${name}[${index}]`, of, item, by)),
+            )
+          : await this.resolveArg(key, name, description, value, by);
+    }
+    return resolved;
+  }
+
+  private async resolveArg(
+    key: string,
+    name: string,
+    description: ArgDescription,
+    value: unknown,
+    by: Invoker,
+  ): Promise<unknown> {
+    const workspace = await this.options.workspace();
+    switch (description.type) {
+      case "person": {
+        const login = typeof value === "string" ? value : "";
+        if (login === "me") {
+          return { id: by.person.id, login: by.person.login, name: by.person.name ?? null };
+        }
+        const settings = await readWorkspaceSettings(this.options.database, workspace.id);
+        const [person] = await listPeople(this.options.database, workspace.id, {
+          visible: personVisibleTo(by.person, settings),
+          login,
+        });
+        if (person === undefined) {
+          throw new PluginRefusal("plugin.invalid_args", `${name}: no person ${login} you may see`);
+        }
+        return { id: person.id, login: person.login, name: person.name ?? null };
+      }
+      case "project": {
+        const projectKey = typeof value === "string" ? value : "";
+        const project = await findProjectFor(
+          this.options.database,
+          workspace.id,
+          projectKey,
+          by.person,
+        );
+        if (project === undefined) {
+          throw new PluginRefusal(
+            "plugin.invalid_args",
+            `${name}: no project ${projectKey} you may see`,
+          );
+        }
+        return { id: project.id, key: project.key, name: project.name };
+      }
+      case "file": {
+        const handle = typeof value === "string" ? value : "";
+        const upload = await this.store().uploadOf(workspace.id, key, handle, by.person.id);
+        if (upload === undefined) {
+          throw new PluginRefusal(
+            "plugin.invalid_args",
+            `${name}: not a file you uploaded for this plugin within the hour`,
+          );
+        }
+        return upload;
+      }
+      default:
+        return value;
+    }
+  }
+
+  /**
+   * An inbound request to an endpoint of the plugin (docs/specs/plugins.md, "The server module"):
+   * a person's, held to the roles the endpoint names; or a webhook's, run as the console with
+   * every role, which the plugin verifies itself with the secret the definition names, and held
+   * to the rate bound. The request's headers are cut to the content type and those the definition
+   * names before anything reaches the plugin.
+   */
+  async callEndpoint(
+    key: string,
+    name: string,
+    request: EndpointRequest,
+    by: Invoker | undefined,
+  ): Promise<EndpointResponse> {
+    const entry = this.runnable(key);
+    const workspace = await this.options.workspace();
+    const install = await findInstall(this.options.database, workspace.id, key);
+    if (install?.state !== "enabled") {
+      throw new PluginRefusal("plugin.disabled", "the plugin is not enabled");
+    }
+    if (!install.consent.includes("endpoints")) {
+      throw new PluginRefusal(
+        "plugin.forbidden",
+        "the plugin has not been given the capability endpoints",
+      );
+    }
+    const endpoint = entry.description.endpoints[name];
+    if (endpoint === undefined) {
+      throw new PluginRefusal("plugin.not_found", `the plugin has no endpoint ${name}`);
+    }
+    if (!endpoint.methods.includes(request.method)) {
+      throw new PluginRefusal(
+        "plugin.invalid_args",
+        `the endpoint ${name} takes ${endpoint.methods.join(", ")}`,
+      );
+    }
+    let caller: PluginCaller;
+    if (endpoint.auth === "person") {
+      if (by === undefined) {
+        throw new PluginRefusal(
+          "plugin.forbidden",
+          "the endpoint takes a person's request: sign in, or present a token",
+        );
+      }
+      const held = await this.rolesOf(key, by.person);
+      if (!mayUse(endpoint.roles, held, Object.keys(entry.manifest.roles))) {
+        throw new PluginRefusal(
+          "plugin.forbidden",
+          `the endpoint ${name} needs a role you do not hold in the plugin`,
+        );
+      }
+      caller = {
+        kind: "person",
+        person: {
+          id: by.person.id,
+          login: by.person.login,
+          name: by.person.name ?? null,
+          language: by.language,
+          admin: configuresPlugins(by.person),
+        },
+        agent: by.agent ?? null,
+        roles: held,
+        run: by.run ?? null,
+        project:
+          by.project === undefined
+            ? null
+            : { id: by.project.id, key: by.project.key, name: by.project.name },
+      };
+    } else {
+      if (!this.webhooks.take(key)) {
+        throw new PluginRefusal(
+          "plugin.rate_limited",
+          `the plugin takes ${this.options.webhooksPerMinute ?? PLUGIN_WEBHOOKS_PER_MINUTE} webhook requests a minute`,
+        );
+      }
+      caller = this.consoleCaller(entry);
+    }
+    const kept = new Set(["content-type", ...endpoint.headers]);
+    const headers = Object.fromEntries(
+      Object.entries(request.headers).filter(([header]) => kept.has(header.toLowerCase())),
+    );
+    const info = await this.infoOf(entry, install);
+    const call: PluginCall = {
+      kind: "endpoint",
+      name,
+      payload: { ...request, headers },
+      info,
+      caller,
+      language: by?.language ?? "en",
+      timeoutMs: this.options.timeouts?.endpoint ?? PLUGIN_ENDPOINT_MS,
+    };
+    const startedAt = performance.now();
+    const result = await this.host().call(key, call);
+    this.options.logger.info(
+      {
+        plugin: key,
+        kind: "endpoint",
+        name,
+        method: request.method,
+        auth: endpoint.auth,
+        person: by?.person.id,
+        agent: by?.agent,
+        outcome: this.outcomeOf(result),
+        code: result.ok ? undefined : result.error.code,
+        durationMs: Math.round(performance.now() - startedAt),
+      },
+      "plugin call",
+    );
+    if (!result.ok) {
+      throw new PluginRefusal(result.error.code, result.error.message, result.error.data);
+    }
+    return responseOf(result.value);
+  }
+
+  /**
+   * Who runs a command (docs/specs/plugins.md, "The context"): the person, the agent where a
+   * token acts, the project the call is on as the caller may see it, their open run in the
+   * plugin's board project (else in the project the call is on), and their language. One open
+   * run there is theirs; with several, `run` says which, else none is named.
+   */
+  async invokerOf(
+    key: string,
+    caller: Caller,
+    options: { readonly project?: string | undefined; readonly run?: string | undefined } = {},
+  ): Promise<Invoker> {
+    const workspace = await this.options.workspace();
+    const { person, token } = caller;
+    let project: ProjectView | undefined;
+    if (options.project !== undefined) {
+      project = await findProjectFor(this.options.database, workspace.id, options.project, person);
+      if (project === undefined) {
+        throw new PluginRefusal(
+          "plugin.invalid_args",
+          `project: no project ${options.project} you may see`,
+        );
+      }
+    }
+    const install = await findInstall(this.options.database, workspace.id, key);
+    const runsIn = install?.boardProjectId ?? project?.id;
+    let run: Invoker["run"];
+    if (runsIn !== undefined) {
+      const { items } = await listRuns(
+        this.options.database,
+        { workspaceId: workspace.id, projectId: runsIn },
+        {
+          open: true,
+          ...(token === undefined ? { personId: person.id } : { tokenId: token.id }),
+          limit: 10,
+        },
+      );
+      const chosen =
+        options.run === undefined
+          ? items.length === 1
+            ? items[0]
+            : undefined
+          : items.find((candidate) => candidate.id === options.run);
+      if (options.run !== undefined && chosen === undefined) {
+        throw new PluginRefusal(
+          "plugin.invalid_args",
+          "run: not an open run of yours in the plugin's board project",
+        );
+      }
+      run = chosen === undefined ? undefined : { id: chosen.id, taskNumber: chosen.taskNumber };
+    } else if (options.run !== undefined) {
+      throw new PluginRefusal(
+        "plugin.invalid_args",
+        "run: the plugin has no board project, and the call names no project",
+      );
+    }
+    return {
+      person,
+      actor: token === undefined ? { id: person.id } : { id: person.id, agent: token.name },
+      agent: token?.name,
+      run,
+      project,
+      language: (await languageOf(this.options.database, person.id)) ?? "en",
+    };
+  }
+
+  /**
+   * The plugins named after the rules (docs/specs/plugins.md, "The command"): in a project, the
+   * enabled plugins bound to it, as their board project or on it, that the person holds a role
+   * in; at the workspace, every enabled plugin they may use. By key.
+   */
+  async forRules(
+    person: PersonRecord,
+    project: { readonly id: string; readonly key: string } | undefined,
+  ): Promise<RestRulesPlugin[]> {
+    if (this.entries.size === 0) {
+      return [];
+    }
+    const workspace = await this.options.workspace();
+    const named: RestRulesPlugin[] = [];
+    for (const install of await listInstalls(this.options.database, workspace.id)) {
+      const entry = this.entries.get(install.key);
+      if (install.state !== "enabled" || entry?.manifest === undefined) {
+        continue;
+      }
+      if (
+        project !== undefined &&
+        install.boardProjectId !== project.id &&
+        install.projects !== "all" &&
+        !install.projects.includes(project.key)
+      ) {
+        continue;
+      }
+      const held = await this.rolesOf(install.key, person);
+      if (!mayUse(null, held, Object.keys(entry.manifest.roles))) {
+        continue;
+      }
+      named.push({
+        key: install.key,
+        name: entry.manifest.name,
+        agentNote: entry.manifest.agentNote ?? null,
+        description: entry.manifest.description,
+        roles: held,
+      });
+    }
+    return named.sort((a, b) => a.key.localeCompare(b.key));
+  }
+
+  /** Where a plugin's skills are read from: its package, for a plugin that ships skills; nothing otherwise. */
+  skillsRootOf(key: string): string | undefined {
+    const entry = this.entries.get(key);
+    return entry?.manifest?.skills === undefined ? undefined : entry.dir;
   }
 
   private outcomeOf(result: CallResult): "ok" | "refused" | "waiting" | "failed" {

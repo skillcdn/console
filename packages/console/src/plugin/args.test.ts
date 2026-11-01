@@ -7,6 +7,7 @@ import {
   argsProblem,
   argUsage,
   argValueFromWord,
+  parseArgv,
 } from "./args.js";
 import { PluginDefinitionError } from "./definition-error.js";
 
@@ -143,5 +144,88 @@ describe("argUsage", () => {
     expect(argUsage("reason", arg.text({ optional: true }))).toBe("[--reason <text>]");
     expect(argUsage("all", arg.boolean({ optional: true }))).toBe("[--all]");
     expect(argUsage("people", arg.list(arg.person()))).toBe("--people <person,...>");
+  });
+});
+
+describe("parseArgv", () => {
+  const definitions = {
+    title: arg.text({ positional: true, max: 80 }),
+    when: arg.day({ optional: true }),
+    count: arg.number({ optional: true, integer: true }),
+    tags: arg.list(arg.text(), { optional: true }),
+    urgent: arg.boolean({ optional: true }),
+    kind: arg.enum(["a", "b"], { optional: true }),
+    attachment: arg.file({ optional: true }),
+  };
+
+  it("reads the positionals in order and the flags by name: a boolean alone, a list repeated or with commas", () => {
+    expect(
+      parseArgv(definitions, [
+        "Fix it",
+        "--when",
+        "2026-11-02",
+        "--count=3",
+        "--tags",
+        "a,b",
+        "--tags",
+        "c",
+        "--urgent",
+        "--kind",
+        "a",
+      ]),
+    ).toEqual({
+      values: {
+        title: "Fix it",
+        when: "2026-11-02",
+        count: 3,
+        tags: ["a", "b", "c"],
+        urgent: true,
+        kind: "a",
+      },
+    });
+    // -- ends the flags: what follows is a positional, whatever it begins with.
+    expect(parseArgv(definitions, ["--urgent=false", "--", "--not-a-flag"])).toEqual({
+      values: { urgent: false, title: "--not-a-flag" },
+    });
+    expect(parseArgv(definitions, [])).toEqual({ values: {} });
+  });
+
+  it("hands the files uploaded to the file arguments in declaration order", () => {
+    expect(parseArgv(definitions, ["x"], ["h1"])).toEqual({
+      values: { title: "x", attachment: "h1" },
+    });
+    expect(parseArgv(definitions, ["x"], ["h1", "h2"]).problem).toBe(
+      "the command takes 1 file, not 2",
+    );
+    expect(parseArgv({ a: arg.text() }, [], ["h1"]).problem).toBe("the command takes no file");
+    // A handle named on the line stands; the uploads fill what is left.
+    expect(parseArgv({ one: arg.file(), two: arg.file() }, ["--one", "named"], ["h1"])).toEqual({
+      values: { one: "named", two: "h1" },
+    });
+  });
+
+  it("names the first word that does not fit, and leaves the values to argsProblem", () => {
+    expect(parseArgv(definitions, ["x", "y"]).problem).toBe(
+      '"y" is one word too many: the command takes 1 positional argument',
+    );
+    expect(parseArgv({}, ["x"]).problem).toBe(
+      '"x" is one word too many: the command takes no positional argument, only flags',
+    );
+    expect(parseArgv(definitions, ["--nope", "1"]).problem).toBe(
+      "--nope is not an argument of this command",
+    );
+    expect(parseArgv(definitions, ["--constructor", "1"]).problem).toBe(
+      "--constructor is not an argument of this command",
+    );
+    expect(parseArgv(definitions, ["x", "--when"]).problem).toBe("--when needs a value");
+    expect(parseArgv(definitions, ["x", "--when", "a", "--when", "b"]).problem).toBe(
+      "when is given more than once",
+    );
+    const parsed = parseArgv(definitions, ["x", "--count", "three"]);
+    expect(parsed.problem).toBeUndefined();
+    expect(argsProblem(definitions, parsed.values ?? {})).toBe("count is not a number");
+    expect(argsProblem(definitions, parseArgv(definitions, []).values ?? {})).toBe(
+      "title is required",
+    );
   });
 });

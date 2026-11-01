@@ -779,7 +779,9 @@ describe("the console command", () => {
     });
     const n = harness({ fetch: none.fetch, env: SIGNED_IN });
     expect(await runCli(["skills"], n.io)).toBe(EXIT.ok);
-    expect(n.out()).toBe("No skills address: neither this project nor the console names one.\n");
+    expect(n.out()).toBe(
+      "No skills address: neither this project nor the console names one.\nThe plugins of this console have skills of their own: console plugins lists the plugins, console plugin <key> skills the skills of one.\n",
+    );
     const down = fakeConsole({
       [`GET ${IN}/skills`]: {
         body: {
@@ -3450,5 +3452,579 @@ describe("this week on the command line (ADR-0039)", () => {
     const b = harness({ fetch: british.fetch, env: SIGNED_IN, now: () => NOON, locale: "en-GB" });
     expect(await runCli(["tasks", "--due", "week"], b.io)).toBe(EXIT.ok);
     expect(british.calls.at(-1)?.key).toBe(`GET ${IN}/tasks?dueBy=2026-10-11&limit=50&offset=0`);
+  });
+});
+
+describe("the plugins on the command line (ADR-0049, ADR-0053)", () => {
+  const AT = "/api/v1/plugins/hello";
+  const BOB = { ...PERSON, id: "0199c4d8-0000-7000-8000-000000000002", login: "bob" };
+  const PLUGIN = {
+    key: "hello",
+    name: { en: "Hello", ko: "헬로" },
+    description: { en: "Greetings kept as records: who greeted whom." },
+    agentNote: { en: "Keeps greetings as records; greet someone with greet." },
+    version: "0.1.0",
+    state: "enabled",
+    problems: [],
+    roles: ["greeter"],
+    declaredRoles: [{ key: "greeter", name: { en: "Greeter" }, description: { en: "Greets." } }],
+    menu: null,
+    pages: [],
+    widgets: [],
+    board: null,
+    boardNeeds: "optional",
+    capabilities: ["files"],
+    consent: null,
+    projects: null,
+    requires: {},
+    dataVersion: 1,
+    enabledAt: WHEN,
+  };
+  const GREET = {
+    name: "greet",
+    kind: "command",
+    about: "Greets someone, and keeps the greeting as a record.",
+    args: {
+      to: { type: "text", about: "who is greeted", optional: false, positional: true, max: 80 },
+      text: { type: "text", about: "the words", optional: true, positional: false, max: 200 },
+      loud: { type: "boolean", optional: true, positional: false },
+    },
+    roles: ["greeter"],
+  };
+  const LATEST = {
+    name: "latest",
+    kind: "query",
+    about: "The latest greetings, newest first.",
+    args: {
+      limit: { type: "number", optional: true, positional: false, integer: true, min: 1, max: 50 },
+    },
+    roles: ["greeter"],
+  };
+  const SETTING = {
+    key: "greeting",
+    type: "text",
+    name: { en: "Greeting" },
+    description: null,
+    required: false,
+    default: "Hello",
+    min: null,
+    max: 40,
+    options: null,
+    of: null,
+    set: true,
+    value: "Hi",
+    setAt: null,
+  };
+  const SECRET = {
+    ...SETTING,
+    key: "token",
+    type: "secret",
+    name: { en: "Token" },
+    default: null,
+    max: null,
+    set: false,
+    value: null,
+  };
+  const DETAIL = {
+    ...PLUGIN,
+    operations: [GREET, LATEST],
+    skills: `${AT}/skills`,
+    boardDefaults: { key: "hello-board", name: { en: "Hello board" }, description: { en: "" } },
+    settings: [SETTING, SECRET],
+    grants: null,
+    events: `${AT}/events`,
+  };
+  const RECORD = {
+    id: "0199c4d8-0000-7000-8000-000000000090",
+    collection: "greetings",
+    project: null,
+    owner: BOB.id,
+    data: { to: "world", text: "Hi, world!", by: "bob" },
+    version: 1,
+    createdAt: WHEN,
+    updatedAt: WHEN,
+    createdBy: BOB.id,
+    updatedBy: BOB.id,
+    archivedAt: null,
+  };
+  const INVOKED = {
+    kind: "command",
+    text: `Hi, world! (kept as ${RECORD.id})`,
+    data: RECORD,
+    waiting: null,
+  };
+  const GRANT = {
+    id: "0199c4d8-0000-7000-8000-0000000000b0",
+    role: "greeter",
+    person: { id: BOB.id, login: "bob", name: null },
+    project: null,
+    everyone: false,
+    createdAt: WHEN,
+  };
+
+  it("lists the plugins one may use, one plugin with its commands, and one command in full", async () => {
+    const { fetch } = fakeConsole({
+      "GET /api/v1/plugins": { body: { items: [PLUGIN], sql: false } },
+      [`GET ${AT}`]: { body: DETAIL },
+      "GET /api/v1/me": { body: ME },
+    });
+    const h = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["plugins"], h.io)).toBe(EXIT.ok);
+    expect(h.out()).toContain("hello  Hello 0.1.0  enabled  roles: greeter");
+    expect(h.out()).toContain("One plugin, with its commands: console plugin <key>.");
+    const one = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["plugin", "hello"], one.io)).toBe(EXIT.ok);
+    expect(one.out()).toContain("hello: Hello 0.1.0, enabled");
+    expect(one.out()).toContain("For agents: Keeps greetings as records");
+    expect(one.out()).toContain("Your roles in it: greeter.");
+    expect(one.out()).toContain("Board project: none yet.");
+    expect(one.out()).toContain("  console plugin hello greet <to> [--text <text>] [--loud]");
+    expect(one.out()).toContain("[query] The latest greetings, newest first.");
+    expect(one.out()).toContain("console plugin hello skills lists them");
+    expect(one.out()).toContain('  greeting (text): "Hi"  Greeting');
+    expect(one.out()).toContain("  token (secret): not set  Token");
+    const help = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["plugin", "hello", "help", "greet"], help.io)).toBe(EXIT.ok);
+    expect(help.out()).toContain("console plugin hello greet <to> [--text <text>] [--loud]");
+    expect(help.out()).toContain("A command. Greets someone");
+    expect(help.out()).toContain("  <to>  text, up to 80 characters: who is greeted");
+    expect(help.out()).toContain(
+      "  [--text <text>]  text, up to 200 characters, optional: the words",
+    );
+    expect(help.out()).toContain("  [--loud]  true or false; the flag alone is true, optional");
+    expect(help.out()).toContain("Roles: greeter");
+    expect(help.out()).toContain("plugin.invalid_args: a word does not fit the definition");
+    const every = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["plugin", "hello", "help"], every.io)).toBe(EXIT.ok);
+    expect(every.out()).toContain(
+      "console plugin hello latest [--limit <number>]\n    [query] The latest",
+    );
+    const unknown = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["plugin", "hello", "help", "nothing"], unknown.io)).toBe(EXIT.usage);
+    expect(unknown.err()).toContain("Not a command or a query of hello you may run: nothing.");
+    // A plugin's name in the language the person chose, where the manifest has it.
+    const korean = fakeConsole({
+      "GET /api/v1/plugins": { body: { items: [PLUGIN], sql: false } },
+      "GET /api/v1/me": { body: { ...ME, language: "ko" } },
+    });
+    const k = harness({ fetch: korean.fetch, env: SIGNED_IN });
+    expect(await runCli(["plugins"], k.io)).toBe(EXIT.ok);
+    expect(k.out()).toContain("hello  헬로 0.1.0  enabled");
+    const nothing = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["plugin"], nothing.io)).toBe(EXIT.usage);
+    expect(nothing.err()).toContain("Say which plugin: console plugin <key>");
+  });
+
+  it("runs a command by the words as typed, which the console parses, and says when a decision waits", async () => {
+    const { fetch, calls } = fakeConsole({
+      [`POST ${AT}/invoke`]: [
+        { body: INVOKED },
+        { body: { ...INVOKED, text: "Requested.", waiting: DECISION.id } },
+        {
+          status: 400,
+          body: { error: { code: "plugin.invalid_args", message: "to is required" } },
+        },
+        { body: { kind: "query", text: "", data: [{ to: "moon" }], waiting: null } },
+        { body: INVOKED },
+      ],
+    });
+    const h = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(["plugin", "hello", "greet", "world", "--text", "Hi there", "--loud"], h.io),
+    ).toBe(EXIT.ok);
+    // The words go as typed, after the command's name; the project the directory works in goes with them.
+    expect(calls[0]?.body).toEqual({
+      argv: ["greet", "world", "--text", "Hi there", "--loud"],
+      project: "web",
+    });
+    expect(h.out()).toBe(`${INVOKED.text}\n`);
+    // A command that raised a decision: its id on a line of its own, and exit 3.
+    const waiting = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["plugin", "hello", "request", "--run", RUN.id], waiting.io)).toBe(
+      EXIT.waiting,
+    );
+    expect(calls[1]?.body).toEqual({ argv: ["request"], project: "web", run: RUN.id });
+    expect(waiting.out()).toContain("Requested.");
+    expect(waiting.out()).toContain(`decision id: ${DECISION.id}`);
+    expect(waiting.out()).toContain(`console decision ${DECISION.id} --wait 100`);
+    // The console's refusal, in its form, and exit 1.
+    const refused = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["plugin", "hello", "greet"], refused.io)).toBe(EXIT.failed);
+    expect(refused.err()).toContain("plugin.invalid_args: to is required");
+    // A query prints its answer as JSON; = binds a value too.
+    const query = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["plugin", "hello", "latest", "--limit=1"], query.io)).toBe(EXIT.ok);
+    expect(calls[3]?.body).toEqual({ argv: ["latest", "--limit=1"], project: "web" });
+    expect(JSON.parse(query.out())).toEqual([{ to: "moon" }]);
+    // --json prints the whole answer, and is the command's own wherever it stands among the words.
+    const asJson = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["plugin", "hello", "greet", "world", "--json"], asJson.io)).toBe(EXIT.ok);
+    expect(calls[4]?.body).toEqual({ argv: ["greet", "world"], project: "web" });
+    expect(JSON.parse(asJson.out())).toEqual(INVOKED);
+  });
+
+  it("uploads a file first and sends its handle with the words, and saves a file a query answers", async () => {
+    const HANDLE = {
+      handle: "0199c4d8-0000-7000-8000-0000000000a0",
+      name: "notes.txt",
+      type: "text/plain",
+      bytes: 5,
+    };
+    const { fetch, calls } = fakeConsole({
+      [`POST ${AT}/files`]: { status: 201, body: HANDLE },
+      [`POST ${AT}/invoke`]: [
+        { body: INVOKED },
+        { body: INVOKED },
+        {
+          body: {
+            kind: "query",
+            text: "",
+            data: {
+              file: {
+                name: "report.csv",
+                type: "text/csv",
+                bytes: 3,
+                base64: Buffer.from("a,b").toString("base64"),
+              },
+            },
+            waiting: null,
+          },
+        },
+      ],
+    });
+    const h = harness({
+      fetch,
+      env: SIGNED_IN,
+      readBytes: async (path) => {
+        expect(path).toBe("notes.txt");
+        return new TextEncoder().encode("hello");
+      },
+    });
+    expect(
+      await runCli(["plugin", "hello", "attach", "--file", "notes.txt", "--note", "x"], h.io),
+    ).toBe(EXIT.ok);
+    expect(calls[0]?.key).toBe(`POST ${AT}/files`);
+    expect(calls[0]?.init?.body).toBeInstanceOf(FormData);
+    expect(calls[1]?.body).toEqual({
+      argv: ["attach", "--note", "x"],
+      files: [HANDLE.handle],
+      project: "web",
+    });
+    // - reads the file from standard input.
+    const stdin = harness({ fetch, env: SIGNED_IN, readStdin: async () => "from stdin" });
+    expect(await runCli(["plugin", "hello", "attach", "-"], stdin.io)).toBe(EXIT.ok);
+    expect(calls[3]?.body).toEqual({ argv: ["attach"], files: [HANDLE.handle], project: "web" });
+    const both = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["plugin", "hello", "attach", "-", "--file", "x"], both.io)).toBe(
+      EXIT.usage,
+    );
+    // A query that answers a file: saved under its name, as console file saves one.
+    const written: { path: string; name: string; bytes: number }[] = [];
+    const saving = harness({
+      fetch,
+      env: SIGNED_IN,
+      writeBytes: async (path, bytes, name) => {
+        written.push({ path, name, bytes: bytes.byteLength });
+        return `/work/${path}`;
+      },
+    });
+    expect(await runCli(["plugin", "hello", "export"], saving.io)).toBe(EXIT.ok);
+    expect(written).toEqual([{ path: "report.csv", name: "report.csv", bytes: 3 }]);
+    expect(saving.out()).toBe("Saved report.csv (3 bytes, text/csv) at /work/report.csv\n");
+  });
+
+  it("reads a plugin's records, one record, and its versions", async () => {
+    const where = new URLSearchParams({
+      where: JSON.stringify({ to: "world", n: 3, done: true }),
+      order: "-id",
+      limit: "5",
+    });
+    const { fetch } = fakeConsole({
+      [`GET ${AT}/records/greetings?${where}`]: {
+        body: { items: [RECORD, { ...RECORD, archivedAt: WHEN }], after: "next-cursor" },
+      },
+      [`GET ${AT}/records/greetings?q=moon&project=web`]: { body: { items: [], after: null } },
+      [`GET ${AT}/records/greetings/${RECORD.id}`]: { body: RECORD },
+      [`GET ${AT}/records/greetings/${RECORD.id}/versions`]: {
+        body: { items: [{ version: 1, data: RECORD.data, at: WHEN, by: BOB.id }] },
+      },
+    });
+    const h = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(
+        [
+          "plugin",
+          "hello",
+          "records",
+          "greetings",
+          "--where",
+          "to=world",
+          "--where",
+          "n=3",
+          "--where",
+          "done=true",
+          "--order",
+          "id:desc",
+          "--limit",
+          "5",
+        ],
+        h.io,
+      ),
+    ).toBe(EXIT.ok);
+    expect(h.out()).toContain(
+      `${RECORD.id}  v1  ${WHEN}  {"to":"world","text":"Hi, world!","by":"bob"}`,
+    );
+    expect(h.out()).toContain(`${RECORD.id}  v1  ${WHEN}  archived  {"to"`);
+    expect(h.out()).toContain("More: --after next-cursor");
+    // Words, and the project's records: the project is the command's own flag.
+    const searched = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(
+        ["plugin", "hello", "records", "greetings", "--search", "moon", "--project", "web"],
+        searched.io,
+      ),
+    ).toBe(EXIT.ok);
+    expect(searched.out()).toBe("No records.\n");
+    const one = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["plugin", "hello", "records", "greetings", RECORD.id], one.io)).toBe(
+      EXIT.ok,
+    );
+    expect(one.out()).toContain(`id: ${RECORD.id}  collection: greetings  version: 1`);
+    expect(one.out()).toContain(`owner: ${BOB.id}`);
+    expect(one.out()).toContain('"to": "world"');
+    const versions = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(
+        ["plugin", "hello", "records", "greetings", RECORD.id, "--versions"],
+        versions.io,
+      ),
+    ).toBe(EXIT.ok);
+    expect(versions.out()).toContain(`v1  ${WHEN}  by ${BOB.id}  {"to":"world"`);
+    const bad = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(["plugin", "hello", "records", "greetings", "--where", "nope"], bad.io),
+    ).toBe(EXIT.usage);
+  });
+
+  it("reads a plugin's skills as a project's pack, and says where the plugins' skills are after the project's", async () => {
+    const { fetch } = fakeConsole({
+      [`GET ${AT}/skills`]: {
+        body: {
+          ...LISTING,
+          address: "/local/plugins/hello",
+          source: null,
+          page: null,
+          items: [
+            {
+              ...LISTING.items[0],
+              page: null,
+              uri: "skill://local/plugins/hello/review/SKILL.md",
+            },
+          ],
+          mount: {
+            ...MOUNT,
+            address: "/local/plugins/hello",
+            repository: {
+              ...MOUNT.repository,
+              host: "local",
+              owner: "plugins",
+              name: "hello",
+              defaultBranch: "",
+              avatar: "",
+            },
+            verified: true,
+          },
+        },
+      },
+      [`GET ${IN}/skills`]: { body: LISTING },
+    });
+    const h = harness({ fetch, env: SIGNED_IN, skillsDir: "/usr/lib/skills/" });
+    expect(await runCli(["plugin", "hello", "skills"], h.io)).toBe(EXIT.ok);
+    expect(h.out()).toContain(
+      "skills at /local/plugins/hello, read from the console's machine: ready",
+    );
+    expect(h.out()).toContain("review/SKILL.md: Reviews a change.");
+    expect(h.out()).not.toContain("The console's own skills");
+    expect(h.out()).not.toContain("The plugins of this console have skills");
+    const project = harness({ fetch, env: SIGNED_IN, skillsDir: "/usr/lib/skills/" });
+    expect(await runCli(["skills"], project.io)).toBe(EXIT.ok);
+    expect(project.out()).toContain(
+      "The console's own skills, for working the board: /usr/lib/skills/",
+    );
+    expect(project.out()).toContain(
+      "The plugins of this console have skills of their own: console plugins lists the plugins, console plugin <key> skills the skills of one.",
+    );
+  });
+
+  it("enables with consent to every capability after saying what each opens, configures, seals a secret, grants and revokes", async () => {
+    const { fetch, calls } = fakeConsole({
+      [`GET ${AT}`]: { body: { ...DETAIL, state: "installed", capabilities: ["files"] } },
+      "GET /api/v1/me": { body: ME },
+      [`POST ${AT}/enable`]: {
+        body: { ...DETAIL, board: { key: "hello-board", name: "Hello board" }, projects: "all" },
+      },
+      [`PATCH ${AT}/settings`]: { body: DETAIL },
+      [`PUT ${AT}/secrets/token`]: { status: 204 },
+      [`DELETE ${AT}/secrets/token`]: { status: 204 },
+      "GET /api/v1/people?login=bob": { body: { items: [BOB], listed: [], organization: null } },
+      [`POST ${AT}/grants`]: { status: 201, body: GRANT },
+      [`DELETE ${AT}/grants/${GRANT.id}`]: { body: GRANT },
+      [`POST ${AT}/disable`]: { body: { ...DETAIL, state: "disabled" } },
+    });
+    // Without consent to every capability: what each opens is said, and nothing is asked of the console.
+    const asked = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["plugin", "hello", "enable"], asked.io)).toBe(EXIT.usage);
+    expect(asked.out()).toContain("hello asks one capability:\n  files: opens ");
+    expect(asked.err()).toContain("--consent files. Not named: files.");
+    expect(calls.some((call) => call.key === `POST ${AT}/enable`)).toBe(false);
+    const enabled = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(
+        [
+          "plugin",
+          "hello",
+          "enable",
+          "--consent",
+          "files",
+          "--board",
+          "new",
+          "--set",
+          "greeting=Hey",
+        ],
+        enabled.io,
+      ),
+    ).toBe(EXIT.ok);
+    expect(calls.find((call) => call.key === `POST ${AT}/enable`)?.body).toEqual({
+      consent: ["files"],
+      board: { create: { key: "hello-board", name: "Hello board", description: "" } },
+      projects: "all",
+      settings: { greeting: "Hey" },
+    });
+    expect(enabled.out()).toContain(
+      "Enabled hello, with the board project hello-board; on every project.",
+    );
+    const chosen = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(
+        [
+          "plugin",
+          "hello",
+          "enable",
+          "--consent",
+          "files",
+          "--board",
+          "ops",
+          "--projects",
+          "web,ops",
+        ],
+        chosen.io,
+      ),
+    ).toBe(EXIT.ok);
+    expect(calls.at(-1)?.body).toEqual({
+      consent: ["files"],
+      board: { project: "ops" },
+      projects: ["web", "ops"],
+    });
+    // The settings: shown, changed as their types have it, a secret set from standard input alone.
+    const shown = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["plugin", "hello", "settings"], shown.io)).toBe(EXIT.ok);
+    expect(shown.out()).toContain('Settings of hello:\n  greeting (text): "Hi"  Greeting');
+    const changed = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["plugin", "hello", "settings", "--set", "greeting="], changed.io)).toBe(
+      EXIT.ok,
+    );
+    expect(calls.at(-1)?.body).toEqual({ values: { greeting: null } });
+    const secretly = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["plugin", "hello", "settings", "--set", "token=x"], secretly.io)).toBe(
+      EXIT.usage,
+    );
+    expect(secretly.err()).toContain("token is a secret: console plugin hello secret token");
+    const sealed = harness({ fetch, env: SIGNED_IN, readStdin: async () => "s3cret\n" });
+    expect(await runCli(["plugin", "hello", "secret", "token"], sealed.io)).toBe(EXIT.ok);
+    expect(calls.at(-1)?.key).toBe(`PUT ${AT}/secrets/token`);
+    expect(calls.at(-1)?.body).toEqual({ value: "s3cret" });
+    expect(sealed.out()).not.toContain("s3cret");
+    const empty = harness({ fetch, env: SIGNED_IN, readStdin: async () => "" });
+    expect(await runCli(["plugin", "hello", "secret", "token"], empty.io)).toBe(EXIT.usage);
+    const removed = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["plugin", "hello", "secret", "token", "--remove"], removed.io)).toBe(
+      EXIT.ok,
+    );
+    expect(calls.at(-1)?.key).toBe(`DELETE ${AT}/secrets/token`);
+    // Grants: to a person by login, to everyone; and taken back by id.
+    const granted = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(["plugin", "hello", "grant", "greeter", "--person", "bob"], granted.io),
+    ).toBe(EXIT.ok);
+    expect(calls.at(-1)?.body).toEqual({ role: "greeter", person: BOB.id });
+    expect(granted.out()).toContain(`Granted: ${GRANT.id}  greeter to person bob  since`);
+    const everyone = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["plugin", "hello", "grant", "greeter", "--everyone"], everyone.io)).toBe(
+      EXIT.ok,
+    );
+    expect(calls.at(-1)?.body).toEqual({ role: "greeter", everyone: true });
+    const members = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(["plugin", "hello", "grant", "greeter", "--project", "ops"], members.io),
+    ).toBe(EXIT.ok);
+    expect(calls.at(-1)?.body).toEqual({ role: "greeter", project: "ops" });
+    const whom = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["plugin", "hello", "grant", "greeter"], whom.io)).toBe(EXIT.usage);
+    const revoked = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["plugin", "hello", "revoke", GRANT.id], revoked.io)).toBe(EXIT.ok);
+    expect(calls.at(-1)?.key).toBe(`DELETE ${AT}/grants/${GRANT.id}`);
+    expect(revoked.out()).toContain("Revoked: ");
+    const disabled = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["plugin", "hello", "disable"], disabled.io)).toBe(EXIT.ok);
+    expect(disabled.out()).toContain("Disabled hello:");
+  });
+
+  it("prints the plugins the console names after the rules, a line each, with take and with rules", async () => {
+    const ruled = {
+      ...RULES,
+      plugins: [
+        {
+          key: "hello",
+          name: { en: "Hello" },
+          agentNote: { en: "Keeps greetings as records; greet someone with greet." },
+          description: { en: "Greetings kept as records." },
+          roles: ["greeter"],
+        },
+        {
+          key: "leave",
+          name: { en: "Leave" },
+          agentNote: null,
+          description: { en: "Leave requests and their approval." },
+          roles: ["employee"],
+        },
+      ],
+    };
+    const { fetch } = fakeConsole({
+      [`GET ${IN}/rules`]: { body: ruled },
+      "GET /api/v1/me": { body: ME },
+      [`GET ${IN}/tasks/7`]: { body: TASK },
+      [`POST ${IN}/runs`]: { status: 201, body: RUN },
+      [`GET ${IN}/tasks/${TASK.id}/comments`]: { body: { items: [] } },
+      [OPEN_RUNS]: { body: { more: false, items: [RUN] } },
+    });
+    const h = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["rules"], h.io)).toBe(EXIT.ok);
+    expect(h.out()).toContain(
+      "## Plugins\n\n- hello (Hello): Keeps greetings as records; greet someone with greet. Start with console plugin hello.\n- leave (Leave): Leave requests and their approval. Start with console plugin leave.",
+    );
+    const taken = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["take", "7"], taken.io)).toBe(EXIT.ok);
+    expect(taken.out()).toMatch(/Ask before pushing\.[\s\S]*## Plugins[\s\S]*Say how it goes/);
+    // The workspace's rules alone, with every plugin the person may use; none named, nothing said.
+    const bare = fakeConsole({
+      "GET /api/v1/rules": { body: { ...RULES.workspace, plugins: [] } },
+      "GET /api/v1/me": { body: ME },
+    });
+    const w = harness({
+      fetch: bare.fetch,
+      env: { CONSOLE_URL: ORIGIN, CONSOLE_TOKEN: "cns_t_secret" },
+    });
+    expect(await runCli(["rules"], w.io)).toBe(EXIT.ok);
+    expect(w.out()).not.toContain("## Plugins");
   });
 });

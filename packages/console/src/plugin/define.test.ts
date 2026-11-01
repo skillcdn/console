@@ -215,6 +215,20 @@ describe("definePlugin", () => {
   });
 });
 
+describe("an argument's name", () => {
+  it("is not a flag the command keeps for itself", () => {
+    expect(() =>
+      defineCommand({
+        about: "Takes a file by a name the command uses.",
+        args: { file: arg.text() },
+        async run() {
+          return { text: "" };
+        },
+      }),
+    ).toThrow(/the argument "file", a flag the command keeps for itself/);
+  });
+});
+
 describe("the definers", () => {
   it("refuse what is not a definition", () => {
     expect(() => defineCollection("Requests", { schema: z.object({}) })).toThrow(

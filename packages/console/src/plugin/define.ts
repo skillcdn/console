@@ -21,7 +21,12 @@ import {
   MAX_PLUGIN_OPERATIONS,
   MIN_PLUGIN_JOB_INTERVAL_MS,
 } from "./limits.js";
-import { CURRENT_PLUGIN_API, PLUGIN_KEY_PATTERN, RESERVED_COMMAND_NAMES } from "./manifest.js";
+import {
+  CURRENT_PLUGIN_API,
+  PLUGIN_KEY_PATTERN,
+  RESERVED_ARG_NAMES,
+  RESERVED_COMMAND_NAMES,
+} from "./manifest.js";
 
 const FIELD = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
 const HOOK_KIND =
@@ -233,6 +238,10 @@ function argsProblems(what: string, args: unknown): string[] {
   for (const [name, definition] of Object.entries(args as Record<string, ArgDescription>)) {
     if (!isKey(name)) {
       problems.push(`${what} has the argument "${name}", which is not named as a key`);
+    } else if (RESERVED_ARG_NAMES.includes(name)) {
+      problems.push(
+        `${what} has the argument "${name}", a flag the command keeps for itself (${RESERVED_ARG_NAMES.join(", ")})`,
+      );
     }
     if (
       typeof definition !== "object" ||

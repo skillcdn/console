@@ -1,0 +1,8 @@
+{
+  "name": "console-plugin-gate",
+  "version": "0.0.1",
+  "private": true,
+  "description": "A fixture: a plugin with arguments of every kind, endpoints and skills.",
+  "license": "MIT",
+  "type": "module"
+}

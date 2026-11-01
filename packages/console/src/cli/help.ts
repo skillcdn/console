@@ -360,7 +360,7 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     synopsis:
       "What this organization and this project ask of agents; rules write writes them, for an owner or an administrator.",
     about:
-      "What this organization asks of agents (ADR-0023): the workspace's rules, the console's own until an administrator writes the organization's, and this project's own when it has them. rules write writes this project's rules, for an owner, or with --workspace the workspace's, for an administrator; none puts the written rules away, so that the console's own hold again, or the project adds none. Without a project named, rules shows the workspace's alone.",
+      "What this organization asks of agents (ADR-0023): the workspace's rules, the console's own until an administrator writes the organization's, and this project's own when it has them. rules write writes this project's rules, for an owner, or with --workspace the workspace's, for an administrator; none puts the written rules away, so that the console's own hold again, or the project adds none. Without a project named, rules shows the workspace's alone. After the rules, a section Plugins names the plugins bound to the project that you hold a role in, or at the workspace every plugin you may use, a line each with the sentence its manifest gives agents and where to start: console plugin <key>.",
     limits: [
       `body: Markdown, up to ${MAX_RULES_LENGTH} characters; the console's own rules, written as they are, write nothing`,
     ],
@@ -369,11 +369,45 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
       "document.conflict: the rules have moved on since --base; read them again",
     ],
   },
+  plugins: {
+    usage: "plugins",
+    synopsis: "The plugins of this console you may use: key, name, version, state, your roles.",
+    about:
+      "The plugins of this console (docs/specs/plugins.md), one a line: the enabled ones a member may use, every one with its state for an administrator; the key, the name, the version, the state, the roles you hold in it. A plugin is worked through console plugin <key>, and the rules of a board name the plugins to use there under Plugins, a sentence each. Needs no project.",
+  },
+  plugin: {
+    usage:
+      "plugin <key>  |  plugin <key> help [<command>]  |  plugin <key> <command> [<args>] [--<name> <value>]... [--file <path> | -] [--run <id>]  |  plugin <key> records <collection> [<id>] [--where <field>=<value>]... [--search <words>] [--project <key>] [--order <field>[:desc]] [--limit <n>] [--after <cursor>] [--archived] [--versions]  |  plugin <key> skills [<folder>|<file>] [--search <words> [--limit <n>] [--cursor <cursor>]]  |  plugin <key> skill <path>  |  plugin <key> skill --file <path> [--offset <n>] [--limit <n>]  |  plugin <key> enable --consent <capability>,... [--board new|<key>] [--projects all|<key>,...] [--set <key>=<value>]...  |  plugin <key> disable  |  plugin <key> settings [--set <key>=<value>]...  |  plugin <key> secret <name> [--remove]  |  plugin <key> grant <role> --person <login>|--project <key>|--everyone  |  plugin <key> revoke <grant id>",
+    overview:
+      "plugin <key> [help [<command>] | <command> [<args>] | records <collection> | skills | skill <path> | enable | disable | settings | secret | grant | revoke]",
+    synopsis:
+      "One plugin: what it is for and its commands; a command run as you; its records, its skills; its settings, for an administrator.",
+    about:
+      "One plugin of this console, by its key. Alone: what it is, the sentence for agents, its state, the roles you hold in it, its board project, then one line per command and query you may run, with its usage, where its skills are, and its settings. help [<command>]: one command or query in full, as console help prints one: its arguments, their types and bounds, and the refusals; every argument is given by its place when positional, else as --<name> <value> or --<name>=<value>; a boolean as --<name> alone; a list as the flag given again, or with commas between; a day as YYYY-MM-DD; a person by login, or me; a project by key; a file by --file <path>, or - for standard input, which the command uploads first, with the plugin's files capability. <command> [<args>]: runs the command or the query as the person whose token you hold; the console parses the words against the definition and refuses the first that does not fit; prints what the command says, or a query's answer as JSON, a file a query answers saved under its name; --json prints the whole answer. A command that raised a decision prints its id and exits with 3: console decision <id> --wait 100 waits for the answer. The event the command leaves names your open run in the plugin's board project, --run <id> saying which when several are open; an argument marked secret is hidden in it. records <collection>: the records you may read, one a line, newest first; --where <field>=<value>, given again for several, narrows by a field the collection indexes (id, owner and project always; a number, true, false and null are read as such); --search <words> by words; --project <key> to those linked to a project; --order <field>, with :desc for the newest first; a page of --limit with --after <cursor> as the last page printed; --archived the ones put away; <id> reads one record whole, --versions its versions. skills and skill: the plugin's own skills, a pack read from its package, exactly as console skills and console skill read a project's pack. enable, disable, settings, secret, grant and revoke are an administrator's. enable prints what each capability the plugin asks opens and what a malicious plugin would reach through it, and refuses unless --consent names every capability again; --board new makes the board project the manifest proposes, --board <key> chooses one, left out where the plugin needs none; --projects all, or the keys of the projects the plugin is on; --set a setting's value, which settings changes afterwards too, an empty value clearing one, a number or true and false read as such. secret <name> reads the value from standard input, seals it and shows it never; --remove takes it away. grant gives a role to a person by login, to the members of a project by key, or to everyone, and revoke takes a grant back by its id, which console plugin <key> lists to an administrator.",
+    limits: [
+      "a command line: up to 200 words of up to 50,000 characters each; one file, up to the file bound (console help hand-in), with the plugin's files capability",
+      "records: a page of up to 200; where: a field the collection indexes",
+      "enable: consent names every capability the manifest asks; settings and secrets as the manifest bounds them",
+    ],
+    refusals: [
+      "plugin.not_found: no plugin has that key, or you may not know of it; or the plugin has no such command or query",
+      "plugin.disabled: the plugin is installed and not enabled",
+      "plugin.unavailable: the plugin failed to load, its host is away, or this deployment lacks what it needs",
+      "plugin.forbidden: the command, the record or the file needs a role you do not hold in the plugin, or the plugin lacks the capability",
+      "plugin.invalid_args: a word does not fit the definition; the message names the first at fault",
+      "plugin.timeout: the plugin's code ran past its time",
+      "plugin.too_many: a quota of the plugin is reached",
+      "plugin.needs_consent, plugin.requires, plugin.required_by: enabling without consent to every capability; a plugin this one requires is not enabled or not in range; another enabled plugin requires this one",
+      "plugin.failed: the plugin's code failed; the console's log says what it said, the answer does not",
+      "plugin.<key>.<code>: the plugin's own refusal, in its own words",
+      "auth.forbidden: enable, disable, settings, secret, grant and revoke are an administrator's",
+    ],
+  },
   take: {
     usage: "take <number|id> [--agent <name>]",
     synopsis: "Takes a task: a run begins, and the task is in progress and the person's.",
     about:
-      "Takes a task: a run begins, and the task is in progress and the person's; the run's id and the task's id are printed on a line of their own, then the task, then the rules of the board. A run still open on the task is taken over, since the board cannot know whether its agent still runs: it ends as abandoned, the feed says who took over, and that agent is refused on its next command; console task <number> shows the runs on a task, with when each was last heard from, before it is taken. --agent is what people see at work; left out, it is what the person called the token.",
+      "Takes a task: a run begins, and the task is in progress and the person's; the run's id and the task's id are printed on a line of their own, then the task, then the rules of the board, with a section Plugins after them where plugins are bound to the project: a line per plugin you may use there, which console plugin <key> then says how to use. A run still open on the task is taken over, since the board cannot know whether its agent still runs: it ends as abandoned, the feed says who took over, and that agent is refused on its next command; console task <number> shows the runs on a task, with when each was last heard from, before it is taken. --agent is what people see at work; left out, it is what the person called the token.",
     limits: [
       `agent: one line, up to ${MAX_AGENT_LENGTH} characters`,
       `at most ${MAX_RUNS_PER_TASK} runs on one task`,
@@ -667,6 +701,11 @@ const SECTIONS: readonly { readonly title: string; readonly commands: readonly s
       "skill",
       "rules",
     ],
+  },
+  {
+    title:
+      "The plugins of this console, if it has any: a feature added to the board, worked through one command",
+    commands: ["plugins", "plugin"],
   },
   {
     title: "Working",

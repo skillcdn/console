@@ -5,6 +5,7 @@ import {
   type ConsoleClient,
   createClient,
   type FetchLike,
+  type PluginClient,
   type ProjectClient,
 } from "../client.js";
 import {
@@ -20,6 +21,8 @@ import {
 } from "../compat.js";
 import { addDays, dayOf as dayOfDate, firstDayOfWeek, isDay, weekOf } from "../dates.js";
 import { DEFAULT_PAGE_LIMIT, LIST_LIMIT, MAX_OPTIONS, MIN_OPTIONS } from "../limits.js";
+import { capabilityWords } from "../plugin/capabilities.js";
+import { PLUGIN_LIST_LIMIT } from "../plugin/limits.js";
 import { fillRules, RULES_PATH, RULES_TITLE } from "../rules.js";
 import {
   hostOfLogin,
@@ -28,6 +31,10 @@ import {
   type RestMember,
   type RestPackConnectStarted,
   type RestPerson,
+  type RestPluginDetail,
+  type RestPluginEnableInput,
+  type RestPluginGrantInput,
+  type RestPluginInvocation,
   type RestSkillBrowse,
   type RestSkillFile,
   type RestSkillLoad,
@@ -78,12 +85,21 @@ import {
   formatDocuments,
   formatGoal,
   formatGoalLine,
+  formatInvocation,
   formatListingLine,
   formatMemberLine,
   formatMore,
   formatOptions,
   formatPersonLine,
   formatPersonWork,
+  formatPlugin,
+  formatPluginGrantLine,
+  formatPluginHelp,
+  formatPluginRecord,
+  formatPluginRecords,
+  formatPluginRecordVersions,
+  formatPluginSettingLine,
+  formatPlugins,
   formatProject,
   formatProjectLine,
   formatRules,
@@ -95,6 +111,7 @@ import {
   formatVersionLine,
   formatWork,
   formatWorkspace,
+  localized,
   moment,
   setMomentZone,
 } from "./format.js";
@@ -1107,20 +1124,55 @@ const MAX_FIND_LIMIT = 25;
 
 /** The pack of the project as the console lists it, and what its reads are rendered at; none when the pack did not answer. */
 async function packOf(
-  project: ProjectClient,
+  reader: PackReader,
 ): Promise<{ readonly listing: RestSkills; readonly summary: PackSummary | undefined }> {
-  const listing = await project.skills();
+  const listing = await reader.skills();
   return { listing, summary: summaryOf(listing) };
 }
 
-const skills: Command = async (args, io) => {
-  const { values, positionals } = parse(args, {
-    search: { type: "string" },
-    limit: { type: "string" },
-    cursor: { type: "string" },
-  });
+/** What reads a pack: a project's client, or a plugin's, whose skills are a pack of their own. */
+type PackReader = Pick<
+  ProjectClient,
+  "skills" | "skill" | "skillFile" | "skillBrowse" | "skillFind"
+>;
+
+const SKILLS_OPTIONS: OptionSpec = {
+  search: { type: "string" },
+  limit: { type: "string" },
+  cursor: { type: "string" },
+};
+
+const SKILL_OPTIONS: OptionSpec = {
+  file: { type: "string" },
+  offset: { type: "string" },
+  limit: { type: "string" },
+};
+
+/** The line `console skills` ends with: where the plugins' own skills are. */
+const PLUGIN_SKILLS_LINE =
+  "The plugins of this console have skills of their own: console plugins lists the plugins, console plugin <key> skills the skills of one.";
+
+/**
+ * The pack as the words say: whole, a folder of it, a file's outline, or what words find; for
+ * the project's pack as `console skills`, and for a plugin's as `console plugin <key> skills`.
+ */
+async function readSkills(
+  io: CliIo,
+  session: Session,
+  reader: PackReader,
+  values: Values,
+  positionals: readonly string[],
+  extras: {
+    /** The command these words came after, for what is said when they are not understood. */
+    readonly command: string;
+    /** Where the console's own skills are on this machine, said with the project's pack. */
+    readonly own?: string | undefined;
+    /** A line after the listing whole. */
+    readonly afterwards?: string | undefined;
+  },
+): Promise<number> {
   if (positionals.length > 1) {
-    throw misuse("Say one folder: console skills [<folder>] [--search <words>]");
+    throw misuse(`Say one folder: ${extras.command} [<folder>] [--search <words>]`);
   }
   // The root of the pack is the mounted folder, which the deployment reads as no path at all.
   const given = positionals[0];
@@ -1130,7 +1182,7 @@ const skills: Command = async (args, io) => {
   const cursor = text(values, "cursor");
   if (words === undefined && (limit !== undefined || cursor !== undefined)) {
     throw misuse(
-      "--limit and --cursor go with --search: console skills --search <words> [--limit <n>] [--cursor <cursor>]",
+      `--limit and --cursor go with --search: ${extras.command} --search <words> [--limit <n>] [--cursor <cursor>]`,
     );
   }
   const atMost = limit === undefined ? undefined : Number(limit);
@@ -1140,17 +1192,19 @@ const skills: Command = async (args, io) => {
   ) {
     throw misuse(`Not a number of results, 1 to ${MAX_FIND_LIMIT}: ${limit}`);
   }
-  const session = await open(io, values);
-  const project = await session.project();
-  const { listing, summary } = await packOf(project);
+  const { listing, summary } = await packOf(reader);
   // The pack as it stands; or why it does not answer, which a folder or a search would meet too.
   if (summary === undefined || (words === undefined && given === undefined)) {
-    answer(io, session, listing, () => formatSkills(listing, io.skillsDir));
+    answer(io, session, listing, () =>
+      [formatSkills(listing, extras.own), extras.afterwards]
+        .filter((part): part is string => part !== undefined)
+        .join("\n"),
+    );
     return EXIT.ok;
   }
   if (words !== undefined) {
     // One page of what the words find; more is said, and asked for with --cursor.
-    const found = await project.skillFind(words, { path: folder, limit: atMost, cursor });
+    const found = await reader.skillFind(words, { path: folder, limit: atMost, cursor });
     answer(io, session, found, () => formatSkillFind(found, summary));
     return EXIT.ok;
   }
@@ -1159,7 +1213,7 @@ const skills: Command = async (args, io) => {
   let next: string | undefined;
   let last: RestSkillBrowse | undefined;
   for (let n = 0; n < MAX_SKILL_PAGES; n += 1) {
-    last = await project.skillBrowse({ path: folder, cursor: next });
+    last = await reader.skillBrowse({ path: folder, cursor: next });
     if (last.read?.status !== "ready") {
       break;
     }
@@ -1178,6 +1232,17 @@ const skills: Command = async (args, io) => {
     formatSkillBrowse(browsed, whole),
   );
   return EXIT.ok;
+}
+
+const skills: Command = async (args, io) => {
+  const { values, positionals } = parse(args, SKILLS_OPTIONS);
+  const session = await open(io, values);
+  const project = await session.project();
+  return readSkills(io, session, project, values, positionals, {
+    command: "console skills",
+    own: io.skillsDir,
+    afterwards: PLUGIN_SKILLS_LINE,
+  });
 };
 
 /** The most characters one read of a file asks for: what the console's API allows on one page. */
@@ -1205,18 +1270,24 @@ function countOf(
   return count;
 }
 
-const skill: Command = async (args, io) => {
-  const { values, positionals } = parse(args, {
-    file: { type: "string" },
-    offset: { type: "string" },
-    limit: { type: "string" },
-  });
+/**
+ * One skill of the pack whole, a file of it, or one page of a file; for the project's pack as
+ * `console skill`, and for a plugin's as `console plugin <key> skill`.
+ */
+async function readSkill(
+  io: CliIo,
+  session: Session,
+  reader: PackReader,
+  values: Values,
+  positionals: readonly string[],
+  command: string,
+): Promise<number> {
   const file = text(values, "file");
   // A file is read by its own path from the repository's root; a skill's path beside it would be
   // ignored, which reads as if it mattered, so the two together are not understood.
   if (file !== undefined && positionals.length > 0) {
     throw misuse(
-      "Say one: console skill <path of its SKILL.md> for a skill, or console skill --file <path> for a file of the pack.",
+      `Say one: ${command} <path of its SKILL.md> for a skill, or ${command} --file <path> for a file of the pack.`,
     );
   }
   // A section is a page of a file read as asked (SkillCDN 0.4): the flags mean nothing without one.
@@ -1225,14 +1296,12 @@ const skill: Command = async (args, io) => {
     (text(values, "offset") !== undefined || text(values, "limit") !== undefined)
   ) {
     throw misuse(
-      "--offset and --limit go with --file: console skill --file <path> [--offset <n>] [--limit <n>]",
+      `--offset and --limit go with --file: ${command} --file <path> [--offset <n>] [--limit <n>]`,
     );
   }
   const offset = countOf(text(values, "offset"), "offset", { least: 0 });
   const limit = countOf(text(values, "limit"), "limit", { least: 1, most: MAX_FILE_LIMIT });
-  const session = await open(io, values);
-  const project = await session.project();
-  const { listing, summary } = await packOf(project);
+  const { listing, summary } = await packOf(reader);
   if (summary === undefined) {
     answer(io, session, listing, () => formatSkills(listing, io.skillsDir));
     return EXIT.ok;
@@ -1240,7 +1309,7 @@ const skill: Command = async (args, io) => {
   if (file !== undefined && (offset !== undefined || limit !== undefined)) {
     // One page as asked, the section a search or an outline named; the result says where the
     // file continues, and asks for nothing.
-    const page = await project.skillFile(file, { offset, limit });
+    const page = await reader.skillFile(file, { offset, limit });
     const section = page.read === null ? undefined : joinFile([page], summary, limit);
     answer(io, session, { ...page, read: section === undefined ? null : bodyOfFile(section) }, () =>
       formatSkillFile(page, section),
@@ -1253,7 +1322,7 @@ const skill: Command = async (args, io) => {
     let offset: number | undefined;
     let last: RestSkillFile | undefined;
     for (let n = 0; n < MAX_SKILL_PAGES; n += 1) {
-      last = await project.skillFile(file, offset === undefined ? {} : { offset });
+      last = await reader.skillFile(file, offset === undefined ? {} : { offset });
       if (last.read === null) {
         break;
       }
@@ -1276,7 +1345,7 @@ const skill: Command = async (args, io) => {
   const wanted = skillPathIn(
     theOne(
       positionals,
-      "Say which skill: console skill <path of its SKILL.md>, or console skill --file <path> for a file of the pack",
+      `Say which skill: ${command} <path of its SKILL.md>, or ${command} --file <path> for a file of the pack`,
     ),
     listing.address,
   );
@@ -1288,7 +1357,7 @@ const skill: Command = async (args, io) => {
   let cursor: string | undefined;
   let last: RestSkillLoad | undefined;
   for (let n = 0; n < MAX_SKILL_PAGES; n += 1) {
-    last = await project.skill(wanted.path, cursor);
+    last = await reader.skill(wanted.path, cursor);
     if (last.read?.status !== "ready") {
       break;
     }
@@ -1307,7 +1376,598 @@ const skill: Command = async (args, io) => {
     formatSkillLoad(loaded, whole),
   );
   return EXIT.ok;
+}
+
+const skill: Command = async (args, io) => {
+  const { values, positionals } = parse(args, SKILL_OPTIONS);
+  const session = await open(io, values);
+  const project = await session.project();
+  return readSkill(io, session, project, values, positionals, "console skill");
 };
+
+// ---- The plugins (docs/specs/plugins.md, "The command") ----
+// `console plugins` and `console plugin <key> ...` are the two entries: the command sends the
+// words as typed and renders the console's generic shapes, and knows nothing of any plugin.
+
+const plugins: Command = async (args, io) => {
+  const { values } = parse(args, {}, false);
+  const session = await open(io, values);
+  const [listed, me] = await Promise.all([session.client.plugins(), session.client.me()]);
+  answer(io, session, listed, () => formatPlugins(listed, me.language));
+  return EXIT.ok;
+};
+
+/** The flags of the command's own on `console plugin ...`, wherever they stand among the words. */
+const PLUGIN_GLOBAL_FLAGS: Readonly<Record<string, "string" | "boolean">> = {
+  json: "boolean",
+  url: "string",
+  account: "string",
+  project: "string",
+};
+
+/** The flags of the command's own on a plugin's command: the file it uploads first, the run it is for. */
+const PLUGIN_COMMAND_FLAGS: Readonly<Record<string, "string" | "boolean">> = {
+  file: "string",
+  run: "string",
+};
+
+/**
+ * The words with the flags named in `own` taken out, wherever they stand: the rest is the
+ * plugin's, and goes to the console as typed. `--` ends the flags, and stays among the words.
+ */
+function splitWords(
+  args: readonly string[],
+  own: Readonly<Record<string, "string" | "boolean">>,
+): { readonly values: Record<string, string | boolean>; readonly words: string[] } {
+  const values: Record<string, string | boolean> = {};
+  const words: string[] = [];
+  let ended = false;
+  for (let index = 0; index < args.length; index += 1) {
+    const word = args[index] ?? "";
+    if (ended || !word.startsWith("--") || word.length === 2) {
+      ended = ended || word === "--";
+      words.push(word);
+      continue;
+    }
+    const equals = word.indexOf("=");
+    const name = equals < 0 ? word.slice(2) : word.slice(2, equals);
+    const type = Object.hasOwn(own, name) ? own[name] : undefined;
+    if (type === undefined) {
+      words.push(word);
+      continue;
+    }
+    if (type === "boolean") {
+      if (equals >= 0) {
+        throw misuse(`--${name} takes no value`);
+      }
+      values[name] = true;
+      continue;
+    }
+    if (equals >= 0) {
+      values[name] = word.slice(equals + 1);
+      continue;
+    }
+    const next = args[index + 1];
+    if (next === undefined) {
+      throw misuse(`--${name} needs a value`);
+    }
+    values[name] = next;
+    index += 1;
+  }
+  return { values, words };
+}
+
+const PLUGIN_USAGE =
+  "console plugin <key> [help [<command>] | <command> [args] | records <collection> | skills | skill <path> | enable | disable | settings | secret <name> | grant <role> | revoke <id>]. console plugins lists the plugins.";
+
+const plugin: Command = async (args, io) => {
+  const { values, words } = splitWords(args, PLUGIN_GLOBAL_FLAGS);
+  const [key, verb, ...rest] = words;
+  if (key === undefined || key.startsWith("-")) {
+    throw misuse(`Say which plugin: ${PLUGIN_USAGE}`);
+  }
+  const session = await open(io, values);
+  const client = session.client.plugin(key);
+  switch (verb) {
+    case undefined: {
+      const [detail, me] = await Promise.all([client.get(), session.client.me()]);
+      answer(io, session, detail, () => formatPlugin(detail, me.language));
+      return EXIT.ok;
+    }
+    case "help": {
+      if (rest.length > 1) {
+        throw misuse(`Say one command: console plugin ${key} help [<command>]`);
+      }
+      const name = rest[0];
+      const detail = await client.get();
+      const operation =
+        name === undefined
+          ? undefined
+          : detail.operations.find((candidate) => candidate.name === name);
+      if (name !== undefined && operation === undefined) {
+        throw misuse(
+          `Not a command or a query of ${key} you may run: ${name}. console plugin ${key} lists them.`,
+        );
+      }
+      answer(io, session, operation ?? detail.operations, () => formatPluginHelp(detail, name));
+      return EXIT.ok;
+    }
+    case "records":
+      return pluginRecords(io, session, client, rest, text(values, "project"));
+    case "skills": {
+      const parsed = parse(rest, SKILLS_OPTIONS);
+      return readSkills(io, session, client, parsed.values, parsed.positionals, {
+        command: `console plugin ${key} skills`,
+      });
+    }
+    case "skill": {
+      const parsed = parse(rest, SKILL_OPTIONS);
+      return readSkill(
+        io,
+        session,
+        client,
+        parsed.values,
+        parsed.positionals,
+        `console plugin ${key} skill`,
+      );
+    }
+    case "enable":
+      return pluginEnable(io, session, client, rest);
+    case "disable": {
+      parse(rest, {}, false);
+      const detail = await client.disable();
+      answer(
+        io,
+        session,
+        detail,
+        () =>
+          `Disabled ${detail.key}: its commands are refused until it is enabled again; what the console kept of it stays.`,
+      );
+      return EXIT.ok;
+    }
+    case "settings":
+      return pluginSettings(io, session, client, rest);
+    case "secret":
+      return pluginSecret(io, session, client, rest);
+    case "grant":
+      return pluginGrant(io, session, client, rest, text(values, "project"));
+    case "revoke": {
+      const { positionals } = parse(rest, {});
+      const id = theOne(positionals, `Say which grant: console plugin ${key} revoke <grant id>`);
+      const revoked = await client.revoke(id);
+      answer(io, session, revoked, () => `Revoked: ${formatPluginGrantLine(revoked)}`);
+      return EXIT.ok;
+    }
+    default:
+      return pluginInvoke(io, session, client, verb, rest);
+  }
+};
+
+/** A query's answer that is a file, as the console carries one: its name, its type, its bytes as base64. */
+function queryFileOf(
+  result: RestPluginInvocation,
+): { readonly name: string; readonly type: string; readonly bytes: Uint8Array } | undefined {
+  if (result.kind !== "query" || typeof result.data !== "object" || result.data === null) {
+    return undefined;
+  }
+  const file = (result.data as { file?: unknown }).file;
+  if (
+    typeof file !== "object" ||
+    file === null ||
+    typeof (file as { name?: unknown }).name !== "string" ||
+    typeof (file as { type?: unknown }).type !== "string" ||
+    typeof (file as { base64?: unknown }).base64 !== "string"
+  ) {
+    return undefined;
+  }
+  const named = file as { name: string; type: string; base64: string };
+  return {
+    name: basename(named.name) || "answer",
+    type: named.type,
+    bytes: Uint8Array.from(Buffer.from(named.base64, "base64")),
+  };
+}
+
+/**
+ * A command or a query of the plugin, by the words as typed: a file named with --file, or read
+ * from standard input for -, is uploaded first and goes as a handle; the console parses the rest.
+ */
+async function pluginInvoke(
+  io: CliIo,
+  session: Session,
+  client: PluginClient,
+  name: string,
+  rest: readonly string[],
+): Promise<number> {
+  const { values, words } = splitWords(rest, PLUGIN_COMMAND_FLAGS);
+  const stdin = words.includes("-");
+  const filePath = text(values, "file");
+  if (filePath !== undefined && stdin) {
+    throw misuse("Say one file: --file <path>, or - for standard input.");
+  }
+  const files: string[] = [];
+  if (filePath !== undefined) {
+    let bytes: Uint8Array;
+    try {
+      bytes = await io.readBytes(filePath);
+    } catch {
+      throw misuse(`The file could not be read: ${filePath}`);
+    }
+    const fileName = basename(filePath);
+    const uploaded = await client.upload({
+      name: fileName,
+      bytes,
+      contentType: CONTENT_TYPES[extname(fileName).toLowerCase()] ?? "application/octet-stream",
+    });
+    files.push(uploaded.handle);
+  } else if (stdin) {
+    const uploaded = await client.upload({
+      name: "stdin.txt",
+      bytes: new TextEncoder().encode(await io.readStdin()),
+      contentType: "text/plain",
+    });
+    files.push(uploaded.handle);
+  }
+  const project = await session.projectKey();
+  const run = text(values, "run");
+  const result = await client.invoke({
+    argv: [name, ...words.filter((word) => word !== "-")],
+    ...(files.length === 0 ? {} : { files }),
+    ...(project === undefined ? {} : { project }),
+    ...(run === undefined ? {} : { run }),
+  });
+  // A query that answers a file: saved under its name in the working directory, as console file saves one.
+  const file = queryFileOf(result);
+  let saved: string | undefined;
+  if (file !== undefined && !session.json) {
+    try {
+      saved = await io.writeBytes(file.name, file.bytes, file.name);
+    } catch {
+      throw failed(`The file could not be written at ${file.name}.`);
+    }
+  }
+  answer(io, session, result, () =>
+    file !== undefined && saved !== undefined
+      ? `Saved ${file.name} (${file.bytes.byteLength} bytes, ${file.type}) at ${saved}`
+      : formatInvocation(result),
+  );
+  return result.waiting === null ? EXIT.ok : EXIT.waiting;
+}
+
+/** A condition's value as typed: a number, true, false and null read as such; JSON where it begins as JSON; text otherwise. */
+function whereValueOf(word: string): unknown {
+  if (word === "true") {
+    return true;
+  }
+  if (word === "false") {
+    return false;
+  }
+  if (word === "null") {
+    return null;
+  }
+  if (/^-?\d+(?:\.\d+)?$/.test(word)) {
+    return Number(word);
+  }
+  if (word.startsWith("{") || word.startsWith("[")) {
+    try {
+      return JSON.parse(word);
+    } catch {
+      return word;
+    }
+  }
+  return word;
+}
+
+/** The records of a collection one may read, a page of them; or one record, or its versions. */
+async function pluginRecords(
+  io: CliIo,
+  session: Session,
+  client: PluginClient,
+  rest: readonly string[],
+  project: string | undefined,
+): Promise<number> {
+  const { values, positionals } = parse(rest, {
+    where: { type: "string", multiple: true },
+    search: { type: "string" },
+    order: { type: "string" },
+    limit: { type: "string" },
+    after: { type: "string" },
+    archived: { type: "boolean" },
+    versions: { type: "boolean" },
+  });
+  const [collection, id, ...more] = positionals;
+  if (collection === undefined || more.length > 0) {
+    throw misuse(
+      `Say which collection: console plugin ${client.key} records <collection> [<id>] [--where <field>=<value>]... [--search <words>] [--order <field>[:desc]] [--limit <n>] [--after <cursor>] [--archived] [--versions]`,
+    );
+  }
+  if (id !== undefined) {
+    if (on(values, "versions")) {
+      const versions = await client.recordVersions(collection, id);
+      answer(io, session, versions, () => formatPluginRecordVersions(versions));
+      return EXIT.ok;
+    }
+    const record = await client.record(collection, id);
+    answer(io, session, record, () => formatPluginRecord(record));
+    return EXIT.ok;
+  }
+  if (on(values, "versions")) {
+    throw misuse(
+      "--versions goes with a record's id: console plugin <key> records <collection> <id> --versions",
+    );
+  }
+  const where: Record<string, unknown> = {};
+  for (const pair of texts(values, "where")) {
+    const equals = pair.indexOf("=");
+    if (equals <= 0) {
+      throw misuse(`Not a condition, as <field>=<value>: ${pair}`);
+    }
+    where[pair.slice(0, equals)] = whereValueOf(pair.slice(equals + 1));
+  }
+  const order = text(values, "order");
+  const page = await client.records(collection, {
+    ...(Object.keys(where).length === 0 ? {} : { where }),
+    q: text(values, "search"),
+    order:
+      order === undefined ? undefined : order.endsWith(":desc") ? `-${order.slice(0, -5)}` : order,
+    limit: countOf(text(values, "limit"), "limit", { least: 1, most: PLUGIN_LIST_LIMIT }),
+    after: text(values, "after"),
+    project,
+    archived: on(values, "archived") ? true : undefined,
+  });
+  answer(io, session, page, () => formatPluginRecords(page));
+  return EXIT.ok;
+}
+
+/** The values `--set <key>=<value>` give, each read as its setting's type; an empty value clears one. */
+function settingValuesOf(
+  pairs: readonly string[],
+  detail: RestPluginDetail,
+): Record<string, unknown> {
+  const values: Record<string, unknown> = {};
+  const read = (type: string, word: string, key: string): unknown => {
+    switch (type) {
+      case "number": {
+        const value = Number(word);
+        if (!Number.isFinite(value) || word.trim().length === 0) {
+          throw misuse(`Not a number for the setting ${key}: ${word}`);
+        }
+        return value;
+      }
+      case "boolean":
+        if (word !== "true" && word !== "false") {
+          throw misuse(`The setting ${key} is true or false: ${word}`);
+        }
+        return word === "true";
+      default:
+        return word;
+    }
+  };
+  for (const pair of pairs) {
+    const equals = pair.indexOf("=");
+    if (equals <= 0) {
+      throw misuse(`Not a setting, as <key>=<value>: ${pair}`);
+    }
+    const key = pair.slice(0, equals);
+    const word = pair.slice(equals + 1);
+    const setting = detail.settings.find((candidate) => candidate.key === key);
+    if (setting === undefined) {
+      throw misuse(
+        `Not a setting of ${detail.key}: ${key}. Its settings: ${detail.settings.map((candidate) => candidate.key).join(", ") || "none"}`,
+      );
+    }
+    if (setting.type === "secret") {
+      throw misuse(
+        `${key} is a secret: console plugin ${detail.key} secret ${key} reads it from standard input.`,
+      );
+    }
+    if (word.length === 0) {
+      values[key] = null;
+    } else if (setting.type === "list") {
+      values[key] = word
+        .split(",")
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0)
+        .map((item) => read(setting.of ?? "text", item, key));
+    } else {
+      values[key] = read(setting.type, word, key);
+    }
+  }
+  return values;
+}
+
+/** The capabilities a plugin asks, each with what it opens and what it risks, for the administrator to read before consenting. */
+function capabilityLines(capabilities: readonly string[]): string[] {
+  return capabilities.map((capability) => {
+    const words = capabilityWords(capability);
+    return words === undefined
+      ? `  ${capability}: a capability this command does not know`
+      : `  ${capability}: opens ${words.opens}; a malicious plugin reaches ${words.reach}`;
+  });
+}
+
+/** Enables a plugin, with consent to every capability it asks, named again; an administrator's. */
+async function pluginEnable(
+  io: CliIo,
+  session: Session,
+  client: PluginClient,
+  rest: readonly string[],
+): Promise<number> {
+  const { values, positionals } = parse(rest, {
+    consent: { type: "string", multiple: true },
+    board: { type: "string" },
+    projects: { type: "string", multiple: true },
+    set: { type: "string", multiple: true },
+  });
+  if (positionals.length > 0) {
+    throw misuse(
+      `Nothing follows enable but its flags: console plugin ${client.key} enable [--consent <capability>,...] [--board new|<key>] [--projects all|<key>,...] [--set <key>=<value>]...`,
+    );
+  }
+  const [detail, me] = await Promise.all([client.get(), session.client.me()]);
+  const asked = detail.capabilities;
+  const consent = texts(values, "consent")
+    .flatMap((value) => value.split(","))
+    .map((capability) => capability.trim())
+    .filter((capability) => capability.length > 0);
+  if (asked.length > 0 && !session.json) {
+    io.stdout(
+      `${detail.key} asks ${asked.length === 1 ? "one capability" : `${asked.length} capabilities`}:\n${capabilityLines(asked).join("\n")}\n`,
+    );
+  }
+  const missing = asked.filter((capability) => !consent.includes(capability));
+  if (missing.length > 0) {
+    throw misuse(
+      `Enabling ${detail.key} needs consent to every capability it asks, named again: --consent ${asked.join(",")}. Not named: ${missing.join(", ")}.`,
+    );
+  }
+  const boardFlag = text(values, "board");
+  let board: RestPluginEnableInput["board"] = null;
+  if (boardFlag === "new") {
+    if (detail.boardDefaults === null) {
+      throw misuse(
+        `${detail.key} names no defaults for a board project: choose one with --board <key>.`,
+      );
+    }
+    board = {
+      create: {
+        key: detail.boardDefaults.key,
+        name: localized(detail.boardDefaults.name, me.language),
+        description: localized(detail.boardDefaults.description, me.language),
+      },
+    };
+  } else if (boardFlag !== undefined) {
+    board = { project: boardFlag };
+  }
+  const named = texts(values, "projects")
+    .flatMap((value) => value.split(","))
+    .map((key) => key.trim())
+    .filter((key) => key.length > 0);
+  const settings = settingValuesOf(texts(values, "set"), detail);
+  const enabled = await client.enable({
+    consent,
+    board,
+    projects: named.length === 0 || named.includes("all") ? "all" : named,
+    ...(Object.keys(settings).length === 0 ? {} : { settings }),
+  });
+  answer(io, session, enabled, () =>
+    [
+      `Enabled ${enabled.key}${enabled.board === null ? "" : `, with the board project ${enabled.board.key}`}; on ${enabled.projects === "all" || enabled.projects === null ? "every project" : enabled.projects.join(", ") || "no project"}.`,
+      ...(enabled.settings.length === 0
+        ? []
+        : [
+            "Settings:",
+            ...enabled.settings.map((setting) => formatPluginSettingLine(setting, me.language)),
+          ]),
+    ].join("\n"),
+  );
+  return EXIT.ok;
+}
+
+/** The settings as they stand, or changed as `--set` says; an administrator's. */
+async function pluginSettings(
+  io: CliIo,
+  session: Session,
+  client: PluginClient,
+  rest: readonly string[],
+): Promise<number> {
+  const { values, positionals } = parse(rest, { set: { type: "string", multiple: true } });
+  if (positionals.length > 0) {
+    throw misuse(
+      `Nothing follows settings but --set: console plugin ${client.key} settings [--set <key>=<value>]...`,
+    );
+  }
+  const [detail, me] = await Promise.all([client.get(), session.client.me()]);
+  const sets = texts(values, "set");
+  if (sets.length === 0) {
+    answer(io, session, detail.settings, () =>
+      detail.settings.length === 0
+        ? `${detail.key} has no settings.`
+        : [
+            `Settings of ${detail.key}:`,
+            ...detail.settings.map((setting) => formatPluginSettingLine(setting, me.language)),
+          ].join("\n"),
+    );
+    return EXIT.ok;
+  }
+  const changed = await client.updateSettings({ values: settingValuesOf(sets, detail) });
+  answer(io, session, changed.settings, () =>
+    [
+      `Changed the settings of ${changed.key}:`,
+      ...changed.settings.map((setting) => formatPluginSettingLine(setting, me.language)),
+    ].join("\n"),
+  );
+  return EXIT.ok;
+}
+
+/** Seals a secret of the plugin, read from standard input and shown never; or takes it away. */
+async function pluginSecret(
+  io: CliIo,
+  session: Session,
+  client: PluginClient,
+  rest: readonly string[],
+): Promise<number> {
+  const { values, positionals } = parse(rest, { remove: { type: "boolean" } });
+  const name = theOne(
+    positionals,
+    `Say which secret: console plugin ${client.key} secret <name> [--remove]; the value is read from standard input.`,
+  );
+  if (on(values, "remove")) {
+    await client.removeSecret(name);
+    answer(io, session, { name, set: false }, () => `Removed the secret ${name} of ${client.key}.`);
+    return EXIT.ok;
+  }
+  const value = (await io.readStdin()).replace(/\r?\n$/, "");
+  if (value.length === 0) {
+    throw misuse(
+      `Pipe the value in: console plugin ${client.key} secret ${name} < file. It is sealed by the console and shown never.`,
+    );
+  }
+  await client.setSecret(name, value);
+  answer(
+    io,
+    session,
+    { name, set: true },
+    () => `Set the secret ${name} of ${client.key}: sealed, and shown by nothing from now on.`,
+  );
+  return EXIT.ok;
+}
+
+/** Grants a role of the plugin to a person, to the members of a project, or to everyone; an administrator's. */
+async function pluginGrant(
+  io: CliIo,
+  session: Session,
+  client: PluginClient,
+  rest: readonly string[],
+  projectKey: string | undefined,
+): Promise<number> {
+  const { values, positionals } = parse(rest, {
+    person: { type: "string" },
+    everyone: { type: "boolean" },
+  });
+  const usage = `console plugin ${client.key} grant <role> --person <login> | --project <key> | --everyone`;
+  const role = theOne(positionals, `Say which role: ${usage}`);
+  const login = text(values, "person");
+  const everyone = on(values, "everyone");
+  if ([login !== undefined, projectKey !== undefined, everyone].filter(Boolean).length !== 1) {
+    throw misuse(`Say whom, one of the three: ${usage}`);
+  }
+  let input: RestPluginGrantInput;
+  if (login !== undefined) {
+    const person = await session.client.findPerson(login);
+    if (person === undefined) {
+      throw failed(`No person has the login ${login} among those you may see.`);
+    }
+    input = { role, person: person.id };
+  } else if (projectKey !== undefined) {
+    input = { role, project: projectKey };
+  } else {
+    input = { role, everyone: true };
+  }
+  const granted = await client.grant(input);
+  answer(io, session, granted, () => `Granted: ${formatPluginGrantLine(granted)}`);
+  return EXIT.ok;
+}
 
 /** A version number given as a flag, or nothing; anything else is not understood. */
 function versionOf(given: string | undefined): number | undefined {
@@ -1400,9 +2060,10 @@ const rules: Command = async (args, io) => {
       ? {
           workspace: forPerson(found.workspace, me.language),
           project: forPerson(found.project, me.language),
+          ...(found.plugins === undefined ? {} : { plugins: found.plugins }),
         }
       : forPerson(found, me.language);
-  answer(io, session, read, () => formatRules(read));
+  answer(io, session, read, () => formatRules(read, me.language));
   return EXIT.ok;
 };
 
@@ -1730,6 +2391,7 @@ const take: Command = async (args, io) => {
   const rules = {
     workspace: forPerson(ruling.workspace, me.language),
     project: forPerson(ruling.project, me.language),
+    ...(ruling.plugins === undefined ? {} : { plugins: ruling.plugins }),
   };
   answer(io, session, { run, task: taken, comments: comments.items, rules }, () =>
     [
@@ -1740,7 +2402,7 @@ const take: Command = async (args, io) => {
       "",
       formatTask(taken, undefined, undefined, comments.items),
       "",
-      formatRules(rules),
+      formatRules(rules, me.language),
       "",
       'Say how it goes: console report "<what you found or did>". Hand in what you make: console hand-in <https url | file path>.',
       'Ask when a person must decide: console ask "<question>" --option "..." --option "...". A word for the task\'s people that is not a report: console comment <number> "<markdown>". End with: console finish --summary "<what was done, what is left>".',
@@ -2980,6 +3642,8 @@ const COMMANDS: Readonly<Record<string, Command>> = {
   skills,
   skill,
   rules,
+  plugins,
+  plugin,
   people,
   person,
   workspace,

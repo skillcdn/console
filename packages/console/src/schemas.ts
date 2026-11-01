@@ -1281,6 +1281,21 @@ export const restDocumentInputSchema = z.object({
 export type RestDocumentInput = z.infer<typeof restDocumentInputSchema>;
 
 /**
+ * A plugin named after the rules (docs/specs/plugins.md, "The command"): one the asker may use,
+ * bound to the project where the rules are a project's; what agents are told of it, in the
+ * manifest's languages, and the asker's roles in it.
+ */
+export const restRulesPluginSchema = z.object({
+  key: z.string(),
+  name: z.record(z.string(), z.string()),
+  /** The sentence agents read, by language; `null` for the description. */
+  agentNote: z.nullable(z.record(z.string(), z.string())),
+  description: z.record(z.string(), z.string()),
+  roles: z.array(z.string()),
+});
+export type RestRulesPlugin = z.infer<typeof restRulesPluginSchema>;
+
+/**
  * `GET /api/v1/rules`, and each half of a project's (ADR-0023): the rules that hold, and where
  * they come from. `reference`: the console's own, since the organization wrote none;
  * `written`: the page written, with its facts; `none`: a project that adds none.
@@ -1291,6 +1306,8 @@ export const restRulesSchema = z.object({
   body: z.nullable(z.string()),
   /** The page they are written on, or `null` for the console's own and for none. */
   page: z.nullable(restDocumentSummarySchema),
+  /** At the workspace: every plugin the asker may use, by key; left out in the halves of a project's answer. */
+  plugins: z.optional(z.array(restRulesPluginSchema)),
 });
 export type RestRules = z.infer<typeof restRulesSchema>;
 
@@ -1298,6 +1315,8 @@ export type RestRules = z.infer<typeof restRulesSchema>;
 export const restProjectRulesSchema = z.object({
   workspace: restRulesSchema,
   project: restRulesSchema,
+  /** The plugins bound to the project, as its board project or on it, that the asker holds a role in. */
+  plugins: z.optional(z.array(restRulesPluginSchema)),
 });
 export type RestProjectRules = z.infer<typeof restProjectRulesSchema>;
 

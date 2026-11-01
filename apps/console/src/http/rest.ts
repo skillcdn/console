@@ -43,6 +43,7 @@ import {
   type RestPersonWork,
   type RestProjectRules,
   type RestProjects,
+  type RestRules,
   type RestRuns,
   type RestSkillBrowse,
   type RestSkillFile,
@@ -231,6 +232,7 @@ import {
   type WorkspaceSettings,
 } from "../db/queries/workspaces.js";
 import type { Logger } from "../logger.js";
+import type { Plugins } from "../plugins/registry.js";
 import { type BlobStore, BlobStoreError } from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
 import { pictureUrlOf } from "../ports/picture-source.js";
@@ -309,6 +311,8 @@ export interface RestDependencies {
   readonly blobs: BlobStore;
   /** The skills of a project, read by address. */
   readonly skills: Skills;
+  /** The plugins, for the ones the rules name (docs/specs/plugins.md, "The command"). */
+  readonly plugins: Plugins;
   /** Connecting a project's pack with a code at the deployment (ADR-0036); left out where no deployment is reached. */
   readonly packConnector: PackConnector | undefined;
   /** Seals the pack token a project holds (ADR-0028); left out where nobody signs in, and then no project holds one. */
@@ -528,6 +532,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     pictures,
     blobs,
     skills,
+    plugins,
     packConnector,
     secrets,
     clock,
@@ -3404,7 +3409,12 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     if (person instanceof Response) {
       return person;
     }
-    return c.json(restRules(await readRules(database, workspacePages(person))));
+    // With the rules, the plugins the person may use: every one, since nothing narrows them here.
+    const body: RestRules = {
+      ...restRules(await readRules(database, workspacePages(person))),
+      plugins: await plugins.forRules(person, undefined),
+    };
+    return c.json(body);
   });
 
   app.put(REST_ROUTES.rules, documentTooLarge, async (c) => {
@@ -3469,7 +3479,15 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       readRules(database, { workspaceId: found.scope.workspaceId, projectId: null }),
       readRules(database, found.scope),
     ]);
-    const body: RestProjectRules = { workspace: restRules(workspace), project: restRules(project) };
+    // With the rules, the plugins bound to the project that the person holds a role in.
+    const body: RestProjectRules = {
+      workspace: restRules(workspace),
+      project: restRules(project),
+      plugins: await plugins.forRules(found.person, {
+        id: found.project.id,
+        key: found.project.key,
+      }),
+    };
     return c.json(body);
   });
 

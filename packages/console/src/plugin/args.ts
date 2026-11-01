@@ -405,6 +405,113 @@ export function argValueFromWord(description: ArgDescription, word: string): unk
   }
 }
 
+/** The words of a command line as the values of a command's arguments, or the first word that does not fit. */
+export type ParsedArgv =
+  | { readonly values: Record<string, unknown>; readonly problem?: undefined }
+  | { readonly problem: string; readonly values?: undefined };
+
+/**
+ * The words of a command line as the arguments of a command or a query, by its definitions
+ * (docs/specs/plugins.md, "The command"): the positional arguments in declaration order, one word
+ * each, among the flags, `--name value` or `--name=value`; a boolean flag alone means true; a
+ * list is a flag given again, or commas between its items; `--` ends the flags. An argument of
+ * type `file` takes the handles of the files the command uploaded, one each in declaration
+ * order, where none is named. The values are then checked with `argsProblem`.
+ */
+export function parseArgv(
+  definitions: Readonly<Record<string, ArgDescription>>,
+  argv: readonly string[],
+  files: readonly string[] = [],
+): ParsedArgv {
+  const values: Record<string, unknown> = {};
+  const positionals = Object.entries(definitions).filter(
+    ([, description]) => description.positional,
+  );
+  let position = 0;
+  let flagsEnded = false;
+  const put = (name: string, description: ArgDescription, word: string): string | undefined => {
+    const value = argValueFromWord(description, word);
+    if (description.type === "list") {
+      const current = values[name];
+      values[name] = Array.isArray(current) ? [...current, ...(value as unknown[])] : value;
+      return undefined;
+    }
+    if (Object.hasOwn(values, name)) {
+      return `${name} is given more than once`;
+    }
+    values[name] = value;
+    return undefined;
+  };
+  for (let index = 0; index < argv.length; index += 1) {
+    const word = argv[index] ?? "";
+    if (!flagsEnded && word === "--") {
+      flagsEnded = true;
+      continue;
+    }
+    if (!flagsEnded && word.startsWith("--") && word.length > 2) {
+      const equals = word.indexOf("=");
+      const name = equals < 0 ? word.slice(2) : word.slice(2, equals);
+      const description = Object.hasOwn(definitions, name) ? definitions[name] : undefined;
+      if (description === undefined) {
+        return { problem: `--${name} is not an argument of this command` };
+      }
+      let given: string;
+      if (equals >= 0) {
+        given = word.slice(equals + 1);
+      } else if (description.type === "boolean") {
+        given = "";
+      } else {
+        const next = argv[index + 1];
+        if (next === undefined) {
+          return { problem: `--${name} needs a value` };
+        }
+        given = next;
+        index += 1;
+      }
+      const problem = put(name, description, given);
+      if (problem !== undefined) {
+        return { problem };
+      }
+      continue;
+    }
+    const slot = positionals[position];
+    if (slot === undefined) {
+      return {
+        problem:
+          positionals.length === 0
+            ? `${JSON.stringify(word)} is one word too many: the command takes no positional argument, only flags`
+            : `${JSON.stringify(word)} is one word too many: the command takes ${positionals.length} positional argument${positionals.length === 1 ? "" : "s"}`,
+      };
+    }
+    const problem = put(slot[0], slot[1], word);
+    if (problem !== undefined) {
+      return { problem };
+    }
+    position += 1;
+  }
+  let taken = 0;
+  let slots = 0;
+  for (const [name, description] of Object.entries(definitions)) {
+    if (description.type !== "file") {
+      continue;
+    }
+    slots += 1;
+    if (!Object.hasOwn(values, name) && taken < files.length) {
+      values[name] = files[taken];
+      taken += 1;
+    }
+  }
+  if (taken < files.length) {
+    return {
+      problem:
+        slots === 0
+          ? "the command takes no file"
+          : `the command takes ${slots} file${slots === 1 ? "" : "s"}, not ${files.length}`,
+    };
+  }
+  return { values };
+}
+
 /** The usage of an argument, as help prints it: `<from>` for a positional, `--to <day>` for a flag, in brackets where optional. */
 export function argUsage(name: string, description: ArgDescription): string {
   const placeholder =

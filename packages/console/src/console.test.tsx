@@ -482,6 +482,10 @@ describe("createConsole", () => {
     work: never,
     personWork: never,
     myDecisions: never,
+    plugins: never,
+    plugin: () => {
+      throw new Error("no plugins in this test");
+    },
   };
 
   it("assembles an app from the default components, and the ones a team replaces", () => {

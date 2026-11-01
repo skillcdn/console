@@ -19,7 +19,7 @@
 | The components: the board, a task, a run, a decision, the live feed | Each takes its data as props and nothing from the network. | exported |
 | `createConsole(config)` | The default console assembled from the components, with the places a team may replace named. The UI the image serves is this, with the default configuration. | exported |
 | The serving of a build | `@skillcdn/console/web`: the files of a build, the page for every other path, under one policy. What the image serves the default UI with, and what `console serve` serves a console of your own with. Node only. | exported |
-| The contract of a plugin | `@skillcdn/console/plugin`: the manifest's schema, `definePlugin` and its definers, the types of `ctx`; `@skillcdn/console/plugin/web`: the frame's side of the bridge; `@skillcdn/console/plugin/testing`: a `ctx` for a plugin's tests; and `console-plugin`, the second `bin`, which writes a plugin from a template and checks one as a console would. No console runs a plugin yet ([docs/specs/plugins.md](https://github.com/skillcdn/console/blob/main/docs/specs/plugins.md)). | exported, ahead of the host |
+| The contract of a plugin | `@skillcdn/console/plugin`: the manifest's schema, `definePlugin` and its definers, the types of `ctx`; `@skillcdn/console/plugin/web`: the frame's side of the bridge; `@skillcdn/console/plugin/testing`: a `ctx` for a plugin's tests; and `console-plugin`, the second `bin`, which writes a plugin from a template and checks one as a console would. A console runs them, and an agent works one through `console plugin <key>` ([docs/specs/plugins.md](https://github.com/skillcdn/console/blob/main/docs/specs/plugins.md)). | exported |
 
 ### The API layer
 
