@@ -1,6 +1,6 @@
 # Spec: plugins
 
-- Status: **Being built.** The decisions are [ADR-0049](../adr/0049-a-plugin-is-an-npm-package-installed-into-the-image-and-enabled-by-an-administrator.md) to [ADR-0054](../adr/0054-a-plugins-pages-run-in-a-sandboxed-frame-and-speak-only-to-their-plugin.md), taken 2026-11-01; milestone 34 of the [roadmap](../roadmap.md) builds them in order, and says what is built: the contract in the package, the authoring command and the example are; the host, the records, the routes, the board and the pages are not yet. This document is the contract between a console and a plugin, and between the console and whoever installs or administers one. Until the milestone is done, where the code and this document differ, the code is behind.
+- Status: **Being built.** The decisions are [ADR-0049](../adr/0049-a-plugin-is-an-npm-package-installed-into-the-image-and-enabled-by-an-administrator.md) to [ADR-0054](../adr/0054-a-plugins-pages-run-in-a-sandboxed-frame-and-speak-only-to-their-plugin.md), taken 2026-11-01; milestone 34 of the [roadmap](../roadmap.md) builds them in order, and says what is built: the contract in the package, the authoring command, the example, the host, the installs with their consent, settings, secrets and grants, their routes and the events are; the records, the command's own routes, the board, hooks, jobs and the pages are not yet. This document is the contract between a console and a plugin, and between the console and whoever installs or administers one. Until the milestone is done, where the code and this document differ, the code is behind.
 - Where things live: the contract in `@skillcdn/console/plugin` (the manifest's schema, `definePlugin` and its definers, the types of `ctx`, the capabilities, the bounds and the refusals), `@skillcdn/console/plugin/web` (the bridge client) and `@skillcdn/console/plugin/testing` (a context for a plugin's own tests); the host, the record store, the policy and the routes in `apps/console/src/plugins/`; the authoring command `console-plugin` as a second `bin` of the package, with its template in the package's `template/plugin`; an example plugin in `examples/plugin-hello`; the skill `skills/building-a-plugin`. The console's own words, limits and refusals are in [rest.md](rest.md) and [cli.md](cli.md); this document adds the plugins'.
 
 ## Words
@@ -449,6 +449,7 @@ The install path is the first line (a release of the deployment, from a lockfile
 | 409 | `plugin.requires` | a required plugin is not enabled or not in range |
 | 409 | `plugin.required_by` | another enabled plugin requires this one |
 | 429 | `plugin.rate_limited` | more webhook or outbound requests than the bound |
+| 500 | `plugin.failed` | the plugin's code threw what is not its own refusal, or the console could not perform a call on `ctx`; what was said is in the log, never in the answer |
 | 400 | `plugin.<key>.<code>` | the plugin's own refusal, `code` as the plugin says, the message its own |
 
 ## Authoring

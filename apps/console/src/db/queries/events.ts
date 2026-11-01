@@ -36,6 +36,8 @@ export interface EventScope {
   readonly decisionId?: string | undefined;
   readonly documentId?: string | undefined;
   readonly goalId?: string | undefined;
+  /** Within a workspace: the events one plugin caused, by its key, whichever project they are in. */
+  readonly plugin?: string | undefined;
 }
 
 export interface EventRecord {
@@ -51,6 +53,8 @@ export interface EventRecord {
   readonly runId: string | undefined;
   readonly documentId: string | undefined;
   readonly goalId: string | undefined;
+  /** The plugin that caused it, by key (ADR-0052); none for the console's own doing. */
+  readonly plugin: string | undefined;
   readonly data: RestEventData;
   readonly createdAt: Date;
 }
@@ -74,6 +78,8 @@ export async function recordEvent(
     readonly runId?: string | undefined;
     readonly documentId?: string | undefined;
     readonly goalId?: string | undefined;
+    /** The plugin that caused it, by key, where one did. */
+    readonly plugin?: string | undefined;
     readonly data: RestEventData;
     readonly now: Date;
   },
@@ -91,6 +97,7 @@ export async function recordEvent(
       runId: event.runId ?? null,
       documentId: event.documentId ?? null,
       goalId: event.goalId ?? null,
+      plugin: event.plugin ?? null,
       data: event.data,
       createdAt: event.now,
     })
@@ -118,6 +125,7 @@ function selectEvents(database: Database) {
       runId: events.runId,
       documentId: events.documentId,
       goalId: events.goalId,
+      plugin: events.plugin,
       data: events.data,
       createdAt: events.createdAt,
       actor: personColumns(actors),
@@ -138,6 +146,7 @@ function within(scope: EventScope) {
     scope.decisionId === undefined ? undefined : eq(events.decisionId, scope.decisionId),
     scope.documentId === undefined ? undefined : eq(events.documentId, scope.documentId),
     scope.goalId === undefined ? undefined : eq(events.goalId, scope.goalId),
+    scope.plugin === undefined ? undefined : eq(events.plugin, scope.plugin),
   );
 }
 
@@ -154,6 +163,7 @@ function toEvent(row: EventRow): EventRecord {
     runId: row.runId ?? undefined,
     documentId: row.documentId ?? undefined,
     goalId: row.goalId ?? undefined,
+    plugin: row.plugin ?? undefined,
     data: row.data,
     createdAt: row.createdAt,
   };
@@ -200,4 +210,23 @@ export async function latestEventId(database: Database, workspaceId: string): Pr
     .from(events)
     .where(eq(events.workspaceId, workspaceId));
   return row?.latest ?? 0;
+}
+
+/**
+ * The newest events one plugin caused in the workspace, whichever project they are in, newest
+ * first, a page at a time: what a plugin's settings page and `GET /api/v1/plugins/<key>/events`
+ * show.
+ */
+export async function listEventsOfPlugin(
+  database: Database,
+  workspaceId: string,
+  plugin: string,
+  page: { readonly limit: number; readonly offset: number },
+): Promise<{ readonly items: EventRecord[]; readonly more: boolean }> {
+  const rows = await selectEvents(database)
+    .where(and(eq(events.workspaceId, workspaceId), eq(events.plugin, plugin)))
+    .orderBy(desc(events.id))
+    .limit(page.limit + 1)
+    .offset(page.offset);
+  return { items: rows.slice(0, page.limit).map(toEvent), more: rows.length > page.limit };
 }

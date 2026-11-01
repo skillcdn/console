@@ -22,6 +22,7 @@ import type { LiveFeed } from "../http/live-feed.js";
 import type { Quotas } from "../http/quotas.js";
 import type { AppEnv } from "../http/request-context.js";
 import { restProject } from "../http/rest-shapes.js";
+import type { Plugins } from "../plugins/registry.js";
 import type { BlobStore } from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
 import type { OrganizationDirectory } from "../ports/organization.js";
@@ -113,6 +114,8 @@ export interface HarnessOptions {
   readonly packConnector?: PackConnector | undefined;
   /** Where a picture from elsewhere is fetched (ADR-0048). Over HTTPS when left out, which no test wants. */
   readonly pictures?: PictureSource | undefined;
+  /** The plugins, with their host, read from a directory of the test's own. None when left out. */
+  readonly plugins?: Plugins | undefined;
 }
 
 /** The skills as the api role is configured with them, at a deployment of the tests' own. */
@@ -185,6 +188,7 @@ export function createHarness(testDatabase: TestDatabase, options: HarnessOption
       packConnector: options.packConnector,
       pictures: options.pictures,
       blobs: options.blobs,
+      plugins: options.plugins,
       version: HARNESS_VERSION,
     },
   );

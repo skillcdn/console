@@ -83,9 +83,10 @@ describe("the common rule", () => {
   });
 
   it("is narrowed by the policy's floor only where the floor is within it", () => {
-    // The line's first version on both sides: the 0.4 line was adopted whole (ADR-0034, ADR-0038).
-    expect(CLIENT_POLICY).toEqual({ atLeast: "0.4.1" });
-    expect(CONSOLE_AT_LEAST).toBe("0.4.1");
+    // The floors on both sides: the 0.4 line was adopted whole (ADR-0034, ADR-0038), and the plugins
+    // raised them to 0.4.2, where every event gained the plugin that caused it and eight kinds.
+    expect(CLIENT_POLICY).toEqual({ atLeast: "0.4.2" });
+    expect(CONSOLE_AT_LEAST).toBe("0.4.2");
     expect(formatRange(clientRange(v("1.4.2"), { atLeast: "1.4.1" }))).toBe(">=1.4.1 <1.6.0");
     expect(formatRange(clientRange(v("1.4.2"), { atLeast: "1.2.0" }))).toBe(">=1.3.0 <1.6.0");
     expect(formatRange(clientRange(v("1.4.2"), { atLeast: "1.6.0" }))).toBe(">=1.3.0 <1.6.0");
@@ -110,11 +111,11 @@ describe("judging a command", () => {
     expect(judgeClient(v("0.3.1"), v("0.3.4"), { atLeast: "0.3.2" }).verdict).toBe("outdated");
     expect(judgeClient(v("0.3.2"), v("0.3.4"), { atLeast: "0.3.2" }).verdict).toBe("behind");
     // The console's own policy: a command of the line before is refused, one of the line from
-    // the floor on answered, one below the floor refused (ADR-0046 raised it to 0.4.1).
-    expect(judgeClient(v("0.3.9"), v("0.4.2")).verdict).toBe("outdated");
-    expect(judgeClient(v("0.4.0"), v("0.4.2")).verdict).toBe("outdated");
-    expect(judgeClient(v("0.4.1"), v("0.4.2")).verdict).toBe("behind");
-    expect(formatRange(judgeClient(v("0.4.1"), v("0.4.2")).range)).toBe(">=0.4.1 <0.5.0");
+    // the floor on answered, one below the floor refused (the plugins raised it to 0.4.2).
+    expect(judgeClient(v("0.3.9"), v("0.4.3")).verdict).toBe("outdated");
+    expect(judgeClient(v("0.4.1"), v("0.4.3")).verdict).toBe("outdated");
+    expect(judgeClient(v("0.4.2"), v("0.4.3")).verdict).toBe("behind");
+    expect(formatRange(judgeClient(v("0.4.2"), v("0.4.3")).range)).toBe(">=0.4.2 <0.5.0");
   });
 
   it("from 1.0 answers a minor within one and refuses the rest", () => {

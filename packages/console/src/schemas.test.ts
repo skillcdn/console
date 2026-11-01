@@ -254,6 +254,7 @@ describe("what the server answers", () => {
       runId: null,
       documentId: null,
       goalId: null,
+      plugin: null,
       data: { number: 1, title: "Ship" },
       createdAt: "2026-10-09T10:00:00.000Z",
     };

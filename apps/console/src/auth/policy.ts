@@ -112,3 +112,12 @@ export function readsWorkspaceEvents(asker: PersonRecord, settings: AccessSettin
 export function configuresWorkspace(person: PersonRecord): boolean {
   return administers(person);
 }
+
+/**
+ * Whether `person` configures the plugins (ADR-0049): enables and disables them, consents to
+ * what they ask, binds their board, sets their settings and secrets, grants their roles. An
+ * administrator's, and nobody else's; a plugin's roles themselves are decided from its grants.
+ */
+export function configuresPlugins(person: PersonRecord): boolean {
+  return administers(person);
+}

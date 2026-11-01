@@ -642,6 +642,15 @@ export const en = {
     as: (agent: string) => `as ${agent}`,
     asTitle: "The agent the person acted through",
     aTask: "a task",
+    aPlugin: "a plugin",
+    everyone: "everyone",
+    membersOf: (project: string) => `the members of ${project}`,
+    outcome: {
+      ok: "done",
+      refused: "refused",
+      waiting: "waiting for a decision",
+      failed: "failed",
+    } as Readonly<Record<string, string>>,
     aProject: "a project",
     someone: "someone",
     something: "something",
@@ -727,6 +736,19 @@ export const en = {
       documentArchived: (page: string) => `archived ${page}`,
       documentRestored: (page: string) => `restored ${page}`,
       fileAttached: (label: string, page: string) => `attached ${label} to ${page}`,
+      pluginEnabled: (plugin: string) => `enabled the plugin ${plugin}`,
+      pluginDisabled: (plugin: string) => `disabled the plugin ${plugin}`,
+      pluginConfigured: (fields: string, plugin: string) =>
+        `changed ${fields} of the plugin ${plugin}`,
+      pluginGranted: (role: string, who: string, plugin: string) =>
+        `gave ${who} the role ${role} in the plugin ${plugin}`,
+      pluginRevoked: (role: string, who: string, plugin: string) =>
+        `took the role ${role} from ${who} in the plugin ${plugin}`,
+      pluginUpgraded: (plugin: string, version: string) =>
+        `brought the plugin ${plugin} to ${version}`,
+      pluginCommand: (command: string, plugin: string, outcome: string) =>
+        `ran ${command} of the plugin ${plugin}: ${outcome}`,
+      pluginFailed: (plugin: string, problem: string) => `the plugin ${plugin} failed: ${problem}`,
     },
   },
 

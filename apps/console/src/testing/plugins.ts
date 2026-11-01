@@ -1,6 +1,6 @@
 import { cp, mkdir, realpath, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // Test support for the plugins: a PLUGINS_DIR laid out as the image lays one out, from the
@@ -55,19 +55,6 @@ export async function writePluginsDir(
     });
   }
   return realpath(root);
-}
-
-/**
- * The directories the host may read in this checkout: the app, the package the host imports
- * from, and the package's own dependencies, which pnpm keeps outside both.
- */
-export async function allowedReadRoots(): Promise<string[]> {
-  const roots = [
-    resolve(fileURLToPath(new URL("../../", import.meta.url))),
-    dirname(require.resolve("@skillcdn/console/package.json")),
-    dirname(require.resolve("zod/package.json")),
-  ];
-  return Promise.all(roots.map((root) => realpath(root)));
 }
 
 /** The environment the host gets on this platform: what Node needs on Windows, and nothing of the console's. */

@@ -11,7 +11,6 @@ import {
 import { pino } from "pino";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
-  allowedReadRoots,
   EVIL_PLUGIN_DIR,
   HELLO_PLUGIN_DIR,
   HOST_ENTRY,
@@ -20,6 +19,7 @@ import {
 } from "../testing/plugins.js";
 import { discoverPlugins } from "./discovery.js";
 import { type ContextCall, PluginHost } from "./host.js";
+import { allowedReadRoots } from "./paths.js";
 import type { CallKind, PluginCall } from "./protocol.js";
 
 // The host against a plugin that tries everything the ceiling refuses (docs/specs/plugins.md,
@@ -74,7 +74,7 @@ beforeAll(async () => {
   ]);
   host = new PluginHost({
     entry: HOST_ENTRY,
-    allowRead: [root, ...(await allowedReadRoots())],
+    allowRead: await allowedReadRoots(root),
     env: hostEnvironment(process.env),
     logger: pino(
       { level: "debug" },

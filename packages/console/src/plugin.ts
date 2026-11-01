@@ -100,6 +100,7 @@ export {
   RESERVED_COMMAND_NAMES,
   RESERVED_PAGE_KEYS,
   RESERVED_PLUGIN_KEYS,
+  SETTING_KEY_PATTERN,
 } from "./plugin/manifest.js";
 export {
   isPluginError,

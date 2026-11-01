@@ -116,6 +116,7 @@ export {
   MIN_OPTIONS,
 } from "./limits.js";
 export { projectColorOf, projectSymbolOf } from "./marks.js";
+export * from "./plugin/rest-schemas.js";
 export {
   AUTH_ROUTES,
   CLAIM_PATH,
@@ -127,6 +128,7 @@ export {
   type ProjectCollection,
   personTokensPath,
   personWorkPath,
+  pluginPath,
   projectIconPath,
   projectPath,
   REST_ROUTES,
@@ -371,6 +373,10 @@ export {
   type PeopleVisibility,
   type PersonRole,
   type PersonStatus,
+  PLUGIN_COMMAND_OUTCOMES,
+  PLUGIN_STATES,
+  type PluginCommandOutcome,
+  type PluginState,
   PROJECT_ICON_TYPES,
   PROJECT_ROLES,
   PROJECT_VISIBILITIES,

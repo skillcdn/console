@@ -204,6 +204,13 @@
       "when": 1793346298734,
       "tag": "0028_connect_client_address",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1793548335351,
+      "tag": "0029_plugins",
+      "breakpoints": true
     }
   ]
 }

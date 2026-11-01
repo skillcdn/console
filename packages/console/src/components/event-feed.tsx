@@ -34,6 +34,15 @@ export function describeEvent(event: RestEvent, words: Messages = en): string {
   const question = data.question ?? feed.aQuestion;
   const goal = data.title ?? feed.aGoal;
   const category = data.name ?? data.key ?? feed.aCategory;
+  const plugin = event.plugin ?? feed.aPlugin;
+  const grantee =
+    data.everyone === true
+      ? feed.everyone
+      : data.login !== undefined
+        ? data.login
+        : data.key !== undefined
+          ? feed.membersOf(data.name ?? data.key)
+          : feed.someone;
   switch (event.kind) {
     case "person.joined":
       return feed.event.personJoined();
@@ -115,6 +124,29 @@ export function describeEvent(event: RestEvent, words: Messages = en): string {
       return feed.event.documentRestored(page);
     case "document.file_attached":
       return feed.event.fileAttached(data.label ?? feed.aFile, page);
+    case "plugin.enabled":
+      return feed.event.pluginEnabled(plugin);
+    case "plugin.disabled":
+      return feed.event.pluginDisabled(plugin);
+    case "plugin.configured":
+      return feed.event.pluginConfigured(fields, plugin);
+    case "plugin.granted":
+      return feed.event.pluginGranted(data.role ?? feed.role.other, grantee, plugin);
+    case "plugin.revoked":
+      return feed.event.pluginRevoked(data.role ?? feed.role.other, grantee, plugin);
+    case "plugin.upgraded":
+      return feed.event.pluginUpgraded(
+        plugin,
+        data.version === undefined ? feed.something : String(data.version),
+      );
+    case "plugin.command":
+      return feed.event.pluginCommand(
+        data.command ?? feed.something,
+        plugin,
+        feed.outcome[data.outcome ?? ""] ?? data.outcome ?? feed.something,
+      );
+    case "plugin.failed":
+      return feed.event.pluginFailed(plugin, data.problem ?? feed.something);
   }
 }
 

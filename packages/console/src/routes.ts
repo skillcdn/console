@@ -35,7 +35,14 @@ export const REST_ROUTES = {
   decisions: "/api/v1/decisions",
   /** The rules of the board (ADR-0023): the console's own until an administrator writes the organization's. */
   rules: "/api/v1/rules",
+  /** The plugins (ADR-0049): the ones a member may know of, and under each key the plugin's own routes. */
+  plugins: "/api/v1/plugins",
 } as const;
+
+/** The REST path of one plugin, by its key, and of what is under it. */
+export function pluginPath(key: string, ...parts: readonly string[]): string {
+  return [REST_ROUTES.plugins, encodeURIComponent(key), ...parts.map(encodeURIComponent)].join("/");
+}
 
 /** The REST path of the workspace's rules put away, or of their versions. */
 export function rulesPath(part?: "archive" | "versions"): string {

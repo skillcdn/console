@@ -37,6 +37,10 @@ import { Janitor } from "../jobs/janitor.js";
 import { OrganizationSync } from "../jobs/organization-sync.js";
 import { RunCloser } from "../jobs/run-closer.js";
 import type { Logger } from "../logger.js";
+import { discoverPlugins } from "../plugins/discovery.js";
+import { PluginHost } from "../plugins/host.js";
+import { allowedReadRoots, HOST_ENTRY } from "../plugins/paths.js";
+import { Plugins } from "../plugins/registry.js";
 import { type BlobStore, BlobStoreError } from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
 import { fixedCredentials } from "../ports/credentials.js";
@@ -94,6 +98,8 @@ export interface ApiPorts {
   readonly packConnector?: PackConnector | undefined;
   /** The console's version, which the command is held to (ADR-0025). The package's when left out; for tests. */
   readonly version?: string | undefined;
+  /** The plugins, read from PLUGINS_DIR and running in their host. Left out, the console has none. */
+  readonly plugins?: Plugins | undefined;
 }
 
 export type ApiConfig = Pick<Config, "workspace"> & {
@@ -255,11 +261,13 @@ export function createApi(
     logger,
   });
 
+  const plugins = ports.plugins ?? Plugins.none(database, workspace, clock, logger);
   const app = createApp({
     database,
     workspace,
     auth,
     feed,
+    plugins,
     quotas: quotasOf(config.quotas),
     pictures: new PictureCache({
       source:
@@ -436,6 +444,8 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
     );
   }
   const blobs = await blobStoreOf(config, database, logger, userAgent);
+  const plugins =
+    config.plugins.dir === undefined ? undefined : await pluginsOf(config, database, logger);
   let shuttingDown = false;
   const { app, feed } = createApi(config, {
     database,
@@ -446,6 +456,7 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
     isShuttingDown: () => shuttingDown,
     web,
     blobs,
+    plugins,
   });
   // What any process changes reaches this one's subscribers through the database's own channel.
   const listener = startEventListener({
@@ -525,8 +536,78 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
   await archivist?.close();
   await runCloser?.close();
   await sync?.close();
+  await plugins?.stop();
   await database.close();
   logger.info("shutdown complete");
+}
+
+/**
+ * The plugins of this deployment (docs/specs/plugins.md): read from the directory the image installed
+ * them into, loaded into a host of their own under Node's permission model, and taken stock of. A
+ * directory that is not there is a setting to fix; a plugin that does not read or load is failed with
+ * its reasons, and the console boots on.
+ */
+export async function pluginsOf(
+  config: Config,
+  database: Database,
+  logger: Logger,
+): Promise<Plugins> {
+  const dir = config.plugins.dir;
+  if (dir === undefined) {
+    throw new ConfigError(["PLUGINS_DIR: not set"]);
+  }
+  const info = await stat(dir).catch(() => undefined);
+  if (info === undefined || !info.isDirectory()) {
+    throw new ConfigError([`PLUGINS_DIR: not a directory that can be read: ${dir}`]);
+  }
+  let discovery: Awaited<ReturnType<typeof discoverPlugins>>;
+  try {
+    discovery = await discoverPlugins(dir);
+  } catch (error) {
+    throw new ConfigError([
+      `PLUGINS_DIR: ${error instanceof Error ? error.message : String(error)}`,
+    ]);
+  }
+  const holder: { current: Plugins | undefined } = { current: undefined };
+  const host = new PluginHost({
+    entry: HOST_ENTRY,
+    allowRead: await allowedReadRoots(dir),
+    env: config.plugins.hostEnv,
+    logger,
+    onContext: (call) =>
+      holder.current === undefined
+        ? Promise.reject(new Error("the plugins are not started"))
+        : holder.current.contextHandler(call),
+  });
+  const plugins = new Plugins({
+    database,
+    workspace: workspaceResolver(database, systemClock, config.workspace.name),
+    host,
+    discovery,
+    memoryMb: config.plugins.memoryMb,
+    secrets: config.auth === undefined ? undefined : createSecrets(config.auth.secret),
+    clock: systemClock,
+    logger,
+  });
+  holder.current = plugins;
+  try {
+    await host.start();
+  } catch (error) {
+    logger.error(
+      { err: error },
+      "the plugin host could not be started; every plugin is unavailable",
+    );
+  }
+  await plugins.start();
+  logger.info(
+    {
+      plugins: discovery.plugins.map((plugin) => plugin.key),
+      failed: discovery.failed.map((plugin) => plugin.key),
+      directory: dir,
+    },
+    "plugins read",
+  );
+  return plugins;
 }
 
 /** The organization at the git host, read through the app the configuration names, or none. */

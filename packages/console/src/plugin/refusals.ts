@@ -16,6 +16,8 @@ export const PLUGIN_REFUSALS = {
   "plugin.requires": 409,
   "plugin.required_by": 409,
   "plugin.rate_limited": 429,
+  /** The plugin's code threw something that is not its own refusal, or answered what cannot be carried; what it said is in the log. */
+  "plugin.failed": 500,
 } as const;
 
 export type PluginRefusalCode = keyof typeof PLUGIN_REFUSALS;

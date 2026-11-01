@@ -209,6 +209,7 @@ describe("the language", () => {
           runId: null,
           documentId: null,
           goalId: null,
+          plugin: null,
           data: { number: 7, title: "Ship", from: "ready", to: "in_progress" },
           createdAt: "2026-10-09T10:00:00.000Z",
         },
@@ -323,6 +324,7 @@ describe("one task", () => {
             runId: null,
             documentId: null,
             goalId: null,
+            plugin: null,
             data: { number: 7, title: "Ship", from: "ready", to: "in_progress" },
             createdAt: "2026-10-09T10:00:00.000Z",
           },
@@ -592,6 +594,7 @@ describe("the feed", () => {
     taskId: null,
     decisionId: null,
     runId: null,
+    plugin: null,
     data: {},
     createdAt: "2026-10-09T10:00:00.000Z",
     ...overrides,
@@ -1341,6 +1344,7 @@ describe("people", () => {
       runId: null,
       documentId: null,
       goalId: null,
+      plugin: null,
       data: { login: "bob", role: "admin" },
       createdAt: "2026-10-09T10:00:00.000Z",
     };
@@ -1484,6 +1488,7 @@ describe("runs", () => {
       runId: run.id,
       documentId: null,
       goalId: null,
+      plugin: null,
       data: { number: 7, title: "Ship", agent: "Claude Code" },
       createdAt: "2026-10-09T10:00:00.000Z",
     };
@@ -2538,6 +2543,7 @@ describe("a run and the feed, a page at a time", () => {
       runId: null,
       documentId: null,
       goalId: null,
+      plugin: null,
       data: { number: index + 1, title: `Task ${index + 1}` },
       createdAt: "2026-10-09T10:00:00.000Z",
     }));
@@ -3375,6 +3381,7 @@ describe("the archive of the board (ADR-0029)", () => {
       runId: null,
       documentId: null,
       goalId: null,
+      plugin: null,
       data: { number: 7, title: "Ship" },
       createdAt: "2026-10-09T10:00:00.000Z",
     };

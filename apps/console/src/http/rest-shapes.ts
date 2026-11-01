@@ -258,6 +258,7 @@ export function restEvent(event: EventRecord): RestEvent {
     runId: event.runId ?? null,
     documentId: event.documentId ?? null,
     goalId: event.goalId ?? null,
+    plugin: event.plugin ?? null,
     data: event.data,
     createdAt: event.createdAt.toISOString(),
   };

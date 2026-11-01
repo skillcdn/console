@@ -55,6 +55,7 @@ import {
   PEOPLE_VISIBILITIES,
   PERSON_ROLES,
   PERSON_STATUSES,
+  PLUGIN_COMMAND_OUTCOMES,
   PROJECT_ICON_TYPES,
   PROJECT_ROLES,
   PROJECT_VISIBILITIES,
@@ -815,6 +816,18 @@ export const restEventDataSchema = z.object({
   excerpt: z.optional(z.string()),
   /** For `task.commented`: how many files came with it. */
   files: z.optional(z.int()),
+  /** For `plugin.command`: the command, how it ended, the refusal's code where it was refused, how long it ran, and the arguments, a secret one as `[hidden]`. */
+  command: z.optional(z.string()),
+  outcome: z.optional(z.enum(PLUGIN_COMMAND_OUTCOMES)),
+  code: z.optional(z.string()),
+  durationMs: z.optional(z.int()),
+  args: z.optional(z.record(z.string(), z.unknown())),
+  /** For `plugin.enabled` and `plugin.configured`: the capabilities consented to. */
+  capabilities: z.optional(z.array(z.string())),
+  /** For `plugin.granted` and `plugin.revoked`: whether the role went to everyone. */
+  everyone: z.optional(z.boolean()),
+  /** For `plugin.failed`: what went wrong, in words for a person. */
+  problem: z.optional(z.string()),
 });
 export type RestEventData = z.infer<typeof restEventDataSchema>;
 
@@ -835,6 +848,8 @@ export const restEventSchema = z.object({
   documentId: z.nullable(uuid),
   /** The goal it is about, or `null`. */
   goalId: z.nullable(uuid),
+  /** The plugin that caused it, by key, or `null` (ADR-0052). */
+  plugin: z.nullable(z.string()),
   data: restEventDataSchema,
   createdAt: instant,
 });
@@ -1390,3 +1405,6 @@ export const restRunEndInputSchema = z.object({
   summary: z.optional(summary),
 });
 export type RestRunEndInput = z.infer<typeof restRunEndInputSchema>;
+
+// The plugins' routes (docs/specs/plugins.md, "REST"), beside the board's.
+export * from "./plugin/rest-schemas.js";

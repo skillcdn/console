@@ -218,6 +218,10 @@ const environmentSchema = z.object({
   SKILLCDN_URL: origin.default("https://skillcdn.ai"),
   SKILLS_ADDRESS: z.string().trim().min(1).max(MAX_ADDRESS_LENGTH).optional(),
   SKILLS_DIR: z.string().min(1).optional(),
+  /** The plugins the image installed (docs/specs/plugins.md); unset, there are none. */
+  PLUGINS_DIR: z.string().min(1).optional(),
+  PLUGIN_MEMORY_MB_AT_MOST: integer(256, 64, 8192),
+  PLUGIN_FILE_BYTES_AT_MOST: z.coerce.number().int().positive().optional(),
 
   S3_ENDPOINT: origin.optional(),
   S3_BUCKET: z
@@ -406,6 +410,18 @@ export interface Config {
     readonly source: string;
     readonly address: Address | undefined;
     readonly directory: string | undefined;
+  };
+  /**
+   * The plugins (ADR-0049, docs/specs/plugins.md): the directory the image installed them into, or
+   * none; the memory one plugin's thread may hold; the bytes its files may hold together, or no
+   * bound; and the environment the plugin host gets, which is nothing but what Node needs on this
+   * platform, never the console's own.
+   */
+  readonly plugins: {
+    readonly dir: string | undefined;
+    readonly memoryMb: number;
+    readonly fileBytesAtMost: number | undefined;
+    readonly hostEnv: Readonly<Record<string, string>>;
   };
   readonly blobs: {
     /** Where the bytes of files go. Unset: the rows of the database. */
@@ -696,6 +712,26 @@ function bucketOf(
   };
 }
 
+/** What Node itself needs of the environment on Windows, and nothing else; on other platforms, nothing. */
+const HOST_ENVIRONMENT_NAMES = ["SYSTEMROOT", "SystemRoot", "TEMP", "TMP"] as const;
+
+/**
+ * The environment the plugin host is spawned with (docs/specs/plugins.md, "The host"): nothing of
+ * the console's, no secret, no connection string; only what Node needs to start on this platform.
+ */
+export function hostEnvironmentOf(environment: Environment): Record<string, string> {
+  const kept: Record<string, string> = {};
+  if (process.platform === "win32") {
+    for (const name of HOST_ENVIRONMENT_NAMES) {
+      const value = environment[name];
+      if (value !== undefined && value !== "") {
+        kept[name] = value;
+      }
+    }
+  }
+  return kept;
+}
+
 /**
  * Parses and validates the environment once, at boot. Problems name the variable and the rule,
  * never the value: a connection string or a secret must not end up in a log.
@@ -755,6 +791,12 @@ export function loadConfig(
     auth,
     web: { root: env.WEB_ROOT },
     skills: { source: env.SKILLCDN_URL, address, directory: env.SKILLS_DIR },
+    plugins: {
+      dir: env.PLUGINS_DIR,
+      memoryMb: env.PLUGIN_MEMORY_MB_AT_MOST,
+      fileBytesAtMost: env.PLUGIN_FILE_BYTES_AT_MOST,
+      hostEnv: hostEnvironmentOf(environment),
+    },
     blobs: { bucket },
   };
 }

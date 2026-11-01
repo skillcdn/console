@@ -598,6 +598,15 @@ export const ko: Messages = {
     as: (agent) => `${agent}(으)로`,
     asTitle: "그 사람이 사용한 에이전트",
     aTask: "작업",
+    aPlugin: "플러그인",
+    everyone: "모든 구성원",
+    membersOf: (project) => `${project}의 구성원`,
+    outcome: {
+      ok: "완료",
+      refused: "거절됨",
+      waiting: "결정 대기",
+      failed: "실패",
+    },
     aProject: "프로젝트",
     someone: "누군가",
     something: "무언가",
@@ -680,6 +689,17 @@ export const ko: Messages = {
       documentArchived: (page) => `${page}을(를) 보관했습니다`,
       documentRestored: (page) => `${page}을(를) 복원했습니다`,
       fileAttached: (label, page) => `${page}에 ${label}을(를) 첨부했습니다`,
+      pluginEnabled: (plugin) => `플러그인 ${plugin}을(를) 켰습니다`,
+      pluginDisabled: (plugin) => `플러그인 ${plugin}을(를) 꺼 두었습니다`,
+      pluginConfigured: (fields, plugin) => `플러그인 ${plugin}의 ${fields}을(를) 바꿨습니다`,
+      pluginGranted: (role, who, plugin) =>
+        `${who}에게 플러그인 ${plugin}의 ${role} 역할을 주었습니다`,
+      pluginRevoked: (role, who, plugin) =>
+        `${who}에게서 플러그인 ${plugin}의 ${role} 역할을 거두었습니다`,
+      pluginUpgraded: (plugin, version) => `플러그인 ${plugin}을(를) ${version}으로 올렸습니다`,
+      pluginCommand: (command, plugin, outcome) =>
+        `플러그인 ${plugin}의 ${command}을(를) 실행했습니다: ${outcome}`,
+      pluginFailed: (plugin, problem) => `플러그인 ${plugin}이(가) 실패했습니다: ${problem}`,
     },
   },
 

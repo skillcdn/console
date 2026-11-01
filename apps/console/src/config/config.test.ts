@@ -41,6 +41,7 @@ describe("loadConfig", () => {
       auth: undefined,
       web: { root: undefined },
       skills: { source: "https://skillcdn.ai", address: undefined, directory: undefined },
+      plugins: { dir: undefined, memoryMb: 256, fileBytesAtMost: undefined, hostEnv: {} },
       blobs: { bucket: undefined },
     });
   });

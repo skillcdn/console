@@ -4,6 +4,7 @@ import type { Database } from "../db/client.js";
 import { getSchemaStatus } from "../db/migrate.js";
 import type { WorkspaceRecord } from "../db/queries/workspaces.js";
 import type { Logger } from "../logger.js";
+import type { Plugins } from "../plugins/registry.js";
 import type { BlobStore } from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
 import type { PackConnector } from "../ports/skill-source.js";
@@ -13,6 +14,7 @@ import type { ClientAddressResolver } from "./client-address.js";
 import { clientVersionGate, versionFactsOf } from "./client-version.js";
 import type { LiveFeed } from "./live-feed.js";
 import type { PictureCache } from "./pictures.js";
+import { registerPluginsRest } from "./plugins-rest.js";
 import type { Quotas } from "./quotas.js";
 import { type AppEnv, requestContext } from "./request-context.js";
 import { registerRest } from "./rest.js";
@@ -37,6 +39,8 @@ export interface AppDependencies {
   readonly blobs: BlobStore;
   /** The organization's skills, read by address. */
   readonly skills: Skills;
+  /** The plugins (docs/specs/plugins.md), and what each person may do with them. */
+  readonly plugins: Plugins;
   /** Connecting a project's pack with a code at the deployment (ADR-0036). Left out, no pack connects that way. */
   readonly packConnector?: PackConnector | undefined;
   /** A build of the default UI to serve. Left out, the server is API only. */
@@ -146,6 +150,8 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
         ? undefined
         : { host: auth.organization.host, name: auth.organization.name },
   });
+
+  registerPluginsRest(app, { plugins: dependencies.plugins, access, logger });
 
   // After the API: a file of the build, or the page for every other path, which routes in the
   // browser. The API's own paths answer their own not-found.

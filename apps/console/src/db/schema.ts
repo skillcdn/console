@@ -23,6 +23,7 @@ import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   bigint,
+  boolean,
   check,
   customType,
   date,
@@ -885,6 +886,8 @@ export const events = pgTable(
     documentId: uuid().references(() => documents.id),
     /** The goal it is about. */
     goalId: uuid().references(() => goals.id),
+    /** The plugin that caused it (ADR-0052), by key; null for the console's own doing. */
+    plugin: text(),
     /** What a feed shows without asking for the subject, as the API describes it. */
     data: jsonb().$type<RestEventData>().notNull().default({}),
     createdAt: createdAt(),
@@ -897,5 +900,106 @@ export const events = pgTable(
     index("events_decision_idx").on(table.decisionId),
     index("events_document_idx").on(table.documentId),
     index("events_goal_idx").on(table.goalId),
+    index("events_plugin_idx").on(table.workspaceId, table.plugin, table.id),
   ],
+);
+
+/**
+ * A plugin an administrator enabled (ADR-0049, docs/specs/plugins.md, "Lifecycle"): what the
+ * console keeps of it while the package comes and goes with the image. The package itself is
+ * read from `PLUGINS_DIR` at boot; this row says whether it is enabled, what was consented to,
+ * which board project and projects it is on, its settings without the secrets, and the version
+ * and data version it was last brought to. An install whose package left the directory is
+ * orphaned, and offered export and purge.
+ */
+export const pluginInstalls = pgTable(
+  "plugin_installs",
+  {
+    id: id(),
+    workspaceId: uuid()
+      .notNull()
+      .references(() => workspaces.id),
+    key: text().notNull(),
+    /** The package's name on the registry, by which it is installed. */
+    packageName: text().notNull(),
+    /** The version last enabled or upgraded to, and the data version its records are at. */
+    version: text().notNull(),
+    dataVersion: integer().notNull().default(1),
+    /** Enabled, disabled by an administrator, or waiting for consent to what a new version asks (checked). */
+    state: text().notNull(),
+    /** The capabilities consented to, as the manifest spells them. */
+    consent: jsonb().$type<string[]>().notNull().default([]),
+    /** The project the plugin's decisions, tasks and documents go to, or none. */
+    boardProjectId: uuid().references(() => projects.id),
+    /** The projects the plugin is on: `"all"`, or their keys. */
+    projects: jsonb().$type<"all" | string[]>().notNull().default(sql`'"all"'::jsonb`),
+    /** The settings' values, by key, without the secrets, which are in `plugin_secrets`. */
+    settings: jsonb().$type<Record<string, unknown>>().notNull().default({}),
+    enabledAt: instant(),
+    enabledBy: uuid().references(() => people.id),
+    disabledAt: instant(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex("plugin_installs_key_key").on(table.workspaceId, table.key),
+    index("plugin_installs_board_idx").on(table.boardProjectId),
+    check(
+      "plugin_installs_state_check",
+      sql`${table.state} in ('enabled', 'disabled', 'needs_consent')`,
+    ),
+  ],
+);
+
+/**
+ * A role of a plugin given by an administrator (docs/specs/plugins.md, "Roles and grants"): to a
+ * person, to the members of a project, which follows the membership, or to everyone of the
+ * workspace. Exactly one of the three, checked. A plugin's grants are read on every call that
+ * names a role; an administrator holds every role without a row.
+ */
+export const pluginGrants = pgTable(
+  "plugin_grants",
+  {
+    id: id(),
+    workspaceId: uuid()
+      .notNull()
+      .references(() => workspaces.id),
+    pluginKey: text().notNull(),
+    role: text().notNull(),
+    personId: uuid().references(() => people.id, { onDelete: "cascade" }),
+    projectId: uuid().references(() => projects.id, { onDelete: "cascade" }),
+    everyone: boolean().notNull().default(false),
+    createdAt: createdAt(),
+    createdBy: uuid().references(() => people.id),
+  },
+  (table) => [
+    index("plugin_grants_plugin_idx").on(table.workspaceId, table.pluginKey),
+    index("plugin_grants_person_idx").on(table.personId),
+    index("plugin_grants_project_idx").on(table.projectId),
+    check(
+      "plugin_grants_target_check",
+      sql`((${table.personId} is not null)::int + (${table.projectId} is not null)::int + (${table.everyone})::int) = 1`,
+    ),
+  ],
+);
+
+/**
+ * A secret setting of a plugin, sealed with the deployment's secret under the purpose
+ * `plugin-secret` (docs/specs/plugins.md, "Settings"): never returned by any route, never handed
+ * to plugin code, used by the console where the plugin names it. Only whether and when it was
+ * set is shown.
+ */
+export const pluginSecrets = pgTable(
+  "plugin_secrets",
+  {
+    workspaceId: uuid()
+      .notNull()
+      .references(() => workspaces.id),
+    pluginKey: text().notNull(),
+    name: text().notNull(),
+    sealed: text().notNull(),
+    setAt: instant().notNull(),
+    setBy: uuid().references(() => people.id),
+  },
+  (table) => [primaryKey({ columns: [table.workspaceId, table.pluginKey, table.name] })],
 );

@@ -17,7 +17,9 @@ export type SealPurpose =
   /** The pack token a project holds (ADR-0028), kept sealed in its row. */
   | "pack-token"
   /** The secret the deployment handed the console to claim a pack token with (ADR-0036), while the person has not approved. */
-  | "pack-connect";
+  | "pack-connect"
+  /** A secret setting of a plugin (docs/specs/plugins.md, "Settings"), never handed to plugin code. */
+  | "plugin-secret";
 
 const VERSION = "v1";
 const IV_BYTES = 12;

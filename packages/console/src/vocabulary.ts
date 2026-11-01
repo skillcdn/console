@@ -209,6 +209,35 @@ export const EVENT_KINDS = [
   "document.archived",
   "document.restored",
   "document.file_attached",
+  "plugin.enabled",
+  "plugin.disabled",
+  "plugin.configured",
+  "plugin.granted",
+  "plugin.revoked",
+  "plugin.upgraded",
+  "plugin.command",
+  "plugin.failed",
 ] as const;
 
 export type EventKind = (typeof EVENT_KINDS)[number];
+
+/**
+ * The states of a plugin (docs/specs/plugins.md, "Lifecycle"): in the directory and loading;
+ * failed to read or load; enabled by an administrator; a new version waiting for consent to
+ * what it asks; disabled; the install kept while the package left the directory.
+ */
+export const PLUGIN_STATES = [
+  "installed",
+  "failed",
+  "enabled",
+  "needs_consent",
+  "disabled",
+  "orphaned",
+] as const;
+
+export type PluginState = (typeof PLUGIN_STATES)[number];
+
+/** How a plugin's command ended, as its event records it. */
+export const PLUGIN_COMMAND_OUTCOMES = ["ok", "refused", "waiting", "failed"] as const;
+
+export type PluginCommandOutcome = (typeof PLUGIN_COMMAND_OUTCOMES)[number];
