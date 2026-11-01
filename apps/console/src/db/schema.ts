@@ -1150,6 +1150,8 @@ export const pluginLinks = pgTable(
       table.targetKind,
       table.targetId,
     ),
+    /** An item of the board by its kind and id: whether, and which, plugin made it (ADR-0052). */
+    index("plugin_links_item_idx").on(table.targetKind, table.targetId),
     index("plugin_links_target_idx").on(
       table.workspaceId,
       table.pluginKey,
@@ -1160,5 +1162,73 @@ export const pluginLinks = pgTable(
       "plugin_links_kind_check",
       sql`${table.targetKind} in ('task', 'decision', 'document', 'project', 'run', 'record')`,
     ),
+  ],
+);
+
+/**
+ * An event a plugin emitted (`ctx.events.emit`, docs/specs/plugins.md, "Events, hooks and
+ * jobs"): for the plugin's own frames and for other plugins' hooks, never the board's feed.
+ * Numbered in one stream per workspace, which the dispatcher reads from a cursor; 100,000 kept
+ * per plugin, for ninety days.
+ */
+export const pluginEvents = pgTable(
+  "plugin_events",
+  {
+    id: bigint({ mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    workspaceId: uuid()
+      .notNull()
+      .references(() => workspaces.id),
+    pluginKey: text().notNull(),
+    kind: text().notNull(),
+    data: jsonb(),
+    createdAt: createdAt(),
+  },
+  (table) => [index("plugin_events_plugin_idx").on(table.workspaceId, table.pluginKey, table.id)],
+);
+
+/**
+ * Where a plugin's hooks are in the two streams, the console's events and the plugins' events
+ * (docs/specs/plugins.md, "Events, hooks and jobs"): the number of the last event delivered of
+ * each, and how the event at the head has gone so far, for the retries with backoff. One row per
+ * plugin, written by the one dispatcher that holds the lock.
+ */
+export const pluginCursors = pgTable(
+  "plugin_cursors",
+  {
+    workspaceId: uuid()
+      .notNull()
+      .references(() => workspaces.id),
+    pluginKey: text().notNull(),
+    consoleAfter: bigint({ mode: "number" }).notNull().default(0),
+    pluginAfter: bigint({ mode: "number" }).notNull().default(0),
+    attempts: integer().notNull().default(0),
+    nextAttemptAt: instant(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [primaryKey({ columns: [table.workspaceId, table.pluginKey] })],
+);
+
+/**
+ * A job of a plugin as the scheduler keeps it (docs/specs/plugins.md, "Events, hooks and jobs"):
+ * when it last ran and how it went, when it runs next, and when its failure was last written as
+ * an event, so that one is written an hour at most.
+ */
+export const pluginJobs = pgTable(
+  "plugin_jobs",
+  {
+    workspaceId: uuid()
+      .notNull()
+      .references(() => workspaces.id),
+    pluginKey: text().notNull(),
+    name: text().notNull(),
+    lastRunAt: instant(),
+    lastOutcome: text(),
+    nextAt: instant(),
+    failedEventAt: instant(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.pluginKey, table.name] }),
+    check("plugin_jobs_outcome_check", sql`${table.lastOutcome} in ('ok', 'failed')`),
   ],
 );

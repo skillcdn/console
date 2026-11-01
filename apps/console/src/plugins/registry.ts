@@ -23,15 +23,20 @@ import {
   type EndpointRequest,
   type EndpointResponse,
   type LinkTarget,
-  outboundAllows,
+  MAX_PLUGIN_EVENT_BYTES,
   PLUGIN_COMMAND_MS,
   PLUGIN_ENDPOINT_MS,
+  PLUGIN_HOOK_MS,
+  PLUGIN_JOB_MS,
+  PLUGIN_KEY_PATTERN,
   PLUGIN_LIFECYCLE_MS,
   PLUGIN_QUERY_MS,
   PLUGIN_WEBHOOKS_PER_MINUTE,
   type PluginCaller,
   type PluginDescription,
+  type PluginFetchInit,
   type PluginFileHandle,
+  type PluginHookEvent,
   type PluginInfo,
   type PluginManifest,
   type PluginRecord,
@@ -46,8 +51,20 @@ import {
 import { configuresPlugins, personVisibleTo } from "../auth/policy.js";
 import type { Secrets } from "../auth/secrets.js";
 import type { Database } from "../db/client.js";
-import { type Actor, type EventRecord, listEventsOfPlugin } from "../db/queries/events.js";
-import { languageOf, listPeople, type PersonRecord } from "../db/queries/people.js";
+import {
+  type Actor,
+  type EventRecord,
+  latestEventId,
+  listEventsOfPlugin,
+} from "../db/queries/events.js";
+import { findPerson, languageOf, listPeople, type PersonRecord } from "../db/queries/people.js";
+import {
+  beginCursor,
+  emitPluginEvent,
+  latestPluginEventId,
+  listPluginEventsOf,
+  purgePluginStreams,
+} from "../db/queries/plugin-board.js";
 import {
   addGrant,
   disableInstall,
@@ -75,12 +92,16 @@ import { listRuns } from "../db/queries/runs.js";
 import { readWorkspaceSettings, type WorkspaceRecord } from "../db/queries/workspaces.js";
 import type { Logger } from "../logger.js";
 import type { Clock } from "../ports/clock.js";
+import { PluginBoard } from "./board.js";
 import type { Discovery } from "./discovery.js";
+import type { DispatchTarget } from "./dispatcher.js";
 import type { ContextCall, PluginHost } from "./host.js";
-import type { CallResult, PluginCall } from "./protocol.js";
+import { Outbound } from "./outbound.js";
+import { type CallResult, measure, type PluginCall, UNAVAILABLE } from "./protocol.js";
 import { createRateLimiter, type RateLimiter } from "./rate.js";
 import type { RecordScope, RecordStore, Visibility, Writer } from "./records.js";
 import { mayUse, rolesHeld } from "./roles.js";
+import type { JobTarget } from "./scheduler.js";
 import type { PluginSqlService } from "./sql.js";
 
 /** A plugin as the registry knows it at runtime: the package read, and the module loaded or not. */
@@ -119,9 +140,13 @@ export interface PluginsOptions {
         readonly command?: number;
         readonly query?: number;
         readonly endpoint?: number;
+        readonly hook?: number;
+        readonly job?: number;
         readonly lifecycle?: number;
       }
     | undefined;
+  /** The plugins' outbound requests; one on the system's resolver and https when left out. */
+  readonly outbound?: Outbound | undefined;
   /** The webhook requests one plugin takes a minute; the package's bound when left out, lower in tests. */
   readonly webhooksPerMinute?: number | undefined;
 }
@@ -344,6 +369,10 @@ export class Plugins {
   private sqlAvailable = false;
   /** The webhook requests each plugin took this minute. */
   private readonly webhooks: RateLimiter;
+  /** The board as plugins reach it through ctx.console (ADR-0052). */
+  private readonly board: PluginBoard;
+  /** The plugins' outbound requests (ctx.fetch). */
+  private readonly outbound: Outbound;
 
   constructor(options: PluginsOptions) {
     this.options = options;
@@ -351,6 +380,14 @@ export class Plugins {
       perMinute: options.webhooksPerMinute ?? PLUGIN_WEBHOOKS_PER_MINUTE,
       clock: options.clock,
     });
+    this.board = new PluginBoard({
+      database: options.database,
+      workspace: options.workspace,
+      clock: options.clock,
+      records: options.records,
+    });
+    this.outbound =
+      options.outbound ?? new Outbound({ clock: options.clock, logger: options.logger });
   }
 
   /** A console without plugins: nothing installed, no host, every plugin not found. */
@@ -1002,6 +1039,14 @@ export class Plugins {
         throw error;
       }
     }
+    // Its hooks begin at the end of the streams: a plugin is not told of everything that ever happened.
+    await beginCursor(database, {
+      workspaceId: workspace.id,
+      key,
+      consoleAfter: await latestEventId(database, workspace.id),
+      pluginAfter: await latestPluginEventId(database, workspace.id),
+      now: this.options.clock.now(),
+    });
     if (entry.description.onEnable) {
       const result = await this.host().call(key, {
         kind: "enable",
@@ -1759,12 +1804,28 @@ export class Plugins {
       case "records":
         return this.recordCall(entry, install, call);
       case "events": {
-        // A plugin's own events are not kept yet; what it emits is taken, and dropped, so that a
-        // plugin that emits runs on. The log says so once per call.
-        this.options.logger.debug(
-          { plugin: call.plugin, kind: typeof args[0] === "string" ? args[0] : undefined },
-          "a plugin emitted an event; events are not kept yet",
-        );
+        if (method !== "emit") {
+          throw new PluginRefusal("plugin.invalid_args", `events.${method} is not a call`);
+        }
+        const kind = typeof args[0] === "string" ? args[0] : "";
+        if (!PLUGIN_KEY_PATTERN.test(kind)) {
+          throw new PluginRefusal("plugin.invalid_args", "an event's kind is named as a key");
+        }
+        const data = args[1] ?? null;
+        const bytes = measure(data);
+        if (bytes === undefined || bytes > MAX_PLUGIN_EVENT_BYTES) {
+          throw new PluginRefusal(
+            "plugin.invalid_args",
+            `an event's data is JSON up to ${MAX_PLUGIN_EVENT_BYTES} bytes`,
+          );
+        }
+        await emitPluginEvent(this.options.database, {
+          workspaceId: workspace.id,
+          key: call.plugin,
+          kind,
+          data,
+          now: this.options.clock.now(),
+        });
         return null;
       }
       case "sql": {
@@ -1793,47 +1854,40 @@ export class Plugins {
             throw new PluginRefusal("plugin.invalid_args", `sql.${method} is not a call`);
         }
       }
-      case "fetch": {
-        const url = typeof args[0] === "string" ? args[0] : "";
-        let host: string;
-        try {
-          host = new URL(url).hostname;
-        } catch {
-          throw new PluginRefusal("plugin.invalid_args", "fetch takes a URL");
-        }
-        if (!consent.some((capability) => outboundAllows(capability, host))) {
-          throw new PluginRefusal(
-            "plugin.forbidden",
-            `the plugin has no capability outbound:${host}`,
-          );
-        }
-        return notYet("outbound requests");
-      }
-      case "plugins": {
-        const other = typeof args[0] === "string" ? args[0] : "";
-        needs(`plugins:${other}`);
-        return notYet("calls between plugins");
-      }
+      case "fetch":
+        return this.outbound.fetch(
+          call.plugin,
+          consent,
+          typeof args[0] === "string" ? args[0] : "",
+          (typeof args[1] === "object" && args[1] !== null ? args[1] : {}) as PluginFetchInit,
+          (name) => this.openSecret(workspace.id, call.plugin, name),
+        );
+      case "plugins":
+        return this.otherPlugin(call, consent, method, args);
       case "console.workspace":
-        return notYet("the workspace");
       case "console.people":
-        needs("people:read");
-        return notYet("the people");
       case "console.projects":
-        needs("projects:read");
-        return notYet("the projects");
       case "console.tasks":
-        needs(method === "list" || method === "get" ? "board:read" : "board:tasks");
-        return notYet("the board");
       case "console.decisions":
-        needs(method === "ask" ? "board:decisions" : "board:read");
-        return notYet("the board");
       case "console.documents":
-        needs(method === "write" ? "board:documents" : "board:read");
-        return notYet("the board");
-      case "console.runs":
-        needs("board:read");
-        return notYet("the board");
+      case "console.runs": {
+        if (install === undefined) {
+          throw new PluginRefusal("plugin.disabled", "the plugin is not enabled");
+        }
+        return this.board.call(
+          {
+            key: call.plugin,
+            manifest: entry.manifest,
+            install,
+            collections: entry.description?.collections ?? [],
+            caller: call.call.caller,
+            consent,
+          },
+          member,
+          method,
+          args,
+        );
+      }
       default:
         throw new PluginRefusal("plugin.invalid_args", `${member}.${method} is not a call on ctx`);
     }
@@ -2173,6 +2227,7 @@ export class Plugins {
       throw new PluginRefusal("plugin.conflict", "the plugin is enabled; disable it first");
     }
     const removed = await this.options.records?.purge(workspace.id, key);
+    await purgePluginStreams(this.options.database, workspace.id, key);
     if (this.options.sql !== undefined && this.sqlAvailable) {
       await this.options.sql.purge(key);
     }
@@ -2184,6 +2239,231 @@ export class Plugins {
       now: this.options.clock.now(),
     });
     this.options.logger.info({ person: by.person.id, plugin: key, ...removed }, "plugin purged");
+  }
+
+  /** A secret's value, opened for the console's own use and never handed over; nothing where it is not set or cannot be opened. */
+  private async openSecret(
+    workspaceId: string,
+    key: string,
+    name: string,
+  ): Promise<string | undefined> {
+    const sealed = await readSecret(this.options.database, workspaceId, key, name);
+    const secrets = this.options.secrets;
+    return sealed === undefined || secrets === undefined
+      ? undefined
+      : secrets.open("plugin-secret", sealed);
+  }
+
+  /**
+   * Another plugin's API, with `plugins:<key>` (docs/specs/plugins.md, "Between plugins"): what it
+   * offers, and one call of it, the caller passed through so that the callee's roles decide again.
+   */
+  private async otherPlugin(
+    call: ContextCall,
+    consent: readonly string[],
+    method: string,
+    args: readonly unknown[],
+  ): Promise<unknown> {
+    const other = typeof args[0] === "string" ? args[0] : "";
+    if (!consent.includes(`plugins:${other}`)) {
+      throw new PluginRefusal(
+        "plugin.forbidden",
+        `the plugin has not been given the capability plugins:${other}`,
+      );
+    }
+    const callee = this.runnable(other);
+    const workspace = await this.options.workspace();
+    const install = await findInstall(this.options.database, workspace.id, other);
+    if (install?.state !== "enabled") {
+      throw new PluginRefusal("plugin.disabled", `the plugin ${other} is not enabled`);
+    }
+    if (method === "get") {
+      return { version: callee.version, api: Object.keys(callee.description.api) };
+    }
+    if (method !== "call") {
+      throw new PluginRefusal("plugin.invalid_args", `plugins.${method} is not a call`);
+    }
+    const name = typeof args[1] === "string" ? args[1] : "";
+    if (!Object.hasOwn(callee.description.api, name)) {
+      throw new PluginRefusal("plugin.not_found", `the plugin ${other} has no api call ${name}`);
+    }
+    const caller = call.call.caller;
+    let passed: PluginCaller;
+    if (caller.kind === "person") {
+      const person = await findPerson(this.options.database, workspace.id, caller.person.id);
+      passed = { ...caller, roles: person === undefined ? [] : await this.rolesOf(other, person) };
+    } else {
+      passed = this.consoleCaller(callee);
+    }
+    const result = await this.host().call(other, {
+      kind: "api",
+      name,
+      payload: args[2],
+      info: await this.infoOf(callee, install),
+      caller: passed,
+      language: call.call.language,
+      timeoutMs: this.options.timeouts?.query ?? PLUGIN_QUERY_MS,
+    });
+    this.options.logger.info(
+      {
+        plugin: other,
+        kind: "api",
+        name,
+        by: call.plugin,
+        outcome: this.outcomeOf(result),
+        code: result.ok ? undefined : result.error.code,
+      },
+      "plugin call",
+    );
+    if (!result.ok) {
+      throw new PluginRefusal(result.error.code, result.error.message, result.error.data);
+    }
+    return result.value;
+  }
+
+  /** The enabled, loaded plugins with their hooks, as the dispatcher delivers to them. */
+  async hookTargets(): Promise<DispatchTarget[]> {
+    const workspace = await this.options.workspace();
+    const targets: DispatchTarget[] = [];
+    for (const install of await listInstalls(this.options.database, workspace.id)) {
+      const entry = this.entries.get(install.key);
+      if (install.state !== "enabled" || entry?.description === undefined) {
+        continue;
+      }
+      targets.push({
+        key: install.key,
+        hooks: [...entry.description.hooks],
+        consent: [...install.consent],
+        boardProjectId: install.boardProjectId,
+        projects: install.projects === "all" ? "all" : [...install.projects],
+      });
+    }
+    return targets;
+  }
+
+  /** The enabled, loaded plugins with the `jobs` capability and their jobs, as the scheduler runs them. */
+  async jobTargets(): Promise<JobTarget[]> {
+    const workspace = await this.options.workspace();
+    const targets: JobTarget[] = [];
+    for (const install of await listInstalls(this.options.database, workspace.id)) {
+      const entry = this.entries.get(install.key);
+      if (
+        install.state !== "enabled" ||
+        entry?.description === undefined ||
+        !install.consent.includes("jobs")
+      ) {
+        continue;
+      }
+      targets.push({
+        key: install.key,
+        boardProjectId: install.boardProjectId,
+        jobs: Object.fromEntries(
+          Object.entries(entry.description.jobs).map(([name, job]) => [
+            name,
+            { every: job.every, at: job.at },
+          ]),
+        ),
+      });
+    }
+    return targets;
+  }
+
+  /** One hook of the plugin, run as the console with every role, within its time. */
+  runHook(key: string, name: string, event: PluginHookEvent): Promise<CallResult> {
+    return this.runAsConsole(
+      key,
+      "hook",
+      name,
+      event,
+      this.options.timeouts?.hook ?? PLUGIN_HOOK_MS,
+    );
+  }
+
+  /** One job of the plugin, run as the console with every role, within its time. */
+  runJob(key: string, name: string): Promise<CallResult> {
+    return this.runAsConsole(key, "job", name, null, this.options.timeouts?.job ?? PLUGIN_JOB_MS);
+  }
+
+  private async runAsConsole(
+    key: string,
+    kind: "hook" | "job",
+    name: string,
+    payload: unknown,
+    timeoutMs: number,
+  ): Promise<CallResult> {
+    const entry = this.entries.get(key);
+    const workspace = await this.options.workspace();
+    const install = await findInstall(this.options.database, workspace.id, key);
+    if (
+      entry?.manifest === undefined ||
+      entry.description === undefined ||
+      install?.state !== "enabled"
+    ) {
+      return { ok: false, error: UNAVAILABLE };
+    }
+    try {
+      const startedAt = performance.now();
+      const result = await this.host().call(key, {
+        kind,
+        name,
+        payload,
+        info: await this.infoOf(entry, install),
+        caller: this.consoleCaller(entry as Entry & { manifest: PluginManifest }),
+        language: "en",
+        timeoutMs,
+      });
+      this.options.logger.info(
+        {
+          plugin: key,
+          kind,
+          name,
+          outcome: this.outcomeOf(result),
+          code: result.ok ? undefined : result.error.code,
+          durationMs: Math.round(performance.now() - startedAt),
+        },
+        "plugin call",
+      );
+      return result;
+    } catch (error) {
+      if (error instanceof PluginRefusal) {
+        return { ok: false, error: { code: error.code, message: error.message } };
+      }
+      throw error;
+    }
+  }
+
+  /** Writes that the plugin failed, as a `plugin.failed` event in its board project. */
+  async recordFailure(key: string, projectId: string | undefined, problem: string): Promise<void> {
+    const workspace = await this.options.workspace();
+    await recordPluginFailure(this.options.database, {
+      workspaceId: workspace.id,
+      key,
+      projectId,
+      problem,
+      now: this.options.clock.now(),
+    });
+  }
+
+  /** A page of the events the plugin emitted, after number `after`: for its frames and its tests. */
+  async pluginEvents(
+    key: string,
+    page: { readonly after: number; readonly limit: number },
+  ): Promise<{
+    readonly items: { id: number; kind: string; data: unknown; at: string }[];
+    readonly more: boolean;
+  }> {
+    this.entryOf(key);
+    const workspace = await this.options.workspace();
+    const read = await listPluginEventsOf(this.options.database, workspace.id, key, page);
+    return {
+      items: read.items.map((event) => ({
+        id: event.id,
+        kind: event.kind,
+        data: event.data ?? null,
+        at: event.createdAt.toISOString(),
+      })),
+      more: read.more,
+    };
   }
 
   private async secretCall(

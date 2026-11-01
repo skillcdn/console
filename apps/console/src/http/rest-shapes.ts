@@ -130,6 +130,7 @@ export function restTask(task: TaskRecord): RestTask {
     state: task.state,
     priority: task.priority,
     owner: restPerson(task.owner),
+    plugin: task.plugin ?? null,
     workers: task.workers.map(restPerson),
     parentId: task.parentId ?? null,
     category: task.category ?? null,
@@ -162,6 +163,7 @@ export function restDecision(decision: DecisionRecord): RestDecision {
     raisedBy: restPerson(decision.raisedBy),
     decider: restPerson(decision.decider),
     run: decision.run === undefined ? null : { id: decision.run.id, agent: decision.run.agent },
+    plugin: decision.plugin ?? null,
     answer:
       decision.answer === undefined
         ? null
@@ -272,6 +274,7 @@ export function restDocumentSummary(document: DocumentSummary): RestDocumentSumm
     version: document.version,
     updatedBy: restPerson(document.updatedBy),
     agent: document.agent ?? null,
+    plugin: document.plugin ?? null,
     archivedAt: document.archivedAt?.toISOString() ?? null,
     createdAt: document.createdAt.toISOString(),
     updatedAt: document.updatedAt.toISOString(),

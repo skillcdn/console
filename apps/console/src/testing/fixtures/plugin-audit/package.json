@@ -1,0 +1,8 @@
+{
+  "name": "console-plugin-audit",
+  "version": "0.0.1",
+  "private": true,
+  "description": "A fixture: a second plugin on the same board, listening to the first and calling its api.",
+  "license": "MIT",
+  "type": "module"
+}

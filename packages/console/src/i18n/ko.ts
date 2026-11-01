@@ -599,6 +599,7 @@ export const ko: Messages = {
     asTitle: "그 사람이 사용한 에이전트",
     aTask: "작업",
     aPlugin: "플러그인",
+    throughPlugin: (plugin) => `플러그인 ${plugin}을(를) 통해`,
     everyone: "모든 구성원",
     membersOf: (project) => `${project}의 구성원`,
     outcome: {

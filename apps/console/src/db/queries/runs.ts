@@ -638,6 +638,19 @@ export function getRun(
   return readRun(drizzleOf(database), scope, runId);
 }
 
+/** One run of the workspace by its id, whichever project it is in: how a plugin reads one it was told of. */
+export async function findRun(
+  database: Database,
+  workspaceId: string,
+  runId: string,
+): Promise<RunRecord | undefined> {
+  const handle = drizzleOf(database);
+  const rows = await selectRuns(handle)
+    .where(and(eq(runs.workspaceId, workspaceId), eq(runs.id, runId)))
+    .limit(1);
+  return (await attach(handle, rows))[0];
+}
+
 /** One artifact of the project, by its id: how the bytes of a file handed in are found. */
 export async function findArtifact(
   database: Database,

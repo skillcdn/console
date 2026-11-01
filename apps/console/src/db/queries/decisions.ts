@@ -2,7 +2,7 @@ import { MAX_DECISIONS_PER_PROJECT, type RestDecisionOption } from "@skillcdn/co
 import { and, asc, count, desc, eq, isNull, ne, sql } from "drizzle-orm";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
-import { decisions, projects, runs, tasks } from "../schema.js";
+import { decisions, pluginLinks, projects, runs, tasks } from "../schema.js";
 import { recordLinks } from "./documents.js";
 import { type Actor, recordEvent, type Scope } from "./events.js";
 import {
@@ -34,6 +34,8 @@ export interface DecisionRecord {
   readonly decider: PersonRecord;
   /** The run that raised it, when an agent asked. */
   readonly run: { readonly id: string; readonly agent: string } | undefined;
+  /** The plugin that raised it, by key (ADR-0052), or none. */
+  readonly plugin: string | undefined;
   readonly answer:
     | {
         readonly option: string;
@@ -95,6 +97,9 @@ const decisionColumns = {
   answeredBy: personColumns(answerers),
   runId: decisions.runId,
   runAgent: runs.agent,
+  plugin: sql<
+    string | null
+  >`(select ${pluginLinks.pluginKey} from ${pluginLinks} where ${pluginLinks.targetKind} = 'decision' and ${pluginLinks.targetId} = ${decisions.id} and ${pluginLinks.recordId} is null limit 1)`,
 };
 
 type Handle = Transaction | ReturnType<typeof drizzleOf>;
@@ -136,6 +141,7 @@ function toDecision(row: DecisionRow): DecisionRecord {
       row.runId !== null && row.runAgent !== null
         ? { id: row.runId, agent: row.runAgent }
         : undefined,
+    plugin: row.plugin ?? undefined,
     answer: answered,
     outcome: row.outcome ?? undefined,
     createdAt: row.createdAt,
@@ -477,6 +483,18 @@ export function getDecision(
   decisionId: string,
 ): Promise<DecisionRecord | undefined> {
   return readDecision(drizzleOf(database), scope, decisionId);
+}
+
+/** One decision of the workspace by its id, whichever project it is in: how a plugin reads one it was told of. */
+export async function findDecision(
+  database: Database,
+  workspaceId: string,
+  decisionId: string,
+): Promise<DecisionRecord | undefined> {
+  const [row] = await selectDecisions(drizzleOf(database))
+    .where(and(eq(decisions.workspaceId, workspaceId), eq(decisions.id, decisionId)))
+    .limit(1);
+  return row === undefined ? undefined : toDecision(row);
 }
 
 /**

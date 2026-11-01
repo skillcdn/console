@@ -75,9 +75,19 @@ src/
                  project, versions, links, files, export and purge), sql.ts (a plugin's schema and
                  login role: made, its password drawn at boot, its migrations applied as the role, its
                  statements run on the role's pool within the bounds, dropped on purge), rate.ts (a bound
-                 a minute by key: the webhooks a plugin takes), skills.ts (a plugin's skills as a
-                 pack of its own, located at its package and read as a local pack); the queries are
-                 db/queries/plugins.ts, the routes http/plugins-rest.ts
+                 a minute by key: the webhooks a plugin takes, its outbound requests), skills.ts (a
+                 plugin's skills as a pack of its own, located at its package and read as a local
+                 pack), board.ts (the board as a plugin reaches it through ctx.console: by capability
+                 and the console's policy, a person's call as the person, a job's or a hook's as the
+                 administrator who enabled the plugin, what it makes marked as its, its own items
+                 alone changed), outbound.ts (ctx.fetch: https to a host consented to, the address
+                 resolved and pinned, a secret put in by the console, the bounds), dispatcher.ts (the
+                 hooks: both streams from a cursor per plugin under one lock, at least once, retries
+                 with backoff, then a plugin.failed event), scheduler.ts (the jobs: every and at in
+                 the workspace's zone, a lock per job, a failure told once an hour); the queries are
+                 db/queries/plugins.ts and db/queries/plugin-board.ts, the routes
+                 http/plugins-rest.ts; the api role runs the dispatcher and the scheduler with
+                 WORKER_IN_PROCESS, the worker role otherwise, in a host of its own
   skills.ts      a project's pack as the board shows and reads it (ADR-0031): opened per request at
                  its address through a pack source, the project's own or the organization's; the
                  listing with each skill's page and URI, held per address for a minute; every read
@@ -194,7 +204,10 @@ Primary keys are `uuid DEFAULT uuidv7()` and timestamps are `timestamptz`, with 
 | `plugin_record_versions` | A record's data before a write, where the collection keeps history: the hundred newest. Rows go with their record. | primary key `(record_id, version)` |
 | `plugin_record_files` | A file on a record: `file_name`, `file_size`, `content_type`, the `sha256` its bytes are kept under in the blob store, who attached it. Counted against `PLUGIN_FILE_BYTES_AT_MOST` with the uploads. Rows go with their record. | `record_id`; `(workspace_id, plugin_key)` |
 | `plugin_uploads` | A file uploaded for a plugin's command and not yet attached: the handle (`id`), good until `expires_at` (an hour), for the `person_id` who uploaded it; the janitor removes what expired. | `expires_at`; `(workspace_id, plugin_key)` |
-| `plugin_links` | What a plugin's record refers to (`record_id` to a `target_kind` and `target_id`: a task, a decision, a document, a project, a run, or a record of any plugin, with `target_plugin` and `target_collection`), and, with no record, an item of the board the plugin made (ADR-0052). | `(record_id, target_kind, target_id)` unique; `(workspace_id, plugin_key, target_kind, target_id)` |
+| `plugin_links` | What a plugin's record refers to (`record_id` to a `target_kind` and `target_id`: a task, a decision, a document, a project, a run, or a record of any plugin, with `target_plugin` and `target_collection`), and, with no record, an item of the board the plugin made (ADR-0052), by which a task, a decision and a document answer `plugin`. | `(record_id, target_kind, target_id)` unique; `(workspace_id, plugin_key, target_kind, target_id)`; `(target_kind, target_id)` |
+| `plugin_events` | An event a plugin emitted (`ctx.events.emit`): `kind`, `data`, when; numbered in one stream per workspace, which the dispatcher reads from a cursor; 100,000 kept per plugin, for ninety days, the janitor sweeping the rest. Never the board's feed. | `(workspace_id, plugin_key, id)` |
+| `plugin_cursors` | Where a plugin's hooks are in the two streams: `console_after` and `plugin_after`, the numbers of the last events delivered, and `attempts` and `next_attempt_at` for the event at the head that failed, retried with backoff. Begun at the end of the streams when the plugin is enabled. | `(workspace_id, plugin_key)` primary |
+| `plugin_jobs` | A job of a plugin as the scheduler keeps it: `last_run_at`, `last_outcome`, `next_at`, and `failed_event_at`, so that a failure is told as an event once an hour. | `(workspace_id, plugin_key, name)` primary |
 | `plugin_<key>.*` | A plugin's own schema, with `storage:sql` consented to ([ADR-0051](../../docs/adr/0051-a-plugin-keeps-its-data-in-records-the-console-holds-or-in-a-schema-of-its-own-by-consent.md)): made when the plugin is enabled, owned by the login role of the same name, which has `USAGE` and `CREATE` on that schema and nothing on `public`, a `search_path` of the schema, a statement timeout of ten seconds and four connections, and whose password the console draws anew at every boot and keeps in memory alone. The plugin's `migrations/*.sql` are applied as the role, those applied kept in the schema's own `_migrations`; `ctx.sql` runs on a pool of the role. Purge drops the schema and the role. Needs a console user that may make roles (`CREATEROLE`); without it, the capability is unavailable in the deployment and such a plugin cannot be enabled. | the plugin's own |
 | `events` | Everything that happened, in order (`plugin` names the plugin that caused it, ADR-0052, or is null): in a project (`project_id`) or to the workspace itself (null: who joined, who was made what, what became of the categories); `kind` (the package's `EVENT_KINDS`), the `actor` (a person, or nobody for the console itself), the `agent` the actor acted through (the run's agent for what a run did, else the name of the token presented; null when a person acted themselves), the `task`, the `decision`, the `run`, the `document` and the `goal` it is about, and `data`, what a feed shows without asking for the subject. Append-only. **Numbered** (`bigint generated always as identity`) rather than keyed by uuid: the feed is read from a number on, and a number says where. | `(workspace_id, id)`; `(project_id, id)`; `task_id`; `run_id`; `decision_id`; `document_id`; `goal_id` |
 

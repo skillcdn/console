@@ -10,8 +10,15 @@ import { formatInstant, PersonChip } from "./ui.js";
 // as which agent when through one, and what. It takes its data as props and nothing from the
 // network; the sentence is the language's (ADR-0012).
 
-/** What an event says, without its actor: the words after the name, in the words given. */
+/** What an event says, without its actor: the words after the name, in the words given; a board's event a plugin caused says so (ADR-0052). */
 export function describeEvent(event: RestEvent, words: Messages = en): string {
+  const sentence = sentenceOf(event, words);
+  return event.plugin !== null && !event.kind.startsWith("plugin.")
+    ? `${sentence} ${words.feed.throughPlugin(event.plugin)}`
+    : sentence;
+}
+
+function sentenceOf(event: RestEvent, words: Messages): string {
   const { data } = event;
   const { feed, vocabulary } = words;
   const task =

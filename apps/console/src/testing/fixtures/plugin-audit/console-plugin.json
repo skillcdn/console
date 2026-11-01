@@ -1,0 +1,16 @@
+{
+  "key": "audit",
+  "name": { "en": "Audit" },
+  "description": {
+    "en": "Watches what Leave decides and leaves a task for each, for the tests of the board."
+  },
+  "pluginApi": 1,
+  "server": "server/index.js",
+  "capabilities": ["board:read", "board:tasks", "events:plugins", "plugins:leave"],
+  "roles": {
+    "auditor": { "name": { "en": "Auditor" }, "description": { "en": "Reads the audit." } }
+  },
+  "defaultRole": "auditor",
+  "board": { "needs": "optional" },
+  "requires": { "leave": "*" }
+}

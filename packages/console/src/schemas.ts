@@ -496,6 +496,8 @@ export const restTaskSchema = z.object({
   priority: z.enum(TASK_PRIORITIES),
   /** Whose task it is: one person, whoever wrote it. */
   owner: restPersonSchema,
+  /** The plugin that made it, by key (ADR-0052), or `null`; left out by a console older than the plugins. */
+  plugin: z.optional(z.nullable(z.string())),
   /** The people at work on it (ADR-0037), in the order they came to it; `[]` while nobody is. */
   workers: z.array(restPersonSchema),
   /** The task this one is part of, or `null`. */
@@ -669,6 +671,8 @@ export const restDecisionSchema = z.object({
   decider: restPersonSchema,
   /** The run that raised it, as the agent asked, or `null` when a person did. */
   run: z.nullable(z.object({ id: uuid, agent: z.string() })),
+  /** The plugin that raised it, by key (ADR-0052), or `null`; left out by a console older than the plugins. */
+  plugin: z.optional(z.nullable(z.string())),
   /** The answer, with who gave it and when; `null` while the decision waits. */
   answer: z.nullable(
     z.object({
@@ -1208,6 +1212,8 @@ export const restDocumentSummarySchema = z.object({
   /** Who wrote the latest version, and the agent they wrote it through, or `null`. */
   updatedBy: restPersonSchema,
   agent: z.nullable(z.string()),
+  /** The plugin that wrote it, by key (ADR-0052), or `null`; left out by a console older than the plugins. */
+  plugin: z.optional(z.nullable(z.string())),
   /** When the document was archived, or `null` while it is current. */
   archivedAt: z.nullable(instant),
   createdAt: instant,

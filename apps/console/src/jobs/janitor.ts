@@ -1,5 +1,7 @@
+import { PLUGIN_EVENT_DAYS, PLUGIN_EVENTS_KEPT } from "@skillcdn/console/plugin";
 import type { Database } from "../db/client.js";
 import { deleteExpiredConnectRequests } from "../db/queries/connect.js";
+import { sweepPluginEvents } from "../db/queries/plugin-board.js";
 import { deleteExpiredSessions } from "../db/queries/sessions.js";
 import { deleteExpiredTokens } from "../db/queries/tokens.js";
 import type { Logger } from "../logger.js";
@@ -38,9 +40,13 @@ export class Janitor {
         const tokens = await deleteExpiredTokens(this.#database, now);
         const requests = await deleteExpiredConnectRequests(this.#database, now);
         const uploads = await deleteExpiredUploads(this.#database, now);
-        if (sessions > 0 || tokens > 0 || requests > 0 || uploads > 0) {
+        const pluginEvents = await sweepPluginEvents(this.#database, {
+          before: new Date(now.getTime() - PLUGIN_EVENT_DAYS * 86_400_000),
+          keep: PLUGIN_EVENTS_KEPT,
+        });
+        if (sessions > 0 || tokens > 0 || requests > 0 || uploads > 0 || pluginEvents > 0) {
           this.#logger.info(
-            { sessions, tokens, requests, uploads },
+            { sessions, tokens, requests, uploads, pluginEvents },
             "what time has ended was removed",
           );
         }

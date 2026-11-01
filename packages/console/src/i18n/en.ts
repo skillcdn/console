@@ -643,6 +643,8 @@ export const en = {
     asTitle: "The agent the person acted through",
     aTask: "a task",
     aPlugin: "a plugin",
+    /** After the sentence of a board's event a plugin caused (ADR-0052). */
+    throughPlugin: (plugin: string) => `through the plugin ${plugin}`,
     everyone: "everyone",
     membersOf: (project: string) => `the members of ${project}`,
     outcome: {

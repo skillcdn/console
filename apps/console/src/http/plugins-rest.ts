@@ -6,6 +6,7 @@ import {
   MAX_FILE_BYTES,
   REST_ROUTES,
   type RestEvents,
+  type RestPluginEvents,
   type RestPluginGrants,
   type RestPluginInvocation,
   type RestSkillBrowse,
@@ -78,6 +79,11 @@ const recordsQuery = z.object({
 });
 const versionQuery = z.object({
   version: z.coerce.number().int().min(1).optional(),
+});
+/** A page of a plugin's own events: after which number, how many at most. */
+const pluginEventsQuery = z.object({
+  after: z.coerce.number().int().min(0).default(0),
+  limit: z.coerce.number().int().min(1).max(PLUGIN_LIST_LIMIT).default(100),
 });
 /** What a query is asked with: its arguments as JSON, and the project the call is on. */
 const queryQuery = z.object({
@@ -671,6 +677,39 @@ export function registerPluginsRest(
         "plugin purged",
       );
       return c.body(null, 204);
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
+  app.get(`${PLUGIN}/plugin-events`, async (c) => {
+    const caller = await asking(c);
+    if (caller instanceof Response) {
+      return caller;
+    }
+    const key = keyOf(c);
+    const detail = key === undefined ? undefined : await plugins.get(key, caller.person);
+    if (key === undefined || detail === undefined) {
+      return notFound(c);
+    }
+    // The plugin's own events are its role holders': what its frames show them.
+    if (
+      !configuresPlugins(caller.person) &&
+      detail.declaredRoles.length > 0 &&
+      detail.roles.length === 0
+    ) {
+      return c.json(
+        errorBody("plugin.forbidden", "The plugin's events are read by those in a role of it."),
+        403,
+      );
+    }
+    const query = pluginEventsQuery.safeParse(c.req.query());
+    if (!query.success) {
+      return invalid(c, query.error.issues[0]?.message ?? "The query is not readable.");
+    }
+    try {
+      const body: RestPluginEvents = await plugins.pluginEvents(key, query.data);
+      return c.json(body);
     } catch (error) {
       return failure(c, error);
     }

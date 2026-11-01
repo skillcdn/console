@@ -8,9 +8,12 @@ import { RunCloser } from "../jobs/run-closer.js";
 import type { Logger } from "../logger.js";
 import { APP_NAME, APP_VERSION } from "../version.js";
 import {
+  blobStoreOf,
   ORGANIZATION_SYNC_INTERVAL_MS,
   organizationOf,
+  pluginsOf,
   shutdownSignal,
+  startPluginStreams,
   workspaceResolver,
 } from "./api.js";
 
@@ -31,7 +34,7 @@ export async function runWorker(config: Config, logger: Logger): Promise<void> {
   const database = createDatabase({
     connectionString: config.database.url,
     ca: config.database.ca,
-    maxConnections: 2,
+    maxConnections: 4,
     applicationName: `${APP_NAME}-worker`,
   });
   const workspace = workspaceResolver(database, systemClock, config.workspace.name);
@@ -65,6 +68,19 @@ export async function runWorker(config: Config, logger: Logger): Promise<void> {
           clock: systemClock,
           logger,
         });
+  // The plugins' hooks and jobs run here, in a host of this process's own, unless the api role
+  // carries the worker's work itself (WORKER_IN_PROCESS).
+  const plugins =
+    config.plugins.dir !== undefined && !config.worker.inProcess
+      ? await pluginsOf(
+          config,
+          database,
+          await blobStoreOf(config, database, logger, `${APP_NAME}/${APP_VERSION}`),
+          logger,
+        )
+      : undefined;
+  const streams =
+    plugins === undefined ? undefined : startPluginStreams(plugins, database, config, logger);
   try {
     const found = await workspace();
     logger.info({ workspace: found.id, organization: organization?.name }, "worker running");
@@ -93,6 +109,8 @@ export async function runWorker(config: Config, logger: Logger): Promise<void> {
   await archivist?.close();
   await runCloser?.close();
   await sync?.close();
+  await streams?.close();
+  await plugins?.stop();
   await database.close();
   logger.info("shutdown complete");
 }

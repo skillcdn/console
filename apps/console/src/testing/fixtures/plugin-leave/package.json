@@ -1,0 +1,8 @@
+{
+  "name": "console-plugin-leave",
+  "version": "0.0.1",
+  "private": true,
+  "description": "A fixture: a plugin on the board, with a decision, a hook, a job, an api and outbound requests.",
+  "license": "MIT",
+  "type": "module"
+}

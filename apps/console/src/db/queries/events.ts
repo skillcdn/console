@@ -15,6 +15,8 @@ export interface Actor {
   readonly id: string;
   /** What the agent calls itself, when the person acts through one; nothing when they act themselves. */
   readonly agent?: string | undefined;
+  /** The plugin the change goes through (ADR-0052), by key, when one does: the event names it. */
+  readonly plugin?: string | undefined;
 }
 
 /** Where a change on the board belongs: the workspace, and the project within it. */
@@ -97,7 +99,7 @@ export async function recordEvent(
       runId: event.runId ?? null,
       documentId: event.documentId ?? null,
       goalId: event.goalId ?? null,
-      plugin: event.plugin ?? null,
+      plugin: event.plugin ?? event.actor?.plugin ?? null,
       data: event.data,
       createdAt: event.now,
     })
@@ -184,6 +186,20 @@ export async function listEventsAfter(
     .orderBy(asc(events.id))
     .limit(limit + 1);
   return { items: rows.slice(0, limit).map(toEvent), more: rows.length > limit };
+}
+
+/** Every event of the workspace after number `after`, whichever project it is in, oldest first: the stream the plugins' dispatcher reads. */
+export async function listAllEventsAfter(
+  database: Database,
+  workspaceId: string,
+  after: number,
+  limit: number,
+): Promise<EventRecord[]> {
+  const rows = await selectEvents(database)
+    .where(and(eq(events.workspaceId, workspaceId), gt(events.id, after)))
+    .orderBy(asc(events.id))
+    .limit(limit);
+  return rows.map(toEvent);
 }
 
 /**

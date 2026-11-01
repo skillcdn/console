@@ -218,6 +218,13 @@
       "when": 1793550083611,
       "tag": "0030_plugin_records",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1793555451424,
+      "tag": "0031_plugin_board",
+      "breakpoints": true
     }
   ]
 }

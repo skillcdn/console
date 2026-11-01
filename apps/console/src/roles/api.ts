@@ -38,10 +38,12 @@ import { OrganizationSync } from "../jobs/organization-sync.js";
 import { RunCloser } from "../jobs/run-closer.js";
 import type { Logger } from "../logger.js";
 import { discoverPlugins } from "../plugins/discovery.js";
+import { PluginDispatcher } from "../plugins/dispatcher.js";
 import { PluginHost } from "../plugins/host.js";
 import { allowedReadRoots, HOST_ENTRY } from "../plugins/paths.js";
 import { RecordStore } from "../plugins/records.js";
 import { Plugins } from "../plugins/registry.js";
+import { PluginScheduler } from "../plugins/scheduler.js";
 import { PluginSqlService } from "../plugins/sql.js";
 import { type BlobStore, BlobStoreError } from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
@@ -317,7 +319,7 @@ export function createApi(
  * served from elsewhere, is a setting to fix before anything else runs; one that does not
  * answer is reported, and tried again with the first file.
  */
-async function blobStoreOf(
+export async function blobStoreOf(
   config: Config,
   database: Database,
   logger: Logger,
@@ -472,6 +474,11 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
     ? new Janitor({ database, clock: systemClock, logger })
     : undefined;
   janitor?.start(JANITOR_INTERVAL_MS);
+  // The plugins' hooks and jobs run here when this process carries the worker (WORKER_IN_PROCESS).
+  const streams =
+    config.worker.inProcess && plugins !== undefined
+      ? startPluginStreams(plugins, database, config, logger)
+      : undefined;
   const archivist =
     config.worker.inProcess && config.worker.archiveAfterDays > 0
       ? new Archivist({
@@ -538,9 +545,49 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
   await archivist?.close();
   await runCloser?.close();
   await sync?.close();
+  await streams?.close();
   await plugins?.stop();
   await database.close();
   logger.info("shutdown complete");
+}
+
+/** How often the plugins' hooks are dispatched, and their jobs looked at. */
+export const PLUGIN_DISPATCH_INTERVAL_MS = 5_000;
+export const PLUGIN_SCHEDULE_INTERVAL_MS = 60_000;
+
+/**
+ * The plugins' hooks and jobs (docs/specs/plugins.md, "Events, hooks and jobs"): the dispatcher
+ * and the scheduler on their timers, in whichever role carries the worker's work.
+ */
+export function startPluginStreams(
+  plugins: Plugins,
+  database: Database,
+  config: Config,
+  logger: Logger,
+): { close(): Promise<void> } {
+  const workspace = workspaceResolver(database, systemClock, config.workspace.name);
+  const dispatcher = new PluginDispatcher({
+    database,
+    workspace,
+    plugins,
+    clock: systemClock,
+    logger,
+  });
+  const scheduler = new PluginScheduler({
+    database,
+    workspace,
+    plugins,
+    clock: systemClock,
+    logger,
+  });
+  dispatcher.start(PLUGIN_DISPATCH_INTERVAL_MS);
+  scheduler.start(PLUGIN_SCHEDULE_INTERVAL_MS);
+  return {
+    async close() {
+      await dispatcher.close();
+      await scheduler.close();
+    },
+  };
 }
 
 /**

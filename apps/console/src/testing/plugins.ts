@@ -76,3 +76,7 @@ export const SQL_PLUGIN_DIR = fileURLToPath(new URL("./fixtures/plugin-sql/", im
 
 /** The fixture with arguments of every kind, endpoints and skills, for the tests of the command and the routes. */
 export const GATE_PLUGIN_DIR = fileURLToPath(new URL("./fixtures/plugin-gate/", import.meta.url));
+
+/** The fixtures of the board: a plugin with a decision, a hook, a job, an api and outbound requests, and a second one on the same board. */
+export const LEAVE_PLUGIN_DIR = fileURLToPath(new URL("./fixtures/plugin-leave/", import.meta.url));
+export const AUDIT_PLUGIN_DIR = fileURLToPath(new URL("./fixtures/plugin-audit/", import.meta.url));

@@ -28,6 +28,7 @@ import {
   decisions,
   goals,
   people,
+  pluginLinks,
   projects,
   runs,
   tasks,
@@ -54,6 +55,8 @@ export interface TaskRecord {
   readonly state: TaskState;
   readonly priority: TaskPriority;
   readonly owner: PersonRecord;
+  /** The plugin that made it, by key (ADR-0052), or none. */
+  readonly plugin: string | undefined;
   /** The people at work on it, in the order they came to it; none while nobody is. */
   readonly workers: readonly PersonRecord[];
   readonly parentId: string | undefined;
@@ -215,6 +218,9 @@ const taskColumns = {
   categoryColor: categories.color,
   openDecisions: openDecisionsOf.mapWith(Number),
   openRuns: openRunsOf.mapWith(Number),
+  plugin: sql<
+    string | null
+  >`(select ${pluginLinks.pluginKey} from ${pluginLinks} where ${pluginLinks.targetKind} = 'task' and ${pluginLinks.targetId} = ${tasks.id} and ${pluginLinks.recordId} is null limit 1)`,
 };
 
 type Handle = Transaction | ReturnType<typeof drizzleOf>;
@@ -240,6 +246,7 @@ function toTask(row: TaskRow): TaskRecord {
     state: row.state,
     priority: row.priority,
     owner: toPerson(row.owner),
+    plugin: row.plugin ?? undefined,
     workers: row.workers,
     parentId: row.parentId ?? undefined,
     category:

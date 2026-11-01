@@ -332,6 +332,21 @@ export const restPluginRecordVersionsSchema = z.object({
 });
 export type RestPluginRecordVersions = z.infer<typeof restPluginRecordVersionsSchema>;
 
+/** An event a plugin emitted (`ctx.events.emit`), as `GET .../plugin-events?after=` lists them for its frames: its number in the stream, its kind, its data, when. */
+export const restPluginEventSchema = z.object({
+  id: z.int(),
+  kind: z.string(),
+  data: z.unknown(),
+  at: instant,
+});
+export type RestPluginEvent = z.infer<typeof restPluginEventSchema>;
+
+export const restPluginEventsSchema = z.object({
+  items: z.array(restPluginEventSchema),
+  more: z.boolean(),
+});
+export type RestPluginEvents = z.infer<typeof restPluginEventsSchema>;
+
 /** What `POST /api/v1/plugins/<key>/purge` is sent: the key again. */
 export const restPluginPurgeInputSchema = z.object({ confirm: pluginKey });
 export type RestPluginPurgeInput = z.infer<typeof restPluginPurgeInputSchema>;

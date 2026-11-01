@@ -10,6 +10,7 @@ import {
   documents,
   documentVersions,
   people,
+  pluginLinks,
   projects,
   tasks,
   workspaces,
@@ -45,6 +46,8 @@ export interface DocumentSummary {
   readonly updatedBy: PersonRecord;
   /** The agent the latest version was written through, or none. */
   readonly agent: string | undefined;
+  /** The plugin that wrote it, by key (ADR-0052), or none. */
+  readonly plugin: string | undefined;
   readonly archivedAt: Date | undefined;
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -150,6 +153,9 @@ const summaryColumns = {
   createdAt: documents.createdAt,
   updatedAt: documents.updatedAt,
   updatedBy: personColumns(writers),
+  plugin: sql<
+    string | null
+  >`(select ${pluginLinks.pluginKey} from ${pluginLinks} where ${pluginLinks.targetKind} = 'document' and ${pluginLinks.targetId} = ${documents.id} and ${pluginLinks.recordId} is null limit 1)`,
 };
 
 type SummaryRow = Awaited<ReturnType<typeof selectSummaries>>[number];
@@ -171,6 +177,7 @@ function toSummary(row: SummaryRow): DocumentSummary {
     version: row.version,
     updatedBy: toPerson(row.updatedBy),
     agent: row.agent ?? undefined,
+    plugin: row.plugin ?? undefined,
     archivedAt: row.archivedAt ?? undefined,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
