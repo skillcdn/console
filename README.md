@@ -74,17 +74,18 @@ console finish --summary "Done: the parser refuses empty input."               #
 console help                                          # the rest, written for an agent that meets the command for the first time
 ```
 
-What to tell the agent is as short as: "Run `console help`, then take task #7 from the console and work it: report as you go, ask when a person must decide, finish when done." The board shows the run as it happens: the reports, what was handed in, the decision that waits, the answer. [docs/specs/cli.md](docs/specs/cli.md) is the command's spec and [docs/specs/rest.md](docs/specs/rest.md) the API's, for scripts and custom consoles. An agent learns the rest from the console's skills ([skills/](skills/), [ADR-0015](docs/adr/0015-the-consoles-skills-live-in-this-repository-in-the-skillcdn-format-and-the-package-carries-them.md)): `working-the-board` for the agent at work, `building-a-console` for one building a console, and `deploying-a-console` for one deploying it, served by SkillCDN at `skillcdn.ai/gh/skillcdn/console` with the specifications, and shipped in the package for an agent that has it installed.
+What to tell the agent is as short as: "Run `console help`, then take task #7 from the console and work it: report as you go, ask when a person must decide, finish when done." The board shows the run as it happens: the reports, what was handed in, the decision that waits, the answer. [docs/specs/cli.md](docs/specs/cli.md) is the command's spec and [docs/specs/rest.md](docs/specs/rest.md) the API's, for scripts and custom consoles. An agent learns the rest from the console's skills ([skills/](skills/), [ADR-0015](docs/adr/0015-the-consoles-skills-live-in-this-repository-in-the-skillcdn-format-and-the-package-carries-them.md)): `working-the-board` for the agent at work, `planning-the-board` for one putting work on the board, `building-a-console` for one building a console, `building-a-plugin` for one writing a plugin, and `deploying-a-console` for one deploying the console, served by SkillCDN at `skillcdn.ai/gh/skillcdn/console` with the specifications, and shipped in the package for an agent that has it installed.
 
 ## How it works
 
-All five steps are there today; [docs/roadmap.md](docs/roadmap.md) says what came when.
+All six steps are there today; [docs/roadmap.md](docs/roadmap.md) says what came when.
 
 1. **Deploy it once.** One container image, one PostgreSQL, S3-compatible storage for what runs leave behind. Locally with compose; on a cloud, the same image next to a managed database and a bucket, which an agent puts there with `deploying-a-console`.
 2. **People sign in** through an identity provider the organization already uses (GitHub, Google Workspace), make projects and say who is in each, and each signs their own agent in with a token of their own (`console login`). Several people, each with their own agent, work on the same board; what a person and their agent may see and change is decided per project. Nobody, person or agent, touches the database: every request goes through the API and is decided there.
 3. **Agents take work from the board**, report what they do, hand in what they made (branches, pull requests, documents, files), and raise a decision when one is needed. A person answers decisions from the board, or from wherever the console notifies them.
 4. **The board shows it all, live:** the tasks and their state, the runs in progress, the history, the decisions.
 5. **Teams build their own console** from the published package, [`@skillcdn/console`](packages/console/): the client of the console's API, the components, and the composition of the default console. A small repository with a configuration and a CI job then produces a custom console, as static files: the organization's takes the default UI's place in the image, and a member's own is served from their machine by `console serve`, with their token ([ADR-0014](docs/adr/0014-a-persons-own-console-is-served-from-their-machine-by-the-command.md)).
+6. **Plugins add the organization's own features** (leave, customers, money), each one npm package built into the image and enabled by an administrator: commands and queries agents run through `console plugin <key>`, pages and widgets people see in the console's tabs, records the console keeps, decisions and tasks on a project of the plugin's, within the capabilities the administrator consented to, in a host that keeps third-party code from everything else ([ADR-0049](docs/adr/0049-a-plugin-is-an-npm-package-installed-into-the-image-and-enabled-by-an-administrator.md) to [ADR-0054](docs/adr/0054-a-plugins-pages-run-in-a-sandboxed-frame-and-speak-only-to-their-plugin.md), [docs/specs/plugins.md](docs/specs/plugins.md)). Writing one is `building-a-plugin`; installing one is a release of the deployment ([deploy/README.md](deploy/README.md#plugins-in-the-image)).
 
 Whoever runs the console deploys the image once, sets up how people sign in and who is a member, and keeps the organization's skills in git. Each member works with the agent of their choice, in their own app or CLI under their own subscription; the console calls no model API and starts no agent. The board is where the work is written down, moved along, decided on and shared, and each organization builds its own console, and each member their own view of it, from the published package.
 
@@ -94,10 +95,11 @@ Whoever runs the console deploys the image once, sets up how people sign in and 
 apps/
   console/    the single deployable: the API people and agents talk to, the worker, the migrations, and the default UI; roles: api | worker | migrate
 packages/
-  console/    @skillcdn/console: what a custom console is built from (the API client and schemas, the components, the composition), and the console command
+  console/    @skillcdn/console: what a custom console is built from (the API client and schemas, the components, the composition), the console command, and the contract of a plugin
+examples/     plugin-hello, the plugin `console-plugin init` writes, built and tested as a workspace
 deploy/       the contract for whoever operates the image; compose for local development
 docs/         architecture, roadmap, specs, ADRs; served with the skills
-skills/       the console's skills in the SkillCDN Format, with SKILLCDN.md at the root as their manifest
+skills/       the console's skills in the SkillCDN Format, for an agent working the board, planning it, building a console or a plugin, or deploying one; SKILLCDN.md at the root is their manifest
 ```
 
 TypeScript monorepo: pnpm workspaces, Turborepo, Node.js 24, PostgreSQL 18, with the toolchain and the conventions of the main repository ([ADR-0002](docs/adr/0002-one-image-one-database-and-the-main-repositorys-toolchain.md)).

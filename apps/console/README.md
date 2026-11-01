@@ -70,7 +70,8 @@ src/
                  by name, its arguments resolved, with its event on the caller's run, an endpoint's
                  request as a person's or a webhook's, the plugins the rules name, and every call on
                  ctx decided by the capabilities consented to), roles.ts (who may use what, pure), paths.ts (what the
-                 host may read), upgrades.ts (the migrate role's upgrades of a plugin's records),
+                 host may read: the plugins' directory, a plugin's own where it is linked in from
+                 elsewhere, the console's code), upgrades.ts (the migrate role's upgrades of a plugin's records),
                  records.ts (the record store: a collection's rules, the quotas, reads by role and
                  project, versions, links, files, export and purge), sql.ts (a plugin's schema and
                  login role: made, its password drawn at boot, its migrations applied as the role, its

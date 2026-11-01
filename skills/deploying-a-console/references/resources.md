@@ -318,7 +318,7 @@ name: Deploy the console
 on:
   push:
     branches: [main]
-    paths: ["deploy/**", "console-ui/**", ".github/workflows/deploy.yml"]
+    paths: ["deploy/**", "console-ui/**", "plugins/**", ".github/workflows/deploy.yml"]
   workflow_dispatch:
 permissions:
   id-token: write
@@ -357,6 +357,9 @@ jobs:
           if [ -d console-ui ]; then
             (cd console-ui && npm ci && npm run build)
             printf 'FROM %s\nCOPY --chown=node:node console-ui/dist/ /app/web/\n' "$IMAGE" | docker build --platform "$PLATFORM" -t "$IMAGE" -f - .
+          fi
+          if [ -f plugins/package.json ]; then
+            printf 'FROM node:24-bookworm-slim AS plugins\nWORKDIR /plugins\nCOPY plugins/package.json plugins/package-lock.json ./\nRUN npm ci --omit=dev --ignore-scripts\nFROM %s\nCOPY --from=plugins --chown=node:node /plugins/ /app/plugins/\nENV PLUGINS_DIR=/app/plugins\n' "$IMAGE" | docker build --platform "$PLATFORM" -t "$IMAGE" -f - .
           fi
           docker push "$IMAGE"
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
@@ -437,11 +440,16 @@ aws iam put-role-policy --role-name console-github-deploy --policy-name console-
 
 `console-ui/`, when the organization has a look of its own: a console made with building-a-console at the plan's look, depending on `@skillcdn/console` at the version of the release `CONSOLE_REF` pins, with a `package-lock.json` (the workflow runs `npm ci`), a `build` script that runs `vite build` into `dist/`, and a `vite.config.ts` that sends `/api` to `console serve` while it is built; the workflow builds it on every push and lays `console-ui/dist/` over the image's web root. Absent, the image's default pages serve.
 
+### The plugins
+
+`plugins/package.json` and `plugins/package-lock.json`, when the plan names a plugin: `dependencies` only, each at an exact version from the registry or a tag of a git host (`github:<owner>/<repo>#<tag>`), written with `npm install --save-exact --package-lock-only --ignore-scripts <package>@<version>` in `plugins/`, which installs nothing on the machine; no scripts, no other field that does anything. The workflow installs them into the image from the lockfile with no install scripts and sets `PLUGINS_DIR`, as [deploy/README.md "Plugins in the image"](/deploy/README.md#plugins-in-the-image) lays it out; the console reads them at boot, and the administrator enables each on the settings page once the console runs. Absent, the console has no plugins. A plugin that asks `storage:sql` needs the database user to hold `CREATEROLE`, which the master user of phase 3's database does; one that keeps files is bounded with `PLUGIN_FILE_BYTES_AT_MOST` in `deploy/console.env` as `PROJECT_FILE_BYTES_AT_MOST` is, and each plugin's thread may hold `PLUGIN_MEMORY_MB_AT_MOST` (256 unless set), which the task's memory leaves room for.
+
 ### The rest of the repository
 
 - `README.md`, in the organization's language: what this repository is (the deployment of the organization's console), that a push to `main` deploys, where the record is, and where the skill that made it lives (`skillcdn.ai/gh/skillcdn/console`).
 - `DEPLOY.md`: the draft from the template (phase 8), filled as far as the run has gone.
 - `console-ui/`: only when the organization has its own console (building-a-console makes it); otherwise absent and the image's default UI serves.
+- `plugins/`: only when the plan names a plugin; otherwise absent, and the console has none.
 
 ### Commit, create, push, watch
 

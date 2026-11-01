@@ -621,7 +621,10 @@ export async function pluginsOf(
   const holder: { current: Plugins | undefined } = { current: undefined };
   const host = new PluginHost({
     entry: HOST_ENTRY,
-    allowRead: await allowedReadRoots(dir),
+    allowRead: await allowedReadRoots(
+      dir,
+      discovery.plugins.map((plugin) => plugin.dir),
+    ),
     env: config.plugins.hostEnv,
     logger,
     onContext: (call) =>

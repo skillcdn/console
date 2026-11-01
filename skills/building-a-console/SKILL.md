@@ -1,16 +1,16 @@
 ---
 name: building-a-console
-description: "Builds a console from the @skillcdn/console package: a person's own console, served from their machine by console serve on their own token; an organization's console, which takes the default pages' place in the image and, given the organization's website, its look, the marks, the colours and the type; or a script against the console's REST API. Use when a person says 'make me a console with a column for this', 're-skin the console in our brand', 'add a page that shows that', 'build our own console UI', or 'write a script that reads the board'. To work tasks on the board, use working-the-board; to deploy a console, deploying-a-console, which runs this skill for the look. The package's README, types and sources are the reference; this skill says where they are, what to configure before anything is replaced, how the build is run against the real board and checked, and what keeps untrusted content harmless. Nothing is spent, and nothing is pushed or published here."
+description: "Builds a console from the @skillcdn/console package: a person's own console, served from their machine by console serve; an organization's console, which takes the default pages' place in the image and, given the organization's website, its look, the marks, the colours and the type; or a script against the console's REST API. Use when a person says 'make me a console with a column for this', 're-skin the console in our brand', 'add a page that shows that', 'build our own console UI', or 'write a script that reads the board'. A feature with data of its own (leave, customers) is a plugin, not a page: use building-a-plugin. To work tasks on the board, use working-the-board; to deploy a console, deploying-a-console. The package's README, types and sources are the reference; this skill says what to configure before anything is replaced, how the build is run against the real board and checked, and what keeps untrusted content harmless. Nothing is spent, pushed or published here."
 license: MIT
 compatibility: A shell with Node.js 24 or newer and npm or pnpm, and an agent that reads and writes files. For looking at the pages against a board, the console command signed in by a person. A browser the agent can drive is optional. No key of the agent's own is needed, and it never sees a token.
 metadata:
   author: skillcdn
-  version: "1.8"
+  version: "1.9"
 skillcdn:
   translations:
     ko:
       title: 패키지로 콘솔 만들기
-      description: "@skillcdn/console 패키지로 콘솔을 만듭니다. console serve로 내 PC에서 내 토큰으로 돌리는 개인 콘솔, 이미지의 기본 페이지 자리를 대신하며 조직 웹사이트가 있으면 그 디자인(마크, 색, 글꼴)을 입는 조직 콘솔, 또는 콘솔 REST API를 쓰는 스크립트. '이 열이 있는 내 콘솔 만들어줘', '콘솔을 우리 브랜드로 바꿔줘', '그걸 보여주는 페이지 추가해줘', '우리 콘솔 UI 만들자', '보드를 읽는 스크립트 써줘'라고 할 때 쓰세요. 보드의 작업은 working-the-board, 콘솔 배포는 deploying-a-console(디자인은 이 스킬로 만듭니다)을 쓰세요. 기준은 패키지의 README·타입·소스이고, 이 스킬은 그것이 어디 있는지, 무엇을 바꾸기 전에 설정으로 할지, 빌드를 실제 보드에 붙여 돌리고 확인하는 법, 신뢰할 수 없는 내용을 안전하게 두는 규칙을 말합니다. 비용은 들지 않고, 여기서는 푸시도 발행도 하지 않습니다."
+      description: "@skillcdn/console 패키지로 콘솔을 만듭니다. console serve로 내 PC에서 내 토큰으로 돌리는 개인 콘솔, 이미지의 기본 페이지 자리를 대신하며 조직 웹사이트가 있으면 그 디자인(마크, 색, 글꼴)을 입는 조직 콘솔, 또는 콘솔 REST API를 쓰는 스크립트. '이 열이 있는 내 콘솔 만들어줘', '콘솔을 우리 브랜드로 바꿔줘', '그걸 보여주는 페이지 추가해줘', '우리 콘솔 UI 만들자', '보드를 읽는 스크립트 써줘'라고 할 때 쓰세요. 자기 데이터를 가진 조직 업무 기능(연차, 고객, 돈)은 페이지가 아니라 플러그인입니다: building-a-plugin을 쓰세요. 보드의 작업은 working-the-board, 콘솔 배포는 deploying-a-console(디자인은 이 스킬로 만듭니다)을 쓰세요. 기준은 패키지의 README·타입·소스이고, 이 스킬은 그것이 어디 있는지, 무엇을 바꾸기 전에 설정으로 할지, 빌드를 실제 보드에 붙여 돌리고 확인하는 법, 신뢰할 수 없는 내용을 안전하게 두는 규칙을 말합니다. 비용은 들지 않고, 여기서는 푸시도 발행도 하지 않습니다."
 ---
 # Building a console from the package
 
@@ -69,7 +69,7 @@ Produces the **configuration**, as [configuring.md](references/configuring.md) l
 
 ### Phase 3: Compose pages of one's own
 
-Produces the **pages**. For a page the default console lacks: `useConsoleData(client, projectKey)` answers the workspace and the project the page is on, kept current by the project's stream, with the actions; the components take their data as props and nothing from the network; `matchRoute`, `PATHS`, `projectHref`, `taskHref`, `decisionHref` and `docHref` name the addresses; `Shell` is the header with the tabs and the person's menu. A page as a tab is `pages` in the configuration, its `render` composing the components over what it is given; a composition of one's own is `src/console.tsx` with pages added or taken away (configuring.md "A page of one's own"). A request without a page of its own skips this phase.
+Produces the **pages**. For a page the default console lacks: `useConsoleData(client, projectKey)` answers the workspace and the project the page is on, kept current by the project's stream, with the actions; the components take their data as props and nothing from the network; `matchRoute`, `PATHS`, `projectHref`, `taskHref`, `decisionHref` and `docHref` name the addresses; `Shell` is the header with the tabs and the person's menu. A page as a tab is `pages` in the configuration, its `render` composing the components over what it is given; a composition of one's own is `src/console.tsx` with pages added or taken away (configuring.md "A page of one's own"). A page composes the board's own data and holds none of its own: a page that would keep records, run logic or reach outside is a feature of the organization's work, which is a plugin, not a page ([building-a-plugin](/skills/building-a-plugin/SKILL.md)); a plugin's pages come in its package and run in frames the console serves, drawn into the tabs by the console itself, so that a console's pages need no build and no change for one. A request without a page of its own skips this phase.
 
 ### Phase 4: Run it against the board
 
@@ -94,7 +94,7 @@ Produces the **checked build** and the delivery. `npx tsc --noEmit` and `npx vit
 - The policy stays: a build is served under a content security policy that runs nothing inline and loads nothing from elsewhere, pictures included, which come through the console. Scripts, styles and fonts are bundled, never loaded from a CDN or written inline, a face only under a license that allows bundling it, and a picture of the console's own pages is in the build or reached through `GET /api/v1/pictures`.
 - The package is pinned by version: the API is `/api/v1`, the schemas in the package are the contract of the version it was built against, and a console is rebuilt to take a new one.
 - The marks of SkillCDN are trademarks, not part of the MIT license: a console of one's own shows its own marks through `brand`, or none.
-- Nothing of the server is rebuilt: a console shows the organization's board and holds nothing of its own. A second database is not a console.
+- Nothing of the server is rebuilt: a console shows the organization's board and holds nothing of its own. A second database is not a console, and a feature with data of its own is a plugin, not a page.
 
 ## Terms
 

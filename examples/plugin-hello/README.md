@@ -23,4 +23,4 @@ npm test             # the server module against an in-memory context, and the p
 npm run check        # console-plugin check: what a console, or a store, would refuse
 ```
 
-To try it on a console of your own, point `PLUGINS_DIR` at a directory that holds this package under `node_modules/`, as the image does, and enable it on the settings page.
+To try it on a console of your own, point `PLUGINS_DIR` at a directory that holds this package under `node_modules/`, as the image does, and enable it on the settings page. The skill `building-a-plugin` of the console, in `node_modules/@skillcdn/console/skills/building-a-plugin/SKILL.md`, says how, from the first question to the install.

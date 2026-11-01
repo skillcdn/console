@@ -15,14 +15,19 @@ export const HOST_ENTRY = fileURLToPath(new URL("./plugin-host.js", import.meta.
 const APP_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 
 /**
- * The directories the host may read: the plugins, the app with its dependencies, and the package
- * the host imports from with that package's own dependency, which a package manager may keep
- * outside both. Nothing else: not the home directory, not the system, not the console's
- * configuration.
+ * The directories the host may read: the plugins, each plugin's own directory where it is linked
+ * into the plugins' directory from elsewhere (a checkout, while a plugin is written), the app with
+ * its dependencies, and the package the host imports from with that package's own dependency,
+ * which a package manager may keep outside both. Nothing else: not the home directory, not the
+ * system, not the console's configuration.
  */
-export async function allowedReadRoots(pluginsDir: string): Promise<string[]> {
+export async function allowedReadRoots(
+  pluginsDir: string,
+  pluginDirs: readonly string[] = [],
+): Promise<string[]> {
   const roots = [
     pluginsDir,
+    ...pluginDirs,
     APP_ROOT,
     dirname(require.resolve("@skillcdn/console/package.json")),
     dirname(require.resolve("zod/package.json")),

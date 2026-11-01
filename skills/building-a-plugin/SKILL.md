@@ -1,0 +1,137 @@
+---
+name: building-a-plugin
+description: "Writes a plugin of the SkillCDN Console: one npm package that adds a feature of an organization's work (leave, customers, money) to a console, under its rule that people decide and agents work. The feature is split into commands and queries an agent runs, decisions and tasks people answer on a board project, hooks and jobs the console runs itself, and pages people see; written from console-plugin init, kept in records or a schema of its own, run on a local console, tested and checked as a console would, published or tagged, and handed to the deployment. Use when a person says 'write a plugin for leave', 'add a feature to the console for our customers', 'the console should track X'. For a console's own pages, use building-a-console; to install a plugin, deploying-a-console; to work one, working-the-board. docs/specs/plugins.md is the reference for every field, bound and refusal; this skill says what to ask, how to split the work and how it is checked. Nothing is spent or published without the person's word."
+license: MIT
+compatibility: A shell with Node.js 24 or newer, npm and git, and an agent that reads and writes files. For running the plugin on a local console, Docker for the database and a checkout of the console's repository, where signing in needs a GitHub OAuth app of the person's own, as the console's README says. The console command is optional, for running the plugin's commands as an agent would. No key of the agent's own is needed, and it never sees a token.
+metadata:
+  author: skillcdn
+  version: "1.0"
+skillcdn:
+  translations:
+    ko:
+      title: 콘솔 플러그인 만들기
+      description: "SkillCDN 콘솔의 플러그인을 만듭니다. 조직 업무의 기능 하나(연차, 고객, 돈)를 npm 패키지 하나로 콘솔에 더하되, 사람은 정하고 에이전트는 일한다는 콘솔의 규칙 아래 둡니다. 기능을 에이전트가 돌리는 명령과 조회, 보드 프로젝트에서 사람이 답하는 결정과 작업, 콘솔이 스스로 돌리는 훅과 잡, 사람이 보는 페이지와 위젯으로 나누고, console-plugin init으로 시작해, 콘솔이 보관하는 레코드나 자기 스키마에 데이터를 두고, 패키지를 PLUGINS_DIR에 링크한 로컬 콘솔에서 돌리고, 패키지의 테스트 컨텍스트와 console-plugin check로 검사하고, 발행하거나 태그를 붙이고, 배포에 설치 작업으로 넘깁니다. '연차 플러그인 만들어줘', '고객 관리 기능을 콘솔에 넣어줘', '콘솔이 X를 추적하면 좋겠어'라고 할 때 쓰세요. 콘솔의 페이지 자체는 building-a-console, 플러그인 설치는 deploying-a-console, 보드에서 플러그인으로 일하기는 working-the-board를 쓰세요. 필드·한도·거절의 기준은 docs/specs/plugins.md이고, 이 스킬은 무엇을 묻고, 일을 어떻게 나누고, 어떻게 검사하는지를 말합니다. 비용은 들지 않고, 사람의 말 없이는 발행하지 않습니다."
+---
+# Building a plugin of the console
+
+What goes in: a feature of the organization's work that the console should carry, in the person's words, and who uses it. What comes out: a repository holding one npm package, the plugin: its manifest, its server module, its web bundle where people look at it, its skills, its tests and its build, checked as a console would check it; and the install, handed to the deployment as a task, since a plugin reaches a console by being built into its image and turned on by an administrator ([ADR-0049](/docs/adr/0049-a-plugin-is-an-npm-package-installed-into-the-image-and-enabled-by-an-administrator.md)). The console holds the people, the projects, the board, the records and the frames; the plugin holds the feature's logic and nothing of the console's. It runs in a host the console keeps apart from everything else and reaches the console only through what its manifest declared and an administrator consented to ([ADR-0050](/docs/adr/0050-plugin-code-runs-in-a-host-process-of-its-own-and-reaches-the-console-only-through-the-capabilities-it-declared.md)); so the first work is deciding what the feature asks for, and asking for the least.
+
+The contract is the [specification of plugins](/docs/specs/plugins.md): every field of the manifest, every member of `ctx`, every capability with what it opens, every bound and every refusal. This skill repeats none of them; where it and the specification differ, the specification is right.
+
+## How the person is involved
+
+- **Questions:** one message, before anything is written, with what the request leaves open under "Inputs": what the feature does and for whom, what a person must decide and what an agent may do alone, where it reaches (a board, which projects, people, an outside service), what it keeps, its name. Plain words; the person need not be a developer.
+- **Checkpoints:** the design (phase 1), as the table of the split and the manifest's capabilities read aloud as the sentences an administrator will consent to; the pages, once they run on a local console (phase 4), where a browser can show them; publishing or tagging (phase 5), named with where it goes. One short message each, with the recommendation, and "OK" continues.
+- **Go-ahead:** when the person says to go ahead alone, the design is still shown before code, and publishing is still confirmed; the rest needs no answer.
+- **Language:** the conversation's in chat; code, identifiers, commit messages and the plugin's skills in English; what people read of the plugin (its name, description, agent note, roles, settings, pages) in every language the organization uses, through the manifest's language maps, `en` first.
+
+## Requirements
+
+| Need | How | When missing |
+|---|---|---|
+| Node.js 24 or newer, npm, git | `node --version`, `npm --version`, `git --version` | Stop and tell the person: the console's runtime is Node.js 24, and the check runs the plugin as the console would. |
+| The authoring command | `console-plugin`, a second command of `@skillcdn/console`: with the package installed globally (`npm install -g @skillcdn/console`, which also gives the console command), or `npx --package @skillcdn/console console-plugin ...` | `npm install -g @skillcdn/console`; `console-plugin help` says its two commands. |
+| The specification and the types | In the plugin's own `node_modules/@skillcdn/console/` once installed (phase 2): `docs/specs/plugins.md`, the package's `README.md`, the types under `src/plugin/`, and this skill under `skills/building-a-plugin/`; or through the connection that served this skill | Read them there; this skill is a map of them. |
+| A local console to run the plugin on (phase 4) | A checkout of the console's repository with Docker for its database, run as its README's "Install" says, with `PLUGINS_DIR` set; signing in there needs a GitHub OAuth app of the person's own, registered for the local address as `apps/console/README.md` of the console says | Phases 1 to 3 and 5 need none; phase 4 is then reported as not run, and the plugin is proven on the deployment's console after the install. |
+| The console command, signed in on that console | `console login --url http://127.0.0.1:11199`, approved on the local console's pages; `console whoami` | Optional: the plugin's commands are tried on the pages, or through the frame alone. |
+
+## Where to read, in this order
+
+1. [docs/specs/plugins.md](/docs/specs/plugins.md): "Words", "The package", "The manifest", "The server module", "The context", "Capabilities", "Roles and grants", "Settings", "Records" or "SQL", "The board", "Events, hooks and jobs", then "Pages" when the plugin has any, and "Security model", "Limits and refusals" and "Authoring" before the check. Every name this skill uses is defined there.
+2. The plugin `console-plugin init` writes (phase 2): a manifest, a server module with one collection, one command and one query, a web bundle with one page and one widget, one skill, the tests and the build, each file saying what it is for. It is the smallest complete plugin, and `examples/plugin-hello` of the console's repository is the same plugin built.
+3. The package's README, "A plugin": the shape of `definePlugin` and its definers, `connect()` of the web bundle, `createTestContext` of the tests and the two commands, in a page.
+4. [deploy/README.md, "Plugins in the image"](/deploy/README.md#plugins-in-the-image): how a deployment installs the plugin, and what `storage:sql`, an `outbound` host or files ask of it, which the hand-over of phase 5 names.
+5. The decisions, for why: [ADR-0051](/docs/adr/0051-a-plugin-keeps-its-data-in-records-the-console-holds-or-in-a-schema-of-its-own-by-consent.md) (records or a schema), [ADR-0052](/docs/adr/0052-a-plugins-board-is-a-project-made-or-chosen-when-it-is-enabled-and-what-it-puts-there-carries-its-name.md) (the board project), [ADR-0053](/docs/adr/0053-agents-reach-a-plugin-through-one-command-whose-definitions-the-console-holds.md) (one command for agents), [ADR-0054](/docs/adr/0054-a-plugins-pages-run-in-a-sandboxed-frame-and-speak-only-to-their-plugin.md) (the frames).
+
+## Inputs
+
+| Input | Source |
+|---|---|
+| The feature | What the person said, in chat or in a document they point to: what the organization does today by hand or in a spreadsheet, and what the console should carry of it. One feature is one plugin; two features that share nothing are two. |
+| Who uses it | Asked: "Who uses this: everyone, or some people? What may each kind of person do?" Each kind is a role of the manifest; a role everyone holds is `defaultRole`; the rest are granted by the administrator. Up to the bound the specification names. |
+| What people decide | Asked: "What must a person approve or choose here, and who?" Each is a decision the plugin raises on its board project, addressed to the person the setting or the record names; the plugin never decides it. A feature where nobody decides anything has `board.needs: "none"`. |
+| What agents do, and read | Derived from the feature: each thing an agent does for a person is a command (it writes), each thing it looks up a query (it reads); named as verbs and nouns an agent would type after `console plugin <key>`, with arguments in the console's own forms (a text, a number, a day, a person by login, a project by key, a file, a record). |
+| What happens on its own | Derived: what the console must tell the plugin (a decision answered, a task done, a member added) is a hook on the console's events; what another plugin tells it is a hook on that plugin's events; what time brings (a balance renewed, a reminder) is a job on a schedule; what an outside service sends is a webhook endpoint; what the plugin must fetch is an outbound request to a host the manifest names, with a secret the administrator sets. |
+| Where it reaches | Asked when the feature does not say: "Does it belong to one project, to some, or to every project of the workspace?" Pages at the workspace level, at the project level, or both; the projects the plugin is on named by the administrator at enable. |
+| What it keeps | Derived: the collections, each with its fields, what is filtered and ordered by (`indexes`), searched (`search`), who owns a record (`owner`), whether a record belongs to a project, whether history is kept, who may read; or a schema of its own with `storage:sql`, by the rule of phase 1. |
+| The key and the name | The key from the feature's one word, lowercase, as the specification's rule and reserved words allow (`leave`, `crm`, `finance`); the name and the description per language; the agent note, one sentence an agent reads with the rules: what the plugin is for and when to use it. Shown at the design checkpoint and changed on request. |
+| Where the code lives, and how it ships | Asked: "A repository of its own on GitHub, under which account? Published to npm, or installed from the repository's tag?" Default: a repository `console-plugin-<key>`, and publishing when the person has an npm account, a tag otherwise. |
+| The deployment | Asked: "Which console is this for, and who runs its deployment?" The install is a task for them (phase 5). |
+| Everything else | Derived and shown in the design: the capabilities from the split, the settings (a number the organization chooses, a person who approves, a secret for an outside service), the board project's defaults (its key, name and description), the menu group, the pages and the widgets with their roles, `dataVersion: 1`. |
+
+## Workflow
+
+Each phase produces something the person can look at and ends with one line to them; phases 1, 4 and 5 stop for a checkpoint.
+
+### Phase 1: Split the feature so that agents work and people decide
+
+Produces the **design**: one table, a row per thing the feature does, saying who starts it and what it becomes in the plugin. The questions to ask of each row, in this order:
+
+| The row | What it becomes |
+|---|---|
+| An agent does it for a person, and something changes | A **command**: `defineCommand({ about, args, roles, run })`. Its `text` answer is for people, its `data` for agents (`--json`); it does one thing and does it again safely where it can. |
+| An agent, or a page, looks something up | A **query**: `defineQuery(...)`, which writes nothing; a query may answer a file. |
+| A person must approve, choose or confirm | A **decision** the command raises with `ctx.console.decisions.ask`, with options, addressed to the person a setting or the record names (`deciderId`), `about` the record it is for; the command answers `waiting`, the agent waits as the console's own `ask` is waited for, and the plugin hears the answer in a hook on `console:decision.answered` and goes on. The plugin never answers one, and never computes what a person must choose. |
+| Someone must do something later | A **task** on the board project with `ctx.console.tasks.create`, marked as the plugin's, worked by whoever takes it. |
+| The console must tell the plugin something happened | A **hook**, `on["console:<kind>"]` (`events:console`): the plugin's board project, the projects it is on and the items it made are what it hears of. Delivery is at least once: a handler reads the record first and does nothing twice. |
+| Another plugin must tell it | A **hook** on `plugin:<key>:<kind>` (`events:plugins`), or a call on the other's `api` (`plugins:<key>`). |
+| Time passes | A **job** (`jobs`), `every` or `at` in the workspace's time zone, never two at once; what it did goes into records and, where people should know, a task or a decision. |
+| An outside service calls in | An **endpoint** (`endpoints`): a `person` endpoint for whoever holds a role, a `webhook` for nobody, verified with `ctx.secrets.verify` against a secret setting. |
+| The plugin must call out | `ctx.fetch` to a host the manifest names (`outbound:<host>`), the secret put in by the console from a `secret` setting, never read by the plugin. |
+| People look at it, or fill a form | A **page** (level `workspace` or `project`) or a **widget** on the front page: it shows records and calls commands and queries through the bridge; the logic stays in the server module, so that the command line and the pages do the same thing. |
+| An agent must know how | A **skill** in the package, one per kind of work, naming the commands as `console plugin <key> <command>`, with the rules of that work; `SKILLCDN.md` at the root. The agent note of the manifest is the one line that sends an agent to them. |
+
+Then the data. Records, unless the feature needs what records do not give: joins across many collections, more rows than a plugin's records may hold, or figures beyond counting, summing, the least and the most; then `storage:sql`, a schema and a role of the plugin's own with migrations under `migrations/`, which needs the deployment's database user to hold `CREATEROLE` and is said in the hand-over. Records are the default: the console keeps them with versions, files, links, search and aggregates, exports and purges them, and shows them to people by role; a schema is the plugin's to keep.
+
+Then the capabilities: the list the split needs, each read as the sentence the administrator will consent to (the specification's catalogue says what each opens and what a malicious plugin could do with it). A capability no row needs is dropped; `people:read:all`, `projects:read:all`, `storage:sql` and every `outbound:<host>` are asked for only where the design shows the row that needs them. Write the design: the table, the collections with their fields, the roles, the settings, the board (`needs`, the defaults), the menu group, the pages and the widgets, and the capabilities with their sentences; stop for the checkpoint.
+
+### Phase 2: Start from the template, then fill it
+
+Produces the **plugin as source**. `console-plugin init <dir> --key <key> --name "<Name>"` writes the smallest complete plugin: the manifest, a server module with one collection, one command and one query, a web bundle with one page and one widget, one skill with its `SKILLCDN.md`, the tests, the build and a README that says where things are; `--console` names the version of `@skillcdn/console` it depends on, the command's own unless said, and for a plugin written for a deployed console, the version that console runs (`console whoami` says it). Then, in `<dir>`: `npm install`, `npm run build`, `npm test`, `npm run check`, all green before a line is changed, and `git init`.
+
+Then the design goes in, file by file: the manifest `console-plugin.json` from the design, its `key`, names and descriptions per language, `agentNote`, `capabilities`, `roles` and `defaultRole`, `board`, `settings`, `menu`, `pages`, `widgets`, `dataVersion`; the server module `src/server/index.ts`, one `defineCollection` per collection, one `defineCommand` or `defineQuery` per row, `endpoints`, `on`, `jobs`, `api`, `onEnable` and `onDisable` where the design has them, exported by name for the tests and gathered in `definePlugin(...)` as the default export; the web bundle `src/web/index.ts` and `index.css`, where `connect()` gives the page the context (who looks, at what, in which language), `command`, `query`, `records`, `files`, `navigate`, `download`, `setTitle` and the events, every class prefixed `pl-<key>-`, the console's `sc-` classes and `--sc-*` tokens for the look, and every word a person wrote put in as text; the skills under `skills/<name>/SKILL.md`, one per kind of work, in the SkillCDN Format, and the README of the package. The server module imports only what the host allows and bundles everything it imports; it keeps no state between calls but in records, since its thread is started afresh after a fault. Where the design has `storage:sql`, `migrations/0001-<words>.sql` makes the tables, and `manifest.migrations` names the directory.
+
+### Phase 3: Test it as the console runs it
+
+Produces the **tests**, green. `src/server/index.test.ts` runs each command, query, hook and job against `createTestContext({ collections, plugin, caller, console, secrets, ... })` from `@skillcdn/console/plugin/testing`: the records in memory, checked against the schema and the indexes as the console checks them; the console answering what the test provided (a person, a project, a task) and refusing the rest as `plugin.forbidden`; `emitted` and `logged` to assert on; `as(caller)` to run the same store as another person. One test per row of the design: what it does, what it refuses (a schema it does not fit, a role it lacks, a record another owns), and what it tells people. The template's second test builds the package and runs `console-plugin check` on it, as a console or a store would, and fails on anything the console would refuse the plugin for: an invalid manifest, a server module that does not load under the host's hardening or names what the manifest does not declare, a built-in the host refuses, a web bundle that is not self-contained, a license that is not permissive, `files` that leave out what runs. `npm run typecheck`, `npm test` and `npm run check` are the three that pass before phase 4, and before every commit.
+
+### Phase 4: Run it on a local console
+
+Produces the **plugin running**, enabled, with its commands tried and its pages shown. The console from its checkout, as the console's README's "Install" says, with one difference: before the api starts, `.env` sets `PLUGINS_DIR` to a directory made for the purpose, whose `package.json` is `{ "private": true, "dependencies": {} }` and in which `npm install --ignore-scripts <path to the plugin>` writes the plugin as a `file:` dependency and links `node_modules/<its name>` to the checkout, built; the console reads the link where it points, so the checkout is the plugin, and `npm run build` in it followed by a restart of the api is a new version. The person signs in on the local console as its administrator (`ADMINS` in `.env`, a GitHub OAuth app registered for the local address, as `apps/console/README.md` of the console says), opens the plugins' settings page, where the plugin is listed as installed with any reason it failed to load, and enables it: the consent to each capability, the board project made from the manifest's defaults or chosen, the projects it is on, the settings; or their agent does the same with `console plugin <key> enable` ([setting-up.md](/skills/planning-the-board/references/setting-up.md), "A plugin's board project"), signed in there with `console login`. The compose database's user owns the database, so `storage:sql` is available locally. Then the tabs appear where the manifest put them, and the plugin is worked as an agent works it ([working-the-board](/skills/working-the-board/SKILL.md)): `console plugin <key>` lists the commands, `console plugin <key> <command> ...` runs one, a decision raised is answered on the pages, a hook runs, a job runs at its time (the worker inside the api, locally), and the pages are looked at with a browser the agent can drive, else by the person. What is seen is shown at the checkpoint; what could not run is reported as not run.
+
+### Phase 5: Ship, and hand the install to the deployment
+
+Produces the **release** and the **hand-over**. The version in `package.json` moves as semver says, `dataVersion` moves with an entry in `upgrades` whenever the shape of a record changed; `npm run build`, `npm test` and `npm run check` pass; a commit, and a push of the repository. Then one of two, confirmed with its consequence: `npm publish` (`--access public` for a scoped name), which puts the package on the registry under that name for good, and is done by the person or with their word; or a tag `v<version>` whose tree carries the built package (the template's `.gitignore` leaves `dist/` out of git, so a release commit adds it with `git add -f dist` before the tag), since the deployment installs with no scripts and runs no build. The deployment then names the plugin as `"<name>": "<version>"` or `"github:<owner>/<repo>#v<version>"`.
+
+The hand-over is a task on the deployment's board, written as [planning-the-board](/skills/planning-the-board/SKILL.md) writes one, or the same words in chat where there is no board: the package and its version, and how it is installed ([deploy/README.md, "Plugins in the image"](/deploy/README.md#plugins-in-the-image), a row of deploying-a-console's [running-it-again.md](/skills/deploying-a-console/references/running-it-again.md)); what the deployment must provide, where the plugin asks it (`CREATEROLE` for `storage:sql`, the hosts of `outbound`, a bound on the files); what the administrator does when they enable it: the capabilities they consent to, the board project, the projects, the settings to fill and the secrets to set, the roles and who gets them; and where the plugin's skills are once it runs (`console plugin <key> skills`). The deployment's agent installs it as a release of the deployment; the administrator enables it; the plugin is then proven on that console as phase 4 proved it locally, and that is the delivery.
+
+## Verdicts
+
+| Result | Verdict |
+|---|---|
+| `npm run typecheck`, `npm test` and `npm run check` pass; the design's every row is a command, a query, a decision, a task, a hook, a job, an endpoint, a page or a widget of the plugin, with a test; the plugin was enabled on a local console, its commands ran and its pages were shown; the package is published or tagged and the install is a task of the deployment | Accepted |
+| A local console could not run (no Docker, no OAuth app), so phase 4 is reported as not run and the proof waits for the deployment's console | Accepted, with the gap named in the delivery |
+| `console-plugin check` warns of a capability no code uses, a class without the prefix or a private package, and the person wants it so | Accepted, with the warning named |
+| The plugin decides what a person should (an approval computed, a decision answered), reaches what it did not declare, reads a secret's value, renders what people wrote as HTML, or keeps state outside records; `check` fails; a capability is asked for without a row that needs it | Redone |
+
+## Hard rules
+
+- People decide: a plugin raises decisions and waits; it never answers one, never acts as a person it is not, and never computes an approval. What it makes on a board carries its name and is reversible by people.
+- The fewest capabilities: each one in the manifest has a row of the design that needs it, and the sentence an administrator reads for it is true of the code. `check` warns of one no definition uses; it is dropped.
+- A secret is a `secret` setting the administrator sets, put into a request by the console or verified by it; the plugin never reads its value, logs it, keeps it in a record, or puts it in the repository, the tests or the chat.
+- Everything a person wrote is shown as text, in the pages and in a command's answer; the frame renders no HTML from a record, and its classes are prefixed `pl-<key>-`.
+- The server module imports nothing the host refuses, reaches no network but `ctx.fetch`, no file but its own, and keeps no state between calls but in records; a hook does nothing twice.
+- Nothing is published, tagged for an install or installed without the person's word; the install is the deployment's release, planned and started by its people, never by this skill.
+- The specification wins: a field, a bound or a refusal is as [docs/specs/plugins.md](/docs/specs/plugins.md) says; the plugin is rebuilt against the console it runs on, since before 1.0 the plugin API moves with the console's line.
+
+## Terms
+
+The specification's "Words" table defines the plugin's own: plugin, manifest, host, capability, role, board project, record and collection, command and query, endpoint, hook and job, frame and bridge, widget. Beside them here: **the design**, the table of phase 1, which the manifest and the tests are read against; **the split**, how a feature becomes rows of that table so that agents work and people decide; **the hand-over**, the task that carries the install to the deployment; **a local console**, the console from its checkout with the plugin linked into `PLUGINS_DIR`.
+
+## Beside this skill
+
+- The contract, every field, bound and refusal: [docs/specs/plugins.md](/docs/specs/plugins.md).
+- How a deployment installs a plugin: [deploy/README.md, "Plugins in the image"](/deploy/README.md#plugins-in-the-image); as a change to a deployed console, [deploying-a-console](/skills/deploying-a-console/SKILL.md), "Running it again".
+- Enabling a plugin and its board project, for an administrator's agent: [planning-the-board](/skills/planning-the-board/SKILL.md), setting-up.md "A plugin's board project".
+- Working a plugin on the board, as the agents who use it will: [working-the-board](/skills/working-the-board/SKILL.md).
+- A console's own pages, which show the board and hold nothing of their own: [building-a-console](/skills/building-a-console/SKILL.md).

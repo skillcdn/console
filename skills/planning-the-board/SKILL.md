@@ -1,16 +1,16 @@
 ---
 name: planning-the-board
-description: "Puts work on the board of a SkillCDN Console and sets the board up, as a person asks, with the console command: tasks written from what they say or plan, each with its days, category, goal, parent and workers; goals on the roadmap; a project made or changed, with its mark, its members and its rules; the workspace's categories, people and settings; a private pack connected. Use when a person says 'put this on the board', 'write these as tasks', 'plan next week', 'set up a project for this', 'add Kim to the project', 'write the rules', 'make a category for design'. To work a task that is on the board, use working-the-board, which also writes a single piece of work given in chat before working it. Everything is done as the person may: a task by anyone who works in the project, the rest by an owner of the project or an administrator of the workspace; what they may not, the console refuses, and the step goes back to them. Nothing is spent."
+description: "Puts work on the board of a SkillCDN Console and sets the board up, as a person asks, with the console command: tasks written from what they say or plan, each with its days, category, goal, parent and workers; goals on the roadmap; a project made or changed, with its mark, its members and its rules; the workspace's categories, people and settings; a private pack connected; a plugin's board project when an administrator enables one. Use when a person says 'put this on the board', 'write these as tasks', 'plan next week', 'set up a project for this', 'add Kim to the project', 'write the rules', 'make a category for design'. To work a task that is on the board, use working-the-board, which also writes a single piece of work given in chat before working it; to write a plugin, building-a-plugin. Everything is done as the person may: a task by anyone in the project, the rest by an owner or an administrator; what they may not, the console refuses, and the step goes back to them. Nothing is spent."
 license: MIT
 compatibility: Needs a shell with the console command on the PATH (npm install -g @skillcdn/console, Node.js 24 or newer), signed in by a person who works in the project, owns it, or administers the workspace, as the step needs. Nothing else; the agent never sees a token.
 metadata:
   author: skillcdn
-  version: "1.0"
+  version: "1.1"
 skillcdn:
   translations:
     ko:
       title: 보드 계획하고 설정하기
-      description: "SkillCDN 콘솔의 보드에 일을 올리고 보드를 설정합니다. 사람이 말하거나 계획한 일을 날짜·범주·목표·상위 작업·담당자와 함께 작업으로 쓰고, 로드맵에 목표를 세우고, 프로젝트를 만들거나 바꾸고(마크, 구성원, 규칙), 워크스페이스의 범주·사람·설정을 다루고, 비공개 팩을 연결합니다. '이거 보드에 올려줘', '이것들 작업으로 써줘', '다음 주 계획 세워줘', '이 일로 프로젝트 만들어줘', '김OO 프로젝트에 추가해줘', '규칙 써줘', '디자인 범주 만들어줘'라고 할 때 쓰세요. 보드에 있는 작업을 하는 것은 working-the-board이고, 그 스킬도 채팅으로 받은 일 하나는 먼저 보드에 쓰고 시작합니다. 모든 일은 그 사람이 할 수 있는 만큼 합니다: 작업은 프로젝트에서 일하는 누구나, 나머지는 프로젝트 소유자나 워크스페이스 관리자. 할 수 없는 일은 콘솔이 거부하고 그 단계는 사람에게 돌아갑니다. 비용은 들지 않습니다."
+      description: "SkillCDN 콘솔의 보드에 일을 올리고 보드를 설정합니다. 사람이 말하거나 계획한 일을 날짜·범주·목표·상위 작업·담당자와 함께 작업으로 쓰고, 로드맵에 목표를 세우고, 프로젝트를 만들거나 바꾸고(마크, 구성원, 규칙), 워크스페이스의 범주·사람·설정을 다루고, 비공개 팩을 연결하고, 관리자가 플러그인을 켤 때 그 보드 프로젝트를 만들거나 고릅니다. '이거 보드에 올려줘', '이것들 작업으로 써줘', '다음 주 계획 세워줘', '이 일로 프로젝트 만들어줘', '김OO 프로젝트에 추가해줘', '규칙 써줘', '디자인 범주 만들어줘', '연차 플러그인 켜줘'라고 할 때 쓰세요. 보드에 있는 작업을 하는 것은 working-the-board이고, 그 스킬도 채팅으로 받은 일 하나는 먼저 보드에 쓰고 시작합니다. 플러그인을 만드는 것은 building-a-plugin입니다. 모든 일은 그 사람이 할 수 있는 만큼 합니다: 작업은 프로젝트에서 일하는 누구나, 나머지는 프로젝트 소유자나 워크스페이스 관리자. 할 수 없는 일은 콘솔이 거부하고 그 단계는 사람에게 돌아갑니다. 비용은 들지 않습니다."
 ---
 # Planning and setting up the board
 
@@ -62,7 +62,7 @@ Produces the **tasks and goals on the board**. A goal first, for an owner: `cons
 
 ### Phase 4: Set up, when asked
 
-Produces the **project and the workspace as asked**: a project made or changed, its mark, its members, the workspace's categories and people, its settings, the rules, a private pack connected, each with the command and the standing [setting-up.md](references/setting-up.md) gives it. A project's rules start from [project-rules.md](references/project-rules.md) and are written only when a person asked for exactly that. What the person may not do goes back to them, with who may.
+Produces the **project and the workspace as asked**: a project made or changed, its mark, its members, the workspace's categories and people, its settings, the rules, a private pack connected, a plugin enabled with its board project, each with the command and the standing [setting-up.md](references/setting-up.md) gives it. A project's rules start from [project-rules.md](references/project-rules.md) and are written only when a person asked for exactly that. A plugin that puts decisions, tasks and pages on a board gets its project when an administrator enables it, made from the plugin's own defaults or chosen among those that exist (setting-up.md "A plugin's board project"); it is a project as any, its tasks planned here as any, and what the plugin writes there carries the plugin's name. What the person may not do goes back to them, with who may.
 
 ### Phase 5: Tell
 

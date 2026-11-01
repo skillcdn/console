@@ -1,6 +1,6 @@
 # Spec: plugins
 
-- Status: **Being built.** The decisions are [ADR-0049](../adr/0049-a-plugin-is-an-npm-package-installed-into-the-image-and-enabled-by-an-administrator.md) to [ADR-0054](../adr/0054-a-plugins-pages-run-in-a-sandboxed-frame-and-speak-only-to-their-plugin.md), taken 2026-11-01; milestone 34 of the [roadmap](../roadmap.md) builds them in order, and says what is built: the contract in the package, the authoring command, the example, the host, the installs with their consent, settings, secrets and grants, their routes and the events, the records with their versions, links and files, the record routes, export and purge, `storage:sql` with its migrations, the command's own routes with `invoke`, the endpoints, a plugin's skills as a pack of its own, `console plugins` and `console plugin <key>`, the plugins named after the rules, the board through `ctx.console`, a plugin's own events, hooks, jobs, outbound requests and calls between plugins, the frame and the bundle, the console's side of the bridge, the tabs, the sub-tabs, the widgets and the settings pages are: every step of the milestone is built, and what follows is the first plugins' second pass over the contract. This document is the contract between a console and a plugin, and between the console and whoever installs or administers one. Until the milestone is done, where the code and this document differ, the code is behind.
+- Status: **Built.** The decisions are [ADR-0049](../adr/0049-a-plugin-is-an-npm-package-installed-into-the-image-and-enabled-by-an-administrator.md) to [ADR-0054](../adr/0054-a-plugins-pages-run-in-a-sandboxed-frame-and-speak-only-to-their-plugin.md), taken 2026-11-01; milestone 34 of the [roadmap](../roadmap.md) built them in order, 2026-11-01 to 2026-11-02: the contract in the package, the authoring command, the example, the host, the installs with their consent, settings, secrets and grants, their routes and the events, the records with their versions, links and files, the record routes, export and purge, `storage:sql` with its migrations, the command's own routes with `invoke`, the endpoints, a plugin's skills as a pack of its own, `console plugins` and `console plugin <key>`, the plugins named after the rules, the board through `ctx.console`, a plugin's own events, hooks, jobs, outbound requests and calls between plugins, the frame and the bundle, the console's side of the bridge, the tabs, the sub-tabs, the widgets and the settings pages, the image's install ([deploy/README.md](../../deploy/README.md), "Plugins in the image") and the skill `building-a-plugin`. What follows is the first plugins' second pass over the contract. This document is the contract between a console and a plugin, and between the console and whoever installs or administers one; where the code and this document differ, the code is behind.
 - Where things live: the contract in `@skillcdn/console/plugin` (the manifest's schema, `definePlugin` and its definers, the types of `ctx`, the capabilities, the bounds and the refusals), `@skillcdn/console/plugin/web` (the bridge client) and `@skillcdn/console/plugin/testing` (a context for a plugin's own tests); the host, the record store, the policy and the routes in `apps/console/src/plugins/`; the authoring command `console-plugin` as a second `bin` of the package, with its template in the package's `template/plugin`; an example plugin in `examples/plugin-hello`; the skill `skills/building-a-plugin`. The console's own words, limits and refusals are in [rest.md](rest.md) and [cli.md](cli.md); this document adds the plugins'.
 
 ## Words
@@ -278,7 +278,7 @@ Upgrades: the `migrate` role, before the `api` and `worker` roles start on a new
 
 ## The host
 
-- The `api` and `worker` roles each spawn one child process from the console's own code (`dist/plugin-host.js`), as `node --permission --allow-fs-read=<PLUGINS_DIR>,<the host's own directory> --allow-worker dist/plugin-host.js`, with an environment of nothing but what Node needs, no database credentials, and no configuration but what the parent sends over the IPC channel: the plugins to load and the limits. No `--allow-fs-write`, `--allow-child-process`, `--allow-addons` or `--allow-wasi`.
+- The `api` and `worker` roles each spawn one child process from the console's own code (`dist/plugin-host.js`), as `node --permission --allow-fs-read=<PLUGINS_DIR>,<each plugin's directory>,<the host's own directory> --allow-worker dist/plugin-host.js`, with an environment of nothing but what Node needs, no database credentials, and no configuration but what the parent sends over the IPC channel: the plugins to load and the limits. A plugin's directory is its real path, so a package linked into `PLUGINS_DIR` from a checkout, as it is while a plugin is written, is read where it is. No `--allow-fs-write`, `--allow-child-process`, `--allow-addons` or `--allow-wasi`.
 - The host loads each plugin's server module in a worker thread of its own, with `resourceLimits` from `PLUGIN_MEMORY_MB_AT_MOST`, after hardening the thread: a module hook refuses `node:net`, `node:http`, `node:https`, `node:http2`, `node:tls`, `node:dgram`, `node:dns`, `node:child_process`, `node:cluster`, `node:worker_threads`, `node:vm`, `node:inspector`, `node:repl`, `node:wasi` and `node:v8`; `globalThis.fetch`, `WebSocket`, `EventSource` and `process.binding` are removed; `process.env` is emptied. Reading files is the plugin's own directory, by the permission model; writing is nowhere.
 - The host's main thread is the broker: a call on `ctx` is a message from the thread to the broker to the parent, which decides and performs it and answers; messages are JSON up to 4 MiB, and files travel as handles the parent resolves.
 - A thread that runs past its time (`ctx.signal` fires first, then the broker ends it), grows past its memory or crashes is ended alone; the broker starts it afresh, and the call that was running fails as `plugin.timeout` or `plugin.unavailable`. Module-level state does not survive; state is in records.
@@ -470,13 +470,15 @@ The install path is the first line (a release of the deployment, from a lockfile
 | `PLUGIN_FILE_BYTES_AT_MOST` | unset | the bytes a plugin's files may hold together; unset, no bound |
 | `PLUGIN_MEMORY_MB_AT_MOST` | 256 | the memory a plugin's thread may hold |
 
-Plugin pages need `PUBLIC_URL`, as signing in does. The image installs plugins thus ([deploy/README.md](../../deploy/README.md), "Plugins in the image", once written):
+Plugin pages need `PUBLIC_URL`, as signing in does. A deployment installs its plugins by building them into its image from a list and a lockfile, with no install scripts, and names the directory ([deploy/README.md](../../deploy/README.md), "Plugins in the image", which says the rest: the list, the git installs, `CREATEROLE` for `storage:sql`, the bounds):
 
 ```dockerfile
+FROM node:24-bookworm-slim AS plugins
+WORKDIR /plugins
+COPY plugins/package.json plugins/package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts
+
 FROM <the console image>
-USER root
-COPY plugins/package.json plugins/package-lock.json /app/plugins/
-RUN cd /app/plugins && npm ci --omit=dev --ignore-scripts
-USER node
+COPY --from=plugins --chown=node:node /plugins/ /app/plugins/
 ENV PLUGINS_DIR=/app/plugins
 ```
