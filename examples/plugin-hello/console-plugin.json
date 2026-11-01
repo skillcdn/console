@@ -1,0 +1,50 @@
+{
+  "key": "hello",
+  "name": { "en": "Hello" },
+  "description": { "en": "Greetings kept as records: who greeted whom, and the latest of them." },
+  "agentNote": {
+    "en": "Keeps greetings as records; greet someone with the command greet, read the latest with the query latest."
+  },
+  "pluginApi": 1,
+  "server": "dist/server/index.js",
+  "web": "dist/web",
+  "skills": "skills",
+  "capabilities": [],
+  "roles": {
+    "greeter": {
+      "name": { "en": "Greeter" },
+      "description": { "en": "Greets people, and reads the greetings." }
+    }
+  },
+  "defaultRole": "greeter",
+  "board": { "needs": "none" },
+  "settings": [
+    {
+      "key": "greeting",
+      "type": "text",
+      "name": { "en": "Greeting" },
+      "description": { "en": "The word a greeting starts with when the command is given none." },
+      "default": "Hello",
+      "max": 40
+    }
+  ],
+  "menu": { "group": "operations" },
+  "pages": [
+    {
+      "key": "greetings",
+      "name": { "en": "Greetings" },
+      "level": "workspace",
+      "roles": ["greeter"]
+    }
+  ],
+  "widgets": [
+    {
+      "key": "latest",
+      "name": { "en": "Latest greeting" },
+      "place": "home:top",
+      "size": "third",
+      "roles": ["greeter"]
+    }
+  ],
+  "dataVersion": 1
+}

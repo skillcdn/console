@@ -20,7 +20,8 @@
   "type": "module",
   "sideEffects": false,
   "bin": {
-    "console": "./dist/cli/main.js"
+    "console": "./dist/cli/main.js",
+    "console-plugin": "./dist/cli/plugin-main.js"
   },
   "engines": {
     "node": ">=24"
@@ -42,6 +43,22 @@
       "types": "./dist/web.d.ts",
       "default": "./dist/web.js"
     },
+    "./plugin": {
+      "types": "./dist/plugin.d.ts",
+      "default": "./dist/plugin.js"
+    },
+    "./plugin/web": {
+      "types": "./dist/plugin-web.d.ts",
+      "default": "./dist/plugin-web.js"
+    },
+    "./plugin/web/react": {
+      "types": "./dist/plugin-web-react.d.ts",
+      "default": "./dist/plugin-web-react.js"
+    },
+    "./plugin/testing": {
+      "types": "./dist/plugin-testing.d.ts",
+      "default": "./dist/plugin-testing.js"
+    },
     "./console.css": "./dist/console.css",
     "./package.json": "./package.json"
   },
@@ -51,6 +68,7 @@
     "src",
     "!src/**/*.test.ts",
     "!src/**/*.test.tsx",
+    "template",
     "skills",
     "docs",
     "SKILLCDN.md"

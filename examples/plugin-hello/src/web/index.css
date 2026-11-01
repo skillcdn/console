@@ -1,0 +1,51 @@
+/* The plugin's own classes begin with pl-hello-; the console's tokens and sc-* classes are there to use. */
+.pl-hello-page {
+  display: grid;
+  gap: var(--sc-space-4);
+  padding: var(--sc-space-4);
+  color: var(--sc-color-text);
+  font-family: var(--sc-font-sans);
+}
+
+.pl-hello-form {
+  display: flex;
+  gap: var(--sc-space-2);
+  align-items: center;
+}
+
+.pl-hello-list {
+  display: grid;
+  gap: var(--sc-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pl-hello-greeting {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sc-space-3);
+  padding: var(--sc-space-2) var(--sc-space-3);
+  border: 1px solid var(--sc-color-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-bg-raised);
+}
+
+.pl-hello-by {
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+.pl-hello-widget {
+  padding: var(--sc-space-3);
+  color: var(--sc-color-text);
+  font-family: var(--sc-font-sans);
+}
+
+.pl-hello-empty {
+  color: var(--sc-color-text-faint);
+}
+
+.pl-hello-error {
+  color: var(--sc-color-danger);
+}

@@ -32,6 +32,12 @@
     },
     "clean": {
       "cache": false
+    },
+    "console-plugin-hello#test": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md"],
+      "outputs": [],
+      "passThroughEnv": []
     }
   }
 }

@@ -1,6 +1,7 @@
 packages:
   - "apps/*"
   - "packages/*"
+  - "examples/*"
 
 # One version per shared tool. Workspace packages reference these as "catalog:".
 catalog:

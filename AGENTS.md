@@ -39,6 +39,7 @@ apps/
   console/    the single deployable; roles: api | worker | migrate; serves the default UI (Node 24)
 packages/
   console/    @skillcdn/console: the API client and schemas, the components, the composition of the default console   on npm, once it exists
+examples/     plugin-hello, the plugin `console-plugin init` writes, built and tested as a workspace, held equal to the package's template
 deploy/       the contract for whoever operates the image, compose for local development
 docs/         architecture, roadmap, specs, ADRs; served with the skills
 skills/       the console's skills in the SkillCDN Format, for an agent working the board, planning it, building a console or deploying one; SKILLCDN.md at the root is their manifest

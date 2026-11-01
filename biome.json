@@ -77,6 +77,19 @@
           }
         }
       }
+    },
+    {
+      "includes": [
+        "packages/console/template/**/src/server/index.ts",
+        "examples/*/src/server/index.ts"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noDefaultExport": "off"
+          }
+        }
+      }
     }
   ]
 }

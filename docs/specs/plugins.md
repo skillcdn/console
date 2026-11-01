@@ -1,7 +1,7 @@
 # Spec: plugins
 
-- Status: **Decided, not yet built.** The decisions are [ADR-0049](../adr/0049-a-plugin-is-an-npm-package-installed-into-the-image-and-enabled-by-an-administrator.md) to [ADR-0054](../adr/0054-a-plugins-pages-run-in-a-sandboxed-frame-and-speak-only-to-their-plugin.md), taken 2026-11-01; milestone 34 of the [roadmap](../roadmap.md) builds them in order. This document is the contract between a console and a plugin, and between the console and whoever installs or administers one. Until the milestone is done, where the code and this document differ, the code is behind.
-- Where things live: the contract in `@skillcdn/console/plugin` (the manifest's schema, `definePlugin` and its definers, the types of `ctx`) and `@skillcdn/console/plugin/web` (the bridge client); the host, the record store, the policy and the routes in `apps/console/src/plugins/`; the authoring command `console-plugin` as a second `bin` of the package; an example plugin in `examples/plugin-hello`; the skill `skills/building-a-plugin`. The console's own words, limits and refusals are in [rest.md](rest.md) and [cli.md](cli.md); this document adds the plugins'.
+- Status: **Being built.** The decisions are [ADR-0049](../adr/0049-a-plugin-is-an-npm-package-installed-into-the-image-and-enabled-by-an-administrator.md) to [ADR-0054](../adr/0054-a-plugins-pages-run-in-a-sandboxed-frame-and-speak-only-to-their-plugin.md), taken 2026-11-01; milestone 34 of the [roadmap](../roadmap.md) builds them in order, and says what is built: the contract in the package, the authoring command and the example are; the host, the records, the routes, the board and the pages are not yet. This document is the contract between a console and a plugin, and between the console and whoever installs or administers one. Until the milestone is done, where the code and this document differ, the code is behind.
+- Where things live: the contract in `@skillcdn/console/plugin` (the manifest's schema, `definePlugin` and its definers, the types of `ctx`, the capabilities, the bounds and the refusals), `@skillcdn/console/plugin/web` (the bridge client) and `@skillcdn/console/plugin/testing` (a context for a plugin's own tests); the host, the record store, the policy and the routes in `apps/console/src/plugins/`; the authoring command `console-plugin` as a second `bin` of the package, with its template in the package's `template/plugin`; an example plugin in `examples/plugin-hello`; the skill `skills/building-a-plugin`. The console's own words, limits and refusals are in [rest.md](rest.md) and [cli.md](cli.md); this document adds the plugins'.
 
 ## Words
 
@@ -55,7 +55,7 @@
 | `defaultRole` | string | a role every member of the workspace holds without a grant; optional |
 | `requires` | `{ [key]: range }` | other plugins this one needs, by a semver range of their version; they are enabled first and cannot be disabled while this one is |
 | `board` | `{ needs, defaults? }` | `needs` is `required`, `optional` or `none`; `defaults` the `key`, `name` and `description` per language of the project an administrator may make for it |
-| `settings` | Setting[] | up to 50, each `{ key, type, name, description?, required?, default?, min?, max?, options?, of? }`; types `text`, `markdown`, `number`, `boolean`, `enum` (with `options`), `day`, `person`, `project`, `secret`, `list` (with `of`, any type but `secret` and `list`) |
+| `settings` | Setting[] | up to 50, each `{ key, type, name, description?, required?, default?, min?, max?, options?, of? }`; `key` a lowercase letter followed by letters and digits (`daysPerYear`), as code and `--set` name it; types `text`, `markdown`, `number`, `boolean`, `enum` (with `options`, each `{ value, name }`), `day`, `person`, `project`, `secret`, `list` (with `of`, any type but `secret` and `list`); `min` and `max` bound a number, the length of a text or the items of a list; `default` fits the type, and `person`, `project` and `secret` have none |
 | `menu` | `{ group, order?, name? }` | the tab the plugin is under: a group of the console's (`people`, `customers`, `money`, `operations`, `marketing`, `engineering`, `reports`), or one the plugin declares with a `name` per language; `order` within the row, default 100 |
 | `pages` | Page[] | up to 12, each `{ key, name, level, roles?, wide? }`; `level` is `workspace` or `project`; page keys as `key`, and not `frame`, `web` or `x` |
 | `widgets` | Widget[] | up to 4, each `{ key, name, place, size, roles? }`; `place` is `home:top` or `home:bottom`; `size` is `third`, `half` or `full` |
@@ -104,24 +104,28 @@ The default export of `server` is `definePlugin({...})` from `@skillcdn/console/
 ```ts
 import { definePlugin, defineCollection, defineCommand, defineQuery, defineEndpoint, arg, z } from "@skillcdn/console/plugin";
 
+const requests = defineCollection("requests", {
+  schema: z.object({ personId: z.string(), from: z.string(), to: z.string(), reason: z.string().max(2000), state: z.enum(["requested", "approved", "rejected", "cancelled"]), decisionId: z.string().nullable() }),
+  indexes: ["personId", "state", "from"],
+  search: ["reason"],
+  owner: "personId",
+  project: "none",
+  read: ["approver"],
+  readOwn: ["employee"],
+});
+
 export default definePlugin({
-  collections: {
-    requests: defineCollection({
-      schema: z.object({ personId: z.string(), from: z.string(), to: z.string(), reason: z.string().max(2000), state: z.enum(["requested", "approved", "rejected", "cancelled"]), decisionId: z.string().nullable() }),
-      indexes: ["personId", "state", "from"],
-      search: ["reason"],
-      owner: "personId",
-      project: "none",
-      read: ["approver"],
-      readOwn: ["employee"],
-    }),
-  },
+  collections: [requests],
   commands: {
     request: defineCommand({
       about: "Requests leave for the person the command acts as; the approval is a decision.",
       args: { from: arg.day({ about: "the first day" }), to: arg.day({ about: "the last day" }), reason: arg.text({ optional: true, max: 2000 }) },
       roles: ["employee"],
-      async run(ctx, args) { /* ... */ return { text: "Requested; the decision waits for the approver.", data: request, waiting: decision.id }; },
+      async run(ctx, args) {
+        const request = await ctx.records(requests).create({ personId: ctx.caller.kind === "person" ? ctx.caller.person.id : "", from: args.from, to: args.to, reason: args.reason ?? "", state: "requested", decisionId: null });
+        /* ... */
+        return { text: "Requested; the decision waits for the approver.", data: request, waiting: decision.id };
+      },
     }),
   },
   queries: {
@@ -143,7 +147,7 @@ export default definePlugin({
 
 | Part | Shape | Notes |
 |---|---|---|
-| `collections` | `defineCollection({ schema, indexes, search?, owner?, project, read, readOwn?, history? })` | `schema` is a zod object, checked in the plugin's thread on every write; `indexes` (up to 8) are the fields `where` and `order` may name; `search` the fields searched as words; `owner` a field holding a person's id, for `readOwn`; `project` is `none`, `optional` or `required`; `read` and `readOwn` name roles; `history` keeps a version per write, `true` unless said otherwise; up to 50 collections |
+| `collections` | `[defineCollection(name, { schema, indexes?, search?, owner?, project?, read?, readOwn?, history? })]` | a list; `name` as `key`; `schema` is a zod object (any schema that follows Standard Schema), checked in the plugin's thread on every write; `indexes` (up to 8) are the fields `where`, `order` and `aggregate` may name, beside `id`, `owner` and `project`, which always may; `search` the fields searched as words; `owner` an indexed field holding a person's id, for `readOwn`; `project` is `none` (unless said), `optional` or `required`; `read` and `readOwn` name roles; `history` keeps a version per write, `true` unless said otherwise; up to 50 collections. The definition is what `ctx.records(requests)` takes, and types the records from the schema |
 | `commands` | `defineCommand({ about, args, roles?, run })` | `about` one line; `args` named definers, positional where `positional: true`, in declaration order; `run(ctx, args)` returns `{ text, data?, waiting? }`: `text` is what the command prints, `data` what `--json` prints, `waiting` the id of a decision the caller waits for; up to 100 commands and queries together, named as `key` and not as a subcommand of the command (`help`, `records`, `skills`, `skill`, `enable`, `disable`, `settings`, `secret`, `grant`, `revoke`) |
 | `queries` | `defineQuery({ about, args, roles?, run })` | reads only; `run` returns JSON up to 4 MiB, or `{ file: { name, type, bytes } }` for an export |
 | `endpoints` | `defineEndpoint({ auth, roles?, secret?, methods?, run })` | with the `endpoints` capability; `auth` is `person` (a session or a token, with `roles`) or `webhook` (nobody; `secret` names the setting the plugin verifies the signature with); `run(ctx, request)`, the request `{ method, path, query, headers, body }` with the headers `content-type` and those the definition names and the body text up to 1 MiB, returns `{ status, headers?, body? }`, the headers among `content-type`, `location` and `cache-control`, the body a string or JSON up to 4 MiB |
@@ -153,7 +157,7 @@ export default definePlugin({
 | `api` | `{ [name]: { about, input, run } }` | what other plugins may call with `plugins:<key>`; `input` a zod schema; `run(ctx, input)` with the caller passed through |
 | `onEnable`, `onDisable` | `(ctx) => Promise<void>` | optional; run when an administrator enables or disables |
 
-The argument definers: `arg.text({ max?, optional?, secret? })`, `arg.markdown()`, `arg.day()`, `arg.number({ min?, max?, integer? })`, `arg.boolean()`, `arg.enum([...])`, `arg.person()` (a login or `me`, resolved by the console to a person the caller may see), `arg.project()` (a key the caller may see), `arg.record("<collection>")` (an id of that collection), `arg.list(inner)` (a flag repeated, or commas between), `arg.file()` (what `--file <path>` or `-` carried; the command uploads it first and hands a handle). Every definer takes `about` (one line, shown in help) and `positional`. An argument marked `secret` is hidden in the event the command leaves.
+The argument definers: `arg.text({ max?, optional?, secret? })`, `arg.markdown()`, `arg.day()`, `arg.number({ min?, max?, integer? })`, `arg.boolean()`, `arg.enum([...])`, `arg.person()` (a login or `me`, resolved by the console to a person the caller may see, handed to `run` as `{ id, login, name }`), `arg.project()` (a key the caller may see, handed as `{ id, key, name }`), `arg.record("<collection>")` (an id of that collection), `arg.list(inner, { max? })` (a flag repeated, or commas between), `arg.file()` (what `--file <path>` or `-` carried; the command uploads it first and hands a handle). Every definer takes `about` (one line, shown in help), `optional` and `positional`; a positional argument comes before the flags, in declaration order, and no required one follows an optional one. Each yields a plain description, and `run`'s `args` is typed from them: optional ones may be `undefined`. An argument marked `secret` is hidden in the event the command leaves. A plugin refuses in its own words by throwing `PluginError(code, message)`, which the console answers as `plugin.<key>.<code>`; a definition the console cannot hold is refused when the module loads, as a `PluginDefinitionError` naming every problem.
 
 ## The context
 
@@ -163,7 +167,7 @@ Everything a plugin does to the console is a call on `ctx`, which is a message t
 |---|---|---|
 | `ctx.plugin` | `{ key, version, dataVersion, settings, board, projects }`: the settings without the secrets; `board` the board project's `{ id, key }` or `null`; `projects` `"all"` or the keys of the projects the plugin is on | nothing |
 | `ctx.caller` | `{ kind: "person" \| "console", person?, agent?, roles, run?, project? }`: in a command, a query or a person's endpoint, the person (`id`, `login`, `name`, `language`, `admin`), the agent's name where a token acts, their roles in this plugin, their open run in the board project if any, and the project the call is on; in a job, a hook, an upgrade or a webhook, `console`, with every role | nothing |
-| `ctx.records.<collection>` | `create(data, { project?, owner? })`, `get(id)`, `update(id, patch, { baseVersion? })`, `archive(id)`, `list({ where?, order?, limit?, after? })`, `search(words, { where?, limit? })`, `aggregate({ where?, groupBy?, count?, sum?, min?, max? })`, `versions(id)`, `link(id, target)`, `unlink(id, target)`, `links(id)`, and `files(id)` with `attach(handle, { name, type })`, `list()` and `remove(fileId)` | nothing; `files` for the files |
+| `ctx.records(collection)` | the records of a collection, by its definition (typed from the schema) or by name: `create(data, { project?, owner? })`, `get(id)` (`null` when there is none), `update(id, patch, { baseVersion? })`, `archive(id)`, `restore(id)`, `list({ where?, order?, limit?, after?, project?, archived? })`, `search(words, { where?, limit?, project? })`, `aggregate({ where?, groupBy?, count?, sum?, min?, max? })`, `versions(id)`, `link(id, target)`, `unlink(id, target)`, `links(id)`, and `files(id)` with `attach(handle, { name?, type? })`, `list()` and `remove(fileId)`; `order` is `{ field, descending? }`; a refusal is thrown as a `PluginRefusal` with the console's code | nothing; `files` for the files |
 | `ctx.sql` | `query(text, params)` and `transaction(async (tx) => ...)`, on the plugin's own role | `storage:sql` |
 | `ctx.console.workspace()` | the workspace's name, languages, time zone and categories | nothing |
 | `ctx.console.people` | `list({ q? })` and `get(id)`: the people the caller may see; everyone for a `console` caller, or with `people:read:all` | `people:read` |
@@ -366,7 +370,7 @@ The console's page and the frame speak over `postMessage`, every message `{ v: 1
 
 The page performs every `call` with the person's session under `/api/v1/plugins/<key>/` only; a method or a path outside it is refused before any request, as `plugin.forbidden`. A page thus holds exactly the authority of its plugin's server module, as the person using it.
 
-`@skillcdn/console/plugin/web` is the frame's side: `connect()` resolves to `{ context, call, command, query, records, files, navigate, download, onEvent, onTheme, setTitle }`, applies the tokens to `:root` and watches the document's height; it depends on nothing. `@skillcdn/console/plugin/web/react` adds `usePlugin()` for a plugin that chooses React. A page renders nothing a person wrote as HTML, as the console's own pages do not.
+`@skillcdn/console/plugin/web` is the frame's side: `connect()` says `ready`, waits for `init`, and resolves to `{ context, call, command, query, records, files, navigate, download, setTitle, onEvent, onTheme, onPath, close }`, applies the tokens to `:root` and the language to the document, and watches the body's height; it depends on nothing, and a refusal arrives as a `PluginBridgeError` with the console's code. `@skillcdn/console/plugin/web/react` adds `usePlugin()` for a plugin that chooses React. A page renders nothing a person wrote as HTML, as the console's own pages do not.
 
 ### Tabs, sub-tabs and addresses
 
@@ -449,8 +453,9 @@ The install path is the first line (a release of the deployment, from a lockfile
 
 ## Authoring
 
-- `console-plugin init <dir> --key <key>` writes a plugin from the template in the package: the manifest, a server module with one collection, one command and one query, the source of a web bundle with the bridge client, one page and one widget, one skill with `SKILLCDN.md`, tests, and the build. `examples/plugin-hello` in the repository is that result, built, and the check holds the two equal.
-- `console-plugin check [<dir>]` reads the package as the console would and fails on: an invalid manifest; a reserved or malformed key; a `pluginApi` the command does not know; a server module that does not load under the host's hardening, or yields a definition naming a role, a setting, a collection or a page that is not declared; a built-in the host refuses, imported anywhere in the server bundle; a web bundle that is not self-contained (a script, a style or an import from elsewhere; `fetch`, `XMLHttpRequest`, `WebSocket` or `document.cookie` in it); a class without the `pl-<key>-` prefix; skills that `skillcdn check` refuses; a license that is not permissive; a `files` field that leaves out what runs. It is what a store would ask of a plugin.
+- `console-plugin init <dir> --key <key> [--name <name>] [--console <dependency>]` writes a plugin from the template in the package (`template/plugin`, the words `__key__`, `__name__` and `__console__` replaced in its files and their names): the manifest, a server module with one collection, one command and one query, the source of a web bundle with the bridge client, one page and one widget, one skill with `SKILLCDN.md`, tests against `@skillcdn/console/plugin/testing` and of the package as a console reads it, and the build with esbuild (`build.mjs`: the server module, the web bundle and its stylesheet). `examples/plugin-hello` in the repository is that result, built, and the check holds the two equal.
+- `console-plugin check [<dir>]` reads the package as the console would and fails on: an invalid manifest; a reserved or malformed key; a `pluginApi` the command does not know; a server module that does not load under the host's hardening, or yields a definition naming a role, a setting, a collection or a page that is not declared; a built-in the host refuses, imported anywhere in the server bundle; a web bundle that is not self-contained (a script, a style or an import from elsewhere; `fetch`, `XMLHttpRequest`, `WebSocket` or `document.cookie` in it); a class without the `pl-<key>-` prefix; skills that `skillcdn check` refuses; a license that is not permissive; a `files` field that leaves out what runs. It is what a store would ask of a plugin. It needs Node.js 24 or newer; it warns, and does not fail, on a private package, a class without the prefix, a capability no definition uses, and skills left out; it exits `1` with every problem, `0` with a summary.
+- `createTestContext({ collections?, plugin?, caller?, console?, sql?, fetch?, secrets?, plugins?, now?, language? })` from `@skillcdn/console/plugin/testing` is a `ctx` for a plugin's own tests: records in memory, checked against the schema and the indexes as the console checks them, versions, links and files kept; the console answering what the test provided and refusing the rest as `plugin.forbidden`; `emitted` and `logged` to assert on; `all(collection)` for every record; `as(caller)` for the same store as someone else.
 - The skill `skills/building-a-plugin` is the map: what to ask, how to split a feature into commands, queries, decisions, tasks and jobs so that agents work and people decide, records or SQL, running a local console with the plugin linked into `PLUGINS_DIR`, the tests, `check`, publishing or tagging, and handing the install to the deployment as a task. It names this document for every field and bound, and repeats none.
 - Before 1.0 the plugin API moves with the console's line; `pluginApi` is raised when the contract breaks, and the console names the majors it serves; a plugin is rebuilt against the console it runs on, with no floor between them. The generic routes and the command are in the REST snapshot, so an addition stays an addition.
 

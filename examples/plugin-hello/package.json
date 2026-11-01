@@ -1,0 +1,28 @@
+{
+  "name": "console-plugin-hello",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hello, a plugin of the SkillCDN Console.",
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "dist",
+    "skills",
+    "SKILLCDN.md",
+    "console-plugin.json"
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "check": "console-plugin check",
+    "clean": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\""
+  },
+  "devDependencies": {
+    "@skillcdn/console": "workspace:*",
+    "@types/node": "^24.19.1",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  }
+}

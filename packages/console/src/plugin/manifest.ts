@@ -1,0 +1,551 @@
+// The manifest of a plugin, `console-plugin.json` (docs/specs/plugins.md, "The manifest"): what the
+// plugin is and asks, as data the console reads without running anything. One schema, in the mini
+// build of zod so that the settings pages read it too, and the words every key is held to.
+import * as z from "zod/mini";
+import {
+  MAX_PROJECT_DESCRIPTION_LENGTH,
+  MAX_PROJECT_KEY_LENGTH,
+  MAX_PROJECT_NAME_LENGTH,
+} from "../limits.js";
+import { hasForbiddenCodePoint } from "../text.js";
+import { isPluginCapability } from "./capabilities.js";
+import {
+  MAX_PLUGIN_AGENT_NOTE_LENGTH,
+  MAX_PLUGIN_DESCRIPTION_LENGTH,
+  MAX_PLUGIN_NAME_LENGTH,
+  MAX_PLUGIN_OPTIONS,
+  MAX_PLUGIN_PAGES,
+  MAX_PLUGIN_ROLES,
+  MAX_PLUGIN_SETTINGS,
+  MAX_PLUGIN_WIDGETS,
+} from "./limits.js";
+
+/** A plugin's key, and every key within a plugin: a role's, a page's, a widget's, a setting's, a collection's, a command's. */
+export const PLUGIN_KEY_PATTERN = /^[a-z][a-z0-9-]{1,31}$/;
+
+export function isPluginKey(value: string): boolean {
+  return PLUGIN_KEY_PATTERN.test(value);
+}
+
+/** The majors of the plugin API this package speaks, and the one a new plugin is written against. */
+export const PLUGIN_API_MAJORS = [1] as const;
+export const CURRENT_PLUGIN_API = 1;
+
+/**
+ * Words no plugin's key may be: the console's own paths and the command's own words, so that
+ * `/plugins/<key>` and `console plugin <key>` never read as something else.
+ */
+export const RESERVED_PLUGIN_KEYS: readonly string[] = [
+  "api",
+  "auth",
+  "plugins",
+  "plugin",
+  "settings",
+  "people",
+  "person",
+  "projects",
+  "project",
+  "work",
+  "decisions",
+  "decision",
+  "agents",
+  "categories",
+  "category",
+  "pages",
+  "connect",
+  "docs",
+  "doc",
+  "tasks",
+  "task",
+  "runs",
+  "run",
+  "skills",
+  "skill",
+  "members",
+  "member",
+  "rules",
+  "goals",
+  "goal",
+  "feed",
+  "files",
+  "file",
+  "events",
+  "frame",
+  "web",
+  "console",
+  "skillcdn",
+  "runtime",
+  "new",
+  "me",
+  "help",
+  "records",
+  "enable",
+  "disable",
+  "grant",
+  "revoke",
+  "secret",
+  "export",
+  "purge",
+];
+
+/** Words a page's key may not be: the routes beside the pages under a plugin's path. */
+export const RESERVED_PAGE_KEYS: readonly string[] = ["frame", "web", "x"];
+
+/** Words a command's or a query's name may not be: the subcommands of `console plugin <key>`. */
+export const RESERVED_COMMAND_NAMES: readonly string[] = [
+  "help",
+  "records",
+  "skills",
+  "skill",
+  "enable",
+  "disable",
+  "settings",
+  "secret",
+  "grant",
+  "revoke",
+];
+
+/** The groups of tabs the console knows; a plugin may declare another, with a name. */
+export const PLUGIN_MENU_GROUPS = [
+  "people",
+  "customers",
+  "money",
+  "operations",
+  "marketing",
+  "engineering",
+  "reports",
+] as const;
+
+export type PluginMenuGroup = (typeof PLUGIN_MENU_GROUPS)[number];
+
+export const PLUGIN_SETTING_TYPES = [
+  "text",
+  "markdown",
+  "number",
+  "boolean",
+  "enum",
+  "day",
+  "person",
+  "project",
+  "secret",
+  "list",
+] as const;
+
+export type PluginSettingType = (typeof PLUGIN_SETTING_TYPES)[number];
+
+export const PLUGIN_PAGE_LEVELS = ["workspace", "project"] as const;
+export type PluginPageLevel = (typeof PLUGIN_PAGE_LEVELS)[number];
+
+export const PLUGIN_WIDGET_PLACES = ["home:top", "home:bottom"] as const;
+export type PluginWidgetPlace = (typeof PLUGIN_WIDGET_PLACES)[number];
+
+export const PLUGIN_WIDGET_SIZES = ["third", "half", "full"] as const;
+export type PluginWidgetSize = (typeof PLUGIN_WIDGET_SIZES)[number];
+
+export const PLUGIN_BOARD_NEEDS = ["required", "optional", "none"] as const;
+export type PluginBoardNeeds = (typeof PLUGIN_BOARD_NEEDS)[number];
+
+const LANGUAGE_TAG = /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
+const DAY = /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/;
+/** A path within the package: relative, forward slashes, never climbing out. */
+const PACKAGE_PATH = /^(?!\/)(?!\.\.(?:\/|$))(?:[A-Za-z0-9._-]+\/)*[A-Za-z0-9._-]+$/;
+/** A semver range as npm spells one, loosely: the console compares versions, the registry resolves. */
+const SEMVER_RANGE = /^[\sA-Za-z0-9.^~<>=|*x-]{1,100}$/;
+
+const key = z
+  .string()
+  .check(
+    z.regex(
+      PLUGIN_KEY_PATTERN,
+      "is lowercase letters, digits and hyphens, 2 to 32 long, starting with a letter",
+    ),
+  );
+
+const line = (max: number) =>
+  z.string().check(
+    z.minLength(1),
+    z.maxLength(max),
+    z.refine((value) => !hasForbiddenCodePoint(value), "must not contain control characters"),
+  );
+
+const packagePath = z
+  .string()
+  .check(
+    z.maxLength(200),
+    z.regex(PACKAGE_PATH, "is a path within the package, with forward slashes"),
+  );
+
+/** A text per language, `en` always among them. */
+export type Localized = Readonly<Record<string, string>>;
+
+const localized = (max: number) =>
+  z
+    .record(z.string().check(z.regex(LANGUAGE_TAG, "is a language tag")), line(max))
+    .check(z.refine((texts) => typeof texts.en === "string", "needs an English text under en"));
+
+const roleList = z.array(key).check(z.maxLength(MAX_PLUGIN_ROLES));
+
+const settingOption = z.strictObject({
+  value: line(64),
+  name: localized(MAX_PLUGIN_NAME_LENGTH),
+});
+
+const settingItemType = z.enum(
+  PLUGIN_SETTING_TYPES.filter((type) => type !== "secret" && type !== "list"),
+);
+
+/** A setting's key, as code and `--set` name it: a lowercase letter, then letters and digits. */
+export const SETTING_KEY_PATTERN = /^[a-z][a-zA-Z0-9]{0,31}$/;
+
+const settingKey = z
+  .string()
+  .check(
+    z.regex(
+      SETTING_KEY_PATTERN,
+      "is a lowercase letter followed by letters and digits, up to 32 long",
+    ),
+  );
+
+const pluginSettingSchema = z
+  .strictObject({
+    key: settingKey,
+    type: z.enum(PLUGIN_SETTING_TYPES),
+    name: localized(MAX_PLUGIN_NAME_LENGTH),
+    description: z.optional(localized(MAX_PLUGIN_DESCRIPTION_LENGTH)),
+    required: z.optional(z.boolean()),
+    default: z.optional(z.unknown()),
+    min: z.optional(z.number()),
+    max: z.optional(z.number()),
+    options: z.optional(
+      z.array(settingOption).check(z.minLength(1), z.maxLength(MAX_PLUGIN_OPTIONS)),
+    ),
+    of: z.optional(settingItemType),
+  })
+  .check(
+    z.superRefine((setting, ctx) => {
+      for (const problem of settingProblems(setting)) {
+        ctx.addIssue({ code: "custom", message: problem, input: setting });
+      }
+    }),
+  );
+
+export type PluginSetting = z.infer<typeof pluginSettingSchema>;
+
+/** True when `value` is what a setting of `type` holds, `options` being the values of an `enum`. */
+function fitsSettingType(
+  type: Exclude<PluginSettingType, "secret" | "list">,
+  value: unknown,
+  options: readonly string[] | undefined,
+): boolean {
+  switch (type) {
+    case "text":
+    case "markdown":
+      return typeof value === "string";
+    case "number":
+      return typeof value === "number" && Number.isFinite(value);
+    case "boolean":
+      return typeof value === "boolean";
+    case "enum":
+      return typeof value === "string" && (options ?? []).includes(value);
+    case "day":
+      return typeof value === "string" && DAY.test(value);
+    case "person":
+    case "project":
+      return false;
+    default:
+      return false;
+  }
+}
+
+function settingProblems(setting: {
+  type: PluginSettingType;
+  default?: unknown;
+  min?: number;
+  max?: number;
+  options?: readonly { value: string }[];
+  of?: Exclude<PluginSettingType, "secret" | "list">;
+}): string[] {
+  const problems: string[] = [];
+  const bounded =
+    setting.type === "number" ||
+    setting.type === "text" ||
+    setting.type === "markdown" ||
+    setting.type === "list";
+  if (!bounded && (setting.min !== undefined || setting.max !== undefined)) {
+    problems.push(`a ${setting.type} setting takes no min or max`);
+  }
+  if (setting.min !== undefined && setting.max !== undefined && setting.min > setting.max) {
+    problems.push("min is above max");
+  }
+  const enumerated = setting.type === "enum" || (setting.type === "list" && setting.of === "enum");
+  if (enumerated && setting.options === undefined) {
+    problems.push("an enum needs options");
+  }
+  if (!enumerated && setting.options !== undefined) {
+    problems.push("only an enum takes options");
+  }
+  if (setting.type === "list" && setting.of === undefined) {
+    problems.push("a list needs of, the type of its items");
+  }
+  if (setting.type !== "list" && setting.of !== undefined) {
+    problems.push("only a list takes of");
+  }
+  if (setting.default !== undefined) {
+    const values = setting.options?.map((option) => option.value);
+    if (setting.type === "secret" || setting.type === "person" || setting.type === "project") {
+      problems.push(`a ${setting.type} setting takes no default`);
+    } else if (setting.type === "list") {
+      const of = setting.of;
+      if (
+        of !== undefined &&
+        !(
+          Array.isArray(setting.default) &&
+          setting.default.every((item) => fitsSettingType(of, item, values))
+        )
+      ) {
+        problems.push(`the default is not a list of ${of}`);
+      }
+    } else if (!fitsSettingType(setting.type, setting.default, values)) {
+      problems.push(`the default is not a ${setting.type}`);
+    }
+  }
+  return problems;
+}
+
+const pluginPageSchema = z.strictObject({
+  key: key.check(
+    z.refine((value) => !RESERVED_PAGE_KEYS.includes(value), "is a word the routes reserve"),
+  ),
+  name: localized(MAX_PLUGIN_NAME_LENGTH),
+  level: z.enum(PLUGIN_PAGE_LEVELS),
+  roles: z.optional(roleList),
+  wide: z.optional(z.boolean()),
+});
+
+export type PluginPage = z.infer<typeof pluginPageSchema>;
+
+const pluginWidgetSchema = z.strictObject({
+  key,
+  name: localized(MAX_PLUGIN_NAME_LENGTH),
+  place: z.enum(PLUGIN_WIDGET_PLACES),
+  size: z.enum(PLUGIN_WIDGET_SIZES),
+  roles: z.optional(roleList),
+});
+
+export type PluginWidget = z.infer<typeof pluginWidgetSchema>;
+
+const pluginMenuSchema = z
+  .strictObject({
+    group: key,
+    order: z.optional(z.int().check(z.gte(0), z.lte(1000))),
+    name: z.optional(localized(MAX_PLUGIN_NAME_LENGTH)),
+  })
+  .check(
+    z.refine(
+      (menu) =>
+        (PLUGIN_MENU_GROUPS as readonly string[]).includes(menu.group) || menu.name !== undefined,
+      "a group the console does not know needs a name",
+    ),
+  );
+
+export type PluginMenu = z.infer<typeof pluginMenuSchema>;
+
+const pluginBoardSchema = z
+  .strictObject({
+    needs: z.enum(PLUGIN_BOARD_NEEDS),
+    defaults: z.optional(
+      z.strictObject({
+        key: z
+          .string()
+          .check(
+            z.maxLength(MAX_PROJECT_KEY_LENGTH),
+            z.regex(/^[a-z][a-z0-9-]*$/, "is lowercase letters, digits and hyphens"),
+          ),
+        name: localized(MAX_PROJECT_NAME_LENGTH),
+        description: localized(MAX_PROJECT_DESCRIPTION_LENGTH),
+      }),
+    ),
+  })
+  .check(
+    z.refine(
+      (board) => board.needs !== "none" || board.defaults === undefined,
+      "a plugin that needs no board has no defaults for one",
+    ),
+  );
+
+export type PluginBoard = z.infer<typeof pluginBoardSchema>;
+
+const pluginRoleSchema = z.strictObject({
+  name: localized(MAX_PLUGIN_NAME_LENGTH),
+  description: localized(MAX_PLUGIN_DESCRIPTION_LENGTH),
+});
+
+export type PluginRole = z.infer<typeof pluginRoleSchema>;
+
+const pluginStoreSchema = z.strictObject({
+  homepage: z.optional(z.string().check(z.maxLength(2048), z.url({ protocol: /^https$/ }))),
+  repository: z.optional(z.string().check(z.maxLength(2048), z.url({ protocol: /^https$/ }))),
+  keywords: z.optional(z.array(line(40)).check(z.maxLength(10))),
+  icon: z.optional(packagePath),
+});
+
+/** The manifest as a plugin writes it; `parsePluginManifest` fills what it leaves out. */
+export const pluginManifestSchema = z
+  .strictObject({
+    key: key.check(
+      z.refine((value) => !RESERVED_PLUGIN_KEYS.includes(value), "is a word the console reserves"),
+    ),
+    name: localized(MAX_PLUGIN_NAME_LENGTH),
+    description: localized(MAX_PLUGIN_DESCRIPTION_LENGTH),
+    agentNote: z.optional(localized(MAX_PLUGIN_AGENT_NOTE_LENGTH)),
+    pluginApi: z.int().check(z.positive()),
+    server: packagePath,
+    web: z.optional(packagePath),
+    skills: z.optional(packagePath),
+    migrations: z.optional(packagePath),
+    capabilities: z._default(
+      z.array(z.string().check(z.maxLength(300))).check(z.maxLength(50)),
+      [],
+    ),
+    roles: z._default(z.record(key, pluginRoleSchema), {}),
+    defaultRole: z.optional(key),
+    requires: z._default(
+      z.record(key, z.string().check(z.regex(SEMVER_RANGE, "is a semver range"))),
+      {},
+    ),
+    board: z._default(pluginBoardSchema, { needs: "none" }),
+    settings: z._default(z.array(pluginSettingSchema).check(z.maxLength(MAX_PLUGIN_SETTINGS)), []),
+    menu: z.optional(pluginMenuSchema),
+    pages: z._default(z.array(pluginPageSchema).check(z.maxLength(MAX_PLUGIN_PAGES)), []),
+    widgets: z._default(z.array(pluginWidgetSchema).check(z.maxLength(MAX_PLUGIN_WIDGETS)), []),
+    dataVersion: z._default(z.int().check(z.positive()), 1),
+    store: z.optional(pluginStoreSchema),
+  })
+  .check(
+    z.superRefine((manifest, ctx) => {
+      for (const problem of manifestProblems(manifest)) {
+        ctx.addIssue({ code: "custom", message: problem, input: manifest });
+      }
+    }),
+  );
+
+export type PluginManifest = z.infer<typeof pluginManifestSchema>;
+
+function duplicates(keys: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const twice = new Set<string>();
+  for (const value of keys) {
+    if (seen.has(value)) {
+      twice.add(value);
+    }
+    seen.add(value);
+  }
+  return [...twice];
+}
+
+/** What one field alone cannot say: the manifest's parts against each other. */
+function manifestProblems(
+  manifest: Omit<PluginManifest, "key" | "name" | "description">,
+): string[] {
+  const problems: string[] = [];
+  const roles = Object.keys(manifest.roles);
+  if (roles.length > MAX_PLUGIN_ROLES) {
+    problems.push(`declares ${roles.length} roles; ${MAX_PLUGIN_ROLES} at most`);
+  }
+  if (manifest.defaultRole !== undefined && !roles.includes(manifest.defaultRole)) {
+    problems.push(`defaultRole ${manifest.defaultRole} is not a declared role`);
+  }
+  for (const capability of manifest.capabilities) {
+    if (!isPluginCapability(capability)) {
+      problems.push(`capabilities: ${capability} is not one the console knows`);
+    }
+  }
+  for (const capability of duplicates(manifest.capabilities)) {
+    problems.push(`capabilities: ${capability} is declared twice`);
+  }
+  const undeclared = (where: string, named: readonly string[] | undefined) => {
+    for (const role of named ?? []) {
+      if (!roles.includes(role)) {
+        problems.push(`${where} names the role ${role}, which is not declared`);
+      }
+    }
+  };
+  for (const page of manifest.pages) {
+    undeclared(`pages.${page.key}`, page.roles);
+  }
+  for (const widget of manifest.widgets) {
+    undeclared(`widgets.${widget.key}`, widget.roles);
+  }
+  for (const [what, keys] of [
+    ["pages", manifest.pages.map((page) => page.key)],
+    ["widgets", manifest.widgets.map((widget) => widget.key)],
+    ["settings", manifest.settings.map((setting) => setting.key)],
+  ] as const) {
+    for (const twice of duplicates(keys)) {
+      problems.push(`${what}: ${twice} is declared twice`);
+    }
+  }
+  if ((manifest.pages.length > 0 || manifest.widgets.length > 0) && manifest.web === undefined) {
+    problems.push("pages and widgets need web, the directory of the bundle");
+  }
+  if (manifest.migrations !== undefined && !manifest.capabilities.includes("storage:sql")) {
+    problems.push("migrations need the capability storage:sql");
+  }
+  if (manifest.pages.length > 0 && manifest.menu === undefined) {
+    problems.push("pages need menu, the tab they are under");
+  }
+  return problems;
+}
+
+/** The issue in words: the mini build of zod says "Invalid input" for its own checks, so the kind of issue is spelled out here. */
+function wordsOf(issue: z.core.$ZodIssue): string {
+  switch (issue.code) {
+    case "unrecognized_keys":
+      return `${issue.keys.join(", ")}: not a field of the manifest`;
+    case "invalid_type":
+      return issue.input === undefined
+        ? "is missing"
+        : `is not ${issue.expected === "array" ? "a list" : issue.expected === "object" ? "an object" : `a ${issue.expected}`}`;
+    case "too_big":
+      return `is over ${issue.maximum}`;
+    case "too_small":
+      return `is under ${issue.minimum}`;
+    case "invalid_value":
+      return `is not one of ${issue.values.map(String).join(", ")}`;
+    case "invalid_format":
+      return issue.message === "Invalid input" ? `is not a valid ${issue.format}` : issue.message;
+    default:
+      return issue.message;
+  }
+}
+
+export type ManifestParse =
+  | { readonly ok: true; readonly manifest: PluginManifest }
+  | { readonly ok: false; readonly problems: readonly string[] };
+
+/** The manifest from what `console-plugin.json` held, filled in, or every problem with it in words. */
+export function parsePluginManifest(value: unknown): ManifestParse {
+  const result = pluginManifestSchema.safeParse(value);
+  if (result.success) {
+    return { ok: true, manifest: result.data };
+  }
+  return {
+    ok: false,
+    problems: result.error.issues.map((issue) => {
+      const path = issue.path.map(String).join(".");
+      const message = wordsOf(issue);
+      return path.length === 0 ? message : `${path}: ${message}`;
+    }),
+  };
+}
+
+/** The text in the person's language, else in English, else the first there is. */
+export function localizedText(texts: Localized, language: string): string {
+  return (
+    texts[language] ??
+    texts[language.split("-")[0] ?? language] ??
+    texts.en ??
+    Object.values(texts)[0] ??
+    ""
+  );
+}

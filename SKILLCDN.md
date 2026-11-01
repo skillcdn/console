@@ -11,6 +11,8 @@ documents:
   - docs
 exclude:
   - docs/adr/0000-template.md
+  - examples
+  - packages/console/template
 metadata:
   author: skillcdn
 ---

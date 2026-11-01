@@ -1,0 +1,104 @@
+import { describe, expect, it } from "vitest";
+import { isBridgePath, isBridgeToFrame, isBridgeToPage } from "./bridge.js";
+
+const INIT = {
+  v: 1,
+  t: "init",
+  plugin: { key: "leave", version: "1.2.3" },
+  page: "mine",
+  project: null,
+  person: { id: "p", login: "alice", name: null, language: "ko", admin: false },
+  roles: ["employee"],
+  path: "",
+  language: "ko",
+  theme: { "--sc-color-text": "#111" },
+};
+
+describe("isBridgeToFrame", () => {
+  it("accepts what the console's page sends", () => {
+    expect(isBridgeToFrame(INIT)).toBe(true);
+    expect(
+      isBridgeToFrame({
+        ...INIT,
+        page: undefined,
+        widget: "balance",
+        project: { key: "web", name: "Web" },
+      }),
+    ).toBe(true);
+    expect(isBridgeToFrame({ v: 1, t: "result", id: "1", ok: true, value: 3 })).toBe(true);
+    expect(
+      isBridgeToFrame({
+        v: 1,
+        t: "result",
+        id: "1",
+        ok: false,
+        error: { code: "plugin.forbidden", message: "no" },
+      }),
+    ).toBe(true);
+    expect(isBridgeToFrame({ v: 1, t: "event", kind: "records", data: {} })).toBe(true);
+    expect(isBridgeToFrame({ v: 1, t: "theme", theme: { "--sc-color-bg": "#fff" } })).toBe(true);
+    expect(isBridgeToFrame({ v: 1, t: "path", path: "/2026-11" })).toBe(true);
+  });
+
+  it("drops anything else unread", () => {
+    expect(isBridgeToFrame(null)).toBe(false);
+    expect(isBridgeToFrame("init")).toBe(false);
+    expect(isBridgeToFrame({ t: "init" })).toBe(false);
+    expect(isBridgeToFrame({ v: 2, t: "init" })).toBe(false);
+    expect(isBridgeToFrame({ ...INIT, theme: { color: "red" } })).toBe(false);
+    expect(isBridgeToFrame({ ...INIT, theme: { "--sc-x": "a".repeat(201) } })).toBe(false);
+    expect(isBridgeToFrame({ ...INIT, roles: "employee" })).toBe(false);
+    expect(isBridgeToFrame({ v: 1, t: "result", id: "", ok: true })).toBe(false);
+    expect(isBridgeToFrame({ v: 1, t: "result", id: "1", ok: false, error: "no" })).toBe(false);
+    expect(isBridgeToFrame({ v: 1, t: "event", kind: "anything", data: {} })).toBe(false);
+    expect(isBridgeToFrame({ v: 1, t: "call", id: "1", method: "command", params: {} })).toBe(
+      false,
+    );
+  });
+});
+
+describe("isBridgeToPage", () => {
+  it("accepts what a frame may ask", () => {
+    expect(isBridgeToPage({ v: 1, t: "ready" })).toBe(true);
+    expect(
+      isBridgeToPage({
+        v: 1,
+        t: "call",
+        id: "1",
+        method: "command",
+        params: { name: "request", args: {} },
+      }),
+    ).toBe(true);
+    expect(isBridgeToPage({ v: 1, t: "navigate", path: "/projects/web" })).toBe(true);
+    expect(isBridgeToPage({ v: 1, t: "resize", height: 320 })).toBe(true);
+    expect(isBridgeToPage({ v: 1, t: "title", text: "Leave" })).toBe(true);
+    expect(isBridgeToPage({ v: 1, t: "download", id: "f1" })).toBe(true);
+    expect(isBridgeToPage({ v: 1, t: "subscribe", kinds: ["records", "plugin"] })).toBe(true);
+  });
+
+  it("refuses a method outside the bridge, a URL, and nonsense", () => {
+    expect(isBridgeToPage({ v: 1, t: "call", id: "1", method: "fetch", params: {} })).toBe(false);
+    expect(isBridgeToPage({ v: 1, t: "call", id: "1", method: "command", params: "x" })).toBe(
+      false,
+    );
+    expect(isBridgeToPage({ v: 1, t: "navigate", path: "https://elsewhere.example/" })).toBe(false);
+    expect(isBridgeToPage({ v: 1, t: "navigate", path: "//elsewhere.example/" })).toBe(false);
+    expect(isBridgeToPage({ v: 1, t: "navigate", path: "relative" })).toBe(false);
+    expect(isBridgeToPage({ v: 1, t: "resize", height: -1 })).toBe(false);
+    expect(isBridgeToPage({ v: 1, t: "resize", height: Number.NaN })).toBe(false);
+    expect(isBridgeToPage({ v: 1, t: "title", text: "a\nb" })).toBe(false);
+    expect(isBridgeToPage({ v: 1, t: "subscribe", kinds: ["everything"] })).toBe(false);
+    expect(isBridgeToPage({ v: 1, t: "init" })).toBe(false);
+    expect(isBridgeToPage([])).toBe(false);
+  });
+});
+
+describe("isBridgePath", () => {
+  it("takes a path of the console's and nothing else", () => {
+    expect(isBridgePath("/")).toBe(true);
+    expect(isBridgePath("/plugins/leave/mine/2026")).toBe(true);
+    expect(isBridgePath("/a b")).toBe(false);
+    expect(isBridgePath("javascript:alert(1)")).toBe(false);
+    expect(isBridgePath(`/${"a".repeat(2048)}`)).toBe(false);
+  });
+});
