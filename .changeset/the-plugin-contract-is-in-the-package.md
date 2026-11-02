@@ -1,5 +1,0 @@
----
-"@skillcdn/console": patch
----
-
-The contract of a plugin is in the package, the first step of the plugin system (ADR-0049 to ADR-0054, `docs/specs/plugins.md`): `@skillcdn/console/plugin` with the manifest's schema (`parsePluginManifest`, `RESERVED_PLUGIN_KEYS`, the capabilities and their words, the bounds), `definePlugin` and its definers (`defineCollection`, `defineCommand`, `defineQuery`, `defineEndpoint`, `arg.*`), the types of `ctx` and `describePlugin`, which yields the definition as data; `@skillcdn/console/plugin/web` with `connect()`, the frame's side of the bridge, and `@skillcdn/console/plugin/web/react` with `usePlugin()`; `@skillcdn/console/plugin/testing` with `createTestContext()`, records in memory for a plugin's own tests; and the second bin, `console-plugin`, whose `init` writes a plugin from the template the package ships and whose `check` reads a plugin as a console would, the server module loaded under the host's hardening. No console runs a plugin yet: the host, the routes and the pages follow.
