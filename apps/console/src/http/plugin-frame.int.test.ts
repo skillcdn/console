@@ -1,8 +1,9 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
 import { pluginPath, restPluginDetailSchema } from "@skillcdn/console/api";
+import { loadWebRoot } from "@skillcdn/console/web";
 import { pino } from "pino";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createSecrets } from "../auth/secrets.js";
@@ -12,7 +13,7 @@ import { discoverPlugins } from "../plugins/discovery.js";
 import { PluginHost } from "../plugins/host.js";
 import { allowedReadRoots } from "../plugins/paths.js";
 import { Plugins } from "../plugins/registry.js";
-import { createFixtureProvider } from "../testing/fixture-provider.js";
+import { createFixtureProvider, type FixtureProvider } from "../testing/fixture-provider.js";
 import { createHarness, type Harness, SIGN_IN_URL } from "../testing/harness.js";
 import {
   HELLO_PLUGIN_DIR,
@@ -30,6 +31,7 @@ let testDatabase: TestDatabase;
 let root: string;
 let plugins: Plugins;
 let h: Harness;
+let provider: FixtureProvider;
 let admin: string;
 let version: string;
 const AT = pluginPath("hello");
@@ -57,7 +59,7 @@ beforeAll(async () => {
         ? Promise.reject(new Error("not started"))
         : holder.current.contextHandler(call),
   });
-  const provider = createFixtureProvider("gh");
+  provider = createFixtureProvider("gh");
   h = createHarness(testDatabase, { providers: [provider], admins: ["alice"] });
   admin = await h.signIn("alice");
   const workspace = await ensureWorkspace(testDatabase.database, { name: "Acme", now: new Date() });
@@ -184,6 +186,72 @@ describe("the frame of a plugin's page", () => {
     expect(css.headers.get("cross-origin-resource-policy")).toBe("cross-origin");
     expect(css.headers.get("access-control-allow-origin")).toBe("*");
     expect(await css.text()).toContain("--sc-color-info");
+  });
+
+  it("gives the frames the faces of the console's own build, their files served from here and nothing else", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "console-faces-"));
+    await mkdir(join(dir, "assets"), { recursive: true });
+    await writeFile(
+      join(dir, "index.html"),
+      '<!doctype html><html><head><link rel="icon" href="/favicon.svg"><link rel="stylesheet" crossorigin href="/assets/index-abc.css"></head><body><div id="root"></div></body></html>',
+    );
+    await writeFile(
+      join(dir, "assets", "index-abc.css"),
+      '@font-face{font-family:"Face";font-weight:45 920;src:url(/assets/face-abc.woff2) format("woff2");unicode-range:U+AC00-D7A3}.sc-x{color:red}@font-face{font-family:"Face";src:url("/assets/face-def.woff2")}',
+    );
+    await writeFile(join(dir, "assets", "face-abc.woff2"), "wOF2fake");
+    const withWeb = createHarness(testDatabase, {
+      providers: [provider],
+      admins: ["alice"],
+      plugins,
+      web: await loadWebRoot(dir),
+    });
+    try {
+      const faces = await withWeb.request("/api/v1/plugin-runtime/fonts.css");
+      expect(faces.status).toBe(200);
+      expect(faces.headers.get("content-type")).toBe("text/css; charset=utf-8");
+      expect(faces.headers.get("cross-origin-resource-policy")).toBe("cross-origin");
+      expect(faces.headers.get("access-control-allow-origin")).toBe("*");
+      const text = await faces.text();
+      expect(text).toContain('src:url(assets/face-abc.woff2) format("woff2")');
+      expect(text).toContain('url("assets/face-def.woff2")');
+      expect(text).not.toContain(".sc-x");
+      const font = await withWeb.request("/api/v1/plugin-runtime/assets/face-abc.woff2");
+      expect(font.status).toBe(200);
+      expect(font.headers.get("content-type")).toBe("font/woff2");
+      expect(font.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
+      expect(font.headers.get("cross-origin-resource-policy")).toBe("cross-origin");
+      expect(font.headers.get("access-control-allow-origin")).toBe("*");
+      expect(await font.text()).toBe("wOF2fake");
+      // A font alone, of the build, by its name alone.
+      for (const path of [
+        "/api/v1/plugin-runtime/assets/index-abc.css",
+        "/api/v1/plugin-runtime/assets/nothing.woff2",
+        "/api/v1/plugin-runtime/assets/..%2Findex.html",
+        "/api/v1/plugin-runtime/assets/",
+      ]) {
+        expect((await withWeb.request(path)).status, path).toBe(404);
+      }
+      // The frame links them before the console's stylesheet.
+      const framed = await withWeb.request(`${AT}/frame?page=greetings`, {
+        headers: { referer: `${SIGN_IN_URL}/plugins/hello/greetings` },
+      });
+      const html = await framed.text();
+      expect(html.indexOf(`href="${SIGN_IN_URL}/api/v1/plugin-runtime/fonts.css"`)).toBeGreaterThan(
+        0,
+      );
+      expect(html.indexOf("plugin-runtime/fonts.css")).toBeLessThan(
+        html.indexOf("plugin-runtime/console.css"),
+      );
+    } finally {
+      await withWeb.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+    // Without a build, the stylesheet is there and empty, and there are no files.
+    const none = await h.request("/api/v1/plugin-runtime/fonts.css");
+    expect(none.status).toBe(200);
+    expect(await none.text()).toBe("");
+    expect((await h.request("/api/v1/plugin-runtime/assets/face-abc.woff2")).status).toBe(404);
   });
 
   it("serves nothing of a plugin that is disabled", async () => {

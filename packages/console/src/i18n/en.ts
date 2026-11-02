@@ -173,8 +173,6 @@ export const en = {
     },
     settings: {
       title: "Plugins",
-      intro:
-        "The plugins installed into this console: what each asks, what it was given, and what it did. Enabling one is consenting to the capabilities it asks, each of which opens something of the console to its code.",
       empty: { title: "No plugins", body: "None is installed in this console's image." },
       none: "The console has no plugins directory: none can be installed.",
       state: "State",

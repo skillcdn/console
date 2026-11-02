@@ -527,18 +527,40 @@ table {
   background: transparent;
 }
 
-/* The widgets of the front page: a grid of six columns. */
+/* A plugin's frame document, which the console serves marked with data-console: it paints no
+   background and is as tall as its content, so that the box the console draws shows through and
+   the frame shrinks as well as grows; no room is kept for a scrollbar it never shows. */
+
+html[data-console] {
+  scrollbar-gutter: auto;
+  scroll-padding-top: 0;
+}
+
+html[data-console] body {
+  min-height: 0;
+  background: transparent;
+}
+
+/* The widgets of the front page: a grid of six columns, above or below the projects. The page's
+   head keeps its own distance above the top ones. */
 
 .sc-widgets {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: var(--sc-space-4);
-  margin-block: var(--sc-space-5);
+}
+
+.sc-widgets-top {
+  margin: 0 0 var(--sc-space-5);
+}
+
+.sc-widgets-bottom {
+  margin: var(--sc-space-5) 0 0;
 }
 
 .sc-widget {
   grid-column: span 6;
-  padding: var(--sc-space-3);
+  padding: var(--sc-space-3) var(--sc-space-4);
   border: var(--sc-border);
   border-radius: var(--sc-radius-lg);
   background: var(--sc-color-bg-raised);

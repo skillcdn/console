@@ -1,0 +1,5 @@
+---
+"@skillcdn/console": patch
+---
+
+The plugins' pages sit in the console as its own do. A frame document paints no background and is as tall as its content (`html[data-console]` in the stylesheet), so the box the console draws shows through and a widget is as tall as what it shows; the widgets above the projects keep only the page head's distance, and those below the projects their own (`sc-widgets-top`, `sc-widgets-bottom`). A frame reads in the console's own faces: the document links `GET /api/v1/plugin-runtime/fonts.css`, the `@font-face` rules of the console's build with their files at `GET /api/v1/plugin-runtime/assets/<file>`. The Settings page lists the plugins with their state for an administrator, each leading to its own page, where it offered a button and a paragraph; the plugins' own list page has no paragraph either (`plugins.settings.intro` is gone from the packs). The plugins' tabs and the organization's own come before Settings, which is last, at the workspace and in a project; the Settings tab is current on the plugins' settings pages. The template's widget, and the example's, pad nothing of their own, since the console's box does.

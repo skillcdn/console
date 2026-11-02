@@ -412,7 +412,9 @@ export function PluginWidgets(props: PluginWidgetsProps) {
     return null;
   }
   return (
-    <section className="sc-widgets">
+    <section
+      className={`sc-widgets ${props.place === "home:top" ? "sc-widgets-top" : "sc-widgets-bottom"}`}
+    >
       {shown.map(({ plugin, widget }) => (
         <article
           key={`${plugin.key}:${widget.key}`}

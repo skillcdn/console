@@ -36,8 +36,8 @@
   font-size: var(--sc-text-sm);
 }
 
+/* The console's box around a widget pads it; the widget pads nothing of its own. */
 .pl-hello-widget {
-  padding: var(--sc-space-3);
   color: var(--sc-color-text);
   font-family: var(--sc-font-sans);
 }

@@ -158,6 +158,7 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
     clock,
     logger,
     ownOrigin: auth?.origin,
+    web,
   });
 
   // After the API: a file of the build, or the page for every other path, which routes in the

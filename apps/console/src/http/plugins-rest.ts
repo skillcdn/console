@@ -38,6 +38,7 @@ import {
   type RecordQuery,
   SETTING_KEY_PATTERN,
 } from "@skillcdn/console/plugin";
+import type { WebRoot } from "@skillcdn/console/web";
 import type { Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { stream } from "hono/streaming";
@@ -61,7 +62,12 @@ export interface PluginsRestDependencies {
   readonly logger: Logger;
   /** The origin of the console's own pages (`PUBLIC_URL`), which may embed the plugins' frames; nothing where nobody signs in. */
   readonly ownOrigin: string | undefined;
+  /** The build of the default UI, whose faces the frames read; nothing where the server is API only. */
+  readonly web?: WebRoot | undefined;
 }
+
+/** A file of the build's faces, as a frame may read one: a name alone, of a font. */
+const FONT_FILE_PATTERN = /^[A-Za-z0-9._-]+\.(?:woff2|woff|ttf|otf)$/;
 
 const MAX_BODY_BYTES = 256 * 1024;
 /** Where the console's own stylesheet is served for the plugins' frames (ADR-0054). */
@@ -200,7 +206,46 @@ export function registerPluginsRest(
   app: Hono<AppEnv>,
   dependencies: PluginsRestDependencies,
 ): void {
-  const { plugins, access, clock, logger, ownOrigin } = dependencies;
+  const { plugins, access, clock, logger, ownOrigin, web } = dependencies;
+
+  /**
+   * The faces of the console's own build, for the frames: the `@font-face` rules of the
+   * stylesheets its page links, with their files named where this module serves them. Read once,
+   * since the build does not change while the server runs; nothing without a build.
+   */
+  let faces: Promise<string> | undefined;
+  const readFaces = async (): Promise<string> => {
+    if (web === undefined) {
+      return "";
+    }
+    const page = await web.respond(new Request("http://console/"));
+    const html = page === undefined ? "" : await page.text();
+    const found: string[] = [];
+    for (const [tag] of html.matchAll(/<link\b[^>]*>/g)) {
+      if (!/\brel="stylesheet"/.test(tag)) {
+        continue;
+      }
+      const href = /\bhref="(\/[^"]+\.css)"/.exec(tag)?.[1];
+      const sheet =
+        href === undefined ? undefined : await web.respond(new Request(`http://console${href}`));
+      const css = sheet === undefined ? "" : await sheet.text();
+      for (const rule of css.match(/@font-face\s*\{[^}]*\}/g) ?? []) {
+        found.push(rule.replaceAll(/url\((["']?)\/assets\//g, "url($1assets/"));
+      }
+    }
+    return found.join("\n");
+  };
+  const facesOf = (): Promise<string> => {
+    faces ??= readFaces().catch((error: unknown) => {
+      faces = undefined;
+      logger.warn(
+        { err: error },
+        "the faces of the console's build could not be read for the plugins' frames",
+      );
+      return "";
+    });
+    return faces;
+  };
 
   const asking = async (c: Context<AppEnv>) => (await access.caller(c)) ?? signInRequired(c);
   /** An administrator, from the console's own pages or with a token, or the refusal. */
@@ -1134,6 +1179,7 @@ export function registerPluginsRest(
       "<head>",
       '<meta charset="utf-8">',
       '<meta name="viewport" content="width=device-width, initial-scale=1">',
+      `<link rel="stylesheet" href="${attribute(`${runtime}/fonts.css`)}">`,
       `<link rel="stylesheet" href="${attribute(`${runtime}/console.css`)}">`,
       `<link rel="stylesheet" href="${attribute(`${bundle}/index.css`)}">`,
       "</head>",
@@ -1228,5 +1274,42 @@ export function registerPluginsRest(
     c.header("access-control-allow-origin", "*");
     c.header("x-content-type-options", "nosniff");
     return c.body(new Uint8Array(bytes).buffer);
+  });
+
+  // The console's faces, for the frames: the build's @font-face rules, and their files, fonts
+  // alone, named by the build after their content and so kept for ever.
+  app.get(`${PLUGIN_RUNTIME}/fonts.css`, async (c) => {
+    const css = await facesOf();
+    c.header("content-type", "text/css; charset=utf-8");
+    c.header("cache-control", "public, max-age=3600");
+    c.header("cross-origin-resource-policy", "cross-origin");
+    c.header("access-control-allow-origin", "*");
+    c.header("x-content-type-options", "nosniff");
+    return c.body(css);
+  });
+
+  app.get(`${PLUGIN_RUNTIME}/assets/:file`, async (c) => {
+    const file = c.req.param("file");
+    if (web === undefined || !FONT_FILE_PATTERN.test(file)) {
+      return c.notFound();
+    }
+    const answer = await web.respond(new Request(`http://console/assets/${file}`));
+    // A build answers its page for a path it has no file at: a font is a font, or nothing.
+    const type = answer?.headers.get("content-type") ?? "";
+    if (answer === undefined || answer.status !== 200 || !type.startsWith("font/")) {
+      return c.notFound();
+    }
+    const headers = new Headers({
+      "content-type": type,
+      "cache-control": "public, max-age=31536000, immutable",
+      "cross-origin-resource-policy": "cross-origin",
+      "access-control-allow-origin": "*",
+      "x-content-type-options": "nosniff",
+    });
+    const etag = answer.headers.get("etag");
+    if (etag !== null) {
+      headers.set("etag", etag);
+    }
+    return new Response(answer.body, { status: 200, headers });
   });
 }

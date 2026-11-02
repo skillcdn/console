@@ -52,9 +52,9 @@ afterAll(async () => {
   await console_?.close();
 });
 
-/** A page of a browser of its own, signed in as the person through the fixture's round trip. */
+/** A page of a browser of its own, in English whatever the machine speaks, signed in as the person through the fixture's round trip. */
 async function signedIn(person: string): Promise<Page> {
-  const context = await browser.newContext();
+  const context = await browser.newContext({ locale: "en-US" });
   const page = await context.newPage();
   page.on("request", (request) => {
     requests.push(request.url());
@@ -133,6 +133,16 @@ describe("the example plugin in a browser", () => {
         'getComputedStyle(document.documentElement).getPropertyValue("--sc-color-text").trim()',
       ),
     ).not.toBe("");
+    // The frame reads in the console's own faces: the Korean one the build carries is there.
+    expect(
+      await frame.evaluate(
+        'document.fonts.load(\'1em "Pretendard Variable"\', "가").then((faces) => faces.length)',
+      ),
+    ).toBeGreaterThan(0);
+    // It paints no background of its own and is as tall as its content, within the console's box.
+    expect(await frame.evaluate("getComputedStyle(document.body).backgroundColor")).toBe(
+      "rgba(0, 0, 0, 0)",
+    );
     await frame.fill("input.sc-input", "Bob");
     await frame.click("button.sc-button");
     // The greeting, or the refusal the page shows in its place, with what the console answered.
@@ -156,7 +166,17 @@ describe("the example plugin in a browser", () => {
     const widget = await frameOf(page, "iframe.sc-plugin-frame-widget");
     await widget.waitForSelector(".pl-hello-text");
     expect(await widget.textContent(".pl-hello-text")).toBe("Hello, Bob!");
-    // The administrator's settings pages list the plugin, and say what it is.
+    // The widget's frame is as tall as its one line, not the box's first guess.
+    expect(await widget.evaluate("document.documentElement.clientHeight")).toBeLessThan(120);
+    // The administrator's Settings page lists the plugin, as the plugins' own page does, and the
+    // plugin's page says what it is. Its tab comes before Settings.
+    await page.goto(`${console_.origin}/settings`);
+    await page.waitForSelector("text=hello 0.1.0");
+    const tabs = (await page.$$eval("nav a", (links) =>
+      links.map((link) => link.textContent?.trim() ?? ""),
+    )) as string[];
+    expect(tabs.indexOf("Hello")).toBeGreaterThan(-1);
+    expect(tabs.indexOf("Hello")).toBeLessThan(tabs.indexOf("Settings"));
     await page.goto(`${console_.origin}/settings/plugins`);
     await page.waitForSelector("text=hello 0.1.0");
     await page.goto(`${console_.origin}/settings/plugins/hello`);

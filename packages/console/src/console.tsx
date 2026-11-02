@@ -580,7 +580,6 @@ function PluginSettingsPage(props: {
         <div className="sc-page-head">
           <h1 className="sc-page-title">{settings.title}</h1>
         </div>
-        <p className="sc-lead">{settings.intro}</p>
         <PluginSettingsList
           plugins={data.plugins}
           language={language}
@@ -1755,9 +1754,10 @@ function WorkspaceSettingsPage(props: {
   readonly form: "rules" | "workspace" | "pack-token" | undefined;
   readonly data: ConsoleData;
   readonly navigation: Navigation;
+  readonly language: string;
 }) {
   const words = useWords();
-  const { form, data, navigation } = props;
+  const { form, data, navigation, language } = props;
   const { busy, error, act } = useAction();
   const administrator = data.me?.person?.role === "admin";
   const workspace = data.me?.workspace;
@@ -1933,8 +1933,15 @@ function WorkspaceSettingsPage(props: {
       {administrator && (
         <section className="sc-panel" aria-label={words.plugins.settings.title}>
           <h2 className="sc-section-title">{words.plugins.settings.title}</h2>
-          <p className="sc-settings-hint">{words.plugins.settings.intro}</p>
-          <LinkButton href={pluginSettingsHref()}>{words.plugins.settings.title}</LinkButton>
+          {data.plugins.length === 0 ? (
+            <p className="sc-settings-hint">{words.plugins.settings.empty.body}</p>
+          ) : (
+            <PluginSettingsList
+              plugins={data.plugins}
+              language={language}
+              href={(plugin) => pluginSettingsHref(plugin.key)}
+            />
+          )}
         </section>
       )}
       <section className="sc-panel" aria-label={words.settings.categories}>
@@ -2399,7 +2406,14 @@ function WorkspacePage(props: {
     return <PersonWorkPage id={route.id} data={data} components={components} week={route.week} />;
   }
   if (route.name === "workspace-settings") {
-    return <WorkspaceSettingsPage form={route.form} data={data} navigation={navigation} />;
+    return (
+      <WorkspaceSettingsPage
+        form={route.form}
+        data={data}
+        navigation={navigation}
+        language={language}
+      />
+    );
   }
   if (route.name === "categories") {
     const me = data.me?.person ?? undefined;
@@ -2662,13 +2676,6 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
                 current: route.name === "agents" || route.name === "new-token",
               },
             ]),
-        // The settings are read by everyone: the rules every agent follows, the categories and
-        // what the colours mean, where the skills come from; kept by an administrator.
-        {
-          href: PATHS.settings,
-          label: words.nav.settings,
-          current: route.name === "workspace-settings" || route.name === "categories",
-        },
         ...pages
           .filter((candidate) => candidate.level === "workspace")
           .map((candidate) => ({
@@ -2690,6 +2697,17 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
           words,
           language: pack.tag,
         }),
+        // The settings are read by everyone: the rules every agent follows, the categories and
+        // what the colours mean, where the skills come from, the plugins; kept by an
+        // administrator. Last, after the organization's own tabs and the plugins'.
+        {
+          href: PATHS.settings,
+          label: words.nav.settings,
+          current:
+            route.name === "workspace-settings" ||
+            route.name === "categories" ||
+            route.name === "plugins-settings",
+        },
       ];
       const nav: NavItem[] =
         projectKey === undefined
@@ -2741,12 +2759,6 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
                 label: words.nav.members,
                 current: route.name === "members",
               },
-              // Read by every member: what the project is, and what its agents are asked (ADR-0023).
-              {
-                href: projectHref(projectKey, "settings"),
-                label: words.nav.settings,
-                current: route.name === "settings",
-              },
               ...pages
                 .filter((candidate) => candidate.level === "project")
                 .map((candidate) => ({
@@ -2768,6 +2780,13 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
                 words,
                 language: pack.tag,
               }),
+              // Read by every member: what the project is, and what its agents are asked
+              // (ADR-0023). Last, after the organization's own tabs and the plugins'.
+              {
+                href: projectHref(projectKey, "settings"),
+                label: words.nav.settings,
+                current: route.name === "settings",
+              },
             ];
       /** A page of the console's own at the address, or nothing there. */
       const customPageOf = (key: string, level: CustomPage["level"]): ReactNode => {
