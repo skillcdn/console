@@ -16,6 +16,7 @@ const plugin = (
   problems: [],
   roles: ["user"],
   declaredRoles: [],
+  defaultRole: null,
   menu: null,
   pages: [{ key: "home", name: { en: "Home" }, level: "workspace", wide: false }],
   widgets: [],

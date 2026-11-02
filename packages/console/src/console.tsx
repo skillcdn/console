@@ -602,6 +602,7 @@ function PluginSettingsPage(props: {
     <PluginSettingsView
       detail={detail}
       projects={data.projects}
+      people={data.people}
       language={language}
       client={client}
       onChanged={async () => {

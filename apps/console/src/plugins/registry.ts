@@ -634,6 +634,7 @@ export class Plugins {
         name: role.name,
         description: role.description,
       })),
+      defaultRole: manifest?.defaultRole ?? null,
       menu:
         manifest?.menu === undefined
           ? null

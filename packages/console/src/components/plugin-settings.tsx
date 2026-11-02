@@ -1,24 +1,39 @@
-import { type FormEvent, useEffect, useId, useMemo, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useId, useMemo, useState } from "react";
 import type { ConsoleClient } from "../client.js";
+import type { Messages } from "../i18n/en.js";
 import { useWords } from "../i18n/index.js";
-import { capabilityWords } from "../plugin/capabilities.js";
+import { PLUGIN_CAPABILITIES, type PluginCapability } from "../plugin/capabilities.js";
 import type {
   RestEvent,
+  RestPerson,
   RestPlugin,
   RestPluginDetail,
   RestPluginEnableInput,
+  RestPluginGrant,
+  RestPluginGrantInput,
   RestPluginSetting,
   RestProject,
 } from "../schemas.js";
 import { useAction } from "../use-action.js";
 import { EventFeed } from "./event-feed.js";
-import { Badge, Button, Callout, EmptyState, LinkButton, Spinner, Time } from "./ui.js";
+import {
+  Badge,
+  Button,
+  Callout,
+  EmptyState,
+  formatInstant,
+  LinkButton,
+  personName,
+  Spinner,
+} from "./ui.js";
 
 // The plugins' settings (docs/specs/plugins.md, "The settings pages"): what is installed and how
-// each stands; and, for one plugin, the capabilities to consent to with what each opens, the
-// board project to make or choose, the projects, the settings form from the manifest, the
-// secrets set and never shown, the grants, what the plugin did, export and purge. No plugin code
-// runs here: everything is the console's own.
+// each stands; and one plugin, read at a glance: its state in the head with the way to disable
+// it, what it is on and holds a row each, the form that enables it (the capabilities to consent
+// to, each by a name with what it opens, the board project, the projects), the settings form
+// from the manifest with the secrets set and never shown, the roles with who holds each and the
+// way to grant one, what the plugin did, export and purge. No plugin code runs here: everything
+// is the console's own.
 
 /** A text in the person's language, else in English, else the first the manifest has. */
 export function pluginWord(
@@ -35,6 +50,32 @@ export function pluginWord(
     Object.values(texts)[0] ??
     ""
   );
+}
+
+export interface CapabilityText {
+  /** What the capability is called on the pages. */
+  readonly name: string;
+  /** The sentence of what it opens, as the administrator reads it before consenting. */
+  readonly opens: string;
+}
+
+/**
+ * A capability by the name the pages give it and the sentence of what it opens, in the person's
+ * language; one the packs do not know, by its key alone.
+ */
+export function capabilityText(words: Messages, capability: string): CapabilityText {
+  // Typed against the catalogue, so that a capability added there is named in the packs too.
+  const known: Readonly<Record<PluginCapability, CapabilityText>> = words.plugins.capability;
+  if ((PLUGIN_CAPABILITIES as readonly string[]).includes(capability)) {
+    return known[capability as PluginCapability];
+  }
+  if (capability.startsWith("outbound:")) {
+    return words.plugins.capability.outbound(capability.slice("outbound:".length));
+  }
+  if (capability.startsWith("plugins:")) {
+    return words.plugins.capability.plugins(capability.slice("plugins:".length));
+  }
+  return { name: capability, opens: "" };
 }
 
 const STATE_TONES: Readonly<
@@ -85,6 +126,8 @@ export function PluginSettingsList(props: PluginSettingsListProps) {
 export interface PluginSettingsViewProps {
   readonly detail: RestPluginDetail;
   readonly projects: readonly RestProject[];
+  /** The people of the workspace, to grant a role to; an administrator sees everyone. */
+  readonly people: readonly RestPerson[];
   readonly language: string;
   readonly client: ConsoleClient;
   /** Called after a change, so that the page reads the plugin again. */
@@ -93,7 +136,143 @@ export interface PluginSettingsViewProps {
   readonly onPurged: () => void;
 }
 
-/** A setting's control, by its type; a secret has a form of its own below. */
+/** A set with a value put in or taken out. */
+function toggled(set: ReadonlySet<string>, value: string, on: boolean): ReadonlySet<string> {
+  const next = new Set(set);
+  if (on) {
+    next.add(value);
+  } else {
+    next.delete(value);
+  }
+  return next;
+}
+
+/** A row of a list to tick: the box, a name, a word under it. */
+function TickRow(props: {
+  readonly checked: boolean;
+  readonly onChange: (checked: boolean) => void;
+  readonly name: string;
+  readonly under?: string | undefined;
+}) {
+  return (
+    <li>
+      <label className="sc-plugin-tick">
+        <input
+          type="checkbox"
+          checked={props.checked}
+          onChange={(event) => props.onChange(event.target.checked)}
+        />
+        <span className="sc-plugin-tick-words">
+          <span className="sc-plugin-tick-name">{props.name}</span>
+          {props.under !== undefined && props.under !== "" && (
+            <span className="sc-plugin-tick-under">{props.under}</span>
+          )}
+        </span>
+      </label>
+    </li>
+  );
+}
+
+/** What the plugin is on and holds, a row each; nothing where there is nothing to say yet. */
+function Overview(props: {
+  readonly detail: RestPluginDetail;
+  readonly projects: readonly RestProject[];
+  readonly language: string;
+}) {
+  const words = useWords();
+  const settings = words.plugins.settings;
+  const { detail, language } = props;
+  const enabled = detail.state === "enabled";
+  const rows: { readonly key: string; readonly name: string; readonly value: ReactNode }[] = [];
+  if (detail.board !== null) {
+    rows.push({
+      key: "board",
+      name: settings.board,
+      value: (
+        <>
+          {detail.board.name} <span className="sc-muted">{detail.board.key}</span>
+        </>
+      ),
+    });
+  } else if (enabled && detail.boardNeeds !== "none") {
+    rows.push({ key: "board", name: settings.board, value: settings.nothing });
+  }
+  if (enabled && detail.projects !== null) {
+    const names = detail.projects;
+    rows.push({
+      key: "projects",
+      name: settings.projects,
+      value:
+        names === "all"
+          ? settings.projectsAll
+          : names.length === 0
+            ? settings.nothing
+            : names
+                .map((key) => props.projects.find((project) => project.key === key)?.name ?? key)
+                .join(", "),
+    });
+  }
+  if (enabled && detail.consent !== null) {
+    const consent = detail.consent;
+    rows.push({
+      key: "capabilities",
+      name: settings.capabilities,
+      value:
+        consent.length === 0 ? (
+          settings.nothing
+        ) : (
+          <ul className="sc-plugin-held">
+            {consent.map((capability) => {
+              const text = capabilityText(words, capability);
+              return (
+                <li key={capability}>
+                  <span className="sc-plugin-tick-name">{text.name}</span>
+                  {text.opens !== "" && <span className="sc-plugin-tick-under"> {text.opens}</span>}
+                </li>
+              );
+            })}
+          </ul>
+        ),
+    });
+  }
+  if (detail.operations.length > 0) {
+    rows.push({
+      key: "operations",
+      name: settings.operations,
+      value: (
+        <span className="sc-plugin-codes">
+          {detail.operations.map((operation) => (
+            <code key={operation.name}>{operation.name}</code>
+          ))}
+        </span>
+      ),
+    });
+  }
+  if (detail.agentNote !== null) {
+    rows.push({
+      key: "agentNote",
+      name: settings.agentNote,
+      value: pluginWord(detail.agentNote, language),
+    });
+  }
+  if (rows.length === 0) {
+    return null;
+  }
+  return (
+    <section className="sc-panel" aria-label={settings.about}>
+      <dl className="sc-settings-list">
+        {rows.map((row) => (
+          <div key={row.key} className="sc-settings-item">
+            <dt>{row.name}</dt>
+            <dd>{row.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
+/** A setting's control, by its type; a secret has a row of its own below. */
 function SettingControl(props: {
   readonly setting: RestPluginSetting;
   readonly value: unknown;
@@ -192,7 +371,7 @@ function SettingsForm(props: {
   readonly busy: boolean;
   readonly onSave: (values: Record<string, unknown>) => void;
 }) {
-  const words = useWords().plugins.settings;
+  const words = useWords();
   const settings = props.detail.settings.filter((setting) => setting.type !== "secret");
   const [values, setValues] = useState<Record<string, unknown>>(() =>
     Object.fromEntries(settings.map((setting) => [setting.key, setting.value ?? setting.default])),
@@ -206,7 +385,11 @@ function SettingsForm(props: {
     props.onSave(values);
   };
   return (
-    <form className="sc-form sc-settings-form" onSubmit={submit} aria-label={words.settingsForm}>
+    <form
+      className="sc-form sc-settings-form"
+      onSubmit={submit}
+      aria-label={words.plugins.settings.settingsForm}
+    >
       {settings.map((setting) => (
         <div key={setting.key} className="sc-settings-row">
           <div className="sc-settings-words">
@@ -231,14 +414,14 @@ function SettingsForm(props: {
       ))}
       <div className="sc-form-actions">
         <Button type="submit" variant="primary" disabled={props.busy}>
-          {words.save}
+          {words.common.save}
         </Button>
       </div>
     </form>
   );
 }
 
-/** One secret: whether and when it is set, a field to set it anew, and the way to remove it. */
+/** One secret: whether and when it is set, a field to set it anew with its buttons on the line. */
 function SecretRow(props: {
   readonly setting: RestPluginSetting;
   readonly language: string;
@@ -246,7 +429,8 @@ function SecretRow(props: {
   readonly onSet: (value: string) => void;
   readonly onRemove: () => void;
 }) {
-  const words = useWords().plugins.settings;
+  const words = useWords();
+  const settings = words.plugins.settings;
   const [value, setValue] = useState("");
   const id = useId();
   const { setting } = props;
@@ -254,45 +438,41 @@ function SecretRow(props: {
     <div className="sc-settings-row">
       <div className="sc-settings-words">
         <label className="sc-settings-label" htmlFor={id}>
-          {pluginWord(setting.name, props.language)} <Badge tone="neutral">{words.secret}</Badge>
+          {pluginWord(setting.name, props.language)}
+          {setting.required && " *"}
         </label>
         <p className="sc-settings-hint">
-          {setting.set && setting.setAt !== null ? (
-            <>
-              {words.secretSet("")}
-              <Time iso={setting.setAt} />
-            </>
-          ) : (
-            words.secretUnset
-          )}
-          {" · "}
-          {words.secretHint}
+          {setting.set && setting.setAt !== null
+            ? settings.secretSet(formatInstant(setting.setAt, props.language))
+            : settings.secretUnset}
         </p>
+        {setting.description !== null && (
+          <p className="sc-settings-hint">{pluginWord(setting.description, props.language)}</p>
+        )}
       </div>
       <div className="sc-settings-control">
-        <input
-          id={id}
-          className="sc-input"
-          type="password"
-          autoComplete="off"
-          placeholder={words.secretNew}
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-        />
-        <div className="sc-form-actions">
+        <div className="sc-plugin-line">
+          <input
+            id={id}
+            className="sc-input sc-plugin-line-input"
+            type="password"
+            autoComplete="off"
+            placeholder={settings.secretNew}
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+          />
           <Button
-            size="sm"
             disabled={props.busy || value.length === 0}
             onClick={() => {
               props.onSet(value);
               setValue("");
             }}
           >
-            {words.secretSave}
+            {words.common.save}
           </Button>
           {setting.set && (
-            <Button size="sm" variant="ghost" disabled={props.busy} onClick={props.onRemove}>
-              {words.secretRemove}
+            <Button variant="ghost" disabled={props.busy} onClick={props.onRemove}>
+              {words.common.remove}
             </Button>
           )}
         </div>
@@ -301,7 +481,10 @@ function SecretRow(props: {
   );
 }
 
-/** Enabling: consent to every capability, the board project, the projects. */
+/**
+ * Enabling: the capabilities to consent to, one by one, those consented to before ticked
+ * already; the board project, the one it had chosen already; the projects, as they were.
+ */
 function EnableForm(props: {
   readonly detail: RestPluginDetail;
   readonly projects: readonly RestProject[];
@@ -309,21 +492,34 @@ function EnableForm(props: {
   readonly busy: boolean;
   readonly onEnable: (input: RestPluginEnableInput) => void;
 }) {
-  const words = useWords().plugins.settings;
+  const words = useWords();
+  const settings = words.plugins.settings;
   const { detail, language } = props;
-  const [consented, setConsented] = useState<ReadonlySet<string>>(new Set());
+  const [consented, setConsented] = useState<ReadonlySet<string>>(
+    () =>
+      new Set(
+        (detail.consent ?? []).filter((capability) => detail.capabilities.includes(capability)),
+      ),
+  );
   const needsBoard = detail.boardNeeds !== "none";
   const [boardMode, setBoardMode] = useState<"none" | "create" | "choose">(
-    detail.boardNeeds === "none" ? "none" : detail.boardDefaults === null ? "choose" : "create",
+    detail.boardNeeds === "none"
+      ? "none"
+      : detail.board !== null || detail.boardDefaults === null
+        ? "choose"
+        : "create",
   );
   const [boardKey, setBoardKey] = useState(detail.boardDefaults?.key ?? "");
   const [boardName, setBoardName] = useState(pluginWord(detail.boardDefaults?.name, language));
   const [boardDescription, setBoardDescription] = useState(
     pluginWord(detail.boardDefaults?.description, language),
   );
-  const [chosen, setChosen] = useState(props.projects[0]?.key ?? "");
-  const [allProjects, setAllProjects] = useState(true);
-  const [onProjects, setOnProjects] = useState<ReadonlySet<string>>(new Set());
+  const [chosen, setChosen] = useState(detail.board?.key ?? props.projects[0]?.key ?? "");
+  const before = detail.projects;
+  const [allProjects, setAllProjects] = useState(!Array.isArray(before) || before.length === 0);
+  const [onProjects, setOnProjects] = useState<ReadonlySet<string>>(
+    () => new Set(Array.isArray(before) ? before : []),
+  );
   const ids = { key: useId(), name: useId(), description: useId(), choose: useId() };
   const everyCapability = detail.capabilities.every((capability) => consented.has(capability));
   const boardReady =
@@ -346,53 +542,30 @@ function EnableForm(props: {
     });
   };
   return (
-    <form className="sc-form" onSubmit={submit} aria-label={words.enable}>
-      <h3 className="sc-section-title">{words.capabilities}</h3>
-      <p className="sc-settings-hint">{words.capabilitiesIntro}</p>
-      {detail.capabilities.length === 0 && <p className="sc-muted">—</p>}
-      <ul className="sc-list">
-        {detail.capabilities.map((capability) => {
-          const said = capabilityWords(capability);
-          return (
-            <li key={capability}>
-              <label className="sc-check">
-                <input
-                  type="checkbox"
+    <form className="sc-form sc-plugin-enable" onSubmit={submit} aria-label={settings.enable}>
+      {detail.capabilities.length > 0 && (
+        <div className="sc-plugin-group">
+          <h3 className="sc-plugin-group-title">{settings.capabilities}</h3>
+          <ul className="sc-plugin-ticks">
+            {detail.capabilities.map((capability) => {
+              const text = capabilityText(words, capability);
+              return (
+                <TickRow
+                  key={capability}
                   checked={consented.has(capability)}
-                  onChange={(event) =>
-                    setConsented((current) => {
-                      const next = new Set(current);
-                      if (event.target.checked) {
-                        next.add(capability);
-                      } else {
-                        next.delete(capability);
-                      }
-                      return next;
-                    })
-                  }
-                />{" "}
-                <code>{capability}</code>
-                {said !== undefined && (
-                  <>
-                    {" "}
-                    <span className="sc-muted">
-                      {words.opens}: {said.opens}
-                    </span>
-                    <br />
-                    <span className="sc-capability-reach">
-                      {words.reach}: {said.reach}
-                    </span>
-                  </>
-                )}
-              </label>
-            </li>
-          );
-        })}
-      </ul>
+                  onChange={(on) => setConsented((current) => toggled(current, capability, on))}
+                  name={text.name}
+                  under={text.opens}
+                />
+              );
+            })}
+          </ul>
+        </div>
+      )}
       {needsBoard && (
-        <>
-          <h3 className="sc-section-title">{words.board}</h3>
-          <p className="sc-settings-hint">{words.boardIntro}</p>
+        <div className="sc-plugin-group">
+          <h3 className="sc-plugin-group-title">{settings.board}</h3>
+          <p className="sc-settings-hint">{settings.boardHint}</p>
           <div className="sc-radio-row">
             {detail.boardNeeds === "optional" && (
               <label className="sc-check">
@@ -401,8 +574,8 @@ function EnableForm(props: {
                   name="board"
                   checked={boardMode === "none"}
                   onChange={() => setBoardMode("none")}
-                />{" "}
-                {words.boardNone}
+                />
+                {settings.boardNone}
               </label>
             )}
             <label className="sc-check">
@@ -411,8 +584,8 @@ function EnableForm(props: {
                 name="board"
                 checked={boardMode === "create"}
                 onChange={() => setBoardMode("create")}
-              />{" "}
-              {words.boardCreate}
+              />
+              {settings.boardCreate}
             </label>
             <label className="sc-check">
               <input
@@ -420,15 +593,15 @@ function EnableForm(props: {
                 name="board"
                 checked={boardMode === "choose"}
                 onChange={() => setBoardMode("choose")}
-              />{" "}
-              {words.boardChoose}
+              />
+              {settings.boardChoose}
             </label>
           </div>
           {boardMode === "create" && (
-            <div className="sc-settings-form">
-              <div className="sc-settings-row">
-                <label className="sc-settings-label" htmlFor={ids.key}>
-                  {words.boardKey}
+            <div className="sc-plugin-fields">
+              <div className="sc-field">
+                <label className="sc-field-label" htmlFor={ids.key}>
+                  {settings.boardKey}
                 </label>
                 <input
                   id={ids.key}
@@ -437,9 +610,9 @@ function EnableForm(props: {
                   onChange={(event) => setBoardKey(event.target.value)}
                 />
               </div>
-              <div className="sc-settings-row">
-                <label className="sc-settings-label" htmlFor={ids.name}>
-                  {words.boardName}
+              <div className="sc-field">
+                <label className="sc-field-label" htmlFor={ids.name}>
+                  {settings.boardName}
                 </label>
                 <input
                   id={ids.name}
@@ -448,9 +621,9 @@ function EnableForm(props: {
                   onChange={(event) => setBoardName(event.target.value)}
                 />
               </div>
-              <div className="sc-settings-row">
-                <label className="sc-settings-label" htmlFor={ids.description}>
-                  {words.boardDescription}
+              <div className="sc-field">
+                <label className="sc-field-label" htmlFor={ids.description}>
+                  {settings.boardDescription}
                 </label>
                 <input
                   id={ids.description}
@@ -462,211 +635,253 @@ function EnableForm(props: {
             </div>
           )}
           {boardMode === "choose" && (
-            <div className="sc-settings-row">
-              <label className="sc-settings-label" htmlFor={ids.choose}>
-                {words.boardChoose}
-              </label>
-              <select
-                id={ids.choose}
-                className="sc-input"
-                value={chosen}
-                onChange={(event) => setChosen(event.target.value)}
-              >
-                {props.projects.map((project) => (
-                  <option key={project.key} value={project.key}>
-                    {project.name} ({project.key})
-                  </option>
-                ))}
-              </select>
+            <div className="sc-plugin-fields">
+              <div className="sc-field">
+                <label className="sc-field-label" htmlFor={ids.choose}>
+                  {settings.boardChoose}
+                </label>
+                <select
+                  id={ids.choose}
+                  className="sc-input"
+                  value={chosen}
+                  onChange={(event) => setChosen(event.target.value)}
+                >
+                  {props.projects.map((project) => (
+                    <option key={project.key} value={project.key}>
+                      {project.name} ({project.key})
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           )}
-        </>
+        </div>
       )}
-      <h3 className="sc-section-title">{words.projects}</h3>
-      <div className="sc-radio-row">
-        <label className="sc-check">
-          <input
-            type="radio"
-            name="projects"
-            checked={allProjects}
-            onChange={() => setAllProjects(true)}
-          />{" "}
-          {words.projectsAll}
-        </label>
-        <label className="sc-check">
-          <input
-            type="radio"
-            name="projects"
-            checked={!allProjects}
-            onChange={() => setAllProjects(false)}
-          />{" "}
-          {words.projectsSome}
-        </label>
+      <div className="sc-plugin-group">
+        <h3 className="sc-plugin-group-title">{settings.projects}</h3>
+        <div className="sc-radio-row">
+          <label className="sc-check">
+            <input
+              type="radio"
+              name="projects"
+              checked={allProjects}
+              onChange={() => setAllProjects(true)}
+            />
+            {settings.projectsAll}
+          </label>
+          <label className="sc-check">
+            <input
+              type="radio"
+              name="projects"
+              checked={!allProjects}
+              onChange={() => setAllProjects(false)}
+            />
+            {settings.projectsSome}
+          </label>
+        </div>
+        {!allProjects && (
+          <ul className="sc-plugin-ticks">
+            {props.projects.map((project) => (
+              <TickRow
+                key={project.key}
+                checked={onProjects.has(project.key)}
+                onChange={(on) => setOnProjects((current) => toggled(current, project.key, on))}
+                name={project.name}
+                under={project.key}
+              />
+            ))}
+          </ul>
+        )}
       </div>
-      {!allProjects && (
-        <ul className="sc-list">
-          {props.projects.map((project) => (
-            <li key={project.key}>
-              <label className="sc-check">
-                <input
-                  type="checkbox"
-                  checked={onProjects.has(project.key)}
-                  onChange={(event) =>
-                    setOnProjects((current) => {
-                      const next = new Set(current);
-                      if (event.target.checked) {
-                        next.add(project.key);
-                      } else {
-                        next.delete(project.key);
-                      }
-                      return next;
-                    })
-                  }
-                />{" "}
-                {project.name} <span className="sc-muted">{project.key}</span>
-              </label>
-            </li>
-          ))}
-        </ul>
-      )}
-      <div className="sc-form-actions">
-        <Button
-          type="submit"
-          variant="primary"
-          disabled={props.busy || !everyCapability || !boardReady}
-        >
-          {words.enable}
-        </Button>
-        {!everyCapability && <span className="sc-muted">{words.enableHint}</span>}
+      <div className="sc-plugin-group">
+        <div className="sc-form-actions">
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={props.busy || !everyCapability || !boardReady}
+          >
+            {settings.enable}
+          </Button>
+        </div>
       </div>
     </form>
   );
 }
 
-/** The grants: who holds which role, and the form to grant one more. */
-function GrantsSection(props: {
-  readonly detail: RestPluginDetail;
+/** Who a grant is to, as the chip says it. */
+function holderOf(grant: RestPluginGrant, words: Messages["plugins"]["settings"]): string {
+  if (grant.everyone) {
+    return words.grantEveryone;
+  }
+  if (grant.project !== null) {
+    return words.grantMembersOf(grant.project.name);
+  }
+  if (grant.person !== null) {
+    return personName(grant.person);
+  }
+  return grant.role;
+}
+
+/** A person as the choice names them: the name, with the login where it is another word. */
+function personChoice(person: RestPerson): string {
+  const name = personName(person);
+  return name === person.login ? name : `${name} (${person.login})`;
+}
+
+/**
+ * One role: its name and what it is for; who holds it, every member for the default role and
+ * each grant as a chip with the way to revoke it; and one choice to grant it to a person, the
+ * members of a project or everyone, those who hold it already left out.
+ */
+function RoleRow(props: {
+  readonly role: RestPluginDetail["declaredRoles"][number];
+  readonly isDefault: boolean;
+  readonly grants: readonly RestPluginGrant[];
   readonly projects: readonly RestProject[];
+  readonly people: readonly RestPerson[];
+  readonly language: string;
   readonly busy: boolean;
-  readonly onGrant: (input: {
-    readonly role: string;
-    readonly person?: string;
-    readonly project?: string;
-    readonly everyone?: true;
-  }) => void;
+  readonly onGrant: (input: RestPluginGrantInput) => void;
   readonly onRevoke: (id: string) => void;
 }) {
-  const words = useWords().plugins.settings;
-  const { detail } = props;
-  const [role, setRole] = useState(detail.declaredRoles[0]?.key ?? "");
-  const [to, setTo] = useState<"person" | "project" | "everyone">("person");
-  const [login, setLogin] = useState("");
-  const [projectKey, setProjectKey] = useState(props.projects[0]?.key ?? "");
-  const ids = { role: useId(), to: useId(), who: useId() };
+  const settings = useWords().plugins.settings;
+  const [whom, setWhom] = useState("");
+  const id = useId();
+  const { role, grants } = props;
+  const everyoneHas = grants.some((grant) => grant.everyone);
+  const projectsWith = new Set(
+    grants.flatMap((grant) => (grant.project === null ? [] : [grant.project.key])),
+  );
+  const peopleWith = new Set(
+    grants.flatMap((grant) => (grant.person === null ? [] : [grant.person.id])),
+  );
+  const projects = props.projects.filter((project) => !projectsWith.has(project.key));
+  const people = props.people.filter(
+    (person) => person.status === "active" && !peopleWith.has(person.id),
+  );
+  const description = pluginWord(role.description, props.language);
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (to === "everyone") {
-      props.onGrant({ role, everyone: true });
-    } else if (to === "project") {
-      props.onGrant({ role, project: projectKey });
-    } else {
-      props.onGrant({ role, person: login.trim() });
+    if (whom === "everyone") {
+      props.onGrant({ role: role.key, everyone: true });
+    } else if (whom.startsWith("project:")) {
+      props.onGrant({ role: role.key, project: whom.slice("project:".length) });
+    } else if (whom.startsWith("person:")) {
+      props.onGrant({ role: role.key, person: whom.slice("person:".length) });
     }
+    setWhom("");
   };
   return (
-    <section className="sc-panel" aria-label={words.grants}>
-      <h2 className="sc-section-title">{words.grants}</h2>
-      <p className="sc-settings-hint">{words.grantsIntro}</p>
-      {detail.grants === null || detail.grants.length === 0 ? (
-        <p className="sc-muted">{words.noGrants}</p>
-      ) : (
-        <ul className="sc-task-rows">
-          {detail.grants.map((grant) => (
-            <li key={grant.id} className="sc-task-row">
-              <span className="sc-task-row-title">
-                <Badge tone="neutral">{grant.role}</Badge>{" "}
-                {grant.person !== null
-                  ? grant.person.login
-                  : grant.project !== null
-                    ? `${grant.project.name} (${grant.project.key})`
-                    : words.grantEveryone}
-              </span>
-              <span className="sc-task-row-meta">
-                <Time iso={grant.createdAt} />
+    <li className="sc-plugin-role">
+      <div>
+        <p className="sc-plugin-role-name">
+          {pluginWord(role.name, props.language)}
+          <code className="sc-plugin-role-key">{role.key}</code>
+          {props.isDefault && <Badge tone="accent">{settings.roleDefault}</Badge>}
+        </p>
+        {description !== "" && <p className="sc-settings-hint">{description}</p>}
+      </div>
+      <div>
+        <div className="sc-plugin-holders">
+          {props.isDefault && (
+            <span className="sc-plugin-holder sc-plugin-holder-fixed">{settings.everyMember}</span>
+          )}
+          {grants.map((grant) => {
+            const holder = holderOf(grant, settings);
+            return (
+              <span key={grant.id} className="sc-plugin-holder">
+                {holder}
                 <Button
                   size="sm"
                   variant="ghost"
                   disabled={props.busy}
                   onClick={() => props.onRevoke(grant.id)}
+                  aria-label={`${settings.revoke}: ${holder}`}
+                  title={settings.revoke}
                 >
-                  {words.revoke}
+                  ×
                 </Button>
               </span>
-            </li>
-          ))}
-        </ul>
-      )}
-      {detail.declaredRoles.length > 0 && (
-        <form className="sc-form sc-inline-form" onSubmit={submit}>
-          <label htmlFor={ids.role} className="sc-visually-hidden">
-            {words.grantRole}
+            );
+          })}
+        </div>
+        <form className="sc-plugin-grant" onSubmit={submit}>
+          <label htmlFor={id} className="sc-visually-hidden">
+            {settings.grantWhom}
           </label>
           <select
-            id={ids.role}
-            className="sc-input"
-            value={role}
-            onChange={(event) => setRole(event.target.value)}
+            id={id}
+            className="sc-input sc-plugin-grant-input"
+            value={whom}
+            onChange={(event) => setWhom(event.target.value)}
           >
-            {detail.declaredRoles.map((declared) => (
-              <option key={declared.key} value={declared.key}>
-                {declared.key}
-              </option>
-            ))}
+            <option value="">{settings.grantWhom}</option>
+            {!props.isDefault && !everyoneHas && (
+              <option value="everyone">{settings.grantEveryone}</option>
+            )}
+            {projects.length > 0 && (
+              <optgroup label={settings.grantProjects}>
+                {projects.map((project) => (
+                  <option key={project.key} value={`project:${project.key}`}>
+                    {project.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {people.length > 0 && (
+              <optgroup label={settings.grantPeople}>
+                {people.map((person) => (
+                  <option key={person.id} value={`person:${person.id}`}>
+                    {personChoice(person)}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
-          <label htmlFor={ids.to} className="sc-visually-hidden">
-            {words.grantTo}
-          </label>
-          <select
-            id={ids.to}
-            className="sc-input"
-            value={to}
-            onChange={(event) => setTo(event.target.value as "person" | "project" | "everyone")}
-          >
-            <option value="person">{words.grantPerson}</option>
-            <option value="project">{words.grantProject}</option>
-            <option value="everyone">{words.grantEveryone}</option>
-          </select>
-          {to === "person" && (
-            <input
-              id={ids.who}
-              className="sc-input"
-              value={login}
-              placeholder={words.grantPerson}
-              onChange={(event) => setLogin(event.target.value)}
-            />
-          )}
-          {to === "project" && (
-            <select
-              id={ids.who}
-              className="sc-input"
-              value={projectKey}
-              onChange={(event) => setProjectKey(event.target.value)}
-            >
-              {props.projects.map((project) => (
-                <option key={project.key} value={project.key}>
-                  {project.name} ({project.key})
-                </option>
-              ))}
-            </select>
-          )}
-          <Button
-            type="submit"
-            size="sm"
-            disabled={props.busy || role === "" || (to === "person" && login.trim() === "")}
-          >
-            {words.grant}
+          <Button type="submit" disabled={props.busy || whom === ""}>
+            {settings.grant}
           </Button>
         </form>
+      </div>
+    </li>
+  );
+}
+
+/** The roles the plugin declares, each with who holds it; a plugin without roles is every member's. */
+function RolesSection(props: {
+  readonly detail: RestPluginDetail;
+  readonly projects: readonly RestProject[];
+  readonly people: readonly RestPerson[];
+  readonly language: string;
+  readonly busy: boolean;
+  readonly onGrant: (input: RestPluginGrantInput) => void;
+  readonly onRevoke: (id: string) => void;
+}) {
+  const settings = useWords().plugins.settings;
+  const { detail } = props;
+  const grants = detail.grants ?? [];
+  return (
+    <section className="sc-panel" aria-label={settings.roles}>
+      <h2 className="sc-section-title">{settings.roles}</h2>
+      {detail.declaredRoles.length === 0 ? (
+        <p className="sc-settings-hint">{settings.rolesNone}</p>
+      ) : (
+        <ul className="sc-plugin-roles">
+          {detail.declaredRoles.map((role) => (
+            <RoleRow
+              key={role.key}
+              role={role}
+              isDefault={detail.defaultRole === role.key}
+              grants={grants.filter((grant) => grant.role === role.key)}
+              projects={props.projects}
+              people={props.people}
+              language={props.language}
+              busy={props.busy}
+              onGrant={props.onGrant}
+              onRevoke={props.onRevoke}
+            />
+          ))}
+        </ul>
       )}
     </section>
   );
@@ -702,69 +917,43 @@ export function PluginSettingsView(props: PluginSettingsViewProps) {
       await props.onChanged();
     });
   const enabled = detail.state === "enabled";
+  const canEnable =
+    detail.state === "installed" || detail.state === "disabled" || detail.state === "needs_consent";
   return (
     <>
       <div className="sc-page-head">
-        <h1 className="sc-page-title">{pluginWord(detail.name, language)}</h1>
-        <Badge tone={STATE_TONES[detail.state]}>
-          {words.vocabulary.pluginState[detail.state] ?? detail.state}
-        </Badge>
+        <div className="sc-page-heading">
+          <h1 className="sc-page-title">{pluginWord(detail.name, language)}</h1>
+          <Badge tone={STATE_TONES[detail.state]}>
+            {words.vocabulary.pluginState[detail.state] ?? detail.state}
+          </Badge>
+          <span className="sc-muted">
+            <code>{detail.key}</code> {detail.version}
+          </span>
+        </div>
+        {enabled && (
+          <div className="sc-page-actions">
+            <Button size="sm" disabled={busy} onClick={() => change(() => plugin.disable())}>
+              {settings.disable}
+            </Button>
+          </div>
+        )}
       </div>
       <p className="sc-lead">{pluginWord(detail.description, language)}</p>
       {error !== undefined && <Callout tone="danger">{error}</Callout>}
-      <section className="sc-panel" aria-label={settings.state}>
-        <dl className="sc-facts">
-          <dt>{settings.byKey("")}</dt>
-          <dd>
-            <code>{detail.key}</code>
-          </dd>
-          <dt>{settings.version}</dt>
-          <dd>{detail.version}</dd>
-          {detail.agentNote !== null && (
-            <>
-              <dt>{settings.agentNote}</dt>
-              <dd>{pluginWord(detail.agentNote, language)}</dd>
-            </>
-          )}
-          {detail.board !== null && (
-            <>
-              <dt>{settings.board}</dt>
-              <dd>
-                {detail.board.name} <span className="sc-muted">{detail.board.key}</span>
-              </dd>
-            </>
-          )}
-          {detail.projects !== null && (
-            <>
-              <dt>{settings.projects}</dt>
-              <dd>
-                {detail.projects === "all" ? settings.projectsAll : detail.projects.join(", ")}
-              </dd>
-            </>
-          )}
-          <dt>{settings.yourRoles}</dt>
-          <dd>{detail.roles.length === 0 ? "—" : detail.roles.join(", ")}</dd>
-          <dt>{settings.operations}</dt>
-          <dd>
-            {detail.operations.length === 0
-              ? "—"
-              : detail.operations.map((operation) => operation.name).join(", ")}
-          </dd>
-        </dl>
-        {detail.problems.length > 0 && (
-          <Callout tone="danger" title={settings.problems}>
-            <ul className="sc-list">
-              {detail.problems.map((problem) => (
-                <li key={problem}>{problem}</li>
-              ))}
-            </ul>
-          </Callout>
-        )}
-      </section>
-      {(detail.state === "installed" ||
-        detail.state === "disabled" ||
-        detail.state === "needs_consent") && (
+      {detail.problems.length > 0 && (
+        <Callout tone="danger" title={settings.problems}>
+          <ul className="sc-plugin-problems">
+            {detail.problems.map((problem) => (
+              <li key={problem}>{problem}</li>
+            ))}
+          </ul>
+        </Callout>
+      )}
+      <Overview detail={detail} projects={props.projects} language={language} />
+      {canEnable && (
         <section className="sc-panel sc-panel-form" aria-label={settings.enable}>
+          <h2 className="sc-section-title">{settings.enable}</h2>
           <EnableForm
             detail={detail}
             projects={props.projects}
@@ -774,75 +963,39 @@ export function PluginSettingsView(props: PluginSettingsViewProps) {
           />
         </section>
       )}
-      {enabled && (
-        <section className="sc-panel" aria-label={settings.capabilities}>
-          <h2 className="sc-section-title">{settings.capabilities}</h2>
-          {detail.consent !== null && detail.consent.length > 0 ? (
-            <ul className="sc-list">
-              {detail.consent.map((capability) => (
-                <li key={capability}>
-                  <code>{capability}</code>
-                  <span className="sc-muted"> {capabilityWords(capability)?.opens ?? ""}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="sc-muted">—</p>
-          )}
-          <div className="sc-form-actions">
-            <Button
-              variant="secondary"
-              disabled={busy}
-              onClick={() => change(() => plugin.disable())}
-            >
-              {settings.disable}
-            </Button>
-          </div>
-        </section>
-      )}
       {enabled && detail.settings.length > 0 && (
         <section className="sc-panel sc-panel-form" aria-label={settings.settingsForm}>
           <h2 className="sc-section-title">{settings.settingsForm}</h2>
-          <SettingsForm
-            detail={detail}
-            language={language}
-            busy={busy}
-            onSave={(values) => change(() => plugin.updateSettings({ values }))}
-          />
-          {detail.settings
-            .filter((setting) => setting.type === "secret")
-            .map((setting) => (
-              <SecretRow
-                key={setting.key}
-                setting={setting}
-                language={language}
-                busy={busy}
-                onSet={(value) => change(() => plugin.setSecret(setting.key, value))}
-                onRemove={() => change(() => plugin.removeSecret(setting.key))}
-              />
-            ))}
+          <div>
+            <SettingsForm
+              detail={detail}
+              language={language}
+              busy={busy}
+              onSave={(values) => change(() => plugin.updateSettings({ values }))}
+            />
+            {detail.settings
+              .filter((setting) => setting.type === "secret")
+              .map((setting) => (
+                <SecretRow
+                  key={setting.key}
+                  setting={setting}
+                  language={language}
+                  busy={busy}
+                  onSet={(value) => change(() => plugin.setSecret(setting.key, value))}
+                  onRemove={() => change(() => plugin.removeSecret(setting.key))}
+                />
+              ))}
+          </div>
         </section>
       )}
       {detail.grants !== null && (
-        <GrantsSection
+        <RolesSection
           detail={detail}
           projects={props.projects}
+          people={props.people}
+          language={language}
           busy={busy}
-          onGrant={(input) =>
-            change(async () => {
-              if (input.person !== undefined) {
-                const found = await client.findPerson(input.person);
-                if (found === undefined) {
-                  throw new Error(`No person has the login ${input.person}.`);
-                }
-                await plugin.grant({ role: input.role, person: found.id });
-              } else if (input.project !== undefined) {
-                await plugin.grant({ role: input.role, project: input.project });
-              } else {
-                await plugin.grant({ role: input.role, everyone: true });
-              }
-            })
-          }
+          onGrant={(input) => change(() => plugin.grant(input))}
           onRevoke={(id) => change(() => plugin.revoke(id))}
         />
       )}
@@ -854,38 +1007,57 @@ export function PluginSettingsView(props: PluginSettingsViewProps) {
           <EventFeed events={events} empty={<p className="sc-muted">{settings.noEvents}</p>} />
         )}
       </section>
-      <section className="sc-panel" aria-label={settings.purge}>
-        <h2 className="sc-section-title">{settings.purge}</h2>
-        <p className="sc-settings-hint">{settings.purgeIntro}</p>
-        <div className="sc-form-actions">
-          <LinkButton href={`/api/v1/plugins/${detail.key}/export`} variant="secondary">
-            {settings.exportLink}
-          </LinkButton>
+      <section className="sc-panel sc-panel-form" aria-label={settings.data}>
+        <h2 className="sc-section-title">{settings.data}</h2>
+        <div>
+          <div className="sc-settings-row">
+            <div className="sc-settings-words">
+              <p className="sc-settings-label">{settings.export}</p>
+              <p className="sc-settings-hint">{settings.exportHint}</p>
+            </div>
+            <div className="sc-settings-control">
+              <LinkButton href={`/api/v1/plugins/${detail.key}/export`}>
+                {settings.exportLink}
+              </LinkButton>
+            </div>
+          </div>
+          <div className="sc-settings-row">
+            <div className="sc-settings-words">
+              <p className="sc-settings-label">{settings.purge}</p>
+              <p className="sc-settings-hint">{settings.purgeHint}</p>
+            </div>
+            <div className="sc-settings-control">
+              {purged ? (
+                <p className="sc-settings-hint">{settings.purged}</p>
+              ) : enabled ? (
+                <p className="sc-settings-hint">{settings.purgeDisabledFirst}</p>
+              ) : (
+                <form
+                  className="sc-plugin-line"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void act(async () => {
+                      await plugin.purge(confirm);
+                      setPurged(true);
+                      props.onPurged();
+                    });
+                  }}
+                >
+                  <input
+                    className="sc-input sc-plugin-line-input"
+                    value={confirm}
+                    placeholder={settings.purgeConfirm(detail.key)}
+                    aria-label={settings.purgeConfirm(detail.key)}
+                    onChange={(event) => setConfirm(event.target.value)}
+                  />
+                  <Button type="submit" variant="danger" disabled={busy || confirm !== detail.key}>
+                    {settings.purge}
+                  </Button>
+                </form>
+              )}
+            </div>
+          </div>
         </div>
-        {!enabled && !purged && (
-          <form
-            className="sc-form sc-inline-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void act(async () => {
-                await plugin.purge(confirm);
-                setPurged(true);
-                props.onPurged();
-              });
-            }}
-          >
-            <input
-              className="sc-input"
-              value={confirm}
-              placeholder={settings.purgeConfirm(detail.key)}
-              onChange={(event) => setConfirm(event.target.value)}
-            />
-            <Button type="submit" variant="danger" disabled={busy || confirm !== detail.key}>
-              {settings.purge}
-            </Button>
-          </form>
-        )}
-        {purged && <p className="sc-muted">{settings.purged}</p>}
       </section>
     </>
   );

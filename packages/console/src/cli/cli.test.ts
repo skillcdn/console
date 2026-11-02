@@ -3468,6 +3468,7 @@ describe("the plugins on the command line (ADR-0049, ADR-0053)", () => {
     problems: [],
     roles: ["greeter"],
     declaredRoles: [{ key: "greeter", name: { en: "Greeter" }, description: { en: "Greets." } }],
+    defaultRole: "greeter",
     menu: null,
     pages: [],
     widgets: [],

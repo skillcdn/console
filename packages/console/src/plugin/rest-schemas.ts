@@ -110,6 +110,8 @@ export const restPluginSchema = z.object({
   roles: z.array(z.string()),
   /** The roles the plugin declares, by key, with their names. */
   declaredRoles: z.array(z.object({ key: z.string(), name: localized, description: localized })),
+  /** The role every member holds without a grant, or `null` where the manifest names none. */
+  defaultRole: z.nullable(z.string()),
   menu: z.nullable(z.object({ group: z.string(), order: z.int(), name: z.nullable(localized) })),
   /** The pages and widgets the asker may see. */
   pages: z.array(restPluginPageSchema),

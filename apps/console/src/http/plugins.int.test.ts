@@ -116,6 +116,7 @@ describe("the plugins' routes", () => {
       name: { en: "Hello" },
       roles: ["greeter"],
       declaredRoles: [{ key: "greeter" }],
+      defaultRole: "greeter",
       menu: { group: "operations", order: 100, name: null },
       pages: [{ key: "greetings", level: "workspace", wide: false }],
       widgets: [{ key: "latest", place: "home:top", size: "third" }],

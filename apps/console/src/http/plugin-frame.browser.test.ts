@@ -181,6 +181,8 @@ describe("the example plugin in a browser", () => {
     await page.waitForSelector("text=hello 0.1.0");
     await page.goto(`${console_.origin}/settings/plugins/hello`);
     await page.waitForSelector("text=Greetings kept as records");
+    // Its one role is the default one: every member's, which the roles say without a grant.
+    await page.waitForSelector("text=Every member");
     await page.context().close();
   });
 
