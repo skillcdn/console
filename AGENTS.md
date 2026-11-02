@@ -66,7 +66,7 @@ Run everything from the repository root through pnpm. Do not use `npm`, `npx` or
 | The REST schemas as built break nothing of the snapshot taken at the floors: a field removed, made required or narrowed on what the command sends, widened on what it reads, fails unless the floors moved (part of `pnpm check`, after the build; [ADR-0043](docs/adr/0043-the-rest-contract-is-held-to-a-snapshot-taken-at-the-floors.md)) | `pnpm check:rest`; `pnpm snapshot:rest` takes the snapshot again, in the change that moves a floor |
 | Local PostgreSQL, and a bucket with the S3 API for the tests of the blob store | `docker compose -f deploy/compose.dev.yaml up -d` |
 | The plugins' frame in a real browser: what only a browser enforces of its policy and its sandbox, seen enforced (apart from `pnpm check`; CI runs it as a job of its own) | `pnpm test:browser`, once `pnpm --filter @skillcdn/console-app exec playwright install chromium` has put a Chromium on the machine |
-| The console on this machine for a person to look at the plugins' pages: the default UI, the example plugin enabled, the fixture's people signing in from the browser, a database of its own that goes with it | `pnpm dev:plugins`, then the addresses it prints |
+| The console on this machine for a person to look at the plugins' pages: the default UI, the example plugin enabled, the fixtures `leave` and `gate` installed for the settings pages to have a plugin to enable, the fixture's people signing in from the browser, a database of its own that goes with it | `pnpm dev:plugins`, then the addresses it prints |
 
 Packages compile to `dist/` and consume each other's compiled output. Going through `turbo` builds upstream packages first; calling a package script directly can test against a stale `dist/`.
 

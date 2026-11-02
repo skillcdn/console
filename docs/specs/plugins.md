@@ -223,7 +223,7 @@ Declared in the manifest, consented to by an administrator when enabling, enforc
 
 ## Settings
 
-The form on `/settings/plugins/<key>` and `console plugin <key> settings --set` come from the manifest's `settings`. A `secret` is sealed with the deployment's secret (`AUTH_SECRET`, with the purpose `plugin-secret`), never returned by any route or shown in any form (only whether and when it was set), and used by the console where the plugin names it: `ctx.fetch`'s `secret`, `ctx.secrets.sign` and `verify`, a webhook's `secret`. A deployment without `AUTH_SECRET` refuses settings of type `secret`. `person` and `project` settings hold ids and are shown as names; a person who left or a project put away makes the setting invalid, which the pages show. Settings are the workspace's; a plugin that needs a value per project keeps a record linked to the project.
+The form on `/settings/plugins/<key>` and `console plugin <key> settings --set` come from the manifest's `settings`. A `secret` is sealed with the deployment's secret (`AUTH_SECRET`, with the purpose `plugin-secret`), never returned by any route or shown in any form (only whether and when it was set), and used by the console where the plugin names it: `ctx.fetch`'s `secret`, `ctx.secrets.sign` and `verify`, a webhook's `secret`. A deployment without `AUTH_SECRET` refuses settings of type `secret`. `person` and `project` settings hold ids and are shown as names, chosen on the page among the workspace's people and projects; a person who left or a project put away makes the setting invalid, which the pages show. Settings are the workspace's; a plugin that needs a value per project keeps a record linked to the project.
 
 ## Records
 

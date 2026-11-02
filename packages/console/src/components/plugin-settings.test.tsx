@@ -13,6 +13,7 @@ import { capabilityText, PluginSettingsView } from "./plugin-settings.js";
 const BOB = "0199c4d8-0000-7000-8000-000000000002";
 const CAROL = "0199c4d8-0000-7000-8000-000000000003";
 const DAVE = "0199c4d8-0000-7000-8000-000000000004";
+const WEB = "0199c4d8-0000-7000-8000-000000000011";
 
 const DETAIL: RestPluginDetail = {
   key: "leave",
@@ -83,6 +84,36 @@ const DETAIL: RestPluginDetail = {
       value: 20,
       setAt: null,
     },
+    {
+      key: "hrContact",
+      type: "person",
+      name: { en: "HR contact" },
+      description: null,
+      required: false,
+      default: null,
+      min: null,
+      max: null,
+      options: null,
+      of: null,
+      set: true,
+      value: BOB,
+      setAt: null,
+    },
+    {
+      key: "archive",
+      type: "project",
+      name: { en: "Archive project" },
+      description: null,
+      required: false,
+      default: null,
+      min: null,
+      max: null,
+      options: null,
+      of: null,
+      set: true,
+      value: WEB,
+      setAt: null,
+    },
   ],
   grants: [
     {
@@ -98,8 +129,8 @@ const DETAIL: RestPluginDetail = {
 };
 
 const PROJECTS = [
-  { key: "web", name: "Web" },
-  { key: "ops", name: "Ops" },
+  { id: WEB, key: "web", name: "Web" },
+  { id: "0199c4d8-0000-7000-8000-000000000012", key: "ops", name: "Ops" },
 ] as unknown as readonly RestProject[];
 
 const PEOPLE = [
@@ -136,7 +167,7 @@ describe("a plugin's settings page", () => {
     // The head: the name in the person's language, the key and the version, the way to disable.
     expect(html).toContain('<h1 class="sc-page-title">연차</h1>');
     expect(html).toContain("<code>leave</code> 1.2.0");
-    expect(html).toContain(">끄기</button>");
+    expect(html).toContain(">비활성화</button>");
     // The rows: the board project, every project, the capabilities by name with what each opens.
     expect(html).toContain('Leave <span class="sc-muted">leave-board</span>');
     expect(html).toContain("모든 프로젝트");
@@ -150,6 +181,9 @@ describe("a plugin's settings page", () => {
     expect(html).toContain('value="20"');
     expect(html).toContain("설정됨");
     expect(html).toContain('type="password"');
+    // A person and a project are chosen by name and held as ids.
+    expect(html).toContain(`<option value="${BOB}" selected="">Bob (bob)</option>`);
+    expect(html).toContain(`<option value="${WEB}" selected="">Web (web)</option>`);
     // The roles: the default one is every member's; a grant is a chip with the way to revoke it.
     expect(html).toContain("직원");
     expect(html).toContain("모든 멤버");
@@ -161,7 +195,7 @@ describe("a plugin's settings page", () => {
     expect(html).not.toContain(`value="person:${DAVE}"`);
     expect(html).toContain("carol</option>");
     // The purge waits for the plugin to be disabled.
-    expect(html).toContain("끈 뒤에 지울 수 있습니다.");
+    expect(html).toContain("삭제하려면 먼저 비활성화하세요.");
     expect(html).not.toContain('placeholder="leave 입력"');
     // Nothing explains itself in a paragraph.
     expect(html).not.toContain("악의적");
@@ -169,19 +203,19 @@ describe("a plugin's settings page", () => {
 
   it("offers a disabled plugin the form that enables it, what was consented to before ticked, and the purge", () => {
     const html = render({ ...DETAIL, state: "disabled", consent: ["board:read"], board: null });
-    expect(html).not.toContain(">끄기</button>");
+    expect(html).not.toContain(">비활성화</button>");
     // One box per capability, the one consented to before ticked; the button waits for the rest.
     expect(count(html, 'type="checkbox"')).toBe(3);
     expect(count(html, 'type="checkbox" checked=""')).toBe(1);
     expect(html).toContain(
-      '<button disabled="" type="submit" class="sc-button sc-button-primary">켜기</button>',
+      '<button disabled="" type="submit" class="sc-button sc-button-primary">활성화</button>',
     );
     // A required board: a new project from the defaults, or an existing one; never none.
     expect(count(html, 'name="board"')).toBe(2);
     expect(html).toContain('value="leave-board"');
     // The purge, once the key is typed.
     expect(html).toContain('placeholder="leave 입력"');
-    expect(html).not.toContain("끈 뒤에 지울 수 있습니다.");
+    expect(html).not.toContain("삭제하려면 먼저 비활성화하세요.");
   });
 
   it("says why a plugin cannot run, and that a plugin without roles is every member's", () => {
@@ -196,7 +230,7 @@ describe("a plugin's settings page", () => {
     expect(html).toContain("실행할 수 없는 이유");
     expect(html).toContain("the server did not start");
     expect(html).toContain("역할이 없어 모든 멤버가 쓸 수 있습니다.");
-    expect(html).not.toContain(">켜기</button>");
+    expect(html).not.toContain(">활성화</button>");
   });
 });
 

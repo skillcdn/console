@@ -272,16 +272,57 @@ function Overview(props: {
   );
 }
 
-/** A setting's control, by its type; a secret has a row of its own below. */
+/**
+ * A setting's control, by its type: a person or a project is chosen among the workspace's, by
+ * name, and held as its id; a secret has a row of its own below.
+ */
 function SettingControl(props: {
   readonly setting: RestPluginSetting;
   readonly value: unknown;
   readonly onChange: (value: unknown) => void;
   readonly id: string;
   readonly language: string;
+  readonly people: readonly RestPerson[];
+  readonly projects: readonly RestProject[];
 }) {
   const { setting, value, onChange, id } = props;
+  const chosen = typeof value === "string" ? value : "";
+  const choose = (event: { readonly target: { readonly value: string } }) =>
+    onChange(event.target.value === "" ? null : event.target.value);
   switch (setting.type) {
+    case "person": {
+      // The people in; the one chosen stays listed when they have left, so that the value shows.
+      const people = props.people.filter(
+        (person) => person.status === "active" || person.id === chosen,
+      );
+      return (
+        <select id={id} className="sc-input" value={chosen} onChange={choose}>
+          <option value="">—</option>
+          {people.map((person) => (
+            <option key={person.id} value={person.id}>
+              {personChoice(person)}
+            </option>
+          ))}
+          {chosen !== "" && !people.some((person) => person.id === chosen) && (
+            <option value={chosen}>{chosen}</option>
+          )}
+        </select>
+      );
+    }
+    case "project":
+      return (
+        <select id={id} className="sc-input" value={chosen} onChange={choose}>
+          <option value="">—</option>
+          {props.projects.map((project) => (
+            <option key={project.id} value={project.id}>
+              {project.name} ({project.key})
+            </option>
+          ))}
+          {chosen !== "" && !props.projects.some((project) => project.id === chosen) && (
+            <option value={chosen}>{chosen}</option>
+          )}
+        </select>
+      );
     case "boolean":
       return (
         <input
@@ -369,6 +410,8 @@ function SettingsForm(props: {
   readonly detail: RestPluginDetail;
   readonly language: string;
   readonly busy: boolean;
+  readonly people: readonly RestPerson[];
+  readonly projects: readonly RestProject[];
   readonly onSave: (values: Record<string, unknown>) => void;
 }) {
   const words = useWords();
@@ -407,6 +450,8 @@ function SettingsForm(props: {
               value={values[setting.key]}
               id={`${prefix}-${setting.key}`}
               language={props.language}
+              people={props.people}
+              projects={props.projects}
               onChange={(value) => setValues((current) => ({ ...current, [setting.key]: value }))}
             />
           </div>
@@ -971,6 +1016,8 @@ export function PluginSettingsView(props: PluginSettingsViewProps) {
               detail={detail}
               language={language}
               busy={busy}
+              people={props.people}
+              projects={props.projects}
               onSave={(values) => change(() => plugin.updateSettings({ values }))}
             />
             {detail.settings

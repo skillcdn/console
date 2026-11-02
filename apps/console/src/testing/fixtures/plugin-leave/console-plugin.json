@@ -34,6 +34,62 @@
       "type": "secret",
       "name": { "en": "API token" },
       "description": { "en": "What the outbound requests carry." }
+    },
+    {
+      "key": "daysPerYear",
+      "type": "number",
+      "name": { "en": "Days a year" },
+      "description": { "en": "What a full year gives." },
+      "default": 15,
+      "min": 0,
+      "max": 60
+    },
+    {
+      "key": "approvalNeeded",
+      "type": "boolean",
+      "name": { "en": "Approval needed" },
+      "default": true
+    },
+    {
+      "key": "accrual",
+      "type": "enum",
+      "name": { "en": "Accrual" },
+      "options": [
+        { "value": "yearly", "name": { "en": "All at the start of the year" } },
+        { "value": "monthly", "name": { "en": "A twelfth each month" } }
+      ],
+      "default": "yearly"
+    },
+    {
+      "key": "yearStart",
+      "type": "day",
+      "name": { "en": "Year starts" },
+      "description": { "en": "The first day of the leave year." }
+    },
+    {
+      "key": "holidays",
+      "type": "list",
+      "of": "day",
+      "name": { "en": "Holidays" },
+      "description": { "en": "Days that take no leave." }
+    },
+    {
+      "key": "notice",
+      "type": "markdown",
+      "name": { "en": "Notice" },
+      "description": { "en": "Shown on the request page." }
+    },
+    {
+      "key": "hrContact",
+      "type": "person",
+      "name": { "en": "HR contact" },
+      "description": { "en": "Who answers questions about leave." }
+    },
+    {
+      "key": "archive",
+      "type": "project",
+      "name": { "en": "Archive project" },
+      "description": { "en": "Where the year's requests are filed." }
     }
   ]
 }

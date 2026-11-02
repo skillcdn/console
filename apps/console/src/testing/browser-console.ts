@@ -20,12 +20,21 @@ import { RecordStore } from "../plugins/records.js";
 import { Plugins } from "../plugins/registry.js";
 import { createFixtureProvider, type FixtureProvider } from "./fixture-provider.js";
 import { createHarness, type Harness } from "./harness.js";
-import { HELLO_PLUGIN_DIR, HOST_ENTRY, hostEnvironment, writePluginsDir } from "./plugins.js";
+import {
+  GATE_PLUGIN_DIR,
+  HELLO_PLUGIN_DIR,
+  HOST_ENTRY,
+  hostEnvironment,
+  LEAVE_PLUGIN_DIR,
+  writePluginsDir,
+} from "./plugins.js";
 
 // Test support: the console as a real browser meets it, listening on this machine with the
-// default UI, the example plugin enabled, and the fixture's people, who sign in from the
-// browser. For what only a browser enforces of a plugin's frame (docs/specs/plugins.md, "The
-// frame"), and for a person to look at the plugins' pages. Not compiled.
+// default UI, the example plugin enabled, two of the fixtures installed and not enabled, and the
+// fixture's people, who sign in from the browser. For what only a browser enforces of a plugin's
+// frame (docs/specs/plugins.md, "The frame"), and for a person to look at the plugins' pages,
+// the settings pages included: the fixtures ask capabilities, a board project, secrets and
+// roles, which the example does not. Not compiled.
 
 /** The build of the default UI, which `pnpm build` writes. */
 const WEB_DIST = fileURLToPath(new URL("../../web/dist/", import.meta.url));
@@ -92,6 +101,8 @@ export async function startBrowserConsole(options: BrowserConsoleOptions): Promi
   const testDatabase = await createTestDatabase(options.databaseUrl ?? DEV_DATABASE_URL);
   const root = await writePluginsDir(await mkdtemp(join(tmpdir(), "console-browser-")), [
     { name: HELLO_PLUGIN_NAME, dir: HELLO_PLUGIN_DIR },
+    { name: "console-plugin-leave", dir: LEAVE_PLUGIN_DIR },
+    { name: "console-plugin-gate", dir: GATE_PLUGIN_DIR },
   ]);
   const logger = pino({ level: "warn" }, { write: () => {} });
   const holder: { current: Plugins | undefined } = { current: undefined };
@@ -142,6 +153,11 @@ export async function startBrowserConsole(options: BrowserConsoleOptions): Promi
       web,
     });
     const admin = await harness.signIn(BROWSER_ADMIN);
+    // The members too, once each, so that the people the fixture knows are the workspace's
+    // people before any of them signs in from the browser: someone to grant a role or to name
+    // in a setting.
+    await harness.signIn("bob");
+    await harness.signIn("carol");
     const enabled = await harness.request(pluginPath("hello", "enable"), {
       method: "POST",
       headers: { cookie: admin, origin, "content-type": "application/json" },

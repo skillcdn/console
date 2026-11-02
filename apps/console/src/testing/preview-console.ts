@@ -2,9 +2,11 @@ import process from "node:process";
 import { BROWSER_ADMIN, startBrowserConsole } from "./browser-console.js";
 
 // The console on this machine for a person to look at the plugins' pages: the default UI, the
-// example plugin enabled, the fixture's people signing in from the browser at the addresses
-// printed, and a database of its own that goes when this ends. `pnpm dev:plugins`, which builds
-// first; `--port <n>` for another port. Not compiled.
+// example plugin enabled, the fixtures leave and gate installed for the settings pages to have
+// a plugin to enable with its capabilities, board project, secrets and roles, the fixture's
+// people signing in from the browser at the addresses printed, and a database of its own that
+// goes when this ends. `pnpm dev:plugins`, which builds first; `--port <n>` for another port.
+// Not compiled.
 
 const DEFAULT_PORT = 11200;
 
@@ -24,7 +26,7 @@ const started = await startBrowserConsole({
   env: process.env,
 });
 const lines = [
-  `The console, with the example plugin enabled: ${started.origin}`,
+  `The console, with the example plugin enabled and the fixtures leave and gate installed: ${started.origin}`,
   `  sign in as ${BROWSER_ADMIN}, an administrator: ${started.signInUrl(BROWSER_ADMIN)}`,
   `  as a member: ${started.signInUrl("bob")} or ${started.signInUrl("carol")}`,
   "  Ctrl-C ends it and drops its database.",
