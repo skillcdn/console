@@ -22,6 +22,15 @@ export interface FixtureProvider extends IdentityProvider {
 export const FIXTURE_WEB_URL = "https://git.test";
 export const FIXTURE_ACCOUNTS_URL = "https://accounts.test";
 
+export interface FixtureProviderOptions {
+  /**
+   * Where the provider sends a browser to authorize, in place of the fixture's own host, which
+   * no browser reaches: for a console a real browser signs in at, a route of the test's own that
+   * answers as the host would, with the code for the person whose sign-in it is.
+   */
+  readonly authorize?: (() => string) | undefined;
+}
+
 const PEOPLE: Readonly<Record<ProviderKey, Readonly<Record<string, ProviderAccount>>>> = {
   gh: {
     alice: {
@@ -64,7 +73,10 @@ const PEOPLE: Readonly<Record<ProviderKey, Readonly<Record<string, ProviderAccou
   },
 };
 
-export function createFixtureProvider(key: ProviderKey = "gh"): FixtureProvider {
+export function createFixtureProvider(
+  key: ProviderKey = "gh",
+  options: FixtureProviderOptions = {},
+): FixtureProvider {
   const people = PEOPLE[key];
   const calls = { exchangeCode: 0, getAccount: 0 };
   /** What a sign-in was started with, by its state: the challenge a code is redeemed against. */
@@ -105,8 +117,11 @@ export function createFixtureProvider(key: ProviderKey = "gh"): FixtureProvider 
         redirect_uri: request.redirectUri,
         code_challenge: request.codeChallenge,
       });
-      const base = key === "gh" ? FIXTURE_WEB_URL : FIXTURE_ACCOUNTS_URL;
-      return `${base}/login/oauth/authorize?${query}`;
+      const base =
+        options.authorize === undefined
+          ? `${key === "gh" ? FIXTURE_WEB_URL : FIXTURE_ACCOUNTS_URL}/login/oauth/authorize`
+          : options.authorize();
+      return `${base}?${query}`;
     },
 
     async exchangeCode(request) {

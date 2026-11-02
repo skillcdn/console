@@ -20,6 +20,8 @@ pnpm --filter @skillcdn/console-app run dev          # the api, restarting on ch
 
 To work on the UI with its own reloading, run `pnpm --filter @skillcdn/console-app run dev:web` next to the api: it serves the pages at `http://127.0.0.1:11198` and sends everything else to the api. Signing in belongs to the api, so the git host sends the browser back to `PUBLIC_URL`, which is the api's port.
 
+To look at the plugins' pages with nobody's provider, `pnpm dev:plugins` runs the console on this machine with the default UI, the example plugin enabled and the fixture's people, who sign in from the browser at the addresses it prints; its database is its own and goes when it ends (`src/testing/browser-console.ts`, which the browser tests run against too).
+
 The exit codes, the probes and what a signal does are the process contract in [`deploy/README.md`](../../deploy/README.md#process-contract). Signing in is off until it is configured, and nothing above needs it; to try it locally, register a GitHub OAuth app with `http://127.0.0.1:11199` as its homepage and `http://127.0.0.1:11199/auth/gh/callback` as its callback, and set its values, `AUTH_SECRET`, `PUBLIC_URL=http://127.0.0.1:11199` and `ADMINS` (your login) in `.env` ([`deploy/README.md`](../../deploy/README.md#signing-in)). The tests need none of it: they sign people in through a fixture.
 
 ## Layout
@@ -111,7 +113,10 @@ src/
                  served from this machine, a directory read as a commit and kept as an index in
                  memory through @skillcdn/indexer and @skillcdn/reader (directory-packs.ts, ADR-0031)
   testing/       test support: the providers' side of signing in for a handful of made-up people,
-                 and the harness that wires the app for the integration tests (not compiled)
+                 the harness that wires the app for the integration tests, the console listening
+                 for a real browser with the UI, the example plugin and those people
+                 (browser-console.ts), and `pnpm dev:plugins` on it (preview-console.ts); not
+                 compiled
   errors.ts      the base class of errors that cross a boundary, with their stable code
   version.ts     what the process calls itself
 web/             the default UI: one page that mounts the package's composition, built by Vite into
@@ -156,6 +161,7 @@ Read the root [`AGENTS.md`](../../AGENTS.md) first. This workspace is the compos
 - `src/cli.int.test.ts` runs the package's `console` command against the app with no socket: the whole of an agent's work from taking a task to finishing it, with a person deciding meanwhile; the project named by the environment or the directory, listed, and refused when it is not the person's to see; the command connecting with a code a person approves; and what the command refuses.
 - `src/live.int.test.ts` covers a project's feed as server-sent events, with a listener on the database's channel as a deployment has: what was there, what happens next, heartbeats, where a reconnecting browser starts, that a project the person may not see has no stream, and that closing the feed ends every stream.
 - `src/db/db.int.test.ts` covers the data model. Every test file has a database of its own; tests inside a file share it.
+- `src/http/plugin-frame.browser.test.ts` drives a real Chromium (Playwright) against the console listening on this machine, signed in through the fixture's round trip in the browser: the example plugin's page and widget work through the bridge alone, every request made on their behalf under the plugin's own routes; inside the frame the origin is opaque, the cookie, the storage and the console's page are out of reach, no request leaves it, and a call the bridge does not know is dropped unanswered; the frame opened as a page of its own is not found. `pnpm test:browser`, apart from `pnpm check` and `vitest run`; CI runs it as a job of its own.
 
 ## Working on the schema
 

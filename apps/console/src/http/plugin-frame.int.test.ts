@@ -113,7 +113,7 @@ describe("the frame of a plugin's page", () => {
         `frame-ancestors ${SIGN_IN_URL}`,
         "base-uri 'none'",
         "form-action 'none'",
-        "sandbox allow-scripts",
+        "sandbox allow-scripts allow-forms",
       ].join("; "),
     );
     expect(framed.headers.get("referrer-policy")).toBe("no-referrer");
@@ -157,11 +157,14 @@ describe("the frame of a plugin's page", () => {
     expect(script.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
     expect(script.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
     expect(script.headers.get("cross-origin-resource-policy")).toBe("cross-origin");
+    // A module script is fetched with CORS from the frame's opaque origin.
+    expect(script.headers.get("access-control-allow-origin")).toBe("*");
     expect(script.headers.get("x-content-type-options")).toBe("nosniff");
     expect((await script.text()).length).toBeGreaterThan(0);
     const style = await h.request(`${AT}/web/${version}/index.css`);
     expect(style.status).toBe(200);
     expect(style.headers.get("content-type")).toBe("text/css; charset=utf-8");
+    expect(style.headers.get("access-control-allow-origin")).toBe("*");
     for (const path of [
       `${AT}/web/0.0.0-other/index.js`,
       `${AT}/web/${version}/nothing.js`,
@@ -179,6 +182,7 @@ describe("the frame of a plugin's page", () => {
     expect(css.status).toBe(200);
     expect(css.headers.get("content-type")).toBe("text/css; charset=utf-8");
     expect(css.headers.get("cross-origin-resource-policy")).toBe("cross-origin");
+    expect(css.headers.get("access-control-allow-origin")).toBe("*");
     expect(await css.text()).toContain("--sc-color-info");
   });
 

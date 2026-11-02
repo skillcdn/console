@@ -65,6 +65,8 @@ Run everything from the repository root through pnpm. Do not use `npm`, `npx` or
 | The package's version is on SkillCDN's line, and every `@skillcdn` package is taken at that one version (part of `pnpm check`) | `pnpm check:version` |
 | The REST schemas as built break nothing of the snapshot taken at the floors: a field removed, made required or narrowed on what the command sends, widened on what it reads, fails unless the floors moved (part of `pnpm check`, after the build; [ADR-0043](docs/adr/0043-the-rest-contract-is-held-to-a-snapshot-taken-at-the-floors.md)) | `pnpm check:rest`; `pnpm snapshot:rest` takes the snapshot again, in the change that moves a floor |
 | Local PostgreSQL, and a bucket with the S3 API for the tests of the blob store | `docker compose -f deploy/compose.dev.yaml up -d` |
+| The plugins' frame in a real browser: what only a browser enforces of its policy and its sandbox, seen enforced (apart from `pnpm check`; CI runs it as a job of its own) | `pnpm test:browser`, once `pnpm --filter @skillcdn/console-app exec playwright install chromium` has put a Chromium on the machine |
+| The console on this machine for a person to look at the plugins' pages: the default UI, the example plugin enabled, the fixture's people signing in from the browser, a database of its own that goes with it | `pnpm dev:plugins`, then the addresses it prints |
 
 Packages compile to `dist/` and consume each other's compiled output. Going through `turbo` builds upstream packages first; calling a package script directly can test against a stale `dist/`.
 
@@ -130,6 +132,7 @@ One topic, one file. Link to where something is documented instead of restating 
 
 - Vitest. Unit tests use no network and no database, and must be fast.
 - Integration tests run against real PostgreSQL (`deploy/compose.dev.yaml`, or wherever `TEST_DATABASE_URL` points) and, for the blob store, against a real store with the S3 API (the same compose file, or wherever `TEST_S3_URL` points). Never mock the database and never swap in another engine. Without a server these tests fail; they do not skip.
+- Browser tests (`*.browser.test.ts`) drive a real Chromium with Playwright against the app listening on this machine, for what only a browser enforces: the policy and the sandbox of a plugin's frame. They are `pnpm test:browser`, apart from `pnpm check` and from `vitest run`, and CI runs them as a job of its own; what they see enforced, an integration test proves of the headers first.
 - Agents and git hosts are tested against recorded or invented fixtures. CI makes no live calls to third parties.
 - Every parser needs hostile-input cases: oversized input, deep nesting, malformed encodings, and what an agent could send on purpose.
 

@@ -366,8 +366,8 @@ Goal: a third party writes a feature of an organization's work as a plugin, an o
 - [x] The board: the board project made from the manifest's defaults or chosen, several plugins to one project, the projects a plugin is on, `ctx.console` for people, projects, tasks, decisions and documents within the person's policy, every item marked as the plugin's and the plugin held to its own, hooks from a cursor under a lock, jobs on a schedule, a plugin's own events, outbound requests with the secret put in by the console, a plugin's API to another.
 - [x] The pages: the frame document under its policy and sandbox, the bundle served immutable, the bridge and its allow-list, grouped tabs and sub-tabs drawn from the manifest, front-page widgets, the design tokens sent in and the new ones for figures and states, the settings pages; proven in a browser that nothing but the bridge gets through.
 - [x] The image and the authoring (2026-11-02): "Plugins in the image" in `deploy/README.md` with `PLUGINS_DIR` and the two limits, the skill `building-a-plugin` as a map of the specification, the four skills that meet plugins brought up to date, and the host reading a plugin linked into `PLUGINS_DIR` from a checkout, as it is while one is written.
-- [ ] A release of a deployment with the example plugin, then without, once a release of the console carries the plugins and the deployment's pin moves to it.
-- [ ] The first plugins, in repositories of their own, and the second pass over the contract they ask for.
+- [x] The browser (2026-11-02): `pnpm test:browser` drives a real Chromium against the console listening on this machine, apart from `pnpm check` and as a job of CI's own, and sees the frame's policy and sandbox enforced; `pnpm dev:plugins` is that console for a person to look at the plugins' pages. The trial release with the example plugin alone is not made: the first plugin's install into a deployment proves the same.
+- [ ] The first plugins, in repositories of their own, their install into a deployment, and the second pass over the contract they ask for.
 
 ## After milestone 16
 

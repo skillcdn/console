@@ -7,6 +7,7 @@ import {
   restMeSchema,
   restProjectSchema,
 } from "@skillcdn/console/api";
+import type { WebRoot } from "@skillcdn/console/web";
 import { formatAddress, parseAddress } from "@skillcdn/core";
 import { and, eq, isNull, notInArray, sql } from "drizzle-orm";
 import type { Hono } from "hono";
@@ -43,7 +44,7 @@ export const HARNESS_VERSION = "0.1.18";
 
 export interface Harness {
   readonly app: Hono<AppEnv>;
-  /** The origin requests are made to: {@link SIGN_IN_URL} where people can sign in. */
+  /** The origin requests are made to: {@link SIGN_IN_URL} where people can sign in, or the one given. */
   readonly origin: string;
   /** Access-log lines and everything else the server logged, as parsed JSON. */
   readonly logs: Record<string, unknown>[];
@@ -116,6 +117,13 @@ export interface HarnessOptions {
   readonly pictures?: PictureSource | undefined;
   /** The plugins, with their host, read from a directory of the test's own. None when left out. */
   readonly plugins?: Plugins | undefined;
+  /**
+   * The origin people sign in at and requests are made to, in place of {@link SIGN_IN_URL}: the
+   * address a server listening for a real browser answers at. Read only with providers.
+   */
+  readonly origin?: string | undefined;
+  /** A loaded build of the default UI, for a browser to read the pages from. Left out, the API alone. */
+  readonly web?: WebRoot | undefined;
 }
 
 /** The skills as the api role is configured with them, at a deployment of the tests' own. */
@@ -145,7 +153,7 @@ export function cookieOf(response: Response, name: string): string {
 export function createHarness(testDatabase: TestDatabase, options: HarnessOptions = {}): Harness {
   const logs: Record<string, unknown>[] = [];
   const providers = options.providers ?? [];
-  const origin = providers.length === 0 ? BASE_URL : SIGN_IN_URL;
+  const origin = providers.length === 0 ? BASE_URL : (options.origin ?? SIGN_IN_URL);
   const logger = pino(
     { level: "info" },
     { write: (line: string) => logs.push(JSON.parse(line) as Record<string, unknown>) },
@@ -189,6 +197,7 @@ export function createHarness(testDatabase: TestDatabase, options: HarnessOption
       pictures: options.pictures,
       blobs: options.blobs,
       plugins: options.plugins,
+      web: options.web,
       version: HARNESS_VERSION,
     },
   );

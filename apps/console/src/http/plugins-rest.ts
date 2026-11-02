@@ -1154,7 +1154,9 @@ export function registerPluginsRest(
         `frame-ancestors ${origin}`,
         "base-uri 'none'",
         "form-action 'none'",
-        "sandbox allow-scripts",
+        // Forms fire their submit event (without allow-forms a browser drops the submission before
+        // the event); form-action 'none' keeps a submission from going anywhere.
+        "sandbox allow-scripts allow-forms",
       ].join("; "),
     );
     c.header("referrer-policy", "no-referrer");
@@ -1200,7 +1202,10 @@ export function registerPluginsRest(
     c.header("content-type", type);
     c.header("content-length", String(bytes.byteLength));
     c.header("cache-control", "public, max-age=31536000, immutable");
+    // The frame's origin is opaque, and a module script, as a font, is fetched with CORS: the
+    // bundle, which holds no secret, is readable from any origin, or the browser runs none of it.
     c.header("cross-origin-resource-policy", "cross-origin");
+    c.header("access-control-allow-origin", "*");
     c.header("x-content-type-options", "nosniff");
     return c.body(new Uint8Array(bytes).buffer);
   });
@@ -1220,6 +1225,7 @@ export function registerPluginsRest(
     c.header("content-length", String(bytes.byteLength));
     c.header("cache-control", "public, max-age=3600");
     c.header("cross-origin-resource-policy", "cross-origin");
+    c.header("access-control-allow-origin", "*");
     c.header("x-content-type-options", "nosniff");
     return c.body(new Uint8Array(bytes).buffer);
   });

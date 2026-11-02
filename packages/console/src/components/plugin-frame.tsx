@@ -381,7 +381,9 @@ export function PluginFrame(props: PluginFrameProps) {
       className={isWidget ? "sc-plugin-frame sc-plugin-frame-widget" : "sc-plugin-frame"}
       src={src}
       title={props.title}
-      sandbox="allow-scripts"
+      // As the document's own policy says: scripts, and forms firing their submit event, which
+      // the policy's form-action 'none' keeps from going anywhere.
+      sandbox="allow-scripts allow-forms"
       referrerPolicy="origin"
       style={{ height: `${height}px` }}
     />

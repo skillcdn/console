@@ -66,8 +66,10 @@
     {
       "includes": [
         "apps/console/src/config/**",
+        "apps/console/src/testing/preview-console.ts",
         "packages/console/src/cli/main.ts",
         "**/*.int.test.ts",
+        "**/*.browser.test.ts",
         "scripts/**/*.mjs"
       ],
       "linter": {
