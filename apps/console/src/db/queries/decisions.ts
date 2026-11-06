@@ -12,6 +12,7 @@ import { type Actor, recordEvent, type Scope } from "./events.js";
 import {
   answerers,
   deciders,
+  outcomeWriters,
   type PersonRecord,
   personColumns,
   raisers,
@@ -56,10 +57,16 @@ export interface DecisionRecord {
         readonly note: string | undefined;
         readonly by: PersonRecord;
         readonly at: Date;
+        /** The agent the answer came through (ADR-0056); none when the person answered themselves. */
+        readonly agent: string | undefined;
       }
     | undefined;
   /** What followed the decision, written afterwards; nothing until someone does. */
   readonly outcome: string | undefined;
+  /** Who wrote what followed, the agent they wrote it through, and when (ADR-0056); none until written. */
+  readonly outcomeBy: PersonRecord | undefined;
+  readonly outcomeAgent: string | undefined;
+  readonly outcomeAt: Date | undefined;
   /** The files put on it when it was raised (ADR-0055), in the order they came. */
   readonly files: readonly DecisionFileRecord[];
   readonly createdAt: Date;
@@ -112,6 +119,10 @@ const decisionColumns = {
   raisedBy: personColumns(raisers),
   decider: personColumns(deciders),
   answeredBy: personColumns(answerers),
+  answeredAgent: decisions.answeredAgent,
+  outcomeBy: personColumns(outcomeWriters),
+  outcomeAgent: decisions.outcomeAgent,
+  outcomeAt: decisions.outcomeAt,
   runId: decisions.runId,
   runAgent: runs.agent,
   plugin: sql<
@@ -140,6 +151,7 @@ function selectDecisions(handle: Handle) {
     .innerJoin(raisers, eq(raisers.id, decisions.raisedById))
     .innerJoin(deciders, eq(deciders.id, decisions.deciderId))
     .leftJoin(answerers, eq(answerers.id, decisions.answeredById))
+    .leftJoin(outcomeWriters, eq(outcomeWriters.id, decisions.outcomeById))
     .leftJoin(runs, eq(runs.id, decisions.runId))
     .leftJoin(tasks, eq(tasks.id, decisions.taskId));
 }
@@ -152,6 +164,7 @@ function toDecision(row: DecisionRow): DecisionRecord {
           note: row.answerNote ?? undefined,
           by: toPerson(row.answeredBy),
           at: row.answeredAt,
+          agent: row.answeredAgent ?? undefined,
         }
       : undefined;
   return {
@@ -172,6 +185,9 @@ function toDecision(row: DecisionRow): DecisionRecord {
     plugin: row.plugin ?? undefined,
     answer: answered,
     outcome: row.outcome ?? undefined,
+    outcomeBy: row.outcomeBy === null ? undefined : toPerson(row.outcomeBy),
+    outcomeAgent: row.outcomeAgent ?? undefined,
+    outcomeAt: row.outcomeAt ?? undefined,
     files: row.files.map((file) => ({
       id: file.id,
       file: {
@@ -425,6 +441,7 @@ export async function answerDecision(
         answer: chosen.id,
         answerNote: note ?? null,
         answeredById: actor.id,
+        answeredAgent: actor.agent ?? null,
         answeredAt: now,
         updatedAt: now,
       })
@@ -523,9 +540,16 @@ export async function updateDecision(
       (field) => next[field] !== current[field],
     );
     if (changed.length > 0) {
+      // Who wrote what followed, through which agent, and when (ADR-0056): the record of the
+      // outcome goes with the outcome, and clears with it.
+      const wrote = !changed.includes("outcome")
+        ? {}
+        : next.outcome === null
+          ? { outcomeById: null, outcomeAgent: null, outcomeAt: null }
+          : { outcomeById: actor.id, outcomeAgent: actor.agent ?? null, outcomeAt: now };
       await tx
         .update(decisions)
-        .set({ ...next, updatedAt: now })
+        .set({ ...next, ...wrote, updatedAt: now })
         .where(eq(decisions.id, decisionId));
       await recordLinks(
         tx,

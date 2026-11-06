@@ -361,6 +361,8 @@ export const goals = pgTable(
     createdById: uuid()
       .notNull()
       .references(() => people.id),
+    /** The agent the goal was set through (ADR-0056), or null when a person set it themselves. */
+    agent: text(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -392,6 +394,8 @@ export const tasks = pgTable(
     ownerId: uuid()
       .notNull()
       .references(() => people.id),
+    /** The agent the task was written through (ADR-0056), or null when a person wrote it themselves; the owner may have changed since. */
+    agent: text(),
     /** The task this one is part of, for a breakdown. */
     parentId: uuid().references((): AnyPgColumn => tasks.id),
     /** The category the task is sorted into, or none; a category in use cannot be removed. */
@@ -632,6 +636,8 @@ export const decisions = pgTable(
       .notNull()
       .references(() => people.id),
     answeredById: uuid().references(() => people.id),
+    /** The agent the answer came through (ADR-0056), or null when the person answered themselves. */
+    answeredAgent: text(),
     /** The id of the chosen option. */
     answer: text(),
     /** The rationale given with the answer: Markdown. */
@@ -639,6 +645,10 @@ export const decisions = pgTable(
     answeredAt: instant(),
     /** What followed the decision, written afterwards: Markdown; null until someone writes it (ADR-0009). */
     outcome: text(),
+    /** Who wrote what followed, the agent they wrote it through (null when themselves) and when (ADR-0056); null until written, cleared with it. */
+    outcomeById: uuid().references(() => people.id),
+    outcomeAgent: text(),
+    outcomeAt: instant(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

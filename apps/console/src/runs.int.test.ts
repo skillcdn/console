@@ -187,6 +187,8 @@ describe("runs", () => {
     const outcome = restDecisionSchema.parse(await (await pending).json());
     expect(outcome.answer).toMatchObject({ option: "2", note: "Change it, carefully." });
     expect(outcome.answer?.by.login).toBe("bob");
+    // Answered on the board by the person, not through an agent (ADR-0056).
+    expect(outcome.answer?.agent).toBeNull();
     expect(await readRun(run.id)).toMatchObject({ status: "running", waitingFor: null });
     expect((await asAgent(aliceToken, "GET", `${IN}/decisions/${decision.id}?wait=x`)).status).toBe(
       400,

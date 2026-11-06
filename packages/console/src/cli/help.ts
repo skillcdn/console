@@ -479,7 +479,7 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     usage: 'answer <id> --option <n>|--own "<answer>" [--note <markdown>|--file <path>]',
     synopsis: "Writes a person's answer on a decision: the option they chose, or their own words.",
     about:
-      "Writes on the board the answer a person gave: one of the decision's options by its number, or their own words, which become one more option of the decision marked as theirs; and a note about it. The answer is the person's, written in their name through you (ADR-0021): a choice they made in chat, in a meeting or by changing the task is written here, with where and when they made it in the note, so that the record is whole and a run that waited goes on. A decision is answered once; what followed is written with console decision <id> --outcome.",
+      "Writes on the board the answer a person gave: one of the decision's options by its number, or their own words, which become one more option of the decision marked as theirs; and a note about it. The answer is the person's, written in their name through you (ADR-0021), and the record says so: the decision names you beside them as the agent the answer came through, where an answer given on the pages names the person alone (ADR-0056). A choice they made in chat, in a meeting or by changing the task is written here, with where and when they made it in the note, so that the record is whole and a run that waited goes on. A decision is answered once; what followed is written with console decision <id> --outcome.",
     limits: [
       `own: one line, up to ${MAX_OPTION_LABEL_LENGTH} characters`,
       `note: Markdown, up to ${MAX_NOTE_LENGTH} characters`,
@@ -495,7 +495,7 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     synopsis:
       "One decision in full; waits for its answer with --wait; writes what followed with --outcome.",
     about:
-      "One decision, with its context, its options, its answer (one of the options, or the person's own words as one more, marked own) and what followed. With --wait, holds on for the answer that long, and exits with 3 if it is still to come. With --outcome, writes down what followed the decision, so that it reads as a record.",
+      "One decision, with its context, its options, its answer (one of the options, or the person's own words as one more, marked own) and what followed. With --wait, holds on for the answer that long, and exits with 3 if it is still to come. With --outcome, writes down what followed the decision, so that it reads as a record; the record names who wrote it, you beside them, and when (ADR-0056).",
     limits: [`outcome: ${MARKDOWN}`],
     refusals: ["decision.not_found: no decision has that id"],
   },

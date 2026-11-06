@@ -505,6 +505,8 @@ export const restTaskSchema = z.object({
   owner: restPersonSchema,
   /** The plugin that made it, by key (ADR-0052), or `null`; left out by a console older than the plugins. */
   plugin: z.optional(z.nullable(z.string())),
+  /** The agent the task was written through, or `null` when a person wrote it themselves (ADR-0056); the owner may have changed since. Left out by an older console. */
+  agent: z.optional(z.nullable(z.string())),
   /** The people at work on it (ADR-0037), in the order they came to it; `[]` while nobody is. */
   workers: z.array(restPersonSchema),
   /** The task this one is part of, or `null`. */
@@ -615,6 +617,8 @@ export const restGoalSchema = z.object({
   /** The day the goal is meant to be reached by, or `null`. */
   dueOn: z.nullable(day),
   createdBy: restPersonSchema,
+  /** The agent the goal was set through, or `null` when a person set it themselves (ADR-0056); left out by an older console. */
+  agent: z.optional(z.nullable(z.string())),
   /** The tasks that work towards it, counted by state. */
   taskCounts: restTaskCountsSchema,
   createdAt: instant,
@@ -729,10 +733,24 @@ export const restDecisionSchema = z.object({
       note: z.nullable(z.string()),
       by: restPersonSchema,
       at: instant,
+      /**
+       * The agent the answer came through, when the person's agent wrote it in their name
+       * (`console answer`, ADR-0021), or `null` when they answered themselves (ADR-0056).
+       * Answered from 0.4.4 and read as optional, so that a console built on this package still
+       * reads an older console's decisions.
+       */
+      agent: z.optional(z.nullable(z.string())),
     }),
   ),
   /** What followed the decision, in Markdown, written afterwards; `null` until someone does. */
   outcome: z.nullable(z.string()),
+  /**
+   * Who wrote what followed, the agent they wrote it through (`null` when themselves) and when
+   * (ADR-0056); each `null` until someone does. Answered from 0.4.4 and read as optional.
+   */
+  outcomeBy: z.optional(z.nullable(restPersonSchema)),
+  outcomeAgent: z.optional(z.nullable(z.string())),
+  outcomeAt: z.optional(z.nullable(instant)),
   /**
    * The files put on it when it was raised (ADR-0055), in the order they came; a picture among
    * them is shown where the context names it as `![words](its name)`, else after it. Answered

@@ -115,6 +115,7 @@ export function restGoal(goal: GoalRecord): RestGoal {
     startsOn: goal.startsOn ?? null,
     dueOn: goal.dueOn ?? null,
     createdBy: restPerson(goal.createdBy),
+    agent: goal.agent ?? null,
     taskCounts: goal.taskCounts,
     createdAt: goal.createdAt.toISOString(),
     updatedAt: goal.updatedAt.toISOString(),
@@ -131,6 +132,7 @@ export function restTask(task: TaskRecord): RestTask {
     priority: task.priority,
     owner: restPerson(task.owner),
     plugin: task.plugin ?? null,
+    agent: task.agent ?? null,
     workers: task.workers.map(restPerson),
     parentId: task.parentId ?? null,
     category: task.category ?? null,
@@ -173,8 +175,12 @@ export function restDecision(decision: DecisionRecord): RestDecision {
             note: decision.answer.note ?? null,
             by: restPerson(decision.answer.by),
             at: decision.answer.at.toISOString(),
+            agent: decision.answer.agent ?? null,
           },
     outcome: decision.outcome ?? null,
+    outcomeBy: decision.outcomeBy === undefined ? null : restPerson(decision.outcomeBy),
+    outcomeAgent: decision.outcomeAgent ?? null,
+    outcomeAt: decision.outcomeAt?.toISOString() ?? null,
     files: decision.files.map((attached) => ({
       id: attached.id,
       file: {

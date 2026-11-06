@@ -737,6 +737,8 @@ describe("decisions", () => {
     const answer = restDecisionSchema.parse(await answered.json()).answer;
     expect(answer).toMatchObject({ option: "2", note: "Shorter." });
     expect(answer?.by.login).toBe("bob");
+    // Answered on the pages, the record names the person alone (ADR-0056).
+    expect(answer?.agent).toBeNull();
     const again = await send(alice, "POST", `${IN}/decisions/${decision.id}/answer`, {
       option: "1",
     });
@@ -746,6 +748,76 @@ describe("decisions", () => {
       restDecisionSchema.parse(await (await get(alice, `${IN}/decisions/${decision.id}`)).json())
         .answer?.option,
     ).toBe("2");
+  });
+
+  it("name the agent an answer, what followed, a task and a goal came through, and nobody when the person did it themselves (ADR-0056)", async () => {
+    const made = await send(alice, "POST", REST_ROUTES.tokens, { name: "the deputy" });
+    const { token, secret } = restTokenCreatedSchema.parse(await made.json());
+    const asAgent = (method: "POST" | "PATCH", path: string, body: unknown) =>
+      h.request(path, {
+        method,
+        headers: { authorization: `Bearer ${secret}`, "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    // A task written and a goal set through the agent name it; written on the pages, they name nobody.
+    const written = restTaskSchema.parse(
+      await (await asAgent("POST", `${IN}/tasks`, { title: "Through the agent" })).json(),
+    );
+    expect(written.agent).toBe("the deputy");
+    expect(written.owner.login).toBe("Alice");
+    expect((await createTask(alice, { title: "By hand" })).agent).toBeNull();
+    const set = restGoalSchema.parse(
+      await (await asAgent("POST", `${IN}/goals`, { title: "Through the agent" })).json(),
+    );
+    expect(set.agent).toBe("the deputy");
+    expect(set.createdBy.login).toBe("Alice");
+    const byHand = await send(alice, "POST", `${IN}/goals`, { title: "By hand" });
+    expect(restGoalSchema.parse(await byHand.json()).agent).toBeNull();
+    // An answer written in the person's name through the agent names it beside them.
+    const raised = restDecisionSchema.parse(
+      await (
+        await send(alice, "POST", `${IN}/decisions`, {
+          question: "Through whom?",
+          options: [{ label: "A" }, { label: "B" }],
+        })
+      ).json(),
+    );
+    const answered = await asAgent("POST", `${IN}/decisions/${raised.id}/answer`, { option: "1" });
+    expect(answered.status).toBe(200);
+    const answer = restDecisionSchema.parse(await answered.json()).answer;
+    expect(answer).toMatchObject({ option: "1", agent: "the deputy" });
+    expect(answer?.by.login).toBe("Alice");
+    // What followed names who wrote it, through what, and when; rewritten by hand, the person alone; cleared, nobody.
+    const grown = await asAgent("PATCH", `${IN}/decisions/${raised.id}`, {
+      outcome: "It went well.",
+    });
+    expect(grown.status).toBe(200);
+    const record = restDecisionSchema.parse(await grown.json());
+    expect(record.outcomeBy?.login).toBe("Alice");
+    expect(record.outcomeAgent).toBe("the deputy");
+    expect(record.outcomeAt).not.toBeNull();
+    const rewritten = restDecisionSchema.parse(
+      await (
+        await send(bob, "PATCH", `${IN}/decisions/${raised.id}`, { outcome: "Bob says so." })
+      ).json(),
+    );
+    expect(rewritten.outcomeBy?.login).toBe("bob");
+    expect(rewritten.outcomeAgent).toBeNull();
+    const cleared = restDecisionSchema.parse(
+      await (await send(bob, "PATCH", `${IN}/decisions/${raised.id}`, { outcome: "" })).json(),
+    );
+    expect(cleared).toMatchObject({
+      outcome: null,
+      outcomeBy: null,
+      outcomeAgent: null,
+      outcomeAt: null,
+    });
+    // The token goes, so that the tokens' own tests find what they expect.
+    const gone = await h.request(`${REST_ROUTES.tokens}/${token.id}`, {
+      method: "DELETE",
+      headers: { cookie: alice, origin: SIGN_IN_URL },
+    });
+    expect(gone.status).toBe(204);
   });
 
   it("are answered in the person's own words as one more option marked theirs, with an option or own and never both", async () => {

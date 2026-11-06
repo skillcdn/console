@@ -219,6 +219,7 @@ export function formatTask(
     `#${task.number} ${task.title}`,
     `state: ${task.state}  priority: ${task.priority}  owner: ${task.owner.login}  workers: ${task.workers.length === 0 ? "nobody" : logins(task.workers)}`,
     `id: ${task.id}${task.parentId === null ? "" : `  part of: ${task.parentId}`}`,
+    ...(task.agent == null ? [] : [`written through: ${task.agent}`]),
     ...scheduleLines(task),
   ];
   if (task.links.length > 0) {
@@ -379,7 +380,7 @@ export function formatGoalLine(goal: RestGoal): string {
 export function formatGoal(goal: RestGoal, tasks?: readonly RestTask[]): string {
   const lines = [
     `goal ${goal.id}: ${goal.title}`,
-    `state: ${goal.state}  category: ${goal.category?.key ?? "none"}  starts: ${goal.startsOn ?? "none"}  due: ${goal.dueOn ?? "none"}  set by: ${goal.createdBy.login}`,
+    `state: ${goal.state}  category: ${goal.category?.key ?? "none"}  starts: ${goal.startsOn ?? "none"}  due: ${goal.dueOn ?? "none"}  set by: ${goal.createdBy.login}${through(goal.agent)}`,
     `progress: ${progressOf(goal)}`,
   ];
   if (goal.body.trim().length > 0) {
@@ -431,6 +432,10 @@ export function formatPersonWork(person: RestPerson, work: RestPersonWork): stri
   ].join("\n");
 }
 
+/** The agent a thing came through, beside the person (ADR-0056); nothing when they did it themselves. */
+const through = (agent: string | null | undefined): string =>
+  agent === null || agent === undefined ? "" : ` through ${agent}`;
+
 /** Whom a decision is for, where that is not the one who asked (ADR-0042). */
 const addressed = (decision: RestDecision): string =>
   decision.decider.id === decision.raisedBy.id ? "" : `, for ${decision.decider.login}`;
@@ -458,7 +463,7 @@ export function formatAnswer(decision: RestDecision): string {
   }
   const chosen = decision.options.find((option) => option.id === answer.option);
   const lines = [
-    `Answered: ${answer.option}) ${chosen?.label ?? answer.option}${chosen?.own === true ? ", in their own words" : ""}, by ${answer.by.login} at ${answer.at}`,
+    `Answered: ${answer.option}) ${chosen?.label ?? answer.option}${chosen?.own === true ? ", in their own words" : ""}, by ${answer.by.login}${through(answer.agent)} at ${answer.at}`,
   ];
   if (answer.note !== null && answer.note.length > 0) {
     lines.push(`Note: ${answer.note}`);
@@ -488,6 +493,13 @@ export function formatDecision(decision: RestDecision): string {
   lines.push("", "options:", formatOptions(decision), "", formatAnswer(decision));
   if (decision.outcome !== null && decision.outcome.trim().length > 0) {
     lines.push("", "what followed:", indent(decision.outcome));
+    if (decision.outcomeBy != null && decision.outcomeAt != null) {
+      lines.push(
+        indent(
+          `written by ${decision.outcomeBy.login}${through(decision.outcomeAgent)} at ${decision.outcomeAt}`,
+        ),
+      );
+    }
   }
   return lines.join("\n");
 }

@@ -511,6 +511,88 @@ describe("decisions", () => {
     expect(nothing).toContain("Nothing answered yet.");
   });
 
+  it("name the agent an answer and what followed came through, and the one a goal or a task was written through (ADR-0056)", () => {
+    const through = decision({
+      id: "0199c4d8-0000-7000-8000-000000000022",
+      answer: {
+        option: "1",
+        note: null,
+        by: bob,
+        at: "2026-10-09T12:00:00.000Z",
+        agent: "Claude Code on the laptop",
+      },
+      outcome: "We did.",
+      outcomeBy: alice,
+      outcomeAgent: "Codex on the desk",
+      outcomeAt: "2026-10-10T09:00:00.000Z",
+    });
+    const card = renderToStaticMarkup(<DecisionCard decision={through} />);
+    expect(card).toContain("answered through Claude Code");
+    expect(card).toContain("wrote what followed through Codex");
+    // Done by the person themselves, the record names them alone; an older console answers no agent.
+    const themselves = renderToStaticMarkup(
+      <DecisionCard
+        decision={decision({
+          answer: { option: "1", note: null, by: bob, at: "2026-10-09T12:00:00.000Z", agent: null },
+          outcome: "We did.",
+          outcomeBy: alice,
+          outcomeAgent: null,
+          outcomeAt: "2026-10-10T09:00:00.000Z",
+        })}
+      />,
+    );
+    expect(themselves).toContain(" answered ");
+    expect(themselves).toContain("wrote what followed");
+    expect(themselves).not.toContain("through");
+    const older = renderToStaticMarkup(
+      <DecisionCard
+        decision={decision({
+          answer: { option: "1", note: null, by: bob, at: "2026-10-09T12:00:00.000Z" },
+          outcome: "We did.",
+        })}
+      />,
+    );
+    expect(older).toContain(" answered ");
+    expect(older).not.toContain("wrote what followed");
+    // The record's rows say it too.
+    const rows = renderToStaticMarkup(
+      <DecisionList
+        decisions={[through]}
+        tasks={new Map()}
+        taskHref={href}
+        decisionHref={(item) => `/projects/web/decisions/${item.id}`}
+      />,
+    );
+    expect(rows).toContain("answered through Claude Code");
+    const goalHtml = renderToStaticMarkup(
+      <GoalView
+        goal={goal({ agent: "Claude Code on the laptop" })}
+        tasks={[]}
+        taskHref={href}
+        today={TODAY}
+      />,
+    );
+    expect(goalHtml).toContain("through Claude Code");
+    const taskView = (agent: string | null) =>
+      renderToStaticMarkup(
+        <TaskView
+          task={task({ agent })}
+          people={[alice, bob]}
+          tasks={[]}
+          decisions={[]}
+          history={[]}
+          taskHref={href}
+          onChange={() => undefined}
+          onMove={() => undefined}
+          onRaiseDecision={() => undefined}
+          onAnswer={() => undefined}
+        />,
+      );
+    expect(taskView("Codex on the desk")).toContain("<dt>Written through</dt>");
+    expect(taskView("Codex on the desk")).toContain("Codex");
+    expect(taskView(null)).not.toContain("Written through");
+  });
+
   it("list the waiting ones as cards with their options and a line of one's own, and the answered ones as the record, a row each", () => {
     const answered = decision({
       id: "0199c4d8-0000-7000-8000-000000000021",

@@ -35,6 +35,8 @@ export interface GoalRecord {
   /** The day the goal is meant to be reached by (`2026-12-31`), or none. */
   readonly dueOn: string | undefined;
   readonly createdBy: PersonRecord;
+  /** The agent the goal was set through (ADR-0056); none when a person set it themselves. */
+  readonly agent: string | undefined;
   /** The tasks that work towards it, counted by state. */
   readonly taskCounts: RestTaskCounts;
   readonly createdAt: Date;
@@ -106,6 +108,7 @@ const goalColumns = {
   createdAt: goals.createdAt,
   updatedAt: goals.updatedAt,
   createdBy: personColumns(raisers),
+  agent: goals.agent,
   idea: countIn("idea"),
   ready: countIn("ready"),
   inProgress: countIn("in_progress"),
@@ -154,6 +157,7 @@ function toGoal(row: GoalRow): GoalRecord {
     startsOn: row.startsOn ?? undefined,
     dueOn: row.dueOn ?? undefined,
     createdBy: toPerson(row.createdBy),
+    agent: row.agent ?? undefined,
     taskCounts: {
       idea: row.idea,
       ready: row.ready,
@@ -283,6 +287,7 @@ export async function createGoal(
         startsOn: goal.startsOn ?? null,
         dueOn: goal.dueOn ?? null,
         createdById: actor.id,
+        agent: actor.agent ?? null,
         createdAt: now,
         updatedAt: now,
       })

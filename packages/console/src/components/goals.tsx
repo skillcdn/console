@@ -1,5 +1,6 @@
 import { type FormEvent, type ReactNode, useState } from "react";
 import {
+  agentLabel,
   GOAL_STATES,
   type GoalState,
   MAX_BODY_LENGTH,
@@ -355,7 +356,9 @@ export function GoalView(props: GoalViewProps) {
           <div>
             <dt>{roadmap.setBy}</dt>
             <dd>
-              <PersonChip person={goal.createdBy} /> <Time iso={goal.createdAt} />
+              <PersonChip person={goal.createdBy} />{" "}
+              {goal.agent != null && <>{roadmap.setThrough(agentLabel(goal.agent))} </>}
+              <Time iso={goal.createdAt} />
             </dd>
           </div>
           {props.editHref !== undefined && (

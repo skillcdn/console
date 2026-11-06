@@ -57,6 +57,8 @@ export interface TaskRecord {
   readonly owner: PersonRecord;
   /** The plugin that made it, by key (ADR-0052), or none. */
   readonly plugin: string | undefined;
+  /** The agent the task was written through (ADR-0056); none when a person wrote it themselves. */
+  readonly agent: string | undefined;
   /** The people at work on it, in the order they came to it; none while nobody is. */
   readonly workers: readonly PersonRecord[];
   readonly parentId: string | undefined;
@@ -212,6 +214,7 @@ const taskColumns = {
   createdAt: tasks.createdAt,
   updatedAt: tasks.updatedAt,
   owner: personColumns(owners),
+  agent: tasks.agent,
   workers: workersOf.mapWith(toWorkers),
   categoryKey: categories.key,
   categoryName: categories.name,
@@ -247,6 +250,7 @@ function toTask(row: TaskRow): TaskRecord {
     priority: row.priority,
     owner: toPerson(row.owner),
     plugin: row.plugin ?? undefined,
+    agent: row.agent ?? undefined,
     workers: row.workers,
     parentId: row.parentId ?? undefined,
     category:
@@ -477,6 +481,7 @@ export async function createTask(
         state,
         priority: task.priority ?? "normal",
         ownerId: actor.id,
+        agent: actor.agent ?? null,
         parentId: task.parentId ?? null,
         categoryId: categoryId ?? null,
         goalId: task.goalId ?? null,

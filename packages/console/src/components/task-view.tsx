@@ -1,3 +1,4 @@
+import { agentLabel } from "../agent-name.js";
 import type {
   RestAnswerInput,
   RestCategory,
@@ -326,6 +327,12 @@ export function TaskView(props: TaskViewProps) {
                 <PersonChip person={task.owner} />
               </dd>
             </div>
+            {task.agent != null && (
+              <div>
+                <dt>{words.task.writtenThrough}</dt>
+                <dd>{agentLabel(task.agent)}</dd>
+              </div>
+            )}
             <div>
               <dt>{words.task.workers}</dt>
               <dd>

@@ -124,6 +124,7 @@ One topic, one file. Link to where something is documented instead of restating 
 - **Ports and adapters:** the domain defines interfaces (git host, blob store, clock, ids, notifications); adapters implement them; `apps/console` wires them together. Do not import an SDK outside its adapter.
 - **Errors:** throw `Error` subclasses with a stable `code`. Translate to HTTP errors, or to the command line's words and exit codes, only at the edge, and never leak internals or the existence of what a caller may not see.
 - **Logging:** structured logger only, no `console` (lint enforces it). Never log tokens, authorization headers or what an agent handed in.
+- **Attribution:** a record that names the person who did something names the agent they did it through (`agent`: the token's name, or `null` when they did it themselves) and the plugin where one acted, as every event does ([ADR-0056](docs/adr/0056-a-record-that-names-the-person-who-did-a-thing-names-the-agent-they-did-it-through.md)). A record of what an act was about, a member or a worker, names no agent; the feed names who added them.
 - **Determinism:** inject time, randomness and ids so the domain stays pure and tests stay stable.
 - **Naming:** kebab-case file names; tests next to the code as `*.test.ts`; integration tests as `*.int.test.ts`.
 - **Comments** explain why, not what.

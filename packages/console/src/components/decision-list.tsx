@@ -43,6 +43,13 @@ export interface DecisionCardProps {
   readonly busy?: boolean | undefined;
 }
 
+/** The word beside who answered: through their agent, when the answer came that way (ADR-0056). */
+function answeredWord(words: ReturnType<typeof useWords>, agent: string | null | undefined) {
+  return agent === null || agent === undefined
+    ? words.decisions.answeredBy
+    : words.decisions.answeredThrough(agentLabel(agent));
+}
+
 /**
  * Who asked, and when: the person, through their agent when a run asked; and whom the decision
  * is for, where that is someone else (ADR-0042).
@@ -233,7 +240,20 @@ function Outcome(props: {
           {decision.outcome === null ? (
             <p className="sc-muted">{words.decisions.nothingWritten}</p>
           ) : (
-            <Markdown source={decision.outcome} docHref={props.docHref} />
+            <>
+              <Markdown source={decision.outcome} docHref={props.docHref} />
+              {decision.outcomeBy != null && decision.outcomeAt != null && (
+                <p className="sc-decision-meta">
+                  <PersonChip person={decision.outcomeBy} />{" "}
+                  {decision.outcomeAgent == null
+                    ? words.decisions.wroteWhatFollowed
+                    : words.decisions.wroteWhatFollowedThrough(
+                        agentLabel(decision.outcomeAgent),
+                      )}{" "}
+                  <Time iso={decision.outcomeAt} />
+                </p>
+              )}
+            </>
           )}
           {props.onUpdate !== undefined && (
             <Button
@@ -368,7 +388,7 @@ export function DecisionCard(props: DecisionCardProps) {
             </div>
           )}
           <p className="sc-decision-meta">
-            <PersonChip person={decision.answer.by} /> {words.decisions.answeredBy}{" "}
+            <PersonChip person={decision.answer.by} /> {answeredWord(words, decision.answer.agent)}{" "}
             <Time iso={decision.answer.at} />
           </p>
         </div>
@@ -474,7 +494,7 @@ function RecordRow(props: {
             </div>
           )}
           <p className="sc-decision-record-meta">
-            <PersonChip person={answer.by} /> {words.decisions.answeredBy}{" "}
+            <PersonChip person={answer.by} /> {answeredWord(words, answer.agent)}{" "}
             <Time iso={answer.at} precision="day" />
           </p>
         </div>

@@ -168,6 +168,8 @@ export const workers = alias(people, "workers");
 export const raisers = alias(people, "raisers");
 export const deciders = alias(people, "deciders");
 export const answerers = alias(people, "answerers");
+/** Who wrote what followed a decision (ADR-0056). */
+export const outcomeWriters = alias(people, "outcome_writers");
 export const actors = alias(people, "actors");
 
 /** Logins are compared as the hosts compare them: without regard to case. */
