@@ -166,8 +166,9 @@ describe("the example plugin in a browser", () => {
     const widget = await frameOf(page, "iframe.sc-plugin-frame-widget");
     await widget.waitForSelector(".pl-hello-text");
     expect(await widget.textContent(".pl-hello-text")).toBe("Hello, Bob!");
-    // The widget's frame is as tall as its one line, not the box's first guess.
-    expect(await widget.evaluate("document.documentElement.clientHeight")).toBeLessThan(120);
+    // The widget's frame fills the cells its size gives it (ADR-0059), a row of the grid, and
+    // not the one line it asks for: the height it says is not read.
+    expect(await widget.evaluate("document.documentElement.clientHeight")).toBeGreaterThan(120);
     // The administrator's Settings page lists the plugin, as the plugins' own page does, and the
     // plugin's page says what it is. Its tab comes before Settings.
     await page.goto(`${console_.origin}/settings`);
