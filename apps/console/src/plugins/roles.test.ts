@@ -50,6 +50,8 @@ describe("settingProblem", () => {
       settingProblem(setting("enum", { options: [{ value: "a", name: { en: "A" } }] }), "b"),
     ).toBe("s is one of a");
     expect(settingProblem(setting("day"), "2026-13-01")).toBe("s is a day as YYYY-MM-DD");
+    expect(settingProblem(setting("time"), "25:00")).toBe("s is a time of day as HH:MM");
+    expect(settingProblem(setting("time"), "18:00")).toBeUndefined();
     expect(settingProblem(setting("secret"), "x")).toBe("s is a secret, set with its own route");
     expect(settingProblem(setting("list", { of: "number", max: 1 }), [1, 2])).toBe(
       "s has more than 1 items",

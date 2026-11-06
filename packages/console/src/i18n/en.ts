@@ -223,6 +223,10 @@ export const en = {
       operations: "Commands and queries",
       console: "Console versions",
       consoleRange: (range: string) => `console ${range}`,
+      timeZoneHint: "In the workspace's time zone.",
+      addItem: "Add",
+      itemPlaceholder: "Type, then add",
+      choose: "Choose…",
     },
     /** The capabilities (docs/specs/plugins.md, "Capabilities"), each by a name and the sentence of what it opens, as an administrator reads them before consenting. */
     capability: {

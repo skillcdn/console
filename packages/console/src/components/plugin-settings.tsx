@@ -278,9 +278,214 @@ function Overview(props: {
   );
 }
 
+/** How many choices a list of an enum shows as pills before it becomes a column of boxes. */
+const PILLS_AT_MOST = 8;
+
+/** The control of one item of a list, as a text field: a number, a day, a time or words. */
+function itemInputType(of: string | null): "number" | "date" | "time" | "text" {
+  switch (of) {
+    case "number":
+      return "number";
+    case "day":
+      return "date";
+    case "time":
+      return "time";
+    default:
+      return "text";
+  }
+}
+
+/** The items of a list setting as the form holds them. */
+function itemsOf(value: unknown): readonly (string | number)[] {
+  return Array.isArray(value)
+    ? value.filter(
+        (item): item is string | number => typeof item === "string" || typeof item === "number",
+      )
+    : [];
+}
+
+/**
+ * A list of an enum: a pill per choice while they are few, lit while chosen, else a column of
+ * boxes; either way the value is the chosen values, in the options' order.
+ */
+function EnumListControl(props: {
+  readonly setting: RestPluginSetting;
+  readonly value: unknown;
+  readonly onChange: (value: unknown) => void;
+  readonly language: string;
+}) {
+  const options = props.setting.options ?? [];
+  const chosen = new Set(itemsOf(props.value).map(String));
+  const toggle = (option: string, on: boolean) => {
+    const next = options
+      .map((candidate) => candidate.value)
+      .filter((candidate) => (candidate === option ? on : chosen.has(candidate)));
+    props.onChange(next.length === 0 ? null : next);
+  };
+  const pills = options.length <= PILLS_AT_MOST;
+  const name = pluginWord(props.setting.name, props.language);
+  const choices = options.map((option) => (
+    <label key={option.value} className={pills ? "sc-toggle-chip" : "sc-check"}>
+      <input
+        type="checkbox"
+        checked={chosen.has(option.value)}
+        onChange={(event) => toggle(option.value, event.target.checked)}
+      />
+      {pluginWord(option.name, props.language)}
+    </label>
+  ));
+  return pills ? (
+    <fieldset className="sc-toggle-chips" aria-label={name}>
+      {choices}
+    </fieldset>
+  ) : (
+    <ul className="sc-check-list" aria-label={name}>
+      {choices.map((choice) => (
+        <li key={choice.key}>{choice}</li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * A list of people or of projects: each chosen one a chip with the way to take it out, and one
+ * choice to add another among those not chosen yet; the value is their ids.
+ */
+function RefListControl(props: {
+  readonly setting: RestPluginSetting;
+  readonly value: unknown;
+  readonly onChange: (value: unknown) => void;
+  readonly id: string;
+  readonly people: readonly RestPerson[];
+  readonly projects: readonly RestProject[];
+}) {
+  const words = useWords();
+  const chosen = itemsOf(props.value).map(String);
+  const candidates: readonly { readonly id: string; readonly label: string }[] =
+    props.setting.of === "person"
+      ? props.people
+          .filter((person) => person.status === "active" || chosen.includes(person.id))
+          .map((person) => ({ id: person.id, label: personChoice(person) }))
+      : props.projects.map((project) => ({
+          id: project.id,
+          label: `${project.name} (${project.key})`,
+        }));
+  const labelOf = (id: string) => candidates.find((candidate) => candidate.id === id)?.label ?? id;
+  const set = (next: readonly string[]) => props.onChange(next.length === 0 ? null : next);
+  const full = props.setting.max !== null && chosen.length >= props.setting.max;
+  return (
+    <div className="sc-chips">
+      {chosen.map((id) => (
+        <span key={id} className="sc-chip">
+          {labelOf(id)}
+          <button
+            type="button"
+            className="sc-chip-remove"
+            aria-label={`${words.common.remove}: ${labelOf(id)}`}
+            onClick={() => set(chosen.filter((kept) => kept !== id))}
+          >
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </span>
+      ))}
+      {!full && (
+        <select
+          id={props.id}
+          className="sc-input sc-chip-add"
+          value=""
+          onChange={(event) => {
+            if (event.target.value !== "") {
+              set([...chosen, event.target.value]);
+            }
+          }}
+        >
+          <option value="">{words.plugins.settings.choose}</option>
+          {candidates
+            .filter((candidate) => !chosen.includes(candidate.id))
+            .map((candidate) => (
+              <option key={candidate.id} value={candidate.id}>
+                {candidate.label}
+              </option>
+            ))}
+        </select>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A list of texts, numbers, days or times: each item a chip with the way to take it out, and a
+ * field that adds one on Enter or with the button; `min` and `max` bound how many.
+ */
+function ItemListControl(props: {
+  readonly setting: RestPluginSetting;
+  readonly value: unknown;
+  readonly onChange: (value: unknown) => void;
+  readonly id: string;
+}) {
+  const words = useWords();
+  const [draft, setDraft] = useState("");
+  const items = itemsOf(props.value);
+  const set = (next: readonly (string | number)[]) =>
+    props.onChange(next.length === 0 ? null : next);
+  const full = props.setting.max !== null && items.length >= props.setting.max;
+  const add = () => {
+    const word = draft.trim();
+    if (word.length === 0 || full) {
+      return;
+    }
+    const item = props.setting.of === "number" ? Number(word) : word;
+    if (typeof item === "number" && !Number.isFinite(item)) {
+      return;
+    }
+    set([...items, item]);
+    setDraft("");
+  };
+  return (
+    <div className="sc-chips">
+      {items.map((item, index) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: an item may be typed twice
+        <span key={`${index}-${String(item)}`} className="sc-chip">
+          {String(item)}
+          <button
+            type="button"
+            className="sc-chip-remove"
+            aria-label={`${words.common.remove}: ${String(item)}`}
+            onClick={() => set(items.filter((_, at) => at !== index))}
+          >
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </span>
+      ))}
+      {!full && (
+        <div className="sc-chip-input">
+          <input
+            id={props.id}
+            className="sc-input"
+            type={itemInputType(props.setting.of)}
+            value={draft}
+            placeholder={words.plugins.settings.itemPlaceholder}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                add();
+              }
+            }}
+          />
+          <Button type="button" size="sm" disabled={draft.trim().length === 0} onClick={add}>
+            {words.plugins.settings.addItem}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * A setting's control, by its type: a person or a project is chosen among the workspace's, by
- * name, and held as its id; a secret has a row of its own below.
+ * name, and held as its id; a time of day is read in the workspace's time zone; a list has a
+ * control per kind of item; a secret has a row of its own below.
  */
 function SettingControl(props: {
   readonly setting: RestPluginSetting;
@@ -291,6 +496,7 @@ function SettingControl(props: {
   readonly people: readonly RestPerson[];
   readonly projects: readonly RestProject[];
 }) {
+  const words = useWords();
   const { setting, value, onChange, id } = props;
   const chosen = typeof value === "string" ? value : "";
   const choose = (event: { readonly target: { readonly value: string } }) =>
@@ -378,25 +584,43 @@ function SettingControl(props: {
           onChange={(event) => onChange(event.target.value === "" ? null : event.target.value)}
         />
       );
-    case "list":
+    case "time":
       return (
-        <input
-          id={id}
-          className="sc-input"
-          value={Array.isArray(value) ? value.join(", ") : ""}
-          onChange={(event) =>
-            onChange(
-              event.target.value.trim() === ""
-                ? null
-                : event.target.value
-                    .split(",")
-                    .map((item) => item.trim())
-                    .filter((item) => item.length > 0)
-                    .map((item) => (setting.of === "number" ? Number(item) : item)),
-            )
-          }
-        />
+        <>
+          <input
+            id={id}
+            className="sc-input"
+            type="time"
+            value={typeof value === "string" ? value : ""}
+            onChange={(event) => onChange(event.target.value === "" ? null : event.target.value)}
+          />
+          <p className="sc-settings-hint">{words.plugins.settings.timeZoneHint}</p>
+        </>
       );
+    case "list":
+      if (setting.of === "enum") {
+        return (
+          <EnumListControl
+            setting={setting}
+            value={value}
+            onChange={onChange}
+            language={props.language}
+          />
+        );
+      }
+      if (setting.of === "person" || setting.of === "project") {
+        return (
+          <RefListControl
+            setting={setting}
+            value={value}
+            onChange={onChange}
+            id={id}
+            people={props.people}
+            projects={props.projects}
+          />
+        );
+      }
+      return <ItemListControl setting={setting} value={value} onChange={onChange} id={id} />;
     default:
       return (
         <input
@@ -433,36 +657,57 @@ function SettingsForm(props: {
     event.preventDefault();
     props.onSave(values);
   };
+  /** A row per setting: the name and the hint on the left, the control on the right. */
+  const rows = (shown: readonly RestPluginSetting[]) =>
+    shown.map((setting) => (
+      <div key={setting.key} className="sc-settings-row">
+        <div className="sc-settings-words">
+          <label className="sc-settings-label" htmlFor={`${prefix}-${setting.key}`}>
+            {pluginWord(setting.name, props.language)}
+            {setting.required && " *"}
+          </label>
+          {setting.description !== null && (
+            <p className="sc-settings-hint">{pluginWord(setting.description, props.language)}</p>
+          )}
+        </div>
+        <div className="sc-settings-control">
+          <SettingControl
+            setting={setting}
+            value={values[setting.key]}
+            id={`${prefix}-${setting.key}`}
+            language={props.language}
+            people={props.people}
+            projects={props.projects}
+            onChange={(value) => setValues((current) => ({ ...current, [setting.key]: value }))}
+          />
+        </div>
+      </div>
+    ));
   return (
     <form
       className="sc-form sc-settings-form"
       onSubmit={submit}
       aria-label={words.plugins.settings.settingsForm}
     >
-      {settings.map((setting) => (
-        <div key={setting.key} className="sc-settings-row">
-          <div className="sc-settings-words">
-            <label className="sc-settings-label" htmlFor={`${prefix}-${setting.key}`}>
-              {pluginWord(setting.name, props.language)}
-              {setting.required && " *"}
-            </label>
-            {setting.description !== null && (
-              <p className="sc-settings-hint">{pluginWord(setting.description, props.language)}</p>
-            )}
-          </div>
-          <div className="sc-settings-control">
-            <SettingControl
-              setting={setting}
-              value={values[setting.key]}
-              id={`${prefix}-${setting.key}`}
-              language={props.language}
-              people={props.people}
-              projects={props.projects}
-              onChange={(value) => setValues((current) => ({ ...current, [setting.key]: value }))}
-            />
-          </div>
-        </div>
-      ))}
+      {rows(settings.filter((setting) => setting.group === null || setting.group === undefined))}
+      {(props.detail.settingGroups ?? []).map((group) => {
+        const grouped = settings.filter((setting) => setting.group === group.key);
+        if (grouped.length === 0) {
+          return null;
+        }
+        const description = pluginWord(group.description, props.language);
+        return (
+          <section
+            key={group.key}
+            className="sc-settings-group"
+            aria-label={pluginWord(group.name, props.language)}
+          >
+            <h3 className="sc-settings-group-title">{pluginWord(group.name, props.language)}</h3>
+            {description !== "" && <p className="sc-settings-hint">{description}</p>}
+            {rows(grouped)}
+          </section>
+        );
+      })}
       <div className="sc-form-actions">
         <Button type="submit" variant="primary" disabled={props.busy}>
           {words.common.save}

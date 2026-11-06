@@ -182,6 +182,10 @@ export const ko: Messages = {
       operations: "명령과 조회",
       console: "콘솔 버전",
       consoleRange: (range) => `콘솔 ${range}`,
+      timeZoneHint: "워크스페이스 시간대 기준입니다.",
+      addItem: "추가",
+      itemPlaceholder: "입력한 뒤 추가",
+      choose: "선택…",
     },
     capability: {
       files: { name: "파일", opens: "레코드에 파일을 붙입니다. 배포가 허용한 용량까지." },

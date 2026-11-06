@@ -673,6 +673,28 @@
             "additionalProperties": false
           }
         },
+        "translations": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "body": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "createdAt": {
           "type": "string",
           "format": "date-time",
@@ -688,6 +710,22 @@
         "files",
         "createdAt"
       ],
+      "additionalProperties": false
+    },
+    "restCommentTranslationsSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "body": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
       "additionalProperties": false
     },
     "restCommentsSchema": {
@@ -843,6 +881,28 @@
                   ],
                   "additionalProperties": false
                 }
+              },
+              "translations": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "body": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               },
               "createdAt": {
                 "type": "string",
@@ -1053,6 +1113,16 @@
           "type": "string",
           "format": "uuid",
           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "deciderIds": {
+          "minItems": 1,
+          "maxItems": 10,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
         }
       },
       "required": [
@@ -1138,6 +1208,52 @@
             ],
             "additionalProperties": false
           }
+        },
+        "translations": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "question": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "body": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "options": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "taskId": {
           "anyOf": [
@@ -1326,6 +1442,91 @@
             "deactivatedAt"
           ],
           "additionalProperties": false
+        },
+        "deciders": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "login": {
+                "type": "string"
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "avatar": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "role": {
+                "type": "string",
+                "enum": [
+                  "admin",
+                  "member"
+                ]
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "active",
+                  "deactivated"
+                ]
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "organization",
+                  "domain",
+                  "listed"
+                ]
+              },
+              "deactivatedAt": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "managerId": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "login",
+              "name",
+              "avatar",
+              "role",
+              "status",
+              "source",
+              "deactivatedAt"
+            ],
+            "additionalProperties": false
+          }
         },
         "run": {
           "anyOf": [
@@ -1664,6 +1865,46 @@
       ],
       "additionalProperties": false
     },
+    "restDecisionTranslationsSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "question": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "body": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "options": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "restDecisionsSchema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
@@ -1709,6 +1950,52 @@
                   ],
                   "additionalProperties": false
                 }
+              },
+              "translations": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "question": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      },
+                      "body": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      },
+                      "options": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               },
               "taskId": {
                 "anyOf": [
@@ -1897,6 +2184,91 @@
                   "deactivatedAt"
                 ],
                 "additionalProperties": false
+              },
+              "deciders": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "login": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "avatar": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "admin",
+                        "member"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "active",
+                        "deactivated"
+                      ]
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "organization",
+                        "domain",
+                        "listed"
+                      ]
+                    },
+                    "deactivatedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "managerId": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "login",
+                    "name",
+                    "avatar",
+                    "role",
+                    "status",
+                    "source",
+                    "deactivatedAt"
+                  ],
+                  "additionalProperties": false
+                }
               },
               "run": {
                 "anyOf": [
@@ -3258,6 +3630,15 @@
         "title": {
           "type": "string"
         },
+        "translations": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
         "fields": {
           "type": "array",
           "items": {
@@ -3633,6 +4014,15 @@
             },
             "title": {
               "type": "string"
+            },
+            "translations": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
             },
             "fields": {
               "type": "array",
@@ -4037,6 +4427,15 @@
                   },
                   "title": {
                     "type": "string"
+                  },
+                  "translations": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "string"
+                    }
                   },
                   "fields": {
                     "type": "array",
@@ -5647,6 +6046,52 @@
                       "additionalProperties": false
                     }
                   },
+                  "translations": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "question": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          },
+                          "body": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          },
+                          "options": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string"
+                              },
+                              "additionalProperties": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "taskId": {
                     "anyOf": [
                       {
@@ -5834,6 +6279,91 @@
                       "deactivatedAt"
                     ],
                     "additionalProperties": false
+                  },
+                  "deciders": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "login": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "avatar": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "admin",
+                            "member"
+                          ]
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "active",
+                            "deactivated"
+                          ]
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "organization",
+                            "domain",
+                            "listed"
+                          ]
+                        },
+                        "deactivatedAt": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "managerId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "login",
+                        "name",
+                        "avatar",
+                        "role",
+                        "status",
+                        "source",
+                        "deactivatedAt"
+                      ],
+                      "additionalProperties": false
+                    }
                   },
                   "run": {
                     "anyOf": [
@@ -6934,6 +7464,37 @@
                   "body": {
                     "type": "string"
                   },
+                  "translations": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "title": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          },
+                          "body": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "state": {
                     "type": "string",
                     "enum": [
@@ -7430,6 +7991,37 @@
                   },
                   "body": {
                     "type": "string"
+                  },
+                  "translations": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "title": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          },
+                          "body": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "state": {
                     "type": "string",
@@ -8365,6 +8957,7 @@
                   "boolean",
                   "enum",
                   "day",
+                  "time",
                   "person",
                   "project",
                   "secret",
@@ -8457,6 +9050,12 @@
                   "null"
                 ]
               },
+              "group": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
               "set": {
                 "type": "boolean"
               },
@@ -8495,6 +9094,48 @@
               "set",
               "value",
               "setAt"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "settingGroups": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "name": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "key",
+              "name",
+              "description"
             ],
             "additionalProperties": false
           }
@@ -10113,6 +10754,7 @@
             "boolean",
             "enum",
             "day",
+            "time",
             "person",
             "project",
             "secret",
@@ -10200,6 +10842,12 @@
           ]
         },
         "of": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "group": {
           "type": [
             "string",
             "null"
@@ -15605,6 +16253,37 @@
         "body": {
           "type": "string"
         },
+        "translations": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "body": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "state": {
           "type": "string",
           "enum": [
@@ -15993,6 +16672,31 @@
       ],
       "additionalProperties": false
     },
+    "restTaskTranslationsSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "body": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "restTasksSchema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
@@ -16017,6 +16721,37 @@
               },
               "body": {
                 "type": "string"
+              },
+              "translations": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "title": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      },
+                      "body": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               },
               "state": {
                 "type": "string",
@@ -17108,6 +17843,37 @@
                   "body": {
                     "type": "string"
                   },
+                  "translations": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "title": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          },
+                          "body": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "state": {
                     "type": "string",
                     "enum": [
@@ -17604,6 +18370,37 @@
                   },
                   "body": {
                     "type": "string"
+                  },
+                  "translations": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "title": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          },
+                          "body": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "state": {
                     "type": "string",
@@ -18123,6 +18920,52 @@
                       "additionalProperties": false
                     }
                   },
+                  "translations": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "question": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          },
+                          "body": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          },
+                          "options": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string"
+                              },
+                              "additionalProperties": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "taskId": {
                     "anyOf": [
                       {
@@ -18310,6 +19153,91 @@
                       "deactivatedAt"
                     ],
                     "additionalProperties": false
+                  },
+                  "deciders": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "login": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "avatar": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "admin",
+                            "member"
+                          ]
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "active",
+                            "deactivated"
+                          ]
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "organization",
+                            "domain",
+                            "listed"
+                          ]
+                        },
+                        "deactivatedAt": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "managerId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "login",
+                        "name",
+                        "avatar",
+                        "role",
+                        "status",
+                        "source",
+                        "deactivatedAt"
+                      ],
+                      "additionalProperties": false
+                    }
                   },
                   "run": {
                     "anyOf": [

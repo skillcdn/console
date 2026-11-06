@@ -156,6 +156,8 @@ export const restPluginSettingSchema = z.object({
   max: z.nullable(z.number()),
   options: z.nullable(z.array(z.object({ value: z.string(), name: localized }))),
   of: z.nullable(z.string()),
+  /** The group the setting is shown under, or `null` for above every group; answered from 0.4.4 and read as optional. */
+  group: z.optional(z.nullable(z.string())),
   /** Whether a value is set; a secret's value is never here. */
   set: z.boolean(),
   value: z.nullable(z.unknown()),
@@ -186,6 +188,10 @@ export const restPluginDetailSchema = z.extend(restPluginSchema, {
   /** The board project the manifest proposes, for an administrator who makes it; `null` where it proposes none. */
   boardDefaults: z.nullable(z.object({ key: z.string(), name: localized, description: localized })),
   settings: z.array(restPluginSettingSchema),
+  /** The groups the settings form is divided into, in the manifest's order; answered from 0.4.4 and read as optional. */
+  settingGroups: z.optional(
+    z.array(z.object({ key: z.string(), name: localized, description: z.nullable(localized) })),
+  ),
   /** The grants, to an administrator; `null` to a member. */
   grants: z.nullable(z.array(restPluginGrantSchema)),
   /** The plugin's own events are at this path. */

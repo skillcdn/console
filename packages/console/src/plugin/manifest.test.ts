@@ -134,6 +134,48 @@ describe("parsePluginManifest", () => {
     );
   });
 
+  it("takes a time of day, a list of an enum with a default, and groups the settings into those declared", () => {
+    const grouped = {
+      settings: [
+        {
+          key: "requestBy",
+          type: "time",
+          name: { en: "Request by" },
+          default: "18:00",
+          group: "policy",
+        },
+        {
+          key: "workdays",
+          type: "list",
+          of: "enum",
+          name: { en: "Workdays" },
+          options: [
+            { value: "mon", name: { en: "Mon" } },
+            { value: "tue", name: { en: "Tue" } },
+          ],
+          default: ["mon", "tue"],
+        },
+      ],
+      settingGroups: [{ key: "policy", name: { en: "Policy" } }],
+    };
+    expect(problemsOf(grouped)).toEqual([]);
+    expect(
+      problemsOf({ ...grouped, settings: [{ ...grouped.settings[0], default: "25:00" }] }),
+    ).toEqual(["settings.0: the default is not a time"]);
+    expect(problemsOf({ ...grouped, settingGroups: [] })).toEqual([
+      "settings.requestBy names the group policy, which settingGroups does not declare",
+    ]);
+    expect(
+      problemsOf({
+        ...grouped,
+        settingGroups: [
+          { key: "policy", name: { en: "Policy" } },
+          { key: "policy", name: { en: "Again" } },
+        ],
+      }),
+    ).toEqual(["settingGroups: policy is declared twice"]);
+  });
+
   it("holds the parts to each other", () => {
     expect(problemsOf({ defaultRole: "owner" })).toEqual([
       "defaultRole owner is not a declared role",

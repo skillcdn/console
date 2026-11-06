@@ -8,9 +8,10 @@ export const MAX_PLUGIN_DESCRIPTION_LENGTH = 200;
 export const MAX_PLUGIN_AGENT_NOTE_LENGTH = 200;
 /** A plugin's key, a role's, a page's, a widget's, a setting's, a collection's, a command's: `^[a-z][a-z0-9-]{1,31}$`. */
 export const MAX_PLUGIN_KEY_LENGTH = 32;
-/** How many roles, settings, pages and widgets one manifest declares. */
+/** How many roles, settings, groups of settings, pages and widgets one manifest declares. */
 export const MAX_PLUGIN_ROLES = 10;
 export const MAX_PLUGIN_SETTINGS = 50;
+export const MAX_PLUGIN_SETTING_GROUPS = 10;
 export const MAX_PLUGIN_PAGES = 12;
 export const MAX_PLUGIN_WIDGETS = 4;
 /** How many collections, commands and queries together, endpoints, and indexes of one collection a server module defines. */

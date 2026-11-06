@@ -93,6 +93,7 @@ export {
   type PluginPageLevel,
   type PluginRole,
   type PluginSetting,
+  type PluginSettingGroup,
   type PluginSettingType,
   type PluginWidget,
   type PluginWidgetPlace,
@@ -103,6 +104,7 @@ export {
   RESERVED_PAGE_KEYS,
   RESERVED_PLUGIN_KEYS,
   SETTING_KEY_PATTERN,
+  TIME_OF_DAY,
 } from "./plugin/manifest.js";
 export {
   isPluginError,

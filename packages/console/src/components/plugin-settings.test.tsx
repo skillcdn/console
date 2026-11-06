@@ -201,6 +201,96 @@ describe("a plugin's settings page", () => {
     expect(html).not.toContain("악의적");
   });
 
+  it("draws a control per kind of setting, and divides the form into the groups declared", () => {
+    const field = (extra: Record<string, unknown>) => ({
+      description: null,
+      required: false,
+      default: null,
+      min: null,
+      max: null,
+      options: null,
+      of: null,
+      set: false,
+      value: null,
+      setAt: null,
+      ...extra,
+    });
+    const html = render({
+      ...DETAIL,
+      settings: [
+        field({ key: "notice", type: "text", name: { en: "Notice" } }),
+        field({
+          key: "workdays",
+          type: "list",
+          of: "enum",
+          name: { en: "Workdays", ko: "근무일" },
+          options: [
+            { value: "mon", name: { en: "Mon", ko: "월" } },
+            { value: "tue", name: { en: "Tue", ko: "화" } },
+            { value: "sat", name: { en: "Sat", ko: "토" } },
+          ],
+          value: ["mon", "tue"],
+          set: true,
+          group: "calendar",
+        }),
+        field({
+          key: "approvers",
+          type: "list",
+          of: "person",
+          name: { en: "Approvers" },
+          value: [BOB],
+          set: true,
+          group: "policy",
+        }),
+        field({
+          key: "holidays",
+          type: "list",
+          of: "day",
+          name: { en: "Holidays" },
+          group: "calendar",
+        }),
+        field({
+          key: "requestBy",
+          type: "time",
+          name: { en: "Request by" },
+          value: "18:00",
+          set: true,
+          group: "policy",
+        }),
+      ],
+      settingGroups: [
+        {
+          key: "policy",
+          name: { en: "Policy", ko: "규정" },
+          description: { en: "How leave is approved." },
+        },
+        { key: "calendar", name: { en: "Calendar", ko: "달력" }, description: null },
+      ],
+    } as unknown as RestPluginDetail);
+    // The groups, in order, after the ungrouped setting; each with its name in the person's language.
+    const notice = html.indexOf("Notice");
+    const policy = html.indexOf('<h3 class="sc-settings-group-title">규정</h3>');
+    const calendar = html.indexOf('<h3 class="sc-settings-group-title">달력</h3>');
+    expect(notice).toBeGreaterThan(-1);
+    expect(policy).toBeGreaterThan(notice);
+    expect(calendar).toBeGreaterThan(policy);
+    expect(html).toContain("How leave is approved.");
+    // A list of an enum: a pill per choice, the chosen ticked, named in the person's language.
+    expect(count(html, 'class="sc-toggle-chip"')).toBe(3);
+    expect(count(html, 'type="checkbox" checked=""')).toBe(2);
+    expect(html).toContain("월");
+    expect(html).not.toContain("mon, tue");
+    // A list of people: the chosen as a chip, the rest offered.
+    expect(html).toContain('class="sc-chip">Bob (bob)');
+    expect(html).toContain(`<option value="${CAROL}">carol</option>`);
+    expect(html).not.toContain(`<option value="${BOB}">Bob (bob)</option>`);
+    // A list of days: a date field that adds one; a time, with the time zone said.
+    expect(html).toContain('type="date"');
+    expect(html).toContain('type="time"');
+    expect(html).toContain('value="18:00"');
+    expect(html).toContain("워크스페이스 시간대 기준입니다.");
+  });
+
   it("offers a disabled plugin the form that enables it, what was consented to before ticked, and the purge", () => {
     const html = render({ ...DETAIL, state: "disabled", consent: ["board:read"], board: null });
     expect(html).not.toContain(">비활성화</button>");

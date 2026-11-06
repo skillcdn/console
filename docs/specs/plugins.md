@@ -56,7 +56,8 @@
 | `defaultRole` | string | a role every member of the workspace holds without a grant; optional |
 | `requires` | `{ [key]: range }` | other plugins this one needs, by a semver range of their version; they are enabled first and cannot be disabled while this one is |
 | `board` | `{ needs, defaults? }` | `needs` is `required`, `optional` or `none`; `defaults` the `key`, `name` and `description` per language of the project an administrator may make for it |
-| `settings` | Setting[] | up to 50, each `{ key, type, name, description?, required?, default?, min?, max?, options?, of? }`; `key` a lowercase letter followed by letters and digits (`daysPerYear`), as code and `--set` name it; types `text`, `markdown`, `number`, `boolean`, `enum` (with `options`, each `{ value, name }`), `day`, `person`, `project`, `secret`, `list` (with `of`, any type but `secret` and `list`); `min` and `max` bound a number, the length of a text or the items of a list; `default` fits the type, and `person`, `project` and `secret` have none |
+| `settings` | Setting[] | up to 50, each `{ key, type, name, description?, required?, default?, min?, max?, options?, of? }`; `key` a lowercase letter followed by letters and digits (`daysPerYear`), as code and `--set` name it; types `text`, `markdown`, `number`, `boolean`, `enum` (with `options`, each `{ value, name }`), `day`, `time` (`HH:MM`, read in the workspace's time zone), `person`, `project`, `secret`, `list` (with `of`, any type but `secret` and `list`); `min` and `max` bound a number, the length of a text or the items of a list; `default` fits the type, and `person`, `project` and `secret` have none; `group` names one of `settingGroups`, under which the form shows the setting |
+| `settingGroups` | Group[] | up to 10, each `{ key, name, description? }`, in the order the form shows them; the settings without a `group` come above them |
 | `menu` | `{ group, order?, name? }` | the tab the plugin is under: a group of the console's (`people`, `customers`, `money`, `operations`, `marketing`, `engineering`, `reports`), or one the plugin declares with a `name` per language; `order` within the row, default 100 |
 | `pages` | Page[] | up to 12, each `{ key, name, level, roles?, wide? }`; `level` is `workspace` or `project`; page keys as `key`, and not `frame`, `web` or `x` |
 | `widgets` | Widget[] | up to 4, each `{ key, name, place, size, roles? }`; `place` is `home:top` or `home:bottom`; `size` is `third`, `half` or `full` |
@@ -224,7 +225,7 @@ Declared in the manifest, consented to by an administrator when enabling, enforc
 
 ## Settings
 
-The form on `/settings/plugins/<key>` and `console plugin <key> settings --set` come from the manifest's `settings`. A `secret` is sealed with the deployment's secret (`AUTH_SECRET`, with the purpose `plugin-secret`), never returned by any route or shown in any form (only whether and when it was set), and used by the console where the plugin names it: `ctx.fetch`'s `secret`, `ctx.secrets.sign` and `verify`, a webhook's `secret`. A deployment without `AUTH_SECRET` refuses settings of type `secret`. `person` and `project` settings hold ids and are shown as names, chosen on the page among the workspace's people and projects; a person who left or a project put away makes the setting invalid, which the pages show. Settings are the workspace's; a plugin that needs a value per project keeps a record linked to the project.
+The form on `/settings/plugins/<key>` and `console plugin <key> settings --set` come from the manifest's `settings`. A `secret` is sealed with the deployment's secret (`AUTH_SECRET`, with the purpose `plugin-secret`), never returned by any route or shown in any form (only whether and when it was set), and used by the console where the plugin names it: `ctx.fetch`'s `secret`, `ctx.secrets.sign` and `verify`, a webhook's `secret`. A deployment without `AUTH_SECRET` refuses settings of type `secret`. `person` and `project` settings hold ids and are shown as names, chosen on the page among the workspace's people and projects; a person who left or a project put away makes the setting invalid, which the pages show. A `time` is `HH:MM`, read in the workspace's time zone, which the form says beside it. A `list` has a control for its kind of item: a list of an `enum` is a pill per choice (a column of boxes past eight), a list of `person` or `project` the chips of those chosen with one choice to add another, a list of anything else the items as chips with a field that adds one, `min` and `max` bounding how many; `--set` takes a list with commas between, as before. The form is divided into the `settingGroups` the manifest declares, a titled block each in the manifest's order, the settings without a group above them. Settings are the workspace's; a plugin that needs a value per project keeps a record linked to the project.
 
 ## Records
 
@@ -438,7 +439,7 @@ The install path is the first line (a release of the deployment, from a lockfile
 | outbound requests; an answer; its time | 60 a minute per plugin; 10 MiB; 10 s |
 | webhook requests | 600 a minute per plugin |
 | `ctx.log` | 100 lines a minute |
-| collections; commands and queries; endpoints; pages; widgets; roles; settings; indexes of a collection | 50; 100; 20; 12; 4; 10; 50; 8 |
+| collections; commands and queries; endpoints; pages; widgets; roles; settings; groups of settings; indexes of a collection | 50; 100; 20; 12; 4; 10; 50; 10; 8 |
 | SQL: a statement; a result; connections | 10 s; 10,000 rows and 4 MiB; 4 |
 | a page of a list | 200 |
 

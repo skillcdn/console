@@ -48,6 +48,7 @@ import {
   type RecordQuery,
   type RecordVersion,
   satisfiesRange,
+  TIME_OF_DAY,
 } from "@skillcdn/console/plugin";
 import { configuresPlugins, personVisibleTo } from "../auth/policy.js";
 import type { Secrets } from "../auth/secrets.js";
@@ -286,6 +287,10 @@ export function settingProblem(setting: PluginSetting, value: unknown): string |
         return typeof candidate === "string" && DAY.test(candidate)
           ? undefined
           : `${name} is a day as YYYY-MM-DD`;
+      case "time":
+        return typeof candidate === "string" && TIME_OF_DAY.test(candidate)
+          ? undefined
+          : `${name} is a time of day as HH:MM`;
       case "person":
       case "project":
         return typeof candidate === "string" && candidate.length > 0 && candidate.length <= 254
@@ -696,6 +701,7 @@ export class Plugins {
         max: setting.max ?? null,
         options: setting.options ?? null,
         of: setting.of ?? null,
+        group: setting.group ?? null,
         set: secret ? setAt !== undefined : value !== undefined && value !== null,
         value: secret || !admin ? null : (value ?? null),
         setAt: setAt?.toISOString() ?? null,
@@ -752,6 +758,11 @@ export class Plugins {
               description: entry.manifest.board.defaults.description,
             },
       settings: await this.settingsOf(entry, install, admin),
+      settingGroups: (entry.manifest?.settingGroups ?? []).map((group) => ({
+        key: group.key,
+        name: group.name,
+        description: group.description ?? null,
+      })),
       grants: admin
         ? (await listGrants(this.options.database, workspace.id, key)).map((grant) =>
             this.restGrant(grant),

@@ -5909,6 +5909,75 @@ select.sc-input {
   font-size: var(--sc-text-sm);
 }
 
+/* A setting of several choices (a list of an enum): a pill per choice, lit while chosen. */
+.sc-toggle-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.sc-toggle-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sc-space-1);
+  min-height: var(--sc-control-size);
+  padding: 0 var(--sc-space-3);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-color-bg-inset);
+  font-size: var(--sc-text-sm);
+  cursor: pointer;
+}
+
+.sc-toggle-chip input {
+  margin: 0;
+}
+
+.sc-toggle-chip:has(input:checked) {
+  border-color: var(--sc-color-point);
+  background: var(--sc-color-point-subtle);
+  color: var(--sc-color-point);
+}
+
+/* A list of several choices too long for pills: a column of boxes. */
+.sc-check-list {
+  display: grid;
+  gap: var(--sc-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A list of items typed one by one: the field and its button on one line, the items as chips above. */
+.sc-chip-input {
+  display: flex;
+  gap: var(--sc-space-2);
+  width: 100%;
+}
+
+.sc-chip-input .sc-input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The settings form divided into groups: each a titled block after the ungrouped settings. */
+.sc-settings-group {
+  padding-top: var(--sc-space-5);
+}
+
+.sc-settings-group-title {
+  margin: 0;
+  font-size: var(--sc-text-md);
+  font-weight: var(--sc-weight-medium);
+}
+
+.sc-settings-group > .sc-settings-row:first-of-type {
+  border-top: 0;
+}
+
 /* The capabilities an enabled plugin holds, one a line; its commands as words side by side. */
 .sc-plugin-held {
   display: grid;

@@ -16,6 +16,7 @@ import {
   MAX_PLUGIN_OPTIONS,
   MAX_PLUGIN_PAGES,
   MAX_PLUGIN_ROLES,
+  MAX_PLUGIN_SETTING_GROUPS,
   MAX_PLUGIN_SETTINGS,
   MAX_PLUGIN_WIDGETS,
 } from "./limits.js";
@@ -135,6 +136,7 @@ export const PLUGIN_SETTING_TYPES = [
   "boolean",
   "enum",
   "day",
+  "time",
   "person",
   "project",
   "secret",
@@ -157,6 +159,8 @@ export type PluginBoardNeeds = (typeof PLUGIN_BOARD_NEEDS)[number];
 
 const LANGUAGE_TAG = /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
 const DAY = /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/;
+/** A time of day as `HH:MM`, read in the workspace's time zone. */
+export const TIME_OF_DAY = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 /** A path within the package: relative, forward slashes, never climbing out. */
 const PACKAGE_PATH = /^(?!\/)(?!\.\.(?:\/|$))(?:[A-Za-z0-9._-]+\/)*[A-Za-z0-9._-]+$/;
 /** A semver range as npm spells one, loosely: the console compares versions, the registry resolves. */
@@ -230,6 +234,8 @@ const pluginSettingSchema = z
       z.array(settingOption).check(z.minLength(1), z.maxLength(MAX_PLUGIN_OPTIONS)),
     ),
     of: z.optional(settingItemType),
+    /** The group of `settingGroups` the setting is shown under; left out, above every group. */
+    group: z.optional(key),
   })
   .check(
     z.superRefine((setting, ctx) => {
@@ -240,6 +246,15 @@ const pluginSettingSchema = z
   );
 
 export type PluginSetting = z.infer<typeof pluginSettingSchema>;
+
+/** A group the settings form is divided into: a panel with a name and, where given, a word under it. */
+const pluginSettingGroupSchema = z.strictObject({
+  key,
+  name: localized(MAX_PLUGIN_NAME_LENGTH),
+  description: z.optional(localized(MAX_PLUGIN_DESCRIPTION_LENGTH)),
+});
+
+export type PluginSettingGroup = z.infer<typeof pluginSettingGroupSchema>;
 
 /** True when `value` is what a setting of `type` holds, `options` being the values of an `enum`. */
 function fitsSettingType(
@@ -259,6 +274,8 @@ function fitsSettingType(
       return typeof value === "string" && (options ?? []).includes(value);
     case "day":
       return typeof value === "string" && DAY.test(value);
+    case "time":
+      return typeof value === "string" && TIME_OF_DAY.test(value);
     case "person":
     case "project":
       return false;
@@ -427,6 +444,10 @@ export const pluginManifestSchema = z
     ),
     board: z._default(pluginBoardSchema, { needs: "none" }),
     settings: z._default(z.array(pluginSettingSchema).check(z.maxLength(MAX_PLUGIN_SETTINGS)), []),
+    settingGroups: z._default(
+      z.array(pluginSettingGroupSchema).check(z.maxLength(MAX_PLUGIN_SETTING_GROUPS)),
+      [],
+    ),
     menu: z.optional(pluginMenuSchema),
     pages: z._default(z.array(pluginPageSchema).check(z.maxLength(MAX_PLUGIN_PAGES)), []),
     widgets: z._default(z.array(pluginWidgetSchema).check(z.maxLength(MAX_PLUGIN_WIDGETS)), []),
@@ -492,9 +513,18 @@ function manifestProblems(
     ["pages", manifest.pages.map((page) => page.key)],
     ["widgets", manifest.widgets.map((widget) => widget.key)],
     ["settings", manifest.settings.map((setting) => setting.key)],
+    ["settingGroups", manifest.settingGroups.map((group) => group.key)],
   ] as const) {
     for (const twice of duplicates(keys)) {
       problems.push(`${what}: ${twice} is declared twice`);
+    }
+  }
+  const groups = manifest.settingGroups.map((group) => group.key);
+  for (const setting of manifest.settings) {
+    if (setting.group !== undefined && !groups.includes(setting.group)) {
+      problems.push(
+        `settings.${setting.key} names the group ${setting.group}, which settingGroups does not declare`,
+      );
     }
   }
   if ((manifest.pages.length > 0 || manifest.widgets.length > 0) && manifest.web === undefined) {

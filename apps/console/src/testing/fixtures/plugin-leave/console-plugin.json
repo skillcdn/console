@@ -43,13 +43,15 @@
       "description": { "en": "What a full year gives." },
       "default": 15,
       "min": 0,
-      "max": 60
+      "max": 60,
+      "group": "policy"
     },
     {
       "key": "approvalNeeded",
       "type": "boolean",
       "name": { "en": "Approval needed" },
-      "default": true
+      "default": true,
+      "group": "policy"
     },
     {
       "key": "accrual",
@@ -59,20 +61,58 @@
         { "value": "yearly", "name": { "en": "All at the start of the year" } },
         { "value": "monthly", "name": { "en": "A twelfth each month" } }
       ],
-      "default": "yearly"
+      "default": "yearly",
+      "group": "policy"
+    },
+    {
+      "key": "requestBy",
+      "type": "time",
+      "name": { "en": "Request by" },
+      "description": { "en": "The time of the day before by which a request is in." },
+      "default": "18:00",
+      "group": "policy"
     },
     {
       "key": "yearStart",
       "type": "day",
       "name": { "en": "Year starts" },
-      "description": { "en": "The first day of the leave year." }
+      "description": { "en": "The first day of the leave year." },
+      "group": "calendar"
+    },
+    {
+      "key": "workdays",
+      "type": "list",
+      "of": "enum",
+      "name": { "en": "Workdays" },
+      "description": { "en": "The days of the week leave is counted on." },
+      "options": [
+        { "value": "mon", "name": { "en": "Mon" } },
+        { "value": "tue", "name": { "en": "Tue" } },
+        { "value": "wed", "name": { "en": "Wed" } },
+        { "value": "thu", "name": { "en": "Thu" } },
+        { "value": "fri", "name": { "en": "Fri" } },
+        { "value": "sat", "name": { "en": "Sat" } },
+        { "value": "sun", "name": { "en": "Sun" } }
+      ],
+      "default": ["mon", "tue", "wed", "thu", "fri"],
+      "group": "calendar"
     },
     {
       "key": "holidays",
       "type": "list",
       "of": "day",
       "name": { "en": "Holidays" },
-      "description": { "en": "Days that take no leave." }
+      "description": { "en": "Days that take no leave." },
+      "max": 30,
+      "group": "calendar"
+    },
+    {
+      "key": "approvers",
+      "type": "list",
+      "of": "person",
+      "name": { "en": "Approvers" },
+      "description": { "en": "Who may approve, any of them." },
+      "max": 5
     },
     {
       "key": "notice",
@@ -92,5 +132,13 @@
       "name": { "en": "Archive project" },
       "description": { "en": "Where the year's requests are filed." }
     }
+  ],
+  "settingGroups": [
+    {
+      "key": "policy",
+      "name": { "en": "Policy" },
+      "description": { "en": "What leave the people have, and how it is approved." }
+    },
+    { "key": "calendar", "name": { "en": "Calendar" } }
   ]
 }
