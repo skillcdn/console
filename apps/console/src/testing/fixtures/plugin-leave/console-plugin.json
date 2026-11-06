@@ -4,6 +4,7 @@
   "description": { "en": "Leave requests and their approval, for the tests of the board." },
   "agentNote": { "en": "Requests leave with the command request; the approval is a decision." },
   "pluginApi": 1,
+  "console": ">=0.4.3 <0.6",
   "server": "server/index.js",
   "capabilities": [
     "board:read",
