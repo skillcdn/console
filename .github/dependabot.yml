@@ -1,0 +1,68 @@
+# What Dependabot proposes, and how (AGENTS.md, "Dependencies"). A proposal is a change like any
+# other: CI runs `pnpm check` on it, and it is merged when green.
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    # The same three days as `minimumReleaseAge` in pnpm-workspace.yaml: a release younger than
+    # that is not installable, so it is not proposed either.
+    cooldown:
+      default-days: 3
+    open-pull-requests-limit: 5
+    ignore:
+      # A line of SkillCDN is adopted by decision, every @skillcdn package at one version, with a
+      # changeset of its own (ADR-0034); `pnpm check:version` holds the rule.
+      - dependency-name: "@skillcdn/*"
+      # zod follows @skillcdn/core: the two must resolve to one copy, or the package's build cannot
+      # emit the declarations of the schemas composed from core's (AGENTS.md, "Gotchas"). It moves
+      # with the line, or by hand with `pnpm dedupe` after it.
+      - dependency-name: "zod"
+      # The Node.js major is pinned on purpose (.nvmrc, devEngines, the Dockerfile) and moves by hand.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+    groups:
+      toolchain:
+        patterns:
+          - "@biomejs/*"
+          - "@changesets/*"
+          - "@types/*"
+          - "@vitejs/*"
+          - "drizzle-kit"
+          - "esbuild"
+          - "playwright"
+          - "tsx"
+          - "turbo"
+          - "typescript"
+          - "vite"
+          - "vitest"
+      runtime-minor:
+        dependency-type: production
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: /deploy
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: docker-compose
+    directory: /deploy
+    schedule:
+      interval: weekly
+    ignore:
+      # A PostgreSQL major needs a data migration, not a pull request.
+      - dependency-name: "postgres"
+        update-types: ["version-update:semver-major"]
