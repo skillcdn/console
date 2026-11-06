@@ -180,6 +180,8 @@ export const ko: Messages = {
       purged: "삭제했습니다.",
       agentNote: "에이전트에게",
       operations: "명령과 조회",
+      console: "콘솔 버전",
+      consoleRange: (range) => `콘솔 ${range}`,
     },
     capability: {
       files: { name: "파일", opens: "레코드에 파일을 붙입니다. 배포가 허용한 용량까지." },

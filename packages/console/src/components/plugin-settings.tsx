@@ -110,6 +110,9 @@ export function PluginSettingsList(props: PluginSettingsListProps) {
             {pluginWord(plugin.name, props.language)}{" "}
             <span className="sc-muted">
               {plugin.key} {plugin.version}
+              {plugin.console !== null && plugin.console !== undefined && (
+                <> · {settings.consoleRange(plugin.console)}</>
+              )}
             </span>
           </a>
           <span className="sc-task-row-meta">
@@ -184,6 +187,9 @@ function Overview(props: {
   const { detail, language } = props;
   const enabled = detail.state === "enabled";
   const rows: { readonly key: string; readonly name: string; readonly value: ReactNode }[] = [];
+  if (detail.console !== null && detail.console !== undefined) {
+    rows.push({ key: "console", name: settings.console, value: <code>{detail.console}</code> });
+  }
   if (detail.board !== null) {
     rows.push({
       key: "board",

@@ -103,6 +103,13 @@ export const restPluginSchema = z.object({
   /** The sentence agents read with the rules, or `null` for the description. */
   agentNote: z.nullable(localized),
   version: z.string(),
+  /**
+   * The consoles the plugin declares it runs on, a semver range of the console's version, or
+   * `null` where the manifest names none; a console outside it fails the plugin with the reason
+   * in `problems`. Answered from 0.4.4 and read as optional, so that a console built on this
+   * package still reads an older console's answer.
+   */
+  console: z.optional(z.nullable(z.string())),
   state: z.enum(PLUGIN_STATES),
   /** Why the plugin failed, or waits for consent; empty otherwise. */
   problems: z.array(z.string()),

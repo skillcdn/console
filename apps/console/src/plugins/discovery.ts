@@ -9,8 +9,10 @@ import {
   PLUGIN_API_MAJORS,
   type PluginManifest,
   parsePluginManifest,
+  satisfiesRange,
 } from "@skillcdn/console/plugin";
 import * as z from "zod";
+import { APP_VERSION } from "../version.js";
 
 export interface InstalledPlugin {
   readonly key: string;
@@ -58,10 +60,16 @@ export async function installedPackageNames(pluginsDir: string): Promise<string[
   return Object.keys(parsed.data.dependencies ?? {}).filter((name) => PACKAGE_NAME.test(name));
 }
 
-/** The plugin at `dir`, read as a console reads one, or its problems. */
+/** What a reading of the plugins is told of the console: its version, which a manifest's `console` is held to; the package's when left out. */
+export interface DiscoveryOptions {
+  readonly consoleVersion?: string | undefined;
+}
+
+/** The plugin at `dir`, read as a console of `consoleVersion` reads one, or its problems. */
 export async function readPluginPackage(
   packageName: string,
   dir: string,
+  consoleVersion: string = APP_VERSION,
 ): Promise<InstalledPlugin | FailedPlugin> {
   const problems: string[] = [];
   let version: string | undefined;
@@ -106,6 +114,14 @@ export async function readPluginPackage(
       `the plugin was written against plugin API ${manifest.pluginApi}; this console serves ${PLUGIN_API_MAJORS.join(", ")} (currently ${CURRENT_PLUGIN_API})`,
     );
   }
+  // The consoles the plugin declares it runs on, read where pluginApi is: a console outside the
+  // range fails the plugin with the range and its own version, so that whoever installs reads
+  // which of the two to move.
+  if (manifest.console !== undefined && !satisfiesRange(consoleVersion, manifest.console)) {
+    problems.push(
+      `the plugin is built for a console ${manifest.console}; this console is ${consoleVersion}`,
+    );
+  }
   if (problems.length > 0 || version === undefined) {
     return { key: manifest.key, packageName, version, dir, problems };
   }
@@ -117,14 +133,18 @@ export async function readPluginPackage(
  * The order puts a plugin after every plugin it requires; a plugin that requires one that is
  * missing or failed fails with it, and a cycle fails every plugin in it.
  */
-export async function discoverPlugins(pluginsDir: string): Promise<Discovery> {
+export async function discoverPlugins(
+  pluginsDir: string,
+  options: DiscoveryOptions = {},
+): Promise<Discovery> {
+  const consoleVersion = options.consoleVersion ?? APP_VERSION;
   const root = await realpath(resolve(pluginsDir));
   const names = await installedPackageNames(root);
   const read = await Promise.all(
     names.map(async (name) => {
       const dir = join(root, "node_modules", ...name.split("/"));
       try {
-        return await readPluginPackage(name, await realpath(dir));
+        return await readPluginPackage(name, await realpath(dir), consoleVersion);
       } catch (error) {
         return {
           key: name,

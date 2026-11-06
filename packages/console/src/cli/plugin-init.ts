@@ -13,6 +13,8 @@ export interface InitOptions {
   readonly name: string;
   /** What the plugin's devDependency on `@skillcdn/console` says: `^<version>` of the command, unless said. */
   readonly consoleDependency: string;
+  /** The consoles the plugin runs on, the manifest's `console`: the line of the version it is written against; left out, the manifest names none. */
+  readonly consoleRange?: string | undefined;
   /** The package's name: `console-plugin-<key>` unless said. A scoped name is published with `publishConfig.access` `public`. */
   readonly packageName?: string | undefined;
   /** The repository the plugin lives in and, in a repository of several, its directory: `repository`, `homepage`, `bugs` and the manifest's `store`. */
@@ -40,12 +42,18 @@ export function substitutions(options: InitOptions): readonly [string, string][]
     ["__package__", packageNameOf(options)],
     ["__key__", options.key],
     ["__name__", options.name],
+    ["__consoleRange__", options.consoleRange ?? "*"],
     ["__console__", options.consoleDependency],
   ];
 }
 
 export function substitute(text: string, options: InitOptions): string {
   let result = text;
+  if (options.consoleRange === undefined) {
+    // No console to name: the manifest's line goes, and any console that serves the plugin API
+    // runs the plugin, as before the field. Taken out as text, so that the file keeps its shape.
+    result = result.replace(/^[ \t]*"console": "__consoleRange__",\r?\n/m, "");
+  }
   for (const [word, value] of substitutions(options)) {
     result = result.replaceAll(word, value);
   }

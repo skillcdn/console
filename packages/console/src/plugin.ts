@@ -124,3 +124,12 @@ export {
   REMOVED_GLOBALS,
   removedGlobalsIn,
 } from "./plugin/sandbox.js";
+export {
+  compareTriples,
+  formatTriple,
+  lineRangeFrom,
+  parseLooseVersion,
+  satisfiesRange,
+  type Triple,
+  versionOfDependency,
+} from "./plugin/semver.js";

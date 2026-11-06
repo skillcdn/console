@@ -47,6 +47,7 @@ import {
   type RecordPage,
   type RecordQuery,
   type RecordVersion,
+  satisfiesRange,
 } from "@skillcdn/console/plugin";
 import { configuresPlugins, personVisibleTo } from "../auth/policy.js";
 import type { Secrets } from "../auth/secrets.js";
@@ -314,53 +315,6 @@ export function settingProblem(setting: PluginSetting, value: unknown): string |
   }
   return fits(setting.type, value);
 }
-
-/** Whether a version is within a range as npm spells the common ones: `*`, exact, `^`, `~`, `>=`. */
-export function satisfiesRange(version: string, range: string): boolean {
-  const parse = (text: string): [number, number, number] | undefined => {
-    const match = /^v?(\d+)\.(\d+)\.(\d+)/.exec(text.trim());
-    return match === null ? undefined : [Number(match[1]), Number(match[2]), Number(match[3])];
-  };
-  const compare = (a: [number, number, number], b: [number, number, number]): number =>
-    a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
-  const have = parse(version);
-  const trimmed = range.trim();
-  if (trimmed === "*" || trimmed === "" || trimmed === "x" || trimmed === "latest") {
-    return true;
-  }
-  if (have === undefined) {
-    return false;
-  }
-  return trimmed.split(/\s*\|\|\s*/).some((alternative) =>
-    alternative.split(/\s+/).every((part) => {
-      const operator = /^(\^|~|>=|<=|>|<|=)?(.*)$/.exec(part);
-      const wanted = parse(operator?.[2] ?? "");
-      if (wanted === undefined) {
-        return false;
-      }
-      switch (operator?.[1]) {
-        case "^":
-          return (
-            compare(have, wanted) >= 0 &&
-            (wanted[0] === 0 ? have[0] === 0 && have[1] === wanted[1] : have[0] === wanted[0])
-          );
-        case "~":
-          return compare(have, wanted) >= 0 && have[0] === wanted[0] && have[1] === wanted[1];
-        case ">=":
-          return compare(have, wanted) >= 0;
-        case ">":
-          return compare(have, wanted) > 0;
-        case "<=":
-          return compare(have, wanted) <= 0;
-        case "<":
-          return compare(have, wanted) < 0;
-        default:
-          return compare(have, wanted) === 0;
-      }
-    }),
-  );
-}
-
 export class Plugins {
   private readonly options: PluginsOptions;
   private readonly entries = new Map<string, Entry>();
@@ -626,6 +580,7 @@ export class Plugins {
       description: manifest?.description ?? { en: "" },
       agentNote: manifest?.agentNote ?? null,
       version: entry.version,
+      console: manifest?.console ?? null,
       state: this.stateOf(entry, install),
       problems: [...entry.problems],
       roles: held,

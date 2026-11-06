@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { satisfiesRange, settingProblem } from "./registry.js";
+import { settingProblem } from "./registry.js";
 import { mayUse, rolesHeld } from "./roles.js";
 
 describe("rolesHeld", () => {
@@ -33,23 +33,6 @@ describe("mayUse", () => {
     expect(mayUse(null, [], ["employee", "approver"])).toBe(false);
     expect(mayUse(null, [], [])).toBe(true);
     expect(mayUse(["employee"], [], [])).toBe(false);
-  });
-});
-
-describe("satisfiesRange", () => {
-  it("reads the ranges a manifest's requires are written in", () => {
-    expect(satisfiesRange("1.2.3", "*")).toBe(true);
-    expect(satisfiesRange("1.2.3", "1.2.3")).toBe(true);
-    expect(satisfiesRange("1.2.3", "^1.0.0")).toBe(true);
-    expect(satisfiesRange("2.0.0", "^1.0.0")).toBe(false);
-    expect(satisfiesRange("0.4.9", "^0.4.1")).toBe(true);
-    expect(satisfiesRange("0.5.0", "^0.4.1")).toBe(false);
-    expect(satisfiesRange("1.2.9", "~1.2.3")).toBe(true);
-    expect(satisfiesRange("1.3.0", "~1.2.3")).toBe(false);
-    expect(satisfiesRange("1.2.3", ">=1.0.0 <2.0.0")).toBe(true);
-    expect(satisfiesRange("2.0.0", ">=1.0.0 <2.0.0")).toBe(false);
-    expect(satisfiesRange("3.0.0", "^1.0.0 || ^3.0.0")).toBe(true);
-    expect(satisfiesRange("not a version", "^1.0.0")).toBe(false);
   });
 });
 

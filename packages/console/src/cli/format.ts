@@ -602,6 +602,9 @@ export function localized(
 export function formatPluginLine(plugin: RestPlugin, language: string | null | undefined): string {
   const notes = [
     plugin.roles.length === 0 ? undefined : `roles: ${plugin.roles.join(", ")}`,
+    plugin.console === null || plugin.console === undefined
+      ? undefined
+      : `console: ${plugin.console}`,
     plugin.problems.length === 0 ? undefined : `problems: ${plugin.problems.join("; ")}`,
   ].filter((note): note is string => note !== undefined);
   return `${plugin.key}  ${localized(plugin.name, language)} ${plugin.version}  ${plugin.state}${notes.length === 0 ? "" : `  ${notes.join("  ")}`}`;
@@ -772,6 +775,9 @@ export function formatPlugin(
   }
   if (detail.problems.length > 0) {
     lines.push(`problems: ${detail.problems.join("; ")}`);
+  }
+  if (detail.console !== null && detail.console !== undefined) {
+    lines.push(`Runs on consoles ${detail.console}.`);
   }
   lines.push(
     detail.roles.length === 0

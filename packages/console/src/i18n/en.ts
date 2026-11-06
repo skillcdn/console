@@ -221,6 +221,8 @@ export const en = {
       purged: "Purged.",
       agentNote: "For agents",
       operations: "Commands and queries",
+      console: "Console versions",
+      consoleRange: (range: string) => `console ${range}`,
     },
     /** The capabilities (docs/specs/plugins.md, "Capabilities"), each by a name and the sentence of what it opens, as an administrator reads them before consenting. */
     capability: {

@@ -155,7 +155,7 @@ describe("console-plugin init", () => {
     expect(files).toContain("skills/leave-days/SKILL.md");
     for (const file of files) {
       const text = await readFile(join(dir, "out", file), "utf8");
-      expect(text, file).not.toMatch(/__(package|key|name|console)__/);
+      expect(text, file).not.toMatch(/__(package|key|name|console|consoleRange)__/);
     }
     const manifest = JSON.parse(
       await readFile(join(dir, "out", "console-plugin.json"), "utf8"),
@@ -170,6 +170,31 @@ describe("console-plugin init", () => {
     expect(await readFile(join(dir, "out", "src/web/index.css"), "utf8")).toContain(
       ".pl-leave-days-page",
     );
+  });
+
+  it("writes the consoles the plugin runs on: the line of the dependency's version, or none where it names none", async () => {
+    const dir = await scratch();
+    const { io } = ioOf(dir);
+    const consoleOf = async (out: string) =>
+      (
+        JSON.parse(await readFile(join(dir, out, "console-plugin.json"), "utf8")) as {
+          console?: string;
+        }
+      ).console;
+    expect(await runPluginCli(["init", "a", "--key", "aa", "--console", "^0.4.3"], io)).toBe(0);
+    expect(await consoleOf("a")).toBe(">=0.4.3 <0.5.0");
+    // No --console: the dependency is the command's own version, and so is the line.
+    expect(await runPluginCli(["init", "b", "--key", "bb"], io)).toBe(0);
+    expect(await consoleOf("b")).toBe(">=0.4.1 <0.5.0");
+    // A dependency that names no version, as a workspace's, names no console either.
+    expect(await runPluginCli(["init", "c", "--key", "cc", "--console", "workspace:*"], io)).toBe(
+      0,
+    );
+    expect(await consoleOf("c")).toBeUndefined();
+    const manifest = JSON.parse(
+      await readFile(join(dir, "c", "console-plugin.json"), "utf8"),
+    ) as Record<string, unknown>;
+    expect(Object.keys(manifest)).not.toContain("console");
   });
 
   it("names the package, the repository and the languages, so that less is adapted by hand", async () => {
@@ -393,6 +418,36 @@ describe("console-plugin check", () => {
     expect(out()).toMatch(/has a postinstall script/);
     expect(out()).toMatch(/files leaves out console-plugin.json/);
     expect(out()).toMatch(/files leaves out skills/);
+  });
+
+  it("holds the dependency on the console to the consoles the manifest declares", async () => {
+    const root = await pluginDir();
+    await built(root);
+    const manifestPath = join(root, "console-plugin.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<string, unknown>;
+    expect(manifest.console).toBe(">=0.4.1 <0.5.0");
+    const pkgPath = join(root, "package.json");
+    const pkg = JSON.parse(await readFile(pkgPath, "utf8")) as {
+      devDependencies: Record<string, string>;
+    };
+    expect(pkg.devDependencies["@skillcdn/console"]).toBe("^0.4.1");
+    // A range that leaves the command's own console out is a warning: the plugin may be for a later one.
+    manifest.console = ">=0.5.0 <0.6";
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    const later = ioOf(root);
+    expect(await runPluginCli(["check", root], later.io)).toBe(1);
+    expect(later.out()).toMatch(
+      /error: package.json: devDependencies names @skillcdn\/console \^0.4.1, outside the consoles the manifest declares \(console >=0.5.0 <0.6\)/,
+    );
+    expect(later.out()).toMatch(
+      /warning: console-plugin.json: console >=0.5.0 <0.6 leaves out 0.4.1, the console this command belongs to/,
+    );
+    // The dependency within the range: nothing to say of it.
+    pkg.devDependencies["@skillcdn/console"] = "^0.5.1";
+    await writeFile(pkgPath, JSON.stringify(pkg));
+    const fits = ioOf(root);
+    expect(await runPluginCli(["check", root], fits.io)).toBe(0);
+    expect(fits.out()).not.toMatch(/outside the consoles/);
   });
 
   it("refuses a manifest the console cannot read, with every problem", async () => {

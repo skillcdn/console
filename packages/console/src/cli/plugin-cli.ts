@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import type { ServerLoad } from "../plugin/load.js";
 import { isPluginKey, RESERVED_PLUGIN_KEYS } from "../plugin/manifest.js";
+import { lineRangeFrom, versionOfDependency } from "../plugin/semver.js";
 import { checkPlugin } from "./plugin-check.js";
 import { LANGUAGE_TAG, nameFromKey, PACKAGE_NAME, writePluginFromTemplate } from "./plugin-init.js";
 
@@ -176,12 +177,18 @@ async function init(args: readonly string[], io: PluginCliIo): Promise<number> {
     return PLUGIN_EXIT.usage;
   }
   const consoleDependency = values.console ?? (io.version === undefined ? "*" : `^${io.version}`);
+  // The consoles the plugin runs on: the line of the version it is written against, read from
+  // the dependency where it names one (`^0.4.3`, `0.4.3`); a dependency that names none
+  // (`workspace:*`) leaves the manifest naming no console.
+  const writtenAgainst = versionOfDependency(consoleDependency);
+  const consoleRange = writtenAgainst === undefined ? undefined : lineRangeFrom(writtenAgainst);
   const target = resolve(io.cwd, dir);
   try {
     const written = await writePluginFromTemplate(io.templateDir, target, {
       key,
       name,
       consoleDependency,
+      consoleRange,
       packageName,
       repository:
         values.repository === undefined
@@ -220,7 +227,9 @@ async function check(args: readonly string[], io: PluginCliIo): Promise<number> 
     return PLUGIN_EXIT.usage;
   }
   const root = resolve(io.cwd, dir ?? ".");
-  const report = await checkPlugin(root, (file) => io.loadServer(file));
+  const report = await checkPlugin(root, (file) => io.loadServer(file), {
+    consoleVersion: io.version,
+  });
   io.stdout(`console-plugin check ${root}\n`);
   io.stdout(wordsOf(report.errors, "error"));
   io.stdout(wordsOf(report.warnings, "warning"));

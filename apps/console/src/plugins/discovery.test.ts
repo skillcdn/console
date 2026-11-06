@@ -98,6 +98,22 @@ describe("discoverPlugins", () => {
     expect(problems.settings).toMatch(/^console-plugin\.json: key: is a word the console reserves/);
   });
 
+  it("holds a plugin to the consoles it declares, against the console's own version", async () => {
+    const root = await pluginsDir(["fits", "older", "newer", "any"]);
+    await fakePlugin(root, "fits", manifestOf("fits", { console: ">=0.4.3 <0.6" }));
+    await fakePlugin(root, "older", manifestOf("older", { console: ">=0.4.5 <0.6" }));
+    await fakePlugin(root, "newer", manifestOf("newer", { console: "^0.3.0" }));
+    await fakePlugin(root, "any", manifestOf("any"));
+    const found = await discoverPlugins(root, { consoleVersion: "0.4.4" });
+    expect(found.plugins.map((plugin) => plugin.key)).toEqual(["fits", "any"]);
+    expect(found.failed.map((plugin) => `${plugin.key}: ${plugin.problems[0]}`)).toEqual([
+      "newer: the plugin is built for a console ^0.3.0; this console is 0.4.4",
+      "older: the plugin is built for a console >=0.4.5 <0.6; this console is 0.4.4",
+    ]);
+    // The default is the console's own version, which the fixtures are written for.
+    expect((await discoverPlugins(root)).plugins.map((plugin) => plugin.key)).toContain("any");
+  });
+
   it("fails two plugins that share a key, so that neither answers for the other", async () => {
     const root = await pluginsDir(["one", "two"]);
     await fakePlugin(root, "one", manifestOf("same"));

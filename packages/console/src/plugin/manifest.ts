@@ -409,6 +409,8 @@ export const pluginManifestSchema = z
     description: localized(MAX_PLUGIN_DESCRIPTION_LENGTH),
     agentNote: z.optional(localized(MAX_PLUGIN_AGENT_NOTE_LENGTH)),
     pluginApi: z.int().check(z.positive()),
+    /** The consoles the plugin runs on, as a semver range of the console's version; left out, any console that serves `pluginApi`. */
+    console: z.optional(z.string().check(z.regex(SEMVER_RANGE, "is a semver range"))),
     server: packagePath,
     web: z.optional(packagePath),
     skills: z.optional(packagePath),

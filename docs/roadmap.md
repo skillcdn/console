@@ -383,6 +383,13 @@ Goal: what the first plugins, written in `skillcdn/console-plugins` against the 
 - [x] The packages (2026-11-06): every `@skillcdn` package taken at 0.4.2, the main repository's patch that lists a pack's skills as data over REST and serves a private repository in full. Nothing the console reads or sends changed shape; a file that is not text, refused in a pack read from a directory, no longer names a GitHub credential.
 - [x] The agent beside the person (2026-11-06): a record that names the person who did a thing names the agent they did it through ([ADR-0056](adr/0056-a-record-that-names-the-person-who-did-a-thing-names-the-agent-they-did-it-through.md)): a decision's answer and what followed, a goal and a task, on the pages, in the command and in the API; the rows of the past filled from the feed.
 
+## Milestone 36, what the first plugins asked, the second round (2026-11-06)
+
+Goal: what writing the first plugins in `skillcdn/console-plugins` against the released contract asked next: the plugin's floor on the console, the preview console whole, and what the board shows of a plugin's doing to the people it is for.
+
+- [x] The preview passes over the `--` pnpm hands on, so that `pnpm dev:plugins --plugin <dir>` and the spelling with the double dash both start it.
+- [x] A plugin declares the consoles it runs on (`console`, a semver range of the console's version): a console outside it fails the plugin at discovery with the reason, the range is on `GET /api/v1/plugins`, the settings pages and `console plugins`; `console-plugin init` writes the line of the version the plugin is written against, and `check` holds the dependency on `@skillcdn/console` to it.
+
 ## After milestone 16
 
 Nothing is chosen yet; the list below is where the next milestone comes from.

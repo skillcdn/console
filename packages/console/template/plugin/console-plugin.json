@@ -6,6 +6,7 @@
     "en": "Keeps greetings as records; greet someone with the command greet, read the latest with the query latest."
   },
   "pluginApi": 1,
+  "console": "__consoleRange__",
   "server": "dist/server/index.js",
   "web": "dist/web",
   "skills": "skills",

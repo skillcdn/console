@@ -109,6 +109,14 @@ describe("parsePluginManifest", () => {
     }
   });
 
+  it("takes the consoles the plugin runs on as a semver range, and nothing else", () => {
+    const result = parsePluginManifest({ ...LEAVE, console: ">=0.4.3 <0.6" });
+    expect(result.ok && result.manifest.console).toBe(">=0.4.3 <0.6");
+    expect(problemsOf({})).toEqual([]);
+    expect(problemsOf({ console: ">=0.4.3 && <0.6" })[0]).toMatch(/^console: /);
+    expect(problemsOf({ console: 7 })[0]).toMatch(/^console: /);
+  });
+
   it("refuses a key that is malformed or reserved", () => {
     expect(problemsOf({ key: "Leave" })[0]).toMatch(/^key: /);
     expect(problemsOf({ key: "a" })[0]).toMatch(/^key: /);

@@ -13,6 +13,7 @@ import {
   parsePluginManifest,
 } from "../plugin/manifest.js";
 import { forbiddenImportsIn, removedGlobalsIn } from "../plugin/sandbox.js";
+import { formatTriple, satisfiesRange, versionOfDependency } from "../plugin/semver.js";
 import { isLanguageMap } from "./plugin-init.js";
 
 export interface CheckReport {
@@ -330,10 +331,16 @@ export function sameAsEnglish(value: unknown, at = ""): string[] {
   );
 }
 
+export interface CheckOptions {
+  /** The version of the console this command belongs to, held against the manifest's `console`; left out, not compared. */
+  readonly consoleVersion?: string | undefined;
+}
+
 /** Reads the plugin at `root` as a console would, and says what it would refuse. */
 export async function checkPlugin(
   root: string,
   loadServer: (file: string) => Promise<ServerLoad>,
+  options: CheckOptions = {},
 ): Promise<CheckReport> {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -365,6 +372,15 @@ export async function checkPlugin(
       `console-plugin.json: ${path} is the same as en: translate it, or leave the language out`,
     );
   }
+  if (
+    manifest.console !== undefined &&
+    options.consoleVersion !== undefined &&
+    !satisfiesRange(options.consoleVersion, manifest.console)
+  ) {
+    warnings.push(
+      `console-plugin.json: console ${manifest.console} leaves out ${options.consoleVersion}, the console this command belongs to`,
+    );
+  }
 
   const packageRead = await readJson(join(root, "package.json"));
   let version = "0.0.0";
@@ -392,6 +408,25 @@ export async function checkPlugin(
     }
     if (pkg.type !== "module") {
       errors.push('package.json: type is not "module"; the server module is ESM');
+    }
+    // The console the plugin is built against is the one its types come from: a devDependency
+    // outside the consoles it declares is a plugin built for a console it says it does not run on.
+    const devDependencies = (
+      typeof pkg.devDependencies === "object" && pkg.devDependencies !== null
+        ? pkg.devDependencies
+        : {}
+    ) as Record<string, unknown>;
+    const dependency = devDependencies["@skillcdn/console"];
+    const builtAgainst =
+      typeof dependency === "string" ? versionOfDependency(dependency) : undefined;
+    if (
+      manifest.console !== undefined &&
+      builtAgainst !== undefined &&
+      !satisfiesRange(formatTriple(builtAgainst), manifest.console)
+    ) {
+      errors.push(
+        `package.json: devDependencies names @skillcdn/console ${String(dependency)}, outside the consoles the manifest declares (console ${manifest.console})`,
+      );
     }
     const scripts = (
       typeof pkg.scripts === "object" && pkg.scripts !== null ? pkg.scripts : {}
