@@ -380,6 +380,7 @@ Goal: what the first plugins, written in `skillcdn/console-plugins` against the 
 - [x] `pnpm dev:plugins -- --plugin <dir>` installs the built plugins of other checkouts beside the fixtures, so that a plugin's pages are looked at without a provider.
 - [x] `console-plugin init` takes the package's name (`--package`), its repository (`--repository`, `--directory`) and the languages of its words (`--languages`), and `check` warns of a translation left as English.
 - [x] The docs name the reference plugin repository, `skillcdn/console-plugins`, and the way of several plugins in one repository: published to the registry, since a tag suits one plugin alone.
+- [x] The packages (2026-11-06): every `@skillcdn` package taken at 0.4.2, the main repository's patch that lists a pack's skills as data over REST and serves a private repository in full. Nothing the console reads or sends changed shape; a file that is not text, refused in a pack read from a directory, no longer names a GitHub credential.
 
 ## After milestone 16
 
