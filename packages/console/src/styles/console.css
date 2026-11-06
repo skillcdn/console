@@ -2980,7 +2980,8 @@ select.sc-input {
   }
 }
 
-.sc-comment-files {
+.sc-comment-files,
+.sc-decision-files {
   display: grid;
   gap: var(--sc-space-2);
   margin: 0;
@@ -2990,6 +2991,7 @@ select.sc-input {
 }
 
 .sc-comment-picture,
+.sc-decision-picture,
 .sc-artifact-picture {
   display: grid;
   gap: var(--sc-space-1);

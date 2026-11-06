@@ -393,6 +393,51 @@ describe("one task", () => {
 });
 
 describe("decisions", () => {
+  it("show the files put on a decision, pictures in place and the rest as links, and take files on the form (ADR-0055)", () => {
+    const withFiles = decision({
+      body: "The first: ![the first](first.png)",
+      files: [
+        {
+          id: "0199c4d8-0000-7000-8000-000000000041",
+          file: { name: "first.png", size: 12, contentType: "image/png", sha256: "a" },
+        },
+        {
+          id: "0199c4d8-0000-7000-8000-000000000042",
+          file: { name: "second.png", size: 12, contentType: "image/png", sha256: "b" },
+        },
+        {
+          id: "0199c4d8-0000-7000-8000-000000000043",
+          file: { name: "notes.txt", size: 2, contentType: "text/plain", sha256: "c" },
+        },
+      ],
+    });
+    const html = renderToStaticMarkup(
+      <DecisionCard decision={withFiles} fileHref={(id) => `/projects/web/files/${id}`} />,
+    );
+    // The picture the context names is shown where the text puts it, once; the second picture
+    // and the notes follow the context, the picture small and the notes as a link.
+    expect(html.split("files/0199c4d8-0000-7000-8000-000000000041").length).toBe(2);
+    expect(html).toContain('<li class="sc-decision-picture">');
+    expect(html).toContain('src="/projects/web/files/0199c4d8-0000-7000-8000-000000000042"');
+    expect(html).toContain('href="/projects/web/files/0199c4d8-0000-7000-8000-000000000043"');
+    expect(html).toContain("notes.txt");
+    expect(html).not.toContain('target="_blank"');
+    // Without a way to read them, the files are named and not linked; a decision without files shows no files section.
+    const unlinked = renderToStaticMarkup(
+      <DecisionCard decision={decision({ files: withFiles.files })} />,
+    );
+    expect(unlinked).not.toContain("sc-picture-thumb");
+    expect(unlinked).not.toContain("/files/");
+    expect(unlinked).toContain("<span>notes.txt</span>");
+    expect(renderToStaticMarkup(<DecisionCard decision={decision()} />)).not.toContain(
+      "sc-decision-files",
+    );
+    // The form takes files, chosen or pasted.
+    const form = renderToStaticMarkup(<DecisionForm onSubmit={() => undefined} />);
+    expect(form).toContain("Add files");
+    expect(form).toContain('type="file"');
+  });
+
   it("say whom a decision is for, take whom to address one to, and list a person's own (ADR-0042)", () => {
     const forBob = decision({ decider: bob });
     const card = renderToStaticMarkup(<DecisionCard decision={forBob} />);

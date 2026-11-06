@@ -1,6 +1,7 @@
-import { type FormEvent, useMemo, useState } from "react";
+import { type ClipboardEvent, type FormEvent, useMemo, useState } from "react";
 import {
   MAX_BODY_LENGTH,
+  MAX_FILES_PER_DECISION,
   MAX_OPTION_LABEL_LENGTH,
   MAX_OPTIONS,
   MAX_QUESTION_LENGTH,
@@ -10,14 +11,17 @@ import {
   type RestTask,
 } from "../api.js";
 import { useWords } from "../i18n/index.js";
+import { isPicture, placing, unusedName } from "./files.js";
 import { Picker, type PickerSearch } from "./picker.js";
 import { type TaskSearch, taskLabel } from "./task-form.js";
-import { Button, PersonChip, personName } from "./ui.js";
+import { Button, formatBytes, PersonChip, personName } from "./ui.js";
 
 // Raising a decision: the question, what a person needs to know, the options to choose from,
 // and who is to answer (ADR-0042): the person raising it, unless they name another of the
 // project. The task it is about is the page's, when raised from a task; otherwise it is found
-// by searching the board a page at a time (ADR-0037), never picked from the board whole.
+// by searching the board a page at a time (ADR-0037), never picked from the board whole. The
+// files put on the decision (ADR-0055) are chosen or pasted here, a pasted picture placed in
+// the context where pictures are read, as a comment's are.
 
 export interface DecisionFormProps {
   /** The task it is about from the start, when raised from a task's page; the field is not shown then. */
@@ -30,7 +34,8 @@ export interface DecisionFormProps {
   readonly me?: RestPerson | undefined;
   readonly busy?: boolean | undefined;
   readonly error?: string | undefined;
-  readonly onSubmit: (input: RestDecisionInput) => void;
+  /** Called with the decision as the API takes it, and the files put on it (ADR-0055), none when none were chosen. */
+  readonly onSubmit: (input: RestDecisionInput, files: readonly File[]) => void;
   readonly onCancel?: (() => void) | undefined;
 }
 
@@ -59,20 +64,61 @@ export function DecisionForm(props: DecisionFormProps) {
   const [about, setAbout] = useState<RestTask | undefined>(undefined);
   const [options, setOptions] = useState<readonly string[]>(["", ""]);
   const [decider, setDecider] = useState<RestPerson | undefined>(props.me);
+  const [files, setFiles] = useState<readonly File[]>([]);
   const findDeciders = useMemo(() => peopleSearch(props.deciders ?? []), [props.deciders]);
 
   const labels = options.map((option) => option.trim()).filter((option) => option.length > 0);
   const ready = question.trim().length > 0 && labels.length >= MIN_OPTIONS;
 
+  const add = (chosen: readonly File[]): File[] => {
+    const added: File[] = [];
+    let held = files;
+    for (const file of chosen) {
+      if (held.length >= MAX_FILES_PER_DECISION) {
+        break;
+      }
+      const name = unusedName(
+        file.name,
+        held.map((kept) => kept.name),
+      );
+      const kept = name === file.name ? file : new File([file], name, { type: file.type });
+      held = [...held, kept];
+      added.push(kept);
+    }
+    setFiles(held);
+    return added;
+  };
+
+  // A picture pasted into the context goes with the decision, placed where pictures are read.
+  const paste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const pasted = [...event.clipboardData.files].filter((file) => isPicture(file.type));
+    if (pasted.length === 0) {
+      return;
+    }
+    event.preventDefault();
+    const added = add(pasted);
+    if (added.length > 0) {
+      setBody((current) =>
+        placing(
+          current,
+          added.map((file) => file.name),
+        ),
+      );
+    }
+  };
+
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    props.onSubmit({
-      question: question.trim(),
-      body,
-      options: labels.map((label) => ({ label })),
-      taskId: props.taskId ?? about?.id ?? null,
-      ...(decider === undefined || decider.id === props.me?.id ? {} : { deciderId: decider.id }),
-    });
+    props.onSubmit(
+      {
+        question: question.trim(),
+        body,
+        options: labels.map((label) => ({ label })),
+        taskId: props.taskId ?? about?.id ?? null,
+        ...(decider === undefined || decider.id === props.me?.id ? {} : { deciderId: decider.id }),
+      },
+      files,
+    );
   };
 
   return (
@@ -96,8 +142,43 @@ export function DecisionForm(props: DecisionFormProps) {
           rows={4}
           placeholder={form.contextPlaceholder}
           onChange={(event) => setBody(event.target.value)}
+          onPaste={paste}
         />
       </label>
+      <div className="sc-field">
+        <span className="sc-field-label">{form.files}</span>
+        {files.length > 0 && (
+          <ul className="sc-chosen-files" aria-label={form.files}>
+            {files.map((file) => (
+              <li key={file.name} className="sc-chosen-file">
+                <span>{file.name}</span> <span className="sc-muted">{formatBytes(file.size)}</span>{" "}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label={form.removeFile(file.name)}
+                  onClick={() => setFiles((current) => current.filter((held) => held !== file))}
+                >
+                  ×
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <label className="sc-button sc-button-ghost sc-button-sm sc-file-choice">
+          {form.chooseFiles}
+          <input
+            className="sc-file-input"
+            type="file"
+            multiple
+            disabled={props.busy === true || files.length >= MAX_FILES_PER_DECISION}
+            onChange={(event) => {
+              add([...(event.target.files ?? [])]);
+              event.target.value = "";
+            }}
+          />
+        </label>
+        <p className="sc-field-hint">{form.filesHint}</p>
+      </div>
       {props.taskId === undefined && props.findTasks !== undefined && (
         <div className="sc-field">
           <span className="sc-field-label">{form.about}</span>

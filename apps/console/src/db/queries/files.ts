@@ -1,10 +1,19 @@
 import { and, eq, sum } from "drizzle-orm";
 import { type Database, drizzleOf } from "../client.js";
-import { artifacts, commentFiles, comments, documentFiles, documents, runs } from "../schema.js";
+import {
+  artifacts,
+  commentFiles,
+  comments,
+  decisionFiles,
+  decisions,
+  documentFiles,
+  documents,
+  runs,
+} from "../schema.js";
 import type { Scope } from "./events.js";
 
-// The files of a project, wherever they are kept: handed in by a run, put in a comment, or
-// attached to a page. Each row names its bytes by their hash and its size; the bytes themselves
+// The files of a project, wherever they are kept: handed in by a run, put in a comment or on a
+// decision, or attached to a page. Each row names its bytes by their hash and its size; the bytes themselves
 // are the blob store's. What is counted here is what the project holds, those put away included,
 // since nothing is deleted.
 
@@ -33,6 +42,13 @@ export async function fileBytesOf(database: Database, scope: Scope): Promise<num
     .where(
       and(eq(comments.workspaceId, scope.workspaceId), eq(comments.projectId, scope.projectId)),
     );
+  const [onDecisions] = await db
+    .select({ bytes: sum(decisionFiles.fileSize) })
+    .from(decisionFiles)
+    .innerJoin(decisions, eq(decisions.id, decisionFiles.decisionId))
+    .where(
+      and(eq(decisions.workspaceId, scope.workspaceId), eq(decisions.projectId, scope.projectId)),
+    );
   const [onPages] = await db
     .select({ bytes: sum(documentFiles.fileSize) })
     .from(documentFiles)
@@ -40,7 +56,12 @@ export async function fileBytesOf(database: Database, scope: Scope): Promise<num
     .where(
       and(eq(documents.workspaceId, scope.workspaceId), eq(documents.projectId, scope.projectId)),
     );
-  return bytesOf(handedIn?.bytes) + bytesOf(inComments?.bytes) + bytesOf(onPages?.bytes);
+  return (
+    bytesOf(handedIn?.bytes) +
+    bytesOf(inComments?.bytes) +
+    bytesOf(onDecisions?.bytes) +
+    bytesOf(onPages?.bytes)
+  );
 }
 
 /** A sum as the database answers it, a string of digits or nothing, as a number. */

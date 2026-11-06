@@ -27,6 +27,8 @@ export interface MyDecisionsProps {
   /** The decisions the person asked of someone else: waiting and answered. */
   readonly raised: DecisionsPage;
   readonly decisionHref: (projectKey: string, decisionId: string) => string;
+  /** Where a file put on a decision is read, by its project's key and its id (ADR-0055). */
+  readonly fileHref?: ((projectKey: string, fileId: string) => string) | undefined;
   /** Called with the person's answer on a decision of theirs, in its project. Left out, a waiting decision is answered on its own page. */
   readonly onAnswer?:
     | ((projectKey: string, decision: RestDecision, input: RestAnswerInput) => void)
@@ -67,7 +69,7 @@ function More(props: {
 export function MyDecisions(props: MyDecisionsProps) {
   const words = useWords();
   const own = words.myDecisions;
-  const { onAnswer } = props;
+  const { onAnswer, fileHref } = props;
   const waiting = props.addressed.items.filter(({ decision }) => decision.answer === null);
   const asked = props.raised.items.filter(({ decision }) => decision.answer === null);
   const record = [...props.addressed.items, ...props.raised.items]
@@ -80,6 +82,7 @@ export function MyDecisions(props: MyDecisionsProps) {
       decision={item.decision}
       href={props.decisionHref(item.project.key, item.decision.id)}
       project={<InProject project={item.project} />}
+      fileHref={fileHref === undefined ? undefined : (fileId) => fileHref(item.project.key, fileId)}
       onAnswer={
         answerable && onAnswer !== undefined
           ? (decision, input) => onAnswer(item.project.key, decision, input)

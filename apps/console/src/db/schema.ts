@@ -589,7 +589,7 @@ export const commentFiles = pgTable(
 );
 
 /**
- * The bytes of files handed in, put in comments or attached to pages, under their SHA-256: the
+ * The bytes of files handed in, put in comments or on decisions, or attached to pages, under their SHA-256: the
  * PostgreSQL implementation of the blob-store port, for the smallest install. The rows that
  * name a hash are what refers to a row here; the table is not the model, and the bucket writes
  * nothing here, reading only what was kept before it (ADR-0016).
@@ -648,6 +648,26 @@ export const decisions = pgTable(
     index("decisions_task_idx").on(table.taskId),
     index("decisions_run_idx").on(table.runId),
   ],
+);
+
+/**
+ * A file put on a decision when it was raised (ADR-0055), kept as a comment's file is: its
+ * name, its size, its media type and its hash. Rows go with their decision.
+ */
+export const decisionFiles = pgTable(
+  "decision_files",
+  {
+    id: id(),
+    decisionId: uuid()
+      .notNull()
+      .references(() => decisions.id, { onDelete: "cascade" }),
+    fileName: text().notNull(),
+    fileSize: integer().notNull(),
+    contentType: text().notNull(),
+    sha256: text().notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [index("decision_files_decision_idx").on(table.decisionId)],
 );
 
 /**

@@ -6,13 +6,16 @@ import {
   MAX_OPTION_LABEL_LENGTH,
   type RestAnswerInput,
   type RestDecision,
+  type RestDecisionFile,
   type RestDecisionPatch,
   type RestTask,
 } from "../api.js";
 import { useWords } from "../i18n/index.js";
+import { isPicture, namedFile, placed } from "./files.js";
 import { Markdown } from "./markdown.js";
 import { Pager, pageOf, RECORD_PAGE_SIZE } from "./paged.js";
-import { Badge, Button, cx, PersonChip, personName, Time } from "./ui.js";
+import { Lightbox, PictureThumb, usePicture } from "./pictures.js";
+import { Badge, Button, cx, formatBytes, PersonChip, personName, Time } from "./ui.js";
 
 // The decisions: the ones that wait, each a card with the way to answer it, since they are what
 // a person came for; and the ones answered, the record, a row each, since they are read back
@@ -31,6 +34,8 @@ export interface DecisionCardProps {
   readonly href?: string | undefined;
   /** The project the decision is in, named where a page shows the decisions of several. */
   readonly project?: React.ReactNode;
+  /** Where a file put on the decision is read, by its id (ADR-0055); left out, the files are named and not linked. */
+  readonly fileHref?: ((fileId: string) => string) | undefined;
   /** Called with the person's answer. Left out, a waiting decision cannot be answered here. */
   readonly onAnswer?: ((decision: RestDecision, input: RestAnswerInput) => void) | undefined;
   /** Called to grow the record, with what followed. Left out, it cannot be written here. */
@@ -255,6 +260,20 @@ export function DecisionCard(props: DecisionCardProps) {
   const words = useWords();
   const { decision, task } = props;
   const answered = decision.answer !== null;
+  // The files put on the decision (ADR-0055): a picture the context names by its file name is
+  // shown where the text puts it; the rest follow the context, pictures in place and
+  // everything else as a link.
+  const files = decision.files ?? [];
+  const pictures = usePicture();
+  const hrefOf = (file: RestDecisionFile) => props.fileHref?.(file.id);
+  const named = (source: string): string | undefined => {
+    const name = namedFile(source);
+    const file = files.find(
+      (candidate) => candidate.file.name === name && isPicture(candidate.file.contentType),
+    );
+    return file === undefined ? undefined : hrefOf(file);
+  };
+  const following = files.filter((file) => !placed(decision.body, file.file.name));
 
   return (
     <article id={decision.id} className={cx("sc-decision", answered && "sc-decision-answered")}>
@@ -289,7 +308,53 @@ export function DecisionCard(props: DecisionCardProps) {
       {decision.body.length > 0 && (
         <section className="sc-decision-section" aria-label={words.decisions.context}>
           <h4 className="sc-decision-label">{words.decisions.context}</h4>
-          <Markdown source={decision.body} docHref={props.docHref} />
+          <Markdown
+            source={decision.body}
+            docHref={props.docHref}
+            fileSrc={named}
+            onOpenPicture={pictures.open}
+          />
+        </section>
+      )}
+      {following.length > 0 && (
+        <section className="sc-decision-section" aria-label={words.decisions.files}>
+          <h4 className="sc-decision-label">{words.decisions.files}</h4>
+          <ul className="sc-decision-files">
+            {following.map((attached) => {
+              const href = hrefOf(attached);
+              const { file } = attached;
+              if (href !== undefined && isPicture(file.contentType)) {
+                return (
+                  <li key={attached.id} className="sc-decision-picture">
+                    <PictureThumb
+                      picture={{
+                        src: href,
+                        alt: words.decisions.picture(file.name),
+                        name: file.name,
+                        size: file.size,
+                      }}
+                      onOpen={pictures.open}
+                    />
+                    <span className="sc-muted">
+                      {file.name}, {formatBytes(file.size)}
+                    </span>
+                  </li>
+                );
+              }
+              return (
+                <li key={attached.id}>
+                  {href === undefined ? (
+                    <span>{file.name}</span>
+                  ) : (
+                    <a href={href} rel="nofollow ugc">
+                      {file.name}
+                    </a>
+                  )}{" "}
+                  <span className="sc-muted">{formatBytes(file.size)}</span>
+                </li>
+              );
+            })}
+          </ul>
         </section>
       )}
       {decision.answer !== null ? (
@@ -322,6 +387,7 @@ export function DecisionCard(props: DecisionCardProps) {
           busy={props.busy}
         />
       )}
+      <Lightbox picture={pictures.shown} onClose={pictures.close} />
     </article>
   );
 }
@@ -332,6 +398,8 @@ export interface DecisionListProps {
   readonly tasks: ReadonlyMap<string, RestTask>;
   readonly taskHref?: ((task: RestTask) => string) | undefined;
   readonly docHref?: ((path: string) => string) | undefined;
+  /** Where a file put on a decision is read, by its id (ADR-0055). */
+  readonly fileHref?: ((fileId: string) => string) | undefined;
   /** Where each decision's own page is. */
   readonly decisionHref?: ((decision: RestDecision) => string) | undefined;
   /** The page of the record shown, from 1, and where each page is (ADR-0010); left out, the record turns its pages in place. */
@@ -465,6 +533,7 @@ export function DecisionList(props: DecisionListProps) {
       task={decision.taskId === null ? undefined : props.tasks.get(decision.taskId)}
       taskHref={props.taskHref}
       docHref={props.docHref}
+      fileHref={props.fileHref}
       href={props.decisionHref?.(decision)}
       onAnswer={props.onAnswer}
       onUpdate={props.onUpdate}

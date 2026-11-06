@@ -474,6 +474,17 @@ export function formatDecision(decision: RestDecision): string {
   if (decision.body.trim().length > 0) {
     lines.push("", decision.body.trimEnd());
   }
+  // The files put on it (ADR-0055), each with the command that reads it.
+  const files = decision.files ?? [];
+  if (files.length > 0) {
+    lines.push(
+      "",
+      ...files.map(
+        (attached) =>
+          `file: ${attached.file.name} (${attached.file.size} bytes, ${attached.file.contentType}): console file ${attached.id}`,
+      ),
+    );
+  }
   lines.push("", "options:", formatOptions(decision), "", formatAnswer(decision));
   if (decision.outcome !== null && decision.outcome.trim().length > 0) {
     lines.push("", "what followed:", indent(decision.outcome));

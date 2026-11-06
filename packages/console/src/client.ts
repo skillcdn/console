@@ -325,7 +325,8 @@ export interface ProjectClient {
    * while the decision waits, for as long as it allows, and answers the decision as it stands.
    */
   awaitDecision(id: string, waitSeconds: number, signal?: AbortSignal): Promise<RestDecision>;
-  raiseDecision(input: RestDecisionInput): Promise<RestDecision>;
+  /** Raises a decision; with `files`, the files put on it (ADR-0055) go in the one request. */
+  raiseDecision(input: RestDecisionInput, files?: readonly FileUpload[]): Promise<RestDecision>;
   answerDecision(id: string, input: RestAnswerInput): Promise<RestDecision>;
   /** Grows a decision's record: its context, or what followed. */
   updateDecision(id: string, patch: RestDecisionPatch): Promise<RestDecision>;
@@ -343,7 +344,7 @@ export interface ProjectClient {
   handIn(runId: string, input: RestArtifactInput): Promise<RestRun>;
   /** Hands in a file, on a run of the asker's: the console keeps the bytes. */
   handInFile(runId: string, input: FileUpload): Promise<RestRun>;
-  /** Where the bytes of a file of the project are read, by its id: handed in by a run, put in a comment, or attached to a page. */
+  /** Where the bytes of a file of the project are read, by its id: handed in by a run, put in a comment or on a decision, or attached to a page. */
   fileUrl(fileId: string): string;
   /** The bytes of a file of the project, by its id, with the name and the type the console says. */
   readFile(fileId: string, signal?: AbortSignal): Promise<FileRead>;
@@ -774,11 +775,9 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
     return form;
   };
 
-  /** A comment with files as the parts of a form: the part `body`, and a part `file` for each file. */
-  const commentFormOf = (input: CommentInput): FormData => {
-    const form = new FormData();
-    form.set("body", input.body);
-    for (const file of input.files ?? []) {
+  /** The files appended to a form, a part `file` each, with its name and its type. */
+  const appendFiles = (form: FormData, files: readonly FileUpload[]): void => {
+    for (const file of files) {
       const bytes =
         file.bytes instanceof Blob ? file.bytes : new Blob([Uint8Array.from(file.bytes)]);
       form.append(
@@ -787,6 +786,21 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
         file.name,
       );
     }
+  };
+
+  /** A comment with files as the parts of a form: the part `body`, and a part `file` for each file. */
+  const commentFormOf = (input: CommentInput): FormData => {
+    const form = new FormData();
+    form.set("body", input.body);
+    appendFiles(form, input.files ?? []);
+    return form;
+  };
+
+  /** A decision with files as the parts of a form (ADR-0055): the part `decision`, what the JSON would say, and a part `file` for each file. */
+  const decisionFormOf = (input: RestDecisionInput, files: readonly FileUpload[]): FormData => {
+    const form = new FormData();
+    form.set("decision", JSON.stringify(input));
+    appendFiles(form, files);
     return form;
   };
 
@@ -860,8 +874,13 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
           restDecisionSchema,
           signal,
         ),
-      raiseDecision: (input) =>
-        request("POST", `${base}${at("decisions")}`, input, restDecisionSchema),
+      raiseDecision: (input, files = []) =>
+        request(
+          "POST",
+          `${base}${at("decisions")}`,
+          files.length > 0 ? decisionFormOf(input, files) : input,
+          restDecisionSchema,
+        ),
       answerDecision: (id, input) =>
         request("POST", `${base}${at("decisions", id)}/answer`, input, restDecisionSchema),
       updateDecision: (id, patch) =>

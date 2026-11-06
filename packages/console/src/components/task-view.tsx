@@ -83,7 +83,8 @@ export interface TaskViewProps {
   readonly error?: string | undefined;
   readonly onChange: (task: RestTask, patch: RestTaskInput) => void;
   readonly onMove: (task: RestTask, state: TaskState) => void;
-  readonly onRaiseDecision: (input: RestDecisionInput) => void;
+  /** Called with a decision raised about the task, and the files put on it (ADR-0055). */
+  readonly onRaiseDecision: (input: RestDecisionInput, files: readonly File[]) => void;
   readonly onAnswer: (decision: RestDecision, input: RestAnswerInput) => void;
   /** Called to grow a decision's record with what followed. */
   readonly onUpdateDecision?:

@@ -174,6 +174,15 @@ export function restDecision(decision: DecisionRecord): RestDecision {
             at: decision.answer.at.toISOString(),
           },
     outcome: decision.outcome ?? null,
+    files: decision.files.map((attached) => ({
+      id: attached.id,
+      file: {
+        name: attached.file.name,
+        size: attached.file.size,
+        contentType: attached.file.contentType,
+        sha256: attached.file.sha256,
+      },
+    })),
     createdAt: decision.createdAt.toISOString(),
     updatedAt: decision.updatedAt.toISOString(),
   };

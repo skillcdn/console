@@ -1269,6 +1269,71 @@ describe("the console command", () => {
     ).toBe(EXIT.usage);
   });
 
+  it("puts files on a decision with --attach, the decision and its files as one form (ADR-0055)", async () => {
+    const bytes = new Uint8Array([137, 80, 78, 71]);
+    const file = {
+      id: "0199c4d8-0000-7000-8000-000000000031",
+      file: { name: "a.png", size: 4, contentType: "image/png", sha256: "x" },
+    };
+    const { fetch, calls } = fakeConsole({
+      [OPEN_RUNS]: { body: { more: false, items: [RUN] } },
+      [`POST ${IN}/decisions`]: { status: 201, body: { ...DECISION, files: [file] } },
+      [`GET ${IN}/decisions/${DECISION.id}`]: { body: { ...DECISION, files: [file] } },
+    });
+    const io = () =>
+      harness({
+        fetch,
+        env: SIGNED_IN,
+        readBytes: async (path) => {
+          if (!path.startsWith("shots/")) {
+            throw new Error("no such file");
+          }
+          return bytes;
+        },
+      });
+    const h = io();
+    expect(
+      await runCli(
+        [
+          "ask",
+          "Which look?",
+          "--option",
+          "a",
+          "--option",
+          "b",
+          "--attach",
+          "shots/a.png",
+          "--wait",
+          "0",
+        ],
+        h.io,
+      ),
+    ).toBe(EXIT.waiting);
+    const form = calls[1]?.init?.body;
+    expect(form).toBeInstanceOf(FormData);
+    expect(JSON.parse((form as FormData).get("decision") as string)).toEqual({
+      question: "Which look?",
+      options: [{ label: "a" }, { label: "b" }],
+      runId: RUN.id,
+    });
+    const parts = (form as FormData).getAll("file");
+    expect(parts.map((part) => (part as File).name)).toEqual(["a.png"]);
+    expect(parts.map((part) => (part as File).type)).toEqual(["image/png"]);
+    expect(h.out()).toContain(`Decision ${DECISION.id} raised on run ${RUN.id}, with 1 file;`);
+    // The decision read back names each file with the command that reads it.
+    const read = io();
+    expect(await runCli(["decision", DECISION.id], read.io)).toBe(EXIT.ok);
+    expect(read.out()).toContain(`file: a.png (4 bytes, image/png): console file ${file.id}`);
+    const missing = io();
+    expect(
+      await runCli(
+        ["ask", "Which?", "--option", "a", "--option", "b", "--attach", "elsewhere/x.png"],
+        missing.io,
+      ),
+    ).toBe(EXIT.failed);
+    expect(missing.err()).toContain("No file could be read at elsewhere/x.png");
+  });
+
   it("lists one's own decisions across the projects with --mine, the waiting first (ADR-0042)", async () => {
     const web = { key: "web", name: "The web app", color: null, symbol: null, icon: null };
     const BOB = {

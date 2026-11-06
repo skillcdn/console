@@ -650,6 +650,26 @@ export const restGoalPatchSchema = z.object({
 });
 export type RestGoalPatch = z.infer<typeof restGoalPatchSchema>;
 
+/** A file a run handed in, as the console keeps it; its bytes are at `projectPath(key, "files", <artifact id>)`. */
+export const restFileSchema = z.object({
+  /** What the agent called it: one line, without a path. */
+  name: z.string(),
+  /** In bytes. */
+  size: count,
+  /** The media type the agent said, or `application/octet-stream`. */
+  contentType: z.string(),
+  /** The SHA-256 of the bytes, in hex: what the console keeps them under. */
+  sha256: z.string(),
+});
+export type RestFile = z.infer<typeof restFileSchema>;
+
+/** A file put on a decision when it was raised (ADR-0055), kept as a run's file is; its bytes are at `projectPath(key, "files", <id>)`. */
+export const restDecisionFileSchema = z.object({
+  id: uuid,
+  file: restFileSchema,
+});
+export type RestDecisionFile = z.infer<typeof restDecisionFileSchema>;
+
 export const restDecisionOptionSchema = z.object({
   /** What an answer names: stable once given. */
   id: z.string(),
@@ -693,6 +713,13 @@ export const restDecisionSchema = z.object({
   ),
   /** What followed the decision, in Markdown, written afterwards; `null` until someone does. */
   outcome: z.nullable(z.string()),
+  /**
+   * The files put on it when it was raised (ADR-0055), in the order they came; a picture among
+   * them is shown where the context names it as `![words](its name)`, else after it. Answered
+   * from 0.4.3 and read as optional, so that a console built on this package still reads an
+   * older console's decisions.
+   */
+  files: z.optional(z.array(restDecisionFileSchema)),
   createdAt: instant,
   updatedAt: instant,
 });
@@ -749,7 +776,11 @@ export const restPersonWorkSchema = z.object({
 });
 export type RestPersonWork = z.infer<typeof restPersonWorkSchema>;
 
-/** What `POST /api/v1/projects/<key>/decisions` is sent: the question, its context, and the options. */
+/**
+ * What `POST /api/v1/projects/<key>/decisions` is sent: the question, its context, and the
+ * options. As JSON; or, with files put on the decision (ADR-0055), as the part `decision` of a
+ * form, with a part `file` for each file.
+ */
 export const restDecisionInputSchema = z.object({
   question: line(MAX_QUESTION_LENGTH),
   body: z.optional(body),
@@ -825,7 +856,7 @@ export const restEventDataSchema = z.object({
   label: z.optional(z.string()),
   /** For `run.reported` and `task.commented`: the first words of what was written. */
   excerpt: z.optional(z.string()),
-  /** For `task.commented`: how many files came with it. */
+  /** For `task.commented`, and for `decision.raised` when any came: how many files came with it. */
   files: z.optional(z.int()),
   /** For `plugin.command`: the command, how it ended, the refusal's code where it was refused, how long it ran, and the arguments, a secret one as `[hidden]`. */
   command: z.optional(z.string()),
@@ -873,19 +904,6 @@ export const restReportSchema = z.object({
   createdAt: instant,
 });
 export type RestReport = z.infer<typeof restReportSchema>;
-
-/** A file a run handed in, as the console keeps it; its bytes are at `projectPath(key, "files", <artifact id>)`. */
-export const restFileSchema = z.object({
-  /** What the agent called it: one line, without a path. */
-  name: z.string(),
-  /** In bytes. */
-  size: count,
-  /** The media type the agent said, or `application/octet-stream`. */
-  contentType: z.string(),
-  /** The SHA-256 of the bytes, in hex: what the console keeps them under. */
-  sha256: z.string(),
-});
-export type RestFile = z.infer<typeof restFileSchema>;
 
 /** What a run handed in: a link to a branch, a pull request, a page; or a file the console keeps. */
 export const restArtifactSchema = z.object({

@@ -392,7 +392,7 @@ export interface Config {
   };
   /** The bounds the deployment sets beyond the package's own; each nothing where it set none. */
   readonly quotas: {
-    /** How many bytes the files of one project may hold together: handed in, put in comments and attached to pages. */
+    /** How many bytes the files of one project may hold together: handed in, put in comments and on decisions, and attached to pages. */
     readonly fileBytesPerProject: number | undefined;
   };
   /** Signing in through identity providers. Unset: nobody signs in, and the board is nobody's. */

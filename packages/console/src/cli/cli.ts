@@ -5,6 +5,7 @@ import {
   type ConsoleClient,
   createClient,
   type FetchLike,
+  type FileUpload,
   type PluginClient,
   type ProjectClient,
 } from "../client.js";
@@ -2298,18 +2299,7 @@ const comment: Command = async (args, io) => {
   if (body.trim().length === 0 && paths.length === 0) {
     throw misuse(`Say something, or attach a file. ${ask}`);
   }
-  const files = [];
-  for (const path of paths) {
-    let bytes: Uint8Array;
-    try {
-      bytes = await io.readBytes(path);
-    } catch {
-      throw failed(`No file could be read at ${path}. Name the path of a file to attach.`);
-    }
-    const name = basename(path);
-    const contentType = CONTENT_TYPES[extname(name).toLowerCase()];
-    files.push({ name, bytes, ...(contentType === undefined ? {} : { contentType }) });
-  }
+  const files = await attachmentsOf(io, paths);
   const session = await open(io, values);
   const project = await session.project();
   const task = await project.task(ref);
@@ -2324,9 +2314,29 @@ const comment: Command = async (args, io) => {
 };
 
 /**
+ * The files named by --attach, read from this machine: each called by its name, without the
+ * path, and typed by its extension where the extension says.
+ */
+async function attachmentsOf(io: CliIo, paths: readonly string[]): Promise<FileUpload[]> {
+  const files: FileUpload[] = [];
+  for (const path of paths) {
+    let bytes: Uint8Array;
+    try {
+      bytes = await io.readBytes(path);
+    } catch {
+      throw failed(`No file could be read at ${path}. Name the path of a file to attach.`);
+    }
+    const name = basename(path);
+    const contentType = CONTENT_TYPES[extname(name).toLowerCase()];
+    files.push({ name, bytes, ...(contentType === undefined ? {} : { contentType }) });
+  }
+  return files;
+}
+
+/**
  * A file of the project, read from the console and written on this machine: one a run handed
- * in, one put in a comment, or one attached to a page, by its id, so that an agent can look at
- * a picture a person put on the board.
+ * in, one put in a comment or on a decision, or one attached to a page, by its id, so that an
+ * agent can look at a picture a person put on the board.
  */
 const file: Command = async (args, io) => {
   const { values, positionals } = parse(args, { out: { type: "string" } });
@@ -2521,6 +2531,7 @@ const ask: Command = async (args, io) => {
     run: { type: "string" },
     wait: { type: "string" },
     to: { type: "string" },
+    attach: { type: "string", multiple: true },
   });
   const question = theOne(
     positionals,
@@ -2536,23 +2547,30 @@ const ask: Command = async (args, io) => {
   }
   const seconds = secondsOf(text(values, "wait"), DEFAULT_ASK_WAIT_SECONDS);
   const body = await bodyOf(io, values, text(values, "body"));
+  // The files put on the decision (ADR-0055): a picture of what is to be chosen between, for one.
+  const files = await attachmentsOf(io, texts(values, "attach"));
   const session = await open(io, values);
   const project = await session.project();
   const runId = await currentRun(project, values);
   // Whom the decision is for (ADR-0042): the person the agent works for, unless --to names another.
   const deciderId = await personIdOf(session, to);
-  const raised = await project.raiseDecision({
-    question,
-    options: options.map((label) => ({ label })),
-    runId,
-    ...(body === undefined ? {} : { body }),
-    ...(typeof deciderId === "string" ? { deciderId } : {}),
-  });
+  const raised = await project.raiseDecision(
+    {
+      question,
+      options: options.map((label) => ({ label })),
+      runId,
+      ...(body === undefined ? {} : { body }),
+      ...(typeof deciderId === "string" ? { deciderId } : {}),
+    },
+    files,
+  );
+  const withFiles =
+    files.length === 0 ? "" : `, with ${files.length} file${files.length === 1 ? "" : "s"}`;
   // The id is printed before any waiting, so that a wait cut short loses nothing.
   io.stdout(
     session.json
       ? `${JSON.stringify(raised, null, 2)}\n`
-      : `Decision ${raised.id} raised on run ${runId}; the run waits for ${raised.decider.login}.\ndecision id: ${raised.id}\n${formatOptions(raised)}\n`,
+      : `Decision ${raised.id} raised on run ${runId}${withFiles}; the run waits for ${raised.decider.login}.\ndecision id: ${raised.id}\n${formatOptions(raised)}\n`,
   );
   return settle(io, session, project, raised, seconds, true);
 };

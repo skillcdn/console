@@ -20,6 +20,7 @@ import {
   restCategoryInputSchema,
   restDecisionInputSchema,
   restDecisionPatchSchema,
+  restDecisionSchema,
   restDocumentInputSchema,
   restDocumentSchema,
   restDocumentsSchema,
@@ -196,6 +197,18 @@ describe("what the server answers", () => {
     expect(field.safeParse({ waiting: -1 }).success).toBe(false);
     expect(field.safeParse({ waiting: 1.5 }).success).toBe(false);
     expect(field.safeParse({}).success).toBe(false);
+  });
+
+  it("reads the files put on a decision, and an older console's decision without them (ADR-0055)", () => {
+    const field = restDecisionSchema.shape.files;
+    const file = { name: "look.png", size: 12, contentType: "image/png", sha256: "ab" };
+    expect(field.safeParse(undefined).success).toBe(true);
+    expect(field.parse([{ id: "0199c4d8-0000-7000-8000-000000000041", file }])).toEqual([
+      { id: "0199c4d8-0000-7000-8000-000000000041", file },
+    ]);
+    expect(field.safeParse([{ id: "41", file }]).success).toBe(false);
+    expect(field.safeParse([{ id: "0199c4d8-0000-7000-8000-000000000041" }]).success).toBe(false);
+    expect(field.safeParse(null).success).toBe(false);
   });
 
   it("parses a task as the server writes one", () => {

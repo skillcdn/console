@@ -356,6 +356,14 @@ function useFollowLinks(navigation: Navigation): void {
 }
 
 /** The key of the project a route is on, or nothing. */
+/** The files chosen or pasted on a page, as the client sends them: each by its name, its bytes and its type where the browser knows one. */
+const uploadsOf = (files: readonly File[]): FileUpload[] =>
+  files.map((file) => ({
+    name: file.name,
+    bytes: file,
+    ...(file.type === "" ? {} : { contentType: file.type }),
+  }));
+
 const projectOf = (route: Route): string | undefined =>
   "project" in route ? route.project : undefined;
 
@@ -863,9 +871,9 @@ function TaskPage(props: {
         })
       }
       onMove={(target, state) => void act(() => data.actions.updateTask(target.id, { state }))}
-      onRaiseDecision={(input) =>
+      onRaiseDecision={(input, files) =>
         void act(async () => {
-          await data.actions.raiseDecision(input);
+          await data.actions.raiseDecision(input, uploadsOf(files));
           navigation.replace(here);
         })
       }
@@ -889,14 +897,7 @@ function TaskPage(props: {
       }
       onComment={(draft) =>
         void act(async () => {
-          await data.actions.comment(task.id, {
-            body: draft.body,
-            files: draft.files.map((file) => ({
-              name: file.name,
-              bytes: file,
-              ...(file.type === "" ? {} : { contentType: file.type }),
-            })),
-          });
+          await data.actions.comment(task.id, { body: draft.body, files: uploadsOf(draft.files) });
           setComments(await taskComments(task.id));
         })
       }
@@ -1311,6 +1312,7 @@ function ProjectPage(props: {
           tasks={tasksById}
           taskHref={href}
           docHref={toDoc}
+          fileHref={(fileId) => projectPath(key, "files", fileId)}
           decisionHref={(decision) => decisionHref(key, decision.id)}
           page={route.page}
           pageHref={(page) => decisionsHref(key, page)}
@@ -1337,9 +1339,9 @@ function ProjectPage(props: {
             deciders={data.members.map((member) => member.person)}
             me={data.me?.person ?? undefined}
             busy={busy}
-            onSubmit={(input: RestDecisionInput) =>
+            onSubmit={(input: RestDecisionInput, files: readonly File[]) =>
               void act(async () => {
-                const made = await data.actions.raiseDecision(input);
+                const made = await data.actions.raiseDecision(input, uploadsOf(files));
                 navigation.replace(decisionHref(key, made.id));
               })
             }
@@ -1366,6 +1368,7 @@ function ProjectPage(props: {
             task={decision.taskId === null ? undefined : tasksById.get(decision.taskId)}
             taskHref={href}
             docHref={toDoc}
+            fileHref={(fileId) => projectPath(key, "files", fileId)}
             onAnswer={onAnswer}
             onUpdate={onUpdate}
             busy={busy}
@@ -2301,6 +2304,7 @@ function MyDecisionsPage(props: { readonly data: ConsoleData }) {
           addressed={{ items: addressed.items, more: addressed.more, onMore: addressed.readMore }}
           raised={{ items: raised.items, more: raised.more, onMore: raised.readMore }}
           decisionHref={decisionHref}
+          fileHref={(projectKey, fileId) => projectPath(projectKey, "files", fileId)}
           onAnswer={onAnswer}
           busy={busy || addressed.busy || raised.busy}
         />

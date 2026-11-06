@@ -369,6 +369,18 @@ Goal: a third party writes a feature of an organization's work as a plugin, an o
 - [x] The browser (2026-11-02): `pnpm test:browser` drives a real Chromium against the console listening on this machine, apart from `pnpm check` and as a job of CI's own, and sees the frame's policy and sandbox enforced; `pnpm dev:plugins` is that console for a person to look at the plugins' pages. The trial release with the example plugin alone is not made: the first plugin's install into a deployment proves the same.
 - [ ] The first plugins, in repositories of their own, their install into a deployment, and the second pass over the contract they ask for.
 
+## Milestone 35, the decision with its pictures, and what the first plugins asked (2026-11-06)
+
+Goal: what the first plugins, written in `skillcdn/console-plugins` against the contract, asked of the console, and what using the board for real asked of decisions, before the release that goes live with SkillCDN 0.4.2.
+
+- [x] The My decisions tab counts the decisions waiting for the person (`GET /api/v1/me` answers `decisions.waiting`; read again when a decision is raised or answered, and on the project's `decision.*` events).
+- [x] A decision carries the files put on it when it is raised ([ADR-0055](adr/0055-a-decision-carries-the-files-put-on-it-when-it-is-raised.md)): `POST .../decisions` as one form, `console ask --attach`, the pictures shown where the context names them and on every page a decision is shown, the files read at the project's one address and by `console file`.
+- [ ] A decision's option may carry a `key`, answered back to the program that asked, so that a plugin reads the answer without comparing labels.
+- [ ] The workspace's people events reach the hooks of a plugin with `people:read:all`.
+- [ ] `pnpm dev:plugins` installs the built plugins of other checkouts, named on the command line, so that a plugin's pages are looked at without a provider.
+- [ ] `console-plugin init` takes the package's name, its repository and the languages of its words.
+- [ ] The docs name the reference plugin repository and the way of several plugins in one repository.
+
 ## After milestone 16
 
 Nothing is chosen yet; the list below is where the next milestone comes from.

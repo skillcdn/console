@@ -1,8 +1,12 @@
-import { MAX_DECISIONS_PER_PROJECT, type RestDecisionOption } from "@skillcdn/console/api";
+import {
+  MAX_DECISIONS_PER_PROJECT,
+  MAX_FILES_PER_DECISION,
+  type RestDecisionOption,
+} from "@skillcdn/console/api";
 import { and, asc, count, desc, eq, isNull, ne, sql } from "drizzle-orm";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
-import { decisions, pluginLinks, projects, runs, tasks } from "../schema.js";
+import { decisionFiles, decisions, pluginLinks, projects, runs, tasks } from "../schema.js";
 import { recordLinks } from "./documents.js";
 import { type Actor, recordEvent, type Scope } from "./events.js";
 import {
@@ -14,10 +18,19 @@ import {
   toPerson,
 } from "./people.js";
 import { mayWorkIn, visibleTo } from "./projects.js";
+import type { FileRecord } from "./runs.js";
 
 // The questions that need a person. A decision is raised once and answered once; both are
 // one transaction with the event that records them. Every read is scoped to the project, but
-// for a person's own decisions, read across the projects they may see (ADR-0042).
+// for a person's own decisions, read across the projects they may see (ADR-0042). The files
+// put on a decision when it is raised (ADR-0055) are rows that name a hash, as a comment's are;
+// the bytes are the blob store's.
+
+/** A file put on a decision when it was raised (ADR-0055): the bytes are in the blob store under the hash. */
+export interface DecisionFileRecord {
+  readonly id: string;
+  readonly file: FileRecord;
+}
 
 export interface DecisionRecord {
   readonly id: string;
@@ -47,6 +60,8 @@ export interface DecisionRecord {
     | undefined;
   /** What followed the decision, written afterwards; nothing until someone does. */
   readonly outcome: string | undefined;
+  /** The files put on it when it was raised (ADR-0055), in the order they came. */
+  readonly files: readonly DecisionFileRecord[];
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -61,7 +76,8 @@ export class DecisionError extends DomainError {
       | "decision.no_such_option"
       | "decision.invalid_run"
       | "decision.invalid_decider"
-      | "decision.too_many",
+      | "decision.too_many"
+      | "decision.too_many_files",
   ) {
     super(code, DECISION_ERROR_WORDS[code]);
   }
@@ -75,6 +91,7 @@ const DECISION_ERROR_WORDS = {
   "decision.invalid_run": "the run is not the asker's, or is over",
   "decision.invalid_decider": "the person named to decide may not work in the project",
   "decision.too_many": "the project holds as many decisions as one may",
+  "decision.too_many_files": "the decision carries more files than one may",
 } as const;
 
 const decisionColumns = {
@@ -100,6 +117,17 @@ const decisionColumns = {
   plugin: sql<
     string | null
   >`(select ${pluginLinks.pluginKey} from ${pluginLinks} where ${pluginLinks.targetKind} = 'decision' and ${pluginLinks.targetId} = ${decisions.id} and ${pluginLinks.recordId} is null limit 1)`,
+  // The files put on it (ADR-0055), in the order they came, as one JSON column, so that a
+  // listing reads one row per decision.
+  files: sql<
+    readonly {
+      readonly id: string;
+      readonly name: string;
+      readonly size: number;
+      readonly contentType: string;
+      readonly sha256: string;
+    }[]
+  >`(select coalesce(json_agg(json_build_object('id', ${decisionFiles.id}, 'name', ${decisionFiles.fileName}, 'size', ${decisionFiles.fileSize}, 'contentType', ${decisionFiles.contentType}, 'sha256', ${decisionFiles.sha256}) order by ${decisionFiles.createdAt}, ${decisionFiles.id}), '[]'::json) from ${decisionFiles} where ${decisionFiles.decisionId} = ${decisions.id})`,
 };
 
 type Handle = Transaction | ReturnType<typeof drizzleOf>;
@@ -144,6 +172,15 @@ function toDecision(row: DecisionRow): DecisionRecord {
     plugin: row.plugin ?? undefined,
     answer: answered,
     outcome: row.outcome ?? undefined,
+    files: row.files.map((file) => ({
+      id: file.id,
+      file: {
+        name: file.name,
+        size: file.size,
+        contentType: file.contentType,
+        sha256: file.sha256,
+      },
+    })),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -161,9 +198,10 @@ async function readDecision(
 }
 
 /**
- * Raises a decision, with its options numbered from one, and tells the board. The task, when
- * there is one, must be the project's. Raised from a run, which must be the actor's and not
- * over, the decision is about the run's task and the run waits for the answer.
+ * Raises a decision, with its options numbered from one and the files put on it, whose bytes
+ * the blob store keeps already (ADR-0055), and tells the board. The task, when there is one,
+ * must be the project's. Raised from a run, which must be the actor's and not over, the
+ * decision is about the run's task and the run waits for the answer.
  */
 export async function raiseDecision(
   database: Database,
@@ -178,6 +216,8 @@ export async function raiseDecision(
       readonly runId?: string | undefined;
       /** Who is to answer: a person who may work in the project; the actor when left out. */
       readonly deciderId?: string | undefined;
+      /** The files put on it (ADR-0055), their bytes kept already; none when left out. */
+      readonly files?: readonly FileRecord[] | undefined;
     };
     /** How many decisions the project may hold, this one included; the package's bound when left out. */
     readonly limit?: number | undefined;
@@ -185,6 +225,10 @@ export async function raiseDecision(
   },
 ): Promise<DecisionRecord> {
   const { scope, actor, decision, now } = input;
+  const files = decision.files ?? [];
+  if (files.length > MAX_FILES_PER_DECISION) {
+    throw new DecisionError("decision.too_many_files");
+  }
   return drizzleOf(database).transaction(async (tx) => {
     // Counted under the lock on the project's row, so that two raised at once cannot both be the last one allowed.
     await tx
@@ -275,6 +319,18 @@ export async function raiseDecision(
     if (inserted === undefined) {
       throw new Error("decision insert returned no row");
     }
+    if (files.length > 0) {
+      await tx.insert(decisionFiles).values(
+        files.map((file) => ({
+          decisionId: inserted.id,
+          fileName: file.name,
+          fileSize: file.size,
+          contentType: file.contentType,
+          sha256: file.sha256,
+          createdAt: now,
+        })),
+      );
+    }
     await recordLinks(tx, scope, { kind: "decision", id: inserted.id }, [decision.body ?? ""], now);
     await recordEvent(tx, {
       ...scope,
@@ -284,7 +340,12 @@ export async function raiseDecision(
       taskId: taskId ?? undefined,
       decisionId: inserted.id,
       runId: runId ?? undefined,
-      data: { question: decision.question, ...about, ...(agent === undefined ? {} : { agent }) },
+      data: {
+        question: decision.question,
+        ...about,
+        ...(agent === undefined ? {} : { agent }),
+        ...(files.length === 0 ? {} : { files: files.length }),
+      },
       now,
     });
     const written = await readDecision(tx, scope, inserted.id);
@@ -483,6 +544,37 @@ export function getDecision(
   decisionId: string,
 ): Promise<DecisionRecord | undefined> {
   return readDecision(drizzleOf(database), scope, decisionId);
+}
+
+/** A file put on a decision of the project (ADR-0055), by the file's id. */
+export async function findDecisionFile(
+  database: Database,
+  scope: Scope,
+  fileId: string,
+): Promise<DecisionFileRecord | undefined> {
+  const [row] = await drizzleOf(database)
+    .select({
+      id: decisionFiles.id,
+      fileName: decisionFiles.fileName,
+      fileSize: decisionFiles.fileSize,
+      contentType: decisionFiles.contentType,
+      sha256: decisionFiles.sha256,
+    })
+    .from(decisionFiles)
+    .innerJoin(decisions, eq(decisions.id, decisionFiles.decisionId))
+    .where(and(eq(decisions.projectId, scope.projectId), eq(decisionFiles.id, fileId)))
+    .limit(1);
+  return row === undefined
+    ? undefined
+    : {
+        id: row.id,
+        file: {
+          name: row.fileName,
+          size: row.fileSize,
+          contentType: row.contentType,
+          sha256: row.sha256,
+        },
+      };
 }
 
 /** One decision of the workspace by its id, whichever project it is in: how a plugin reads one it was told of. */

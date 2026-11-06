@@ -28,7 +28,7 @@ export interface Quotas {
   readonly streams: number;
   /**
    * How many bytes the files of one project hold together: those runs hand in, those put in
-   * comments and those attached to pages, each counted by its size. `Infinity` where the
+   * comments and on decisions, and those attached to pages, each counted by its size. `Infinity` where the
    * deployment set no bound, which is the default.
    */
   readonly fileBytesPerProject: number;

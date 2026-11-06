@@ -305,6 +305,7 @@ export function TaskThread(props: TaskThreadProps) {
         decision={item.decision}
         task={props.task}
         docHref={props.docHref}
+        fileHref={fileHref}
         onAnswer={props.onAnswer}
         onUpdate={props.onUpdateDecision}
         busy={props.busy}

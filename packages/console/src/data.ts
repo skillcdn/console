@@ -125,7 +125,8 @@ export interface ConsoleActions {
     page: { readonly limit: number; readonly offset: number },
     signal?: AbortSignal,
   ): Promise<RestGoals>;
-  raiseDecision(input: RestDecisionInput): Promise<RestDecision>;
+  /** Raises a decision in the project; with `files`, the files put on it (ADR-0055). */
+  raiseDecision(input: RestDecisionInput, files?: readonly FileUpload[]): Promise<RestDecision>;
   answerDecision(id: string, input: RestAnswerInput): Promise<RestDecision>;
   /** Answers a decision of any project the person may see, by its project's key: for the person's own page of decisions (ADR-0042). */
   answerDecisionIn(projectKey: string, id: string, input: RestAnswerInput): Promise<RestDecision>;
@@ -703,8 +704,8 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
         scope().tasks({ archived: false, ...searchWordsOf(query), ...page }, signal),
       findGoals: (query, page, signal) =>
         scope().goals({ open: true, ...searchWordsOf(query), ...page }, signal),
-      async raiseDecision(input) {
-        const decision = await scope().raiseDecision(input);
+      async raiseDecision(input, files) {
+        const decision = await scope().raiseDecision(input, files);
         await Promise.all([refreshProject(), refreshMe().catch(() => undefined)]);
         return decision;
       },

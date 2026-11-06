@@ -12,6 +12,7 @@ import {
   MAX_DOCUMENT_PATH_LENGTH,
   MAX_FILE_BYTES,
   MAX_FILES_PER_COMMENT,
+  MAX_FILES_PER_DECISION,
   MAX_FILES_PER_DOCUMENT,
   MAX_LOGIN_LENGTH,
   MAX_PROJECT_ICON_BYTES,
@@ -31,6 +32,7 @@ import {
   type RestComments,
   type RestConnection,
   type RestConnectRequest,
+  type RestDecisionInput,
   type RestDecisions,
   type RestDocuments,
   type RestEvents,
@@ -131,6 +133,7 @@ import {
   answerDecision,
   DecisionError,
   type DecisionRecord,
+  findDecisionFile,
   getDecision,
   listDecisions,
   listDecisionsFor,
@@ -716,6 +719,21 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
   });
   const commentTooLarge: MiddlewareHandler<AppEnv> = (c, next) =>
     isForm(c) ? commentFormTooLarge(c, next) : tooLarge(c, next);
+  // A decision too comes as JSON, or as a form with the files put on it (ADR-0055), bounded as
+  // a comment's are.
+  const decisionFormTooLarge = bodyLimit({
+    maxSize: MAX_FILE_BYTES + FORM_OVERHEAD_BYTES,
+    onError: (c) =>
+      c.json(
+        errorBody(
+          "request.too_large",
+          `The files of a decision are over ${MAX_FILE_BYTES} bytes together.`,
+        ),
+        413,
+      ),
+  });
+  const decisionTooLarge: MiddlewareHandler<AppEnv> = (c, next) =>
+    isForm(c) ? decisionFormTooLarge(c, next) : tooLarge(c, next);
   const iconTooLarge = (c: Context<AppEnv>): Response =>
     c.json(
       errorBody("request.too_large", `The image is over ${MAX_PROJECT_ICON_BYTES} bytes.`),
@@ -880,42 +898,29 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     };
   };
 
+  /** A file among the parts of a form, checked and not yet kept. */
+  type FilePart = {
+    readonly part: File;
+    readonly name: string;
+    readonly contentType: string;
+  };
+
   /**
-   * A comment as the parts of a form: the part `body`, and a part `file` for each file put in
-   * it, each checked as a file handed in is; or the refusal. The parts are read before any
-   * byte is kept, so that a form with one bad file keeps nothing.
+   * The parts called `file` of a form, each checked as a file handed in is, at most `limit` of
+   * them on one `what`; or the refusal. Read before any byte is kept, so that a form with one
+   * bad file keeps nothing.
    */
-  const commentPartsOf = async (
+  const filePartsOf = (
     c: Context<AppEnv>,
-  ): Promise<
-    | {
-        readonly body: string;
-        readonly files: readonly {
-          readonly part: File;
-          readonly name: string;
-          readonly contentType: string;
-        }[];
-      }
-    | Response
-  > => {
-    let form: FormData;
-    try {
-      form = await c.req.formData();
-    } catch {
-      return invalid(c, "The request body is not a form.");
-    }
-    const bodyPart = form.get("body");
-    const parsedBody = restCommentInputSchema.safeParse({
-      body: typeof bodyPart === "string" ? bodyPart : "",
-    });
-    if (!parsedBody.success) {
-      return invalid(c, firstProblem(parsedBody));
-    }
+    form: FormData,
+    limit: number,
+    what: string,
+  ): readonly FilePart[] | Response => {
     const parts = form.getAll("file");
-    if (parts.length > MAX_FILES_PER_COMMENT) {
-      return invalid(c, `file: at most ${MAX_FILES_PER_COMMENT} files on one comment.`);
+    if (parts.length > limit) {
+      return invalid(c, `file: at most ${limit} files on one ${what}.`);
     }
-    const files: { part: File; name: string; contentType: string }[] = [];
+    const files: FilePart[] = [];
     for (const part of parts) {
       if (!(part instanceof File)) {
         return invalid(c, "file: every part called file is a file.");
@@ -940,7 +945,82 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         contentType: parsed.data.contentType ?? "application/octet-stream",
       });
     }
+    return files;
+  };
+
+  /**
+   * A comment as the parts of a form: the part `body`, and a part `file` for each file put in
+   * it; or the refusal.
+   */
+  const commentPartsOf = async (
+    c: Context<AppEnv>,
+  ): Promise<{ readonly body: string; readonly files: readonly FilePart[] } | Response> => {
+    let form: FormData;
+    try {
+      form = await c.req.formData();
+    } catch {
+      return invalid(c, "The request body is not a form.");
+    }
+    const bodyPart = form.get("body");
+    const parsedBody = restCommentInputSchema.safeParse({
+      body: typeof bodyPart === "string" ? bodyPart : "",
+    });
+    if (!parsedBody.success) {
+      return invalid(c, firstProblem(parsedBody));
+    }
+    const files = filePartsOf(c, form, MAX_FILES_PER_COMMENT, "comment");
+    if (files instanceof Response) {
+      return files;
+    }
     return { body: parsedBody.data.body, files };
+  };
+
+  /**
+   * A decision as the parts of a form (ADR-0055): the part `decision`, what the JSON would say,
+   * and a part `file` for each file put on it; or the refusal.
+   */
+  const decisionPartsOf = async (
+    c: Context<AppEnv>,
+  ): Promise<
+    { readonly input: RestDecisionInput; readonly files: readonly FilePart[] } | Response
+  > => {
+    let form: FormData;
+    try {
+      form = await c.req.formData();
+    } catch {
+      return invalid(c, "The request body is not a form.");
+    }
+    const part = form.get("decision");
+    let json: unknown;
+    try {
+      json = JSON.parse(typeof part === "string" ? part : "");
+    } catch {
+      return invalid(c, "decision: the form needs a part called decision, the decision as JSON.");
+    }
+    const parsed = restDecisionInputSchema.safeParse(json);
+    if (!parsed.success || parsed.data === undefined) {
+      return invalid(c, firstProblem(parsed));
+    }
+    const files = filePartsOf(c, form, MAX_FILES_PER_DECISION, "decision");
+    if (files instanceof Response) {
+      return files;
+    }
+    return { input: parsed.data, files };
+  };
+
+  /** The files of a form kept in the blob store, each as a row names it. */
+  const keepFiles = async (sent: readonly FilePart[]) => {
+    const files = [];
+    for (const file of sent) {
+      const kept = await blobs.put(new Uint8Array(await file.part.arrayBuffer()), clock.now());
+      files.push({
+        name: file.name,
+        size: kept.size,
+        contentType: file.contentType,
+        sha256: kept.sha256,
+      });
+    }
+    return files;
   };
 
   /**
@@ -2193,11 +2273,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       return noSuchTask(c);
     }
     let body: string;
-    let sent: readonly {
-      readonly part: File;
-      readonly name: string;
-      readonly contentType: string;
-    }[];
+    let sent: readonly FilePart[];
     if (isForm(c)) {
       const parts = await commentPartsOf(c);
       if (parts instanceof Response) {
@@ -2226,16 +2302,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       return failure(c, new ProjectError("project.too_many_bytes"));
     }
     try {
-      const files = [];
-      for (const file of sent) {
-        const kept = await blobs.put(new Uint8Array(await file.part.arrayBuffer()), clock.now());
-        files.push({
-          name: file.name,
-          size: kept.size,
-          contentType: file.contentType,
-          sha256: kept.sha256,
-        });
-      }
+      const files = await keepFiles(sent);
       const written = await writeComment(database, {
         scope: found.scope,
         actor: found.actor,
@@ -2271,17 +2338,42 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     return c.json(body);
   });
 
-  app.post(`${PROJECT}/decisions`, tooLarge, async (c) => {
+  // A decision as JSON, or, with the files put on it (ADR-0055), as one form: one request, one
+  // decision, one event, and no byte kept before the whole form was found good.
+  app.post(`${PROJECT}/decisions`, decisionTooLarge, async (c) => {
     const found = await changing(c);
     if (found instanceof Response) {
       return found;
     }
-    const input = await bodyOf(c, restDecisionInputSchema);
-    if (input instanceof Response) {
-      return input;
+    let input: RestDecisionInput;
+    let sent: readonly FilePart[];
+    if (isForm(c)) {
+      const parts = await decisionPartsOf(c);
+      if (parts instanceof Response) {
+        return parts;
+      }
+      input = parts.input;
+      sent = parts.files;
+    } else {
+      const parsed = await bodyOf(c, restDecisionInputSchema);
+      if (parsed instanceof Response) {
+        return parsed;
+      }
+      input = parsed;
+      sent = [];
+    }
+    if (
+      sent.length > 0 &&
+      (await overFileBytes(
+        found.scope,
+        sent.reduce((total, file) => total + file.part.size, 0),
+      ))
+    ) {
+      return failure(c, new ProjectError("project.too_many_bytes"));
     }
     const fromRun = input.runId !== undefined && input.runId !== null;
     try {
+      const files = await keepFiles(sent);
       const decision = await raiseDecision(database, {
         scope: found.scope,
         limit: quotas.decisionsPerProject,
@@ -2294,6 +2386,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
           taskId: fromRun ? undefined : input.taskId,
           runId: fromRun ? (input.runId ?? undefined) : undefined,
           deciderId: input.deciderId,
+          files,
         },
         now: clock.now(),
       });
@@ -2574,7 +2667,8 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
   });
 
   // The bytes of a file of the project, whichever way it came: handed in by a run, put in a
-  // comment, or attached to a page; one address for all of them, for whoever may see the project.
+  // comment or on a decision, or attached to a page; one address for all of them, for whoever
+  // may see the project.
   app.get(`${PROJECT}/files/:id`, async (c) => {
     const found = await reading(c);
     if (found instanceof Response) {
@@ -2591,6 +2685,10 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     const commented = await findCommentFile(database, found.scope, id);
     if (commented !== undefined) {
       return serveFile(c, commented.file, { commentFile: commented.id });
+    }
+    const decided = await findDecisionFile(database, found.scope, id);
+    if (decided !== undefined) {
+      return serveFile(c, decided.file, { decisionFile: decided.id });
     }
     const attached = await findDocumentFileById(database, found.scope, id);
     if (attached !== undefined) {

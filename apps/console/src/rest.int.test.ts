@@ -8,6 +8,7 @@ import {
   DEFAULT_TOKEN_DAYS,
   MAX_FILE_BYTES,
   MAX_FILES_PER_COMMENT,
+  MAX_FILES_PER_DECISION,
   MAX_PROJECT_ICON_BYTES,
   MAX_RULES_LENGTH,
   MAX_TITLE_LENGTH,
@@ -788,6 +789,117 @@ describe("decisions", () => {
         .parse(await (await get(alice, `${IN}/decisions/${decision.id}`)).json())
         .options.at(-1),
     ).toEqual({ id: "3", label: "Green, as the brand is", own: true });
+  });
+
+  it("carry the files put on them when raised, as one form, read back at the project's address (ADR-0055)", async () => {
+    const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13]);
+    const headers = { cookie: alice, origin: SIGN_IN_URL };
+    const task = await createTask(alice, { title: "Choose a look" });
+    const formOf = (
+      decision: unknown,
+      files: readonly { name: string; type: string; bytes: Uint8Array | string }[],
+    ) => {
+      const data = new FormData();
+      if (decision !== undefined) {
+        data.set("decision", JSON.stringify(decision));
+      }
+      for (const file of files) {
+        data.append("file", new File([file.bytes], file.name, { type: file.type }), file.name);
+      }
+      return data;
+    };
+    const raised = await h.request(`${IN}/decisions`, {
+      method: "POST",
+      headers,
+      body: formOf(
+        {
+          question: "Which look?",
+          body: "The first: ![the first](first.png)",
+          options: [{ label: "The first" }, { label: "The second" }],
+          taskId: task.id,
+        },
+        [
+          { name: "first.png", type: "image/png", bytes: png },
+          { name: "notes.txt", type: "text/plain", bytes: "a\n" },
+        ],
+      ),
+    });
+    expect(raised.status, await raised.clone().text()).toBe(201);
+    const decision = restDecisionSchema.parse(await raised.json());
+    expect(decision).toMatchObject({ question: "Which look?", taskId: task.id, answer: null });
+    expect(decision.files?.map((attached) => attached.file)).toEqual([
+      {
+        name: "first.png",
+        size: png.byteLength,
+        contentType: "image/png",
+        sha256: expect.any(String),
+      },
+      { name: "notes.txt", size: 2, contentType: "text/plain", sha256: expect.any(String) },
+    ]);
+    // Read back whole in the listing, and the bytes at the project's one address for files,
+    // by anyone who may see the project; another project's address finds nothing.
+    const listed = restDecisionsSchema.parse(
+      await (await get(bob, `${IN}/decisions?task=${task.id}`)).json(),
+    );
+    expect(listed.items.map((item) => item.files)).toEqual([decision.files]);
+    const [picture, notes] = decision.files ?? [];
+    const bytes = await get(bob, `${IN}/files/${picture?.id}`);
+    expect(bytes.status).toBe(200);
+    expect(bytes.headers.get("content-type")).toBe("image/png");
+    expect(bytes.headers.get("content-disposition")).toContain("inline");
+    expect(new Uint8Array(await bytes.arrayBuffer())).toEqual(png);
+    expect(await (await get(bob, `${IN}/files/${notes?.id}`)).text()).toBe("a\n");
+    expect((await get(alice, `${projectPath("docs")}/files/${picture?.id}`)).status).toBe(404);
+    // The board is told once, with how many files came; a decision without files says nothing of them.
+    const history = restEventsSchema.parse(
+      await (await get(alice, `${IN}/events?task=${task.id}`)).json(),
+    );
+    const told = history.items.filter((event) => event.kind === "decision.raised");
+    expect(told).toHaveLength(1);
+    expect(told[0]?.data).toMatchObject({ question: "Which look?", files: 2 });
+    const plain = restDecisionSchema.parse(
+      await (
+        await send(alice, "POST", `${IN}/decisions`, {
+          question: "Plain?",
+          options: [{ label: "a" }, { label: "b" }],
+        })
+      ).json(),
+    );
+    expect(plain.files).toEqual([]);
+    // A form without its decision, an empty file, and too many files are refused whole.
+    const options = [{ label: "a" }, { label: "b" }];
+    const bare = await h.request(`${IN}/decisions`, {
+      method: "POST",
+      headers,
+      body: formOf(undefined, [{ name: "x.png", type: "image/png", bytes: png }]),
+    });
+    expect(bare.status).toBe(400);
+    expect(await errorOf(bare)).toBe("request.invalid");
+    const empty = await h.request(`${IN}/decisions`, {
+      method: "POST",
+      headers,
+      body: formOf({ question: "Which?", options }, [
+        { name: "empty.png", type: "image/png", bytes: new Uint8Array() },
+      ]),
+    });
+    expect(empty.status).toBe(400);
+    const many = await h.request(`${IN}/decisions`, {
+      method: "POST",
+      headers,
+      body: formOf(
+        { question: "Which?", options },
+        Array.from({ length: MAX_FILES_PER_DECISION + 1 }, (_, n) => ({
+          name: `p${n}.png`,
+          type: "image/png",
+          bytes: png,
+        })),
+      ),
+    });
+    expect(many.status).toBe(400);
+    expect(
+      restDecisionsSchema.parse(await (await get(bob, `${IN}/decisions?task=${task.id}`)).json())
+        .items,
+    ).toHaveLength(1);
   });
 
   it("refuse one about a task that is nothing, too few options, and an id that is nothing", async () => {

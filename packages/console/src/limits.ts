@@ -33,6 +33,8 @@ export const MAX_ARTIFACTS_PER_RUN = 50;
 /** How many comments one task carries, and how many files one comment carries, together within `MAX_FILE_BYTES`. */
 export const MAX_COMMENTS_PER_TASK = 500;
 export const MAX_FILES_PER_COMMENT = 10;
+/** How many files one decision carries, put on it when it is raised (ADR-0055), together within `MAX_FILE_BYTES`. */
+export const MAX_FILES_PER_DECISION = 10;
 /** A file a run hands in: how many bytes, and its name, one line without a path. */
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 export const MAX_FILE_NAME_LENGTH = 200;
