@@ -3,6 +3,7 @@ import {
   MAX_TASKS_PER_PROJECT,
   OPEN_TASK_STATES,
   type RestTaskLink,
+  type RestTaskTranslations,
   type TaskPriority,
   type TaskState,
 } from "@skillcdn/console/api";
@@ -52,6 +53,8 @@ export interface TaskRecord {
   readonly number: number;
   readonly title: string;
   readonly body: string;
+  /** The title and the body per language (ADR-0058), where a plugin wrote the task in several. */
+  readonly translations: RestTaskTranslations | undefined;
   readonly state: TaskState;
   readonly priority: TaskPriority;
   readonly owner: PersonRecord;
@@ -125,10 +128,18 @@ export interface TaskInput {
   readonly startsOn?: string | null;
   readonly dueOn?: string | null;
   readonly links?: readonly RestTaskLink[];
+  /** The title and the body per language (ADR-0058), where a plugin wrote them in several; `title` and `body` hold the first language's. */
+  readonly translations?: RestTaskTranslations | undefined;
 }
 
 /** Only what changes; a key that is absent leaves the field as it is. */
 export type TaskPatch = Partial<TaskInput>;
+
+/** What an event about a task carries of its title per language (ADR-0058): the map, where there is one. */
+const titleTranslations = (
+  translations: RestTaskTranslations | null | undefined,
+): { readonly translations?: Readonly<Record<string, string>> } =>
+  translations?.title === undefined ? {} : { translations: translations.title };
 
 /** What the board is narrowed to, as the API takes it. */
 export interface TaskFilter {
@@ -175,6 +186,7 @@ const workerRow = z.object({
   source: z.string(),
   deactivatedAt: z.nullable(z.string()),
   managerId: z.nullable(z.string()),
+  language: z.nullable(z.string()),
 });
 const workerRows = z.array(workerRow);
 
@@ -193,7 +205,7 @@ function toWorkers(value: unknown): PersonRecord[] {
  * The workers of the task being read, in the order they came to it, as one JSON array: a page of
  * tasks stays one query, however many people are on each.
  */
-const workersOf = sql<unknown>`(select coalesce(json_agg(json_build_object('id', ${people.id}, 'workspaceId', ${people.workspaceId}, 'host', ${people.host}, 'hostAccountId', ${people.hostAccountId}, 'login', ${people.login}, 'name', ${people.name}, 'avatarUrl', ${people.avatarUrl}, 'role', ${people.role}, 'status', ${people.status}, 'source', ${people.source}, 'deactivatedAt', ${people.deactivatedAt}, 'managerId', ${people.managerId}) order by ${taskWorkers.addedAt}, ${people.login}), '[]'::json) from ${taskWorkers} join ${people} on ${people.id} = ${taskWorkers.personId} where ${taskWorkers.taskId} = ${tasks.id})`;
+const workersOf = sql<unknown>`(select coalesce(json_agg(json_build_object('id', ${people.id}, 'workspaceId', ${people.workspaceId}, 'host', ${people.host}, 'hostAccountId', ${people.hostAccountId}, 'login', ${people.login}, 'name', ${people.name}, 'avatarUrl', ${people.avatarUrl}, 'role', ${people.role}, 'status', ${people.status}, 'source', ${people.source}, 'deactivatedAt', ${people.deactivatedAt}, 'managerId', ${people.managerId}, 'language', ${people.language}) order by ${taskWorkers.addedAt}, ${people.login}), '[]'::json) from ${taskWorkers} join ${people} on ${people.id} = ${taskWorkers.personId} where ${taskWorkers.taskId} = ${tasks.id})`;
 
 const taskColumns = {
   id: tasks.id,
@@ -202,6 +214,7 @@ const taskColumns = {
   number: tasks.number,
   title: tasks.title,
   body: tasks.body,
+  translations: tasks.translations,
   state: tasks.state,
   priority: tasks.priority,
   parentId: tasks.parentId,
@@ -247,6 +260,7 @@ function toTask(row: TaskRow): TaskRecord {
     number: row.number,
     title: row.title,
     body: row.body,
+    translations: row.translations ?? undefined,
     state: row.state,
     priority: row.priority,
     owner: toPerson(row.owner),
@@ -479,6 +493,7 @@ export async function createTask(
         number: counter.number,
         title: task.title,
         body: task.body ?? "",
+        translations: task.translations ?? null,
         state,
         priority: task.priority ?? "normal",
         ownerId: actor.id,
@@ -506,7 +521,7 @@ export async function createTask(
       kind: "task.created",
       actor,
       taskId: inserted.id,
-      data: { number: counter.number, title: task.title },
+      data: { number: counter.number, title: task.title, ...titleTranslations(task.translations) },
       now,
     });
     const written = await readTask(tx, scope, inserted.id);
@@ -541,6 +556,7 @@ export async function updateTaskIn(tx: Transaction, input: TaskUpdate): Promise<
     .select({
       title: tasks.title,
       body: tasks.body,
+      translations: tasks.translations,
       state: tasks.state,
       priority: tasks.priority,
       parentId: tasks.parentId,
@@ -636,7 +652,13 @@ export async function updateTaskIn(tx: Transaction, input: TaskUpdate): Promise<
       kind: "task.moved",
       actor,
       taskId,
-      data: { number: current.number, title: next.title, from: current.state, to: next.state },
+      data: {
+        number: current.number,
+        title: next.title,
+        ...titleTranslations(current.translations),
+        from: current.state,
+        to: next.state,
+      },
       now,
     });
   }
@@ -646,7 +668,12 @@ export async function updateTaskIn(tx: Transaction, input: TaskUpdate): Promise<
       kind: "task.updated",
       actor,
       taskId,
-      data: { number: current.number, title: next.title, fields: changed },
+      data: {
+        number: current.number,
+        title: next.title,
+        ...titleTranslations(current.translations),
+        fields: changed,
+      },
       now,
     });
   }

@@ -503,13 +503,40 @@ export const restCategoryPatchSchema = z.object({
 });
 export type RestCategoryPatch = z.infer<typeof restCategoryPatchSchema>;
 
+/** A text per language, as a plugin writes one for every language of the workspace (ADR-0058). */
+const translations = z.record(z.string(), z.string());
+
+export const restTaskTranslationsSchema = z.object({
+  title: z.optional(translations),
+  body: z.optional(translations),
+});
+export type RestTaskTranslations = z.infer<typeof restTaskTranslationsSchema>;
+
+export const restDecisionTranslationsSchema = z.object({
+  question: z.optional(translations),
+  body: z.optional(translations),
+  /** Each option's label per language, by the option's id. */
+  options: z.optional(z.record(z.string(), translations)),
+});
+export type RestDecisionTranslations = z.infer<typeof restDecisionTranslationsSchema>;
+
+export const restCommentTranslationsSchema = z.object({ body: z.optional(translations) });
+export type RestCommentTranslations = z.infer<typeof restCommentTranslationsSchema>;
+
 export const restTaskSchema = z.object({
   id: uuid,
   /** The task's number in its project, the one people say out loud. */
   number: z.int().check(z.positive()),
+  /** In the reader's language, where a plugin wrote the task in several (ADR-0058); as written otherwise. */
   title: z.string(),
-  /** Markdown. Shown as text or rendered to elements, never as HTML. */
+  /** Markdown. Shown as text or rendered to elements, never as HTML; in the reader's language the same way. */
   body: z.string(),
+  /**
+   * The title and the body per language, where a plugin wrote the task in several (ADR-0058),
+   * for a page to show the reader's own; `null` for a task written in one. Answered from 0.4.4
+   * and read as optional, so that a console built on this package still reads an older console.
+   */
+  translations: z.optional(z.nullable(restTaskTranslationsSchema)),
   state: z.enum(TASK_STATES),
   priority: z.enum(TASK_PRIORITIES),
   /** Whose task it is: one person, whoever wrote it. */
@@ -720,10 +747,18 @@ export type RestDecisionOption = z.infer<typeof restDecisionOptionSchema>;
 
 export const restDecisionSchema = z.object({
   id: uuid,
+  /** In the reader's language, where a plugin asked in several (ADR-0058); as asked otherwise. */
   question: z.string(),
-  /** Markdown: what a person needs to know to answer. */
+  /** Markdown: what a person needs to know to answer; in the reader's language the same way. */
   body: z.string(),
+  /** Each label in the reader's language the same way. */
   options: z.array(restDecisionOptionSchema),
+  /**
+   * The question, the body and each option's label per language, where a plugin asked in several
+   * (ADR-0058), the labels by the option's id; `null` for a decision asked in one. Answered from
+   * 0.4.4 and read as optional, so that a console built on this package still reads an older console.
+   */
+  translations: z.optional(z.nullable(restDecisionTranslationsSchema)),
   /** The task the decision is about, or `null`. */
   taskId: z.nullable(uuid),
   /** The task's number, when there is a task, or `null`. */
@@ -899,6 +934,8 @@ export type RestAnswerInput = z.infer<typeof restAnswerInputSchema>;
 export const restEventDataSchema = z.object({
   number: z.optional(z.int()),
   title: z.optional(z.string()),
+  /** For the events about a task or a decision a plugin wrote in several languages (ADR-0058): the title's, or the question's, text per language. */
+  translations: z.optional(translations),
   /** For `task.updated`, `project.updated`, `goal.updated` and `decision.updated`: which fields changed. */
   fields: z.optional(z.array(z.string())),
   /** For the events about a document: its path, and the version written. */
@@ -1039,9 +1076,11 @@ export const restCommentSchema = z.object({
   author: restPersonSchema,
   /** The agent the author wrote through, or `null` when a person wrote it themselves. */
   agent: z.nullable(z.string()),
-  /** Markdown. A picture among the files is placed in it as `![words](its name)`. */
+  /** Markdown. A picture among the files is placed in it as `![words](its name)`; in the reader's language where a plugin wrote it in several (ADR-0058). */
   body: z.string(),
   files: z.array(restCommentFileSchema),
+  /** The body per language, where a plugin wrote it in several (ADR-0058); `null` otherwise. Answered from 0.4.4 and read as optional. */
+  translations: z.optional(z.nullable(restCommentTranslationsSchema)),
   createdAt: instant,
 });
 export type RestComment = z.infer<typeof restCommentSchema>;

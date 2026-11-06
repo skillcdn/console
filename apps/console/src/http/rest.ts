@@ -1523,7 +1523,9 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     const body: RestMyDecisions = {
       items: page.items.flatMap((decision) => {
         const project = projectOf(decision.projectId);
-        return project === undefined ? [] : [{ project, decision: restDecision(decision) }];
+        return project === undefined
+          ? []
+          : [{ project, decision: restDecision(decision, person.language) }];
       }),
       more: page.more,
     };
@@ -1544,14 +1546,16 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     const projectOf = projectRefsOf(projects);
     const withProject = (task: TaskRecord) => {
       const project = projectOf(task.projectId);
-      return project === undefined ? [] : [{ project, task: restTask(task) }];
+      return project === undefined ? [] : [{ project, task: restTask(task, person.language) }];
     };
     const body: RestWork = {
       tasks: tasks.flatMap(withProject),
       closed: closed.flatMap(withProject),
       decisions: decisions.flatMap((decision) => {
         const project = projectOf(decision.projectId);
-        return project === undefined ? [] : [{ project, decision: restDecision(decision) }];
+        return project === undefined
+          ? []
+          : [{ project, decision: restDecision(decision, person.language) }];
       }),
     };
     return c.json(body);
@@ -1590,7 +1594,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     const projectOf = projectRefsOf(projects);
     const withProject = (task: TaskRecord) => {
       const project = projectOf(task.projectId);
-      return project === undefined ? [] : [{ project, task: restTask(task) }];
+      return project === undefined ? [] : [{ project, task: restTask(task, asker.language) }];
     };
     const body: RestPersonWork = {
       tasks: tasks.flatMap(withProject),
@@ -2126,7 +2130,10 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       limit: query.data.limit,
       offset: query.data.offset,
     });
-    const body: RestTasks = { items: page.items.map(restTask), more: page.more };
+    const body: RestTasks = {
+      items: page.items.map((task) => restTask(task, found.person.language)),
+      more: page.more,
+    };
     return c.json(body);
   });
 
@@ -2154,7 +2161,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         { person: found.person.id, task: task.id, requestId: c.get("requestId") },
         "task created",
       );
-      return c.json(restTask(task), 201);
+      return c.json(restTask(task, found.person.language), 201);
     } catch (error) {
       return failure(c, error);
     }
@@ -2174,7 +2181,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       return found;
     }
     const task = await taskOf(found.scope, c.req.param("id"));
-    return task === undefined ? noSuchTask(c) : c.json(restTask(task));
+    return task === undefined ? noSuchTask(c) : c.json(restTask(task, found.person.language));
   });
 
   app.patch(`${PROJECT}/tasks/:id`, tooLarge, async (c) => {
@@ -2201,7 +2208,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         },
         now: clock.now(),
       });
-      return c.json(restTask(task));
+      return c.json(restTask(task, found.person.language));
     } catch (error) {
       return failure(c, error);
     }
@@ -2225,7 +2232,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       const task = archive
         ? await archiveTask(database, input)
         : await restoreTask(database, input);
-      return c.json(restTask(task));
+      return c.json(restTask(task, found.person.language));
     } catch (error) {
       return failure(c, error);
     }
@@ -2266,7 +2273,9 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       return noSuchTask(c);
     }
     const items = await listComments(database, found.scope, task.id);
-    const body: RestComments = { items: items.map(restComment) };
+    const body: RestComments = {
+      items: items.map((comment) => restComment(comment, found.person.language)),
+    };
     return c.json(body);
   });
 
@@ -2323,7 +2332,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         fileLimit: MAX_FILES_PER_COMMENT,
         now: clock.now(),
       });
-      return c.json(restComment(written), 201);
+      return c.json(restComment(written, found.person.language), 201);
     } catch (error) {
       return failure(c, error);
     }
@@ -2344,7 +2353,10 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       limit: query.data.limit,
       offset: query.data.offset,
     });
-    const body: RestDecisions = { items: page.items.map(restDecision), more: page.more };
+    const body: RestDecisions = {
+      items: page.items.map((decision) => restDecision(decision, found.person.language)),
+      more: page.more,
+    };
     return c.json(body);
   });
 
@@ -2410,7 +2422,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         },
         "decision raised",
       );
-      return c.json(restDecision(decision), 201);
+      return c.json(restDecision(decision, found.person.language), 201);
     } catch (error) {
       return failure(c, error);
     }
@@ -2436,7 +2448,9 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       id,
       Math.min(query.data.wait * 1000, agents.waitMs),
     );
-    return decision === undefined ? noSuchDecision(c) : c.json(restDecision(decision));
+    return decision === undefined
+      ? noSuchDecision(c)
+      : c.json(restDecision(decision, found.person.language));
   });
 
   // The record of a decision grows: its context, or what followed, by anyone who works in the project.
@@ -2461,7 +2475,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         patch,
         now: clock.now(),
       });
-      return c.json(restDecision(decision));
+      return c.json(restDecision(decision, found.person.language));
     } catch (error) {
       return failure(c, error);
     }
@@ -2494,7 +2508,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         { person: found.person.id, decision: decision.id, requestId: c.get("requestId") },
         "decision answered",
       );
-      return c.json(restDecision(decision));
+      return c.json(restDecision(decision, found.person.language));
     } catch (error) {
       return failure(c, error);
     }

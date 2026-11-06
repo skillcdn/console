@@ -1,0 +1,5 @@
+---
+"@skillcdn/console": patch
+---
+
+What a plugin writes on the board reaches each reader in their own language ([ADR-0058](https://github.com/skillcdn/console/blob/main/docs/adr/0058-what-a-plugin-writes-on-the-board-is-in-every-language-of-the-workspace-and-read-in-the-readers.md)). `ctx.console.decisions.ask` takes its `question`, `body` and each option's `label`, `tasks.create` its `title` and `body`, and `tasks.comment` its `body`, as one string or as a text per language (`{ en, ko }`, at least one of the console's languages among them). A decision, a task and a comment answer `translations`, the texts per language, beside `question`, `body`, a label and `title` in the reader's language, the one they chose for the pages (read as optional, for an older console); the pages read the map again in the language they speak, and the feed's event about a task or a decision carries the map as `translations`. `textIn` and `storedText` are exported from `@skillcdn/console/api`.

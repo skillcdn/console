@@ -18,6 +18,7 @@ import type {
   RestVersion,
   RestVersionSummary,
 } from "@skillcdn/console/api";
+import { textIn } from "@skillcdn/console/api";
 import type { CategoryRecord } from "../db/queries/categories.js";
 import type { CommentRecord } from "../db/queries/comments.js";
 import type { DecisionRecord } from "../db/queries/decisions.js";
@@ -123,12 +124,14 @@ export function restGoal(goal: GoalRecord): RestGoal {
   };
 }
 
-export function restTask(task: TaskRecord): RestTask {
+/** A task as the reader reads it: the title and the body in their language, where the task was written in several (ADR-0058). */
+export function restTask(task: TaskRecord, language?: string | undefined): RestTask {
   return {
     id: task.id,
     number: task.number,
-    title: task.title,
-    body: task.body,
+    title: textIn(task.translations?.title, task.title, language),
+    body: textIn(task.translations?.body, task.body, language),
+    translations: task.translations ?? null,
     state: task.state,
     priority: task.priority,
     owner: restPerson(task.owner),
@@ -151,14 +154,19 @@ export function restTask(task: TaskRecord): RestTask {
   };
 }
 
-export function restDecision(decision: DecisionRecord): RestDecision {
+/** A decision as the reader reads it: the question, the body and the labels in their language, where it was asked in several (ADR-0058). */
+export function restDecision(
+  decision: DecisionRecord,
+  language?: string | undefined,
+): RestDecision {
   return {
     id: decision.id,
-    question: decision.question,
-    body: decision.body,
+    question: textIn(decision.translations?.question, decision.question, language),
+    body: textIn(decision.translations?.body, decision.body, language),
+    translations: decision.translations ?? null,
     options: decision.options.map((option) => ({
       id: option.id,
-      label: option.label,
+      label: textIn(decision.translations?.options?.[option.id], option.label, language),
       ...(option.key === undefined ? {} : { key: option.key }),
       ...(option.own === true ? { own: true as const } : {}),
     })),
@@ -197,13 +205,15 @@ export function restDecision(decision: DecisionRecord): RestDecision {
   };
 }
 
-export function restComment(comment: CommentRecord): RestComment {
+/** A comment as the reader reads it: the body in their language, where it was written in several (ADR-0058). */
+export function restComment(comment: CommentRecord, language?: string | undefined): RestComment {
   return {
     id: comment.id,
     taskId: comment.taskId,
     author: restPerson(comment.author),
     agent: comment.agent ?? null,
-    body: comment.body,
+    body: textIn(comment.translations?.body, comment.body, language),
+    translations: comment.translations ?? null,
     files: comment.files.map((attached) => ({
       id: attached.id,
       file: {

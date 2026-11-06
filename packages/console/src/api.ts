@@ -172,6 +172,7 @@ export {
   type RestCommentFile,
   type RestCommentInput,
   type RestComments,
+  type RestCommentTranslations,
   type RestConnectInput,
   type RestConnection,
   type RestConnectRequest,
@@ -181,6 +182,7 @@ export {
   type RestDecisionOption,
   type RestDecisionPatch,
   type RestDecisions,
+  type RestDecisionTranslations,
   type RestDocument,
   type RestDocumentFile,
   type RestDocumentInput,
@@ -243,6 +245,7 @@ export {
   type RestTaskLink,
   type RestTaskPatch,
   type RestTasks,
+  type RestTaskTranslations,
   type RestToken,
   type RestTokenCreated,
   type RestTokenInput,
@@ -270,6 +273,7 @@ export {
   restCommentInputSchema,
   restCommentSchema,
   restCommentsSchema,
+  restCommentTranslationsSchema,
   restConnectInputSchema,
   restConnectionSchema,
   restConnectRequestSchema,
@@ -279,6 +283,7 @@ export {
   restDecisionPatchSchema,
   restDecisionSchema,
   restDecisionsSchema,
+  restDecisionTranslationsSchema,
   restDocumentFileSchema,
   restDocumentInputSchema,
   restDocumentLinkSchema,
@@ -341,6 +346,7 @@ export {
   restTaskPatchSchema,
   restTaskSchema,
   restTasksSchema,
+  restTaskTranslationsSchema,
   restTokenCreatedSchema,
   restTokenInputSchema,
   restTokenSchema,
@@ -354,6 +360,7 @@ export {
   restWorkspaceSchema,
 } from "./schemas.js";
 export { hasForbiddenCodePoint } from "./text.js";
+export { storedText, type Translations, textIn } from "./translations.js";
 export {
   ARTIFACT_KINDS,
   type ArtifactKind,

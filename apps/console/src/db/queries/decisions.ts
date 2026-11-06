@@ -3,6 +3,7 @@ import {
   MAX_DECISIONS_PER_PROJECT,
   MAX_FILES_PER_DECISION,
   type RestDecisionOption,
+  type RestDecisionTranslations,
 } from "@skillcdn/console/api";
 import { and, asc, count, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { DomainError } from "../../errors.js";
@@ -44,6 +45,8 @@ export interface DecisionRecord {
   readonly question: string;
   readonly body: string;
   readonly options: readonly RestDecisionOption[];
+  /** The question, the body and the labels per language (ADR-0058), where a plugin asked in several. */
+  readonly translations: RestDecisionTranslations | undefined;
   readonly raisedBy: PersonRecord;
   /** The first of those to answer (ADR-0042): the raiser, unless others of the project were named. */
   readonly decider: PersonRecord;
@@ -115,6 +118,7 @@ const decisionColumns = {
   question: decisions.question,
   body: decisions.body,
   options: decisions.options,
+  translations: decisions.translations,
   answer: decisions.answer,
   answerNote: decisions.answerNote,
   answeredAt: decisions.answeredAt,
@@ -139,8 +143,9 @@ const decisionColumns = {
       readonly source: string;
       readonly deactivatedAt: string | null;
       readonly managerId: string | null;
+      readonly language: string | null;
     }[]
-  >`(select coalesce(json_agg(json_build_object('id', ${people.id}, 'workspaceId', ${people.workspaceId}, 'host', ${people.host}, 'hostAccountId', ${people.hostAccountId}, 'login', ${people.login}, 'name', ${people.name}, 'avatarUrl', ${people.avatarUrl}, 'role', ${people.role}, 'status', ${people.status}, 'source', ${people.source}, 'deactivatedAt', ${people.deactivatedAt}, 'managerId', ${people.managerId}) order by named.ordinality), '[]'::json) from unnest(${decisions.deciderIds}) with ordinality as named(id, ordinality) join ${people} on ${people.id} = named.id)`,
+  >`(select coalesce(json_agg(json_build_object('id', ${people.id}, 'workspaceId', ${people.workspaceId}, 'host', ${people.host}, 'hostAccountId', ${people.hostAccountId}, 'login', ${people.login}, 'name', ${people.name}, 'avatarUrl', ${people.avatarUrl}, 'role', ${people.role}, 'status', ${people.status}, 'source', ${people.source}, 'deactivatedAt', ${people.deactivatedAt}, 'managerId', ${people.managerId}, 'language', ${people.language}) order by named.ordinality), '[]'::json) from unnest(${decisions.deciderIds}) with ordinality as named(id, ordinality) join ${people} on ${people.id} = named.id)`,
   answeredBy: personColumns(answerers),
   answeredAgent: decisions.answeredAgent,
   outcomeBy: personColumns(outcomeWriters),
@@ -199,6 +204,7 @@ function toDecision(row: DecisionRow): DecisionRecord {
     question: row.question,
     body: row.body,
     options: row.options,
+    translations: row.translations ?? undefined,
     raisedBy: toPerson(row.raisedBy),
     decider: toPerson(row.decider),
     deciders: row.deciders.map((named) =>
@@ -269,6 +275,8 @@ export async function raiseDecision(
       readonly deciderIds?: readonly string[] | undefined;
       /** The files put on it (ADR-0055), their bytes kept already; none when left out. */
       readonly files?: readonly FileRecord[] | undefined;
+      /** The texts per language (ADR-0058), where the raiser wrote them in several; the plain fields hold the first language's. */
+      readonly translations?: RestDecisionTranslations | undefined;
     };
     /** How many decisions the project may hold, this one included; the package's bound when left out. */
     readonly limit?: number | undefined;
@@ -378,6 +386,7 @@ export async function raiseDecision(
         question: decision.question,
         body: decision.body ?? "",
         options,
+        translations: decision.translations ?? null,
         raisedById: actor.id,
         deciderId,
         deciderIds,
@@ -411,6 +420,9 @@ export async function raiseDecision(
       runId: runId ?? undefined,
       data: {
         question: decision.question,
+        ...(decision.translations?.question === undefined
+          ? {}
+          : { translations: decision.translations.question }),
         ...about,
         ...(agent === undefined ? {} : { agent }),
         ...(files.length === 0 ? {} : { files: files.length }),
@@ -451,6 +463,7 @@ export async function answerDecision(
     const [current] = await tx
       .select({
         question: decisions.question,
+        translations: decisions.translations,
         body: decisions.body,
         options: decisions.options,
         answeredAt: decisions.answeredAt,
@@ -504,6 +517,9 @@ export async function answerDecision(
       runId: current.runId ?? undefined,
       data: {
         question: current.question,
+        ...(current.translations?.question === undefined
+          ? {}
+          : { translations: current.translations.question }),
         option: chosen.label,
         ...(chosen.key === undefined ? {} : { optionKey: chosen.key }),
       },
@@ -557,6 +573,7 @@ export async function updateDecision(
     const [current] = await tx
       .select({
         question: decisions.question,
+        translations: decisions.translations,
         body: decisions.body,
         answerNote: decisions.answerNote,
         outcome: decisions.outcome,
@@ -607,7 +624,13 @@ export async function updateDecision(
         taskId: current.taskId ?? undefined,
         decisionId,
         runId: current.runId ?? undefined,
-        data: { question: current.question, fields: changed },
+        data: {
+          question: current.question,
+          ...(current.translations?.question === undefined
+            ? {}
+            : { translations: current.translations.question }),
+          fields: changed,
+        },
         now,
       });
     }

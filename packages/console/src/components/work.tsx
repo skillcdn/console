@@ -1,6 +1,7 @@
 import type { RestTask, RestWork, WeekStart } from "../api.js";
 import { deviceLanguage, firstDayOfWeek, today as todayOf, weekOf } from "../dates.js";
 import { useLanguage, useWords } from "../i18n/index.js";
+import { textIn } from "../translations.js";
 import { Week } from "./calendar.js";
 import { ProjectMark } from "./projects.js";
 import { TaskList } from "./task-list.js";
@@ -108,7 +109,7 @@ export function WorkList(props: WorkListProps) {
                       className="sc-decision-row-question"
                       href={props.decisionHref(project.key, decision.id)}
                     >
-                      {decision.question}
+                      {textIn(decision.translations?.question, decision.question, tag)}
                     </a>
                     <span className="sc-task-row-project">
                       <ProjectMark project={project} size="sm" /> {work.inProject(project.name)}

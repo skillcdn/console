@@ -33,6 +33,8 @@ export interface PersonRecord {
   readonly deactivatedAt: Date | undefined;
   /** The id of the person they report to, set by an administrator; none for nobody. */
   readonly managerId: string | undefined;
+  /** The language the person chose for the pages (ADR-0012), a tag; none for the browser's. */
+  readonly language: string | undefined;
 }
 
 /** What is wrong with a change to a person. `code` is what the API answers with. */
@@ -100,6 +102,7 @@ interface PersonTable {
   readonly source: AnyPgColumn;
   readonly deactivatedAt: AnyPgColumn;
   readonly managerId: AnyPgColumn;
+  readonly language: AnyPgColumn;
 }
 
 /** For this directory only: the columns a {@link PersonRecord} is made of, from `table`. */
@@ -118,6 +121,7 @@ export const personColumns = <T extends PersonTable>(
   source: table.source,
   deactivatedAt: table.deactivatedAt,
   managerId: table.managerId,
+  language: table.language,
 });
 
 type PersonRow = {
@@ -133,6 +137,7 @@ type PersonRow = {
   readonly source: string;
   readonly deactivatedAt: Date | null;
   readonly managerId: string | null;
+  readonly language: string | null;
 };
 
 export const toPerson = (row: PersonRow): PersonRecord => ({
@@ -148,6 +153,7 @@ export const toPerson = (row: PersonRow): PersonRecord => ({
   source: row.source as MembershipSource,
   deactivatedAt: row.deactivatedAt ?? undefined,
   managerId: row.managerId ?? undefined,
+  language: row.language ?? undefined,
 });
 
 const listingColumns = {

@@ -17,6 +17,7 @@ import type {
 import { formatDay } from "../dates.js";
 import { useLanguage, useWords } from "../i18n/index.js";
 import type { TaskFormKind } from "../router.js";
+import { textIn } from "../translations.js";
 import { TASK_STATES } from "../vocabulary.js";
 import { type CommentDraft, TaskThread } from "./comments.js";
 import { DecisionForm } from "./decision-form.js";
@@ -103,6 +104,9 @@ export function TaskView(props: TaskViewProps) {
   const words = useWords();
   const { tag } = useLanguage();
   const { task } = props;
+  // In the language the page speaks, where a plugin wrote the task in several (ADR-0058).
+  const title = textIn(task.translations?.title, task.title, tag);
+  const body = textIn(task.translations?.body, task.body, tag);
   const parent =
     props.parent ??
     (task.parentId === null
@@ -122,7 +126,7 @@ export function TaskView(props: TaskViewProps) {
     return (
       <div className="sc-task sc-task-editing">
         <h1 className="sc-task-title">
-          <span className="sc-card-number">#{task.number}</span> {task.title}
+          <span className="sc-card-number">#{task.number}</span> {title}
         </h1>
         <TaskForm
           people={props.people}
@@ -154,7 +158,7 @@ export function TaskView(props: TaskViewProps) {
             </p>
           )}
           <h1 className="sc-task-title">
-            <span className="sc-card-number">#{task.number}</span> {task.title}
+            <span className="sc-card-number">#{task.number}</span> {title}
           </h1>
           <div className="sc-task-badges">
             <StateBadge state={task.state} />
@@ -202,8 +206,8 @@ export function TaskView(props: TaskViewProps) {
               {props.error}
             </p>
           )}
-          {task.body.length > 0 ? (
-            <Markdown source={task.body} docHref={props.docHref} />
+          {body.length > 0 ? (
+            <Markdown source={body} docHref={props.docHref} />
           ) : (
             <p className="sc-muted">{words.task.nothingMore}</p>
           )}
@@ -268,7 +272,8 @@ export function TaskView(props: TaskViewProps) {
                 {subtasks.map((subtask) => (
                   <li key={subtask.id}>
                     <a href={props.taskHref(subtask)}>
-                      <span className="sc-card-number">#{subtask.number}</span> {subtask.title}
+                      <span className="sc-card-number">#{subtask.number}</span>{" "}
+                      {textIn(subtask.translations?.title, subtask.title, tag)}
                     </a>{" "}
                     <StateBadge state={subtask.state} />
                   </li>

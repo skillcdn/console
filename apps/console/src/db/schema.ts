@@ -11,9 +11,12 @@ import {
   PROJECT_ROLES,
   PROJECT_VISIBILITIES,
   PROVIDER_KEYS,
+  type RestCommentTranslations,
   type RestDecisionOption,
+  type RestDecisionTranslations,
   type RestEventData,
   type RestTaskLink,
+  type RestTaskTranslations,
   RUN_STATUSES,
   TASK_PRIORITIES,
   TASK_STATES,
@@ -418,6 +421,8 @@ export const tasks = pgTable(
     archivedAt: instant(),
     /** Repositories, pull requests, documents: `https` URLs with a label, as the API checked them. */
     links: jsonb().$type<RestTaskLink[]>().notNull().default([]),
+    /** The title and the body per language, where a plugin wrote the task in several (ADR-0058); null otherwise. */
+    translations: jsonb().$type<RestTaskTranslations>(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -573,6 +578,8 @@ export const comments = pgTable(
     /** The agent the author wrote through, when they did; null when a person wrote it themselves. */
     agent: text(),
     body: text().notNull(),
+    /** The body per language, where a plugin wrote it in several (ADR-0058); null otherwise. */
+    translations: jsonb().$type<RestCommentTranslations>(),
     createdAt: createdAt(),
   },
   (table) => [index("comments_task_idx").on(table.taskId, table.createdAt)],
@@ -631,6 +638,8 @@ export const decisions = pgTable(
     body: text().notNull().default(""),
     /** Each with an id an answer names and the label a person reads, as the API checked them. */
     options: jsonb().$type<RestDecisionOption[]>().notNull(),
+    /** The question, the body and the labels per language, where a plugin asked in several (ADR-0058); null otherwise. */
+    translations: jsonb().$type<RestDecisionTranslations>(),
     raisedById: uuid()
       .notNull()
       .references(() => people.id),

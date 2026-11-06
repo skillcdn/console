@@ -5,7 +5,7 @@ license: MIT
 compatibility: A shell with Node.js 24 or newer, npm and git, and an agent that reads and writes files. For running the plugin on a local console, Docker for the database and a checkout of the console's repository, where signing in needs a GitHub OAuth app of the person's own, as the console's README says. The console command is optional, for running the plugin's commands as an agent would. No key of the agent's own is needed, and it never sees a token.
 metadata:
   author: skillcdn
-  version: "1.3"
+  version: "1.4"
 skillcdn:
   translations:
     ko:
@@ -71,8 +71,8 @@ Produces the **design**: one table, a row per thing the feature does, saying who
 |---|---|
 | An agent does it for a person, and something changes | A **command**: `defineCommand({ about, args, roles, run })`. Its `text` answer is for people, its `data` for agents (`--json`); it does one thing and does it again safely where it can. |
 | An agent, or a page, looks something up | A **query**: `defineQuery(...)`, which writes nothing; a query may answer a file. |
-| A person must approve, choose or confirm | A **decision** the command raises with `ctx.console.decisions.ask`, with options, addressed to the person a setting or the record names (`deciderId`), `about` the record it is for; the command answers `waiting`, the agent waits as the console's own `ask` is waited for, and the plugin hears the answer in a hook on `console:decision.answered` and goes on. The plugin never answers one, and never computes what a person must choose. |
-| Someone must do something later | A **task** on the board project with `ctx.console.tasks.create`, marked as the plugin's, worked by whoever takes it. |
+| A person must approve, choose or confirm | A **decision** the command raises with `ctx.console.decisions.ask`, with options, addressed to the person a setting or the record names (`deciderId`), or to several of them (`deciderIds`, any of whom may answer), `about` the record it is for, its question, body and labels written in every language of the organization as a map (`{ en, ko }`, [ADR-0058](/docs/adr/0058-what-a-plugin-writes-on-the-board-is-in-every-language-of-the-workspace-and-read-in-the-readers.md)), since the plugin cannot know who will read it; the command answers `waiting`, the agent waits as the console's own `ask` is waited for, and the plugin hears the answer in a hook on `console:decision.answered` and goes on. The plugin never answers one, and never computes what a person must choose. |
+| Someone must do something later | A **task** on the board project with `ctx.console.tasks.create`, marked as the plugin's, worked by whoever takes it; its title and body, and a comment on it, written in every language of the organization as a map, as a decision's words are. |
 | The console must tell the plugin something happened | A **hook**, `on["console:<kind>"]` (`events:console`): the plugin's board project, the projects it is on and the items it made are what it hears of. Delivery is at least once: a handler reads the record first and does nothing twice. |
 | Another plugin must tell it | A **hook** on `plugin:<key>:<kind>` (`events:plugins`), or a call on the other's `api` (`plugins:<key>`). |
 | Time passes | A **job** (`jobs`), `every` or `at` in the workspace's time zone, never two at once; what it did goes into records and, where people should know, a task or a decision. |

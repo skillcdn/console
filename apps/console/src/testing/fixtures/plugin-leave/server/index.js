@@ -102,6 +102,39 @@ export default {
       }
       return { text: own.path, data: { own, elsewhere } };
     }),
+    bilingual: command(
+      "Asks a decision and leaves a task with a comment in every language of the workspace.",
+      { approver: argument("person") },
+      async (ctx, args) => {
+        const personId = ctx.caller.kind === "person" ? ctx.caller.person.id : "";
+        const record = await ctx.records(requests).create({
+          personId,
+          from: "2026-12-24",
+          to: "2026-12-26",
+          state: "requested",
+          decisionId: null,
+        });
+        const decision = await ctx.console.decisions.ask(ctx.plugin.board.key, {
+          question: { en: "Leave at the year's end?", ko: "연말 휴가를 승인할까요?" },
+          body: { en: "Three days.", ko: "사흘입니다." },
+          options: [
+            { label: { en: "Approve", ko: "승인" }, key: "approve" },
+            { label: { en: "Reject", ko: "반려" }, key: "reject" },
+          ],
+          deciderId: args.approver.id,
+          about: { collection: "requests", id: record.id },
+        });
+        const task = await ctx.console.tasks.create(ctx.plugin.board.key, {
+          title: { en: "Settle the year's leave", ko: "연말 휴가 정산" },
+          body: { en: "Before the year ends.", ko: "연말 전에." },
+        });
+        const comment = await ctx.console.tasks.comment(ctx.plugin.board.key, task.number, {
+          en: "Left by leave.",
+          ko: "휴가 플러그인이 남김.",
+        });
+        return { text: "written in every language", data: { decision, task, comment } };
+      },
+    ),
     people: command("Reads the people and the projects the caller may see.", {}, async (ctx) => {
       const people = await ctx.console.people.list();
       let projects = "forbidden";

@@ -253,6 +253,13 @@
       "when": 1793965844421,
       "tag": "0035_decision_deciders",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1793966965726,
+      "tag": "0036_board_translations",
+      "breakpoints": true
     }
   ]
 }

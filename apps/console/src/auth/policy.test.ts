@@ -28,6 +28,7 @@ const person = (role: "admin" | "member", id = `id-${role}`): PersonRecord => ({
   source: "listed",
   deactivatedAt: undefined,
   managerId: undefined,
+  language: undefined,
 });
 
 const admin = person("admin");

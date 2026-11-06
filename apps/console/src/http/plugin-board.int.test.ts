@@ -6,6 +6,7 @@ import {
   pluginPath,
   projectPath,
   REST_ROUTES,
+  restCommentsSchema,
   restDecisionSchema,
   restDocumentSchema,
   restErrorSchema,
@@ -14,6 +15,7 @@ import {
   restPluginEventsSchema,
   restPluginInvocationSchema,
   restPluginRecordSchema,
+  restTaskSchema,
   restTasksSchema,
 } from "@skillcdn/console/api";
 import { pino } from "pino";
@@ -456,5 +458,81 @@ describe("a plugin on the board", () => {
     schedulerNow = new Date(schedulerNow.getTime() + 61 * 60_000);
     await scheduler.tick();
     expect(await failed()).toHaveLength(2);
+  });
+  it("writes in every language of the workspace, and each reader reads their own (ADR-0058)", async () => {
+    // Bob writes with no language of his own, so the plugin reads back the text kept, English;
+    // then he reads the pages in Korean, and the administrator in English.
+    const made = await invoked("leave", member, ["bilingual", "--approver", aliceLogin]);
+    expect(
+      (await h.request(REST_ROUTES.me, json({ language: "ko" }, member, "PATCH"))).status,
+    ).toBe(200);
+    const carol = member;
+    const { decision, task } = made.data as {
+      decision: { id: string; question: string; translations: { question?: { ko?: string } } };
+      task: { number: number; title: string };
+    };
+    // The plugin reads back in its caller's language, Bob's, which is the text kept: English.
+    expect(decision.question).toBe("Leave at the year's end?");
+    expect(decision.translations.question?.ko).toBe("연말 휴가를 승인할까요?");
+    expect(task.title).toBe("Settle the year's leave");
+    // Carol reads everything in Korean: the question, the context, the labels, the task, the comment.
+    const asCarol = restDecisionSchema.parse(
+      await (
+        await h.request(projectPath(BOARD, "decisions", decision.id), {
+          headers: { cookie: carol },
+        })
+      ).json(),
+    );
+    expect(asCarol.question).toBe("연말 휴가를 승인할까요?");
+    expect(asCarol.body).toBe("사흘입니다.");
+    expect(asCarol.options.map((option) => option.label)).toEqual(["승인", "반려"]);
+    expect(asCarol.translations?.options?.["1"]?.en).toBe("Approve");
+    const taskAsCarol = restTaskSchema.parse(
+      await (
+        await h.request(projectPath(BOARD, "tasks", String(task.number)), {
+          headers: { cookie: carol },
+        })
+      ).json(),
+    );
+    expect(taskAsCarol.title).toBe("연말 휴가 정산");
+    expect(taskAsCarol.body).toBe("연말 전에.");
+    expect(taskAsCarol.translations?.title?.en).toBe("Settle the year's leave");
+    const comments = restCommentsSchema.parse(
+      await (
+        await h.request(`${projectPath(BOARD, "tasks", String(task.number))}/comments`, {
+          headers: { cookie: carol },
+        })
+      ).json(),
+    );
+    expect(comments.items.at(-1)?.body).toBe("휴가 플러그인이 남김.");
+    // An English reader reads English, and the feed's events carry the map for the pages.
+    const asAdmin = restDecisionSchema.parse(
+      await (
+        await h.request(projectPath(BOARD, "decisions", decision.id), {
+          headers: { cookie: admin },
+        })
+      ).json(),
+    );
+    expect(asAdmin.question).toBe("Leave at the year's end?");
+    expect(asAdmin.options.map((option) => option.label)).toEqual(["Approve", "Reject"]);
+    const feed = restEventsSchema.parse(
+      await (
+        await h.request(`${projectPath(BOARD, "events")}?latest=true&limit=20`, {
+          headers: { cookie: admin },
+        })
+      ).json(),
+    );
+    expect(
+      feed.items.find((event) => event.kind === "task.created" && event.data.number === task.number)
+        ?.data.translations?.ko,
+    ).toBe("연말 휴가 정산");
+    expect(
+      feed.items.find(
+        (event) => event.kind === "decision.raised" && event.decisionId === decision.id,
+      )?.data.translations?.ko,
+    ).toBe("연말 휴가를 승인할까요?");
+    expect(
+      (await h.request(REST_ROUTES.me, json({ language: null }, member, "PATCH"))).status,
+    ).toBe(200);
   });
 });

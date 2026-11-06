@@ -11,7 +11,8 @@ import {
   type RestPerson,
   type RestTask,
 } from "../api.js";
-import { useWords } from "../i18n/index.js";
+import { useLanguage, useWords } from "../i18n/index.js";
+import { textIn } from "../translations.js";
 import { isPicture, namedFile, placed } from "./files.js";
 import { Markdown } from "./markdown.js";
 import { Pager, pageOf, RECORD_PAGE_SIZE } from "./paged.js";
@@ -99,11 +100,16 @@ function Asked(props: { readonly decision: RestDecision; readonly day?: boolean 
 /** What was chosen: the option's label, marked when it is the person's own words. */
 function Chosen(props: { readonly decision: RestDecision }) {
   const words = useWords();
+  const { tag } = useLanguage();
   const { decision } = props;
   const chosen = decision.options.find((option) => option.id === decision.answer?.option);
   return (
     <>
-      <span>{chosen?.label ?? decision.answer?.option ?? ""}</span>
+      <span>
+        {chosen === undefined
+          ? (decision.answer?.option ?? "")
+          : textIn(decision.translations?.options?.[chosen.id], chosen.label, tag)}
+      </span>
       {chosen?.own === true && <Badge>{words.decisions.ownAnswer}</Badge>}
     </>
   );
@@ -119,6 +125,7 @@ function AnswerForm(props: {
   readonly busy: boolean | undefined;
 }) {
   const words = useWords();
+  const { tag } = useLanguage();
   const { decision } = props;
   const [chosen, setChosen] = useState<string | undefined>(undefined);
   const [own, setOwn] = useState(false);
@@ -165,7 +172,7 @@ function AnswerForm(props: {
                 setOwn(false);
               }}
             />
-            <span>{option.label}</span>
+            <span>{textIn(decision.translations?.options?.[option.id], option.label, tag)}</span>
           </label>
         ))}
         <label className={cx("sc-option", "sc-option-own", own && "sc-option-chosen")}>
@@ -299,6 +306,10 @@ export function DecisionCard(props: DecisionCardProps) {
   // everything else as a link.
   const files = decision.files ?? [];
   const pictures = usePicture();
+  // In the language the page speaks, where the decision was asked in several (ADR-0058).
+  const { tag } = useLanguage();
+  const question = textIn(decision.translations?.question, decision.question, tag);
+  const body = textIn(decision.translations?.body, decision.body, tag);
   const hrefOf = (file: RestDecisionFile) => props.fileHref?.(file.id);
   const named = (source: string): string | undefined => {
     const name = namedFile(source);
@@ -307,17 +318,13 @@ export function DecisionCard(props: DecisionCardProps) {
     );
     return file === undefined ? undefined : hrefOf(file);
   };
-  const following = files.filter((file) => !placed(decision.body, file.file.name));
+  const following = files.filter((file) => !placed(body, file.file.name));
 
   return (
     <article id={decision.id} className={cx("sc-decision", answered && "sc-decision-answered")}>
       <header className="sc-decision-header">
         <h3 className="sc-decision-question">
-          {props.href === undefined ? (
-            decision.question
-          ) : (
-            <a href={props.href}>{decision.question}</a>
-          )}
+          {props.href === undefined ? question : <a href={props.href}>{question}</a>}
         </h3>
         <p className="sc-decision-meta">
           <Asked decision={decision} />
@@ -339,11 +346,11 @@ export function DecisionCard(props: DecisionCardProps) {
           {props.project}
         </p>
       </header>
-      {decision.body.length > 0 && (
+      {body.length > 0 && (
         <section className="sc-decision-section" aria-label={words.decisions.context}>
           <h4 className="sc-decision-label">{words.decisions.context}</h4>
           <Markdown
-            source={decision.body}
+            source={body}
             docHref={props.docHref}
             fileSrc={named}
             onOpenPicture={pictures.open}
@@ -470,17 +477,15 @@ function RecordRow(props: {
   readonly project?: React.ReactNode;
 }) {
   const words = useWords();
+  const { tag } = useLanguage();
   const { decision, task } = props;
   const { answer } = decision;
+  const question = textIn(decision.translations?.question, decision.question, tag);
   return (
     <li className="sc-decision-record-row">
       <div className="sc-decision-record-asked">
         <p className="sc-decision-record-question">
-          {props.href === undefined ? (
-            decision.question
-          ) : (
-            <a href={props.href}>{decision.question}</a>
-          )}
+          {props.href === undefined ? question : <a href={props.href}>{question}</a>}
           {task !== undefined &&
             (props.taskHref === undefined ? (
               <span className="sc-card-number">#{task.number}</span>
