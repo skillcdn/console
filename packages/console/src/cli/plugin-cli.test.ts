@@ -9,6 +9,7 @@ import {
   classesIn,
   coveredByFiles,
   isPermissiveLicense,
+  sameAsEnglish,
   webBundleProblems,
 } from "./plugin-check.js";
 import { type PluginCliIo, runPluginCli } from "./plugin-cli.js";
@@ -154,7 +155,7 @@ describe("console-plugin init", () => {
     expect(files).toContain("skills/leave-days/SKILL.md");
     for (const file of files) {
       const text = await readFile(join(dir, "out", file), "utf8");
-      expect(text, file).not.toMatch(/__(key|name|console)__/);
+      expect(text, file).not.toMatch(/__(package|key|name|console)__/);
     }
     const manifest = JSON.parse(
       await readFile(join(dir, "out", "console-plugin.json"), "utf8"),
@@ -169,6 +170,95 @@ describe("console-plugin init", () => {
     expect(await readFile(join(dir, "out", "src/web/index.css"), "utf8")).toContain(
       ".pl-leave-days-page",
     );
+  });
+
+  it("names the package, the repository and the languages, so that less is adapted by hand", async () => {
+    const dir = await scratch();
+    const { io, err } = ioOf(dir);
+    expect(
+      await runPluginCli(
+        [
+          "init",
+          "hr",
+          "--key",
+          "hr",
+          "--name",
+          "HR",
+          "--package",
+          "@acme/console-plugin-hr",
+          "--repository",
+          "https://github.com/acme/console-plugins",
+          "--directory",
+          "plugins/hr",
+          "--languages",
+          "en,ko",
+        ],
+        io,
+      ),
+    ).toBe(0);
+    const read = async (file: string) =>
+      (await readFile(join(dir, "hr", file), "utf8")).replaceAll("\r\n", "\n");
+    const pkg = JSON.parse(await read("package.json")) as Record<string, unknown>;
+    expect(pkg.name).toBe("@acme/console-plugin-hr");
+    expect(pkg.publishConfig).toEqual({ access: "public" });
+    expect(pkg.repository).toEqual({
+      type: "git",
+      url: "https://github.com/acme/console-plugins",
+      directory: "plugins/hr",
+    });
+    expect(pkg.homepage).toBe("https://github.com/acme/console-plugins/tree/HEAD/plugins/hr");
+    expect(pkg.bugs).toEqual({ url: "https://github.com/acme/console-plugins/issues" });
+    const manifest = JSON.parse(await read("console-plugin.json")) as {
+      name: Record<string, string>;
+      store: unknown;
+      roles: Record<string, { name: Record<string, string> }>;
+      settings: { description: Record<string, string> }[];
+      pages: { name: Record<string, string> }[];
+      widgets: { name: Record<string, string> }[];
+      board: unknown;
+    };
+    expect(manifest.store).toEqual({
+      homepage: "https://github.com/acme/console-plugins/tree/HEAD/plugins/hr",
+      repository: "https://github.com/acme/console-plugins",
+    });
+    // Every language map has Korean, the English words again, for the author to translate.
+    expect(manifest.name).toEqual({ en: "HR", ko: "HR" });
+    expect(manifest.roles.greeter?.name.ko).toBe("Greeter");
+    expect(manifest.settings[0]?.description.ko).toBe(manifest.settings[0]?.description.en);
+    expect(manifest.pages[0]?.name.ko).toBe("Greetings");
+    expect(manifest.widgets[0]?.name.ko).toBe("Latest greeting");
+    expect(manifest.board).toEqual({ needs: "none" });
+    expect(sameAsEnglish(manifest)).toEqual(
+      expect.arrayContaining(["name.ko", "roles.greeter.name.ko", "pages[0].name.ko"]),
+    );
+    // Both manifests in the SkillCDN Format carry the translations too.
+    expect(await read("SKILLCDN.md")).toMatch(
+      /^translations:\n {2}ko:\n {4}name: "HR"\n {4}description: "The skills of HR, a plugin of the SkillCDN Console: how an agent greets through it and reads the greetings."\n---$/m,
+    );
+    expect(await read("skills/hr/SKILL.md")).toMatch(
+      /^skillcdn:\n {2}translations:\n {4}ko:\n {6}title: "HR"\n {6}description: "Greets someone through the HR plugin/m,
+    );
+    // What is not a package name, a directory without its repository, an address that is not
+    // https, and languages that do not begin with English are refused.
+    expect(await runPluginCli(["init", "x", "--key", "hr", "--package", "Acme/HR"], io)).toBe(2);
+    expect(err()).toMatch(/is not a package name/);
+    expect(await runPluginCli(["init", "x", "--key", "hr", "--directory", "plugins/hr"], io)).toBe(
+      2,
+    );
+    expect(err()).toMatch(/--directory goes with --repository/);
+    expect(
+      await runPluginCli(
+        ["init", "x", "--key", "hr", "--repository", "git@github.com:acme/plugins.git"],
+        io,
+      ),
+    ).toBe(2);
+    expect(err()).toMatch(/is not the https address/);
+    expect(await runPluginCli(["init", "x", "--key", "hr", "--languages", "ko,en"], io)).toBe(2);
+    expect(err()).toMatch(/begins with en/);
+    expect(await runPluginCli(["init", "x", "--key", "hr", "--languages", "en,Korean"], io)).toBe(
+      2,
+    );
+    expect(err()).toMatch(/list of language tags/);
   });
 
   it("refuses a bad key, a reserved key, and a directory that is not empty", async () => {

@@ -1,5 +1,5 @@
 {
-  "name": "console-plugin-__key__",
+  "name": "__package__",
   "version": "0.1.0",
   "description": "__name__, a plugin of the SkillCDN Console.",
   "license": "MIT",

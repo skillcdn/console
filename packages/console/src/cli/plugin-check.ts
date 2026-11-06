@@ -13,6 +13,7 @@ import {
   parsePluginManifest,
 } from "../plugin/manifest.js";
 import { forbiddenImportsIn, removedGlobalsIn } from "../plugin/sandbox.js";
+import { isLanguageMap } from "./plugin-init.js";
 
 export interface CheckReport {
   readonly ok: boolean;
@@ -308,6 +309,27 @@ function describeCounts(manifest: PluginManifest, description: PluginDescription
   return counts.join(", ");
 }
 
+/**
+ * The words of the manifest, as JSON, whose translation repeats the English words (`name.ko`,
+ * for one): what `init --languages` copies for the author to translate, and what was left.
+ */
+export function sameAsEnglish(value: unknown, at = ""): string[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) => sameAsEnglish(item, `${at}[${index}]`));
+  }
+  if (typeof value !== "object" || value === null) {
+    return [];
+  }
+  if (isLanguageMap(value)) {
+    return Object.entries(value)
+      .filter(([language, words]) => language !== "en" && words === value.en)
+      .map(([language]) => `${at}.${language}`.replace(/^\./, ""));
+  }
+  return Object.entries(value).flatMap(([key, inner]) =>
+    sameAsEnglish(inner, at.length === 0 ? key : `${at}.${key}`),
+  );
+}
+
 /** Reads the plugin at `root` as a console would, and says what it would refuse. */
 export async function checkPlugin(
   root: string,
@@ -336,6 +358,11 @@ export async function checkPlugin(
   if (!(PLUGIN_API_MAJORS as readonly number[]).includes(manifest.pluginApi)) {
     errors.push(
       `console-plugin.json: pluginApi ${manifest.pluginApi} is not one this command knows (${PLUGIN_API_MAJORS.join(", ")}); write against ${CURRENT_PLUGIN_API}`,
+    );
+  }
+  for (const path of sameAsEnglish(manifestRead.value)) {
+    warnings.push(
+      `console-plugin.json: ${path} is the same as en: translate it, or leave the language out`,
     );
   }
 
