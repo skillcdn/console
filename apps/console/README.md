@@ -20,7 +20,7 @@ pnpm --filter @skillcdn/console-app run dev          # the api, restarting on ch
 
 To work on the UI with its own reloading, run `pnpm --filter @skillcdn/console-app run dev:web` next to the api: it serves the pages at `http://127.0.0.1:11198` and sends everything else to the api. Signing in belongs to the api, so the git host sends the browser back to `PUBLIC_URL`, which is the api's port.
 
-To look at the plugins' pages with nobody's provider, `pnpm dev:plugins` runs the console on this machine with the default UI, the example plugin enabled, the fixtures `leave` and `gate` installed and not enabled (so that the settings pages have a plugin to enable, with its capabilities, board project, secrets and roles) and the fixture's people, who sign in from the browser at the addresses it prints; its database is its own and goes when it ends (`src/testing/browser-console.ts`, which the browser tests run against too).
+To look at the plugins' pages with nobody's provider, `pnpm dev:plugins` runs the console on this machine with the default UI, the example plugin enabled, the fixtures `leave` and `gate` installed and not enabled (so that the settings pages have a plugin to enable, with its capabilities, board project, secrets and roles) and the fixture's people, who sign in from the browser at the addresses it prints; its database is its own and goes when it ends (`src/testing/browser-console.ts`, which the browser tests run against too). `pnpm dev:plugins -- --plugin <dir>`, once or more, installs beside them a built plugin of another checkout, laid out as the image lays one out (`package.json`, `console-plugin.json`, `dist/`), under its package's name and not enabled, so that a plugin's author looks at its pages here without a provider: the administrator enables it on the settings page. A directory that is not a built plugin stops the console before it starts, with the reason.
 
 The exit codes, the probes and what a signal does are the process contract in [`deploy/README.md`](../../deploy/README.md#process-contract). Signing in is off until it is configured, and nothing above needs it; to try it locally, register a GitHub OAuth app with `http://127.0.0.1:11199` as its homepage and `http://127.0.0.1:11199/auth/gh/callback` as its callback, and set its values, `AUTH_SECRET`, `PUBLIC_URL=http://127.0.0.1:11199` and `ADMINS` (your login) in `.env` ([`deploy/README.md`](../../deploy/README.md#signing-in)). The tests need none of it: they sign people in through a fixture.
 
@@ -115,8 +115,8 @@ src/
   testing/       test support: the providers' side of signing in for a handful of made-up people,
                  the harness that wires the app for the integration tests, the console listening
                  for a real browser with the UI, the example plugin and those people
-                 (browser-console.ts), and `pnpm dev:plugins` on it (preview-console.ts); not
-                 compiled
+                 (browser-console.ts), and `pnpm dev:plugins` on it (preview-console.ts, with
+                 what it is told on the command line in preview-plugins.ts); not compiled
   errors.ts      the base class of errors that cross a boundary, with their stable code
   version.ts     what the process calls itself
 web/             the default UI: one page that mounts the package's composition, built by Vite into

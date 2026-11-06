@@ -376,8 +376,8 @@ Goal: what the first plugins, written in `skillcdn/console-plugins` against the 
 - [x] The My decisions tab counts the decisions waiting for the person (`GET /api/v1/me` answers `decisions.waiting`; read again when a decision is raised or answered, and on the project's `decision.*` events).
 - [x] A decision carries the files put on it when it is raised ([ADR-0055](adr/0055-a-decision-carries-the-files-put-on-it-when-it-is-raised.md)): `POST .../decisions` as one form, `console ask --attach`, the pictures shown where the context names them and on every page a decision is shown, the files read at the project's one address and by `console file`.
 - [x] A decision's option may carry a `key`, answered back as `optionKey` on the `decision.answered` event, to a plugin with `board:decisions` for its own decisions, so that it reads the answer without comparing labels.
-- [ ] The workspace's people events reach the hooks of a plugin with `people:read:all`.
-- [ ] `pnpm dev:plugins` installs the built plugins of other checkouts, named on the command line, so that a plugin's pages are looked at without a provider.
+- [x] The workspace's people events reach the hooks of a plugin with `people:read:all`, with their content, as they happen.
+- [x] `pnpm dev:plugins -- --plugin <dir>` installs the built plugins of other checkouts beside the fixtures, so that a plugin's pages are looked at without a provider.
 - [ ] `console-plugin init` takes the package's name, its repository and the languages of its words.
 - [ ] The docs name the reference plugin repository and the way of several plugins in one repository.
 

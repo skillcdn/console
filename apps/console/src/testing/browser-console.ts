@@ -30,11 +30,12 @@ import {
 } from "./plugins.js";
 
 // Test support: the console as a real browser meets it, listening on this machine with the
-// default UI, the example plugin enabled, two of the fixtures installed and not enabled, and the
-// fixture's people, who sign in from the browser. For what only a browser enforces of a plugin's
-// frame (docs/specs/plugins.md, "The frame"), and for a person to look at the plugins' pages,
-// the settings pages included: the fixtures ask capabilities, a board project, secrets and
-// roles, which the example does not. Not compiled.
+// default UI, the example plugin enabled, two of the fixtures installed and not enabled, the
+// built plugins of other checkouts it was given the same way, and the fixture's people, who
+// sign in from the browser. For what only a browser enforces of a plugin's frame
+// (docs/specs/plugins.md, "The frame"), and for a person to look at the plugins' pages, the
+// settings pages included: the fixtures ask capabilities, a board project, secrets and roles,
+// which the example does not. Not compiled.
 
 /** The build of the default UI, which `pnpm build` writes. */
 const WEB_DIST = fileURLToPath(new URL("../../web/dist/", import.meta.url));
@@ -57,6 +58,12 @@ export interface BrowserConsoleOptions {
   readonly databaseUrl?: string | undefined;
   /** The process's environment, for what the plugin host needs of it on this platform. */
   readonly env: Readonly<Record<string, string | undefined>>;
+  /**
+   * Built plugins of other checkouts, each laid out as the image lays a plugin out, installed
+   * beside the fixtures under their package's name and not enabled: for a plugin's author to
+   * look at its pages here, enabled on the settings page as the administrator.
+   */
+  readonly plugins?: readonly { readonly name: string; readonly dir: string }[] | undefined;
 }
 
 export interface BrowserConsole {
@@ -103,6 +110,7 @@ export async function startBrowserConsole(options: BrowserConsoleOptions): Promi
     { name: HELLO_PLUGIN_NAME, dir: HELLO_PLUGIN_DIR },
     { name: "console-plugin-leave", dir: LEAVE_PLUGIN_DIR },
     { name: "console-plugin-gate", dir: GATE_PLUGIN_DIR },
+    ...(options.plugins ?? []),
   ]);
   const logger = pino({ level: "warn" }, { write: () => {} });
   const holder: { current: Plugins | undefined } = { current: undefined };
