@@ -8,7 +8,7 @@ catalog:
   "@types/node": ^24.19.2
   typescript: ^7.0.2
   vitest: ^5.1.0
-  zod: ^4.6.5
+  zod: ^4.6.7
 
 # Supply-chain guard: never resolve a version published less than 3 days ago (minutes).
 # For an urgent security fix, or a fresh @skillcdn/* release that is needed now, list the package
