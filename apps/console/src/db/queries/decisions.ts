@@ -523,6 +523,30 @@ export async function listWaitingDecisionsFor(
 }
 
 /**
+ * How many decisions wait for `person` (ADR-0042) across the projects they may see: what the
+ * pages say beside My decisions, read with who is signed in.
+ */
+export async function countWaitingDecisionsFor(
+  database: Database,
+  workspaceId: string,
+  person: PersonRecord,
+): Promise<number> {
+  const [row] = await drizzleOf(database)
+    .select({ count: count() })
+    .from(decisions)
+    .innerJoin(projects, eq(projects.id, decisions.projectId))
+    .where(
+      and(
+        eq(decisions.workspaceId, workspaceId),
+        eq(decisions.deciderId, person.id),
+        isNull(decisions.answeredAt),
+        visibleTo(person),
+      ),
+    );
+  return row?.count ?? 0;
+}
+
+/**
  * A page of the decisions addressed to `person` (ADR-0042) across the projects they may see,
  * or, with `raised`, of those they raised, through their agent or not, for someone else: the
  * ones that wait first, oldest first among them, since those are the ones to answer; then the

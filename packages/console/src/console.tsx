@@ -2660,6 +2660,7 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
           href: PATHS.decisions,
           label: words.nav.myDecisions,
           current: route.name === "my-decisions",
+          count: data.me?.decisions?.waiting,
         },
         {
           href: PATHS.people,

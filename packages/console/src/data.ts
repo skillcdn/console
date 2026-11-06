@@ -382,6 +382,20 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
 
   const reload = useCallback(() => setGeneration((current) => current + 1), []);
 
+  /**
+   * Asks again who is signed in, for what moves with the board: the decisions waiting for the
+   * person, said beside My decisions. What fails stays as it was.
+   */
+  const refreshMe = useCallback(
+    async (signal?: AbortSignal) => {
+      const answer = await client.me(signal);
+      if (signal?.aborted !== true) {
+        setMe(answer);
+      }
+    },
+    [client],
+  );
+
   /** Loads the workspace's lists again. What fails stays as it was. */
   const refreshWorkspace = useCallback(
     async (signal?: AbortSignal) => {
@@ -571,6 +585,11 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
           if (event.kind.startsWith("project.")) {
             refreshWorkspace(signal).catch(() => undefined);
           }
+          // A decision raised or answered here may be one of the person's own: the count beside
+          // My decisions follows it.
+          if (event.kind.startsWith("decision.")) {
+            refreshMe(signal).catch(() => undefined);
+          }
         }, RELOAD_DELAY_MS);
       };
       for (const kind of EVENT_KINDS) {
@@ -584,7 +603,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
       source?.close();
       setLive(false);
     };
-  }, [client, projectKey, signedIn, generation, refreshProject, refreshWorkspace]);
+  }, [client, projectKey, signedIn, generation, refreshProject, refreshWorkspace, refreshMe]);
 
   const actions = useMemo<ConsoleActions>(() => {
     /** The project the page is on, for an action that needs one. */
@@ -686,14 +705,17 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
         scope().goals({ open: true, ...searchWordsOf(query), ...page }, signal),
       async raiseDecision(input) {
         const decision = await scope().raiseDecision(input);
-        await refreshProject();
+        await Promise.all([refreshProject(), refreshMe().catch(() => undefined)]);
         return decision;
       },
-      answerDecisionIn: (projectKey, id, input) =>
-        client.project(projectKey).answerDecision(id, input),
+      async answerDecisionIn(projectKey, id, input) {
+        const decision = await client.project(projectKey).answerDecision(id, input);
+        await refreshMe().catch(() => undefined);
+        return decision;
+      },
       async answerDecision(id, input) {
         const decision = await scope().answerDecision(id, input);
-        await refreshProject();
+        await Promise.all([refreshProject(), refreshMe().catch(() => undefined)]);
         return decision;
       },
       async updateDecision(id, patch) {
@@ -834,7 +856,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
         setLoaded(false);
       },
     };
-  }, [client, projectKey, refreshProject, refreshWorkspace]);
+  }, [client, projectKey, refreshProject, refreshWorkspace, refreshMe]);
 
   return {
     me,

@@ -22,6 +22,7 @@ import type { Secrets } from "../auth/secrets.js";
 import type { Sessions } from "../auth/sessions.js";
 import type { Tokens } from "../auth/tokens.js";
 import type { Database } from "../db/client.js";
+import { countWaitingDecisionsFor } from "../db/queries/decisions.js";
 import { languageOf, type PersonRecord, setLanguage } from "../db/queries/people.js";
 import type { TokenRecord } from "../db/queries/tokens.js";
 import {
@@ -229,6 +230,12 @@ export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies):
       person: person === undefined ? null : restPerson(person),
       agent: caller?.token?.name ?? null,
       language: person === undefined ? null : ((await languageOf(database, person.id)) ?? null),
+      // The decisions waiting for the person across the projects they may see (ADR-0042),
+      // counted for the pages to say beside My decisions; nobody has none to answer.
+      decisions:
+        person === undefined
+          ? null
+          : { waiting: await countWaitingDecisionsFor(database, found.id, person) },
       signIn: auth === undefined ? [] : [...auth.providers],
       console: {
         version: dependencies.console.version,

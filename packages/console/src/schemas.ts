@@ -284,6 +284,13 @@ export const restMeSchema = z.object({
    * built on this package still reads an older console's answer, and says it is older.
    */
   console: z.optional(z.object({ version: z.string(), clientRange: z.string() })),
+  /**
+   * How many decisions wait for the person's answer across the projects they may see
+   * (ADR-0042), for the pages to say beside My decisions; `null` for nobody. Answered from
+   * 0.4.3 and read as optional, so that a console built on this package still reads an older
+   * console's answer.
+   */
+  decisions: z.optional(z.nullable(z.object({ waiting: count }))),
 });
 export type RestMe = z.infer<typeof restMeSchema>;
 

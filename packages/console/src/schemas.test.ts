@@ -28,6 +28,7 @@ import {
   restGoalSchema,
   restListingInputSchema,
   restMemberInputSchema,
+  restMeSchema,
   restPersonPatchSchema,
   restPersonSchema,
   restProjectIconSchema,
@@ -187,6 +188,16 @@ describe("decision input", () => {
 });
 
 describe("what the server answers", () => {
+  it("reads how many decisions wait for the person, and an older console's answer without it", () => {
+    const field = restMeSchema.shape.decisions;
+    expect(field.safeParse(undefined).success).toBe(true);
+    expect(field.safeParse(null).success).toBe(true);
+    expect(field.parse({ waiting: 3 })).toEqual({ waiting: 3 });
+    expect(field.safeParse({ waiting: -1 }).success).toBe(false);
+    expect(field.safeParse({ waiting: 1.5 }).success).toBe(false);
+    expect(field.safeParse({}).success).toBe(false);
+  });
+
   it("parses a task as the server writes one", () => {
     const task = restTaskSchema.parse({
       id: "0199c4d8-0000-7000-8000-000000000010",

@@ -2707,6 +2707,24 @@ describe("the schedule and the roadmap", () => {
       await (await get(alice, `${REST_ROUTES.decisions}?raised=true`)).json(),
     );
     expect(alicesAsked.items.map((item) => item.decision.id)).toEqual([forBob.id]);
+    // How many wait for each is said with who is signed in, for the My decisions tab: Bob's
+    // unanswered ones, nothing of Bob's for Alice, and one fewer once Bob has answered.
+    const bobsMe = restMeSchema.parse(await (await get(bob, REST_ROUTES.me)).json());
+    const bobsWaiting = bobsOwn.items.filter((item) => item.decision.answer === null).length;
+    expect(bobsWaiting).toBeGreaterThanOrEqual(2);
+    expect(bobsMe.decisions).toEqual({ waiting: bobsWaiting });
+    const alicesMe = restMeSchema.parse(await (await get(alice, REST_ROUTES.me)).json());
+    expect(alicesMe.decisions).toEqual({
+      waiting: alicesOwn.items.filter((item) => item.decision.answer === null).length,
+    });
+    const firstOption = forBob.options[0]?.id;
+    expect(firstOption).toBeDefined();
+    const answered = await send(bob, "POST", `${IN}/decisions/${forBob.id}/answer`, {
+      option: firstOption,
+    });
+    expect(answered.ok).toBe(true);
+    const bobsMeAfter = restMeSchema.parse(await (await get(bob, REST_ROUTES.me)).json());
+    expect(bobsMeAfter.decisions).toEqual({ waiting: bobsWaiting - 1 });
     // Bob sees his own, and nothing of the docs project, which is not his to see.
     const bobWork = restWorkSchema.parse(await (await get(bob, REST_ROUTES.work)).json());
     expect(bobWork.tasks.map((item) => item.task.id)).toEqual([bobs.id]);
