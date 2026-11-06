@@ -13,13 +13,20 @@ export interface PreviewArguments {
   readonly pluginDirs: readonly string[];
 }
 
-/** The arguments as given, or an error saying what was not understood. */
+/**
+ * The arguments as given, or an error saying what was not understood. A bare `--` is passed over:
+ * pnpm hands the `--` of `pnpm dev:plugins -- --plugin <dir>` on to the script, since pnpm 12, so
+ * it reaches here with the flags that followed it.
+ */
 export function parsePreviewArguments(argv: readonly string[]): PreviewArguments {
   let port: number | undefined;
   const pluginDirs: string[] = [];
   for (let at = 0; at < argv.length; at += 1) {
     const flag = argv[at];
     const value = argv[at + 1];
+    if (flag === "--") {
+      continue;
+    }
     if (flag === "--port") {
       const parsed = value === undefined ? Number.NaN : Number(value);
       if (!Number.isInteger(parsed) || parsed < 0 || parsed > 65_535) {

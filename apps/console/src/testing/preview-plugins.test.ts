@@ -28,6 +28,18 @@ describe("what dev:plugins is told", () => {
     expect(() => parsePreviewArguments(["--verbose"])).toThrow(/is not understood/);
   });
 
+  it("passes over the -- that pnpm hands on with the flags that followed it", () => {
+    expect(parsePreviewArguments(["--", "--plugin", "../plugins/hr"])).toEqual({
+      port: undefined,
+      pluginDirs: ["../plugins/hr"],
+    });
+    expect(parsePreviewArguments(["--port", "11201", "--", "--plugin", "x"])).toEqual({
+      port: 11201,
+      pluginDirs: ["x"],
+    });
+    expect(() => parsePreviewArguments(["--plugin", "--"])).toThrow(/--plugin takes/);
+  });
+
   it("installs a built plugin by its package's name, and says why one cannot be", async () => {
     const dir = await scratch();
     await expect(builtPluginAt("nothing", dir)).rejects.toThrow(/is not a directory/);
