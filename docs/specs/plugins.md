@@ -60,7 +60,7 @@
 | `settingGroups` | Group[] | up to 10, each `{ key, name, description? }`, in the order the form shows them; the settings without a `group` come above them |
 | `menu` | `{ group, order?, name? }` | the tab the plugin is under: a group of the console's (`people`, `customers`, `money`, `operations`, `marketing`, `engineering`, `reports`), or one the plugin declares with a `name` per language; `order` within the row, default 100 |
 | `pages` | Page[] | up to 12, each `{ key, name, level, roles?, wide? }`; `level` is `workspace` or `project`; page keys as `key`, and not `frame`, `web` or `x` |
-| `widgets` | Widget[] | up to 4, each `{ key, name, place, size, roles? }`; `place` is `home:top` or `home:bottom`; `size` is `third`, `half` or `full` |
+| `widgets` | Widget[] | up to 4, each `{ key, name, place, sizes, defaultSize?, roles? }`; `place` is `home:top` or `home:bottom`; `sizes` the sizes the widget comes in, each once, among `small` (2×1 cells of the six-column grid), `medium` (3×1), `large` (3×2), `wide` (6×1) and `full` (6×2), and `defaultSize` the one it starts at, the first of them when left out ([ADR-0059](../adr/0059-a-person-arranges-the-front-pages-widgets-from-the-sizes-each-comes-in.md)); the one `size` of before, `third`, `half` or `full`, still reads, as `small`, `medium` or `wide` |
 | `dataVersion` | integer | the version of the plugin's record shapes, from 1; raised with an entry in `upgrades` |
 | `store` | object | `homepage`, `repository`, `keywords`, `icon`; the license is `package.json`'s |
 
@@ -362,15 +362,16 @@ The console's page and the frame speak over `postMessage`, every message `{ v: 1
 
 | From | `t` | Carries |
 |---|---|---|
-| the page | `init` | `plugin: { key, version }`, `page` or `widget`, `project?: { key, name }`, `person: { id, login, name, language, admin }`, `roles`, `path` (what follows the page in the address), `language`, `theme: { [token]: value }` |
+| the page | `init` | `plugin: { key, version }`, `page` or `widget` (with `size`, the size the widget has, [ADR-0059](../adr/0059-a-person-arranges-the-front-pages-widgets-from-the-sizes-each-comes-in.md)), `project?: { key, name }`, `person: { id, login, name, language, admin }`, `roles`, `path` (what follows the page in the address), `language`, `theme: { [token]: value }` |
 | the page | `result` | `id`, `ok`, `value` or `error: { code, message }` |
 | the page | `event` | `kind: "records" \| "command" \| "plugin"`, `data`: something of this plugin changed. `command` and `records` come from the project's feed, on every `plugin.command` of the plugin on the project the page is on; `plugin` from `GET .../plugin-events`, asked for every few seconds while a frame listens |
 | the page | `theme` | the tokens, when the console's look changes |
 | the page | `path` | `path`, when the console navigated within this page's address |
+| the page | `size` | `size`, when the person gave the widget another of the sizes it comes in |
 | the frame | `ready` | nothing; the page answers with `init` |
 | the frame | `call` | `id`, `method`, `params`: `command` (`name`, `args`), `query` (`name`, `args`), `records.list`, `records.get`, `records.versions`, `files.get` (`id`; the bytes come back transferred), `files.put` (`bytes`, `name`, `type`; a handle comes back) |
 | the frame | `navigate` | `path`: a path of the console's, which the page follows in place; a URL is refused |
-| the frame | `resize` | `height`, which the page gives the frame, up to a bound for a widget |
+| the frame | `resize` | `height`, which the page gives a page's frame; a widget fills the cells its size gives it, and its height is not read |
 | the frame | `title` | `text`, for the document's title |
 | the frame | `download` | `id` of a file, which the page downloads |
 | the frame | `subscribe` | `kinds`, to receive `event` |
@@ -389,7 +390,7 @@ The page performs every `call` with the person's session under `/api/v1/plugins/
 
 ### Widgets
 
-The front page (`/`) shows the widgets the person holds a role for, `home:top` above the projects and `home:bottom` below, in a grid of six columns: `third` takes two, `half` three, `full` six. Each widget is a frame with the same document and bridge, `widget=<key>` in place of `page`, its name above it, its height what it asks up to 480 pixels.
+The front page (`/`) shows the widgets the person holds a role for, `home:top` above the projects and `home:bottom` below, in a grid of six columns whose rows are of one height (`--sc-widget-row`, 14rem): each widget at its size, `small` 2×1, `medium` 3×1, `large` 3×2, `wide` 6×1, `full` 6×2 ([ADR-0059](../adr/0059-a-person-arranges-the-front-pages-widgets-from-the-sizes-each-comes-in.md)), filling the cells it has; the height it says is not read. Each widget is a frame with the same document and bridge, `widget=<key>` in place of `page`, its name above it; `init` carries `size`, and a `size` message follows when the person changes it, so that the bundle lays itself out for the cells (`frame.context.size`, `frame.onSize`). As the manifests place them, each at its `defaultSize`, until the person arranges the page: `GET /api/v1/me` answers `home`, their arrangement, `[{ plugin, widget, size, place? }]` in order, or `null` for the manifests'; `PATCH /api/v1/me` with `home` keeps it, `null` lets the manifests decide again. On the page, Edit widgets shows each widget's tools, its size among those it comes in, a step up or down, the way out, and a choice to add a widget the person's roles allow; a widget is dragged before another too. A widget the person may no longer see, for a role gone or a plugin disabled, drops out quietly; on a narrow screen the widgets stand in one column in the same order.
 
 ### The look
 

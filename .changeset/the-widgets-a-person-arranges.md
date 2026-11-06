@@ -1,0 +1,5 @@
+---
+"@skillcdn/console": patch
+---
+
+A person arranges the front page's widgets ([ADR-0059](https://github.com/skillcdn/console/blob/main/docs/adr/0059-a-person-arranges-the-front-pages-widgets-from-the-sizes-each-comes-in.md)). A widget comes in sizes of one family, `small` (2×1 cells of the six-column grid), `medium` (3×1), `large` (3×2), `wide` (6×1) and `full` (6×2), declared as `sizes` with a `defaultSize` in the manifest; the one `size` of before reads as one of them. A widget fills the cells its size gives it, and its frame is told the size in `init.size` and in a `size` message when it changes (`frame.context.size`, `frame.onSize` in `@skillcdn/console/plugin/web`). On the front page, Edit widgets lets the person add a widget their roles allow, take one out, move one before another and pick its size; the arrangement is kept on them, `home` on `GET /api/v1/me` and `PATCH /api/v1/me` (read as optional), `null` for the manifests'. `PluginWidgets` takes `arrangement`, `editing` and `onArrange`; the helpers are in `home-widgets`. `MAX_PLUGIN_WIDGET_HEIGHT` is no longer read: the rows of a size bound a widget.

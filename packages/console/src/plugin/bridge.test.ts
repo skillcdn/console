@@ -38,6 +38,13 @@ describe("isBridgeToFrame", () => {
     expect(isBridgeToFrame({ v: 1, t: "event", kind: "records", data: {} })).toBe(true);
     expect(isBridgeToFrame({ v: 1, t: "theme", theme: { "--sc-color-bg": "#fff" } })).toBe(true);
     expect(isBridgeToFrame({ v: 1, t: "path", path: "/2026-11" })).toBe(true);
+    // A widget's size (ADR-0059): at the start, and when the person changes it.
+    expect(isBridgeToFrame({ ...INIT, page: undefined, widget: "balance", size: "small" })).toBe(
+      true,
+    );
+    expect(isBridgeToFrame({ v: 1, t: "size", size: "wide" })).toBe(true);
+    expect(isBridgeToFrame({ ...INIT, widget: "balance", size: "huge" })).toBe(false);
+    expect(isBridgeToFrame({ v: 1, t: "size", size: "huge" })).toBe(false);
   });
 
   it("drops anything else unread", () => {

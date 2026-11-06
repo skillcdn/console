@@ -65,7 +65,7 @@ export const MAX_PLUGIN_SQL_ROWS = 10_000;
 export const PLUGIN_SQL_CONNECTIONS = 4;
 /** The memory a plugin's thread may hold, in megabytes, where the deployment says nothing. */
 export const DEFAULT_PLUGIN_MEMORY_MB = 256;
-/** How tall a widget's frame may grow, in pixels. */
+/** How tall a widget's frame grew, in pixels, before a widget had sizes of a family (ADR-0059); kept for the readers of before, read by nothing. */
 export const MAX_PLUGIN_WIDGET_HEIGHT = 480;
 /** How many retries a hook gets before its event is skipped with a `plugin.failed` event. */
 export const PLUGIN_HOOK_RETRIES = 5;

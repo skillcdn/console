@@ -5,6 +5,14 @@
 
 export const PLUGIN_BRIDGE_VERSION = 1;
 
+/**
+ * The sizes a widget comes in (ADR-0059): columns and rows of the front page's six-column grid,
+ * `small` 2×1, `medium` 3×1, `large` 3×2, `wide` 6×1, `full` 6×2. Here, so that a bundle learns
+ * them without the manifest's schema.
+ */
+export const PLUGIN_WIDGET_SIZE_NAMES = ["small", "medium", "large", "wide", "full"] as const;
+export type PluginWidgetSizeName = (typeof PLUGIN_WIDGET_SIZE_NAMES)[number];
+
 /** What the frame may ask the page to perform, each under `/api/v1/plugins/<key>/` and nothing else. */
 export const BRIDGE_METHODS = [
   "command",
@@ -38,6 +46,8 @@ export interface BridgeInit {
   readonly plugin: { readonly key: string; readonly version: string };
   readonly page?: string;
   readonly widget?: string;
+  /** The size the widget's frame has (ADR-0059), one of the sizes the manifest declared for it; none for a page. */
+  readonly size?: PluginWidgetSizeName;
   readonly project: { readonly key: string; readonly name: string } | null;
   readonly person: BridgePerson;
   readonly roles: readonly string[];
@@ -82,7 +92,20 @@ export interface BridgePath {
   readonly path: string;
 }
 
-export type BridgeToFrame = BridgeInit | BridgeResult | BridgeEvent | BridgeTheme | BridgePath;
+/** The person gave the widget another size (ADR-0059): the frame lays itself out for it. */
+export interface BridgeSize {
+  readonly v: 1;
+  readonly t: "size";
+  readonly size: PluginWidgetSizeName;
+}
+
+export type BridgeToFrame =
+  | BridgeInit
+  | BridgeResult
+  | BridgeEvent
+  | BridgeTheme
+  | BridgePath
+  | BridgeSize;
 
 export interface BridgeReady {
   readonly v: 1;
@@ -194,6 +217,8 @@ export function isBridgeToFrame(value: unknown): value is BridgeToFrame {
         isLine(value.plugin.version, 64) &&
         (value.page === undefined || isLine(value.page, 32)) &&
         (value.widget === undefined || isLine(value.widget, 32)) &&
+        (value.size === undefined ||
+          (PLUGIN_WIDGET_SIZE_NAMES as readonly unknown[]).includes(value.size)) &&
         (value.project === null ||
           (isRecord(value.project) &&
             isLine(value.project.key, 64) &&
@@ -229,6 +254,8 @@ export function isBridgeToFrame(value: unknown): value is BridgeToFrame {
       return isTheme(value.theme);
     case "path":
       return typeof value.path === "string" && value.path.length <= MAX_BRIDGE_PATH_LENGTH;
+    case "size":
+      return (PLUGIN_WIDGET_SIZE_NAMES as readonly unknown[]).includes(value.size);
     default:
       return false;
   }

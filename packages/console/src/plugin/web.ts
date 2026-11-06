@@ -16,6 +16,7 @@ import {
   isBridgeToFrame,
   MAX_BRIDGE_TITLE_LENGTH,
   PLUGIN_BRIDGE_VERSION,
+  type PluginWidgetSizeName,
 } from "./bridge.js";
 import type { PluginRecord, RecordPage, RecordVersion } from "./context.js";
 
@@ -125,6 +126,8 @@ export interface PluginFrame {
   onTheme(handler: (theme: Readonly<Record<string, string>>) => void): () => void;
   /** The console navigated within this page's address. */
   onPath(handler: (path: string) => void): () => void;
+  /** The person gave the widget another size (ADR-0059); `context.size` was the first. */
+  onSize(handler: (size: PluginWidgetSizeName) => void): () => void;
   /** Stops listening to the console's page. */
   close(): void;
 }
@@ -219,6 +222,7 @@ export function connect(options: ConnectOptions = {}): Promise<PluginFrame> {
   const eventHandlers = new Set<(kind: BridgeEventKind, data: unknown) => void>();
   const themeHandlers = new Set<(theme: Readonly<Record<string, string>>) => void>();
   const pathHandlers = new Set<(path: string) => void>();
+  const sizeHandlers = new Set<(size: PluginWidgetSizeName) => void>();
   const subscribed = new Set<BridgeEventKind>();
   let counter = 0;
   let stopHeight: (() => void) | undefined;
@@ -338,6 +342,10 @@ export function connect(options: ConnectOptions = {}): Promise<PluginFrame> {
               pathHandlers.add(handler);
               return () => pathHandlers.delete(handler);
             },
+            onSize: (handler) => {
+              sizeHandlers.add(handler);
+              return () => sizeHandlers.delete(handler);
+            },
             close: () => {
               win.removeEventListener("message", listener);
               stopHeight?.();
@@ -391,6 +399,11 @@ export function connect(options: ConnectOptions = {}): Promise<PluginFrame> {
         case "path":
           for (const handler of pathHandlers) {
             handler(message.path);
+          }
+          return;
+        case "size":
+          for (const handler of sizeHandlers) {
+            handler(message.size);
           }
           return;
         default:

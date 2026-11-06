@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { localizedText, parsePluginManifest, RESERVED_PLUGIN_KEYS } from "./manifest.js";
+import {
+  legacyWidgetSize,
+  localizedText,
+  parsePluginManifest,
+  RESERVED_PLUGIN_KEYS,
+  widgetSizesOf,
+} from "./manifest.js";
 
 const LEAVE = {
   key: "leave",
@@ -207,6 +213,27 @@ describe("parsePluginManifest", () => {
     expect(problemsOf({ board: { needs: "none", defaults: LEAVE.board.defaults } })[0]).toMatch(
       /^board: /,
     );
+  });
+
+  it("gives a widget the sizes it comes in, and reads the one size of before as one of them", () => {
+    const widget = (changes: Record<string, unknown>) =>
+      problemsOf({ widgets: [{ key: "wid", name: { en: "W" }, place: "home:top", ...changes }] });
+    expect(widget({ sizes: ["small", "medium"], defaultSize: "medium" })).toEqual([]);
+    expect(widget({ size: "half" })).toEqual([]);
+    expect(widget({})[0]).toMatch(/needs sizes/);
+    expect(widget({ sizes: ["small", "small"] })[0]).toMatch(/names a size twice/);
+    expect(widget({ sizes: ["small"], defaultSize: "wide" })[0]).toMatch(
+      /defaultSize is not one of sizes/,
+    );
+    expect(widget({ sizes: ["huge"] })[0]).toMatch(/^widgets\.0\.sizes/);
+    expect(widgetSizesOf({ size: "third" })).toEqual({ sizes: ["small"], defaultSize: "small" });
+    expect(widgetSizesOf({ size: "full" })).toEqual({ sizes: ["wide"], defaultSize: "wide" });
+    expect(widgetSizesOf({ sizes: ["large", "full"] })).toEqual({
+      sizes: ["large", "full"],
+      defaultSize: "large",
+    });
+    expect(legacyWidgetSize("large")).toBe("half");
+    expect(legacyWidgetSize("full")).toBe("full");
   });
 
   it("refuses a page keyed as a route, and keys declared twice", () => {

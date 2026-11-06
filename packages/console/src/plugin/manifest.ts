@@ -8,6 +8,7 @@ import {
   MAX_PROJECT_NAME_LENGTH,
 } from "../limits.js";
 import { hasForbiddenCodePoint } from "../text.js";
+import { PLUGIN_WIDGET_SIZE_NAMES, type PluginWidgetSizeName } from "./bridge.js";
 import { isPluginCapability } from "./capabilities.js";
 import {
   MAX_PLUGIN_AGENT_NOTE_LENGTH,
@@ -151,8 +152,52 @@ export type PluginPageLevel = (typeof PLUGIN_PAGE_LEVELS)[number];
 export const PLUGIN_WIDGET_PLACES = ["home:top", "home:bottom"] as const;
 export type PluginWidgetPlace = (typeof PLUGIN_WIDGET_PLACES)[number];
 
+/** The sizes of before (ADR-0054), each read as one of the family (ADR-0059): a third as small, a half as medium, the width as wide. */
 export const PLUGIN_WIDGET_SIZES = ["third", "half", "full"] as const;
 export type PluginWidgetSize = (typeof PLUGIN_WIDGET_SIZES)[number];
+
+export { PLUGIN_WIDGET_SIZE_NAMES, type PluginWidgetSizeName };
+
+const LEGACY_WIDGET_SIZES: Readonly<Record<PluginWidgetSize, PluginWidgetSizeName>> = {
+  third: "small",
+  half: "medium",
+  full: "wide",
+};
+
+/** The columns and the rows of the six-column grid each size takes (ADR-0059). */
+export const PLUGIN_WIDGET_SIZE_CELLS: Readonly<
+  Record<PluginWidgetSizeName, { readonly columns: number; readonly rows: number }>
+> = {
+  small: { columns: 2, rows: 1 },
+  medium: { columns: 3, rows: 1 },
+  large: { columns: 3, rows: 2 },
+  wide: { columns: 6, rows: 1 },
+  full: { columns: 6, rows: 2 },
+};
+
+/**
+ * The sizes a widget comes in and the one it starts at: `sizes` and `defaultSize` where the
+ * manifest declares them, else the one size of before read as one of the family.
+ */
+export function widgetSizesOf(widget: {
+  readonly size?: PluginWidgetSize | undefined;
+  readonly sizes?: readonly PluginWidgetSizeName[] | undefined;
+  readonly defaultSize?: PluginWidgetSizeName | undefined;
+}): {
+  readonly sizes: readonly PluginWidgetSizeName[];
+  readonly defaultSize: PluginWidgetSizeName;
+} {
+  if (widget.sizes !== undefined && widget.sizes.length > 0) {
+    return { sizes: widget.sizes, defaultSize: widget.defaultSize ?? widget.sizes[0] ?? "small" };
+  }
+  const one = LEGACY_WIDGET_SIZES[widget.size ?? "third"];
+  return { sizes: [one], defaultSize: one };
+}
+
+/** The size of before nearest to one of the family, for a reader of before. */
+export function legacyWidgetSize(size: PluginWidgetSizeName): PluginWidgetSize {
+  return size === "small" ? "third" : size === "medium" || size === "large" ? "half" : "full";
+}
 
 export const PLUGIN_BOARD_NEEDS = ["required", "optional", "none"] as const;
 export type PluginBoardNeeds = (typeof PLUGIN_BOARD_NEEDS)[number];
@@ -351,13 +396,42 @@ const pluginPageSchema = z.strictObject({
 
 export type PluginPage = z.infer<typeof pluginPageSchema>;
 
-const pluginWidgetSchema = z.strictObject({
-  key,
-  name: localized(MAX_PLUGIN_NAME_LENGTH),
-  place: z.enum(PLUGIN_WIDGET_PLACES),
-  size: z.enum(PLUGIN_WIDGET_SIZES),
-  roles: z.optional(roleList),
-});
+const pluginWidgetSchema = z
+  .strictObject({
+    key,
+    name: localized(MAX_PLUGIN_NAME_LENGTH),
+    place: z.enum(PLUGIN_WIDGET_PLACES),
+    /** The one size of before; `sizes` says it better. */
+    size: z.optional(z.enum(PLUGIN_WIDGET_SIZES)),
+    /** The sizes the widget comes in (ADR-0059), each once; the person picks among them. */
+    sizes: z.optional(
+      z.array(z.enum(PLUGIN_WIDGET_SIZE_NAMES)).check(z.minLength(1), z.maxLength(5)),
+    ),
+    /** The size it starts at, one of `sizes`; the first of them when left out. */
+    defaultSize: z.optional(z.enum(PLUGIN_WIDGET_SIZE_NAMES)),
+    roles: z.optional(roleList),
+  })
+  .check(
+    z.superRefine((widget, ctx) => {
+      if (widget.size === undefined && widget.sizes === undefined) {
+        ctx.addIssue({
+          code: "custom",
+          message: "needs sizes, the sizes it comes in",
+          input: widget,
+        });
+      }
+      if (widget.sizes !== undefined && new Set(widget.sizes).size !== widget.sizes.length) {
+        ctx.addIssue({ code: "custom", message: "sizes names a size twice", input: widget });
+      }
+      if (widget.defaultSize !== undefined && !(widget.sizes ?? []).includes(widget.defaultSize)) {
+        ctx.addIssue({
+          code: "custom",
+          message: "defaultSize is not one of sizes",
+          input: widget,
+        });
+      }
+    }),
+  );
 
 export type PluginWidget = z.infer<typeof pluginWidgetSchema>;
 

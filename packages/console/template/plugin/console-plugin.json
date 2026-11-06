@@ -43,7 +43,8 @@
       "key": "latest",
       "name": { "en": "Latest greeting" },
       "place": "home:top",
-      "size": "third",
+      "sizes": ["small", "medium"],
+      "defaultSize": "small",
       "roles": ["greeter"]
     }
   ],

@@ -112,6 +112,7 @@ describe("signing in", () => {
         timeZone: null,
       },
       language: null,
+      home: null,
       agent: null,
       console: { version: "0.1.18", clientRange: ">=0.1.0 <0.2.0" },
       // Nothing waits for Alice yet.
@@ -139,6 +140,7 @@ describe("signing in", () => {
         timeZone: null,
       },
       language: null,
+      home: null,
       agent: null,
       console: { version: "0.1.18", clientRange: ">=0.1.0 <0.2.0" },
       person: null,
@@ -318,6 +320,36 @@ describe("a session", () => {
     expect((await me(h, cookie)).person).toBeNull();
   });
 
+  it("keeps the person's own arrangement of the front page's widgets (ADR-0059)", async () => {
+    const login = createFixtureProvider();
+    const h = harness({ login, listed: ["alice"], admins: ["alice"] });
+    const cookie = await h.signIn("alice");
+    const patch = (body: unknown) =>
+      h.request(REST_ROUTES.me, {
+        method: "PATCH",
+        headers: { cookie, origin: SIGN_IN_URL, "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    expect((await me(h, cookie)).home).toBeNull();
+    const home = [
+      { plugin: "hr", widget: "today", size: "large", place: "home:top" },
+      { plugin: "hello", widget: "latest", size: "small" },
+    ];
+    const kept = await patch({ home });
+    expect(kept.status, await kept.clone().text()).toBe(200);
+    expect(restMeSchema.parse(await kept.json()).home).toEqual(home);
+    expect((await me(h, cookie)).home).toEqual(home);
+    // The language changes beside it, and leaves it; nothing named, or a size that is not one, is refused.
+    expect((await patch({ language: "ko" })).status).toBe(200);
+    expect(await me(h, cookie)).toMatchObject({ language: "ko", home });
+    expect((await patch({})).status).toBe(400);
+    expect((await patch({ home: [{ plugin: "hr", widget: "today", size: "huge" }] })).status).toBe(
+      400,
+    );
+    expect((await patch({ home: null, language: null })).status).toBe(200);
+    expect(await me(h, cookie)).toMatchObject({ language: null, home: null });
+  });
+
   it("ends at once for a person deactivated, and the cookie goes with the answer", async () => {
     const login = createFixtureProvider();
     const h = harness({ login, listed: ["alice", "bob"], admins: ["alice"] });
@@ -444,6 +476,7 @@ describe("a deployment where nobody signs in", () => {
         timeZone: null,
       },
       language: null,
+      home: null,
       agent: null,
       console: { version: "0.1.18", clientRange: ">=0.1.0 <0.2.0" },
       person: null,

@@ -228,6 +228,25 @@ export const en = {
       itemPlaceholder: "Type, then add",
       choose: "Choose…",
     },
+    /** The front page's widgets, arranged by the person (ADR-0059). */
+    widgets: {
+      edit: "Edit widgets",
+      done: "Done",
+      reset: "Default layout",
+      add: "Add a widget",
+      remove: "Remove",
+      size: "Size",
+      moveUp: "Move up",
+      moveDown: "Move down",
+      none: "No widget here.",
+      sizes: {
+        small: "Small",
+        medium: "Medium",
+        large: "Large",
+        wide: "Wide",
+        full: "Full",
+      } as Record<string, string>,
+    },
     /** The capabilities (docs/specs/plugins.md, "Capabilities"), each by a name and the sentence of what it opens, as an administrator reads them before consenting. */
     capability: {
       files: {

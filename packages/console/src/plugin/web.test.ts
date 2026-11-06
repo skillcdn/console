@@ -210,6 +210,11 @@ describe("connect", () => {
     frame.receive({ v: 1, t: "path", path: "2027" });
     expect(paths).toEqual(["2027"]);
 
+    const sizes: string[] = [];
+    plugin.onSize((size) => sizes.push(size));
+    frame.receive({ v: 1, t: "size", size: "large" });
+    expect(sizes).toEqual(["large"]);
+
     plugin.close();
     expect(frame.listeners.size).toBe(0);
   });

@@ -23,7 +23,13 @@ import type { Sessions } from "../auth/sessions.js";
 import type { Tokens } from "../auth/tokens.js";
 import type { Database } from "../db/client.js";
 import { countWaitingDecisionsFor } from "../db/queries/decisions.js";
-import { languageOf, type PersonRecord, setLanguage } from "../db/queries/people.js";
+import {
+  homeOf,
+  languageOf,
+  type PersonRecord,
+  setHome,
+  setLanguage,
+} from "../db/queries/people.js";
 import type { TokenRecord } from "../db/queries/tokens.js";
 import {
   readWorkspaceSettings,
@@ -230,6 +236,8 @@ export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies):
       person: person === undefined ? null : restPerson(person),
       agent: caller?.token?.name ?? null,
       language: person === undefined ? null : ((await languageOf(database, person.id)) ?? null),
+      // The person's own arrangement of the front page's widgets (ADR-0059), or the manifests'.
+      home: person === undefined ? null : ((await homeOf(database, person.id)) ?? null),
       // The decisions waiting for the person across the projects they may see (ADR-0042),
       // counted for the pages to say beside My decisions; nobody has none to answer.
       decisions:
@@ -274,9 +282,20 @@ export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies):
     }
     const parsed = restMePatchSchema.safeParse(json);
     if (!parsed.success) {
-      return c.json(errorBody("request.invalid", "The language is not a language tag."), 400);
+      return c.json(
+        errorBody(
+          "request.invalid",
+          "The patch names no language tag and no arrangement of the front page's widgets that reads.",
+        ),
+        400,
+      );
     }
-    await setLanguage(database, person.id, parsed.data.language ?? undefined, clock.now());
+    if (parsed.data.language !== undefined) {
+      await setLanguage(database, person.id, parsed.data.language ?? undefined, clock.now());
+    }
+    if (parsed.data.home !== undefined) {
+      await setHome(database, person.id, parsed.data.home ?? undefined, clock.now());
+    }
     return c.json(await meOf({ person, token: undefined }));
   });
 

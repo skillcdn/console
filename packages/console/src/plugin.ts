@@ -74,6 +74,7 @@ export {
   CURRENT_PLUGIN_API,
   isPluginKey,
   type Localized,
+  legacyWidgetSize,
   localizedText,
   type ManifestParse,
   PLUGIN_API_MAJORS,
@@ -83,6 +84,8 @@ export {
   PLUGIN_PAGE_LEVELS,
   PLUGIN_SETTING_TYPES,
   PLUGIN_WIDGET_PLACES,
+  PLUGIN_WIDGET_SIZE_CELLS,
+  PLUGIN_WIDGET_SIZE_NAMES,
   PLUGIN_WIDGET_SIZES,
   type PluginBoard,
   type PluginBoardNeeds,
@@ -98,6 +101,7 @@ export {
   type PluginWidget,
   type PluginWidgetPlace,
   type PluginWidgetSize,
+  type PluginWidgetSizeName,
   parsePluginManifest,
   pluginManifestSchema,
   RESERVED_COMMAND_NAMES,
@@ -105,6 +109,7 @@ export {
   RESERVED_PLUGIN_KEYS,
   SETTING_KEY_PATTERN,
   TIME_OF_DAY,
+  widgetSizesOf,
 } from "./plugin/manifest.js";
 export {
   isPluginError,

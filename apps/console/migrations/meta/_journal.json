@@ -260,6 +260,13 @@
       "when": 1793966965726,
       "tag": "0036_board_translations",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1793968723491,
+      "tag": "0037_person_home",
+      "breakpoints": true
     }
   ]
 }

@@ -22,6 +22,7 @@ import {
   type RestDecisionInput,
   type RestDecisionPatch,
   type RestEvent,
+  type RestHomeWidget,
   type RestMyDecisions,
   type RestPluginDetail,
   type RestProject,
@@ -413,9 +414,15 @@ function ProjectsPage(props: {
   readonly making: boolean;
 }) {
   const words = useWords().projects;
+  const widgetWords = useWords().plugins.widgets;
   const { data, components, navigation, client, language } = props;
   const me = data.me;
-  /** The plugins' widgets at a place of this page (ADR-0054), for the person's roles. */
+  // The person arranges the front page's widgets (ADR-0059): which, how large, in what order.
+  const [arranging, setArranging] = useState(false);
+  const hasWidgets = data.plugins.some((plugin) => plugin.widgets.length > 0);
+  const arrange = (home: readonly RestHomeWidget[] | null) =>
+    void data.actions.updateMe({ home: home === null ? null : [...home] }).catch(() => undefined);
+  /** The plugins' widgets at a place of this page (ADR-0054, ADR-0059), as the person arranged them. */
   const widgets = (place: "home:top" | "home:bottom") =>
     me === undefined ? null : (
       <PluginWidgets
@@ -426,6 +433,9 @@ function ProjectsPage(props: {
         client={client}
         navigation={navigation}
         nameOf={(name) => pluginWordOf(name, language)}
+        arrangement={me.home ?? null}
+        editing={arranging}
+        onArrange={arrange}
       />
     );
   const { busy, error, act } = useAction();
@@ -438,11 +448,29 @@ function ProjectsPage(props: {
     <>
       <div className="sc-page-head">
         <h1 className="sc-page-title">{words.title}</h1>
-        {administrator && !making && (
-          <LinkButton href={PATHS.newProject} variant="primary">
-            {words.newProject}
-          </LinkButton>
-        )}
+        <div className="sc-page-actions">
+          {hasWidgets &&
+            me?.person !== null &&
+            (arranging ? (
+              <>
+                <Button size="sm" variant="ghost" onClick={() => arrange(null)}>
+                  {widgetWords.reset}
+                </Button>
+                <Button size="sm" onClick={() => setArranging(false)}>
+                  {widgetWords.done}
+                </Button>
+              </>
+            ) : (
+              <Button size="sm" variant="ghost" onClick={() => setArranging(true)}>
+                {widgetWords.edit}
+              </Button>
+            ))}
+          {administrator && !making && (
+            <LinkButton href={PATHS.newProject} variant="primary">
+              {words.newProject}
+            </LinkButton>
+          )}
+        </div>
       </div>
       {error !== undefined && <Callout tone="danger">{error}</Callout>}
       {widgets("home:top")}

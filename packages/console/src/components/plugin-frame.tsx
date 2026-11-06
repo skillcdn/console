@@ -1,6 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ConsoleClient, PluginClient } from "../client.js";
 import {
+  type AvailableWidget,
+  addable,
+  added,
+  arrangementShown,
+  defaultArrangement,
+  moved,
+  removed,
+  resized,
+  type ShownWidget,
+} from "../home-widgets.js";
+import { useWords } from "../i18n/index.js";
+import type { PluginWidgetSizeName } from "../plugin/bridge.js";
+import {
   type BridgeCall,
   type BridgeEventKind,
   type BridgeToFrame,
@@ -8,10 +21,10 @@ import {
   isBridgeToPage,
   PLUGIN_BRIDGE_VERSION,
 } from "../plugin/bridge.js";
-import { MAX_PLUGIN_WIDGET_HEIGHT } from "../plugin/limits.js";
 import type { Navigation } from "../router.js";
-import type { RestEvent, RestMe, RestPlugin, RestProject } from "../schemas.js";
+import type { RestEvent, RestHomeWidget, RestMe, RestPlugin, RestProject } from "../schemas.js";
 import { CONSOLE_TOKENS } from "../tokens.js";
+import { Button } from "./ui.js";
 
 // A plugin's page or widget on the console's page (ADR-0054, docs/specs/plugins.md, "Pages"):
 // a sandboxed frame whose document the console serves, and the console's side of the bridge.
@@ -29,6 +42,8 @@ export interface PluginFrameProps {
   /** The page shown, or the widget; one of the two. */
   readonly page?: string | undefined;
   readonly widget?: string | undefined;
+  /** The size the widget has (ADR-0059), told to the frame at the start and when it changes. */
+  readonly size?: PluginWidgetSizeName | undefined;
   /** The project the page is on, or nothing on the workspace. */
   readonly project?: RestProject | undefined;
   /** What follows the page in the address, handed to the frame. */
@@ -183,7 +198,7 @@ export function PluginFrame(props: PluginFrameProps) {
   const { plugin, page, widget, project, me, language, client, navigation, events } = props;
   const frame = useRef<HTMLIFrameElement>(null);
   const isWidget = widget !== undefined;
-  const [height, setHeight] = useState(isWidget ? 160 : 480);
+  const [height, setHeight] = useState(480);
   const subscribed = useRef<Set<BridgeEventKind>>(new Set());
   const ready = useRef(false);
   const lastPluginEvent = useRef(0);
@@ -228,6 +243,7 @@ export function PluginFrame(props: PluginFrameProps) {
             plugin: { key: plugin.key, version: plugin.version },
             ...(page === undefined ? {} : { page }),
             ...(widget === undefined ? {} : { widget }),
+            ...(props.size === undefined ? {} : { size: props.size }),
             project: project === undefined ? null : { key: project.key, name: project.name },
             person: {
               id: me.person?.id ?? "",
@@ -266,15 +282,10 @@ export function PluginFrame(props: PluginFrameProps) {
           }
           return;
         case "resize":
-          setHeight(
-            Math.max(
-              40,
-              Math.min(
-                Math.ceil(message.height),
-                isWidget ? MAX_PLUGIN_WIDGET_HEIGHT : MAX_PAGE_HEIGHT,
-              ),
-            ),
-          );
+          // A widget fills the cells its size gives it (ADR-0059); a page is as tall as it asks.
+          if (!isWidget) {
+            setHeight(Math.max(40, Math.min(Math.ceil(message.height), MAX_PAGE_HEIGHT)));
+          }
           return;
         case "title":
           if (!isWidget && typeof document !== "undefined") {
@@ -314,6 +325,14 @@ export function PluginFrame(props: PluginFrameProps) {
       post({ v: PLUGIN_BRIDGE_VERSION, t: "path", path });
     }
   }, [path, post]);
+
+  // The person gave the widget another size: the frame lays itself out for it.
+  const size = props.size;
+  useEffect(() => {
+    if (ready.current && size !== undefined) {
+      post({ v: PLUGIN_BRIDGE_VERSION, t: "size", size });
+    }
+  }, [size, post]);
 
   // The plugin's commands, as the project's feed tells of them: a frame that listens hears of each.
   useEffect(() => {
@@ -385,7 +404,7 @@ export function PluginFrame(props: PluginFrameProps) {
       // the policy's form-action 'none' keeps from going anywhere.
       sandbox="allow-scripts allow-forms"
       referrerPolicy="origin"
-      style={{ height: `${height}px` }}
+      style={isWidget ? undefined : { height: `${height}px` }}
     />
   );
 }
@@ -399,39 +418,153 @@ export interface PluginWidgetsProps {
   readonly navigation: Navigation;
   /** The widget's name in the person's language. */
   readonly nameOf: (name: Readonly<Record<string, string>>) => string;
+  /** The person's own arrangement (ADR-0059), or none for the manifests'. */
+  readonly arrangement?: readonly RestHomeWidget[] | null | undefined;
+  /** Whether the person is arranging: each widget shows its tools, and one may be added. */
+  readonly editing?: boolean | undefined;
+  /** Called with the whole arrangement as the person changes it. */
+  readonly onArrange?: ((arrangement: readonly RestHomeWidget[]) => void) | undefined;
 }
 
-/** The widgets at a place of the front page, in a grid of six columns: a third takes two, a half three, the full six. */
+/**
+ * The widgets at a place of the front page (ADR-0059), in a grid of six columns whose rows are
+ * of one height: each at the size it has, `small` 2×1, `medium` 3×1, `large` 3×2, `wide` 6×1,
+ * `full` 6×2; as the manifests place them, or as the person arranged them. While the person
+ * arranges, a widget carries its tools, is dragged before another, and one may be added.
+ */
 export function PluginWidgets(props: PluginWidgetsProps) {
-  const shown = props.plugins.flatMap((plugin) =>
-    plugin.widgets
-      .filter((widget) => widget.place === props.place)
-      .map((widget) => ({ plugin, widget })),
+  const words = useWords().plugins.widgets;
+  const editing = props.editing === true && props.onArrange !== undefined;
+  const whole = props.arrangement ?? defaultArrangement(props.plugins);
+  const shown = arrangementShown(props.plugins, props.arrangement).filter(
+    (widget) => widget.place === props.place,
   );
-  if (shown.length === 0) {
+  const [dragged, setDragged] = useState<RestHomeWidget | undefined>(undefined);
+  const arrange = (next: readonly RestHomeWidget[]) => props.onArrange?.(next);
+  const candidates = editing ? addable(props.plugins, whole) : [];
+  if (shown.length === 0 && !editing) {
     return null;
   }
+  const sizeWords = words.sizes;
+  const tools = (widget: ShownWidget, at: number) => (
+    <div className="sc-widget-tools">
+      {widget.sizes.length > 1 && (
+        <select
+          className="sc-input"
+          aria-label={words.size}
+          value={widget.size}
+          onChange={(event) =>
+            arrange(resized(whole, widget.entry, event.target.value as PluginWidgetSizeName))
+          }
+        >
+          {widget.sizes.map((size) => (
+            <option key={size} value={size}>
+              {sizeWords[size] ?? size}
+            </option>
+          ))}
+        </select>
+      )}
+      <Button
+        size="sm"
+        variant="ghost"
+        aria-label={words.moveUp}
+        title={words.moveUp}
+        disabled={at === 0}
+        onClick={() => arrange(moved(whole, widget.entry, shown[at - 1]?.entry))}
+      >
+        ↑
+      </Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        aria-label={words.moveDown}
+        title={words.moveDown}
+        disabled={at === shown.length - 1}
+        onClick={() => arrange(moved(whole, widget.entry, shown[at + 2]?.entry))}
+      >
+        ↓
+      </Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        aria-label={`${words.remove}: ${props.nameOf(widget.widget.name)}`}
+        title={words.remove}
+        onClick={() => arrange(removed(whole, widget.entry))}
+      >
+        ×
+      </Button>
+    </div>
+  );
   return (
     <section
       className={`sc-widgets ${props.place === "home:top" ? "sc-widgets-top" : "sc-widgets-bottom"}`}
     >
-      {shown.map(({ plugin, widget }) => (
+      {shown.map((widget, at) => (
         <article
-          key={`${plugin.key}:${widget.key}`}
-          className={`sc-widget sc-widget-${widget.size}`}
+          key={`${widget.plugin.key}:${widget.widget.key}`}
+          className={`sc-widget sc-widget-${widget.size}${editing ? " sc-widget-editing" : ""}`}
+          draggable={editing}
+          onDragStart={editing ? () => setDragged(widget.entry) : undefined}
+          onDragOver={editing ? (event) => event.preventDefault() : undefined}
+          onDrop={
+            editing
+              ? (event) => {
+                  event.preventDefault();
+                  if (dragged !== undefined) {
+                    arrange(moved(whole, dragged, widget.entry));
+                    setDragged(undefined);
+                  }
+                }
+              : undefined
+          }
         >
-          <h2 className="sc-widget-title">{props.nameOf(widget.name)}</h2>
+          <div className="sc-widget-head">
+            <h2 className="sc-widget-title">{props.nameOf(widget.widget.name)}</h2>
+            {editing && tools(widget, at)}
+          </div>
           <PluginFrame
-            plugin={plugin}
-            widget={widget.key}
+            plugin={widget.plugin}
+            widget={widget.widget.key}
+            size={widget.size}
             me={props.me}
             language={props.language}
             client={props.client}
             navigation={props.navigation}
-            title={props.nameOf(widget.name)}
+            title={props.nameOf(widget.widget.name)}
           />
         </article>
       ))}
+      {editing && (
+        <div className="sc-widget sc-widget-wide sc-widgets-edit">
+          {shown.length === 0 && <span className="sc-muted">{words.none}</span>}
+          {candidates.length > 0 && (
+            <select
+              className="sc-input"
+              aria-label={words.add}
+              value=""
+              onChange={(event) => {
+                const chosen = candidates.find(
+                  (candidate) =>
+                    `${candidate.plugin.key}:${candidate.widget.key}` === event.target.value,
+                );
+                if (chosen !== undefined) {
+                  arrange(added(whole, chosen, props.place));
+                }
+              }}
+            >
+              <option value="">{words.add}</option>
+              {candidates.map((candidate: AvailableWidget) => (
+                <option
+                  key={`${candidate.plugin.key}:${candidate.widget.key}`}
+                  value={`${candidate.plugin.key}:${candidate.widget.key}`}
+                >
+                  {props.nameOf(candidate.plugin.name)}: {props.nameOf(candidate.widget.name)}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
     </section>
   );
 }

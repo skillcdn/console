@@ -3,6 +3,7 @@ import type {
   PersonRole,
   PersonStatus,
   ProviderKey,
+  RestHomeWidget,
 } from "@skillcdn/console/api";
 import { and, asc, count, eq, inArray, isNull, notInArray, or, type SQL, sql } from "drizzle-orm";
 import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
@@ -702,6 +703,32 @@ export async function syncOrganization(
       reactivated: back.map((row) => row.login),
     };
   });
+}
+
+/** The person's own arrangement of the front page's widgets (ADR-0059), or nothing for the manifests' default. */
+export async function homeOf(
+  database: Database,
+  personId: string,
+): Promise<RestHomeWidget[] | undefined> {
+  const [row] = await drizzleOf(database)
+    .select({ home: people.home })
+    .from(people)
+    .where(eq(people.id, personId))
+    .limit(1);
+  return row?.home ?? undefined;
+}
+
+/** Keeps the person's arrangement of the front page's widgets, or none. */
+export async function setHome(
+  database: Database,
+  personId: string,
+  home: readonly RestHomeWidget[] | undefined,
+  now: Date,
+): Promise<void> {
+  await drizzleOf(database)
+    .update(people)
+    .set({ home: home === undefined ? null : [...home], updatedAt: now })
+    .where(eq(people.id, personId));
 }
 
 /** The language the person chose for the pages, or nothing. */

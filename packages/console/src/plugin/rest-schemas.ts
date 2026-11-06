@@ -21,6 +21,7 @@ import {
   PLUGIN_PAGE_LEVELS,
   PLUGIN_SETTING_TYPES,
   PLUGIN_WIDGET_PLACES,
+  PLUGIN_WIDGET_SIZE_NAMES,
   PLUGIN_WIDGET_SIZES,
   SETTING_KEY_PATTERN,
 } from "./manifest.js";
@@ -91,7 +92,11 @@ export const restPluginWidgetSchema = z.object({
   key: z.string(),
   name: localized,
   place: z.enum(PLUGIN_WIDGET_PLACES),
+  /** The size of before nearest to the one it starts at, for a reader of before. */
   size: z.enum(PLUGIN_WIDGET_SIZES),
+  /** The sizes the widget comes in (ADR-0059) and the one it starts at; answered from 0.4.4 and read as optional. */
+  sizes: z.optional(z.array(z.enum(PLUGIN_WIDGET_SIZE_NAMES))),
+  defaultSize: z.optional(z.enum(PLUGIN_WIDGET_SIZE_NAMES)),
 });
 export type RestPluginWidget = z.infer<typeof restPluginWidgetSchema>;
 

@@ -20,6 +20,7 @@ import {
   MAX_DOCUMENT_LENGTH,
   MAX_DOCUMENT_PATH_LENGTH,
   MAX_FILE_NAME_LENGTH,
+  MAX_HOME_WIDGETS,
   MAX_LANGUAGE_TAG_LENGTH,
   MAX_LINK_LABEL_LENGTH,
   MAX_LINKS,
@@ -43,6 +44,11 @@ import {
   MAX_WORKERS,
   MIN_OPTIONS,
 } from "./limits.js";
+import {
+  PLUGIN_KEY_PATTERN,
+  PLUGIN_WIDGET_PLACES,
+  PLUGIN_WIDGET_SIZE_NAMES,
+} from "./plugin/manifest.js";
 import { hasForbiddenCodePoint } from "./text.js";
 import {
   ARTIFACT_KINDS,
@@ -212,7 +218,32 @@ const languageTag = z
   );
 
 /** What `PATCH /api/v1/me` is sent: the language the person chose, or `null` to choose none. */
-export const restMePatchSchema = z.object({ language: z.nullable(languageTag) });
+/**
+ * One widget of a person's own front page (ADR-0059): which plugin's, which, how large, and
+ * above or below the projects (the manifest's place when left out), in the order kept.
+ */
+export const restHomeWidgetSchema = z.object({
+  plugin: z.string().check(z.regex(PLUGIN_KEY_PATTERN)),
+  widget: z.string().check(z.regex(PLUGIN_KEY_PATTERN)),
+  size: z.enum(PLUGIN_WIDGET_SIZE_NAMES),
+  place: z.optional(z.enum(PLUGIN_WIDGET_PLACES)),
+});
+export type RestHomeWidget = z.infer<typeof restHomeWidgetSchema>;
+
+/** What `PATCH /api/v1/me` is sent: the language, the front page's widgets, either or both; `null` lets the console choose. */
+export const restMePatchSchema = z
+  .object({
+    language: z.optional(z.nullable(languageTag)),
+    home: z.optional(
+      z.nullable(z.array(restHomeWidgetSchema).check(z.maxLength(MAX_HOME_WIDGETS))),
+    ),
+  })
+  .check(
+    z.refine(
+      (patch) => patch.language !== undefined || patch.home !== undefined,
+      "must name a language or the front page's widgets",
+    ),
+  );
 export type RestMePatch = z.infer<typeof restMePatchSchema>;
 
 /**
@@ -284,6 +315,11 @@ export const restMeSchema = z.object({
   agent: z.nullable(z.string()),
   /** The language the person chose for the pages (ADR-0012), or `null` for the browser's. */
   language: z.nullable(languageTag),
+  /**
+   * The person's own arrangement of the front page's widgets (ADR-0059), in order, or `null` for
+   * the manifests' default; answered from 0.4.4 and read as optional.
+   */
+  home: z.optional(z.nullable(z.array(restHomeWidgetSchema))),
   signIn: z.array(restProviderSchema),
   /**
    * The console's version and the range of command versions it takes, as npm spells one

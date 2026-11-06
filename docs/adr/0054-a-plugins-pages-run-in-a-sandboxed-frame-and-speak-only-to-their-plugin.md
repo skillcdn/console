@@ -1,6 +1,6 @@
 # ADR-0054: A plugin's pages run in a sandboxed frame and speak only to their plugin
 
-- Status: Accepted
+- Status: Accepted; point 4 is amended by [ADR-0059](0059-a-person-arranges-the-front-pages-widgets-from-the-sizes-each-comes-in.md), which gives a widget sizes of a family and the person the arrangement
 - Date: 2026-11-01
 
 ## Context

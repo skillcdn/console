@@ -23,6 +23,7 @@ import {
   type EndpointRequest,
   type EndpointResponse,
   type LinkTarget,
+  legacyWidgetSize,
   MAX_PLUGIN_EVENT_BYTES,
   PLUGIN_COMMAND_MS,
   PLUGIN_ENDPOINT_MS,
@@ -49,6 +50,7 @@ import {
   type RecordVersion,
   satisfiesRange,
   TIME_OF_DAY,
+  widgetSizesOf,
 } from "@skillcdn/console/plugin";
 import { configuresPlugins, personVisibleTo } from "../auth/policy.js";
 import type { Secrets } from "../auth/secrets.js";
@@ -613,12 +615,17 @@ export class Plugins {
         })),
       widgets: (manifest?.widgets ?? [])
         .filter((widget) => mayUse(widget.roles ?? null, held, declared))
-        .map((widget) => ({
-          key: widget.key,
-          name: widget.name,
-          place: widget.place,
-          size: widget.size,
-        })),
+        .map((widget) => {
+          const { sizes, defaultSize } = widgetSizesOf(widget);
+          return {
+            key: widget.key,
+            name: widget.name,
+            place: widget.place,
+            size: legacyWidgetSize(defaultSize),
+            sizes: [...sizes],
+            defaultSize,
+          };
+        }),
       board: board === undefined ? null : { key: board.key, name: board.name },
       boardNeeds: manifest?.board.needs ?? "none",
       capabilities: [...(manifest?.capabilities ?? [])],
