@@ -261,8 +261,10 @@ export interface DecisionAsk {
    * without comparing labels.
    */
   readonly options: readonly { readonly label: string; readonly key?: string }[];
-  /** Who is to answer: a person who may work in the project; the project's owners when left out. */
+  /** Who is to answer: a person who may work in the project; the administrator who enabled the plugin when left out. */
   readonly deciderId?: string;
+  /** Several to answer (ADR-0057), in place of `deciderId`: any of them may, and the first answer ends it; up to MAX_DECIDERS. */
+  readonly deciderIds?: readonly string[];
   readonly taskId?: string;
   /** The record the decision is for, by which the plugin maps the answer back. */
   readonly about: { readonly collection: string; readonly id: string };

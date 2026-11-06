@@ -634,10 +634,12 @@ export const decisions = pgTable(
     raisedById: uuid()
       .notNull()
       .references(() => people.id),
-    /** Who is to answer (ADR-0042): the raiser, unless another person of the project was named. */
+    /** The first of those to answer (ADR-0042): the raiser, unless others of the project were named; kept beside the list for the readers of before. */
     deciderId: uuid()
       .notNull()
       .references(() => people.id),
+    /** Everyone the decision is addressed to (ADR-0057), the first being `deciderId`: each finds it among their decisions, and the first answer ends it. */
+    deciderIds: uuid().array().notNull().default(sql`'{}'::uuid[]`),
     answeredById: uuid().references(() => people.id),
     /** The agent the answer came through (ADR-0056), or null when the person answered themselves. */
     answeredAgent: text(),
@@ -658,6 +660,7 @@ export const decisions = pgTable(
   (table) => [
     index("decisions_project_open_idx").on(table.projectId, table.answeredAt),
     index("decisions_decider_open_idx").on(table.deciderId, table.answeredAt),
+    index("decisions_deciders_idx").using("gin", table.deciderIds),
     index("decisions_task_idx").on(table.taskId),
     index("decisions_run_idx").on(table.runId),
   ],

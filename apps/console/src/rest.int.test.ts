@@ -147,9 +147,11 @@ async function createTask(cookie: string, body: unknown, at = IN): Promise<RestT
   return restTaskSchema.parse(await response.json());
 }
 
+// The newest event, read from the end: a project's feed grows past one page over these tests.
 const latestEventIn = async (cookie: string, at = IN) =>
-  restEventsSchema.parse(await (await get(cookie, `${at}/events?after=0`)).json()).items.at(-1)
-    ?.id ?? 0;
+  restEventsSchema
+    .parse(await (await get(cookie, `${at}/events?latest=true&limit=1`)).json())
+    .items.at(-1)?.id ?? 0;
 
 describe("who may ask", () => {
   it("answers nobody with a refusal, on every route", async () => {
@@ -3091,6 +3093,80 @@ describe("the schedule and the roadmap", () => {
         .parse(await seen.json())
         .tasks.map((item) => [item.project.key, item.task.title]),
     ).toContainEqual(["docs", "Mine in the docs"]);
+  });
+
+  it("address a decision to several people, each of whom finds it as their own, the first answer ending it (ADR-0057)", async () => {
+    // Carol is in, whatever ran before this, and works in the web project too, so that she may be named.
+    const carol = await h.signIn("carol");
+    const people = restPeopleSchema.parse(await (await get(alice, REST_ROUTES.people)).json());
+    const bobId = people.items.find((person) => person.login === "bob")?.id ?? "";
+    const carolId = people.items.find((person) => person.login === "carol")?.id ?? "";
+    const listed = await send(alice, "POST", `${IN}/members`, {
+      personId: carolId,
+      role: "member",
+    });
+    expect([201, 409]).toContain(listed.status);
+    const before = restMeSchema.parse(await (await get(carol, REST_ROUTES.me)).json()).decisions;
+    const raised = restDecisionSchema.parse(
+      await (
+        await send(alice, "POST", `${IN}/decisions`, {
+          question: "Either of you?",
+          options: [{ label: "Yes" }, { label: "No" }],
+          deciderIds: [bobId, carolId, bobId],
+        })
+      ).json(),
+    );
+    expect(raised.decider.id).toBe(bobId);
+    expect(raised.deciders?.map((person) => person.id)).toEqual([bobId, carolId]);
+    // Each finds it among their own and on their plate, with the count the pages say; the raiser
+    // among those asked of others.
+    for (const [cookie, id] of [
+      [bob, bobId],
+      [carol, carolId],
+    ] as const) {
+      const own = restMyDecisionsSchema.parse(
+        await (await get(cookie, `${REST_ROUTES.decisions}?open=true`)).json(),
+      );
+      expect(own.items.some((item) => item.decision.id === raised.id)).toBe(true);
+      expect(
+        own.items.every((item) => item.decision.deciders?.some((person) => person.id === id)),
+      ).toBe(true);
+      const work = restWorkSchema.parse(await (await get(cookie, REST_ROUTES.work)).json());
+      expect(work.decisions.some((item) => item.decision.id === raised.id)).toBe(true);
+    }
+    const after = restMeSchema.parse(await (await get(carol, REST_ROUTES.me)).json()).decisions;
+    expect(after?.waiting).toBe((before?.waiting ?? 0) + 1);
+    const asked = restMyDecisionsSchema.parse(
+      await (await get(alice, `${REST_ROUTES.decisions}?raised=true`)).json(),
+    );
+    expect(asked.items.some((item) => item.decision.id === raised.id)).toBe(true);
+    // A person who may not work here, or too many, is refused.
+    const stranger = await send(alice, "POST", `${IN}/decisions`, {
+      question: "Nobody?",
+      options: [{ label: "Yes" }, { label: "No" }],
+      deciderIds: [bobId, "0199c4d8-0000-7000-8000-0000000000de"],
+    });
+    expect(await errorOf(stranger)).toBe("decision.invalid_decider");
+    const crowd = await send(alice, "POST", `${IN}/decisions`, {
+      question: "Everyone?",
+      options: [{ label: "Yes" }, { label: "No" }],
+      deciderIds: Array.from(
+        { length: 11 },
+        (_, i) => `0199c4d8-0000-7000-8000-0000000000${(10 + i).toString(16)}`,
+      ),
+    });
+    expect(crowd.status).toBe(400);
+    // Carol answers: the decision is answered for everyone, and off Bob's plate.
+    const answered = await send(carol, "POST", `${IN}/decisions/${raised.id}/answer`, {
+      option: raised.options[0]?.id,
+    });
+    expect(answered.status, await answered.clone().text()).toBe(200);
+    const bobsWork = restWorkSchema.parse(await (await get(bob, REST_ROUTES.work)).json());
+    expect(bobsWork.decisions.some((item) => item.decision.id === raised.id)).toBe(false);
+    const again = await send(bob, "POST", `${IN}/decisions/${raised.id}/answer`, {
+      option: raised.options[1]?.id,
+    });
+    expect(await errorOf(again)).toBe("decision.answered");
   });
 });
 

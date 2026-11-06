@@ -21,7 +21,13 @@ import {
   formatVersion as versionText,
 } from "../compat.js";
 import { addDays, dayOf as dayOfDate, firstDayOfWeek, isDay, weekOf } from "../dates.js";
-import { DEFAULT_PAGE_LIMIT, LIST_LIMIT, MAX_OPTIONS, MIN_OPTIONS } from "../limits.js";
+import {
+  DEFAULT_PAGE_LIMIT,
+  LIST_LIMIT,
+  MAX_DECIDERS,
+  MAX_OPTIONS,
+  MIN_OPTIONS,
+} from "../limits.js";
 import { capabilityWords } from "../plugin/capabilities.js";
 import { PLUGIN_LIST_LIMIT } from "../plugin/limits.js";
 import { fillRules, RULES_PATH, RULES_TITLE } from "../rules.js";
@@ -77,6 +83,7 @@ import {
 } from "./credentials.js";
 import { type DirectorySettings, type DirectoryStore, THE_SENTENCE } from "./directory.js";
 import {
+  deciderLogins,
   formatAnswer,
   formatCategoryLine,
   formatComment,
@@ -2530,16 +2537,19 @@ const ask: Command = async (args, io) => {
     file: { type: "string" },
     run: { type: "string" },
     wait: { type: "string" },
-    to: { type: "string" },
+    to: { type: "string", multiple: true },
     attach: { type: "string", multiple: true },
   });
   const question = theOne(
     positionals,
     'Say the question: console ask "<question>" --option "<label>" --option "<label>"',
   );
-  const to = text(values, "to");
-  if (to === "none") {
-    throw misuse("Say whom the decision is for: --to <login|me>.");
+  const tos = texts(values, "to");
+  if (tos.includes("none")) {
+    throw misuse("Say whom the decision is for: --to <login|me>, given again for several.");
+  }
+  if (tos.length > MAX_DECIDERS) {
+    throw misuse(`Name up to ${MAX_DECIDERS} people with --to.`);
   }
   const options = texts(values, "option");
   if (options.length < MIN_OPTIONS || options.length > MAX_OPTIONS) {
@@ -2552,15 +2562,26 @@ const ask: Command = async (args, io) => {
   const session = await open(io, values);
   const project = await session.project();
   const runId = await currentRun(project, values);
-  // Whom the decision is for (ADR-0042): the person the agent works for, unless --to names another.
-  const deciderId = await personIdOf(session, to);
+  // Whom the decision is for (ADR-0042, ADR-0057): the person the agent works for, unless --to
+  // names others of the project, each once; several, and any of them may answer.
+  const deciderIds: string[] = [];
+  for (const to of tos) {
+    const id = await personIdOf(session, to);
+    if (typeof id === "string" && !deciderIds.includes(id)) {
+      deciderIds.push(id);
+    }
+  }
   const raised = await project.raiseDecision(
     {
       question,
       options: options.map((label) => ({ label })),
       runId,
       ...(body === undefined ? {} : { body }),
-      ...(typeof deciderId === "string" ? { deciderId } : {}),
+      ...(deciderIds.length === 0
+        ? {}
+        : deciderIds.length === 1
+          ? { deciderId: deciderIds[0] }
+          : { deciderId: deciderIds[0], deciderIds }),
     },
     files,
   );
@@ -2570,7 +2591,7 @@ const ask: Command = async (args, io) => {
   io.stdout(
     session.json
       ? `${JSON.stringify(raised, null, 2)}\n`
-      : `Decision ${raised.id} raised on run ${runId}${withFiles}; the run waits for ${raised.decider.login}.\ndecision id: ${raised.id}\n${formatOptions(raised)}\n`,
+      : `Decision ${raised.id} raised on run ${runId}${withFiles}; the run waits for ${deciderLogins(raised)}.\ndecision id: ${raised.id}\n${formatOptions(raised)}\n`,
   );
   return settle(io, session, project, raised, seconds, true);
 };

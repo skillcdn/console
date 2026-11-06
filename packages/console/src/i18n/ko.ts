@@ -515,6 +515,8 @@ export const ko: Messages = {
       noTask: "특정 작업 없음",
       decider: "결정할 사람",
       deciderPlaceholder: "지정하지 않으면 본인",
+      addDecider: "사람 추가",
+      decidersHint: "누구든 답할 수 있고, 첫 답으로 끝납니다.",
       me: "(나)",
       options: "선택지",
       option: (n) => `선택지 ${n}`,

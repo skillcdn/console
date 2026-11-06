@@ -1,6 +1,7 @@
 import { type ClipboardEvent, type FormEvent, useMemo, useState } from "react";
 import {
   MAX_BODY_LENGTH,
+  MAX_DECIDERS,
   MAX_FILES_PER_DECISION,
   MAX_OPTION_LABEL_LENGTH,
   MAX_OPTIONS,
@@ -39,6 +40,23 @@ export interface DecisionFormProps {
   readonly onCancel?: (() => void) | undefined;
 }
 
+/**
+ * What the form sends of whom the decision is for: nothing for the raiser alone, `deciderId` for
+ * one other person, `deciderIds` for several (ADR-0057), the first among them repeated as
+ * `deciderId` for a console of before.
+ */
+export function decidersInput(
+  deciders: readonly RestPerson[],
+  me: RestPerson | undefined,
+): Pick<RestDecisionInput, "deciderId" | "deciderIds"> {
+  const ids = deciders.map((person) => person.id);
+  if (ids.length === 0 || (ids.length === 1 && ids[0] === me?.id)) {
+    return {};
+  }
+  const first = ids[0] ?? "";
+  return ids.length === 1 ? { deciderId: first } : { deciderId: first, deciderIds: ids };
+}
+
 /** The people of the project found by the words typed, a page at a time, as a picker searches. */
 export function peopleSearch(people: readonly RestPerson[]): PickerSearch<RestPerson> {
   return async (query, page) => {
@@ -63,9 +81,20 @@ export function DecisionForm(props: DecisionFormProps) {
   const [body, setBody] = useState("");
   const [about, setAbout] = useState<RestTask | undefined>(undefined);
   const [options, setOptions] = useState<readonly string[]>(["", ""]);
-  const [decider, setDecider] = useState<RestPerson | undefined>(props.me);
+  // Whom it is for (ADR-0042, ADR-0057): the raiser, until others are named in their place.
+  const [deciders, setDeciders] = useState<readonly RestPerson[]>(
+    props.me === undefined ? [] : [props.me],
+  );
   const [files, setFiles] = useState<readonly File[]>([]);
-  const findDeciders = useMemo(() => peopleSearch(props.deciders ?? []), [props.deciders]);
+  const findDeciders = useMemo(
+    () =>
+      peopleSearch(
+        (props.deciders ?? []).filter(
+          (person) => !deciders.some((chosen) => chosen.id === person.id),
+        ),
+      ),
+    [props.deciders, deciders],
+  );
 
   const labels = options.map((option) => option.trim()).filter((option) => option.length > 0);
   const ready = question.trim().length > 0 && labels.length >= MIN_OPTIONS;
@@ -115,7 +144,7 @@ export function DecisionForm(props: DecisionFormProps) {
         body,
         options: labels.map((label) => ({ label })),
         taskId: props.taskId ?? about?.id ?? null,
-        ...(decider === undefined || decider.id === props.me?.id ? {} : { deciderId: decider.id }),
+        ...decidersInput(deciders, props.me),
       },
       files,
     );
@@ -195,24 +224,51 @@ export function DecisionForm(props: DecisionFormProps) {
         </div>
       )}
       {props.deciders !== undefined && (
-        <div className="sc-field">
-          <span className="sc-field-label">{form.decider}</span>
-          <Picker
-            value={decider}
-            search={findDeciders}
-            keyOf={(person) => person.id}
-            render={(person) => (
-              <>
-                <PersonChip person={person} size="sm" />
+        <fieldset className="sc-field sc-workers-field">
+          <legend className="sc-field-label">{form.decider}</legend>
+          <div className="sc-chips">
+            {deciders.map((person) => (
+              <span key={person.id} className="sc-chip">
+                <PersonChip person={person} />
                 {person.id === props.me?.id && <span className="sc-muted"> {form.me}</span>}
-              </>
+                <button
+                  type="button"
+                  className="sc-chip-remove"
+                  aria-label={`${words.common.remove}: ${personName(person)}`}
+                  disabled={props.busy}
+                  onClick={() =>
+                    setDeciders((current) => current.filter((chosen) => chosen.id !== person.id))
+                  }
+                >
+                  <span aria-hidden="true">&times;</span>
+                </button>
+              </span>
+            ))}
+            {deciders.length === 0 && <span className="sc-muted">{form.deciderPlaceholder}</span>}
+            {deciders.length < MAX_DECIDERS && (
+              <Picker
+                value={undefined}
+                search={findDeciders}
+                keyOf={(person) => person.id}
+                render={(person) => (
+                  <>
+                    <PersonChip person={person} size="sm" />
+                    {person.id === props.me?.id && <span className="sc-muted"> {form.me}</span>}
+                  </>
+                )}
+                label={form.addDecider}
+                placeholder={form.addDecider}
+                disabled={props.busy}
+                onChange={(person) => {
+                  if (person !== undefined) {
+                    setDeciders((current) => [...current, person]);
+                  }
+                }}
+              />
             )}
-            label={form.decider}
-            placeholder={form.deciderPlaceholder}
-            disabled={props.busy}
-            onChange={(person) => setDecider(person ?? props.me)}
-          />
-        </div>
+          </div>
+          {deciders.length > 1 && <p className="sc-field-hint">{form.decidersHint}</p>}
+        </fieldset>
       )}
       <fieldset className="sc-field sc-options">
         <legend className="sc-field-label">{form.options}</legend>

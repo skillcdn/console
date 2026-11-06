@@ -7,6 +7,7 @@ import {
   MAX_CATEGORY_KEY_LENGTH,
   MAX_CATEGORY_NAME_LENGTH,
   MAX_COMMENTS_PER_TASK,
+  MAX_DECIDERS,
   MAX_DECISIONS_PER_PROJECT,
   MAX_DOCUMENT_LENGTH,
   MAX_DOCUMENT_PATH_LENGTH,
@@ -452,25 +453,26 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   },
   ask: {
     usage:
-      'ask "<question>" --option "<label>" --option "<label>" [...] [--body <markdown>|--file <path>] [--attach <path>]... [--to <login|me>] [--wait <seconds>] [--run <id>]',
+      'ask "<question>" --option "<label>" --option "<label>" [...] [--body <markdown>|--file <path>] [--attach <path>]... [--to <login|me>]... [--wait <seconds>] [--run <id>]',
     overview:
-      'ask "<question>" --option "<label>" --option "<label>" [...] [--body <markdown>|--file <path>] [--attach <path>]... [--to <login|me>] [--wait <seconds>]',
+      'ask "<question>" --option "<label>" --option "<label>" [...] [--body <markdown>|--file <path>] [--attach <path>]... [--to <login|me>]... [--wait <seconds>]',
     synopsis:
       "Raises a decision a person must make, with options, and waits a while for the answer.",
-    about: `Raises a decision a person must make: the question, the options to choose from, and what they need to know. --attach puts a file on the decision, in the one request: a picture of what is to be chosen between, a screenshot of what was made; a picture the body names as ![words](its name) is shown there, the rest after the body, and the person reads each back with \`console file <id>\` (ADR-0055). It is for the person you work for unless --to names another of the project, who then finds it among their decisions (ADR-0042); anyone of the project may still answer. The run waits for the answer. The command waits 60 seconds for it unless --wait says otherwise, and exits with 3 if it is still to come: keep waiting with \`console decision <id> --wait 100\`, within what your shell gives one command. The decision's id is printed as soon as it is raised. The person chooses one of the options, or answers in their own words: the answer then names one more option, their words, marked own; act on it as given. ${ON_THE_RUN}`,
+    about: `Raises a decision a person must make: the question, the options to choose from, and what they need to know. --attach puts a file on the decision, in the one request: a picture of what is to be chosen between, a screenshot of what was made; a picture the body names as ![words](its name) is shown there, the rest after the body, and the person reads each back with \`console file <id>\` (ADR-0055). It is for the person you work for unless --to names another of the project, who then finds it among their decisions (ADR-0042); --to given again names several, each of whom finds it among theirs, and the first answer ends it (ADR-0057); anyone of the project may still answer. The run waits for the answer. The command waits 60 seconds for it unless --wait says otherwise, and exits with 3 if it is still to come: keep waiting with \`console decision <id> --wait 100\`, within what your shell gives one command. The decision's id is printed as soon as it is raised. The person chooses one of the options, or answers in their own words: the answer then names one more option, their words, marked own; act on it as given. ${ON_THE_RUN}`,
     limits: [
       `question: one line, up to ${MAX_QUESTION_LENGTH} characters`,
       `options: ${MIN_OPTIONS} to ${MAX_OPTIONS}, each one line up to ${MAX_OPTION_LABEL_LENGTH} characters`,
       `body: ${MARKDOWN}`,
       `attach: a file: up to ${MAX_FILE_BYTES} bytes, not empty; called by its name, without the path; a picture is placed in the body as ![words](its name)`,
       `at most ${MAX_FILES_PER_DECISION} files on one decision, together up to ${MAX_FILE_BYTES} bytes`,
-      "to: a login of the project, or me",
+      `to: a login of the project, or me; up to ${MAX_DECIDERS} of them`,
       `at most ${MAX_DECISIONS_PER_PROJECT} decisions in one project`,
     ],
     refusals: [
       ...RUN_CHOICE,
       "decision.invalid_run: the run is not yours, or is over",
-      "decision.invalid_decider: the person named may not work in the project",
+      "decision.invalid_decider: a person named may not work in the project",
+      "decision.too_many_deciders: more people named than one decision takes",
       "decision.too_many: the project holds as many decisions as one may",
       "decision.too_many_files: more files than one decision carries",
       "request.too_large: a file, or the files together, over the bound",

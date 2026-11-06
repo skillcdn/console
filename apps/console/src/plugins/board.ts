@@ -1,6 +1,7 @@
 import {
   isDocumentPath,
   MAX_COMMENTS_PER_TASK,
+  MAX_DECIDERS,
   MAX_DOCUMENTS_PER_PROJECT,
   MAX_FILES_PER_COMMENT,
   MAX_OPTION_LABEL_LENGTH,
@@ -88,6 +89,8 @@ const decisionAskSchema = z.object({
       return new Set(keys).size === keys.length;
     }, "each key once"),
   deciderId: z.uuid().optional(),
+  // Several to answer (ADR-0057), any one of whom may; the first answer ends the decision.
+  deciderIds: z.array(z.uuid()).min(1).max(MAX_DECIDERS).optional(),
   taskId: z.uuid().optional(),
   about: z.object({ collection: z.string().min(1).max(32), id: z.uuid() }),
 });
@@ -482,6 +485,7 @@ export class PluginBoard {
               options: ask.data.options,
               taskId: ask.data.taskId,
               deciderId: ask.data.deciderId,
+              deciderIds: ask.data.deciderIds,
             },
             now: this.options.clock.now(),
           });

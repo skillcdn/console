@@ -447,11 +447,24 @@ describe("decisions", () => {
     const ownCard = renderToStaticMarkup(<DecisionCard decision={decision()} />);
     expect(ownCard).not.toContain("sc-decision-arrow");
     expect(ownCard).toContain("Waiting for Alice Example.");
+    // Several people (ADR-0057): each shown, each waited for.
+    const carol: RestPerson = {
+      ...bob,
+      id: "0199c4d8-0000-7000-8000-000000000003",
+      login: "carol",
+    };
+    const forBoth = renderToStaticMarkup(
+      <DecisionCard decision={decision({ decider: bob, deciders: [bob, carol] })} />,
+    );
+    expect(forBoth).toContain("asked by Alice Example, for bob, carol");
+    expect(forBoth).toContain("Waiting for bob, carol.");
+    expect(forBoth.match(/sc-person-login/g)?.length).toBeGreaterThanOrEqual(3);
     const form = renderToStaticMarkup(
       <DecisionForm deciders={[alice, bob]} me={alice} onSubmit={() => undefined} />,
     );
     expect(form).toContain("Who decides");
     expect(form).toContain("(you)");
+    expect(form).toContain("Add a person");
     expect(renderToStaticMarkup(<DecisionForm onSubmit={() => undefined} />)).not.toContain(
       "Who decides",
     );

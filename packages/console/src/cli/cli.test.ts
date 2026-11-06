@@ -1263,6 +1263,55 @@ describe("the console command", () => {
       deciderId: BOB.id,
     });
     expect(a.out()).toContain(`the run waits for ${BOB.login}.`);
+    // Several people (ADR-0057): --to given again, the ids sent together, the first of them as before.
+    const CAROL = {
+      ...BOB,
+      id: "0199c4d8-0000-7000-8000-000000000003",
+      login: "carol",
+      name: "Carol",
+    };
+    const several = fakeConsole({
+      [OPEN_RUNS]: { body: { more: false, items: [RUN] } },
+      "GET /api/v1/people?login=bob": { body: { items: [BOB], listed: [], organization: null } },
+      "GET /api/v1/people?login=carol": {
+        body: { items: [CAROL], listed: [], organization: null },
+      },
+      [`POST ${IN}/decisions`]: {
+        status: 201,
+        body: { ...DECISION, decider: BOB, deciders: [BOB, CAROL] },
+      },
+      [`GET ${IN}/decisions/${DECISION.id}?wait=50`]: {
+        body: { ...ANSWERED, decider: BOB, deciders: [BOB, CAROL] },
+      },
+    });
+    const both = harness({ fetch: several.fetch, env: SIGNED_IN });
+    expect(
+      await runCli(
+        [
+          "ask",
+          "Which?",
+          "--option",
+          "a",
+          "--option",
+          "b",
+          "--to",
+          "bob",
+          "--to",
+          "carol",
+          "--to",
+          "bob",
+        ],
+        both.io,
+      ),
+    ).toBe(EXIT.ok);
+    expect(several.calls.find((call) => call.key === `POST ${IN}/decisions`)?.body).toEqual({
+      question: "Which?",
+      options: [{ label: "a" }, { label: "b" }],
+      runId: RUN.id,
+      deciderId: BOB.id,
+      deciderIds: [BOB.id, CAROL.id],
+    });
+    expect(both.out()).toContain("the run waits for bob, carol.");
     const nobody = harness({ fetch: addressed.fetch, env: SIGNED_IN });
     expect(
       await runCli(["ask", "Which?", "--option", "a", "--option", "b", "--to", "none"], nobody.io),

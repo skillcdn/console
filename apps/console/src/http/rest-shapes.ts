@@ -166,6 +166,7 @@ export function restDecision(decision: DecisionRecord): RestDecision {
     taskNumber: decision.taskNumber ?? null,
     raisedBy: restPerson(decision.raisedBy),
     decider: restPerson(decision.decider),
+    deciders: decision.deciders.map(restPerson),
     run: decision.run === undefined ? null : { id: decision.run.id, agent: decision.run.agent },
     plugin: decision.plugin ?? null,
     answer:

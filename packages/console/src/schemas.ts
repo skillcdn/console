@@ -16,6 +16,7 @@ import {
   MAX_BODY_LENGTH,
   MAX_CATEGORY_KEY_LENGTH,
   MAX_CATEGORY_NAME_LENGTH,
+  MAX_DECIDERS,
   MAX_DOCUMENT_LENGTH,
   MAX_DOCUMENT_PATH_LENGTH,
   MAX_FILE_NAME_LENGTH,
@@ -728,8 +729,15 @@ export const restDecisionSchema = z.object({
   /** The task's number, when there is a task, or `null`. */
   taskNumber: z.nullable(z.int()),
   raisedBy: restPersonSchema,
-  /** Who is to answer (ADR-0042): the raiser, unless another person of the project was named. */
+  /** The first of those to answer (ADR-0042): the raiser, unless others of the project were named. */
   decider: restPersonSchema,
+  /**
+   * Everyone the decision is addressed to (ADR-0057), `decider` first: each finds it among their
+   * decisions, any of them may answer, and the first answer ends it. Answered from 0.4.4 and read
+   * as optional, so that a console built on this package still reads an older console's
+   * decisions, where it is `[decider]`.
+   */
+  deciders: z.optional(z.array(restPersonSchema)),
   /** The run that raised it, as the agent asked, or `null` when a person did. */
   run: z.nullable(z.object({ id: uuid, agent: z.string() })),
   /** The plugin that raised it, by key (ADR-0052), or `null`; left out by a console older than the plugins. */
@@ -848,6 +856,11 @@ export const restDecisionInputSchema = z.object({
   runId: z.optional(z.nullable(uuid)),
   /** Who is to answer (ADR-0042): a person who may work in the project; the asker when left out. */
   deciderId: z.optional(uuid),
+  /**
+   * Several to answer (ADR-0057), in place of `deciderId`: each a person who may work in the
+   * project, up to `MAX_DECIDERS`; any of them may answer, and the first answer ends the decision.
+   */
+  deciderIds: z.optional(z.array(uuid).check(z.minLength(1), z.maxLength(MAX_DECIDERS))),
 });
 export type RestDecisionInput = z.infer<typeof restDecisionInputSchema>;
 

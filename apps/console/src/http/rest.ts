@@ -2396,6 +2396,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
           taskId: fromRun ? undefined : input.taskId,
           runId: fromRun ? (input.runId ?? undefined) : undefined,
           deciderId: input.deciderId,
+          deciderIds: input.deciderIds,
           files,
         },
         now: clock.now(),

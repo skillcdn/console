@@ -437,9 +437,23 @@ export function formatPersonWork(person: RestPerson, work: RestPersonWork): stri
 const through = (agent: string | null | undefined): string =>
   agent === null || agent === undefined ? "" : ` through ${agent}`;
 
-/** Whom a decision is for, where that is not the one who asked (ADR-0042). */
+/** Everyone a decision is addressed to (ADR-0057): `deciders` where the console answers it, else the one decider. */
+const decidersOf = (decision: RestDecision): readonly RestPerson[] =>
+  decision.deciders !== undefined && decision.deciders.length > 0
+    ? decision.deciders
+    : [decision.decider];
+
+/** The logins of everyone a decision is addressed to, with commas between. */
+export const deciderLogins = (decision: RestDecision): string =>
+  decidersOf(decision)
+    .map((person) => person.login)
+    .join(", ");
+
+/** Whom a decision is for, where that is not the one who asked alone (ADR-0042, ADR-0057). */
 const addressed = (decision: RestDecision): string =>
-  decision.decider.id === decision.raisedBy.id ? "" : `, for ${decision.decider.login}`;
+  decidersOf(decision).every((person) => person.id === decision.raisedBy.id)
+    ? ""
+    : `, for ${deciderLogins(decision)}`;
 
 export function formatDecisionLine(decision: RestDecision): string {
   const state = decision.answer === null ? "waiting" : `answered ${decision.answer.option}`;
@@ -460,7 +474,7 @@ export function formatOptions(decision: RestDecision): string {
 export function formatAnswer(decision: RestDecision): string {
   const { answer } = decision;
   if (answer === null) {
-    return `waits for ${decision.decider.login}.`;
+    return `waits for ${deciderLogins(decision)}.`;
   }
   const chosen = decision.options.find((option) => option.id === answer.option);
   const lines = [

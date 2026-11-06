@@ -8,6 +8,7 @@ import {
   type RestDecision,
   type RestDecisionFile,
   type RestDecisionPatch,
+  type RestPerson,
   type RestTask,
 } from "../api.js";
 import { useWords } from "../i18n/index.js";
@@ -50,13 +51,27 @@ function answeredWord(words: ReturnType<typeof useWords>, agent: string | null |
     : words.decisions.answeredThrough(agentLabel(agent));
 }
 
+/** Everyone a decision is addressed to (ADR-0057): `deciders` where the console answers it, else the one decider. */
+export function decidersOf(decision: RestDecision): readonly RestPerson[] {
+  return decision.deciders !== undefined && decision.deciders.length > 0
+    ? decision.deciders
+    : [decision.decider];
+}
+
+/** The names of everyone a decision is addressed to, one after another. */
+export function deciderNames(decision: RestDecision): string {
+  return decidersOf(decision).map(personName).join(", ");
+}
+
 /**
  * Who asked, and when: the person, through their agent when a run asked; and whom the decision
- * is for, where that is someone else (ADR-0042).
+ * is for, where that is not the asker alone (ADR-0042, ADR-0057).
  */
 function Asked(props: { readonly decision: RestDecision; readonly day?: boolean }) {
   const words = useWords();
   const { decision } = props;
+  const deciders = decidersOf(decision);
+  const addressed = deciders.some((person) => person.id !== decision.raisedBy.id);
   return (
     <>
       <PersonChip person={decision.raisedBy} />{" "}
@@ -64,18 +79,17 @@ function Asked(props: { readonly decision: RestDecision; readonly day?: boolean 
         ? words.decisions.asked
         : words.decisions.askedThrough(agentLabel(decision.run.agent))}{" "}
       <Time iso={decision.createdAt} precision={props.day === true ? "day" : "minute"} />
-      {decision.decider.id !== decision.raisedBy.id && (
+      {addressed && (
         <span className="sc-decision-for">
           <span className="sc-visually-hidden">
-            {words.decisions.peopleLabel(
-              personName(decision.raisedBy),
-              personName(decision.decider),
-            )}
+            {words.decisions.peopleLabel(personName(decision.raisedBy), deciderNames(decision))}
           </span>
           <span className="sc-decision-arrow" aria-hidden="true">
             →
           </span>{" "}
-          <PersonChip person={decision.decider} />
+          {deciders.map((person) => (
+            <PersonChip key={person.id} person={person} />
+          ))}
         </span>
       )}
     </>
@@ -393,9 +407,7 @@ export function DecisionCard(props: DecisionCardProps) {
           </p>
         </div>
       ) : props.onAnswer === undefined ? (
-        <p className="sc-decision-waiting">
-          {words.decisions.waitingFor(personName(decision.decider))}
-        </p>
+        <p className="sc-decision-waiting">{words.decisions.waitingFor(deciderNames(decision))}</p>
       ) : (
         <AnswerForm decision={decision} onAnswer={props.onAnswer} busy={props.busy} />
       )}

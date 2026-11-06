@@ -574,6 +574,8 @@ export const en = {
       noTask: "No task in particular",
       decider: "Who decides",
       deciderPlaceholder: "You, unless you name someone",
+      addDecider: "Add a person",
+      decidersHint: "Any of them may answer; the first answer ends it.",
       me: "(you)",
       options: "Options",
       option: (n: number) => `Option ${n}`,

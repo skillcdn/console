@@ -1,12 +1,13 @@
 import {
+  MAX_DECIDERS,
   MAX_DECISIONS_PER_PROJECT,
   MAX_FILES_PER_DECISION,
   type RestDecisionOption,
 } from "@skillcdn/console/api";
-import { and, asc, count, desc, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
-import { decisionFiles, decisions, pluginLinks, projects, runs, tasks } from "../schema.js";
+import { decisionFiles, decisions, people, pluginLinks, projects, runs, tasks } from "../schema.js";
 import { recordLinks } from "./documents.js";
 import { type Actor, recordEvent, type Scope } from "./events.js";
 import {
@@ -44,8 +45,10 @@ export interface DecisionRecord {
   readonly body: string;
   readonly options: readonly RestDecisionOption[];
   readonly raisedBy: PersonRecord;
-  /** Who is to answer (ADR-0042): the raiser, unless another person of the project was named. */
+  /** The first of those to answer (ADR-0042): the raiser, unless others of the project were named. */
   readonly decider: PersonRecord;
+  /** Everyone the decision is addressed to (ADR-0057), `decider` first: any of them may answer, and the first answer ends it. */
+  readonly deciders: readonly PersonRecord[];
   /** The run that raised it, when an agent asked. */
   readonly run: { readonly id: string; readonly agent: string } | undefined;
   /** The plugin that raised it, by key (ADR-0052), or none. */
@@ -83,6 +86,7 @@ export class DecisionError extends DomainError {
       | "decision.no_such_option"
       | "decision.invalid_run"
       | "decision.invalid_decider"
+      | "decision.too_many_deciders"
       | "decision.too_many"
       | "decision.too_many_files",
   ) {
@@ -97,6 +101,7 @@ const DECISION_ERROR_WORDS = {
   "decision.no_such_option": "the option is not one of the decision's",
   "decision.invalid_run": "the run is not the asker's, or is over",
   "decision.invalid_decider": "the person named to decide may not work in the project",
+  "decision.too_many_deciders": "more people were named to decide than one decision takes",
   "decision.too_many": "the project holds as many decisions as one may",
   "decision.too_many_files": "the decision carries more files than one may",
 } as const;
@@ -118,6 +123,24 @@ const decisionColumns = {
   updatedAt: decisions.updatedAt,
   raisedBy: personColumns(raisers),
   decider: personColumns(deciders),
+  // Everyone the decision is addressed to (ADR-0057), in the order they were named, as one JSON
+  // column, so that a listing reads one row per decision.
+  deciders: sql<
+    readonly {
+      readonly id: string;
+      readonly workspaceId: string;
+      readonly host: string;
+      readonly hostAccountId: string;
+      readonly login: string;
+      readonly name: string | null;
+      readonly avatarUrl: string | null;
+      readonly role: string;
+      readonly status: string;
+      readonly source: string;
+      readonly deactivatedAt: string | null;
+      readonly managerId: string | null;
+    }[]
+  >`(select coalesce(json_agg(json_build_object('id', ${people.id}, 'workspaceId', ${people.workspaceId}, 'host', ${people.host}, 'hostAccountId', ${people.hostAccountId}, 'login', ${people.login}, 'name', ${people.name}, 'avatarUrl', ${people.avatarUrl}, 'role', ${people.role}, 'status', ${people.status}, 'source', ${people.source}, 'deactivatedAt', ${people.deactivatedAt}, 'managerId', ${people.managerId}) order by named.ordinality), '[]'::json) from unnest(${decisions.deciderIds}) with ordinality as named(id, ordinality) join ${people} on ${people.id} = named.id)`,
   answeredBy: personColumns(answerers),
   answeredAgent: decisions.answeredAgent,
   outcomeBy: personColumns(outcomeWriters),
@@ -178,6 +201,12 @@ function toDecision(row: DecisionRow): DecisionRecord {
     options: row.options,
     raisedBy: toPerson(row.raisedBy),
     decider: toPerson(row.decider),
+    deciders: row.deciders.map((named) =>
+      toPerson({
+        ...named,
+        deactivatedAt: named.deactivatedAt === null ? null : new Date(named.deactivatedAt),
+      }),
+    ),
     run:
       row.runId !== null && row.runAgent !== null
         ? { id: row.runId, agent: row.runAgent }
@@ -236,6 +265,8 @@ export async function raiseDecision(
       readonly runId?: string | undefined;
       /** Who is to answer: a person who may work in the project; the actor when left out. */
       readonly deciderId?: string | undefined;
+      /** Everyone to answer (ADR-0057), in place of `deciderId`: each a person who may work in the project, up to MAX_DECIDERS; the first answer ends the decision. */
+      readonly deciderIds?: readonly string[] | undefined;
       /** The files put on it (ADR-0055), their bytes kept already; none when left out. */
       readonly files?: readonly FileRecord[] | undefined;
     };
@@ -263,17 +294,27 @@ export async function raiseDecision(
     if ((held?.count ?? 0) >= (input.limit ?? MAX_DECISIONS_PER_PROJECT)) {
       throw new DecisionError("decision.too_many");
     }
-    const deciderId = decision.deciderId ?? actor.id;
-    if (deciderId !== actor.id) {
-      const [able] = await tx
+    // Whom it is for (ADR-0042, ADR-0057): the people named, each once in the order named, else
+    // the one person named, else the actor; everyone but the actor must be able to work here.
+    const named =
+      decision.deciderIds !== undefined && decision.deciderIds.length > 0
+        ? decision.deciderIds
+        : [decision.deciderId ?? actor.id];
+    const deciderIds = [...new Set(named)];
+    if (deciderIds.length > MAX_DECIDERS) {
+      throw new DecisionError("decision.too_many_deciders");
+    }
+    const others = deciderIds.filter((id) => id !== actor.id);
+    if (others.length > 0) {
+      const able = await tx
         .select({ id: deciders.id })
         .from(deciders)
-        .where(and(eq(deciders.id, deciderId), mayWorkIn(scope.projectId, deciders.id)))
-        .limit(1);
-      if (able === undefined) {
+        .where(and(inArray(deciders.id, others), mayWorkIn(scope.projectId, deciders.id)));
+      if (able.length !== others.length) {
         throw new DecisionError("decision.invalid_decider");
       }
     }
+    const deciderId = deciderIds[0] ?? actor.id;
     let runId: string | null = null;
     let agent: string | undefined;
     let taskOfRun: string | undefined;
@@ -339,6 +380,7 @@ export async function raiseDecision(
         options,
         raisedById: actor.id,
         deciderId,
+        deciderIds,
         createdAt: now,
         updatedAt: now,
       })
@@ -628,6 +670,10 @@ export async function findDecision(
   return row === undefined ? undefined : toDecision(row);
 }
 
+/** On a `decisions` row: whether the decision is addressed to the person, alone or among others (ADR-0057). */
+const addressedTo = (person: PersonRecord) =>
+  sql`(${person.id}::uuid = any(${decisions.deciderIds}))`;
+
 /**
  * The decisions that wait for `person`'s answer (ADR-0042) across the projects they may see, the
  * oldest first: what has waited longest comes first on their own page of what is theirs to do.
@@ -643,7 +689,7 @@ export async function listWaitingDecisionsFor(
     .where(
       and(
         eq(decisions.workspaceId, workspaceId),
-        eq(decisions.deciderId, person.id),
+        addressedTo(person),
         isNull(decisions.answeredAt),
         visibleTo(person),
       ),
@@ -669,7 +715,7 @@ export async function countWaitingDecisionsFor(
     .where(
       and(
         eq(decisions.workspaceId, workspaceId),
-        eq(decisions.deciderId, person.id),
+        addressedTo(person),
         isNull(decisions.answeredAt),
         visibleTo(person),
       ),
@@ -701,8 +747,8 @@ export async function listDecisionsFor(
       and(
         eq(decisions.workspaceId, workspaceId),
         filter.raised === true
-          ? and(eq(decisions.raisedById, person.id), ne(decisions.deciderId, person.id))
-          : eq(decisions.deciderId, person.id),
+          ? and(eq(decisions.raisedById, person.id), sql`not ${addressedTo(person)}`)
+          : addressedTo(person),
         filter.open === true ? isNull(decisions.answeredAt) : undefined,
         visibleTo(person),
       ),
