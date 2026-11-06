@@ -14,10 +14,12 @@ import { createTestDatabase, DEV_DATABASE_URL } from "../db/testing.js";
 import type { AppEnv } from "../http/request-context.js";
 import { startServer } from "../http/server.js";
 import { discoverPlugins } from "../plugins/discovery.js";
+import { PluginDispatcher } from "../plugins/dispatcher.js";
 import { PluginHost } from "../plugins/host.js";
 import { allowedReadRoots } from "../plugins/paths.js";
 import { RecordStore } from "../plugins/records.js";
 import { Plugins } from "../plugins/registry.js";
+import { PluginScheduler } from "../plugins/scheduler.js";
 import { createFixtureProvider, type FixtureProvider } from "./fixture-provider.js";
 import { createHarness, type Harness } from "./harness.js";
 import {
@@ -31,7 +33,8 @@ import {
 
 // Test support: the console as a real browser meets it, listening on this machine with the
 // default UI, the example plugin enabled, two of the fixtures installed and not enabled, the
-// built plugins of other checkouts it was given the same way, and the fixture's people, who
+// built plugins of other checkouts it was given the same way, the plugins' hooks and jobs
+// running in this process as WORKER_IN_PROCESS runs them, and the fixture's people, who
 // sign in from the browser. For what only a browser enforces of a plugin's frame
 // (docs/specs/plugins.md, "The frame"), and for a person to look at the plugins' pages, the
 // settings pages included: the fixtures ask capabilities, a board project, secrets and roles,
@@ -45,6 +48,14 @@ export const HELLO_PLUGIN_NAME = "console-plugin-hello";
 
 /** The administrator among the fixture's people; the git host's other two are members. */
 export const BROWSER_ADMIN = "alice";
+
+/**
+ * How often the plugins' hooks are dispatched and their jobs looked at here: sooner than a
+ * deployment does (roles/api.ts), since nothing else runs on this machine and a plugin's author
+ * is waiting to see the round close: the decision answered, the hook run, the record moved.
+ */
+export const PREVIEW_DISPATCH_INTERVAL_MS = 2_000;
+export const PREVIEW_SCHEDULE_INTERVAL_MS = 15_000;
 
 /** Where a browser begins signing in as one of the fixture's people. */
 const FIXTURE_SIGN_IN = "/__fixture/sign-in";
@@ -113,7 +124,10 @@ export async function startBrowserConsole(options: BrowserConsoleOptions): Promi
     ...(options.plugins ?? []),
   ]);
   const logger = pino({ level: "warn" }, { write: () => {} });
-  const holder: { current: Plugins | undefined } = { current: undefined };
+  const holder: {
+    current: Plugins | undefined;
+    streams: { dispatcher: PluginDispatcher; scheduler: PluginScheduler } | undefined;
+  } = { current: undefined, streams: undefined };
   const host = new PluginHost({
     entry: HOST_ENTRY,
     allowRead: await allowedReadRoots(root),
@@ -150,6 +164,25 @@ export async function startBrowserConsole(options: BrowserConsoleOptions): Promi
     holder.current = plugins;
     await host.start();
     await plugins.start();
+    // The hooks and the jobs, in this process, so that what a plugin does when a decision is
+    // answered, or on its schedule, is seen here and not only on a deployment.
+    const dispatcher = new PluginDispatcher({
+      database: testDatabase.database,
+      workspace: async () => workspace,
+      plugins,
+      clock,
+      logger,
+    });
+    const scheduler = new PluginScheduler({
+      database: testDatabase.database,
+      workspace: async () => workspace,
+      plugins,
+      clock,
+      logger,
+    });
+    dispatcher.start(PREVIEW_DISPATCH_INTERVAL_MS);
+    scheduler.start(PREVIEW_SCHEDULE_INTERVAL_MS);
+    holder.streams = { dispatcher, scheduler };
     const provider = createFixtureProvider("gh", {
       authorize: () => `${origin}${FIXTURE_AUTHORIZE}`,
     });
@@ -234,6 +267,8 @@ export async function startBrowserConsole(options: BrowserConsoleOptions): Promi
           : `${origin}${FIXTURE_SIGN_IN}/${encodeURIComponent(person)}`,
       async close() {
         await server.close(2_000);
+        await dispatcher.close();
+        await scheduler.close();
         await plugins.stop();
         await harness.close();
         await testDatabase.drop();
@@ -241,6 +276,8 @@ export async function startBrowserConsole(options: BrowserConsoleOptions): Promi
       },
     };
   } catch (error) {
+    await holder.streams?.dispatcher.close().catch(() => undefined);
+    await holder.streams?.scheduler.close().catch(() => undefined);
     await holder.current?.stop().catch(() => undefined);
     await testDatabase.drop().catch(() => undefined);
     await rm(root, { recursive: true, force: true }).catch(() => undefined);

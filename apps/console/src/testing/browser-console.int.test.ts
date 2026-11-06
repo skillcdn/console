@@ -1,0 +1,118 @@
+import process from "node:process";
+import { pluginPath, projectPath } from "@skillcdn/console/api";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { BROWSER_ADMIN, type BrowserConsole, startBrowserConsole } from "./browser-console.js";
+
+// The console a person looks at the plugins on (`pnpm dev:plugins`) runs the plugins' hooks and
+// jobs itself, as a deployment's worker does: a decision a plugin raised, answered on the board,
+// reaches the plugin's hook here within seconds, and the record it keeps moves on. Needs
+// PostgreSQL and the build, as the browser tests do, and no browser.
+
+let started: BrowserConsole;
+
+const json = (body: unknown, cookie: string, method = "POST"): RequestInit => ({
+  method,
+  headers: { cookie, origin: started.origin, "content-type": "application/json" },
+  body: JSON.stringify(body),
+});
+
+/** Asks again until the answer satisfies `until`, or the time is up. */
+async function eventually<T>(
+  read: () => Promise<T>,
+  until: (value: T) => boolean,
+  ms: number,
+): Promise<T> {
+  const deadline = Date.now() + ms;
+  let last = await read();
+  while (!until(last) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    last = await read();
+  }
+  return last;
+}
+
+beforeAll(async () => {
+  started = await startBrowserConsole({
+    databaseUrl: process.env.TEST_DATABASE_URL,
+    env: process.env,
+  });
+}, 120_000);
+
+afterAll(async () => {
+  await started?.close();
+});
+
+describe("the preview console", () => {
+  it("runs a plugin's hooks itself: a decision answered on the board moves the plugin's record", async () => {
+    const admin = await started.harness.signIn(BROWSER_ADMIN);
+    const bob = await started.harness.signIn("bob");
+    const enabled = await started.harness.request(
+      pluginPath("leave", "enable"),
+      json(
+        {
+          consent: [
+            "board:read",
+            "board:tasks",
+            "board:decisions",
+            "board:documents",
+            "events:console",
+            "jobs",
+            "people:read",
+            "people:read:all",
+            "outbound:api.example.test",
+          ],
+          board: {
+            create: { key: "leave-board", name: "Leave", description: "Leave and its approval." },
+          },
+          projects: ["leave-board"],
+        },
+        admin,
+      ),
+    );
+    expect(enabled.status, await enabled.clone().text()).toBe(200);
+    const bobId = (
+      (await (
+        await started.harness.request("/api/v1/me", { headers: { cookie: bob } })
+      ).json()) as { person: { id: string } }
+    ).person.id;
+    const listed = await started.harness.request(
+      projectPath("leave-board", "members"),
+      json({ personId: bobId, role: "member" }, admin),
+    );
+    expect(listed.status, await listed.clone().text()).toBe(201);
+
+    const requested = await started.harness.request(
+      pluginPath("leave", "invoke"),
+      json(
+        { argv: ["request", "--from", "2026-12-01", "--to", "2026-12-02", "--approver", "alice"] },
+        bob,
+      ),
+    );
+    expect(requested.status, await requested.clone().text()).toBe(200);
+    const { data } = (await requested.json()) as {
+      data: { record: { id: string }; decision: { id: string } };
+    };
+
+    const answered = await started.harness.request(
+      `${projectPath("leave-board", "decisions", data.decision.id)}/answer`,
+      json({ option: "1" }, admin),
+    );
+    expect(answered.status, await answered.clone().text()).toBe(200);
+
+    // Nobody dispatches by hand: the preview's own dispatcher delivers the event to the hook.
+    const record = await eventually(
+      async () =>
+        (await (
+          await started.harness.request(
+            pluginPath("leave", "records", "requests", data.record.id),
+            {
+              headers: { cookie: bob },
+            },
+          )
+        ).json()) as { data: { state: string } },
+      (found) => found.data.state === "approved",
+      20_000,
+    );
+    expect(record.data.state).toBe("approved");
+  }, 60_000);
+});

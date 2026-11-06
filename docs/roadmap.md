@@ -389,6 +389,7 @@ Goal: what writing the first plugins in `skillcdn/console-plugins` against the r
 
 - [x] The preview passes over the `--` pnpm hands on, so that `pnpm dev:plugins --plugin <dir>` and the spelling with the double dash both start it.
 - [x] A plugin declares the consoles it runs on (`console`, a semver range of the console's version): a console outside it fails the plugin at discovery with the reason, the range is on `GET /api/v1/plugins`, the settings pages and `console plugins`; `console-plugin init` writes the line of the version the plugin is written against, and `check` holds the dependency on `@skillcdn/console` to it.
+- [x] The preview console runs the plugins' hooks and jobs in its process, as `WORKER_IN_PROCESS` does in the `api` role, so that a plugin's author sees the round close on this machine: the decision answered, the hook run, the record moved, the page refreshed.
 
 ## After milestone 16
 
