@@ -2575,6 +2575,7 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
   const languages = config.languages ?? DEFAULT_LANGUAGES;
   const pages = config.pages ?? [];
 
+  // biome-ignore lint/correctness/noComponentHookFactories: createConsole runs once, when a console is built, never during a render; App is that console's one root component, closing over its config.
   function App(props: { readonly initialPath?: string | undefined }) {
     const { location, navigation } = useNavigation(props.initialPath);
     useFollowLinks(navigation);

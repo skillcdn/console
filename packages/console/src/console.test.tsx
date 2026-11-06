@@ -419,6 +419,9 @@ describe("matchRoute", () => {
   });
 });
 
+/** A sign-in page a team puts in place of the default one; a component of its own, not one made in the test. */
+const CustomSignIn = () => <p>custom sign-in</p>;
+
 describe("createConsole", () => {
   const never = (): Promise<never> => new Promise(() => undefined);
   const project = (key: string): ProjectClient => ({
@@ -541,7 +544,7 @@ describe("createConsole", () => {
 
     const custom = createConsole({
       client,
-      components: { ...DEFAULT_COMPONENTS, SignIn: () => <p>custom sign-in</p> },
+      components: { ...DEFAULT_COMPONENTS, SignIn: CustomSignIn },
     });
     expect(typeof custom.App).toBe("function");
     expect(typeof custom.mount).toBe("function");
