@@ -367,7 +367,7 @@ Goal: a third party writes a feature of an organization's work as a plugin, an o
 - [x] The pages: the frame document under its policy and sandbox, the bundle served immutable, the bridge and its allow-list, grouped tabs and sub-tabs drawn from the manifest, front-page widgets, the design tokens sent in and the new ones for figures and states, the settings pages; proven in a browser that nothing but the bridge gets through.
 - [x] The image and the authoring (2026-11-02): "Plugins in the image" in `deploy/README.md` with `PLUGINS_DIR` and the two limits, the skill `building-a-plugin` as a map of the specification, the four skills that meet plugins brought up to date, and the host reading a plugin linked into `PLUGINS_DIR` from a checkout, as it is while one is written.
 - [x] The browser (2026-11-02): `pnpm test:browser` drives a real Chromium against the console listening on this machine, apart from `pnpm check` and as a job of CI's own, and sees the frame's policy and sandbox enforced; `pnpm dev:plugins` is that console for a person to look at the plugins' pages. The trial release with the example plugin alone is not made: the first plugin's install into a deployment proves the same.
-- [ ] The first plugins, in repositories of their own, their install into a deployment, and the second pass over the contract they ask for.
+- [ ] The first plugins, in [`skillcdn/console-plugins`](https://github.com/skillcdn/console-plugins), the reference plugin repository (one repository of several, each published to the registry), their install into a deployment, and the second pass over the contract they ask for, which milestone 35 begins.
 
 ## Milestone 35, the decision with its pictures, and what the first plugins asked (2026-11-06)
 
@@ -378,8 +378,8 @@ Goal: what the first plugins, written in `skillcdn/console-plugins` against the 
 - [x] A decision's option may carry a `key`, answered back as `optionKey` on the `decision.answered` event, to a plugin with `board:decisions` for its own decisions, so that it reads the answer without comparing labels.
 - [x] The workspace's people events reach the hooks of a plugin with `people:read:all`, with their content, as they happen.
 - [x] `pnpm dev:plugins -- --plugin <dir>` installs the built plugins of other checkouts beside the fixtures, so that a plugin's pages are looked at without a provider.
-- [ ] `console-plugin init` takes the package's name, its repository and the languages of its words.
-- [ ] The docs name the reference plugin repository and the way of several plugins in one repository.
+- [x] `console-plugin init` takes the package's name (`--package`), its repository (`--repository`, `--directory`) and the languages of its words (`--languages`), and `check` warns of a translation left as English.
+- [x] The docs name the reference plugin repository, `skillcdn/console-plugins`, and the way of several plugins in one repository: published to the registry, since a tag suits one plugin alone.
 
 ## After milestone 16
 
