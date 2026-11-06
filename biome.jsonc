@@ -17,7 +17,7 @@
     "lineEnding": "lf"
   },
   // Markdown is what this repository makes: the skills in the SkillCDN Format, the specs, the
-  // fixtures a test reads byte for byte. Biome formats Markdown since 2.6; here it leaves it as written.
+  // fixtures the tests read as a pack. Biome formats Markdown since 2.6; here it leaves it as written.
   "markdown": {
     "formatter": {
       "enabled": false
@@ -46,11 +46,6 @@
       },
       "style": {
         "noDefaultExport": "error",
-        // The stylesheet is laid out by component, and a shared rule early in it (the small capitals
-        // over a group) names descendants of several components; a component's own rule, lower in
-        // specificity, then follows it by design. The rule would have the stylesheet reordered for
-        // selectors that never meet on one element.
-        "noDescendingSpecificity": "off",
         "noProcessEnv": "error",
         "useExportType": "error",
         "useImportType": "error",
@@ -101,6 +96,20 @@
         "rules": {
           "style": {
             "noDefaultExport": "off"
+          }
+        }
+      }
+    },
+    {
+      // The console's stylesheet is laid out by component, and a shared rule early in it (the small
+      // capitals over a group) names descendants of several components; a component's own rule,
+      // lower in specificity, then follows it by design. The rule would have the stylesheet
+      // reordered for selectors that never meet on one element; elsewhere it stays on.
+      "includes": ["packages/console/src/styles/console.css"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noDescendingSpecificity": "off"
           }
         }
       }
