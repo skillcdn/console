@@ -277,7 +277,11 @@ export class PluginDispatcher {
     return ids;
   }
 
-  /** Whether a console event concerns the plugin: caused by it, in one of its projects, or about an item it made. */
+  /**
+   * Whether a console event concerns the plugin: caused by it, in one of its projects, or about
+   * an item it made; or one of the workspace's people events, for a plugin that reads the
+   * directory (`people:read:all`), so that it learns who came and went as it happens.
+   */
   private async concerns(
     workspace: WorkspaceRecord,
     target: DispatchTarget,
@@ -285,6 +289,9 @@ export class PluginDispatcher {
     event: EventRecord,
   ): Promise<boolean> {
     if (event.plugin === target.key) {
+      return true;
+    }
+    if (isPeopleEvent(event.kind) && target.consent.includes("people:read:all")) {
       return true;
     }
     if (
@@ -325,7 +332,7 @@ export class PluginDispatcher {
       ...(event.documentId === undefined ? {} : { documentId: event.documentId }),
       ...(event.goalId === undefined ? {} : { goalId: event.goalId }),
     };
-    const content = target.consent.includes("board:read")
+    const content = contentFor(target.consent, event.kind)
       ? {
           ...event.data,
           actor:
@@ -372,6 +379,21 @@ export class PluginDispatcher {
       data: event.data,
     };
   }
+}
+
+/** Whether an event is one of the workspace's people events: someone joined, left, came back, changed role, or was listed. */
+export function isPeopleEvent(kind: string): boolean {
+  return kind.startsWith("person.");
+}
+
+/**
+ * Whether a hook receives the event's content and its actor: with `board:read`; or, for a
+ * people event, with `people:read:all`, since the directory is the plugin's to read anyway.
+ */
+export function contentFor(consent: readonly string[], kind: string): boolean {
+  return (
+    consent.includes("board:read") || (isPeopleEvent(kind) && consent.includes("people:read:all"))
+  );
 }
 
 /**

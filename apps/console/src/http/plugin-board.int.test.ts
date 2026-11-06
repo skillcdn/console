@@ -176,6 +176,7 @@ beforeAll(async () => {
           "events:console",
           "jobs",
           "people:read",
+          "people:read:all",
           "outbound:api.example.test",
         ],
         board: { create: { key: BOARD, name: "Leave", description: "Leave and its approval." } },
@@ -400,6 +401,28 @@ describe("a plugin on the board", () => {
     const held = await h.request(pluginPath("leave", "disable"), json({}, admin));
     expect(held.status).toBe(409);
     expect(restErrorSchema.parse(await held.json()).error.code).toBe("plugin.required_by");
+  });
+
+  it("hears of the workspace's people with people:read:all: who was deactivated, by login", async () => {
+    const carol = await h.signIn("carol");
+    const carolId = (
+      (await (await h.request(REST_ROUTES.me, { headers: { cookie: carol } })).json()) as {
+        person: { id: string };
+      }
+    ).person.id;
+    const gone = await h.request(
+      `${REST_ROUTES.people}/${carolId}`,
+      json({ status: "deactivated" }, admin, "PATCH"),
+    );
+    expect(gone.status, await gone.clone().text()).toBe(200);
+    // The event is the workspace's, in no project; the plugin reads the directory, so it is told.
+    await dispatcher.dispatch();
+    const emitted = restPluginEventsSchema.parse(
+      await (
+        await h.request(pluginPath("leave", "plugin-events"), { headers: { cookie: member } })
+      ).json(),
+    );
+    expect(emitted.items.find((event) => event.kind === "left")?.data).toEqual({ login: "carol" });
   });
 
   it("runs the jobs on their schedule, and tells a failure once an hour", async () => {

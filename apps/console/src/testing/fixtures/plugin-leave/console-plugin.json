@@ -13,6 +13,7 @@
     "events:console",
     "jobs",
     "people:read",
+    "people:read:all",
     "outbound:api.example.test"
   ],
   "roles": {

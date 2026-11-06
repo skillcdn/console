@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { ownAnswerOf } from "./dispatcher.js";
+import { contentFor, isPeopleEvent, ownAnswerOf } from "./dispatcher.js";
+
+describe("the workspace's people events", () => {
+  it("reach a plugin that reads the directory, with their content, and no other hook gets content without board:read", () => {
+    expect(isPeopleEvent("person.deactivated")).toBe(true);
+    expect(isPeopleEvent("person.joined")).toBe(true);
+    expect(isPeopleEvent("task.created")).toBe(false);
+    expect(contentFor(["people:read:all"], "person.deactivated")).toBe(true);
+    expect(contentFor(["people:read:all"], "task.created")).toBe(false);
+    expect(contentFor(["people:read"], "person.deactivated")).toBe(false);
+    expect(contentFor(["board:read"], "task.created")).toBe(true);
+  });
+});
 
 describe("the answer to a plugin's own decision", () => {
   it("reaches a hook with board:decisions alone, by the option's label and key, and nothing else does", () => {

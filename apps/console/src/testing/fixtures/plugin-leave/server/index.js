@@ -166,6 +166,10 @@ export default {
         by: event.data.actor ?? null,
       });
     },
+    // With people:read:all, the console says who left the workspace, as it happens.
+    "console:person.deactivated": async (ctx, event) => {
+      await ctx.events.emit("left", { login: event.data.login ?? null });
+    },
   },
   jobs: {
     accrue: {
