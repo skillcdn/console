@@ -179,6 +179,7 @@ import {
   listPeople,
   PersonError,
   type PersonRecord,
+  updatePersonManager,
   updatePersonRole,
   updatePersonStatus,
 } from "../db/queries/people.js";
@@ -1221,6 +1222,15 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
           actor: actorOf(caller),
           personId: id,
           status: patch.status,
+          now: clock.now(),
+        });
+      }
+      if (patch.managerId !== undefined) {
+        changed = await updatePersonManager(database, {
+          workspaceId: person.workspaceId,
+          actor: actorOf(caller),
+          personId: id,
+          managerId: patch.managerId,
           now: clock.now(),
         });
       }

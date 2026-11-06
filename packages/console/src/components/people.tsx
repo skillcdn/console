@@ -37,6 +37,8 @@ export interface PeopleListProps {
    * with it.
    */
   readonly onChangeStatus?: ((person: RestPerson, status: PersonStatus) => void) | undefined;
+  /** Called with whom an administrator said the person reports to, or null for nobody. Left out, the line is read here, not changed. */
+  readonly onChangeManager?: ((person: RestPerson, managerId: string | null) => void) | undefined;
   /** Called when an administrator takes a listing away. Left out, listings are read here. */
   readonly onUnlist?: ((listing: RestListing) => void) | undefined;
   /** Where a person's work is seen; given to an administrator, or an owner of a project. */
@@ -57,6 +59,12 @@ export function PeopleList(props: PeopleListProps) {
     person.source !== "organization" &&
     props.me?.id !== person.id;
   const organization = props.organization ?? undefined;
+  const byId = new Map(props.people.map((person) => [person.id, person]));
+  /** The reporting line, as the row shows it: whom the person reports to, where someone. */
+  const managerOf = (person: RestPerson): RestPerson | undefined =>
+    person.managerId === null || person.managerId === undefined
+      ? undefined
+      : byId.get(person.managerId);
   /** What let the person in, by its name: the organization, the domain of their login, or an administrator. */
   const noteOf = (person: RestPerson): string => {
     if (person.source === "organization") {
@@ -113,6 +121,43 @@ export function PeopleList(props: PeopleListProps) {
                       {words.vocabulary.role[role]}
                     </option>
                   ))}
+                </select>
+              </label>
+            )}
+            {props.onChangeManager === undefined ? (
+              managerOf(person) !== undefined && (
+                <span className="sc-person-manager sc-muted">
+                  {people.reportsToName(personName(managerOf(person) ?? person))}
+                </span>
+              )
+            ) : (
+              <label className="sc-field sc-field-inline">
+                <span className="sc-visually-hidden">{people.reportsToOf(personName(person))}</span>
+                <select
+                  className="sc-input"
+                  value={person.managerId ?? ""}
+                  disabled={props.busy === true}
+                  onChange={(event) =>
+                    props.onChangeManager?.(
+                      person,
+                      event.target.value === "" ? null : event.target.value,
+                    )
+                  }
+                >
+                  <option value="">
+                    {people.reportsTo}: {people.nobody}
+                  </option>
+                  {props.people
+                    .filter(
+                      (candidate) =>
+                        candidate.id !== person.id &&
+                        (candidate.status === "active" || candidate.id === person.managerId),
+                    )
+                    .map((candidate) => (
+                      <option key={candidate.id} value={candidate.id}>
+                        {people.reportsTo}: {personName(candidate)}
+                      </option>
+                    ))}
                 </select>
               </label>
             )}

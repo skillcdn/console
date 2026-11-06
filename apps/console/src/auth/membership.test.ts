@@ -15,6 +15,7 @@ const person = (fields: Partial<PersonRecord>): PersonRecord => ({
   status: "active",
   source: "listed",
   deactivatedAt: undefined,
+  managerId: undefined,
   ...fields,
 });
 

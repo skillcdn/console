@@ -2506,6 +2506,12 @@ function WorkspacePage(props: {
               ? (person, status) => void act(() => data.actions.updatePerson(person.id, { status }))
               : undefined
           }
+          onChangeManager={
+            administrator
+              ? (person, managerId) =>
+                  void act(() => data.actions.updatePerson(person.id, { managerId }))
+              : undefined
+          }
           onUnlist={
             administrator
               ? (listing) => void act(() => data.actions.removeListing(listing.id))

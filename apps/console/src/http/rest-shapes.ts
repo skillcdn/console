@@ -51,6 +51,7 @@ export function restPerson(person: PersonRecord): RestPerson {
     status: person.status,
     source: person.source,
     deactivatedAt: person.deactivatedAt?.toISOString() ?? null,
+    managerId: person.managerId ?? null,
   };
 }
 

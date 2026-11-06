@@ -1348,6 +1348,22 @@ describe("people", () => {
     expect(change).toContain('value="admin"');
   });
 
+  it("says whom a person reports to, and lets an administrator set the line", () => {
+    const reporting: RestPerson = { ...bob, managerId: alice.id };
+    const read = renderToStaticMarkup(<PeopleList people={[alice, reporting]} me={bob} />);
+    expect(read).toContain("Reports to Alice Example");
+    expect(read).not.toContain("<select");
+    const change = renderToStaticMarkup(
+      <PeopleList people={[alice, reporting]} me={alice} onChangeManager={() => undefined} />,
+    );
+    // One select per person, each offering everyone but themselves, with the line as it stands.
+    expect(change.match(/<select/g)).toHaveLength(2);
+    expect(change).toContain("Reports to: Nobody");
+    expect(change.match(/Reports to: Alice Example/g)).toHaveLength(1);
+    expect(change.match(/Reports to: bob/g)).toHaveLength(1);
+    expect(change).toContain(`value="${alice.id}" selected=""`);
+  });
+
   it("keeps those out apart, with the way back in, and shows the logins let in with the way out", () => {
     const carol: RestPerson = {
       ...bob,

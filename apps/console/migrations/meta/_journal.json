@@ -239,6 +239,13 @@
       "when": 1793954480178,
       "tag": "0033_attribution",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1793964716219,
+      "tag": "0034_person_manager",
+      "breakpoints": true
     }
   ]
 }

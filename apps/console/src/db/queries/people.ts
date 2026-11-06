@@ -31,21 +31,30 @@ export interface PersonRecord {
   /** What let them in at their last sign-in. */
   readonly source: MembershipSource;
   readonly deactivatedAt: Date | undefined;
+  /** The id of the person they report to, set by an administrator; none for nobody. */
+  readonly managerId: string | undefined;
 }
 
 /** What is wrong with a change to a person. `code` is what the API answers with. */
 export class PersonError extends DomainError {
-  constructor(code: "person.not_found" | "person.last_admin" | "person.of_organization") {
-    super(
-      code,
-      code === "person.not_found"
-        ? "the person was not found"
-        : code === "person.last_admin"
-          ? "the board would be left without an administrator"
-          : "the organization says who is in; the person cannot be changed here",
-    );
+  constructor(
+    code:
+      | "person.not_found"
+      | "person.last_admin"
+      | "person.of_organization"
+      | "person.invalid_manager",
+  ) {
+    super(code, PERSON_ERROR_WORDS[code]);
   }
 }
+
+const PERSON_ERROR_WORDS = {
+  "person.not_found": "the person was not found",
+  "person.last_admin": "the board would be left without an administrator",
+  "person.of_organization": "the organization says who is in; the person cannot be changed here",
+  "person.invalid_manager":
+    "the manager is not another active person of the workspace, or reports to this person already",
+} as const;
 
 /** What is wrong with a listing. `code` is what the API answers with. */
 export class ListingError extends DomainError {
@@ -90,6 +99,7 @@ interface PersonTable {
   readonly status: AnyPgColumn;
   readonly source: AnyPgColumn;
   readonly deactivatedAt: AnyPgColumn;
+  readonly managerId: AnyPgColumn;
 }
 
 /** For this directory only: the columns a {@link PersonRecord} is made of, from `table`. */
@@ -107,6 +117,7 @@ export const personColumns = <T extends PersonTable>(
   status: table.status,
   source: table.source,
   deactivatedAt: table.deactivatedAt,
+  managerId: table.managerId,
 });
 
 type PersonRow = {
@@ -121,6 +132,7 @@ type PersonRow = {
   readonly status: string;
   readonly source: string;
   readonly deactivatedAt: Date | null;
+  readonly managerId: string | null;
 };
 
 export const toPerson = (row: PersonRow): PersonRecord => ({
@@ -135,6 +147,7 @@ export const toPerson = (row: PersonRow): PersonRecord => ({
   status: row.status as PersonStatus,
   source: row.source as MembershipSource,
   deactivatedAt: row.deactivatedAt ?? undefined,
+  managerId: row.managerId ?? undefined,
 });
 
 const listingColumns = {
@@ -438,6 +451,83 @@ export async function updatePersonRole(
       kind: "person.role_changed",
       actor,
       data: { login: person.login, role },
+      now,
+    });
+    return toPerson(row);
+  });
+}
+
+/**
+ * Names whom a person reports to, or nobody, and tells the board: the reporting line of the
+ * directory, which the plugins read as a default (`managerId` on a person) in place of a line of
+ * their own. The manager is another active person of the workspace who does not report to this
+ * person, directly or through others, so that the line never loops. What is already so writes
+ * nothing.
+ */
+export async function updatePersonManager(
+  database: Database,
+  input: {
+    readonly workspaceId: string;
+    readonly actor: Actor;
+    readonly personId: string;
+    /** The manager's id, or null for nobody. */
+    readonly managerId: string | null;
+    readonly now: Date;
+  },
+): Promise<PersonRecord> {
+  const { workspaceId, actor, personId, managerId, now } = input;
+  return drizzleOf(database).transaction(async (tx) => {
+    const person = await lockedPerson(tx, workspaceId, personId);
+    if ((person.managerId ?? null) === managerId) {
+      return person;
+    }
+    let managerLogin: string | null = null;
+    if (managerId !== null) {
+      if (managerId === personId) {
+        throw new PersonError("person.invalid_manager");
+      }
+      const [manager] = await tx
+        .select(personColumns(people))
+        .from(people)
+        .where(
+          and(
+            eq(people.workspaceId, workspaceId),
+            eq(people.id, managerId),
+            eq(people.status, "active"),
+          ),
+        )
+        .limit(1);
+      if (manager === undefined) {
+        throw new PersonError("person.invalid_manager");
+      }
+      // Up the line from the manager: meeting the person again would close a loop.
+      let above = manager.managerId;
+      for (let steps = 0; above !== null && steps < 1000; steps += 1) {
+        if (above === personId) {
+          throw new PersonError("person.invalid_manager");
+        }
+        const [next] = await tx
+          .select({ managerId: people.managerId })
+          .from(people)
+          .where(eq(people.id, above))
+          .limit(1);
+        above = next?.managerId ?? null;
+      }
+      managerLogin = manager.login;
+    }
+    const [row] = await tx
+      .update(people)
+      .set({ managerId, updatedAt: now })
+      .where(eq(people.id, personId))
+      .returning(personColumns(people));
+    if (row === undefined) {
+      throw new PersonError("person.not_found");
+    }
+    await recordEvent(tx, {
+      workspaceId,
+      kind: "person.manager_changed",
+      actor,
+      data: { login: person.login, manager: managerLogin },
       now,
     });
     return toPerson(row);

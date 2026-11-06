@@ -119,12 +119,13 @@ export function formatProject(project: RestProject): string {
   return lines.join("\n");
 }
 
-/** One person: their login, their name where the host gives one, what they are in the workspace, and that they are out when they are. */
-export function formatPersonLine(person: RestPerson): string {
+/** One person: their login, their name where the host gives one, what they are in the workspace, that they are out when they are, and whom they report to where known. */
+export function formatPersonLine(person: RestPerson, reportsTo?: string | undefined): string {
   const standing = person.status === "active" ? person.role : `${person.role}, deactivated`;
+  const line = reportsTo === undefined ? "" : `, reports to ${reportsTo}`;
   return person.name === null
-    ? `${person.login}  (${standing})`
-    : `${person.login}  ${person.name}  (${standing})`;
+    ? `${person.login}  (${standing}${line})`
+    : `${person.login}  ${person.name}  (${standing}${line})`;
 }
 
 /** The provider a listing names, as people call it. */

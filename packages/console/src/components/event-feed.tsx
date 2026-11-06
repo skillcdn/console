@@ -63,6 +63,10 @@ function sentenceOf(event: RestEvent, words: Messages): string {
       return feed.event.personDeactivated(login);
     case "person.reactivated":
       return feed.event.personReactivated(login);
+    case "person.manager_changed":
+      return data.manager === null || data.manager === undefined
+        ? feed.event.managerCleared(login)
+        : feed.event.managerChanged(login, data.manager);
     case "workspace.updated":
       return feed.event.workspaceUpdated(fields);
     case "project.created":

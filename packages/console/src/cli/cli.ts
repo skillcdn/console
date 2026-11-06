@@ -3119,8 +3119,19 @@ const people: Command = async (args, io) => {
   const { values } = parse(args, {}, false);
   const session = await open(io, values);
   const found = await session.client.people();
+  const loginOf = new Map(found.items.map((person) => [person.id, person.login]));
   answer(io, session, found, () =>
-    [...found.items.map(formatPersonLine), ...found.listed.map(formatListingLine)].join("\n"),
+    [
+      ...found.items.map((person) =>
+        formatPersonLine(
+          person,
+          person.managerId === null || person.managerId === undefined
+            ? undefined
+            : (loginOf.get(person.managerId) ?? person.managerId),
+        ),
+      ),
+      ...found.listed.map(formatListingLine),
+    ].join("\n"),
   );
   return EXIT.ok;
 };
@@ -3201,7 +3212,7 @@ const workspace: Command = async (args, io) => {
 };
 
 const PERSON_USAGE =
-  "Say what to do: console person role <login> <admin|member>  |  person add <login> [--host gh|google]  |  person remove <login>  |  person deactivate <login>  |  person reactivate <login>";
+  "Say what to do: console person role <login> <admin|member>  |  person manager <login> <manager login|none>  |  person add <login> [--host gh|google]  |  person remove <login>  |  person deactivate <login>  |  person reactivate <login>";
 
 const person: Command = async (args, io) => {
   const what = args[0];
@@ -3216,6 +3227,21 @@ const person: Command = async (args, io) => {
     const found = await personOf(session, login);
     const changed = await session.client.updatePerson(found.id, { role: wanted });
     answer(io, session, changed, () => formatPersonLine(changed));
+    return EXIT.ok;
+  }
+  if (what === "manager") {
+    const { values, positionals } = parse(args.slice(1), {});
+    const [login, manager] = theTwo(
+      positionals,
+      "Say whom and whom they report to: console person manager <login> <manager login|none>",
+    );
+    const session = await open(io, values);
+    const found = await personOf(session, login);
+    const managerId = manager === "none" ? null : (await personOf(session, manager)).id;
+    const changed = await session.client.updatePerson(found.id, { managerId });
+    answer(io, session, changed, () =>
+      formatPersonLine(changed, managerId === null ? undefined : manager),
+    );
     return EXIT.ok;
   }
   if (what === "add") {

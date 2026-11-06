@@ -2345,6 +2345,63 @@ describe("roles", () => {
     expect((await change(bob, aliceId, { role: "admin" })).status).toBe(200);
     expect((await change(admin, bobId, { role: "member" })).status).toBe(200);
   });
+
+  it("keeps the reporting line: whom a person reports to, set by an administrator, never a loop, and told to the workspace", async () => {
+    const named = createHarness(testDatabase, {
+      providers: [createFixtureProvider()],
+      admins: ["alice"],
+    });
+    const admin = await named.signIn("alice");
+    // Carol is in, whatever ran before this.
+    await named.signIn("carol");
+    const change = (cookie: string, id: string, body: unknown) =>
+      named.request(`${REST_ROUTES.people}/${id}`, {
+        method: "PATCH",
+        headers: { cookie, origin: SIGN_IN_URL, "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    const people = restPeopleSchema.parse(await (await get(alice, REST_ROUTES.people)).json());
+    const aliceId = people.items.find((person) => person.login === "Alice")?.id ?? "";
+    const bobId = people.items.find((person) => person.login === "bob")?.id ?? "";
+    const carolId = people.items.find((person) => person.login === "carol")?.id ?? "";
+    expect(people.items.every((person) => person.managerId === null)).toBe(true);
+    const before = restEventsSchema.parse(
+      await (await get(alice, `${REST_ROUTES.events}?after=0`)).json(),
+    );
+    const latest = before.items.at(-1)?.id ?? 0;
+
+    // A member may not; an administrator says bob reports to carol, and carol to alice.
+    expect((await change(bob, bobId, { managerId: carolId })).status).toBe(403);
+    const reporting = await change(admin, bobId, { managerId: carolId });
+    expect(reporting.status, await reporting.clone().text()).toBe(200);
+    expect(restPersonSchema.parse(await reporting.json()).managerId).toBe(carolId);
+    expect((await change(admin, carolId, { managerId: aliceId })).status).toBe(200);
+    // Nobody reports to themselves, to someone below them, or to nobody of the workspace.
+    for (const wrong of [
+      change(admin, aliceId, { managerId: aliceId }),
+      change(admin, aliceId, { managerId: bobId }),
+      change(admin, aliceId, { managerId: "0199c4d8-0000-7000-8000-000000000099" }),
+    ]) {
+      const refused = await wrong;
+      expect(refused.status).toBe(409);
+      expect(await errorOf(refused)).toBe("person.invalid_manager");
+    }
+    // The line is on every person read, and comes off again; said twice, nothing is written.
+    const listed = restPeopleSchema.parse(await (await get(bob, REST_ROUTES.people)).json());
+    expect(listed.items.find((person) => person.login === "bob")?.managerId).toBe(carolId);
+    expect((await change(admin, bobId, { managerId: carolId })).status).toBe(200);
+    expect((await change(admin, bobId, { managerId: null })).status).toBe(200);
+    expect((await change(admin, bobId, {})).status).toBe(400);
+    const since = restEventsSchema.parse(
+      await (await get(alice, `${REST_ROUTES.events}?after=${latest}`)).json(),
+    );
+    expect(since.items.map((event) => [event.kind, event.actor?.login, event.data])).toEqual([
+      ["person.manager_changed", "Alice", { login: "bob", manager: "carol" }],
+      ["person.manager_changed", "Alice", { login: "carol", manager: "Alice" }],
+      ["person.manager_changed", "Alice", { login: "bob", manager: null }],
+    ]);
+    expect((await change(admin, carolId, { managerId: null })).status).toBe(200);
+  });
 });
 
 /** A pack whose reads are never asked: what the tests of the listing need of them. */

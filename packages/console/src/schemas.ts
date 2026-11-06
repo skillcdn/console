@@ -116,6 +116,13 @@ export const restPersonSchema = z.object({
   source: z.enum(MEMBERSHIP_SOURCES),
   /** When they were deactivated, or `null`. */
   deactivatedAt: z.nullable(instant),
+  /**
+   * The id of the person they report to, the reporting line of the directory an administrator
+   * keeps, or `null` for nobody; what a plugin reads as the default approver, the default
+   * assignee, in place of a line of its own. Answered from 0.4.4 and read as optional, so that
+   * a console built on this package still reads an older console's people.
+   */
+  managerId: z.optional(z.nullable(uuid)),
 });
 export type RestPerson = z.infer<typeof restPersonSchema>;
 
@@ -313,11 +320,14 @@ export const restPersonPatchSchema = z
   .object({
     role: z.optional(z.enum(PERSON_ROLES)),
     status: z.optional(z.enum(PERSON_STATUSES)),
+    /** Whom the person reports to: another active person of the workspace, or `null` for nobody. */
+    managerId: z.optional(z.nullable(uuid)),
   })
   .check(
     z.refine(
-      (patch) => patch.role !== undefined || patch.status !== undefined,
-      "must name a role or a status",
+      (patch) =>
+        patch.role !== undefined || patch.status !== undefined || patch.managerId !== undefined,
+      "must name a role, a status or a manager",
     ),
   );
 export type RestPersonPatch = z.infer<typeof restPersonPatchSchema>;
@@ -891,6 +901,8 @@ export const restEventDataSchema = z.object({
   /** For `person.role_changed` and the events about a project's members: whose role, and what it became. */
   login: z.optional(z.string()),
   role: z.optional(z.string()),
+  /** For `person.manager_changed`: the login of whom the person reports to now, or `null` for nobody. */
+  manager: z.optional(z.nullable(z.string())),
   /** For the events about a project: its key and its name. */
   key: z.optional(z.string()),
   name: z.optional(z.string()),

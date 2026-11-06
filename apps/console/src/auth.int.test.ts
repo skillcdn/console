@@ -125,6 +125,7 @@ describe("signing in", () => {
         status: "active",
         source: "listed",
         deactivatedAt: null,
+        managerId: null,
       },
       signIn: [{ key: "gh", label: "GitHub", admits: { organization: null, domains: [] } }],
     });

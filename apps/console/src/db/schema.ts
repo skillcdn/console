@@ -130,12 +130,15 @@ export const people = pgTable(
     deactivatedAt: instant(),
     /** The language the person chose for the pages (ADR-0012), a tag; null for the browser's. */
     language: text(),
+    /** Whom the person reports to, another person of the workspace, set by an administrator; null for nobody. */
+    managerId: uuid().references((): AnyPgColumn => people.id),
     lastLoginAt: instant().notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (table) => [
     uniqueIndex("people_host_account_key").on(table.workspaceId, table.host, table.hostAccountId),
+    index("people_manager_idx").on(table.managerId),
     check("people_role_check", sql`${table.role} in (${sql.raw(literals(PERSON_ROLES))})`),
     check("people_status_check", sql`${table.status} in (${sql.raw(literals(PERSON_STATUSES))})`),
     check(
