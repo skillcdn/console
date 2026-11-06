@@ -199,6 +199,26 @@ describe("what the server answers", () => {
     expect(field.safeParse({}).success).toBe(false);
   });
 
+  it("takes a key on an option, spelled as a plugin's key is and each once", () => {
+    const options = restDecisionInputSchema.shape.options;
+    expect(
+      options.safeParse([
+        { label: "Approve", key: "approve" },
+        { label: "Reject", key: "reject-it" },
+        { label: "Later" },
+      ]).success,
+    ).toBe(true);
+    expect(options.safeParse([{ label: "a", key: "Approve" }, { label: "b" }]).success).toBe(false);
+    expect(options.safeParse([{ label: "a", key: "1st" }, { label: "b" }]).success).toBe(false);
+    expect(options.safeParse([{ label: "a", key: "a" }, { label: "b" }]).success).toBe(false);
+    expect(
+      options.safeParse([
+        { label: "a", key: "same" },
+        { label: "b", key: "same" },
+      ]).success,
+    ).toBe(false);
+  });
+
   it("reads the files put on a decision, and an older console's decision without them (ADR-0055)", () => {
     const field = restDecisionSchema.shape.files;
     const file = { name: "look.png", size: 12, contentType: "image/png", sha256: "ab" };

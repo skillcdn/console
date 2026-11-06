@@ -55,7 +55,10 @@ export default {
         const decision = await ctx.console.decisions.ask(ctx.plugin.board.key, {
           question: `Leave from ${args.from} to ${args.to}?`,
           body: `Requested through the plugin by ${personId}.`,
-          options: [{ label: "Approve" }, { label: "Reject" }],
+          options: [
+            { label: "Approve", key: "approve" },
+            { label: "Reject", key: "reject" },
+          ],
           deciderId: args.approver.id,
           about: { collection: "requests", id: record.id },
         });
@@ -154,8 +157,8 @@ export default {
       if (record === undefined) {
         return;
       }
-      const decision = await ctx.console.decisions.get(decisionId);
-      const state = decision?.answer?.option === "1" ? "approved" : "rejected";
+      // The answer is read by the key the plugin gave the option, from the event itself.
+      const state = event.data.optionKey === "approve" ? "approved" : "rejected";
       await ctx.records(requests).update(record.id, { state });
       await ctx.events.emit("decided", {
         requestId: record.id,

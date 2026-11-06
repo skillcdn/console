@@ -156,6 +156,7 @@ export function restDecision(decision: DecisionRecord): RestDecision {
     options: decision.options.map((option) => ({
       id: option.id,
       label: option.label,
+      ...(option.key === undefined ? {} : { key: option.key }),
       ...(option.own === true ? { own: true as const } : {}),
     })),
     taskId: decision.taskId ?? null,

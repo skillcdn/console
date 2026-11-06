@@ -211,7 +211,11 @@ export async function raiseDecision(
     readonly decision: {
       readonly question: string;
       readonly body?: string;
-      readonly options: readonly string[];
+      /** The options, each a label alone or with the key a program reads the answer by. */
+      readonly options: readonly (
+        | string
+        | { readonly label: string; readonly key?: string | undefined }
+      )[];
       readonly taskId?: string | null;
       readonly runId?: string | undefined;
       /** Who is to answer: a person who may work in the project; the actor when left out. */
@@ -299,7 +303,14 @@ export async function raiseDecision(
       taskId = task.id;
       about = { number: task.number, title: task.title };
     }
-    const options = decision.options.map((label, index) => ({ id: String(index + 1), label }));
+    const options = decision.options.map((option, index) => {
+      const given = typeof option === "string" ? { label: option } : option;
+      return {
+        id: String(index + 1),
+        label: given.label,
+        ...(given.key === undefined ? {} : { key: given.key }),
+      };
+    });
     const [inserted] = await tx
       .insert(decisions)
       .values({
@@ -432,7 +443,11 @@ export async function answerDecision(
       taskId: current.taskId ?? undefined,
       decisionId,
       runId: current.runId ?? undefined,
-      data: { question: current.question, option: chosen.label },
+      data: {
+        question: current.question,
+        option: chosen.label,
+        ...(chosen.key === undefined ? {} : { optionKey: chosen.key }),
+      },
       now,
     });
     if (current.runId !== null) {

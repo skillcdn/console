@@ -445,7 +445,7 @@ export function formatOptions(decision: RestDecision): string {
   return decision.options
     .map(
       (option) =>
-        `  ${option.id}) ${option.label}${option.own === true ? "  (the person's own answer, not one given)" : ""}`,
+        `  ${option.id}) ${option.label}${option.key === undefined ? "" : `  [${option.key}]`}${option.own === true ? "  (the person's own answer, not one given)" : ""}`,
     )
     .join("\n");
 }

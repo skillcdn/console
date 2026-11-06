@@ -154,6 +154,7 @@ export {
 export {
   hostOfLogin,
   isLoginAt,
+  OPTION_KEY_PATTERN,
   type RestAnswerInput,
   type RestArchivedTasks,
   type RestArchiveTasksInput,

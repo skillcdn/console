@@ -670,10 +670,30 @@ export const restDecisionFileSchema = z.object({
 });
 export type RestDecisionFile = z.infer<typeof restDecisionFileSchema>;
 
+/**
+ * The key a raiser may give an option, for a program to read the answer by instead of
+ * comparing labels: spelled as a plugin's key is.
+ */
+export const OPTION_KEY_PATTERN = /^[a-z][a-z0-9-]{1,31}$/;
+const optionKey = z
+  .string()
+  .check(
+    z.regex(
+      OPTION_KEY_PATTERN,
+      "must be a key: a lowercase letter, then lowercase letters, digits and hyphens, 2 to 32 long",
+    ),
+  );
+
 export const restDecisionOptionSchema = z.object({
   /** What an answer names: stable once given. */
   id: z.string(),
   label: z.string(),
+  /**
+   * The key the raiser gave the option, for a program to read the answer by (`optionKey` on the
+   * `decision.answered` event) without comparing labels; none on an option given without one,
+   * and none on the person's own answer.
+   */
+  key: z.optional(z.string()),
   /**
    * On the one option a person's own answer became, when they answered in their own words
    * instead of choosing (`POST .../answer` with `own`): added then, after the options given,
@@ -784,9 +804,17 @@ export type RestPersonWork = z.infer<typeof restPersonWorkSchema>;
 export const restDecisionInputSchema = z.object({
   question: line(MAX_QUESTION_LENGTH),
   body: z.optional(body),
+  /** Each a label, and optionally a key a program reads the answer by, each key once. */
   options: z
-    .array(z.object({ label: line(MAX_OPTION_LABEL_LENGTH) }))
-    .check(z.minLength(MIN_OPTIONS), z.maxLength(MAX_OPTIONS)),
+    .array(z.object({ label: line(MAX_OPTION_LABEL_LENGTH), key: z.optional(optionKey) }))
+    .check(
+      z.minLength(MIN_OPTIONS),
+      z.maxLength(MAX_OPTIONS),
+      z.refine((options) => {
+        const keys = options.flatMap((option) => (option.key === undefined ? [] : [option.key]));
+        return new Set(keys).size === keys.length;
+      }, "each key once"),
+    ),
   taskId: z.optional(z.nullable(uuid)),
   /** The run that asks, when an agent does: the decision is about its task, and it waits for the answer. */
   runId: z.optional(z.nullable(uuid)),
@@ -839,8 +867,9 @@ export const restEventDataSchema = z.object({
   from: z.optional(z.enum(TASK_STATES)),
   to: z.optional(z.enum(TASK_STATES)),
   question: z.optional(z.string()),
-  /** For `decision.answered`: the label of the chosen option. */
+  /** For `decision.answered`: the label of the chosen option, and its key where the raiser gave one. */
   option: z.optional(z.string()),
+  optionKey: z.optional(z.string()),
   /** For `person.role_changed` and the events about a project's members: whose role, and what it became. */
   login: z.optional(z.string()),
   role: z.optional(z.string()),

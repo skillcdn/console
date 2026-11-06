@@ -2381,7 +2381,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         decision: {
           question: input.question,
           body: input.body,
-          options: input.options.map((option) => option.label),
+          options: input.options,
           // Raised from a run, the decision is about the run's task and nothing else.
           taskId: fromRun ? undefined : input.taskId,
           runId: fromRun ? (input.runId ?? undefined) : undefined,

@@ -308,7 +308,10 @@ export class PluginDispatcher {
     return (await pluginsOfItems(this.options.database, workspace.id, items)).has(target.key);
   }
 
-  /** A console event as a hook receives it: the kind, the ids and the time; the content with `board:read`. */
+  /**
+   * A console event as a hook receives it: the kind, the ids and the time; the content with
+   * `board:read`; and the answer to the plugin's own decision with `board:decisions`.
+   */
   private async payloadOf(
     workspace: WorkspaceRecord,
     target: DispatchTarget,
@@ -332,6 +335,19 @@ export class PluginDispatcher {
           agent: event.agent ?? null,
         }
       : {};
+    // The answer to a decision the plugin raised is its own to read (`board:decisions`): the
+    // chosen option's label and key, without `board:read` and without a second call.
+    const own =
+      event.kind === "decision.answered" &&
+      event.decisionId !== undefined &&
+      !target.consent.includes("board:read") &&
+      target.consent.includes("board:decisions") &&
+      (
+        await pluginsOfItems(this.options.database, workspace.id, [
+          { kind: "decision", id: event.decisionId },
+        ])
+      ).has(target.key);
+    const answer = ownAnswerOf(target.consent, event.kind, event.data, own);
     const project =
       event.projectId === undefined
         ? undefined
@@ -342,7 +358,7 @@ export class PluginDispatcher {
       at: event.createdAt.toISOString(),
       plugin: event.plugin ?? null,
       project: project === undefined ? null : { id: project.id, key: project.key },
-      data: { ...ids, ...content },
+      data: { ...ids, ...content, ...answer },
     };
   }
 
@@ -356,4 +372,24 @@ export class PluginDispatcher {
       data: event.data,
     };
   }
+}
+
+/**
+ * What a hook is told of the answer to the plugin's own decision: the chosen option's label and
+ * its key, with `board:decisions`, since the answers to its own decisions are the plugin's to
+ * read; nothing for another's decision, another kind of event, or without the capability.
+ */
+export function ownAnswerOf(
+  consent: readonly string[],
+  kind: string,
+  data: { readonly option?: string | undefined; readonly optionKey?: string | undefined },
+  own: boolean,
+): { readonly option?: string; readonly optionKey?: string } {
+  if (!own || kind !== "decision.answered" || !consent.includes("board:decisions")) {
+    return {};
+  }
+  return {
+    ...(data.option === undefined ? {} : { option: data.option }),
+    ...(data.optionKey === undefined ? {} : { optionKey: data.optionKey }),
+  };
 }

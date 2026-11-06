@@ -249,7 +249,11 @@ describe("a plugin on the board", () => {
     expect(raised.decider.id).toBe(aliceId);
     expect(raised.raisedBy.id).toBe(bobId);
     expect(raised.plugin).toBe("leave");
-    expect(raised.options.map((option) => option.label)).toEqual(["Approve", "Reject"]);
+    // The options carry the keys the plugin gave them, by which it reads the answer.
+    expect(raised.options.map((option) => [option.label, option.key])).toEqual([
+      ["Approve", "approve"],
+      ["Reject", "reject"],
+    ]);
     // Alice approves, on the board as any decision is answered.
     const answered = await h.request(
       `${projectPath(BOARD, "decisions", decisionId ?? "")}/answer`,
@@ -297,6 +301,11 @@ describe("a plugin on the board", () => {
         ["task.created", "audit"],
       ]),
     );
+    // The answered event names the option by its label and by the key the plugin gave it.
+    expect(feed.items.find((event) => event.kind === "decision.answered")?.data).toMatchObject({
+      option: "Approve",
+      optionKey: "approve",
+    });
     // A second pass delivers nothing twice: the cursor moved on.
     await dispatcher.dispatch();
     const again = restTasksSchema.parse(

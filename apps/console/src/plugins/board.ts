@@ -8,6 +8,7 @@ import {
   MAX_QUESTION_LENGTH,
   MAX_VERSIONS_PER_DOCUMENT,
   MIN_OPTIONS,
+  OPTION_KEY_PATTERN,
   type RestTask,
   restTaskInputSchema,
   restTaskPatchSchema,
@@ -71,10 +72,21 @@ const READ_LIMIT = PLUGIN_LIST_LIMIT;
 const decisionAskSchema = z.object({
   question: z.string().trim().min(1).max(MAX_QUESTION_LENGTH),
   body: z.string().max(20_000).optional(),
+  // Each a label, and optionally a key the plugin reads the answer by (`optionKey` on the
+  // answered event), spelled as its own key is; each key once.
   options: z
-    .array(z.object({ label: z.string().trim().min(1).max(MAX_OPTION_LABEL_LENGTH) }))
+    .array(
+      z.object({
+        label: z.string().trim().min(1).max(MAX_OPTION_LABEL_LENGTH),
+        key: z.string().regex(OPTION_KEY_PATTERN).optional(),
+      }),
+    )
     .min(MIN_OPTIONS)
-    .max(MAX_OPTIONS),
+    .max(MAX_OPTIONS)
+    .refine((options) => {
+      const keys = options.flatMap((option) => (option.key === undefined ? [] : [option.key]));
+      return new Set(keys).size === keys.length;
+    }, "each key once"),
   deciderId: z.uuid().optional(),
   taskId: z.uuid().optional(),
   about: z.object({ collection: z.string().min(1).max(32), id: z.uuid() }),
@@ -467,7 +479,7 @@ export class PluginBoard {
             decision: {
               question: ask.data.question,
               body: ask.data.body,
-              options: ask.data.options.map((option) => option.label),
+              options: ask.data.options,
               taskId: ask.data.taskId,
               deciderId: ask.data.deciderId,
             },

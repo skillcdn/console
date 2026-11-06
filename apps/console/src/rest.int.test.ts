@@ -902,6 +902,68 @@ describe("decisions", () => {
     ).toHaveLength(1);
   });
 
+  it("carry the keys the raiser gave the options, answered back on the event for a program to read", async () => {
+    const raised = await send(alice, "POST", `${IN}/decisions`, {
+      question: "Approve the leave?",
+      options: [
+        { label: "Approve", key: "approve" },
+        { label: "Reject", key: "reject" },
+      ],
+    });
+    expect(raised.status, await raised.clone().text()).toBe(201);
+    const decision = restDecisionSchema.parse(await raised.json());
+    expect(decision.options).toEqual([
+      { id: "1", label: "Approve", key: "approve" },
+      { id: "2", label: "Reject", key: "reject" },
+    ]);
+    const answered = await send(alice, "POST", `${IN}/decisions/${decision.id}/answer`, {
+      option: "1",
+    });
+    expect(answered.status).toBe(200);
+    const history = restEventsSchema.parse(
+      await (await get(alice, `${IN}/events?decision=${decision.id}`)).json(),
+    );
+    expect(history.items.find((event) => event.kind === "decision.answered")?.data).toMatchObject({
+      option: "Approve",
+      optionKey: "approve",
+    });
+    // A key given twice, or a word that is not a key, is refused; an option may go without
+    // one, and the person's own answer carries none.
+    const twice = await send(alice, "POST", `${IN}/decisions`, {
+      question: "Twice?",
+      options: [
+        { label: "a", key: "same" },
+        { label: "b", key: "same" },
+      ],
+    });
+    expect(twice.status).toBe(400);
+    const odd = await send(alice, "POST", `${IN}/decisions`, {
+      question: "Odd?",
+      options: [{ label: "a", key: "Not A Key" }, { label: "b" }],
+    });
+    expect(odd.status).toBe(400);
+    const mixed = restDecisionSchema.parse(
+      await (
+        await send(alice, "POST", `${IN}/decisions`, {
+          question: "Some?",
+          options: [{ label: "a", key: "first" }, { label: "b" }],
+        })
+      ).json(),
+    );
+    expect(mixed.options.map((option) => option.key)).toEqual(["first", undefined]);
+    const own = restDecisionSchema.parse(
+      await (
+        await send(alice, "POST", `${IN}/decisions/${mixed.id}/answer`, { own: "Neither" })
+      ).json(),
+    );
+    expect(own.options.at(-1)).toEqual({ id: "3", label: "Neither", own: true });
+    const ownTold = restEventsSchema
+      .parse(await (await get(alice, `${IN}/events?decision=${mixed.id}`)).json())
+      .items.find((event) => event.kind === "decision.answered");
+    expect(ownTold?.data.option).toBe("Neither");
+    expect(ownTold?.data.optionKey).toBeUndefined();
+  });
+
   it("refuse one about a task that is nothing, too few options, and an id that is nothing", async () => {
     const orphan = await send(alice, "POST", `${IN}/decisions`, {
       question: "About nothing?",

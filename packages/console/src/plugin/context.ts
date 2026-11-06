@@ -255,7 +255,12 @@ export interface PluginWorkspace {
 export interface DecisionAsk {
   readonly question: string;
   readonly body?: string;
-  readonly options: readonly { readonly label: string }[];
+  /**
+   * The options, each a label and optionally a key (spelled as a plugin's key is, each once),
+   * which the answered event carries back as `optionKey`, so that the plugin reads the answer
+   * without comparing labels.
+   */
+  readonly options: readonly { readonly label: string; readonly key?: string }[];
   /** Who is to answer: a person who may work in the project; the project's owners when left out. */
   readonly deciderId?: string;
   readonly taskId?: string;
