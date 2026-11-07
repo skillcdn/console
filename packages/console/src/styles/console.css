@@ -5166,13 +5166,14 @@ select.sc-input-quiet:focus-visible {
 }
 
 /* A goal's page reads as the board does: the facts in a row at its head, then a switch between
-   the views of its tasks, then the view, which takes the rest of the height as the board does. */
+   the views of its tasks, then the view, which takes the rest of the height as the board does. A
+   view that needs more makes the page longer, as on any page: held to the window, it would run out
+   of the shell, and the header, which stays within the shell, would go with the scrolling. */
 .sc-goal-page {
   display: flex;
   flex: 1 1 0;
   flex-direction: column;
   gap: var(--sc-space-4);
-  min-height: 0;
 }
 
 .sc-goal-header {
@@ -5262,7 +5263,6 @@ select.sc-input-quiet:focus-visible {
   display: flex;
   flex: 1 1 0;
   flex-direction: column;
-  min-height: 0;
 }
 
 .sc-goal-view-list {
@@ -6364,11 +6364,12 @@ a.sc-tile-project:focus-visible {
 }
 
 /* While the page is arranged: the cells show as dots, every tile is a thing to take hold of, and
-   what is in a frame stays out of the pointer's way. */
+   what is in a frame stays out of the pointer's way. The bar stays in reach, just under the header
+   and above the tiles that pass beneath it. */
 .sc-home-bar {
   position: sticky;
-  top: var(--sc-space-3);
-  z-index: 20;
+  top: calc(var(--sc-header-height) + 2.75rem + var(--sc-space-3));
+  z-index: 2;
   display: flex;
   flex-wrap: wrap;
   gap: var(--sc-space-2) var(--sc-space-4);
