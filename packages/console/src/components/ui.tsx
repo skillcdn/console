@@ -108,7 +108,10 @@ export function Avatar(props: {
   const remote = useRemotePictureSrc();
   const size = props.size ?? "md";
   const initial = personName(props.person).slice(0, 1).toUpperCase();
-  if (props.person.avatar === null) {
+  const src = props.person.avatar === null ? undefined : remote(props.person.avatar);
+  // A picture that would not load gives way to the initial, and never to a broken image.
+  const [failed, setFailed] = useState<string | undefined>(undefined);
+  if (src === undefined || src === failed) {
     return (
       <span
         className={cx("sc-avatar", "sc-avatar-initial", `sc-avatar-${size}`)}
@@ -121,11 +124,12 @@ export function Avatar(props: {
   return (
     <img
       className={cx("sc-avatar", `sc-avatar-${size}`)}
-      src={remote(props.person.avatar)}
+      src={src}
       alt=""
       loading="lazy"
       decoding="async"
       referrerPolicy="no-referrer"
+      onError={() => setFailed(src)}
     />
   );
 }

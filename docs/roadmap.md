@@ -396,6 +396,13 @@ Goal: what writing the first plugins in `skillcdn/console-plugins` against the r
 - [x] The settings form draws a control per kind of setting: a list of an enum as pills or boxes, a list of people or projects as chips with a choice to add, a list of anything else as chips with a field, a `time` of day read in the workspace's time zone; and is divided into the `settingGroups` the manifest declares.
 - [x] A person arranges the front page's widgets ([ADR-0059](adr/0059-a-person-arranges-the-front-pages-widgets-from-the-sizes-each-comes-in.md)): a widget comes in sizes of one family (`sizes`, `defaultSize`; the one size of before read as one of them), the frame is told its size, and the person adds, removes, moves and resizes widgets on the page, their arrangement kept as `home` on `me`.
 
+## Milestone 37, what a look at the pages asked (2026-11-07)
+
+Goal: what a person found looking at milestone 36 on the preview console: the pages a plugin touches, read as a person reads them, and the front page, which a person arranges by hand.
+
+- [x] A frame never shows an answer meant for a program: the front page keeps to the plugins that are on, which an administrator reads with the rest, and the document of a frame with nothing to show is blank and tells the page, which says so in the person's language (`unavailable` on the bridge).
+- [x] The People page reads better: a card per person with their role, their manager and the team they manage in rows of one shape, the selects reading as the value they hold; the pages say manager where they said reports to, and a picture that will not load gives way to the initial.
+
 ## After milestone 16
 
 Nothing is chosen yet; the list below is where the next milestone comes from.

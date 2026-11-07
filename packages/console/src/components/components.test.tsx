@@ -1361,19 +1361,21 @@ describe("people", () => {
     expect(change).toContain('value="admin"');
   });
 
-  it("says whom a person reports to, and lets an administrator set the line", () => {
-    const reporting: RestPerson = { ...bob, managerId: alice.id };
-    const read = renderToStaticMarkup(<PeopleList people={[alice, reporting]} me={bob} />);
-    expect(read).toContain("Reports to Alice Example");
+  it("names a person's manager and the team a manager has, and lets an administrator set the manager", () => {
+    const managed: RestPerson = { ...bob, managerId: alice.id };
+    const read = renderToStaticMarkup(<PeopleList people={[alice, managed]} me={bob} />);
+    expect(read).toMatch(/<dt>Manager<\/dt><dd><span class="sc-person"[^>]*>.*?Alice Example/);
+    expect(read).toMatch(/<dt>Team<\/dt><dd><span class="sc-workers" title="bob">/);
+    expect(read).toMatch(/<dt>Manager<\/dt><dd><span class="sc-muted">None/);
     expect(read).not.toContain("<select");
     const change = renderToStaticMarkup(
-      <PeopleList people={[alice, reporting]} me={alice} onChangeManager={() => undefined} />,
+      <PeopleList people={[alice, managed]} me={alice} onChangeManager={() => undefined} />,
     );
-    // One select per person, each offering everyone but themselves, with the line as it stands.
+    // One select per person, each offering everyone but themselves, with the manager as it stands.
     expect(change.match(/<select/g)).toHaveLength(2);
-    expect(change).toContain("Reports to: Nobody");
-    expect(change.match(/Reports to: Alice Example/g)).toHaveLength(1);
-    expect(change.match(/Reports to: bob/g)).toHaveLength(1);
+    expect(change.match(/>None<[/]option>/g)).toHaveLength(2);
+    expect(change.match(/>Alice Example<\/option>/g)).toHaveLength(1);
+    expect(change.match(/>bob<\/option>/g)).toHaveLength(1);
     expect(change).toContain(`value="${alice.id}" selected=""`);
   });
 
@@ -1455,10 +1457,10 @@ describe("people", () => {
         organization={{ host: "gh", name: "acme", syncedAt: null }}
       />,
     );
-    expect(ofIt).toContain('alice · <span class="sc-person-note">Member of acme</span>');
+    expect(ofIt).toContain('<span class="sc-person-card-note">alice · Member of acme</span>');
     expect(ofIt).toContain('dave · <span class="sc-person-note">Left the organization');
     expect(ofIt).toContain(
-      'erin@acme.test · <span class="sc-person-note">Account at acme.test</span>',
+      '<span class="sc-person-card-note">erin@acme.test · Account at acme.test</span>',
     );
     expect(ofIt).not.toContain("Of the organization");
     expect(ofIt).not.toContain("Of the domain");

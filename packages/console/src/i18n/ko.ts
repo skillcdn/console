@@ -816,8 +816,8 @@ export const ko: Messages = {
       personUnlisted: (login) => `${login}을(를) 목록에서 뺐습니다`,
       personDeactivated: (login) => `${login}을(를) 비활성화했습니다`,
       personReactivated: (login) => `${login}을(를) 다시 활성화했습니다`,
-      managerChanged: (login, manager) => `${login}의 보고 라인을 ${manager}(으)로 정했습니다`,
-      managerCleared: (login) => `${login}의 보고 라인을 지웠습니다`,
+      managerChanged: (login, manager) => `${login}의 매니저를 ${manager}(으)로 지정했습니다`,
+      managerCleared: (login) => `${login}의 매니저 지정을 해제했습니다`,
       projectCreated: (project) => `프로젝트 ${project}을(를) 만들었습니다`,
       projectUpdated: (fields, project) => `프로젝트 ${project}의 ${fields}을(를) 바꿨습니다`,
       memberAdded: (login, project, role) =>
@@ -859,9 +859,9 @@ export const ko: Messages = {
       pluginDisabled: (plugin) => `플러그인 ${plugin}을(를) 비활성화했습니다`,
       pluginConfigured: (fields, plugin) => `플러그인 ${plugin}의 ${fields}을(를) 바꿨습니다`,
       pluginGranted: (role, who, plugin) =>
-        `${who}에게 플러그인 ${plugin}의 ${role} 역할을 주었습니다`,
+        `${who}에게 플러그인 ${plugin}의 ${role} 역할을 부여했습니다`,
       pluginRevoked: (role, who, plugin) =>
-        `${who}에게서 플러그인 ${plugin}의 ${role} 역할을 거두었습니다`,
+        `${who}에게서 플러그인 ${plugin}의 ${role} 역할을 제거했습니다`,
       pluginUpgraded: (plugin, version) => `플러그인 ${plugin}을(를) ${version}으로 올렸습니다`,
       pluginCommand: (command, plugin, outcome) =>
         `플러그인 ${plugin}의 ${command}을(를) 실행했습니다: ${outcome}`,
@@ -1029,9 +1029,10 @@ export const ko: Messages = {
     list: "사람들",
     narrowed: "같은 프로젝트에 속한 사람들과 관리자입니다.",
     roleOf: (name) => `${name}의 역할`,
-    reportsTo: "보고 라인",
-    reportsToOf: (name) => `${name}의 보고 라인`,
-    reportsToName: (name) => `${name}에게 보고`,
+    role: "역할",
+    manager: "매니저",
+    managerOf: (name) => `${name}의 매니저`,
+    team: "팀원",
     nobody: "없음",
     letIn: "사람 추가",
     letInAria: "사람 추가",

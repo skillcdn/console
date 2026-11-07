@@ -14,7 +14,7 @@ import {
 import { useWords } from "../i18n/index.js";
 import { MAX_LOGIN_LENGTH } from "../limits.js";
 import { PERSON_ROLES } from "../vocabulary.js";
-import { Badge, Button, PersonChip, personName, RoleBadge, Time } from "./ui.js";
+import { Avatar, Badge, Button, PersonChip, personName, RoleBadge, Time, Workers } from "./ui.js";
 
 // The people of the board, with what each may do and whether they are in (ADR-0022): those in,
 // the logins let in that nobody has signed in with yet, and those deactivated. An administrator
@@ -37,7 +37,7 @@ export interface PeopleListProps {
    * with it.
    */
   readonly onChangeStatus?: ((person: RestPerson, status: PersonStatus) => void) | undefined;
-  /** Called with whom an administrator said the person reports to, or null for nobody. Left out, the line is read here, not changed. */
+  /** Called with the manager an administrator chose for the person, or null for none. Left out, managers are read here, not changed. */
   readonly onChangeManager?: ((person: RestPerson, managerId: string | null) => void) | undefined;
   /** Called when an administrator takes a listing away. Left out, listings are read here. */
   readonly onUnlist?: ((listing: RestListing) => void) | undefined;
@@ -60,7 +60,7 @@ export function PeopleList(props: PeopleListProps) {
     props.me?.id !== person.id;
   const organization = props.organization ?? undefined;
   const byId = new Map(props.people.map((person) => [person.id, person]));
-  /** The reporting line, as the row shows it: whom the person reports to, where someone. */
+  /** The person's manager, where they have one that can be named here. */
   const managerOf = (person: RestPerson): RestPerson | undefined =>
     person.managerId === null || person.managerId === undefined
       ? undefined
@@ -93,96 +93,133 @@ export function PeopleList(props: PeopleListProps) {
         </p>
       )}
       <ul className="sc-people" aria-label={people.list}>
-        {active.map((person) => (
-          <li key={person.id} className="sc-person-row">
-            <PersonChip person={person} size="md" />
-            {props.me?.id === person.id && (
-              <span className="sc-person-you">{words.common.you}</span>
-            )}
-            <span className="sc-person-name sc-muted">
-              {person.name !== null && <>{person.login} · </>}
-              <span className="sc-person-note">{noteOf(person)}</span>
-            </span>
-            {props.onChangeRole === undefined ? (
-              <RoleBadge role={person.role} />
-            ) : (
-              <label className="sc-field sc-field-inline">
-                <span className="sc-visually-hidden">{people.roleOf(personName(person))}</span>
-                <select
-                  className="sc-input"
-                  value={person.role}
-                  disabled={props.busy === true}
-                  onChange={(event) =>
-                    props.onChangeRole?.(person, event.target.value as PersonRole)
-                  }
-                >
-                  {PERSON_ROLES.map((role) => (
-                    <option key={role} value={role}>
-                      {words.vocabulary.role[role]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            {props.onChangeManager === undefined ? (
-              managerOf(person) !== undefined && (
-                <span className="sc-person-manager sc-muted">
-                  {people.reportsToName(personName(managerOf(person) ?? person))}
-                </span>
-              )
-            ) : (
-              <label className="sc-field sc-field-inline">
-                <span className="sc-visually-hidden">{people.reportsToOf(personName(person))}</span>
-                <select
-                  className="sc-input"
-                  value={person.managerId ?? ""}
-                  disabled={props.busy === true}
-                  onChange={(event) =>
-                    props.onChangeManager?.(
-                      person,
-                      event.target.value === "" ? null : event.target.value,
-                    )
-                  }
-                >
-                  <option value="">
-                    {people.reportsTo}: {people.nobody}
-                  </option>
-                  {props.people
-                    .filter(
-                      (candidate) =>
-                        candidate.id !== person.id &&
-                        (candidate.status === "active" || candidate.id === person.managerId),
-                    )
-                    .map((candidate) => (
-                      <option key={candidate.id} value={candidate.id}>
-                        {people.reportsTo}: {personName(candidate)}
-                      </option>
-                    ))}
-                </select>
-              </label>
-            )}
-            {props.workHref !== undefined && (
-              <a className="sc-button sc-button-ghost sc-button-sm" href={props.workHref(person)}>
-                {people.work}
-              </a>
-            )}
-            {props.agentsHref !== undefined && (
-              <a className="sc-button sc-button-ghost sc-button-sm" href={props.agentsHref(person)}>
-                {people.agents}
-              </a>
-            )}
-            {mayChange(person) && (
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={props.busy === true}
-                onClick={() => props.onChangeStatus?.(person, "deactivated")}
-              >
-                {people.deactivate}
-              </Button>
-            )}
-          </li>
-        ))}
+        {active.map((person) => {
+          const manager = managerOf(person);
+          const team = active.filter((other) => other.managerId === person.id);
+          const hasWays =
+            props.workHref !== undefined || props.agentsHref !== undefined || mayChange(person);
+          return (
+            <li key={person.id} className="sc-person-card">
+              <div className="sc-person-card-head">
+                <Avatar person={person} size="lg" />
+                <div className="sc-person-card-who">
+                  <span className="sc-person-card-name">
+                    {personName(person)}
+                    {props.me?.id === person.id && (
+                      <span className="sc-person-you">{words.common.you}</span>
+                    )}
+                  </span>
+                  <span className="sc-person-card-note">
+                    {person.name !== null && <>{person.login} · </>}
+                    {noteOf(person)}
+                  </span>
+                </div>
+              </div>
+              <dl className="sc-person-facts">
+                <div className="sc-person-fact">
+                  <dt>{people.role}</dt>
+                  <dd>
+                    {props.onChangeRole === undefined ? (
+                      <RoleBadge role={person.role} />
+                    ) : (
+                      <select
+                        className="sc-input sc-input-quiet"
+                        aria-label={people.roleOf(personName(person))}
+                        value={person.role}
+                        disabled={props.busy === true}
+                        onChange={(event) =>
+                          props.onChangeRole?.(person, event.target.value as PersonRole)
+                        }
+                      >
+                        {PERSON_ROLES.map((role) => (
+                          <option key={role} value={role}>
+                            {words.vocabulary.role[role]}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </dd>
+                </div>
+                <div className="sc-person-fact">
+                  <dt>{people.manager}</dt>
+                  <dd>
+                    {props.onChangeManager === undefined ? (
+                      manager === undefined ? (
+                        <span className="sc-muted">{people.nobody}</span>
+                      ) : (
+                        <PersonChip person={manager} />
+                      )
+                    ) : (
+                      <select
+                        className="sc-input sc-input-quiet"
+                        aria-label={people.managerOf(personName(person))}
+                        value={person.managerId ?? ""}
+                        disabled={props.busy === true}
+                        onChange={(event) =>
+                          props.onChangeManager?.(
+                            person,
+                            event.target.value === "" ? null : event.target.value,
+                          )
+                        }
+                      >
+                        <option value="">{people.nobody}</option>
+                        {props.people
+                          .filter(
+                            (candidate) =>
+                              candidate.id !== person.id &&
+                              (candidate.status === "active" || candidate.id === person.managerId),
+                          )
+                          .map((candidate) => (
+                            <option key={candidate.id} value={candidate.id}>
+                              {personName(candidate)}
+                            </option>
+                          ))}
+                      </select>
+                    )}
+                  </dd>
+                </div>
+                {team.length > 0 && (
+                  <div className="sc-person-fact">
+                    <dt>{people.team}</dt>
+                    <dd>
+                      <Workers workers={team} />
+                    </dd>
+                  </div>
+                )}
+              </dl>
+              {hasWays && (
+                <div className="sc-person-card-ways">
+                  {props.workHref !== undefined && (
+                    <a
+                      className="sc-button sc-button-ghost sc-button-sm"
+                      href={props.workHref(person)}
+                    >
+                      {people.work}
+                    </a>
+                  )}
+                  {props.agentsHref !== undefined && (
+                    <a
+                      className="sc-button sc-button-ghost sc-button-sm"
+                      href={props.agentsHref(person)}
+                    >
+                      {people.agents}
+                    </a>
+                  )}
+                  {mayChange(person) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={props.busy === true}
+                      onClick={() => props.onChangeStatus?.(person, "deactivated")}
+                    >
+                      {people.deactivate}
+                    </Button>
+                  )}
+                </div>
+              )}
+            </li>
+          );
+        })}
       </ul>
       {listed.length > 0 && (
         <section className="sc-people-section" aria-label={people.notSignedIn}>
