@@ -29,6 +29,7 @@ export {
   type CapabilityWords,
   capabilityWords,
   isPluginCapability,
+  OUTBOUND_WEBRTC,
   outboundAllows,
   PLUGIN_CAPABILITIES,
   PLUGIN_CAPABILITY_PREFIXES,

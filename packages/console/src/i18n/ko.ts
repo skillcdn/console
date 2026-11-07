@@ -357,6 +357,10 @@ export const ko: Messages = {
         name: "전용 데이터베이스 스키마",
         opens: "콘솔 데이터베이스에 전용 스키마와 로그인 역할을 갖습니다.",
       },
+      "outbound:webrtc": {
+        name: "페이지의 WebRTC 연결",
+        opens: "페이지가 각 사람의 브라우저에서 콘솔을 거치지 않고 어떤 주소로든 연결합니다.",
+      },
       outbound: (host) => ({ name: `${host}로 요청`, opens: `${host}에 https 요청을 보냅니다.` }),
       plugins: (key) => ({
         name: `플러그인 ${key} 호출`,

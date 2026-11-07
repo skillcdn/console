@@ -8,6 +8,7 @@ import {
   type BrowserConsole,
   startBrowserConsole,
 } from "../testing/browser-console.js";
+import { CALL_PLUGIN_DIR } from "../testing/plugins.js";
 
 // A plugin's pages as a real browser has them (ADR-0054, docs/specs/plugins.md, "The frame" and
 // "The bridge"): what plugin-frame.int.test.ts proves of the headers, the browser is seen to
@@ -45,6 +46,7 @@ beforeAll(async () => {
   console_ = await startBrowserConsole({
     databaseUrl: process.env.TEST_DATABASE_URL,
     env: process.env,
+    plugins: [{ name: "console-plugin-call", dir: CALL_PLUGIN_DIR }],
   });
   browser = await chromium.launch();
 }, 180_000);
@@ -287,6 +289,63 @@ describe("the example plugin in a browser", () => {
     expect(await frame.evaluate(FROM_WITHIN(`${address}/within.js`))).toBe("WebRTC is undefined");
     // A script that shadows what the first line reads fails it, and none of it runs.
     expect(await frame.evaluate(FROM_WITHIN(`${address}/shadowing.js`))).toBe("nothing");
+    await page.context().close();
+  });
+
+  it("gives a frame WebRTC while its plugin holds outbound:webrtc, and takes it with the capability (ADR-0066)", async () => {
+    const page = await signedIn(BROWSER_ADMIN);
+    const sent = (path: string, method: string, body: unknown) =>
+      page.evaluate(
+        async (request) => {
+          const answer = await fetch(request.path, {
+            method: request.method,
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(request.body),
+          });
+          return answer.status;
+        },
+        { path, method, body },
+      );
+    const opened = async () => {
+      await page.goto(`${console_.origin}/plugins/call/room`);
+      const frame = await frameOf(page, "iframe.sc-plugin-frame");
+      await frame.waitForFunction("document.getElementById('root').textContent.length > 0");
+      return frame;
+    };
+    const said = "document.getElementById('root').textContent";
+    const within = FROM_WITHIN(`${console_.origin}/api/v1/plugins/call/web/0.0.1/within.js`);
+    expect(
+      await sent("/api/v1/plugins/call/enable", "POST", {
+        consent: ["outbound:webrtc"],
+        board: null,
+        projects: "all",
+      }),
+    ).toBe(200);
+
+    const held = await opened();
+    expect(await held.evaluate(said)).toBe("WebRTC is function");
+    expect(await held.evaluate(within)).toBe("WebRTC is function");
+    expect(
+      await held.evaluate(
+        "new RTCPeerConnection().createOffer({ offerToReceiveAudio: true }).then((offer) => offer.type)",
+      ),
+    ).toBe("offer");
+
+    // Withdrawn, the next frame has none, in the same browser that ran the script without the line.
+    expect(await sent("/api/v1/plugins/call/consent", "PATCH", { consent: [] })).toBe(200);
+    const withdrawn = await opened();
+    expect(await withdrawn.evaluate(said)).toBe("WebRTC is undefined");
+    expect(await withdrawn.evaluate(within)).toBe("WebRTC is undefined");
+
+    // Neither camera nor microphone comes with it: the frame is allowed neither.
+    expect(
+      await sent("/api/v1/plugins/call/consent", "PATCH", { consent: ["outbound:webrtc"] }),
+    ).toBe(200);
+    const again = await opened();
+    expect(
+      await again.evaluate(`(navigator.mediaDevices?.getUserMedia({ audio: true }) ?? Promise.reject(new TypeError()))
+        .then(() => "given", (error) => error.name)`),
+    ).not.toBe("given");
     await page.context().close();
   });
 

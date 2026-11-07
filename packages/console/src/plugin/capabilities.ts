@@ -19,9 +19,17 @@ export const PLUGIN_CAPABILITIES = [
   "jobs",
   "endpoints",
   "storage:sql",
+  "outbound:webrtc",
 ] as const;
 
 export type PluginCapability = (typeof PLUGIN_CAPABILITIES)[number];
+
+/**
+ * WebRTC on a plugin's pages (ADR-0066). It stands with `outbound:<host>` as a way to the internet,
+ * and it is no host: a connection goes from a person's browser to any address a page names, which
+ * no host could bound, so that consent to a host does not open it, and it opens no host.
+ */
+export const OUTBOUND_WEBRTC: PluginCapability = "outbound:webrtc";
 
 /** The capabilities that carry a parameter: a host to reach, a plugin to call. */
 export const PLUGIN_CAPABILITY_PREFIXES = ["outbound:", "plugins:"] as const;
@@ -97,6 +105,10 @@ export const CAPABILITY_WORDS: Readonly<Record<PluginCapability, CapabilityWords
     opens: "a schema and a login role of its own in the console's database",
     reach: "statements up to the timeout, within its schema",
   },
+  "outbound:webrtc": {
+    opens: "WebRTC on its pages: connections from each person's browser to any address",
+    reach: "what its pages are shown, sent anywhere from the person's browser; their address",
+  },
 };
 
 /** True for a capability the catalogue knows, parameter included. */
@@ -137,7 +149,11 @@ export function capabilityWords(capability: string): CapabilityWords | undefined
 
 /** True when the request's host is within what `outbound:<host>` names: the host itself, or a subdomain where the capability starts with `*.`. */
 export function outboundAllows(capability: string, host: string): boolean {
-  if (!capability.startsWith("outbound:") || !isPluginCapability(capability)) {
+  if (
+    !capability.startsWith("outbound:") ||
+    capability === OUTBOUND_WEBRTC ||
+    !isPluginCapability(capability)
+  ) {
     return false;
   }
   const named = capability.slice("outbound:".length);

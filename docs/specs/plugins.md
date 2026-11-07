@@ -51,7 +51,7 @@
 | `web` | path | the directory of the web bundle, with `index.js`; required where `pages` or `widgets` are declared |
 | `skills` | path | the directory of the skills; `SKILLCDN.md` is then at the package root |
 | `migrations` | path | the directory of SQL migrations; with `storage:sql` only |
-| `capabilities` | string[] | what the plugin requires, from the catalogue below; `outbound:<host>` and `plugins:<key>` carry their parameter |
+| `capabilities` | string[] | what the plugin requires, from the catalogue below; `outbound:<host>` and `plugins:<key>` carry their parameter, `outbound:webrtc` is a word of its own |
 | `optionalCapabilities` | string[] | what it can go without ([ADR-0060](../adr/0060-what-a-plugin-asks-is-required-or-optional-and-the-optional-are-the-administrators-to-choose.md)): the same catalogue, never `storage:sql`, each named once across the two lists, at most 50 together; an administrator turns each on when enabling the plugin or later, off until then |
 | `roles` | `{ [role]: { name, description } }` | role keys as `key`; up to 10; names and descriptions per language |
 | `defaultRole` | string | a role every member of the workspace holds without a grant; optional |
@@ -210,6 +210,7 @@ Declared in the manifest, consented to by an administrator when enabling, enforc
 | `events:plugins` | hooks on the events other plugins emit | what they publish |
 | `jobs` | runs on a schedule | time, within the bound |
 | `outbound:<host>` | `ctx.fetch` to that host, a public address, over https | what it may read, sent to that host; a cost there |
+| `outbound:webrtc` | WebRTC on its pages: connections from each person's browser to any address ([ADR-0066](../adr/0066-webrtc-is-a-way-out-a-plugin-asks-for-and-how-a-frame-is-held-stays-in-one-place.md)) | what its pages are shown, sent anywhere from the person's browser; their address |
 | `endpoints` | inbound requests under its path, a person's or a webhook's | input it accepts without verifying; the rate limit holds |
 | `plugins:<key>` | that plugin's `api`, as the caller | what that API gives the caller |
 | `storage:sql` | a schema and a login role of its own | statements up to the timeout, within its schema |
@@ -427,11 +428,11 @@ The install path is the first line (a release of the deployment, from a lockfile
 | hold the console: run past its time, grow past its memory, send more than fits | the bounds; the thread ended alone |
 | hide: run a command, change the board or fail without a trace | the events and the log |
 
-**The reach, by capability,** is the last column of the catalogue above. In sum: a plugin reaches what its role holders may see through it and what its consented capabilities open; sending anything out needs an `outbound` host the administrator consented to; what it does on a board is marked and reversible.
+**The reach, by capability,** is the last column of the catalogue above. In sum: a plugin reaches what its role holders may see through it and what its consented capabilities open; sending anything out needs an `outbound` capability the administrator consented to; what it does on a board is marked and reversible.
 
 **What is checked, not enforced.** The hardening of a thread is defence in depth: a sandbox of its own would be a host container without egress, left to later. `console-plugin check` scans a plugin for what the host refuses, so that an author learns before an administrator does.
 
-**The pages.** A frame's code runs in an opaque origin and reaches the console through the bridge alone, which performs its plugin's own routes and nothing else; it holds the person's authority within its plugin, exactly as the plugin's server does. A file of its bundle, which a frame may go to, carries a policy of its own and runs nothing as a document. A frame holds no WebRTC either, which `connect-src` does not govern and no policy a browser honours closes: every script of a bundle is served beginning with a line that takes it out of wherever the script runs, the frame or a frame made inside it ([ADR-0064](../adr/0064-a-frame-holds-no-webrtc-every-script-of-a-bundle-begins-by-taking-it-out.md)). Nothing a plugin writes is rendered as HTML by the console's pages: a tab, a sub-tab and a widget's name are text.
+**The pages.** A frame's code runs in an opaque origin and reaches the console through the bridge alone, which performs its plugin's own routes and nothing else; it holds the person's authority within its plugin, exactly as the plugin's server does. A file of its bundle, which a frame may go to, carries a policy of its own and runs nothing as a document. A frame holds no WebRTC either, which `connect-src` does not govern and no policy a browser honours closes: every script of a bundle is served beginning with a line that takes it out of wherever the script runs, the frame or a frame made inside it ([ADR-0064](../adr/0064-a-frame-holds-no-webrtc-every-script-of-a-bundle-begins-by-taking-it-out.md)). A plugin that holds `outbound:webrtc` is served its scripts without that line; no host opens it, and it opens no host. One that lists it as optional is served its scripts uncached, so that it is gone from the next time a frame loads once it is withdrawn, and a frame runs its own version's scripts alone ([ADR-0066](../adr/0066-webrtc-is-a-way-out-a-plugin-asks-for-and-how-a-frame-is-held-stays-in-one-place.md)). Nothing a plugin writes is rendered as HTML by the console's pages: a tab, a sub-tab and a widget's name are text.
 
 **The record.** Who did what, through which plugin, is on the board: `plugin.command` for every command, the board's own events with the plugin's key for every change, `plugin.enabled` and its kin for every administrative act. The settings page shows a plugin's events, and a feed is filtered by plugin. What was read, queried, received and run on schedule is in the operational log, a line each, with the plugin, the person, the name, the duration and the outcome.
 

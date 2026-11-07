@@ -1,0 +1,8 @@
+{
+  "name": "console-plugin-call",
+  "version": "0.0.1",
+  "private": true,
+  "description": "A fixture: a page that may use WebRTC, for the tests of the frame.",
+  "license": "MIT",
+  "type": "module"
+}

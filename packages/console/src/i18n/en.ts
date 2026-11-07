@@ -415,6 +415,10 @@ export const en = {
         name: "Own database schema",
         opens: "Gets a schema and a login role of its own in the console's database.",
       },
+      "outbound:webrtc": {
+        name: "WebRTC on its pages",
+        opens: "Its pages connect from each person's browser to any address, past the console.",
+      },
       outbound: (host: string) => ({
         name: `Requests to ${host}`,
         opens: `Sends https requests to ${host}.`,

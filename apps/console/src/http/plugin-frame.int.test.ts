@@ -17,6 +17,7 @@ import { Plugins } from "../plugins/registry.js";
 import { createFixtureProvider, type FixtureProvider } from "../testing/fixture-provider.js";
 import { createHarness, type Harness, SIGN_IN_URL } from "../testing/harness.js";
 import {
+  CALL_PLUGIN_DIR,
   HELLO_PLUGIN_DIR,
   HOST_ENTRY,
   hostEnvironment,
@@ -47,6 +48,7 @@ beforeAll(async () => {
   testDatabase = await createTestDatabase(process.env.TEST_DATABASE_URL ?? DEV_DATABASE_URL);
   root = await writePluginsDir(await mkdtemp(join(tmpdir(), "console-plugin-frame-")), [
     { name: "console-plugin-hello", dir: HELLO_PLUGIN_DIR },
+    { name: "console-plugin-call", dir: CALL_PLUGIN_DIR },
   ]);
   const logger = pino({ level: "warn" }, { write: () => {} });
   const holder: { current: Plugins | undefined } = { current: undefined };
@@ -108,7 +110,7 @@ describe("the frame of a plugin's page", () => {
     expect(framed.headers.get("content-security-policy")).toBe(
       [
         "default-src 'none'",
-        `script-src ${web}`,
+        `script-src ${web}${version}/`,
         `style-src ${web} ${runtime}`,
         `img-src ${web} data: blob:`,
         `font-src ${web} ${runtime}`,
@@ -152,6 +154,44 @@ describe("the frame of a plugin's page", () => {
       const refused = await h.request(path, { headers });
       expect(refused.status, path).toBe(404);
     }
+  });
+
+  it("serves a plugin's scripts as what it holds says, and keeps no copy of what can change (ADR-0066)", async () => {
+    const AT_CALL = pluginPath("call");
+    const enabled = await h.request(
+      `${AT_CALL}/enable`,
+      json({ consent: [], board: null, projects: "all" }, admin),
+    );
+    expect(enabled.status, await enabled.clone().text()).toBe(200);
+    const script = () => h.request(`${AT_CALL}/web/0.0.1/index.js`);
+    const consented = async (consent: readonly string[]) => {
+      const answer = await h.request(`${AT_CALL}/consent`, {
+        ...json({ consent }, admin),
+        method: "PATCH",
+      });
+      expect(answer.status, await answer.clone().text()).toBe(200);
+    };
+    const GUARD = 'if(typeof globalThis!=="object")';
+
+    const without = await script();
+    expect((await without.text()).startsWith(GUARD)).toBe(true);
+    expect(without.headers.get("cache-control")).toBe("no-store");
+
+    await consented(["outbound:webrtc"]);
+    const held = await script();
+    const served = await held.text();
+    expect(served.startsWith(GUARD)).toBe(false);
+    expect(served).toContain("WebRTC is");
+    expect(held.headers.get("cache-control")).toBe("no-store");
+    expect(Number(held.headers.get("content-length"))).toBe(
+      new TextEncoder().encode(served).length,
+    );
+
+    await consented([]);
+    expect((await (await script()).text()).startsWith(GUARD)).toBe(true);
+
+    const style = await h.request(`${AT_CALL}/web/0.0.1/index.css`);
+    expect(style.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
   });
 
   it("serves the bundle's files under their version, immutable and readable across origins, and nothing outside", async () => {

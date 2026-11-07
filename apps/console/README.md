@@ -84,7 +84,9 @@ src/
                  and the console's policy, a person's call as the person, a job's or a hook's as the
                  administrator who enabled the plugin, what it makes marked as its, its own items
                  alone changed), outbound.ts (ctx.fetch: https to a host consented to, the address
-                 resolved and pinned, a secret put in by the console, the bounds), dispatcher.ts (the
+                 resolved and pinned, a secret put in by the console, the bounds), frame-holds.ts (what
+                 a plugin's frames hold beyond the bridge and how they are held to it, the one place that
+                 knows how), dispatcher.ts (the
                  hooks: both streams from a cursor per plugin under one lock, at least once, retries
                  with backoff, then a plugin.failed event), scheduler.ts (the jobs: every and at in
                  the workspace's zone, a lock per job, a failure told once an hour); the queries are

@@ -1,0 +1,41 @@
+{
+  "key": "call",
+  "name": {
+    "en": "Call"
+  },
+  "description": {
+    "en": "A page that may use WebRTC where an administrator turns it on, for the tests of the frame."
+  },
+  "pluginApi": 1,
+  "server": "server/index.js",
+  "web": "server/web",
+  "capabilities": [],
+  "optionalCapabilities": ["outbound:webrtc"],
+  "roles": {
+    "caller": {
+      "name": {
+        "en": "Caller"
+      },
+      "description": {
+        "en": "Opens the room."
+      }
+    }
+  },
+  "defaultRole": "caller",
+  "board": {
+    "needs": "none"
+  },
+  "menu": {
+    "group": "operations"
+  },
+  "pages": [
+    {
+      "key": "room",
+      "name": {
+        "en": "Room"
+      },
+      "level": "workspace",
+      "roles": ["caller"]
+    }
+  ]
+}

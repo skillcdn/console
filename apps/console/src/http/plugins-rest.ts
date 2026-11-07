@@ -49,6 +49,7 @@ import { configuresPlugins } from "../auth/policy.js";
 import { PluginStoreError } from "../db/queries/plugins.js";
 import { ProjectError } from "../db/queries/projects.js";
 import type { Logger } from "../logger.js";
+import { frameFile } from "../plugins/frame-holds.js";
 import type { Caller, Invocation, Plugins } from "../plugins/registry.js";
 import { createPluginSkills, pluginSkillsAddress } from "../plugins/skills.js";
 import type { Clock } from "../ports/clock.js";
@@ -87,17 +88,6 @@ const CONSOLE_STYLESHEET = createRequire(import.meta.url).resolve("@skillcdn/con
 const FRAME_UNAVAILABLE_SCRIPT = `parent.postMessage({v:1,t:"unavailable"},"*")`;
 const FRAME_UNAVAILABLE_DOCUMENT = `<!doctype html><html lang="en"><head><meta charset="utf-8"></head><body><script>${FRAME_UNAVAILABLE_SCRIPT}</script></body></html>\n`;
 const FRAME_UNAVAILABLE_HASH = `sha256-${createHash("sha256").update(FRAME_UNAVAILABLE_SCRIPT).digest("base64")}`;
-
-/**
- * What every script of a bundle is served beginning with (ADR-0064): WebRTC, which no policy of a
- * frame governs, goes from wherever the script runs, the frame or a frame made inside it, before a
- * line of the plugin's. A file that shadows what this reads fails here, and none of it runs.
- */
-const NO_WEBRTC = new TextEncoder().encode(
-  'if(typeof globalThis!=="object")throw new Error("a script of a bundle may not shadow globalThis");' +
-    "for(const name of Object.getOwnPropertyNames(globalThis))" +
-    "if(/^(webkit)?RTC/.test(name))delete globalThis[name];\n",
-);
 
 /** A person's own console, served on this machine by the command (ADR-0014): it may embed a frame too. */
 const LOOPBACK_ORIGIN = /^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/;
@@ -1284,7 +1274,8 @@ export function registerPluginsRest(
     const webPath = `${origin}${pluginPath(key, "web")}/`;
     frameHeaders(c, [
       "default-src 'none'",
-      `script-src ${webPath}`,
+      // This version's alone: what a browser kept of another began as that version held.
+      `script-src ${bundle}/`,
       `style-src ${webPath} ${runtime}/`,
       `img-src ${webPath} data: blob:`,
       `font-src ${webPath} ${runtime}/`,
@@ -1333,10 +1324,10 @@ export function registerPluginsRest(
       return notFound(c);
     }
     const type = BUNDLE_TYPES[extname(file).toLowerCase()] ?? "application/octet-stream";
-    const served = type.startsWith("text/javascript") ? Buffer.concat([NO_WEBRTC, bytes]) : bytes;
+    const served = frameFile(bytes, type, web.holds);
     c.header("content-type", type);
-    c.header("content-length", String(served.byteLength));
-    c.header("cache-control", "public, max-age=31536000, immutable");
+    c.header("content-length", String(served.body.byteLength));
+    c.header("cache-control", served.cacheControl);
     // The frame's origin is opaque, and a module script, as a font, is fetched with CORS: the
     // bundle, which holds no secret, is readable from any origin, or the browser runs none of it.
     c.header("cross-origin-resource-policy", "cross-origin");
@@ -1345,7 +1336,7 @@ export function registerPluginsRest(
     // A frame may go to a file of its own bundle, where the frame's policy is gone, and an SVG is
     // a document that runs scripts: a file is loaded, under the frame's policy, and is never a page.
     c.header("content-security-policy", "default-src 'none'; sandbox");
-    return c.body(new Uint8Array(served).buffer);
+    return c.body(new Uint8Array(served.body).buffer);
   });
 
   app.get(`${PLUGIN_RUNTIME}/console.css`, async (c) => {

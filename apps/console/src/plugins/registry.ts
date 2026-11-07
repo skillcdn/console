@@ -102,6 +102,7 @@ import type { Clock } from "../ports/clock.js";
 import { PluginBoard } from "./board.js";
 import type { Discovery } from "./discovery.js";
 import type { DispatchTarget } from "./dispatcher.js";
+import { type FrameHolds, frameHoldsOf } from "./frame-holds.js";
 import type { ContextCall, PluginHost } from "./host.js";
 import { Outbound } from "./outbound.js";
 import { type CallResult, measure, type PluginCall, UNAVAILABLE } from "./protocol.js";
@@ -1789,6 +1790,7 @@ export class Plugins {
         readonly version: string;
         readonly pages: readonly string[];
         readonly widgets: readonly string[];
+        readonly holds: FrameHolds;
       }
     | undefined
   > {
@@ -1806,6 +1808,7 @@ export class Plugins {
       version: entry.version,
       pages: entry.manifest.pages.map((page) => page.key),
       widgets: entry.manifest.widgets.map((widget) => widget.key),
+      holds: frameHoldsOf(entry.manifest.optionalCapabilities, install.consent),
     };
   }
 
