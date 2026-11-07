@@ -13,6 +13,15 @@ export const FORBIDDEN_BUILTINS: readonly string[] = [
   "dgram",
   "dns",
   "dns/promises",
+  // The same network, under the names Node keeps for compatibility.
+  "_http_agent",
+  "_http_client",
+  "_http_common",
+  "_http_incoming",
+  "_http_outgoing",
+  "_http_server",
+  "_tls_common",
+  "_tls_wrap",
   "child_process",
   "cluster",
   "worker_threads",
@@ -67,6 +76,15 @@ export interface HardenedThread {
   readonly removed: readonly string[];
 }
 
+/** What a plugin is told of a built-in it may not have, by whichever way it asked. */
+function refusedBuiltin(specifier: string): Error {
+  const error = new Error(
+    `the host refuses ${specifier}: a plugin reaches the console through ctx alone`,
+  );
+  (error as { code?: string }).code = "ERR_PLUGIN_FORBIDDEN_BUILTIN";
+  return error;
+}
+
 /** The module hook: refuses the forbidden built-ins and lets everything else resolve as it would. */
 export function forbiddingResolve<C, R>(
   specifier: string,
@@ -74,19 +92,16 @@ export function forbiddingResolve<C, R>(
   nextResolve: (specifier: string, context: C) => R,
 ): R {
   if (isForbiddenBuiltin(specifier)) {
-    const error = new Error(
-      `the host refuses ${specifier}: a plugin reaches the console through ctx alone`,
-    );
-    (error as { code?: string }).code = "ERR_PLUGIN_FORBIDDEN_BUILTIN";
-    throw error;
+    throw refusedBuiltin(specifier);
   }
   return nextResolve(specifier, context);
 }
 
 /**
- * Hardens the current thread: refuses the forbidden built-ins through the module hooks, removes
- * the globals, empties the environment, and blocks `process.binding`. Call it in a worker thread
- * before importing plugin code; it reaches nothing outside that thread.
+ * Hardens the current thread: refuses the forbidden built-ins through the module hooks and through
+ * `process.getBuiltinModule`, which goes round them, removes the globals, empties the environment,
+ * and blocks `process.binding`. Call it in a worker thread before importing plugin code; it reaches
+ * nothing outside that thread.
  */
 export function hardenThread(
   moduleApi: Pick<typeof import("node:module"), "registerHooks">,
@@ -111,6 +126,19 @@ export function hardenThread(
     };
     for (const name of ["binding", "_linkedBinding", "dlopen"]) {
       Object.defineProperty(proc, name, { value: refuse, writable: false, configurable: false });
+    }
+    const getBuiltinModule = proc.getBuiltinModule;
+    if (typeof getBuiltinModule === "function") {
+      Object.defineProperty(proc, "getBuiltinModule", {
+        value: (specifier: string): unknown => {
+          if (isForbiddenBuiltin(specifier)) {
+            throw refusedBuiltin(specifier);
+          }
+          return getBuiltinModule.call(proc, specifier);
+        },
+        writable: false,
+        configurable: false,
+      });
     }
     const env = proc.env as Record<string, unknown> | undefined;
     if (env !== undefined) {

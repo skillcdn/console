@@ -1,3 +1,4 @@
+import { builtinModules } from "node:module";
 import { describe, expect, it } from "vitest";
 import {
   forbiddenImportsIn,
@@ -34,6 +35,65 @@ describe("isForbiddenBuiltin", () => {
 });
 
 describe("forbiddenImportsIn", () => {
+  it("has looked at every built-in of this Node", () => {
+    // What a plugin's thread may load: none reaches the network, a process or a thread, and what
+    // reads or writes a file answers to the permission model. A built-in a new Node brings fails
+    // here until someone says which it is.
+    const reachesNothing = new Set([
+      "_stream_duplex",
+      "_stream_passthrough",
+      "_stream_readable",
+      "_stream_transform",
+      "_stream_wrap",
+      "_stream_writable",
+      "assert",
+      "assert/strict",
+      "async_hooks",
+      "buffer",
+      "console",
+      "constants",
+      "crypto",
+      "diagnostics_channel",
+      "domain",
+      "events",
+      "fs",
+      "fs/promises",
+      "module",
+      "os",
+      "path",
+      "path/posix",
+      "path/win32",
+      "perf_hooks",
+      "process",
+      "punycode",
+      "querystring",
+      "readline",
+      "readline/promises",
+      "sea",
+      "sqlite",
+      "stream",
+      "stream/consumers",
+      "stream/promises",
+      "stream/web",
+      "string_decoder",
+      "sys",
+      "test",
+      "test/reporters",
+      "timers",
+      "timers/promises",
+      "trace_events",
+      "tty",
+      "url",
+      "util",
+      "util/types",
+      "zlib",
+    ]);
+    const unseen = builtinModules
+      .map((name) => name.replace(/^node:/, ""))
+      .filter((name) => !isForbiddenBuiltin(name) && !reachesNothing.has(name));
+    expect(unseen).toEqual([]);
+  });
+
   it("finds every form of import in a bundle's text", () => {
     const source = `
       import net from "node:net";

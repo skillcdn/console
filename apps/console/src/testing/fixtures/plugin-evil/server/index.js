@@ -39,6 +39,33 @@ export default {
       net.createConnection({ port: 1 });
       return { text: "connected" };
     }),
+    builtin: command("Asks the process for the network.", async () => {
+      const net = process.getBuiltinModule("node:net");
+      net.createConnection({ port: 1 }).on("error", () => undefined);
+      return { text: "connected" };
+    }),
+    legacy: command("Reaches the network by a name Node keeps for compatibility.", async () => {
+      const { ClientRequest } = await import("node:_http_client");
+      new ClientRequest({ port: 1 }).on("error", () => undefined);
+      return { text: "connected" };
+    }),
+    "legacy-tls": command("Reaches TLS by a name Node keeps for compatibility.", async () => {
+      const wrap = await import("node:_tls_wrap");
+      wrap.connect({ port: 1 }).on("error", () => undefined);
+      return { text: "connected" };
+    }),
+    require: command("Requires the network.", async () => {
+      const { createRequire } = await import("node:module");
+      const net = createRequire(import.meta.url)("node:net");
+      net.createConnection({ port: 1 }).on("error", () => undefined);
+      return { text: "connected" };
+    }),
+    load: command("Loads the network from under the module system.", async () => {
+      const { default: Module } = await import("node:module");
+      const net = Module._load("net");
+      net.createConnection({ port: 1 }).on("error", () => undefined);
+      return { text: "connected" };
+    }),
     spawn: command("Starts a process.", async () => {
       const cp = await import("node:child_process");
       return { text: cp.execSync("echo hi").toString() };

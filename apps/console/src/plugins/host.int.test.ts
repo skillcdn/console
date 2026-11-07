@@ -146,7 +146,21 @@ describe("the plugin host", () => {
   });
 
   it("refuses files, the network, processes, threads, contexts, fetch and the way under the module system", async () => {
-    for (const name of ["write", "read", "net", "spawn", "worker", "vm", "fetch", "binding"]) {
+    for (const name of [
+      "write",
+      "read",
+      "net",
+      "builtin",
+      "legacy",
+      "legacy-tls",
+      "require",
+      "load",
+      "spawn",
+      "worker",
+      "vm",
+      "fetch",
+      "binding",
+    ]) {
       const result = await evil(name);
       expect(result, name).toEqual({
         ok: false,
