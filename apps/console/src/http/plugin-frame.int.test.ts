@@ -165,10 +165,17 @@ describe("the frame of a plugin's page", () => {
     expect(script.headers.get("x-content-type-options")).toBe("nosniff");
     // A frame may go to a file of its bundle; there the frame's policy is gone, and this one holds.
     expect(script.headers.get("content-security-policy")).toBe("default-src 'none'; sandbox");
-    expect((await script.text()).length).toBeGreaterThan(0);
+    // Every script begins by taking WebRTC out of wherever it runs, before a line of the plugin's.
+    const served = await script.text();
+    expect(served.startsWith('if(typeof globalThis!=="object")')).toBe(true);
+    expect(served.split("\n").slice(1).join("\n").length).toBeGreaterThan(0);
+    expect(Number(script.headers.get("content-length"))).toBe(
+      new TextEncoder().encode(served).length,
+    );
     const style = await h.request(`${AT}/web/${version}/index.css`);
     expect(style.status).toBe(200);
     expect(style.headers.get("content-type")).toBe("text/css; charset=utf-8");
+    expect(await style.text()).not.toContain("globalThis");
     expect(style.headers.get("access-control-allow-origin")).toBe("*");
     for (const path of [
       `${AT}/web/0.0.0-other/index.js`,

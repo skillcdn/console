@@ -133,6 +133,28 @@ const BRIDGE_CALLS = `new Promise((resolve) => {
   }, 2000);
 })`;
 
+/** What a script of the bundle says from a frame made inside the frame, or "nothing" where none ran. */
+const FROM_WITHIN = (address: string): string => `new Promise((resolve) => {
+  window.addEventListener("message", (event) => {
+    if (typeof event.data === "string") resolve(event.data);
+  });
+  setTimeout(() => resolve("nothing"), 1000);
+  const frame = document.createElement("iframe");
+  frame.srcdoc = ${JSON.stringify(`<script src="${address}"></script>`)};
+  document.body.append(frame);
+})`;
+
+/** What a frame made inside the frame holds of WebRTC, as read from outside it. */
+const FROM_A_BLANK_FRAME = `(() => {
+  const frame = document.createElement("iframe");
+  document.body.append(frame);
+  try {
+    return typeof frame.contentWindow.RTCPeerConnection;
+  } catch (error) {
+    return error.name;
+  }
+})()`;
+
 /** How far the frame stands outside the page's column. Text, as this workspace has no types of a page. */
 const FRAME_OUTSIDE_THE_COLUMN = `(() => {
   const main = document.querySelector("#sc-content");
@@ -238,6 +260,33 @@ describe("the example plugin in a browser", () => {
       weekStart: "auto",
       firstDay: expect.any(Number),
     });
+    await page.context().close();
+  });
+
+  it("keeps WebRTC out of the frame and of any frame made inside it, which no policy does", async () => {
+    const web = await console_.plugins.webOf("hello");
+    if (web === undefined) {
+      throw new Error("the example plugin has no pages");
+    }
+    const says = `parent.postMessage("WebRTC is " + typeof window.RTCPeerConnection, "*");`;
+    await writeFile(join(web.dir, "within.js"), says);
+    await writeFile(join(web.dir, "shadowing.js"), `function globalThis() {}\n${says}`);
+    const address = `${console_.origin}/api/v1/plugins/hello/web/${web.version}`;
+    const page = await signedIn(BROWSER_ADMIN);
+    await page.goto(`${console_.origin}/plugins/hello/greetings`);
+    const frame = await frameOf(page, "iframe.sc-plugin-frame");
+    await frame.waitForSelector(".pl-hello-page");
+    expect(
+      await frame.evaluate(
+        "Object.getOwnPropertyNames(window).filter((name) => /^(webkit)?RTC/.test(name))",
+      ),
+    ).toEqual([]);
+    // A blank frame inside it is of another origin, and a script of the bundle starts by taking
+    // WebRTC out of whichever frame it is in.
+    expect(await frame.evaluate(FROM_A_BLANK_FRAME)).toBe("SecurityError");
+    expect(await frame.evaluate(FROM_WITHIN(`${address}/within.js`))).toBe("WebRTC is undefined");
+    // A script that shadows what the first line reads fails it, and none of it runs.
+    expect(await frame.evaluate(FROM_WITHIN(`${address}/shadowing.js`))).toBe("nothing");
     await page.context().close();
   });
 

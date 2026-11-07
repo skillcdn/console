@@ -5,7 +5,7 @@ license: MIT
 compatibility: A shell with Node.js 24 or newer, npm and git, and an agent that reads and writes files. For running the plugin on a local console, Docker for the database and a checkout of the console's repository, where signing in needs a GitHub OAuth app of the person's own, as the console's README says. The console command is optional, for running the plugin's commands as an agent would. No key of the agent's own is needed, and it never sees a token.
 metadata:
   author: skillcdn
-  version: "1.5"
+  version: "1.6"
 skillcdn:
   translations:
     ko:
@@ -121,6 +121,7 @@ The hand-over is a task on the deployment's board, written as [planning-the-boar
 - A secret is a `secret` setting the administrator sets, put into a request by the console or verified by it; the plugin never reads its value, logs it, keeps it in a record, or puts it in the repository, the tests or the chat.
 - Everything a person wrote is shown as text, in the pages and in a command's answer; the frame renders no HTML from a record, and its classes are prefixed `pl-<key>-`.
 - The server module imports nothing the host refuses, reaches no network but `ctx.fetch`, no file but its own, and keeps no state between calls but in records; a hook does nothing twice.
+- A page reaches the console through the bridge alone: a frame has no network and no WebRTC, and the console serves each script of the bundle with a line before it, so that a source map is a line out.
 - Nothing is published, tagged for an install or installed without the person's word; the install is the deployment's release, planned and started by its people, never by this skill.
 - The specification wins: a field, a bound or a refusal is as [docs/specs/plugins.md](/docs/specs/plugins.md) says; the plugin is rebuilt against the console it runs on, since before 1.0 the plugin API moves with the console's line.
 

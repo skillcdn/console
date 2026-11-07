@@ -88,6 +88,17 @@ const FRAME_UNAVAILABLE_SCRIPT = `parent.postMessage({v:1,t:"unavailable"},"*")`
 const FRAME_UNAVAILABLE_DOCUMENT = `<!doctype html><html lang="en"><head><meta charset="utf-8"></head><body><script>${FRAME_UNAVAILABLE_SCRIPT}</script></body></html>\n`;
 const FRAME_UNAVAILABLE_HASH = `sha256-${createHash("sha256").update(FRAME_UNAVAILABLE_SCRIPT).digest("base64")}`;
 
+/**
+ * What every script of a bundle is served beginning with (ADR-0064): WebRTC, which no policy of a
+ * frame governs, goes from wherever the script runs, the frame or a frame made inside it, before a
+ * line of the plugin's. A file that shadows what this reads fails here, and none of it runs.
+ */
+const NO_WEBRTC = new TextEncoder().encode(
+  'if(typeof globalThis!=="object")throw new Error("a script of a bundle may not shadow globalThis");' +
+    "for(const name of Object.getOwnPropertyNames(globalThis))" +
+    "if(/^(webkit)?RTC/.test(name))delete globalThis[name];\n",
+);
+
 /** A person's own console, served on this machine by the command (ADR-0014): it may embed a frame too. */
 const LOOPBACK_ORIGIN = /^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/;
 /** What a bundle's files are served as, by extension; anything else as bytes. */
@@ -1322,8 +1333,9 @@ export function registerPluginsRest(
       return notFound(c);
     }
     const type = BUNDLE_TYPES[extname(file).toLowerCase()] ?? "application/octet-stream";
+    const served = type.startsWith("text/javascript") ? Buffer.concat([NO_WEBRTC, bytes]) : bytes;
     c.header("content-type", type);
-    c.header("content-length", String(bytes.byteLength));
+    c.header("content-length", String(served.byteLength));
     c.header("cache-control", "public, max-age=31536000, immutable");
     // The frame's origin is opaque, and a module script, as a font, is fetched with CORS: the
     // bundle, which holds no secret, is readable from any origin, or the browser runs none of it.
@@ -1333,7 +1345,7 @@ export function registerPluginsRest(
     // A frame may go to a file of its own bundle, where the frame's policy is gone, and an SVG is
     // a document that runs scripts: a file is loaded, under the frame's policy, and is never a page.
     c.header("content-security-policy", "default-src 'none'; sandbox");
-    return c.body(new Uint8Array(bytes).buffer);
+    return c.body(new Uint8Array(served).buffer);
   });
 
   app.get(`${PLUGIN_RUNTIME}/console.css`, async (c) => {
