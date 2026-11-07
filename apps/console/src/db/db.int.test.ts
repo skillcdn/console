@@ -1,7 +1,7 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { Database } from "./client.js";
+import { type Database, drizzleOf } from "./client.js";
 import { getSchemaStatus, migrateDatabase } from "./migrate.js";
 import {
   createCategory,
@@ -12,6 +12,7 @@ import {
 } from "./queries/categories.js";
 import {
   answerDecision,
+  countWaitingDecisionsFor,
   DecisionError,
   getDecision,
   listDecisions,
@@ -68,6 +69,7 @@ import {
   touchToken,
 } from "./queries/tokens.js";
 import { ensureWorkspace } from "./queries/workspaces.js";
+import { decisions } from "./schema.js";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "./testing.js";
 
 let testDatabase: TestDatabase;
@@ -691,6 +693,30 @@ describe("decisions", () => {
     expect((await listDecisions(database, scope, { open: true, limit: 100 })).items).toEqual(
       waiting,
     );
+  });
+
+  it("reach whom they are addressed to when the version before the list raised them", async () => {
+    // The migration runs first, and the version before goes on serving until it is replaced: what
+    // it raises in that moment comes with no list of those it is addressed to (ADR-0057).
+    const raised = await raiseDecision(database, {
+      scope,
+      actor: alice,
+      decision: { question: "Raised in a rollout?", options: ["Yes", "No"], deciderId: bob.id },
+      now: minutes(600),
+    });
+    const before = await countWaitingDecisionsFor(database, workspaceId, bob);
+    await drizzleOf(database)
+      .update(decisions)
+      .set({ deciderIds: [] })
+      .where(eq(decisions.id, raised.id));
+
+    const waiting = await listWaitingDecisionsFor(database, workspaceId, bob, 50);
+    expect(waiting.map((item) => item.id)).toContain(raised.id);
+    expect(await countWaitingDecisionsFor(database, workspaceId, bob)).toBe(before);
+    const bobs = await listDecisionsFor(database, workspaceId, bob, { limit: 50 });
+    expect(bobs.items.map((item) => item.id)).toContain(raised.id);
+    const asked = await listDecisionsFor(database, workspaceId, alice, { limit: 50, raised: true });
+    expect(asked.items.map((item) => item.id)).toContain(raised.id);
   });
 });
 

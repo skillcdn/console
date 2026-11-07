@@ -693,9 +693,13 @@ export async function findDecision(
   return row === undefined ? undefined : toDecision(row);
 }
 
-/** On a `decisions` row: whether the decision is addressed to the person, alone or among others (ADR-0057). */
+/**
+ * On a `decisions` row: whether the decision is addressed to the person, alone or among others
+ * (ADR-0057). The first of them is asked for too: the version before the list goes on serving for
+ * a moment after the migration, and what it raises then has none.
+ */
 const addressedTo = (person: PersonRecord) =>
-  sql`(${person.id}::uuid = any(${decisions.deciderIds}))`;
+  sql`(${person.id}::uuid = any(${decisions.deciderIds}) or ${decisions.deciderId} = ${person.id}::uuid)`;
 
 /**
  * The decisions that wait for `person`'s answer (ADR-0042) across the projects they may see, the
