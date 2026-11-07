@@ -162,6 +162,40 @@ describe("connect", () => {
     expect(put.transfer).toHaveLength(1);
   });
 
+  it("asks for a person's picture by the person, keeps it, and takes none for an answer", async () => {
+    const frame = frameOf();
+    const connecting = connect({ window: frame.win, document: frame.doc, resize: false });
+    frame.init();
+    const plugin = await connecting;
+    const answer = (id: string, value: unknown) =>
+      frame.receive({ v: 1, t: "result", id, ok: true, value });
+    const refuse = (id: string, code: string) =>
+      frame.receive({ v: 1, t: "result", id, ok: false, error: { code, message: "no" } });
+
+    const asked = plugin.people.picture("p1");
+    expect(frame.lastCall()).toMatchObject({ method: "people.picture", params: { id: "p1" } });
+    answer(frame.lastCall().id, { type: "image/png", bytes: new ArrayBuffer(4) });
+    await expect(asked).resolves.toMatch(/^blob:/);
+    // Asked again, it is the same address, and the page is asked nothing.
+    const calls = frame.posted.length;
+    await expect(plugin.people.picture("p1")).resolves.toBe(await asked);
+    expect(frame.posted).toHaveLength(calls);
+
+    const none = plugin.people.picture("p2");
+    refuse(frame.lastCall().id, "plugin.not_found");
+    await expect(none).resolves.toBeNull();
+    const away = plugin.people.picture("p3");
+    refuse(frame.lastCall().id, "picture.unavailable");
+    await expect(away).resolves.toBeNull();
+
+    // A plugin that was not given the people is told, and may ask again once it is.
+    const refused = plugin.people.picture("p4");
+    refuse(frame.lastCall().id, "plugin.forbidden");
+    await expect(refused).rejects.toMatchObject({ code: "plugin.forbidden" });
+    void plugin.people.picture("p4");
+    expect(frame.lastCall()).toMatchObject({ method: "people.picture", params: { id: "p4" } });
+  });
+
   it("navigates within the console only, and says its title", async () => {
     const frame = frameOf();
     const connecting = connect({ window: frame.win, document: frame.doc, resize: false });

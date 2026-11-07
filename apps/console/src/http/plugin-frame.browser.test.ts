@@ -230,6 +230,8 @@ describe("the example plugin in a browser", () => {
     expect(await frame.evaluate(BRIDGE_CALLS)).toEqual({ known: "performed", unknown: "ignored" });
     // A frame is told the workspace, with the day its week begins on worked out for it.
     expect(await frame.evaluate(WORKSPACE_TOLD)).toEqual({
+      name: expect.any(String),
+      languages: ["en", "ko"],
       timeZone: expect.any(String),
       weekStart: "auto",
       firstDay: expect.any(Number),

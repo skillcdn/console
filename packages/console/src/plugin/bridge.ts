@@ -24,6 +24,7 @@ export const BRIDGE_METHODS = [
   "records.versions",
   "files.get",
   "files.put",
+  "people.picture",
 ] as const;
 
 export type BridgeMethod = (typeof BRIDGE_METHODS)[number];
@@ -41,8 +42,10 @@ export interface BridgePerson {
   readonly admin: boolean;
 }
 
-/** The workspace as a page lays itself out for it: its clock and the day its week begins on. */
+/** The workspace as a page lays itself out for it: what it is called, the languages it writes in, its clock and the day its week begins on. */
 export interface BridgeWorkspace {
+  readonly name: string;
+  readonly languages: readonly string[];
   readonly timeZone: string;
   /** The workspace's setting (ADR-0035): `auto` leaves the week to the language of the pages. */
   readonly weekStart: WeekStart;
@@ -226,6 +229,9 @@ function isTheme(value: unknown): value is Record<string, string> {
 function isWorkspace(value: unknown): boolean {
   return (
     isRecord(value) &&
+    typeof value.name === "string" &&
+    Array.isArray(value.languages) &&
+    value.languages.every((language) => typeof language === "string") &&
     isLine(value.timeZone, 100) &&
     (WEEK_STARTS as readonly unknown[]).includes(value.weekStart) &&
     typeof value.firstDay === "number" &&
@@ -371,6 +377,12 @@ export interface BridgeFilesPutParams {
 }
 
 /** What `files.get` answers: the bytes, transferred, with the file's name and type. */
+/** A person's picture, as the page hands it to the frame (ADR-0063). */
+export interface BridgePicture {
+  readonly type: string;
+  readonly bytes: ArrayBuffer;
+}
+
 export interface BridgeFile {
   readonly name: string;
   readonly type: string;

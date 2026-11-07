@@ -498,6 +498,8 @@ export interface PluginClient {
   fileUrl(fileId: string): string;
   /** The bytes of a record's file, with the name and the type the console says. */
   readFile(fileId: string, signal?: AbortSignal): Promise<FileRead>;
+  /** A person's picture, for a frame, which names the person and never an address (ADR-0063). */
+  personPicture(personId: string, signal?: AbortSignal): Promise<FileRead>;
   /** Where the frame of a page or a widget is (ADR-0054), on a project when its key is given. */
   frameUrl(options: {
     readonly page?: string | undefined;
@@ -1145,6 +1147,8 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
         ),
       fileUrl: (fileId) => `${base}${at("files", fileId)}`,
       readFile: (fileId, signal) => read(`${base}${at("files", fileId)}`, fileId, signal),
+      personPicture: (personId, signal) =>
+        read(`${base}${at("people", personId, "picture")}`, personId, signal),
       frameUrl: (options) =>
         withQuery(at("frame"), {
           page: options.page,

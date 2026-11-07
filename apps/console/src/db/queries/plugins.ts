@@ -702,6 +702,29 @@ export async function grantedRoles(
   return rows.map((row) => row.role).sort();
 }
 
+/**
+ * The people a role of a plugin was granted to: by name, with everyone, or as members of a project,
+ * decided as membership is everywhere (auth/policy.ts). An administrator's holding every role is
+ * no grant.
+ */
+export async function peopleGranted(
+  database: Database,
+  workspaceId: string,
+  key: string,
+  role: string,
+): Promise<ReadonlySet<string>> {
+  const rows = await drizzleOf(database)
+    .select({ id: people.id })
+    .from(people)
+    .where(
+      and(
+        eq(people.workspaceId, workspaceId),
+        sql`exists (select 1 from ${pluginGrants} where ${pluginGrants.workspaceId} = ${workspaceId} and ${pluginGrants.pluginKey} = ${key} and ${pluginGrants.role} = ${role} and (${pluginGrants.personId} = ${people.id} or ${pluginGrants.everyone} or exists (select 1 from ${projects} where ${projects.id} = ${pluginGrants.projectId} and ${memberOfProject(people.id)})))`,
+      ),
+    );
+  return new Set(rows.map((row) => row.id));
+}
+
 /** Sets a secret, sealed by the caller, in place of what was there; tells the board which setting, never its value. */
 export async function setSecret(
   database: Database,

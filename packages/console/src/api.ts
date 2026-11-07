@@ -371,6 +371,7 @@ export {
   CATEGORY_COLORS,
   type CategoryColor,
   COLOR_NAMES,
+  CONSOLE_LANGUAGES,
   type ColorName,
   EVENT_KINDS,
   type EventKind,

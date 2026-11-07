@@ -11,6 +11,7 @@ import {
   type BridgeFile,
   type BridgeInit,
   type BridgeMethod,
+  type BridgePicture,
   type BridgeToPage,
   isBridgePath,
   isBridgeToFrame,
@@ -112,6 +113,13 @@ export interface PluginFrame {
       type: string,
     ): Promise<{ readonly handle: string }>;
   };
+  readonly people: {
+    /**
+     * An address to put in an image, of the person of that id (ADR-0063), with `people:read`; or
+     * `null` for a person with no picture to show. Kept for the life of the frame.
+     */
+    picture(id: string): Promise<string | null>;
+  };
   /** The console's page follows a path of the console's in place; a URL is refused. */
   navigate(path: string): void;
   /** The console's page downloads a file of this plugin. */
@@ -133,6 +141,13 @@ export interface PluginFrame {
 }
 
 const DEFAULT_CONNECT_MS = 10_000;
+
+/** What a page is told for a person with no picture to show, which is no failure of the page's. */
+const NO_PICTURE: ReadonlySet<string> = new Set([
+  "plugin.not_found",
+  "picture.refused",
+  "picture.unavailable",
+]);
 
 function globalWindow(): FrameWindow {
   const candidate = (globalThis as { window?: FrameWindow }).window;
@@ -224,6 +239,7 @@ export function connect(options: ConnectOptions = {}): Promise<PluginFrame> {
   const pathHandlers = new Set<(path: string) => void>();
   const sizeHandlers = new Set<(size: PluginWidgetSizeName) => void>();
   const subscribed = new Set<BridgeEventKind>();
+  const pictures = new Map<string, Promise<string | null>>();
   let counter = 0;
   let stopHeight: (() => void) | undefined;
 
@@ -303,6 +319,26 @@ export function connect(options: ConnectOptions = {}): Promise<PluginFrame> {
                 return call("files.put", { bytes: buffer, name, type }, [buffer]) as Promise<{
                   handle: string;
                 }>;
+              },
+            },
+            people: {
+              picture: (id) => {
+                const kept = pictures.get(id);
+                if (kept !== undefined) {
+                  return kept;
+                }
+                const asked = (call("people.picture", { id }) as Promise<BridgePicture>).then(
+                  ({ type, bytes }) => URL.createObjectURL(new Blob([bytes], { type })),
+                  (error: unknown) => {
+                    if (error instanceof PluginBridgeError && NO_PICTURE.has(error.code)) {
+                      return null;
+                    }
+                    pictures.delete(id);
+                    throw error;
+                  },
+                );
+                pictures.set(id, asked);
+                return asked;
               },
             },
             navigate: (path) => {

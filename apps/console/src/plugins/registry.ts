@@ -53,6 +53,7 @@ import {
   TIME_OF_DAY,
   widgetSizesOf,
 } from "@skillcdn/console/plugin";
+import { sql } from "drizzle-orm";
 import { configuresPlugins, personVisibleTo } from "../auth/policy.js";
 import type { Secrets } from "../auth/secrets.js";
 import type { Database } from "../db/client.js";
@@ -2212,6 +2213,37 @@ export class Plugins {
     }
     const workspace = await this.options.workspace();
     return this.store().upload(workspace.id, key, person.id, bytes, name, contentType);
+  }
+
+  /**
+   * Where a person's picture is, for a frame of the plugin (ADR-0063): for someone in a role of
+   * it, of the people they may see through it; none for anyone else, or a person with no picture.
+   */
+  async pictureOf(
+    key: string,
+    personId: string,
+    person: PersonRecord,
+  ): Promise<string | undefined> {
+    const { entry, install } = await this.enabledFor(key, person);
+    const everyone = install.consent.includes("people:read:all");
+    if (!everyone && !install.consent.includes("people:read")) {
+      throw new PluginRefusal(
+        "plugin.forbidden",
+        "the plugin has not been given the capability people:read",
+      );
+    }
+    const held = await this.rolesOf(key, person);
+    if (!mayUse(null, held, Object.keys(entry.manifest.roles))) {
+      throw new PluginRefusal(
+        "plugin.forbidden",
+        "reading a person's picture for the plugin needs a role in it",
+      );
+    }
+    const workspace = await this.options.workspace();
+    const settings = await readWorkspaceSettings(this.options.database, workspace.id);
+    const visible = everyone ? sql`true` : personVisibleTo(person, settings);
+    const found = await listPeople(this.options.database, workspace.id, { visible });
+    return found.find((candidate) => candidate.id === personId)?.avatarUrl;
   }
 
   /** A file on a record, read under the record's rule: its bytes, name and type, or none. */

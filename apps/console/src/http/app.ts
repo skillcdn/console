@@ -157,6 +157,7 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
     access,
     clock,
     logger,
+    pictures: dependencies.pictures,
     ownOrigin: auth?.origin,
     web,
   });

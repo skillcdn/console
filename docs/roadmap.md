@@ -415,6 +415,7 @@ Goal: what the same person found on the second look: the words of a failure, the
 - [x] A tile on the front page never cuts a line of words: the mark and the room around it follow the cell, and a row that still does not fit stands whole or not at all, seen at every width by a browser test. What waits on a project reads as the count on a tab does, and the tray of what was taken off says Add.
 - [x] A widget comes in a size a phone can hold ([ADR-0062](adr/0062-a-widget-comes-in-a-size-a-phone-can-hold.md)): a manifest needs a size at most four cells across, a grid offers the sizes that fit it, and a frame is told the size it has, never `wide` on four cells.
 - [x] A plugin's tabs read as levels of one thing: its pages go on from the header's tabs on the same gutters, the views within a page are the console's view switch, and a page's frame stands a step outside the column, so that its first words line up with the tabs above it.
+- [x] What a plugin could not read at all ([ADR-0063](adr/0063-a-frame-reads-a-persons-picture-by-the-person-and-a-plugin-reads-who-it-granted-a-role.md)): a person's picture in a frame, asked for by the person and never by an address, and who was granted a role of the plugin; the frame's workspace says its name and its languages as the server's does.
 
 ## After milestone 16
 

@@ -48,10 +48,19 @@ describe("isBridgeToFrame", () => {
   });
 
   it("takes the workspace, the day its week begins on within the week, and goes without it from an older console", () => {
-    const workspace = { timeZone: "Asia/Seoul", weekStart: "sunday", firstDay: 7 };
+    const workspace = {
+      name: "Acme",
+      languages: ["en", "ko"],
+      timeZone: "Asia/Seoul",
+      weekStart: "sunday",
+      firstDay: 7,
+    };
     expect(isBridgeToFrame({ ...INIT, workspace })).toBe(true);
     expect(isBridgeToFrame(INIT)).toBe(true);
     for (const wrong of [
+      { ...workspace, name: 7 },
+      { ...workspace, languages: "ko" },
+      { ...workspace, languages: [7] },
       { ...workspace, firstDay: 0 },
       { ...workspace, firstDay: 8 },
       { ...workspace, firstDay: 1.5 },

@@ -198,7 +198,7 @@ Declared in the manifest, consented to by an administrator when enabling, enforc
 |---|---|---|
 | (none) | its own records, versions, links and events; its settings; its log | its own data, spoiled; the versions restore it |
 | `files` | files on its records, within `PLUGIN_FILE_BYTES_AT_MOST` | storage filled to the bound |
-| `people:read` | the people the caller may see, as the person | the names and logins its role holders may see anyway |
+| `people:read` | the people the caller may see, as the person, and among them who was granted a role of the plugin (`ctx.console.people.granted(role)`, an administrator listed only where granted it) and, for a frame, their pictures | the names, logins and pictures its role holders may see anyway |
 | `people:read:all` | everyone, for `console` callers too; and the workspace's people events (`person.joined`, `person.deactivated`, `person.reactivated`, `person.role_changed`, `person.manager_changed`, `person.listed`, `person.unlisted`) to its hooks, with their content | the directory, and when people come and go |
 | `projects:read` | the projects and members the caller may see | what the person sees |
 | `projects:read:all` | every project and its members | the projects and who is in them |
@@ -309,6 +309,7 @@ Under `/api/v1/plugins`. Who may call: *anyone* signed in or on a token, *roles*
 | `GET .../records/<collection>?where=&order=&limit=&after=&q=&project=` | roles | the records the caller may read |
 | `GET .../records/<collection>/<id>[?version=]`, `GET .../records/<collection>/<id>/versions` | roles | one record, a version of it, its versions |
 | `POST .../files`, `GET .../files/<id>` | roles | a file for a command (a handle, good for an hour); a record's file |
+| `GET .../people/<id>/picture` | roles, `people:read` | the picture of a person the asker may see, or of anyone with `people:read:all`; it names the person, never an address ([ADR-0063](../adr/0063-a-frame-reads-a-persons-picture-by-the-person-and-a-plugin-reads-who-it-granted-a-role.md)) |
 | `GET .../events?limit=&offset=` | roles | the plugin's events |
 | `GET .../plugin-events?after=&limit=` | roles | the events the plugin emitted (`ctx.events.emit`), after a number, oldest first: `{ items: [{ id, kind, data, at }], more }` |
 | `GET .../skills`, `.../skills/one?path=&cursor=`, `.../skills/file?path=&offset=&limit=`, `.../skills/browse?path=&cursor=&limit=`, `.../skills/find?query=&path=&cursor=&limit=` | anyone who may know of the plugin | the plugin's skills, a pack of its own at `/local/plugins/<key>`, read from its package on the console's machine as a `local` pack is ([ADR-0031](../adr/0031-the-console-reads-a-pack-as-the-skillcdn-command-does-and-a-local-one-from-a-directory.md)), answered as a project's five reads are; `status: none` for a plugin that ships none |
@@ -364,7 +365,7 @@ The console's page and the frame speak over `postMessage`, every message `{ v: 1
 
 | From | `t` | Carries |
 |---|---|---|
-| the page | `init` | `plugin: { key, version }`, `page` or `widget` (with `size`, the size the widget has, [ADR-0059](../adr/0059-a-person-arranges-the-front-pages-widgets-from-the-sizes-each-comes-in.md)), `project?: { key, name }`, `person: { id, login, name, language, admin }`, `workspace: { timeZone, weekStart, firstDay }` (`firstDay` the day a week begins on with the workspace's setting applied, 1 for Monday, 7 for Sunday, for a calendar to start from; none from a console older than it), `roles`, `path` (what follows the page in the address), `language`, `theme: { [token]: value }` |
+| the page | `init` | `plugin: { key, version }`, `page` or `widget` (with `size`, the size the widget has, [ADR-0059](../adr/0059-a-person-arranges-the-front-pages-widgets-from-the-sizes-each-comes-in.md)), `project?: { key, name }`, `person: { id, login, name, language, admin }`, `workspace: { name, languages, timeZone, weekStart, firstDay }` (`firstDay` the day a week begins on with the workspace's setting applied, 1 for Monday, 7 for Sunday, for a calendar to start from; none from a console older than it), `roles`, `path` (what follows the page in the address), `language`, `theme: { [token]: value }` |
 | the page | `result` | `id`, `ok`, `value` or `error: { code, message }` |
 | the page | `event` | `kind: "records" \| "command" \| "plugin"`, `data`: something of this plugin changed. `command` and `records` come from the project's feed, on every `plugin.command` of the plugin on the project the page is on; `plugin` from `GET .../plugin-events`, asked for every few seconds while a frame listens |
 | the page | `theme` | the tokens, when the console's look changes |
@@ -372,7 +373,7 @@ The console's page and the frame speak over `postMessage`, every message `{ v: 1
 | the page | `size` | `size`, when the widget has another of the sizes it comes in: the person chose it, or the page's width changed the grid |
 | the frame | `ready` | nothing; the page answers with `init` |
 | the frame | `unavailable` | nothing; the page shows a line of its own in place of the frame. The document the console serves when there is nothing to show says it: a plugin that is off, a page or a widget it has not |
-| the frame | `call` | `id`, `method`, `params`: `command` (`name`, `args`), `query` (`name`, `args`), `records.list`, `records.get`, `records.versions`, `files.get` (`id`; the bytes come back transferred), `files.put` (`bytes`, `name`, `type`; a handle comes back) |
+| the frame | `call` | `id`, `method`, `params`: `command` (`name`, `args`), `query` (`name`, `args`), `records.list`, `records.get`, `records.versions`, `files.get` (`id`; the bytes come back transferred), `files.put` (`bytes`, `name`, `type`; a handle comes back), `people.picture` (`id` of a person; the bytes and their type come back transferred) |
 | the frame | `navigate` | `path`: a path of the console's, which the page follows in place; a URL is refused |
 | the frame | `resize` | `height`, which the page gives a page's frame; a widget fills the cells its size gives it, and its height is not read |
 | the frame | `title` | `text`, for the document's title |
@@ -381,7 +382,7 @@ The console's page and the frame speak over `postMessage`, every message `{ v: 1
 
 The page performs every `call` with the person's session under `/api/v1/plugins/<key>/` only; a method or a path outside it is refused before any request, as `plugin.forbidden`. A page thus holds exactly the authority of its plugin's server module, as the person using it.
 
-`@skillcdn/console/plugin/web` is the frame's side: `connect()` says `ready`, waits for `init`, and resolves to `{ context, call, command, query, records, files, navigate, download, setTitle, onEvent, onTheme, onPath, close }`, applies the tokens to `:root` and the language to the document, and watches the body's height; it depends on nothing, and a refusal arrives as a `PluginBridgeError` with the console's code. `@skillcdn/console/plugin/web/react` adds `usePlugin()` for a plugin that chooses React. A page renders nothing a person wrote as HTML, as the console's own pages do not.
+`@skillcdn/console/plugin/web` is the frame's side: `connect()` says `ready`, waits for `init`, and resolves to `{ context, call, command, query, records, files, people, navigate, download, setTitle, onEvent, onTheme, onPath, close }`, applies the tokens to `:root` and the language to the document, and watches the body's height; it depends on nothing, and a refusal arrives as a `PluginBridgeError` with the console's code. `@skillcdn/console/plugin/web/react` adds `usePlugin()` for a plugin that chooses React. `people.picture(id)` answers a `blob:` address for an image, or `null` for a person with no picture to show. A page renders nothing a person wrote as HTML, as the console's own pages do not.
 
 ### Tabs, sub-tabs and addresses
 

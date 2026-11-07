@@ -174,6 +174,9 @@ export default {
   },
   queries: {
     holds: query("The capabilities the plugin holds.", {}, async (ctx) => ctx.plugin.capabilities),
+    granted: query("Who was granted a role.", { role: argument("text") }, async (ctx, args) =>
+      (await ctx.console.people.granted(args.role)).map((person) => person.login),
+    ),
     mine: query("The caller's requests.", {}, async (ctx) => {
       const page = await ctx.records(requests).list({ order: { field: "id", descending: true } });
       return page.items;

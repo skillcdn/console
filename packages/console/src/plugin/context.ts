@@ -298,6 +298,12 @@ export interface PluginConsole {
   people: {
     list(options?: { readonly q?: string }): Promise<readonly RestPerson[]>;
     get(id: string): Promise<RestPerson | null>;
+    /**
+     * The active people a role of the plugin was granted to, by name, through a project or with
+     * everyone, and everyone for `defaultRole` (ADR-0063). An administrator holds every role, and
+     * is listed only where they were granted it.
+     */
+    granted(role: string): Promise<readonly RestPerson[]>;
   };
   projects: {
     list(): Promise<readonly RestProject[]>;

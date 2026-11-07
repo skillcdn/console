@@ -60,6 +60,9 @@ export const PROJECT_ICON_TYPES = ["image/png", "image/jpeg", "image/gif", "imag
 export type ProjectIconType = (typeof PROJECT_ICON_TYPES)[number];
 
 /** The identity providers people may sign in through: the git host, and Google (Workspace). */
+/** The languages the console's pages speak, and a plugin's words are given in. */
+export const CONSOLE_LANGUAGES = ["en", "ko"] as const;
+
 export const PROVIDER_KEYS = ["gh", "google"] as const;
 
 export type ProviderKey = (typeof PROVIDER_KEYS)[number];

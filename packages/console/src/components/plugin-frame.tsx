@@ -16,6 +16,7 @@ import type { Navigation } from "../router.js";
 import type { RestEvent, RestMe, RestPlugin, RestProject } from "../schemas.js";
 import { CONSOLE_TOKENS } from "../tokens.js";
 import { wordsForFailure } from "../use-action.js";
+import { CONSOLE_LANGUAGES } from "../vocabulary.js";
 import { weekStartOf } from "./workspace.js";
 
 // A plugin's page or widget on the console's page (ADR-0054, docs/specs/plugins.md, "Pages"):
@@ -133,6 +134,12 @@ export async function performBridgeCall(
         value: { name: file.name, type: file.contentType, bytes },
         transfer: [bytes],
       };
+    }
+    case "people.picture": {
+      const id = text(params.id, "id");
+      const picture = await plugin.personPicture(id);
+      const bytes = new Uint8Array(picture.bytes).buffer;
+      return { value: { type: picture.contentType, bytes }, transfer: [bytes] };
     }
     case "files.put": {
       const name = text(params.name, "name");
@@ -260,6 +267,8 @@ export function PluginFrame(props: PluginFrameProps) {
               admin: me.person?.role === "admin",
             },
             workspace: {
+              name: me.workspace.name,
+              languages: [...CONSOLE_LANGUAGES],
               timeZone: me.workspace.timeZone ?? "UTC",
               weekStart: weekStartOf(me.workspace),
               firstDay: firstDayOfWeek(language, weekStartOf(me.workspace)),

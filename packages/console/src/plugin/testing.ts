@@ -519,7 +519,7 @@ function refusingConsole(given: TestConsoleOptions | undefined): PluginConsole {
   return {
     workspace:
       given?.workspace ?? (async () => forbidden("console.workspace", "console.workspace")),
-    people: fill("people", ["list", "get"], given?.people),
+    people: fill("people", ["list", "get", "granted"], given?.people),
     projects: fill("projects", ["list", "get", "members"], given?.projects),
     tasks: fill("tasks", ["list", "get", "create", "update", "comment"], given?.tasks),
     decisions: fill("decisions", ["list", "get", "ask"], given?.decisions),

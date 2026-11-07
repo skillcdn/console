@@ -1,4 +1,5 @@
 import {
+  CONSOLE_LANGUAGES,
   isDocumentPath,
   MAX_BODY_LENGTH,
   MAX_COMMENTS_PER_TASK,
@@ -42,7 +43,7 @@ import {
   markPluginItem,
   type PluginItemKind,
 } from "../db/queries/plugin-board.js";
-import type { PluginInstallRecord } from "../db/queries/plugins.js";
+import { type PluginInstallRecord, peopleGranted } from "../db/queries/plugins.js";
 import { findProjectFor, listMembers, listProjectsFor } from "../db/queries/projects.js";
 import { findRun, listRuns } from "../db/queries/runs.js";
 import { createTask, findTaskByNumber, listTasks, updateTask } from "../db/queries/tasks.js";
@@ -70,7 +71,6 @@ import type { RecordStore } from "./records.js";
 // the plugin makes is marked as its, and it changes its own items alone.
 
 /** The languages the pages speak (ADR-0012): the packs the package ships. */
-const CONSOLE_LANGUAGES: readonly string[] = ["en", "ko"];
 
 /** How many items one read answers at most: a page of the board's own size. */
 const READ_LIMIT = PLUGIN_LIST_LIMIT;
@@ -304,6 +304,23 @@ export class PluginBoard {
           const id = text(args[0], "the person's id");
           const found = people.find((person) => person.id === id);
           return found === undefined ? null : restPerson(found);
+        }
+        if (method === "granted") {
+          const role = text(args[0], "the role");
+          if (context.manifest.roles[role] === undefined) {
+            throw invalid(`the plugin declares no role ${role}`);
+          }
+          const granted =
+            context.manifest.defaultRole === role
+              ? undefined
+              : await peopleGranted(this.options.database, workspace.id, context.key, role);
+          return people
+            .filter(
+              (person) =>
+                person.status === "active" && (granted === undefined || granted.has(person.id)),
+            )
+            .slice(0, READ_LIMIT)
+            .map(restPerson);
         }
         break;
       }

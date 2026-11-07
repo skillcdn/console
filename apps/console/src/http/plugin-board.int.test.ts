@@ -13,6 +13,7 @@ import {
   restEventsSchema,
   restPluginDetailSchema,
   restPluginEventsSchema,
+  restPluginGrantSchema,
   restPluginInvocationSchema,
   restPluginRecordSchema,
   restTaskSchema,
@@ -63,6 +64,8 @@ let bobId: string;
 let aliceId: string;
 let aliceLogin: string;
 const sent: Parameters<OutboundSend>[0][] = [];
+const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const pictured: string[] = [];
 let schedulerNow = new Date("2026-11-02T09:00:00.000Z");
 const BOARD = "leave-board";
 
@@ -165,7 +168,23 @@ beforeAll(async () => {
     clock: { now: () => schedulerNow },
     logger,
   });
-  h = createHarness(testDatabase, { providers: [provider], admins: ["alice"], plugins });
+  h = createHarness(testDatabase, {
+    providers: [provider],
+    admins: ["alice"],
+    plugins,
+    pictures: {
+      async fetch(request) {
+        pictured.push(request.url);
+        return {
+          kind: "picture",
+          bytes: PNG,
+          contentType: "image/png",
+          etag: '"v1"',
+          lastModified: undefined,
+        };
+      },
+    },
+  });
   const leave = await h.request(
     pluginPath("leave", "enable"),
     json(
@@ -223,6 +242,78 @@ afterAll(async () => {
   if (root !== undefined) {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+describe("what a plugin reads of the people (ADR-0063)", () => {
+  it("tells it who was granted a role, an administrator only where they were", async () => {
+    const asked = (role: string) => invoked("leave", member, ["granted", "--role", role]);
+    // The default role is everyone's; no one has been given the other yet, and holding every role
+    // does not make an administrator someone to address.
+    expect((await asked("employee")).data).toEqual(expect.arrayContaining([aliceLogin, "bob"]));
+    expect((await asked("approver")).data).toEqual([]);
+    const granted = await h.request(
+      pluginPath("leave", "grants"),
+      json({ role: "approver", person: bobId }, admin),
+    );
+    expect(granted.status, await granted.clone().text()).toBe(201);
+    expect((await asked("approver")).data).toEqual(["bob"]);
+    const revoke = async (response: Response) => {
+      const { id } = restPluginGrantSchema.parse(await response.json());
+      const away = await h.request(pluginPath("leave", "grants", id), {
+        method: "DELETE",
+        headers: { cookie: admin, origin: SIGN_IN_URL },
+      });
+      expect(away.status).toBe(200);
+    };
+    await revoke(granted);
+    expect((await asked("approver")).data).toEqual([]);
+    // Through a project, it is everyone in the project, an open one having all of the workspace.
+    const open = await h.request(
+      REST_ROUTES.projects,
+      json({ key: "granted", name: "Granted", visibility: "workspace" }, admin),
+    );
+    expect(open.status, await open.clone().text()).toBe(201);
+    const throughProject = await h.request(
+      pluginPath("leave", "grants"),
+      json({ role: "approver", project: "granted" }, admin),
+    );
+    expect(throughProject.status, await throughProject.clone().text()).toBe(201);
+    expect((await asked("approver")).data).toEqual(expect.arrayContaining([aliceLogin, "bob"]));
+    await revoke(throughProject);
+    // A role the plugin does not declare is its mistake, and said so.
+    const refused = await invoke("leave", member, ["granted", "--role", "boss"]);
+    expect(refused.status).toBe(400);
+    expect(restErrorSchema.parse(await refused.json()).error.code).toBe("plugin.invalid_args");
+  });
+
+  it("serves a frame a person's picture, by the person and never by an address", async () => {
+    const at = (id: string, plugin = "leave") => pluginPath(plugin, "people", id, "picture");
+    const seen = await h.request(at(aliceId), { headers: { cookie: member } });
+    expect(seen.status, await seen.clone().text()).toBe(200);
+    expect(seen.headers.get("content-type")).toBe("image/png");
+    expect(seen.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(new Uint8Array(await seen.arrayBuffer())).toEqual(PNG);
+    // The console read it from where the person's provider says it is, and from nowhere else.
+    expect(pictured).toEqual(["https://avatars.example/alice.png"]);
+
+    // A person with none is answered so, as a page takes it, and so is an id that is no one's.
+    const none = await h.request(at(bobId), { headers: { cookie: member } });
+    expect(none.status).toBe(404);
+    expect(restErrorSchema.parse(await none.json()).error.code).toBe("plugin.not_found");
+    const nobody = "0199c4d8-0000-7000-8000-00000000ffff";
+    expect((await h.request(at(nobody), { headers: { cookie: member } })).status).toBe(404);
+
+    // An address is not a person: nothing the frame writes reaches the console's fetching.
+    const address = at("https%3A%2F%2Felsewhere.example%2Fdata.png");
+    expect((await h.request(address, { headers: { cookie: member } })).status).toBe(404);
+    expect(pictured).toHaveLength(1);
+
+    // Signed out it is nobody's; a plugin that was not given the people has none to show.
+    expect((await h.request(at(aliceId))).status).toBe(401);
+    const lacking = await h.request(at(aliceId, "audit"), { headers: { cookie: member } });
+    expect(lacking.status).toBe(403);
+    expect(restErrorSchema.parse(await lacking.json()).error.code).toBe("plugin.forbidden");
+  });
 });
 
 describe("a plugin on the board", () => {

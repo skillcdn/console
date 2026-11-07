@@ -54,6 +54,7 @@ import { createPluginSkills, pluginSkillsAddress } from "../plugins/skills.js";
 import type { Clock } from "../ports/clock.js";
 import { errorBody } from "./app.js";
 import { type Access, administratorRequired, foreignOrigin, signInRequired } from "./auth.js";
+import type { PictureCache } from "./pictures.js";
 import type { AppEnv } from "./request-context.js";
 import { restEvent } from "./rest-shapes.js";
 
@@ -62,6 +63,8 @@ export interface PluginsRestDependencies {
   readonly access: Access;
   readonly clock: Clock;
   readonly logger: Logger;
+  /** The pictures from elsewhere, fetched by the console and kept a while (ADR-0048). */
+  readonly pictures: PictureCache;
   /** The origin of the console's own pages (`PUBLIC_URL`), which may embed the plugins' frames; nothing where nobody signs in. */
   readonly ownOrigin: string | undefined;
   /** The build of the default UI, whose faces the frames read; nothing where the server is API only. */
@@ -217,7 +220,7 @@ export function registerPluginsRest(
   app: Hono<AppEnv>,
   dependencies: PluginsRestDependencies,
 ): void {
-  const { plugins, access, clock, logger, ownOrigin, web } = dependencies;
+  const { plugins, access, clock, logger, pictures, ownOrigin, web } = dependencies;
 
   /**
    * The faces of the console's own build, for the frames: the `@font-face` rules of the
@@ -704,6 +707,39 @@ export function registerPluginsRest(
         parsed.data.contentType ?? "application/octet-stream",
       );
       return c.json(handle, 201);
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
+  // A person's picture, for a frame, which has no way out of its own (ADR-0063). It names the
+  // person and never an address: an address would be a way out, through the console.
+  app.get(`${PLUGIN}/people/:id/picture`, async (c) => {
+    const caller = await asking(c);
+    if (caller instanceof Response) {
+      return caller;
+    }
+    const key = keyOf(c);
+    const id = c.req.param("id") ?? "";
+    if (key === undefined || !UUID.test(id)) {
+      return notFound(c);
+    }
+    try {
+      const src = await plugins.pictureOf(key, id, caller.person);
+      if (src === undefined) {
+        return c.json(errorBody("plugin.not_found", "The person has no picture."), 404);
+      }
+      const answer = await pictures.get(src);
+      if (answer.kind === "refused") {
+        return c.json(errorBody("picture.unavailable", "The picture could not be fetched."), 502);
+      }
+      c.header("content-type", answer.picture.contentType);
+      c.header("cache-control", "private, max-age=86400");
+      c.header("x-content-type-options", "nosniff");
+      c.header("content-security-policy", "default-src 'none'; sandbox");
+      c.header("cross-origin-resource-policy", "same-origin");
+      // A copy of its own: what the cache holds may be a view of a larger buffer.
+      return c.body(new Uint8Array(answer.picture.bytes).buffer);
     } catch (error) {
       return failure(c, error);
     }
