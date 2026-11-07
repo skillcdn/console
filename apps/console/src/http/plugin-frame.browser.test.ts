@@ -1,3 +1,5 @@
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import process from "node:process";
 import { type Browser, chromium, type Frame, type Page } from "playwright";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -236,6 +238,40 @@ describe("the example plugin in a browser", () => {
       weekStart: "auto",
       firstDay: expect.any(Number),
     });
+    await page.context().close();
+  });
+
+  it("runs nothing of a bundle as a document: a frame cannot go to a file of its own to leave its policy", async () => {
+    const web = await console_.plugins.webOf("hello");
+    if (web === undefined) {
+      throw new Error("the example plugin has no pages");
+    }
+    // The copy of the plugin this console installed: nothing of the repository is written to.
+    const heard = `${console_.origin}/heard-from-the-bundle`;
+    await writeFile(
+      join(web.dir, "hostile.svg"),
+      `<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8"/><script>fetch(${JSON.stringify(heard)}, { mode: "no-cors" });</script></svg>`,
+    );
+    const address = `${console_.origin}/api/v1/plugins/hello/web/${web.version}/hostile.svg`;
+    const page = await signedIn(BROWSER_ADMIN);
+    await page.goto(`${console_.origin}/plugins/hello/greetings`);
+    const frame = await frameOf(page, "iframe.sc-plugin-frame");
+    await frame.waitForSelector(".pl-hello-page");
+    // As a picture it is one, as a page may show it.
+    expect(
+      await frame.evaluate(`new Promise((resolve) => {
+        const image = new Image();
+        image.onload = () => resolve(image.naturalWidth);
+        image.onerror = () => resolve("refused");
+        image.src = ${JSON.stringify(address)};
+      })`),
+    ).toBe(8);
+    // As a document, its script does not run.
+    const arrived = page.waitForResponse(address);
+    await frame.evaluate(`setTimeout(() => { location.href = ${JSON.stringify(address)}; }, 0)`);
+    await arrived;
+    await page.waitForTimeout(500);
+    expect(requests).not.toContain(heard);
     await page.context().close();
   });
 

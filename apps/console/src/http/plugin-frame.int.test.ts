@@ -163,6 +163,8 @@ describe("the frame of a plugin's page", () => {
     // A module script is fetched with CORS from the frame's opaque origin.
     expect(script.headers.get("access-control-allow-origin")).toBe("*");
     expect(script.headers.get("x-content-type-options")).toBe("nosniff");
+    // A frame may go to a file of its bundle; there the frame's policy is gone, and this one holds.
+    expect(script.headers.get("content-security-policy")).toBe("default-src 'none'; sandbox");
     expect((await script.text()).length).toBeGreaterThan(0);
     const style = await h.request(`${AT}/web/${version}/index.css`);
     expect(style.status).toBe(200);

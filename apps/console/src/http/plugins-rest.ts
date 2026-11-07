@@ -1330,6 +1330,9 @@ export function registerPluginsRest(
     c.header("cross-origin-resource-policy", "cross-origin");
     c.header("access-control-allow-origin", "*");
     c.header("x-content-type-options", "nosniff");
+    // A frame may go to a file of its own bundle, where the frame's policy is gone, and an SVG is
+    // a document that runs scripts: a file is loaded, under the frame's policy, and is never a page.
+    c.header("content-security-policy", "default-src 'none'; sandbox");
     return c.body(new Uint8Array(bytes).buffer);
   });
 
