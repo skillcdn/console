@@ -417,6 +417,7 @@ Goal: what the same person found on the second look: the words of a failure, the
 - [x] A plugin's tabs read as levels of one thing: its pages go on from the header's tabs on the same gutters, the views within a page are the console's view switch, and a page's frame stands a step outside the column, so that its first words line up with the tabs above it.
 - [x] What a plugin could not read at all ([ADR-0063](adr/0063-a-frame-reads-a-persons-picture-by-the-person-and-a-plugin-reads-who-it-granted-a-role.md)): a person's picture in a frame, asked for by the person and never by an address, and who was granted a role of the plugin; the frame's workspace says its name and its languages as the server's does.
 - [x] Arranging the front page reads as handling tiles: where a tile would land shows the tile itself, faint, in the accent's colour, those in the way slide aside with a little give from the nearest out, and a tile lifts when taken and settles when put down.
+- [x] The title of a task across days passes under the header as the page scrolls, on a week and on a calendar alike, a test in a real browser seeing to it.
 
 ## After milestone 16
 

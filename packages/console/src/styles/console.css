@@ -3842,11 +3842,12 @@ select.sc-input-quiet:focus-visible {
 
 /* The title of a bar with more days in the week runs along the bar as far as its days reach,
    less the room of its end, instead of stopping at the first day's edge: above every piece,
-   the one under the pointer included, and under the cards; the pointer goes through it to the
-   piece of the day beneath. The days are the first piece's own custom property. */
+   the one under the pointer included, and under the cards and the header, which the page scrolls
+   beneath; the pointer goes through it to the piece of the day beneath. The days are the first
+   piece's own custom property. */
 .sc-calendar-task-title-spanning {
   position: relative;
-  z-index: 25;
+  z-index: 2;
   flex: none;
   max-width: calc(var(--sc-span, 1) * 100% - 2.25rem);
   pointer-events: none;
