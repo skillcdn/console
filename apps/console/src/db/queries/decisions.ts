@@ -4,6 +4,7 @@ import {
   MAX_FILES_PER_DECISION,
   type RestDecisionOption,
   type RestDecisionTranslations,
+  textIn,
 } from "@skillcdn/console/api";
 import { and, asc, count, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { DomainError } from "../../errors.js";
@@ -22,6 +23,7 @@ import {
 } from "./people.js";
 import { mayWorkIn, visibleTo } from "./projects.js";
 import type { FileRecord } from "./runs.js";
+import { withoutWrittenOver } from "./translations.js";
 
 // The questions that need a person. A decision is raised once and answered once; both are
 // one transaction with the event that records them. Every read is scoped to the project, but
@@ -565,6 +567,8 @@ export async function updateDecision(
     readonly actor: Actor;
     readonly decisionId: string;
     readonly patch: DecisionPatch;
+    /** The language the body was read in, where a person read it first. */
+    readonly reader?: string | null | undefined;
     readonly now: Date;
   },
 ): Promise<DecisionRecord> {
@@ -586,8 +590,12 @@ export async function updateDecision(
     if (current === undefined) {
       throw new DecisionError("decision.not_found");
     }
+    // A form sends the body back as its reader read it (ADR-0058): that is no edit.
+    const same =
+      patch.body === undefined ||
+      patch.body === textIn(current.translations?.body, current.body, input.reader);
     const next = {
-      body: patch.body ?? current.body,
+      body: same ? current.body : patch.body,
       outcome:
         patch.outcome === undefined
           ? current.outcome
@@ -606,9 +614,10 @@ export async function updateDecision(
         : next.outcome === null
           ? { outcomeById: null, outcomeAgent: null, outcomeAt: null }
           : { outcomeById: actor.id, outcomeAgent: actor.agent ?? null, outcomeAt: now };
+      const translations = withoutWrittenOver(current.translations, changed);
       await tx
         .update(decisions)
-        .set({ ...next, ...wrote, updatedAt: now })
+        .set({ ...next, ...wrote, translations, updatedAt: now })
         .where(eq(decisions.id, decisionId));
       await recordLinks(
         tx,

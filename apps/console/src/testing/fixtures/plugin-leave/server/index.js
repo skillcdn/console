@@ -135,6 +135,19 @@ export default {
         return { text: "written in every language", data: { decision, task, comment } };
       },
     ),
+    control: command("Writes a control character in one language of a title.", {}, async (ctx) => {
+      await ctx.console.tasks.create(ctx.plugin.board.key, {
+        title: { en: "Fine", ko: `제어${String.fromCodePoint(27)}문자` },
+      });
+      return { text: "written" };
+    }),
+    lines: command("Writes a body of two lines in two languages.", {}, async (ctx) => {
+      await ctx.console.tasks.create(ctx.plugin.board.key, {
+        title: { en: "Two lines", ko: "두 줄" },
+        body: { en: "one\ntwo", ko: "하나\n둘" },
+      });
+      return { text: "written" };
+    }),
     people: command("Reads the people and the projects the caller may see.", {}, async (ctx) => {
       const people = await ctx.console.people.list();
       let projects = "forbidden";

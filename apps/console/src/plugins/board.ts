@@ -1,5 +1,6 @@
 import {
   CONSOLE_LANGUAGES,
+  hasForbiddenCodePoint,
   isDocumentPath,
   MAX_BODY_LENGTH,
   MAX_COMMENTS_PER_TASK,
@@ -80,13 +81,22 @@ const LANGUAGE_TAG = /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
 /** How many languages one text comes in at most. */
 const MAX_TEXT_LANGUAGES = 10;
 
+/** One text as the API takes any: within the bound, with no control characters. */
+const textSchema = (max: number, atLeast: number, multiline: boolean) =>
+  z
+    .string()
+    .trim()
+    .min(atLeast)
+    .max(max)
+    .refine((text) => !hasForbiddenCodePoint(text, multiline), "holds control characters");
+
 /**
  * A text per language (ADR-0058): keyed by tag, each within the bound, at least one of the
  * console's languages among them, so that every reader finds a text.
  */
-const textsSchema = (max: number, atLeast = 1) =>
+const textsSchema = (max: number, atLeast: number, multiline: boolean) =>
   z
-    .record(z.string().regex(LANGUAGE_TAG), z.string().trim().min(atLeast).max(max))
+    .record(z.string().regex(LANGUAGE_TAG), textSchema(max, atLeast, multiline))
     .refine(
       (texts) =>
         Object.keys(texts).length <= MAX_TEXT_LANGUAGES &&
@@ -95,8 +105,8 @@ const textsSchema = (max: number, atLeast = 1) =>
     );
 
 /** A text a plugin writes on the board: one string, or one per language (ADR-0058). */
-const boardText = (max: number, atLeast = 1) =>
-  z.union([z.string().trim().min(atLeast).max(max), textsSchema(max, atLeast)]);
+const boardText = (max: number, { atLeast = 1, multiline = false } = {}) =>
+  z.union([textSchema(max, atLeast, multiline), textsSchema(max, atLeast, multiline)]);
 
 /** The text the board keeps beside a map: English where the map has it, else the first of the console's languages it has. */
 const plainOf = (text: string | Translations): string =>
@@ -108,7 +118,7 @@ const mapOf = (text: string | Translations | undefined): Translations | undefine
 
 const decisionAskSchema = z.object({
   question: boardText(MAX_QUESTION_LENGTH),
-  body: boardText(20_000, 0).optional(),
+  body: boardText(20_000, { atLeast: 0, multiline: true }).optional(),
   // Each a label, and optionally a key the plugin reads the answer by (`optionKey` on the
   // answered event), spelled as its own key is; each key once.
   options: z
@@ -134,7 +144,7 @@ const decisionAskSchema = z.object({
 /** A task as a plugin writes one: as the API takes it, the title and the body in one language or several (ADR-0058). */
 const pluginTaskTextsSchema = z.object({
   title: boardText(MAX_TITLE_LENGTH),
-  body: boardText(MAX_BODY_LENGTH, 0).optional(),
+  body: boardText(MAX_BODY_LENGTH, { atLeast: 0, multiline: true }).optional(),
 });
 
 const documentWriteSchema = z.object({
@@ -498,6 +508,7 @@ export class PluginBoard {
             scope,
             actor: await this.actorOf(context, workspace),
             taskId: task.id,
+            reader: this.languageOf(context),
             patch: {
               ...patch.data,
               links: patch.data.links?.map((link) => ({
@@ -515,7 +526,7 @@ export class PluginBoard {
       case "comment": {
         needs("board:tasks");
         const task = await this.ownTask(context, workspace, scope, whole(args[1], "the number"));
-        const said = boardText(MAX_BODY_LENGTH).safeParse(args[2]);
+        const said = boardText(MAX_BODY_LENGTH, { multiline: true }).safeParse(args[2]);
         if (!said.success) {
           throw invalid(`the comment does not fit: ${said.error.issues[0]?.message ?? ""}`);
         }

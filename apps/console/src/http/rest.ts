@@ -2202,6 +2202,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         scope: found.scope,
         actor: found.actor,
         taskId: id,
+        reader: found.person.language,
         patch: {
           ...patch,
           links: patch.links?.map((link) => ({ url: link.url, label: link.label ?? null })),
@@ -2472,6 +2473,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         scope: found.scope,
         actor: found.actor,
         decisionId: id,
+        reader: found.person.language,
         patch,
         now: clock.now(),
       });
