@@ -89,6 +89,43 @@ async function drag(page: Page, tile: string, x: number, y: number): Promise<voi
   await page.mouse.up();
 }
 
+/**
+ * What of the projects' words the page cuts: a row reaching past its tile, and a text that is not
+ * a whole number of lines. A row beyond the tile's right edge has gone whole. Written out as text,
+ * since it runs in the page and this workspace has no types of a page.
+ */
+const CUT_WORDS = `(() => {
+  const cut = [];
+  for (const pane of document.querySelectorAll(".sc-tile-project")) {
+    const tile = pane.getBoundingClientRect();
+    for (const row of pane.querySelectorAll(".sc-tile-name, .sc-tile-meta, .sc-tile-about")) {
+      const box = row.getBoundingClientRect();
+      if (box.left >= tile.right) {
+        continue;
+      }
+      const name = row.className + " of " + pane.querySelector(".sc-tile-name").textContent;
+      if (box.bottom > tile.bottom + 0.5 || box.right > tile.right + 0.5) {
+        cut.push(name + " past its tile");
+      }
+      if (!row.matches(".sc-tile-meta")) {
+        const lines = box.height / Number.parseFloat(getComputedStyle(row).lineHeight);
+        if (Math.abs(lines - Math.round(lines)) > 0.05) {
+          cut.push(name + " at " + lines + " lines");
+        }
+      }
+    }
+  }
+  return cut;
+})()`;
+
+/** How many of the icons have lost their names. */
+const NAMES_GONE = `(() =>
+  [...document.querySelectorAll(".sc-tile-project:not(.sc-tile-project-card)")].filter(
+    (pane) =>
+      pane.querySelector(".sc-tile-name").getBoundingClientRect().left >=
+      pane.getBoundingClientRect().right,
+  ).length)()`;
+
 describe("the front page in a browser (ADR-0061)", () => {
   it("takes a tile anywhere, opens nothing meanwhile, and keeps where it was put", async () => {
     const page = await signedIn(BROWSER_ADMIN);
@@ -160,6 +197,39 @@ describe("the front page in a browser (ADR-0061)", () => {
     expect(await page.$(".sc-tile-held")).toBeNull();
     await page.mouse.up();
     expect(await placeOf(page, tile)).toEqual(before);
+    await page.context().close();
+  });
+
+  it("shows a tile's words whole or not at all, at every width", async () => {
+    const page = await signedIn(BROWSER_ADMIN);
+    const icon = await made(page, "icon");
+    const card = await made(page, "card");
+    await page.evaluate(async (tile) => {
+      await fetch(`/api/v1/projects/card`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "A project whose name goes on for rather longer than a tile has room for",
+          description: "What the project is for, said at length. ".repeat(6),
+        }),
+      });
+      const layout = [{ tile, x: 0, y: 0, size: "small" }];
+      await fetch("/api/v1/me", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          home: { hidden: [], layouts: { 12: layout, 8: layout, 6: layout, 4: layout } },
+        }),
+      });
+    }, card);
+    await page.goto(`${console_.origin}/`);
+    await page.waitForSelector(`[data-tile="${icon}"]`);
+    for (let width = 320; width <= 2000; width += 40) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.waitForTimeout(40);
+      expect(await page.evaluate(CUT_WORDS), `at ${width} pixels`).toEqual([]);
+      expect(await page.evaluate(NAMES_GONE), `at ${width} pixels`).toBe(0);
+    }
     await page.context().close();
   });
 });

@@ -60,14 +60,13 @@ export function ProjectTile(props: ProjectTileProps) {
   const card = props.size !== "icon";
   const inside = (
     <>
-      <ProjectMark project={project} size="lg" />
+      <span className="sc-tile-mark">
+        <ProjectMark project={project} size="lg" />
+      </span>
       <span className="sc-tile-name">{project.name}</span>
-      {card && <code className="sc-project-key">{project.key}</code>}
-      {card && project.description.length > 0 && (
-        <span className="sc-tile-about">{project.description}</span>
-      )}
       {card && (
-        <span className="sc-tile-badges">
+        <span className="sc-tile-meta">
+          <code className="sc-project-key">{project.key}</code>
           <ProjectRoleBadge role={project.role} />
           {project.visibility === "private" ? (
             <Badge tone="neutral">{words.private}</Badge>
@@ -76,8 +75,14 @@ export function ProjectTile(props: ProjectTileProps) {
           )}
         </span>
       )}
+      {card && project.description.length > 0 && (
+        <span className="sc-tile-about">{project.description}</span>
+      )}
       {project.openDecisions > 0 && (
-        <span className="sc-tile-count" title={words.decisionsWaiting(project.openDecisions)}>
+        <span
+          className="sc-nav-count sc-tile-count"
+          title={words.decisionsWaiting(project.openDecisions)}
+        >
           {project.openDecisions}
           <span className="sc-visually-hidden">
             {" "}

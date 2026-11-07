@@ -6136,6 +6136,7 @@ select.sc-input-quiet:focus-visible {
 }
 
 .sc-tile {
+  container: sc-tile / size;
   --sc-tile-x: 0;
   --sc-tile-y: 0;
   --sc-tile-w: 1;
@@ -6164,17 +6165,32 @@ select.sc-input-quiet:focus-visible {
     box-shadow var(--sc-transition);
 }
 
-/* A project as an icon: its mark and its name in the middle of the cell, what waits in the corner. */
+/* A project as an icon: its mark and its name in the middle of the cell, what waits in the corner.
+   The mark and the room around it follow the cell. What still does not fit stands whole or not at
+   all: its row goes to a second column, past the room the tile cuts off, so that no line of words
+   is ever cut across. */
 .sc-tile-project {
+  --sc-tile-mark: clamp(1.75rem, 47cqh, 3.25rem);
   display: flex;
-  flex-direction: column;
-  gap: var(--sc-space-2);
-  align-items: center;
+  flex-flow: column wrap;
+  gap: clamp(0.125rem, 4cqh, 0.5rem) var(--sc-space-7);
+  align-content: flex-start;
   justify-content: center;
-  padding: var(--sc-space-3);
+  padding: clamp(0.25rem, 8cqh, 0.75rem);
+  overflow: hidden;
   color: var(--sc-color-text);
   text-align: center;
   text-decoration: none;
+}
+
+.sc-tile-project > :not(.sc-tile-count) {
+  flex: none;
+  width: 100%;
+}
+
+.sc-tile-mark {
+  display: flex;
+  justify-content: center;
 }
 
 a.sc-tile-project:hover,
@@ -6186,9 +6202,9 @@ a.sc-tile-project:focus-visible {
 }
 
 .sc-tile-project .sc-mark {
-  width: 3.25rem;
-  height: 3.25rem;
-  font-size: var(--sc-text-xl);
+  width: var(--sc-tile-mark);
+  height: var(--sc-tile-mark);
+  font-size: calc(var(--sc-tile-mark) * 0.42);
 }
 
 .sc-tile-name {
@@ -6203,35 +6219,54 @@ a.sc-tile-project:focus-visible {
   -webkit-line-clamp: 2;
 }
 
+/* What waits, in the corner: the count a tab shows, where it stands on a tile. */
 .sc-tile-count {
   position: absolute;
   top: var(--sc-space-2);
   right: var(--sc-space-2);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.25rem;
-  padding-inline: var(--sc-space-1);
-  border-radius: var(--sc-radius-full);
-  background: var(--sc-color-point);
-  color: var(--sc-color-bg-raised);
-  font-size: var(--sc-text-xs);
-  font-weight: var(--sc-weight-bold);
-  line-height: 1.25rem;
 }
 
-/* A project as a card: what it is under its name, read from the corner. */
+/* On a low cell the name keeps to one line, on the lowest in smaller words. */
+@container sc-tile (height < 7.75rem) {
+  .sc-tile-project:not(.sc-tile-project-card) .sc-tile-name {
+    -webkit-line-clamp: 1;
+  }
+}
+
+@container sc-tile (height < 5.5rem) {
+  .sc-tile-project:not(.sc-tile-project-card) {
+    border-radius: var(--sc-radius-lg);
+  }
+
+  .sc-tile-project:not(.sc-tile-project-card) .sc-tile-name {
+    font-size: var(--sc-text-xs);
+    line-height: var(--sc-leading-tight);
+  }
+}
+
+/* A project as a card, read from the corner: its name, what it is at a glance, and as much of its
+   description as the card has room for, the rows lost from the last up. */
 .sc-tile-project-card {
-  align-items: flex-start;
+  --sc-tile-mark: clamp(2.25rem, 22cqh, 3.25rem);
   justify-content: flex-start;
-  padding: var(--sc-space-5);
-  overflow: hidden;
+  padding: clamp(0.75rem, 8cqh, 1.25rem);
   text-align: start;
+}
+
+.sc-tile-project-card .sc-tile-mark {
+  justify-content: flex-start;
 }
 
 .sc-tile-project-card .sc-tile-name {
   font-size: var(--sc-text-lg);
   font-weight: var(--sc-weight-bold);
+}
+
+.sc-tile-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-1) var(--sc-space-2);
+  align-items: center;
 }
 
 .sc-tile-about {
@@ -6243,11 +6278,20 @@ a.sc-tile-project:focus-visible {
   -webkit-line-clamp: 3;
 }
 
-.sc-tile-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sc-space-1);
-  margin-top: auto;
+@container sc-tile (height < 15rem) {
+  .sc-tile-project-card .sc-tile-name {
+    -webkit-line-clamp: 1;
+  }
+
+  .sc-tile-about {
+    -webkit-line-clamp: 2;
+  }
+}
+
+@container sc-tile (height < 13rem) {
+  .sc-tile-about {
+    -webkit-line-clamp: 1;
+  }
 }
 
 /* A widget: its name, and its frame filling the cells its size gives it. */
@@ -6271,24 +6315,6 @@ a.sc-tile-project:focus-visible {
 .sc-tile-widget .sc-plugin-frame-widget {
   height: 100%;
   min-height: 0;
-}
-
-/* On a phone's cells the mark is smaller, and the name one line. */
-.sc-home-grid[data-columns="4"] .sc-tile-project:not(.sc-tile-project-card) {
-  gap: var(--sc-space-1);
-  padding: var(--sc-space-2);
-  border-radius: var(--sc-radius-lg);
-}
-
-.sc-home-grid[data-columns="4"] .sc-tile-project:not(.sc-tile-project-card) .sc-mark {
-  width: 2.25rem;
-  height: 2.25rem;
-  font-size: var(--sc-text-md);
-}
-
-.sc-home-grid[data-columns="4"] .sc-tile-project:not(.sc-tile-project-card) .sc-tile-name {
-  font-size: var(--sc-text-xs);
-  -webkit-line-clamp: 1;
 }
 
 /* While the page is arranged: the cells show as dots, every tile is a thing to take hold of, and

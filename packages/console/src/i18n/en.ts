@@ -1212,7 +1212,7 @@ export const en = {
     edit: "Edit layout",
     hint: "Drag to move. Pick a size at the top right; × takes a tile off this page.",
     done: "Done",
-    add: "Add back",
+    add: "Add",
     remove: "Remove from this page",
     size: "Size",
     sizes: {

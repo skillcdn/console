@@ -412,6 +412,7 @@ Goal: what a person found looking at milestone 36 on the preview console: the pa
 Goal: what the same person found on the second look: the words of a failure, the front page at every width and on a phone, the plugins' tabs, and what a plugin still could not read.
 
 - [x] A failure reads in the person's language: the pages read the server's code in the pack, whose `errors` hold every code the server can answer, a test seeing to it; the server's own message stays English, for programs, and a plugin's own refusal stays in the plugin's words.
+- [x] A tile on the front page never cuts a line of words: the mark and the room around it follow the cell, and a row that still does not fit stands whole or not at all, seen at every width by a browser test. What waits on a project reads as the count on a tab does, and the tray of what was taken off says Add.
 
 ## After milestone 16
 
