@@ -25,7 +25,6 @@ import {
   weekOf,
 } from "../dates.js";
 import { useLanguage, useWords } from "../i18n/index.js";
-import { textIn } from "../translations.js";
 import { TaskList } from "./task-list.js";
 import { CategoryBadge, cx, PersonChip, personName, StateBadge, Time, Workers } from "./ui.js";
 
@@ -241,7 +240,7 @@ export function TaskTip(props: TaskTipProps) {
       aria-hidden="true"
     >
       <p className="sc-task-tip-title">
-        #{task.number} {textIn(task.translations?.title, task.title, tag)}
+        #{task.number} {task.title}
       </p>
       <dl className="sc-task-tip-facts">
         <div>
@@ -506,7 +505,7 @@ function WeekRow(props: WeekRowProps) {
                           spanning && "sc-calendar-task-title-spanning",
                         )}
                       >
-                        {textIn(task.translations?.title, task.title, tag)}
+                        {task.title}
                       </span>
                     </>
                   )}
@@ -540,9 +539,7 @@ function WeekRow(props: WeekRowProps) {
                           mark
                         )}
                         {who(task)}
-                        <span className="sc-calendar-task-title">
-                          {textIn(task.translations?.title, task.title, tag)}
-                        </span>
+                        <span className="sc-calendar-task-title">{task.title}</span>
                         {tipIn(task, cell.day)}
                       </a>
                     );

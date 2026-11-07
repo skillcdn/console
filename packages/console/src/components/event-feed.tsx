@@ -3,7 +3,6 @@ import { agentLabel, type RestEvent } from "../api.js";
 import { dayOf } from "../dates.js";
 import { en, type Messages } from "../i18n/en.js";
 import { useLanguage, useWords } from "../i18n/index.js";
-import { textIn } from "../translations.js";
 import { ShowMore, usePaged } from "./paged.js";
 import { formatInstant, PersonChip } from "./ui.js";
 
@@ -12,27 +11,20 @@ import { formatInstant, PersonChip } from "./ui.js";
 // network; the sentence is the language's (ADR-0012).
 
 /** What an event says, without its actor: the words after the name, in the words given; a board's event a plugin caused says so (ADR-0052). */
-export function describeEvent(
-  event: RestEvent,
-  words: Messages = en,
-  language?: string | undefined,
-): string {
-  const sentence = sentenceOf(event, words, language);
+export function describeEvent(event: RestEvent, words: Messages = en): string {
+  const sentence = sentenceOf(event, words);
   return event.plugin !== null && !event.kind.startsWith("plugin.")
     ? `${sentence} ${words.feed.throughPlugin(event.plugin)}`
     : sentence;
 }
 
-function sentenceOf(event: RestEvent, words: Messages, language?: string | undefined): string {
+function sentenceOf(event: RestEvent, words: Messages): string {
   const { data } = event;
   const { feed, vocabulary } = words;
-  // A title or a question a plugin wrote in several languages (ADR-0058) is read in the reader's.
-  const title =
-    data.title === undefined ? undefined : textIn(data.translations, data.title, language);
   const task =
     data.number === undefined
       ? feed.aTask
-      : `#${data.number}${title === undefined ? "" : ` ${title}`}`;
+      : `#${data.number}${data.title === undefined ? "" : ` ${data.title}`}`;
   const project = data.name ?? data.key ?? feed.aProject;
   const changed = (data.fields ?? []).map((field) => feed.field[field] ?? field);
   const fields = changed.length === 0 ? feed.something : changed.join(", ");
@@ -46,11 +38,8 @@ function sentenceOf(event: RestEvent, words: Messages, language?: string | undef
           ? feed.role.member
           : feed.role.other;
   const login = data.login ?? feed.someone;
-  const question =
-    data.question === undefined
-      ? feed.aQuestion
-      : textIn(data.translations, data.question, language);
-  const goal = title ?? feed.aGoal;
+  const question = data.question ?? feed.aQuestion;
+  const goal = data.title ?? feed.aGoal;
   const category = data.name ?? data.key ?? feed.aCategory;
   const plugin = event.plugin ?? feed.aPlugin;
   const grantee =
@@ -281,7 +270,7 @@ export function EventFeed(props: EventFeedProps) {
                   <ol className="sc-feed-run-list">
                     {run.events.map((event) => {
                       const href = props.href?.(event);
-                      const said = describeEvent(event, words, tag);
+                      const said = describeEvent(event, words);
                       return (
                         <li key={event.id} className="sc-feed-item">
                           <time

@@ -22,6 +22,7 @@ import {
   type RestDecisionInput,
   type RestDecisionPatch,
   type RestEvent,
+  type RestMe,
   type RestMyDecisions,
   type RestPluginDetail,
   type RestProject,
@@ -381,6 +382,17 @@ function Ground(props: { readonly children: React.ReactNode }) {
  */
 function holdsToken(data: ConsoleData): boolean {
   return data.me !== undefined && data.me.agent !== null;
+}
+
+/**
+ * The language to keep for a person the pages see for the first time (ADR-0065): the one they are
+ * spoken to in, so that a plugin or an agent can write for them while they are away. Nothing for
+ * a person who has a language, and for nobody.
+ */
+export function languageToKeep(me: RestMe | undefined, speaking: string): string | undefined {
+  return me?.person !== null && me?.person !== undefined && me.language === null
+    ? speaking
+    : undefined;
 }
 
 /**
@@ -2614,7 +2626,7 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
     const failure = signInFailureOf(location.search);
     const title = data.me?.workspace.name ?? fallbackTitle;
     const viaToken = holdsToken(data);
-    // The language: the person's choice, else the browser's, else the first the console speaks.
+    // The language: the person's own, else the browser's, else the first the console speaks.
     const chosen = data.me?.language;
     const pack = useMemo(
       () =>
@@ -2626,6 +2638,13 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
       [chosen],
     );
     const words = pack.messages;
+
+    const toKeep = languageToKeep(data.me, pack.tag);
+    useEffect(() => {
+      if (toKeep !== undefined) {
+        void data.actions.updateMe({ language: toKeep }).catch(() => undefined);
+      }
+    }, [toKeep, data.actions]);
 
     // An address that moved is shown at its new one, in its place.
     useEffect(() => {

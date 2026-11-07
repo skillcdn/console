@@ -16,9 +16,8 @@ import {
   TASK_STATES,
   type TaskState,
 } from "../api.js";
-import { useLanguage, useWords } from "../i18n/index.js";
+import { useWords } from "../i18n/index.js";
 import type { BoardFilter } from "../router.js";
-import { textIn } from "../translations.js";
 import { isPlainClick } from "./shell.js";
 import {
   Badge,
@@ -151,9 +150,7 @@ export interface TaskCardProps {
 
 export function TaskCard(props: TaskCardProps) {
   const words = useWords();
-  const { tag } = useLanguage();
   const { task, onPress } = props;
-  const title = textIn(task.translations?.title, task.title, tag);
   return (
     <article
       className={cx(
@@ -161,7 +158,7 @@ export function TaskCard(props: TaskCardProps) {
         onPress !== undefined && "sc-card-movable",
         props.dragging === true && "sc-card-dragging",
       )}
-      aria-label={`#${task.number} ${title}`}
+      aria-label={`#${task.number} ${task.title}`}
       onPointerDown={onPress === undefined ? undefined : (event) => onPress(task, event)}
     >
       {(props.editHref !== undefined || props.onArchive !== undefined) && (
@@ -184,7 +181,7 @@ export function TaskCard(props: TaskCardProps) {
           }
         }}
       >
-        <span className="sc-card-number">#{task.number}</span> {title}
+        <span className="sc-card-number">#{task.number}</span> {task.title}
       </a>
       <div className="sc-card-meta">
         {task.category !== null && <CategoryBadge category={task.category} />}

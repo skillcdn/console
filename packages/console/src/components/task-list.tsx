@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import type { RestTask } from "../api.js";
-import { useLanguage, useWords } from "../i18n/index.js";
-import { textIn } from "../translations.js";
+import { useWords } from "../i18n/index.js";
 import { ShowMore, usePaged } from "./paged.js";
 import { Badge, CategoryBadge, DueBadge, StateBadge, Workers } from "./ui.js";
 
@@ -25,7 +24,6 @@ export interface TaskListProps {
 
 export function TaskList(props: TaskListProps) {
   const words = useWords();
-  const { tag } = useLanguage();
   const { shown, rest, more } = usePaged(props.tasks);
   if (props.tasks.length === 0) {
     return <>{props.empty ?? null}</>;
@@ -38,8 +36,7 @@ export function TaskList(props: TaskListProps) {
           return (
             <li key={task.id} className="sc-task-row">
               <a className="sc-task-row-title" href={props.taskHref(task)}>
-                <span className="sc-card-number">#{task.number}</span>{" "}
-                {textIn(task.translations?.title, task.title, tag)}
+                <span className="sc-card-number">#{task.number}</span> {task.title}
               </a>
               {project !== undefined && project !== null && (
                 <span className="sc-task-row-project">{project}</span>

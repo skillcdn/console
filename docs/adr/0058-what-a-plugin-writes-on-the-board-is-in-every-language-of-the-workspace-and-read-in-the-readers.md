@@ -1,6 +1,6 @@
 # ADR-0058: What a plugin writes on the board is in every language of the workspace, and read in the reader's
 
-- Status: Accepted
+- Status: Superseded by [ADR-0065](0065-a-plugin-writes-one-text-and-a-persons-language-is-kept-from-the-first-time-the-pages-see-them.md), which takes the texts per language out before they were released: a plugin writes one text, in the language of whoever it is for
 - Date: 2026-11-06
 - Refines [ADR-0012](0012-the-pages-speak-the-persons-language-from-packs-that-ship-with-the-package.md), which gave the pages the person's language, and [ADR-0052](0052-a-plugins-board-is-a-project-made-or-chosen-when-it-is-enabled-and-what-it-puts-there-carries-its-name.md), which put a plugin's decisions, tasks and comments on the board. The contract is in [specs/plugins.md](../specs/plugins.md) and [specs/rest.md](../specs/rest.md).
 

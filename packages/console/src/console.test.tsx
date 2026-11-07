@@ -1,11 +1,12 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { ConsoleClient, ProjectClient } from "./api.js";
+import type { ConsoleClient, ProjectClient, RestMe } from "./api.js";
 import {
   type CustomPage,
   createConsole,
   customPageLabel,
   DEFAULT_COMPONENTS,
+  languageToKeep,
   onlyOnOwnPages,
 } from "./console.js";
 import {
@@ -548,6 +549,15 @@ describe("createConsole", () => {
     });
     expect(typeof custom.App).toBe("function");
     expect(typeof custom.mount).toBe("function");
+  });
+
+  it("keeps the language a person is first seen in, and never one over theirs (ADR-0065)", () => {
+    const me = (fields: Partial<RestMe>) =>
+      ({ person: { id: ID }, language: null, ...fields }) as RestMe;
+    expect(languageToKeep(me({}), "ko")).toBe("ko");
+    expect(languageToKeep(me({ language: "en" }), "ko")).toBeUndefined();
+    expect(languageToKeep(me({ person: null }), "ko")).toBeUndefined();
+    expect(languageToKeep(undefined, "ko")).toBeUndefined();
   });
 
   it("knows which pages a console that holds a token does not offer", () => {

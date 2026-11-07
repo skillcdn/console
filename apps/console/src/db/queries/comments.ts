@@ -1,4 +1,3 @@
-import type { RestCommentTranslations } from "@skillcdn/console/api";
 import { and, asc, count, eq, inArray } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { DomainError } from "../../errors.js";
@@ -28,8 +27,6 @@ export interface CommentRecord {
   /** The agent the author wrote through, when they did. */
   readonly agent: string | undefined;
   readonly body: string;
-  /** The body per language (ADR-0058), where a plugin wrote it in several. */
-  readonly translations: RestCommentTranslations | undefined;
   readonly files: readonly CommentFileRecord[];
   readonly createdAt: Date;
 }
@@ -63,15 +60,13 @@ export async function writeComment(
     readonly actor: Actor;
     readonly taskId: string;
     readonly body: string;
-    /** The body per language (ADR-0058), where the writer wrote it in several; `body` holds the first language's. */
-    readonly translations?: RestCommentTranslations | undefined;
     readonly files: readonly FileRecord[];
     readonly limit: number;
     readonly fileLimit: number;
     readonly now: Date;
   },
 ): Promise<CommentRecord> {
-  const { scope, actor, taskId, body, translations, files, limit, fileLimit, now } = input;
+  const { scope, actor, taskId, body, files, limit, fileLimit, now } = input;
   if (body.trim().length === 0 && files.length === 0) {
     throw new CommentError("comment.empty");
   }
@@ -103,7 +98,6 @@ export async function writeComment(
         authorId: actor.id,
         agent: actor.agent ?? null,
         body,
-        translations: translations ?? null,
         createdAt: now,
       })
       .returning({ id: comments.id });
@@ -185,7 +179,6 @@ async function readComments(
       taskId: comments.taskId,
       agent: comments.agent,
       body: comments.body,
-      translations: comments.translations,
       createdAt: comments.createdAt,
       author: personColumns(authors),
     })
@@ -231,7 +224,6 @@ async function readComments(
     author: toPerson(row.author),
     agent: row.agent ?? undefined,
     body: row.body,
-    translations: row.translations ?? undefined,
     files: filesOf.get(row.id) ?? [],
     createdAt: row.createdAt,
   }));

@@ -34,7 +34,7 @@ export interface PersonRecord {
   readonly deactivatedAt: Date | undefined;
   /** The id of the person they report to, set by an administrator; none for nobody. */
   readonly managerId: string | undefined;
-  /** The language the person chose for the pages (ADR-0012), a tag; none for the browser's. */
+  /** The language the person reads in (ADR-0065), a tag: the one they chose, else the one the pages first saw them in; none until then. */
   readonly language: string | undefined;
 }
 
@@ -728,7 +728,7 @@ export async function setHome(
     .where(eq(people.id, personId));
 }
 
-/** The language the person chose for the pages, or nothing. */
+/** The language the person reads in, or nothing until the pages have seen them. */
 export async function languageOf(
   database: Database,
   personId: string,
@@ -741,7 +741,7 @@ export async function languageOf(
   return row?.language ?? undefined;
 }
 
-/** Keeps the person's choice of language, or none. */
+/** Keeps the person's language, or none. */
 export async function setLanguage(
   database: Database,
   personId: string,

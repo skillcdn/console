@@ -102,49 +102,55 @@ export default {
       }
       return { text: own.path, data: { own, elsewhere } };
     }),
-    bilingual: command(
-      "Asks a decision and leaves a task with a comment in every language of the workspace.",
+    theirs: command(
+      "Asks a decision in the language of the person it is for.",
       { approver: argument("person") },
       async (ctx, args) => {
-        const personId = ctx.caller.kind === "person" ? ctx.caller.person.id : "";
+        const { language } = await ctx.console.people.get(args.approver.id);
         const record = await ctx.records(requests).create({
-          personId,
+          personId: ctx.caller.kind === "person" ? ctx.caller.person.id : "",
           from: "2026-12-24",
           to: "2026-12-26",
           state: "requested",
           decisionId: null,
         });
+        const korean = language === "ko";
         const decision = await ctx.console.decisions.ask(ctx.plugin.board.key, {
-          question: { en: "Leave at the year's end?", ko: "연말 휴가를 승인할까요?" },
-          body: { en: "Three days.", ko: "사흘입니다." },
+          question: korean ? "연말 휴가를 승인할까요?" : "Leave at the year's end?",
           options: [
-            { label: { en: "Approve", ko: "승인" }, key: "approve" },
-            { label: { en: "Reject", ko: "반려" }, key: "reject" },
+            { label: korean ? "승인" : "Approve", key: "approve" },
+            { label: korean ? "반려" : "Reject", key: "reject" },
           ],
           deciderId: args.approver.id,
           about: { collection: "requests", id: record.id },
         });
-        const task = await ctx.console.tasks.create(ctx.plugin.board.key, {
-          title: { en: "Settle the year's leave", ko: "연말 휴가 정산" },
-          body: { en: "Before the year ends.", ko: "연말 전에." },
-        });
-        const comment = await ctx.console.tasks.comment(ctx.plugin.board.key, task.number, {
-          en: "Left by leave.",
-          ko: "휴가 플러그인이 남김.",
-        });
-        return { text: "written in every language", data: { decision, task, comment } };
+        return { text: decision.question, data: { language, decision } };
       },
     ),
-    control: command("Writes a control character in one language of a title.", {}, async (ctx) => {
+    several: command("Writes a title in two languages at once.", {}, async (ctx) => {
       await ctx.console.tasks.create(ctx.plugin.board.key, {
-        title: { en: "Fine", ko: `제어${String.fromCodePoint(27)}문자` },
+        title: { en: "Settle the year's leave", ko: "연말 휴가 정산" },
       });
       return { text: "written" };
     }),
-    lines: command("Writes a body of two lines in two languages.", {}, async (ctx) => {
+    "control-title": command("Writes a control character in a title.", {}, async (ctx) => {
       await ctx.console.tasks.create(ctx.plugin.board.key, {
-        title: { en: "Two lines", ko: "두 줄" },
-        body: { en: "one\ntwo", ko: "하나\n둘" },
+        title: `제어${String.fromCodePoint(27)}문자`,
+      });
+      return { text: "written" };
+    }),
+    "control-question": command("Writes a control character in a question.", {}, async (ctx) => {
+      await ctx.console.decisions.ask(ctx.plugin.board.key, {
+        question: `제어${String.fromCodePoint(27)}문자`,
+        options: [{ label: "Yes" }, { label: "No" }],
+        about: { collection: "requests", id: "01a1b5cc-0000-7000-8000-000000000000" },
+      });
+      return { text: "written" };
+    }),
+    lines: command("Writes a body of two lines.", {}, async (ctx) => {
+      await ctx.console.tasks.create(ctx.plugin.board.key, {
+        title: "Two lines",
+        body: "one\ntwo",
       });
       return { text: "written" };
     }),

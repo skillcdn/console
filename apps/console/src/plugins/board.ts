@@ -10,16 +10,12 @@ import {
   MAX_OPTION_LABEL_LENGTH,
   MAX_OPTIONS,
   MAX_QUESTION_LENGTH,
-  MAX_TITLE_LENGTH,
   MAX_VERSIONS_PER_DOCUMENT,
   MIN_OPTIONS,
   OPTION_KEY_PATTERN,
-  type RestDecisionTranslations,
   type RestTask,
   restTaskInputSchema,
   restTaskPatchSchema,
-  storedText,
-  type Translations,
 } from "@skillcdn/console/api";
 import {
   type CollectionDescription,
@@ -71,50 +67,17 @@ import type { RecordStore } from "./records.js";
 // or a hook, acts as the administrator who enabled the plugin, within the plugin's projects. What
 // the plugin makes is marked as its, and it changes its own items alone.
 
-/** The languages the pages speak (ADR-0012): the packs the package ships. */
-
 /** How many items one read answers at most: a page of the board's own size. */
 const READ_LIMIT = PLUGIN_LIST_LIMIT;
 
-/** A language tag as the manifest's language maps are keyed. */
-const LANGUAGE_TAG = /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
-/** How many languages one text comes in at most. */
-const MAX_TEXT_LANGUAGES = 10;
-
-/** One text as the API takes any: within the bound, with no control characters. */
-const textSchema = (max: number, atLeast: number, multiline: boolean) =>
+/** A text a plugin writes on the board, as the API takes any: within the bound, with no control characters. */
+const boardText = (max: number, { atLeast = 1, multiline = false } = {}) =>
   z
     .string()
     .trim()
     .min(atLeast)
     .max(max)
     .refine((text) => !hasForbiddenCodePoint(text, multiline), "holds control characters");
-
-/**
- * A text per language (ADR-0058): keyed by tag, each within the bound, at least one of the
- * console's languages among them, so that every reader finds a text.
- */
-const textsSchema = (max: number, atLeast: number, multiline: boolean) =>
-  z
-    .record(z.string().regex(LANGUAGE_TAG), textSchema(max, atLeast, multiline))
-    .refine(
-      (texts) =>
-        Object.keys(texts).length <= MAX_TEXT_LANGUAGES &&
-        CONSOLE_LANGUAGES.some((language) => typeof texts[language] === "string"),
-      `names none of the console's languages (${CONSOLE_LANGUAGES.join(", ")}), or too many`,
-    );
-
-/** A text a plugin writes on the board: one string, or one per language (ADR-0058). */
-const boardText = (max: number, { atLeast = 1, multiline = false } = {}) =>
-  z.union([textSchema(max, atLeast, multiline), textsSchema(max, atLeast, multiline)]);
-
-/** The text the board keeps beside a map: English where the map has it, else the first of the console's languages it has. */
-const plainOf = (text: string | Translations): string =>
-  typeof text === "string" ? text : storedText(text, CONSOLE_LANGUAGES);
-
-/** The map, where the text was one; nothing for a plain string. */
-const mapOf = (text: string | Translations | undefined): Translations | undefined =>
-  typeof text === "object" ? text : undefined;
 
 const decisionAskSchema = z.object({
   question: boardText(MAX_QUESTION_LENGTH),
@@ -139,12 +102,6 @@ const decisionAskSchema = z.object({
   deciderIds: z.array(z.uuid()).min(1).max(MAX_DECIDERS).optional(),
   taskId: z.uuid().optional(),
   about: z.object({ collection: z.string().min(1).max(32), id: z.uuid() }),
-});
-
-/** A task as a plugin writes one: as the API takes it, the title and the body in one language or several (ADR-0058). */
-const pluginTaskTextsSchema = z.object({
-  title: boardText(MAX_TITLE_LENGTH),
-  body: boardText(MAX_BODY_LENGTH, { atLeast: 0, multiline: true }).optional(),
 });
 
 const documentWriteSchema = z.object({
@@ -192,35 +149,6 @@ interface Reached {
   readonly name: string;
   readonly visibility: "workspace" | "private";
   readonly createdAt: Date;
-}
-
-/**
- * What a decision keeps of the texts per language it was asked with (ADR-0058): the question's,
- * the body's and each option's map, the options by the id the board gives them, 1 to n in order;
- * nothing where every text was plain.
- */
-function decisionTranslationsOf(ask: {
-  readonly question: string | Translations;
-  readonly body?: string | Translations | undefined;
-  readonly options: readonly { readonly label: string | Translations }[];
-}): RestDecisionTranslations | undefined {
-  const question = mapOf(ask.question);
-  const body = mapOf(ask.body);
-  const options: Record<string, Translations> = {};
-  ask.options.forEach((option, index) => {
-    const label = mapOf(option.label);
-    if (label !== undefined) {
-      options[String(index + 1)] = label;
-    }
-  });
-  if (question === undefined && body === undefined && Object.keys(options).length === 0) {
-    return undefined;
-  }
-  return {
-    ...(question === undefined ? {} : { question }),
-    ...(body === undefined ? {} : { body }),
-    ...(Object.keys(options).length === 0 ? {} : { options }),
-  };
 }
 
 const forbidden = (message: string): PluginRefusal =>
@@ -425,7 +353,7 @@ export class PluginBoard {
           limit: filter.data.limit ?? READ_LIMIT,
           offset: filter.data.offset,
         });
-        return items.map((task) => restTask(task, this.languageOf(context)));
+        return items.map(restTask);
       }
       case "get": {
         needs("board:read");
@@ -434,39 +362,14 @@ export class PluginBoard {
           scope,
           whole(args[1], "the number"),
         );
-        return task === undefined ? null : restTask(task, this.languageOf(context));
+        return task === undefined ? null : restTask(task);
       }
       case "create": {
         needs("board:tasks");
-        // The title and the body may come per language (ADR-0058): the board keeps one text of
-        // each as the task's own and the map beside it.
-        const given =
-          typeof args[1] === "object" && args[1] !== null && !Array.isArray(args[1])
-            ? (args[1] as Record<string, unknown>)
-            : {};
-        const texts = pluginTaskTextsSchema.safeParse({ title: given.title, body: given.body });
-        if (!texts.success) {
-          throw invalid(`the task does not fit: ${texts.error.issues[0]?.message ?? ""}`);
-        }
-        const input = restTaskInputSchema.safeParse({
-          ...given,
-          title: plainOf(texts.data.title),
-          ...(texts.data.body === undefined
-            ? { body: undefined }
-            : { body: plainOf(texts.data.body) }),
-        });
+        const input = restTaskInputSchema.safeParse(args[1]);
         if (!input.success) {
           throw invalid(`the task does not fit: ${input.error.issues[0]?.message ?? ""}`);
         }
-        const titleMap = mapOf(texts.data.title);
-        const bodyMap = mapOf(texts.data.body);
-        const translations =
-          titleMap === undefined && bodyMap === undefined
-            ? undefined
-            : {
-                ...(titleMap === undefined ? {} : { title: titleMap }),
-                ...(bodyMap === undefined ? {} : { body: bodyMap }),
-              };
         const actor = await this.actorOf(context, workspace);
         try {
           const task = await createTask(this.options.database, {
@@ -474,7 +377,6 @@ export class PluginBoard {
             actor,
             task: {
               ...input.data,
-              translations,
               links: input.data.links?.map((link) => ({
                 url: link.url,
                 label: link.label ?? null,
@@ -488,10 +390,7 @@ export class PluginBoard {
             kind: "task",
             id: task.id,
           });
-          return {
-            ...restTask(task, this.languageOf(context)),
-            plugin: context.key,
-          } satisfies RestTask;
+          return { ...restTask(task), plugin: context.key } satisfies RestTask;
         } catch (error) {
           return refusalOf(error);
         }
@@ -508,7 +407,6 @@ export class PluginBoard {
             scope,
             actor: await this.actorOf(context, workspace),
             taskId: task.id,
-            reader: this.languageOf(context),
             patch: {
               ...patch.data,
               links: patch.data.links?.map((link) => ({
@@ -518,7 +416,7 @@ export class PluginBoard {
             },
             now: this.options.clock.now(),
           });
-          return restTask(updated, this.languageOf(context));
+          return restTask(updated);
         } catch (error) {
           return refusalOf(error);
         }
@@ -530,20 +428,18 @@ export class PluginBoard {
         if (!said.success) {
           throw invalid(`the comment does not fit: ${said.error.issues[0]?.message ?? ""}`);
         }
-        const bodyMap = mapOf(said.data);
         try {
           const comment = await writeComment(this.options.database, {
             scope,
             actor: await this.actorOf(context, workspace),
             taskId: task.id,
-            body: plainOf(said.data),
-            translations: bodyMap === undefined ? undefined : { body: bodyMap },
+            body: said.data,
             files: [],
             limit: MAX_COMMENTS_PER_TASK,
             fileLimit: MAX_FILES_PER_COMMENT,
             now: this.options.clock.now(),
           });
-          return restComment(comment, this.languageOf(context));
+          return restComment(comment);
         } catch (error) {
           return refusalOf(error);
         }
@@ -571,7 +467,7 @@ export class PluginBoard {
             limit: READ_LIMIT,
           },
         );
-        return items.map((decision) => restDecision(decision, this.languageOf(context)));
+        return items.map(restDecision);
       }
       case "get": {
         needs("board:read");
@@ -586,7 +482,7 @@ export class PluginBoard {
         ) {
           return null;
         }
-        return restDecision(decision, this.languageOf(context));
+        return restDecision(decision);
       }
       case "ask": {
         needs("board:decisions");
@@ -614,13 +510,9 @@ export class PluginBoard {
             scope,
             actor: await this.actorOf(context, workspace),
             decision: {
-              question: plainOf(ask.data.question),
-              body: ask.data.body === undefined ? undefined : plainOf(ask.data.body),
-              options: ask.data.options.map((option) => ({
-                label: plainOf(option.label),
-                ...(option.key === undefined ? {} : { key: option.key }),
-              })),
-              translations: decisionTranslationsOf(ask.data),
+              question: ask.data.question,
+              body: ask.data.body,
+              options: ask.data.options,
               taskId: ask.data.taskId,
               deciderId: ask.data.deciderId,
               deciderIds: ask.data.deciderIds,
@@ -639,7 +531,7 @@ export class PluginBoard {
             ask.data.about.id,
             { kind: "decision", id: decision.id },
           );
-          return { ...restDecision(decision, this.languageOf(context)), plugin: context.key };
+          return { ...restDecision(decision), plugin: context.key };
         } catch (error) {
           return refusalOf(error);
         }
@@ -806,11 +698,6 @@ export class PluginBoard {
       throw forbidden(`the plugin is not on the project ${key}`);
     }
     return project;
-  }
-
-  /** The language a call's reader reads in (ADR-0058): the person's own; English for the console itself. */
-  private languageOf(context: BoardContext): string {
-    return context.caller.kind === "person" ? context.caller.person.language : "en";
   }
 
   /** The person a call acts as: the caller, or, for the console, the administrator who enabled the plugin. */

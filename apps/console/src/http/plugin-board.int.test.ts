@@ -6,7 +6,6 @@ import {
   pluginPath,
   projectPath,
   REST_ROUTES,
-  restCommentsSchema,
   restDecisionSchema,
   restDocumentSchema,
   restErrorSchema,
@@ -16,7 +15,6 @@ import {
   restPluginGrantSchema,
   restPluginInvocationSchema,
   restPluginRecordSchema,
-  restTaskSchema,
   restTasksSchema,
 } from "@skillcdn/console/api";
 import { eq } from "drizzle-orm";
@@ -590,135 +588,38 @@ describe("a plugin on the board", () => {
     await scheduler.tick();
     expect(await failed()).toHaveLength(2);
   });
-  it("writes in every language of the workspace, and each reader reads their own (ADR-0058)", async () => {
-    // Bob writes with no language of his own, so the plugin reads back the text kept, English;
-    // then he reads the pages in Korean, and the administrator in English.
-    const made = await invoked("leave", member, ["bilingual", "--approver", aliceLogin]);
-    expect(
-      (await h.request(REST_ROUTES.me, json({ language: "ko" }, member, "PATCH"))).status,
-    ).toBe(200);
-    const carol = member;
-    const { decision, task } = made.data as {
-      decision: { id: string; question: string; translations: { question?: { ko?: string } } };
-      task: { number: number; title: string };
+  it("tells a plugin a person's language, and keeps the one text it writes in it (ADR-0065)", async () => {
+    const set = async (language: string | null) => {
+      const answer = await h.request(REST_ROUTES.me, json({ language }, admin, "PATCH"));
+      expect(answer.status, await answer.clone().text()).toBe(200);
     };
-    // The plugin reads back in its caller's language, Bob's, which is the text kept: English.
-    expect(decision.question).toBe("Leave at the year's end?");
-    expect(decision.translations.question?.ko).toBe("연말 휴가를 승인할까요?");
-    expect(task.title).toBe("Settle the year's leave");
-    // Carol reads everything in Korean: the question, the context, the labels, the task, the comment.
-    const asCarol = restDecisionSchema.parse(
-      await (
-        await h.request(projectPath(BOARD, "decisions", decision.id), {
-          headers: { cookie: carol },
-        })
-      ).json(),
-    );
-    expect(asCarol.question).toBe("연말 휴가를 승인할까요?");
-    expect(asCarol.body).toBe("사흘입니다.");
-    expect(asCarol.options.map((option) => option.label)).toEqual(["승인", "반려"]);
-    expect(asCarol.translations?.options?.["1"]?.en).toBe("Approve");
-    const taskAsCarol = restTaskSchema.parse(
-      await (
-        await h.request(projectPath(BOARD, "tasks", String(task.number)), {
-          headers: { cookie: carol },
-        })
-      ).json(),
-    );
-    expect(taskAsCarol.title).toBe("연말 휴가 정산");
-    expect(taskAsCarol.body).toBe("연말 전에.");
-    expect(taskAsCarol.translations?.title?.en).toBe("Settle the year's leave");
-    const comments = restCommentsSchema.parse(
-      await (
-        await h.request(`${projectPath(BOARD, "tasks", String(task.number))}/comments`, {
-          headers: { cookie: carol },
-        })
-      ).json(),
-    );
-    expect(comments.items.at(-1)?.body).toBe("휴가 플러그인이 남김.");
-    // An English reader reads English, and the feed's events carry the map for the pages.
-    const asAdmin = restDecisionSchema.parse(
-      await (
-        await h.request(projectPath(BOARD, "decisions", decision.id), {
-          headers: { cookie: admin },
-        })
-      ).json(),
-    );
-    expect(asAdmin.question).toBe("Leave at the year's end?");
-    expect(asAdmin.options.map((option) => option.label)).toEqual(["Approve", "Reject"]);
-    const feed = restEventsSchema.parse(
-      await (
-        await h.request(`${projectPath(BOARD, "events")}?latest=true&limit=20`, {
-          headers: { cookie: admin },
-        })
-      ).json(),
-    );
-    expect(
-      feed.items.find((event) => event.kind === "task.created" && event.data.number === task.number)
-        ?.data.translations?.ko,
-    ).toBe("연말 휴가 정산");
-    expect(
-      feed.items.find(
-        (event) => event.kind === "decision.raised" && event.decisionId === decision.id,
-      )?.data.translations?.ko,
-    ).toBe("연말 휴가를 승인할까요?");
-    expect(
-      (await h.request(REST_ROUTES.me, json({ language: null }, member, "PATCH"))).status,
-    ).toBe(200);
-  });
-
-  it("takes what a person writes over a text in several languages as the text, and what they read as no change", async () => {
-    expect(
-      (await h.request(REST_ROUTES.me, json({ language: "ko" }, member, "PATCH"))).status,
-    ).toBe(200);
-    const made = await invoked("leave", member, ["bilingual", "--approver", aliceLogin]);
-    const { decision, task } = made.data as {
-      decision: { id: string };
-      task: { id: string };
+    const written = async () => {
+      const made = await invoked("leave", member, ["theirs", "--approver", aliceLogin]);
+      return made.data as { language: string | null; decision: { id: string; question: string } };
     };
-    const taskPath = projectPath(BOARD, "tasks", task.id);
-    const taskFor = async (cookie: string) =>
-      restTaskSchema.parse(await (await h.request(taskPath, { headers: { cookie } })).json());
-    const decisionPath = projectPath(BOARD, "decisions", decision.id);
-    const decisionFor = async (cookie: string) =>
-      restDecisionSchema.parse(
-        await (await h.request(decisionPath, { headers: { cookie } })).json(),
-      );
 
-    // A form sends the texts back as it showed them, whatever else was changed: here a date, by
-    // a reader of Korean. The English stays, and every language with it.
-    const shown = await taskFor(member);
-    const dated = await h.request(
-      taskPath,
-      json({ title: shown.title, body: shown.body, dueOn: "2026-12-20" }, member, "PATCH"),
-    );
-    expect(dated.status, await dated.clone().text()).toBe(200);
-    const kept = await taskFor(admin);
-    expect(kept.title).toBe("Settle the year's leave");
-    expect(kept.dueOn).toBe("2026-12-20");
-    expect(kept.translations?.title?.ko).toBe("연말 휴가 정산");
+    // Before the pages have seen them, a plugin reads no language, and chooses for itself.
+    await set(null);
+    expect((await written()).language).toBeNull();
 
-    // A title written over is the title, for every reader; the body keeps its languages.
-    const renamed = await h.request(taskPath, json({ title: "연말 정산 마감" }, member, "PATCH"));
-    expect(renamed.status, await renamed.clone().text()).toBe(200);
-    expect((await taskFor(admin)).title).toBe("연말 정산 마감");
-    expect((await taskFor(member)).title).toBe("연말 정산 마감");
-    expect((await taskFor(admin)).translations?.title).toBeUndefined();
-    expect((await taskFor(admin)).body).toBe("Before the year ends.");
-    expect((await taskFor(member)).body).toBe("연말 전에.");
+    await set("ko");
+    const { language, decision } = await written();
+    expect(language).toBe("ko");
+    expect(decision.question).toBe("연말 휴가를 승인할까요?");
 
-    // So with a decision's body, the rest of it keeping its languages.
-    const same = await h.request(decisionPath, json({ body: "사흘입니다." }, member, "PATCH"));
-    expect(same.status, await same.clone().text()).toBe(200);
-    expect((await decisionFor(admin)).body).toBe("Three days.");
-    const longer = await h.request(decisionPath, json({ body: "나흘입니다." }, member, "PATCH"));
-    expect(longer.status, await longer.clone().text()).toBe(200);
-    expect((await decisionFor(admin)).body).toBe("나흘입니다.");
-    expect((await decisionFor(admin)).question).toBe("Leave at the year's end?");
-    expect((await decisionFor(member)).question).toBe("연말 휴가를 승인할까요?");
-    expect(
-      (await h.request(REST_ROUTES.me, json({ language: null }, member, "PATCH"))).status,
-    ).toBe(200);
+    // One text, whoever reads it, in their language or not, and nothing beside it.
+    const kept = await h.request(projectPath(BOARD, "decisions", decision.id), {
+      headers: { cookie: member },
+    });
+    const body = (await kept.json()) as Record<string, unknown>;
+    expect(body.question).toBe("연말 휴가를 승인할까요?");
+    expect(body).not.toHaveProperty("translations");
+    await set(null);
+
+    // A text per language is not a text.
+    const refused = await invoke("leave", member, ["several"]);
+    expect(refused.status, await refused.clone().text()).toBe(400);
+    expect(restErrorSchema.parse(await refused.json()).error.code).toBe("plugin.invalid_args");
   });
 
   it("tells a plugin nothing of what happened while it did not hold the stream", async () => {
@@ -768,10 +669,12 @@ describe("a plugin on the board", () => {
     expect(unheard.data.state).toBe("requested");
   });
 
-  it("takes no control character in any language of what a plugin writes, and line breaks in a body", async () => {
-    const refused = await invoke("leave", member, ["control"]);
-    expect(refused.status, await refused.clone().text()).toBe(400);
-    expect(restErrorSchema.parse(await refused.json()).error.code).toBe("plugin.invalid_args");
+  it("takes no control character in what a plugin writes, and line breaks in a body", async () => {
+    for (const command of ["control-title", "control-question"]) {
+      const refused = await invoke("leave", member, [command]);
+      expect(refused.status, await refused.clone().text()).toBe(400);
+      expect(restErrorSchema.parse(await refused.json()).error.code).toBe("plugin.invalid_args");
+    }
     expect((await invoked("leave", member, ["lines"])).text).toBe("written");
   });
 });

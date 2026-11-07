@@ -11,13 +11,10 @@ import {
   PROJECT_ROLES,
   PROJECT_VISIBILITIES,
   PROVIDER_KEYS,
-  type RestCommentTranslations,
   type RestDecisionOption,
-  type RestDecisionTranslations,
   type RestEventData,
   type RestHome,
   type RestTaskLink,
-  type RestTaskTranslations,
   RUN_STATUSES,
   TASK_PRIORITIES,
   TASK_STATES,
@@ -132,7 +129,7 @@ export const people = pgTable(
     /** What let them in at their last sign-in: the organization, the domain, or a listing. */
     source: text({ enum: MEMBERSHIP_SOURCES }).notNull().default("listed"),
     deactivatedAt: instant(),
-    /** The language the person chose for the pages (ADR-0012), a tag; null for the browser's. */
+    /** The language the person reads in (ADR-0065), a tag: the one they chose, else the one the pages first saw them in; null until then. */
     language: text(),
     /** Whom the person reports to, another person of the workspace, set by an administrator; null for nobody. */
     managerId: uuid().references((): AnyPgColumn => people.id),
@@ -424,8 +421,6 @@ export const tasks = pgTable(
     archivedAt: instant(),
     /** Repositories, pull requests, documents: `https` URLs with a label, as the API checked them. */
     links: jsonb().$type<RestTaskLink[]>().notNull().default([]),
-    /** The title and the body per language, where a plugin wrote the task in several (ADR-0058); null otherwise. */
-    translations: jsonb().$type<RestTaskTranslations>(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -581,8 +576,6 @@ export const comments = pgTable(
     /** The agent the author wrote through, when they did; null when a person wrote it themselves. */
     agent: text(),
     body: text().notNull(),
-    /** The body per language, where a plugin wrote it in several (ADR-0058); null otherwise. */
-    translations: jsonb().$type<RestCommentTranslations>(),
     createdAt: createdAt(),
   },
   (table) => [index("comments_task_idx").on(table.taskId, table.createdAt)],
@@ -641,8 +634,6 @@ export const decisions = pgTable(
     body: text().notNull().default(""),
     /** Each with an id an answer names and the label a person reads, as the API checked them. */
     options: jsonb().$type<RestDecisionOption[]>().notNull(),
-    /** The question, the body and the labels per language, where a plugin asked in several (ADR-0058); null otherwise. */
-    translations: jsonb().$type<RestDecisionTranslations>(),
     raisedById: uuid()
       .notNull()
       .references(() => people.id),

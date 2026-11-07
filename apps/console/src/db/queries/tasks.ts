@@ -3,10 +3,8 @@ import {
   MAX_TASKS_PER_PROJECT,
   OPEN_TASK_STATES,
   type RestTaskLink,
-  type RestTaskTranslations,
   type TaskPriority,
   type TaskState,
-  textIn,
 } from "@skillcdn/console/api";
 import {
   and,
@@ -41,7 +39,6 @@ import { type Actor, recordEvent, type Scope } from "./events.js";
 import { owners, type PersonRecord, personColumns, toPerson, workers } from "./people.js";
 import { mayWorkIn, visibleTo } from "./projects.js";
 import { titleMatches } from "./search.js";
-import { withoutWrittenOver } from "./translations.js";
 
 // The work on the board of a project. Every change is one transaction with the event that
 // records it, and every read is scoped to the project: a task of another is not found. The
@@ -55,8 +52,6 @@ export interface TaskRecord {
   readonly number: number;
   readonly title: string;
   readonly body: string;
-  /** The title and the body per language (ADR-0058), where a plugin wrote the task in several. */
-  readonly translations: RestTaskTranslations | undefined;
   readonly state: TaskState;
   readonly priority: TaskPriority;
   readonly owner: PersonRecord;
@@ -130,18 +125,10 @@ export interface TaskInput {
   readonly startsOn?: string | null;
   readonly dueOn?: string | null;
   readonly links?: readonly RestTaskLink[];
-  /** The title and the body per language (ADR-0058), where a plugin wrote them in several; `title` and `body` hold the first language's. */
-  readonly translations?: RestTaskTranslations | undefined;
 }
 
 /** Only what changes; a key that is absent leaves the field as it is. */
 export type TaskPatch = Partial<TaskInput>;
-
-/** What an event about a task carries of its title per language (ADR-0058): the map, where there is one. */
-const titleTranslations = (
-  translations: RestTaskTranslations | null | undefined,
-): { readonly translations?: Readonly<Record<string, string>> } =>
-  translations?.title === undefined ? {} : { translations: translations.title };
 
 /** What the board is narrowed to, as the API takes it. */
 export interface TaskFilter {
@@ -216,7 +203,6 @@ const taskColumns = {
   number: tasks.number,
   title: tasks.title,
   body: tasks.body,
-  translations: tasks.translations,
   state: tasks.state,
   priority: tasks.priority,
   parentId: tasks.parentId,
@@ -262,7 +248,6 @@ function toTask(row: TaskRow): TaskRecord {
     number: row.number,
     title: row.title,
     body: row.body,
-    translations: row.translations ?? undefined,
     state: row.state,
     priority: row.priority,
     owner: toPerson(row.owner),
@@ -495,7 +480,6 @@ export async function createTask(
         number: counter.number,
         title: task.title,
         body: task.body ?? "",
-        translations: task.translations ?? null,
         state,
         priority: task.priority ?? "normal",
         ownerId: actor.id,
@@ -523,7 +507,7 @@ export async function createTask(
       kind: "task.created",
       actor,
       taskId: inserted.id,
-      data: { number: counter.number, title: task.title, ...titleTranslations(task.translations) },
+      data: { number: counter.number, title: task.title },
       now,
     });
     const written = await readTask(tx, scope, inserted.id);
@@ -548,8 +532,6 @@ export interface TaskUpdate {
   readonly actor: Actor;
   readonly taskId: string;
   readonly patch: TaskPatch;
-  /** The language the texts were read in, where a person or a plugin read them first. */
-  readonly reader?: string | null | undefined;
   readonly now: Date;
 }
 
@@ -560,7 +542,6 @@ export async function updateTaskIn(tx: Transaction, input: TaskUpdate): Promise<
     .select({
       title: tasks.title,
       body: tasks.body,
-      translations: tasks.translations,
       state: tasks.state,
       priority: tasks.priority,
       parentId: tasks.parentId,
@@ -590,19 +571,10 @@ export async function updateTaskIn(tx: Transaction, input: TaskUpdate): Promise<
   const categoryId = await categoryIdOf(tx, scope, patch.category);
   await checkGoal(tx, scope, patch.goalId);
 
-  // A form sends a text back as its reader read it, whatever else they changed: in their language,
-  // which need not be the text kept (ADR-0058). That is no edit.
-  const edited = (field: "title" | "body"): string => {
-    const text = patch[field];
-    return text === undefined ||
-      text === textIn(current.translations?.[field], current[field], input.reader)
-      ? current[field]
-      : text;
-  };
   const changed: string[] = [];
   const next = {
-    title: edited("title"),
-    body: edited("body"),
+    title: patch.title ?? current.title,
+    body: patch.body ?? current.body,
     state: patch.state ?? current.state,
     priority: patch.priority ?? current.priority,
     parentId: patch.parentId === undefined ? current.parentId : patch.parentId,
@@ -649,10 +621,9 @@ export async function updateTaskIn(tx: Transaction, input: TaskUpdate): Promise<
   // is the end, and a move back out of done takes the end away again.
   const startedAt = current.startedAt ?? (STARTED_STATES.includes(next.state) ? now : null);
   const doneAt = next.state === "done" ? (current.state === "done" ? current.doneAt : now) : null;
-  const translations = withoutWrittenOver(current.translations, changed);
   await tx
     .update(tasks)
-    .set({ ...next, translations, startedAt, doneAt, updatedAt: now })
+    .set({ ...next, startedAt, doneAt, updatedAt: now })
     .where(eq(tasks.id, taskId));
   if (workersChanged) {
     await setWorkers(tx, taskId, currentWorkers, nextWorkers, now);
@@ -669,7 +640,6 @@ export async function updateTaskIn(tx: Transaction, input: TaskUpdate): Promise<
       data: {
         number: current.number,
         title: next.title,
-        ...titleTranslations(translations),
         from: current.state,
         to: next.state,
       },
@@ -685,7 +655,6 @@ export async function updateTaskIn(tx: Transaction, input: TaskUpdate): Promise<
       data: {
         number: current.number,
         title: next.title,
-        ...titleTranslations(translations),
         fields: changed,
       },
       now,

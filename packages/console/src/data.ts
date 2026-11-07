@@ -173,7 +173,7 @@ export interface ConsoleActions {
   createListing(input: RestListingInput): Promise<RestListing>;
   /** Takes a listing away that nobody signed in with; for an administrator. */
   removeListing(id: string): Promise<void>;
-  /** Keeps the person's own choice of language (ADR-0012). */
+  /** Keeps the person's language (ADR-0065) or their front page. */
   updateMe(patch: RestMePatch): Promise<RestMe>;
   /** Changes the workspace's settings (ADR-0035); for an administrator. `me` says them from then on. */
   updateWorkspace(patch: RestWorkspacePatch): Promise<RestWorkspace>;

@@ -3,8 +3,6 @@ import {
   MAX_DECISIONS_PER_PROJECT,
   MAX_FILES_PER_DECISION,
   type RestDecisionOption,
-  type RestDecisionTranslations,
-  textIn,
 } from "@skillcdn/console/api";
 import { and, asc, count, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { DomainError } from "../../errors.js";
@@ -23,7 +21,6 @@ import {
 } from "./people.js";
 import { mayWorkIn, visibleTo } from "./projects.js";
 import type { FileRecord } from "./runs.js";
-import { withoutWrittenOver } from "./translations.js";
 
 // The questions that need a person. A decision is raised once and answered once; both are
 // one transaction with the event that records them. Every read is scoped to the project, but
@@ -47,8 +44,6 @@ export interface DecisionRecord {
   readonly question: string;
   readonly body: string;
   readonly options: readonly RestDecisionOption[];
-  /** The question, the body and the labels per language (ADR-0058), where a plugin asked in several. */
-  readonly translations: RestDecisionTranslations | undefined;
   readonly raisedBy: PersonRecord;
   /** The first of those to answer (ADR-0042): the raiser, unless others of the project were named. */
   readonly decider: PersonRecord;
@@ -120,7 +115,6 @@ const decisionColumns = {
   question: decisions.question,
   body: decisions.body,
   options: decisions.options,
-  translations: decisions.translations,
   answer: decisions.answer,
   answerNote: decisions.answerNote,
   answeredAt: decisions.answeredAt,
@@ -206,7 +200,6 @@ function toDecision(row: DecisionRow): DecisionRecord {
     question: row.question,
     body: row.body,
     options: row.options,
-    translations: row.translations ?? undefined,
     raisedBy: toPerson(row.raisedBy),
     decider: toPerson(row.decider),
     deciders: row.deciders.map((named) =>
@@ -277,8 +270,6 @@ export async function raiseDecision(
       readonly deciderIds?: readonly string[] | undefined;
       /** The files put on it (ADR-0055), their bytes kept already; none when left out. */
       readonly files?: readonly FileRecord[] | undefined;
-      /** The texts per language (ADR-0058), where the raiser wrote them in several; the plain fields hold the first language's. */
-      readonly translations?: RestDecisionTranslations | undefined;
     };
     /** How many decisions the project may hold, this one included; the package's bound when left out. */
     readonly limit?: number | undefined;
@@ -388,7 +379,6 @@ export async function raiseDecision(
         question: decision.question,
         body: decision.body ?? "",
         options,
-        translations: decision.translations ?? null,
         raisedById: actor.id,
         deciderId,
         deciderIds,
@@ -422,9 +412,6 @@ export async function raiseDecision(
       runId: runId ?? undefined,
       data: {
         question: decision.question,
-        ...(decision.translations?.question === undefined
-          ? {}
-          : { translations: decision.translations.question }),
         ...about,
         ...(agent === undefined ? {} : { agent }),
         ...(files.length === 0 ? {} : { files: files.length }),
@@ -465,7 +452,6 @@ export async function answerDecision(
     const [current] = await tx
       .select({
         question: decisions.question,
-        translations: decisions.translations,
         body: decisions.body,
         options: decisions.options,
         answeredAt: decisions.answeredAt,
@@ -519,9 +505,6 @@ export async function answerDecision(
       runId: current.runId ?? undefined,
       data: {
         question: current.question,
-        ...(current.translations?.question === undefined
-          ? {}
-          : { translations: current.translations.question }),
         option: chosen.label,
         ...(chosen.key === undefined ? {} : { optionKey: chosen.key }),
       },
@@ -567,8 +550,6 @@ export async function updateDecision(
     readonly actor: Actor;
     readonly decisionId: string;
     readonly patch: DecisionPatch;
-    /** The language the body was read in, where a person read it first. */
-    readonly reader?: string | null | undefined;
     readonly now: Date;
   },
 ): Promise<DecisionRecord> {
@@ -577,7 +558,6 @@ export async function updateDecision(
     const [current] = await tx
       .select({
         question: decisions.question,
-        translations: decisions.translations,
         body: decisions.body,
         answerNote: decisions.answerNote,
         outcome: decisions.outcome,
@@ -590,12 +570,8 @@ export async function updateDecision(
     if (current === undefined) {
       throw new DecisionError("decision.not_found");
     }
-    // A form sends the body back as its reader read it (ADR-0058): that is no edit.
-    const same =
-      patch.body === undefined ||
-      patch.body === textIn(current.translations?.body, current.body, input.reader);
     const next = {
-      body: same ? current.body : patch.body,
+      body: patch.body ?? current.body,
       outcome:
         patch.outcome === undefined
           ? current.outcome
@@ -614,10 +590,9 @@ export async function updateDecision(
         : next.outcome === null
           ? { outcomeById: null, outcomeAgent: null, outcomeAt: null }
           : { outcomeById: actor.id, outcomeAgent: actor.agent ?? null, outcomeAt: now };
-      const translations = withoutWrittenOver(current.translations, changed);
       await tx
         .update(decisions)
-        .set({ ...next, ...wrote, translations, updatedAt: now })
+        .set({ ...next, ...wrote, updatedAt: now })
         .where(eq(decisions.id, decisionId));
       await recordLinks(
         tx,
@@ -635,9 +610,6 @@ export async function updateDecision(
         runId: current.runId ?? undefined,
         data: {
           question: current.question,
-          ...(current.translations?.question === undefined
-            ? {}
-            : { translations: current.translations.question }),
           fields: changed,
         },
         now,

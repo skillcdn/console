@@ -16,7 +16,6 @@ import type {
   RestTaskInput,
   RestTaskPatch,
 } from "../schemas.js";
-import type { Translations } from "../translations.js";
 import type { WeekStart } from "../vocabulary.js";
 import type { PluginFileHandle } from "./args.js";
 
@@ -261,22 +260,16 @@ export interface PluginWorkspace {
   }[];
 }
 
-/**
- * A text a plugin writes on the board (ADR-0058): one string, or one per language of the
- * workspace (`{ en, ko }`, at least one of the console's languages among them), which the console
- * keeps whole and shows to each reader in their own.
- */
-export type BoardText = string | Translations;
-
 export interface DecisionAsk {
-  readonly question: BoardText;
-  readonly body?: BoardText;
+  /** In the language of whoever is to answer, as `people.get` says it (ADR-0065). */
+  readonly question: string;
+  readonly body?: string;
   /**
    * The options, each a label and optionally a key (spelled as a plugin's key is, each once),
    * which the answered event carries back as `optionKey`, so that the plugin reads the answer
    * without comparing labels.
    */
-  readonly options: readonly { readonly label: BoardText; readonly key?: string }[];
+  readonly options: readonly { readonly label: string; readonly key?: string }[];
   /** Who is to answer: a person who may work in the project; the administrator who enabled the plugin when left out. */
   readonly deciderId?: string;
   /** Several to answer (ADR-0057), in place of `deciderId`: any of them may, and the first answer ends it; up to MAX_DECIDERS. */
@@ -285,12 +278,6 @@ export interface DecisionAsk {
   /** The record the decision is for, by which the plugin maps the answer back. */
   readonly about: { readonly collection: string; readonly id: string };
 }
-
-/** A task as a plugin writes one: as the API takes it, the title and the body in one language or in several (ADR-0058). */
-export type PluginTaskInput = Omit<RestTaskInput, "title" | "body"> & {
-  readonly title: BoardText;
-  readonly body?: BoardText;
-};
 
 /** The console's board, as a plugin reaches it with the `board:*` capabilities, each read the caller's own. */
 export interface PluginConsole {
@@ -313,9 +300,9 @@ export interface PluginConsole {
   tasks: {
     list(project: string, filter?: TaskFilter): Promise<readonly RestTask[]>;
     get(project: string, number: number): Promise<RestTask | null>;
-    create(project: string, task: PluginTaskInput): Promise<RestTask>;
+    create(project: string, task: RestTaskInput): Promise<RestTask>;
     update(project: string, number: number, patch: RestTaskPatch): Promise<RestTask>;
-    comment(project: string, number: number, body: BoardText): Promise<RestComment>;
+    comment(project: string, number: number, body: string): Promise<RestComment>;
   };
   decisions: {
     list(project: string): Promise<readonly RestDecision[]>;

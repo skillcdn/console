@@ -274,6 +274,13 @@
       "when": 1794040095520,
       "tag": "0038_home_tiles",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1794051646738,
+      "tag": "0039_drop_board_translations",
+      "breakpoints": true
     }
   ]
 }

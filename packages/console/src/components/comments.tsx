@@ -9,8 +9,7 @@ import {
   type RestRun,
   type RestTask,
 } from "../api.js";
-import { useLanguage, useWords } from "../i18n/index.js";
-import { textIn } from "../translations.js";
+import { useWords } from "../i18n/index.js";
 import { DecisionCard, type DecisionCardProps } from "./decision-list.js";
 import { isPicture, namedFile, placed, placing, unusedName } from "./files.js";
 import { Markdown } from "./markdown.js";
@@ -33,9 +32,6 @@ export interface CommentCardProps {
 
 export function CommentCard(props: CommentCardProps) {
   const words = useWords();
-  const { tag } = useLanguage();
-  // In the language the page speaks, where a plugin wrote the comment in several (ADR-0058).
-  const body = textIn(props.comment.translations?.body, props.comment.body, tag);
   const { comment } = props;
   const pictures = usePicture();
   const hrefOf = (file: RestCommentFile) => props.fileHref?.(file);
@@ -48,7 +44,7 @@ export function CommentCard(props: CommentCardProps) {
     );
     return file === undefined ? undefined : hrefOf(file);
   };
-  const following = comment.files.filter((file) => !placed(body, file.file.name));
+  const following = comment.files.filter((file) => !placed(comment.body, file.file.name));
   return (
     <article
       className="sc-comment"
@@ -66,9 +62,9 @@ export function CommentCard(props: CommentCardProps) {
           <Time iso={comment.createdAt} />
         </span>
       </header>
-      {body.trim().length > 0 && (
+      {comment.body.trim().length > 0 && (
         <Markdown
-          source={body}
+          source={comment.body}
           docHref={props.docHref}
           fileSrc={named}
           onOpenPicture={pictures.open}

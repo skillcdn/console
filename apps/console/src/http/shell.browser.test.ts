@@ -55,6 +55,13 @@ const IN_FRONT_OF_THE_HEADER = `(() => {
   return [...found];
 })()`;
 
+/** The language the console keeps on the person signed in on this page. */
+const languageOn = (page: Page) =>
+  page.evaluate(async () => {
+    const me = (await (await fetch("/api/v1/me")).json()) as { readonly language: string | null };
+    return me.language;
+  });
+
 /** A project with a goal and a task across days, on the person's plate; answers their ids. */
 async function seeded(page: Page) {
   return await page.evaluate(async () => {
@@ -87,6 +94,30 @@ async function seeded(page: Page) {
 }
 
 describe("the header over the pages", () => {
+  it("keeps the language a person is first seen in, and leaves theirs alone after that (ADR-0065)", async () => {
+    const context = await browser.newContext({ locale: "ko-KR" });
+    const page = await context.newPage();
+    await page.goto(console_.signInUrl(BROWSER_ADMIN));
+    await page.locator(".sc-header").waitFor();
+    await expect.poll(() => languageOn(page)).toBe("ko");
+
+    // Chosen on the menu, it stays chosen, in a browser that asks for another.
+    const chosen = await page.evaluate(async () => {
+      const response = await fetch("/api/v1/me", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ language: "en" }),
+      });
+      return response.status;
+    });
+    expect(chosen).toBe(200);
+    await page.reload();
+    await page.locator(".sc-header").waitFor();
+    expect(await page.locator("html").getAttribute("lang")).toBe("en");
+    expect(await languageOn(page)).toBe("en");
+    await context.close();
+  });
+
   it("stands in front of everything on a page as it scrolls, at both ends of the widths", async () => {
     const context = await browser.newContext({ locale: "en-US" });
     const page = await context.newPage();
