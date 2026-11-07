@@ -19,11 +19,14 @@ import {
   restTaskSchema,
   restTasksSchema,
 } from "@skillcdn/console/api";
+import { eq } from "drizzle-orm";
 import { pino } from "pino";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createPgBlobStore } from "../adapters/pg-blob-store.js";
 import { createSecrets } from "../auth/secrets.js";
+import { drizzleOf } from "../db/client.js";
 import { ensureWorkspace } from "../db/queries/workspaces.js";
+import { pluginInstalls } from "../db/schema.js";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "../db/testing.js";
 import { discoverPlugins } from "../plugins/discovery.js";
 import { PluginDispatcher } from "../plugins/dispatcher.js";
@@ -716,6 +719,53 @@ describe("a plugin on the board", () => {
     expect(
       (await h.request(REST_ROUTES.me, json({ language: null }, member, "PATCH"))).status,
     ).toBe(200);
+  });
+
+  it("tells a plugin nothing of what happened while it did not hold the stream", async () => {
+    const consentOf = async () =>
+      restPluginDetailSchema.parse(
+        await (await h.request(pluginPath("leave"), { headers: { cookie: admin } })).json(),
+      ).consent ?? [];
+    const consented = (consent: readonly string[]) =>
+      drizzleOf(testDatabase.database)
+        .update(pluginInstalls)
+        .set({ consent: [...consent] })
+        .where(eq(pluginInstalls.key, "leave"));
+    const requested = await invoked("leave", member, [
+      "request",
+      "--from",
+      "2026-12-07",
+      "--to",
+      "2026-12-08",
+      "--approver",
+      "alice",
+    ]);
+    const { record } = requested.data as { record: { id: string } };
+    const held = await consentOf();
+    expect(held).toContain("events:console");
+    await dispatcher.dispatch();
+
+    // The answer comes while the plugin does not hold the console's events.
+    await consented(held.filter((capability) => capability !== "events:console"));
+    const answered = await h.request(
+      `${projectPath(BOARD, "decisions", requested.waiting ?? "")}/answer`,
+      json({ option: "1" }, admin),
+    );
+    expect(answered.status, await answered.clone().text()).toBe(200);
+    await dispatcher.dispatch();
+
+    // Given them again, the plugin hears from here on, and not of what it missed.
+    await consented(held);
+    await dispatcher.dispatch();
+    await dispatcher.dispatch();
+    const unheard = restPluginRecordSchema.parse(
+      await (
+        await h.request(pluginPath("leave", "records", "requests", record.id), {
+          headers: { cookie: member },
+        })
+      ).json(),
+    );
+    expect(unheard.data.state).toBe("requested");
   });
 
   it("takes no control character in any language of what a plugin writes, and line breaks in a body", async () => {

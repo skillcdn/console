@@ -215,13 +215,12 @@ describe("a plugin's records", () => {
     });
     expect(uploaded.status).toBe(403);
     expect(restErrorSchema.parse(await uploaded.json()).error.code).toBe("plugin.forbidden");
-    expect(
-      (
-        await h.request(pluginPath("hello", "files", "00000000-0000-7000-8000-000000000000"), {
-          headers: { cookie: member },
-        })
-      ).status,
-    ).toBe(404);
+    const read = await h.request(
+      pluginPath("hello", "files", "00000000-0000-7000-8000-000000000000"),
+      { headers: { cookie: member } },
+    );
+    expect(read.status).toBe(403);
+    expect(restErrorSchema.parse(await read.json()).error.code).toBe("plugin.forbidden");
   });
 
   it("are exported and purged by an administrator, after the plugin is disabled", async () => {

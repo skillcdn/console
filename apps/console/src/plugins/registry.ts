@@ -2254,7 +2254,14 @@ export class Plugins {
   ): Promise<
     { readonly name: string; readonly contentType: string; readonly bytes: Uint8Array } | undefined
   > {
-    const { entry } = await this.enabledFor(key, person);
+    const { entry, install } = await this.enabledFor(key, person);
+    // What it no longer holds is refused from its next call on (ADR-0060), a frame's read too.
+    if (!install.consent.includes("files")) {
+      throw new PluginRefusal(
+        "plugin.forbidden",
+        "the plugin has not been given the capability files",
+      );
+    }
     const workspace = await this.options.workspace();
     const file = await this.store().fileOf(workspace.id, key, fileId);
     if (file === undefined) {

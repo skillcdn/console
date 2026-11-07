@@ -180,6 +180,10 @@ export class PluginDispatcher {
           ...cursor,
         });
       }
+    } else {
+      cursor = await this.keptUp(workspace, target, cursor, {
+        consoleAfter: await latestEventId(database, workspace.id),
+      });
     }
     if (
       target.consent.includes("events:plugins") &&
@@ -210,7 +214,33 @@ export class PluginDispatcher {
           ...cursor,
         });
       }
+    } else {
+      await this.keptUp(workspace, target, cursor, {
+        pluginAfter: await latestPluginEventId(database, workspace.id),
+      });
     }
+  }
+
+  /**
+   * A stream the plugin does not hold, or has no hook on: what passes there is not its to hear of
+   * later, so that the cursor keeps up, and turning it on begins from then on.
+   */
+  private async keptUp(
+    workspace: WorkspaceRecord,
+    target: DispatchTarget,
+    cursor: PluginCursor,
+    latest: Pick<Partial<PluginCursor>, "consoleAfter" | "pluginAfter">,
+  ): Promise<PluginCursor> {
+    const next = { ...cursor, ...latest };
+    if (next.consoleAfter !== cursor.consoleAfter || next.pluginAfter !== cursor.pluginAfter) {
+      await writeCursor(this.options.database, {
+        workspaceId: workspace.id,
+        key: target.key,
+        now: this.options.clock.now(),
+        ...next,
+      });
+    }
+    return next;
   }
 
   /**
