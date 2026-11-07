@@ -163,8 +163,7 @@ export const ko: Messages = {
     "member.open_project": "공개 프로젝트라서 워크스페이스의 모든 사람이 이미 멤버입니다.",
     "mount.ref_not_found": "팩의 그 버전을 찾을 수 없습니다.",
     "mount.repo_not_found": "팩을 찾을 수 없습니다.",
-    "person.invalid_manager":
-      "매니저는 활성 상태인 다른 사람이어야 하며, 이 사람의 팀원은 지정할 수 없습니다.",
+    "person.invalid_manager": "본인, 본인의 팀원, 비활성화된 사람은 매니저로 지정할 수 없습니다.",
     "person.last_admin": "관리자가 한 명은 있어야 합니다.",
     "person.not_found": "사람을 찾을 수 없습니다.",
     "person.of_organization": "조직 설정으로 정해지는 사람이라 여기서 바꿀 수 없습니다.",
