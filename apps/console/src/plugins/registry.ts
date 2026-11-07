@@ -20,6 +20,7 @@ import {
   type ArgDescription,
   argsProblem,
   type CollectionDescription,
+  capabilitiesAsked,
   type EndpointRequest,
   type EndpointResponse,
   type LinkTarget,
@@ -89,6 +90,7 @@ import {
   removeSecret,
   setInstallState,
   setSecret,
+  updateInstallConsent,
   updateInstallSettings,
 } from "../db/queries/plugins.js";
 import { createProject, findProjectFor, type ProjectView } from "../db/queries/projects.js";
@@ -629,6 +631,7 @@ export class Plugins {
       board: board === undefined ? null : { key: board.key, name: board.name },
       boardNeeds: manifest?.board.needs ?? "none",
       capabilities: [...(manifest?.capabilities ?? [])],
+      optionalCapabilities: [...(manifest?.optionalCapabilities ?? [])],
       consent: admin ? [...(install?.consent ?? [])] : null,
       projects: admin
         ? install?.projects === "all"
@@ -871,6 +874,7 @@ export class Plugins {
       version: entry.version,
       dataVersion: install.dataVersion,
       settings,
+      capabilities: [...install.consent],
       board: board === undefined ? null : { id: board.id, key: board.key },
       projects: install.projects === "all" ? "all" : [...install.projects],
     };
@@ -884,6 +888,25 @@ export class Plugins {
     return host;
   }
 
+  /** Consent holds every capability the plugin requires, and nothing it does not ask (ADR-0060). */
+  private checkConsent(manifest: PluginManifest, consent: readonly string[]): void {
+    const missing = manifest.capabilities.filter((capability) => !consent.includes(capability));
+    if (missing.length > 0) {
+      throw new PluginRefusal(
+        "plugin.needs_consent",
+        `consent names every capability the plugin requires; missing: ${missing.join(", ")}`,
+      );
+    }
+    const asked = capabilitiesAsked(manifest);
+    const unknown = consent.filter((capability) => !asked.includes(capability));
+    if (unknown.length > 0) {
+      throw new PluginRefusal(
+        "plugin.invalid_args",
+        `consent names ${unknown.join(", ")}, which the plugin does not ask`,
+      );
+    }
+  }
+
   /** Enables a plugin: consent, the board, the projects, the settings, then `onEnable`. An administrator's. */
   async enable(
     key: string,
@@ -895,24 +918,7 @@ export class Plugins {
     const workspace = await this.options.workspace();
     const database = this.options.database;
     const now = this.options.clock.now();
-    const missing = manifest.capabilities.filter(
-      (capability) => !input.consent.includes(capability),
-    );
-    if (missing.length > 0) {
-      throw new PluginRefusal(
-        "plugin.needs_consent",
-        `consent names every capability the plugin asks; missing: ${missing.join(", ")}`,
-      );
-    }
-    const unknown = input.consent.filter(
-      (capability) => !manifest.capabilities.includes(capability),
-    );
-    if (unknown.length > 0) {
-      throw new PluginRefusal(
-        "plugin.invalid_args",
-        `consent names ${unknown.join(", ")}, which the plugin does not ask`,
-      );
-    }
+    this.checkConsent(manifest, input.consent);
     if (manifest.capabilities.includes("storage:sql") && !this.sqlAvailable) {
       throw new PluginRefusal(
         "plugin.unavailable",
@@ -1100,6 +1106,44 @@ export class Plugins {
     const detail = await this.get(key, by.person);
     if (detail === undefined) {
       throw new Error("the plugin vanished while being disabled");
+    }
+    return detail;
+  }
+
+  /**
+   * Changes which of the optional capabilities an enabled plugin holds (ADR-0060); those it
+   * requires stay. What it no longer holds is refused from its next call on. An administrator's.
+   */
+  async updateConsent(
+    key: string,
+    consent: readonly string[],
+    by: Administrator,
+  ): Promise<RestPluginDetail> {
+    const { manifest } = this.runnable(key);
+    this.checkConsent(manifest, consent);
+    const workspace = await this.options.workspace();
+    const install = await findInstall(this.options.database, workspace.id, key);
+    if (install?.state !== "enabled") {
+      throw new PluginRefusal(
+        "plugin.disabled",
+        "the plugin is not enabled; what it holds is said when enabling it",
+      );
+    }
+    const same =
+      consent.length === install.consent.length &&
+      consent.every((capability) => install.consent.includes(capability));
+    if (!same) {
+      await updateInstallConsent(this.options.database, {
+        workspaceId: workspace.id,
+        key,
+        consent,
+        actor: by.actor,
+        now: this.options.clock.now(),
+      });
+    }
+    const detail = await this.get(key, by.person);
+    if (detail === undefined) {
+      throw new Error("the plugin vanished while its capabilities changed");
     }
     return detail;
   }

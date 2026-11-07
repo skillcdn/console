@@ -313,6 +313,42 @@ export async function updateInstallSettings(
   });
 }
 
+/** Writes what the install holds now, an optional capability turned on or off, and tells the board. */
+export async function updateInstallConsent(
+  database: Database,
+  input: {
+    readonly workspaceId: string;
+    readonly key: string;
+    readonly consent: readonly string[];
+    readonly actor: Actor;
+    readonly now: Date;
+  },
+): Promise<PluginInstallRecord> {
+  return drizzleOf(database).transaction(async (tx) => {
+    await lockWorkspace(tx, input.workspaceId);
+    const [row] = await tx
+      .update(pluginInstalls)
+      .set({ consent: [...input.consent], updatedAt: input.now })
+      .where(
+        and(eq(pluginInstalls.workspaceId, input.workspaceId), eq(pluginInstalls.key, input.key)),
+      )
+      .returning(installColumns);
+    if (row === undefined) {
+      throw new PluginStoreError("plugin.not_found", "the plugin has no install");
+    }
+    await recordEvent(tx, {
+      workspaceId: input.workspaceId,
+      projectId: row.boardProjectId ?? undefined,
+      kind: "plugin.configured",
+      actor: input.actor,
+      plugin: input.key,
+      data: { key: input.key, capabilities: [...input.consent] },
+      now: input.now,
+    });
+    return toInstall(row);
+  });
+}
+
 /** Changes how an install stands without anyone doing it: a new version waiting for consent, or back. */
 export async function setInstallState(
   database: Database,

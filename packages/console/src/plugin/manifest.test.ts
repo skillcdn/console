@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  capabilitiesAsked,
   legacyWidgetSize,
   localizedText,
   parsePluginManifest,
@@ -213,6 +214,40 @@ describe("parsePluginManifest", () => {
     expect(problemsOf({ board: { needs: "none", defaults: LEAVE.board.defaults } })[0]).toMatch(
       /^board: /,
     );
+  });
+
+  it("takes what a plugin can go without beside what it requires, each once, and never its schema", () => {
+    const of = (capabilities: readonly string[], optionalCapabilities: readonly string[]) =>
+      parsePluginManifest({
+        key: "hi",
+        name: { en: "Hi" },
+        description: { en: "Says hi." },
+        pluginApi: 1,
+        server: "dist/server/index.js",
+        capabilities,
+        optionalCapabilities,
+      });
+    const read = of(["jobs"], ["files", "outbound:api.example.com"]);
+    expect(read.ok).toBe(true);
+    expect(read.ok && read.manifest.optionalCapabilities).toEqual([
+      "files",
+      "outbound:api.example.com",
+    ]);
+    expect(read.ok && capabilitiesAsked(read.manifest)).toEqual([
+      "jobs",
+      "files",
+      "outbound:api.example.com",
+    ]);
+    expect(of(["jobs"], []).ok).toBe(true);
+    expect(of(["jobs"], ["nonsense"])).toMatchObject({ ok: false });
+    expect(of(["jobs"], ["jobs"])).toMatchObject({ ok: false });
+    expect(of([], ["storage:sql"])).toMatchObject({ ok: false });
+    expect(
+      of(
+        Array.from({ length: 30 }, (_, at) => `plugins:a${at}`),
+        Array.from({ length: 30 }, (_, at) => `plugins:b${at}`),
+      ),
+    ).toMatchObject({ ok: false });
   });
 
   it("gives a widget the sizes it comes in, and reads the one size of before as one of them", () => {

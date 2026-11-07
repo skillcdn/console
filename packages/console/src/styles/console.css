@@ -6081,12 +6081,56 @@ select.sc-input-quiet:focus-visible {
   margin-top: 0.25em;
 }
 
+/* One the plugin requires: on, and not the person's to change, so it does not read as a control. */
+.sc-plugin-tick-locked {
+  background: transparent;
+  cursor: default;
+}
+
+/* What a plugin asks, in two lists: what it requires, and what it can go without. */
+.sc-plugin-capabilities {
+  display: grid;
+  gap: var(--sc-space-2);
+}
+
+.sc-plugin-capabilities + .sc-plugin-capabilities {
+  margin-top: var(--sc-space-3);
+}
+
+.sc-plugin-capabilities-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sc-space-1) var(--sc-space-2);
+  margin: 0;
+}
+
+.sc-plugin-capabilities-name {
+  font-size: var(--sc-text-sm);
+  font-weight: var(--sc-weight-bold);
+}
+
+.sc-plugin-capabilities-head .sc-settings-hint {
+  margin: 0;
+}
+
+/* What it can go without, on the page of a plugin that is on: under what it requires, each a box. */
+.sc-plugin-optional {
+  display: grid;
+  gap: var(--sc-space-1);
+  margin-top: var(--sc-space-3);
+}
+
 .sc-plugin-tick-words {
   display: grid;
   gap: 2px;
 }
 
 .sc-plugin-tick-name {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
   font-weight: var(--sc-weight-medium);
 }
 

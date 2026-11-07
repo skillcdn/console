@@ -380,9 +380,9 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   },
   plugin: {
     usage:
-      "plugin <key>  |  plugin <key> help [<command>]  |  plugin <key> <command> [<args>] [--<name> <value>]... [--file <path> | -] [--run <id>]  |  plugin <key> records <collection> [<id>] [--where <field>=<value>]... [--search <words>] [--project <key>] [--order <field>[:desc]] [--limit <n>] [--after <cursor>] [--archived] [--versions]  |  plugin <key> skills [<folder>|<file>] [--search <words> [--limit <n>] [--cursor <cursor>]]  |  plugin <key> skill <path>  |  plugin <key> skill --file <path> [--offset <n>] [--limit <n>]  |  plugin <key> enable --consent <capability>,... [--board new|<key>] [--projects all|<key>,...] [--set <key>=<value>]...  |  plugin <key> disable  |  plugin <key> settings [--set <key>=<value>]...  |  plugin <key> secret <name> [--remove]  |  plugin <key> grant <role> --person <login>|--project <key>|--everyone  |  plugin <key> revoke <grant id>",
+      "plugin <key>  |  plugin <key> help [<command>]  |  plugin <key> <command> [<args>] [--<name> <value>]... [--file <path> | -] [--run <id>]  |  plugin <key> records <collection> [<id>] [--where <field>=<value>]... [--search <words>] [--project <key>] [--order <field>[:desc]] [--limit <n>] [--after <cursor>] [--archived] [--versions]  |  plugin <key> skills [<folder>|<file>] [--search <words> [--limit <n>] [--cursor <cursor>]]  |  plugin <key> skill <path>  |  plugin <key> skill --file <path> [--offset <n>] [--limit <n>]  |  plugin <key> enable --consent <capability>,... [--board new|<key>] [--projects all|<key>,...] [--set <key>=<value>]...  |  plugin <key> disable  |  plugin <key> capabilities [--consent <capability>,...|none]  |  plugin <key> settings [--set <key>=<value>]...  |  plugin <key> secret <name> [--remove]  |  plugin <key> grant <role> --person <login>|--project <key>|--everyone  |  plugin <key> revoke <grant id>",
     overview:
-      "plugin <key> [help [<command>] | <command> [<args>] | records <collection> | skills | skill <path> | enable | disable | settings | secret | grant | revoke]",
+      "plugin <key> [help [<command>] | <command> [<args>] | records <collection> | skills | skill <path> | enable | disable | capabilities | settings | secret | grant | revoke]",
     synopsis:
       "One plugin: what it is for and its commands; a command run as you; its records, its skills; its settings, for an administrator.",
     about:
@@ -390,7 +390,8 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     limits: [
       "a command line: up to 200 words of up to 50,000 characters each; one file, up to the file bound (console help hand-in), with the plugin's files capability",
       "records: a page of up to 200; where: a field the collection indexes",
-      "enable: consent names every capability the manifest asks; settings and secrets as the manifest bounds them",
+      "enable: consent names every capability the manifest requires, and the optional ones to turn on; settings and secrets as the manifest bounds them",
+      "capabilities: --consent names the optional capabilities the plugin holds from now on, none for none of them; those it requires stay",
     ],
     refusals: [
       "plugin.not_found: no plugin has that key, or you may not know of it; or the plugin has no such command or query",

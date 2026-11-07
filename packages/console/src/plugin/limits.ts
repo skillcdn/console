@@ -14,6 +14,8 @@ export const MAX_PLUGIN_SETTINGS = 50;
 export const MAX_PLUGIN_SETTING_GROUPS = 10;
 export const MAX_PLUGIN_PAGES = 12;
 export const MAX_PLUGIN_WIDGETS = 4;
+/** How many capabilities a plugin asks, the optional ones counted. */
+export const MAX_PLUGIN_CAPABILITIES = 50;
 /** How many collections, commands and queries together, endpoints, and indexes of one collection a server module defines. */
 export const MAX_PLUGIN_COLLECTIONS = 50;
 export const MAX_PLUGIN_OPERATIONS = 100;

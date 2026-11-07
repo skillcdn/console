@@ -113,6 +113,7 @@ export async function runPluginUpgrades(options: UpgradeOptions): Promise<number
           version: plugin.version,
           dataVersion: version,
           settings: install.settings,
+          capabilities: [...install.consent],
           board: null,
           projects: install.projects === "all" ? "all" : [...install.projects],
         },

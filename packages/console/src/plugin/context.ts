@@ -200,6 +200,11 @@ export interface PluginInfo {
   readonly dataVersion: number;
   /** The settings as the administrator set them, by key, without the secrets. */
   readonly settings: Readonly<Record<string, unknown>>;
+  /**
+   * The capabilities the plugin holds: those it requires, and the optional ones an administrator
+   * turned on (ADR-0060), so that it offers what it can do. One it does not hold is refused.
+   */
+  readonly capabilities: readonly string[];
   /** The board project, or none. */
   readonly board: { readonly id: string; readonly key: string } | null;
   /** The projects the plugin is on: all, or their keys. */

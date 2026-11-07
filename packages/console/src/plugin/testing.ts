@@ -538,6 +538,7 @@ function build(store: Store, options: TestContextOptions, caller: PluginCaller):
     version: "0.0.0",
     dataVersion: 1,
     settings: {},
+    capabilities: [],
     board: null,
     projects: "all",
     ...options.plugin,

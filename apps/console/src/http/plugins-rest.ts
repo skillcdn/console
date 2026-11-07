@@ -22,6 +22,7 @@ import {
   type RestSkills,
   restFileInputSchema,
   restPluginCommandInputSchema,
+  restPluginConsentPatchSchema,
   restPluginEnableInputSchema,
   restPluginGrantInputSchema,
   restPluginInvokeInputSchema,
@@ -432,6 +433,26 @@ export function registerPluginsRest(
     const name = c.req.param("name") ?? "";
     return SETTING_KEY_PATTERN.test(name) ? name : undefined;
   };
+
+  app.patch(`${PLUGIN}/consent`, tooLarge, async (c) => {
+    const by = await administering(c);
+    if (by instanceof Response) {
+      return by;
+    }
+    const key = keyOf(c);
+    if (key === undefined) {
+      return notFound(c);
+    }
+    const patch = await bodyOf(c, restPluginConsentPatchSchema);
+    if (patch instanceof Response) {
+      return patch;
+    }
+    try {
+      return c.json(await plugins.updateConsent(key, patch.consent, by));
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
 
   app.put(`${PLUGIN}/secrets/:name`, tooLarge, async (c) => {
     const by = await administering(c);

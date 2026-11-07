@@ -402,6 +402,7 @@ Goal: what a person found looking at milestone 36 on the preview console: the pa
 
 - [x] A frame never shows an answer meant for a program: the front page keeps to the plugins that are on, which an administrator reads with the rest, and the document of a frame with nothing to show is blank and tells the page, which says so in the person's language (`unavailable` on the bridge).
 - [x] The People page reads better: a card per person with their role, their manager and the team they manage in rows of one shape, the selects reading as the value they hold; the pages say manager where they said reports to, and a picture that will not load gives way to the initial.
+- [x] A plugin says what it requires and what it can go without ([ADR-0060](adr/0060-what-a-plugin-asks-is-required-or-optional-and-the-optional-are-the-administrators-to-choose.md)): `optionalCapabilities` beside `capabilities`; the form that enables it shows the two apart, those it requires on and locked, and the optional ones are turned on or off then or later, on the plugin's page, with `PATCH .../consent` and `console plugin <key> capabilities`; `ctx.plugin.capabilities` says what it holds.
 
 ## After milestone 16
 

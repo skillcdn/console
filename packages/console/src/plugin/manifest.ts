@@ -12,6 +12,7 @@ import { PLUGIN_WIDGET_SIZE_NAMES, type PluginWidgetSizeName } from "./bridge.js
 import { isPluginCapability } from "./capabilities.js";
 import {
   MAX_PLUGIN_AGENT_NOTE_LENGTH,
+  MAX_PLUGIN_CAPABILITIES,
   MAX_PLUGIN_DESCRIPTION_LENGTH,
   MAX_PLUGIN_NAME_LENGTH,
   MAX_PLUGIN_OPTIONS,
@@ -435,6 +436,14 @@ const pluginWidgetSchema = z
 
 export type PluginWidget = z.infer<typeof pluginWidgetSchema>;
 
+/** Every capability a plugin asks: those it needs, then those it can go without (ADR-0060). */
+export function capabilitiesAsked(manifest: {
+  readonly capabilities: readonly string[];
+  readonly optionalCapabilities?: readonly string[] | undefined;
+}): string[] {
+  return [...manifest.capabilities, ...(manifest.optionalCapabilities ?? [])];
+}
+
 const pluginMenuSchema = z
   .strictObject({
     group: key,
@@ -507,7 +516,12 @@ export const pluginManifestSchema = z
     skills: z.optional(packagePath),
     migrations: z.optional(packagePath),
     capabilities: z._default(
-      z.array(z.string().check(z.maxLength(300))).check(z.maxLength(50)),
+      z.array(z.string().check(z.maxLength(300))).check(z.maxLength(MAX_PLUGIN_CAPABILITIES)),
+      [],
+    ),
+    /** What the plugin can go without (ADR-0060): an administrator turns each on, or leaves it off. */
+    optionalCapabilities: z._default(
+      z.array(z.string().check(z.maxLength(300))).check(z.maxLength(MAX_PLUGIN_CAPABILITIES)),
       [],
     ),
     roles: z._default(z.record(key, pluginRoleSchema), {}),
@@ -562,12 +576,21 @@ function manifestProblems(
   if (manifest.defaultRole !== undefined && !roles.includes(manifest.defaultRole)) {
     problems.push(`defaultRole ${manifest.defaultRole} is not a declared role`);
   }
-  for (const capability of manifest.capabilities) {
+  const asked = capabilitiesAsked(manifest);
+  if (asked.length > MAX_PLUGIN_CAPABILITIES) {
+    problems.push(`capabilities: at most ${MAX_PLUGIN_CAPABILITIES}, the optional ones counted`);
+  }
+  if (manifest.optionalCapabilities.includes("storage:sql")) {
+    problems.push(
+      "optionalCapabilities: storage:sql cannot be optional: its schema is made when the plugin is enabled",
+    );
+  }
+  for (const capability of asked) {
     if (!isPluginCapability(capability)) {
       problems.push(`capabilities: ${capability} is not one the console knows`);
     }
   }
-  for (const capability of duplicates(manifest.capabilities)) {
+  for (const capability of duplicates(asked)) {
     problems.push(`capabilities: ${capability} is declared twice`);
   }
   const undeclared = (where: string, named: readonly string[] | undefined) => {

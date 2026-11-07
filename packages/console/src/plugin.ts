@@ -72,6 +72,7 @@ export { PluginDefinitionError } from "./plugin/definition-error.js";
 export * from "./plugin/limits.js";
 export {
   CURRENT_PLUGIN_API,
+  capabilitiesAsked,
   isPluginKey,
   type Localized,
   legacyWidgetSize,

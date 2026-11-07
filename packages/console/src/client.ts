@@ -543,6 +543,8 @@ export interface PluginClient {
   disable(): Promise<RestPluginDetail>;
   /** Changes the settings' values, without secrets; `null` clears one. */
   updateSettings(patch: RestPluginSettingsPatch): Promise<RestPluginDetail>;
+  /** Says what an enabled plugin holds: those it requires, named again, and the optional ones to turn on. */
+  updateConsent(consent: readonly string[]): Promise<RestPluginDetail>;
   /** Seals a secret for the plugin; it is answered by nothing from then on. */
   setSecret(name: string, value: string): Promise<void>;
   removeSecret(name: string): Promise<void>;
@@ -1213,6 +1215,8 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
       disable: () => request("POST", `${base}${at("disable")}`, undefined, restPluginDetailSchema),
       updateSettings: (patch) =>
         request("PATCH", `${base}${at("settings")}`, patch, restPluginDetailSchema),
+      updateConsent: (consent) =>
+        request("PATCH", `${base}${at("consent")}`, { consent }, restPluginDetailSchema),
       setSecret: (name, value) =>
         request("PUT", `${base}${at("secrets", name)}`, { value }, undefined),
       removeSecret: (name) =>

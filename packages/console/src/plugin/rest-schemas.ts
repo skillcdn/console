@@ -133,6 +133,8 @@ export const restPluginSchema = z.object({
   boardNeeds: z.enum(PLUGIN_BOARD_NEEDS),
   /** What the plugin asks, and what was consented to; `consent` is `null` to a member. */
   capabilities: z.array(z.string()),
+  /** What it can go without (ADR-0060), an administrator's to turn on; a console older than them names none. */
+  optionalCapabilities: z.optional(z.array(z.string())),
   consent: z.nullable(z.array(z.string())),
   /** The projects the plugin is on: all, their keys, or `null` to a member. */
   projects: z.nullable(z.union([z.literal("all"), z.array(z.string())])),
@@ -206,7 +208,7 @@ export type RestPluginDetail = z.infer<typeof restPluginDetailSchema>;
 
 /** What `POST /api/v1/plugins/<key>/enable` is sent. */
 export const restPluginEnableInputSchema = z.object({
-  /** Every capability the manifest asks, named again: consent. */
+  /** Every capability the manifest requires, named again, and the optional ones to turn on: consent. */
   consent: z.array(z.string().check(z.maxLength(300))).check(z.maxLength(50)),
   /** The board project: one to make, one that exists, or none. */
   board: z.nullable(
@@ -233,6 +235,12 @@ export const restPluginSettingsPatchSchema = z.object({
   values: z.record(settingKey, z.unknown()),
 });
 export type RestPluginSettingsPatch = z.infer<typeof restPluginSettingsPatchSchema>;
+
+/** What `PATCH /api/v1/plugins/<key>/consent` is sent: what the plugin holds from now on, those it requires named again. */
+export const restPluginConsentPatchSchema = z.object({
+  consent: z.array(z.string().check(z.maxLength(300))).check(z.maxLength(50)),
+});
+export type RestPluginConsentPatch = z.infer<typeof restPluginConsentPatchSchema>;
 
 /** What `PUT /api/v1/plugins/<key>/secrets/<name>` is sent. */
 export const restPluginSecretInputSchema = z.object({

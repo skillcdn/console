@@ -714,6 +714,7 @@ export function descriptionProblems(
   manifest: {
     readonly roles: Readonly<Record<string, unknown>>;
     readonly capabilities: readonly string[];
+    readonly optionalCapabilities?: readonly string[] | undefined;
     readonly settings: readonly { readonly key: string; readonly type: string }[];
     readonly dataVersion: number;
   },
@@ -729,7 +730,9 @@ export function descriptionProblems(
     }
   };
   const needs = (where: string, capability: string) => {
-    if (!manifest.capabilities.includes(capability)) {
+    if (
+      ![...manifest.capabilities, ...(manifest.optionalCapabilities ?? [])].includes(capability)
+    ) {
       problems.push(
         `${where} needs the capability ${capability}, which the manifest does not declare`,
       );

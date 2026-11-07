@@ -151,7 +151,9 @@ function sentenceOf(event: RestEvent, words: Messages, language?: string | undef
     case "plugin.disabled":
       return feed.event.pluginDisabled(plugin);
     case "plugin.configured":
-      return feed.event.pluginConfigured(fields, plugin);
+      return data.capabilities === undefined
+        ? feed.event.pluginConfigured(fields, plugin)
+        : feed.event.pluginConsented(plugin);
     case "plugin.granted":
       return feed.event.pluginGranted(data.role ?? feed.role.other, grantee, plugin);
     case "plugin.revoked":

@@ -3971,6 +3971,50 @@ describe("the plugins on the command line (ADR-0049, ADR-0053)", () => {
     );
   });
 
+  it("says what a plugin requires and what it can go without, and turns the optional ones on and off (ADR-0060)", async () => {
+    const OPTIONAL = {
+      ...DETAIL,
+      capabilities: ["board:read"],
+      optionalCapabilities: ["jobs", "files"],
+    };
+    const { fetch, calls } = fakeConsole({
+      [`GET ${AT}`]: { body: { ...OPTIONAL, consent: ["board:read", "jobs"] } },
+      "GET /api/v1/me": { body: ME },
+      [`POST ${AT}/enable`]: { body: { ...OPTIONAL, board: null, projects: "all" } },
+      [`PATCH ${AT}/consent`]: { body: { ...OPTIONAL, consent: ["board:read", "files"] } },
+    });
+    // Enabling names what it requires; what it can go without is said, and left off.
+    const enabling = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(["plugin", "hello", "enable", "--consent", "board:read"], enabling.io),
+    ).toBe(EXIT.ok);
+    expect(enabling.out()).toContain("hello requires one capability:\n  board:read: opens ");
+    expect(enabling.out()).toContain("It can go without these");
+    expect(enabling.out()).toContain("  jobs: opens ");
+    expect(calls.find((call) => call.key === `POST ${AT}/enable`)?.body).toMatchObject({
+      consent: ["board:read"],
+    });
+    const read = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["plugin", "hello", "capabilities"], read.io)).toBe(EXIT.ok);
+    expect(read.out()).toContain("required: board:read");
+    expect(read.out()).toContain("optional, on: jobs");
+    expect(read.out()).toContain("optional, off: files");
+    // What it requires stays, whatever is named; `none` takes every optional one away.
+    const changed = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(["plugin", "hello", "capabilities", "--consent", "files"], changed.io),
+    ).toBe(EXIT.ok);
+    expect(calls.at(-1)?.body).toEqual({ consent: ["board:read", "files"] });
+    expect(changed.out()).toContain("optional, on: files");
+    const none = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["plugin", "hello", "capabilities", "--consent", "none"], none.io)).toBe(
+      EXIT.ok,
+    );
+    expect(calls.at(-1)?.body).toEqual({ consent: ["board:read"] });
+    const stray = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["plugin", "hello", "capabilities", "files"], stray.io)).toBe(EXIT.usage);
+  });
+
   it("enables with consent to every capability after saying what each opens, configures, seals a secret, grants and revokes", async () => {
     const { fetch, calls } = fakeConsole({
       [`GET ${AT}`]: { body: { ...DETAIL, state: "installed", capabilities: ["files"] } },
@@ -3989,7 +4033,7 @@ describe("the plugins on the command line (ADR-0049, ADR-0053)", () => {
     // Without consent to every capability: what each opens is said, and nothing is asked of the console.
     const asked = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["plugin", "hello", "enable"], asked.io)).toBe(EXIT.usage);
-    expect(asked.out()).toContain("hello asks one capability:\n  files: opens ");
+    expect(asked.out()).toContain("hello requires one capability:\n  files: opens ");
     expect(asked.err()).toContain("--consent files. Not named: files.");
     expect(calls.some((call) => call.key === `POST ${AT}/enable`)).toBe(false);
     const enabled = harness({ fetch, env: SIGNED_IN });

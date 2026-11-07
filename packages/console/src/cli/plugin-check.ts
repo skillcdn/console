@@ -8,6 +8,7 @@ import { descriptionProblems, type PluginDescription } from "../plugin/define.js
 import type { ServerLoad } from "../plugin/load.js";
 import {
   CURRENT_PLUGIN_API,
+  capabilitiesAsked,
   PLUGIN_API_MAJORS,
   type PluginManifest,
   parsePluginManifest,
@@ -491,14 +492,17 @@ export async function checkPlugin(
         errors.push(`${manifest.server}: ${problem}`);
       }
       if (
-        manifest.capabilities.includes("endpoints") &&
+        capabilitiesAsked(manifest).includes("endpoints") &&
         Object.keys(description.endpoints).length === 0
       ) {
         warnings.push(
           "console-plugin.json: asks the capability endpoints and the server module defines no endpoint",
         );
       }
-      if (manifest.capabilities.includes("jobs") && Object.keys(description.jobs).length === 0) {
+      if (
+        capabilitiesAsked(manifest).includes("jobs") &&
+        Object.keys(description.jobs).length === 0
+      ) {
         warnings.push(
           "console-plugin.json: asks the capability jobs and the server module defines no job",
         );

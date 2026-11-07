@@ -173,6 +173,7 @@ export default {
     ),
   },
   queries: {
+    holds: query("The capabilities the plugin holds.", {}, async (ctx) => ctx.plugin.capabilities),
     mine: query("The caller's requests.", {}, async (ctx) => {
       const page = await ctx.records(requests).list({ order: { field: "id", descending: true } });
       return page.items;

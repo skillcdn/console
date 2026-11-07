@@ -20,6 +20,7 @@ import {
   Badge,
   Button,
   Callout,
+  cx,
   EmptyState,
   formatInstant,
   LinkButton,
@@ -153,20 +154,28 @@ function toggled(set: ReadonlySet<string>, value: string, on: boolean): Readonly
 /** A row of a list to tick: the box, a name, a word under it. */
 function TickRow(props: {
   readonly checked: boolean;
-  readonly onChange: (checked: boolean) => void;
+  readonly onChange?: ((checked: boolean) => void) | undefined;
   readonly name: string;
   readonly under?: string | undefined;
+  /** A word beside the name: that this one is new, say. */
+  readonly tag?: string | undefined;
+  /** Whether it stays as it is: on, and not the person's to turn off. */
+  readonly locked?: boolean | undefined;
 }) {
   return (
     <li>
-      <label className="sc-plugin-tick">
+      <label className={cx("sc-plugin-tick", props.locked === true && "sc-plugin-tick-locked")}>
         <input
           type="checkbox"
           checked={props.checked}
-          onChange={(event) => props.onChange(event.target.checked)}
+          disabled={props.locked === true}
+          onChange={(event) => props.onChange?.(event.target.checked)}
         />
         <span className="sc-plugin-tick-words">
-          <span className="sc-plugin-tick-name">{props.name}</span>
+          <span className="sc-plugin-tick-name">
+            {props.name}
+            {props.tag !== undefined && <Badge tone="warning">{props.tag}</Badge>}
+          </span>
           {props.under !== undefined && props.under !== "" && (
             <span className="sc-plugin-tick-under">{props.under}</span>
           )}
@@ -181,6 +190,9 @@ function Overview(props: {
   readonly detail: RestPluginDetail;
   readonly projects: readonly RestProject[];
   readonly language: string;
+  readonly busy: boolean;
+  /** Called with what the plugin holds from now on, an optional capability turned on or off. */
+  readonly onConsent: (consent: readonly string[]) => void;
 }) {
   const words = useWords();
   const settings = words.plugins.settings;
@@ -220,24 +232,66 @@ function Overview(props: {
   }
   if (enabled && detail.consent !== null) {
     const consent = detail.consent;
+    const optional = detail.optionalCapabilities ?? [];
+    const required = consent.filter((capability) => !optional.includes(capability));
     rows.push({
       key: "capabilities",
       name: settings.capabilities,
       value:
-        consent.length === 0 ? (
+        consent.length === 0 && optional.length === 0 ? (
           settings.nothing
         ) : (
-          <ul className="sc-plugin-held">
-            {consent.map((capability) => {
-              const text = capabilityText(words, capability);
-              return (
-                <li key={capability}>
-                  <span className="sc-plugin-tick-name">{text.name}</span>
-                  {text.opens !== "" && <span className="sc-plugin-tick-under"> {text.opens}</span>}
-                </li>
-              );
-            })}
-          </ul>
+          <>
+            {required.length > 0 && (
+              <ul className="sc-plugin-held">
+                {required.map((capability) => {
+                  const text = capabilityText(words, capability);
+                  return (
+                    <li key={capability}>
+                      <span className="sc-plugin-tick-name">{text.name}</span>
+                      {text.opens !== "" && (
+                        <span className="sc-plugin-tick-under"> {text.opens}</span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {optional.length > 0 && (
+              <div className="sc-plugin-optional">
+                <span className="sc-field-label">{settings.optional}</span>
+                <ul className="sc-plugin-held">
+                  {optional.map((capability) => {
+                    const text = capabilityText(words, capability);
+                    return (
+                      <li key={capability}>
+                        <label className="sc-check">
+                          <input
+                            type="checkbox"
+                            checked={consent.includes(capability)}
+                            disabled={props.busy}
+                            onChange={(event) =>
+                              props.onConsent(
+                                event.target.checked
+                                  ? [...consent, capability]
+                                  : consent.filter((held) => held !== capability),
+                              )
+                            }
+                          />
+                          <span>
+                            <span className="sc-plugin-tick-name">{text.name}</span>
+                            {text.opens !== "" && (
+                              <span className="sc-plugin-tick-under"> {text.opens}</span>
+                            )}
+                          </span>
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+          </>
         ),
     });
   }
@@ -778,8 +832,9 @@ function SecretRow(props: {
 }
 
 /**
- * Enabling: the capabilities to consent to, one by one, those consented to before ticked
- * already; the board project, the one it had chosen already; the projects, as they were.
+ * Enabling: the capabilities the plugin requires, on and not the administrator's to turn off, and
+ * those it can go without, off until chosen, those consented to before on already (ADR-0060); the
+ * board project, the one it had chosen already; the projects, as they were.
  */
 function EnableForm(props: {
   readonly detail: RestPluginDetail;
@@ -791,12 +846,15 @@ function EnableForm(props: {
   const words = useWords();
   const settings = words.plugins.settings;
   const { detail, language } = props;
+  const optional = detail.optionalCapabilities ?? [];
   const [consented, setConsented] = useState<ReadonlySet<string>>(
-    () =>
-      new Set(
-        (detail.consent ?? []).filter((capability) => detail.capabilities.includes(capability)),
-      ),
+    () => new Set((detail.consent ?? []).filter((capability) => optional.includes(capability))),
   );
+  /** A capability a new version asks and nobody has consented to yet is said to be new. */
+  const tagOf = (capability: string): string | undefined =>
+    detail.state === "needs_consent" && !(detail.consent ?? []).includes(capability)
+      ? settings.newCapability
+      : undefined;
   const needsBoard = detail.boardNeeds !== "none";
   const [boardMode, setBoardMode] = useState<"none" | "create" | "choose">(
     detail.boardNeeds === "none"
@@ -817,7 +875,6 @@ function EnableForm(props: {
     () => new Set(Array.isArray(before) ? before : []),
   );
   const ids = { key: useId(), name: useId(), description: useId(), choose: useId() };
-  const everyCapability = detail.capabilities.every((capability) => consented.has(capability));
   const boardReady =
     boardMode === "none"
       ? detail.boardNeeds !== "required"
@@ -827,7 +884,7 @@ function EnableForm(props: {
   const submit = (event: FormEvent) => {
     event.preventDefault();
     props.onEnable({
-      consent: [...consented],
+      consent: [...detail.capabilities, ...consented],
       board:
         boardMode === "none"
           ? null
@@ -839,23 +896,54 @@ function EnableForm(props: {
   };
   return (
     <form className="sc-form sc-plugin-enable" onSubmit={submit} aria-label={settings.enable}>
-      {detail.capabilities.length > 0 && (
+      {detail.capabilities.length + optional.length > 0 && (
         <div className="sc-plugin-group">
           <h3 className="sc-plugin-group-title">{settings.capabilities}</h3>
-          <ul className="sc-plugin-ticks">
-            {detail.capabilities.map((capability) => {
-              const text = capabilityText(words, capability);
-              return (
-                <TickRow
-                  key={capability}
-                  checked={consented.has(capability)}
-                  onChange={(on) => setConsented((current) => toggled(current, capability, on))}
-                  name={text.name}
-                  under={text.opens}
-                />
-              );
-            })}
-          </ul>
+          {detail.capabilities.length > 0 && (
+            <div className="sc-plugin-capabilities">
+              <p className="sc-plugin-capabilities-head">
+                <span className="sc-plugin-capabilities-name">{settings.required}</span>
+                <span className="sc-settings-hint">{settings.requiredHint}</span>
+              </p>
+              <ul className="sc-plugin-ticks">
+                {detail.capabilities.map((capability) => {
+                  const text = capabilityText(words, capability);
+                  return (
+                    <TickRow
+                      key={capability}
+                      checked
+                      locked
+                      name={text.name}
+                      under={text.opens}
+                      tag={tagOf(capability)}
+                    />
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+          {optional.length > 0 && (
+            <div className="sc-plugin-capabilities">
+              <p className="sc-plugin-capabilities-head">
+                <span className="sc-plugin-capabilities-name">{settings.optional}</span>
+                <span className="sc-settings-hint">{settings.optionalHint}</span>
+              </p>
+              <ul className="sc-plugin-ticks">
+                {optional.map((capability) => {
+                  const text = capabilityText(words, capability);
+                  return (
+                    <TickRow
+                      key={capability}
+                      checked={consented.has(capability)}
+                      onChange={(on) => setConsented((current) => toggled(current, capability, on))}
+                      name={text.name}
+                      under={text.opens}
+                    />
+                  );
+                })}
+              </ul>
+            </div>
+          )}
         </div>
       )}
       {needsBoard && (
@@ -991,11 +1079,7 @@ function EnableForm(props: {
       </div>
       <div className="sc-plugin-group">
         <div className="sc-form-actions">
-          <Button
-            type="submit"
-            variant="primary"
-            disabled={props.busy || !everyCapability || !boardReady}
-          >
+          <Button type="submit" variant="primary" disabled={props.busy || !boardReady}>
             {settings.enable}
           </Button>
         </div>
@@ -1246,7 +1330,13 @@ export function PluginSettingsView(props: PluginSettingsViewProps) {
           </ul>
         </Callout>
       )}
-      <Overview detail={detail} projects={props.projects} language={language} />
+      <Overview
+        detail={detail}
+        projects={props.projects}
+        language={language}
+        busy={busy}
+        onConsent={(consent) => change(() => plugin.updateConsent(consent))}
+      />
       {canEnable && (
         <section className="sc-panel sc-panel-form" aria-label={settings.enable}>
           <h2 className="sc-section-title">{settings.enable}</h2>

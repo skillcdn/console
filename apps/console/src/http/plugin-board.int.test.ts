@@ -389,6 +389,42 @@ describe("a plugin on the board", () => {
     expect(new TextDecoder().decode(request?.body)).toBe('{"hello":"there"}');
   });
 
+  it("leaves what a plugin can go without to the administrator, and keeps what it requires (ADR-0060)", async () => {
+    const consentNow = async () =>
+      restPluginDetailSchema.parse(
+        await (await h.request(pluginPath("leave"), { headers: { cookie: admin } })).json(),
+      );
+    const before = await consentNow();
+    expect(before.optionalCapabilities).toEqual(["outbound:api.example.test"]);
+    expect(before.capabilities).not.toContain("outbound:api.example.test");
+    expect(before.consent).toContain("outbound:api.example.test");
+    const consent = (body: readonly string[], cookie = admin) =>
+      h.request(pluginPath("leave", "consent"), json({ consent: body }, cookie, "PATCH"));
+    const off = before.capabilities;
+    // Those it requires are not the administrator's to take away, and it asks nothing else.
+    const lacking = await consent(off.slice(1));
+    expect(lacking.status).toBe(409);
+    expect(restErrorSchema.parse(await lacking.json()).error.code).toBe("plugin.needs_consent");
+    const unasked = await consent([...off, "files"]);
+    expect(unasked.status).toBe(400);
+    expect(restErrorSchema.parse(await unasked.json()).error.code).toBe("plugin.invalid_args");
+    expect((await consent(off, member)).status).toBe(403);
+    // Turned off, the call is refused from the next one on, and the plugin can tell.
+    const turned = await consent(off);
+    expect(turned.status, await turned.clone().text()).toBe(200);
+    expect(restPluginDetailSchema.parse(await turned.json()).consent).toEqual(off);
+    const held = await invoked("leave", member, ["holds"]);
+    expect(held.data).not.toContain("outbound:api.example.test");
+    expect(held.data).toContain("people:read");
+    const refused = await invoke("leave", member, ["probe"]);
+    expect(refused.status).toBe(403);
+    expect(restErrorSchema.parse(await refused.json()).error.code).toBe("plugin.forbidden");
+    // Turned on again, it holds it.
+    expect((await consent([...off, "outbound:api.example.test"])).status).toBe(200);
+    expect((await invoked("leave", member, ["holds"])).data).toContain("outbound:api.example.test");
+    expect((await invoke("leave", member, ["probe"])).status).toBe(200);
+  });
+
   it("calls another plugin's api as the caller, with the callee's roles, and only with the capability", async () => {
     const peeked = await invoked("audit", member, ["peek", "--person", bobId]);
     expect(peeked.text).toBe("12");

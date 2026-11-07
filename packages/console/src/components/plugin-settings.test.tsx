@@ -291,14 +291,25 @@ describe("a plugin's settings page", () => {
     expect(html).toContain("워크스페이스 시간대 기준입니다.");
   });
 
-  it("offers a disabled plugin the form that enables it, what was consented to before ticked, and the purge", () => {
-    const html = render({ ...DETAIL, state: "disabled", consent: ["board:read"], board: null });
+  it("offers a disabled plugin the form that enables it: what it requires on and locked, the optional off until chosen, and the purge", () => {
+    const html = render({
+      ...DETAIL,
+      state: "disabled",
+      capabilities: ["board:read", "people:read"],
+      optionalCapabilities: ["jobs", "files"],
+      consent: ["board:read", "files"],
+      board: null,
+    });
     expect(html).not.toContain(">비활성화</button>");
-    // One box per capability, the one consented to before ticked; the button waits for the rest.
-    expect(count(html, 'type="checkbox"')).toBe(3);
+    // What it requires is on and not the administrator's; of the optional, what was consented
+    // to before is on; and the button does not wait for a tick.
+    expect(html).toContain(">필수<");
+    expect(html).toContain(">선택<");
+    expect(count(html, 'type="checkbox"')).toBe(4);
+    expect(count(html, 'disabled="" checked=""')).toBe(2);
     expect(count(html, 'type="checkbox" checked=""')).toBe(1);
     expect(html).toContain(
-      '<button disabled="" type="submit" class="sc-button sc-button-primary">활성화</button>',
+      '<button type="submit" class="sc-button sc-button-primary">활성화</button>',
     );
     // A required board: a new project from the defaults, or an existing one; never none.
     expect(count(html, 'name="board"')).toBe(2);
@@ -306,6 +317,24 @@ describe("a plugin's settings page", () => {
     // The purge, once the key is typed.
     expect(html).toContain('placeholder="leave 입력"');
     expect(html).not.toContain("삭제하려면 먼저 비활성화하세요.");
+  });
+
+  it("marks what a new version requires, and keeps what an enabled plugin can go without a choice", () => {
+    const waiting = render({
+      ...DETAIL,
+      state: "needs_consent",
+      capabilities: ["board:read", "people:read"],
+      consent: ["board:read"],
+    });
+    expect(count(waiting, ">새 권한<")).toBe(1);
+    const enabled = render({
+      ...DETAIL,
+      capabilities: ["board:read"],
+      optionalCapabilities: ["jobs", "files"],
+      consent: ["board:read", "files"],
+    });
+    expect(count(enabled, 'type="checkbox"')).toBe(2);
+    expect(count(enabled, 'type="checkbox" checked=""')).toBe(1);
   });
 
   it("says why a plugin cannot run, and that a plugin without roles is every member's", () => {

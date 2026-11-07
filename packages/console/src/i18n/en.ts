@@ -179,6 +179,11 @@ export const en = {
       problems: "Why it cannot run",
       nothing: "None",
       capabilities: "Capabilities",
+      required: "Required",
+      requiredHint: "The plugin can't work without these, so they stay on.",
+      optional: "Optional",
+      optionalHint: "Turn on what you want it to use. You can change this later.",
+      newCapability: "New",
       board: "Board project",
       boardHint: "Where its decisions, tasks and pages go.",
       boardNone: "None",
@@ -924,6 +929,7 @@ export const en = {
       fileAttached: (label: string, page: string) => `attached ${label} to ${page}`,
       pluginEnabled: (plugin: string) => `enabled the plugin ${plugin}`,
       pluginDisabled: (plugin: string) => `disabled the plugin ${plugin}`,
+      pluginConsented: (plugin: string) => `changed the capabilities of the plugin ${plugin}`,
       pluginConfigured: (fields: string, plugin: string) =>
         `changed ${fields} of the plugin ${plugin}`,
       pluginGranted: (role: string, who: string, plugin: string) =>

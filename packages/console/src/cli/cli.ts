@@ -1533,6 +1533,8 @@ const plugin: Command = async (args, io) => {
       );
       return EXIT.ok;
     }
+    case "capabilities":
+      return pluginCapabilities(io, session, client, rest);
     case "settings":
       return pluginSettings(io, session, client, rest);
     case "secret":
@@ -1794,7 +1796,60 @@ function capabilityLines(capabilities: readonly string[]): string[] {
   });
 }
 
-/** Enables a plugin, with consent to every capability it asks, named again; an administrator's. */
+/** The capabilities `--consent` names, given again or with commas between. */
+function capabilitiesNamed(values: Values): string[] {
+  return texts(values, "consent")
+    .flatMap((value) => value.split(","))
+    .map((capability) => capability.trim())
+    .filter((capability) => capability.length > 0);
+}
+
+/** What a plugin requires, and which of what it can go without it holds, as `capabilities` prints it. */
+function capabilitiesHeld(detail: RestPluginDetail): string {
+  const held = detail.consent ?? [];
+  const optional = detail.optionalCapabilities ?? [];
+  const named = (capabilities: readonly string[]) =>
+    capabilities.length === 0 ? "none" : capabilities.join(", ");
+  return [
+    `Capabilities of ${detail.key}:`,
+    `  required: ${named(detail.capabilities)}`,
+    `  optional, on: ${named(optional.filter((capability) => held.includes(capability)))}`,
+    `  optional, off: ${named(optional.filter((capability) => !held.includes(capability)))}`,
+  ].join("\n");
+}
+
+/**
+ * What a plugin holds; with `--consent`, which of the optional capabilities it holds from now on,
+ * `none` for none of them. An administrator's.
+ */
+async function pluginCapabilities(
+  io: CliIo,
+  session: Session,
+  client: PluginClient,
+  rest: readonly string[],
+): Promise<number> {
+  const { values, positionals } = parse(rest, { consent: { type: "string", multiple: true } });
+  if (positionals.length > 0) {
+    throw misuse(
+      `Nothing follows capabilities but --consent: console plugin ${client.key} capabilities [--consent <capability>,...|none]`,
+    );
+  }
+  const detail = await client.get();
+  const named = capabilitiesNamed(values);
+  if (named.length === 0) {
+    answer(io, session, detail, () => capabilitiesHeld(detail));
+    return EXIT.ok;
+  }
+  const chosen = named.filter((capability) => capability !== "none");
+  const changed = await client.updateConsent([
+    ...detail.capabilities,
+    ...chosen.filter((capability) => !detail.capabilities.includes(capability)),
+  ]);
+  answer(io, session, changed, () => capabilitiesHeld(changed));
+  return EXIT.ok;
+}
+
+/** Enables a plugin, with consent to every capability it requires, named again; an administrator's. */
 async function pluginEnable(
   io: CliIo,
   session: Session,
@@ -1814,19 +1869,22 @@ async function pluginEnable(
   }
   const [detail, me] = await Promise.all([client.get(), session.client.me()]);
   const asked = detail.capabilities;
-  const consent = texts(values, "consent")
-    .flatMap((value) => value.split(","))
-    .map((capability) => capability.trim())
-    .filter((capability) => capability.length > 0);
+  const optional = detail.optionalCapabilities ?? [];
+  const consent = capabilitiesNamed(values);
   if (asked.length > 0 && !session.json) {
     io.stdout(
-      `${detail.key} asks ${asked.length === 1 ? "one capability" : `${asked.length} capabilities`}:\n${capabilityLines(asked).join("\n")}\n`,
+      `${detail.key} requires ${asked.length === 1 ? "one capability" : `${asked.length} capabilities`}:\n${capabilityLines(asked).join("\n")}\n`,
+    );
+  }
+  if (optional.length > 0 && !session.json) {
+    io.stdout(
+      `It can go without these, which it holds if --consent names them too:\n${capabilityLines(optional).join("\n")}\n`,
     );
   }
   const missing = asked.filter((capability) => !consent.includes(capability));
   if (missing.length > 0) {
     throw misuse(
-      `Enabling ${detail.key} needs consent to every capability it asks, named again: --consent ${asked.join(",")}. Not named: ${missing.join(", ")}.`,
+      `Enabling ${detail.key} needs consent to every capability it requires, named again: --consent ${asked.join(",")}. Not named: ${missing.join(", ")}.`,
     );
   }
   const boardFlag = text(values, "board");

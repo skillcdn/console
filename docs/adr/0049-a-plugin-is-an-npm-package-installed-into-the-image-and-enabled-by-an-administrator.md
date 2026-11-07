@@ -1,6 +1,6 @@
 # ADR-0049: A plugin is an npm package installed into the image and enabled by an administrator
 
-- Status: Accepted
+- Status: Accepted; point 3 amended by [ADR-0060](0060-what-a-plugin-asks-is-required-or-optional-and-the-optional-are-the-administrators-to-choose.md)
 - Date: 2026-11-01
 
 ## Context
