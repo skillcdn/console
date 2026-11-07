@@ -1501,6 +1501,21 @@ describe("tokens", () => {
     expect(me.person?.login).toBe("Alice");
     // With what: the token's name, so that a console of a person's own knows it holds one.
     expect(me.agent).toBe("a script");
+    // The pages of a person's own console keep a language too (ADR-0065), and go on holding the token.
+    const kept = await h.request(REST_ROUTES.me, {
+      method: "PATCH",
+      headers: { ...auth, "content-type": "application/json" },
+      body: JSON.stringify({ language: "ko" }),
+    });
+    const patched = restMeSchema.parse(await kept.json());
+    expect(patched.agent).toBe("a script");
+    expect(patched.language).toBe("ko");
+    expect(patched.person?.language).toBe("ko");
+    await h.request(REST_ROUTES.me, {
+      method: "PATCH",
+      headers: { ...auth, "content-type": "application/json" },
+      body: JSON.stringify({ language: null }),
+    });
     const created = await h.request(`${IN}/tasks`, {
       method: "POST",
       headers: { ...auth, "content-type": "application/json" },

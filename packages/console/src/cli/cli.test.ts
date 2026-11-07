@@ -901,7 +901,7 @@ describe("the console command", () => {
     );
   });
 
-  it("reads the rules as they are for the person: {language} filled with the language they chose", async () => {
+  it("reads the rules as they are for the person: {language} filled with the language they read in", async () => {
     const ruled = {
       ...RULES,
       workspace: { ...RULES.workspace, body: "# Ours. Write what people read in {language}." },
@@ -917,7 +917,7 @@ describe("the console command", () => {
     const asJson = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["rules", "--json"], asJson.io)).toBe(EXIT.ok);
     expect(JSON.parse(asJson.out()).workspace.body).toContain("in Korean.");
-    // Nothing chosen: the task's language, as the people of the board wrote it.
+    // No language yet: the task's, as the people of the board wrote it.
     const unchosen = harness({
       fetch: fakeConsole({ [`GET ${IN}/rules`]: { body: ruled }, "GET /api/v1/me": { body: ME } })
         .fetch,

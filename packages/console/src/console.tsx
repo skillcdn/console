@@ -100,6 +100,7 @@ import { type ConsoleData, useConsoleData } from "./data.js";
 import { monthOf, today } from "./dates.js";
 import { DocsPage } from "./docs-page.js";
 import {
+  browserPack,
   chooseLanguage,
   DEFAULT_LANGUAGES,
   LanguageContext,
@@ -385,13 +386,17 @@ function holdsToken(data: ConsoleData): boolean {
 }
 
 /**
- * The language to keep for a person the pages see for the first time (ADR-0065): the one they are
- * spoken to in, so that a plugin or an agent can write for them while they are away. Nothing for
- * a person who has a language, and for nobody.
+ * The language to keep for a person the pages see for the first time (ADR-0065): the one their
+ * browser asks for, so that a plugin or an agent can write for them while they are away. Nothing
+ * for a person who has a language, for nobody, and where the pages only fall back on a language.
  */
-export function languageToKeep(me: RestMe | undefined, speaking: string): string | undefined {
+export function languageToKeep(
+  me: RestMe | undefined,
+  browser: readonly string[],
+  packs: readonly LanguagePack[],
+): string | undefined {
   return me?.person !== null && me?.person !== undefined && me.language === null
-    ? speaking
+    ? browserPack(browser, packs)?.tag
     : undefined;
 }
 
@@ -2639,7 +2644,11 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
     );
     const words = pack.messages;
 
-    const toKeep = languageToKeep(data.me, pack.tag);
+    const toKeep = languageToKeep(
+      data.me,
+      typeof navigator === "undefined" ? [] : navigator.languages,
+      languages,
+    );
     useEffect(() => {
       if (toKeep !== undefined) {
         void data.actions.updateMe({ language: toKeep }).catch(() => undefined);

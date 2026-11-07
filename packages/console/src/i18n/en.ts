@@ -417,7 +417,8 @@ export const en = {
       },
       "outbound:webrtc": {
         name: "WebRTC on its pages",
-        opens: "Its pages connect from each person's browser to any address, past the console.",
+        opens:
+          "Its pages connect from each person's browser to any address, past the console: what they show, and the person's network address, can go anywhere.",
       },
       outbound: (host: string) => ({
         name: `Requests to ${host}`,

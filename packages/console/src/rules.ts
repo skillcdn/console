@@ -83,7 +83,7 @@ export function isReferenceRules(body: string): boolean {
 /** What stands in the rules for the language of the person the agent works for. */
 export const RULES_LANGUAGE_PLACEHOLDER = "{language}";
 
-/** What the rules say when the person chose no language: the task's, as the people of the board wrote it. */
+/** What the rules say for a person with no language yet: the task's, as the people of the board wrote it. */
 const TASKS_LANGUAGE = "the language the task is written in";
 
 /** The name of a language in English, from its tag (`ko` is Korean); the tag itself when it is not one. */
@@ -101,8 +101,8 @@ export function languageNameOf(tag: string): string {
 
 /**
  * The rules as they read for a person: `{language}` filled with the name of the language they
- * chose for the pages, or with the task's language when they chose none. The command fills
- * them for the person whose token it holds; the pages for whoever reads them.
+ * read in (ADR-0065), or with the task's language while they have none. The command fills them
+ * for the person whose token it holds; the pages for whoever reads them.
  */
 export function fillRules(body: string, language: string | null | undefined): string {
   const name = language == null ? TASKS_LANGUAGE : languageNameOf(language);

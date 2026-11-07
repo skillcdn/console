@@ -7,18 +7,26 @@ const text = (body: Uint8Array) => new TextDecoder().decode(body);
 
 describe("what a plugin's frames hold (ADR-0066)", () => {
   it("is what its install holds, and changes where the plugin can go without it", () => {
-    expect(frameHoldsOf([], [])).toEqual({ webrtc: false, changing: false });
-    expect(frameHoldsOf([], ["outbound:webrtc"])).toEqual({ webrtc: true, changing: false });
-    expect(frameHoldsOf(["outbound:webrtc"], [])).toEqual({ webrtc: false, changing: true });
-    expect(frameHoldsOf(["outbound:webrtc"], ["outbound:webrtc"])).toEqual({
-      webrtc: true,
-      changing: true,
+    const webrtc = ["outbound:webrtc"];
+    const asking = (capabilities: string[], optionalCapabilities: string[]) => ({
+      capabilities,
+      optionalCapabilities,
     });
+    expect(frameHoldsOf(asking([], []), [])).toEqual({ webrtc: false, changing: false });
+    expect(frameHoldsOf(asking(webrtc, []), webrtc)).toEqual({ webrtc: true, changing: false });
+    expect(frameHoldsOf(asking([], webrtc), [])).toEqual({ webrtc: false, changing: true });
+    expect(frameHoldsOf(asking([], webrtc), webrtc)).toEqual({ webrtc: true, changing: true });
+  });
+
+  it("opens nothing for what a version no longer asks, though it was consented to for one before", () => {
+    const manifest = { capabilities: [], optionalCapabilities: [] };
+    expect(frameHoldsOf(manifest, ["outbound:webrtc"])).toEqual({ webrtc: false, changing: false });
   });
 
   it("is not opened by a host", () => {
-    const holds = frameHoldsOf(["outbound:api.example.com"], ["outbound:api.example.com"]);
-    expect(holds).toEqual({ webrtc: false, changing: false });
+    const host = ["outbound:api.example.com"];
+    const manifest = { capabilities: [], optionalCapabilities: host };
+    expect(frameHoldsOf(manifest, host)).toEqual({ webrtc: false, changing: false });
   });
 
   it("begins every script by taking WebRTC out, unless the plugin holds it", () => {

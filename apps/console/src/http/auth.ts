@@ -304,7 +304,8 @@ export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies):
     if (parsed.data.home !== undefined) {
       await setHome(database, person.id, parsed.data.home ?? undefined, clock.now());
     }
-    return c.json(await meOf({ person, token: undefined }));
+    // Asked again: the person as they are now, and the token that asked, as `GET` answers.
+    return c.json(await meOf(await access.caller(c)));
   });
 
   // The workspace's settings (ADR-0035): an administrator's, from the console's own pages or

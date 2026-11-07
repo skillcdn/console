@@ -2135,7 +2135,7 @@ const rules: Command = async (args, io) => {
 
 /**
  * The rules as they read for the person whose token the command holds: `{language}` filled
- * with the language they chose for the pages, or with the task's when they chose none.
+ * with the language they read in, or with the task's while they have none.
  */
 function forPerson<T extends { readonly body: string | null }>(
   half: T,

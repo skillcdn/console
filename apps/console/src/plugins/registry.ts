@@ -634,7 +634,14 @@ export class Plugins {
       boardNeeds: manifest?.board.needs ?? "none",
       capabilities: [...(manifest?.capabilities ?? [])],
       optionalCapabilities: [...(manifest?.optionalCapabilities ?? [])],
-      consent: admin ? [...(install?.consent ?? [])] : null,
+      // What this version asks of it: the form sends this back, and a capability no version
+      // asks is refused there.
+      consent: admin
+        ? (install?.consent ?? []).filter(
+            (capability) =>
+              manifest === undefined || capabilitiesAsked(manifest).includes(capability),
+          )
+        : null,
       projects: admin
         ? install?.projects === "all"
           ? "all"
@@ -1808,7 +1815,7 @@ export class Plugins {
       version: entry.version,
       pages: entry.manifest.pages.map((page) => page.key),
       widgets: entry.manifest.widgets.map((widget) => widget.key),
-      holds: frameHoldsOf(entry.manifest.optionalCapabilities, install.consent),
+      holds: frameHoldsOf(entry.manifest, install.consent),
     };
   }
 

@@ -52,25 +52,28 @@ export function packFor(
   );
 }
 
-/**
- * The language to speak: the person's choice when it names a pack, else the first of the
- * browser's languages that does, else the first pack.
- */
-export function chooseLanguage(
-  chosen: string | null | undefined,
+/** The first of the browser's languages a pack speaks, or nothing. */
+export function browserPack(
   browser: readonly string[],
-  packs: readonly LanguagePack[] = DEFAULT_LANGUAGES,
-): LanguagePack {
-  const first = packs[0] ?? ENGLISH;
-  const own = packFor(chosen, packs);
-  if (own !== undefined) {
-    return own;
-  }
+  packs: readonly LanguagePack[],
+): LanguagePack | undefined {
   for (const tag of browser) {
     const found = packFor(tag, packs);
     if (found !== undefined) {
       return found;
     }
   }
-  return first;
+  return undefined;
+}
+
+/**
+ * The language to speak: the person's own when it names a pack, else the first of the browser's
+ * languages that does, else the first pack.
+ */
+export function chooseLanguage(
+  chosen: string | null | undefined,
+  browser: readonly string[],
+  packs: readonly LanguagePack[] = DEFAULT_LANGUAGES,
+): LanguagePack {
+  return packFor(chosen, packs) ?? browserPack(browser, packs) ?? packs[0] ?? ENGLISH;
 }

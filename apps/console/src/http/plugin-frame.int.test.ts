@@ -5,10 +5,13 @@ import { join } from "node:path";
 import process from "node:process";
 import { pluginPath, restPluginDetailSchema } from "@skillcdn/console/api";
 import { loadWebRoot } from "@skillcdn/console/web";
+import { eq } from "drizzle-orm";
 import { pino } from "pino";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createSecrets } from "../auth/secrets.js";
+import { drizzleOf } from "../db/client.js";
 import { ensureWorkspace } from "../db/queries/workspaces.js";
+import { pluginInstalls } from "../db/schema.js";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "../db/testing.js";
 import { discoverPlugins } from "../plugins/discovery.js";
 import { PluginHost } from "../plugins/host.js";
@@ -192,6 +195,24 @@ describe("the frame of a plugin's page", () => {
 
     const style = await h.request(`${AT_CALL}/web/0.0.1/index.css`);
     expect(style.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
+  });
+
+  it("takes nothing from a consent the version no longer asks, on the frame or on the form", async () => {
+    // As a version before leaves it, that held what this one no longer asks.
+    const consented = (consent: readonly string[]) =>
+      drizzleOf(testDatabase.database)
+        .update(pluginInstalls)
+        .set({ consent: [...consent] })
+        .where(eq(pluginInstalls.key, "hello"));
+    await consented(["outbound:webrtc"]);
+    const script = await h.request(`${AT}/web/${version}/index.js`);
+    expect((await script.text()).startsWith('if(typeof globalThis!=="object")')).toBe(true);
+    expect(script.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
+    const detail = restPluginDetailSchema.parse(
+      await (await h.request(AT, { headers: { cookie: admin } })).json(),
+    );
+    expect(detail.consent).toEqual([]);
+    await consented([]);
   });
 
   it("serves the bundle's files under their version, immutable and readable across origins, and nothing outside", async () => {

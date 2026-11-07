@@ -359,7 +359,8 @@ export const ko: Messages = {
       },
       "outbound:webrtc": {
         name: "페이지의 WebRTC 연결",
-        opens: "페이지가 각 사람의 브라우저에서 콘솔을 거치지 않고 어떤 주소로든 연결합니다.",
+        opens:
+          "페이지가 콘솔을 거치지 않고 각 사람의 브라우저에서 어떤 주소로든 연결합니다. 화면에 보여 주는 내용과 그 사람의 네트워크 주소가 어디로든 나갈 수 있습니다.",
       },
       outbound: (host) => ({ name: `${host}로 요청`, opens: `${host}에 https 요청을 보냅니다.` }),
       plugins: (key) => ({

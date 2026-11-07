@@ -9,6 +9,7 @@ import {
   languageToKeep,
   onlyOnOwnPages,
 } from "./console.js";
+import { ENGLISH, KOREAN } from "./i18n/index.js";
 import {
   boardHref,
   calendarHref,
@@ -554,10 +555,14 @@ describe("createConsole", () => {
   it("keeps the language a person is first seen in, and never one over theirs (ADR-0065)", () => {
     const me = (fields: Partial<RestMe>) =>
       ({ person: { id: ID }, language: null, ...fields }) as RestMe;
-    expect(languageToKeep(me({}), "ko")).toBe("ko");
-    expect(languageToKeep(me({ language: "en" }), "ko")).toBeUndefined();
-    expect(languageToKeep(me({ person: null }), "ko")).toBeUndefined();
-    expect(languageToKeep(undefined, "ko")).toBeUndefined();
+    const both = [ENGLISH, KOREAN];
+    expect(languageToKeep(me({}), ["ko-KR", "en"], both)).toBe("ko");
+    expect(languageToKeep(me({ language: "en" }), ["ko"], both)).toBeUndefined();
+    expect(languageToKeep(me({ person: null }), ["ko"], both)).toBeUndefined();
+    expect(languageToKeep(undefined, ["ko"], both)).toBeUndefined();
+    // What the console falls back on is not what the person's browser asked for.
+    expect(languageToKeep(me({}), ["fr"], both)).toBeUndefined();
+    expect(languageToKeep(me({}), ["ko"], [ENGLISH])).toBeUndefined();
   });
 
   it("knows which pages a console that holds a token does not offer", () => {

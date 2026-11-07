@@ -12,12 +12,21 @@ export interface FrameHolds {
   readonly changing: boolean;
 }
 
-/** What the frames of a plugin hold: from what it can go without, and what its install holds now. */
-export function frameHoldsOf(optional: readonly string[], consent: readonly string[]): FrameHolds {
-  return {
-    webrtc: consent.includes(OUTBOUND_WEBRTC),
-    changing: optional.includes(OUTBOUND_WEBRTC),
-  };
+/**
+ * What the frames of a plugin hold: from what this version asks, and what its install holds now.
+ * A consent stays on the install when a new version stops asking; it opens nothing then, or that
+ * version's scripts would be kept without the line, past any withdrawing.
+ */
+export function frameHoldsOf(
+  manifest: {
+    readonly capabilities: readonly string[];
+    readonly optionalCapabilities: readonly string[];
+  },
+  consent: readonly string[],
+): FrameHolds {
+  const changing = manifest.optionalCapabilities.includes(OUTBOUND_WEBRTC);
+  const asked = changing || manifest.capabilities.includes(OUTBOUND_WEBRTC);
+  return { webrtc: asked && consent.includes(OUTBOUND_WEBRTC), changing };
 }
 
 /**
