@@ -99,61 +99,6 @@ export function ProjectRoleBadge(props: { readonly role: ProjectRole }) {
   );
 }
 
-export interface ProjectListProps {
-  readonly projects: readonly RestProject[];
-  /** The link to a project's board, as the composition routes it. */
-  readonly projectHref: (project: RestProject) => string;
-  readonly onOpen: (project: RestProject) => void;
-  readonly empty?: ReactNode;
-}
-
-export function ProjectList(props: ProjectListProps) {
-  const words = useWords().projects;
-  if (props.projects.length === 0) {
-    return <>{props.empty ?? null}</>;
-  }
-  return (
-    <ul className="sc-projects" aria-label={words.list}>
-      {props.projects.map((project) => (
-        <li key={project.id} className="sc-project">
-          <div className="sc-project-head">
-            <ProjectMark project={project} size="md" />
-            <a
-              className="sc-project-name"
-              href={props.projectHref(project)}
-              onClick={(event) => {
-                if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey) {
-                  event.preventDefault();
-                  props.onOpen(project);
-                }
-              }}
-            >
-              {project.name}
-            </a>
-            <code className="sc-project-key">{project.key}</code>
-            <ProjectRoleBadge role={project.role} />
-            {project.visibility === "private" ? (
-              <Badge tone="neutral">{words.private}</Badge>
-            ) : (
-              <Badge tone="warning">{words.public}</Badge>
-            )}
-          </div>
-          {project.description.length > 0 && (
-            <p className="sc-project-description">{project.description}</p>
-          )}
-          {project.openDecisions > 0 && (
-            <p className="sc-project-meta">
-              <Badge tone="warning" kind="count">
-                {words.decisionsWaiting(project.openDecisions)}
-              </Badge>
-            </p>
-          )}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 export interface ProjectFormProps {
   /** The project to change; left out, the form makes a new one, with a key. */
   readonly project?: RestProject | undefined;

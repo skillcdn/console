@@ -1,6 +1,6 @@
 # ADR-0059: A person arranges the front page's widgets, from the sizes each comes in
 
-- Status: Accepted
+- Status: Accepted; the cells of point 1 and all of point 3 superseded by [ADR-0061](0061-the-front-page-is-one-grid-of-tiles-a-person-arranges-by-hand.md)
 - Date: 2026-11-06
 - Amends point 4 of [ADR-0054](0054-a-plugins-pages-run-in-a-sandboxed-frame-and-speak-only-to-their-plugin.md), which placed the widgets as the manifest said. The contract is in [specs/plugins.md](../specs/plugins.md) and [specs/rest.md](../specs/rest.md).
 

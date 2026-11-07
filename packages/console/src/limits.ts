@@ -13,8 +13,10 @@ export const MAX_LINKS = 20;
 export const MAX_WORKERS = 20;
 /** How many people one decision may be addressed to (ADR-0057): the approvers of a team, any of whom may answer. */
 export const MAX_DECIDERS = 10;
-/** How many widgets a person keeps on their front page (ADR-0059). */
-export const MAX_HOME_WIDGETS = 24;
+/** How many tiles a person keeps at a width of their front page, and how many they took off it (ADR-0061). */
+export const MAX_HOME_TILES = 200;
+/** How far down the front page a tile may stand, in rows. */
+export const MAX_HOME_ROW = 1000;
 export const MAX_LINK_LABEL_LENGTH = 120;
 export const MAX_URL_LENGTH = 2048;
 /** The options of a decision, and how a person words each. */

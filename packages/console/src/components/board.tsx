@@ -72,13 +72,13 @@ export interface BoardProps {
 export const FOLDED_STATES: readonly TaskState[] = ["done", "dropped"];
 
 /** How far a mouse travels on a card before the press is a drag and not a click. */
-const DRAG_SLACK = 4;
+export const DRAG_SLACK = 4;
 /**
  * How long a finger rests on a card before the card comes loose, and how far it may wander
  * meanwhile; a finger that moves sooner is scrolling the page, not moving the card.
  */
-const HOLD_MS = 300;
-const HOLD_SLACK = 8;
+export const HOLD_MS = 300;
+export const HOLD_SLACK = 8;
 /** How near the pointer comes to the board's edge before the board scrolls to show more columns. */
 const EDGE = 48;
 /** How fast the board scrolls, in pixels a second, with the pointer at the edge itself; slower further in. */

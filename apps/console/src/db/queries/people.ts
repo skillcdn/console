@@ -3,7 +3,7 @@ import type {
   PersonRole,
   PersonStatus,
   ProviderKey,
-  RestHomeWidget,
+  RestHome,
 } from "@skillcdn/console/api";
 import { and, asc, count, eq, inArray, isNull, notInArray, or, type SQL, sql } from "drizzle-orm";
 import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
@@ -705,11 +705,8 @@ export async function syncOrganization(
   });
 }
 
-/** The person's own arrangement of the front page's widgets (ADR-0059), or nothing for the manifests' default. */
-export async function homeOf(
-  database: Database,
-  personId: string,
-): Promise<RestHomeWidget[] | undefined> {
+/** The person's own front page (ADR-0061), or nothing while they have arranged nothing. */
+export async function homeOf(database: Database, personId: string): Promise<RestHome | undefined> {
   const [row] = await drizzleOf(database)
     .select({ home: people.home })
     .from(people)
@@ -718,16 +715,16 @@ export async function homeOf(
   return row?.home ?? undefined;
 }
 
-/** Keeps the person's arrangement of the front page's widgets, or none. */
+/** Keeps what the person arranged of the front page, or nothing. */
 export async function setHome(
   database: Database,
   personId: string,
-  home: readonly RestHomeWidget[] | undefined,
+  home: RestHome | undefined,
   now: Date,
 ): Promise<void> {
   await drizzleOf(database)
     .update(people)
-    .set({ home: home === undefined ? null : [...home], updatedAt: now })
+    .set({ home: home ?? null, updatedAt: now })
     .where(eq(people.id, personId));
 }
 

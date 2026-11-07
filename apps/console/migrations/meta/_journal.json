@@ -267,6 +267,13 @@
       "when": 1793968723491,
       "tag": "0037_person_home",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1794040095520,
+      "tag": "0038_home_tiles",
+      "breakpoints": true
     }
   ]
 }

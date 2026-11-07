@@ -5280,6 +5280,233 @@
       ],
       "additionalProperties": false
     },
+    "restHomeSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "hidden": {
+          "maxItems": 200,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?:project:[0-9a-f-]{36}|widget:[a-z][a-z0-9-]{0,31}:[a-z][a-z0-9-]{0,31})$"
+          }
+        },
+        "layouts": {
+          "type": "object",
+          "properties": {
+            "4": {
+              "maxItems": 200,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "tile": {
+                    "type": "string",
+                    "pattern": "^(?:project:[0-9a-f-]{36}|widget:[a-z][a-z0-9-]{0,31}:[a-z][a-z0-9-]{0,31})$"
+                  },
+                  "x": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 11
+                  },
+                  "y": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1000
+                  },
+                  "size": {
+                    "type": "string",
+                    "enum": [
+                      "icon",
+                      "small",
+                      "medium",
+                      "large",
+                      "wide",
+                      "full"
+                    ]
+                  }
+                },
+                "required": [
+                  "tile",
+                  "x",
+                  "y",
+                  "size"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "6": {
+              "maxItems": 200,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "tile": {
+                    "type": "string",
+                    "pattern": "^(?:project:[0-9a-f-]{36}|widget:[a-z][a-z0-9-]{0,31}:[a-z][a-z0-9-]{0,31})$"
+                  },
+                  "x": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 11
+                  },
+                  "y": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1000
+                  },
+                  "size": {
+                    "type": "string",
+                    "enum": [
+                      "icon",
+                      "small",
+                      "medium",
+                      "large",
+                      "wide",
+                      "full"
+                    ]
+                  }
+                },
+                "required": [
+                  "tile",
+                  "x",
+                  "y",
+                  "size"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "8": {
+              "maxItems": 200,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "tile": {
+                    "type": "string",
+                    "pattern": "^(?:project:[0-9a-f-]{36}|widget:[a-z][a-z0-9-]{0,31}:[a-z][a-z0-9-]{0,31})$"
+                  },
+                  "x": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 11
+                  },
+                  "y": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1000
+                  },
+                  "size": {
+                    "type": "string",
+                    "enum": [
+                      "icon",
+                      "small",
+                      "medium",
+                      "large",
+                      "wide",
+                      "full"
+                    ]
+                  }
+                },
+                "required": [
+                  "tile",
+                  "x",
+                  "y",
+                  "size"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "12": {
+              "maxItems": 200,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "tile": {
+                    "type": "string",
+                    "pattern": "^(?:project:[0-9a-f-]{36}|widget:[a-z][a-z0-9-]{0,31}:[a-z][a-z0-9-]{0,31})$"
+                  },
+                  "x": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 11
+                  },
+                  "y": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1000
+                  },
+                  "size": {
+                    "type": "string",
+                    "enum": [
+                      "icon",
+                      "small",
+                      "medium",
+                      "large",
+                      "wide",
+                      "full"
+                    ]
+                  }
+                },
+                "required": [
+                  "tile",
+                  "x",
+                  "y",
+                  "size"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "hidden",
+        "layouts"
+      ],
+      "additionalProperties": false
+    },
+    "restHomeTileSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "tile": {
+          "type": "string",
+          "pattern": "^(?:project:[0-9a-f-]{36}|widget:[a-z][a-z0-9-]{0,31}:[a-z][a-z0-9-]{0,31})$"
+        },
+        "x": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 11
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "size": {
+          "type": "string",
+          "enum": [
+            "icon",
+            "small",
+            "medium",
+            "large",
+            "wide",
+            "full"
+          ]
+        }
+      },
+      "required": [
+        "tile",
+        "x",
+        "y",
+        "size"
+      ],
+      "additionalProperties": false
+    },
     "restListingInputSchema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
@@ -5350,11 +5577,197 @@
               "type": "null"
             }
           ]
+        },
+        "home": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "hidden": {
+                  "maxItems": 200,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^(?:project:[0-9a-f-]{36}|widget:[a-z][a-z0-9-]{0,31}:[a-z][a-z0-9-]{0,31})$"
+                  }
+                },
+                "layouts": {
+                  "type": "object",
+                  "properties": {
+                    "4": {
+                      "maxItems": 200,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "tile": {
+                            "type": "string",
+                            "pattern": "^(?:project:[0-9a-f-]{36}|widget:[a-z][a-z0-9-]{0,31}:[a-z][a-z0-9-]{0,31})$"
+                          },
+                          "x": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 11
+                          },
+                          "y": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 1000
+                          },
+                          "size": {
+                            "type": "string",
+                            "enum": [
+                              "icon",
+                              "small",
+                              "medium",
+                              "large",
+                              "wide",
+                              "full"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "tile",
+                          "x",
+                          "y",
+                          "size"
+                        ]
+                      }
+                    },
+                    "6": {
+                      "maxItems": 200,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "tile": {
+                            "type": "string",
+                            "pattern": "^(?:project:[0-9a-f-]{36}|widget:[a-z][a-z0-9-]{0,31}:[a-z][a-z0-9-]{0,31})$"
+                          },
+                          "x": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 11
+                          },
+                          "y": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 1000
+                          },
+                          "size": {
+                            "type": "string",
+                            "enum": [
+                              "icon",
+                              "small",
+                              "medium",
+                              "large",
+                              "wide",
+                              "full"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "tile",
+                          "x",
+                          "y",
+                          "size"
+                        ]
+                      }
+                    },
+                    "8": {
+                      "maxItems": 200,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "tile": {
+                            "type": "string",
+                            "pattern": "^(?:project:[0-9a-f-]{36}|widget:[a-z][a-z0-9-]{0,31}:[a-z][a-z0-9-]{0,31})$"
+                          },
+                          "x": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 11
+                          },
+                          "y": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 1000
+                          },
+                          "size": {
+                            "type": "string",
+                            "enum": [
+                              "icon",
+                              "small",
+                              "medium",
+                              "large",
+                              "wide",
+                              "full"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "tile",
+                          "x",
+                          "y",
+                          "size"
+                        ]
+                      }
+                    },
+                    "12": {
+                      "maxItems": 200,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "tile": {
+                            "type": "string",
+                            "pattern": "^(?:project:[0-9a-f-]{36}|widget:[a-z][a-z0-9-]{0,31}:[a-z][a-z0-9-]{0,31})$"
+                          },
+                          "x": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 11
+                          },
+                          "y": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 1000
+                          },
+                          "size": {
+                            "type": "string",
+                            "enum": [
+                              "icon",
+                              "small",
+                              "medium",
+                              "large",
+                              "wide",
+                              "full"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "tile",
+                          "x",
+                          "y",
+                          "size"
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              "required": [
+                "hidden",
+                "layouts"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
-      },
-      "required": [
-        "language"
-      ]
+      }
     },
     "restMeSchema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -5555,6 +5968,201 @@
               "type": "string",
               "maxLength": 35,
               "pattern": "^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "home": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "hidden": {
+                  "maxItems": 200,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^(?:project:[0-9a-f-]{36}|widget:[a-z][a-z0-9-]{0,31}:[a-z][a-z0-9-]{0,31})$"
+                  }
+                },
+                "layouts": {
+                  "type": "object",
+                  "properties": {
+                    "4": {
+                      "maxItems": 200,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "tile": {
+                            "type": "string",
+                            "pattern": "^(?:project:[0-9a-f-]{36}|widget:[a-z][a-z0-9-]{0,31}:[a-z][a-z0-9-]{0,31})$"
+                          },
+                          "x": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 11
+                          },
+                          "y": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 1000
+                          },
+                          "size": {
+                            "type": "string",
+                            "enum": [
+                              "icon",
+                              "small",
+                              "medium",
+                              "large",
+                              "wide",
+                              "full"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "tile",
+                          "x",
+                          "y",
+                          "size"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "6": {
+                      "maxItems": 200,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "tile": {
+                            "type": "string",
+                            "pattern": "^(?:project:[0-9a-f-]{36}|widget:[a-z][a-z0-9-]{0,31}:[a-z][a-z0-9-]{0,31})$"
+                          },
+                          "x": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 11
+                          },
+                          "y": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 1000
+                          },
+                          "size": {
+                            "type": "string",
+                            "enum": [
+                              "icon",
+                              "small",
+                              "medium",
+                              "large",
+                              "wide",
+                              "full"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "tile",
+                          "x",
+                          "y",
+                          "size"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "8": {
+                      "maxItems": 200,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "tile": {
+                            "type": "string",
+                            "pattern": "^(?:project:[0-9a-f-]{36}|widget:[a-z][a-z0-9-]{0,31}:[a-z][a-z0-9-]{0,31})$"
+                          },
+                          "x": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 11
+                          },
+                          "y": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 1000
+                          },
+                          "size": {
+                            "type": "string",
+                            "enum": [
+                              "icon",
+                              "small",
+                              "medium",
+                              "large",
+                              "wide",
+                              "full"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "tile",
+                          "x",
+                          "y",
+                          "size"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "12": {
+                      "maxItems": 200,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "tile": {
+                            "type": "string",
+                            "pattern": "^(?:project:[0-9a-f-]{36}|widget:[a-z][a-z0-9-]{0,31}:[a-z][a-z0-9-]{0,31})$"
+                          },
+                          "x": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 11
+                          },
+                          "y": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 1000
+                          },
+                          "size": {
+                            "type": "string",
+                            "enum": [
+                              "icon",
+                              "small",
+                              "medium",
+                              "large",
+                              "wide",
+                              "full"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "tile",
+                          "x",
+                          "y",
+                          "size"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "hidden",
+                "layouts"
+              ],
+              "additionalProperties": false
             },
             {
               "type": "null"
@@ -8512,6 +9120,23 @@
         "args"
       ]
     },
+    "restPluginConsentPatchSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "consent": {
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 300
+          }
+        }
+      },
+      "required": [
+        "consent"
+      ]
+    },
     "restPluginDetailSchema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
@@ -8736,6 +9361,29 @@
                   "half",
                   "full"
                 ]
+              },
+              "sizes": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "small",
+                    "medium",
+                    "large",
+                    "wide",
+                    "full"
+                  ]
+                }
+              },
+              "defaultSize": {
+                "type": "string",
+                "enum": [
+                  "small",
+                  "medium",
+                  "large",
+                  "wide",
+                  "full"
+                ]
               }
             },
             "required": [
@@ -8779,6 +9427,12 @@
           ]
         },
         "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "optionalCapabilities": {
           "type": "array",
           "items": {
             "type": "string"
@@ -10590,6 +11244,29 @@
                   "half",
                   "full"
                 ]
+              },
+              "sizes": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "small",
+                    "medium",
+                    "large",
+                    "wide",
+                    "full"
+                  ]
+                }
+              },
+              "defaultSize": {
+                "type": "string",
+                "enum": [
+                  "small",
+                  "medium",
+                  "large",
+                  "wide",
+                  "full"
+                ]
               }
             },
             "required": [
@@ -10633,6 +11310,12 @@
           ]
         },
         "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "optionalCapabilities": {
           "type": "array",
           "items": {
             "type": "string"
@@ -10941,6 +11624,29 @@
             "half",
             "full"
           ]
+        },
+        "sizes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "small",
+              "medium",
+              "large",
+              "wide",
+              "full"
+            ]
+          }
+        },
+        "defaultSize": {
+          "type": "string",
+          "enum": [
+            "small",
+            "medium",
+            "large",
+            "wide",
+            "full"
+          ]
         }
       },
       "required": [
@@ -11180,6 +11886,29 @@
                         "half",
                         "full"
                       ]
+                    },
+                    "sizes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "small",
+                          "medium",
+                          "large",
+                          "wide",
+                          "full"
+                        ]
+                      }
+                    },
+                    "defaultSize": {
+                      "type": "string",
+                      "enum": [
+                        "small",
+                        "medium",
+                        "large",
+                        "wide",
+                        "full"
+                      ]
                     }
                   },
                   "required": [
@@ -11223,6 +11952,12 @@
                 ]
               },
               "capabilities": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "optionalCapabilities": {
                 "type": "array",
                 "items": {
                   "type": "string"

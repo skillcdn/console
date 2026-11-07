@@ -331,21 +331,36 @@ describe("a session", () => {
         body: JSON.stringify(body),
       });
     expect((await me(h, cookie)).home).toBeNull();
-    const home = [
-      { plugin: "hr", widget: "today", size: "large", place: "home:top" },
-      { plugin: "hello", widget: "latest", size: "small" },
-    ];
+    const home = {
+      hidden: ["project:0199c4d8-0000-7000-8000-000000000001"],
+      layouts: {
+        8: [
+          { tile: "widget:hr:today", x: 2, y: 0, size: "large" },
+          { tile: "project:0199c4d8-0000-7000-8000-000000000002", x: 7, y: 3, size: "icon" },
+        ],
+        4: [{ tile: "widget:hello:latest", x: 0, y: 0, size: "small" }],
+      },
+    };
     const kept = await patch({ home });
     expect(kept.status, await kept.clone().text()).toBe(200);
     expect(restMeSchema.parse(await kept.json()).home).toEqual(home);
     expect((await me(h, cookie)).home).toEqual(home);
-    // The language changes beside it, and leaves it; nothing named, or a size that is not one, is refused.
+    // The language changes beside it, and leaves it; nothing named, or what is not a page, is refused.
     expect((await patch({ language: "ko" })).status).toBe(200);
     expect(await me(h, cookie)).toMatchObject({ language: "ko", home });
     expect((await patch({})).status).toBe(400);
-    expect((await patch({ home: [{ plugin: "hr", widget: "today", size: "huge" }] })).status).toBe(
-      400,
-    );
+    const tile = { tile: "widget:hr:today", x: 0, y: 0, size: "small" };
+    for (const wrong of [
+      [tile],
+      { hidden: [], layouts: { 8: [{ ...tile, size: "huge" }] } },
+      { hidden: [], layouts: { 8: [{ ...tile, x: 12 }] } },
+      { hidden: [], layouts: { 8: [{ ...tile, y: -1 }] } },
+      { hidden: [], layouts: { 8: [{ ...tile, tile: "widget:../../etc" }] } },
+      { hidden: ["task:1"], layouts: {} },
+      { hidden: [], layouts: { 8: Array.from({ length: 201 }, () => tile) } },
+    ]) {
+      expect((await patch({ home: wrong })).status).toBe(400);
+    }
     expect((await patch({ home: null, language: null })).status).toBe(200);
     expect(await me(h, cookie)).toMatchObject({ language: null, home: null });
   });

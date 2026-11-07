@@ -193,24 +193,6 @@ export const ko: Messages = {
       choose: "선택…",
     },
     frameUnavailable: "지금은 표시할 수 없습니다.",
-    widgets: {
-      edit: "위젯 편집",
-      done: "완료",
-      reset: "기본 배치",
-      add: "위젯 추가",
-      remove: "빼기",
-      size: "크기",
-      moveUp: "위로",
-      moveDown: "아래로",
-      none: "여기에 위젯이 없습니다.",
-      sizes: {
-        small: "소형",
-        medium: "중형",
-        large: "대형",
-        wide: "와이드",
-        full: "전체",
-      },
-    },
     capability: {
       files: { name: "파일", opens: "레코드에 파일을 붙입니다. 배포가 허용한 용량까지." },
       "people:read": { name: "사람 읽기", opens: "보는 사람이 볼 수 있는 사람들을 읽습니다." },
@@ -1027,6 +1009,23 @@ export const ko: Messages = {
       removeFile: (name) => `${name} 빼기`,
       write: "페이지 쓰기",
       writeVersion: "새 버전 쓰기",
+    },
+  },
+
+  home: {
+    edit: "화면 편집",
+    hint: "끌어서 옮기세요. 크기는 오른쪽 위에서 고르고, ×로 화면에서 뺍니다.",
+    done: "완료",
+    add: "다시 추가",
+    remove: "화면에서 제거",
+    size: "크기",
+    sizes: {
+      icon: "아이콘",
+      small: "소형",
+      medium: "중형",
+      large: "대형",
+      wide: "와이드",
+      full: "전체",
     },
   },
 

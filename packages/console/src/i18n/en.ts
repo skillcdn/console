@@ -235,25 +235,6 @@ export const en = {
     },
     /** What stands in for a frame the console has nothing to show in. */
     frameUnavailable: "This can't be shown right now.",
-    /** The front page's widgets, arranged by the person (ADR-0059). */
-    widgets: {
-      edit: "Edit widgets",
-      done: "Done",
-      reset: "Default layout",
-      add: "Add a widget",
-      remove: "Remove",
-      size: "Size",
-      moveUp: "Move up",
-      moveDown: "Move down",
-      none: "No widget here.",
-      sizes: {
-        small: "Small",
-        medium: "Medium",
-        large: "Large",
-        wide: "Wide",
-        full: "Full",
-      } as Record<string, string>,
-    },
     /** The capabilities (docs/specs/plugins.md, "Capabilities"), each by a name and the sentence of what it opens, as an administrator reads them before consenting. */
     capability: {
       files: {
@@ -1096,6 +1077,24 @@ export const en = {
       removeFile: (name: string) => `Take ${name} out`,
       write: "Write the page",
       writeVersion: "Write a new version",
+    },
+  },
+
+  /** The front page as the person arranges it (ADR-0061). */
+  home: {
+    edit: "Edit layout",
+    hint: "Drag to move. Pick a size at the top right; × takes a tile off this page.",
+    done: "Done",
+    add: "Add back",
+    remove: "Remove from this page",
+    size: "Size",
+    sizes: {
+      icon: "Icon",
+      small: "Small",
+      medium: "Medium",
+      large: "Large",
+      wide: "Wide",
+      full: "Full",
     },
   },
 

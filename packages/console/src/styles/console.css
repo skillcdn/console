@@ -541,121 +541,11 @@ html[data-console] body {
   background: transparent;
 }
 
-/* The widgets of the front page: a grid of six columns, above or below the projects. The page's
-   head keeps its own distance above the top ones. */
-
-.sc-widgets {
-  --sc-widget-row: 14rem;
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  grid-auto-rows: var(--sc-widget-row);
-  grid-auto-flow: dense;
-  gap: var(--sc-space-4);
-}
-
-.sc-widgets-top {
-  margin: 0 0 var(--sc-space-5);
-}
-
-.sc-widgets-bottom {
-  margin: var(--sc-space-5) 0 0;
-}
-
-.sc-widget {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  grid-column: span 6;
-  min-height: 0;
-  padding: var(--sc-space-3) var(--sc-space-4);
-  overflow: hidden;
-  border: var(--sc-border);
-  border-radius: var(--sc-radius-lg);
-  background: var(--sc-color-bg-raised);
-}
-
-/* A widget's frame fills the cells its size gives it: the plugin lays itself out for the size. */
-.sc-widget .sc-plugin-frame-widget {
-  height: 100%;
-  min-height: 0;
-}
-
 /* What stands in for a frame that has nothing to show. */
 .sc-plugin-frame-unavailable {
   margin: 0;
   color: var(--sc-color-text-muted);
   font-size: var(--sc-text-sm);
-}
-
-.sc-widget-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sc-space-2);
-  margin: 0 0 var(--sc-space-2);
-}
-
-.sc-widget-head .sc-widget-title {
-  flex: 1;
-  margin: 0;
-}
-
-/* The tools of a widget while the page is edited: its size, its place in the order, the way out. */
-.sc-widget-editing {
-  border-color: var(--sc-color-point);
-  box-shadow: 0 0 0 2px var(--sc-color-point-subtle);
-}
-
-.sc-widget-tools {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sc-space-1);
-}
-
-.sc-widget-tools .sc-input {
-  width: auto;
-  min-height: 1.75rem;
-  padding-block: 0;
-  font-size: var(--sc-text-sm);
-}
-
-.sc-widgets-edit {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sc-space-2);
-  margin: 0 0 var(--sc-space-3);
-}
-
-.sc-widgets-edit .sc-input {
-  width: auto;
-}
-
-.sc-widget-large,
-.sc-widget-full {
-  grid-row: span 2;
-}
-
-.sc-widget-title {
-  margin: 0 0 var(--sc-space-2);
-  font-size: var(--sc-text-sm);
-  font-weight: var(--sc-weight-medium);
-  color: var(--sc-color-text-muted);
-}
-
-@media (min-width: 48rem) {
-  .sc-widget-small {
-    grid-column: span 2;
-  }
-
-  .sc-widget-medium,
-  .sc-widget-large {
-    grid-column: span 3;
-  }
-
-  .sc-widget-wide,
-  .sc-widget-full {
-    grid-column: span 6;
-  }
 }
 
 /* What waits, beside a tab's name: a count in the point colour, so it reads before the words. */
@@ -955,7 +845,8 @@ html[data-console] body {
 
 .sc-panel,
 .sc-column,
-.sc-project,
+.sc-tile-pane,
+.sc-home-bar,
 .sc-person-card,
 .sc-decision,
 .sc-run,
@@ -2782,116 +2673,9 @@ select.sc-input-quiet:focus-visible {
   font-size: var(--sc-text-sm);
 }
 
-/* Projects: what a person may see, each with what they are in it and what waits in it. */
-
-.sc-projects {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
-  gap: var(--sc-space-4);
-}
-
-.sc-project {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sc-space-2);
-  padding: var(--sc-space-5);
-  border-radius: var(--sc-radius-xl);
-  transition:
-    border-color var(--sc-transition),
-    background var(--sc-transition),
-    box-shadow var(--sc-transition);
-}
-
-.sc-project:hover,
-.sc-project:focus-within {
-  border-color: var(--sc-color-accent);
-  background: var(--sc-glass-surface-hover);
-  box-shadow: var(--sc-glass-sheen), var(--sc-glass-lift), var(--sc-glow);
-}
-
-/* The head of a project reads on three lines: the mark with the name beside it, the key under
-   the name, and the badges on a line of their own; the mark floats so that the name and the key
-   stack beside it without a box around them. */
-.sc-project-head {
-  display: block;
-}
-
-.sc-project-head::after {
-  content: "";
-  display: block;
-  clear: both;
-}
-
-.sc-project-head > :first-child {
-  float: left;
-  margin-inline-end: var(--sc-space-3);
-}
-
-.sc-project-head > .sc-badge {
-  margin-top: var(--sc-space-3);
-  margin-inline-end: var(--sc-space-1);
-}
-
-/* The whole pane is the way in: the name's link stretches over it. */
-.sc-project-name {
-  display: block;
-  color: var(--sc-color-text);
-  font-size: var(--sc-text-lg);
-  font-weight: var(--sc-weight-bold);
-  line-height: var(--sc-leading-snug);
-  text-decoration: none;
-  overflow-wrap: anywhere;
-}
-
-.sc-project-name::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-}
-
-.sc-project-name:hover {
-  color: var(--sc-color-text);
-}
-
-.sc-project-name:focus-visible {
-  outline: none;
-}
-
 .sc-project-key {
   color: var(--sc-color-text-faint);
   font-size: var(--sc-text-xs);
-}
-
-/* Under the name, and past the mark: the key ends below the mark, so that the badges after it
-   start at the edge. */
-.sc-project-head > .sc-project-key {
-  display: block;
-  margin-top: var(--sc-space-1);
-}
-
-.sc-project-head > .sc-project-key::after {
-  content: "";
-  display: block;
-  clear: both;
-}
-
-.sc-project-description {
-  margin-top: var(--sc-space-1);
-  color: var(--sc-color-text-muted);
-  font-size: var(--sc-text-sm);
-}
-
-.sc-project-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sc-space-2);
-  margin-top: auto;
-  padding-top: var(--sc-space-3);
-  border-top: var(--sc-hairline);
-}
-
-.sc-project-meta:empty {
-  display: none;
 }
 
 .sc-members {
@@ -4104,14 +3888,6 @@ select.sc-input-quiet:focus-visible {
 
 /* The mark hangs in the margin, so that what wraps onto a second line, a badge most often,
    starts under the name rather than under the mark. */
-.sc-project-head:has(> .sc-mark-md) {
-  padding-inline-start: calc(2rem + var(--sc-space-3));
-}
-
-.sc-project-head > .sc-mark-md {
-  margin-inline-start: calc(-2rem - var(--sc-space-3));
-}
-
 .sc-mark-lg {
   width: 3rem;
   height: 3rem;
@@ -6325,5 +6101,389 @@ select.sc-input-quiet:focus-visible {
 @media (max-width: 40rem) {
   .sc-plugin-role {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* The front page (ADR-0061): one grid of square cells, each as wide as the page gives it, a
+   tile's place and shape numbers on its style. A tile stands where a transform puts it, so that
+   it glides to a new place and the frame in it stays loaded. */
+
+.sc-home {
+  container-type: inline-size;
+}
+
+.sc-home-grid {
+  --sc-home-columns: 8;
+  --sc-home-rows: 1;
+  --sc-home-gap: var(--sc-space-4);
+  --sc-home-cell: calc(
+    (100cqi - (var(--sc-home-columns) - 1) * var(--sc-home-gap)) /
+    var(--sc-home-columns)
+  );
+  --sc-home-step: calc(var(--sc-home-cell) + var(--sc-home-gap));
+  position: relative;
+  height: calc(var(--sc-home-rows) * var(--sc-home-step) - var(--sc-home-gap));
+  row-gap: var(--sc-home-gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sc-home-grid[data-columns="4"] {
+  --sc-home-gap: var(--sc-space-3);
+}
+
+.sc-tile {
+  --sc-tile-x: 0;
+  --sc-tile-y: 0;
+  --sc-tile-w: 1;
+  --sc-tile-h: 1;
+  --sc-tile-left: 0px;
+  --sc-tile-top: 0px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: calc(var(--sc-tile-w) * var(--sc-home-step) - var(--sc-home-gap));
+  height: calc(var(--sc-tile-h) * var(--sc-home-step) - var(--sc-home-gap));
+  transform: translate(
+    calc(var(--sc-tile-x) * var(--sc-home-step)),
+    calc(var(--sc-tile-y) * var(--sc-home-step))
+  );
+  transition: transform 180ms ease-out;
+}
+
+.sc-tile-pane {
+  width: 100%;
+  height: 100%;
+  border-radius: var(--sc-radius-xl);
+  transition:
+    border-color var(--sc-transition),
+    background var(--sc-transition),
+    box-shadow var(--sc-transition);
+}
+
+/* A project as an icon: its mark and its name in the middle of the cell, what waits in the corner. */
+.sc-tile-project {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sc-space-2);
+  align-items: center;
+  justify-content: center;
+  padding: var(--sc-space-3);
+  color: var(--sc-color-text);
+  text-align: center;
+  text-decoration: none;
+}
+
+a.sc-tile-project:hover,
+a.sc-tile-project:focus-visible {
+  border-color: var(--sc-color-accent);
+  background: var(--sc-glass-surface-hover);
+  color: var(--sc-color-text);
+  box-shadow: var(--sc-glass-sheen), var(--sc-glass-lift), var(--sc-glow);
+}
+
+.sc-tile-project .sc-mark {
+  width: 3.25rem;
+  height: 3.25rem;
+  font-size: var(--sc-text-xl);
+}
+
+.sc-tile-name {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  font-size: var(--sc-text-sm);
+  font-weight: var(--sc-weight-medium);
+  line-height: var(--sc-leading-snug);
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.sc-tile-count {
+  position: absolute;
+  top: var(--sc-space-2);
+  right: var(--sc-space-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  padding-inline: var(--sc-space-1);
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-color-point);
+  color: var(--sc-color-bg-raised);
+  font-size: var(--sc-text-xs);
+  font-weight: var(--sc-weight-bold);
+  line-height: 1.25rem;
+}
+
+/* A project as a card: what it is under its name, read from the corner. */
+.sc-tile-project-card {
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: var(--sc-space-5);
+  overflow: hidden;
+  text-align: start;
+}
+
+.sc-tile-project-card .sc-tile-name {
+  font-size: var(--sc-text-lg);
+  font-weight: var(--sc-weight-bold);
+}
+
+.sc-tile-about {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.sc-tile-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-1);
+  margin-top: auto;
+}
+
+/* A widget: its name, and its frame filling the cells its size gives it. */
+.sc-tile-widget {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  padding: var(--sc-space-3) var(--sc-space-4);
+  overflow: hidden;
+}
+
+.sc-tile-title {
+  margin: 0 0 var(--sc-space-2);
+  overflow: hidden;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+  font-weight: var(--sc-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-tile-widget .sc-plugin-frame-widget {
+  height: 100%;
+  min-height: 0;
+}
+
+/* On a phone's cells the mark is smaller, and the name one line. */
+.sc-home-grid[data-columns="4"] .sc-tile-project:not(.sc-tile-project-card) {
+  gap: var(--sc-space-1);
+  padding: var(--sc-space-2);
+  border-radius: var(--sc-radius-lg);
+}
+
+.sc-home-grid[data-columns="4"] .sc-tile-project:not(.sc-tile-project-card) .sc-mark {
+  width: 2.25rem;
+  height: 2.25rem;
+  font-size: var(--sc-text-md);
+}
+
+.sc-home-grid[data-columns="4"] .sc-tile-project:not(.sc-tile-project-card) .sc-tile-name {
+  font-size: var(--sc-text-xs);
+  -webkit-line-clamp: 1;
+}
+
+/* While the page is arranged: the cells show as dots, every tile is a thing to take hold of, and
+   what is in a frame stays out of the pointer's way. */
+.sc-home-bar {
+  position: sticky;
+  top: var(--sc-space-3);
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-2) var(--sc-space-4);
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--sc-space-4);
+  padding: var(--sc-space-2) var(--sc-space-2) var(--sc-space-2) var(--sc-space-4);
+  border-radius: var(--sc-radius-lg);
+}
+
+.sc-home-hint {
+  margin: 0;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-home-bar-actions {
+  display: flex;
+  gap: var(--sc-space-2);
+  align-items: center;
+}
+
+.sc-home-tray {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-2);
+  align-items: center;
+  margin-bottom: var(--sc-space-4);
+}
+
+.sc-home-add {
+  padding: var(--sc-space-1) var(--sc-space-3);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-color-sheet);
+  color: var(--sc-color-text);
+  font: inherit;
+  font-size: var(--sc-text-sm);
+  cursor: pointer;
+}
+
+.sc-home-add:hover {
+  border-color: var(--sc-color-accent);
+}
+
+.sc-home-editing .sc-home-grid {
+  background-image: radial-gradient(circle, var(--sc-color-text-faint) 1px, transparent 1.5px);
+  background-position: calc(var(--sc-home-cell) / 2) calc(var(--sc-home-cell) / 2);
+  background-size: var(--sc-home-step) var(--sc-home-step);
+}
+
+.sc-home-editing .sc-tile {
+  cursor: grab;
+  user-select: none;
+}
+
+.sc-home-editing .sc-tile:focus-visible {
+  outline: var(--sc-focus-ring);
+  outline-offset: 2px;
+}
+
+.sc-home-editing .sc-tile:hover .sc-tile-pane {
+  border-color: var(--sc-color-accent);
+}
+
+.sc-home-editing .sc-plugin-frame {
+  pointer-events: none;
+}
+
+/* A finger resting on a tile is neither selecting its words nor asking for the page's menu. */
+@media (pointer: coarse) {
+  .sc-home-editing .sc-tile {
+    -webkit-touch-callout: none;
+  }
+}
+
+/* The tile in hand, under the pointer, and the cells it would land on. */
+.sc-tile-held {
+  z-index: 10;
+  transform: translate(var(--sc-tile-left), var(--sc-tile-top)) scale(1.03);
+  transition: none;
+}
+
+.sc-tile-held .sc-tile-pane {
+  box-shadow: var(--sc-glass-sheen), var(--sc-glass-lift), var(--sc-glow);
+}
+
+.sc-home-held,
+.sc-home-held .sc-tile,
+.sc-home-held .sc-tile * {
+  cursor: grabbing;
+}
+
+.sc-tile-slot {
+  border: 2px dashed var(--sc-color-point);
+  border-radius: var(--sc-radius-xl);
+  background: var(--sc-color-point-subtle);
+}
+
+/* The ways on a tile while the page is arranged: off the page at its corner, the sizes across. */
+.sc-tile-remove {
+  position: absolute;
+  top: calc(var(--sc-space-2) * -1);
+  left: calc(var(--sc-space-2) * -1);
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-color-bg-raised);
+  color: var(--sc-color-text);
+  font-size: var(--sc-text-sm);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.sc-tile-remove:hover {
+  border-color: var(--sc-color-accent);
+}
+
+.sc-tile-sizes {
+  position: absolute;
+  top: var(--sc-space-1);
+  right: var(--sc-space-1);
+  z-index: 1;
+  display: inline-flex;
+  gap: 1px;
+  margin: 0;
+  padding: 1px;
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-bg-raised);
+}
+
+.sc-tile-size {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding: 0 3px;
+  border: 0;
+  border-radius: var(--sc-radius-sm);
+  background: transparent;
+  color: var(--sc-color-text-muted);
+  cursor: pointer;
+}
+
+.sc-tile-size:hover {
+  background: var(--sc-color-bg-inset);
+}
+
+.sc-tile-size-on {
+  background: var(--sc-color-point-subtle);
+  color: var(--sc-color-point);
+}
+
+/* Under the sizes, a widget's name ends short of them; on small cells a project stands lower. */
+.sc-home-editing .sc-tile-title {
+  padding-inline-end: 4.5rem;
+}
+
+.sc-home-editing .sc-home-grid[data-columns="4"] .sc-tile-size,
+.sc-home-editing .sc-home-grid[data-columns="6"] .sc-tile-size {
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 2px;
+}
+
+.sc-home-editing .sc-home-grid[data-columns="4"] .sc-tile-project:not(.sc-tile-project-card),
+.sc-home-editing .sc-home-grid[data-columns="6"] .sc-tile-project:not(.sc-tile-project-card) {
+  justify-content: flex-end;
+}
+
+/* The size's shape in small: the cells it takes, a few pixels each. */
+.sc-tile-size-glyph {
+  display: block;
+  width: calc(var(--sc-tile-w) * 2px + 4px);
+  height: calc(var(--sc-tile-h) * 2px + 4px);
+  border: 1.5px solid currentcolor;
+  border-radius: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sc-tile {
+    transition: none;
   }
 }

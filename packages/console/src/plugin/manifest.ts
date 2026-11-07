@@ -165,15 +165,15 @@ const LEGACY_WIDGET_SIZES: Readonly<Record<PluginWidgetSize, PluginWidgetSizeNam
   full: "wide",
 };
 
-/** The columns and the rows of the six-column grid each size takes (ADR-0059). */
+/** The columns and the rows of the front page's grid of square cells each size takes (ADR-0061). */
 export const PLUGIN_WIDGET_SIZE_CELLS: Readonly<
   Record<PluginWidgetSizeName, { readonly columns: number; readonly rows: number }>
 > = {
-  small: { columns: 2, rows: 1 },
-  medium: { columns: 3, rows: 1 },
-  large: { columns: 3, rows: 2 },
-  wide: { columns: 6, rows: 1 },
-  full: { columns: 6, rows: 2 },
+  small: { columns: 2, rows: 2 },
+  medium: { columns: 4, rows: 2 },
+  large: { columns: 4, rows: 4 },
+  wide: { columns: 8, rows: 2 },
+  full: { columns: 8, rows: 4 },
 };
 
 /**

@@ -285,7 +285,7 @@ export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies):
       return c.json(
         errorBody(
           "request.invalid",
-          "The patch names no language tag and no arrangement of the front page's widgets that reads.",
+          "The patch names no language tag and no arrangement of the front page that reads.",
         ),
         400,
       );

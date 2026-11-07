@@ -22,7 +22,6 @@ import {
   type RestDecisionInput,
   type RestDecisionPatch,
   type RestEvent,
-  type RestHomeWidget,
   type RestMyDecisions,
   type RestPluginDetail,
   type RestProject,
@@ -48,18 +47,17 @@ import { DecisionForm } from "./components/decision-form.js";
 import { DecisionCard, DecisionList, type DecisionListProps } from "./components/decision-list.js";
 import { EventFeed, type EventFeedProps } from "./components/event-feed.js";
 import { GoalForm, GoalList, type GoalListProps, GoalView, goalMonth } from "./components/goals.js";
+import { HomeGrid, type HomeGridProps } from "./components/home.js";
 import { MyDecisions } from "./components/my-decisions.js";
 import { PackTokenWays } from "./components/pack-token.js";
 import { PAGE_SIZE } from "./components/paged.js";
 import { ListingForm, PeopleList, type PeopleListProps } from "./components/people.js";
-import { PluginFrame, PluginWidgets } from "./components/plugin-frame.js";
+import { PluginFrame } from "./components/plugin-frame.js";
 import { PluginSettingsList, PluginSettingsView } from "./components/plugin-settings.js";
 import {
   MemberList,
   type MemberListProps,
   ProjectForm,
-  ProjectList,
-  type ProjectListProps,
   ProjectMark,
 } from "./components/projects.js";
 import { type RemotePictureSrc, RemotePicturesContext } from "./components/remote-pictures.js";
@@ -100,7 +98,6 @@ import { ConnectPage } from "./connect-page.js";
 import { type ConsoleData, useConsoleData } from "./data.js";
 import { monthOf, today } from "./dates.js";
 import { DocsPage } from "./docs-page.js";
-import { availableWidgets } from "./home-widgets.js";
 import {
   chooseLanguage,
   DEFAULT_LANGUAGES,
@@ -159,7 +156,7 @@ export interface ConsoleComponents {
   readonly TokenList: ComponentType<TokenListProps>;
   readonly PeopleList: ComponentType<PeopleListProps>;
   readonly SkillList: ComponentType<SkillListProps>;
-  readonly ProjectList: ComponentType<ProjectListProps>;
+  readonly HomeGrid: ComponentType<HomeGridProps>;
   readonly MemberList: ComponentType<MemberListProps>;
   readonly Calendar: ComponentType<CalendarProps>;
   readonly GoalList: ComponentType<GoalListProps>;
@@ -177,7 +174,7 @@ export const DEFAULT_COMPONENTS: ConsoleComponents = {
   TokenList,
   PeopleList,
   SkillList,
-  ProjectList,
+  HomeGrid,
   MemberList,
   Calendar,
   GoalList,
@@ -415,30 +412,11 @@ function ProjectsPage(props: {
   readonly making: boolean;
 }) {
   const words = useWords().projects;
-  const widgetWords = useWords().plugins.widgets;
+  const homeWords = useWords().home;
   const { data, components, navigation, client, language } = props;
   const me = data.me;
-  // The person arranges the front page's widgets (ADR-0059): which, how large, in what order.
+  // The person arranges the page (ADR-0061): the projects and the widgets, tiles on one grid.
   const [arranging, setArranging] = useState(false);
-  const hasWidgets = availableWidgets(data.plugins).length > 0;
-  const arrange = (home: readonly RestHomeWidget[] | null) =>
-    void data.actions.updateMe({ home: home === null ? null : [...home] }).catch(() => undefined);
-  /** The plugins' widgets at a place of this page (ADR-0054, ADR-0059), as the person arranged them. */
-  const widgets = (place: "home:top" | "home:bottom") =>
-    me === undefined ? null : (
-      <PluginWidgets
-        plugins={data.plugins}
-        place={place}
-        me={me}
-        language={language}
-        client={client}
-        navigation={navigation}
-        nameOf={(name) => pluginWordOf(name, language)}
-        arrangement={me.home ?? null}
-        editing={arranging}
-        onArrange={arrange}
-      />
-    );
   const { busy, error, act } = useAction();
   const href = (project: RestProject) => projectHref(project.key);
   // A project is made by an administrator (ADR-0045): a member sees the list alone, the form's
@@ -449,32 +427,22 @@ function ProjectsPage(props: {
     <>
       <div className="sc-page-head">
         <h1 className="sc-page-title">{words.title}</h1>
-        <div className="sc-page-actions">
-          {hasWidgets &&
-            me?.person !== null &&
-            (arranging ? (
-              <>
-                <Button size="sm" variant="ghost" onClick={() => arrange(null)}>
-                  {widgetWords.reset}
-                </Button>
-                <Button size="sm" onClick={() => setArranging(false)}>
-                  {widgetWords.done}
-                </Button>
-              </>
-            ) : (
+        {!arranging && (
+          <div className="sc-page-actions">
+            {me !== undefined && me.person !== null && (
               <Button size="sm" variant="ghost" onClick={() => setArranging(true)}>
-                {widgetWords.edit}
+                {homeWords.edit}
               </Button>
-            ))}
-          {administrator && !making && (
-            <LinkButton href={PATHS.newProject} variant="primary">
-              {words.newProject}
-            </LinkButton>
-          )}
-        </div>
+            )}
+            {administrator && !making && (
+              <LinkButton href={PATHS.newProject} variant="primary">
+                {words.newProject}
+              </LinkButton>
+            )}
+          </div>
+        )}
       </div>
       {error !== undefined && <Callout tone="danger">{error}</Callout>}
-      {widgets("home:top")}
       {making && (
         <section className="sc-panel sc-panel-form" aria-label={words.form.aria}>
           <ProjectForm
@@ -494,10 +462,30 @@ function ProjectsPage(props: {
           />
         </section>
       )}
-      <components.ProjectList
+      <components.HomeGrid
         projects={data.projects}
+        plugins={data.plugins}
+        home={me?.home}
+        editing={arranging}
+        onSave={(home) => data.actions.updateMe({ home })}
+        onDone={() => setArranging(false)}
         projectHref={href}
         onOpen={(project) => navigation.go(href(project))}
+        nameOf={(name) => pluginWordOf(name, language)}
+        renderWidget={(tile, size) =>
+          me === undefined ? null : (
+            <PluginFrame
+              plugin={tile.plugin}
+              widget={tile.widget.key}
+              size={size}
+              me={me}
+              language={language}
+              client={client}
+              navigation={navigation}
+              title={pluginWordOf(tile.widget.name, language)}
+            />
+          )
+        }
         empty={
           <EmptyState
             title={words.empty.title}
@@ -510,7 +498,6 @@ function ProjectsPage(props: {
           />
         }
       />
-      {widgets("home:bottom")}
     </>
   );
 }

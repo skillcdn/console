@@ -82,6 +82,12 @@ export {
   type GoalViewProps,
   goalMonth,
 } from "./components/goals.js";
+export {
+  HomeGrid,
+  type HomeGridProps,
+  ProjectTile,
+  type ProjectTileProps,
+} from "./components/home.js";
 export { Markdown, type MarkdownProps } from "./components/markdown.js";
 export { MyDecisions, type MyDecisionsProps } from "./components/my-decisions.js";
 export {
@@ -135,8 +141,6 @@ export {
   BridgeRefusal,
   PluginFrame,
   type PluginFrameProps,
-  PluginWidgets,
-  type PluginWidgetsProps,
   performBridgeCall,
   readTheme,
 } from "./components/plugin-frame.js";
@@ -149,8 +153,6 @@ export {
   PROJECT_ROLE_LABELS,
   ProjectForm,
   type ProjectFormProps,
-  ProjectList,
-  type ProjectListProps,
   ProjectMark,
   ProjectRoleBadge,
   VISIBILITY_LABELS,

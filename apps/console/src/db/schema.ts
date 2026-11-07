@@ -15,7 +15,7 @@ import {
   type RestDecisionOption,
   type RestDecisionTranslations,
   type RestEventData,
-  type RestHomeWidget,
+  type RestHome,
   type RestTaskLink,
   type RestTaskTranslations,
   RUN_STATUSES,
@@ -136,8 +136,8 @@ export const people = pgTable(
     language: text(),
     /** Whom the person reports to, another person of the workspace, set by an administrator; null for nobody. */
     managerId: uuid().references((): AnyPgColumn => people.id),
-    /** The person's own arrangement of the front page's widgets (ADR-0059), in order; null for the manifests' default. */
-    home: jsonb().$type<RestHomeWidget[]>(),
+    /** The person's own front page (ADR-0061), what they took off it and what they arranged at each width; null while they have arranged nothing. */
+    home: jsonb().$type<RestHome>(),
     lastLoginAt: instant().notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),

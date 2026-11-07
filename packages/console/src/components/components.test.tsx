@@ -10,6 +10,7 @@ import type {
   RestGoal,
   RestMember,
   RestPerson,
+  RestPlugin,
   RestProject,
   RestRun,
   RestTask,
@@ -37,6 +38,7 @@ import { DecisionCard, DecisionList, DecisionLog } from "./decision-list.js";
 import { DocumentForm, DocumentList, DocumentView, FolderView } from "./documents.js";
 import { describeEvent, EventFeed } from "./event-feed.js";
 import { GoalForm, GoalList, GoalView, goalMonth } from "./goals.js";
+import { HomeGrid, type HomeGridProps } from "./home.js";
 import { Markdown } from "./markdown.js";
 import { MyDecisions } from "./my-decisions.js";
 import { PackConnect } from "./pack-connect.js";
@@ -51,14 +53,7 @@ import {
   wheelFactor,
   zoomAround,
 } from "./pictures.js";
-import {
-  keyOf,
-  MemberList,
-  PackTokenForm,
-  ProjectForm,
-  ProjectList,
-  ProjectMark,
-} from "./projects.js";
+import { keyOf, MemberList, PackTokenForm, ProjectForm, ProjectMark } from "./projects.js";
 import { RemotePicturesContext } from "./remote-pictures.js";
 import { GoalTimeline, timelineBars } from "./roadmap.js";
 import { RulesForm, RulesView } from "./rules.js";
@@ -1704,40 +1699,64 @@ describe("projects", () => {
     ...overrides,
   });
 
-  it("lists what a person may see, each with what they are in it and what waits, as text", () => {
-    const html = renderToStaticMarkup(
-      <ProjectList
-        projects={[
-          project(),
-          project({
-            id: "0199c4d8-0000-7000-8000-000000000051",
-            key: "ops",
-            name: "Ops",
-            role: "member",
-            visibility: "workspace",
-            description: "",
-            openDecisions: 0,
-            openRuns: 0,
-          }),
-        ]}
+  /** The front page with the projects given, kept as an icon and a card by the layout given. */
+  const home = (projects: readonly RestProject[], props?: Partial<HomeGridProps>) =>
+    renderToStaticMarkup(
+      <HomeGrid
+        projects={projects}
+        plugins={[]}
+        home={null}
+        editing={false}
+        onSave={() => Promise.resolve()}
+        onDone={() => undefined}
         projectHref={(item) => `/projects/${item.key}`}
         onOpen={() => undefined}
+        nameOf={(name) => name.en ?? ""}
+        renderWidget={() => null}
+        {...props}
       />,
     );
+
+  it("stands each project as an icon that opens it, what waits on its corner, as text", () => {
+    const ops = project({
+      id: "0199c4d8-0000-7000-8000-000000000051",
+      key: "ops",
+      name: "Ops",
+      role: "member",
+      visibility: "workspace",
+      description: "",
+      openDecisions: 0,
+      openRuns: 0,
+    });
+    const html = home([project(), ops]);
     expect(html).toContain('href="/projects/web"');
     expect(html).toContain("The web &lt;app&gt;");
     expect(html).not.toContain("<app>");
-    expect(html).toContain("What we ship.");
-    expect(html).toContain("Owner");
-    expect(html).toContain("Member");
-    expect(html).toContain("Private");
-    // What is not private says so, in so many words: a project is never open by accident.
-    expect(html).toContain("Open to everyone");
     expect(html).toContain("2 decisions waiting");
+    expect(html.match(/sc-tile-count/g)).toHaveLength(1);
     expect(html).not.toContain("at work");
     // Each with its mark: the first letter of its name on a colour from its key, unless it names its own.
-    expect(html).toContain('class="sc-mark sc-mark-md sc-category-');
+    expect(html).toContain('class="sc-mark sc-mark-lg sc-category-');
     expect(html).toContain(">T</span>");
+    expect(html).not.toContain("What we ship.");
+    // As a card, what it is too.
+    const card = home([project(), ops], {
+      home: {
+        hidden: [],
+        layouts: {
+          8: [
+            { tile: `project:${project().id}`, x: 0, y: 0, size: "small" },
+            { tile: `project:${ops.id}`, x: 2, y: 0, size: "small" },
+          ],
+        },
+      },
+    });
+    expect(card).toContain("What we ship.");
+    expect(card).toContain("Owner");
+    expect(card).toContain("Member");
+    expect(card).toContain("Private");
+    // What is not private says so, in so many words: a project is never open by accident.
+    expect(card).toContain("Open to everyone");
     const marked = renderToStaticMarkup(
       <ProjectMark project={project({ color: "teal", symbol: "W2" })} size="lg" />,
     );
@@ -1746,16 +1765,51 @@ describe("projects", () => {
     const chosen = renderToStaticMarkup(<ProjectMark project={project()} />);
     expect(chosen).toBe(renderToStaticMarkup(<ProjectMark project={project()} />));
     expect(chosen).not.toContain("sc-category-gray");
-    expect(
-      renderToStaticMarkup(
-        <ProjectList
-          projects={[]}
-          projectHref={() => "/"}
-          onOpen={() => undefined}
-          empty={<p>none</p>}
-        />,
-      ),
-    ).toBe("<p>none</p>");
+    expect(home([], { empty: <p>none</p> })).toContain("<p>none</p>");
+  });
+
+  it("opens nothing while the page is arranged, and gives each tile the way off it and its sizes", () => {
+    const html = home([project()], { editing: true });
+    expect(html).not.toContain("<a ");
+    expect(html).not.toContain("href=");
+    expect(html).toContain("sc-home-editing");
+    expect(html).toContain('aria-label="Remove from this page: The web &lt;app&gt;"');
+    expect(html).toContain('aria-pressed="true" aria-label="Icon"');
+    expect(html).toContain('aria-pressed="false" aria-label="Small"');
+    expect(html).toContain(">Done</button>");
+    expect(html).toContain(">Cancel</button>");
+    // What the person took off waits to be added back.
+    const taken = home([project()], {
+      editing: true,
+      home: { hidden: [`project:${project().id}`], layouts: {} },
+    });
+    expect(taken).toContain("+ The web &lt;app&gt;");
+    expect(taken).not.toContain('class="sc-tile"');
+  });
+
+  it("draws only the frames of the widgets of a plugin that is on", () => {
+    const hello = {
+      key: "hello",
+      state: "enabled",
+      widgets: [
+        {
+          key: "latest",
+          name: { en: "Latest" },
+          place: "home:top",
+          size: "third",
+          sizes: ["small", "medium"],
+          defaultSize: "small",
+        },
+      ],
+    } as unknown as RestPlugin;
+    const drawn = (plugin: RestPlugin) =>
+      home([], {
+        plugins: [plugin],
+        renderWidget: (tile, size) => <i>{`frame of ${tile.widget.key} at ${size}`}</i>,
+      });
+    expect(drawn(hello)).toContain("frame of latest at small");
+    expect(drawn(hello)).toContain(">Latest</h2>");
+    expect(drawn({ ...hello, state: "disabled" })).not.toContain("frame of");
   });
 
   it("asks for a key and a name when making one, and keeps the key when changing one", () => {

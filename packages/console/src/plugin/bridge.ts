@@ -8,9 +8,9 @@ import { WEEK_STARTS, type WeekStart } from "../vocabulary.js";
 export const PLUGIN_BRIDGE_VERSION = 1;
 
 /**
- * The sizes a widget comes in (ADR-0059): columns and rows of the front page's six-column grid,
- * `small` 2×1, `medium` 3×1, `large` 3×2, `wide` 6×1, `full` 6×2. Here, so that a bundle learns
- * them without the manifest's schema.
+ * The sizes a widget comes in (ADR-0061): columns and rows of the front page's grid of square
+ * cells, `small` 2×2, `medium` 4×2, `large` 4×4, `wide` 8×2, `full` 8×4. Here, so that a bundle
+ * learns them without the manifest's schema.
  */
 export const PLUGIN_WIDGET_SIZE_NAMES = ["small", "medium", "large", "wide", "full"] as const;
 export type PluginWidgetSizeName = (typeof PLUGIN_WIDGET_SIZE_NAMES)[number];

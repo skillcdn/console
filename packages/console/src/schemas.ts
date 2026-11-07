@@ -20,7 +20,8 @@ import {
   MAX_DOCUMENT_LENGTH,
   MAX_DOCUMENT_PATH_LENGTH,
   MAX_FILE_NAME_LENGTH,
-  MAX_HOME_WIDGETS,
+  MAX_HOME_ROW,
+  MAX_HOME_TILES,
   MAX_LANGUAGE_TAG_LENGTH,
   MAX_LINK_LABEL_LENGTH,
   MAX_LINKS,
@@ -44,11 +45,7 @@ import {
   MAX_WORKERS,
   MIN_OPTIONS,
 } from "./limits.js";
-import {
-  PLUGIN_KEY_PATTERN,
-  PLUGIN_WIDGET_PLACES,
-  PLUGIN_WIDGET_SIZE_NAMES,
-} from "./plugin/manifest.js";
+import { PLUGIN_WIDGET_SIZE_NAMES } from "./plugin/manifest.js";
 import { hasForbiddenCodePoint } from "./text.js";
 import {
   ARTIFACT_KINDS,
@@ -218,30 +215,56 @@ const languageTag = z
   );
 
 /** What `PATCH /api/v1/me` is sent: the language the person chose, or `null` to choose none. */
-/**
- * One widget of a person's own front page (ADR-0059): which plugin's, which, how large, and
- * above or below the projects (the manifest's place when left out), in the order kept.
- */
-export const restHomeWidgetSchema = z.object({
-  plugin: z.string().check(z.regex(PLUGIN_KEY_PATTERN)),
-  widget: z.string().check(z.regex(PLUGIN_KEY_PATTERN)),
-  size: z.enum(PLUGIN_WIDGET_SIZE_NAMES),
-  place: z.optional(z.enum(PLUGIN_WIDGET_PLACES)),
-});
-export type RestHomeWidget = z.infer<typeof restHomeWidgetSchema>;
+/** The sizes of a tile on the front page (ADR-0061): a project's icon, and the widgets' family. */
+export const HOME_TILE_SIZES = ["icon", ...PLUGIN_WIDGET_SIZE_NAMES] as const;
 
-/** What `PATCH /api/v1/me` is sent: the language, the front page's widgets, either or both; `null` lets the console choose. */
+/** A tile by what it is: a project by its id, a widget by its plugin's key and its own. */
+const homeTileId = z
+  .string()
+  .check(
+    z.regex(
+      /^(?:project:[0-9a-f-]{36}|widget:[a-z][a-z0-9-]{0,31}:[a-z][a-z0-9-]{0,31})$/,
+      "must name a project or a widget",
+    ),
+  );
+
+/** One tile of a person's own front page, at a place of the grid and at a size. */
+export const restHomeTileSchema = z.object({
+  tile: homeTileId,
+  x: z.int().check(z.gte(0), z.lte(11)),
+  y: z.int().check(z.gte(0), z.lte(MAX_HOME_ROW)),
+  size: z.enum(HOME_TILE_SIZES),
+});
+export type RestHomeTile = z.infer<typeof restHomeTileSchema>;
+
+const homeLayoutSchema = z.array(restHomeTileSchema).check(z.maxLength(MAX_HOME_TILES));
+
+/**
+ * A person's own front page (ADR-0061): the tiles they took off it, which stay off, and what
+ * they arranged at each width of the grid, by its columns; what they have not seen yet takes
+ * the first room.
+ */
+export const restHomeSchema = z.object({
+  hidden: z.array(homeTileId).check(z.maxLength(MAX_HOME_TILES)),
+  layouts: z.object({
+    12: z.optional(homeLayoutSchema),
+    8: z.optional(homeLayoutSchema),
+    6: z.optional(homeLayoutSchema),
+    4: z.optional(homeLayoutSchema),
+  }),
+});
+export type RestHome = z.infer<typeof restHomeSchema>;
+
+/** What `PATCH /api/v1/me` is sent: the language, the front page, either or both; `null` lets the console choose. */
 export const restMePatchSchema = z
   .object({
     language: z.optional(z.nullable(languageTag)),
-    home: z.optional(
-      z.nullable(z.array(restHomeWidgetSchema).check(z.maxLength(MAX_HOME_WIDGETS))),
-    ),
+    home: z.optional(z.nullable(restHomeSchema)),
   })
   .check(
     z.refine(
       (patch) => patch.language !== undefined || patch.home !== undefined,
-      "must name a language or the front page's widgets",
+      "must name a language or the front page",
     ),
   );
 export type RestMePatch = z.infer<typeof restMePatchSchema>;
@@ -316,10 +339,10 @@ export const restMeSchema = z.object({
   /** The language the person chose for the pages (ADR-0012), or `null` for the browser's. */
   language: z.nullable(languageTag),
   /**
-   * The person's own arrangement of the front page's widgets (ADR-0059), in order, or `null` for
-   * the manifests' default; answered from 0.4.4 and read as optional.
+   * The person's own front page (ADR-0061), or `null` while they have arranged nothing; answered
+   * from 0.4.4 and read as optional.
    */
-  home: z.optional(z.nullable(z.array(restHomeWidgetSchema))),
+  home: z.optional(z.nullable(restHomeSchema)),
   signIn: z.array(restProviderSchema),
   /**
    * The console's version and the range of command versions it takes, as npm spells one
