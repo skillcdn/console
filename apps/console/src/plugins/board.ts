@@ -271,6 +271,7 @@ export class PluginBoard {
           name: workspace.name,
           languages: [...CONSOLE_LANGUAGES],
           timeZone: settings.timeZone ?? "UTC",
+          weekStart: settings.weekStart,
           categories: categories.map(restCategory).map((category) => ({
             key: category.key,
             name: category.name,

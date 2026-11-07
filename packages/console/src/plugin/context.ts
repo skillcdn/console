@@ -17,6 +17,7 @@ import type {
   RestTaskPatch,
 } from "../schemas.js";
 import type { Translations } from "../translations.js";
+import type { WeekStart } from "../vocabulary.js";
 import type { PluginFileHandle } from "./args.js";
 
 /** A schema as the Standard Schema interface spells one: what every build of zod implements, so that a plugin's own copy validates its records. */
@@ -251,6 +252,8 @@ export interface PluginWorkspace {
   readonly name: string;
   readonly languages: readonly string[];
   readonly timeZone: string;
+  /** The day the week begins on (ADR-0035): `auto` leaves it to the language of whoever reads. */
+  readonly weekStart: WeekStart;
   readonly categories: readonly {
     readonly key: string;
     readonly name: string;

@@ -98,6 +98,16 @@ const attempt = (expression: string): string =>
 const fetchFrom = (url: string): string =>
   `fetch(${JSON.stringify(url)}).then(() => "answered", (error) => (error instanceof Error ? error.name : String(error)))`;
 
+/** What the page tells a frame that says it is ready, of the workspace. */
+const WORKSPACE_TOLD = `new Promise((resolve) => {
+  window.addEventListener("message", (event) => {
+    if (event.data !== null && typeof event.data === "object" && event.data.t === "init") {
+      resolve(event.data.workspace);
+    }
+  });
+  window.parent.postMessage({ v: 1, t: "ready" }, "*");
+})`;
+
 /**
  * Two calls over the bridge from inside the frame: one of its methods, and one it does not know.
  * What came back for each, or "ignored" when nothing did within two seconds.
@@ -209,6 +219,12 @@ describe("the example plugin in a browser", () => {
     }
     // The bridge performs its own methods, and a call it does not know is dropped unanswered.
     expect(await frame.evaluate(BRIDGE_CALLS)).toEqual({ known: "performed", unknown: "ignored" });
+    // A frame is told the workspace, with the day its week begins on worked out for it.
+    expect(await frame.evaluate(WORKSPACE_TOLD)).toEqual({
+      timeZone: expect.any(String),
+      weekStart: "auto",
+      firstDay: expect.any(Number),
+    });
     await page.context().close();
   });
 

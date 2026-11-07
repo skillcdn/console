@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ConsoleClient, PluginClient } from "../client.js";
+import { firstDayOfWeek } from "../dates.js";
 import {
   type AvailableWidget,
   addable,
@@ -25,6 +26,7 @@ import type { Navigation } from "../router.js";
 import type { RestEvent, RestHomeWidget, RestMe, RestPlugin, RestProject } from "../schemas.js";
 import { CONSOLE_TOKENS } from "../tokens.js";
 import { Button } from "./ui.js";
+import { weekStartOf } from "./workspace.js";
 
 // A plugin's page or widget on the console's page (ADR-0054, docs/specs/plugins.md, "Pages"):
 // a sandboxed frame whose document the console serves, and the console's side of the bridge.
@@ -259,6 +261,11 @@ export function PluginFrame(props: PluginFrameProps) {
               name: me.person?.name ?? null,
               language,
               admin: me.person?.role === "admin",
+            },
+            workspace: {
+              timeZone: me.workspace.timeZone ?? "UTC",
+              weekStart: weekStartOf(me.workspace),
+              firstDay: firstDayOfWeek(language, weekStartOf(me.workspace)),
             },
             roles: plugin.roles,
             path,

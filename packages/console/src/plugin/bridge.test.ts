@@ -47,6 +47,23 @@ describe("isBridgeToFrame", () => {
     expect(isBridgeToFrame({ v: 1, t: "size", size: "huge" })).toBe(false);
   });
 
+  it("takes the workspace, the day its week begins on within the week, and goes without it from an older console", () => {
+    const workspace = { timeZone: "Asia/Seoul", weekStart: "sunday", firstDay: 7 };
+    expect(isBridgeToFrame({ ...INIT, workspace })).toBe(true);
+    expect(isBridgeToFrame(INIT)).toBe(true);
+    for (const wrong of [
+      { ...workspace, firstDay: 0 },
+      { ...workspace, firstDay: 8 },
+      { ...workspace, firstDay: 1.5 },
+      { ...workspace, firstDay: "7" },
+      { ...workspace, weekStart: "friday" },
+      { ...workspace, timeZone: "" },
+      "sunday",
+    ]) {
+      expect(isBridgeToFrame({ ...INIT, workspace: wrong })).toBe(false);
+    }
+  });
+
   it("drops anything else unread", () => {
     expect(isBridgeToFrame(null)).toBe(false);
     expect(isBridgeToFrame("init")).toBe(false);

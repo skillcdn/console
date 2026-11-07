@@ -368,6 +368,7 @@ describe("a plugin on the board", () => {
     expect(data.workspace).toMatchObject({
       name: "Acme",
       timeZone: "UTC",
+      weekStart: "auto",
       languages: ["en", "ko"],
     });
   });

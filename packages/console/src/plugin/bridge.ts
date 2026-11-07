@@ -3,6 +3,8 @@
 // frame the console's origin alone. The shapes and their guards, with no DOM in them, so that the
 // page's side and the frame's side read the same words and the tests need no browser.
 
+import { WEEK_STARTS, type WeekStart } from "../vocabulary.js";
+
 export const PLUGIN_BRIDGE_VERSION = 1;
 
 /**
@@ -39,6 +41,15 @@ export interface BridgePerson {
   readonly admin: boolean;
 }
 
+/** The workspace as a page lays itself out for it: its clock and the day its week begins on. */
+export interface BridgeWorkspace {
+  readonly timeZone: string;
+  /** The workspace's setting (ADR-0035): `auto` leaves the week to the language of the pages. */
+  readonly weekStart: WeekStart;
+  /** The day a week begins on with the setting applied, for a calendar to start from: 1 for Monday, 7 for Sunday. */
+  readonly firstDay: number;
+}
+
 /** What the page tells the frame once it is ready: who looks, at what, in which words and colours. */
 export interface BridgeInit {
   readonly v: 1;
@@ -50,6 +61,8 @@ export interface BridgeInit {
   readonly size?: PluginWidgetSizeName;
   readonly project: { readonly key: string; readonly name: string } | null;
   readonly person: BridgePerson;
+  /** The workspace; none from a console older than this. */
+  readonly workspace?: BridgeWorkspace;
   readonly roles: readonly string[];
   /** What follows the page's key in the address. */
   readonly path: string;
@@ -210,6 +223,18 @@ function isTheme(value: unknown): value is Record<string, string> {
   );
 }
 
+function isWorkspace(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    isLine(value.timeZone, 100) &&
+    (WEEK_STARTS as readonly unknown[]).includes(value.weekStart) &&
+    typeof value.firstDay === "number" &&
+    Number.isInteger(value.firstDay) &&
+    value.firstDay >= 1 &&
+    value.firstDay <= 7
+  );
+}
+
 function isEnvelope(value: unknown): value is Record<string, unknown> & { t: string } {
   return isRecord(value) && value.v === PLUGIN_BRIDGE_VERSION && typeof value.t === "string";
 }
@@ -239,6 +264,7 @@ export function isBridgeToFrame(value: unknown): value is BridgeToFrame {
         (value.person.name === null || typeof value.person.name === "string") &&
         typeof value.person.language === "string" &&
         typeof value.person.admin === "boolean" &&
+        (value.workspace === undefined || isWorkspace(value.workspace)) &&
         Array.isArray(value.roles) &&
         value.roles.every((role) => typeof role === "string") &&
         typeof value.path === "string" &&
