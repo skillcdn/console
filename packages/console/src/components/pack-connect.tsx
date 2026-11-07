@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { PackConnectEnding, RestPackConnect, RestPackConnectStarted } from "../api.js";
 import { useWords } from "../i18n/index.js";
+import { errorWords } from "../use-action.js";
 import { Button, Time } from "./ui.js";
 
 // A private pack connected with a code a person approves (ADR-0036): an owner, or for the
@@ -97,7 +98,7 @@ export function PackConnect(props: PackConnectProps) {
             return;
           }
           // The console could not be asked this time; it is asked again.
-          setProblem(failure instanceof Error ? failure.message : String(failure));
+          setProblem(errorWords(failure, words.common.somethingWentWrong, words));
           setShown((current) => (current.kind === "waiting" ? { ...current } : current));
         });
     }, Math.max(shown.intervalSeconds, MIN_INTERVAL_SECONDS) * 1000);
@@ -105,7 +106,7 @@ export function PackConnect(props: PackConnectProps) {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [shown, claim, onConnected]);
+  }, [shown, claim, onConnected, words]);
 
   const start = () => {
     setProblem(undefined);
@@ -113,7 +114,7 @@ export function PackConnect(props: PackConnectProps) {
       .onStart()
       .then((started) => setShown({ kind: "waiting", ...started }))
       .catch((failure: unknown) => {
-        setProblem(failure instanceof Error ? failure.message : String(failure));
+        setProblem(errorWords(failure, words.common.somethingWentWrong, words));
       });
   };
   const cancel = () => {
@@ -121,7 +122,7 @@ export function PackConnect(props: PackConnectProps) {
       .onCancel()
       .then(() => setShown({ kind: "idle" }))
       .catch((failure: unknown) => {
-        setProblem(failure instanceof Error ? failure.message : String(failure));
+        setProblem(errorWords(failure, words.common.somethingWentWrong, words));
       });
   };
 

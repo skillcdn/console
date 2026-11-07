@@ -10,7 +10,7 @@ import { Callout, Spinner } from "./components/ui.js";
 import type { ConsoleData } from "./data.js";
 import { useWords } from "./i18n/index.js";
 import { connectHref, type Navigation, PATHS } from "./router.js";
-import { useAction } from "./use-action.js";
+import { errorWords, useAction } from "./use-action.js";
 
 // The page where a person connects their agent (ADR-0011): the code typed when the address
 // does not carry one, what asks under it, the approval, and what came of it. Part of the
@@ -24,7 +24,8 @@ export interface ConnectPageProps {
 }
 
 export function ConnectPage(props: ConnectPageProps) {
-  const words = useWords().connect;
+  const pack = useWords();
+  const words = pack.connect;
   const { data, navigation } = props;
   const code = props.code === undefined ? undefined : normalizeConnectCode(props.code);
   const [request, setRequest] = useState<RestConnectRequest | undefined>(undefined);
@@ -55,13 +56,11 @@ export function ConnectPage(props: ConnectPageProps) {
         setProblem(
           failure instanceof ApiError && failure.code === "connect.not_found"
             ? words.noSuchCode
-            : failure instanceof ApiError
-              ? failure.message
-              : words.couldNotAsk,
+            : errorWords(failure, words.couldNotAsk, pack),
         );
       });
     return () => controller.abort();
-  }, [code, connectRequest, words]);
+  }, [code, connectRequest, pack, words]);
 
   const head = (
     <div className="sc-page-head">

@@ -407,6 +407,12 @@ Goal: what a person found looking at milestone 36 on the preview console: the pa
 - [x] The front page is one grid of tiles a person arranges by hand ([ADR-0061](adr/0061-the-front-page-is-one-grid-of-tiles-a-person-arranges-by-hand.md)): the projects as icons and the widgets side by side on square cells, 12, 8, 6 or 4 columns by the width, the sizes a phone's; a tile is taken in hand with the mouse or a resting finger and put down anywhere, those in the way moving aside, and nothing opens while the page is arranged; there is no default layout: what is new takes the first room, a plugin's widgets as soon as it is on, what was taken off stays off and is offered to add back, and each width is arranged for itself.
 - [x] A tab reads the same as a button, so that a plugin's own tabs in its frame look like the console's.
 
+## Milestone 38, a second look at the pages (2026-11-07)
+
+Goal: what the same person found on the second look: the words of a failure, the front page at every width and on a phone, the plugins' tabs, and what a plugin still could not read.
+
+- [x] A failure reads in the person's language: the pages read the server's code in the pack, whose `errors` hold every code the server can answer, a test seeing to it; the server's own message stays English, for programs, and a plugin's own refusal stays in the plugin's words.
+
 ## After milestone 16
 
 Nothing is chosen yet; the list below is where the next milestone comes from.

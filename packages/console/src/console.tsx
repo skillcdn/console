@@ -588,9 +588,9 @@ function PluginSettingsPage(props: {
       setDetail(await client.plugin(key).get());
       setFailure(undefined);
     } catch (error) {
-      setFailure(error instanceof ApiError ? error.message : words.common.somethingWentWrong);
+      setFailure(errorWords(error, words.common.somethingWentWrong, words));
     }
-  }, [client, key, words.common.somethingWentWrong]);
+  }, [client, key, words]);
   useEffect(() => {
     setDetail(undefined);
     void read();
@@ -2654,7 +2654,7 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
                 title={words.common.couldNotReach}
                 action={<Button onClick={data.reload}>{words.common.tryAgain}</Button>}
               >
-                {data.error}
+                {errorWords(data.failure, data.error, words)}
               </Callout>
             )}
           </div>

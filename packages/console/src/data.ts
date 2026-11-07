@@ -214,8 +214,10 @@ export interface ConsoleActions {
 export interface ConsoleData {
   /** Who is signed in and what the board is called; `undefined` until the server has answered. */
   readonly me: RestMe | undefined;
-  /** What went wrong asking who is signed in, for a person. */
+  /** What went wrong asking who is signed in, for a person, in English. */
   readonly error: string | undefined;
+  /** The failure itself, for a page to say in the person's language (`errorWords`). */
+  readonly failure?: unknown;
   /** True once the workspace has been loaded for the first time: the projects, the people, the tokens. */
   readonly loaded: boolean;
   /** The projects the person may see, by name. */
@@ -357,6 +359,7 @@ const wordsOf = (failure: unknown, fallback: string): string =>
 export function useConsoleData(client: ConsoleClient, projectKey: string | undefined): ConsoleData {
   const [me, setMe] = useState<RestMe | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
+  const [failure, setFailure] = useState<unknown>(undefined);
   const [loaded, setLoaded] = useState(false);
   const [projects, setProjects] = useState<readonly RestProject[]>([]);
   const [people, setPeople] = useState<readonly RestPerson[]>([]);
@@ -461,12 +464,14 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
     const controller = new AbortController();
     const { signal } = controller;
     setError(undefined);
+    setFailure(undefined);
     const run = async () => {
       let answer: RestMe;
       try {
         answer = await client.me(signal);
       } catch (failure) {
         if (!signal.aborted) {
+          setFailure(failure);
           setError(wordsOf(failure, "The server could not be reached."));
         }
         return;
@@ -492,6 +497,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
         setLoaded(true);
       } catch (failure) {
         if (!signal.aborted) {
+          setFailure(failure);
           setError(wordsOf(failure, "The workspace could not be loaded."));
         }
       }
@@ -862,6 +868,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
   return {
     me,
     error,
+    failure,
     loaded,
     projects,
     people,

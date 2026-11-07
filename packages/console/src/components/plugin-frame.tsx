@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ConsoleClient, PluginClient } from "../client.js";
 import { firstDayOfWeek } from "../dates.js";
+import type { Messages } from "../i18n/en.js";
 import { useWords } from "../i18n/index.js";
 import type { PluginWidgetSizeName } from "../plugin/bridge.js";
 import {
@@ -14,6 +15,7 @@ import {
 import type { Navigation } from "../router.js";
 import type { RestEvent, RestMe, RestPlugin, RestProject } from "../schemas.js";
 import { CONSOLE_TOKENS } from "../tokens.js";
+import { wordsForFailure } from "../use-action.js";
 import { weekStartOf } from "./workspace.js";
 
 // A plugin's page or widget on the console's page (ADR-0054, docs/specs/plugins.md, "Pages"):
@@ -166,8 +168,14 @@ export function readTheme(): Record<string, string> {
   return theme;
 }
 
-/** What a failure of a call says to the frame: the console's code and words, or the console's own failure. */
-function errorOf(error: unknown): { readonly code: string; readonly message: string } {
+/**
+ * What a failure of a call says to the frame: the code, with the console's own refusals in the
+ * person's language, a plugin's own in its own words; or the console's own failure.
+ */
+function errorOf(
+  error: unknown,
+  pack: Messages,
+): { readonly code: string; readonly message: string } {
   if (error instanceof BridgeRefusal) {
     return { code: error.code, message: error.message };
   }
@@ -179,14 +187,15 @@ function errorOf(error: unknown): { readonly code: string; readonly message: str
     "message" in error &&
     typeof error.message === "string"
   ) {
-    return { code: error.code, message: error.message };
+    return { code: error.code, message: wordsForFailure(error, pack) ?? error.message };
   }
   return { code: "plugin.failed", message: "the call failed" };
 }
 
 export function PluginFrame(props: PluginFrameProps) {
   const { plugin, page, widget, project, me, language, client, navigation, events } = props;
-  const words = useWords().plugins;
+  const pack = useWords();
+  const words = pack.plugins;
   const frame = useRef<HTMLIFrameElement>(null);
   const isWidget = widget !== undefined;
   const [height, setHeight] = useState(480);
@@ -275,7 +284,7 @@ export function PluginFrame(props: PluginFrameProps) {
                 t: "result",
                 id: message.id,
                 ok: false,
-                error: errorOf(error),
+                error: errorOf(error, pack),
               }),
             );
           return;

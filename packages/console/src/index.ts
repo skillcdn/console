@@ -328,4 +328,4 @@ export {
   workHref,
 } from "./router.js";
 export { CONSOLE_TOKENS } from "./tokens.js";
-export { errorWords, useAction } from "./use-action.js";
+export { errorWords, useAction, wordsForFailure } from "./use-action.js";

@@ -30,7 +30,7 @@ import {
   taskHref,
 } from "./router.js";
 import { projectPath } from "./routes.js";
-import { useAction } from "./use-action.js";
+import { errorWords, useAction } from "./use-action.js";
 
 // The Docs page of a project (ADR-0009): the folder or the page the path names, read on its
 // own since the tree may be large, and read again whenever the project's feed grows; and the
@@ -51,7 +51,8 @@ export interface DocsPageProps {
 type Found = RestDocument | null | undefined;
 
 export function DocsPage(props: DocsPageProps) {
-  const words = useWords().docs;
+  const pack = useWords();
+  const words = pack.docs;
   const { project, path, view, data, navigation } = props;
   const [listing, setListing] = useState<RestDocuments | undefined>(undefined);
   const [document, setDocument] = useState<Found>(undefined);
@@ -105,7 +106,7 @@ export function DocsPage(props: DocsPageProps) {
     };
     load().catch((failure: unknown) => {
       if (!signal.aborted) {
-        setProblem(failure instanceof ApiError ? failure.message : words.couldNotLoad);
+        setProblem(errorWords(failure, words.couldNotLoad, pack));
       }
     });
     return () => controller.abort();
@@ -145,11 +146,11 @@ export function DocsPage(props: DocsPageProps) {
       })
       .catch((failure: unknown) => {
         if (!controller.signal.aborted) {
-          setProblem(failure instanceof ApiError ? failure.message : words.searchFailed);
+          setProblem(errorWords(failure, words.searchFailed, pack));
         }
       });
     return () => controller.abort();
-  }, [actions, query, words]);
+  }, [actions, pack, query, words]);
 
   const toDoc = (target: string) => docHref(key, target);
   const toFolder = (folder: string) => docHref(key, folder);
