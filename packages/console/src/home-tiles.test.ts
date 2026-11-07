@@ -14,6 +14,7 @@ import {
   rowsOf,
   sizesAt,
   startingSizeAt,
+  waitToGiveWay,
 } from "./home-tiles.js";
 import type { RestHome, RestPlugin, RestProject } from "./schemas.js";
 
@@ -257,6 +258,13 @@ describe("the front page's grid (ADR-0061)", () => {
     expect(places(arranged(tiles, null, 6))["widget:hello:latest"]).toEqual([0, 0, "medium"]);
     const back = added([], tiles[0] as HomeTile, 4);
     expect(back[0]?.size).toBe("medium");
+  });
+
+  it("has the tiles in the way give way from the nearest out, within a short wait", () => {
+    expect(waitToGiveWay({ x: 3, y: 3 }, { x: 3, y: 3 })).toBe(0);
+    expect(waitToGiveWay({ x: 4, y: 3 }, { x: 3, y: 3 })).toBe(22);
+    expect(waitToGiveWay({ x: 6, y: 7 }, { x: 3, y: 3 })).toBe(110);
+    expect(waitToGiveWay({ x: 40, y: 0 }, { x: 0, y: 0 })).toBe(130);
   });
 
   it("keeps a widget of an older console, with no size that fits, as wide as the grid", () => {

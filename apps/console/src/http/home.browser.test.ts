@@ -200,6 +200,46 @@ describe("the front page in a browser (ADR-0061)", () => {
     await page.context().close();
   });
 
+  it("lifts a tile under the pointer, shows where it would land, and slides those in the way aside", async () => {
+    const page = await signedIn(BROWSER_ADMIN);
+    const held = await made(page, "held");
+    const inTheWay = await made(page, "way");
+    await page.goto(`${console_.origin}/`);
+    await page.waitForSelector(`[data-tile="${inTheWay}"]`);
+    await page.click("text=Edit layout");
+    await page.waitForSelector(".sc-home-bar");
+    const boxOf = async (tile: string) => {
+      const box = await (await page.$(`[data-tile="${tile}"]`))?.boundingBox();
+      if (box === null || box === undefined) {
+        throw new Error(`no tile ${tile}`);
+      }
+      return box;
+    };
+    const from = await boxOf(held);
+    const over = await boxOf(inTheWay);
+    const target = { x: over.x + over.width / 2, y: over.y + over.height / 2 };
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(target.x, target.y, { steps: 6 });
+
+    // The one in the way is on its way there, not there at once.
+    await page.waitForFunction(
+      `document.querySelector('[data-tile="${inTheWay}"]').getAnimations().some((running) => running.transitionProperty === "translate")`,
+    );
+    // Where the tile in hand would land shows the tile itself.
+    expect(await page.textContent(".sc-tile-slot .sc-tile-name")).toBe("HELD");
+
+    // Lifted, it stays under the pointer: the lift grows the tile and not how far it has come.
+    const lifted = await boxOf(held);
+    expect(Math.abs(lifted.x + lifted.width / 2 - target.x)).toBeLessThan(2);
+    expect(Math.abs(lifted.y + lifted.height / 2 - target.y)).toBeLessThan(2);
+    expect(lifted.width).toBeGreaterThan(from.width);
+
+    await page.mouse.up();
+    expect(await page.$(".sc-tile-slot")).toBeNull();
+    await page.context().close();
+  });
+
   it("shows a tile's words whole or not at all, at every width", async () => {
     const page = await signedIn(BROWSER_ADMIN);
     const icon = await made(page, "icon");

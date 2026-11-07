@@ -370,6 +370,19 @@ export function moved(
   return makingRoom(others, at, columns);
 }
 
+/** How far apart in time the tiles in the way move, by the cells between them, in milliseconds. */
+const WAIT_PER_CELL_MS = 22;
+const LONGEST_WAIT_MS = 130;
+
+/**
+ * How long a tile waits before it gives way to the tile being put down at `from`: the further off
+ * the later, so that the push runs outward from there, as water does.
+ */
+export function waitToGiveWay(tile: Place, from: Place): number {
+  const cells = Math.hypot(tile.x - from.x, tile.y - from.y);
+  return Math.min(Math.round(cells * WAIT_PER_CELL_MS), LONGEST_WAIT_MS);
+}
+
 /** The page with a tile at another size, where it stands; what its new cells cover moves aside. */
 export function resized(
   placed: readonly PlacedTile[],

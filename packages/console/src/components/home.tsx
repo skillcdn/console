@@ -26,6 +26,7 @@ import {
   resized,
   rowsOf,
   sizesAt,
+  waitToGiveWay,
 } from "../home-tiles.js";
 import { useWords } from "../i18n/index.js";
 import type { PluginWidgetSizeName } from "../plugin/bridge.js";
@@ -540,6 +541,9 @@ export function HomeGrid(props: HomeGridProps) {
                         "--sc-tile-left": `${inHand.left}px`,
                         "--sc-tile-top": `${inHand.top}px`,
                       }),
+                  ...(slot === undefined || inHand !== undefined
+                    ? {}
+                    : { "--sc-tile-wait": `${waitToGiveWay(tile, slot)}ms` }),
                 } as CSSProperties
               }
               tabIndex={editing ? 0 : undefined}
@@ -595,7 +599,15 @@ export function HomeGrid(props: HomeGridProps) {
                 "--sc-tile-h": footprintOf(slot.size, columns).h,
               } as CSSProperties
             }
-          />
+          >
+            {slot.tile.kind === "project" ? (
+              <ProjectTile project={slot.tile.project} size={slot.size} />
+            ) : (
+              <div className="sc-tile-pane sc-tile-widget">
+                <p className="sc-tile-title">{nameOfTile(slot.tile)}</p>
+              </div>
+            )}
+          </li>
         )}
       </ul>
     </div>
