@@ -261,8 +261,16 @@ describe("parsePluginManifest", () => {
       /defaultSize is not one of sizes/,
     );
     expect(widget({ sizes: ["huge"] })[0]).toMatch(/^widgets\.0\.sizes/);
+    // A phone's grid is four cells across, and a widget has a size it can show there.
+    expect(widget({ sizes: ["wide"] })[0]).toMatch(/four cells across/);
+    expect(widget({ sizes: ["wide", "full"] })[0]).toMatch(/four cells across/);
+    expect(widget({ sizes: ["medium", "wide"], defaultSize: "wide" })).toEqual([]);
+    expect(widget({ sizes: ["large", "full"] })).toEqual([]);
     expect(widgetSizesOf({ size: "third" })).toEqual({ sizes: ["small"], defaultSize: "small" });
-    expect(widgetSizesOf({ size: "full" })).toEqual({ sizes: ["wide"], defaultSize: "wide" });
+    expect(widgetSizesOf({ size: "full" })).toEqual({
+      sizes: ["medium", "wide"],
+      defaultSize: "wide",
+    });
     expect(widgetSizesOf({ sizes: ["large", "full"] })).toEqual({
       sizes: ["large", "full"],
       defaultSize: "large",

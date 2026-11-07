@@ -119,6 +119,28 @@ interface Place {
   readonly y: number;
 }
 
+/**
+ * The sizes a tile may have on a grid of so many columns: those that fit it. A widget always has
+ * one (ADR-0062); only a console older than the rule can answer one that has none, and then it
+ * keeps what it has, drawn as wide as the grid.
+ */
+export function sizesAt(tile: HomeTile, columns: number): readonly HomeTileSize[] {
+  const fitting = (tile.sizes as readonly HomeTileSize[]).filter(
+    (size) => HOME_TILE_CELLS[size].columns <= columns,
+  );
+  return fitting.length > 0 ? fitting : tile.sizes;
+}
+
+/** The size a tile starts at on a grid of so many columns: its own where that fits, else the largest that does. */
+export function startingSizeAt(tile: HomeTile, columns: number): HomeTileSize {
+  const fitting = sizesAt(tile, columns);
+  if (fitting.includes(tile.defaultSize)) {
+    return tile.defaultSize;
+  }
+  const area = (size: HomeTileSize) => HOME_TILE_CELLS[size].columns * HOME_TILE_CELLS[size].rows;
+  return [...fitting].sort((a, b) => area(b) - area(a))[0] ?? tile.defaultSize;
+}
+
 /** The cells a size takes on a grid of so many columns: never wider than the grid. */
 export function footprintOf(size: HomeTileSize, columns: number): Footprint {
   const cells = HOME_TILE_CELLS[size];
@@ -218,8 +240,8 @@ function keptAt(
 /**
  * The page as it stands: what the person kept for this width where they stand, or, kept for
  * another width, the same order packed from the top; a tile they may no longer see stays out, a
- * size it no longer comes in becomes the one it starts at, and a tile on another's cells moves to
- * the nearest room. What they have not seen yet takes the first room, a plugin's widgets as soon
+ * size it no longer comes in, or that is too wide for this grid, becomes the one it starts at
+ * here, and a tile on another's cells moves to the nearest room. What they have not seen yet takes the first room, a plugin's widgets as soon
  * as it is on; what they took off stays off.
  */
 export function arranged(
@@ -248,15 +270,15 @@ export function arranged(
   for (const entry of entries) {
     const tile = byId.get(entry.tile);
     if (tile !== undefined && !hidden.has(tile.id) && !seen.has(tile.id)) {
-      const size = (tile.sizes as readonly HomeTileSize[]).includes(entry.size)
+      const size = sizesAt(tile, columns).includes(entry.size)
         ? entry.size
-        : tile.defaultSize;
+        : startingSizeAt(tile, columns);
       put(tile, size, keepsPlaces ? { x: entry.x, y: entry.y } : undefined);
     }
   }
   for (const tile of tiles) {
     if (!hidden.has(tile.id) && !seen.has(tile.id)) {
-      put(tile, tile.defaultSize, undefined);
+      put(tile, startingSizeAt(tile, columns), undefined);
     }
   }
   return placed;
@@ -373,12 +395,9 @@ export function added(
   tile: HomeTile,
   columns: number,
 ): readonly PlacedTile[] {
-  const room = firstRoom(
-    occupied(placed, columns),
-    footprintOf(tile.defaultSize, columns),
-    columns,
-  );
-  return [...placed, { tile, size: tile.defaultSize, ...room }];
+  const size = startingSizeAt(tile, columns);
+  const room = firstRoom(occupied(placed, columns), footprintOf(size, columns), columns);
+  return [...placed, { tile, size, ...room }];
 }
 
 /** What is kept of the page: the layout at this width, the others as they were. */

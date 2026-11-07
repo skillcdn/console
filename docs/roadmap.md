@@ -413,6 +413,7 @@ Goal: what the same person found on the second look: the words of a failure, the
 
 - [x] A failure reads in the person's language: the pages read the server's code in the pack, whose `errors` hold every code the server can answer, a test seeing to it; the server's own message stays English, for programs, and a plugin's own refusal stays in the plugin's words.
 - [x] A tile on the front page never cuts a line of words: the mark and the room around it follow the cell, and a row that still does not fit stands whole or not at all, seen at every width by a browser test. What waits on a project reads as the count on a tab does, and the tray of what was taken off says Add.
+- [x] A widget comes in a size a phone can hold ([ADR-0062](adr/0062-a-widget-comes-in-a-size-a-phone-can-hold.md)): a manifest needs a size at most four cells across, a grid offers the sizes that fit it, and a frame is told the size it has, never `wide` on four cells.
 
 ## After milestone 16
 

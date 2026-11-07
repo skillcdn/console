@@ -25,6 +25,7 @@ import {
   type PlacedTile,
   resized,
   rowsOf,
+  sizesAt,
 } from "../home-tiles.js";
 import { useWords } from "../i18n/index.js";
 import type { PluginWidgetSizeName } from "../plugin/bridge.js";
@@ -121,12 +122,13 @@ export function ProjectTile(props: ProjectTileProps) {
 /** The sizes a tile comes in, each a little picture of its shape, the one it has lit. */
 function SizeChoice(props: {
   readonly tile: PlacedTile;
+  readonly sizes: readonly HomeTileSize[];
   readonly onChoose: (size: HomeTileSize) => void;
 }) {
   const words = useWords().home;
   return (
     <fieldset className="sc-tile-sizes" aria-label={words.size}>
-      {(props.tile.tile.sizes as readonly HomeTileSize[]).map((size) => (
+      {props.sizes.map((size) => (
         <button
           key={size}
           type="button"
@@ -569,9 +571,10 @@ export function HomeGrid(props: HomeGridProps) {
                   >
                     ×
                   </button>
-                  {tile.tile.sizes.length > 1 && (
+                  {sizesAt(tile.tile, columns).length > 1 && (
                     <SizeChoice
                       tile={tile}
+                      sizes={sizesAt(tile.tile, columns)}
                       onChoose={(size) => change(resized(placed, tile.tile.id, size, columns))}
                     />
                   )}

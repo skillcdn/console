@@ -176,9 +176,17 @@ export const PLUGIN_WIDGET_SIZE_CELLS: Readonly<
   full: { columns: 8, rows: 4 },
 };
 
+/** The most cells across a phone's grid has; a widget comes in a size that fits it (ADR-0062). */
+const PLUGIN_WIDGET_PHONE_COLUMNS = 4;
+
+/** Whether a size fits a phone's grid. */
+const fitsPhone = (size: PluginWidgetSizeName): boolean =>
+  PLUGIN_WIDGET_SIZE_CELLS[size].columns <= PLUGIN_WIDGET_PHONE_COLUMNS;
+
 /**
  * The sizes a widget comes in and the one it starts at: `sizes` and `defaultSize` where the
- * manifest declares them, else the one size of before read as one of the family.
+ * manifest declares them, else the one size of before read as one of the family, with a size a
+ * phone can hold beside it where that one is too wide.
  */
 export function widgetSizesOf(widget: {
   readonly size?: PluginWidgetSize | undefined;
@@ -192,7 +200,7 @@ export function widgetSizesOf(widget: {
     return { sizes: widget.sizes, defaultSize: widget.defaultSize ?? widget.sizes[0] ?? "small" };
   }
   const one = LEGACY_WIDGET_SIZES[widget.size ?? "third"];
-  return { sizes: [one], defaultSize: one };
+  return { sizes: fitsPhone(one) ? [one] : ["medium", one], defaultSize: one };
 }
 
 /** The size of before nearest to one of the family, for a reader of before. */
@@ -423,6 +431,13 @@ const pluginWidgetSchema = z
       }
       if (widget.sizes !== undefined && new Set(widget.sizes).size !== widget.sizes.length) {
         ctx.addIssue({ code: "custom", message: "sizes names a size twice", input: widget });
+      }
+      if (widget.sizes !== undefined && !widget.sizes.some(fitsPhone)) {
+        ctx.addIssue({
+          code: "custom",
+          message: "sizes needs small, medium or large: a phone's grid is four cells across",
+          input: widget,
+        });
       }
       if (widget.defaultSize !== undefined && !(widget.sizes ?? []).includes(widget.defaultSize)) {
         ctx.addIssue({

@@ -1,6 +1,6 @@
 # ADR-0061: The front page is one grid of tiles a person arranges by hand
 
-- Status: Accepted
+- Status: Accepted; point 2 amended by [ADR-0062](0062-a-widget-comes-in-a-size-a-phone-can-hold.md)
 - Date: 2026-11-07
 - Supersedes the cells of point 1 and all of point 3 of [ADR-0059](0059-a-person-arranges-the-front-pages-widgets-from-the-sizes-each-comes-in.md); the sizes keep their names, and the frame is told its size as before. The contract is in [specs/plugins.md](../specs/plugins.md) and [specs/rest.md](../specs/rest.md).
 

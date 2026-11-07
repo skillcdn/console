@@ -5,12 +5,15 @@ import {
   columnsFor,
   footprintOf,
   type HomeColumns,
+  type HomeTile,
   homeTiles,
   homeWith,
   moved,
   type PlacedTile,
   resized,
   rowsOf,
+  sizesAt,
+  startingSizeAt,
 } from "./home-tiles.js";
 import type { RestHome, RestPlugin, RestProject } from "./schemas.js";
 
@@ -135,7 +138,7 @@ describe("the front page's grid (ADR-0061)", () => {
     expect(tiles[2]?.sizes).toEqual(["icon", "small"]);
     expect(tiles[2]?.defaultSize).toBe("icon");
     // The one size of before reads as one of the family.
-    expect(tiles[3]?.sizes).toEqual(["wide"]);
+    expect(tiles[3]?.sizes).toEqual(["medium", "wide"]);
     for (const state of ["installed", "disabled", "needs_consent", "failed"]) {
       expect(homeTiles([{ ...hr, state } as RestPlugin], [])).toEqual([]);
     }
@@ -221,6 +224,48 @@ describe("the front page's grid (ADR-0061)", () => {
     expect(places(arranged(tiles, kept, 4))[P1]).toEqual([3, 1, "icon"]);
     expect(kept.layouts[8]).toEqual(wide.layouts[8]);
     expect(places(arranged(tiles, kept, 8))[P1]).toEqual([6, 4, "icon"]);
+  });
+
+  it("gives a tile only the sizes that fit the grid, and the largest of them where its own does not", () => {
+    const [balance, today, , latest] = homeTiles([hr, hello], [project(1)]);
+    expect(balance && sizesAt(balance, 4)).toEqual(["small", "medium"]);
+    expect(today && sizesAt(today, 8)).toEqual(["medium", "large", "wide"]);
+    expect(today && sizesAt(today, 6)).toEqual(["medium", "large"]);
+    expect(latest && startingSizeAt(latest, 8)).toBe("wide");
+    expect(latest && startingSizeAt(latest, 6)).toBe("medium");
+    expect(latest && startingSizeAt(latest, 4)).toBe("medium");
+    const full = plugin("board", [
+      {
+        key: "all",
+        name: { en: "All" },
+        place: "home:top",
+        size: "full",
+        sizes: ["small", "large", "full"],
+        defaultSize: "full",
+      },
+    ]);
+    const [all] = homeTiles([full], []);
+    expect(all && startingSizeAt(all, 8)).toBe("full");
+    expect(all && startingSizeAt(all, 4)).toBe("large");
+  });
+
+  it("never shows a phone a size too wide for it, so that a frame is told what it has", () => {
+    const tiles = homeTiles([hello], []);
+    const kept = layout(8, [{ tile: "widget:hello:latest", x: 0, y: 0, size: "wide" }]);
+    expect(places(arranged(tiles, kept, 8))["widget:hello:latest"]).toEqual([0, 0, "wide"]);
+    expect(places(arranged(tiles, kept, 4))["widget:hello:latest"]).toEqual([0, 0, "medium"]);
+    expect(places(arranged(tiles, null, 6))["widget:hello:latest"]).toEqual([0, 0, "medium"]);
+    const back = added([], tiles[0] as HomeTile, 4);
+    expect(back[0]?.size).toBe("medium");
+  });
+
+  it("keeps a widget of an older console, with no size that fits, as wide as the grid", () => {
+    const old = plugin("old", [
+      { key: "strip", name: { en: "Strip" }, place: "home:top", size: "full", sizes: ["wide"] },
+    ]);
+    const [strip] = homeTiles([old], []);
+    expect(strip && sizesAt(strip, 4)).toEqual(["wide"]);
+    expect(footprintOf("wide", 4)).toEqual({ w: 4, h: 2 });
   });
 });
 
