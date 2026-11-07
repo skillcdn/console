@@ -196,9 +196,12 @@ function errorOf(error: unknown): { readonly code: string; readonly message: str
 
 export function PluginFrame(props: PluginFrameProps) {
   const { plugin, page, widget, project, me, language, client, navigation, events } = props;
+  const words = useWords().plugins;
   const frame = useRef<HTMLIFrameElement>(null);
   const isWidget = widget !== undefined;
   const [height, setHeight] = useState(480);
+  /** Whether the console served the frame nothing to show: a plugin turned off since the page read it, say. */
+  const [unavailable, setUnavailable] = useState(false);
   const subscribed = useRef<Set<BridgeEventKind>>(new Set());
   const ready = useRef(false);
   const lastPluginEvent = useRef(0);
@@ -214,6 +217,8 @@ export function PluginFrame(props: PluginFrameProps) {
       }),
     [scoped, page, widget, project],
   );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: another address is another document
+  useEffect(() => setUnavailable(false), [src]);
 
   const post = useCallback((message: BridgeToFrame, transfer?: Transferable[]) => {
     // The frame's origin is opaque, so the target is any: the frame itself checks the sender.
@@ -235,6 +240,9 @@ export function PluginFrame(props: PluginFrameProps) {
       }
       const message = event.data;
       switch (message.t) {
+        case "unavailable":
+          setUnavailable(true);
+          return;
         case "ready":
           ready.current = true;
           post({
@@ -394,6 +402,9 @@ export function PluginFrame(props: PluginFrameProps) {
       .catch(() => undefined);
   }, [scoped]);
 
+  if (unavailable) {
+    return <p className="sc-plugin-frame-unavailable">{words.frameUnavailable}</p>;
+  }
   return (
     <iframe
       ref={frame}

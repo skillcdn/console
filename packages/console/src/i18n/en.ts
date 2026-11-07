@@ -228,6 +228,8 @@ export const en = {
       itemPlaceholder: "Type, then add",
       choose: "Choose…",
     },
+    /** What stands in for a frame the console has nothing to show in. */
+    frameUnavailable: "This can't be shown right now.",
     /** The front page's widgets, arranged by the person (ADR-0059). */
     widgets: {
       edit: "Edit widgets",

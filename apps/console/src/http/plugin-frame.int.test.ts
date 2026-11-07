@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -254,12 +255,30 @@ describe("the frame of a plugin's page", () => {
     expect((await h.request("/api/v1/plugin-runtime/assets/face-abc.woff2")).status).toBe(404);
   });
 
-  it("serves nothing of a plugin that is disabled", async () => {
+  it("serves nothing of a plugin that is disabled, and a frame shows no answer meant for a program", async () => {
     expect((await h.request(pluginPath("hello", "disable"), json({}, admin))).status).toBe(200);
     const framed = await h.request(`${AT}/frame?page=greetings`, {
       headers: { referer: `${SIGN_IN_URL}/` },
     });
     expect(framed.status).toBe(404);
+    expect(framed.headers.get("content-type")).toContain("text/html");
+    const html = await framed.text();
+    expect(html).not.toContain("plugin.not_found");
+    expect(html).not.toContain("<link");
+    // The one script it runs tells the console's page, by its hash; nothing else may run or load.
+    const script = /<script>(.*)<\/script>/.exec(html)?.[1] ?? "";
+    expect(script).toContain('t:"unavailable"');
+    const hash = createHash("sha256").update(script).digest("base64");
+    expect(framed.headers.get("content-security-policy")).toBe(
+      [
+        "default-src 'none'",
+        `script-src 'sha256-${hash}'`,
+        `frame-ancestors ${SIGN_IN_URL}`,
+        "base-uri 'none'",
+        "form-action 'none'",
+        "sandbox allow-scripts",
+      ].join("; "),
+    );
     expect((await h.request(`${AT}/web/${version}/index.js`)).status).toBe(404);
   });
 });

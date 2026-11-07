@@ -67,6 +67,7 @@ describe("isBridgeToFrame", () => {
 describe("isBridgeToPage", () => {
   it("accepts what a frame may ask", () => {
     expect(isBridgeToPage({ v: 1, t: "ready" })).toBe(true);
+    expect(isBridgeToPage({ v: 1, t: "unavailable" })).toBe(true);
     expect(
       isBridgeToPage({
         v: 1,

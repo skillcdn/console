@@ -3,6 +3,7 @@ import {
   addable,
   added,
   arrangementShown,
+  availableWidgets,
   defaultArrangement,
   moved,
   removed,
@@ -74,6 +75,13 @@ describe("the front page's widgets (ADR-0059)", () => {
       ["latest", "wide", "home:bottom"],
     ]);
     expect(shown[2]?.sizes).toEqual(["wide"]);
+  });
+
+  it("leaves out the widgets of a plugin that is not on, which an administrator reads with the rest", () => {
+    for (const state of ["installed", "disabled", "needs_consent", "failed"] as const) {
+      expect(availableWidgets([{ ...hr, state }])).toEqual([]);
+      expect(arrangementShown([{ ...hr, state }], null)).toEqual([]);
+    }
   });
 
   it("shows the person's arrangement, dropping what they may no longer see and a size the widget no longer comes in", () => {

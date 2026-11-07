@@ -212,6 +212,37 @@ describe("the example plugin in a browser", () => {
     await page.context().close();
   });
 
+  it("says in the console's words that a frame has nothing to show, and shows no answer meant for a program", async () => {
+    const page = await signedIn(BROWSER_ADMIN);
+    // The page reads a widget the plugin does not have, as a page that read the plugins a while
+    // ago reads one that was turned off since.
+    await page.route("**/api/v1/plugins", async (route) => {
+      const response = await route.fetch();
+      const plugins = (await response.json()) as {
+        items: { key: string; widgets: Record<string, unknown>[] }[];
+      };
+      for (const plugin of plugins.items) {
+        if (plugin.key === "hello") {
+          plugin.widgets.push({
+            key: "gone",
+            name: { en: "Gone" },
+            place: "home:top",
+            size: "third",
+            sizes: ["small"],
+            defaultSize: "small",
+          });
+        }
+      }
+      await route.fulfill({ response, json: plugins });
+    });
+    await page.goto(`${console_.origin}/`);
+    await page.waitForSelector(".sc-plugin-frame-unavailable");
+    expect(await page.textContent(".sc-plugin-frame-unavailable")).toBe(
+      "This can't be shown right now.",
+    );
+    await page.context().close();
+  });
+
   it("serves the frame to the console's own pages alone: opened as a page of its own, it is not found", async () => {
     const context = await browser.newContext();
     const page = await context.newPage();

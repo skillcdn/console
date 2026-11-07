@@ -187,6 +187,7 @@ export const ko: Messages = {
       itemPlaceholder: "입력한 뒤 추가",
       choose: "선택…",
     },
+    frameUnavailable: "지금은 표시할 수 없습니다.",
     widgets: {
       edit: "위젯 편집",
       done: "완료",

@@ -100,6 +100,7 @@ import { ConnectPage } from "./connect-page.js";
 import { type ConsoleData, useConsoleData } from "./data.js";
 import { monthOf, today } from "./dates.js";
 import { DocsPage } from "./docs-page.js";
+import { availableWidgets } from "./home-widgets.js";
 import {
   chooseLanguage,
   DEFAULT_LANGUAGES,
@@ -419,7 +420,7 @@ function ProjectsPage(props: {
   const me = data.me;
   // The person arranges the front page's widgets (ADR-0059): which, how large, in what order.
   const [arranging, setArranging] = useState(false);
-  const hasWidgets = data.plugins.some((plugin) => plugin.widgets.length > 0);
+  const hasWidgets = availableWidgets(data.plugins).length > 0;
   const arrange = (home: readonly RestHomeWidget[] | null) =>
     void data.actions.updateMe({ home: home === null ? null : [...home] }).catch(() => undefined);
   /** The plugins' widgets at a place of this page (ADR-0054, ADR-0059), as the person arranged them. */

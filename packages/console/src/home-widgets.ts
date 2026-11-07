@@ -25,9 +25,15 @@ export interface ShownWidget extends AvailableWidget {
   readonly sizes: readonly PluginWidgetSizeName[];
 }
 
-/** Every widget the person holds a role for, in the plugins' order. */
+/**
+ * Every widget the person may see, in the plugins' order: those they hold a role for, of the
+ * plugins that are on. An administrator reads every plugin installed, and one that is off has no
+ * frame to show.
+ */
 export function availableWidgets(plugins: readonly RestPlugin[]): AvailableWidget[] {
-  return plugins.flatMap((plugin) => plugin.widgets.map((widget) => ({ plugin, widget })));
+  return plugins
+    .filter((plugin) => plugin.state === "enabled")
+    .flatMap((plugin) => plugin.widgets.map((widget) => ({ plugin, widget })));
 }
 
 /** The manifests' arrangement: every widget at its place, at the size it starts at. */

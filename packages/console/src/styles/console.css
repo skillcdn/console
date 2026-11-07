@@ -579,6 +579,13 @@ html[data-console] body {
   min-height: 0;
 }
 
+/* What stands in for a frame that has nothing to show. */
+.sc-plugin-frame-unavailable {
+  margin: 0;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
 .sc-widget-head {
   display: flex;
   flex-wrap: wrap;

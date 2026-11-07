@@ -2,6 +2,7 @@
 // and what an administrator does with them. Every route runs as the board's do: parse, ask who
 // is asking and whether they may, then do the work; what a member may not know of is not found.
 
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { extname, resolve, sep } from "node:path";
@@ -74,6 +75,15 @@ const MAX_BODY_BYTES = 256 * 1024;
 const PLUGIN_RUNTIME = "/api/v1/plugin-runtime";
 /** The package's stylesheet, as this app resolves it. */
 const CONSOLE_STYLESHEET = createRequire(import.meta.url).resolve("@skillcdn/console/console.css");
+/**
+ * What a frame is served when there is nothing to show in it: a plugin that is off, a page it has
+ * not. No words, which are the console's page's to say in the person's language: the document
+ * tells the page and stays blank, so that a frame never shows an answer meant for a program.
+ */
+const FRAME_UNAVAILABLE_SCRIPT = `parent.postMessage({v:1,t:"unavailable"},"*")`;
+const FRAME_UNAVAILABLE_DOCUMENT = `<!doctype html><html lang="en"><head><meta charset="utf-8"></head><body><script>${FRAME_UNAVAILABLE_SCRIPT}</script></body></html>\n`;
+const FRAME_UNAVAILABLE_HASH = `sha256-${createHash("sha256").update(FRAME_UNAVAILABLE_SCRIPT).digest("base64")}`;
+
 /** A person's own console, served on this machine by the command (ADR-0014): it may embed a frame too. */
 const LOOPBACK_ORIGIN = /^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/;
 /** What a bundle's files are served as, by extension; anything else as bytes. */
@@ -1152,6 +1162,14 @@ export function registerPluginsRest(
     return origin === ownOrigin || LOOPBACK_ORIGIN.test(origin) ? origin : undefined;
   };
 
+  /** What every document of a frame is served with, under the policy it has. */
+  const frameHeaders = (c: Context<AppEnv>, policy: readonly string[]): void => {
+    c.header("content-security-policy", policy.join("; "));
+    c.header("referrer-policy", "no-referrer");
+    c.header("x-content-type-options", "nosniff");
+    c.header("cache-control", "no-store");
+  };
+
   app.get(`${PLUGIN}/frame`, async (c) => {
     const key = keyOf(c);
     const origin = embedderOf(c);
@@ -1169,7 +1187,15 @@ export function registerPluginsRest(
     }
     const web = await plugins.webOf(key);
     if (web === undefined || !(page === undefined ? web.widgets : web.pages).includes(name)) {
-      return notFound(c);
+      frameHeaders(c, [
+        "default-src 'none'",
+        `script-src '${FRAME_UNAVAILABLE_HASH}'`,
+        `frame-ancestors ${origin}`,
+        "base-uri 'none'",
+        "form-action 'none'",
+        "sandbox allow-scripts",
+      ]);
+      return c.html(FRAME_UNAVAILABLE_DOCUMENT, 404);
     }
     const bundle = `${origin}${pluginPath(key, "web", web.version)}`;
     const runtime = `${origin}${PLUGIN_RUNTIME}`;
@@ -1188,26 +1214,20 @@ export function registerPluginsRest(
       "",
     ].join("\n");
     const webPath = `${origin}${pluginPath(key, "web")}/`;
-    c.header(
-      "content-security-policy",
-      [
-        "default-src 'none'",
-        `script-src ${webPath}`,
-        `style-src ${webPath} ${runtime}/`,
-        `img-src ${webPath} data: blob:`,
-        `font-src ${webPath} ${runtime}/`,
-        "connect-src 'none'",
-        `frame-ancestors ${origin}`,
-        "base-uri 'none'",
-        "form-action 'none'",
-        // Forms fire their submit event (without allow-forms a browser drops the submission before
-        // the event); form-action 'none' keeps a submission from going anywhere.
-        "sandbox allow-scripts allow-forms",
-      ].join("; "),
-    );
-    c.header("referrer-policy", "no-referrer");
-    c.header("x-content-type-options", "nosniff");
-    c.header("cache-control", "no-store");
+    frameHeaders(c, [
+      "default-src 'none'",
+      `script-src ${webPath}`,
+      `style-src ${webPath} ${runtime}/`,
+      `img-src ${webPath} data: blob:`,
+      `font-src ${webPath} ${runtime}/`,
+      "connect-src 'none'",
+      `frame-ancestors ${origin}`,
+      "base-uri 'none'",
+      "form-action 'none'",
+      // Forms fire their submit event (without allow-forms a browser drops the submission before
+      // the event); form-action 'none' keeps a submission from going anywhere.
+      "sandbox allow-scripts allow-forms",
+    ]);
     return c.html(html);
   });
 

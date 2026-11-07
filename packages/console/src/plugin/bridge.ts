@@ -150,8 +150,18 @@ export interface BridgeSubscribe {
   readonly kinds: readonly BridgeEventKind[];
 }
 
+/**
+ * The frame has nothing to show: the plugin is off, or the page is not one of its own. The console
+ * serves such a frame a document with no words, and the console's page says so in its own.
+ */
+export interface BridgeUnavailable {
+  readonly v: 1;
+  readonly t: "unavailable";
+}
+
 export type BridgeToPage =
   | BridgeReady
+  | BridgeUnavailable
   | BridgeCall
   | BridgeNavigate
   | BridgeResize
@@ -268,6 +278,7 @@ export function isBridgeToPage(value: unknown): value is BridgeToPage {
   }
   switch (value.t) {
     case "ready":
+    case "unavailable":
       return true;
     case "call":
       return (
