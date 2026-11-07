@@ -13,6 +13,7 @@ import {
   restWorkspacePatchSchema,
 } from "@skillcdn/console/api";
 import type { Context, Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import type { Connections } from "../auth/connect.js";
 import type { Login, LoginStep } from "../auth/login.js";
 import { safeReturnTo } from "../auth/login.js";
@@ -66,6 +67,9 @@ export interface AppAuth {
 }
 
 // The sign-in paths of the package, with the provider as a parameter of the route.
+/** The most a patch of the person or the workspace reads, as the rest of the API does. */
+const MAX_BODY_BYTES = 256 * 1024;
+
 const LOGIN_PATTERN = "/auth/:provider/login";
 const CALLBACK_PATTERN = "/auth/:provider/callback";
 
@@ -209,6 +213,10 @@ export interface AuthDependencies {
  */
 export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies): void {
   const { auth, access, workspace, skills, database, clock } = dependencies;
+  const tooLarge = bodyLimit({
+    maxSize: MAX_BODY_BYTES,
+    onError: (c) => c.json(errorBody("request.too_large", "The request body is too large."), 413),
+  });
 
   /**
    * What the pages are told about who asks: the workspace, the person, with what (a token's
@@ -265,7 +273,7 @@ export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies):
 
   // The person's own choice of language (ADR-0012): theirs to keep, from the console's own
   // pages or through their token (ADR-0021).
-  app.patch(REST_ROUTES.me, async (c) => {
+  app.patch(REST_ROUTES.me, tooLarge, async (c) => {
     c.header("cache-control", "no-store");
     if (!access.presentsToken(c) && !access.fromOwnPages(c)) {
       return foreignOrigin(c);
@@ -301,7 +309,7 @@ export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies):
 
   // The workspace's settings (ADR-0035): an administrator's, from the console's own pages or
   // through their agent's token (ADR-0021); answered as `me` describes the workspace.
-  app.patch(REST_ROUTES.workspace, async (c) => {
+  app.patch(REST_ROUTES.workspace, tooLarge, async (c) => {
     c.header("cache-control", "no-store");
     if (!access.presentsToken(c) && !access.fromOwnPages(c)) {
       return foreignOrigin(c);

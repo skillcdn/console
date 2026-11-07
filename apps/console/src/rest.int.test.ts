@@ -154,6 +154,18 @@ const latestEventIn = async (cookie: string, at = IN) =>
     .items.at(-1)?.id ?? 0;
 
 describe("who may ask", () => {
+  it("reads no more of a patch of the person or the workspace than one can hold", async () => {
+    for (const path of [REST_ROUTES.me, REST_ROUTES.workspace]) {
+      const huge = await h.request(path, {
+        method: "PATCH",
+        headers: { cookie: alice, origin: SIGN_IN_URL, "content-type": "application/json" },
+        body: JSON.stringify({ language: "x".repeat(300 * 1024) }),
+      });
+      expect(huge.status, path).toBe(413);
+      expect(await errorOf(huge)).toBe("request.too_large");
+    }
+  });
+
   it("answers nobody with a refusal, on every route", async () => {
     for (const path of [
       REST_ROUTES.people,
