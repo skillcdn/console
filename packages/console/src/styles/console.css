@@ -508,14 +508,44 @@ table {
   top: 100%;
 }
 
-/* The sub-tabs of a plugin with several pages, above its frame. */
+/* The pages of a plugin: the header's tabs going on a row lower, on the same gutters, the line
+   under them where the page begins. The line is a shadow, so that the current tab's underline lies
+   on it, as the header's does on its own line, in a row that scrolls sideways. */
+.sc-page-tabs {
+  display: flex;
+  flex: none;
+  gap: var(--sc-space-5);
+  margin: calc(var(--sc-main-top) * -1) calc(var(--sc-main-side) * -1) var(--sc-space-5);
+  padding: var(--sc-space-1) var(--sc-main-side) 0;
+  background: color-mix(in srgb, var(--sc-color-bg) 45%, transparent);
+  box-shadow: inset 0 -1px 0 var(--sc-color-border);
+  overflow: auto hidden;
+  scrollbar-width: none;
+}
 
+/* The views within a page, as a plugin has in its frame: the console's view switch, in a tab's
+   words, so that the row reads as a level below the tabs. What stands around it is the page's. */
 .sc-subtabs {
   display: flex;
-  gap: var(--sc-space-4);
-  margin-bottom: var(--sc-space-4);
-  border-bottom: var(--sc-border);
-  overflow: auto hidden;
+  flex-wrap: wrap;
+  gap: var(--sc-space-1);
+}
+
+.sc-subtabs .sc-tab {
+  padding: var(--sc-space-1) var(--sc-space-3);
+  border-bottom: 0;
+  border-radius: var(--sc-radius-full);
+  cursor: pointer;
+}
+
+.sc-subtabs .sc-tab:hover {
+  background: var(--sc-color-bg-inset);
+}
+
+.sc-subtabs .sc-tab-current {
+  background: var(--sc-color-bg-raised);
+  box-shadow: 0 0 0 1px var(--sc-color-border);
+  color: var(--sc-color-text);
 }
 
 /* A plugin's frame: the width of the page, as tall as the frame says. */
@@ -527,6 +557,14 @@ table {
   border: 0;
   border-radius: var(--sc-radius-lg);
   background: transparent;
+}
+
+/* A page pads itself by a step, for the shadows of what is in it, which the frame would cut. The
+   frame stands that step outside the page's column, so that the page's first words line up with
+   the tabs above it, and with every other page's. */
+.sc-plugin-frame-page {
+  width: calc(100% + 2 * var(--sc-space-4));
+  margin: calc(var(--sc-space-4) * -1);
 }
 
 /* A plugin's frame document, which the console serves marked with data-console: it paints no
@@ -735,18 +773,20 @@ html[data-console] body {
 /* The page is a column of blocks that fills the window below the header, so that a block which
    wants the rest of the height, the board, can take it. */
 .sc-main {
+  --sc-main-top: var(--sc-space-6);
+  --sc-main-side: var(--sc-gutter);
   display: flex;
   flex: 1;
   flex-direction: column;
   width: 100%;
-  padding: var(--sc-space-6) var(--sc-gutter) var(--sc-space-8);
+  padding: var(--sc-main-top) var(--sc-main-side) var(--sc-space-8);
 }
 
 /* A page as wide as the window: the board, whose columns want every bit of it. It starts at the
    same height as the other pages and, being as tall as the window, ends with the same room. */
 .sc-main-wide {
   max-width: none;
-  padding: var(--sc-space-6) var(--sc-gutter);
+  padding: var(--sc-main-top) var(--sc-main-side);
 }
 
 /* A page that takes the whole window takes the header with it, so that the lockup, the tabs and
@@ -4525,7 +4565,13 @@ select.sc-input-quiet:focus-visible {
   }
 
   .sc-main {
-    padding: var(--sc-space-5) var(--sc-space-4) var(--sc-space-7);
+    --sc-main-top: var(--sc-space-5);
+    --sc-main-side: var(--sc-space-4);
+    padding-bottom: var(--sc-space-7);
+  }
+
+  .sc-page-tabs {
+    gap: var(--sc-space-4);
   }
 
   .sc-page-title,

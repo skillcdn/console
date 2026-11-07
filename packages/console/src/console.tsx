@@ -532,7 +532,7 @@ function PluginPage(props: {
   return (
     <>
       {pages.length > 1 && (
-        <nav className="sc-subtabs" aria-label={pluginWordOf(plugin.name, language)}>
+        <nav className="sc-page-tabs" aria-label={pluginWordOf(plugin.name, language)}>
           {pages.map((candidate) => (
             <a
               key={candidate.key}

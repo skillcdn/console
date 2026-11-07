@@ -412,7 +412,9 @@ export function PluginFrame(props: PluginFrameProps) {
   return (
     <iframe
       ref={frame}
-      className={isWidget ? "sc-plugin-frame sc-plugin-frame-widget" : "sc-plugin-frame"}
+      className={
+        isWidget ? "sc-plugin-frame sc-plugin-frame-widget" : "sc-plugin-frame sc-plugin-frame-page"
+      }
       src={src}
       title={props.title}
       // As the document's own policy says: scripts, and forms firing their submit event, which

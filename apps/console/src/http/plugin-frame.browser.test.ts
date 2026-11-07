@@ -131,12 +131,21 @@ const BRIDGE_CALLS = `new Promise((resolve) => {
   }, 2000);
 })`;
 
+/** How far the frame stands outside the page's column. Text, as this workspace has no types of a page. */
+const FRAME_OUTSIDE_THE_COLUMN = `(() => {
+  const main = document.querySelector("#sc-content");
+  const column = main.getBoundingClientRect().left + Number.parseFloat(getComputedStyle(main).paddingLeft);
+  return column - document.querySelector(".sc-plugin-frame").getBoundingClientRect().left;
+})()`;
+
 describe("the example plugin in a browser", () => {
   it("shows its page in a frame, works it through the bridge alone, and the widget follows", async () => {
     const page = await signedIn(BROWSER_ADMIN);
     await page.goto(`${console_.origin}/plugins/hello/greetings`);
     const frame = await frameOf(page, "iframe.sc-plugin-frame");
     await frame.waitForSelector("text=Nobody has been greeted yet.");
+    // A page pads itself by a step, which its frame takes back, so that it lines up with the tabs.
+    expect(await page.evaluate(FRAME_OUTSIDE_THE_COLUMN)).toBe(16);
     // The console's theme reached the frame with `init`: its tokens are on the frame's root.
     expect(
       await frame.evaluate(
