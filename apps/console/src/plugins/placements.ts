@@ -357,28 +357,72 @@ function replacePath(value: unknown, path: string, replacement: string): void {
   }
 }
 
+/** The fewest bytes a value is looked for in base64 by: a shorter one's letters turn up in any base64 by chance. */
+const MIN_BASE64_BYTES = 8;
+
+/** A percent-encoding with its hex digits small, as a server that encodes again may spell it. */
+const smallHex = (encoded: string): string =>
+  encoded.replace(/%[0-9A-F]{2}/g, (sequence) => sequence.toLowerCase());
+
+/** Base64 in the alphabet of a URL. */
+const urlAlphabet = (base64: string): string => base64.replaceAll("+", "-").replaceAll("/", "_");
+
+/** A value as it is, escaped as JSON, URL-encoded as a URL's part and as a query or a form encodes it, each with its hex digits big or small. */
+function spelledForms(text: string): readonly string[] {
+  // A lone surrogate, which an answer's JSON may hold, is encoded as a form encodes it, not thrown on.
+  const part = encodeURIComponent(text.toWellFormed());
+  const query = new URLSearchParams([["", text]]).toString().slice(1);
+  return [text, JSON.stringify(text).slice(1, -1), part, query, smallHex(part), smallHex(query)];
+}
+
+/**
+ * A value in base64, in a header's alphabet and in a URL's: whole, padded or not, and inside a
+ * longer run of base64 at each of the three places its first byte may fall, without the letters
+ * it shares with what is around it, so that a value encoded together with others is found too.
+ * A value too short to tell from chance has none.
+ */
+function base64Forms(text: string): readonly string[] {
+  const bytes = Buffer.from(text.toWellFormed(), "utf8");
+  if (bytes.byteLength < MIN_BASE64_BYTES) {
+    return [];
+  }
+  const whole = bytes.toString("base64");
+  const forms = [whole, whole.replace(/=+$/, ""), bytes.toString("base64url")];
+  for (const offset of [0, 1, 2]) {
+    const shifted = Buffer.concat([Buffer.alloc(offset), bytes]).toString("base64");
+    // The letters made of the value's bits alone: past the bits of the bytes before it, and
+    // short of the last letter, which shares its bits with whatever follows.
+    const inside = shifted.slice(
+      Math.ceil((offset * 8) / 6),
+      Math.floor(((offset + bytes.byteLength) * 8) / 6),
+    );
+    forms.push(inside, urlAlphabet(inside));
+  }
+  return forms;
+}
+
 /**
  * The forms a value may come back in, to be taken out of an answer: as it is, escaped as JSON,
- * URL-encoded as a URL's part and as a query or a form encodes it; for basic authentication also
- * the base64 of the pair, as the header carries it, and the password alone.
+ * URL-encoded as a URL's part and as a query or a form encodes it, with the hex digits big or
+ * small; in base64, whole or inside a longer run of it, in a header's alphabet or a URL's; and
+ * each with its slashes escaped, as some JSON spells them. For basic authentication, the pair's
+ * forms and the password's alone.
  */
 export function formsOf(value: string, as?: SecretPlacement): readonly string[] {
-  const spelled = (text: string): readonly string[] => [
-    text,
-    JSON.stringify(text).slice(1, -1),
-    // A lone surrogate, which an answer's JSON may hold, is encoded as a form encodes it, not thrown on.
-    encodeURIComponent(text.toWellFormed()),
-    new URLSearchParams([["", text]]).toString().slice(1),
-  ];
-  const forms = [...spelled(value)];
+  const forms = [...spelledForms(value), ...base64Forms(value)];
   if (as === "basic") {
-    forms.push(Buffer.from(value, "utf8").toString("base64"));
+    // The header carries the pair as this, however short it is.
+    forms.push(Buffer.from(value.toWellFormed(), "utf8").toString("base64"));
     const colon = value.indexOf(":");
     if (colon >= 0 && colon < value.length - 1) {
-      forms.push(...spelled(value.slice(colon + 1)));
+      const password = value.slice(colon + 1);
+      forms.push(...spelledForms(password), ...base64Forms(password));
     }
   }
-  return [...new Set(forms)].filter((form) => form.length > 0);
+  const escaped = forms.flatMap((form) =>
+    form.includes("/") ? [form, form.replaceAll("/", "\\/")] : [form],
+  );
+  return [...new Set(escaped)].filter((form) => form.length > 0);
 }
 
 /**

@@ -1,6 +1,6 @@
 # ADR-0075: A secret never comes back to a plugin, and sealing fails closed
 
-- Status: Accepted
+- Status: Accepted; the forms a secret is taken out of an answer in are widened by [ADR-0079](0079-a-secret-is-taken-out-of-an-answer-in-the-encodings-a-service-sends-it-back-in.md): small hex digits, escaped slashes, and base64 for every placement
 - Date: 2026-11-08
 - Amends [ADR-0070](0070-a-secret-is-sealed-by-the-console-from-an-answer-and-goes-where-its-setting-says.md), whose point that a value which is not there, not a string, or over the bound "seals nothing and is left as it is" this replaces, and which said nothing of where a sealed value may come from or of what an answer carries back. The contract is in [specs/plugins.md](../specs/plugins.md).
 

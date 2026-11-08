@@ -251,7 +251,14 @@ describe("what of an answer is sealed", () => {
 
 describe("what of an answer is scrubbed", () => {
   it("knows a value as placed, escaped as JSON, URL-encoded both ways, and basic authentication's base64 and password", () => {
-    expect(formsOf("a b/c")).toEqual(["a b/c", "a%20b%2Fc", "a+b%2Fc"]);
+    expect(formsOf("a b/c")).toEqual([
+      "a b/c",
+      "a b\\/c",
+      "a%20b%2Fc",
+      "a+b%2Fc",
+      "a%20b%2fc",
+      "a+b%2fc",
+    ]);
     expect(formsOf('q"\\')).toContain('q\\"\\\\');
     const basic = formsOf("client:s3cr et", "basic");
     expect(basic).toEqual(
@@ -265,9 +272,42 @@ describe("what of an answer is scrubbed", () => {
       ]),
     );
     expect(formsOf("client:", "basic")).not.toContain("");
+    // The pair as the header carries it, however short.
+    expect(formsOf("u:p4ss", "basic")).toContain(Buffer.from("u:p4ss").toString("base64"));
     // An answer's JSON may hold a lone surrogate: its forms are spelled, never thrown on.
     const lone = `t${String.fromCharCode(0xd800)}k`;
     expect(formsOf(lone)).toEqual(expect.arrayContaining([lone, "t%EF%BF%BDk"]));
+  });
+
+  it("knows a value in the encodings a service may send it back in: small hex digits, escaped slashes, base64 anywhere", () => {
+    const token = "sk_live/4f9a+Z0q";
+    const forms = formsOf(token, "bearer");
+    const echoed = (body: string): string =>
+      text(scrubAnswer({}, new TextEncoder().encode(body), forms).bytes);
+    // Percent-encoded with small hex digits, as a server that encodes again may spell it.
+    expect(echoed("https://api.example.test/cb?key=sk_live%2f4f9a%2bZ0q")).toBe(
+      "https://api.example.test/cb?key=[withheld]",
+    );
+    // In JSON that escapes its slashes.
+    expect(echoed('{"echo":"sk_live\\/4f9a+Z0q"}')).toBe('{"echo":"[withheld]"}');
+    // In base64, in either alphabet, alone or inside a longer run of it wherever it falls.
+    for (const before of ["", "x", "xy", "xyz", "Bearer "]) {
+      for (const encoding of ["base64", "base64url"] as const) {
+        const run = Buffer.from(`${before}${token} and the rest`).toString(encoding);
+        const left = echoed(`{"echo":"${run}"}`);
+        expect(left).toContain("[withheld]");
+        const rest = Buffer.from(
+          left.slice('{"echo":"'.length, -2).replaceAll("[withheld]", ""),
+          encoding,
+        ).toString("latin1");
+        expect(rest).not.toContain(token);
+      }
+    }
+    // A run of base64 without it comes through as it was.
+    const other = Buffer.from("nothing of the token in here").toString("base64");
+    expect(echoed(other)).toBe(other);
+    // A value too short to tell from chance is not looked for in base64.
+    expect(formsOf("abcd")).toEqual(["abcd"]);
   });
 
   it("takes every form out of the headers and the body, and leaves an answer without one as it came", () => {
