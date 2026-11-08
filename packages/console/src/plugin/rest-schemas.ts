@@ -217,6 +217,8 @@ export const restPluginDetailSchema = z.extend(restPluginSchema, {
    * pages and the command tell an administrator to set one. Answered from 0.4.5 and read as optional.
    */
   needsTimeZone: z.optional(z.boolean()),
+  /** The collections the plugin keeps for a while only, each with its days, so that an administrator reads what it forgets; answered from 0.4.5 and read as optional. */
+  keeps: z.optional(z.array(z.object({ collection: z.string(), days: z.int() }))),
 });
 export type RestPluginDetail = z.infer<typeof restPluginDetailSchema>;
 

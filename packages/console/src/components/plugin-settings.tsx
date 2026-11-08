@@ -216,6 +216,13 @@ function Overview(props: {
   } else if (enabled && detail.boardNeeds !== "none") {
     rows.push({ key: "board", name: settings.board, value: settings.nothing });
   }
+  if (detail.keeps !== undefined && detail.keeps.length > 0) {
+    rows.push({
+      key: "keeps",
+      name: settings.keeps,
+      value: detail.keeps.map((kept) => settings.keepsFor(kept.collection, kept.days)).join(", "),
+    });
+  }
   if (enabled && detail.projects !== null) {
     const names = detail.projects;
     rows.push({

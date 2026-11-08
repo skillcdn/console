@@ -359,6 +359,9 @@ export const en = {
       console: "Console versions",
       consoleRange: (range: string) => `console ${range}`,
       timeZoneHint: "In the workspace's time zone.",
+      keeps: "Kept for",
+      keepsFor: (collection: string, days: number) =>
+        `${collection}: ${days} ${days === 1 ? "day" : "days"}, then removed`,
       needsTimeZone:
         "The workspace has no time zone, so this plugin's times of day run on UTC until one is set.",
       setTimeZone: "Set the time zone",

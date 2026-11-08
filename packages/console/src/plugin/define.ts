@@ -6,6 +6,7 @@
 import type { ArgDefinitions, ArgDescription, ArgsOf } from "./args.js";
 import type {
   CollectionDefinition,
+  CollectionRetention,
   EndpointRequest,
   EndpointResponse,
   PluginContext,
@@ -19,6 +20,7 @@ import {
   MAX_PLUGIN_ENDPOINTS,
   MAX_PLUGIN_INDEXES,
   MAX_PLUGIN_OPERATIONS,
+  MAX_PLUGIN_RETENTION_DAYS,
   MIN_PLUGIN_JOB_INTERVAL_MS,
 } from "./limits.js";
 import {
@@ -103,6 +105,13 @@ export interface CollectionInput<S extends RecordSchema> {
   readonly readOwn?: readonly string[];
   /** A version kept per write; on unless said otherwise. */
   readonly history?: boolean;
+  /**
+   * How long a record is kept: `days` (1 to `MAX_PLUGIN_RETENTION_DAYS`) after the moment `by`
+   * names, `createdAt` unless said, `updatedAt`, or an indexed field holding a day or an instant
+   * as ISO 8601 text. The console removes what is past it, with its versions, links and files;
+   * with `history: false`, a light collection for logs and deliveries. Kept for ever when left out.
+   */
+  readonly retention?: { readonly days: number; readonly by?: string };
 }
 
 /** A collection of records the console keeps for the plugin, by name. */
@@ -154,6 +163,24 @@ export function defineCollection<S extends RecordSchema>(
   if (input.readOwn !== undefined && input.owner === undefined) {
     problems.push(`the collection ${name} has readOwn roles and no owner field`);
   }
+  const retention = input.retention;
+  if (retention !== undefined) {
+    if (
+      !Number.isInteger(retention.days) ||
+      retention.days < 1 ||
+      retention.days > MAX_PLUGIN_RETENTION_DAYS
+    ) {
+      problems.push(
+        `the collection ${name} keeps records for ${String(retention.days)} days; 1 to ${MAX_PLUGIN_RETENTION_DAYS}`,
+      );
+    }
+    const by = retention.by ?? "createdAt";
+    if (by !== "createdAt" && by !== "updatedAt" && !indexes.includes(by)) {
+      problems.push(
+        `the collection ${name} keeps records by ${by}, which is neither createdAt, updatedAt nor an indexed field`,
+      );
+    }
+  }
   fail(problems);
   return Object.freeze({
     name,
@@ -165,6 +192,10 @@ export function defineCollection<S extends RecordSchema>(
     read: Object.freeze([...(input.read ?? [])]),
     readOwn: Object.freeze([...(input.readOwn ?? [])]),
     history: input.history ?? true,
+    retention:
+      input.retention === undefined
+        ? null
+        : Object.freeze({ days: input.retention.days, by: input.retention.by ?? "createdAt" }),
   });
 }
 
@@ -595,6 +626,8 @@ export interface CollectionDescription {
   readonly read: readonly string[];
   readonly readOwn: readonly string[];
   readonly history: boolean;
+  /** How long a record is kept, or `null` for as long as the plugin is; none from a plugin built before it. */
+  readonly retention?: CollectionRetention | null | undefined;
 }
 
 export interface EndpointDescription {
@@ -670,6 +703,7 @@ export function describePlugin(definition: PluginDefinition): PluginDescription 
       read: [...collection.read],
       readOwn: [...collection.readOwn],
       history: collection.history,
+      retention: collection.retention ?? null,
     })),
     commands: Object.fromEntries(
       Object.entries(definition.commands).map(([name, command]) => [

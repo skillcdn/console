@@ -43,6 +43,7 @@ import { PluginHost } from "../plugins/host.js";
 import { allowedReadRoots, HOST_ENTRY } from "../plugins/paths.js";
 import { RecordStore } from "../plugins/records.js";
 import { Plugins } from "../plugins/registry.js";
+import { PluginRetention } from "../plugins/retention.js";
 import { PluginScheduler } from "../plugins/scheduler.js";
 import { PluginSqlService } from "../plugins/sql.js";
 import { type BlobStore, BlobStoreError } from "../ports/blob-store.js";
@@ -554,6 +555,8 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
 /** How often the plugins' hooks are dispatched, and their jobs looked at. */
 export const PLUGIN_DISPATCH_INTERVAL_MS = 5_000;
 export const PLUGIN_SCHEDULE_INTERVAL_MS = 60_000;
+/** How often the records past their collection's retention are removed. */
+export const PLUGIN_RETENTION_INTERVAL_MS = 60 * 60_000;
 
 /**
  * The plugins' hooks and jobs (docs/specs/plugins.md, "Events, hooks and jobs"): the dispatcher
@@ -580,12 +583,16 @@ export function startPluginStreams(
     clock: systemClock,
     logger,
   });
+  const retention = new PluginRetention({ plugins, clock: systemClock, logger });
   dispatcher.start(PLUGIN_DISPATCH_INTERVAL_MS);
   scheduler.start(PLUGIN_SCHEDULE_INTERVAL_MS);
+  retention.start(PLUGIN_RETENTION_INTERVAL_MS);
+  void retention.sweep();
   return {
     async close() {
       await dispatcher.close();
       await scheduler.close();
+      await retention.close();
     },
   };
 }

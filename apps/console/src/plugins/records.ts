@@ -1138,6 +1138,37 @@ export class RecordStore {
   }
 
   /** Removes everything the plugin keeps here: records with their versions, files and links, and its uploads. */
+  /**
+   * Removes the records of a collection that are past its retention (docs/specs/plugins.md,
+   * "Records"): older than `days` by the record's own moment, or by a day or an instant an indexed
+   * field holds as ISO 8601 text, compared as text, which the shape sorts right and a malformed
+   * value cannot break; what does not look like one is kept. Their versions, links and files go
+   * with them. Nothing where the collection has no retention.
+   */
+  async sweepExpired(scope: RecordScope, now: Date): Promise<number> {
+    const retention = scope.collection.retention ?? null;
+    if (retention === null) {
+      return 0;
+    }
+    const cutoff = new Date(now.getTime() - retention.days * 86_400_000);
+    let past: SQL;
+    if (retention.by === "createdAt") {
+      past = lt(pluginRecords.createdAt, cutoff);
+    } else if (retention.by === "updatedAt") {
+      past = lt(pluginRecords.updatedAt, cutoff);
+    } else if (FIELD.test(retention.by) && scope.collection.indexes.includes(retention.by)) {
+      const text = sql`(${pluginRecords.data} ->> ${retention.by})`;
+      past = sql`(${text} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' and left(${text}, 19) < ${cutoff.toISOString().slice(0, 19)})`;
+    } else {
+      return 0;
+    }
+    const removed = await drizzleOf(this.database)
+      .delete(pluginRecords)
+      .where(and(this.within(scope), past))
+      .returning({ id: pluginRecords.id });
+    return removed.length;
+  }
+
   async purge(
     workspaceId: string,
     plugin: string,

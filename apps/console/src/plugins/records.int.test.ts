@@ -1,9 +1,12 @@
 import process from "node:process";
 import { type CollectionDescription, MAX_PLUGIN_RECORD_BYTES } from "@skillcdn/console/plugin";
+import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createPgBlobStore } from "../adapters/pg-blob-store.js";
+import { drizzleOf } from "../db/client.js";
 import { findPerson, type PersonRecord } from "../db/queries/people.js";
 import { ensureWorkspace } from "../db/queries/workspaces.js";
+import { pluginRecords } from "../db/schema.js";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "../db/testing.js";
 import { createFixtureProvider } from "../testing/fixture-provider.js";
 import { createHarness, type Harness } from "../testing/harness.js";
@@ -29,6 +32,7 @@ const requests: CollectionDescription = {
   read: ["approver"],
   readOwn: ["employee"],
   history: true,
+  retention: null,
 };
 const notes: CollectionDescription = {
   name: "notes",
@@ -39,6 +43,19 @@ const notes: CollectionDescription = {
   read: [],
   readOwn: [],
   history: false,
+  retention: null,
+};
+/** A log-like collection: light, and forgotten after a while, by a day its records name. */
+const deliveries: CollectionDescription = {
+  name: "deliveries",
+  indexes: ["sentOn"],
+  search: [],
+  owner: null,
+  project: "none",
+  read: [],
+  readOwn: [],
+  history: false,
+  retention: { days: 30, by: "sentOn" },
 };
 const CONSOLE: Writer = { personId: undefined, agent: undefined };
 let scope: RecordScope;
@@ -398,6 +415,37 @@ describe("the record store", () => {
     });
     await store.removeFile(own, record.id, file.id);
     expect(await store.listFiles(own, record.id)).toEqual([]);
+  });
+
+  it("forgets what is past a collection's retention, by a day its records name or by their own moment", async () => {
+    const own = { ...scope, plugin: "forgetting", collection: deliveries };
+    const now = new Date("2026-11-08T12:00:00.000Z");
+    const old = await store.create(own, { sentOn: "2026-09-01" }, {}, CONSOLE);
+    // Thirty days before noon is noon of 2026-10-09: an instant later that day stays.
+    const edge = await store.create(own, { sentOn: "2026-10-09T13:00:00Z" }, {}, CONSOLE);
+    const fresh = await store.create(own, { sentOn: "2026-11-01" }, {}, CONSOLE);
+    // What does not read as a day is kept, never guessed at.
+    const odd = await store.create(own, { sentOn: "yesterday" }, {}, CONSOLE);
+    expect(await store.sweepExpired(own, now)).toBe(1);
+    expect(await store.get(own, old.id)).toBeUndefined();
+    expect(await store.get(own, edge.id)).toBeDefined();
+    expect(await store.get(own, fresh.id)).toBeDefined();
+    expect(await store.get(own, odd.id)).toBeDefined();
+    // By the record's own moment, where the collection says so; a collection without retention forgets nothing.
+    const lines = {
+      ...own,
+      collection: { ...notes, name: "lines", retention: { days: 7, by: "createdAt" } },
+    };
+    const line = await store.create(lines, { text: "x" }, {}, CONSOLE);
+    const kept = await store.create(lines, { text: "y" }, {}, CONSOLE);
+    await drizzleOf(testDatabase.database)
+      .update(pluginRecords)
+      .set({ createdAt: new Date("2026-10-01T00:00:00.000Z") })
+      .where(eq(pluginRecords.id, line.id));
+    expect(await store.sweepExpired(lines, now)).toBe(1);
+    expect(await store.get(lines, line.id)).toBeUndefined();
+    expect(await store.get(lines, kept.id)).toBeDefined();
+    expect(await store.sweepExpired({ ...own, collection: notes }, now)).toBe(0);
   });
 
   it("exports everything it keeps, and purges it", async () => {

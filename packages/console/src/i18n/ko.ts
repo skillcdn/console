@@ -313,6 +313,8 @@ export const ko: Messages = {
       console: "콘솔 버전",
       consoleRange: (range) => `콘솔 ${range}`,
       timeZoneHint: "워크스페이스 시간대 기준입니다.",
+      keeps: "보관 기간",
+      keepsFor: (collection, days) => `${collection}: ${days}일, 지나면 삭제`,
       needsTimeZone:
         "워크스페이스에 시간대가 없어 이 플러그인의 시각은 시간대를 정할 때까지 UTC로 돕니다.",
       setTimeZone: "시간대 정하기",

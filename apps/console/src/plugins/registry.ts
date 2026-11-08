@@ -820,6 +820,12 @@ export class Plugins {
         : null,
       events: `/api/v1/plugins/${key}/events`,
       needsTimeZone: await this.needsTimeZone(entry, workspace),
+      // What the plugin forgets, and when, for the administrator who turns it on to read.
+      keeps: (entry.description?.collections ?? []).flatMap((collection) =>
+        collection.retention === null || collection.retention === undefined
+          ? []
+          : [{ collection: collection.name, days: collection.retention.days }],
+      ),
     };
   }
 
@@ -2601,6 +2607,42 @@ export class Plugins {
       }
       throw error;
     }
+  }
+
+  /**
+   * Removes what is past its retention in every enabled plugin's collections (docs/specs/plugins.md,
+   * "Records"): the sweep the worker runs on its schedule. Answers how many records went, by plugin.
+   */
+  async sweepExpired(now: Date): Promise<Record<string, number>> {
+    const store = this.options.records;
+    if (store === undefined) {
+      return {};
+    }
+    const workspace = await this.options.workspace();
+    const swept: Record<string, number> = {};
+    for (const install of await listInstalls(this.options.database, workspace.id)) {
+      const entry = this.entries.get(install.key);
+      if (install.state !== "enabled" || entry?.description === undefined) {
+        continue;
+      }
+      for (const collection of entry.description.collections) {
+        if ((collection.retention ?? null) === null) {
+          continue;
+        }
+        const removed = await store.sweepExpired(
+          { workspaceId: workspace.id, plugin: install.key, collection },
+          now,
+        );
+        if (removed > 0) {
+          swept[install.key] = (swept[install.key] ?? 0) + removed;
+          this.options.logger.info(
+            { plugin: install.key, collection: collection.name, removed },
+            "plugin records past their retention were removed",
+          );
+        }
+      }
+    }
+    return swept;
   }
 
   /** Writes that the plugin failed, as a `plugin.failed` event in its board project. */

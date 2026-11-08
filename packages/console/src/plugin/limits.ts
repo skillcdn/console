@@ -42,6 +42,8 @@ export const MAX_PLUGIN_COMMAND_FILES = 20;
 export const MAX_PLUGIN_EVENT_BYTES = 16 * 1024;
 export const PLUGIN_EVENTS_KEPT = 100_000;
 export const PLUGIN_EVENT_DAYS = 90;
+/** The most days a collection's retention may keep a record: ten years. */
+export const MAX_PLUGIN_RETENTION_DAYS = 3650;
 /** How many records one page of a list carries at most. */
 export const PLUGIN_LIST_LIMIT = 200;
 /** How long plugin code may run: a command; a query or an endpoint; a hook; a job; `onEnable`, `onDisable` and an upgrade. */

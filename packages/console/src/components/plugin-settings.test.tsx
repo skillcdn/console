@@ -336,6 +336,12 @@ describe("a plugin's settings page", () => {
     expect(html).toContain("팀원이 있는 사람");
   });
 
+  it("says what the plugin keeps for a while only, and for how long", () => {
+    const html = render({ ...DETAIL, keeps: [{ collection: "deliveries", days: 90 }] });
+    expect(html).toContain("deliveries: 90일, 지나면 삭제");
+    expect(render(DETAIL)).not.toContain("보관 기간");
+  });
+
   it("tells an administrator when the plugin reads a time of day and the workspace has no time zone", () => {
     const html = render({ ...DETAIL, needsTimeZone: true });
     expect(html).toContain(

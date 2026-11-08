@@ -41,6 +41,16 @@ export type RecordSchemaResult<T> =
 /** The data a record of a collection holds, from its schema. */
 export type RecordData<S> = S extends RecordSchema<infer T> ? T : never;
 
+/**
+ * How long a collection keeps a record: `days` after the moment `by` names, `createdAt` or
+ * `updatedAt` of the record, or an indexed field of its data that holds a day or an instant as
+ * ISO 8601 text; then the console removes the record, with its versions, links and files.
+ */
+export interface CollectionRetention {
+  readonly days: number;
+  readonly by: string;
+}
+
 /** A collection as `defineCollection` yields it: the name, the schema, and what the console indexes and who reads. */
 export interface CollectionDefinition<S extends RecordSchema = RecordSchema> {
   readonly name: string;
@@ -52,6 +62,8 @@ export interface CollectionDefinition<S extends RecordSchema = RecordSchema> {
   readonly read: readonly string[];
   readonly readOwn: readonly string[];
   readonly history: boolean;
+  /** How long a record is kept, or `null` for as long as the plugin is. */
+  readonly retention: CollectionRetention | null;
 }
 
 export interface PluginRecord<T = Record<string, unknown>> {

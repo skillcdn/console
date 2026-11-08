@@ -105,6 +105,7 @@ describe("definePlugin", () => {
         read: ["approver"],
         readOwn: ["employee"],
         history: true,
+        retention: null,
       },
     ]);
     expect(description.commands.request).toEqual({
@@ -216,6 +217,32 @@ describe("definePlugin", () => {
 });
 
 describe("an argument's name", () => {
+  it("keeps a collection's records for the days its retention says, by the moment it names", () => {
+    const schema = z.object({ sentOn: z.string() });
+    expect(
+      defineCollection("deliveries", {
+        schema,
+        indexes: ["sentOn"],
+        history: false,
+        retention: { days: 90, by: "sentOn" },
+      }).retention,
+    ).toEqual({ days: 90, by: "sentOn" });
+    expect(defineCollection("lines", { schema, retention: { days: 1 } }).retention).toEqual({
+      days: 1,
+      by: "createdAt",
+    });
+    expect(defineCollection("lines", { schema }).retention).toBeNull();
+    for (const retention of [
+      { days: 0 },
+      { days: 3651 },
+      { days: 1.5 },
+      // A field it keeps by must be indexed, so that the sweep reads it as a listing does.
+      { days: 7, by: "sentOn" },
+    ]) {
+      expect(() => defineCollection("lines", { schema, retention })).toThrow(PluginDefinitionError);
+    }
+  });
+
   it("is not a flag the command keeps for itself", () => {
     expect(() =>
       defineCommand({
