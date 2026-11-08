@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { contentFor, hookEventId, isPeopleEvent, ownAnswerOf } from "./dispatcher.js";
+import { contentFor, hookEventId, isPeopleEvent, ownAnswerOf, retryAfterOf } from "./dispatcher.js";
+
+describe("what a failed hook asks of the next try", () => {
+  it("waits retryAfterMs from the refusal's data, within an hour, and nothing otherwise", () => {
+    expect(retryAfterOf({ data: { retryAfterMs: 30_000 } })).toBe(30_000);
+    expect(retryAfterOf({ data: { retryAfterMs: 90 * 60_000 } })).toBe(60 * 60_000);
+    expect(retryAfterOf({ data: { retryAfterMs: 0.4 } })).toBe(1);
+    expect(retryAfterOf({ data: { retryAfterMs: -1 } })).toBeUndefined();
+    expect(retryAfterOf({ data: { retryAfterMs: "soon" } })).toBeUndefined();
+    expect(retryAfterOf({ data: "nothing" })).toBeUndefined();
+    expect(retryAfterOf({})).toBeUndefined();
+  });
+});
 
 describe("a hook event's id", () => {
   it("names the stream and the number, so that one id is one event across both streams", () => {

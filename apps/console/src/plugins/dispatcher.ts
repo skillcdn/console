@@ -20,18 +20,22 @@ import type { Logger } from "../logger.js";
 import type { Clock } from "../ports/clock.js";
 import type { CallResult } from "./protocol.js";
 import type { Plugins } from "./registry.js";
+import { lockKeyOf } from "./scheduler.js";
 
 // The hooks (docs/specs/plugins.md, "Events, hooks and jobs"): the console's events and the
-// plugins' events, read from a cursor per plugin under one advisory lock, so that one process
-// dispatches, and delivered to the handler that named each kind. A console event reaches a plugin
-// for its board projects, the projects it is on, and the items it made. Delivery is at least once:
-// a handler that fails is tried again with backoff, five times, then the event is skipped with a
+// plugins' events, read from a cursor per plugin, each plugin under an advisory lock of its own,
+// so that one process dispatches to a plugin at a time and a slow or failing plugin holds up no
+// other, and delivered to the handler that named each kind. A console event reaches a plugin for
+// its board projects, the projects it is on, and the items it made. Delivery is at least once: a
+// handler that fails is tried again with backoff, five times, then the event is skipped with a
 // `plugin.failed` event. Runs in the worker role, or in the api role when it carries the worker.
 
-/** The one lock the dispatcher holds for a pass: every process shares the number. */
-const DISPATCH_LOCK_KEY = 5_434_003;
 /** How many events of each stream one pass reads for one plugin. */
 const BATCH = 100;
+/** How long one pass spends on one plugin before leaving the rest of its events to the next pass. */
+const PLUGIN_PASS_MS = 20_000;
+/** The longest a hook may ask the next try to wait, by `retryAfterMs` on its refusal. */
+const RETRY_AFTER_MS_AT_MOST = 60 * 60_000;
 
 /** A plugin as the dispatcher delivers to it. */
 export interface DispatchTarget {
@@ -107,30 +111,38 @@ export class PluginDispatcher {
       return;
     }
     const workspace = await this.options.workspace();
-    await drizzleOf(this.options.database).transaction(async (tx) => {
-      // One dispatcher at a time: whoever does not get the lock leaves the pass to the one who has it.
-      const locked = await tx.execute<{ locked: boolean }>(
-        sql`select pg_try_advisory_xact_lock(${DISPATCH_LOCK_KEY}) as locked`,
-      );
-      if (locked.rows[0]?.locked !== true) {
-        return;
-      }
-      for (const target of targets) {
-        try {
-          await this.deliverTo(workspace, target);
-        } catch (error) {
-          this.options.logger.warn(
-            { err: error, plugin: target.key },
-            "a plugin's hooks were not delivered to",
-          );
-        }
-      }
-    });
+    // Each plugin under a lock of its own, side by side: a plugin whose hook calls a slow
+    // service, or waits out its backoff, holds up no other plugin's delivery, and two processes
+    // may dispatch to two plugins at once, never to one.
+    await Promise.all(
+      targets.map((target) =>
+        drizzleOf(this.options.database)
+          .transaction(async (tx) => {
+            const locked = await tx.execute<{ locked: boolean }>(
+              sql`select pg_try_advisory_xact_lock(${lockKeyOf(target.key, "dispatch")}) as locked`,
+            );
+            if (locked.rows[0]?.locked !== true) {
+              return;
+            }
+            await this.deliverTo(workspace, target);
+          })
+          .catch((error: unknown) => {
+            this.options.logger.warn(
+              { err: error, plugin: target.key },
+              "a plugin's hooks were not delivered to",
+            );
+          }),
+      ),
+    );
   }
 
   private async deliverTo(workspace: WorkspaceRecord, target: DispatchTarget): Promise<void> {
     const { database, clock } = this.options;
     const now = clock.now();
+    // The pass leaves this plugin to the next one once it has had its time, so that a plugin with
+    // a long tail of slow hooks does not keep the pass, and the others, from coming round.
+    const began = performance.now();
+    const outOfTime = () => performance.now() - began > PLUGIN_PASS_MS;
     let cursor = await readCursor(database, workspace.id, target.key);
     if (cursor === undefined) {
       // A plugin that was never told of anything begins at the end of the streams: it is not
@@ -179,6 +191,9 @@ export class PluginDispatcher {
           now: clock.now(),
           ...cursor,
         });
+        if (outOfTime()) {
+          return;
+        }
       }
     } else {
       cursor = await this.keptUp(workspace, target, cursor, {
@@ -213,6 +228,9 @@ export class PluginDispatcher {
           now: clock.now(),
           ...cursor,
         });
+        if (outOfTime()) {
+          return;
+        }
       }
     } else {
       await this.keptUp(workspace, target, cursor, {
@@ -276,13 +294,17 @@ export class PluginDispatcher {
       return "delivered";
     }
     const now = clock.now();
+    // A hook that was told to come back later by the service it called says so with
+    // `retryAfterMs` on its refusal, and the next try waits that long instead of the backoff.
+    const waitMs =
+      retryAfterOf(result.error) ?? (this.options.backoffMs ?? defaultBackoff)(attempts);
     await writeCursor(database, {
       workspaceId: workspace.id,
       key: target.key,
       now,
       ...cursor,
       attempts,
-      nextAttemptAt: new Date(now.getTime() + (this.options.backoffMs ?? defaultBackoff)(attempts)),
+      nextAttemptAt: new Date(now.getTime() + waitMs),
     });
     return "waiting";
   }
@@ -419,6 +441,23 @@ export class PluginDispatcher {
       data: event.data,
     };
   }
+}
+
+/**
+ * How long a failed hook asked the next try to wait, from `retryAfterMs` in the data of its
+ * refusal (`throw new PluginError("rate_limited", message, { retryAfterMs })`), within an hour;
+ * nothing where it said nothing, and the backoff holds.
+ */
+export function retryAfterOf(error: { readonly data?: unknown }): number | undefined {
+  const data = error.data;
+  if (typeof data !== "object" || data === null) {
+    return undefined;
+  }
+  const after = (data as { retryAfterMs?: unknown }).retryAfterMs;
+  if (typeof after !== "number" || !Number.isFinite(after) || after <= 0) {
+    return undefined;
+  }
+  return Math.min(Math.ceil(after), RETRY_AFTER_MS_AT_MOST);
 }
 
 /**

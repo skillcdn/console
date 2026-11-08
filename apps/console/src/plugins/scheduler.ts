@@ -37,8 +37,8 @@ export interface PluginSchedulerOptions {
   readonly logger: Logger;
 }
 
-/** The lock of one job, from its plugin's key and its name: a stable number every process agrees on. */
-function lockKeyOf(key: string, name: string): number {
+/** The lock of one job, or of one plugin's dispatch, from its plugin's key and a name: a stable number every process agrees on. */
+export function lockKeyOf(key: string, name: string): number {
   let hash = 2166136261;
   for (const char of `${key}:${name}`) {
     hash ^= char.codePointAt(0) ?? 0;
