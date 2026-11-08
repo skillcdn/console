@@ -47,6 +47,10 @@ describe("matchRoute", () => {
     expect(matchRoute("/projects/new")).toEqual({ name: "new-project" });
     expect(matchRoute("/people/")).toEqual({ name: "people" });
     expect(matchRoute("/people/new")).toEqual({ name: "new-listing" });
+    // The teams are a view of the people's page (ADR-0073), with the form that makes one.
+    expect(matchRoute("/people/teams")).toEqual({ name: "teams" });
+    expect(matchRoute("/people/teams/new")).toEqual({ name: "new-team" });
+    expect(matchRoute("/people/teams/other")).toEqual({ name: "not-found" });
     expect(matchRoute("/agents")).toEqual({ name: "agents" });
     expect(matchRoute("/agents/new")).toEqual({ name: "new-token" });
     expect(matchRoute("/projects/web")).toEqual({ name: "board", project: "web", filter: {} });

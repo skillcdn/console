@@ -11,18 +11,32 @@ import {
   type RestPerson,
   type RestProvider,
   type RestTeam,
+  type RestTeamInput,
 } from "../api.js";
 import { useWords } from "../i18n/index.js";
-import { MAX_LOGIN_LENGTH, MAX_TEAM_NAME_LENGTH } from "../limits.js";
+import { MAX_LOGIN_LENGTH, MAX_TEAM_KEY_LENGTH, MAX_TEAM_NAME_LENGTH } from "../limits.js";
 import { PERSON_ROLES } from "../vocabulary.js";
 import { Picker } from "./picker.js";
+import { keyOf } from "./projects.js";
 import { listSearch, peopleSearch } from "./searches.js";
-import { Avatar, Badge, Button, PersonChip, personName, RoleBadge, Time, Workers } from "./ui.js";
+import {
+  Avatar,
+  Badge,
+  Button,
+  Chip,
+  cx,
+  EmptyState,
+  PersonChip,
+  personName,
+  RoleBadge,
+  Time,
+} from "./ui.js";
 
 // The people of the board, with what each may do and whether they are in (ADR-0022): those in,
-// the logins let in that nobody has signed in with yet, and those deactivated. An administrator
-// changes roles here, takes people out and back in, and takes a listing away; a member reads.
-// Takes its data as props and nothing from the network.
+// the logins let in that nobody has signed in with yet, and those deactivated; and the teams
+// (ADR-0073), a view of their own. An administrator changes a person's facts in place, takes
+// people out and back in, takes a listing away, and keeps the teams; a member reads. Takes its
+// data as props and nothing from the network.
 
 export interface PeopleListProps {
   readonly people: readonly RestPerson[];
@@ -46,13 +60,11 @@ export interface PeopleListProps {
   readonly onChangeEmail?: ((person: RestPerson, email: string | null) => void) | undefined;
   /** Called when an administrator takes a listing away. Left out, listings are read here. */
   readonly onUnlist?: ((listing: RestListing) => void) | undefined;
-  /** The teams of the workspace (ADR-0073), each with the members the person may see; left out, none are shown. */
+  /** The teams of the workspace (ADR-0073), so that each person's card names theirs; left out, none are named. */
   readonly teams?: readonly RestTeam[] | undefined;
-  /** The ways an administrator keeps the teams. Left out, the teams are read here. */
-  readonly onCreateTeam?: ((name: string) => void) | undefined;
-  readonly onRenameTeam?: ((team: RestTeam, name: string) => void) | undefined;
-  readonly onRemoveTeam?: ((team: RestTeam) => void) | undefined;
+  /** Called with a team an administrator puts the person in, from the person's card. Left out, a person's teams are read here. */
   readonly onJoinTeam?: ((person: RestPerson, team: RestTeam) => void) | undefined;
+  /** Called with a team an administrator takes the person out of, from the person's card. */
   readonly onLeaveTeam?: ((person: RestPerson, team: RestTeam) => void) | undefined;
   /** Where a person's work is seen; given to an administrator, or an owner of a project. */
   readonly workHref?: ((person: RestPerson) => string) | undefined;
@@ -61,32 +73,51 @@ export interface PeopleListProps {
   readonly busy?: boolean | undefined;
 }
 
+/** How many of a manager's reports are shown as pictures before the rest are a count. */
+const REPORTS_SHOWN = 5;
+
 /**
- * A person's work email as an administrator writes it: kept while typed, written when the field
- * is left or Enter is pressed, and only where it changed; emptied, it clears the address.
+ * A line an administrator writes in place, quiet until the pointer or the focus is on it: kept
+ * while typed, written when the field is left or Enter is pressed, and only where it changed.
+ * `normalize` says what is written; what it makes empty is `onEmpty`'s to answer: written as
+ * nothing, or the line put back as it was.
  */
-function EmailField(props: {
-  readonly person: RestPerson;
+function QuietField(props: {
+  readonly value: string;
+  /** What the field is, for a screen reader. */
   readonly label: string;
+  readonly placeholder?: string | undefined;
+  readonly title?: string | undefined;
+  readonly type?: "text" | "email";
+  readonly maxLength?: number | undefined;
+  readonly className?: string | undefined;
   readonly busy: boolean;
-  readonly onChange: (email: string | null) => void;
+  readonly normalize: (typed: string) => string;
+  /** Empty, the field writes `null` where this is `clear`, and goes back to the value where it is `keep`. */
+  readonly onEmpty: "clear" | "keep";
+  readonly onChange: (value: string | null) => void;
 }) {
-  const current = props.person.email ?? "";
+  const current = props.value;
   const [value, setValue] = useState(current);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the field follows what the console answers for the person
-  useEffect(() => setValue(current), [current, props.person.id]);
+  // The field follows what the console answers.
+  useEffect(() => setValue(current), [current]);
   const commit = () => {
-    const next = value.trim().toLowerCase();
-    if (next !== current) {
+    const next = props.normalize(value);
+    if (next === "" && props.onEmpty === "keep") {
+      setValue(current);
+    } else if (next !== current) {
       props.onChange(next === "" ? null : next);
     }
   };
   return (
     <input
-      type="email"
-      className="sc-input sc-input-quiet"
+      type={props.type ?? "text"}
+      className={cx("sc-input", "sc-input-quiet", props.className)}
       aria-label={props.label}
+      title={props.title}
+      placeholder={props.placeholder}
       value={value}
+      maxLength={props.maxLength}
       disabled={props.busy}
       onChange={(event) => setValue(event.target.value)}
       onBlur={commit}
@@ -94,6 +125,8 @@ function EmailField(props: {
         if (event.key === "Enter") {
           event.preventDefault();
           commit();
+        } else if (event.key === "Escape") {
+          setValue(current);
         }
       }}
     />
@@ -106,6 +139,7 @@ export function PeopleList(props: PeopleListProps) {
   const active = props.people.filter((person) => person.status === "active");
   const deactivated = props.people.filter((person) => person.status === "deactivated");
   const listed = props.listed ?? [];
+  const busy = props.busy === true;
   const mayChange = (person: RestPerson): boolean =>
     props.onChangeStatus !== undefined &&
     person.source !== "organization" &&
@@ -113,11 +147,6 @@ export function PeopleList(props: PeopleListProps) {
   const organization = props.organization ?? undefined;
   const byId = new Map(props.people.map((person) => [person.id, person]));
   const teamList = props.teams ?? [];
-  /** The teams the person is in, and those they could be put in. */
-  const teamsOf = (person: RestPerson): readonly RestTeam[] =>
-    teamList.filter((team) => team.memberIds.includes(person.id));
-  const teamsToJoin = (person: RestPerson): readonly RestTeam[] =>
-    teamList.filter((team) => !team.memberIds.includes(person.id));
   /** The person's manager, where they have one that can be named here. */
   const managerOf = (person: RestPerson): RestPerson | undefined =>
     person.managerId === null || person.managerId === undefined
@@ -153,7 +182,10 @@ export function PeopleList(props: PeopleListProps) {
       <ul className="sc-people" aria-label={people.list}>
         {active.map((person) => {
           const manager = managerOf(person);
-          const team = active.filter((other) => other.managerId === person.id);
+          const reports = active.filter((other) => other.managerId === person.id);
+          const joined = teamList.filter((team) => team.memberIds.includes(person.id));
+          const toJoin = teamList.filter((team) => !team.memberIds.includes(person.id));
+          const name = personName(person);
           const hasWays =
             props.workHref !== undefined || props.agentsHref !== undefined || mayChange(person);
           return (
@@ -162,7 +194,7 @@ export function PeopleList(props: PeopleListProps) {
                 <Avatar person={person} size="lg" />
                 <div className="sc-person-card-who">
                   <span className="sc-person-card-name">
-                    {personName(person)}
+                    {name}
                     {props.me?.id === person.id && (
                       <span className="sc-person-you">{words.common.you}</span>
                     )}
@@ -182,9 +214,9 @@ export function PeopleList(props: PeopleListProps) {
                     ) : (
                       <select
                         className="sc-input sc-input-quiet"
-                        aria-label={people.roleOf(personName(person))}
+                        aria-label={people.roleOf(name)}
                         value={person.role}
-                        disabled={props.busy === true}
+                        disabled={busy}
                         onChange={(event) =>
                           props.onChangeRole?.(person, event.target.value as PersonRole)
                         }
@@ -209,6 +241,7 @@ export function PeopleList(props: PeopleListProps) {
                       )
                     ) : (
                       <Picker
+                        className="sc-picker-quiet"
                         value={manager}
                         search={peopleSearch(
                           props.people.filter(
@@ -218,10 +251,10 @@ export function PeopleList(props: PeopleListProps) {
                           ),
                         )}
                         keyOf={(candidate) => candidate.id}
-                        render={(candidate) => <PersonChip person={candidate} size="sm" />}
-                        label={people.managerOf(personName(person))}
+                        render={(candidate) => <PersonChip person={candidate} />}
+                        label={people.managerOf(name)}
                         placeholder={people.nobody}
-                        disabled={props.busy === true}
+                        disabled={busy}
                         onChange={(candidate) =>
                           props.onChangeManager?.(person, candidate?.id ?? null)
                         }
@@ -234,59 +267,72 @@ export function PeopleList(props: PeopleListProps) {
                     <dt>{people.email}</dt>
                     <dd>
                       {props.onChangeEmail === undefined ? (
-                        person.email
+                        <span className="sc-person-email">{person.email}</span>
                       ) : (
-                        <EmailField
-                          person={person}
-                          label={people.emailOf(personName(person))}
-                          busy={props.busy === true}
+                        <QuietField
+                          type="email"
+                          value={person.email ?? ""}
+                          label={people.emailOf(name)}
+                          title={people.emailHint}
+                          placeholder={people.nobody}
+                          busy={busy}
+                          normalize={(typed) => typed.trim().toLowerCase()}
+                          onEmpty="clear"
                           onChange={(email) => props.onChangeEmail?.(person, email)}
                         />
                       )}
                     </dd>
                   </div>
                 )}
-                {team.length > 0 && (
+                {reports.length > 0 && (
                   <div className="sc-person-fact">
                     <dt>{people.team}</dt>
                     <dd>
-                      <Workers workers={team} />
+                      <span
+                        className="sc-person-reports"
+                        title={reports.map(personName).join(", ")}
+                      >
+                        <span className="sc-workers">
+                          {reports.slice(0, REPORTS_SHOWN).map((report) => (
+                            <Avatar key={report.id} person={report} size="sm" />
+                          ))}
+                        </span>
+                        <span className="sc-muted">{people.howMany(reports.length)}</span>
+                      </span>
                     </dd>
                   </div>
                 )}
-                {(teamsOf(person).length > 0 ||
-                  (props.onJoinTeam !== undefined && teamsToJoin(person).length > 0)) && (
+                {(joined.length > 0 || (props.onJoinTeam !== undefined && toJoin.length > 0)) && (
                   <div className="sc-person-fact">
                     <dt>{people.teams}</dt>
                     <dd>
                       <div className="sc-chips">
-                        {teamsOf(person).map((joined) => (
-                          <span key={joined.id} className="sc-chip">
-                            {joined.name}
-                            {props.onLeaveTeam !== undefined && (
-                              <button
-                                type="button"
-                                className="sc-chip-remove"
-                                aria-label={`${words.common.remove}: ${joined.name}`}
-                                disabled={props.busy === true}
-                                onClick={() => props.onLeaveTeam?.(person, joined)}
-                              >
-                                <span aria-hidden="true">&times;</span>
-                              </button>
-                            )}
-                          </span>
+                        {joined.map((team) => (
+                          <Chip
+                            key={team.id}
+                            onRemove={
+                              props.onLeaveTeam === undefined
+                                ? undefined
+                                : () => props.onLeaveTeam?.(person, team)
+                            }
+                            removeLabel={people.leaveTeam(name, team.name)}
+                            disabled={busy}
+                          >
+                            {team.name}
+                          </Chip>
                         ))}
-                        {props.onJoinTeam !== undefined && teamsToJoin(person).length > 0 && (
+                        {props.onJoinTeam !== undefined && toJoin.length > 0 && (
                           <Picker<RestTeam>
+                            className="sc-picker-add"
                             value={undefined}
-                            search={listSearch(teamsToJoin(person), (candidate, typed) =>
+                            search={listSearch(toJoin, (candidate, typed) =>
                               candidate.name.toLowerCase().includes(typed),
                             )}
                             keyOf={(candidate) => candidate.id}
                             render={(candidate) => candidate.name}
-                            label={people.joinTeamOf(personName(person))}
+                            label={people.joinTeamOf(name)}
                             placeholder={people.joinTeam}
-                            disabled={props.busy === true}
+                            disabled={busy}
                             onChange={(candidate) => {
                               if (candidate !== undefined) {
                                 props.onJoinTeam?.(person, candidate);
@@ -321,7 +367,7 @@ export function PeopleList(props: PeopleListProps) {
                     <Button
                       variant="ghost"
                       size="sm"
-                      disabled={props.busy === true}
+                      disabled={busy}
                       onClick={() => props.onChangeStatus?.(person, "deactivated")}
                     >
                       {people.deactivate}
@@ -351,7 +397,7 @@ export function PeopleList(props: PeopleListProps) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    disabled={props.busy === true}
+                    disabled={busy}
                     onClick={() => props.onUnlist?.(listing)}
                   >
                     {words.common.remove}
@@ -386,7 +432,7 @@ export function PeopleList(props: PeopleListProps) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    disabled={props.busy === true}
+                    disabled={busy}
                     onClick={() => props.onChangeStatus?.(person, "active")}
                   >
                     {people.reactivate}
@@ -397,147 +443,206 @@ export function PeopleList(props: PeopleListProps) {
           </ul>
         </section>
       )}
-      {props.teams !== undefined && (
-        <TeamSection
-          teams={props.teams}
-          byId={byId}
-          busy={props.busy === true}
-          onCreateTeam={props.onCreateTeam}
-          onRenameTeam={props.onRenameTeam}
-          onRemoveTeam={props.onRemoveTeam}
-        />
-      )}
     </div>
   );
 }
 
-/**
- * A team's name as an administrator writes it anew: kept while typed, written when the field is
- * left or Enter is pressed, and only where it changed; emptied, it goes back to the name.
- */
-function TeamNameField(props: {
-  readonly team: RestTeam;
-  readonly label: string;
-  readonly busy: boolean;
-  readonly onChange: (name: string) => void;
-}) {
-  const current = props.team.name;
-  const [value, setValue] = useState(current);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the field follows the name as the console answers it
-  useEffect(() => setValue(current), [current, props.team.id]);
-  const commit = () => {
-    const next = value.trim();
-    if (next === "") {
-      setValue(current);
-    } else if (next !== current) {
-      props.onChange(next);
-    }
-  };
-  return (
-    <input
-      className="sc-input sc-input-quiet"
-      aria-label={props.label}
-      value={value}
-      maxLength={MAX_TEAM_NAME_LENGTH}
-      disabled={props.busy}
-      onChange={(event) => setValue(event.target.value)}
-      onBlur={commit}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") {
-          event.preventDefault();
-          commit();
-        }
-      }}
-    />
-  );
+export interface TeamListProps {
+  /** The teams of the workspace (ADR-0073), by name, each with the members the person may see. */
+  readonly teams: readonly RestTeam[];
+  /** The people the page holds: whom a team's members are named from, and whom an administrator adds from, the active among them. */
+  readonly people: readonly RestPerson[];
+  /** Called with the name an administrator wrote for a team. Left out, names are read here. */
+  readonly onRename?: ((team: RestTeam, name: string) => void) | undefined;
+  /** Called when an administrator deletes a team, after asking where it is the page's to ask. Left out, teams are read here. */
+  readonly onRemove?: ((team: RestTeam) => void) | undefined;
+  /** Called with a person an administrator puts in a team. Left out, the members are read here. */
+  readonly onAddMember?: ((team: RestTeam, person: RestPerson) => void) | undefined;
+  /** Called with a member an administrator takes out of a team. */
+  readonly onRemoveMember?: ((team: RestTeam, person: RestPerson) => void) | undefined;
+  readonly busy?: boolean | undefined;
 }
 
 /**
- * The teams of the workspace (ADR-0073): each with who is in it, among the people the page
- * holds; for an administrator, named anew, removed, and a new one made.
+ * The teams of the workspace (ADR-0073), a card each: the name, how many are in it, and who, a
+ * chip each. For an administrator the name is written anew in its place, a member is taken out
+ * from their chip and a person is added from the end of the row, searched among those in; a team
+ * is deleted from its card. Its people stay; the roles granted to it go with it.
  */
-function TeamSection(props: {
-  readonly teams: readonly RestTeam[];
-  readonly byId: ReadonlyMap<string, RestPerson>;
-  readonly busy: boolean;
-  readonly onCreateTeam?: ((name: string) => void) | undefined;
-  readonly onRenameTeam?: ((team: RestTeam, name: string) => void) | undefined;
-  readonly onRemoveTeam?: ((team: RestTeam) => void) | undefined;
-}) {
+export function TeamList(props: TeamListProps) {
   const words = useWords();
-  const people = words.people;
-  const [draft, setDraft] = useState("");
+  const teams = words.teams;
+  const busy = props.busy === true;
+  const byId = new Map(props.people.map((person) => [person.id, person]));
+  const active = props.people.filter((person) => person.status === "active");
+  if (props.teams.length === 0) {
+    return <EmptyState title={teams.none.title} body={teams.none.body} />;
+  }
   return (
-    <section className="sc-people-section" aria-label={people.teams}>
-      <h2 className="sc-section-title">{people.teams}</h2>
-      {props.teams.length === 0 && <p className="sc-muted">{people.teamsNone}</p>}
-      {props.teams.length > 0 && (
-        <ul className="sc-people">
-          {props.teams.map((team) => {
-            const members = team.memberIds.flatMap((id) => {
-              const member = props.byId.get(id);
-              return member === undefined ? [] : [member];
-            });
-            return (
-              <li key={team.id} className="sc-person-row">
-                {props.onRenameTeam === undefined ? (
-                  <span className="sc-person-login">{team.name}</span>
+    <ul className="sc-teams" aria-label={teams.list}>
+      {props.teams.map((team) => {
+        const members = team.memberIds.flatMap((id) => {
+          const member = byId.get(id);
+          return member === undefined ? [] : [member];
+        });
+        const candidates = active.filter((person) => !team.memberIds.includes(person.id));
+        return (
+          <li key={team.id} className="sc-team-card">
+            <div className="sc-team-head">
+              <div className="sc-team-title">
+                {props.onRename === undefined ? (
+                  <h2 className="sc-team-name">{team.name}</h2>
                 ) : (
-                  <TeamNameField
-                    team={team}
-                    label={people.teamNameOf(team.name)}
-                    busy={props.busy}
-                    onChange={(name) => props.onRenameTeam?.(team, name)}
+                  <QuietField
+                    className="sc-team-name"
+                    value={team.name}
+                    label={teams.nameOf(team.name)}
+                    maxLength={MAX_TEAM_NAME_LENGTH}
+                    busy={busy}
+                    normalize={(typed) => typed.trim()}
+                    onEmpty="keep"
+                    onChange={(name) => {
+                      if (name !== null) {
+                        props.onRename?.(team, name);
+                      }
+                    }}
                   />
                 )}
-                <span className="sc-person-name sc-muted">
-                  {people.teamMembers(team.memberIds.length)}
+                <span className="sc-team-key" title={teams.keyTitle}>
+                  {team.key}
                 </span>
-                {members.length > 0 && <Workers workers={members} />}
-                {props.onRemoveTeam !== undefined && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={props.busy}
-                    onClick={() => props.onRemoveTeam?.(team)}
-                  >
-                    {words.common.remove}
-                  </Button>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      {props.onCreateTeam !== undefined && (
-        <form
-          className="sc-form sc-member-form"
-          aria-label={people.newTeam}
-          onSubmit={(event) => {
-            event.preventDefault();
-            const name = draft.trim();
-            if (name.length > 0) {
-              props.onCreateTeam?.(name);
-              setDraft("");
-            }
-          }}
-        >
-          <label className="sc-field">
-            <span className="sc-field-label">{people.teamName}</span>
-            <input
-              className="sc-input"
-              value={draft}
-              maxLength={MAX_TEAM_NAME_LENGTH}
-              disabled={props.busy}
-              onChange={(event) => setDraft(event.target.value)}
-            />
-          </label>
-          <Button type="submit" disabled={props.busy || draft.trim().length === 0}>
-            {people.newTeam}
+              </div>
+              <Badge kind="count">{teams.members(team.memberIds.length)}</Badge>
+            </div>
+            <div className="sc-chips sc-team-members">
+              {members.map((member) => (
+                <Chip
+                  key={member.id}
+                  onRemove={
+                    props.onRemoveMember === undefined
+                      ? undefined
+                      : () => props.onRemoveMember?.(team, member)
+                  }
+                  removeLabel={teams.removeMember(personName(member), team.name)}
+                  disabled={busy}
+                >
+                  <PersonChip person={member} />
+                </Chip>
+              ))}
+              {members.length === 0 && props.onAddMember === undefined && (
+                <span className="sc-muted">{teams.nobody}</span>
+              )}
+              {props.onAddMember !== undefined && candidates.length > 0 && (
+                <Picker
+                  className="sc-picker-add"
+                  value={undefined}
+                  search={peopleSearch(candidates)}
+                  keyOf={(candidate) => candidate.id}
+                  render={(candidate) => <PersonChip person={candidate} />}
+                  label={teams.addMemberTo(team.name)}
+                  placeholder={teams.addMember}
+                  disabled={busy}
+                  onChange={(candidate) => {
+                    if (candidate !== undefined) {
+                      props.onAddMember?.(team, candidate);
+                    }
+                  }}
+                />
+              )}
+            </div>
+            {props.onRemove !== undefined && (
+              <div className="sc-team-ways">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => props.onRemove?.(team)}
+                >
+                  {teams.remove}
+                </Button>
+              </div>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+export interface TeamFormProps {
+  readonly busy?: boolean | undefined;
+  /** Called with the key and the name written, trimmed. */
+  readonly onSubmit: (input: RestTeamInput) => void;
+  readonly onCancel?: (() => void) | undefined;
+}
+
+/** A key as the pages accept one: a project key's shape (ADR-0074). */
+const TEAM_KEY = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
+
+/**
+ * Where an administrator makes a team: its name, one in the workspace, and its key, taken from
+ * the name as it is typed until the key is typed itself, and never changed after; its people are
+ * added on its card.
+ */
+export function TeamForm(props: TeamFormProps) {
+  const words = useWords();
+  const form = words.teams.form;
+  const [name, setName] = useState("");
+  const [key, setKey] = useState("");
+  const [keyTouched, setKeyTouched] = useState(false);
+  const valid = name.trim().length > 0 && TEAM_KEY.test(key.trim()) && key.trim() !== "new";
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (valid) {
+      props.onSubmit({ key: key.trim(), name: name.trim() });
+    }
+  };
+  return (
+    <form className="sc-form sc-team-form" aria-label={words.teams.newAria} onSubmit={submit}>
+      <div className="sc-field-row">
+        <label className="sc-field">
+          <span className="sc-field-label">{form.name}</span>
+          <input
+            className="sc-input"
+            value={name}
+            maxLength={MAX_TEAM_NAME_LENGTH}
+            autoComplete="off"
+            onChange={(event) => {
+              setName(event.target.value);
+              if (!keyTouched) {
+                setKey(keyOf(event.target.value).slice(0, MAX_TEAM_KEY_LENGTH));
+              }
+            }}
+          />
+        </label>
+        <label className="sc-field">
+          <span className="sc-field-label">{form.key}</span>
+          <input
+            className="sc-input"
+            value={key}
+            maxLength={MAX_TEAM_KEY_LENGTH}
+            pattern="[a-z0-9]([a-z0-9-]*[a-z0-9])?"
+            autoComplete="off"
+            title={form.keyHint}
+            onChange={(event) => {
+              setKeyTouched(true);
+              setKey(event.target.value);
+            }}
+          />
+        </label>
+        <div className="sc-form-actions">
+          <Button type="submit" variant="primary" disabled={props.busy === true || !valid}>
+            {form.submit}
           </Button>
-        </form>
-      )}
-    </section>
+          {props.onCancel !== undefined && (
+            <Button type="button" variant="ghost" onClick={props.onCancel}>
+              {words.common.cancel}
+            </Button>
+          )}
+        </div>
+      </div>
+      <p className="sc-field-hint">{form.hint}</p>
+    </form>
   );
 }
 

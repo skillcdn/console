@@ -2,16 +2,20 @@ import { MAX_TEAM_NAME_LENGTH, MAX_TEAMS } from "@skillcdn/console/api";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
-import { people, teamMembers, teams, workspaces } from "../schema.js";
+import { people, projects, teamMembers, teams, workspaces } from "../schema.js";
 import { type Actor, recordEvent } from "./events.js";
 
 // The teams of a workspace (ADR-0073): a name and its members, kept by an administrator. A team
 // is a unit to call people by and to grant a plugin's role to, nothing more: no head, no team
 // above it, since the reporting line already says who is above whom. A person is in any number.
+// A team is called by its key (ADR-0074), immutable, one name among the teams' keys and the
+// projects' keys alike; its name is what people read, and changes.
 
 export interface TeamRecord {
   readonly id: string;
   readonly workspaceId: string;
+  /** What the team is called by: its addresses, a grant, a plugin, the command. */
+  readonly key: string;
   readonly name: string;
   /** Who is in, by id, in the order they came. */
   readonly memberIds: readonly string[];
@@ -20,6 +24,7 @@ export interface TeamRecord {
 
 export type TeamErrorCode =
   | "team.not_found"
+  | "team.key_taken"
   | "team.name_taken"
   | "team.too_many"
   | "team.invalid_member"
@@ -27,6 +32,7 @@ export type TeamErrorCode =
 
 const MESSAGES: Record<TeamErrorCode, string> = {
   "team.not_found": "The team was not found.",
+  "team.key_taken": "A team or a project of that key is there already.",
   "team.name_taken": "A team of that name is there already.",
   "team.too_many": `The workspace holds ${MAX_TEAMS} teams already.`,
   "team.invalid_member": "The person is not an active person of the workspace.",
@@ -46,11 +52,20 @@ export class TeamError extends DomainError {
 const columns = {
   id: teams.id,
   workspaceId: teams.workspaceId,
+  key: teams.key,
   name: teams.name,
   createdAt: teams.createdAt,
 };
 
 type Handle = Transaction | ReturnType<typeof drizzleOf>;
+
+type TeamRow = {
+  readonly id: string;
+  readonly workspaceId: string;
+  readonly key: string;
+  readonly name: string;
+  readonly createdAt: Date;
+};
 
 /** The members of the teams given, by team, in the order they came. */
 async function membersOf(
@@ -77,10 +92,7 @@ async function membersOf(
   return members;
 }
 
-async function toTeams(
-  handle: Handle,
-  rows: readonly { id: string; workspaceId: string; name: string; createdAt: Date }[],
-): Promise<TeamRecord[]> {
+async function toTeams(handle: Handle, rows: readonly TeamRow[]): Promise<TeamRecord[]> {
   const members = await membersOf(
     handle,
     rows.map((row) => row.id),
@@ -99,28 +111,28 @@ export async function listTeams(database: Database, workspaceId: string): Promis
   return toTeams(handle, rows);
 }
 
-/** One team, or none. */
+/** One team by its key, or none. */
 export async function findTeam(
   database: Database,
   workspaceId: string,
-  teamId: string,
+  key: string,
 ): Promise<TeamRecord | undefined> {
   const handle = drizzleOf(database);
   const rows = await handle
     .select(columns)
     .from(teams)
-    .where(and(eq(teams.workspaceId, workspaceId), eq(teams.id, teamId)))
+    .where(and(eq(teams.workspaceId, workspaceId), eq(teams.key, key)))
     .limit(1);
   return (await toTeams(handle, rows))[0];
 }
 
-/** The teams each person of the workspace is in, by person, the teams by name. */
-export async function teamIdsByPerson(
+/** The keys of the teams each person of the workspace is in, by person, the teams by name. */
+export async function teamKeysByPerson(
   database: Database,
   workspaceId: string,
 ): Promise<Map<string, string[]>> {
   const rows = await drizzleOf(database)
-    .select({ personId: teamMembers.personId, teamId: teamMembers.teamId })
+    .select({ personId: teamMembers.personId, key: teams.key })
     .from(teamMembers)
     .innerJoin(teams, eq(teams.id, teamMembers.teamId))
     .where(eq(teams.workspaceId, workspaceId))
@@ -129,15 +141,18 @@ export async function teamIdsByPerson(
   for (const row of rows) {
     const list = byPerson.get(row.personId);
     if (list === undefined) {
-      byPerson.set(row.personId, [row.teamId]);
+      byPerson.set(row.personId, [row.key]);
     } else {
-      list.push(row.teamId);
+      list.push(row.key);
     }
   }
   return byPerson;
 }
 
-/** Holds the workspace's row while teams change, so that two changes never race past the bounds. */
+/**
+ * Holds the workspace's row while teams change, so that two changes never race past the bounds,
+ * and a team and a project are never made under one key at once: a project is made under it too.
+ */
 async function lockWorkspace(tx: Transaction, workspaceId: string): Promise<void> {
   await tx
     .select({ id: workspaces.id })
@@ -160,16 +175,30 @@ async function teamNamed(
   return found;
 }
 
-/** The team to change, held for the transaction; none is `team.not_found`. */
-async function lockedTeam(
-  tx: Transaction,
-  workspaceId: string,
-  teamId: string,
-): Promise<{ id: string; workspaceId: string; name: string; createdAt: Date }> {
+/** Whether a team or a project of the workspace is called by the key already (ADR-0074). */
+async function keyTaken(tx: Transaction, workspaceId: string, key: string): Promise<boolean> {
+  const [team] = await tx
+    .select({ id: teams.id })
+    .from(teams)
+    .where(and(eq(teams.workspaceId, workspaceId), eq(teams.key, key)))
+    .limit(1);
+  if (team !== undefined) {
+    return true;
+  }
+  const [project] = await tx
+    .select({ id: projects.id })
+    .from(projects)
+    .where(and(eq(projects.workspaceId, workspaceId), eq(projects.key, key)))
+    .limit(1);
+  return project !== undefined;
+}
+
+/** The team to change, by its key, held for the transaction; none is `team.not_found`. */
+async function lockedTeam(tx: Transaction, workspaceId: string, key: string): Promise<TeamRow> {
   const [row] = await tx
     .select(columns)
     .from(teams)
-    .where(and(eq(teams.workspaceId, workspaceId), eq(teams.id, teamId)))
+    .where(and(eq(teams.workspaceId, workspaceId), eq(teams.key, key)))
     .for("update");
   if (row === undefined) {
     throw new TeamError("team.not_found");
@@ -186,17 +215,19 @@ function nameOf(given: string): string {
   return name;
 }
 
-/** Makes a team, named once in the workspace, and tells the board. */
+/** Makes a team under a key no team and no project has, named once in the workspace, and tells the board. */
 export async function createTeam(
   database: Database,
   input: {
     readonly workspaceId: string;
     readonly actor: Actor;
+    /** As the edge checked it: a project key's shape. */
+    readonly key: string;
     readonly name: string;
     readonly now: Date;
   },
 ): Promise<TeamRecord> {
-  const { workspaceId, actor, now } = input;
+  const { workspaceId, actor, key, now } = input;
   const name = nameOf(input.name);
   return drizzleOf(database).transaction(async (tx) => {
     await lockWorkspace(tx, workspaceId);
@@ -207,48 +238,57 @@ export async function createTeam(
     if ((counted?.count ?? 0) >= MAX_TEAMS) {
       throw new TeamError("team.too_many");
     }
+    if (await keyTaken(tx, workspaceId, key)) {
+      throw new TeamError("team.key_taken");
+    }
     if ((await teamNamed(tx, workspaceId, name)) !== undefined) {
       throw new TeamError("team.name_taken");
     }
     const [row] = await tx
       .insert(teams)
-      .values({ workspaceId, name, createdAt: now, createdBy: actor.id })
+      .values({ workspaceId, key, name, createdAt: now, createdBy: actor.id })
       .returning(columns);
     if (row === undefined) {
       throw new Error("team insert returned no row");
     }
-    await recordEvent(tx, { workspaceId, kind: "team.created", actor, data: { team: name }, now });
+    await recordEvent(tx, {
+      workspaceId,
+      kind: "team.created",
+      actor,
+      data: { team: name, key },
+      now,
+    });
     return { ...row, memberIds: [] };
   });
 }
 
-/** Renames a team, and tells the board the name before and after. */
+/** Renames a team, its key staying as it is, and tells the board the name before and after. */
 export async function renameTeam(
   database: Database,
   input: {
     readonly workspaceId: string;
     readonly actor: Actor;
-    readonly teamId: string;
+    readonly key: string;
     readonly name: string;
     readonly now: Date;
   },
 ): Promise<TeamRecord> {
-  const { workspaceId, actor, teamId, now } = input;
+  const { workspaceId, actor, key, now } = input;
   const name = nameOf(input.name);
   return drizzleOf(database).transaction(async (tx) => {
     await lockWorkspace(tx, workspaceId);
-    const current = await lockedTeam(tx, workspaceId, teamId);
+    const current = await lockedTeam(tx, workspaceId, key);
     if (current.name !== name) {
       const taken = await teamNamed(tx, workspaceId, name);
-      if (taken !== undefined && taken.id !== teamId) {
+      if (taken !== undefined && taken.id !== current.id) {
         throw new TeamError("team.name_taken");
       }
-      await tx.update(teams).set({ name }).where(eq(teams.id, teamId));
+      await tx.update(teams).set({ name }).where(eq(teams.id, current.id));
       await recordEvent(tx, {
         workspaceId,
         kind: "team.renamed",
         actor,
-        data: { team: name, name: current.name },
+        data: { team: name, name: current.name, key },
         now,
       });
     }
@@ -266,19 +306,19 @@ export async function removeTeam(
   input: {
     readonly workspaceId: string;
     readonly actor: Actor;
-    readonly teamId: string;
+    readonly key: string;
     readonly now: Date;
   },
 ): Promise<void> {
-  const { workspaceId, actor, teamId, now } = input;
+  const { workspaceId, actor, key, now } = input;
   await drizzleOf(database).transaction(async (tx) => {
-    const current = await lockedTeam(tx, workspaceId, teamId);
-    await tx.delete(teams).where(eq(teams.id, teamId));
+    const current = await lockedTeam(tx, workspaceId, key);
+    await tx.delete(teams).where(eq(teams.id, current.id));
     await recordEvent(tx, {
       workspaceId,
       kind: "team.removed",
       actor,
-      data: { team: current.name },
+      data: { team: current.name, key },
       now,
     });
   });
@@ -290,14 +330,14 @@ export async function addTeamMember(
   input: {
     readonly workspaceId: string;
     readonly actor: Actor;
-    readonly teamId: string;
+    readonly key: string;
     readonly personId: string;
     readonly now: Date;
   },
 ): Promise<TeamRecord> {
-  const { workspaceId, actor, teamId, personId, now } = input;
+  const { workspaceId, actor, key, personId, now } = input;
   return drizzleOf(database).transaction(async (tx) => {
-    const current = await lockedTeam(tx, workspaceId, teamId);
+    const current = await lockedTeam(tx, workspaceId, key);
     const [person] = await tx
       .select({ id: people.id, login: people.login })
       .from(people)
@@ -314,7 +354,7 @@ export async function addTeamMember(
     }
     const added = await tx
       .insert(teamMembers)
-      .values({ teamId, personId, addedAt: now, addedBy: actor.id })
+      .values({ teamId: current.id, personId, addedAt: now, addedBy: actor.id })
       .onConflictDoNothing()
       .returning({ personId: teamMembers.personId });
     if (added.length > 0) {
@@ -322,7 +362,7 @@ export async function addTeamMember(
         workspaceId,
         kind: "team.member_added",
         actor,
-        data: { team: current.name, login: person.login },
+        data: { team: current.name, key, login: person.login },
         now,
       });
     }
@@ -340,17 +380,17 @@ export async function removeTeamMember(
   input: {
     readonly workspaceId: string;
     readonly actor: Actor;
-    readonly teamId: string;
+    readonly key: string;
     readonly personId: string;
     readonly now: Date;
   },
 ): Promise<TeamRecord> {
-  const { workspaceId, actor, teamId, personId, now } = input;
+  const { workspaceId, actor, key, personId, now } = input;
   return drizzleOf(database).transaction(async (tx) => {
-    const current = await lockedTeam(tx, workspaceId, teamId);
+    const current = await lockedTeam(tx, workspaceId, key);
     const removed = await tx
       .delete(teamMembers)
-      .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.personId, personId)))
+      .where(and(eq(teamMembers.teamId, current.id), eq(teamMembers.personId, personId)))
       .returning({ personId: teamMembers.personId });
     if (removed.length === 0) {
       throw new TeamError("team.not_a_member");
@@ -364,7 +404,7 @@ export async function removeTeamMember(
       workspaceId,
       kind: "team.member_removed",
       actor,
-      data: { team: current.name, login: person?.login ?? personId },
+      data: { team: current.name, key, login: person?.login ?? personId },
       now,
     });
     const [team] = await toTeams(tx, [current]);

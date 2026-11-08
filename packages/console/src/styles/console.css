@@ -890,6 +890,7 @@ html[data-console] body {
 .sc-tile-pane,
 .sc-home-bar,
 .sc-person-card,
+.sc-team-card,
 .sc-decision,
 .sc-run,
 .sc-comment,
@@ -1396,24 +1397,72 @@ select.sc-input {
   justify-self: start;
 }
 
-/* The workers of a task on its form: each a chip with the way to take them off, and the way to add one. */
+/* Chips: things named among others in a row, a person, a team, an item of a list, a holder of
+   a role, each as low as a line of text and round at its ends, so that a row of them stays light
+   beside the fields of a form; the way to take one out in its end where it can be, a person's
+   face in its start. `Chip` writes one, and every row of things a person adds to and takes from
+   is made of them; the way to add one more stands at the end of the row as one more chip, a
+   picker with `sc-picker-add`. */
 .sc-chips {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--sc-space-2);
+  min-width: 0;
 }
 
 .sc-chip {
   display: inline-flex;
   align-items: center;
   gap: var(--sc-space-1);
-  min-height: var(--sc-control-size);
-  padding: 0 var(--sc-space-1) 0 var(--sc-space-2);
+  max-width: 100%;
+  min-height: 1.75rem;
+  padding: 0 var(--sc-space-3);
   border: var(--sc-border);
-  border-radius: var(--sc-radius-md);
-  background: var(--sc-color-bg-inset);
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-color-sheet);
+  color: var(--sc-color-text);
   font-size: var(--sc-text-sm);
+  line-height: var(--sc-leading-snug);
+  white-space: nowrap;
+}
+
+/* What a chip names, cut short where the row has no room for it whole. */
+.sc-chip-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sc-chip-label:has(> .sc-person) {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-space-1);
+}
+
+.sc-chip-label > .sc-person {
+  min-width: 0;
+}
+
+.sc-chip-label .sc-person-login {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: var(--sc-weight-normal);
+  text-overflow: ellipsis;
+}
+
+/* A person's face in the chip's rounded start, and the way out in its end, a hair inside. */
+.sc-chip:has(.sc-avatar) {
+  padding-inline-start: 0.1875rem;
+}
+
+.sc-chip:has(> .sc-chip-remove) {
+  padding-inline-end: 0.1875rem;
+}
+
+.sc-chip .sc-avatar-sm {
+  width: 1.375rem;
+  height: 1.375rem;
 }
 
 .sc-chip-remove,
@@ -1421,20 +1470,25 @@ select.sc-input {
   display: inline-grid;
   flex: none;
   place-items: center;
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 1.375rem;
+  height: 1.375rem;
+  padding: 0;
   border: 0;
-  border-radius: var(--sc-radius-sm);
+  border-radius: var(--sc-radius-full);
   background: transparent;
-  color: var(--sc-color-text-muted);
+  color: var(--sc-color-text-faint);
   font-size: var(--sc-text-md);
   line-height: 1;
   cursor: pointer;
+  transition:
+    background var(--sc-transition),
+    color var(--sc-transition),
+    opacity var(--sc-transition);
 }
 
 .sc-chip-remove:hover:not(:disabled),
 .sc-picker-clear:hover:not(:disabled) {
-  background: var(--sc-color-bg-raised);
+  background: var(--sc-color-bg-inset);
   color: var(--sc-color-text);
 }
 
@@ -1443,9 +1497,10 @@ select.sc-input {
   outline: var(--sc-focus-ring);
 }
 
-.sc-chips .sc-chip-add {
-  width: auto;
-  min-width: 10rem;
+.sc-chip-remove:disabled,
+.sc-picker-clear:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 /* A picker: the field that searches a listing, its page of results under it, and the choice in its place. */
@@ -1515,13 +1570,105 @@ select.sc-input {
   padding: var(--sc-space-2);
 }
 
-/* A picker among chips, in a fact of a person or in the board's filters: wide enough for a name, never the whole row. */
-.sc-chips .sc-picker,
-.sc-person-fact .sc-picker,
+/* A picker in the board's filters, in the form that adds a member, or among chips without being
+   the way to add to them: wide enough for a name, never the whole row. */
+.sc-chips .sc-picker:not(.sc-picker-add),
 .sc-filters .sc-picker,
 .sc-member-form .sc-picker {
   flex: 0 1 14rem;
   min-width: 11rem;
+}
+
+/* A picker that reads as what it holds, until the pointer or the focus is on it: a fact changed
+   in place, as low as a line of the facts, as a quiet field is. Its way out stands while the
+   pointer or the focus is on it, where there is a pointer to hover. */
+.sc-picker-quiet > .sc-input,
+.sc-picker-quiet.sc-picker-chosen {
+  min-height: 2rem;
+  padding-block: 0;
+  border-color: transparent;
+  background-color: transparent;
+}
+
+.sc-picker-quiet > .sc-input {
+  padding-inline: var(--sc-space-2);
+}
+
+.sc-picker-quiet.sc-picker-chosen {
+  padding-inline: var(--sc-space-2) 0.1875rem;
+  transition:
+    border-color var(--sc-transition),
+    background var(--sc-transition);
+}
+
+.sc-picker-quiet > .sc-input:hover:not(:disabled),
+.sc-picker-quiet > .sc-input:focus,
+.sc-picker-quiet.sc-picker-chosen:hover,
+.sc-picker-quiet.sc-picker-chosen:focus-within {
+  border-color: var(--sc-color-border);
+  background-color: var(--sc-color-sheet);
+}
+
+.sc-picker-quiet > .sc-input:focus {
+  border-color: var(--sc-color-accent);
+}
+
+@media (hover: hover) {
+  .sc-picker-quiet.sc-picker-chosen:not(:hover):not(:focus-within) .sc-picker-clear {
+    opacity: 0;
+  }
+}
+
+/* A picker that adds one more to a row of chips: a chip itself, its line dashed, as wide as its
+   words until it is typed in, and its list as wide as a name needs. */
+.sc-picker-add {
+  flex: none;
+}
+
+.sc-picker.sc-picker-add > .sc-input {
+  width: 8.5rem;
+  min-height: 1.75rem;
+  padding-block: 0;
+  padding-inline: var(--sc-space-3);
+  border-style: dashed;
+  border-radius: var(--sc-radius-full);
+  background: transparent;
+  line-height: var(--sc-leading-snug);
+  transition:
+    width var(--sc-transition),
+    border-color var(--sc-transition),
+    background var(--sc-transition);
+}
+
+.sc-picker.sc-picker-add > .sc-input::placeholder {
+  color: var(--sc-color-text-muted);
+}
+
+.sc-picker.sc-picker-add > .sc-input:hover:not(:disabled) {
+  background: var(--sc-color-sheet);
+}
+
+.sc-picker.sc-picker-add > .sc-input:focus {
+  border-style: solid;
+  background: var(--sc-color-sheet);
+}
+
+/* Where the browser sizes a field by what it holds, the way to add is as wide as its words, and
+   grows as a name is typed into it. */
+@supports (field-sizing: content) {
+  .sc-picker.sc-picker-add > .sc-input {
+    width: auto;
+    min-width: 6rem;
+    max-width: 100%;
+    field-sizing: content;
+  }
+}
+
+.sc-picker-add > .sc-picker-list {
+  right: auto;
+  width: max-content;
+  min-width: 100%;
+  max-width: min(22rem, calc(100vw - 2rem));
 }
 
 /* The workers of a task on a card or a row: pictures side by side, and how many more. */
@@ -2603,34 +2750,66 @@ select.sc-input {
   overflow-wrap: anywhere;
 }
 
+/* A person's facts: a column of names and a column of values, every value starting on one line
+   down the card, so that the cards read alike. A fact changed in place is a quiet field whose
+   words stand where a value's words stand, its box drawn out into the gap while the pointer or
+   the focus is on it. */
 .sc-person-facts {
   display: grid;
-  gap: var(--sc-space-1);
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--sc-space-1) var(--sc-space-4);
   margin: 0;
   padding-top: var(--sc-space-3);
   border-top: var(--sc-hairline);
 }
 
 .sc-person-fact {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: start;
+}
+
+/* A fact's name stands on the first line of its value, however many lines the value takes. */
+.sc-person-fact dt,
+.sc-person-fact dd {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--sc-space-3);
   min-height: 2rem;
 }
 
 .sc-person-fact dt {
-  flex: none;
   color: var(--sc-color-text-muted);
   font-size: var(--sc-text-sm);
 }
 
 .sc-person-fact dd {
-  display: flex;
-  justify-content: flex-end;
   min-width: 0;
   margin: 0;
   font-size: var(--sc-text-sm);
+}
+
+/* Whom a person manages: their faces side by side, and how many. */
+.sc-person-reports {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sc-space-2);
+}
+
+.sc-person-fact dd > .sc-input-quiet,
+.sc-person-fact dd > .sc-picker-quiet {
+  width: calc(100% + var(--sc-space-2));
+  max-width: none;
+  margin-inline-start: calc(var(--sc-space-2) * -1);
+}
+
+.sc-person-fact dd > .sc-chips {
+  padding-block: 0.125rem;
+}
+
+.sc-person-email {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 /* The ways to a person's work at the foot of the card, the way out across from them. */
@@ -2647,23 +2826,38 @@ select.sc-input {
   margin-inline-start: auto;
 }
 
-/* A select that reads as the value it holds, until the pointer or the focus is on it. */
-select.sc-input-quiet {
-  width: auto;
-  min-width: 0;
-  max-width: 100%;
+/* A field that reads as the value it holds, until the pointer or the focus is on it: a fact
+   changed in place, as low as a line of the facts, its box drawn only then. A select keeps the
+   room for its chevron, drawn only then too where there is a pointer to hover. */
+.sc-input-quiet {
   min-height: 2rem;
   padding-block: 0;
-  padding-inline-start: var(--sc-space-2);
+  padding-inline: var(--sc-space-2);
   border-color: transparent;
   background-color: transparent;
   text-overflow: ellipsis;
 }
 
-select.sc-input-quiet:hover,
-select.sc-input-quiet:focus-visible {
-  border-color: var(--sc-color-border);
+select.sc-input-quiet {
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
+  padding-inline-end: calc(var(--sc-space-3) * 2 + 0.625rem);
+}
+
+.sc-input-quiet:hover:not(:disabled),
+.sc-input-quiet:focus {
   background-color: var(--sc-color-sheet);
+}
+
+.sc-input-quiet:hover:not(:disabled):not(:focus) {
+  border-color: var(--sc-color-border);
+}
+
+@media (hover: hover) {
+  select.sc-input-quiet:not(:hover):not(:focus) {
+    background-image: none;
+  }
 }
 
 .sc-person-row {
@@ -2714,8 +2908,86 @@ select.sc-input-quiet:focus-visible {
   opacity: 0.55;
 }
 
-.sc-listing-form .sc-field-row {
+.sc-listing-form .sc-field-row,
+.sc-team-form .sc-field-row {
   align-items: end;
+}
+
+/* The two views of the people's page, the people and the teams: the page's view switch, with how
+   many each holds beside its name. */
+.sc-people-views {
+  margin-bottom: var(--sc-space-5);
+}
+
+.sc-people-views .sc-tab {
+  align-items: baseline;
+}
+
+.sc-tab-count {
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.sc-tab-current .sc-tab-count {
+  color: var(--sc-color-text-muted);
+}
+
+/* The teams (ADR-0073): a card each in a grid, as the people are; the name and how many at the
+   head, who is in it as chips with the way to add one at the end, the way to delete it at the
+   foot. The name, for an administrator, is a quiet field in the name's own words. */
+.sc-teams {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
+  gap: var(--sc-space-4);
+}
+
+.sc-team-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sc-space-3);
+  min-width: 0;
+  padding: var(--sc-space-4) var(--sc-space-5);
+  border-radius: var(--sc-radius-xl);
+}
+
+.sc-team-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-space-2);
+  min-width: 0;
+}
+
+/* The team's name, and under it its key, what it is called by (ADR-0074). */
+.sc-team-title {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+.sc-team-name {
+  min-width: 0;
+  font-size: var(--sc-text-md);
+  font-weight: var(--sc-weight-bold);
+  line-height: var(--sc-leading-snug);
+  overflow-wrap: anywhere;
+}
+
+.sc-team-name.sc-input-quiet {
+  margin-inline-start: calc(var(--sc-space-2) * -1);
+  color: var(--sc-color-text);
+}
+
+.sc-team-members {
+  padding-top: var(--sc-space-3);
+  border-top: var(--sc-hairline);
+}
+
+.sc-team-ways {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: auto;
+  margin-inline: calc(var(--sc-space-2) * -1);
 }
 
 .sc-field-hint {
@@ -2724,7 +2996,8 @@ select.sc-input-quiet:focus-visible {
   font-size: var(--sc-text-sm);
 }
 
-.sc-project-key {
+.sc-project-key,
+.sc-team-key {
   color: var(--sc-color-text-faint);
   font-size: var(--sc-text-xs);
 }
@@ -5357,6 +5630,11 @@ select.sc-input-quiet:focus-visible {
   width: 100%;
 }
 
+/* A person or a project chosen in a setting: a field as wide as the others. */
+.sc-settings-control > .sc-picker:not(.sc-picker-add) {
+  justify-self: stretch;
+}
+
 .sc-settings-form .sc-form-actions {
   padding-top: var(--sc-space-4);
   border-top: var(--sc-border);
@@ -5983,27 +6261,66 @@ select.sc-input-quiet:focus-visible {
   border: 0;
 }
 
+/* A choice is a chip that is its own box: the browser's square kept for the keyboard and a
+   screen reader, out of sight; a choice made is lit in the accent, a tick drawn before its word. */
 .sc-toggle-chip {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: var(--sc-space-1);
-  min-height: var(--sc-control-size);
+  gap: var(--sc-space-2);
+  min-height: 2rem;
   padding: 0 var(--sc-space-3);
   border: var(--sc-border);
   border-radius: var(--sc-radius-full);
-  background: var(--sc-color-bg-inset);
+  background: var(--sc-color-sheet);
+  color: var(--sc-color-text-muted);
   font-size: var(--sc-text-sm);
   cursor: pointer;
+  user-select: none;
+  transition:
+    background var(--sc-transition),
+    border-color var(--sc-transition),
+    color var(--sc-transition);
+}
+
+.sc-toggle-chip:hover {
+  border-color: var(--sc-color-border-strong);
+  color: var(--sc-color-text);
 }
 
 .sc-toggle-chip input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
   margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.sc-toggle-chip:has(input:focus-visible) {
+  outline: var(--sc-focus-ring);
+  outline-offset: 2px;
 }
 
 .sc-toggle-chip:has(input:checked) {
-  border-color: var(--sc-color-point);
-  background: var(--sc-color-point-subtle);
-  color: var(--sc-color-point);
+  border-color: color-mix(in srgb, var(--sc-color-accent) 40%, transparent);
+  background: var(--sc-color-accent-subtle);
+  color: var(--sc-color-accent);
+}
+
+.sc-toggle-chip:has(input:checked)::before {
+  content: "";
+  width: 0.3125rem;
+  height: 0.5625rem;
+  margin-inline: 0.125rem 0.0625rem;
+  border: solid currentColor;
+  border-width: 0 1.5px 1.5px 0;
+  transform: translateY(-0.0625rem) rotate(45deg);
+}
+
+.sc-toggle-chip:has(input:disabled) {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 /* A list of several choices too long for pills: a column of boxes. */
@@ -6106,37 +6423,6 @@ select.sc-input-quiet:focus-visible {
 .sc-plugin-role-key {
   color: var(--sc-color-text-muted);
   font-weight: normal;
-}
-
-.sc-plugin-holders {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sc-space-2);
-}
-
-/* Who holds a role, a chip each, with the way to revoke a grant in it. */
-.sc-plugin-holder {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sc-space-1);
-  min-height: 2rem;
-  padding-inline: var(--sc-space-3) var(--sc-space-1);
-  border: var(--sc-border);
-  border-radius: var(--sc-radius-full);
-  background: var(--sc-color-sheet);
-  font-size: var(--sc-text-sm);
-}
-
-.sc-plugin-holder-fixed {
-  padding-inline-end: var(--sc-space-3);
-}
-
-.sc-plugin-holder .sc-button {
-  min-height: 1.5rem;
-  padding-inline: var(--sc-space-2);
-  font-size: var(--sc-text-md);
-  line-height: 1;
 }
 
 .sc-plugin-grant {

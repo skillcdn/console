@@ -96,6 +96,10 @@ export type Route =
   | { readonly name: "people" }
   /** The form where an administrator lets someone in by login (ADR-0022). */
   | { readonly name: "new-listing" }
+  /** The teams of the workspace (ADR-0073), a view of the people's page. */
+  | { readonly name: "teams" }
+  /** The form where an administrator makes a team. */
+  | { readonly name: "new-team" }
   /** The agents of one person, for an administrator. */
   | { readonly name: "person-agents"; readonly id: string }
   /** Another person's plate, for whoever oversees them: a day of the week shown at the top, or today's. */
@@ -168,6 +172,10 @@ export const PATHS = {
   people: "/people",
   /** The form where an administrator lets someone in by login. */
   newListing: "/people/new",
+  /** The teams of the workspace, a view of the people's page. */
+  teams: "/people/teams",
+  /** The form where an administrator makes a team. */
+  newTeam: "/people/teams/new",
   /** The agents of whoever is signed in, which hold their tokens: their own page. */
   agents: "/agents",
   /** The form for a token made by hand, for a script or a console of one's own. */
@@ -304,6 +312,12 @@ export function matchRoute(pathname: string, search = ""): Route {
   }
   if (path === PATHS.newListing) {
     return { name: "new-listing" };
+  }
+  if (path === PATHS.teams) {
+    return { name: "teams" };
+  }
+  if (path === PATHS.newTeam) {
+    return { name: "new-team" };
   }
   if (path === PATHS.agents) {
     return { name: "agents" };

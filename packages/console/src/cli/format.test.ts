@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { RestPluginOperation } from "../plugin/rest-schemas.js";
 import { restDecisionSchema, restGoalSchema, restTaskSchema } from "../schemas.js";
-import { formatDecision, formatGoal, formatOperationUsage, formatTask } from "./format.js";
+import {
+  formatDecision,
+  formatGoal,
+  formatOperationUsage,
+  formatPluginGrantLine,
+  formatTask,
+} from "./format.js";
 
 describe("the usage of a plugin's command", () => {
   const argument = (extra: Record<string, unknown>) => ({
@@ -191,5 +197,24 @@ describe("the agent beside the person", () => {
     );
     expect(formatGoal(goal({ agent: null }))).toContain("set by: alice\n");
     expect(formatGoal(goal())).not.toContain("through");
+  });
+});
+
+describe("a grant in a line", () => {
+  it("names whom a role went to: a team by its key, never as everyone (ADR-0074)", () => {
+    const grant = {
+      id: "0199c4d8-0000-7000-8000-000000000090",
+      role: "approver",
+      person: null,
+      project: null,
+      everyone: false,
+      plugin: null,
+      team: { key: "platform", name: "Platform" },
+      createdAt: "2026-11-02T01:00:00.000Z",
+    };
+    expect(formatPluginGrantLine(grant)).toContain("approver to the team platform");
+    expect(formatPluginGrantLine({ ...grant, team: null, everyone: true })).toContain(
+      "approver to everyone",
+    );
   });
 });

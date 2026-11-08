@@ -93,6 +93,7 @@ import {
   type RestTasks,
   type RestTeam,
   type RestTeamInput,
+  type RestTeamPatch,
   type RestTeams,
   type RestTokenCreated,
   type RestTokenInput,
@@ -598,12 +599,15 @@ export interface ConsoleClient {
   removeListing(id: string): Promise<void>;
   /** The teams of the workspace (ADR-0073), each with the members the asker may see. */
   teams(signal?: AbortSignal): Promise<RestTeams>;
-  /** Makes, renames and removes a team, and puts a person in one or takes them out; for an administrator. */
+  /**
+   * Makes, renames and removes a team, and puts a person in one or takes them out; for an
+   * administrator. A team is called by its key (ADR-0074), which never changes.
+   */
   createTeam(input: RestTeamInput): Promise<RestTeam>;
-  renameTeam(id: string, input: RestTeamInput): Promise<RestTeam>;
-  removeTeam(id: string): Promise<void>;
-  addTeamMember(id: string, personId: string): Promise<RestTeam>;
-  removeTeamMember(id: string, personId: string): Promise<RestTeam>;
+  renameTeam(key: string, patch: RestTeamPatch): Promise<RestTeam>;
+  removeTeam(key: string): Promise<void>;
+  addTeamMember(key: string, personId: string): Promise<RestTeam>;
+  removeTeamMember(key: string, personId: string): Promise<RestTeam>;
   /** The projects the asker may see, with what they are in each. */
   projects(signal?: AbortSignal): Promise<RestProjects>;
   /** Makes a project, whose owner the asker becomes. */
@@ -1318,15 +1322,16 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
     teams: (signal) =>
       request("GET", `${base}${REST_ROUTES.teams}`, undefined, restTeamsSchema, signal),
     createTeam: (input) => request("POST", `${base}${REST_ROUTES.teams}`, input, restTeamSchema),
-    renameTeam: (id, input) =>
-      request("PATCH", `${base}${restPath("teams", id)}`, input, restTeamSchema),
-    removeTeam: (id) => request("DELETE", `${base}${restPath("teams", id)}`, undefined, undefined),
-    addTeamMember: (id, personId) =>
-      request("POST", `${base}${restPath("teams", id)}/members`, { personId }, restTeamSchema),
-    removeTeamMember: (id, personId) =>
+    renameTeam: (key, patch) =>
+      request("PATCH", `${base}${restPath("teams", key)}`, patch, restTeamSchema),
+    removeTeam: (key) =>
+      request("DELETE", `${base}${restPath("teams", key)}`, undefined, undefined),
+    addTeamMember: (key, personId) =>
+      request("POST", `${base}${restPath("teams", key)}/members`, { personId }, restTeamSchema),
+    removeTeamMember: (key, personId) =>
       request(
         "DELETE",
-        `${base}${restPath("teams", id)}/members/${encodeURIComponent(personId)}`,
+        `${base}${restPath("teams", key)}/members/${encodeURIComponent(personId)}`,
         undefined,
         restTeamSchema,
       ),

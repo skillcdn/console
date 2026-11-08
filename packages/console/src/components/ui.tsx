@@ -164,6 +164,42 @@ export function PersonChip(props: { readonly person: RestPerson; readonly size?:
   );
 }
 
+/**
+ * A thing named among others in a row (`sc-chips`): a person (a `PersonChip` inside), a team, an
+ * item of a list, a holder of a role. Given `onRemove`, it carries the way to take it out, named
+ * for a screen reader by `removeLabel`; left out, the chip is read, not changed. Every row of
+ * things a person adds to and takes from is made of these, so that they read alike everywhere.
+ */
+export function Chip(props: {
+  readonly children: ReactNode;
+  readonly onRemove?: (() => void) | undefined;
+  /** What the way out says to a screen reader: the word for removing, and what the chip names. */
+  readonly removeLabel?: string | undefined;
+  readonly disabled?: boolean | undefined;
+  readonly title?: string | undefined;
+  /** A class of the chip's own beside `sc-chip`. */
+  readonly className?: string | undefined;
+}) {
+  const words = useWords().common;
+  return (
+    <span className={cx("sc-chip", props.className)} title={props.title}>
+      <span className="sc-chip-label">{props.children}</span>
+      {props.onRemove !== undefined && (
+        <button
+          type="button"
+          className="sc-chip-remove"
+          aria-label={props.removeLabel ?? words.remove}
+          title={props.removeLabel ?? words.remove}
+          disabled={props.disabled}
+          onClick={props.onRemove}
+        >
+          <span aria-hidden="true">&times;</span>
+        </button>
+      )}
+    </span>
+  );
+}
+
 /** How many of a task's workers are shown as pictures before the rest are a count. */
 const WORKERS_SHOWN = 3;
 

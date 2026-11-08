@@ -210,6 +210,7 @@ export const en = {
     "person.email_taken": "That address is another person's in this workspace.",
     "team.not_found": "The team was not found.",
     "team.name_taken": "A team of that name is there already.",
+    "team.key_taken": "A team or a project of that key is there already.",
     "team.too_many": "The workspace holds as many teams as one may.",
     "team.invalid_member": "Only an active person of the workspace is put in a team.",
     "team.not_a_member": "The person is not in the team.",
@@ -235,7 +236,7 @@ export const en = {
     "plugin.unavailable": "The plugin can't be reached right now.",
     "project.invalid_address": "That is not the address of a pack.",
     "project.invalid_icon": "That file can't be used as the project's image.",
-    "project.key_taken": "A project with this key already exists.",
+    "project.key_taken": "A project or a team with this key already exists.",
     "project.no_icon": "The project has no image.",
     "project.not_found": "The project was not found.",
     "project.pack_connect_refused": "SkillCDN refused the connection.",
@@ -330,9 +331,9 @@ export const en = {
       projectsSome: "Some projects",
       settingsForm: "Settings",
       secretSet: (when: string) => `Set ${when}`,
-      secretSealedFrom: (host: string, when: string) => `Sealed from ${host}'s answer ${when}.`,
-      secretExpires: (when: string) => `Expires ${when}.`,
-      secretExpired: (when: string) => `Expired ${when}.`,
+      secretSealedFrom: (host: string, when: string) => `Received from ${host} ${when}`,
+      secretExpires: (when: string) => `expires ${when}`,
+      secretExpired: (when: string) => `expired ${when}`,
       secretHosts: (hosts: string) => `Sent to ${hosts} only.`,
       secretUnset: "Not set",
       secretNew: "New value",
@@ -342,7 +343,7 @@ export const en = {
       rolesNone: "No roles: every member may use it.",
       roleDefault: "Default",
       everyMember: "Every member",
-      roleManagers: "Managers",
+      roleManagers: "Reporting line",
       whoeverManages: "Whoever someone reports to",
       grantEveryone: "Everyone",
       grantMembersOf: (project: string) => `Members of ${project}`,
@@ -388,6 +389,7 @@ export const en = {
       addItem: "Add",
       itemPlaceholder: "Type, then add",
       choose: "Choose…",
+      addOne: "Add…",
     },
     /** What stands in for a frame the console has nothing to show in. */
     frameUnavailable: "This can't be shown right now.",
@@ -1048,7 +1050,7 @@ export const en = {
       emailCleared: (login: string) => `cleared ${login}'s work email`,
       teamCreated: (team: string) => `made the team ${team}`,
       teamRenamed: (from: string, team: string) => `renamed the team ${from} to ${team}`,
-      teamRemoved: (team: string) => `removed the team ${team}`,
+      teamRemoved: (team: string) => `deleted the team ${team}`,
       teamMemberAdded: (login: string, team: string) => `put ${login} in the team ${team}`,
       teamMemberRemoved: (login: string, team: string) => `took ${login} out of the team ${team}`,
       projectCreated: (project: string) => `made the project ${project}`,
@@ -1097,7 +1099,7 @@ export const en = {
       pluginConfigured: (fields: string, plugin: string) =>
         `changed ${fields} of the plugin ${plugin}`,
       pluginSealed: (fields: string, plugin: string, host: string) =>
-        `sealed ${fields} of the plugin ${plugin} from ${host}'s answer`,
+        `stored ${fields} of the plugin ${plugin}, received from ${host}`,
       pluginGranted: (role: string, who: string, plugin: string) =>
         `gave ${who} the role ${role} in the plugin ${plugin}`,
       pluginRevoked: (role: string, who: string, plugin: string) =>
@@ -1295,16 +1297,13 @@ export const en = {
     emailOf: (name: string) => `Work email of ${name}`,
     emailHint:
       "Google's at sign-in; written here otherwise. Read by an administrator, the person, and a plugin allowed to.",
-    team: "Reports",
+    team: "Direct reports",
     teams: "Teams",
-    teamsNone:
-      "No teams yet. A team is a name and its members: a way to call people by, and to grant a plugin's role to.",
-    newTeam: "New team",
-    teamName: "Team name",
-    teamNameOf: (team: string) => `Name of the team ${team}`,
     joinTeam: "Add to a team…",
     joinTeamOf: (name: string) => `Add ${name} to a team`,
-    teamMembers: (count: number) => (count === 1 ? "1 member" : `${count} members`),
+    leaveTeam: (name: string, team: string) => `Take ${name} out of ${team}`,
+    howMany: (count: number) => (count === 1 ? "1 person" : `${count} people`),
+    views: { aria: "People and teams", people: "People", teams: "Teams" },
     nobody: "None",
     letIn: "Add a person",
     letInAria: "Add a person",
@@ -1352,6 +1351,36 @@ export const en = {
     onlyAdmin: {
       title: "Only an administrator sees another person's agents",
       body: "Your own are on your Agents page.",
+    },
+  },
+
+  /** The teams of the workspace (ADR-0073), a view of the people page of their own. */
+  teams: {
+    list: "Teams",
+    none: {
+      title: "No teams yet",
+      body: "A team puts people under one name: a plugin finds them by it, and a role of a plugin granted to the team is held by everyone in it.",
+    },
+    members: (count: number) => (count === 1 ? "1 member" : `${count} members`),
+    nobody: "Nobody in it yet.",
+    nameOf: (team: string) => `Name of the team ${team}`,
+    keyTitle:
+      "The team's key: what a grant, a plugin and the command call it by. It never changes.",
+    addMember: "Add a person…",
+    addMemberTo: (team: string) => `Add a person to ${team}`,
+    removeMember: (name: string, team: string) => `Take ${name} out of ${team}`,
+    remove: "Delete team",
+    removeAsk: (team: string) =>
+      `Delete the team ${team}? The roles of plugins granted to it go with it; its people stay.`,
+    newTeam: "New team",
+    newAria: "New team",
+    form: {
+      name: "Team name",
+      key: "Key",
+      keyHint:
+        "Lowercase letters, digits and hyphens: what a grant, a plugin and the command call the team by. No other team and no project has it, and it never changes.",
+      hint: "The name is what people read, and can change; the key stays. People are added on the team's card once it is made.",
+      submit: "Make the team",
     },
   },
 

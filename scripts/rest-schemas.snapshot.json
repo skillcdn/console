@@ -607,12 +607,10 @@
                 }
               ]
             },
-            "teamIds": {
+            "teams": {
               "type": "array",
               "items": {
-                "type": "string",
-                "format": "uuid",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                "type": "string"
               }
             },
             "language": {
@@ -804,12 +802,10 @@
                       }
                     ]
                   },
-                  "teamIds": {
+                  "teams": {
                     "type": "array",
                     "items": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      "type": "string"
                     }
                   },
                   "language": {
@@ -1294,12 +1290,10 @@
                 }
               ]
             },
-            "teamIds": {
+            "teams": {
               "type": "array",
               "items": {
-                "type": "string",
-                "format": "uuid",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                "type": "string"
               }
             },
             "language": {
@@ -1402,12 +1396,10 @@
                 }
               ]
             },
-            "teamIds": {
+            "teams": {
               "type": "array",
               "items": {
-                "type": "string",
-                "format": "uuid",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                "type": "string"
               }
             },
             "language": {
@@ -1512,12 +1504,10 @@
                   }
                 ]
               },
-              "teamIds": {
+              "teams": {
                 "type": "array",
                 "items": {
-                  "type": "string",
-                  "format": "uuid",
-                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  "type": "string"
                 }
               },
               "language": {
@@ -1666,12 +1656,10 @@
                         }
                       ]
                     },
-                    "teamIds": {
+                    "teams": {
                       "type": "array",
                       "items": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        "type": "string"
                       }
                     },
                     "language": {
@@ -1807,12 +1795,10 @@
                     }
                   ]
                 },
-                "teamIds": {
+                "teams": {
                   "type": "array",
                   "items": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    "type": "string"
                   }
                 },
                 "language": {
@@ -2080,12 +2066,10 @@
                       }
                     ]
                   },
-                  "teamIds": {
+                  "teams": {
                     "type": "array",
                     "items": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      "type": "string"
                     }
                   },
                   "language": {
@@ -2188,12 +2172,10 @@
                       }
                     ]
                   },
-                  "teamIds": {
+                  "teams": {
                     "type": "array",
                     "items": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      "type": "string"
                     }
                   },
                   "language": {
@@ -2298,12 +2280,10 @@
                         }
                       ]
                     },
-                    "teamIds": {
+                    "teams": {
                       "type": "array",
                       "items": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        "type": "string"
                       }
                     },
                     "language": {
@@ -2452,12 +2432,10 @@
                               }
                             ]
                           },
-                          "teamIds": {
+                          "teams": {
                             "type": "array",
                             "items": {
-                              "type": "string",
-                              "format": "uuid",
-                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              "type": "string"
                             }
                           },
                           "language": {
@@ -2593,12 +2571,10 @@
                           }
                         ]
                       },
-                      "teamIds": {
+                      "teams": {
                         "type": "array",
                         "items": {
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          "type": "string"
                         }
                       },
                       "language": {
@@ -2848,12 +2824,10 @@
                 }
               ]
             },
-            "teamIds": {
+            "teams": {
               "type": "array",
               "items": {
-                "type": "string",
-                "format": "uuid",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                "type": "string"
               }
             },
             "language": {
@@ -3043,12 +3017,10 @@
                 }
               ]
             },
-            "teamIds": {
+            "teams": {
               "type": "array",
               "items": {
-                "type": "string",
-                "format": "uuid",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                "type": "string"
               }
             },
             "language": {
@@ -3188,12 +3160,10 @@
                 }
               ]
             },
-            "teamIds": {
+            "teams": {
               "type": "array",
               "items": {
-                "type": "string",
-                "format": "uuid",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                "type": "string"
               }
             },
             "language": {
@@ -3410,12 +3380,10 @@
                       }
                     ]
                   },
-                  "teamIds": {
+                  "teams": {
                     "type": "array",
                     "items": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      "type": "string"
                     }
                   },
                   "language": {
@@ -3581,12 +3549,10 @@
                 }
               ]
             },
-            "teamIds": {
+            "teams": {
               "type": "array",
               "items": {
-                "type": "string",
-                "format": "uuid",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                "type": "string"
               }
             },
             "language": {
@@ -3772,12 +3738,10 @@
                       }
                     ]
                   },
-                  "teamIds": {
+                  "teams": {
                     "type": "array",
                     "items": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      "type": "string"
                     }
                   },
                   "language": {
@@ -4187,12 +4151,10 @@
                     }
                   ]
                 },
-                "teamIds": {
+                "teams": {
                   "type": "array",
                   "items": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    "type": "string"
                   }
                 },
                 "language": {
@@ -4641,12 +4603,10 @@
                           }
                         ]
                       },
-                      "teamIds": {
+                      "teams": {
                         "type": "array",
                         "items": {
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          "type": "string"
                         }
                       },
                       "language": {
@@ -5293,12 +5253,10 @@
                 }
               ]
             },
-            "teamIds": {
+            "teams": {
               "type": "array",
               "items": {
-                "type": "string",
-                "format": "uuid",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                "type": "string"
               }
             },
             "language": {
@@ -5567,12 +5525,10 @@
                       }
                     ]
                   },
-                  "teamIds": {
+                  "teams": {
                     "type": "array",
                     "items": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      "type": "string"
                     }
                   },
                   "language": {
@@ -6351,12 +6307,10 @@
                     }
                   ]
                 },
-                "teamIds": {
+                "teams": {
                   "type": "array",
                   "items": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    "type": "string"
                   }
                 },
                 "language": {
@@ -6810,12 +6764,10 @@
                 }
               ]
             },
-            "teamIds": {
+            "teams": {
               "type": "array",
               "items": {
-                "type": "string",
-                "format": "uuid",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                "type": "string"
               }
             },
             "language": {
@@ -6950,12 +6902,10 @@
                       }
                     ]
                   },
-                  "teamIds": {
+                  "teams": {
                     "type": "array",
                     "items": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      "type": "string"
                     }
                   },
                   "language": {
@@ -7238,12 +7188,10 @@
                           }
                         ]
                       },
-                      "teamIds": {
+                      "teams": {
                         "type": "array",
                         "items": {
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          "type": "string"
                         }
                       },
                       "language": {
@@ -7346,12 +7294,10 @@
                           }
                         ]
                       },
-                      "teamIds": {
+                      "teams": {
                         "type": "array",
                         "items": {
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          "type": "string"
                         }
                       },
                       "language": {
@@ -7456,12 +7402,10 @@
                             }
                           ]
                         },
-                        "teamIds": {
+                        "teams": {
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            "type": "string"
                           }
                         },
                         "language": {
@@ -7610,12 +7554,10 @@
                                   }
                                 ]
                               },
-                              "teamIds": {
+                              "teams": {
                                 "type": "array",
                                 "items": {
-                                  "type": "string",
-                                  "format": "uuid",
-                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  "type": "string"
                                 }
                               },
                               "language": {
@@ -7751,12 +7693,10 @@
                               }
                             ]
                           },
-                          "teamIds": {
+                          "teams": {
                             "type": "array",
                             "items": {
-                              "type": "string",
-                              "format": "uuid",
-                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              "type": "string"
                             }
                           },
                           "language": {
@@ -8330,12 +8270,10 @@
                   }
                 ]
               },
-              "teamIds": {
+              "teams": {
                 "type": "array",
                 "items": {
-                  "type": "string",
-                  "format": "uuid",
-                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  "type": "string"
                 }
               },
               "language": {
@@ -8568,12 +8506,10 @@
             }
           ]
         },
-        "teamIds": {
+        "teams": {
           "type": "array",
           "items": {
-            "type": "string",
-            "format": "uuid",
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            "type": "string"
           }
         },
         "language": {
@@ -8801,12 +8737,10 @@
                           }
                         ]
                       },
-                      "teamIds": {
+                      "teams": {
                         "type": "array",
                         "items": {
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          "type": "string"
                         }
                       },
                       "language": {
@@ -8923,12 +8857,10 @@
                             }
                           ]
                         },
-                        "teamIds": {
+                        "teams": {
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            "type": "string"
                           }
                         },
                         "language": {
@@ -9350,12 +9282,10 @@
                           }
                         ]
                       },
-                      "teamIds": {
+                      "teams": {
                         "type": "array",
                         "items": {
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          "type": "string"
                         }
                       },
                       "language": {
@@ -9472,12 +9402,10 @@
                             }
                           ]
                         },
-                        "teamIds": {
+                        "teams": {
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            "type": "string"
                           }
                         },
                         "language": {
@@ -10613,17 +10541,15 @@
                       {
                         "type": "object",
                         "properties": {
-                          "id": {
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          "key": {
+                            "type": "string"
                           },
                           "name": {
                             "type": "string"
                           }
                         },
                         "required": [
-                          "id",
+                          "key",
                           "name"
                         ],
                         "additionalProperties": false
@@ -11035,8 +10961,8 @@
         },
         "team": {
           "type": "string",
-          "format": "uuid",
-          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          "minLength": 1,
+          "maxLength": 40
         },
         "everyone": {
           "type": "boolean",
@@ -11128,17 +11054,15 @@
             {
               "type": "object",
               "properties": {
-                "id": {
-                  "type": "string",
-                  "format": "uuid",
-                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                "key": {
+                  "type": "string"
                 },
                 "name": {
                   "type": "string"
                 }
               },
               "required": [
-                "id",
+                "key",
                 "name"
               ],
               "additionalProperties": false
@@ -11250,17 +11174,15 @@
                   {
                     "type": "object",
                     "properties": {
-                      "id": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      "key": {
+                        "type": "string"
                       },
                       "name": {
                         "type": "string"
                       }
                     },
                     "required": [
-                      "id",
+                      "key",
                       "name"
                     ],
                     "additionalProperties": false
@@ -13306,12 +13228,10 @@
                             }
                           ]
                         },
-                        "teamIds": {
+                        "teams": {
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            "type": "string"
                           }
                         },
                         "language": {
@@ -13573,12 +13493,10 @@
                             }
                           ]
                         },
-                        "teamIds": {
+                        "teams": {
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            "type": "string"
                           }
                         },
                         "language": {
@@ -14381,12 +14299,10 @@
                     }
                   ]
                 },
-                "teamIds": {
+                "teams": {
                   "type": "array",
                   "items": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    "type": "string"
                   }
                 },
                 "language": {
@@ -14489,12 +14405,10 @@
                     }
                   ]
                 },
-                "teamIds": {
+                "teams": {
                   "type": "array",
                   "items": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    "type": "string"
                   }
                 },
                 "language": {
@@ -14599,12 +14513,10 @@
                       }
                     ]
                   },
-                  "teamIds": {
+                  "teams": {
                     "type": "array",
                     "items": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      "type": "string"
                     }
                   },
                   "language": {
@@ -14753,12 +14665,10 @@
                             }
                           ]
                         },
-                        "teamIds": {
+                        "teams": {
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            "type": "string"
                           }
                         },
                         "language": {
@@ -14894,12 +14804,10 @@
                         }
                       ]
                     },
-                    "teamIds": {
+                    "teams": {
                       "type": "array",
                       "items": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        "type": "string"
                       }
                     },
                     "language": {
@@ -15260,12 +15168,10 @@
                         }
                       ]
                     },
-                    "teamIds": {
+                    "teams": {
                       "type": "array",
                       "items": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        "type": "string"
                       }
                     },
                     "language": {
@@ -15547,12 +15453,10 @@
                 }
               ]
             },
-            "teamIds": {
+            "teams": {
               "type": "array",
               "items": {
-                "type": "string",
-                "format": "uuid",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                "type": "string"
               }
             },
             "language": {
@@ -15856,12 +15760,10 @@
                       }
                     ]
                   },
-                  "teamIds": {
+                  "teams": {
                     "type": "array",
                     "items": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      "type": "string"
                     }
                   },
                   "language": {
@@ -19047,12 +18949,10 @@
                 }
               ]
             },
-            "teamIds": {
+            "teams": {
               "type": "array",
               "items": {
-                "type": "string",
-                "format": "uuid",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                "type": "string"
               }
             },
             "language": {
@@ -19169,12 +19069,10 @@
                   }
                 ]
               },
-              "teamIds": {
+              "teams": {
                 "type": "array",
                 "items": {
-                  "type": "string",
-                  "format": "uuid",
-                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  "type": "string"
                 }
               },
               "language": {
@@ -19512,12 +19410,10 @@
                       }
                     ]
                   },
-                  "teamIds": {
+                  "teams": {
                     "type": "array",
                     "items": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      "type": "string"
                     }
                   },
                   "language": {
@@ -19634,12 +19530,10 @@
                         }
                       ]
                     },
-                    "teamIds": {
+                    "teams": {
                       "type": "array",
                       "items": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        "type": "string"
                       }
                     },
                     "language": {
@@ -19878,6 +19772,11 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "properties": {
+        "key": {
+          "type": "string",
+          "maxLength": 40,
+          "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+        },
         "name": {
           "type": "string",
           "minLength": 1,
@@ -19885,6 +19784,7 @@
         }
       },
       "required": [
+        "key",
         "name"
       ]
     },
@@ -19902,6 +19802,20 @@
         "personId"
       ]
     },
+    "restTeamPatchSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
     "restTeamSchema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
@@ -19910,6 +19824,9 @@
           "type": "string",
           "format": "uuid",
           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "key": {
+          "type": "string"
         },
         "name": {
           "type": "string"
@@ -19930,6 +19847,7 @@
       },
       "required": [
         "id",
+        "key",
         "name",
         "memberIds",
         "createdAt"
@@ -19950,6 +19868,9 @@
                 "format": "uuid",
                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
               },
+              "key": {
+                "type": "string"
+              },
               "name": {
                 "type": "string"
               },
@@ -19969,6 +19890,7 @@
             },
             "required": [
               "id",
+              "key",
               "name",
               "memberIds",
               "createdAt"
@@ -20288,12 +20210,10 @@
                 }
               ]
             },
-            "teamIds": {
+            "teams": {
               "type": "array",
               "items": {
-                "type": "string",
-                "format": "uuid",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                "type": "string"
               }
             },
             "language": {
@@ -20433,12 +20353,10 @@
                 }
               ]
             },
-            "teamIds": {
+            "teams": {
               "type": "array",
               "items": {
-                "type": "string",
-                "format": "uuid",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                "type": "string"
               }
             },
             "language": {
@@ -20579,12 +20497,10 @@
                       }
                     ]
                   },
-                  "teamIds": {
+                  "teams": {
                     "type": "array",
                     "items": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      "type": "string"
                     }
                   },
                   "language": {
@@ -20840,12 +20756,10 @@
                           }
                         ]
                       },
-                      "teamIds": {
+                      "teams": {
                         "type": "array",
                         "items": {
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          "type": "string"
                         }
                       },
                       "language": {
@@ -20962,12 +20876,10 @@
                             }
                           ]
                         },
-                        "teamIds": {
+                        "teams": {
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            "type": "string"
                           }
                         },
                         "language": {
@@ -21389,12 +21301,10 @@
                           }
                         ]
                       },
-                      "teamIds": {
+                      "teams": {
                         "type": "array",
                         "items": {
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          "type": "string"
                         }
                       },
                       "language": {
@@ -21511,12 +21421,10 @@
                             }
                           ]
                         },
-                        "teamIds": {
+                        "teams": {
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            "type": "string"
                           }
                         },
                         "language": {
@@ -21963,12 +21871,10 @@
                           }
                         ]
                       },
-                      "teamIds": {
+                      "teams": {
                         "type": "array",
                         "items": {
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          "type": "string"
                         }
                       },
                       "language": {
@@ -22071,12 +21977,10 @@
                           }
                         ]
                       },
-                      "teamIds": {
+                      "teams": {
                         "type": "array",
                         "items": {
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          "type": "string"
                         }
                       },
                       "language": {
@@ -22181,12 +22085,10 @@
                             }
                           ]
                         },
-                        "teamIds": {
+                        "teams": {
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            "type": "string"
                           }
                         },
                         "language": {
@@ -22335,12 +22237,10 @@
                                   }
                                 ]
                               },
-                              "teamIds": {
+                              "teams": {
                                 "type": "array",
                                 "items": {
-                                  "type": "string",
-                                  "format": "uuid",
-                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  "type": "string"
                                 }
                               },
                               "language": {
@@ -22476,12 +22376,10 @@
                               }
                             ]
                           },
-                          "teamIds": {
+                          "teams": {
                             "type": "array",
                             "items": {
-                              "type": "string",
-                              "format": "uuid",
-                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              "type": "string"
                             }
                           },
                           "language": {

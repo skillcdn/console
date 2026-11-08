@@ -10,7 +10,7 @@ import { and, asc, count, eq, inArray, type SQL, sql } from "drizzle-orm";
 import { memberOfProject, projectVisibleTo } from "../../auth/policy.js";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
-import { decisions, people, projectMembers, projects, runs, workspaces } from "../schema.js";
+import { decisions, people, projectMembers, projects, runs, teams, workspaces } from "../schema.js";
 import { type Actor, recordEvent } from "./events.js";
 import { type PersonRecord, personColumns, toPerson } from "./people.js";
 
@@ -87,7 +87,7 @@ export class ProjectError extends DomainError {
 
 const PROJECT_ERROR_WORDS = {
   "project.not_found": "the project was not found",
-  "project.key_taken": "a project with this key exists already",
+  "project.key_taken": "a project or a team with this key exists already",
   "project.too_many": "the workspace holds as many projects as one may",
   "project.too_many_bytes": "the project's files hold as many bytes together as one may",
   "member.not_found": "the person is not listed in the project",
@@ -345,7 +345,14 @@ export async function createProject(
       .from(projects)
       .where(and(eq(projects.workspaceId, workspaceId), eq(projects.key, project.key)))
       .limit(1);
-    if (taken !== undefined) {
+    // The projects' keys and the teams' are one set of names in a workspace (ADR-0074), each
+    // checked under the workspace's row, which a team is made under too.
+    const [team] = await tx
+      .select({ id: teams.id })
+      .from(teams)
+      .where(and(eq(teams.workspaceId, workspaceId), eq(teams.key, project.key)))
+      .limit(1);
+    if (taken !== undefined || team !== undefined) {
       throw new ProjectError("project.key_taken");
     }
     const [held] = await tx

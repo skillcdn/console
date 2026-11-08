@@ -302,18 +302,21 @@ describe("the plugins' routes", () => {
     const me = (await (
       await h.request(REST_ROUTES.me, { headers: { cookie: member } })
     ).json()) as { person: { id: string } };
-    // To a team (ADR-0073): whoever is in it holds the role, as the membership stands.
-    const teamMade = await h.request(REST_ROUTES.teams, json({ name: "Greeters" }, admin));
+    // To a team (ADR-0073), by its key (ADR-0074): whoever is in it holds the role, as the
+    // membership stands.
+    const teamMade = await h.request(
+      REST_ROUTES.teams,
+      json({ key: "greeters", name: "Greeters" }, admin),
+    );
     expect(teamMade.status, await teamMade.clone().text()).toBe(201);
-    const teamId = ((await teamMade.json()) as { id: string }).id;
     const toTeam = await h.request(
       pluginPath("hello", "grants"),
-      json({ role: "greeter", team: teamId }, admin),
+      json({ role: "greeter", team: "greeters" }, admin),
     );
     expect(toTeam.status).toBe(201);
     expect(restPluginGrantSchema.parse(await toTeam.json())).toMatchObject({
       role: "greeter",
-      team: { id: teamId, name: "Greeters" },
+      team: { key: "greeters", name: "Greeters" },
     });
     // Whoever is in the team holds the role as the membership stands: plugin-board.int.test.ts
     // shows it on a role that is not everyone's; greeter is hello's default role.

@@ -70,6 +70,7 @@ export function restPersonWithEmail(person: PersonRecord): RestPerson {
 export function restTeam(team: TeamRecord, visible?: ReadonlySet<string>): RestTeam {
   return {
     id: team.id,
+    key: team.key,
     name: team.name,
     memberIds:
       visible === undefined ? [...team.memberIds] : team.memberIds.filter((id) => visible.has(id)),

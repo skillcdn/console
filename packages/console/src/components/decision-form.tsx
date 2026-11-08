@@ -16,7 +16,7 @@ import { isPicture, placing, unusedName } from "./files.js";
 import { Picker } from "./picker.js";
 import { peopleSearch } from "./searches.js";
 import { type TaskSearch, taskLabel } from "./task-form.js";
-import { Button, formatBytes, PersonChip, personName } from "./ui.js";
+import { Button, Chip, formatBytes, PersonChip, personName } from "./ui.js";
 
 // Raising a decision: the question, what a person needs to know, the options to choose from,
 // and who is to answer (ADR-0042): the person raising it, unless they name another of the
@@ -212,25 +212,22 @@ export function DecisionForm(props: DecisionFormProps) {
           <legend className="sc-field-label">{form.decider}</legend>
           <div className="sc-chips">
             {deciders.map((person) => (
-              <span key={person.id} className="sc-chip">
+              <Chip
+                key={person.id}
+                onRemove={() =>
+                  setDeciders((current) => current.filter((chosen) => chosen.id !== person.id))
+                }
+                removeLabel={`${words.common.remove}: ${personName(person)}`}
+                disabled={props.busy}
+              >
                 <PersonChip person={person} />
                 {person.id === props.me?.id && <span className="sc-muted"> {form.me}</span>}
-                <button
-                  type="button"
-                  className="sc-chip-remove"
-                  aria-label={`${words.common.remove}: ${personName(person)}`}
-                  disabled={props.busy}
-                  onClick={() =>
-                    setDeciders((current) => current.filter((chosen) => chosen.id !== person.id))
-                  }
-                >
-                  <span aria-hidden="true">&times;</span>
-                </button>
-              </span>
+              </Chip>
             ))}
             {deciders.length === 0 && <span className="sc-muted">{form.deciderPlaceholder}</span>}
             {deciders.length < MAX_DECIDERS && (
               <Picker
+                className="sc-picker-add"
                 value={undefined}
                 search={findDeciders}
                 keyOf={(person) => person.id}

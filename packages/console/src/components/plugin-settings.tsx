@@ -24,6 +24,7 @@ import {
   Badge,
   Button,
   Callout,
+  Chip,
   cx,
   EmptyState,
   formatInstant,
@@ -449,21 +450,18 @@ function RefListControl(props: {
   return (
     <div className="sc-chips">
       {chosen.map((id) => (
-        <span key={id} className="sc-chip">
+        <Chip
+          key={id}
+          onRemove={() => set(chosen.filter((kept) => kept !== id))}
+          removeLabel={`${words.common.remove}: ${labelOf(id)}`}
+        >
           {labelOf(id)}
-          <button
-            type="button"
-            className="sc-chip-remove"
-            aria-label={`${words.common.remove}: ${labelOf(id)}`}
-            onClick={() => set(chosen.filter((kept) => kept !== id))}
-          >
-            <span aria-hidden="true">&times;</span>
-          </button>
-        </span>
+        </Chip>
       ))}
       {!full && (
         <Picker<Candidate>
           id={props.id}
+          className="sc-picker-add"
           value={undefined}
           search={listSearch(
             candidates.filter((candidate) => !chosen.includes(candidate.id)),
@@ -472,7 +470,7 @@ function RefListControl(props: {
           keyOf={(candidate) => candidate.id}
           render={(candidate) => candidate.label}
           label={pluginWord(props.setting.name, props.language)}
-          placeholder={words.plugins.settings.choose}
+          placeholder={words.plugins.settings.addOne}
           onChange={(candidate) => {
             if (candidate !== undefined) {
               set([...chosen, candidate.id]);
@@ -515,18 +513,14 @@ function ItemListControl(props: {
   return (
     <div className="sc-chips">
       {items.map((item, index) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: an item may be typed twice
-        <span key={`${index}-${String(item)}`} className="sc-chip">
+        <Chip
+          // biome-ignore lint/suspicious/noArrayIndexKey: an item may be typed twice
+          key={`${index}-${String(item)}`}
+          onRemove={() => set(items.filter((_, at) => at !== index))}
+          removeLabel={`${words.common.remove}: ${String(item)}`}
+        >
           {String(item)}
-          <button
-            type="button"
-            className="sc-chip-remove"
-            aria-label={`${words.common.remove}: ${String(item)}`}
-            onClick={() => set(items.filter((_, at) => at !== index))}
-          >
-            <span aria-hidden="true">&times;</span>
-          </button>
-        </span>
+        </Chip>
       ))}
       {!full && (
         <div className="sc-chip-input">
@@ -807,7 +801,7 @@ function secretStanding(
     return set;
   }
   const expires = formatInstant(setting.expiresAt, language);
-  return `${set} ${
+  return `${set} · ${
     Date.parse(setting.expiresAt) <= Date.now()
       ? settings.secretExpired(expires)
       : settings.secretExpires(expires)
@@ -1254,10 +1248,10 @@ function RoleRow(props: {
   const plugins = props.plugins.filter((plugin) => !pluginsWith.has(plugin.key));
   const teamsWith = new Set(
     grants.flatMap((grant) =>
-      grant.team === null || grant.team === undefined ? [] : [grant.team.id],
+      grant.team === null || grant.team === undefined ? [] : [grant.team.key],
     ),
   );
-  const teams = props.teams.filter((team) => !teamsWith.has(team.id));
+  const teams = props.teams.filter((team) => !teamsWith.has(team.key));
   const projects = props.projects.filter((project) => !projectsWith.has(project.key));
   const people = props.people.filter(
     (person) => person.status === "active" && !peopleWith.has(person.id),
@@ -1297,7 +1291,7 @@ function RoleRow(props: {
         : choice.kind === "person"
           ? `person:${choice.person.id}`
           : choice.kind === "team"
-            ? `team:${choice.team.id}`
+            ? `team:${choice.team.key}`
             : `plugin:${choice.plugin.key}`;
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -1311,7 +1305,7 @@ function RoleRow(props: {
     } else if (whom.kind === "person") {
       props.onGrant({ role: role.key, person: whom.person.id });
     } else if (whom.kind === "team") {
-      props.onGrant({ role: role.key, team: whom.team.id });
+      props.onGrant({ role: role.key, team: whom.team.key });
     } else {
       props.onGrant({ role: role.key, plugin: whom.plugin.key });
     }
@@ -1329,31 +1323,23 @@ function RoleRow(props: {
         {description !== "" && <p className="sc-settings-hint">{description}</p>}
       </div>
       <div>
-        <div className="sc-plugin-holders">
-          {props.isDefault && (
-            <span className="sc-plugin-holder sc-plugin-holder-fixed">{settings.everyMember}</span>
-          )}
+        <div className="sc-chips sc-plugin-holders">
+          {props.isDefault && <Chip className="sc-plugin-holder">{settings.everyMember}</Chip>}
           {role.follows === "reports" && (
-            <span className="sc-plugin-holder sc-plugin-holder-fixed">
-              {settings.whoeverManages}
-            </span>
+            <Chip className="sc-plugin-holder">{settings.whoeverManages}</Chip>
           )}
           {grants.map((grant) => {
             const holder = holderOf(grant, settings);
             return (
-              <span key={grant.id} className="sc-plugin-holder">
+              <Chip
+                key={grant.id}
+                className="sc-plugin-holder"
+                onRemove={() => props.onRevoke(grant.id)}
+                removeLabel={`${settings.revoke}: ${holder}`}
+                disabled={props.busy}
+              >
                 {holder}
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={props.busy}
-                  onClick={() => props.onRevoke(grant.id)}
-                  aria-label={`${settings.revoke}: ${holder}`}
-                  title={settings.revoke}
-                >
-                  ×
-                </Button>
-              </span>
+              </Chip>
             );
           })}
         </div>
@@ -1379,6 +1365,12 @@ function RoleRow(props: {
       </div>
     </li>
   );
+}
+
+/** Another plugin by the name it gives itself in the person's language, or its key where the page does not know it. */
+function pluginNameOf(plugins: readonly RestPlugin[], key: string, language: string): string {
+  const found = plugins.find((plugin) => plugin.key === key);
+  return found === undefined ? key : pluginWord(found.name, language);
 }
 
 /** The roles the plugin declares, each with who holds it; a plugin without roles is every member's. */
@@ -1436,7 +1428,8 @@ function RolesSection(props: {
               <li key={`${ask.plugin}:${ask.role}`} className="sc-plugin-role">
                 <div>
                   <p className="sc-plugin-role-name">
-                    <code className="sc-plugin-role-key">{ask.role}</code> {ask.plugin}
+                    {pluginNameOf(props.plugins, ask.plugin, props.language)}
+                    <code className="sc-plugin-role-key">{ask.role}</code>
                     {ask.state === "granted" && <Badge tone="accent">{settings.askGranted}</Badge>}
                   </p>
                   <p className="sc-settings-hint">{pluginWord(ask.why, props.language)}</p>

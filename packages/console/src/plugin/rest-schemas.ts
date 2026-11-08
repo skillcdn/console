@@ -7,6 +7,7 @@ import {
   MAX_PROJECT_DESCRIPTION_LENGTH,
   MAX_PROJECT_KEY_LENGTH,
   MAX_PROJECT_NAME_LENGTH,
+  MAX_TEAM_KEY_LENGTH,
 } from "../limits.js";
 import { PLUGIN_STATES } from "../vocabulary.js";
 import { ARG_TYPES } from "./args.js";
@@ -199,7 +200,7 @@ export const restPluginGrantSchema = z.object({
   /** The plugin the role went to (ADR-0072), by key, or `null`; answered from 0.4.5 and read as optional. */
   plugin: z.optional(z.nullable(z.string())),
   /** The team the role went to (ADR-0073), whose members hold it, or `null`; answered from 0.4.5 and read as optional. */
-  team: z.optional(z.nullable(z.object({ id: uuid, name: z.string() }))),
+  team: z.optional(z.nullable(z.object({ key: z.string(), name: z.string() }))),
   createdAt: instant,
 });
 export type RestPluginGrant = z.infer<typeof restPluginGrantSchema>;
@@ -298,8 +299,8 @@ export const restPluginGrantInputSchema = z
     project: z.optional(projectKey),
     /** A plugin, by key, to hold the role as itself (ADR-0072). */
     plugin: z.optional(pluginKey),
-    /** A team, by id, whose members hold the role (ADR-0073). */
-    team: z.optional(uuid),
+    /** A team, by its key (ADR-0074), whose members hold the role (ADR-0073). */
+    team: z.optional(z.string().check(z.minLength(1), z.maxLength(MAX_TEAM_KEY_LENGTH))),
     everyone: z.optional(z.literal(true)),
   })
   .check(

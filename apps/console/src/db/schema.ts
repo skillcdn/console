@@ -183,12 +183,21 @@ export const teams = pgTable(
     workspaceId: uuid()
       .notNull()
       .references(() => workspaces.id),
+    /**
+     * What the team is called by in an address, a grant, a plugin and the command (ADR-0074):
+     * lowercase letters, digits and hyphens, as a project's key is, and one per workspace among
+     * the teams' keys and the projects' keys alike; immutable once the team is made.
+     */
+    key: text().notNull(),
     /** As the administrator spelled it; one per workspace without regard to case. */
     name: text().notNull(),
     createdAt: createdAt(),
     createdBy: uuid().references(() => people.id),
   },
-  (table) => [uniqueIndex("teams_name_key").on(table.workspaceId, sql`lower(${table.name})`)],
+  (table) => [
+    uniqueIndex("teams_key_key").on(table.workspaceId, table.key),
+    uniqueIndex("teams_name_key").on(table.workspaceId, sql`lower(${table.name})`),
+  ],
 );
 
 /** Who is in a team: a person is in any number of them. */

@@ -56,6 +56,7 @@ import {
   type RestTasks,
   type RestTeam,
   type RestTeamInput,
+  type RestTeamPatch,
   type RestToken,
   type RestTokenCreated,
   type RestTokenInput,
@@ -182,10 +183,11 @@ export interface ConsoleActions {
   removeListing(id: string): Promise<void>;
   /** The teams (ADR-0073): made, renamed and removed, a person put in or taken out; for an administrator. */
   createTeam(input: RestTeamInput): Promise<RestTeam>;
-  renameTeam(id: string, input: RestTeamInput): Promise<RestTeam>;
-  removeTeam(id: string): Promise<void>;
-  addTeamMember(id: string, personId: string): Promise<RestTeam>;
-  removeTeamMember(id: string, personId: string): Promise<RestTeam>;
+  /** A team is called by its key (ADR-0074), which never changes. */
+  renameTeam(key: string, patch: RestTeamPatch): Promise<RestTeam>;
+  removeTeam(key: string): Promise<void>;
+  addTeamMember(key: string, personId: string): Promise<RestTeam>;
+  removeTeamMember(key: string, personId: string): Promise<RestTeam>;
   /** Keeps the person's language (ADR-0065) or their front page. */
   updateMe(patch: RestMePatch): Promise<RestMe>;
   /** Changes the workspace's settings (ADR-0035); for an administrator. `me` says them from then on. */
@@ -811,22 +813,22 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
         await refreshWorkspace();
         return team;
       },
-      async renameTeam(id, input) {
-        const team = await client.renameTeam(id, input);
+      async renameTeam(key, patch) {
+        const team = await client.renameTeam(key, patch);
         await refreshWorkspace();
         return team;
       },
-      async removeTeam(id) {
-        await client.removeTeam(id);
+      async removeTeam(key) {
+        await client.removeTeam(key);
         await refreshWorkspace();
       },
-      async addTeamMember(id, personId) {
-        const team = await client.addTeamMember(id, personId);
+      async addTeamMember(key, personId) {
+        const team = await client.addTeamMember(key, personId);
         await refreshWorkspace();
         return team;
       },
-      async removeTeamMember(id, personId) {
-        const team = await client.removeTeamMember(id, personId);
+      async removeTeamMember(key, personId) {
+        const team = await client.removeTeamMember(key, personId);
         await refreshWorkspace();
         return team;
       },

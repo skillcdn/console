@@ -48,7 +48,6 @@ import {
   type RestSkillLoad,
   type RestSkills,
   type RestTaskPatch,
-  type RestTeam,
 } from "../schemas.js";
 import {
   COLOR_NAMES,
@@ -2014,7 +2013,10 @@ async function pluginSecret(
   return EXIT.ok;
 }
 
-/** Grants a role of the plugin to a person, to the members of a project, or to everyone; an administrator's. */
+/**
+ * Grants a role of the plugin to a person, to the members of a project, to another plugin, to the
+ * members of a team, or to everyone; an administrator's.
+ */
 async function pluginGrant(
   io: CliIo,
   session: Session,
@@ -2025,18 +2027,25 @@ async function pluginGrant(
   const { values, positionals } = parse(rest, {
     person: { type: "string" },
     plugin: { type: "string" },
+    team: { type: "string" },
     everyone: { type: "boolean" },
   });
-  const usage = `console plugin ${client.key} grant <role> --person <login> | --project <key> | --plugin <key> | --everyone`;
+  const usage = `console plugin ${client.key} grant <role> --person <login> | --project <key> | --plugin <key> | --team <key> | --everyone`;
   const role = theOne(positionals, `Say which role: ${usage}`);
   const login = text(values, "person");
   const other = text(values, "plugin");
+  const teamKey = text(values, "team");
   const everyone = on(values, "everyone");
   if (
-    [login !== undefined, projectKey !== undefined, other !== undefined, everyone].filter(Boolean)
-      .length !== 1
+    [
+      login !== undefined,
+      projectKey !== undefined,
+      other !== undefined,
+      teamKey !== undefined,
+      everyone,
+    ].filter(Boolean).length !== 1
   ) {
-    throw misuse(`Say whom, one of the four: ${usage}`);
+    throw misuse(`Say whom, one of the five: ${usage}`);
   }
   let input: RestPluginGrantInput;
   if (login !== undefined) {
@@ -2049,6 +2058,8 @@ async function pluginGrant(
     input = { role, project: projectKey };
   } else if (other !== undefined) {
     input = { role, plugin: other };
+  } else if (teamKey !== undefined) {
+    input = { role, team: teamKey };
   } else {
     input = { role, everyone: true };
   }
@@ -3313,69 +3324,60 @@ const teams: Command = async (args, io) => {
   const loginOf = new Map(everyone.items.map((person) => [person.id, person.login]));
   answer(io, session, found, () =>
     found.items.length === 0
-      ? "No teams yet. console team new <name> makes one."
+      ? "No teams yet. console team new <key> <name> makes one."
       : found.items.map((team) => formatTeamLine(team, loginOf)).join("\n"),
   );
   return EXIT.ok;
 };
 
 const TEAM_USAGE =
-  "Say what to do: console team new <name>  |  team rename <name> <new name>  |  team remove <name>  |  team add <name> <login>  |  team drop <name> <login>";
+  'Say what to do: console team new <key> "<name>"  |  team rename <key> "<new name>"  |  team remove <key>  |  team add <key> <login>  |  team drop <key> <login>';
 
-/** A team by its name, compared without regard to case, among the workspace's. */
-async function teamNamed(session: Session, name: string): Promise<RestTeam> {
-  const { items } = await session.client.teams();
-  const found = items.find((team) => team.name.toLowerCase() === name.trim().toLowerCase());
-  if (found === undefined) {
-    throw failed(`No team is called ${name}. console teams lists them.`);
-  }
-  return found;
-}
-
+// A team is called by its key (ADR-0074), which never changes; its name is what people read.
 const team: Command = async (args, io) => {
   const what = args[0];
   if (what === "new") {
     const { values, positionals } = parse(args.slice(1), {});
-    const name = theOne(positionals, "Say the name: console team new <name>");
+    const [key, name] = theTwo(
+      positionals,
+      'Say the key and the name: console team new <key> "<name>"',
+    );
     const session = await open(io, values);
-    const made = await session.client.createTeam({ name });
+    const made = await session.client.createTeam({ key, name });
     answer(io, session, made, () => formatTeamLine(made, new Map()));
     return EXIT.ok;
   }
   if (what === "rename") {
     const { values, positionals } = parse(args.slice(1), {});
-    const [name, next] = theTwo(
+    const [key, next] = theTwo(
       positionals,
-      "Say which team and its new name: console team rename <name> <new name>",
+      'Say which team and its new name: console team rename <key> "<new name>"',
     );
     const session = await open(io, values);
-    const found = await teamNamed(session, name);
-    const changed = await session.client.renameTeam(found.id, { name: next });
+    const changed = await session.client.renameTeam(key, { name: next });
     answer(io, session, changed, () => formatTeamLine(changed, new Map()));
     return EXIT.ok;
   }
   if (what === "remove") {
     const { values, positionals } = parse(args.slice(1), {});
-    const name = theOne(positionals, "Say which team: console team remove <name>");
+    const key = theOne(positionals, "Say which team: console team remove <key>");
     const session = await open(io, values);
-    const found = await teamNamed(session, name);
-    await session.client.removeTeam(found.id);
-    answer(io, session, { removed: found }, () => `The team ${found.name} is no more.`);
+    await session.client.removeTeam(key);
+    answer(io, session, { removed: key }, () => `The team ${key} is no more.`);
     return EXIT.ok;
   }
   if (what === "add" || what === "drop") {
     const { values, positionals } = parse(args.slice(1), {});
-    const [name, login] = theTwo(
+    const [key, login] = theTwo(
       positionals,
-      `Say which team and whom: console team ${what} <name> <login>`,
+      `Say which team and whom: console team ${what} <key> <login>`,
     );
     const session = await open(io, values);
-    const found = await teamNamed(session, name);
     const person = await personOf(session, login);
     const changed =
       what === "add"
-        ? await session.client.addTeamMember(found.id, person.id)
-        : await session.client.removeTeamMember(found.id, person.id);
+        ? await session.client.addTeamMember(key, person.id)
+        : await session.client.removeTeamMember(key, person.id);
     const everyone = await session.client.people();
     answer(io, session, changed, () =>
       formatTeamLine(changed, new Map(everyone.items.map((one) => [one.id, one.login]))),

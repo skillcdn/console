@@ -109,6 +109,10 @@ export {
   type ListingFormProps,
   PeopleList,
   type PeopleListProps,
+  TeamForm,
+  type TeamFormProps,
+  TeamList,
+  type TeamListProps,
 } from "./components/people.js";
 export {
   PICKER_PAGE_LIMIT,
@@ -218,6 +222,7 @@ export {
   Button,
   Callout,
   CategoryBadge,
+  Chip,
   CopyButton,
   cx,
   Day,

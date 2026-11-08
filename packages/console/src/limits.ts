@@ -50,6 +50,8 @@ export const MAX_TOKEN_NAME_LENGTH = 80;
 export const MAX_LOGIN_LENGTH = 254;
 /** A team's name (ADR-0073). */
 export const MAX_TEAM_NAME_LENGTH = 60;
+/** A team's key (ADR-0074), as long as a project's may be: the two are one set of names. */
+export const MAX_TEAM_KEY_LENGTH = 40;
 /** How many teams one workspace may hold. */
 export const MAX_TEAMS = 200;
 /** How long a token may be good for, in days, and how long one is when nothing is said. */

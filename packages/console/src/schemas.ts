@@ -38,6 +38,7 @@ import {
   MAX_SECRET_LENGTH,
   MAX_SKILLS_ADDRESS_LENGTH,
   MAX_SUMMARY_LENGTH,
+  MAX_TEAM_KEY_LENGTH,
   MAX_TEAM_NAME_LENGTH,
   MAX_TITLE_LENGTH,
   MAX_TOKEN_DAYS,
@@ -136,8 +137,8 @@ export const restPersonSchema = z.object({
    * a console built on this package still reads an older console's people.
    */
   managerId: z.optional(z.nullable(uuid)),
-  /** The teams the person is in (ADR-0073), by id: on the people listing and to a plugin, from 0.4.5, and read as optional. */
-  teamIds: z.optional(z.array(uuid)),
+  /** The teams the person is in (ADR-0073), by their keys (ADR-0074): on the people listing and to a plugin, from 0.4.5, and read as optional. */
+  teams: z.optional(z.array(z.string())),
   /**
    * The language the person reads in (ADR-0065), a tag: the one they chose, else the one the pages
    * first saw them in; `null` until they have opened the pages. What a plugin or an agent writes
@@ -198,9 +199,21 @@ export const restListingInputSchema = z
   .check(z.refine((input) => isLoginAt(input.host, input.login), "must be a login at the host"));
 export type RestListingInput = z.infer<typeof restListingInputSchema>;
 
-/** A team of the workspace (ADR-0073): a name and who is in it, among the people the asker may see. */
+/**
+ * A team's key (ADR-0074): what its addresses, a grant, a plugin and the command call it. A
+ * project key's shape, one name among the teams' keys and the projects' keys of a workspace;
+ * immutable once the team is made.
+ */
+const teamKey = z.string().check(
+  z.maxLength(MAX_TEAM_KEY_LENGTH),
+  z.regex(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/, "must be lowercase letters, digits and hyphens"),
+  z.refine((key) => key !== "new", "is a word the pages reserve"),
+);
+
+/** A team of the workspace (ADR-0073): its key, its name and who is in it, among the people the asker may see. */
 export const restTeamSchema = z.object({
   id: uuid,
+  key: z.string(),
   name: z.string(),
   memberIds: z.array(uuid),
   createdAt: instant,
@@ -210,13 +223,20 @@ export type RestTeam = z.infer<typeof restTeamSchema>;
 export const restTeamsSchema = z.object({ items: z.array(restTeamSchema) });
 export type RestTeams = z.infer<typeof restTeamsSchema>;
 
-/** What `POST /api/v1/teams` and `PATCH /api/v1/teams/<id>` are sent. */
+/** What `POST /api/v1/teams` is sent: the key, which stays, and the name. */
 export const restTeamInputSchema = z.object({
+  key: teamKey,
   name: z.string().check(z.trim(), z.minLength(1), z.maxLength(MAX_TEAM_NAME_LENGTH)),
 });
 export type RestTeamInput = z.infer<typeof restTeamInputSchema>;
 
-/** What `POST /api/v1/teams/<id>/members` is sent. */
+/** What `PATCH /api/v1/teams/<key>` is sent: the name; the key never changes. */
+export const restTeamPatchSchema = z.object({
+  name: z.string().check(z.trim(), z.minLength(1), z.maxLength(MAX_TEAM_NAME_LENGTH)),
+});
+export type RestTeamPatch = z.infer<typeof restTeamPatchSchema>;
+
+/** What `POST /api/v1/teams/<key>/members` is sent. */
 export const restTeamMemberInputSchema = z.object({ personId: uuid });
 export type RestTeamMemberInput = z.infer<typeof restTeamMemberInputSchema>;
 
@@ -1030,7 +1050,7 @@ export const restEventDataSchema = z.object({
   role: z.optional(z.string()),
   /** For `person.manager_changed`: the login of whom the person reports to now, or `null` for nobody. */
   manager: z.optional(z.nullable(z.string())),
-  /** For the events about a team (ADR-0073), and for a role granted to one: its name; `team.renamed` holds the name before in `name`. */
+  /** For the events about a team (ADR-0073), and for a role granted to one: its name; `team.renamed` holds the name before in `name`, and each event of a team its `key` (ADR-0074). */
   team: z.optional(z.string()),
   /** For `person.email_changed`: whether the person has an address now; never the address itself. */
   set: z.optional(z.boolean()),

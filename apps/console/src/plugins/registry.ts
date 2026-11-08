@@ -823,7 +823,7 @@ export class Plugins {
         grant.project === undefined ? null : { key: grant.project.key, name: grant.project.name },
       everyone: grant.everyone,
       plugin: grant.plugin ?? null,
-      team: grant.team ?? null,
+      team: grant.team === undefined ? null : { key: grant.team.key, name: grant.team.name },
       createdAt: grant.createdAt.toISOString(),
     };
   }
@@ -1410,11 +1410,14 @@ export class Plugins {
           : `the plugin ${input.plugin} is not installed`,
       );
     }
-    if (
-      input.team !== undefined &&
-      (await findTeam(this.options.database, workspace.id, input.team)) === undefined
-    ) {
-      throw new PluginRefusal("plugin.invalid_args", "the team was not found");
+    // A team is named by its key (ADR-0074), and held by its id.
+    let teamId: string | undefined;
+    if (input.team !== undefined) {
+      const team = await findTeam(this.options.database, workspace.id, input.team);
+      if (team === undefined) {
+        throw new PluginRefusal("plugin.invalid_args", `the team ${input.team} was not found`);
+      }
+      teamId = team.id;
     }
     const install = await findInstall(this.options.database, workspace.id, key);
     const grant = await addGrant(this.options.database, {
@@ -1424,7 +1427,7 @@ export class Plugins {
       personId: input.person,
       projectId,
       grantee: input.plugin,
-      teamId: input.team,
+      teamId,
       everyone: input.everyone === true,
       actor: by.actor,
       now: this.options.clock.now(),

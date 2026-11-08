@@ -20,6 +20,7 @@ import {
   MAX_REPORTS_PER_RUN,
   MAX_RULES_LENGTH,
   MAX_SEARCH_LENGTH,
+  MAX_TEAM_KEY_LENGTH,
   MAX_URL_LENGTH,
   MAX_VERSIONS_PER_DOCUMENT,
   normalizeConnectCode,
@@ -92,6 +93,7 @@ import {
   restTaskPatchSchema,
   restTeamInputSchema,
   restTeamMemberInputSchema,
+  restTeamPatchSchema,
   restTokenInputSchema,
   rulesPath,
   TASK_STATES,
@@ -241,7 +243,7 @@ import {
   removeTeamMember,
   renameTeam,
   TeamError,
-  teamIdsByPerson,
+  teamKeysByPerson,
 } from "../db/queries/teams.js";
 import { TokenError, type TokenRecord } from "../db/queries/tokens.js";
 import {
@@ -1196,13 +1198,13 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         : undefined,
     ]);
     // The work email is an administrator's to read, and one's own; nobody else's (ADR-0022).
-    // The teams each is in (ADR-0073) come with every reading.
+    // The teams each is in (ADR-0073), by their keys (ADR-0074), come with every reading.
     const administrator = configuresWorkspace(person);
-    const teamIdsOf = await teamIdsByPerson(database, person.workspaceId);
+    const teamsOf = await teamKeysByPerson(database, person.workspaceId);
     const body: RestPeople = {
       items: items.map((item) => ({
         ...(administrator || item.id === person.id ? restPersonWithEmail(item) : restPerson(item)),
-        teamIds: teamIdsOf.get(item.id) ?? [],
+        teams: teamsOf.get(item.id) ?? [],
       })),
       listed: listed.map(restListing),
       organization:
@@ -1387,10 +1389,12 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     return caller.person.role === "admin" ? caller : administratorRequired(c);
   };
 
-  /** The team's id in the path, or the refusal. */
-  const teamIdOf = (c: Context<AppEnv>): string | Response => {
-    const id = c.req.param("id") ?? "";
-    return UUID.test(id) ? id : notFound(c, "team.not_found", "The team was not found.");
+  /** The team's key in the path (ADR-0074), or the refusal. */
+  const teamKeyOf = (c: Context<AppEnv>): string | Response => {
+    const key = c.req.param("key") ?? "";
+    return key.length <= MAX_TEAM_KEY_LENGTH && PROJECT_KEY.test(key)
+      ? key
+      : notFound(c, "team.not_found", "The team was not found.");
   };
 
   app.post(REST_ROUTES.teams, tooLarge, async (c) => {
@@ -1406,11 +1410,12 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       const team = await createTeam(database, {
         workspaceId: caller.person.workspaceId,
         actor: actorOf(caller),
+        key: input.key,
         name: input.name,
         now: clock.now(),
       });
       logger.info(
-        { person: caller.person.id, team: team.id, requestId: c.get("requestId") },
+        { person: caller.person.id, team: team.key, requestId: c.get("requestId") },
         "a team was made",
       );
       return c.json(restTeam(team), 201);
@@ -1419,16 +1424,16 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
   });
 
-  app.patch(`${REST_ROUTES.teams}/:id`, tooLarge, async (c) => {
+  app.patch(`${REST_ROUTES.teams}/:key`, tooLarge, async (c) => {
     const caller = await administeringTeams(c);
     if (caller instanceof Response) {
       return caller;
     }
-    const id = teamIdOf(c);
-    if (id instanceof Response) {
-      return id;
+    const key = teamKeyOf(c);
+    if (key instanceof Response) {
+      return key;
     }
-    const input = await bodyOf(c, restTeamInputSchema);
+    const input = await bodyOf(c, restTeamPatchSchema);
     if (input instanceof Response) {
       return input;
     }
@@ -1436,7 +1441,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       const team = await renameTeam(database, {
         workspaceId: caller.person.workspaceId,
         actor: actorOf(caller),
-        teamId: id,
+        key,
         name: input.name,
         now: clock.now(),
       });
@@ -1446,24 +1451,24 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
   });
 
-  app.delete(`${REST_ROUTES.teams}/:id`, async (c) => {
+  app.delete(`${REST_ROUTES.teams}/:key`, async (c) => {
     const caller = await administeringTeams(c);
     if (caller instanceof Response) {
       return caller;
     }
-    const id = teamIdOf(c);
-    if (id instanceof Response) {
-      return id;
+    const key = teamKeyOf(c);
+    if (key instanceof Response) {
+      return key;
     }
     try {
       await removeTeam(database, {
         workspaceId: caller.person.workspaceId,
         actor: actorOf(caller),
-        teamId: id,
+        key,
         now: clock.now(),
       });
       logger.info(
-        { person: caller.person.id, team: id, requestId: c.get("requestId") },
+        { person: caller.person.id, team: key, requestId: c.get("requestId") },
         "a team was removed",
       );
       return c.body(null, 204);
@@ -1472,14 +1477,14 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
   });
 
-  app.post(`${REST_ROUTES.teams}/:id/members`, tooLarge, async (c) => {
+  app.post(`${REST_ROUTES.teams}/:key/members`, tooLarge, async (c) => {
     const caller = await administeringTeams(c);
     if (caller instanceof Response) {
       return caller;
     }
-    const id = teamIdOf(c);
-    if (id instanceof Response) {
-      return id;
+    const key = teamKeyOf(c);
+    if (key instanceof Response) {
+      return key;
     }
     const input = await bodyOf(c, restTeamMemberInputSchema);
     if (input instanceof Response) {
@@ -1489,7 +1494,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       const team = await addTeamMember(database, {
         workspaceId: caller.person.workspaceId,
         actor: actorOf(caller),
-        teamId: id,
+        key,
         personId: input.personId,
         now: clock.now(),
       });
@@ -1499,14 +1504,14 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
   });
 
-  app.delete(`${REST_ROUTES.teams}/:id/members/:personId`, async (c) => {
+  app.delete(`${REST_ROUTES.teams}/:key/members/:personId`, async (c) => {
     const caller = await administeringTeams(c);
     if (caller instanceof Response) {
       return caller;
     }
-    const id = teamIdOf(c);
-    if (id instanceof Response) {
-      return id;
+    const key = teamKeyOf(c);
+    if (key instanceof Response) {
+      return key;
     }
     const personId = c.req.param("personId") ?? "";
     if (!UUID.test(personId)) {
@@ -1516,7 +1521,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       const team = await removeTeamMember(database, {
         workspaceId: caller.person.workspaceId,
         actor: actorOf(caller),
-        teamId: id,
+        key,
         personId,
         now: clock.now(),
       });

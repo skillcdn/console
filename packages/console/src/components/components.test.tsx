@@ -42,7 +42,7 @@ import { HomeGrid, type HomeGridProps } from "./home.js";
 import { Markdown } from "./markdown.js";
 import { MyDecisions } from "./my-decisions.js";
 import { PackConnect } from "./pack-connect.js";
-import { ListingForm, PeopleList } from "./people.js";
+import { ListingForm, PeopleList, TeamForm, TeamList } from "./people.js";
 import { opensAbove, Picker } from "./picker.js";
 import {
   clampScale,
@@ -67,6 +67,7 @@ import { TaskView } from "./task-view.js";
 import { NewToken, TokenForm, TokenList } from "./tokens.js";
 import {
   Avatar,
+  Chip,
   DueBadge,
   PersonChip,
   PriorityBadge,
@@ -1360,7 +1361,10 @@ describe("people", () => {
     const managed: RestPerson = { ...bob, managerId: alice.id };
     const read = renderToStaticMarkup(<PeopleList people={[alice, managed]} me={bob} />);
     expect(read).toMatch(/<dt>Manager<\/dt><dd><span class="sc-person"[^>]*>.*?Alice Example/);
-    expect(read).toMatch(/<dt>Reports<\/dt><dd><span class="sc-workers" title="bob">/);
+    expect(read).toMatch(
+      /<dt>Direct reports<\/dt><dd><span class="sc-person-reports" title="bob"><span class="sc-workers">/,
+    );
+    expect(read).toContain(">1 person</span>");
     expect(read).toMatch(/<dt>Manager<\/dt><dd><span class="sc-muted">None/);
     expect(read).not.toContain("<select");
     const change = renderToStaticMarkup(
@@ -1373,46 +1377,113 @@ describe("people", () => {
     expect(change).toContain('aria-label="Manager of Alice Example"');
     expect(change).toContain('placeholder="None"');
     expect(change).toMatch(/sc-picker-chosen[\s\S]*?Alice Example/);
+    // Changed in place, the manager reads as a fact does until the pointer or the focus is on it.
+    expect(change.match(/class="sc-picker sc-picker-quiet"/g)).toHaveLength(1);
+    expect(change.match(/class="sc-picker sc-picker-chosen sc-picker-quiet"/g)).toHaveLength(1);
   });
 
-  it("names the teams a person is in, and lets an administrator keep the teams (ADR-0073)", () => {
+  it("names the teams a person is in as chips, and lets an administrator put them in one from their card (ADR-0073)", () => {
     const team = {
       id: "0199c4d8-0000-7000-8000-000000000071",
+      key: "platform",
       name: "Platform",
       memberIds: [bob.id],
       createdAt: "2026-11-02T01:00:00.000Z",
     };
     const read = renderToStaticMarkup(<PeopleList people={[alice, bob]} me={bob} teams={[team]} />);
-    expect(read).toMatch(/<dt>Teams<\/dt><dd>[\s\S]*?Platform/);
-    expect(read).toContain("1 member");
-    expect(read).not.toContain("New team");
-    expect(read).not.toContain('aria-label="Remove: Platform"');
+    expect(read).toMatch(/<dt>Teams<\/dt><dd><div class="sc-chips"><span class="sc-chip">/);
+    expect(read).toContain('<span class="sc-chip-label">Platform</span>');
+    expect(read).not.toContain("sc-chip-remove");
+    expect(read).not.toContain('role="combobox"');
+    // Nobody in a team and nothing to add: no row of teams on the card.
+    expect(read.match(/<dt>Teams<\/dt>/g)).toHaveLength(1);
     const kept = renderToStaticMarkup(
       <PeopleList
         people={[alice, bob]}
         me={alice}
         teams={[team]}
-        onCreateTeam={() => undefined}
-        onRenameTeam={() => undefined}
-        onRemoveTeam={() => undefined}
         onJoinTeam={() => undefined}
         onLeaveTeam={() => undefined}
       />,
     );
-    expect(kept).toContain('aria-label="New team"');
-    expect(kept).toContain('aria-label="Name of the team Platform"');
-    expect(kept).toContain('aria-label="Remove: Platform"');
-    expect(kept).toContain('aria-label="Add Alice Example to a team"');
-    expect(kept).not.toContain('aria-label="Add bob to a team"');
-    expect(renderToStaticMarkup(<PeopleList people={[alice]} teams={[]} />)).toContain(
-      "No teams yet.",
+    expect(kept).toContain('aria-label="Take bob out of Platform"');
+    expect(kept).toMatch(
+      /class="sc-picker sc-picker-add"><input[^>]*aria-label="Add Alice Example to a team"/,
     );
+    expect(kept).not.toContain('aria-label="Add bob to a team"');
+    // The teams themselves are kept on a view of their own.
+    expect(kept).not.toContain("New team");
+    expect(renderToStaticMarkup(<PeopleList people={[alice]} teams={[]} />)).not.toContain("Teams");
+  });
+
+  it("shows the teams as cards, with who is in each, and lets an administrator keep them (ADR-0073)", () => {
+    const platform = {
+      id: "0199c4d8-0000-7000-8000-000000000071",
+      key: "platform",
+      name: "Platform",
+      memberIds: [bob.id],
+      createdAt: "2026-11-02T01:00:00.000Z",
+    };
+    const design = {
+      ...platform,
+      id: "0199c4d8-0000-7000-8000-000000000072",
+      key: "design",
+      name: "Design",
+      memberIds: [],
+    };
+    const read = renderToStaticMarkup(
+      <TeamList teams={[design, platform]} people={[alice, bob]} />,
+    );
+    expect(read).toContain('<h2 class="sc-team-name">Design</h2>');
+    // Each team says its key (ADR-0074), what a grant, a plugin and the command call it by.
+    expect(read).toMatch(/<span class="sc-team-key"[^>]*>platform<\/span>/);
+    expect(read).toContain("1 member");
+    expect(read).toContain("0 members");
+    expect(read).toContain("Nobody in it yet.");
+    expect(read).toMatch(
+      /<span class="sc-chip"><span class="sc-chip-label"><span class="sc-person" title="bob">/,
+    );
+    expect(read).not.toContain("<input");
+    expect(read).not.toContain("<button");
+    const kept = renderToStaticMarkup(
+      <TeamList
+        teams={[design, platform]}
+        people={[alice, bob]}
+        onRename={() => undefined}
+        onRemove={() => undefined}
+        onAddMember={() => undefined}
+        onRemoveMember={() => undefined}
+      />,
+    );
+    expect(kept).toContain('aria-label="Name of the team Platform"');
+    expect(kept).toContain('value="Platform"');
+    expect(kept).toContain('aria-label="Take bob out of Platform"');
+    // A person is added from the end of the team's row, searched among those in and not in it.
+    expect(kept).toContain('aria-label="Add a person to Platform"');
+    expect(kept).toContain('aria-label="Add a person to Design"');
+    expect(kept.match(/>Delete team</g)).toHaveLength(2);
+    expect(kept).not.toContain("Nobody in it yet.");
+    expect(renderToStaticMarkup(<TeamList teams={[]} people={[alice]} />)).toContain(
+      "No teams yet",
+    );
+  });
+
+  it("makes a team by its name", () => {
+    const form = renderToStaticMarkup(
+      <TeamForm onSubmit={() => undefined} onCancel={() => undefined} />,
+    );
+    expect(form).toContain('aria-label="New team"');
+    expect(form).toContain("Team name");
+    // The key is asked beside the name, in a project key's shape, and stays once the team is made.
+    expect(form).toMatch(/<span class="sc-field-label">Key<\/span><input[^>]*pattern="\[a-z0-9\]/);
+    expect(form).toMatch(/<button disabled="" type="submit"[^>]*>Make the team</);
+    expect(form).toContain(">Cancel<");
   });
 
   it("shows a person's work email where the console answers one, and lets an administrator write it (ADR-0069)", () => {
     const mailed: RestPerson = { ...bob, email: "bob@example.test" };
     const read = renderToStaticMarkup(<PeopleList people={[alice, mailed]} me={bob} />);
-    expect(read).toMatch(/<dt>Work email<\/dt><dd>bob@example.test/);
+    expect(read).toMatch(/<dt>Work email<\/dt><dd><span class="sc-person-email">bob@example.test/);
     expect(read).not.toContain('type="email"');
     // A person the console answers no address for has no row; an administrator writes everyone's.
     expect(read.match(/<dt>Work email<\/dt>/g)).toHaveLength(1);
@@ -1422,6 +1493,9 @@ describe("people", () => {
     expect(change.match(/type="email"/g)).toHaveLength(2);
     expect(change).toContain('value="bob@example.test"');
     expect(change).toContain('aria-label="Work email of bob"');
+    // A quiet field, its hint on hover: where an address comes from, and who reads it.
+    expect(change.match(/class="sc-input sc-input-quiet"/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(change).toContain("Read by an administrator, the person, and a plugin allowed to.");
   });
 
   it("keeps those out apart, with the way back in, and shows the logins let in with the way out", () => {
@@ -2890,6 +2964,27 @@ describe("a person's name", () => {
   });
 });
 
+describe("a chip", () => {
+  it("names a thing among others, with the way to take it out only where it can be", () => {
+    const read = renderToStaticMarkup(<Chip>Platform</Chip>);
+    expect(read).toBe('<span class="sc-chip"><span class="sc-chip-label">Platform</span></span>');
+    const kept = renderToStaticMarkup(
+      <Chip onRemove={() => undefined} removeLabel="Take bob out of Platform" className="sc-team">
+        <PersonChip person={bob} />
+      </Chip>,
+    );
+    expect(kept).toContain('class="sc-chip sc-team"');
+    expect(kept).toContain(
+      '<button type="button" class="sc-chip-remove" aria-label="Take bob out of Platform" title="Take bob out of Platform">',
+    );
+    expect(kept).toContain('<span aria-hidden="true">×</span>');
+    // Left unnamed, the way out says what it does.
+    expect(renderToStaticMarkup(<Chip onRemove={() => undefined}>x</Chip>)).toContain(
+      'aria-label="Remove"',
+    );
+  });
+});
+
 describe("the discussion on a task", () => {
   const task: RestTask = {
     id: "0199c4d8-0000-7000-8000-000000000010",
@@ -3844,7 +3939,13 @@ describe("the workers of a task, and what a form finds by searching (ADR-0037)",
     // The one combobox left is the worker's, searched for (ADR-0037).
     expect(bare.match(/role="combobox"/g)).toHaveLength(1);
     expect(bare).not.toContain("Part of");
-    expect(bare).toContain("Nobody");
+    // Nobody is on it yet: the way to add one, a chip at the end of the row, stands alone.
+    expect(bare).toMatch(/class="sc-picker sc-picker-add"><input[^>]*aria-label="Add a worker"/);
+    expect(bare).not.toContain("Nobody");
+    // Where nobody can be added, the row says nobody is on it.
+    expect(renderToStaticMarkup(<TaskForm people={[]} onSubmit={() => undefined} />)).toContain(
+      "Nobody",
+    );
   });
 
   it("opens its list below the field, and above it only where the window has no room below and more above", () => {

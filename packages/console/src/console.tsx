@@ -53,7 +53,14 @@ import { HomeGrid, type HomeGridProps } from "./components/home.js";
 import { MyDecisions } from "./components/my-decisions.js";
 import { PackTokenWays } from "./components/pack-token.js";
 import { PAGE_SIZE } from "./components/paged.js";
-import { ListingForm, PeopleList, type PeopleListProps } from "./components/people.js";
+import {
+  ListingForm,
+  PeopleList,
+  type PeopleListProps,
+  TeamForm,
+  TeamList,
+  type TeamListProps,
+} from "./components/people.js";
 import { PluginFrame } from "./components/plugin-frame.js";
 import { PluginSettingsList, PluginSettingsView } from "./components/plugin-settings.js";
 import {
@@ -82,6 +89,7 @@ import {
   Button,
   Callout,
   CategoryBadge,
+  cx,
   EmptyState,
   LinkButton,
   personName,
@@ -159,6 +167,7 @@ export interface ConsoleComponents {
   readonly SignIn: ComponentType<SignInProps>;
   readonly TokenList: ComponentType<TokenListProps>;
   readonly PeopleList: ComponentType<PeopleListProps>;
+  readonly TeamList: ComponentType<TeamListProps>;
   readonly SkillList: ComponentType<SkillListProps>;
   readonly HomeGrid: ComponentType<HomeGridProps>;
   readonly MemberList: ComponentType<MemberListProps>;
@@ -177,6 +186,7 @@ export const DEFAULT_COMPONENTS: ConsoleComponents = {
   SignIn,
   TokenList,
   PeopleList,
+  TeamList,
   SkillList,
   HomeGrid,
   MemberList,
@@ -2573,26 +2583,106 @@ function WorkspacePage(props: {
     );
   }
 
-  if (route.name === "people" || route.name === "new-listing") {
+  if (
+    route.name === "people" ||
+    route.name === "new-listing" ||
+    route.name === "teams" ||
+    route.name === "new-team"
+  ) {
     const me = data.me?.person ?? undefined;
     const administrator = me?.role === "admin";
+    // The people and the teams (ADR-0073) are two views of one page, each with its form.
+    const onTeams = route.name === "teams" || route.name === "new-team";
     const making = route.name === "new-listing" && administrator;
+    const makingTeam = route.name === "new-team" && administrator;
     // An owner sees the work of the people in their projects; the console refuses the rest.
     const oversees = administrator || data.projects.some((project) => project.role === "owner");
     // The list is what the policy shows (ADR-0035): everyone, or the people one shares a project with.
     const narrowed = peopleVisibilityOf(data.me?.workspace) === "shared_projects" && !administrator;
+    const views = words.people.views;
+    const inCount = data.people.filter((person) => person.status === "active").length;
     return (
       <>
         <div className="sc-page-head">
           <h1 className="sc-page-title">{words.people.title}</h1>
-          {administrator && !making && (
+          {administrator && !onTeams && !making && (
             <LinkButton href={PATHS.newListing} variant="primary">
               {words.people.letIn}
             </LinkButton>
           )}
+          {administrator && onTeams && !makingTeam && (
+            <LinkButton href={PATHS.newTeam} variant="primary">
+              {words.teams.newTeam}
+            </LinkButton>
+          )}
         </div>
+        <nav className="sc-subtabs sc-people-views" aria-label={views.aria}>
+          <a
+            className={cx("sc-tab", !onTeams && "sc-tab-current")}
+            href={PATHS.people}
+            aria-current={onTeams ? undefined : "page"}
+          >
+            {views.people}
+            <span className="sc-tab-count">{inCount}</span>
+          </a>
+          <a
+            className={cx("sc-tab", onTeams && "sc-tab-current")}
+            href={PATHS.teams}
+            aria-current={onTeams ? "page" : undefined}
+          >
+            {views.teams}
+            <span className="sc-tab-count">{data.teams.length}</span>
+          </a>
+        </nav>
         {narrowed && <p className="sc-lead">{words.people.narrowed}</p>}
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
+        {makingTeam && (
+          <section className="sc-panel sc-panel-form" aria-label={words.teams.newAria}>
+            <TeamForm
+              busy={busy}
+              onSubmit={(input) =>
+                void act(async () => {
+                  await data.actions.createTeam(input);
+                  navigation.replace(PATHS.teams);
+                })
+              }
+              onCancel={() => navigation.back(PATHS.teams)}
+            />
+          </section>
+        )}
+        {onTeams && (
+          <components.TeamList
+            teams={data.teams}
+            people={data.people}
+            busy={busy}
+            onRename={
+              administrator
+                ? (team, name) => void act(() => data.actions.renameTeam(team.key, { name }))
+                : undefined
+            }
+            onRemove={
+              administrator
+                ? (team) => {
+                    // The roles granted to the team go with it: asked first, as nothing brings them back.
+                    if (window.confirm(words.teams.removeAsk(team.name))) {
+                      void act(() => data.actions.removeTeam(team.key));
+                    }
+                  }
+                : undefined
+            }
+            onAddMember={
+              administrator
+                ? (team, person) => void act(() => data.actions.addTeamMember(team.key, person.id))
+                : undefined
+            }
+            onRemoveMember={
+              administrator
+                ? (team, person) =>
+                    void act(() => data.actions.removeTeamMember(team.key, person.id))
+                : undefined
+            }
+          />
+        )}
         {making && (
           <section className="sc-panel sc-panel-form" aria-label={words.people.letInAria}>
             <ListingForm
@@ -2608,63 +2698,56 @@ function WorkspacePage(props: {
             />
           </section>
         )}
-        <components.PeopleList
-          people={data.people}
-          listed={data.listed}
-          organization={data.organization}
-          me={me}
-          busy={busy}
-          onChangeRole={
-            administrator
-              ? (person, role) => void act(() => data.actions.updatePerson(person.id, { role }))
-              : undefined
-          }
-          onChangeStatus={
-            administrator
-              ? (person, status) => void act(() => data.actions.updatePerson(person.id, { status }))
-              : undefined
-          }
-          onChangeManager={
-            administrator
-              ? (person, managerId) =>
-                  void act(() => data.actions.updatePerson(person.id, { managerId }))
-              : undefined
-          }
-          onChangeEmail={
-            administrator
-              ? (person, email) => void act(() => data.actions.updatePerson(person.id, { email }))
-              : undefined
-          }
-          onUnlist={
-            administrator
-              ? (listing) => void act(() => data.actions.removeListing(listing.id))
-              : undefined
-          }
-          teams={data.teams}
-          onCreateTeam={
-            administrator ? (name) => void act(() => data.actions.createTeam({ name })) : undefined
-          }
-          onRenameTeam={
-            administrator
-              ? (team, name) => void act(() => data.actions.renameTeam(team.id, { name }))
-              : undefined
-          }
-          onRemoveTeam={
-            administrator ? (team) => void act(() => data.actions.removeTeam(team.id)) : undefined
-          }
-          onJoinTeam={
-            administrator
-              ? (person, team) => void act(() => data.actions.addTeamMember(team.id, person.id))
-              : undefined
-          }
-          onLeaveTeam={
-            administrator
-              ? (person, team) => void act(() => data.actions.removeTeamMember(team.id, person.id))
-              : undefined
-          }
-          workHref={oversees ? (person) => personWorkHref(person.id) : undefined}
-          agentsHref={administrator ? (person) => personAgentsHref(person.id) : undefined}
-        />
+        {!onTeams && (
+          <components.PeopleList
+            people={data.people}
+            listed={data.listed}
+            organization={data.organization}
+            me={me}
+            busy={busy}
+            onChangeRole={
+              administrator
+                ? (person, role) => void act(() => data.actions.updatePerson(person.id, { role }))
+                : undefined
+            }
+            onChangeStatus={
+              administrator
+                ? (person, status) =>
+                    void act(() => data.actions.updatePerson(person.id, { status }))
+                : undefined
+            }
+            onChangeManager={
+              administrator
+                ? (person, managerId) =>
+                    void act(() => data.actions.updatePerson(person.id, { managerId }))
+                : undefined
+            }
+            onChangeEmail={
+              administrator
+                ? (person, email) => void act(() => data.actions.updatePerson(person.id, { email }))
+                : undefined
+            }
+            onUnlist={
+              administrator
+                ? (listing) => void act(() => data.actions.removeListing(listing.id))
+                : undefined
+            }
+            teams={data.teams}
+            onJoinTeam={
+              administrator
+                ? (person, team) => void act(() => data.actions.addTeamMember(team.key, person.id))
+                : undefined
+            }
+            onLeaveTeam={
+              administrator
+                ? (person, team) =>
+                    void act(() => data.actions.removeTeamMember(team.key, person.id))
+                : undefined
+            }
+            workHref={oversees ? (person) => personWorkHref(person.id) : undefined}
+            agentsHref={administrator ? (person) => personAgentsHref(person.id) : undefined}
+          />
+        )}
       </>
     );
   }
@@ -2834,6 +2917,8 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
           current:
             route.name === "people" ||
             route.name === "new-listing" ||
+            route.name === "teams" ||
+            route.name === "new-team" ||
             route.name === "person-agents",
         },
         ...(viaToken

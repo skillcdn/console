@@ -55,7 +55,7 @@ import { type PluginInstallRecord, peopleGranted } from "../db/queries/plugins.j
 import { findProjectFor, listMembers, listProjectsFor } from "../db/queries/projects.js";
 import { findRun, listRuns } from "../db/queries/runs.js";
 import { createTask, findTaskByNumber, listTasks, updateTask } from "../db/queries/tasks.js";
-import { findTeam, listTeams, teamIdsByPerson } from "../db/queries/teams.js";
+import { findTeam, listTeams, teamKeysByPerson } from "../db/queries/teams.js";
 import { readWorkspaceSettings, type WorkspaceRecord } from "../db/queries/workspaces.js";
 import { DomainError } from "../errors.js";
 import {
@@ -272,13 +272,13 @@ export class PluginBoard {
           : personVisibleTo(viewer, settings);
         const people = await listPeople(this.options.database, workspace.id, { visible });
         // The work email with `people:read:email` alone, to match a person to an account elsewhere;
-        // the teams each is in (ADR-0073) with every reading.
-        const teamIdsOf = await teamIdsByPerson(this.options.database, workspace.id);
+        // the teams each is in (ADR-0073), by their keys (ADR-0074), with every reading.
+        const teamsOf = await teamKeysByPerson(this.options.database, workspace.id);
         const shape = (person: PersonRecord) => ({
           ...(context.consent.includes("people:read:email")
             ? restPersonWithEmail(person)
             : restPerson(person)),
-          teamIds: teamIdsOf.get(person.id) ?? [],
+          teams: teamsOf.get(person.id) ?? [],
         });
         if (method === "list") {
           const options = (args[0] ?? {}) as { readonly q?: unknown };
@@ -345,7 +345,7 @@ export class PluginBoard {
           const team = await findTeam(
             this.options.database,
             workspace.id,
-            text(args[0], "the team's id"),
+            text(args[0], "the team's key"),
           );
           return team === undefined ? null : restTeam(team, visible);
         }

@@ -57,7 +57,7 @@ export interface PluginGrantRecord {
   /** The plugin the role went to (ADR-0072), by key, where it went to one. */
   readonly plugin: string | undefined;
   /** The team the role went to (ADR-0073), whose members hold it, where it went to one. */
-  readonly team: { readonly id: string; readonly name: string } | undefined;
+  readonly team: { readonly id: string; readonly key: string; readonly name: string } | undefined;
   readonly createdAt: Date;
   readonly createdBy: string | undefined;
 }
@@ -492,6 +492,7 @@ const grantColumns = {
   everyone: pluginGrants.everyone,
   granteePluginKey: pluginGrants.granteePluginKey,
   teamId: pluginGrants.teamId,
+  teamKey: teams.key,
   teamName: teams.name,
   createdAt: pluginGrants.createdAt,
   createdBy: pluginGrants.createdBy,
@@ -511,6 +512,7 @@ function toGrant(row: {
   everyone: boolean;
   granteePluginKey: string | null;
   teamId: string | null;
+  teamKey: string | null;
   teamName: string | null;
   createdAt: Date;
   createdBy: string | null;
@@ -530,7 +532,10 @@ function toGrant(row: {
         : { id: row.projectId, key: row.projectKey ?? "", name: row.projectName ?? "" },
     everyone: row.everyone,
     plugin: row.granteePluginKey ?? undefined,
-    team: row.teamId === null ? undefined : { id: row.teamId, name: row.teamName ?? "" },
+    team:
+      row.teamId === null
+        ? undefined
+        : { id: row.teamId, key: row.teamKey ?? "", name: row.teamName ?? "" },
     createdAt: row.createdAt,
     createdBy: row.createdBy ?? undefined,
   };

@@ -227,8 +227,7 @@ describe("a plugin's settings page", () => {
     expect(html).toContain("설정됨");
     expect(html).toContain('type="password"');
     // A secret sealed from an answer says from where, until when, and where alone it goes.
-    expect(html).toContain("api.example.test의 응답에서 봉인함");
-    expect(html).toContain("에 만료");
+    expect(html).toMatch(/api\.example\.test에서 받아 저장됨 · [^<]*만료/);
     expect(html).toContain("api.example.test에만 보냅니다.");
     // A person and a project are searched for (ADR-0037) and stand in the field's place, held as ids.
     expect(html).toMatch(/sc-picker-chosen[\s\S]*?Bob \(bob\)/);
@@ -334,9 +333,10 @@ describe("a plugin's settings page", () => {
     expect(count(html, 'type="checkbox" checked=""')).toBe(2);
     expect(html).toContain("월");
     expect(html).not.toContain("mon, tue");
-    // A list of people: the chosen as a chip, the rest searched for (ADR-0037).
-    expect(html).toContain('class="sc-chip">Bob (bob)');
-    expect(html).toContain('placeholder="선택…"');
+    // A list of people: the chosen as a chip, the rest searched for (ADR-0037) from a field at
+    // the end of the row, a chip itself.
+    expect(html).toContain('class="sc-chip-label">Bob (bob)');
+    expect(html).toMatch(/class="sc-picker sc-picker-add"><input[^>]*placeholder="추가…"/);
     expect(html).not.toContain(`<option value="${CAROL}">carol</option>`);
     // A list of days: a date field that adds one; a time, with the time zone said.
     expect(html).toContain('type="date"');
@@ -390,23 +390,23 @@ describe("a plugin's settings page", () => {
         },
       ],
     });
-    expect(html).toContain(">매니저</span>");
-    expect(html).toContain("팀원이 있는 사람");
+    expect(html).toContain('<span class="sc-badge sc-badge-accent">보고 라인</span>');
+    expect(html).toContain("누군가의 매니저인 사람");
   });
 
   it("says what the plugin keeps for a while only, and for how long", () => {
     const html = render({ ...DETAIL, keeps: [{ collection: "deliveries", days: 90 }] });
-    expect(html).toContain("deliveries: 90일, 지나면 삭제");
+    expect(html).toContain("deliveries: 90일이 지나면 삭제");
     expect(render(DETAIL)).not.toContain("보관 기간");
   });
 
   it("tells an administrator when the plugin reads a time of day and the workspace has no time zone", () => {
     const html = render({ ...DETAIL, needsTimeZone: true });
     expect(html).toContain(
-      "워크스페이스에 시간대가 없어 이 플러그인의 시각은 시간대를 정할 때까지 UTC로 돕니다.",
+      "워크스페이스에 시간대가 없어서, 시간대를 정하기 전까지 이 플러그인의 시각은 UTC 기준으로 실행됩니다.",
     );
     expect(html).toContain('href="/settings?workspace"');
-    expect(render(DETAIL)).not.toContain("UTC로 돕니다");
+    expect(render(DETAIL)).not.toContain("UTC 기준으로 실행됩니다");
   });
 
   it("marks what a new version requires, and keeps what an enabled plugin can go without a choice", () => {

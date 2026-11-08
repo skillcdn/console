@@ -352,7 +352,8 @@ export interface PluginConsole {
   /** The teams of the workspace (ADR-0073): a name and its members, among the people the caller may see. */
   teams: {
     list(): Promise<readonly RestTeam[]>;
-    get(id: string): Promise<RestTeam | null>;
+    /** One team by its key (ADR-0074), what a grant and a person's `teams` name it by. */
+    get(key: string): Promise<RestTeam | null>;
   };
   projects: {
     list(): Promise<readonly RestProject[]>;

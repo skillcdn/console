@@ -1,6 +1,6 @@
 # ADR-0073: A team is a name and its members, a unit to call people by and to grant a plugin's role to
 
-- Status: Accepted
+- Status: Accepted; how a team is called is amended by [ADR-0074](0074-a-team-is-called-by-a-key-that-never-changes-one-name-among-the-projects-keys.md), a key that never changes, one among the projects' keys
 - Date: 2026-11-08
 - Extends [ADR-0022](0022-who-is-in-is-the-consoles-own-record-and-an-administrator-keeps-it.md), under which who is in is the console's own record kept by an administrator, and [ADR-0072](0072-a-plugin-is-a-principal-it-holds-roles-granted-to-it-calls-as-itself-and-acts-for-a-person-within-what-both-may-do.md), under which a role of a plugin goes to a person, a project's members, everyone or a plugin. The contract is in [specs/rest.md](../specs/rest.md), [specs/cli.md](../specs/cli.md) and [specs/plugins.md](../specs/plugins.md).
 

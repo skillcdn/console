@@ -4978,7 +4978,7 @@ describe("the workspace's SkillCDN token (ADR-0036)", () => {
 });
 
 describe("teams", () => {
-  it("keeps teams: a name and its members, made by an administrator, read by everyone with the members they see (ADR-0073)", async () => {
+  it("keeps teams: a key, a name and its members, made by an administrator, read by everyone with the members they see (ADR-0073, ADR-0074)", async () => {
     // An administrator keeps the teams; a member reads them. Two people no other test leans on,
     // since the harness makes one of them an administrator of the shared workspace.
     const keeping = createHarness(testDatabase, {
@@ -5003,50 +5003,103 @@ describe("teams", () => {
       (await keeping.request(path, { headers: { cookie } })).json();
     const people = restPeopleSchema.parse(await read(admin, REST_ROUTES.people));
     const bobId = people.items.find((person) => person.login === "dave@acme.test")?.id ?? "";
-    const made = await call(admin, "POST", REST_ROUTES.teams, { name: "Platform" });
+    const made = await call(admin, "POST", REST_ROUTES.teams, {
+      key: "platform",
+      name: "Platform",
+    });
     expect(made.status, await made.clone().text()).toBe(201);
     const team = restTeamSchema.parse(await made.json());
-    expect(team).toMatchObject({ name: "Platform", memberIds: [] });
-    // A member keeps no team; a name is one per workspace, whatever its case.
-    expect((await call(member, "POST", REST_ROUTES.teams, { name: "Ops" })).status).toBe(403);
-    expect((await call(admin, "POST", REST_ROUTES.teams, { name: "platform" })).status).toBe(409);
-    const joined = await call(admin, "POST", `${REST_ROUTES.teams}/${team.id}/members`, {
+    expect(team).toMatchObject({ key: "platform", name: "Platform", memberIds: [] });
+    // A member keeps no team; a name is one per workspace, whatever its case; a key is one among
+    // the teams' keys and the projects' keys alike, in a project key's shape.
+    expect(
+      (await call(member, "POST", REST_ROUTES.teams, { key: "ops", name: "Ops" })).status,
+    ).toBe(403);
+    const nameTaken = await call(admin, "POST", REST_ROUTES.teams, { key: "p2", name: "platform" });
+    expect(nameTaken.status).toBe(409);
+    expect(await nameTaken.json()).toMatchObject({ error: { code: "team.name_taken" } });
+    const keyTaken = await call(admin, "POST", REST_ROUTES.teams, {
+      key: "platform",
+      name: "Another",
+    });
+    expect(await keyTaken.json()).toMatchObject({ error: { code: "team.key_taken" } });
+    const project = await call(admin, "POST", REST_ROUTES.projects, {
+      key: "atlas",
+      name: "Atlas",
+    });
+    expect(project.status, await project.clone().text()).toBe(201);
+    const projectsKey = await call(admin, "POST", REST_ROUTES.teams, {
+      key: "atlas",
+      name: "Atlas",
+    });
+    expect(projectsKey.status).toBe(409);
+    expect(await projectsKey.json()).toMatchObject({ error: { code: "team.key_taken" } });
+    const teamsKey = await call(admin, "POST", REST_ROUTES.projects, {
+      key: "platform",
+      name: "Platform",
+    });
+    expect(teamsKey.status).toBe(409);
+    expect(await teamsKey.json()).toMatchObject({ error: { code: "project.key_taken" } });
+    for (const key of ["Platform", "-ops", "new", "a b", "x".repeat(41)]) {
+      expect((await call(admin, "POST", REST_ROUTES.teams, { key, name: "Odd" })).status).toBe(400);
+    }
+    expect((await call(admin, "POST", REST_ROUTES.teams, { name: "Keyless" })).status).toBe(400);
+    const joined = await call(admin, "POST", `${REST_ROUTES.teams}/platform/members`, {
       personId: bobId,
     });
     expect(joined.status, await joined.clone().text()).toBe(200);
     expect(restTeamSchema.parse(await joined.json()).memberIds).toEqual([bobId]);
-    const renamed = await call(admin, "PATCH", `${REST_ROUTES.teams}/${team.id}`, {
+    // A team is renamed, its key staying: a key sent to change it is not read.
+    const renamed = await call(admin, "PATCH", `${REST_ROUTES.teams}/platform`, {
       name: "Platform team",
+      key: "elsewhere",
     });
     expect(renamed.status).toBe(200);
-    // Everyone reads the teams, and the people listing names each person's teams.
+    expect(restTeamSchema.parse(await renamed.json())).toMatchObject({
+      key: "platform",
+      name: "Platform team",
+    });
+    // Everyone reads the teams, and the people listing names each person's teams by key.
     const listed = restTeamsSchema.parse(await read(member, REST_ROUTES.teams));
     expect(listed.items).toEqual([
-      expect.objectContaining({ id: team.id, name: "Platform team", memberIds: [bobId] }),
+      expect.objectContaining({
+        id: team.id,
+        key: "platform",
+        name: "Platform team",
+        memberIds: [bobId],
+      }),
     ]);
     const listedPeople = restPeopleSchema.parse(await read(member, REST_ROUTES.people));
-    expect(listedPeople.items.find((person) => person.id === bobId)?.teamIds).toEqual([team.id]);
+    expect(listedPeople.items.find((person) => person.id === bobId)?.teams).toEqual(["platform"]);
+    // A team is found by its key alone: not by its id, nor by a key no team has.
+    expect((await call(admin, "DELETE", `${REST_ROUTES.teams}/${team.id}`)).status).toBe(404);
+    expect((await call(admin, "DELETE", `${REST_ROUTES.teams}/elsewhere`)).status).toBe(404);
     // The person is taken out, once; the team is removed with what it held, once.
-    const left = await call(admin, "DELETE", `${REST_ROUTES.teams}/${team.id}/members/${bobId}`);
+    const left = await call(admin, "DELETE", `${REST_ROUTES.teams}/platform/members/${bobId}`);
     expect(left.status).toBe(200);
     expect(
-      (await call(admin, "DELETE", `${REST_ROUTES.teams}/${team.id}/members/${bobId}`)).status,
+      (await call(admin, "DELETE", `${REST_ROUTES.teams}/platform/members/${bobId}`)).status,
     ).toBe(409);
-    expect((await call(admin, "DELETE", `${REST_ROUTES.teams}/${team.id}`)).status).toBe(204);
-    expect((await call(admin, "DELETE", `${REST_ROUTES.teams}/${team.id}`)).status).toBe(404);
-    // The feed says each step, as the workspace's own.
+    expect((await call(admin, "DELETE", `${REST_ROUTES.teams}/platform`)).status).toBe(204);
+    expect((await call(admin, "DELETE", `${REST_ROUTES.teams}/platform`)).status).toBe(404);
+    // The feed says each step, as the workspace's own, with the team's key.
     const events = restEventsSchema.parse(await read(admin, `${REST_ROUTES.events}?after=0`));
     expect(
       events.items
         .filter((event) => event.kind.startsWith("team."))
-        .map((event) => [event.kind, event.data.team, event.data.login ?? event.data.name]),
+        .map((event) => [
+          event.kind,
+          event.data.team,
+          event.data.key,
+          event.data.login ?? event.data.name,
+        ]),
     ).toEqual(
       expect.arrayContaining([
-        ["team.created", "Platform", undefined],
-        ["team.member_added", "Platform", "dave@acme.test"],
-        ["team.renamed", "Platform team", "Platform"],
-        ["team.member_removed", "Platform team", "dave@acme.test"],
-        ["team.removed", "Platform team", undefined],
+        ["team.created", "Platform", "platform", undefined],
+        ["team.member_added", "Platform", "platform", "dave@acme.test"],
+        ["team.renamed", "Platform team", "platform", "Platform"],
+        ["team.member_removed", "Platform team", "platform", "dave@acme.test"],
+        ["team.removed", "Platform team", "platform", undefined],
       ]),
     );
   });

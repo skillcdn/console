@@ -17,7 +17,7 @@ import {
 import { useWords } from "../i18n/index.js";
 import { Picker, type PickerSearch } from "./picker.js";
 import { peopleSearch } from "./searches.js";
-import { Button, GoalStateBadge, PersonChip, personName, StateBadge } from "./ui.js";
+import { Button, Chip, GoalStateBadge, PersonChip, personName, StateBadge } from "./ui.js";
 
 // Writing a task, or changing one. The bounds are the package's, said before a request is made.
 // The plan is two days (ADR-0019); what happened to the task is the board's to keep, not a
@@ -223,21 +223,17 @@ export function TaskForm(props: TaskFormProps) {
         <legend className="sc-field-label">{form.workers}</legend>
         <div className="sc-chips">
           {chosenWorkers.map((person) => (
-            <span key={person.id} className="sc-chip">
+            <Chip
+              key={person.id}
+              onRemove={() => setWorkerIds(workerIds.filter((id) => id !== person.id))}
+              removeLabel={`${words.common.remove}: ${personName(person)}`}
+            >
               <PersonChip person={person} />
-              <button
-                type="button"
-                className="sc-chip-remove"
-                aria-label={`${words.common.remove}: ${personName(person)}`}
-                onClick={() => setWorkerIds(workerIds.filter((id) => id !== person.id))}
-              >
-                <span aria-hidden="true">&times;</span>
-              </button>
-            </span>
+            </Chip>
           ))}
-          {chosenWorkers.length === 0 && <span className="sc-muted">{words.common.nobody}</span>}
-          {otherPeople.length > 0 && workerIds.length < MAX_WORKERS && (
+          {otherPeople.length > 0 && workerIds.length < MAX_WORKERS ? (
             <Picker
+              className="sc-picker-add"
               value={undefined}
               search={peopleSearch(otherPeople)}
               keyOf={(person) => person.id}
@@ -250,6 +246,8 @@ export function TaskForm(props: TaskFormProps) {
                 }
               }}
             />
+          ) : (
+            chosenWorkers.length === 0 && <span className="sc-muted">{words.common.nobody}</span>
           )}
         </div>
       </fieldset>

@@ -294,15 +294,30 @@ describe("what a plugin reads of the people (ADR-0063)", () => {
     };
     await revoke(granted);
     expect((await asked("approver")).data).toEqual([]);
-    // A role granted to a team (ADR-0073) is held by whoever is in it, as the membership stands.
-    const crew = await h.request(REST_ROUTES.teams, json({ name: "Approvers" }, admin));
+    // A role granted to a team (ADR-0073), named by its key (ADR-0074), is held by whoever is in
+    // it, as the membership stands; a key no team has is refused.
+    const crew = await h.request(
+      REST_ROUTES.teams,
+      json({ key: "approvers", name: "Approvers" }, admin),
+    );
     expect(crew.status, await crew.clone().text()).toBe(201);
-    const crewId = ((await crew.json()) as { id: string }).id;
+    const crewId = "approvers";
+    expect(
+      (
+        await h.request(
+          pluginPath("leave", "grants"),
+          json({ role: "approver", team: "nobody-here" }, admin),
+        )
+      ).status,
+    ).toBe(400);
     const toCrew = await h.request(
       pluginPath("leave", "grants"),
       json({ role: "approver", team: crewId }, admin),
     );
     expect(toCrew.status, await toCrew.clone().text()).toBe(201);
+    expect(await toCrew.clone().json()).toMatchObject({
+      team: { key: "approvers", name: "Approvers" },
+    });
     expect((await asked("approver")).data).toEqual([]);
     expect(
       (await h.request(`${REST_ROUTES.teams}/${crewId}/members`, json({ personId: bobId }, admin)))
@@ -626,10 +641,11 @@ describe("a plugin on the board", () => {
     );
     expect(page.plugin).toBe("leave");
     expect(page.updatedBy.login).toBe("bob");
-    // A team of the workspace (ADR-0073), with bob in it, read by the plugin with the people.
-    const crew = await h.request(REST_ROUTES.teams, json({ name: "Crew" }, admin));
+    // A team of the workspace (ADR-0073), with bob in it, read by the plugin with the people, who
+    // name their teams by key (ADR-0074).
+    const crew = await h.request(REST_ROUTES.teams, json({ key: "crew", name: "Crew" }, admin));
     expect(crew.status, await crew.clone().text()).toBe(201);
-    const crewId = ((await crew.json()) as { id: string }).id;
+    const crewId = "crew";
     expect(
       (await h.request(`${REST_ROUTES.teams}/${crewId}/members`, json({ personId: bobId }, admin)))
         .status,
@@ -645,7 +661,7 @@ describe("a plugin on the board", () => {
     };
     expect(data.people).toEqual(expect.arrayContaining([aliceLogin, "bob"]));
     expect(data.teams).toEqual(["Crew"]);
-    expect(data.teamsOf.bob).toEqual([crewId]);
+    expect(data.teamsOf.bob).toEqual(["crew"]);
     expect(data.projects).toBe("plugin.forbidden");
     // UTC because nobody set a zone, and said so; the console's public address, for a link elsewhere.
     expect(data.workspace).toMatchObject({

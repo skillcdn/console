@@ -68,6 +68,12 @@ export interface PickerProps<T> {
   readonly disabled?: boolean | undefined;
   /** What the search may answer with but cannot be chosen: a task, as its own parent. */
   readonly exclude?: ((item: T) => boolean) | undefined;
+  /**
+   * A class of the picker's own beside `sc-picker`: `sc-picker-quiet`, a picker that reads as
+   * what it holds until the pointer or the focus is on it, a fact changed in place; or
+   * `sc-picker-add`, the way to add one more at the end of a row of chips, as low as a chip.
+   */
+  readonly className?: string | undefined;
 }
 
 export function Picker<T>(props: PickerProps<T>) {
@@ -206,7 +212,7 @@ export function Picker<T>(props: PickerProps<T>) {
 
   if (props.value !== undefined || props.held !== undefined) {
     return (
-      <div className="sc-picker sc-picker-chosen">
+      <div className={cx("sc-picker", "sc-picker-chosen", props.className)}>
         <span className="sc-picker-value">
           {props.value === undefined ? props.held : props.render(props.value)}
         </span>
@@ -224,7 +230,7 @@ export function Picker<T>(props: PickerProps<T>) {
   }
 
   return (
-    <div className="sc-picker">
+    <div className={cx("sc-picker", props.className)}>
       <input
         ref={field}
         id={props.id}

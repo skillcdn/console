@@ -1792,9 +1792,10 @@ describe("the plan on the command line", () => {
     expect(blank.err()).toContain("--search <words>");
   });
 
-  it("lists the teams with their members, makes one, and puts a person in it (ADR-0073)", async () => {
+  it("lists the teams with their keys and members, makes one, and puts a person in it, a team called by its key (ADR-0073, ADR-0074)", async () => {
     const TEAM = {
       id: "0199c4d8-0000-7000-8000-000000000071",
+      key: "platform",
       name: "Platform",
       memberIds: [BOB.id],
       createdAt: "2026-11-02T01:00:00.000Z",
@@ -1804,25 +1805,38 @@ describe("the plan on the command line", () => {
       "GET /api/v1/people": { body: { items: [PERSON, BOB], listed: [], organization: null } },
       "GET /api/v1/people?login=bob": { body: { items: [BOB], listed: [], organization: null } },
       "GET /api/v1/teams": { body: { items: [TEAM] } },
-      "POST /api/v1/teams": { status: 201, body: { ...TEAM, name: "Ops", memberIds: [] } },
-      [`POST /api/v1/teams/${TEAM.id}/members`]: { body: TEAM },
+      "POST /api/v1/teams": {
+        status: 201,
+        body: { ...TEAM, key: "ops", name: "Ops", memberIds: [] },
+      },
+      "POST /api/v1/teams/platform/members": { body: TEAM },
+      "PATCH /api/v1/teams/platform": { body: { ...TEAM, name: "Platform team" } },
+      "DELETE /api/v1/teams/nobody": {
+        status: 404,
+        body: { error: { code: "team.not_found", message: "The team was not found." } },
+      },
     });
     const listed = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["teams"], listed.io)).toBe(EXIT.ok);
-    expect(listed.out()).toContain("Platform  1 member: bob");
+    expect(listed.out()).toContain("platform  Platform  1 member: bob");
     const made = harness({ fetch, env: SIGNED_IN });
-    expect(await runCli(["team", "new", "Ops"], made.io)).toBe(EXIT.ok);
-    expect(calls.at(-1)?.body).toEqual({ name: "Ops" });
-    expect(made.out()).toContain("Ops  0 members");
+    expect(await runCli(["team", "new", "ops", "Ops"], made.io)).toBe(EXIT.ok);
+    expect(calls.at(-1)?.body).toEqual({ key: "ops", name: "Ops" });
+    expect(made.out()).toContain("ops  Ops  0 members");
+    const renamed = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["team", "rename", "platform", "Platform team"], renamed.io)).toBe(EXIT.ok);
+    expect(calls.at(-1)?.body).toEqual({ name: "Platform team" });
     const added = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["team", "add", "platform", "bob"], added.io)).toBe(EXIT.ok);
     expect(calls.at(-2)?.body).toEqual({ personId: BOB.id });
-    expect(added.out()).toContain("Platform  1 member: bob");
+    expect(added.out()).toContain("platform  Platform  1 member: bob");
     const nowhere = harness({ fetch, env: SIGNED_IN });
-    expect(await runCli(["team", "remove", "Nobody"], nowhere.io)).toBe(EXIT.failed);
-    expect(nowhere.err()).toContain("No team is called Nobody");
+    expect(await runCli(["team", "remove", "nobody"], nowhere.io)).not.toBe(EXIT.ok);
+    expect(nowhere.err()).toContain("team.not_found");
     const usage = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["team"], usage.io)).toBe(EXIT.usage);
+    const nameless = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["team", "new", "ops"], nameless.io)).toBe(EXIT.usage);
   });
 
   it("writes a task with its plan, and changes one in what the flags say, none clearing a field", async () => {
@@ -4263,6 +4277,11 @@ describe("the plugins on the command line (ADR-0049, ADR-0053)", () => {
       await runCli(["plugin", "hello", "grant", "greeter", "--plugin", "messenger"], asPlugin.io),
     ).toBe(EXIT.ok);
     expect(calls.at(-1)?.body).toEqual({ role: "greeter", plugin: "messenger" });
+    const toTeam = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(["plugin", "hello", "grant", "greeter", "--team", "platform"], toTeam.io),
+    ).toBe(EXIT.ok);
+    expect(calls.at(-1)?.body).toEqual({ role: "greeter", team: "platform" });
     const whom = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["plugin", "hello", "grant", "greeter"], whom.io)).toBe(EXIT.usage);
     const revoked = harness({ fetch, env: SIGNED_IN });
