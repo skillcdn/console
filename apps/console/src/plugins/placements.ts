@@ -1,9 +1,10 @@
-import type { SecretPlacement, SecretSeal } from "@skillcdn/console/plugin";
+import type { SealOutcome, SecretPlacement, SecretSeal } from "@skillcdn/console/plugin";
 import { PluginRefusal } from "@skillcdn/console/plugin";
 
 // Where a secret goes into an outbound request, and what of an answer is sealed as one
 // (docs/specs/plugins.md, "The context", `ctx.fetch`; ADR-0070): pure, so that the tests need no
-// network. The console puts a secret in and takes a secret out; the plugin names the places.
+// network. The console puts a secret in and takes a secret out; the plugin names the places. What
+// the console put in or took out never reaches the plugin in the answer, in any form it knows.
 
 /** Headers a plugin does not set: the connection's own, and what the console puts in itself. */
 export const FIXED_HEADERS: ReadonlySet<string> = new Set([
@@ -176,7 +177,10 @@ export function validateSeal(value: unknown): Readonly<Record<string, SecretSeal
   return seal;
 }
 
-/** The value at a path in parsed JSON, or nothing where the path leads nowhere. */
+/**
+ * The value at a path in parsed JSON, or nothing where the path leads nowhere: a key the answer
+ * holds itself, never one every object inherits (`$.constructor`).
+ */
 export function readPath(value: unknown, path: string): unknown {
   if (!PATH.test(path)) {
     throw new PluginRefusal("plugin.invalid_args", `${path} is not a path as $.a.b spells one`);
@@ -187,7 +191,9 @@ export function readPath(value: unknown, path: string): unknown {
       const index = Number(step);
       current = Number.isInteger(index) && index >= 0 ? current[index] : undefined;
     } else if (typeof current === "object" && current !== null) {
-      current = (current as Record<string, unknown>)[step];
+      current = Object.hasOwn(current, step)
+        ? (current as Record<string, unknown>)[step]
+        : undefined;
     } else {
       return undefined;
     }
@@ -212,33 +218,95 @@ export interface Sealed {
   readonly expiresAt: Date | undefined;
 }
 
+/** What the plugin reads where the console sealed a value of the answer. */
+const SEALED_MARK = "[sealed]";
+
+/** What the plugin reads where the console withheld a value: one it could not seal, or a secret the request carried. */
+const WITHHELD_MARK = "[withheld]";
+
+/** A secret a request carried, by its setting, as the forms it may come back in. */
+export interface Carried {
+  readonly name: string;
+  readonly forms: readonly string[];
+}
+
+/** An answer as sealing leaves it: the bytes the plugin reads, what to seal, and what became of each value named. */
+export interface SealedAnswer {
+  readonly bytes: Uint8Array;
+  readonly sealed: readonly Sealed[];
+  readonly outcomes: Readonly<Record<string, SealOutcome>>;
+  /** The strings taken out where they stood, sealed or withheld: what is taken out of the rest of the answer too. */
+  readonly taken: readonly string[];
+}
+
 /**
- * Seals what the plugin named of an answer (ADR-0070): the answer's JSON is read, each value
- * named is taken out for the console to seal, with its expiry where one is named, and the
- * answer the plugin receives says `"[sealed]"` where each stood. A path that leads to no string
- * seals nothing and leaves the answer as it is there; an answer that is no JSON seals nothing.
+ * Seals what the plugin named of an answer (ADR-0070), and fails closed: the answer's JSON is
+ * read, each value named is taken out for the console to seal, with its expiry where one is
+ * named, and the answer the plugin receives says `"[sealed]"` where each stood. A value that
+ * cannot be sealed, being no string, over the bound, or holding a secret the request carried from
+ * another setting, is not handed over either: `"[withheld]"` stands in its place. An answer that
+ * is no JSON object or array is withheld whole, since nothing in it can be told apart from the
+ * values named. A path that leads to nothing, `null` or an empty string seals nothing and takes
+ * nothing out. Every value is read before any is replaced, so that no seal reads another's mark.
  */
 export function sealAnswer(
   bytes: Uint8Array,
   seal: Readonly<Record<string, SecretSeal>>,
   now: Date,
   maxLength: number,
-): { readonly bytes: Uint8Array; readonly sealed: readonly Sealed[] } {
+  carried: readonly Carried[] = [],
+): SealedAnswer {
   const entries = Object.entries(seal);
   if (entries.length === 0) {
-    return { bytes, sealed: [] };
+    return { bytes, sealed: [], outcomes: {}, taken: [] };
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(decoder.decode(bytes));
   } catch {
-    return { bytes, sealed: [] };
+    parsed = undefined;
   }
-  const sealed: Sealed[] = [];
-  for (const [name, wanted] of entries) {
+  if (typeof parsed !== "object" || parsed === null) {
+    const outcome: SealOutcome = "not_json";
+    return {
+      bytes: new Uint8Array(0),
+      sealed: [],
+      outcomes: Object.fromEntries(entries.map(([name]) => [name, outcome])),
+      taken: [],
+    };
+  }
+  const named = entries.map(([name, wanted]) => {
     const { path, expiresIn } = sealOf(wanted);
-    const value = readPath(parsed, path);
-    if (typeof value !== "string" || value.length === 0 || value.length > maxLength) {
+    return { name, path, expiresIn, value: readPath(parsed, path) };
+  });
+  const sealed: Sealed[] = [];
+  const outcomes: Record<string, SealOutcome> = {};
+  const taken: string[] = [];
+  const marks: (readonly [path: string, mark: string])[] = [];
+  for (const { name, path, expiresIn, value } of named) {
+    if (value === undefined || value === null || value === "") {
+      outcomes[name] = "absent";
+      continue;
+    }
+    if (typeof value !== "string") {
+      outcomes[name] = "not_a_string";
+      marks.push([path, WITHHELD_MARK]);
+      continue;
+    }
+    taken.push(value);
+    // A value that holds a secret the request carried is an echo of it: sealed as another
+    // setting, it would go where that setting lets it, past the hosts its own setting names.
+    const withheld: SealOutcome | undefined =
+      value.length > maxLength
+        ? "too_long"
+        : carried.some(
+              (secret) => secret.name !== name && secret.forms.some((form) => value.includes(form)),
+            )
+          ? "echoed"
+          : undefined;
+    if (withheld !== undefined) {
+      outcomes[name] = withheld;
+      marks.push([path, WITHHELD_MARK]);
       continue;
     }
     const seconds =
@@ -252,9 +320,18 @@ export function sealAnswer(
         ? new Date(now.getTime() + Math.min(Math.floor(seconds), MAX_SECRET_LIFE_SECONDS) * 1000)
         : undefined;
     sealed.push({ name, value, expiresAt });
-    replacePath(parsed, path, "[sealed]");
+    outcomes[name] = "sealed";
+    marks.push([path, SEALED_MARK]);
   }
-  return { bytes: sealed.length === 0 ? bytes : encoder.encode(JSON.stringify(parsed)), sealed };
+  for (const [path, mark] of marks) {
+    replacePath(parsed, path, mark);
+  }
+  return {
+    bytes: marks.length === 0 ? bytes : encoder.encode(JSON.stringify(parsed)),
+    sealed,
+    outcomes,
+    taken,
+  };
 }
 
 function replacePath(value: unknown, path: string, replacement: string): void {
@@ -278,4 +355,85 @@ function replacePath(value: unknown, path: string, replacement: string): void {
   } else if (typeof current === "object" && current !== null) {
     (current as Record<string, unknown>)[last] = replacement;
   }
+}
+
+/**
+ * The forms a value may come back in, to be taken out of an answer: as it is, escaped as JSON,
+ * URL-encoded as a URL's part and as a query or a form encodes it; for basic authentication also
+ * the base64 of the pair, as the header carries it, and the password alone.
+ */
+export function formsOf(value: string, as?: SecretPlacement): readonly string[] {
+  const spelled = (text: string): readonly string[] => [
+    text,
+    JSON.stringify(text).slice(1, -1),
+    // A lone surrogate, which an answer's JSON may hold, is encoded as a form encodes it, not thrown on.
+    encodeURIComponent(text.toWellFormed()),
+    new URLSearchParams([["", text]]).toString().slice(1),
+  ];
+  const forms = [...spelled(value)];
+  if (as === "basic") {
+    forms.push(Buffer.from(value, "utf8").toString("base64"));
+    const colon = value.indexOf(":");
+    if (colon >= 0 && colon < value.length - 1) {
+      forms.push(...spelled(value.slice(colon + 1)));
+    }
+  }
+  return [...new Set(forms)].filter((form) => form.length > 0);
+}
+
+/**
+ * Takes every form out of an answer, the names and the values of its headers and its body, with
+ * `"[withheld]"` in its place: a server that echoes the request, a redirect that carries its URL,
+ * hands the plugin no secret the console put in or took out. The body is searched as bytes, and
+ * comes through as it was where no form is in it. The longest form goes first, so that a shorter
+ * one never leaves part of it behind.
+ */
+export function scrubAnswer(
+  headers: Readonly<Record<string, string>>,
+  bytes: Uint8Array,
+  forms: readonly string[],
+): { readonly headers: Readonly<Record<string, string>>; readonly bytes: Uint8Array } {
+  const ordered = [...new Set(forms)]
+    .filter((form) => form.length > 0)
+    .sort((a, b) => b.length - a.length);
+  if (ordered.length === 0) {
+    return { headers, bytes };
+  }
+  const scrubbed: Record<string, string> = {};
+  for (const [name, value] of Object.entries(headers)) {
+    scrubbed[scrubText(name, ordered)] = scrubText(value, ordered);
+  }
+  return { headers: scrubbed, bytes: scrubBytes(bytes, ordered) };
+}
+
+function scrubText(text: string, forms: readonly string[]): string {
+  let scrubbed = text;
+  for (const form of forms) {
+    scrubbed = scrubbed.replaceAll(form, WITHHELD_MARK);
+  }
+  return scrubbed;
+}
+
+function scrubBytes(bytes: Uint8Array, forms: readonly string[]): Uint8Array {
+  const mark = encoder.encode(WITHHELD_MARK);
+  let current = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let changed = false;
+  for (const form of forms) {
+    const needle = Buffer.from(form, "utf8");
+    let at = current.indexOf(needle);
+    if (at < 0) {
+      continue;
+    }
+    const parts: Uint8Array[] = [];
+    let from = 0;
+    while (at >= 0) {
+      parts.push(current.subarray(from, at), mark);
+      from = at + needle.byteLength;
+      at = current.indexOf(needle, from);
+    }
+    parts.push(current.subarray(from));
+    current = Buffer.concat(parts);
+    changed = true;
+  }
+  return changed ? new Uint8Array(current) : bytes;
 }

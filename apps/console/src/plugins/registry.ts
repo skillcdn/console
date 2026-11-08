@@ -2074,9 +2074,8 @@ export class Plugins {
           typeof args[0] === "string" ? args[0] : "",
           (typeof args[1] === "object" && args[1] !== null ? args[1] : {}) as PluginFetchInit,
           {
-            sealable: (name) => {
-              this.secretSetting(entry, name);
-            },
+            // The hosts a secret goes to are the hosts whose answers it is sealed from (ADR-0070).
+            sealable: (name) => ({ hosts: this.secretSetting(entry, name).hosts }),
             open: (name) => this.openSecret(entry, workspace.id, name),
             seal: (name, value, expiresAt, host) =>
               this.sealFromAnswer(entry, install, call, name, value, expiresAt, host),
@@ -2550,10 +2549,12 @@ export class Plugins {
 
   /**
    * Seals a value the plugin named of an answer it received (ADR-0070), as the secret setting it
-   * named, which the manifest declares: the plugin never holds it. Recorded as the setting's
-   * change by the caller, or by the administrator who enabled the plugin where the console's own
-   * call made the request, as the board attributes those; with the host the answer came from as
-   * its source, and never its value.
+   * named, which the manifest declares: the plugin never holds it. The answer came from a host
+   * the setting's `hosts` name, if it names any: `sealable` answered them, and the request was
+   * refused before it went out otherwise. Recorded as the setting's change by the caller, or by
+   * the administrator who enabled the plugin where the console's own call made the request, as
+   * the board attributes those; with the host the answer came from as its source, and never its
+   * value.
    */
   private async sealFromAnswer(
     entry: Entry,

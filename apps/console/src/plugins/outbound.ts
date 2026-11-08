@@ -9,16 +9,20 @@ import {
   PLUGIN_OUTBOUND_PER_MINUTE,
   type PluginFetchInit,
   PluginRefusal,
+  type SealOutcome,
   type SecretUse,
 } from "@skillcdn/console/plugin";
 import { isPublicAddress } from "../adapters/https-pictures.js";
 import type { Logger } from "../logger.js";
 import type { Clock } from "../ports/clock.js";
 import {
+  type Carried,
   FIXED_HEADERS,
+  formsOf,
   type Placed,
   placeSecret,
   SECRETS_PER_REQUEST,
+  scrubAnswer,
   sealAnswer,
   validateSeal,
 } from "./placements.js";
@@ -27,16 +31,39 @@ import { createRateLimiter, type RateLimiter } from "./rate.js";
 // A plugin's outbound request (docs/specs/plugins.md, "The context", `ctx.fetch`; ADR-0050,
 // ADR-0070): to a host the plugin declared and an administrator consented to, over https, to a
 // public address the console resolves itself and pins, within the bounds a minute, of size and of
-// time; the secrets the plugin names are put in by the console, each where the plugin said and
-// to the hosts its setting allows, and never cross to the plugin; what the plugin names of the
-// answer is sealed as a secret by the console, and the plugin reads the answer without it. What
-// comes back is read whole, to the bound, and handed over as bytes.
+// time, with a method that has no server send the request back; the secrets the plugin names are
+// put in by the console, each where the plugin said and to the hosts its setting allows, and
+// never cross to the plugin, the answer scrubbed of them; what the plugin names of the answer is
+// sealed as a secret by the console, from the hosts its setting allows, and the plugin reads the
+// answer without it, or without the body where it cannot be read. What comes back is read whole,
+// to the bound, and handed over as bytes; a redirect is handed over as it is, never followed.
 
 /** What an outbound request answered, whole. */
 export interface OutboundAnswer {
   readonly status: number;
   readonly headers: Readonly<Record<string, string>>;
   readonly bytes: Uint8Array;
+}
+
+/** What the plugin reads of an answer: scrubbed, and what became of each value it named to seal, there where it named any. */
+export interface PluginAnswer extends OutboundAnswer {
+  readonly sealed?: Readonly<Record<string, SealOutcome>>;
+}
+
+/** The methods a request may use: none that has a server send the request back, as TRACE does, or opens a tunnel. */
+export const OUTBOUND_METHODS: ReadonlySet<string> = new Set([
+  "GET",
+  "HEAD",
+  "POST",
+  "PUT",
+  "PATCH",
+  "DELETE",
+  "OPTIONS",
+]);
+
+/** True when the host is among those a secret's setting names, or the setting names none. */
+function withinHosts(hosts: readonly string[] | undefined, host: string): boolean {
+  return hosts === undefined || hosts.some((named) => outboundAllows(`outbound:${named}`, host));
 }
 
 /** One request to one address: the transport, replaceable in tests. */
@@ -60,8 +87,11 @@ export interface OpenedSecret {
 
 /** The console's side of the secrets a request names: opening one to put it in, sealing one from the answer. */
 export interface SecretAccess {
-  /** Refuses a name that is no secret setting of the plugin, before the request goes out. */
-  sealable(name: string): void;
+  /**
+   * Refuses a name that is no secret setting of the plugin, before the request goes out; answers
+   * the hosts its setting pins it to otherwise, whose answers alone it is sealed from.
+   */
+  sealable(name: string): { readonly hosts: readonly string[] | undefined };
   open(name: string): Promise<OpenedSecret | undefined>;
   seal(name: string, value: string, expiresAt: Date | undefined, host: string): Promise<void>;
 }
@@ -181,10 +211,12 @@ export class Outbound {
 
   /**
    * One request of the plugin: refused unless the URL is https to a host among the plugin's
-   * consented `outbound:<host>` capabilities and resolves to public addresses alone; the secrets
-   * named, if any, put where each `as` says, each within the hosts its setting pins it to and
-   * before its expiry, read by the console and never handed over; and what `seal` names of the
-   * answer taken out and sealed, the plugin reading the answer without it.
+   * consented `outbound:<host>` capabilities and resolves to public addresses alone, and the
+   * method is one of `OUTBOUND_METHODS`; the secrets named, if any, put where each `as` says,
+   * each within the hosts its setting pins it to and before its expiry, read by the console and
+   * never handed over, every form of them taken out of the answer; and what `seal` names of the
+   * answer, from a host its setting allows, taken out and sealed, the plugin reading the answer
+   * without it and with what became of each.
    */
   async fetch(
     key: string,
@@ -192,7 +224,7 @@ export class Outbound {
     target: string,
     init: PluginFetchInit,
     secrets: SecretAccess,
-  ): Promise<OutboundAnswer> {
+  ): Promise<PluginAnswer> {
     if (!URL.canParse(target)) {
       throw new PluginRefusal("plugin.invalid_args", "fetch takes a URL");
     }
@@ -211,9 +243,18 @@ export class Outbound {
         `the plugin makes ${perMinute} outbound requests a minute`,
       );
     }
-    const method = (init.method ?? "GET").toUpperCase();
-    if (!/^[A-Z]{3,10}$/.test(method)) {
-      throw new PluginRefusal("plugin.invalid_args", "the method is not one");
+    const method =
+      init.method === undefined
+        ? "GET"
+        : typeof init.method === "string"
+          ? init.method.toUpperCase()
+          : "";
+    // A server that answers TRACE sends the request back, the secrets the console put in with it.
+    if (!OUTBOUND_METHODS.has(method)) {
+      throw new PluginRefusal(
+        "plugin.invalid_args",
+        "the method is GET, HEAD, POST, PUT, PATCH, DELETE or OPTIONS",
+      );
     }
     const headers: Record<string, string> = {};
     for (const [name, value] of Object.entries(init.headers ?? {})) {
@@ -226,7 +267,16 @@ export class Outbound {
     // elsewhere is not made for a seal that would be refused after it.
     const seal = validateSeal(init.seal);
     for (const name of Object.keys(seal)) {
-      secrets.sealable(name);
+      const { hosts } = secrets.sealable(name);
+      // A secret pinned to hosts is sealed from their answers alone, as it goes to them alone: a
+      // value from another host could stand in for a token, or for a signing secret and let a
+      // forged webhook through.
+      if (!withinHosts(hosts, host)) {
+        throw new PluginRefusal(
+          "plugin.forbidden",
+          `the secret ${name} is sealed from ${(hosts ?? []).join(", ")} only`,
+        );
+      }
     }
     let placed: Placed = {
       url,
@@ -239,6 +289,7 @@ export class Outbound {
             : init.body,
     };
     const now = this.options.clock.now();
+    const carried: Carried[] = [];
     for (const use of secretsOf(init)) {
       const secret = await secrets.open(use.name);
       if (secret === undefined) {
@@ -251,16 +302,14 @@ export class Outbound {
         );
       }
       // A secret pinned to hosts goes to those and no other, whatever else the plugin may reach.
-      if (
-        secret.hosts !== undefined &&
-        !secret.hosts.some((named) => outboundAllows(`outbound:${named}`, host))
-      ) {
+      if (!withinHosts(secret.hosts, host)) {
         throw new PluginRefusal(
           "plugin.forbidden",
-          `the secret ${use.name} goes to ${secret.hosts.join(", ")} only`,
+          `the secret ${use.name} goes to ${(secret.hosts ?? []).join(", ")} only`,
         );
       }
       placed = placeSecret(placed, use.as, secret.value);
+      carried.push({ name: use.name, forms: formsOf(secret.value, use.as) });
     }
     const addresses =
       isIP(host) !== 0
@@ -292,16 +341,24 @@ export class Outbound {
       this.options.logger.warn({ plugin: key, host, err: error }, "plugin outbound request failed");
       throw new PluginRefusal("plugin.failed", `the request to ${host} failed`);
     }
-    // What the plugin named of the answer is sealed here, and the plugin reads the rest (ADR-0070).
-    const { bytes, sealed } = sealAnswer(
+    // What the plugin named of the answer is sealed here, and the plugin reads the rest (ADR-0070):
+    // a value that cannot be sealed is withheld, and the body of an answer that cannot be read.
+    const sealing = sealAnswer(
       answer.bytes,
       seal,
       this.options.clock.now(),
       MAX_PLUGIN_SECRET_LENGTH,
+      carried,
     );
-    for (const one of sealed) {
+    for (const one of sealing.sealed) {
       await secrets.seal(one.name, one.value, one.expiresAt, host);
     }
+    // What the console put into the request, or took out of the answer, is taken out of the rest
+    // of it in every form it knows: an echo of the request, a redirect carrying its URL.
+    const scrubbed = scrubAnswer(answer.headers, sealing.bytes, [
+      ...carried.flatMap((one) => one.forms),
+      ...sealing.taken.flatMap((value) => formsOf(value)),
+    ]);
     this.options.logger.info(
       {
         plugin: key,
@@ -309,11 +366,16 @@ export class Outbound {
         method,
         status: answer.status,
         bytes: answer.bytes.byteLength,
-        sealed: sealed.map((one) => one.name),
+        sealed: sealing.outcomes,
         durationMs: Math.round(performance.now() - startedAt),
       },
       "plugin outbound request",
     );
-    return { ...answer, bytes };
+    return {
+      status: answer.status,
+      headers: scrubbed.headers,
+      bytes: scrubbed.bytes,
+      ...(Object.keys(seal).length === 0 ? {} : { sealed: sealing.outcomes }),
+    };
   }
 }

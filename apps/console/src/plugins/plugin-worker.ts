@@ -128,14 +128,23 @@ function records<T extends Record<string, unknown>>(
 }
 
 function response(raw: unknown): PluginFetchResponse {
-  const { status, headers, bytes } = raw as {
+  const { status, headers, bytes, sealed } = raw as {
     status: number;
     headers: Record<string, string>;
     bytes: Uint8Array;
+    sealed?: PluginFetchResponse["sealed"];
   };
   const body = bytes instanceof Uint8Array ? bytes : new Uint8Array(0);
   const text = () => new TextDecoder().decode(body);
-  return { status, headers, bytes: body, text, json: () => JSON.parse(text()) as unknown };
+  return {
+    status,
+    headers,
+    bytes: body,
+    // What became of each value the request named to seal (ADR-0070).
+    ...(sealed === undefined ? {} : { sealed }),
+    text,
+    json: () => JSON.parse(text()) as unknown,
+  };
 }
 
 /** The context of one call: every member a message, with the call's id so the parent knows the caller. */

@@ -312,7 +312,7 @@ const pluginSettingSchema = z
     of: z.optional(settingItemType),
     /** The group of `settingGroups` the setting is shown under; left out, above every group. */
     group: z.optional(key),
-    /** For a `secret`: the hosts it may be put into a request to (`slack.com`, `*.example.com`), and no other; any host the plugin may reach when left out. */
+    /** For a `secret`: the hosts it may be put into a request to and sealed from the answers of (`slack.com`, `*.example.com`), and no other; any host the plugin may reach when left out. */
     hosts: z.optional(z.array(z.string().check(z.maxLength(300))).check(z.maxLength(20))),
     /** For a `secret`: `verify`, a secret that verifies signatures and signs nothing, so that a request cannot be forged with it. */
     use: z.optional(z.literal("verify")),

@@ -292,6 +292,79 @@ export default {
         };
       },
     ),
+    unsealable: command(
+      "Asks to seal what an answer cannot give: a form where JSON was meant, a value too long or no string, a path to nothing.",
+      {},
+      async (ctx) => {
+        const read = async (path) => {
+          const answer = await ctx.fetch(`https://api.example.test${path}`, {
+            method: "POST",
+            seal: { botToken: "$.access_token", signingSecret: "$.credentials" },
+          });
+          return { status: answer.status, body: answer.text(), sealed: answer.sealed ?? null };
+        };
+        return {
+          text: "tried",
+          data: {
+            form: await read("/oauth/form"),
+            odd: await read("/oauth/odd"),
+            refused: await read("/oauth/refused"),
+          },
+        };
+      },
+    ),
+    echo: command(
+      "Sends the API token to a host that answers with the request, and to one that redirects with it; and tries TRACE.",
+      {},
+      async (ctx) => {
+        let trace = "sent";
+        try {
+          await ctx.fetch("https://api.example.test/echo", {
+            method: "TRACE",
+            secret: { name: "apiToken", as: "bearer" },
+          });
+        } catch (error) {
+          trace = error.code;
+        }
+        const echoed = await ctx.fetch("https://api.example.test/echo", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ hello: "there" }),
+          secret: { name: "apiToken", as: "bearer" },
+          seal: { botToken: "$.headers.authorization" },
+        });
+        const basic = await ctx.fetch("https://api.example.test/echo", {
+          secret: { name: "apiToken", as: "basic" },
+        });
+        const moved = await ctx.fetch("https://api.example.test/redirect", {
+          secret: { name: "apiToken", as: "query:key" },
+        });
+        return {
+          text: "echoed",
+          data: {
+            trace,
+            echo: { headers: echoed.headers, body: echoed.json(), sealed: echoed.sealed ?? null },
+            basic: basic.headers,
+            redirect: { status: moved.status, location: moved.headers.location ?? null },
+          },
+        };
+      },
+    ),
+    stray: command(
+      "Seals the secret pinned to other.example.test from an answer of api.example.test.",
+      {},
+      async (ctx) => {
+        try {
+          await ctx.fetch("https://api.example.test/oauth/token", {
+            method: "POST",
+            seal: { pinned: "$.access_token" },
+          });
+          return { text: "sealed", data: { pinned: "sealed" } };
+        } catch (error) {
+          return { text: error.code, data: { pinned: error.code } };
+        }
+      },
+    ),
   },
   queries: {
     standing: query("How a secret stands.", { name: argument("text") }, async (ctx, args) =>

@@ -34,7 +34,7 @@ import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "../db/t
 import { discoverPlugins } from "../plugins/discovery.js";
 import { PluginDispatcher } from "../plugins/dispatcher.js";
 import { PluginHost } from "../plugins/host.js";
-import { Outbound, type OutboundSend } from "../plugins/outbound.js";
+import { Outbound, type OutboundAnswer, type OutboundSend } from "../plugins/outbound.js";
 import { allowedReadRoots } from "../plugins/paths.js";
 import { RecordStore } from "../plugins/records.js";
 import { Plugins } from "../plugins/registry.js";
@@ -74,6 +74,42 @@ let auditedNumber: number | undefined;
 const sent: Parameters<OutboundSend>[0][] = [];
 /** What the fake host answers, by path; a pong otherwise. */
 const answers = new Map<string, unknown>();
+/** What the fake host answers that is no JSON, by path: its type and its body. */
+const bodies = new Map<string, { readonly type: string; readonly body: string }>();
+
+/**
+ * The fake host: `/echo` answers with the request it received, as a server answering TRACE
+ * does, its authorization in a header too; `/redirect` sends the client to the URL it was asked
+ * for; a path in `bodies` answers that body, and any other the JSON in `answers`.
+ */
+function answerOf(input: Parameters<OutboundSend>[0]): OutboundAnswer {
+  const encode = (text: string) => new TextEncoder().encode(text);
+  if (input.url.pathname === "/echo") {
+    return {
+      status: 200,
+      headers: {
+        "content-type": "application/json",
+        "x-echo-authorization": input.headers.authorization ?? "",
+      },
+      bytes: encode(
+        JSON.stringify({
+          url: input.url.href,
+          headers: input.headers,
+          body: input.body === undefined ? null : new TextDecoder().decode(input.body),
+        }),
+      ),
+    };
+  }
+  if (input.url.pathname === "/redirect") {
+    return { status: 302, headers: { location: input.url.href }, bytes: new Uint8Array(0) };
+  }
+  const raw = bodies.get(input.url.pathname);
+  return {
+    status: 200,
+    headers: { "content-type": raw?.type ?? "application/json" },
+    bytes: encode(raw?.body ?? JSON.stringify(answers.get(input.url.pathname) ?? { pong: true })),
+  };
+}
 /** How far ahead of the machine the console's clock stands, to see a secret expire. */
 let skewMs = 0;
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -150,13 +186,7 @@ beforeAll(async () => {
       resolve: async () => ["93.184.216.34"],
       send: async (input) => {
         sent.push(input);
-        return {
-          status: 200,
-          headers: { "content-type": "application/json" },
-          bytes: new TextEncoder().encode(
-            JSON.stringify(answers.get(input.url.pathname) ?? { pong: true }),
-          ),
-        };
+        return answerOf(input);
       },
     }),
     clock,
@@ -856,6 +886,89 @@ describe("a plugin on the board", () => {
     } finally {
       skewMs = 0;
     }
+  });
+
+  it("withholds from a plugin what it cannot seal, and says so: a form where JSON was meant, a value too long or no string, a path to nothing (ADR-0070)", async () => {
+    // A token endpoint that answers a form unless asked for JSON: what it holds reaches no plugin.
+    bodies.set("/oauth/form", {
+      type: "application/x-www-form-urlencoded",
+      body: "access_token=xoxb-form&signing_secret=s1gn-form",
+    });
+    answers.set("/oauth/odd", {
+      access_token: "x".repeat(5000),
+      credentials: { signing_secret: "s1gn-odd" },
+    });
+    answers.set("/oauth/refused", { ok: false, error: "invalid_code" });
+    const standing = async () =>
+      (await invoked("leave", member, ["standing", "--name", "botToken"])).data;
+    const before = await standing();
+    const tried = await invoked("leave", member, ["unsealable"]);
+    expect(tried.data).toEqual({
+      form: {
+        status: 200,
+        body: "",
+        sealed: { botToken: "not_json", signingSecret: "not_json" },
+      },
+      odd: {
+        status: 200,
+        body: JSON.stringify({ access_token: "[withheld]", credentials: "[withheld]" }),
+        sealed: { botToken: "too_long", signingSecret: "not_a_string" },
+      },
+      refused: {
+        status: 200,
+        body: JSON.stringify({ ok: false, error: "invalid_code" }),
+        sealed: { botToken: "absent", signingSecret: "absent" },
+      },
+    });
+    const said = JSON.stringify(tried);
+    for (const secret of ["xoxb-form", "s1gn-form", "s1gn-odd", "x".repeat(4097)]) {
+      expect(said).not.toContain(secret);
+    }
+    // Nothing was sealed: the bot token stands as the exchange sealed it.
+    expect(await standing()).toEqual(before);
+  });
+
+  it("hands a plugin no secret the console put in, sent back or carried by a redirect, and sends no TRACE (ADR-0070)", async () => {
+    sent.length = 0;
+    const standing = async () =>
+      (await invoked("leave", member, ["standing", "--name", "botToken"])).data;
+    const before = await standing();
+    const basic = Buffer.from("t0k3n").toString("base64");
+    const echoed = await invoked("leave", member, ["echo"]);
+    expect(echoed.data).toMatchObject({
+      trace: "plugin.invalid_args",
+      // What the plugin named to seal is withheld wherever else the answer holds it too.
+      echo: {
+        headers: { "x-echo-authorization": "[withheld]" },
+        body: { headers: { authorization: "[withheld]" }, body: '{"hello":"there"}' },
+        sealed: { botToken: "echoed" },
+      },
+      basic: { "x-echo-authorization": "Basic [withheld]" },
+      redirect: { status: 302, location: "https://api.example.test/redirect?key=[withheld]" },
+    });
+    const said = JSON.stringify(echoed);
+    for (const secret of ["t0k3n", basic]) {
+      expect(said).not.toContain(secret);
+    }
+    // The secret went out where it was put; TRACE never did, and the redirect was not followed.
+    expect(sent.map((request) => request.method)).toEqual(["POST", "GET", "GET"]);
+    expect(sent[0]?.headers.authorization).toBe("Bearer t0k3n");
+    expect(sent[1]?.headers.authorization).toBe(`Basic ${basic}`);
+    expect(sent[2]?.url.searchParams.get("key")).toBe("t0k3n");
+    // The echo of the API token was not sealed as the bot token.
+    expect(await standing()).toEqual(before);
+  });
+
+  it("seals a secret pinned to hosts from their answers alone, refused before the request goes out (ADR-0070)", async () => {
+    sent.length = 0;
+    expect((await invoked("leave", member, ["stray"])).data).toEqual({
+      pinned: "plugin.forbidden",
+    });
+    expect(sent).toEqual([]);
+    expect((await invoked("leave", member, ["standing", "--name", "pinned"])).data).toMatchObject({
+      set: true,
+      source: "administrator",
+    });
   });
 
   it("leaves what a plugin can go without to the administrator, and keeps what it requires (ADR-0060)", async () => {

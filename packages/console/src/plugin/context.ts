@@ -439,7 +439,19 @@ export type SecretSeal =
   | string
   | { readonly path: string; readonly expiresIn?: number | string | undefined };
 
+/**
+ * What became of a value `seal` named (ADR-0070). `sealed`: sealed as the setting, the answer
+ * saying `"[sealed]"` in its place. `absent`: nothing at the path (no such key, `null` or an
+ * empty string); nothing sealed, nothing taken out. `not_a_string`, `too_long` and `echoed`: a
+ * value that is no string, is over the bound of a secret (4,096 characters), or holds a secret
+ * the request carried from another setting; never sealed and never handed over, the answer saying
+ * `"[withheld]"` in its place. `not_json`: an answer that is no JSON object or array, whose body
+ * is withheld whole. Only `sealed` changed the setting.
+ */
+export type SealOutcome = "sealed" | "absent" | "not_a_string" | "too_long" | "echoed" | "not_json";
+
 export interface PluginFetchInit {
+  /** `GET` unless said; `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE` or `OPTIONS`, and no other. */
   readonly method?: string;
   readonly headers?: Readonly<Record<string, string>>;
   readonly body?: string | Uint8Array;
@@ -451,11 +463,17 @@ export interface PluginFetchInit {
   readonly seal?: Readonly<Record<string, SecretSeal>>;
 }
 
-/** An outbound answer, whole: the host reads it to the bound before handing it over. */
+/**
+ * An outbound answer, whole: the host reads it to the bound before handing it over, a redirect as
+ * it is, never followed. Every form of a secret the request carried, and of a value sealed or
+ * withheld, is taken out of its headers and its body first, `"[withheld]"` in its place.
+ */
 export interface PluginFetchResponse {
   readonly status: number;
   readonly headers: Readonly<Record<string, string>>;
   readonly bytes: Uint8Array;
+  /** What became of each value `seal` named, by the setting's name; there where the request named `seal`. */
+  readonly sealed?: Readonly<Record<string, SealOutcome>>;
   text(): string;
   json(): unknown;
 }
