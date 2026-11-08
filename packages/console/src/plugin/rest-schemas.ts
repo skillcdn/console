@@ -178,6 +178,14 @@ export const restPluginSettingSchema = z.object({
   value: z.nullable(z.unknown()),
   /** When a secret was set, or `null`. */
   setAt: z.nullable(instant),
+  /** When a secret expires, or `null` (ADR-0070); answered from 0.4.5 and read as optional. */
+  expiresAt: z.optional(z.nullable(instant)),
+  /** `administrator` for a secret an administrator set, the host of the answer it was sealed from otherwise, `null` while unset. */
+  source: z.optional(z.nullable(z.string())),
+  /** The hosts a secret is pinned to, or `null` for any the plugin reaches. */
+  hosts: z.optional(z.nullable(z.array(z.string()))),
+  /** `verify` for a secret that verifies and signs nothing, or `null`. */
+  use: z.optional(z.nullable(z.literal("verify"))),
 });
 export type RestPluginSetting = z.infer<typeof restPluginSettingSchema>;
 

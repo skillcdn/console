@@ -153,6 +153,17 @@ describe("createTestContext", () => {
     expect(ctx.plugin.settings.daysPerYear).toBe(15);
     expect(await ctx.secrets.has("token")).toBe(true);
     expect(await ctx.secrets.has("other")).toBe(false);
+    expect(await ctx.secrets.status("token")).toMatchObject({
+      set: true,
+      expiresAt: null,
+      source: "administrator",
+    });
+    expect(await ctx.secrets.status("other")).toEqual({
+      set: false,
+      setAt: null,
+      expiresAt: null,
+      source: null,
+    });
     const signature = await ctx.secrets.sign("token", "payload", "hmac-sha256");
     expect(signature).toMatch(/^[0-9a-f]{64}$/);
     expect(await ctx.secrets.verify("token", "payload", signature, "hmac-sha256")).toBe(true);

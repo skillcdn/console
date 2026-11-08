@@ -217,6 +217,7 @@ function contextOf(
       response(await rpc(callId, "fetch", "fetch", [url, init ?? {}])),
     secrets: {
       has: group("secrets")("has") as never,
+      status: group("secrets")("status") as never,
       sign: group("secrets")("sign") as never,
       verify: group("secrets")("verify") as never,
     },

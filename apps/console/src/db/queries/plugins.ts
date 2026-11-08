@@ -59,6 +59,15 @@ export interface PluginGrantRecord {
 export interface PluginSecretSummary {
   readonly name: string;
   readonly setAt: Date;
+  /** When it expires, or none. */
+  readonly expiresAt: Date | undefined;
+  /** `administrator`, or the host of the answer it was sealed from. */
+  readonly source: string;
+}
+
+/** A sealed secret as the console reads it to use it: never for a plugin. */
+export interface PluginSecretRow extends PluginSecretSummary {
+  readonly sealed: string;
 }
 
 /** What is wrong with a change to what the console keeps of a plugin. `code` is what the API answers with. */
@@ -725,7 +734,12 @@ export async function peopleGranted(
   return new Set(rows.map((row) => row.id));
 }
 
-/** Sets a secret, sealed by the caller, in place of what was there; tells the board which setting, never its value. */
+/**
+ * Sets a secret, sealed by the caller, in place of what was there: an administrator's, or one
+ * the console sealed from an answer a plugin received (ADR-0070), with the host it came from as
+ * its source and its expiry where the answer said one. Tells the board which setting and from
+ * where, never its value.
+ */
 export async function setSecret(
   database: Database,
   input: {
@@ -736,8 +750,12 @@ export async function setSecret(
     readonly actor: Actor;
     readonly now: Date;
     readonly boardProjectId: string | undefined;
+    readonly expiresAt?: Date | undefined;
+    /** `administrator` when left out. */
+    readonly source?: string | undefined;
   },
 ): Promise<void> {
+  const source = input.source ?? "administrator";
   await drizzleOf(database).transaction(async (tx) => {
     await tx
       .insert(pluginSecrets)
@@ -748,10 +766,18 @@ export async function setSecret(
         sealed: input.sealed,
         setAt: input.now,
         setBy: input.actor.id,
+        expiresAt: input.expiresAt ?? null,
+        source,
       })
       .onConflictDoUpdate({
         target: [pluginSecrets.workspaceId, pluginSecrets.pluginKey, pluginSecrets.name],
-        set: { sealed: input.sealed, setAt: input.now, setBy: input.actor.id },
+        set: {
+          sealed: input.sealed,
+          setAt: input.now,
+          setBy: input.actor.id,
+          expiresAt: input.expiresAt ?? null,
+          source,
+        },
       });
     await recordEvent(tx, {
       workspaceId: input.workspaceId,
@@ -759,7 +785,7 @@ export async function setSecret(
       kind: "plugin.configured",
       actor: input.actor,
       plugin: input.key,
-      data: { key: input.key, fields: [input.name] },
+      data: { key: input.key, fields: [input.name], source },
       now: input.now,
     });
   });
@@ -803,15 +829,21 @@ export async function removeSecret(
   });
 }
 
-/** The sealed secret, for the console to open where the plugin names it; never for the plugin. */
+/** The sealed secret with how it stands, for the console to open where the plugin names it; never for the plugin. */
 export async function readSecret(
   database: Database,
   workspaceId: string,
   key: string,
   name: string,
-): Promise<string | undefined> {
+): Promise<PluginSecretRow | undefined> {
   const [row] = await drizzleOf(database)
-    .select({ sealed: pluginSecrets.sealed })
+    .select({
+      name: pluginSecrets.name,
+      sealed: pluginSecrets.sealed,
+      setAt: pluginSecrets.setAt,
+      expiresAt: pluginSecrets.expiresAt,
+      source: pluginSecrets.source,
+    })
     .from(pluginSecrets)
     .where(
       and(
@@ -821,7 +853,7 @@ export async function readSecret(
       ),
     )
     .limit(1);
-  return row?.sealed;
+  return row === undefined ? undefined : { ...row, expiresAt: row.expiresAt ?? undefined };
 }
 
 /**
@@ -870,15 +902,21 @@ export async function purgeInstall(
   });
 }
 
-/** Which secrets are set, and when: what the pages may show of them. */
+/** Which secrets are set, when, from where and until when: what the pages may show of them. */
 export async function listSecrets(
   database: Database,
   workspaceId: string,
   key: string,
 ): Promise<PluginSecretSummary[]> {
-  return drizzleOf(database)
-    .select({ name: pluginSecrets.name, setAt: pluginSecrets.setAt })
+  const rows = await drizzleOf(database)
+    .select({
+      name: pluginSecrets.name,
+      setAt: pluginSecrets.setAt,
+      expiresAt: pluginSecrets.expiresAt,
+      source: pluginSecrets.source,
+    })
     .from(pluginSecrets)
     .where(and(eq(pluginSecrets.workspaceId, workspaceId), eq(pluginSecrets.pluginKey, key)))
     .orderBy(asc(pluginSecrets.name));
+  return rows.map((row) => ({ ...row, expiresAt: row.expiresAt ?? undefined }));
 }

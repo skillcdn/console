@@ -70,6 +70,10 @@ let bobId: string;
 let aliceId: string;
 let aliceLogin: string;
 const sent: Parameters<OutboundSend>[0][] = [];
+/** What the fake host answers, by path; a pong otherwise. */
+const answers = new Map<string, unknown>();
+/** How far ahead of the machine the console's clock stands, to see a secret expire. */
+let skewMs = 0;
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const pictured: string[] = [];
 let schedulerNow = new Date("2026-11-02T09:00:00.000Z");
@@ -124,7 +128,7 @@ beforeAll(async () => {
   aliceId = alice.id;
   aliceLogin = alice.login;
   const workspace = await ensureWorkspace(testDatabase.database, { name: "Acme", now: new Date() });
-  const clock = { now: () => new Date() };
+  const clock = { now: () => new Date(Date.now() + skewMs) };
   plugins = new Plugins({
     database: testDatabase.database,
     workspace: async () => workspace,
@@ -147,7 +151,9 @@ beforeAll(async () => {
         return {
           status: 200,
           headers: { "content-type": "application/json" },
-          bytes: new TextEncoder().encode(JSON.stringify({ pong: true })),
+          bytes: new TextEncoder().encode(
+            JSON.stringify(answers.get(input.url.pathname) ?? { pong: true }),
+          ),
         };
       },
     }),
@@ -640,6 +646,96 @@ describe("a plugin on the board", () => {
     expect(request?.method).toBe("POST");
     expect(request?.headers).toEqual({ "content-type": "application/json", "x-token": "t0k3n" });
     expect(new TextDecoder().decode(request?.body)).toBe('{"hello":"there"}');
+  });
+
+  it("seals what a plugin names of an answer, puts a secret where named and to its hosts alone, and keeps a verifying secret from signing (ADR-0070)", async () => {
+    sent.length = 0;
+    answers.set("/oauth/token", {
+      ok: true,
+      access_token: "xoxb-1",
+      expires_in: 3600,
+      credentials: { signing_secret: "s1gn", client_id: "id" },
+    });
+    for (const [name, value] of [
+      ["clientSecret", "cs"],
+      ["pinned", "p1n"],
+    ] as const) {
+      const put = await h.request(
+        pluginPath("leave", "secrets", name),
+        json({ value }, admin, "PUT"),
+      );
+      expect(put.status).toBe(204);
+    }
+    const exchanged = await invoked("leave", member, ["exchange"]);
+    expect(exchanged.data).toMatchObject({
+      token: {
+        ok: true,
+        access_token: "[sealed]",
+        expires_in: 3600,
+        credentials: { signing_secret: "[sealed]", client_id: "id" },
+      },
+      me: 200,
+      has: true,
+      status: { set: true, source: "api.example.test" },
+    });
+    expect(JSON.stringify(exchanged)).not.toContain("xoxb-1");
+    expect(sent).toHaveLength(2);
+    expect(new TextDecoder().decode(sent[0]?.body)).toBe(
+      "grant_type=authorization_code&code=c0de&client_secret=cs",
+    );
+    expect(sent[1]?.headers).toEqual({ authorization: "Bearer xoxb-1" });
+    // The settings say from where and until when, never the value; the feed says the setting changed and from where.
+    const detail = restPluginDetailSchema.parse(
+      await (await h.request(pluginPath("leave"), { headers: { cookie: admin } })).json(),
+    );
+    const settingOf = (key: string) => detail.settings.find((setting) => setting.key === key);
+    expect(settingOf("botToken")).toMatchObject({
+      set: true,
+      value: null,
+      source: "api.example.test",
+      hosts: ["api.example.test"],
+      use: null,
+    });
+    expect(settingOf("botToken")?.expiresAt).toMatch(/Z$/);
+    expect(settingOf("signingSecret")).toMatchObject({
+      set: true,
+      source: "api.example.test",
+      expiresAt: null,
+      use: "verify",
+    });
+    expect(settingOf("clientSecret")).toMatchObject({ set: true, source: "administrator" });
+    expect(JSON.stringify(detail)).not.toContain("xoxb-1");
+    const events = restEventsSchema.parse(
+      await (await h.request(pluginPath("leave", "events"), { headers: { cookie: admin } })).json(),
+    );
+    expect(
+      events.items
+        .filter(
+          (event) => event.kind === "plugin.configured" && event.data.source === "api.example.test",
+        )
+        .map((event) => event.data.fields)
+        .sort(),
+    ).toEqual([["botToken"], ["signingSecret"]]);
+    expect(JSON.stringify(events)).not.toContain("xoxb-1");
+    // What a secret refuses: a pinned one to another host, signing with one that verifies.
+    expect((await invoked("leave", member, ["misuse"])).data).toMatchObject({
+      pinned: "plugin.forbidden",
+      sign: "plugin.forbidden",
+      botToken: "sent",
+      verified: false,
+    });
+    // Past its expiry, the bot token stands unset and goes into no request, until sealed again.
+    skewMs = 2 * 3_600_000;
+    try {
+      expect(
+        (await invoked("leave", member, ["standing", "--name", "botToken"])).data,
+      ).toMatchObject({ set: false, source: "api.example.test" });
+      expect((await invoked("leave", member, ["misuse"])).data).toMatchObject({
+        botToken: "plugin.forbidden",
+      });
+    } finally {
+      skewMs = 0;
+    }
   });
 
   it("leaves what a plugin can go without to the administrator, and keeps what it requires (ADR-0060)", async () => {

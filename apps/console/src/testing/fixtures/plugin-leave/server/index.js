@@ -203,8 +203,70 @@ export default {
         };
       },
     ),
+    exchange: command(
+      "Exchanges a code for tokens, which the console seals from the answer; then calls with the bot token as a bearer.",
+      {},
+      async (ctx) => {
+        const token = await ctx.fetch("https://api.example.test/oauth/token", {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body: "grant_type=authorization_code&code=c0de",
+          secrets: [{ name: "clientSecret", as: "body:client_secret" }],
+          seal: {
+            botToken: { path: "$.access_token", expiresIn: "$.expires_in" },
+            signingSecret: "$.credentials.signing_secret",
+          },
+        });
+        const me = await ctx.fetch("https://api.example.test/me", {
+          secret: { name: "botToken", as: "bearer" },
+        });
+        return {
+          text: "exchanged",
+          data: {
+            token: token.json(),
+            me: me.status,
+            status: await ctx.secrets.status("botToken"),
+            has: await ctx.secrets.has("signingSecret"),
+          },
+        };
+      },
+    ),
+    misuse: command(
+      "Tries what a secret refuses: a pinned secret to another host, signing with one that verifies, a bearer past its expiry.",
+      {},
+      async (ctx) => {
+        const codeOf = async (attempt) => {
+          try {
+            await attempt();
+            return "sent";
+          } catch (error) {
+            return error.code;
+          }
+        };
+        return {
+          text: "tried",
+          data: {
+            pinned: await codeOf(() =>
+              ctx.fetch("https://api.example.test/me", {
+                secret: { name: "pinned", as: "bearer" },
+              }),
+            ),
+            sign: await codeOf(() => ctx.secrets.sign("signingSecret", "payload", "hmac-sha256")),
+            botToken: await codeOf(() =>
+              ctx.fetch("https://api.example.test/me", {
+                secret: { name: "botToken", as: "bearer" },
+              }),
+            ),
+            verified: await ctx.secrets.verify("signingSecret", "payload", "0", "hmac-sha256"),
+          },
+        };
+      },
+    ),
   },
   queries: {
+    standing: query("How a secret stands.", { name: argument("text") }, async (ctx, args) =>
+      ctx.secrets.status(args.name),
+    ),
     holds: query("The capabilities the plugin holds.", {}, async (ctx) => ctx.plugin.capabilities),
     granted: query("Who was granted a role.", { role: argument("text") }, async (ctx, args) =>
       (await ctx.console.people.granted(args.role)).map((person) => person.login),

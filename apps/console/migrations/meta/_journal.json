@@ -288,6 +288,13 @@
       "when": 1794119334474,
       "tag": "0040_person_email",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1794120867488,
+      "tag": "0041_plugin_secret_source",
+      "breakpoints": true
     }
   ]
 }

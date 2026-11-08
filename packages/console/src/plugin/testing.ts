@@ -575,6 +575,12 @@ function build(store: Store, options: TestContextOptions, caller: PluginCaller):
     fetch: options.fetch ?? (async () => forbidden("fetch", "fetch")),
     secrets: {
       has: async (name) => name in secrets,
+      status: async (name) => ({
+        set: name in secrets,
+        setAt: name in secrets ? now().toISOString() : null,
+        expiresAt: null,
+        source: name in secrets ? "administrator" : null,
+      }),
       sign: async (name, payload) => {
         const secret = secrets[name];
         if (secret === undefined) {

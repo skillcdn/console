@@ -112,7 +112,7 @@ import type { Discovery } from "./discovery.js";
 import type { DispatchTarget } from "./dispatcher.js";
 import { type FrameHolds, frameHoldsOf } from "./frame-holds.js";
 import type { ContextCall, PluginHost } from "./host.js";
-import { Outbound } from "./outbound.js";
+import { type OpenedSecret, Outbound } from "./outbound.js";
 import { type CallResult, measure, type PluginCall, UNAVAILABLE } from "./protocol.js";
 import { createRateLimiter, type RateLimiter } from "./rate.js";
 import type { RecordScope, RecordStore, Visibility, Writer } from "./records.js";
@@ -733,13 +733,14 @@ export class Plugins {
     const secrets = new Map(
       (await listSecrets(this.options.database, workspace.id, entry.key)).map((secret) => [
         secret.name,
-        secret.setAt,
+        secret,
       ]),
     );
     return manifest.settings.map((setting) => {
       const value = install?.settings[setting.key];
       const secret = setting.type === "secret";
-      const setAt = secrets.get(setting.key);
+      const kept = secrets.get(setting.key);
+      const setAt = kept?.setAt;
       return {
         key: setting.key,
         type: setting.type,
@@ -755,6 +756,10 @@ export class Plugins {
         set: secret ? setAt !== undefined : value !== undefined && value !== null,
         value: secret || !admin ? null : (value ?? null),
         setAt: setAt?.toISOString() ?? null,
+        expiresAt: kept?.expiresAt?.toISOString() ?? null,
+        source: kept?.source ?? null,
+        hosts: setting.hosts ?? null,
+        use: setting.use ?? null,
       };
     });
   }
@@ -1982,7 +1987,14 @@ export class Plugins {
           consent,
           typeof args[0] === "string" ? args[0] : "",
           (typeof args[1] === "object" && args[1] !== null ? args[1] : {}) as PluginFetchInit,
-          (name) => this.openSecret(workspace.id, call.plugin, name),
+          {
+            sealable: (name) => {
+              this.secretSetting(entry, name);
+            },
+            open: (name) => this.openSecret(entry, workspace.id, name),
+            seal: (name, value, expiresAt, host) =>
+              this.sealFromAnswer(entry, install, call, name, value, expiresAt, host),
+          },
         );
       case "plugins":
         return this.otherPlugin(call, consent, method, args);
@@ -2419,16 +2431,83 @@ export class Plugins {
   }
 
   /** A secret's value, opened for the console's own use and never handed over; nothing where it is not set or cannot be opened. */
+  /**
+   * A secret as a request needs it: its value opened for the console's own use and never handed
+   * over, when it expires, and the hosts its setting pins it to. A secret that verifies goes into
+   * no request. Nothing where it is not set or cannot be opened.
+   */
   private async openSecret(
+    entry: Entry,
     workspaceId: string,
-    key: string,
     name: string,
-  ): Promise<string | undefined> {
-    const sealed = await readSecret(this.options.database, workspaceId, key, name);
+  ): Promise<OpenedSecret | undefined> {
+    const setting = this.secretSetting(entry, name);
+    if (setting.use === "verify") {
+      throw new PluginRefusal(
+        "plugin.forbidden",
+        `the secret ${name} verifies and goes into no request`,
+      );
+    }
+    const row = await readSecret(this.options.database, workspaceId, entry.key, name);
     const secrets = this.options.secrets;
-    return sealed === undefined || secrets === undefined
+    const value =
+      row === undefined || secrets === undefined
+        ? undefined
+        : secrets.open("plugin-secret", row.sealed);
+    return value === undefined
       ? undefined
-      : secrets.open("plugin-secret", sealed);
+      : { value, expiresAt: row?.expiresAt, hosts: setting.hosts };
+  }
+
+  /**
+   * Seals a value the plugin named of an answer it received (ADR-0070), as the secret setting it
+   * named, which the manifest declares: the plugin never holds it. Recorded as the setting's
+   * change by the caller, or by the administrator who enabled the plugin where the console's own
+   * call made the request, as the board attributes those; with the host the answer came from as
+   * its source, and never its value.
+   */
+  private async sealFromAnswer(
+    entry: Entry,
+    install: PluginInstallRecord | undefined,
+    call: ContextCall,
+    name: string,
+    value: string,
+    expiresAt: Date | undefined,
+    host: string,
+  ): Promise<void> {
+    this.secretSetting(entry, name);
+    const secrets = this.options.secrets;
+    if (secrets === undefined) {
+      throw new PluginRefusal(
+        "plugin.unavailable",
+        "this deployment keeps no secret to seal with (AUTH_SECRET)",
+      );
+    }
+    const workspace = await this.options.workspace();
+    const caller = call.call.caller;
+    const actorId = caller.kind === "person" ? caller.person.id : install?.enabledBy;
+    if (actorId === undefined) {
+      throw new PluginRefusal("plugin.disabled", "the plugin is not enabled");
+    }
+    await setSecret(this.options.database, {
+      workspaceId: workspace.id,
+      key: entry.key,
+      name,
+      sealed: secrets.seal("plugin-secret", value),
+      actor: {
+        id: actorId,
+        ...(caller.kind === "person" && caller.agent !== null ? { agent: caller.agent } : {}),
+        plugin: entry.key,
+      },
+      now: this.options.clock.now(),
+      boardProjectId: install?.boardProjectId,
+      expiresAt,
+      source: host,
+    });
+    this.options.logger.info(
+      { plugin: entry.key, setting: name, source: host, expiresAt },
+      "plugin secret sealed from an answer",
+    );
   }
 
   /**
@@ -2686,9 +2765,19 @@ export class Plugins {
     args: readonly unknown[],
   ): Promise<unknown> {
     const name = typeof args[0] === "string" ? args[0] : "";
-    const sealed = await readSecret(this.options.database, workspaceId, key, name);
+    const row = await readSecret(this.options.database, workspaceId, key, name);
+    const now = this.options.clock.now();
+    const expired = row?.expiresAt !== undefined && row.expiresAt.getTime() <= now.getTime();
     if (method === "has") {
-      return sealed !== undefined;
+      return row !== undefined && !expired;
+    }
+    if (method === "status") {
+      return {
+        set: row !== undefined && !expired,
+        setAt: row?.setAt.toISOString() ?? null,
+        expiresAt: row?.expiresAt?.toISOString() ?? null,
+        source: row?.source ?? null,
+      };
     }
     if (method !== "sign" && method !== "verify") {
       throw new PluginRefusal("plugin.invalid_args", `secrets.${method} is not a call`);
@@ -2697,16 +2786,24 @@ export class Plugins {
     if (algorithm !== "hmac-sha256") {
       throw new PluginRefusal("plugin.invalid_args", "the algorithm is hmac-sha256");
     }
+    // A secret for verifying signs nothing, so that a request cannot be forged with it.
+    const setting = this.entries.get(key)?.manifest?.settings.find((s) => s.key === name);
+    if (method === "sign" && setting?.use === "verify") {
+      throw new PluginRefusal("plugin.forbidden", `the secret ${name} verifies and signs nothing`);
+    }
     const secrets = this.options.secrets;
     const value =
-      sealed === undefined || secrets === undefined
+      row === undefined || expired || secrets === undefined
         ? undefined
-        : secrets.open("plugin-secret", sealed);
+        : secrets.open("plugin-secret", row.sealed);
     if (value === undefined) {
       if (method === "verify") {
         return false;
       }
-      throw new PluginRefusal("plugin.forbidden", `the secret ${name} is not set`);
+      throw new PluginRefusal(
+        "plugin.forbidden",
+        expired ? `the secret ${name} expired` : `the secret ${name} is not set`,
+      );
     }
     const payload = args[1];
     const bytes =

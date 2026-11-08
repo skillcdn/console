@@ -1029,6 +1029,8 @@ export const restEventDataSchema = z.object({
   args: z.optional(z.record(z.string(), z.unknown())),
   /** For `plugin.enabled` and `plugin.configured`: the capabilities consented to. */
   capabilities: z.optional(z.array(z.string())),
+  /** For `plugin.configured` of a secret: `administrator`, or the host of the answer it was sealed from (ADR-0070). */
+  source: z.optional(z.string()),
   /** For `plugin.granted` and `plugin.revoked`: whether the role went to everyone. */
   everyone: z.optional(z.boolean()),
   /** For `plugin.failed`: what went wrong, in words for a person. */

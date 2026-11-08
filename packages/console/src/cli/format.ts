@@ -762,7 +762,13 @@ export function formatPluginSettingLine(
   const holds =
     setting.type === "secret"
       ? setting.set
-        ? `set${setting.setAt === null ? "" : ` ${moment(setting.setAt)}`}`
+        ? `set${setting.setAt === null ? "" : ` ${moment(setting.setAt)}`}${
+            setting.source === null ||
+            setting.source === undefined ||
+            setting.source === "administrator"
+              ? ""
+              : ` from ${setting.source}`
+          }${setting.expiresAt === null || setting.expiresAt === undefined ? "" : `, expires ${moment(setting.expiresAt)}`}`
         : "not set"
       : setting.set
         ? setting.value === null

@@ -366,15 +366,44 @@ export interface PluginSql extends PluginSqlClient {
   transaction<T>(work: (tx: PluginSqlClient) => Promise<T>): Promise<T>;
 }
 
-/** Where the console puts a secret into an outbound request. */
-export type SecretPlacement = `header:${string}` | `query:${string}` | "basic";
+/**
+ * Where the console puts a secret into an outbound request: a header, as `Authorization: Bearer`,
+ * a query parameter, as basic authentication (`user:password`), or a field of a JSON or a form
+ * body.
+ */
+export type SecretPlacement =
+  | `header:${string}`
+  | "bearer"
+  | `query:${string}`
+  | "basic"
+  | `body:${string}`;
+
+/** One secret setting and where it goes. */
+export interface SecretUse {
+  readonly name: string;
+  readonly as: SecretPlacement;
+}
+
+/**
+ * A value of the answer to seal as a secret setting (ADR-0070): the path to it in the answer's
+ * JSON (`$.access_token`, `$.credentials.signing_secret`, `$.items.0.token`), and, where it
+ * expires, how long it lasts, in seconds or as a path to the seconds (`$.expires_in`). The
+ * console seals the value and hands the plugin the answer with `"[sealed]"` in its place.
+ */
+export type SecretSeal =
+  | string
+  | { readonly path: string; readonly expiresIn?: number | string | undefined };
 
 export interface PluginFetchInit {
   readonly method?: string;
   readonly headers?: Readonly<Record<string, string>>;
   readonly body?: string | Uint8Array;
-  /** A secret setting, put where `as` says: a header, a query parameter, or as basic authentication (`user:password`). */
-  readonly secret?: { readonly name: string; readonly as: SecretPlacement };
+  /** A secret setting, put where `as` says. */
+  readonly secret?: SecretUse;
+  /** Several, where a request carries more than one: a client secret in the body and a token as a bearer, say. */
+  readonly secrets?: readonly SecretUse[];
+  /** Values of the answer to seal as secret settings, by the setting's name, never handed to the plugin. */
+  readonly seal?: Readonly<Record<string, SecretSeal>>;
 }
 
 /** An outbound answer, whole: the host reads it to the bound before handing it over. */
@@ -386,8 +415,23 @@ export interface PluginFetchResponse {
   json(): unknown;
 }
 
+/** How a secret stands: whether it is set and not expired, when it expires, and where it came from. */
+export interface SecretStatus {
+  /** Set, and not past its expiry. */
+  readonly set: boolean;
+  readonly setAt: string | null;
+  /** When it expires, or `null` for a secret that does not. */
+  readonly expiresAt: string | null;
+  /** `administrator` for one an administrator set; the host of the answer it was sealed from otherwise; `null` while unset. */
+  readonly source: string | null;
+}
+
 export interface PluginSecrets {
+  /** Whether the secret is set and not past its expiry. */
   has(name: string): Promise<boolean>;
+  /** How the secret stands, for a settings page to say and a job to decide whether to renew it. */
+  status(name: string): Promise<SecretStatus>;
+  /** Signs with the secret; refused for a secret declared `use: "verify"`, which signs nothing. */
   sign(name: string, payload: string | Uint8Array, algorithm: "hmac-sha256"): Promise<string>;
   verify(
     name: string,

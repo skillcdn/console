@@ -318,6 +318,11 @@ describe("parsePluginManifest", () => {
     expect(setting({ type: "list", of: "list" })).toMatch(/^settings\.0\.of: /);
     expect(setting({ type: "person", default: "x" })).toMatch(/takes no default/);
     expect(setting({ type: "secret", default: "x" })).toMatch(/takes no default/);
+    expect(setting({ hosts: ["api.example.com"] })).toMatch(/only a secret takes hosts or use/);
+    expect(setting({ type: "secret", hosts: ["not a host"] })).toMatch(/is not a host/);
+    expect(setting({ type: "secret", hosts: ["webrtc"] })).toMatch(/is not a host/);
+    expect(setting({ type: "secret", use: "sign" })).toMatch(/^settings\.0\.use/);
+    expect(setting({ type: "secret", hosts: ["*.example.com"], use: "verify" })).toBeUndefined();
     expect(setting({ type: "day", default: "2026-13-01" })).toMatch(/the default is not a day/);
     expect(setting({ type: "list", of: "number", default: [1, "2"] })).toMatch(
       /not a list of number/,

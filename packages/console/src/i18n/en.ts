@@ -325,6 +325,10 @@ export const en = {
       projectsSome: "Some projects",
       settingsForm: "Settings",
       secretSet: (when: string) => `Set ${when}`,
+      secretSealedFrom: (host: string, when: string) => `Sealed from ${host}'s answer ${when}.`,
+      secretExpires: (when: string) => `Expires ${when}.`,
+      secretExpired: (when: string) => `Expired ${when}.`,
+      secretHosts: (hosts: string) => `Sent to ${hosts} only.`,
       secretUnset: "Not set",
       secretNew: "New value",
       enable: "Enable",
@@ -1061,6 +1065,8 @@ export const en = {
       pluginConsented: (plugin: string) => `changed the capabilities of the plugin ${plugin}`,
       pluginConfigured: (fields: string, plugin: string) =>
         `changed ${fields} of the plugin ${plugin}`,
+      pluginSealed: (fields: string, plugin: string, host: string) =>
+        `sealed ${fields} of the plugin ${plugin} from ${host}'s answer`,
       pluginGranted: (role: string, who: string, plugin: string) =>
         `gave ${who} the role ${role} in the plugin ${plugin}`,
       pluginRevoked: (role: string, who: string, plugin: string) =>

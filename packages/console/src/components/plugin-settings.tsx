@@ -779,6 +779,30 @@ function SettingsForm(props: {
   );
 }
 
+/**
+ * How a secret stands, in a line (ADR-0070): set by an administrator, or sealed from an answer
+ * of a host, when; and when it expires, or that it has.
+ */
+function secretStanding(
+  settings: Messages["plugins"]["settings"],
+  setting: RestPluginSetting,
+  language: string,
+): string {
+  const when = formatInstant(setting.setAt ?? "", language);
+  const source = setting.source ?? "administrator";
+  const set =
+    source === "administrator" ? settings.secretSet(when) : settings.secretSealedFrom(source, when);
+  if (setting.expiresAt === null || setting.expiresAt === undefined) {
+    return set;
+  }
+  const expires = formatInstant(setting.expiresAt, language);
+  return `${set} ${
+    Date.parse(setting.expiresAt) <= Date.now()
+      ? settings.secretExpired(expires)
+      : settings.secretExpires(expires)
+  }`;
+}
+
 /** One secret: whether and when it is set, a field to set it anew with its buttons on the line. */
 function SecretRow(props: {
   readonly setting: RestPluginSetting;
@@ -801,9 +825,12 @@ function SecretRow(props: {
         </label>
         <p className="sc-settings-hint">
           {setting.set && setting.setAt !== null
-            ? settings.secretSet(formatInstant(setting.setAt, props.language))
+            ? secretStanding(settings, setting, props.language)
             : settings.secretUnset}
         </p>
+        {setting.hosts !== null && setting.hosts !== undefined && setting.hosts.length > 0 && (
+          <p className="sc-settings-hint">{settings.secretHosts(setting.hosts.join(", "))}</p>
+        )}
         {setting.description !== null && (
           <p className="sc-settings-hint">{pluginWord(setting.description, props.language)}</p>
         )}

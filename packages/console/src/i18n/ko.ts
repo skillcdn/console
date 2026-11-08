@@ -280,6 +280,10 @@ export const ko: Messages = {
       projectsSome: "일부 프로젝트",
       settingsForm: "설정",
       secretSet: (when) => `${when} 설정됨`,
+      secretSealedFrom: (host, when) => `${when}에 ${host}의 응답에서 봉인함.`,
+      secretExpires: (when) => `${when}에 만료.`,
+      secretExpired: (when) => `${when}에 만료됨.`,
+      secretHosts: (hosts) => `${hosts}에만 보냅니다.`,
       secretUnset: "설정 안 됨",
       secretNew: "새 값",
       enable: "활성화",
@@ -987,6 +991,8 @@ export const ko: Messages = {
       pluginDisabled: (plugin) => `플러그인 ${plugin}을(를) 비활성화했습니다`,
       pluginConsented: (plugin) => `플러그인 ${plugin}의 권한을 바꿨습니다`,
       pluginConfigured: (fields, plugin) => `플러그인 ${plugin}의 ${fields}을(를) 바꿨습니다`,
+      pluginSealed: (fields, plugin, host) =>
+        `플러그인 ${plugin}의 ${fields}을(를) ${host}의 응답에서 봉인했습니다`,
       pluginGranted: (role, who, plugin) =>
         `${who}에게 플러그인 ${plugin}의 ${role} 역할을 부여했습니다`,
       pluginRevoked: (role, who, plugin) =>

@@ -70,6 +70,25 @@ const DETAIL: RestPluginDetail = {
       setAt: "2026-11-02T01:00:00.000Z",
     },
     {
+      key: "botToken",
+      type: "secret",
+      name: { en: "Bot token" },
+      description: null,
+      required: false,
+      default: null,
+      min: null,
+      max: null,
+      options: null,
+      of: null,
+      set: true,
+      value: null,
+      setAt: "2026-11-02T02:00:00.000Z",
+      expiresAt: "2026-11-02T14:00:00.000Z",
+      source: "api.example.test",
+      hosts: ["api.example.test"],
+      use: null,
+    },
+    {
       key: "daysPerYear",
       type: "number",
       name: { en: "Days a year", ko: "연간 일수" },
@@ -181,6 +200,10 @@ describe("a plugin's settings page", () => {
     expect(html).toContain('value="20"');
     expect(html).toContain("설정됨");
     expect(html).toContain('type="password"');
+    // A secret sealed from an answer says from where, until when, and where alone it goes.
+    expect(html).toContain("api.example.test의 응답에서 봉인함");
+    expect(html).toContain("에 만료");
+    expect(html).toContain("api.example.test에만 보냅니다.");
     // A person and a project are chosen by name and held as ids.
     expect(html).toContain(`<option value="${BOB}" selected="">Bob (bob)</option>`);
     expect(html).toContain(`<option value="${WEB}" selected="">Web (web)</option>`);

@@ -38,6 +38,35 @@
       "description": { "en": "What the outbound requests carry." }
     },
     {
+      "key": "clientSecret",
+      "type": "secret",
+      "name": { "en": "Client secret" },
+      "description": { "en": "Goes into the token exchange, and to api.example.test alone." },
+      "hosts": ["api.example.test"]
+    },
+    {
+      "key": "botToken",
+      "type": "secret",
+      "name": { "en": "Bot token" },
+      "description": { "en": "Sealed from the token exchange's answer." },
+      "hosts": ["api.example.test"]
+    },
+    {
+      "key": "signingSecret",
+      "type": "secret",
+      "name": { "en": "Signing secret" },
+      "description": {
+        "en": "Sealed from the token exchange's answer; verifies and signs nothing."
+      },
+      "use": "verify"
+    },
+    {
+      "key": "pinned",
+      "type": "secret",
+      "name": { "en": "Pinned elsewhere" },
+      "hosts": ["other.example.test"]
+    },
+    {
       "key": "daysPerYear",
       "type": "number",
       "name": { "en": "Days a year" },

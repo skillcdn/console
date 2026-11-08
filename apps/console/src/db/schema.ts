@@ -1049,6 +1049,10 @@ export const pluginSecrets = pgTable(
     sealed: text().notNull(),
     setAt: instant().notNull(),
     setBy: uuid().references(() => people.id),
+    /** When the secret expires, where the answer it was sealed from said so (ADR-0070); null for one that does not. */
+    expiresAt: instant(),
+    /** `administrator` for one an administrator set; the host of the answer it was sealed from otherwise. */
+    source: text().notNull().default("administrator"),
   },
   (table) => [primaryKey({ columns: [table.workspaceId, table.pluginKey, table.name] })],
 );

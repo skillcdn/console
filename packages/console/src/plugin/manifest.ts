@@ -311,6 +311,10 @@ const pluginSettingSchema = z
     of: z.optional(settingItemType),
     /** The group of `settingGroups` the setting is shown under; left out, above every group. */
     group: z.optional(key),
+    /** For a `secret`: the hosts it may be put into a request to (`slack.com`, `*.example.com`), and no other; any host the plugin may reach when left out. */
+    hosts: z.optional(z.array(z.string().check(z.maxLength(300))).check(z.maxLength(20))),
+    /** For a `secret`: `verify`, a secret that verifies signatures and signs nothing, so that a request cannot be forged with it. */
+    use: z.optional(z.literal("verify")),
   })
   .check(
     z.superRefine((setting, ctx) => {
@@ -366,8 +370,18 @@ function settingProblems(setting: {
   max?: number;
   options?: readonly { value: string }[];
   of?: Exclude<PluginSettingType, "secret" | "list">;
+  hosts?: readonly string[];
+  use?: "verify";
 }): string[] {
   const problems: string[] = [];
+  if (setting.type !== "secret" && (setting.hosts !== undefined || setting.use !== undefined)) {
+    problems.push(`only a secret takes hosts or use`);
+  }
+  for (const host of setting.hosts ?? []) {
+    if (!isPluginCapability(`outbound:${host}`) || host === "webrtc") {
+      problems.push(`the host "${host}" is not a host as outbound:<host> names one`);
+    }
+  }
   const bounded =
     setting.type === "number" ||
     setting.type === "text" ||
