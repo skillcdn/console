@@ -1,6 +1,6 @@
 # ADR-0072: A plugin is a principal: it holds roles granted to it, calls as itself, and acts for a person within what both may do
 
-- Status: Accepted
+- Status: Accepted; acting for a person is amended by [ADR-0076](0076-a-plugin-acting-for-a-person-stands-as-a-member-and-answers-only-what-is-on-their-plate.md), the person standing as a member and a decision answered only where it is on their plate
 - Date: 2026-11-08
 - Extends [ADR-0021](0021-a-token-configures-as-its-person-does.md), under which a token acts as its person and nothing is granted to an agent, and [ADR-0050](0050-plugin-code-runs-in-a-host-process-of-its-own-and-reaches-the-console-only-through-the-capabilities-it-declared.md), under which a plugin reaches the console through capabilities an administrator consented to. Follows [ADR-0071](0071-the-console-sends-no-notification-of-its-own-a-plugin-carries-them-out-of-the-board-and-back.md), which left the standing to act as the next decision. The contract is in [specs/plugins.md](../specs/plugins.md).
 
