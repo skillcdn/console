@@ -2385,14 +2385,17 @@ function useMyDecisions(
  */
 function MyDecisionsPage(props: { readonly data: ConsoleData }) {
   const words = useWords();
-  const { myDecisions, answerDecisionIn } = props.data.actions;
+  const { myDecisions, answerReachedDecision } = props.data.actions;
   const addressed = useMyDecisions(myDecisions, false, words.myDecisions.couldNotLoad);
   const raised = useMyDecisions(myDecisions, true, words.myDecisions.couldNotLoad);
   const { busy, error, act } = useAction();
   const problem = addressed.problem ?? raised.problem ?? error;
-  const onAnswer = (projectKey: string, decision: RestDecision, input: RestAnswerInput) =>
+  // Answered at the decision's own address (ADR-0068), so that one that reaches the person from a
+  // project they are not in, a plugin's up the reporting line or one they were named in before
+  // they left it, is answered here as it is read here.
+  const onAnswer = (_projectKey: string, decision: RestDecision, input: RestAnswerInput) =>
     void act(async () => {
-      await answerDecisionIn(projectKey, decision.id, input);
+      await answerReachedDecision(decision.id, input);
       addressed.reload();
       raised.reload();
     });
