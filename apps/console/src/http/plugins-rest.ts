@@ -1284,8 +1284,10 @@ export function registerPluginsRest(
       "base-uri 'none'",
       "form-action 'none'",
       // Forms fire their submit event (without allow-forms a browser drops the submission before
-      // the event); form-action 'none' keeps a submission from going anywhere.
-      "sandbox allow-scripts allow-forms",
+      // the event); form-action 'none' keeps a submission from going anywhere. A frame opens a
+      // window for a link a person pressed in it, which the browser holds to the press (ADR-0078),
+      // out of the sandbox, so that the page it opens is a page as any.
+      "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox",
     ]);
     return c.html(html);
   });

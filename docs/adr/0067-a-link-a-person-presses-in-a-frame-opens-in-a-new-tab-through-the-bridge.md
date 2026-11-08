@@ -1,6 +1,6 @@
 # ADR-0067: A link a person presses in a frame opens in a new tab, through the bridge
 
-- Status: Accepted; which press opens a link is amended by [ADR-0078](0078-a-frame-opens-a-tab-only-for-a-press-in-it-one-tab-a-press.md), a press in the frame that asks, one tab a press
+- Status: Accepted; the first and third points are amended by [ADR-0078](0078-a-frame-opens-its-links-itself-and-the-browser-holds-it-to-a-press-in-it.md): since 0.4.6 a frame opens its links itself, held to a press in it by the browser, and the page's `open` stays for the bundles built before, until the next line
 - Date: 2026-11-08
 - Extends [ADR-0054](0054-a-plugins-pages-run-in-a-sandboxed-frame-and-speak-only-to-their-plugin.md), under which a frame speaks to the console's page over the bridge alone, and [ADR-0066](0066-webrtc-is-a-way-out-a-plugin-asks-for-and-how-a-frame-is-held-stays-in-one-place.md), which keeps how a frame is held in one place. The contract is in [specs/plugins.md](../specs/plugins.md), "The bridge".
 

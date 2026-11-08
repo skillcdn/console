@@ -121,7 +121,7 @@ describe("the frame of a plugin's page", () => {
         `frame-ancestors ${SIGN_IN_URL}`,
         "base-uri 'none'",
         "form-action 'none'",
-        "sandbox allow-scripts allow-forms",
+        "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox",
       ].join("; "),
     );
     expect(framed.headers.get("referrer-policy")).toBe("no-referrer");

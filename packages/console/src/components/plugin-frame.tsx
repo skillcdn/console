@@ -162,11 +162,14 @@ export async function performBridgeCall(
 
 /** The console's computed design tokens, as the page's root has them: what a frame is told to look like. */
 /**
- * Whether a person pressed something in this frame a moment ago (ADR-0067). The browser keeps a
- * press for the whole page, wherever it was, so a press is this frame's only while the frame
- * holds the page's focus, which a press in it gives it and a press anywhere else, on the page or
- * in another plugin's frame, takes away: a frame that keeps asking gets no tab for a press that
- * was not in it. A browser without the API is left to decide for itself, as it does for any page.
+ * Whether a person pressed something in this frame a moment ago, as far as the page can tell, for
+ * a bundle built before 0.4.6, which asks the page to open its links (ADR-0067). The browser
+ * keeps a press for the whole page, wherever it was, so the page takes a press for the frame's
+ * only while the frame holds the page's focus, which a press in it gives it and a press anywhere
+ * else takes away. That is as far as a page sees into a frame: one that takes the focus itself is
+ * not told apart, which is why a frame opens its own links since 0.4.6, held by the browser to a
+ * press in it (ADR-0078). A browser without the API is left to decide for itself, as it does for
+ * any page.
  */
 function pressedIn(element: HTMLIFrameElement | null): boolean {
   if (typeof navigator === "undefined" || typeof document === "undefined" || element === null) {
@@ -342,10 +345,11 @@ export function PluginFrame(props: PluginFrameProps) {
           return;
         }
         case "open":
-          // A link a person pressed in the frame (ADR-0067): a web or a mail address, opened in a
-          // new tab with no opener and no referrer, and only while the press is recent and was in
-          // this frame. The frame gives the focus up for the tab, so that it takes another press
-          // in it to open another: one press, one tab, whatever the browser lets a press open.
+          // A link a frame built before 0.4.6 asks the page to open (ADR-0067): a web or a mail
+          // address, in a new tab with no opener and no referrer, while a press is recent and the
+          // frame holds the focus, which the page takes back as it opens one, so that another tab
+          // takes another press. A frame since opens its own links, held to a press in it by the
+          // browser (ADR-0078); the page stops hearing this at the next line.
           if (isOpenableFrom(message.url, window.location.origin) && pressedIn(frame.current)) {
             window.open(message.url, "_blank", "noopener,noreferrer");
             frame.current?.blur();
@@ -456,9 +460,11 @@ export function PluginFrame(props: PluginFrameProps) {
       }
       src={src}
       title={props.title}
-      // As the document's own policy says: scripts, and forms firing their submit event, which
-      // the policy's form-action 'none' keeps from going anywhere.
-      sandbox="allow-scripts allow-forms"
+      // As the document's own policy says: scripts; forms firing their submit event, which the
+      // policy's form-action 'none' keeps from going anywhere; and a window for a link a person
+      // pressed in the frame, which the browser holds to the press (ADR-0078), opened out of the
+      // sandbox so that the page it shows is a page as any.
+      sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
       referrerPolicy="origin"
       style={isWidget ? undefined : { height: `${height}px` }}
     />

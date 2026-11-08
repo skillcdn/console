@@ -12,7 +12,7 @@ import {
 const ORIGIN = "https://console.example";
 
 /** A window and a document as a frame has them, with the console's page played by the test. */
-function frameOf(consoleOrigin: string | null = ORIGIN) {
+function frameOf(consoleOrigin: string | null = ORIGIN, pressed?: boolean) {
   const posted: { message: unknown; targetOrigin: string; transfer: Transferable[] | undefined }[] =
     [];
   const listeners = new Set<(event: FrameMessageEvent) => void>();
@@ -21,10 +21,18 @@ function frameOf(consoleOrigin: string | null = ORIGIN) {
       posted.push({ message, targetOrigin, transfer });
     },
   };
+  /** The windows the frame opened, as the browser was asked. */
+  const opened: string[] = [];
   const win: FrameWindow = {
     parent,
     addEventListener: (_type, listener) => listeners.add(listener),
     removeEventListener: (_type, listener) => listeners.delete(listener),
+    open: (url, target, features) => {
+      opened.push(`${url} ${target} ${features}`);
+      return null;
+    },
+    // A browser that can say whether a person pressed something a moment ago, or one that cannot.
+    ...(pressed === undefined ? {} : { navigator: { userActivation: { isActive: pressed } } }),
   };
   const set: Record<string, string> = {};
   const doc: FrameDocument = {
@@ -60,7 +68,7 @@ function frameOf(consoleOrigin: string | null = ORIGIN) {
       theme: { "--sc-color-text": "#111" },
     });
   const lastCall = () => posted.at(-1)?.message as { id: string; method: string; params: unknown };
-  return { win, doc, posted, set, receive, init, lastCall, listeners };
+  return { win, doc, posted, set, receive, init, lastCall, listeners, opened };
 }
 
 describe("connect", () => {
@@ -209,15 +217,33 @@ describe("connect", () => {
     expect(frame.posted.at(-1)?.message).toEqual({ v: 1, t: "title", text: "Leave requests" });
     plugin.download("f1");
     expect(frame.posted.at(-1)?.message).toEqual({ v: 1, t: "download", id: "f1" });
-    // A link to the web is for the page to open in a new tab; a path of the console's is not one.
+    // A link to the web is the frame's own to open, in a new tab with no opener and no referrer
+    // (ADR-0078), asking the page nothing; a path of the console's is not one.
     plugin.open("https://forms.example/leave");
-    expect(frame.posted.at(-1)?.message).toEqual({
-      v: 1,
-      t: "open",
-      url: "https://forms.example/leave",
-    });
+    expect(frame.opened).toEqual(["https://forms.example/leave _blank noopener,noreferrer"]);
+    expect(frame.posted.at(-1)?.message).toEqual({ v: 1, t: "download", id: "f1" });
     expect(() => plugin.open("/projects/web")).toThrow(PluginBridgeError);
     expect(() => plugin.open("javascript:alert(1)")).toThrow(PluginBridgeError);
+    expect(frame.opened).toHaveLength(1);
+  });
+
+  it("opens a link right after a press in the frame, and refuses one when the browser says there was none (ADR-0078)", async () => {
+    const after = frameOf(ORIGIN, true);
+    const connecting = connect({ window: after.win, document: after.doc, resize: false });
+    after.init();
+    const plugin = await connecting;
+    plugin.open("https://forms.example/leave");
+    expect(after.opened).toHaveLength(1);
+    const without = frameOf(ORIGIN, false);
+    const connectingWithout = connect({
+      window: without.win,
+      document: without.doc,
+      resize: false,
+    });
+    without.init();
+    const idle = await connectingWithout;
+    expect(() => idle.open("https://forms.example/leave")).toThrow(PluginBridgeError);
+    expect(without.opened).toEqual([]);
   });
 
   it("subscribes once per kind and hands events, themes and paths to the handlers", async () => {

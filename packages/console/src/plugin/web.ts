@@ -51,6 +51,13 @@ export interface FrameWindow {
   };
   addEventListener(type: "message", listener: (event: FrameMessageEvent) => void): void;
   removeEventListener(type: "message", listener: (event: FrameMessageEvent) => void): void;
+  /**
+   * The browser's own way to open a window, which it holds to a press in the frame (ADR-0078).
+   * A frame of a console before 0.4.6 has one too, whose sandbox lets it open nothing.
+   */
+  open?(url: string, target: string, features: string): unknown;
+  /** The browser's word on whether a person pressed something in this frame a moment ago, where it has one. */
+  readonly navigator?: { readonly userActivation?: { readonly isActive: boolean } };
 }
 
 /** As much of `document` as the bridge uses. */
@@ -124,9 +131,11 @@ export interface PluginFrame {
   /** The console's page follows a path of the console's in place; a URL is refused. */
   navigate(path: string): void;
   /**
-   * The console's page opens a web or a mail address in a new tab (ADR-0067), for a link a
-   * person pressed: call it from the press itself, since the page opens nothing but right after
-   * one. Anything else, a path of the console's included, is refused; `navigate` takes those.
+   * Opens a web or a mail address in a new tab, with no opener and no referrer, for a link a
+   * person pressed (ADR-0067, ADR-0078): the browser opens it for a press in the frame and for
+   * nothing else, one window a press, so call it from the press itself; without a recent press
+   * it is refused, where the browser can say so. Anything else, a path of the console's included,
+   * is refused; `navigate` takes those. Needs a console from 0.4.6, whose frames may open a window.
    */
   open(url: string): void;
   /** The console's page downloads a file of this plugin. */
@@ -365,7 +374,15 @@ export function connect(options: ConnectOptions = {}): Promise<PluginFrame> {
                     "open takes a web or a mail address; navigate takes a path of the console's",
                 });
               }
-              post({ v: PLUGIN_BRIDGE_VERSION, t: "open", url });
+              // The browser holds the frame to a press in it (ADR-0078), and says so where it can.
+              if (win.navigator?.userActivation?.isActive === false) {
+                throw new PluginBridgeError({
+                  code: "plugin.forbidden",
+                  message:
+                    "open opens a link right after a person pressed in the frame, and not otherwise",
+                });
+              }
+              win.open?.(url, "_blank", "noopener,noreferrer");
             },
             download: (id) => post({ v: PLUGIN_BRIDGE_VERSION, t: "download", id }),
             setTitle: (text) => {

@@ -265,9 +265,62 @@ describe("the example plugin in a browser", () => {
     await page.context().close();
   });
 
-  it("opens one tab for a press in the frame, and none for a press elsewhere on the page (ADR-0067)", async () => {
-    // The browser of the tests opens whatever a page asks, a press or none, as a person's would
-    // not: what keeps a frame from a tab here is the page alone.
+  it("opens a window for a press in it, and none on its own time, as the browser holds it (ADR-0078)", async () => {
+    const page = await signedIn(BROWSER_ADMIN);
+    const context = page.context();
+    // The address is answered here, so that nothing leaves the machine.
+    await context.route("https://example.com/**", (route) =>
+      route.fulfill({ status: 200, contentType: "text/html", body: "<p>opened</p>" }),
+    );
+    // The fixture whose page notes whether the browser holds a press of its own recent and opens
+    // a window as the frame's SDK does where there is one: once on its own, six seconds after it
+    // loaded, and when the console's page tells it to; enabled for this test and disabled after.
+    const sent = (path: string, body: unknown) =>
+      page.evaluate(
+        async (request) => {
+          const answer = await fetch(request.path, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(request.body),
+          });
+          return answer.status;
+        },
+        { path, body },
+      );
+    expect(
+      await sent("/api/v1/plugins/call/enable", { consent: [], board: null, projects: "all" }),
+    ).toBe(200);
+    try {
+      await page.goto(`${console_.origin}/plugins/call/room`);
+      const frame = await frameOf(page, "iframe.sc-plugin-frame");
+      await frame.waitForSelector("#press");
+      let opened = 0;
+      context.on("page", () => {
+        opened += 1;
+      });
+      // Left alone past the time a press lasts, the frame holds no press of its own and opens
+      // nothing. Whatever a test asks of a page hands every frame of it a press, so the frame is
+      // asked nothing until it has noted that on its own.
+      await page.waitForTimeout(6500);
+      expect(await frame.evaluate("document.getElementById('root').dataset.load")).toBe("false");
+      expect(opened).toBe(0);
+      // A press in the frame is the frame's own, and the sandbox lets it open a window for it.
+      await frame.click("#press");
+      await page.evaluate(
+        `document.querySelector("iframe.sc-plugin-frame").contentWindow.postMessage("open example", "*")`,
+      );
+      await page.waitForTimeout(800);
+      expect(await frame.evaluate("document.getElementById('root').dataset.active")).toBe("true");
+      expect(opened).toBe(1);
+    } finally {
+      expect(await sent("/api/v1/plugins/call/disable", {})).toBe(200);
+      await context.close();
+    }
+  });
+
+  it("opens a tab for a frame built before 0.4.6 for a press in it alone, as far as the page can tell (ADR-0067)", async () => {
+    // Such a frame asks the page over the bridge; the page refuses a press that was not in the
+    // frame as far as it sees one, before the browser is asked anything.
     const page = await signedIn(BROWSER_ADMIN);
     const context = page.context();
     // The address is answered here, so that nothing leaves the machine.

@@ -161,9 +161,10 @@ export interface BridgeDownload {
 }
 
 /**
- * A link a person pressed in the frame, for the console's page to open in a new tab (ADR-0067):
- * the frame's sandbox opens no window itself, and the page opens one only for a web or a mail
- * address, and only right after a person pressed.
+ * A link a person pressed in a frame built before 0.4.6, for the console's page to open in a new
+ * tab (ADR-0067): such a frame's sandbox opened no window itself. The page opens one for a web
+ * or a mail address alone, and only as far as it can tell of a press in that frame (ADR-0078). A
+ * frame since opens its links itself, and the page stops hearing this at the next line.
  */
 export interface BridgeOpen {
   readonly v: 1;
