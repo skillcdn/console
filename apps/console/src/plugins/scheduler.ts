@@ -1,4 +1,4 @@
-import { durationMs, TIME_OF_DAY } from "@skillcdn/console/plugin";
+import { durationMs, PLUGIN_JOB_MS, TIME_OF_DAY } from "@skillcdn/console/plugin";
 import { sql } from "drizzle-orm";
 import { type Database, drizzleOf } from "../db/client.js";
 import { type PluginJobRecord, readJobs, writeJob } from "../db/queries/plugin-board.js";
@@ -10,12 +10,20 @@ import type { Plugins } from "./registry.js";
 
 // The jobs (docs/specs/plugins.md, "Events, hooks and jobs"): each on its schedule, `every` an
 // ISO 8601 duration and `at` a time of day in the workspace's time zone, each under an advisory
-// lock so that never two run at once, `plugin_jobs` keeping the last run, its outcome and the next
-// time; a failed job is a line in the log every time and a `plugin.failed` event an hour at most.
+// lock held for as long as the job runs, so that never two run at once, `plugin_jobs` keeping the
+// last run, its outcome and the next time; a failed job is a line in the log every time and a
+// `plugin.failed` event an hour at most.
 
 /** How long a job's failure is told once as an event before another is written. */
 const FAILURE_EVENT_EVERY_MS = 60 * 60_000;
 const DAY_MS = 24 * 60 * 60_000;
+/**
+ * How long the transaction that holds a job's lock may sit idle before the server ends it, set
+ * for that transaction alone in place of the pool's thirty seconds: the job's time, and a minute
+ * for the host's fence behind it and the queries around it. The lock is not taken from a job
+ * still running, and a process that vanished without closing its connection gives it up.
+ */
+const JOB_LOCK_IDLE_MS = PLUGIN_JOB_MS + 60_000;
 
 export interface JobTarget {
   readonly key: string;
@@ -221,6 +229,9 @@ export class PluginScheduler {
   ): Promise<void> {
     const { database, clock, logger } = this.options;
     await drizzleOf(database).transaction(async (tx) => {
+      await tx.execute(
+        sql`select set_config('idle_in_transaction_session_timeout', ${String(JOB_LOCK_IDLE_MS)}, true)`,
+      );
       const locked = await tx.execute<{ locked: boolean }>(
         sql`select pg_try_advisory_xact_lock(${lockKeyOf(target.key, name)}) as locked`,
       );
