@@ -385,7 +385,7 @@ The console's page and the frame speak over `postMessage`, every message `{ v: 1
 | the frame | `resize` | `height`, which the page gives a page's frame; a widget fills the cells its size gives it, and its height is not read |
 | the frame | `title` | `text`, for the document's title |
 | the frame | `download` | `id` of a file, which the page downloads |
-| the frame | `open` | `url`, a web or a mail address (`https:`, `http:`, `mailto:`) a person pressed, which the page opens in a new tab with no opener and no referrer, only right after a press ([ADR-0067](../adr/0067-a-link-a-person-presses-in-a-frame-opens-in-a-new-tab-through-the-bridge.md)); anything else is dropped unread, an address of the console's own origin among it, since a path of the console's is `navigate`'s |
+| the frame | `open` | `url`, a web or a mail address (`https:`, `http:`, `mailto:`) a person pressed, which the page opens in a new tab with no opener and no referrer, only right after a press in that frame, while it holds the page's focus, and one tab a press, the page taking the focus back as it opens one ([ADR-0067](../adr/0067-a-link-a-person-presses-in-a-frame-opens-in-a-new-tab-through-the-bridge.md), [ADR-0078](../adr/0078-a-frame-opens-a-tab-only-for-a-press-in-it-one-tab-a-press.md)); anything else is dropped unread, an address of the console's own origin among it, since a path of the console's is `navigate`'s |
 | the frame | `subscribe` | `kinds`, to receive `event` |
 
 The page performs every `call` with the person's session under `/api/v1/plugins/<key>/` only; a method or a path outside it is refused before any request, as `plugin.forbidden`. A page thus holds exactly the authority of its plugin's server module, as the person using it.

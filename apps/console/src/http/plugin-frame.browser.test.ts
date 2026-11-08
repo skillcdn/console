@@ -265,6 +265,44 @@ describe("the example plugin in a browser", () => {
     await page.context().close();
   });
 
+  it("opens one tab for a press in the frame, and none for a press elsewhere on the page (ADR-0067)", async () => {
+    // The browser of the tests opens whatever a page asks, a press or none, as a person's would
+    // not: what keeps a frame from a tab here is the page alone.
+    const page = await signedIn(BROWSER_ADMIN);
+    const context = page.context();
+    // The address is answered here, so that nothing leaves the machine.
+    await context.route("https://example.com/**", (route) =>
+      route.fulfill({ status: 200, contentType: "text/html", body: "<p>opened</p>" }),
+    );
+    await page.goto(`${console_.origin}/plugins/hello/greetings`);
+    const frame = await frameOf(page, "iframe.sc-plugin-frame");
+    await frame.waitForSelector(".pl-hello-page");
+    let opened = 0;
+    context.on("page", () => {
+      opened += 1;
+    });
+    const ask = `window.parent.postMessage({ v: 1, t: "open", url: "https://example.com/" }, "*")`;
+    const asked = async (): Promise<void> => {
+      await frame.evaluate(ask);
+      await page.waitForTimeout(800);
+    };
+    // A press on the console's own page is recent for the whole page, and is not the frame's.
+    await page.locator("#sc-content").click({ position: { x: 2, y: 2 } });
+    await asked();
+    expect(opened).toBe(0);
+    // A press in the frame is: one tab, and asking again without another press opens nothing.
+    await frame.click("input.sc-input");
+    await asked();
+    expect(opened).toBe(1);
+    await asked();
+    expect(opened).toBe(1);
+    // Another press in it opens another.
+    await frame.click("input.sc-input");
+    await asked();
+    expect(opened).toBe(2);
+    await context.close();
+  });
+
   it("keeps WebRTC out of the frame and of any frame made inside it, which no policy does", async () => {
     const web = await console_.plugins.webOf("hello");
     if (web === undefined) {

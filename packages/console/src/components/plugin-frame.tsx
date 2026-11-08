@@ -162,12 +162,17 @@ export async function performBridgeCall(
 
 /** The console's computed design tokens, as the page's root has them: what a frame is told to look like. */
 /**
- * Whether a person pressed something a moment ago, as the browser keeps it: a link in a frame
- * gives the page this too, which is what lets the page open a tab for it; a browser without the
- * API is left to decide for itself, as it does for any page.
+ * Whether a person pressed something in this frame a moment ago (ADR-0067). The browser keeps a
+ * press for the whole page, wherever it was, so a press is this frame's only while the frame
+ * holds the page's focus, which a press in it gives it and a press anywhere else, on the page or
+ * in another plugin's frame, takes away: a frame that keeps asking gets no tab for a press that
+ * was not in it. A browser without the API is left to decide for itself, as it does for any page.
  */
-function recentlyPressed(): boolean {
-  if (typeof navigator === "undefined") {
+function pressedIn(element: HTMLIFrameElement | null): boolean {
+  if (typeof navigator === "undefined" || typeof document === "undefined" || element === null) {
+    return false;
+  }
+  if (document.activeElement !== element) {
     return false;
   }
   const activation = (navigator as Navigator & { userActivation?: { isActive: boolean } })
@@ -338,10 +343,12 @@ export function PluginFrame(props: PluginFrameProps) {
         }
         case "open":
           // A link a person pressed in the frame (ADR-0067): a web or a mail address, opened in a
-          // new tab with no opener and no referrer, and only while the press is recent, which a
-          // press in the frame gives this page too.
-          if (isOpenableFrom(message.url, window.location.origin) && recentlyPressed()) {
+          // new tab with no opener and no referrer, and only while the press is recent and was in
+          // this frame. The frame gives the focus up for the tab, so that it takes another press
+          // in it to open another: one press, one tab, whatever the browser lets a press open.
+          if (isOpenableFrom(message.url, window.location.origin) && pressedIn(frame.current)) {
             window.open(message.url, "_blank", "noopener,noreferrer");
+            frame.current?.blur();
           }
           return;
         case "subscribe":
