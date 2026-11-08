@@ -1031,6 +1031,8 @@ export const restEventDataSchema = z.object({
   capabilities: z.optional(z.array(z.string())),
   /** For `plugin.configured` of a secret: `administrator`, or the host of the answer it was sealed from (ADR-0070). */
   source: z.optional(z.string()),
+  /** For `plugin.granted` and `plugin.revoked`: the plugin the role went to, by key, where one did (ADR-0072). */
+  grantee: z.optional(z.string()),
   /** For `plugin.granted` and `plugin.revoked`: whether the role went to everyone. */
   everyone: z.optional(z.boolean()),
   /** For `plugin.failed`: what went wrong, in words for a person. */
@@ -1057,6 +1059,8 @@ export const restEventSchema = z.object({
   goalId: z.nullable(uuid),
   /** The plugin that caused it, by key, or `null` (ADR-0052). */
   plugin: z.nullable(z.string()),
+  /** The plugin the person acted through (ADR-0072), by key, when one acted for them; answered from 0.4.5 and read as optional. */
+  via: z.optional(z.nullable(z.string())),
   data: restEventDataSchema,
   createdAt: instant,
 });

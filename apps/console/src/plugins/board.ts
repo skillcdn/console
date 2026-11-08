@@ -30,7 +30,13 @@ import { personVisibleTo } from "../auth/policy.js";
 import { type Database, drizzleOf } from "../db/client.js";
 import { listCategories } from "../db/queries/categories.js";
 import { writeComment } from "../db/queries/comments.js";
-import { findDecision, listDecisions, raiseDecision } from "../db/queries/decisions.js";
+import {
+  answerDecision,
+  findDecision,
+  findDecisionReachable,
+  listDecisions,
+  raiseDecision,
+} from "../db/queries/decisions.js";
 import { getDocument, listDocuments, writeDocument } from "../db/queries/documents.js";
 import type { Actor, Scope } from "../db/queries/events.js";
 import {
@@ -165,6 +171,32 @@ const invalid = (message: string): PluginRefusal =>
   new PluginRefusal("plugin.invalid_args", message);
 
 /** A query's refusal as the plugin gets it: the console's code and words, as an invalid argument. */
+/** Whether a caller acts as a person: a person themselves, or a plugin for one (ADR-0072); the console and a plugin as itself do not. */
+function actsAsPerson(caller: PluginCaller): boolean {
+  return caller.kind === "person" || (caller.kind === "plugin" && caller.for !== null);
+}
+
+/** The person a caller acts as, by id, where it acts as one. */
+function personIdOf(caller: PluginCaller): string | undefined {
+  return caller.kind === "person"
+    ? caller.person.id
+    : caller.kind === "plugin"
+      ? caller.for?.id
+      : undefined;
+}
+
+/** An answer a plugin gives for a person (ADR-0072): the option by its key or by its label, one of the two, and a note. */
+const decisionAnswerSchema = z
+  .object({
+    optionKey: z.string().min(1).max(64).optional(),
+    option: z.string().min(1).max(500).optional(),
+    note: z.string().max(4000).optional(),
+  })
+  .refine(
+    (answer) => (answer.optionKey !== undefined) !== (answer.option !== undefined),
+    "one of optionKey and option",
+  );
+
 function refusalOf(error: unknown): never {
   if (error instanceof PluginRefusal) {
     throw error;
@@ -230,7 +262,7 @@ export class PluginBoard {
         };
       }
       case "console.people": {
-        needs(context.caller.kind === "console" ? "people:read:all" : "people:read");
+        needs(actsAsPerson(context.caller) ? "people:read" : "people:read:all");
         const viewer = await this.actingPerson(context, workspace);
         const settings = await readWorkspaceSettings(this.options.database, workspace.id);
         const visible = context.consent.includes("people:read:all")
@@ -284,7 +316,7 @@ export class PluginBoard {
         break;
       }
       case "console.projects": {
-        needs(context.caller.kind === "console" ? "projects:read:all" : "projects:read");
+        needs(actsAsPerson(context.caller) ? "projects:read" : "projects:read:all");
         // With `:all`, the view is the administrator's who enabled the plugin, who sees every project.
         const viewer = context.consent.includes("projects:read:all")
           ? await this.enabler(context, workspace)
@@ -557,6 +589,67 @@ export class PluginBoard {
           return refusalOf(error);
         }
       }
+      case "answer": {
+        // For a person who answered elsewhere (ADR-0072): their own standing decides, as on the
+        // board; the answer is theirs, through this plugin. A plugin answers nothing itself.
+        needs("people:act");
+        const id = text(args[0], "the decision's id");
+        const given = decisionAnswerSchema.safeParse(args[1]);
+        if (!given.success) {
+          throw invalid(`the answer does not fit: ${given.error.issues[0]?.message ?? ""}`);
+        }
+        const asked = args[2];
+        const forWhom =
+          typeof asked === "object" &&
+          asked !== null &&
+          typeof (asked as { readonly for?: unknown }).for === "string"
+            ? (asked as { readonly for: string }).for
+            : undefined;
+        if (forWhom === undefined) {
+          throw invalid(
+            "answer names whom it is for, { for: <person id> }; a plugin answers no decision itself",
+          );
+        }
+        const person = await findPerson(this.options.database, workspace.id, forWhom);
+        if (person === undefined || person.status !== "active") {
+          throw new PluginRefusal(
+            "plugin.not_found",
+            "the person to answer for is not an active person of the workspace",
+          );
+        }
+        const reached = await findDecisionReachable(
+          this.options.database,
+          workspace.id,
+          id,
+          person,
+        );
+        if (reached === undefined || !reached.mayAnswer) {
+          throw forbidden("the person may not answer this decision");
+        }
+        const chosen = reached.decision.options.find((option) =>
+          given.data.optionKey !== undefined
+            ? option.key === given.data.optionKey
+            : option.label === given.data.option,
+        );
+        if (chosen === undefined) {
+          throw invalid("the option is not one of the decision's");
+        }
+        const via = context.caller.kind === "plugin" ? context.caller.plugin : context.key;
+        try {
+          const decision = await answerDecision(this.options.database, {
+            scope: { workspaceId: workspace.id, projectId: reached.project.id },
+            actor: { id: person.id, plugin: context.key, via },
+            decisionId: id,
+            option: chosen.id,
+            own: undefined,
+            note: given.data.note,
+            now: this.options.clock.now(),
+          });
+          return restDecision(decision);
+        } catch (error) {
+          return refusalOf(error);
+        }
+      }
       default:
         throw invalid(`console.decisions.${method} is not a call on ctx`);
     }
@@ -668,7 +761,7 @@ export class PluginBoard {
       install.boardProjectId === project.id ||
       install.projects === "all" ||
       install.projects.includes(project.key) ||
-      (caller.kind === "person" && caller.project?.id === project.id)
+      (caller.kind !== "console" && caller.project?.id === project.id)
     );
   }
 
@@ -681,7 +774,7 @@ export class PluginBoard {
     if (install.boardProjectId === projectId || install.projects === "all") {
       return true;
     }
-    if (caller.kind === "person" && caller.project?.id === projectId) {
+    if (caller.kind !== "console" && caller.project?.id === projectId) {
       return true;
     }
     if (install.projects.length === 0) {
@@ -706,7 +799,7 @@ export class PluginBoard {
     key: string,
   ): Promise<Reached> {
     let project: Reached | undefined;
-    if (context.caller.kind === "person") {
+    if (actsAsPerson(context.caller)) {
       const person = await this.actingPerson(context, workspace);
       project = await findProjectFor(this.options.database, workspace.id, key, person);
     } else {
@@ -726,13 +819,13 @@ export class PluginBoard {
     context: BoardContext,
     workspace: WorkspaceRecord,
   ): Promise<PersonRecord> {
-    if (context.caller.kind === "person") {
-      const person = await findPerson(
-        this.options.database,
-        workspace.id,
-        context.caller.person.id,
-      );
-      if (person === undefined) {
+    const personId = personIdOf(context.caller);
+    if (personId !== undefined) {
+      const person = await findPerson(this.options.database, workspace.id, personId);
+      if (
+        person === undefined ||
+        (context.caller.kind === "plugin" && person.status !== "active")
+      ) {
         throw forbidden("the caller is no longer a person of the workspace");
       }
       return person;
@@ -756,6 +849,13 @@ export class PluginBoard {
     const person = await this.actingPerson(context, workspace);
     const agent =
       context.caller.kind === "person" ? (context.caller.agent ?? undefined) : undefined;
-    return { id: person.id, ...(agent === undefined ? {} : { agent }), plugin: context.key };
+    // A plugin that acts for a person is named beside them (ADR-0072), as an agent is.
+    const via = context.caller.kind === "plugin" ? context.caller.plugin : undefined;
+    return {
+      id: person.id,
+      ...(agent === undefined ? {} : { agent }),
+      plugin: context.key,
+      ...(via === undefined ? {} : { via }),
+    };
   }
 }

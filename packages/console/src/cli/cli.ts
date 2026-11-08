@@ -102,6 +102,7 @@ import {
   formatPersonLine,
   formatPersonWork,
   formatPlugin,
+  formatPluginAsks,
   formatPluginGrantLine,
   formatPluginHelp,
   formatPluginRecord,
@@ -1936,6 +1937,7 @@ async function pluginEnable(
             "Settings:",
             ...enabled.settings.map((setting) => formatPluginSettingLine(setting, me.language)),
           ]),
+      ...formatPluginAsks(enabled, me.language),
     ].join("\n"),
   );
   return EXIT.ok;
@@ -2020,14 +2022,19 @@ async function pluginGrant(
 ): Promise<number> {
   const { values, positionals } = parse(rest, {
     person: { type: "string" },
+    plugin: { type: "string" },
     everyone: { type: "boolean" },
   });
-  const usage = `console plugin ${client.key} grant <role> --person <login> | --project <key> | --everyone`;
+  const usage = `console plugin ${client.key} grant <role> --person <login> | --project <key> | --plugin <key> | --everyone`;
   const role = theOne(positionals, `Say which role: ${usage}`);
   const login = text(values, "person");
+  const other = text(values, "plugin");
   const everyone = on(values, "everyone");
-  if ([login !== undefined, projectKey !== undefined, everyone].filter(Boolean).length !== 1) {
-    throw misuse(`Say whom, one of the three: ${usage}`);
+  if (
+    [login !== undefined, projectKey !== undefined, other !== undefined, everyone].filter(Boolean)
+      .length !== 1
+  ) {
+    throw misuse(`Say whom, one of the four: ${usage}`);
   }
   let input: RestPluginGrantInput;
   if (login !== undefined) {
@@ -2038,6 +2045,8 @@ async function pluginGrant(
     input = { role, person: person.id };
   } else if (projectKey !== undefined) {
     input = { role, project: projectKey };
+  } else if (other !== undefined) {
+    input = { role, plugin: other };
   } else {
     input = { role, everyone: true };
   }

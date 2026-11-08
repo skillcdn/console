@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { ConsoleClient } from "../client.js";
 import { en } from "../i18n/en.js";
 import { KOREAN, LanguageContext } from "../i18n/index.js";
-import type { RestPerson, RestPluginDetail, RestProject } from "../schemas.js";
+import type { RestPerson, RestPlugin, RestPluginDetail, RestProject } from "../schemas.js";
 import { capabilityText, PluginSettingsView } from "./plugin-settings.js";
 
 // The plugins' settings page (docs/specs/plugins.md, "The settings pages") as an administrator
@@ -143,9 +143,34 @@ const DETAIL: RestPluginDetail = {
       everyone: false,
       createdAt: "2026-11-02T01:00:00.000Z",
     },
+    {
+      id: "0199c4d8-0000-7000-8000-000000000032",
+      role: "approver",
+      person: null,
+      project: null,
+      everyone: false,
+      plugin: "messenger",
+      createdAt: "2026-11-02T01:00:00.000Z",
+    },
   ],
   events: "/api/v1/plugins/leave/events",
+  asks: [
+    {
+      plugin: "messenger",
+      role: "carrier",
+      why: { en: "To carry approvals out." },
+      state: "ungranted",
+    },
+    { plugin: "crm", role: "reader", why: { en: "To read accounts." }, state: "unavailable" },
+  ],
 };
+
+const PLUGINS = [
+  { key: "messenger", name: { en: "Messenger" }, state: "enabled" },
+  { key: "crm", name: { en: "CRM" }, state: "enabled" },
+  { key: "leave", name: { en: "Leave" }, state: "enabled" },
+  { key: "gate", name: { en: "Gate" }, state: "disabled" },
+] as unknown as readonly RestPlugin[];
 
 const PROJECTS = [
   { id: WEB, key: "web", name: "Web" },
@@ -168,6 +193,7 @@ function render(detail: RestPluginDetail): string {
   return renderToStaticMarkup(
     <LanguageContext.Provider value={KOREAN}>
       <PluginSettingsView
+        plugins={PLUGINS}
         detail={detail}
         projects={PROJECTS}
         people={PEOPLE}
@@ -212,6 +238,17 @@ describe("a plugin's settings page", () => {
     expect(html).toContain("모든 멤버");
     expect(html).toContain(">기본</span>");
     expect(html).toContain('aria-label="회수: Bob"');
+    // A plugin holds a role as itself (ADR-0072): a chip of its own; the enabled plugins are
+    // offered a role they do not hold, never the plugin itself or one that is off.
+    expect(html).toContain('aria-label="회수: 플러그인 messenger"');
+    expect(count(html, 'value="plugin:messenger"')).toBe(1);
+    expect(count(html, 'value="plugin:crm"')).toBe(2);
+    expect(html).not.toContain('value="plugin:leave"');
+    expect(html).not.toContain('value="plugin:gate"');
+    // What it asks of other plugins: granted now where the plugin is enabled, waited for where not.
+    expect(html).toContain("다른 플러그인에 요청한 역할");
+    expect(html).toContain("지금 부여");
+    expect(html).toContain("crm이(가) 꺼져 있습니다.");
     // Whoever holds a role is not offered it again; the deactivated are not offered at all.
     expect(count(html, `value="person:${BOB}"`)).toBe(1);
     expect(count(html, `value="person:${CAROL}"`)).toBe(2);
@@ -328,7 +365,11 @@ describe("a plugin's settings page", () => {
     // to before is on; and the button does not wait for a tick.
     expect(html).toContain(">필수<");
     expect(html).toContain(">선택<");
-    expect(count(html, 'type="checkbox"')).toBe(4);
+    // Two more ticks: the roles the plugin asks of other plugins (ADR-0072), off until ticked,
+    // the one whose plugin is not enabled locked off.
+    expect(count(html, 'type="checkbox"')).toBe(6);
+    expect(html).toContain("다른 플러그인에 요청한 역할");
+    expect(html).toContain("crm이(가) 꺼져 있습니다.");
     expect(count(html, 'disabled="" checked=""')).toBe(2);
     expect(count(html, 'type="checkbox" checked=""')).toBe(1);
     expect(html).toContain(

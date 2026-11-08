@@ -344,6 +344,15 @@ export const en = {
       grantPeople: "People",
       grantProjects: "Members of a project",
       grantWhom: "Grant to…",
+      grantPlugins: "Plugins",
+      grantPlugin: (plugin: string) => `The plugin ${plugin}`,
+      asks: "Roles asked of other plugins",
+      asksHint:
+        "Roles of other plugins this plugin asks to hold, to act as itself in them; each is an administrator's to grant, here or when enabling.",
+      askGranted: "Granted",
+      askUngranted: "Not granted",
+      askUnavailable: (plugin: string) => `${plugin} is not enabled; grant it here once it is.`,
+      askGrantNow: "Grant it now",
       grant: "Grant",
       revoke: "Revoke",
       events: "What happened",
@@ -390,6 +399,11 @@ export const en = {
         name: "Work email",
         opens:
           "Reads the work email of the people it may read, to match them to accounts elsewhere.",
+      },
+      "people:act": {
+        name: "Acting for a person",
+        opens:
+          "Runs a command and answers a decision for a person who did it elsewhere, within what they may do, recorded as theirs through the plugin.",
       },
       "projects:read": {
         name: "Projects",
@@ -959,6 +973,9 @@ export const en = {
     console: "The console",
     as: (agent: string) => `as ${agent}`,
     asTitle: "The agent the person acted through",
+    via: (plugin: string) => `through ${plugin}`,
+    viaTitle: "The plugin that acted for the person",
+    thePlugin: (plugin: string) => `the plugin ${plugin}`,
     aTask: "a task",
     aPlugin: "a plugin",
     /** After the sentence of a board's event a plugin caused (ADR-0052). */

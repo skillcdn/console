@@ -38,6 +38,7 @@ const INFO: PluginInfo = {
   dataVersion: 1,
   settings: { greeting: "Hi" },
   capabilities: [],
+  grants: [],
   board: null,
   projects: "all",
 };

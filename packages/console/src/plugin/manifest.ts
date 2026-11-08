@@ -14,6 +14,7 @@ import {
   MAX_PLUGIN_AGENT_NOTE_LENGTH,
   MAX_PLUGIN_CAPABILITIES,
   MAX_PLUGIN_DESCRIPTION_LENGTH,
+  MAX_PLUGIN_GRANTS_ASKED,
   MAX_PLUGIN_NAME_LENGTH,
   MAX_PLUGIN_OPTIONS,
   MAX_PLUGIN_PAGES,
@@ -585,6 +586,20 @@ export const pluginManifestSchema = z
       z.record(key, z.string().check(z.regex(SEMVER_RANGE, "is a semver range"))),
       {},
     ),
+    /**
+     * The roles of other plugins the plugin asks to hold (ADR-0072), by their key, each with why,
+     * for the administrator who grants them: shown when enabling and on the plugin's page.
+     */
+    grants: z._default(
+      z.record(
+        key,
+        z.strictObject({
+          roles: z.array(key).check(z.minLength(1), z.maxLength(MAX_PLUGIN_ROLES)),
+          why: localized(MAX_PLUGIN_DESCRIPTION_LENGTH),
+        }),
+      ),
+      {},
+    ),
     board: z._default(pluginBoardSchema, { needs: "none" }),
     settings: z._default(z.array(pluginSettingSchema).check(z.maxLength(MAX_PLUGIN_SETTINGS)), []),
     settingGroups: z._default(
@@ -599,7 +614,10 @@ export const pluginManifestSchema = z
   })
   .check(
     z.superRefine((manifest, ctx) => {
-      for (const problem of manifestProblems(manifest)) {
+      for (const problem of [
+        ...manifestProblems(manifest),
+        ...(manifest.key in manifest.grants ? ["grants: a plugin asks nothing of itself"] : []),
+      ]) {
         ctx.addIssue({ code: "custom", message: problem, input: manifest });
       }
     }),
@@ -627,6 +645,12 @@ function manifestProblems(
   const roles = Object.keys(manifest.roles);
   if (roles.length > MAX_PLUGIN_ROLES) {
     problems.push(`declares ${roles.length} roles; ${MAX_PLUGIN_ROLES} at most`);
+  }
+  const pluginsAsked = Object.keys(manifest.grants);
+  if (pluginsAsked.length > MAX_PLUGIN_GRANTS_ASKED) {
+    problems.push(
+      `asks roles of ${pluginsAsked.length} plugins; ${MAX_PLUGIN_GRANTS_ASKED} at most`,
+    );
   }
   if (manifest.defaultRole !== undefined && !roles.includes(manifest.defaultRole)) {
     problems.push(`defaultRole ${manifest.defaultRole} is not a declared role`);

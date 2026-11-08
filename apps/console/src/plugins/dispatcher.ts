@@ -343,6 +343,11 @@ export class PluginDispatcher {
     if (event.plugin === target.key) {
       return true;
     }
+    // A plugin hears when one it may call is enabled, disabled or upgraded (ADR-0072).
+    const lifecycle = lifecycleOf(event);
+    if (lifecycle !== undefined && target.consent.includes(`plugins:${lifecycle}`)) {
+      return true;
+    }
     if (isPeopleEvent(event.kind) && target.consent.includes("people:read:all")) {
       return true;
     }
@@ -386,16 +391,19 @@ export class PluginDispatcher {
       ...(event.documentId === undefined ? {} : { documentId: event.documentId }),
       ...(event.goalId === undefined ? {} : { goalId: event.goalId }),
     };
-    const content = contentFor(target.consent, event.kind)
-      ? {
-          ...event.data,
-          actor:
-            event.actor === undefined
-              ? null
-              : { id: event.actor.id, login: event.actor.login, name: event.actor.name ?? null },
-          agent: event.agent ?? null,
-        }
-      : {};
+    const lifecycle = lifecycleOf(event);
+    const content =
+      contentFor(target.consent, event.kind) ||
+      (lifecycle !== undefined && target.consent.includes(`plugins:${lifecycle}`))
+        ? {
+            ...event.data,
+            actor:
+              event.actor === undefined
+                ? null
+                : { id: event.actor.id, login: event.actor.login, name: event.actor.name ?? null },
+            agent: event.agent ?? null,
+          }
+        : {};
     // The answer to a decision the plugin raised is its own to read (`board:decisions`): the
     // chosen option's label and key, without `board:read` and without a second call.
     const own =
@@ -470,6 +478,23 @@ export function hookEventId(source: "console" | "plugin", number: number): strin
 }
 
 /** Whether an event is one of the workspace's people events: someone joined, left, came back, changed role, or was listed. */
+/** The plugin kinds a plugin with `plugins:<key>` hears of (ADR-0072). */
+const LIFECYCLE_KINDS: readonly string[] = ["plugin.enabled", "plugin.disabled", "plugin.upgraded"];
+
+/**
+ * The plugin a lifecycle event is about, by key, or none: `plugin.enabled`, `plugin.disabled` and
+ * `plugin.upgraded` reach the hooks of a plugin that holds `plugins:<key>` for it, with their
+ * content, so that it follows what it depends on without a capability on the other's board.
+ */
+export function lifecycleOf(event: {
+  readonly kind: string;
+  readonly data: { readonly key?: string | undefined };
+}): string | undefined {
+  return LIFECYCLE_KINDS.includes(event.kind) && typeof event.data.key === "string"
+    ? event.data.key
+    : undefined;
+}
+
 export function isPeopleEvent(kind: string): boolean {
   return kind.startsWith("person.");
 }

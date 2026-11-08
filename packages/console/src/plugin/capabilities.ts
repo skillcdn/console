@@ -9,6 +9,7 @@ export const PLUGIN_CAPABILITIES = [
   "people:read",
   "people:read:all",
   "people:read:email",
+  "people:act",
   "projects:read",
   "projects:read:all",
   "board:read",
@@ -64,6 +65,11 @@ export const CAPABILITY_WORDS: Readonly<Record<PluginCapability, CapabilityWords
   "people:read:email": {
     opens: "the work email of the people it may read, to match them to accounts elsewhere",
     reach: "the addresses of the people its role holders may see",
+  },
+  "people:act": {
+    opens:
+      "acting for a person who did something elsewhere: a command run and a decision answered as them, within what they may do, recorded as theirs through the plugin",
+    reach: "what its role holders may do, done in their name from elsewhere",
   },
   "projects:read": {
     opens: "the projects and members the caller may see",

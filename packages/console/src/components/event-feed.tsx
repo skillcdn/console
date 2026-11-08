@@ -45,11 +45,13 @@ function sentenceOf(event: RestEvent, words: Messages): string {
   const grantee =
     data.everyone === true
       ? feed.everyone
-      : data.login !== undefined
-        ? data.login
-        : data.key !== undefined
-          ? feed.membersOf(data.name ?? data.key)
-          : feed.someone;
+      : data.grantee !== undefined
+        ? feed.thePlugin(data.grantee)
+        : data.login !== undefined
+          ? data.login
+          : data.key !== undefined
+            ? feed.membersOf(data.name ?? data.key)
+            : feed.someone;
   switch (event.kind) {
     case "person.joined":
       return feed.event.personJoined();
@@ -199,7 +201,11 @@ function formatFeedDay(day: string, language: string, now: Date = new Date()): s
 
 /** Whether two events were done by the same person as the same agent, so the name is said once. */
 function sameHands(a: RestEvent, b: RestEvent): boolean {
-  return (a.actor?.id ?? null) === (b.actor?.id ?? null) && a.agent === b.agent;
+  return (
+    (a.actor?.id ?? null) === (b.actor?.id ?? null) &&
+    a.agent === b.agent &&
+    (a.via ?? null) === (b.via ?? null)
+  );
 }
 
 /** The hour of an event, for a row whose day is in the heading above it. */
@@ -268,6 +274,11 @@ export function EventFeed(props: EventFeedProps) {
                         }
                       >
                         {words.feed.as(agentLabel(run.actor.agent))}
+                      </span>
+                    )}
+                    {run.actor.via !== null && run.actor.via !== undefined && (
+                      <span className="sc-feed-agent" title={words.feed.viaTitle}>
+                        {words.feed.via(run.actor.via)}
                       </span>
                     )}
                   </span>

@@ -783,11 +783,13 @@ export function formatPluginSettingLine(
 /** A grant in a line: its id, the role, whom it is to, since when. */
 export function formatPluginGrantLine(grant: RestPluginGrant): string {
   const whom =
-    grant.person !== null
-      ? `person ${grant.person.login}`
-      : grant.project !== null
-        ? `the members of ${grant.project.key}`
-        : "everyone";
+    grant.plugin !== null && grant.plugin !== undefined
+      ? `the plugin ${grant.plugin}`
+      : grant.person !== null
+        ? `person ${grant.person.login}`
+        : grant.project !== null
+          ? `the members of ${grant.project.key}`
+          : "everyone";
   return `${grant.id}  ${grant.role} to ${whom}  since ${moment(grant.createdAt)}`;
 }
 
@@ -857,7 +859,35 @@ export function formatPlugin(
       ...detail.grants.map((grant) => `  ${formatPluginGrantLine(grant)}`),
     );
   }
+  lines.push(...formatPluginAsks(detail, language));
   return lines.join("\n");
+}
+
+/**
+ * The roles the plugin asks of other plugins (ADR-0072), each with how it stands and, where not
+ * granted, the command that grants it; nothing where it asks none.
+ */
+export function formatPluginAsks(
+  detail: RestPluginDetail,
+  language: string | null | undefined,
+): string[] {
+  const asks = detail.asks ?? [];
+  if (asks.length === 0) {
+    return [];
+  }
+  return [
+    "",
+    "Asks of other plugins:",
+    ...asks.map((ask) => {
+      const standing =
+        ask.state === "granted"
+          ? "granted"
+          : ask.state === "unavailable"
+            ? `${ask.plugin} is not enabled`
+            : `not granted; console plugin ${ask.plugin} grant ${ask.role} --plugin ${detail.key}`;
+      return `  ${ask.role} of ${ask.plugin}: ${standing}  ${localized(ask.why, language)}`;
+    }),
+  ];
 }
 
 /** What a command or a query answered, as the command prints it. */

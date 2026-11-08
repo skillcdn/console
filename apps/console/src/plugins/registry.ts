@@ -86,6 +86,7 @@ import {
   findInstall,
   findProjectBrief,
   grantedRoles,
+  grantsHeldByPlugin,
   listGrants,
   listInstalls,
   listSecrets,
@@ -97,6 +98,7 @@ import {
   recordPluginFailure,
   removeGrant,
   removeSecret,
+  rolesGrantedToPlugin,
   setInstallState,
   setSecret,
   updateInstallConsent,
@@ -575,7 +577,11 @@ export class Plugins {
   }
 
   /** The roles a person holds in a plugin, from the grants and the manifest. */
-  async rolesOf(key: string, person: PersonRecord): Promise<string[]> {
+  async rolesOf(
+    key: string,
+    person: PersonRecord,
+    asAdmin = configuresPlugins(person),
+  ): Promise<string[]> {
     const entry = this.entries.get(key);
     if (entry?.manifest === undefined) {
       return [];
@@ -593,12 +599,52 @@ export class Plugins {
         ? following
         : [];
     return rolesHeld({
-      admin: configuresPlugins(person),
+      admin: asAdmin,
       declared: Object.keys(entry.manifest.roles),
       defaultRole: entry.manifest.defaultRole,
       granted,
       followed,
     });
+  }
+
+  /**
+   * The roles a plugin holds in another (ADR-0072): those granted to it by key, and the callee's
+   * default role, as a member holds it; never an administrator's standing, never a grant to everyone.
+   */
+  private async rolesOfPlugin(key: string, grantee: string): Promise<string[]> {
+    const entry = this.entries.get(key);
+    if (entry?.manifest === undefined) {
+      return [];
+    }
+    const workspace = await this.options.workspace();
+    return rolesHeld({
+      admin: false,
+      declared: Object.keys(entry.manifest.roles),
+      defaultRole: entry.manifest.defaultRole,
+      granted: await rolesGrantedToPlugin(this.options.database, workspace.id, key, grantee),
+    });
+  }
+
+  /** What the manifest asks of other plugins (ADR-0072), each role with how it stands, for the pages and the command. */
+  private async asksOf(entry: Entry, workspaceId: string): Promise<RestPluginDetail["asks"]> {
+    const asks: NonNullable<RestPluginDetail["asks"]> = [];
+    for (const [other, asked] of Object.entries(entry.manifest?.grants ?? {})) {
+      const install = await findInstall(this.options.database, workspaceId, other);
+      const available =
+        install?.state === "enabled" && this.entries.get(other)?.manifest !== undefined;
+      const held = available
+        ? await rolesGrantedToPlugin(this.options.database, workspaceId, other, entry.key)
+        : [];
+      for (const role of asked.roles) {
+        asks.push({
+          plugin: other,
+          role,
+          why: asked.why,
+          state: !available ? "unavailable" : held.includes(role) ? "granted" : "ungranted",
+        });
+      }
+    }
+    return asks;
   }
 
   private async restOf(
@@ -775,6 +821,7 @@ export class Plugins {
       project:
         grant.project === undefined ? null : { key: grant.project.key, name: grant.project.name },
       everyone: grant.everyone,
+      plugin: grant.plugin ?? null,
       createdAt: grant.createdAt.toISOString(),
     };
   }
@@ -823,6 +870,7 @@ export class Plugins {
             this.restGrant(grant),
           )
         : null,
+      asks: await this.asksOf(entry, workspace.id),
       events: `/api/v1/plugins/${key}/events`,
       needsTimeZone: await this.needsTimeZone(entry, workspace),
       // What the plugin forgets, and when, for the administrator who turns it on to read.
@@ -944,6 +992,7 @@ export class Plugins {
       capabilities: [...install.consent],
       board: board === undefined ? null : { id: board.id, key: board.key },
       projects: install.projects === "all" ? "all" : [...install.projects],
+      grants: await grantsHeldByPlugin(this.options.database, workspace.id, entry.key),
     };
   }
 
@@ -1322,6 +1371,8 @@ export class Plugins {
       readonly role: string;
       readonly person?: string | undefined;
       readonly project?: string | undefined;
+      /** Another plugin, by key, to hold the role as itself (ADR-0072). */
+      readonly plugin?: string | undefined;
       readonly everyone?: boolean | undefined;
     },
     by: Administrator,
@@ -1347,6 +1398,14 @@ export class Plugins {
       }
       projectId = project.id;
     }
+    if (input.plugin !== undefined && (input.plugin === key || !this.entries.has(input.plugin))) {
+      throw new PluginRefusal(
+        "plugin.invalid_args",
+        input.plugin === key
+          ? "a plugin holds its own roles already"
+          : `the plugin ${input.plugin} is not installed`,
+      );
+    }
     const install = await findInstall(this.options.database, workspace.id, key);
     const grant = await addGrant(this.options.database, {
       workspaceId: workspace.id,
@@ -1354,6 +1413,7 @@ export class Plugins {
       role: input.role,
       personId: input.person,
       projectId,
+      grantee: input.plugin,
       everyone: input.everyone === true,
       actor: by.actor,
       now: this.options.clock.now(),
@@ -2081,7 +2141,9 @@ export class Plugins {
     const writer: Writer =
       caller.kind === "person"
         ? { personId: caller.person.id, agent: caller.agent ?? undefined }
-        : { personId: undefined, agent: undefined };
+        : caller.kind === "plugin" && caller.for !== null
+          ? { personId: caller.for.id, agent: undefined }
+          : { personId: undefined, agent: undefined };
     const text = (value: unknown, what: string): string => {
       if (typeof value !== "string") {
         throw new PluginRefusal("plugin.invalid_args", `${what} is text`);
@@ -2544,12 +2606,76 @@ export class Plugins {
       throw new PluginRefusal("plugin.not_found", `the plugin ${other} has no api call ${name}`);
     }
     const caller = call.call.caller;
+    const asked = args[3];
+    const forId =
+      typeof asked === "object" &&
+      asked !== null &&
+      typeof (asked as { readonly for?: unknown }).for === "string"
+        ? (asked as { readonly for: string }).for
+        : undefined;
     let passed: PluginCaller;
-    if (caller.kind === "person") {
+    let language = call.call.language;
+    if (forId !== undefined) {
+      // For a person who did something elsewhere (ADR-0072): the roles the plugin and the person
+      // both hold in the callee, in the person's language, never the person's administration.
+      if (!consent.includes("people:act")) {
+        throw new PluginRefusal(
+          "plugin.forbidden",
+          "the plugin has not been given the capability people:act",
+        );
+      }
+      const person = await findPerson(this.options.database, workspace.id, forId);
+      if (person === undefined || person.status !== "active") {
+        throw new PluginRefusal(
+          "plugin.not_found",
+          "the person to act for is not an active person of the workspace",
+        );
+      }
+      const theirs = await this.rolesOf(other, person, false);
+      passed = {
+        kind: "plugin",
+        plugin: call.plugin,
+        roles: (await this.rolesOfPlugin(other, call.plugin)).filter((role) =>
+          theirs.includes(role),
+        ),
+        for: {
+          id: person.id,
+          login: person.login,
+          name: person.name ?? null,
+          language: person.language ?? call.call.language,
+          admin: false,
+        },
+        project: caller.kind === "console" ? null : caller.project,
+      };
+      language = person.language ?? call.call.language;
+    } else if (caller.kind === "person") {
       const person = await findPerson(this.options.database, workspace.id, caller.person.id);
       passed = { ...caller, roles: person === undefined ? [] : await this.rolesOf(other, person) };
+    } else if (caller.kind === "plugin" && caller.for !== null) {
+      // A call for a person goes on for them down the chain, with the roles this plugin and the person both hold.
+      const person = await findPerson(this.options.database, workspace.id, caller.for.id);
+      const theirs =
+        person === undefined || person.status !== "active"
+          ? []
+          : await this.rolesOf(other, person, false);
+      passed = {
+        kind: "plugin",
+        plugin: call.plugin,
+        roles: (await this.rolesOfPlugin(other, call.plugin)).filter((role) =>
+          theirs.includes(role),
+        ),
+        for: caller.for,
+        project: caller.project,
+      };
     } else {
-      passed = this.consoleCaller(callee);
+      // The plugin as itself, from its job, hook or webhook: the roles granted to it, and no more (ADR-0072).
+      passed = {
+        kind: "plugin",
+        plugin: call.plugin,
+        roles: await this.rolesOfPlugin(other, call.plugin),
+        for: null,
+        project: caller.project,
+      };
     }
     const result = await this.host().call(other, {
       kind: "api",
@@ -2557,7 +2683,7 @@ export class Plugins {
       payload: args[2],
       info: await this.infoOf(callee, install),
       caller: passed,
-      language: call.call.language,
+      language,
       timeoutMs: this.options.timeouts?.query ?? PLUGIN_QUERY_MS,
     });
     this.options.logger.info(
@@ -2566,6 +2692,8 @@ export class Plugins {
         kind: "api",
         name,
         by: call.plugin,
+        as: passed.kind,
+        ...(forId === undefined ? {} : { for: forId }),
         outcome: this.outcomeOf(result),
         code: result.ok ? undefined : result.error.code,
       },

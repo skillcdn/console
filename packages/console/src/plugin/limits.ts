@@ -10,6 +10,8 @@ export const MAX_PLUGIN_AGENT_NOTE_LENGTH = 200;
 export const MAX_PLUGIN_KEY_LENGTH = 32;
 /** How many roles, settings, groups of settings, pages and widgets one manifest declares. */
 export const MAX_PLUGIN_ROLES = 10;
+/** How many other plugins one plugin may ask roles of (ADR-0072). */
+export const MAX_PLUGIN_GRANTS_ASKED = 10;
 export const MAX_PLUGIN_SETTINGS = 50;
 export const MAX_PLUGIN_SETTING_GROUPS = 10;
 export const MAX_PLUGIN_PAGES = 12;

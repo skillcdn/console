@@ -135,6 +135,8 @@ export interface PluginSettingsViewProps {
   readonly people: readonly RestPerson[];
   readonly language: string;
   readonly client: ConsoleClient;
+  /** The plugins of the console, to grant a role of this one to another (ADR-0072); none when left out. */
+  readonly plugins?: readonly RestPlugin[] | undefined;
   /** Called after a change, so that the page reads the plugin again. */
   readonly onChanged: () => Promise<void>;
   /** Where the list is, for after a purge. */
@@ -876,12 +878,18 @@ function EnableForm(props: {
   readonly projects: readonly RestProject[];
   readonly language: string;
   readonly busy: boolean;
-  readonly onEnable: (input: RestPluginEnableInput) => void;
+  readonly onEnable: (
+    input: RestPluginEnableInput,
+    grants: readonly { readonly plugin: string; readonly role: string }[],
+  ) => void;
 }) {
   const words = useWords();
   const settings = words.plugins.settings;
   const { detail, language } = props;
   const optional = detail.optionalCapabilities ?? [];
+  // The roles the plugin asks of other plugins (ADR-0072): granted on the way where ticked.
+  const asks = (detail.asks ?? []).filter((ask) => ask.state !== "granted");
+  const [askedNow, setAskedNow] = useState<ReadonlySet<string>>(() => new Set());
   const [consented, setConsented] = useState<ReadonlySet<string>>(
     () => new Set((detail.consent ?? []).filter((capability) => optional.includes(capability))),
   );
@@ -918,16 +926,21 @@ function EnableForm(props: {
         : chosen.length > 0;
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    props.onEnable({
-      consent: [...detail.capabilities, ...consented],
-      board:
-        boardMode === "none"
-          ? null
-          : boardMode === "create"
-            ? { create: { key: boardKey, name: boardName, description: boardDescription } }
-            : { project: chosen },
-      projects: allProjects ? "all" : [...onProjects],
-    });
+    props.onEnable(
+      {
+        consent: [...detail.capabilities, ...consented],
+        board:
+          boardMode === "none"
+            ? null
+            : boardMode === "create"
+              ? { create: { key: boardKey, name: boardName, description: boardDescription } }
+              : { project: chosen },
+        projects: allProjects ? "all" : [...onProjects],
+      },
+      asks
+        .filter((ask) => ask.state === "ungranted" && askedNow.has(`${ask.plugin}:${ask.role}`))
+        .map((ask) => ({ plugin: ask.plugin, role: ask.role })),
+    );
   };
   return (
     <form className="sc-form sc-plugin-enable" onSubmit={submit} aria-label={settings.enable}>
@@ -1113,6 +1126,44 @@ function EnableForm(props: {
         )}
       </div>
       <div className="sc-plugin-group">
+        {asks.length > 0 && (
+          <div className="sc-plugin-group">
+            <h3 className="sc-plugin-group-title">{settings.asks}</h3>
+            <p className="sc-settings-hint">{settings.asksHint}</p>
+            <ul className="sc-plugin-ticks">
+              {asks.map((ask) => {
+                const id = `${ask.plugin}:${ask.role}`;
+                return (
+                  <TickRow
+                    key={id}
+                    checked={ask.state === "ungranted" && askedNow.has(id)}
+                    onChange={
+                      ask.state === "ungranted"
+                        ? (checked) =>
+                            setAskedNow((current) => {
+                              const next = new Set(current);
+                              if (checked) {
+                                next.add(id);
+                              } else {
+                                next.delete(id);
+                              }
+                              return next;
+                            })
+                        : undefined
+                    }
+                    locked={ask.state === "unavailable"}
+                    name={`${ask.role} (${ask.plugin})`}
+                    under={
+                      ask.state === "unavailable"
+                        ? settings.askUnavailable(ask.plugin)
+                        : pluginWord(ask.why, language)
+                    }
+                  />
+                );
+              })}
+            </ul>
+          </div>
+        )}
         <div className="sc-form-actions">
           <Button type="submit" variant="primary" disabled={props.busy || !boardReady}>
             {settings.enable}
@@ -1130,6 +1181,9 @@ function holderOf(grant: RestPluginGrant, words: Messages["plugins"]["settings"]
   }
   if (grant.project !== null) {
     return words.grantMembersOf(grant.project.name);
+  }
+  if (grant.plugin !== null && grant.plugin !== undefined) {
+    return words.grantPlugin(grant.plugin);
   }
   if (grant.person !== null) {
     return personName(grant.person);
@@ -1154,6 +1208,8 @@ function RoleRow(props: {
   readonly grants: readonly RestPluginGrant[];
   readonly projects: readonly RestProject[];
   readonly people: readonly RestPerson[];
+  /** The other plugins that are enabled, to hold the role as themselves (ADR-0072). */
+  readonly plugins: readonly RestPlugin[];
   readonly language: string;
   readonly busy: boolean;
   readonly onGrant: (input: RestPluginGrantInput) => void;
@@ -1170,6 +1226,12 @@ function RoleRow(props: {
   const peopleWith = new Set(
     grants.flatMap((grant) => (grant.person === null ? [] : [grant.person.id])),
   );
+  const pluginsWith = new Set(
+    grants.flatMap((grant) =>
+      grant.plugin === null || grant.plugin === undefined ? [] : [grant.plugin],
+    ),
+  );
+  const plugins = props.plugins.filter((plugin) => !pluginsWith.has(plugin.key));
   const projects = props.projects.filter((project) => !projectsWith.has(project.key));
   const people = props.people.filter(
     (person) => person.status === "active" && !peopleWith.has(person.id),
@@ -1183,6 +1245,8 @@ function RoleRow(props: {
       props.onGrant({ role: role.key, project: whom.slice("project:".length) });
     } else if (whom.startsWith("person:")) {
       props.onGrant({ role: role.key, person: whom.slice("person:".length) });
+    } else if (whom.startsWith("plugin:")) {
+      props.onGrant({ role: role.key, plugin: whom.slice("plugin:".length) });
     }
     setWhom("");
   };
@@ -1258,6 +1322,15 @@ function RoleRow(props: {
                 ))}
               </optgroup>
             )}
+            {plugins.length > 0 && (
+              <optgroup label={settings.grantPlugins}>
+                {plugins.map((plugin) => (
+                  <option key={plugin.key} value={`plugin:${plugin.key}`}>
+                    {pluginWord(plugin.name, props.language)} ({plugin.key})
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
           <Button type="submit" disabled={props.busy || whom === ""}>
             {settings.grant}
@@ -1273,14 +1346,21 @@ function RolesSection(props: {
   readonly detail: RestPluginDetail;
   readonly projects: readonly RestProject[];
   readonly people: readonly RestPerson[];
+  readonly plugins: readonly RestPlugin[];
   readonly language: string;
   readonly busy: boolean;
   readonly onGrant: (input: RestPluginGrantInput) => void;
   readonly onRevoke: (id: string) => void;
+  /** Grants a role this plugin asks of another plugin (ADR-0072): the other plugin's key, and the role. */
+  readonly onGrantAsked: (plugin: string, role: string) => void;
 }) {
   const settings = useWords().plugins.settings;
   const { detail } = props;
   const grants = detail.grants ?? [];
+  const others = props.plugins.filter(
+    (plugin) => plugin.state === "enabled" && plugin.key !== detail.key,
+  );
+  const asks = detail.asks ?? [];
   return (
     <section className="sc-panel" aria-label={settings.roles}>
       <h2 className="sc-section-title">{settings.roles}</h2>
@@ -1296,6 +1376,7 @@ function RolesSection(props: {
               grants={grants.filter((grant) => grant.role === role.key)}
               projects={props.projects}
               people={props.people}
+              plugins={others}
               language={props.language}
               busy={props.busy}
               onGrant={props.onGrant}
@@ -1303,6 +1384,38 @@ function RolesSection(props: {
             />
           ))}
         </ul>
+      )}
+      {asks.length > 0 && (
+        <div className="sc-plugin-group">
+          <h3 className="sc-plugin-group-title">{settings.asks}</h3>
+          <p className="sc-settings-hint">{settings.asksHint}</p>
+          <ul className="sc-plugin-roles">
+            {asks.map((ask) => (
+              <li key={`${ask.plugin}:${ask.role}`} className="sc-plugin-role">
+                <div>
+                  <p className="sc-plugin-role-name">
+                    <code className="sc-plugin-role-key">{ask.role}</code> {ask.plugin}
+                    {ask.state === "granted" && <Badge tone="accent">{settings.askGranted}</Badge>}
+                  </p>
+                  <p className="sc-settings-hint">{pluginWord(ask.why, props.language)}</p>
+                </div>
+                <div>
+                  {ask.state === "unavailable" ? (
+                    <span className="sc-settings-hint">{settings.askUnavailable(ask.plugin)}</span>
+                  ) : ask.state === "ungranted" ? (
+                    <Button
+                      size="sm"
+                      disabled={props.busy}
+                      onClick={() => props.onGrantAsked(ask.plugin, ask.role)}
+                    >
+                      {settings.askGrantNow}
+                    </Button>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </section>
   );
@@ -1394,7 +1507,14 @@ export function PluginSettingsView(props: PluginSettingsViewProps) {
             projects={props.projects}
             language={language}
             busy={busy}
-            onEnable={(input) => change(() => plugin.enable(input))}
+            onEnable={(input, grants) =>
+              change(async () => {
+                await plugin.enable(input);
+                for (const grant of grants) {
+                  await client.plugin(grant.plugin).grant({ role: grant.role, plugin: detail.key });
+                }
+              })
+            }
           />
         </section>
       )}
@@ -1428,6 +1548,10 @@ export function PluginSettingsView(props: PluginSettingsViewProps) {
       {detail.grants !== null && (
         <RolesSection
           detail={detail}
+          plugins={props.plugins ?? []}
+          onGrantAsked={(other, role) =>
+            change(() => client.plugin(other).grant({ role, plugin: detail.key }))
+          }
           projects={props.projects}
           people={props.people}
           language={language}

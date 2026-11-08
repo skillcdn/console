@@ -330,6 +330,18 @@ describe("parsePluginManifest", () => {
     expect(setting({ type: "list", of: "number", default: [1, 2] })).toBeUndefined();
   });
 
+  it("holds what a plugin asks of other plugins to its shape, and never of itself (ADR-0072)", () => {
+    expect(
+      problemsOf({ grants: { messenger: { roles: ["carrier"], why: { en: "To carry." } } } }),
+    ).toEqual([]);
+    expect(
+      problemsOf({ grants: { messenger: { roles: [], why: { en: "To carry." } } } })[0],
+    ).toMatch(/^grants\.messenger\.roles/);
+    expect(
+      problemsOf({ grants: { [LEAVE.key]: { roles: ["approver"], why: { en: "Itself." } } } }),
+    ).toEqual(["grants: a plugin asks nothing of itself"]);
+  });
+
   it("refuses what is not a manifest at all, and unknown fields", () => {
     expect(parsePluginManifest(null).ok).toBe(false);
     expect(parsePluginManifest("leave").ok).toBe(false);

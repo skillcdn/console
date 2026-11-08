@@ -15,6 +15,7 @@ import {
   isPluginError,
   isPluginRefusal,
   isQueryFile,
+  type OtherPlugin,
   ownRefusalCode,
   type PluginContext,
   type PluginDefinition,
@@ -201,6 +202,7 @@ function contextOf(
         list: group("console.decisions")("list") as never,
         get: group("console.decisions")("get") as never,
         ask: group("console.decisions")("ask") as never,
+        answer: group("console.decisions")("answer") as never,
       },
       documents: {
         list: group("console.documents")("list") as never,
@@ -228,15 +230,24 @@ function contextOf(
           version: string;
           api: string[];
         };
-        return {
+        // As the caller, or for a person (ADR-0072): the parent decides the roles either way.
+        const asCaller = (forId: string | undefined): OtherPlugin => ({
           version: found.version,
           api: Object.fromEntries(
             found.api.map((name) => [
               name,
-              (input: unknown) => rpc(callId, "plugins", "call", [other, name, input]),
+              (input: unknown) =>
+                rpc(
+                  callId,
+                  "plugins",
+                  "call",
+                  forId === undefined ? [other, name, input] : [other, name, input, { for: forId }],
+                ),
             ]),
           ),
-        };
+          for: (personId: string) => asCaller(personId),
+        });
+        return asCaller(undefined);
       },
     },
     log: {

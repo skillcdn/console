@@ -196,6 +196,8 @@ export const restPluginGrantSchema = z.object({
   person: z.nullable(z.object({ id: uuid, login: z.string(), name: z.nullable(z.string()) })),
   project: z.nullable(z.object({ key: z.string(), name: z.string() })),
   everyone: z.boolean(),
+  /** The plugin the role went to (ADR-0072), by key, or `null`; answered from 0.4.5 and read as optional. */
+  plugin: z.optional(z.nullable(z.string())),
   createdAt: instant,
 });
 export type RestPluginGrant = z.infer<typeof restPluginGrantSchema>;
@@ -227,6 +229,20 @@ export const restPluginDetailSchema = z.extend(restPluginSchema, {
   needsTimeZone: z.optional(z.boolean()),
   /** The collections the plugin keeps for a while only, each with its days, so that an administrator reads what it forgets; answered from 0.4.5 and read as optional. */
   keeps: z.optional(z.array(z.object({ collection: z.string(), days: z.int() }))),
+  /**
+   * What the manifest asks of other plugins (ADR-0072): a role of a plugin, why, and how it
+   * stands: granted, not yet, or the plugin is not enabled. Answered from 0.4.5 and read as optional.
+   */
+  asks: z.optional(
+    z.array(
+      z.object({
+        plugin: z.string(),
+        role: z.string(),
+        why: localized,
+        state: z.enum(["granted", "ungranted", "unavailable"]),
+      }),
+    ),
+  ),
 });
 export type RestPluginDetail = z.infer<typeof restPluginDetailSchema>;
 
@@ -278,14 +294,19 @@ export const restPluginGrantInputSchema = z
     role: pluginKey,
     person: z.optional(uuid),
     project: z.optional(projectKey),
+    /** A plugin, by key, to hold the role as itself (ADR-0072). */
+    plugin: z.optional(pluginKey),
     everyone: z.optional(z.literal(true)),
   })
   .check(
     z.refine(
       (input) =>
-        [input.person !== undefined, input.project !== undefined, input.everyone === true].filter(
-          Boolean,
-        ).length === 1,
+        [
+          input.person !== undefined,
+          input.project !== undefined,
+          input.plugin !== undefined,
+          input.everyone === true,
+        ].filter(Boolean).length === 1,
       "names a person, a project or everyone, one of the three",
     ),
   );

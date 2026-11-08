@@ -114,6 +114,8 @@ export async function runPluginUpgrades(options: UpgradeOptions): Promise<number
           dataVersion: version,
           settings: install.settings,
           capabilities: [...install.consent],
+          // An upgrade runs before the registry: what other plugins granted is read at the next call.
+          grants: [],
           board: null,
           projects: install.projects === "all" ? "all" : [...install.projects],
         },

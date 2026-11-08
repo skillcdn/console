@@ -52,6 +52,8 @@ export interface PluginGrantRecord {
     | { readonly id: string; readonly key: string; readonly name: string }
     | undefined;
   readonly everyone: boolean;
+  /** The plugin the role went to (ADR-0072), by key, where it went to one. */
+  readonly plugin: string | undefined;
   readonly createdAt: Date;
   readonly createdBy: string | undefined;
 }
@@ -484,6 +486,7 @@ const grantColumns = {
   projectKey: projects.key,
   projectName: projects.name,
   everyone: pluginGrants.everyone,
+  granteePluginKey: pluginGrants.granteePluginKey,
   createdAt: pluginGrants.createdAt,
   createdBy: pluginGrants.createdBy,
 };
@@ -500,6 +503,7 @@ function toGrant(row: {
   projectKey: string | null;
   projectName: string | null;
   everyone: boolean;
+  granteePluginKey: string | null;
   createdAt: Date;
   createdBy: string | null;
 }): PluginGrantRecord {
@@ -517,6 +521,7 @@ function toGrant(row: {
         ? undefined
         : { id: row.projectId, key: row.projectKey ?? "", name: row.projectName ?? "" },
     everyone: row.everyone,
+    plugin: row.granteePluginKey ?? undefined,
     createdAt: row.createdAt,
     createdBy: row.createdBy ?? undefined,
   };
@@ -551,6 +556,8 @@ export interface GrantInput {
   readonly role: string;
   readonly personId?: string | undefined;
   readonly projectId?: string | undefined;
+  /** A plugin, by key, to hold the role as itself (ADR-0072). */
+  readonly grantee?: string | undefined;
   readonly everyone: boolean;
   readonly actor: Actor;
   readonly now: Date;
@@ -576,6 +583,9 @@ export async function addGrant(database: Database, input: GrantInput): Promise<P
           input.projectId === undefined
             ? sql`${pluginGrants.projectId} is null`
             : eq(pluginGrants.projectId, input.projectId),
+          input.grantee === undefined
+            ? sql`${pluginGrants.granteePluginKey} is null`
+            : eq(pluginGrants.granteePluginKey, input.grantee),
           eq(pluginGrants.everyone, input.everyone),
         ),
       )
@@ -603,6 +613,7 @@ export async function addGrant(database: Database, input: GrantInput): Promise<P
         role: input.role,
         personId: input.personId ?? null,
         projectId: input.projectId ?? null,
+        granteePluginKey: input.grantee ?? null,
         everyone: input.everyone,
         createdAt: input.now,
         createdBy: input.actor.id,
@@ -628,6 +639,7 @@ export async function addGrant(database: Database, input: GrantInput): Promise<P
         ...(grant.project === undefined
           ? {}
           : { key: grant.project.key, name: grant.project.name }),
+        ...(grant.plugin === undefined ? {} : { grantee: grant.plugin }),
         everyone: grant.everyone,
       },
       now: input.now,
@@ -676,6 +688,7 @@ export async function removeGrant(
         ...(grant.project === undefined
           ? {}
           : { key: grant.project.key, name: grant.project.name }),
+        ...(grant.plugin === undefined ? {} : { grantee: grant.plugin }),
         everyone: grant.everyone,
       },
       now: input.now,
@@ -732,6 +745,45 @@ export async function peopleGranted(
       ),
     );
   return new Set(rows.map((row) => row.id));
+}
+
+/**
+ * The roles a plugin was granted in another plugin (ADR-0072): those given to it by key. A grant
+ * to everyone is every member's and not a plugin's; the callee's default role is added by the
+ * registry, as for a member.
+ */
+export async function rolesGrantedToPlugin(
+  database: Database,
+  workspaceId: string,
+  key: string,
+  grantee: string,
+): Promise<string[]> {
+  const rows = await drizzleOf(database)
+    .selectDistinct({ role: pluginGrants.role })
+    .from(pluginGrants)
+    .where(
+      and(
+        eq(pluginGrants.workspaceId, workspaceId),
+        eq(pluginGrants.pluginKey, key),
+        eq(pluginGrants.granteePluginKey, grantee),
+      ),
+    );
+  return rows.map((row) => row.role).sort();
+}
+
+/** Every role a plugin holds in other plugins by a grant to it, for `ctx.plugin.grants`. */
+export async function grantsHeldByPlugin(
+  database: Database,
+  workspaceId: string,
+  grantee: string,
+): Promise<{ readonly plugin: string; readonly role: string }[]> {
+  return drizzleOf(database)
+    .select({ plugin: pluginGrants.pluginKey, role: pluginGrants.role })
+    .from(pluginGrants)
+    .where(
+      and(eq(pluginGrants.workspaceId, workspaceId), eq(pluginGrants.granteePluginKey, grantee)),
+    )
+    .orderBy(asc(pluginGrants.pluginKey), asc(pluginGrants.role));
 }
 
 /**

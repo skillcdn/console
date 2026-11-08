@@ -45,6 +45,16 @@ export interface TestConsoleOptions {
   readonly runs?: Partial<PluginConsole["runs"]>;
 }
 
+/**
+ * Another plugin as a test gives it: its version and its api; and, where `for` is given, what it
+ * answers when called for a person. Without `for`, it answers the same for anyone.
+ */
+export interface TestOtherPlugin {
+  readonly version: string;
+  readonly api: OtherPlugin["api"];
+  readonly for?: ((personId: string) => TestOtherPlugin) | undefined;
+}
+
 export interface TestContextOptions {
   readonly plugin?: Partial<PluginInfo>;
   readonly caller?: PluginCaller;
@@ -56,7 +66,7 @@ export interface TestContextOptions {
   readonly fetch?: (url: string, init?: PluginFetchInit) => Promise<PluginFetchResponse>;
   /** The secrets by name; `sign` and `verify` use them, and never hand them over. */
   readonly secrets?: Readonly<Record<string, string>>;
-  readonly plugins?: Readonly<Record<string, OtherPlugin>>;
+  readonly plugins?: Readonly<Record<string, TestOtherPlugin>>;
   /** The console's public origin, from which `ctx.endpoints.url` is answered; left out, it is `plugin.unavailable`. */
   readonly publicUrl?: string;
   /** The endpoints the plugin defines, by name, which `ctx.endpoints.url` answers for; any name when left out. */
@@ -230,7 +240,7 @@ function memoryRecords<T extends Record<string, unknown>>(
     }
     return found;
   };
-  const by = caller.kind === "person" ? caller.person.id : null;
+  const by = actingPersonOf(caller)?.id ?? null;
   const indexed = (field: string) => {
     if (
       collection !== undefined &&
@@ -532,6 +542,25 @@ function refusingConsole(given: TestConsoleOptions | undefined): PluginConsole {
   };
 }
 
+/** The person a caller acts as: themselves, or the one a plugin acts for; none for the console or a plugin as itself. */
+function actingPersonOf(caller: PluginCaller) {
+  return caller.kind === "person"
+    ? caller.person
+    : caller.kind === "plugin"
+      ? (caller.for ?? undefined)
+      : undefined;
+}
+
+/** Another plugin as the context hands it over: `for` answers as the test said, or the same as for anyone. */
+function withFor(other: TestOtherPlugin): OtherPlugin {
+  const built: OtherPlugin = {
+    version: other.version,
+    api: other.api,
+    for: (personId) => (other.for === undefined ? built : withFor(other.for(personId))),
+  };
+  return built;
+}
+
 function build(store: Store, options: TestContextOptions, caller: PluginCaller): TestContext {
   const now = options.now ?? (() => new Date());
   const collections = new Map(
@@ -545,6 +574,7 @@ function build(store: Store, options: TestContextOptions, caller: PluginCaller):
     capabilities: [],
     board: null,
     projects: "all",
+    grants: [],
     ...options.plugin,
   };
   const secrets = options.secrets ?? {};
@@ -601,7 +631,7 @@ function build(store: Store, options: TestContextOptions, caller: PluginCaller):
         if (other === undefined) {
           forbidden(`plugins.get(${key})`, `plugins.${key}`);
         }
-        return other;
+        return withFor(other);
       },
     },
     endpoints: {
@@ -620,7 +650,7 @@ function build(store: Store, options: TestContextOptions, caller: PluginCaller):
     },
     log: { info: log("info"), warn: log("warn"), error: log("error") },
     now,
-    language: options.language ?? (caller.kind === "person" ? caller.person.language : "en"),
+    language: options.language ?? actingPersonOf(caller)?.language ?? "en",
     signal: new AbortController().signal,
     emitted: store.emitted,
     logged: store.logged,

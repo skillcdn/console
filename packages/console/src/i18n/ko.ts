@@ -299,6 +299,15 @@ export const ko: Messages = {
       grantPeople: "사람",
       grantProjects: "프로젝트의 멤버",
       grantWhom: "부여할 대상…",
+      grantPlugins: "플러그인",
+      grantPlugin: (plugin) => `플러그인 ${plugin}`,
+      asks: "다른 플러그인에 요청한 역할",
+      asksHint:
+        "이 플러그인이 다른 플러그인에서 자기 이름으로 쓰려고 요청한 역할입니다. 관리자가 여기서, 또는 켤 때 부여합니다.",
+      askGranted: "부여됨",
+      askUngranted: "부여되지 않음",
+      askUnavailable: (plugin) => `${plugin}이(가) 꺼져 있습니다. 켜진 뒤 여기서 부여하세요.`,
+      askGrantNow: "지금 부여",
       grant: "부여",
       revoke: "회수",
       events: "일어난 일",
@@ -337,6 +346,11 @@ export const ko: Messages = {
       "people:read:email": {
         name: "업무 이메일",
         opens: "읽을 수 있는 사람의 업무 이메일을 읽습니다. 다른 서비스의 계정과 맞추는 데 씁니다.",
+      },
+      "people:act": {
+        name: "사람 대신 실행",
+        opens:
+          "다른 곳에서 한 일을 그 사람 대신 실행하고 결정에 답합니다. 그 사람이 할 수 있는 범위 안에서, 플러그인을 거친 것으로 기록됩니다.",
       },
       "projects:read": {
         name: "프로젝트 읽기",
@@ -890,6 +904,9 @@ export const ko: Messages = {
     console: "콘솔",
     as: (agent) => `${agent}(으)로`,
     asTitle: "그 사람이 사용한 에이전트",
+    via: (plugin) => `${plugin}을(를) 거쳐`,
+    viaTitle: "그 사람 대신 실행한 플러그인",
+    thePlugin: (plugin) => `플러그인 ${plugin}`,
     aTask: "작업",
     aPlugin: "플러그인",
     throughPlugin: (plugin) => `플러그인 ${plugin}을(를) 통해`,

@@ -335,6 +335,10 @@ export default {
           days: 12,
           caller: ctx.caller.kind,
           roles: ctx.caller.roles,
+          by: ctx.caller.kind === "plugin" ? ctx.caller.plugin : null,
+          for:
+            ctx.caller.kind === "plugin" && ctx.caller.for !== null ? ctx.caller.for.login : null,
+          language: ctx.language,
         };
       },
     },

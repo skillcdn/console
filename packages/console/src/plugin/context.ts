@@ -221,6 +221,14 @@ export interface PluginInfo {
   readonly board: { readonly id: string; readonly key: string } | null;
   /** The projects the plugin is on: all, or their keys. */
   readonly projects: "all" | readonly string[];
+  /** The roles other plugins granted to this one (ADR-0072), by their key, so that a plugin says what it lacks. */
+  readonly grants: readonly PluginGrantHeld[];
+}
+
+/** A role of another plugin, held by this one. */
+export interface PluginGrantHeld {
+  readonly plugin: string;
+  readonly role: string;
 }
 
 export interface CallerPerson {
@@ -257,7 +265,24 @@ export interface ConsoleCaller {
   readonly project: CallerProject | null;
 }
 
-export type PluginCaller = PersonCaller | ConsoleCaller;
+/**
+ * Another plugin, calling with the roles granted to it (ADR-0072): from its own job, hook or
+ * webhook, as itself; or for a person who did something elsewhere, with `for`, and then with the
+ * roles the plugin and the person both hold, in the person's language. A plugin that knows only
+ * `person` and `console` refuses the kind, which fails safe.
+ */
+export interface PluginAsCaller {
+  readonly kind: "plugin";
+  /** The calling plugin's key. */
+  readonly plugin: string;
+  readonly roles: readonly string[];
+  /** The person the plugin acts for, or `null` when it acts as itself; never an administrator by that. */
+  readonly for: CallerPerson | null;
+  /** The project the call is on, if any: the one the person's own call was on. */
+  readonly project: CallerProject | null;
+}
+
+export type PluginCaller = PersonCaller | ConsoleCaller | PluginAsCaller;
 
 export interface PluginWorkspace {
   readonly name: string;
@@ -282,6 +307,13 @@ export interface PluginWorkspace {
     readonly name: string;
     readonly color: string;
   }[];
+}
+
+/** An answer given for a person (ADR-0072): the option by its key or by its label, one of the two, and a note. */
+export interface DecisionAnswer {
+  readonly optionKey?: string;
+  readonly option?: string;
+  readonly note?: string;
 }
 
 export interface DecisionAsk {
@@ -332,6 +364,12 @@ export interface PluginConsole {
     list(project: string): Promise<readonly RestDecision[]>;
     get(id: string): Promise<RestDecision | null>;
     ask(project: string, decision: DecisionAsk): Promise<RestDecision>;
+    /**
+     * Answers a decision for a person who answered elsewhere (ADR-0072), with `people:act`: the
+     * person's own standing decides whether they may, as on the board, and the answer is theirs,
+     * through this plugin. A plugin answers no decision itself.
+     */
+    answer(id: string, answer: DecisionAnswer, as: { readonly for: string }): Promise<RestDecision>;
   };
   documents: {
     list(project: string, folder?: string): Promise<readonly RestDocumentSummary[]>;
@@ -444,6 +482,12 @@ export interface PluginSecrets {
 export interface OtherPlugin {
   readonly version: string;
   readonly api: Readonly<Record<string, (input: unknown) => Promise<unknown>>>;
+  /**
+   * The same plugin, called for a person who did something elsewhere (ADR-0072): with the roles
+   * this plugin and the person both hold in it, in the person's language, recorded as theirs
+   * through this plugin. Needs `people:act`; the person is active, or the call is `plugin.not_found`.
+   */
+  for(personId: string): OtherPlugin;
 }
 
 /** The plugin's own endpoints, as a service elsewhere is told to call them. */

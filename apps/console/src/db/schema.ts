@@ -937,6 +937,8 @@ export const events = pgTable(
     goalId: uuid().references(() => goals.id),
     /** The plugin that caused it (ADR-0052), by key; null for the console's own doing. */
     plugin: text(),
+    /** The plugin the actor acted through (ADR-0072), by key, when one acted for them. */
+    via: text(),
     /** What a feed shows without asking for the subject, as the API describes it. */
     data: jsonb().$type<RestEventData>().notNull().default({}),
     createdAt: createdAt(),
@@ -1017,6 +1019,8 @@ export const pluginGrants = pgTable(
     role: text().notNull(),
     personId: uuid().references(() => people.id, { onDelete: "cascade" }),
     projectId: uuid().references(() => projects.id, { onDelete: "cascade" }),
+    /** The plugin the role went to (ADR-0072), by key: one that holds it as itself. */
+    granteePluginKey: text(),
     everyone: boolean().notNull().default(false),
     createdAt: createdAt(),
     createdBy: uuid().references(() => people.id),
@@ -1025,9 +1029,10 @@ export const pluginGrants = pgTable(
     index("plugin_grants_plugin_idx").on(table.workspaceId, table.pluginKey),
     index("plugin_grants_person_idx").on(table.personId),
     index("plugin_grants_project_idx").on(table.projectId),
+    index("plugin_grants_grantee_idx").on(table.workspaceId, table.granteePluginKey),
     check(
       "plugin_grants_target_check",
-      sql`((${table.personId} is not null)::int + (${table.projectId} is not null)::int + (${table.everyone})::int) = 1`,
+      sql`((${table.personId} is not null)::int + (${table.projectId} is not null)::int + (${table.granteePluginKey} is not null)::int + (${table.everyone})::int) = 1`,
     ),
   ],
 );

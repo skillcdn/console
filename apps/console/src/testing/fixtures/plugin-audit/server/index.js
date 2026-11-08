@@ -37,14 +37,42 @@ export default {
       await ctx.plugins.get("gate");
       return { text: "got it" };
     }),
+    peekFor: command(
+      "Asks Leave for a person's balance as them, through its api (ADR-0072).",
+      { person: argument("text") },
+      async (ctx, args) => {
+        const leave = await ctx.plugins.get("leave");
+        const balance = await leave.for(args.person).api.balance({ personId: args.person });
+        return { text: String(balance.days), data: balance };
+      },
+    ),
+    answerFor: command(
+      "Answers a decision for a person, as a messenger would for a button pressed elsewhere.",
+      { decision: argument("text"), option: argument("text"), person: argument("text") },
+      async (ctx, args) => {
+        const decision = await ctx.console.decisions.answer(
+          args.decision,
+          { optionKey: args.option },
+          { for: args.person },
+        );
+        return { text: "answered", data: decision };
+      },
+    ),
+    held: command("The roles granted to this plugin in other plugins.", {}, async (ctx) => ({
+      text: String(ctx.plugin.grants.length),
+      data: ctx.plugin.grants,
+    })),
   },
   queries: {},
   endpoints: {},
   on: {
     "plugin:leave:decided": async (ctx, event) => {
+      // Leave's api from a hook: as the plugin itself, with the roles granted to it (ADR-0072).
+      const leave = await ctx.plugins.get("leave");
+      const seen = await leave.api.balance({ personId: event.data.requestId });
       await ctx.console.tasks.create(ctx.plugin.board.key, {
         title: `Audit ${event.data.requestId}: ${event.data.state}`,
-        body: `Decided on ${event.at}, told by ${event.plugin}.`,
+        body: `Decided on ${event.at}, told by ${event.plugin}; seen as ${seen.caller} ${seen.by ?? ""} with ${seen.roles.join(", ")}.`,
       });
     },
   },

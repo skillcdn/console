@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { contentFor, hookEventId, isPeopleEvent, ownAnswerOf, retryAfterOf } from "./dispatcher.js";
+import {
+  contentFor,
+  hookEventId,
+  isPeopleEvent,
+  lifecycleOf,
+  ownAnswerOf,
+  retryAfterOf,
+} from "./dispatcher.js";
 
 describe("what a failed hook asks of the next try", () => {
   it("waits retryAfterMs from the refusal's data, within an hour, and nothing otherwise", () => {
@@ -28,6 +35,11 @@ describe("the workspace's people events", () => {
     expect(isPeopleEvent("task.created")).toBe(false);
     expect(contentFor(["people:read:all"], "person.deactivated")).toBe(true);
     expect(contentFor(["people:read:all"], "task.created")).toBe(false);
+    // A plugin's lifecycle reaches whoever may call it (ADR-0072), by the key the event names.
+    expect(lifecycleOf({ kind: "plugin.enabled", data: { key: "hr" } })).toBe("hr");
+    expect(lifecycleOf({ kind: "plugin.upgraded", data: { key: "hr" } })).toBe("hr");
+    expect(lifecycleOf({ kind: "plugin.configured", data: { key: "hr" } })).toBeUndefined();
+    expect(lifecycleOf({ kind: "plugin.enabled", data: {} })).toBeUndefined();
     expect(contentFor(["people:read"], "person.deactivated")).toBe(false);
     expect(contentFor(["board:read"], "task.created")).toBe(true);
   });

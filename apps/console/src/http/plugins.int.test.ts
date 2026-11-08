@@ -280,6 +280,25 @@ describe("the plugins' routes", () => {
       json({ role: "boss", everyone: true }, admin),
     );
     expect(bad.status).toBe(400);
+    // To a plugin, by key (ADR-0072): one that is installed, and never the plugin itself.
+    const toPlugin = await h.request(
+      pluginPath("hello", "grants"),
+      json({ role: "greeter", plugin: "evil" }, admin),
+    );
+    expect(toPlugin.status).toBe(201);
+    expect(restPluginGrantSchema.parse(await toPlugin.json())).toMatchObject({
+      role: "greeter",
+      plugin: "evil",
+      person: null,
+      everyone: false,
+    });
+    for (const plugin of ["hello", "nobody"]) {
+      const refused = await h.request(
+        pluginPath("hello", "grants"),
+        json({ role: "greeter", plugin }, admin),
+      );
+      expect(refused.status, plugin).toBe(400);
+    }
     const me = (await (
       await h.request(REST_ROUTES.me, { headers: { cookie: member } })
     ).json()) as { person: { id: string } };
@@ -301,7 +320,7 @@ describe("the plugins' routes", () => {
     );
     expect(again.status).toBe(409);
     const listed = await h.request(pluginPath("hello", "grants"), { headers: { cookie: admin } });
-    expect(restPluginGrantsSchema.parse(await listed.json()).items).toHaveLength(1);
+    expect(restPluginGrantsSchema.parse(await listed.json()).items).toHaveLength(2);
     const revoked = await h.request(pluginPath("hello", "grants", grant.id), {
       method: "DELETE",
       headers: { cookie: admin, origin: SIGN_IN_URL },
@@ -325,6 +344,7 @@ describe("the plugins' routes", () => {
     ).toEqual([
       expect.objectContaining({ role: "greeter", login: "bob", everyone: false }),
       expect.objectContaining({ role: "greeter", login: "bob", everyone: false }),
+      expect.objectContaining({ role: "greeter", grantee: "evil", everyone: false }),
     ]);
   });
 

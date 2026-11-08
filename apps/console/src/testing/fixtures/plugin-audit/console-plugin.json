@@ -6,11 +6,17 @@
   },
   "pluginApi": 1,
   "server": "server/index.js",
-  "capabilities": ["board:read", "board:tasks", "events:plugins", "plugins:leave"],
+  "capabilities": ["board:read", "board:tasks", "events:plugins", "plugins:leave", "people:act"],
   "roles": {
     "auditor": { "name": { "en": "Auditor" }, "description": { "en": "Reads the audit." } }
   },
   "defaultRole": "auditor",
   "board": { "needs": "optional" },
-  "requires": { "leave": "*" }
+  "requires": { "leave": "*" },
+  "grants": {
+    "leave": {
+      "roles": ["approver"],
+      "why": { "en": "To read every request it audits, as itself." }
+    }
+  }
 }

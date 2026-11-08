@@ -129,6 +129,39 @@ describe("createTestContext", () => {
     expect(await ctx.records(requests).files(record.id).list()).toEqual([]);
   });
 
+  it("acts as another plugin's caller, for a person or as itself (ADR-0072)", async () => {
+    const ctx = createTestContext({
+      plugins: {
+        hr: {
+          version: "1.0.0",
+          api: { who: async () => "anyone" },
+          for: (personId) => ({ version: "1.0.0", api: { who: async () => personId } }),
+        },
+      },
+    });
+    const hr = await ctx.plugins.get("hr");
+    expect(await hr.api.who?.({})).toBe("anyone");
+    expect(await hr.for("person-2").api.who?.({})).toBe("person-2");
+    const forBob = ctx.as({
+      kind: "plugin",
+      plugin: "messenger",
+      roles: ["employee"],
+      for: { id: "person-2", login: "bob", name: "Bob", language: "ko", admin: false },
+      project: null,
+    });
+    expect(forBob.language).toBe("ko");
+    expect(forBob.caller.kind).toBe("plugin");
+    const itself = ctx.as({
+      kind: "plugin",
+      plugin: "messenger",
+      roles: [],
+      for: null,
+      project: null,
+    });
+    expect(itself.language).toBe("en");
+    expect(itself.plugin.grants).toEqual([]);
+  });
+
   it("refuses the console where nothing was given, and answers where it was", async () => {
     const ctx = createTestContext({
       console: {

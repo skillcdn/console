@@ -17,6 +17,8 @@ export interface Actor {
   readonly agent?: string | undefined;
   /** The plugin the change goes through (ADR-0052), by key, when one does: the event names it. */
   readonly plugin?: string | undefined;
+  /** The plugin that acted for the person (ADR-0072), by key, when one did: the event says they acted through it. */
+  readonly via?: string | undefined;
 }
 
 /** Where a change on the board belongs: the workspace, and the project within it. */
@@ -57,6 +59,8 @@ export interface EventRecord {
   readonly goalId: string | undefined;
   /** The plugin that caused it, by key (ADR-0052); none for the console's own doing. */
   readonly plugin: string | undefined;
+  /** The plugin the actor acted through (ADR-0072), when one acted for them. */
+  readonly via?: string | undefined;
   readonly data: RestEventData;
   readonly createdAt: Date;
 }
@@ -100,6 +104,7 @@ export async function recordEvent(
       documentId: event.documentId ?? null,
       goalId: event.goalId ?? null,
       plugin: event.plugin ?? event.actor?.plugin ?? null,
+      via: event.actor?.via ?? null,
       data: event.data,
       createdAt: event.now,
     })
@@ -128,6 +133,7 @@ function selectEvents(database: Database) {
       documentId: events.documentId,
       goalId: events.goalId,
       plugin: events.plugin,
+      via: events.via,
       data: events.data,
       createdAt: events.createdAt,
       actor: personColumns(actors),
@@ -166,6 +172,7 @@ function toEvent(row: EventRow): EventRecord {
     documentId: row.documentId ?? undefined,
     goalId: row.goalId ?? undefined,
     plugin: row.plugin ?? undefined,
+    via: row.via ?? undefined,
     data: row.data,
     createdAt: row.createdAt,
   };

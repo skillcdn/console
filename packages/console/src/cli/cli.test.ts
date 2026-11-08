@@ -4225,6 +4225,11 @@ describe("the plugins on the command line (ADR-0049, ADR-0053)", () => {
       await runCli(["plugin", "hello", "grant", "greeter", "--project", "ops"], members.io),
     ).toBe(EXIT.ok);
     expect(calls.at(-1)?.body).toEqual({ role: "greeter", project: "ops" });
+    const asPlugin = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(["plugin", "hello", "grant", "greeter", "--plugin", "messenger"], asPlugin.io),
+    ).toBe(EXIT.ok);
+    expect(calls.at(-1)?.body).toEqual({ role: "greeter", plugin: "messenger" });
     const whom = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["plugin", "hello", "grant", "greeter"], whom.io)).toBe(EXIT.usage);
     const revoked = harness({ fetch, env: SIGNED_IN });
