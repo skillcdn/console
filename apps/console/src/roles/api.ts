@@ -653,6 +653,7 @@ export async function pluginsOf(
     }),
     clock: systemClock,
     logger,
+    publicUrl: config.auth?.publicUrl,
   });
   holder.current = plugins;
   try {

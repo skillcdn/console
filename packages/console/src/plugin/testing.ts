@@ -57,6 +57,10 @@ export interface TestContextOptions {
   /** The secrets by name; `sign` and `verify` use them, and never hand them over. */
   readonly secrets?: Readonly<Record<string, string>>;
   readonly plugins?: Readonly<Record<string, OtherPlugin>>;
+  /** The console's public origin, from which `ctx.endpoints.url` is answered; left out, it is `plugin.unavailable`. */
+  readonly publicUrl?: string;
+  /** The endpoints the plugin defines, by name, which `ctx.endpoints.url` answers for; any name when left out. */
+  readonly endpoints?: readonly string[];
   readonly now?: () => Date;
   readonly language?: string;
 }
@@ -592,6 +596,20 @@ function build(store: Store, options: TestContextOptions, caller: PluginCaller):
           forbidden(`plugins.get(${key})`, `plugins.${key}`);
         }
         return other;
+      },
+    },
+    endpoints: {
+      async url(name) {
+        if (options.endpoints !== undefined && !options.endpoints.includes(name)) {
+          throw new PluginRefusal("plugin.not_found", `the plugin defines no endpoint ${name}`);
+        }
+        if (options.publicUrl === undefined) {
+          throw new PluginRefusal(
+            "plugin.unavailable",
+            "this console has no public address (PUBLIC_URL) to reach its endpoints at",
+          );
+        }
+        return `${options.publicUrl}/api/v1/plugins/${encodeURIComponent(plugin.key)}/x/${encodeURIComponent(name)}`;
       },
     },
     log: { info: log("info"), warn: log("warn"), error: log("error") },

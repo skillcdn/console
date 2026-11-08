@@ -15,6 +15,7 @@ import {
   type BridgeToPage,
   isBridgePath,
   isBridgeToFrame,
+  isBridgeUrl,
   MAX_BRIDGE_TITLE_LENGTH,
   PLUGIN_BRIDGE_VERSION,
   type PluginWidgetSizeName,
@@ -122,6 +123,12 @@ export interface PluginFrame {
   };
   /** The console's page follows a path of the console's in place; a URL is refused. */
   navigate(path: string): void;
+  /**
+   * The console's page opens a web or a mail address in a new tab (ADR-0067), for a link a
+   * person pressed: call it from the press itself, since the page opens nothing but right after
+   * one. Anything else, a path of the console's included, is refused; `navigate` takes those.
+   */
+  open(url: string): void;
   /** The console's page downloads a file of this plugin. */
   download(id: string): void;
   setTitle(text: string): void;
@@ -349,6 +356,16 @@ export function connect(options: ConnectOptions = {}): Promise<PluginFrame> {
                 });
               }
               post({ v: PLUGIN_BRIDGE_VERSION, t: "navigate", path });
+            },
+            open: (url) => {
+              if (!isBridgeUrl(url)) {
+                throw new PluginBridgeError({
+                  code: "plugin.forbidden",
+                  message:
+                    "open takes a web or a mail address; navigate takes a path of the console's",
+                });
+              }
+              post({ v: PLUGIN_BRIDGE_VERSION, t: "open", url });
             },
             download: (id) => post({ v: PLUGIN_BRIDGE_VERSION, t: "download", id }),
             setTitle: (text) => {

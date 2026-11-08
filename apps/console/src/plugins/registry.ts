@@ -5,16 +5,17 @@
 // administrative act and every command, a log line for the rest.
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { join } from "node:path";
-import type {
-  PluginState,
-  RestPlugin,
-  RestPluginDetail,
-  RestPluginEnableInput,
-  RestPluginGrant,
-  RestPluginOperation,
-  RestPluginSetting,
-  RestPlugins,
-  RestRulesPlugin,
+import {
+  type PluginState,
+  pluginPath,
+  type RestPlugin,
+  type RestPluginDetail,
+  type RestPluginEnableInput,
+  type RestPluginGrant,
+  type RestPluginOperation,
+  type RestPluginSetting,
+  type RestPlugins,
+  type RestRulesPlugin,
 } from "@skillcdn/console/api";
 import {
   type ArgDescription,
@@ -359,6 +360,7 @@ export class Plugins {
       workspace: options.workspace,
       clock: options.clock,
       records: options.records,
+      publicUrl: options.publicUrl,
     });
     this.outbound =
       options.outbound ?? new Outbound({ clock: options.clock, logger: options.logger });
@@ -1952,6 +1954,23 @@ export class Plugins {
         );
       case "plugins":
         return this.otherPlugin(call, consent, method, args);
+      case "endpoints": {
+        if (method !== "url") {
+          throw new PluginRefusal("plugin.invalid_args", `endpoints.${method} is not a call`);
+        }
+        const name = typeof args[0] === "string" ? args[0] : "";
+        if (entry.description?.endpoints[name] === undefined) {
+          throw new PluginRefusal("plugin.not_found", `the plugin defines no endpoint ${name}`);
+        }
+        const origin = this.options.publicUrl;
+        if (origin === undefined) {
+          throw new PluginRefusal(
+            "plugin.unavailable",
+            "this console has no public address (PUBLIC_URL) to reach its endpoints at",
+          );
+        }
+        return `${origin}${pluginPath(call.plugin, "x", name)}`;
+      }
       case "console.workspace":
       case "console.people":
       case "console.projects":

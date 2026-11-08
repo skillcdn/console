@@ -250,9 +250,21 @@ export type PluginCaller = PersonCaller | ConsoleCaller;
 export interface PluginWorkspace {
   readonly name: string;
   readonly languages: readonly string[];
+  /** The zone the workspace's times of day are read in; `UTC` where none is set, as `timeZoneSet` says. */
   readonly timeZone: string;
+  /**
+   * Whether an administrator set the time zone: `false` where the workspace runs on UTC because
+   * nobody said otherwise, so that a plugin that reads a time of day says so, instead of taking
+   * UTC for a choice.
+   */
+  readonly timeZoneSet: boolean;
   /** The day the week begins on (ADR-0035): `auto` leaves it to the language of whoever reads. */
   readonly weekStart: WeekStart;
+  /**
+   * The console's public origin (`PUBLIC_URL`), for a link to the console in what a plugin
+   * writes elsewhere; `null` where the deployment names none.
+   */
+  readonly url: string | null;
   readonly categories: readonly {
     readonly key: string;
     readonly name: string;
@@ -378,6 +390,16 @@ export interface OtherPlugin {
   readonly api: Readonly<Record<string, (input: unknown) => Promise<unknown>>>;
 }
 
+/** The plugin's own endpoints, as a service elsewhere is told to call them. */
+export interface PluginEndpoints {
+  /**
+   * The full address of an endpoint the plugin defines, under the console's public origin, to
+   * register a callback or a webhook with a service elsewhere; `plugin.not_found` for a name the
+   * plugin does not define, `plugin.unavailable` where the console has no public address.
+   */
+  url(name: string): Promise<string>;
+}
+
 export interface PluginLog {
   info(message: string, fields?: Readonly<Record<string, unknown>>): void;
   warn(message: string, fields?: Readonly<Record<string, unknown>>): void;
@@ -399,6 +421,7 @@ export interface PluginContext {
   fetch(url: string, init?: PluginFetchInit): Promise<PluginFetchResponse>;
   readonly secrets: PluginSecrets;
   readonly plugins: { get(key: string): Promise<OtherPlugin> };
+  readonly endpoints: PluginEndpoints;
   readonly log: PluginLog;
   now(): Date;
   /** The caller's language, `en` for the console. */
@@ -410,6 +433,14 @@ export interface PluginContext {
 /** An event a hook receives: the console's, of the plugin's board projects, or another plugin's. */
 export interface PluginHookEvent {
   readonly source: "console" | "plugin";
+  /**
+   * The event's id, one per event across both streams (`console:<number>` or `plugin:<number>`):
+   * delivery is at least once, so a hook that must not act twice keeps the ids it acted on and
+   * passes over one it has seen.
+   */
+  readonly id: string;
+  /** Which delivery of the event this is: 1 the first time, more after a failure and its retries. */
+  readonly attempt: number;
   /** `console:<kind>` or `plugin:<key>:<kind>`, as the hook was named. */
   readonly kind: string;
   readonly at: string;

@@ -421,6 +421,19 @@ Goal: what the same person found on the second look: the words of a failure, the
 - [x] What a read before the release found: a plugin's thread holds no way to the network, `process.getBuiltinModule` and the names Node keeps for compatibility among the ways there were; a frame cannot leave its policy for a file of its own bundle; a stream a plugin did not hold tells it nothing later, and `files` withdrawn stops a frame's reads; what a plugin writes meets the rules of any text; a patch of the person or the workspace is bounded; a decision raised during a rollout reaches its decider. The migrations were rehearsed on a database of the release before. A frame holds no WebRTC, which no policy closes: every script of a bundle begins by taking it out ([ADR-0064](adr/0064-a-frame-holds-no-webrtc-every-script-of-a-bundle-begins-by-taking-it-out.md)), tried against the ways back in Chromium, Firefox and WebKit.
 - [x] WebRTC is a way out a plugin asks for ([ADR-0066](adr/0066-webrtc-is-a-way-out-a-plugin-asks-for-and-how-a-frame-is-held-stays-in-one-place.md)): `outbound:webrtc`, which an administrator consents to, leaves the line out of the plugin's scripts, gone from the next frame once withdrawn; what a frame holds is decided in one file, for when frames are isolated another way.
 
+## Milestone 39, what the first plugins asked, the third round: the console's side of the messenger (2026-11-08)
+
+Goal: what `hr` on a live console and the design of `messenger` in `skillcdn/console-plugins` asked of the console: the small things an agent and an administrator met first, then what a plugin that carries messages out of the console and back needs of it ([console-plugins ADR-0008](https://github.com/skillcdn/console-plugins/blob/main/docs/adr/0008-every-notification-leaves-the-console-through-the-messenger-plugin-which-reads-what-it-tells-as-a-principal.md)).
+
+- [x] `arg.day` and a `day` setting take a day the calendar has: February 30 fit the shape and reached the plugin.
+- [x] `console plugin <key>` lists each command in brief, the positionals and the required flags with `[options]` for the rest, which `help <command>` has whole; a file argument prints as `--file <path>`, the flag the command takes, where it printed a flag of the argument's name that the command refused.
+- [x] The preview console answers as the console's own version, so that the real `console` command signs in to it and runs a plugin's commands; before, the harness's fixed version refused the command as too new.
+- [x] The preview console serves the bundles uncached: a plugin rebuilt under one version was run by a browser from the build it had kept, against a server that answered something else, and looked like a bug of the plugin's.
+- [x] A hook event carries its `id`, one across both streams, and the `attempt`, so that a hook keeps from acting twice by the id alone.
+- [x] A plugin's server reads the console's public origin (`ctx.console.workspace().url`) and the full address of its own endpoints (`ctx.endpoints.url(name)`), to register a callback with a service elsewhere and to write a link to the console.
+- [x] A time zone nobody set is told: `ctx.console.workspace().timeZoneSet`, a notice on the plugin's settings page and from `console plugin <key> enable` where the plugin reads a time of day, and a job's next time computed again when the zone is set or changed, where the first run after the change was at the old zone's time.
+- [x] A link a person presses in a frame opens in a new tab ([ADR-0067](adr/0067-a-link-a-person-presses-in-a-frame-opens-in-a-new-tab-through-the-bridge.md)): `frame.open(url)`, a web or a mail address, right after the press; the frame copied the address for the person to paste before.
+
 ## After milestone 16
 
 Nothing is chosen yet; the list below is where the next milestone comes from.

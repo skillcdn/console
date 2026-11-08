@@ -163,9 +163,15 @@ export default {
         projects = error.code;
       }
       const workspace = await ctx.console.workspace();
+      let endpoint;
+      try {
+        endpoint = await ctx.endpoints.url("callback");
+      } catch (error) {
+        endpoint = error.code;
+      }
       return {
         text: String(people.length),
-        data: { people: people.map((p) => p.login), projects, workspace },
+        data: { people: people.map((p) => p.login), projects, workspace, endpoint },
       };
     }),
     probe: command(
@@ -220,6 +226,9 @@ export default {
         requestId: record.id,
         state,
         by: event.data.actor ?? null,
+        // The event's id and which delivery it was, by which a hook keeps from acting twice.
+        eventId: event.id,
+        attempt: event.attempt,
       });
     },
     // With people:read:all, the console says who left the workspace, as it happens.

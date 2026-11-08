@@ -220,6 +220,7 @@ function contextOf(
       sign: group("secrets")("sign") as never,
       verify: group("secrets")("verify") as never,
     },
+    endpoints: { url: group("endpoints")("url") as never },
     plugins: {
       async get(other: string) {
         const found = (await rpc(callId, "plugins", "get", [other])) as {

@@ -149,6 +149,7 @@ beforeAll(async () => {
     clock,
     logger,
     timeouts: { command: 10_000, query: 5_000, hook: 10_000, job: 10_000, lifecycle: 5_000 },
+    publicUrl: SIGN_IN_URL,
   });
   holder.current = plugins;
   await host.start();
@@ -373,10 +374,14 @@ describe("a plugin on the board", () => {
       ).json(),
     );
     expect(emitted.items.map((event) => event.kind)).toEqual(["decided"]);
+    // The hook was told the event's id and that this was its first delivery, by which a plugin
+    // keeps from acting twice on a delivery repeated.
     expect(emitted.items[0]?.data).toMatchObject({
       requestId: record.id,
       state: "approved",
       by: { login: aliceLogin },
+      eventId: expect.stringMatching(/^console:\d+$/),
+      attempt: 1,
     });
     const tasks = restTasksSchema.parse(
       await (await h.request(projectPath(BOARD, "tasks"), { headers: { cookie: admin } })).json(),
@@ -454,15 +459,21 @@ describe("a plugin on the board", () => {
       people: string[];
       projects: string;
       workspace: { name: string; timeZone: string; languages: string[] };
+      endpoint: string;
     };
     expect(data.people).toEqual(expect.arrayContaining([aliceLogin, "bob"]));
     expect(data.projects).toBe("plugin.forbidden");
+    // UTC because nobody set a zone, and said so; the console's public address, for a link elsewhere.
     expect(data.workspace).toMatchObject({
       name: "Acme",
       timeZone: "UTC",
+      timeZoneSet: false,
       weekStart: "auto",
       languages: ["en", "ko"],
+      url: SIGN_IN_URL,
     });
+    // An endpoint's address is of one the plugin defines; this plugin defines none.
+    expect(data.endpoint).toBe("plugin.not_found");
   });
 
   it("makes outbound requests to the host declared, the secret put in by the console, and to no other", async () => {

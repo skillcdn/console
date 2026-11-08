@@ -10,6 +10,7 @@ import {
   type BridgeToFrame,
   isBridgePath,
   isBridgeToPage,
+  isBridgeUrl,
   PLUGIN_BRIDGE_VERSION,
 } from "../plugin/bridge.js";
 import type { Navigation } from "../router.js";
@@ -160,6 +161,20 @@ export async function performBridgeCall(
 }
 
 /** The console's computed design tokens, as the page's root has them: what a frame is told to look like. */
+/**
+ * Whether a person pressed something a moment ago, as the browser keeps it: a link in a frame
+ * gives the page this too, which is what lets the page open a tab for it; a browser without the
+ * API is left to decide for itself, as it does for any page.
+ */
+function recentlyPressed(): boolean {
+  if (typeof navigator === "undefined") {
+    return false;
+  }
+  const activation = (navigator as Navigator & { userActivation?: { isActive: boolean } })
+    .userActivation;
+  return activation === undefined || activation.isActive;
+}
+
 export function readTheme(): Record<string, string> {
   if (typeof document === "undefined" || typeof getComputedStyle === "undefined") {
     return {};
@@ -321,6 +336,14 @@ export function PluginFrame(props: PluginFrameProps) {
           anchor.click();
           return;
         }
+        case "open":
+          // A link a person pressed in the frame (ADR-0067): a web or a mail address, opened in a
+          // new tab with no opener and no referrer, and only while the press is recent, which a
+          // press in the frame gives this page too.
+          if (isBridgeUrl(message.url) && recentlyPressed()) {
+            window.open(message.url, "_blank", "noopener,noreferrer");
+          }
+          return;
         case "subscribe":
           subscribed.current = new Set(message.kinds);
           return;

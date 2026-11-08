@@ -160,6 +160,17 @@ export interface BridgeDownload {
   readonly id: string;
 }
 
+/**
+ * A link a person pressed in the frame, for the console's page to open in a new tab (ADR-0067):
+ * the frame's sandbox opens no window itself, and the page opens one only for a web or a mail
+ * address, and only right after a person pressed.
+ */
+export interface BridgeOpen {
+  readonly v: 1;
+  readonly t: "open";
+  readonly url: string;
+}
+
 export interface BridgeSubscribe {
   readonly v: 1;
   readonly t: "subscribe";
@@ -183,6 +194,7 @@ export type BridgeToPage =
   | BridgeResize
   | BridgeTitle
   | BridgeDownload
+  | BridgeOpen
   | BridgeSubscribe;
 
 /** A path of the console's, as `navigate` and `path` carry one: absolute, no scheme, no host, one line. */
@@ -210,6 +222,28 @@ export function isBridgePath(value: unknown): value is string {
     !value.startsWith("//") &&
     !/[\s\\]/.test(value)
   );
+}
+
+/** The schemes a link pressed in a frame may open in a new tab: the web, and mail. Nothing that runs. */
+const OPENABLE_SCHEMES: ReadonlySet<string> = new Set(["https:", "http:", "mailto:"]);
+export const MAX_BRIDGE_URL_LENGTH = 2048;
+
+/** True for an address the page may open in a new tab for a frame: an absolute web or mail address, one line. */
+export function isBridgeUrl(value: unknown): value is string {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.length > MAX_BRIDGE_URL_LENGTH ||
+    /\s/.test(value) ||
+    [...value].some((character) => {
+      const code = character.codePointAt(0) ?? 0;
+      return code < 0x20 || code === 0x7f;
+    }) ||
+    !URL.canParse(value)
+  ) {
+    return false;
+  }
+  return OPENABLE_SCHEMES.has(new URL(value).protocol);
 }
 
 function isTheme(value: unknown): value is Record<string, string> {
@@ -331,6 +365,8 @@ export function isBridgeToPage(value: unknown): value is BridgeToPage {
       );
     case "download":
       return isLine(value.id, MAX_ID_LENGTH);
+    case "open":
+      return isBridgeUrl(value.url);
     case "subscribe":
       return (
         Array.isArray(value.kinds) &&

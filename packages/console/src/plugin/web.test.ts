@@ -209,6 +209,15 @@ describe("connect", () => {
     expect(frame.posted.at(-1)?.message).toEqual({ v: 1, t: "title", text: "Leave requests" });
     plugin.download("f1");
     expect(frame.posted.at(-1)?.message).toEqual({ v: 1, t: "download", id: "f1" });
+    // A link to the web is for the page to open in a new tab; a path of the console's is not one.
+    plugin.open("https://forms.example/leave");
+    expect(frame.posted.at(-1)?.message).toEqual({
+      v: 1,
+      t: "open",
+      url: "https://forms.example/leave",
+    });
+    expect(() => plugin.open("/projects/web")).toThrow(PluginBridgeError);
+    expect(() => plugin.open("javascript:alert(1)")).toThrow(PluginBridgeError);
   });
 
   it("subscribes once per kind and hands events, themes and paths to the handlers", async () => {

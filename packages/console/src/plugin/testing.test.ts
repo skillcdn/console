@@ -159,6 +159,21 @@ describe("createTestContext", () => {
     expect(await ctx.secrets.verify("token", "other", signature, "hmac-sha256")).toBe(false);
   });
 
+  it("answers an endpoint's address from the public origin given, and refuses without one", async () => {
+    const ctx = createTestContext({
+      plugin: { key: "leave" },
+      publicUrl: "https://console.example",
+      endpoints: ["slack"],
+    });
+    await expect(ctx.endpoints.url("slack")).resolves.toBe(
+      "https://console.example/api/v1/plugins/leave/x/slack",
+    );
+    await expect(ctx.endpoints.url("nope")).rejects.toMatchObject({ code: "plugin.not_found" });
+    await expect(createTestContext().endpoints.url("slack")).rejects.toMatchObject({
+      code: "plugin.unavailable",
+    });
+  });
+
   it("keeps what was emitted and logged, and acts as another caller on the same store", async () => {
     const ctx = createTestContext({ collections: [requests] });
     await ctx.events.emit("requested", { id: "r1" });

@@ -164,7 +164,7 @@ export class PluginDispatcher {
               target,
               cursor,
               hook,
-              await this.payloadOf(workspace, target, event, hook),
+              await this.payloadOf(workspace, target, event, hook, cursor.attempts + 1),
               event.projectId,
               `event ${event.id}`,
             )
@@ -198,7 +198,7 @@ export class PluginDispatcher {
               target,
               cursor,
               hook,
-              this.pluginPayloadOf(event, hook),
+              this.pluginPayloadOf(event, hook, cursor.attempts + 1),
               target.boardProjectId,
               `plugin event ${event.id}`,
             )
@@ -346,14 +346,16 @@ export class PluginDispatcher {
   }
 
   /**
-   * A console event as a hook receives it: the kind, the ids and the time; the content with
-   * `board:read`; and the answer to the plugin's own decision with `board:decisions`.
+   * A console event as a hook receives it: its id and which delivery this is, the kind, the ids
+   * and the time; the content with `board:read`; and the answer to the plugin's own decision with
+   * `board:decisions`.
    */
   private async payloadOf(
     workspace: WorkspaceRecord,
     target: DispatchTarget,
     event: EventRecord,
     hook: string,
+    attempt: number,
   ): Promise<PluginHookEvent> {
     const ids = {
       ...(event.taskId === undefined ? {} : { taskId: event.taskId }),
@@ -391,6 +393,8 @@ export class PluginDispatcher {
         : await findProjectBrief(this.options.database, workspace.id, event.projectId);
     return {
       source: "console",
+      id: hookEventId("console", event.id),
+      attempt,
       kind: hook,
       at: event.createdAt.toISOString(),
       plugin: event.plugin ?? null,
@@ -399,9 +403,15 @@ export class PluginDispatcher {
     };
   }
 
-  private pluginPayloadOf(event: PluginEventRecord, hook: string): PluginHookEvent {
+  private pluginPayloadOf(
+    event: PluginEventRecord,
+    hook: string,
+    attempt: number,
+  ): PluginHookEvent {
     return {
       source: "plugin",
+      id: hookEventId("plugin", event.id),
+      attempt,
       kind: hook,
       at: event.createdAt.toISOString(),
       plugin: event.plugin,
@@ -409,6 +419,15 @@ export class PluginDispatcher {
       data: event.data,
     };
   }
+}
+
+/**
+ * The id a hook reads an event by: the stream and the event's number in it, so that one id
+ * names one event across the console's events and the plugins', and a hook that keeps the ids it
+ * acted on passes over a delivery repeated.
+ */
+export function hookEventId(source: "console" | "plugin", number: number): string {
+  return `${source}:${number}`;
 }
 
 /** Whether an event is one of the workspace's people events: someone joined, left, came back, changed role, or was listed. */

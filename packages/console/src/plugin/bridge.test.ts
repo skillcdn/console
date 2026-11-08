@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isBridgePath, isBridgeToFrame, isBridgeToPage } from "./bridge.js";
+import { isBridgePath, isBridgeToFrame, isBridgeToPage, isBridgeUrl } from "./bridge.js";
 
 const INIT = {
   v: 1,
@@ -107,6 +107,8 @@ describe("isBridgeToPage", () => {
     expect(isBridgeToPage({ v: 1, t: "resize", height: 320 })).toBe(true);
     expect(isBridgeToPage({ v: 1, t: "title", text: "Leave" })).toBe(true);
     expect(isBridgeToPage({ v: 1, t: "download", id: "f1" })).toBe(true);
+    expect(isBridgeToPage({ v: 1, t: "open", url: "https://forms.example/leave" })).toBe(true);
+    expect(isBridgeToPage({ v: 1, t: "open", url: "mailto:hr@example.com" })).toBe(true);
     expect(isBridgeToPage({ v: 1, t: "subscribe", kinds: ["records", "plugin"] })).toBe(true);
   });
 
@@ -121,9 +123,29 @@ describe("isBridgeToPage", () => {
     expect(isBridgeToPage({ v: 1, t: "resize", height: -1 })).toBe(false);
     expect(isBridgeToPage({ v: 1, t: "resize", height: Number.NaN })).toBe(false);
     expect(isBridgeToPage({ v: 1, t: "title", text: "a\nb" })).toBe(false);
+    expect(isBridgeToPage({ v: 1, t: "open", url: "javascript:alert(1)" })).toBe(false);
+    expect(isBridgeToPage({ v: 1, t: "open", url: "/projects/web" })).toBe(false);
     expect(isBridgeToPage({ v: 1, t: "subscribe", kinds: ["everything"] })).toBe(false);
     expect(isBridgeToPage({ v: 1, t: "init" })).toBe(false);
     expect(isBridgeToPage([])).toBe(false);
+  });
+});
+
+describe("isBridgeUrl", () => {
+  it("takes a web or a mail address, absolute and one line, and nothing that runs or is relative", () => {
+    expect(isBridgeUrl("https://forms.example/leave?id=1#top")).toBe(true);
+    expect(isBridgeUrl("http://intranet.example/")).toBe(true);
+    expect(isBridgeUrl("mailto:hr@example.com?subject=Leave")).toBe(true);
+    expect(isBridgeUrl("javascript:alert(1)")).toBe(false);
+    expect(isBridgeUrl("data:text/html,hi")).toBe(false);
+    expect(isBridgeUrl("blob:https://console.example/x")).toBe(false);
+    expect(isBridgeUrl("file:///etc/passwd")).toBe(false);
+    expect(isBridgeUrl("/projects/web")).toBe(false);
+    expect(isBridgeUrl("forms.example/leave")).toBe(false);
+    expect(isBridgeUrl("https://a b.example/")).toBe(false);
+    expect(isBridgeUrl(`https://forms.example/${"a".repeat(2048)}`)).toBe(false);
+    expect(isBridgeUrl("")).toBe(false);
+    expect(isBridgeUrl(42)).toBe(false);
   });
 });
 

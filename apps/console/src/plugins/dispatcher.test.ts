@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { contentFor, isPeopleEvent, ownAnswerOf } from "./dispatcher.js";
+import { contentFor, hookEventId, isPeopleEvent, ownAnswerOf } from "./dispatcher.js";
+
+describe("a hook event's id", () => {
+  it("names the stream and the number, so that one id is one event across both streams", () => {
+    expect(hookEventId("console", 42)).toBe("console:42");
+    expect(hookEventId("plugin", 42)).toBe("plugin:42");
+    expect(hookEventId("console", 42)).not.toBe(hookEventId("plugin", 42));
+  });
+});
 
 describe("the workspace's people events", () => {
   it("reach a plugin that reads the directory, with their content, and no other hook gets content without board:read", () => {
