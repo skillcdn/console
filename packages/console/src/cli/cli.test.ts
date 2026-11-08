@@ -1462,6 +1462,62 @@ describe("the console command", () => {
     expect(shown.out()).toContain(`waits for ${PERSON.login}.`);
   });
 
+  it("reaches a decision outside the project it works in, wherever it is (ADR-0068), and answers it there", async () => {
+    const elsewhere = { key: "hr", name: "HR", color: null, symbol: null, icon: null };
+    const reached = { project: elsewhere, decision: DECISION, mayAnswer: true };
+    const answered = {
+      ...DECISION,
+      answer: { option: "1", note: null, by: PERSON, at: "2026-11-08T09:00:00.000Z", agent: null },
+    };
+    const { fetch, calls } = fakeConsole({
+      [`GET ${IN}/decisions/${DECISION.id}`]: {
+        status: 404,
+        body: { error: { code: "decision.not_found", message: "The decision was not found." } },
+      },
+      [`GET /api/v1/decisions/${DECISION.id}`]: { body: reached },
+      [`GET /api/v1/decisions/${DECISION.id}?wait=50`]: {
+        body: { ...reached, decision: answered },
+      },
+      [`POST ${IN}/decisions/${DECISION.id}/answer`]: {
+        status: 404,
+        body: { error: { code: "decision.not_found", message: "The decision was not found." } },
+      },
+      [`POST /api/v1/decisions/${DECISION.id}/answer`]: { body: answered },
+    });
+    // Not in this project: the console is asked for the decision wherever it is.
+    const read = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["decision", DECISION.id], read.io)).toBe(EXIT.ok);
+    expect(read.out()).toContain(DECISION.question);
+    expect(calls.map((call) => call.key)).toEqual([
+      `GET ${IN}/decisions/${DECISION.id}`,
+      `GET /api/v1/decisions/${DECISION.id}`,
+    ]);
+    // Waiting goes the same way, and an answer is written where the decision is.
+    const waited = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["decision", DECISION.id, "--wait", "60"], waited.io)).toBe(EXIT.ok);
+    expect(waited.out()).toContain("Answered: 1)");
+    const written = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["answer", DECISION.id, "--option", "1"], written.io)).toBe(EXIT.ok);
+    expect(calls.at(-1)?.key).toBe(`POST /api/v1/decisions/${DECISION.id}/answer`);
+    // With no project bound at all, the decision is reached wherever it is, straight away.
+    const unbound = harness({ fetch, env: { CONSOLE_URL: ORIGIN, CONSOLE_TOKEN: "cns_t_secret" } });
+    const before = calls.length;
+    expect(await runCli(["decision", DECISION.id], unbound.io)).toBe(EXIT.ok);
+    expect(calls.slice(before).map((call) => call.key)).toEqual([
+      `GET /api/v1/decisions/${DECISION.id}`,
+    ]);
+    // A console from before that route, or a decision that is nobody's: not found, as before.
+    const older = fakeConsole({
+      [`GET ${IN}/decisions/${DECISION.id}`]: {
+        status: 404,
+        body: { error: { code: "decision.not_found", message: "The decision was not found." } },
+      },
+    });
+    const gone = harness({ fetch: older.fetch, env: SIGNED_IN });
+    expect(await runCli(["decision", DECISION.id], gone.io)).toBe(EXIT.failed);
+    expect(gone.err()).toContain("decision.not_found");
+  });
+
   it("ends a run as finished, failed or abandoned", async () => {
     const { fetch, calls } = fakeConsole({
       [OPEN_RUNS]: { body: { more: false, items: [RUN] } },
@@ -3738,7 +3794,7 @@ describe("the plugins on the command line (ADR-0049, ADR-0053)", () => {
     const { fetch, calls } = fakeConsole({
       [`POST ${AT}/invoke`]: [
         { body: INVOKED },
-        { body: { ...INVOKED, text: "Requested.", waiting: DECISION.id } },
+        { body: { ...INVOKED, text: "Requested.", waiting: DECISION.id, project: "hello-board" } },
         {
           status: 400,
           body: { error: { code: "plugin.invalid_args", message: "to is required" } },
@@ -3765,7 +3821,9 @@ describe("the plugins on the command line (ADR-0049, ADR-0053)", () => {
     expect(calls[1]?.body).toEqual({ argv: ["request"], project: "web", run: RUN.id });
     expect(waiting.out()).toContain("Requested.");
     expect(waiting.out()).toContain(`decision id: ${DECISION.id}`);
-    expect(waiting.out()).toContain(`console decision ${DECISION.id} --wait 100`);
+    expect(waiting.out()).toContain(
+      `The decision waits for a person in the project hello-board: console decision ${DECISION.id} --wait 100`,
+    );
     // The console's refusal, in its form, and exit 1.
     const refused = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["plugin", "hello", "greet"], refused.io)).toBe(EXIT.failed);

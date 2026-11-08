@@ -68,6 +68,11 @@ export function personWorkPath(personId: string): string {
   return `${restPath("people", personId)}/work`;
 }
 
+/** The REST path of one decision wherever it is (ADR-0068), by its id; `/answer` under it answers. */
+export function decisionPath(id: string): string {
+  return `${REST_ROUTES.decisions}/${encodeURIComponent(id)}`;
+}
+
 /** The REST path of a person's tokens, or of one of them: for an administrator. */
 export function personTokensPath(personId: string, tokenId?: string): string {
   const base = `${restPath("people", personId)}/tokens`;

@@ -2,7 +2,7 @@ import type { PeopleVisibility } from "@skillcdn/console/api";
 import { type SQL, sql } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import type { PersonRecord } from "../db/queries/people.js";
-import { people, projectMembers, projects } from "../db/schema.js";
+import { decisions, people, pluginLinks, projectMembers, projects } from "../db/schema.js";
 
 // Who may see whom, and what (ADR-0035). Every decision about people and projects is made here
 // and nowhere else: a query takes its condition from this module and applies it in SQL, so that
@@ -106,6 +106,47 @@ export function readsListings(asker: PersonRecord, settings: AccessSettings): bo
  */
 export function readsWorkspaceEvents(asker: PersonRecord, settings: AccessSettings): boolean {
   return !peopleNarrowedFor(asker, settings);
+}
+
+/** On a `decisions` row: whether the decision is addressed to `person`, alone or among others (ADR-0057). */
+export function decisionAddressedTo(person: PersonRef): SQL {
+  return sql`(${person}::uuid = any(${decisions.deciderIds}) or ${decisions.deciderId} = ${person}::uuid)`;
+}
+
+/** On a `decisions` row: whether a plugin raised the decision (ADR-0052), which is what lets it reach past the project. */
+const raisedByAPlugin = (): SQL =>
+  sql`exists (select 1 from ${pluginLinks} where ${pluginLinks.targetKind} = 'decision' and ${pluginLinks.targetId} = ${decisions.id} and ${pluginLinks.recordId} is null)`;
+
+/**
+ * On a `decisions` row: whether `person` manages someone the decision is addressed to, directly
+ * or up the reporting line (ADR-0068): what the nearest manager holds, everyone above holds too.
+ * The line never loops (`updatePersonManager` sees to it), so the climb ends.
+ */
+const aboveADecider = (person: PersonRef): SQL =>
+  sql`exists (with recursive above(id) as (select ${people.managerId} from ${people} where ${people.id} = any(${decisions.deciderIds}) and ${people.managerId} is not null union select p.manager_id from people p join above on p.id = above.id where p.manager_id is not null) select 1 from above where above.id = ${person}::uuid)`;
+
+/**
+ * On a `decisions` row: whether `person` may read the decision wherever it is, in a project they
+ * may see or not (ADR-0068): they raised it, it is addressed to them, or it is a plugin's and
+ * addressed to someone they manage. An administrator reads every one.
+ */
+export function decisionReachableBy(person: PersonRecord): SQL {
+  if (administers(person)) {
+    return sql`true`;
+  }
+  return sql`(${decisions.raisedById} = ${person.id}::uuid or ${decisionAddressedTo(person.id)} or (${raisedByAPlugin()} and ${aboveADecider(person.id)}))`;
+}
+
+/**
+ * On a `decisions` row: whether `person` may answer the decision from outside the project
+ * (ADR-0068): it is addressed to them, or it is a plugin's and addressed to someone they manage.
+ * Within the project, anyone who may work there answers, as before; an administrator always.
+ */
+export function decisionAnswerableBy(person: PersonRecord): SQL {
+  if (administers(person)) {
+    return sql`true`;
+  }
+  return sql`(${decisionAddressedTo(person.id)} or (${raisedByAPlugin()} and ${aboveADecider(person.id)}))`;
 }
 
 /** Whether `person` configures the workspace: its settings, its categories, who is in and what they are. */

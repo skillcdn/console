@@ -332,6 +332,8 @@ export const en = {
       rolesNone: "No roles: every member may use it.",
       roleDefault: "Default",
       everyMember: "Every member",
+      roleManagers: "Managers",
+      whoeverManages: "Whoever someone reports to",
       grantEveryone: "Everyone",
       grantMembersOf: (project: string) => `Members of ${project}`,
       grantPeople: "People",

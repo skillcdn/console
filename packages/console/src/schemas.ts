@@ -887,6 +887,18 @@ export const restMyDecisionsSchema = z.object({
 export type RestMyDecisions = z.infer<typeof restMyDecisionsSchema>;
 
 /**
+ * `GET /api/v1/decisions/<id>`: one decision wherever it is (ADR-0068), in a project the asker
+ * may see or one that reaches them from elsewhere, with its project and whether they may answer
+ * it (`mayAnswer`, read as optional).
+ */
+export const restReachedDecisionSchema = z.object({
+  project: projectRef,
+  decision: restDecisionSchema,
+  mayAnswer: z.optional(z.boolean()),
+});
+export type RestReachedDecision = z.infer<typeof restReachedDecisionSchema>;
+
+/**
  * What `GET /api/v1/people/<id>/work` answers: another person's open tasks, and their closed
  * ones for the week, within the projects the asker may see, for whoever oversees them. No
  * decisions, which wait for anyone.

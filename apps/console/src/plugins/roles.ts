@@ -13,6 +13,11 @@ export interface RolesInput {
   readonly defaultRole: string | undefined;
   /** The roles granted to the person, to the projects they are in, or to everyone, as read. */
   readonly granted: readonly string[];
+  /**
+   * The roles the person holds by what they are (ADR-0068): a role that follows the reporting
+   * line, where someone active reports to them. None when left out.
+   */
+  readonly followed?: readonly string[] | undefined;
 }
 
 /** The roles a person holds in a plugin, among those the manifest declares, in the manifest's order. */
@@ -20,7 +25,7 @@ export function rolesHeld(input: RolesInput): string[] {
   if (input.admin) {
     return [...input.declared];
   }
-  const held = new Set(input.granted);
+  const held = new Set([...input.granted, ...(input.followed ?? [])]);
   if (input.defaultRole !== undefined) {
     held.add(input.defaultRole);
   }

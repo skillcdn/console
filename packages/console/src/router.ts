@@ -107,6 +107,8 @@ export type Route =
   | { readonly name: "work"; readonly week: string | undefined }
   /** The decisions addressed to the person (ADR-0042), across the projects they may see. */
   | { readonly name: "my-decisions" }
+  /** One decision wherever it is (ADR-0068), for whoever it reaches: in a project they may see or not. */
+  | { readonly name: "my-decision"; readonly id: string }
   /** The categories tasks are sorted into; an administrator keeps them here. */
   | { readonly name: "categories" }
   /** Where a person approves an agent's connection, by the code it showed, or types one. */
@@ -292,6 +294,10 @@ export function matchRoute(pathname: string, search = ""): Route {
   }
   if (path === PATHS.decisions) {
     return { name: "my-decisions" };
+  }
+  if (path.startsWith(`${PATHS.decisions}/`)) {
+    const id = path.slice(PATHS.decisions.length + 1);
+    return UUID.test(id) ? { name: "my-decision", id } : NOT_FOUND;
   }
   if (path === PATHS.people) {
     return { name: "people" };
@@ -569,6 +575,11 @@ export function decisionsHref(key: string, page?: number): string {
 }
 
 /** Where the person's own work is, with the week of a day at the top, or this week's when none is named. */
+/** Where one decision is read wherever it is (ADR-0068), by whoever it reaches: a person outside its project too. */
+export function myDecisionHref(id: string): string {
+  return `${PATHS.decisions}/${id}`;
+}
+
 export function workHref(week?: string): string {
   return week === undefined ? PATHS.work : `${PATHS.work}?week=${week}`;
 }

@@ -121,7 +121,15 @@ export const restPluginSchema = z.object({
   /** The asker's roles in the plugin; every role for an administrator. */
   roles: z.array(z.string()),
   /** The roles the plugin declares, by key, with their names. */
-  declaredRoles: z.array(z.object({ key: z.string(), name: localized, description: localized })),
+  declaredRoles: z.array(
+    z.object({
+      key: z.string(),
+      name: localized,
+      description: localized,
+      /** What the role follows, held with no grant: `reports`, whoever manages someone (ADR-0068); answered from 0.4.5 and read as optional. */
+      follows: z.optional(z.nullable(z.literal("reports"))),
+    }),
+  ),
   /** The role every member holds without a grant, or `null` where the manifest names none. */
   defaultRole: z.nullable(z.string()),
   menu: z.nullable(z.object({ group: z.string(), order: z.int(), name: z.nullable(localized) })),
@@ -317,6 +325,8 @@ export const restPluginInvocationSchema = z.object({
   text: z.string(),
   data: z.unknown(),
   waiting: z.nullable(z.string()),
+  /** The key of the plugin's board project, where a decision it raised waits, or `null`; answered from 0.4.5 and read as optional. */
+  project: z.optional(z.nullable(z.string())),
 });
 export type RestPluginInvocation = z.infer<typeof restPluginInvocationSchema>;
 

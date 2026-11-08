@@ -29,6 +29,7 @@ import {
   type RestProjectInput,
   type RestProjectPatch,
   type RestProjectRules,
+  type RestReachedDecision,
   type RestRules,
   type RestTask,
   type RestTaskInput,
@@ -119,6 +120,7 @@ import {
   type GoalTaskView,
   goalHref,
   matchRoute,
+  myDecisionHref,
   type Navigation,
   newDecisionHref,
   newGoalHref,
@@ -2242,6 +2244,80 @@ function PlatePage(props: {
   );
 }
 
+/**
+ * One decision wherever it is (ADR-0068): in a project the person may see, or one that reaches
+ * them from elsewhere, addressed to them, raised by them, or a plugin's addressed to someone
+ * they manage; answered here where they may. The address a plugin's page sends a person to,
+ * who may not be in the project the decision waits in.
+ */
+function MyDecisionPage(props: { readonly id: string; readonly data: ConsoleData }) {
+  const words = useWords();
+  const { id, data } = props;
+  const { reachDecision, answerReachedDecision } = data.actions;
+  const [reached, setReached] = useState<RestReachedDecision | undefined>(undefined);
+  const [problem, setProblem] = useState<string | undefined>(undefined);
+  const { busy, error, act } = useAction();
+  const couldNotLoad = words.myDecisions.couldNotLoad;
+  useEffect(() => {
+    const controller = new AbortController();
+    setReached(undefined);
+    setProblem(undefined);
+    reachDecision(id, controller.signal).then(
+      (found) => {
+        if (!controller.signal.aborted) {
+          setReached(found);
+        }
+      },
+      (failure: unknown) => {
+        if (!controller.signal.aborted) {
+          setProblem(errorWords(failure, couldNotLoad, words));
+        }
+      },
+    );
+    return () => controller.abort();
+  }, [reachDecision, id, couldNotLoad, words]);
+  const shown = problem ?? error;
+  return (
+    <>
+      <div className="sc-page-head">
+        <h1 className="sc-page-title">{words.decisions.one}</h1>
+        <LinkButton href={PATHS.decisions}>{words.myDecisions.title}</LinkButton>
+      </div>
+      {shown !== undefined && <Callout tone="danger">{shown}</Callout>}
+      {reached === undefined ? (
+        shown === undefined && (
+          <div className="sc-loading">
+            <Spinner label={words.myDecisions.loading} />
+          </div>
+        )
+      ) : (
+        <DecisionCard
+          decision={reached.decision}
+          project={
+            <span className="sc-task-row-project">
+              <ProjectMark project={reached.project} size="sm" />{" "}
+              {words.work.inProject(reached.project.name)}
+            </span>
+          }
+          fileHref={(fileId) => projectPath(reached.project.key, "files", fileId)}
+          onAnswer={
+            reached.mayAnswer === true
+              ? (_decision, input) =>
+                  void act(async () => {
+                    const answered = await answerReachedDecision(id, input);
+                    setReached((current) =>
+                      current === undefined ? current : { ...current, decision: answered },
+                    );
+                  })
+              : undefined
+          }
+          busy={busy}
+        />
+      )}
+    </>
+  );
+}
+
 /** What is on the person's own plate, across their projects. */
 /** How many of a person's decisions are read at a time. */
 const MY_DECISIONS_PAGE = 50;
@@ -2336,7 +2412,11 @@ function MyDecisionsPage(props: { readonly data: ConsoleData }) {
         <MyDecisions
           addressed={{ items: addressed.items, more: addressed.more, onMore: addressed.readMore }}
           raised={{ items: raised.items, more: raised.more, onMore: raised.readMore }}
-          decisionHref={decisionHref}
+          decisionHref={(projectKey, decisionId) =>
+            props.data.projects.some((project) => project.key === projectKey)
+              ? decisionHref(projectKey, decisionId)
+              : myDecisionHref(decisionId)
+          }
           fileHref={(projectKey, fileId) => projectPath(projectKey, "files", fileId)}
           onAnswer={onAnswer}
           busy={busy || addressed.busy || raised.busy}
@@ -2439,6 +2519,9 @@ function WorkspacePage(props: {
   }
   if (route.name === "my-decisions") {
     return <MyDecisionsPage data={data} />;
+  }
+  if (route.name === "my-decision") {
+    return <MyDecisionPage id={route.id} data={data} />;
   }
   if (route.name === "person-work") {
     return <PersonWorkPage id={route.id} data={data} components={components} week={route.week} />;
@@ -2713,7 +2796,7 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
         {
           href: PATHS.decisions,
           label: words.nav.myDecisions,
-          current: route.name === "my-decisions",
+          current: route.name === "my-decisions" || route.name === "my-decision",
           count: data.me?.decisions?.waiting,
         },
         {

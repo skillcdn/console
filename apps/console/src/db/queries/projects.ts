@@ -6,7 +6,7 @@ import {
   type ProjectRole,
   type ProjectVisibility,
 } from "@skillcdn/console/api";
-import { and, asc, count, eq, type SQL, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, type SQL, sql } from "drizzle-orm";
 import { memberOfProject, projectVisibleTo } from "../../auth/policy.js";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
@@ -155,6 +155,15 @@ const isIconType = (value: string): value is ProjectIconType =>
   (PROJECT_ICON_TYPES as readonly string[]).includes(value);
 
 /** The image a row names, when it names one of a kind the pages show; a row cannot name another. */
+/** A project's own image for its mark from its two columns, or none: what every read of a project's mark goes through. */
+export const projectIconOf = (row: {
+  readonly iconSha256: string | null;
+  readonly iconContentType: string | null;
+}): ProjectIcon | undefined =>
+  row.iconSha256 !== null && row.iconContentType !== null && isIconType(row.iconContentType)
+    ? { sha256: row.iconSha256, contentType: row.iconContentType }
+    : undefined;
+
 const iconOf = (row: ProjectRow): ProjectIcon | undefined =>
   row.iconSha256 !== null && row.iconContentType !== null && isIconType(row.iconContentType)
     ? { sha256: row.iconSha256, contentType: row.iconContentType }
@@ -241,6 +250,41 @@ export async function findProjectFor(
     .where(and(eq(projects.workspaceId, workspaceId), eq(projects.key, key)))
     .limit(1);
   return row === undefined ? undefined : toView(row, person);
+}
+
+/**
+ * The mark and the name of projects by their ids, for the pages to say and link what reaches a
+ * person from a project they may not see (ADR-0068): a decision addressed to them there. The key
+ * and the name of the project, and nothing else of it.
+ */
+export async function findProjectRefs(
+  database: Database,
+  workspaceId: string,
+  ids: readonly string[],
+): Promise<Pick<ProjectRecord, "id" | "key" | "name" | "color" | "symbol" | "icon">[]> {
+  if (ids.length === 0) {
+    return [];
+  }
+  const rows = await drizzleOf(database)
+    .select({
+      id: projects.id,
+      key: projects.key,
+      name: projects.name,
+      color: projects.color,
+      symbol: projects.symbol,
+      iconSha256: projects.iconSha256,
+      iconContentType: projects.iconContentType,
+    })
+    .from(projects)
+    .where(and(eq(projects.workspaceId, workspaceId), inArray(projects.id, [...ids])));
+  return rows.map((row) => ({
+    id: row.id,
+    key: row.key,
+    name: row.name,
+    color: row.color ?? undefined,
+    symbol: row.symbol ?? undefined,
+    icon: projectIconOf(row),
+  }));
 }
 
 /** The projects `person` may see, by name. */

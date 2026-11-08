@@ -858,9 +858,14 @@ export function formatInvocation(result: RestPluginInvocation): string {
     return result.data === undefined ? "null" : JSON.stringify(result.data, null, 2);
   }
   const text = result.text.length === 0 ? "Done." : result.text;
-  return result.waiting === null
-    ? text
-    : `${text}\ndecision id: ${result.waiting}\nThe decision waits for a person: console decision ${result.waiting} --wait 100`;
+  if (result.waiting === null) {
+    return text;
+  }
+  const where =
+    result.project === null || result.project === undefined
+      ? ""
+      : ` in the project ${result.project}`;
+  return `${text}\ndecision id: ${result.waiting}\nThe decision waits for a person${where}: console decision ${result.waiting} --wait 100`;
 }
 
 /** A record's data on one line, cut where it runs long. */

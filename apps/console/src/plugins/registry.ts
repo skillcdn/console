@@ -65,7 +65,13 @@ import {
   latestEventId,
   listEventsOfPlugin,
 } from "../db/queries/events.js";
-import { findPerson, languageOf, listPeople, type PersonRecord } from "../db/queries/people.js";
+import {
+  findPerson,
+  hasActiveReports,
+  languageOf,
+  listPeople,
+  type PersonRecord,
+} from "../db/queries/people.js";
 import {
   beginCursor,
   emitPluginEvent,
@@ -203,6 +209,8 @@ export interface Invocation {
   readonly text: string;
   readonly data: unknown;
   readonly waiting: string | null;
+  /** The key of the plugin's board project, where a decision it raised waits; `null` for none. */
+  readonly project: string | null;
 }
 
 const EMPTY_DISCOVERY: Discovery = { plugins: [], failed: [] };
@@ -574,11 +582,22 @@ export class Plugins {
     }
     const workspace = await this.options.workspace();
     const granted = await grantedRoles(this.options.database, workspace.id, key, person);
+    // A role that follows the reporting line (ADR-0068) is held by whoever manages someone,
+    // read from the directory on every call, so that it comes and goes with the line.
+    const following = Object.entries(entry.manifest.roles)
+      .filter(([, role]) => role.follows === "reports")
+      .map(([role]) => role);
+    const followed =
+      following.length > 0 &&
+      (await hasActiveReports(this.options.database, workspace.id, person.id))
+        ? following
+        : [];
     return rolesHeld({
       admin: configuresPlugins(person),
       declared: Object.keys(entry.manifest.roles),
       defaultRole: entry.manifest.defaultRole,
       granted,
+      followed,
     });
   }
 
@@ -610,6 +629,7 @@ export class Plugins {
         key,
         name: role.name,
         description: role.description,
+        follows: role.follows ?? null,
       })),
       defaultRole: manifest?.defaultRole ?? null,
       menu:
@@ -1461,8 +1481,13 @@ export class Plugins {
     if (!result.ok) {
       throw new PluginRefusal(result.error.code, result.error.message, result.error.data);
     }
+    const board =
+      install.boardProjectId === undefined
+        ? undefined
+        : await findProjectBrief(this.options.database, workspace.id, install.boardProjectId);
+    const project = board?.key ?? null;
     if (kind === "query") {
-      return { kind, text: "", data: result.value, waiting: null };
+      return { kind, text: "", data: result.value, waiting: null, project };
     }
     const value = (result.value ?? {}) as { text?: unknown; data?: unknown; waiting?: unknown };
     return {
@@ -1470,6 +1495,7 @@ export class Plugins {
       text: typeof value.text === "string" ? value.text : "",
       data: value.data ?? null,
       waiting: typeof value.waiting === "string" ? value.waiting : null,
+      project,
     };
   }
 

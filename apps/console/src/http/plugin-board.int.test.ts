@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
 import {
+  decisionPath,
   pluginPath,
   projectPath,
   REST_ROUTES,
@@ -10,12 +11,16 @@ import {
   restDocumentSchema,
   restErrorSchema,
   restEventsSchema,
+  restMyDecisionsSchema,
+  restPeopleSchema,
   restPluginDetailSchema,
   restPluginEventsSchema,
   restPluginGrantSchema,
   restPluginInvocationSchema,
   restPluginRecordSchema,
+  restReachedDecisionSchema,
   restTasksSchema,
+  restWorkSchema,
 } from "@skillcdn/console/api";
 import { eq } from "drizzle-orm";
 import { pino } from "pino";
@@ -412,6 +417,119 @@ describe("a plugin on the board", () => {
       await (await h.request(projectPath(BOARD, "tasks"), { headers: { cookie: admin } })).json(),
     );
     expect(again.items.filter((task) => task.title.startsWith("Audit ")).length).toBe(1);
+  });
+
+  it("addresses a decision to someone outside its project, who reaches and answers it there, and whoever manages them too (ADR-0068)", async () => {
+    // Carol is of the workspace and not in the board project; the plugin may still name her.
+    const carol = await h.signIn("carol");
+    const people = restPeopleSchema.parse(
+      await (await h.request(REST_ROUTES.people, { headers: { cookie: admin } })).json(),
+    );
+    const carolId = people.items.find((person) => person.login === "carol")?.id ?? "";
+    expect(carolId).not.toBe("");
+    const outside = await h.request(projectPath(BOARD), { headers: { cookie: carol } });
+    expect(outside.status).toBe(404);
+    const requested = await invoked("leave", member, [
+      "request",
+      "--from",
+      "2026-12-01",
+      "--to",
+      "2026-12-02",
+      "--approver",
+      "carol",
+    ]);
+    const decisionId = requested.waiting ?? "";
+    expect(decisionId).not.toBe("");
+    // The command is told where the decision waits, so that an agent names the project.
+    expect(requested.project).toBe(BOARD);
+    // Carol finds it among her decisions and on her plate, with the project named, though she
+    // may not see the project; and reads it at its own address, which says she may answer.
+    const mine = restMyDecisionsSchema.parse(
+      await (
+        await h.request(`${REST_ROUTES.decisions}?open=true`, { headers: { cookie: carol } })
+      ).json(),
+    );
+    expect(mine.items.find((item) => item.decision.id === decisionId)?.project.key).toBe(BOARD);
+    const plate = restWorkSchema.parse(
+      await (await h.request(REST_ROUTES.work, { headers: { cookie: carol } })).json(),
+    );
+    expect(plate.decisions.some((item) => item.decision.id === decisionId)).toBe(true);
+    const reached = restReachedDecisionSchema.parse(
+      await (await h.request(decisionPath(decisionId), { headers: { cookie: carol } })).json(),
+    );
+    expect(reached.project.key).toBe(BOARD);
+    expect(reached.decision.plugin).toBe("leave");
+    expect(reached.mayAnswer).toBe(true);
+    // Bob, who requested, reads it too and may not answer it from outside; he is in the project, so he may.
+    const bobs = restReachedDecisionSchema.parse(
+      await (await h.request(decisionPath(decisionId), { headers: { cookie: member } })).json(),
+    );
+    expect(bobs.mayAnswer).toBe(true);
+    // Carol answers at the decision's own address; the project's route is still closed to her.
+    const closed = await h.request(
+      `${projectPath(BOARD, "decisions", decisionId)}/answer`,
+      json({ option: "1" }, carol),
+    );
+    expect(closed.status).toBe(404);
+    const answered = await h.request(
+      `${decisionPath(decisionId)}/answer`,
+      json({ option: "1" }, carol),
+    );
+    expect(answered.status, await answered.clone().text()).toBe(200);
+    expect(restDecisionSchema.parse(await answered.json()).answer?.by.id).toBe(carolId);
+
+    // Whoever manages a decider of a plugin's decision reaches it and answers it too: Carol
+    // manages Bob, and a decision addressed to Bob is hers to answer from outside the project.
+    const managed = await h.request(
+      `${REST_ROUTES.people}/${bobId}`,
+      json({ managerId: carolId }, admin, "PATCH"),
+    );
+    expect(managed.status, await managed.clone().text()).toBe(200);
+    const forBob = await invoked("leave", member, [
+      "request",
+      "--from",
+      "2026-12-03",
+      "--to",
+      "2026-12-03",
+      "--approver",
+      "bob",
+    ]);
+    const above = restReachedDecisionSchema.parse(
+      await (
+        await h.request(decisionPath(forBob.waiting ?? ""), { headers: { cookie: carol } })
+      ).json(),
+    );
+    expect(above.mayAnswer).toBe(true);
+    const byManager = await h.request(
+      `${decisionPath(forBob.waiting ?? "")}/answer`,
+      json({ option: "2" }, carol),
+    );
+    expect(byManager.status, await byManager.clone().text()).toBe(200);
+    // A person's own decision in the project, addressed to Bob, reaches Carol through no line:
+    // the climb is a plugin's decision's alone.
+    const plain = restDecisionSchema.parse(
+      await (
+        await h.request(
+          projectPath(BOARD, "decisions"),
+          json(
+            { question: "Plain?", options: [{ label: "Yes" }, { label: "No" }], deciderId: bobId },
+            admin,
+          ),
+        )
+      ).json(),
+    );
+    const unreached = await h.request(decisionPath(plain.id), { headers: { cookie: carol } });
+    expect(unreached.status).toBe(404);
+    // And a person raising a decision names only who may work in the project, as before.
+    const refused = await h.request(
+      projectPath(BOARD, "decisions"),
+      json(
+        { question: "Carol?", options: [{ label: "Yes" }, { label: "No" }], deciderId: carolId },
+        admin,
+      ),
+    );
+    expect(restErrorSchema.parse(await refused.json()).error.code).toBe("decision.invalid_decider");
+    await h.request(`${REST_ROUTES.people}/${bobId}`, json({ managerId: null }, admin, "PATCH"));
   });
 
   it("changes, comments on and reads its own items; another plugin reads them and may not change them", async () => {

@@ -524,6 +524,11 @@ export type PluginBoard = z.infer<typeof pluginBoardSchema>;
 const pluginRoleSchema = z.strictObject({
   name: localized(MAX_PLUGIN_NAME_LENGTH),
   description: localized(MAX_PLUGIN_DESCRIPTION_LENGTH),
+  /**
+   * A role held by what a person is in the directory, with no grant (ADR-0068): `reports`,
+   * whoever someone active reports to, read from the directory on every call.
+   */
+  follows: z.optional(z.literal("reports")),
 });
 
 export type PluginRole = z.infer<typeof pluginRoleSchema>;

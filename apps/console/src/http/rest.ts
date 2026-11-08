@@ -45,6 +45,7 @@ import {
   type RestPersonWork,
   type RestProjectRules,
   type RestProjects,
+  type RestReachedDecision,
   type RestRules,
   type RestRuns,
   type RestSkillBrowse,
@@ -134,6 +135,7 @@ import {
   DecisionError,
   type DecisionRecord,
   findDecisionFile,
+  findDecisionReachable,
   getDecision,
   listDecisions,
   listDecisionsFor,
@@ -187,6 +189,7 @@ import {
   addMember,
   createProject,
   findProjectFor,
+  findProjectRefs,
   listMembers,
   listProjectsFor,
   ownsAProject,
@@ -1477,6 +1480,16 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
   });
 
+  /** A project as a plate names and links it: its key, its name and its mark. */
+  const projectRefOf = (
+    project: Pick<ProjectRecord, "key" | "name" | "color" | "symbol" | "icon">,
+  ) => ({
+    key: project.key,
+    name: project.name,
+    color: project.color ?? null,
+    symbol: project.symbol ?? null,
+    icon: project.icon ?? null,
+  });
   /** The projects a plate's tasks are in, as a page says and links them; nothing for one the asker may not see. */
   const projectRefsOf = (
     found: readonly Pick<ProjectRecord, "id" | "key" | "name" | "color" | "symbol" | "icon">[],
@@ -1484,16 +1497,26 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     const named = new Map(found.map((project) => [project.id, project]));
     return (projectId: string) => {
       const project = named.get(projectId);
-      return project === undefined
-        ? undefined
-        : {
-            key: project.key,
-            name: project.name,
-            color: project.color ?? null,
-            symbol: project.symbol ?? null,
-            icon: project.icon ?? null,
-          };
+      return project === undefined ? undefined : projectRefOf(project);
     };
+  };
+  /**
+   * The projects a person's decisions are in, those they may see and, for a decision that
+   * reaches them from elsewhere (ADR-0068), the key, the name and the mark of its project alone.
+   */
+  const projectsOfDecisions = async (
+    person: PersonRecord,
+    seen: readonly Pick<ProjectRecord, "id" | "key" | "name" | "color" | "symbol" | "icon">[],
+    found: readonly DecisionRecord[],
+  ) => {
+    const known = new Set(seen.map((project) => project.id));
+    const elsewhere = [...new Set(found.map((decision) => decision.projectId))].filter(
+      (id) => !known.has(id),
+    );
+    return projectRefsOf([
+      ...seen,
+      ...(await findProjectRefs(database, person.workspaceId, elsewhere)),
+    ]);
   };
 
   // What is on the asker's plate, across the projects they may see: their open tasks, what of
@@ -1519,7 +1542,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         offset: query.data.offset,
       }),
     ]);
-    const projectOf = projectRefsOf(projects);
+    const projectOf = await projectsOfDecisions(person, projects, page.items);
     const body: RestMyDecisions = {
       items: page.items.flatMap((decision) => {
         const project = projectOf(decision.projectId);
@@ -1528,6 +1551,89 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       more: page.more,
     };
     return c.json(body);
+  });
+
+  // One decision by its id, wherever it is (ADR-0068): in a project the asker may see, or one
+  // that reaches them from elsewhere, addressed to them, raised by them, or a plugin's addressed
+  // to someone they manage; with `wait`, held while it waits, as the project's route holds.
+  app.get(`${REST_ROUTES.decisions}/:id`, async (c) => {
+    const query = decisionQuery.safeParse(c.req.query());
+    if (!query.success) {
+      return invalid(c, firstProblem(query));
+    }
+    const person = await asking(c);
+    if (person instanceof Response) {
+      return person;
+    }
+    const id = c.req.param("id");
+    if (!UUID.test(id)) {
+      return noSuchDecision(c);
+    }
+    const reached = await findDecisionReachable(database, person.workspaceId, id, person);
+    if (reached === undefined) {
+      return noSuchDecision(c);
+    }
+    const waited = await waitForAnswer(
+      { workspaceId: person.workspaceId, projectId: reached.project.id },
+      id,
+      Math.min(query.data.wait * 1000, agents.waitMs),
+    );
+    const body: RestReachedDecision = {
+      project: projectRefOf(reached.project),
+      decision: restDecision(waited ?? reached.decision),
+      mayAnswer: reached.mayAnswer,
+    };
+    return c.json(body);
+  });
+
+  // The answer, by whoever the decision reaches with the right to answer it (ADR-0068): anyone
+  // who may work in the project, as on the project's route; and from outside it, those it is
+  // addressed to and, for a plugin's decision, whoever manages one of them.
+  app.post(`${REST_ROUTES.decisions}/:id/answer`, tooLarge, async (c) => {
+    const caller = await changingCaller(c);
+    if (caller instanceof Response) {
+      return caller;
+    }
+    const input = await bodyOf(c, restAnswerInputSchema);
+    if (input instanceof Response) {
+      return input;
+    }
+    const id = c.req.param("id");
+    if (!UUID.test(id)) {
+      return noSuchDecision(c);
+    }
+    const person = caller.person;
+    const reached = await findDecisionReachable(database, person.workspaceId, id, person);
+    if (reached === undefined) {
+      return noSuchDecision(c);
+    }
+    if (!reached.mayAnswer) {
+      return c.json(
+        errorBody(
+          "auth.forbidden",
+          "Only those the decision is addressed to, whoever manages them where a plugin raised it, and the project's own people may answer it.",
+        ),
+        403,
+      );
+    }
+    try {
+      const decision = await answerDecision(database, {
+        scope: { workspaceId: person.workspaceId, projectId: reached.project.id },
+        actor: actorOf(caller),
+        decisionId: id,
+        option: input.option,
+        own: input.own,
+        note: input.note,
+        now: clock.now(),
+      });
+      logger.info(
+        { person: person.id, decision: decision.id, requestId: c.get("requestId") },
+        "decision answered",
+      );
+      return c.json(restDecision(decision));
+    } catch (error) {
+      return failure(c, error);
+    }
   });
 
   app.get(REST_ROUTES.work, async (c) => {
@@ -1541,7 +1647,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       listClosedTasksOf(database, person.workspaceId, person, person, LIST_LIMIT),
       listWaitingDecisionsFor(database, person.workspaceId, person, LIST_LIMIT),
     ]);
-    const projectOf = projectRefsOf(projects);
+    const projectOf = await projectsOfDecisions(person, projects, decisions);
     const withProject = (task: TaskRecord) => {
       const project = projectOf(task.projectId);
       return project === undefined ? [] : [{ project, task: restTask(task) }];

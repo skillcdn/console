@@ -4,7 +4,8 @@ import {
   MAX_FILES_PER_DECISION,
   type RestDecisionOption,
 } from "@skillcdn/console/api";
-import { and, asc, count, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { decisionAnswerableBy, decisionReachableBy, memberOfProject } from "../../auth/policy.js";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
 import { decisionFiles, decisions, people, pluginLinks, projects, runs, tasks } from "../schema.js";
@@ -19,7 +20,7 @@ import {
   raisers,
   toPerson,
 } from "./people.js";
-import { mayWorkIn, visibleTo } from "./projects.js";
+import { mayWorkIn, type ProjectRecord, projectIconOf, visibleTo } from "./projects.js";
 import type { FileRecord } from "./runs.js";
 
 // The questions that need a person. A decision is raised once and answered once; both are
@@ -307,10 +308,19 @@ export async function raiseDecision(
     }
     const others = deciderIds.filter((id) => id !== actor.id);
     if (others.length > 0) {
+      // A person named must be able to work here; a plugin's decision (ADR-0068) may address
+      // anyone active of the workspace, who then reaches it where it is, outside the project too.
       const able = await tx
         .select({ id: deciders.id })
         .from(deciders)
-        .where(and(inArray(deciders.id, others), mayWorkIn(scope.projectId, deciders.id)));
+        .where(
+          and(
+            inArray(deciders.id, others),
+            actor.plugin === undefined
+              ? mayWorkIn(scope.projectId, deciders.id)
+              : and(eq(deciders.workspaceId, scope.workspaceId), eq(deciders.status, "active")),
+          ),
+        );
       if (able.length !== others.length) {
         throw new DecisionError("decision.invalid_decider");
       }
@@ -683,8 +693,9 @@ const addressedTo = (person: PersonRecord) =>
   sql`(${person.id}::uuid = any(${decisions.deciderIds}) or ${decisions.deciderId} = ${person.id}::uuid)`;
 
 /**
- * The decisions that wait for `person`'s answer (ADR-0042) across the projects they may see, the
- * oldest first: what has waited longest comes first on their own page of what is theirs to do.
+ * The decisions that wait for `person`'s answer (ADR-0042), the oldest first: what has waited
+ * longest comes first on their own page of what is theirs to do. A decision addressed to the
+ * person is theirs wherever it is, in a project they may see or not (ADR-0068).
  */
 export async function listWaitingDecisionsFor(
   database: Database,
@@ -693,13 +704,11 @@ export async function listWaitingDecisionsFor(
   limit: number,
 ): Promise<DecisionRecord[]> {
   const rows = await selectDecisions(drizzleOf(database))
-    .innerJoin(projects, eq(projects.id, decisions.projectId))
     .where(
       and(
         eq(decisions.workspaceId, workspaceId),
         addressedTo(person),
         isNull(decisions.answeredAt),
-        visibleTo(person),
       ),
     )
     .orderBy(asc(decisions.createdAt), asc(decisions.id))
@@ -708,8 +717,8 @@ export async function listWaitingDecisionsFor(
 }
 
 /**
- * How many decisions wait for `person` (ADR-0042) across the projects they may see: what the
- * pages say beside My decisions, read with who is signed in.
+ * How many decisions wait for `person` (ADR-0042), wherever they are: what the pages say beside
+ * My decisions, read with who is signed in.
  */
 export async function countWaitingDecisionsFor(
   database: Database,
@@ -719,22 +728,87 @@ export async function countWaitingDecisionsFor(
   const [row] = await drizzleOf(database)
     .select({ count: count() })
     .from(decisions)
-    .innerJoin(projects, eq(projects.id, decisions.projectId))
     .where(
       and(
         eq(decisions.workspaceId, workspaceId),
         addressedTo(person),
         isNull(decisions.answeredAt),
-        visibleTo(person),
       ),
     );
   return row?.count ?? 0;
 }
 
 /**
- * A page of the decisions addressed to `person` (ADR-0042) across the projects they may see,
- * or, with `raised`, of those they raised, through their agent or not, for someone else: the
- * ones that wait first, oldest first among them, since those are the ones to answer; then the
+ * A decision as `person` reaches it (ADR-0068), with its project and whether they may answer
+ * it: one of a project they may see, as before; or, wherever it is, one addressed to them, one
+ * they raised, or a plugin's addressed to someone they manage. Nothing for a decision out of
+ * their reach, which is not told apart from one that is not there.
+ */
+export async function findDecisionReachable(
+  database: Database,
+  workspaceId: string,
+  decisionId: string,
+  person: PersonRecord,
+): Promise<
+  | {
+      readonly decision: DecisionRecord;
+      readonly project: Pick<ProjectRecord, "id" | "key" | "name" | "color" | "symbol" | "icon">;
+      /** Whether the person may answer it: anyone who may work in the project, or whom it reaches past the project. */
+      readonly mayAnswer: boolean;
+    }
+  | undefined
+> {
+  const handle = drizzleOf(database);
+  const [row] = await selectDecisions(handle)
+    .innerJoin(projects, eq(projects.id, decisions.projectId))
+    .where(
+      and(
+        eq(decisions.workspaceId, workspaceId),
+        eq(decisions.id, decisionId),
+        or(visibleTo(person), decisionReachableBy(person)),
+      ),
+    )
+    .limit(1);
+  if (row === undefined) {
+    return undefined;
+  }
+  const [reach] = await handle
+    .select({
+      id: projects.id,
+      key: projects.key,
+      name: projects.name,
+      color: projects.color,
+      symbol: projects.symbol,
+      iconSha256: projects.iconSha256,
+      iconContentType: projects.iconContentType,
+      member: sql<boolean>`${person.role === "admin" ? sql`true` : memberOfProject(person.id)}`,
+      answerable: sql<boolean>`${decisionAnswerableBy(person)}`,
+    })
+    .from(decisions)
+    .innerJoin(projects, eq(projects.id, decisions.projectId))
+    .where(eq(decisions.id, decisionId))
+    .limit(1);
+  if (reach === undefined) {
+    return undefined;
+  }
+  return {
+    decision: toDecision(row),
+    project: {
+      id: reach.id,
+      key: reach.key,
+      name: reach.name,
+      color: reach.color ?? undefined,
+      symbol: reach.symbol ?? undefined,
+      icon: projectIconOf(reach),
+    },
+    mayAnswer: reach.member === true || reach.answerable === true,
+  };
+}
+
+/**
+ * A page of the decisions addressed to `person` (ADR-0042), wherever they are (ADR-0068), or,
+ * with `raised`, of those they raised, through their agent or not, for someone else: the ones
+ * that wait first, oldest first among them, since those are the ones to answer; then the
  * answered, newest first, as the record; or only those that wait. And whether there is more.
  */
 export async function listDecisionsFor(
@@ -750,7 +824,6 @@ export async function listDecisionsFor(
   },
 ): Promise<{ readonly items: DecisionRecord[]; readonly more: boolean }> {
   const rows = await selectDecisions(drizzleOf(database))
-    .innerJoin(projects, eq(projects.id, decisions.projectId))
     .where(
       and(
         eq(decisions.workspaceId, workspaceId),
@@ -758,7 +831,6 @@ export async function listDecisionsFor(
           ? and(eq(decisions.raisedById, person.id), sql`not ${addressedTo(person)}`)
           : addressedTo(person),
         filter.open === true ? isNull(decisions.answeredAt) : undefined,
-        visibleTo(person),
       ),
     )
     .orderBy(

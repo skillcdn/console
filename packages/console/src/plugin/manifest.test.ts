@@ -124,6 +124,21 @@ describe("parsePluginManifest", () => {
     expect(problemsOf({ console: 7 })[0]).toMatch(/^console: /);
   });
 
+  it("takes a role that follows the reporting line, and no other line (ADR-0068)", () => {
+    const roles = (role: Record<string, unknown>) =>
+      parsePluginManifest({
+        ...LEAVE,
+        roles: {
+          ...LEAVE.roles,
+          manager: { name: { en: "Manager" }, description: { en: "Approves." }, ...role },
+        },
+      });
+    const followed = roles({ follows: "reports" });
+    expect(followed.ok).toBe(true);
+    expect(followed.ok && followed.manifest.roles.manager?.follows).toBe("reports");
+    expect(roles({ follows: "owners" }).ok).toBe(false);
+  });
+
   it("refuses a key that is malformed or reserved", () => {
     expect(problemsOf({ key: "Leave" })[0]).toMatch(/^key: /);
     expect(problemsOf({ key: "a" })[0]).toMatch(/^key: /);

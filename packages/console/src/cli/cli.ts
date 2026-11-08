@@ -33,6 +33,7 @@ import { PLUGIN_LIST_LIMIT } from "../plugin/limits.js";
 import { fillRules, RULES_PATH, RULES_TITLE } from "../rules.js";
 import {
   hostOfLogin,
+  type RestAnswerInput,
   type RestClaim,
   type RestDecision,
   type RestMember,
@@ -632,9 +633,14 @@ function theTwo(positionals: readonly string[], ask: string): readonly [string, 
  * The decision once answered, or as it stands when the wait is over. Each request asks the
  * console to hold it for a while, so the answer arrives as soon as a person gives it.
  */
+/** Whatever waits for a decision's answer: the project's client, or the decision wherever it is (ADR-0068). */
+interface Waiter {
+  awaitDecision(id: string, waitSeconds: number): Promise<RestDecision>;
+}
+
 async function waitForAnswer(
   io: CliIo,
-  project: ProjectClient,
+  project: Waiter,
   decision: RestDecision,
   seconds: number,
 ): Promise<RestDecision> {
@@ -665,7 +671,7 @@ const stillWaiting = (id: string): string =>
 async function settle(
   io: CliIo,
   session: Session,
-  project: ProjectClient,
+  project: Waiter,
   decision: RestDecision,
   seconds: number,
   shown = false,
@@ -2684,14 +2690,82 @@ const answering: Command = async (args, io) => {
   }
   const note = await bodyOf(io, values, text(values, "note"));
   const session = await open(io, values);
-  const project = await session.project();
-  const answered = await project.answerDecision(id, {
+  const answered = await answerReached(session, id, {
     ...(own === undefined ? { option } : { own }),
     ...(note === undefined ? {} : { note }),
   });
   answer(io, session, answered, () => formatDecision(answered));
   return EXIT.ok;
 };
+
+/** Whether a refusal says the decision is not in the project the command works in, or the project is not the person's. */
+const notInProject = (error: unknown): boolean =>
+  error instanceof ApiError &&
+  (error.code === "decision.not_found" || error.code === "project.not_found");
+
+/**
+ * One decision as the command reaches it (ADR-0068): in the project the command works in, as
+ * before; else wherever it is, addressed to the person, raised by them, or a plugin's addressed
+ * to someone they manage, through the console's own route for one decision. A plugin's decision
+ * waits in the plugin's board project, which a checkout bound to another project does not name,
+ * and which the person may not be in at all. A console from before that route answers as before.
+ */
+async function reachDecision(
+  session: Session,
+  id: string,
+): Promise<{ readonly decision: RestDecision; readonly waiter: Waiter }> {
+  if ((await session.projectKey()) !== undefined) {
+    const project = await session.project();
+    try {
+      return { decision: await project.decision(id), waiter: project };
+    } catch (error) {
+      if (!notInProject(error)) {
+        throw error;
+      }
+    }
+  }
+  const anywhere = session.client;
+  try {
+    const reached = await anywhere.decision(id);
+    return {
+      decision: reached.decision,
+      waiter: {
+        awaitDecision: async (decisionId, seconds) =>
+          (await anywhere.awaitDecision(decisionId, seconds)).decision,
+      },
+    };
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      throw new ApiError(404, "decision.not_found", "The decision was not found.");
+    }
+    throw error;
+  }
+}
+
+/** Writes an answer on a decision as the command reaches it (ADR-0068): in the project, else wherever it is. */
+async function answerReached(
+  session: Session,
+  id: string,
+  input: RestAnswerInput,
+): Promise<RestDecision> {
+  if ((await session.projectKey()) !== undefined) {
+    try {
+      return await (await session.project()).answerDecision(id, input);
+    } catch (error) {
+      if (!notInProject(error)) {
+        throw error;
+      }
+    }
+  }
+  try {
+    return await session.client.answerDecision(id, input);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      throw new ApiError(404, "decision.not_found", "The decision was not found.");
+    }
+    throw error;
+  }
+}
 
 const decision: Command = async (args, io) => {
   const { values, positionals } = parse(args, {
@@ -2706,19 +2780,19 @@ const decision: Command = async (args, io) => {
   const seconds = secondsOf(text(values, "wait"), 0);
   const outcome = await bodyOf(io, values, text(values, "outcome"));
   const session = await open(io, values);
-  const project = await session.project();
   if (outcome !== undefined) {
     // What followed the decision: the record grows, and is printed as it stands.
+    const project = await session.project();
     const grown = await project.updateDecision(id, { outcome });
     answer(io, session, grown, () => formatDecision(grown));
     return EXIT.ok;
   }
-  const found = await project.decision(id);
+  const { decision: found, waiter } = await reachDecision(session, id);
   if (seconds === 0) {
     answer(io, session, found, () => formatDecision(found));
     return EXIT.ok;
   }
-  return settle(io, session, project, found, seconds);
+  return settle(io, session, waiter, found, seconds);
 };
 
 const docs: Command = async (args, io) => {

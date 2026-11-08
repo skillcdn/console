@@ -319,6 +319,23 @@ describe("a plugin's settings page", () => {
     expect(html).not.toContain("삭제하려면 먼저 비활성화하세요.");
   });
 
+  it("says that a role which follows the reporting line is held by whoever someone reports to (ADR-0068)", () => {
+    const html = render({
+      ...DETAIL,
+      declaredRoles: [
+        ...DETAIL.declaredRoles,
+        {
+          key: "manager",
+          name: { en: "Manager", ko: "매니저" },
+          description: { en: "Approves their people's leave.", ko: "팀원의 연차를 승인합니다." },
+          follows: "reports",
+        },
+      ],
+    });
+    expect(html).toContain(">매니저</span>");
+    expect(html).toContain("팀원이 있는 사람");
+  });
+
   it("tells an administrator when the plugin reads a time of day and the workspace has no time zone", () => {
     const html = render({ ...DETAIL, needsTimeZone: true });
     expect(html).toContain(

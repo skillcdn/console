@@ -44,6 +44,7 @@ import {
   type RestProjectInput,
   type RestProjectPatch,
   type RestProjectRules,
+  type RestReachedDecision,
   type RestRules,
   type RestRulesInput,
   type RestRulesPlugin,
@@ -148,6 +149,10 @@ export interface ConsoleActions {
     },
     signal?: AbortSignal,
   ): Promise<RestMyDecisions>;
+  /** One decision wherever it is (ADR-0068), with its project and whether the person may answer it, read when the page asks. */
+  reachDecision(id: string, signal?: AbortSignal): Promise<RestReachedDecision>;
+  /** Answers a decision wherever it is, as whoever it reaches (ADR-0068). */
+  answerReachedDecision(id: string, input: RestAnswerInput): Promise<RestDecision>;
   /** The categories tasks are sorted into: kept by an administrator. */
   createCategory(input: RestCategoryInput): Promise<RestCategory>;
   updateCategory(key: string, patch: RestCategoryPatch): Promise<RestCategory>;
@@ -744,6 +749,12 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
       },
       work: (signal) => client.work(signal),
       myDecisions: (filter, signal) => client.myDecisions(filter, signal),
+      reachDecision: (id, signal) => client.decision(id, signal),
+      async answerReachedDecision(id, input) {
+        const decision = await client.answerDecision(id, input);
+        await refreshMe().catch(() => undefined);
+        return decision;
+      },
       async createCategory(input) {
         const category = await client.createCategory(input);
         setCategories((await client.categories()).items);

@@ -541,6 +541,44 @@ export async function updatePersonManager(
   });
 }
 
+/** Whether someone active reports to the person: what a plugin's role that follows the reporting line is held by (ADR-0068). */
+export async function hasActiveReports(
+  database: Database,
+  workspaceId: string,
+  personId: string,
+): Promise<boolean> {
+  const [row] = await drizzleOf(database)
+    .select({ id: people.id })
+    .from(people)
+    .where(
+      and(
+        eq(people.workspaceId, workspaceId),
+        eq(people.managerId, personId),
+        eq(people.status, "active"),
+      ),
+    )
+    .limit(1);
+  return row !== undefined;
+}
+
+/** The ids of everyone someone active reports to: who holds a plugin's role that follows the reporting line (ADR-0068). */
+export async function peopleWithReports(
+  database: Database,
+  workspaceId: string,
+): Promise<ReadonlySet<string>> {
+  const rows = await drizzleOf(database)
+    .selectDistinct({ id: people.managerId })
+    .from(people)
+    .where(
+      and(
+        eq(people.workspaceId, workspaceId),
+        eq(people.status, "active"),
+        sql`${people.managerId} is not null`,
+      ),
+    );
+  return new Set(rows.flatMap((row) => (row.id === null ? [] : [row.id])));
+}
+
 /**
  * Takes a person out, or back in, and tells the board (ADR-0022). Only a person the domain or
  * a listing let in: one the organization let in comes and goes with it. Deactivating takes the

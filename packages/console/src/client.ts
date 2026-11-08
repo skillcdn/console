@@ -3,6 +3,7 @@ import {
   CLAIM_PATH,
   categoryPath,
   connectPath,
+  decisionPath,
   personTokensPath,
   personWorkPath,
   pluginPath,
@@ -73,6 +74,7 @@ import {
   type RestProjectPatch,
   type RestProjectRules,
   type RestProjects,
+  type RestReachedDecision,
   type RestReportInput,
   type RestRules,
   type RestRulesInput,
@@ -137,6 +139,7 @@ import {
   restProjectRulesSchema,
   restProjectSchema,
   restProjectsSchema,
+  restReachedDecisionSchema,
   restRulesSchema,
   restRunSchema,
   restRunsSchema,
@@ -624,6 +627,20 @@ export interface ConsoleClient {
     filter?: { readonly open?: boolean; readonly raised?: boolean } & Page,
     signal?: AbortSignal,
   ): Promise<RestMyDecisions>;
+  /**
+   * One decision by its id, wherever it is (ADR-0068): in a project the asker may see, or one
+   * that reaches them from elsewhere, addressed to them, raised by them, or a plugin's addressed
+   * to someone they manage; with its project and whether they may answer it.
+   */
+  decision(id: string, signal?: AbortSignal): Promise<RestReachedDecision>;
+  /** The same, after waiting up to `waitSeconds` for its answer, as a project's `awaitDecision` waits. */
+  awaitDecision(
+    id: string,
+    waitSeconds: number,
+    signal?: AbortSignal,
+  ): Promise<RestReachedDecision>;
+  /** Answers a decision wherever it is, as whoever it reaches with the right to answer (ADR-0068). */
+  answerDecision(id: string, input: RestAnswerInput): Promise<RestDecision>;
   /** Another person's plate, within what the asker may see: for an administrator, or an owner of a project they are in. */
   personWork(personId: string, signal?: AbortSignal): Promise<RestPersonWork>;
   /** The tokens of whoever asks. */
@@ -1331,6 +1348,18 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
         restMyDecisionsSchema,
         signal,
       ),
+    decision: (id, signal) =>
+      request("GET", `${base}${decisionPath(id)}`, undefined, restReachedDecisionSchema, signal),
+    awaitDecision: (id, waitSeconds, signal) =>
+      request(
+        "GET",
+        withQuery(decisionPath(id), { wait: String(waitSeconds) }),
+        undefined,
+        restReachedDecisionSchema,
+        signal,
+      ),
+    answerDecision: (id, input) =>
+      request("POST", `${base}${decisionPath(id)}/answer`, input, restDecisionSchema),
     personWork: (personId, signal) =>
       request("GET", `${base}${personWorkPath(personId)}`, undefined, restPersonWorkSchema, signal),
     tokens: (signal) =>

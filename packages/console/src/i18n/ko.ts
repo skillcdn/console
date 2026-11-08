@@ -287,6 +287,8 @@ export const ko: Messages = {
       rolesNone: "역할이 없어 모든 멤버가 쓸 수 있습니다.",
       roleDefault: "기본",
       everyMember: "모든 멤버",
+      roleManagers: "매니저",
+      whoeverManages: "팀원이 있는 사람",
       grantEveryone: "모두",
       grantMembersOf: (project) => `${project}의 멤버`,
       grantPeople: "사람",

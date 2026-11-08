@@ -33,7 +33,12 @@ import { writeComment } from "../db/queries/comments.js";
 import { findDecision, listDecisions, raiseDecision } from "../db/queries/decisions.js";
 import { getDocument, listDocuments, writeDocument } from "../db/queries/documents.js";
 import type { Actor, Scope } from "../db/queries/events.js";
-import { findPerson, listPeople, type PersonRecord } from "../db/queries/people.js";
+import {
+  findPerson,
+  listPeople,
+  type PersonRecord,
+  peopleWithReports,
+} from "../db/queries/people.js";
 import {
   findProjectByKey,
   isPluginItem,
@@ -251,13 +256,18 @@ export class PluginBoard {
         }
         if (method === "granted") {
           const role = text(args[0], "the role");
-          if (context.manifest.roles[role] === undefined) {
+          const declared = context.manifest.roles[role];
+          if (declared === undefined) {
             throw invalid(`the plugin declares no role ${role}`);
           }
+          // Everyone for the default role; whoever manages someone for a role that follows the
+          // reporting line (ADR-0068); else those granted it.
           const granted =
             context.manifest.defaultRole === role
               ? undefined
-              : await peopleGranted(this.options.database, workspace.id, context.key, role);
+              : declared.follows === "reports"
+                ? await peopleWithReports(this.options.database, workspace.id)
+                : await peopleGranted(this.options.database, workspace.id, context.key, role);
           return people
             .filter(
               (person) =>

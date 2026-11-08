@@ -1159,6 +1159,7 @@ function RoleRow(props: {
           {pluginWord(role.name, props.language)}
           <code className="sc-plugin-role-key">{role.key}</code>
           {props.isDefault && <Badge tone="accent">{settings.roleDefault}</Badge>}
+          {role.follows === "reports" && <Badge tone="accent">{settings.roleManagers}</Badge>}
         </p>
         {description !== "" && <p className="sc-settings-hint">{description}</p>}
       </div>
@@ -1166,6 +1167,11 @@ function RoleRow(props: {
         <div className="sc-plugin-holders">
           {props.isDefault && (
             <span className="sc-plugin-holder sc-plugin-holder-fixed">{settings.everyMember}</span>
+          )}
+          {role.follows === "reports" && (
+            <span className="sc-plugin-holder sc-plugin-holder-fixed">
+              {settings.whoeverManages}
+            </span>
           )}
           {grants.map((grant) => {
             const holder = holderOf(grant, settings);

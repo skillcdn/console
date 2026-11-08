@@ -5,6 +5,9 @@ import {
   type AccessSettings,
   administers,
   configuresWorkspace,
+  decisionAddressedTo,
+  decisionAnswerableBy,
+  decisionReachableBy,
   mayWorkIn,
   memberOfProject,
   peopleNarrowedFor,
@@ -87,6 +90,31 @@ describe("the policy", () => {
     expect(render(personFindableBy(member, shared, false)).sql).toBe(
       render(personVisibleTo(member, shared)).sql,
     );
+  });
+
+  it("reaches a decision past its project for whom it is addressed to, who raised it, and, for a plugin's, whoever manages a decider (ADR-0068)", () => {
+    expect(render(decisionReachableBy(admin)).sql).toBe("true");
+    expect(render(decisionAnswerableBy(admin)).sql).toBe("true");
+    const addressed = render(decisionAddressedTo(member.id));
+    expect(addressed.sql).toContain(`any("decisions"."decider_ids")`);
+    expect(addressed.sql).toContain(`"decisions"."decider_id" = $2::uuid`);
+    const reach = render(decisionReachableBy(member));
+    expect(reach.sql).toContain(`"decisions"."raised_by_id" = $1::uuid`);
+    expect(reach.sql).toContain(
+      render(decisionAddressedTo(member.id))
+        .sql.replace("$1", "$2")
+        .replace("$2::uuid)", "$3::uuid)"),
+    );
+    // A plugin's decision alone climbs the reporting line, and the climb ends where the line does.
+    expect(reach.sql).toContain(`"plugin_links"."target_kind" = 'decision'`);
+    expect(reach.sql).toContain("with recursive above(id) as");
+    expect(reach.sql).toContain(`"people"."manager_id" is not null`);
+    expect(reach.params).toEqual([member.id, member.id, member.id, member.id]);
+    // Answering from outside the project is for those addressed and those above them, never for the raiser alone.
+    const answer = render(decisionAnswerableBy(member));
+    expect(answer.sql).not.toContain("raised_by_id");
+    expect(answer.sql).toContain("with recursive above(id) as");
+    expect(answer.params).toEqual([member.id, member.id, member.id]);
   });
 
   it("lets an active administrator or member of the project work in it, and nobody else", () => {

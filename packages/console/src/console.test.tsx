@@ -21,6 +21,7 @@ import {
   goalHref,
   matchRoute,
   movedFrom,
+  myDecisionHref,
   newDecisionHref,
   newGoalHref,
   newTaskHref,
@@ -55,6 +56,15 @@ describe("matchRoute", () => {
     expect(matchRoute("/work", "?week=next")).toEqual({ name: "not-found" });
     expect(workHref()).toBe("/work");
     expect(matchRoute("/decisions")).toEqual({ name: "my-decisions" });
+    // One decision wherever it is (ADR-0068), by its id alone.
+    expect(matchRoute("/decisions/0199c4d8-0000-7000-8000-000000000030")).toEqual({
+      name: "my-decision",
+      id: "0199c4d8-0000-7000-8000-000000000030",
+    });
+    expect(matchRoute("/decisions/new")).toEqual({ name: "not-found" });
+    expect(myDecisionHref("0199c4d8-0000-7000-8000-000000000030")).toBe(
+      "/decisions/0199c4d8-0000-7000-8000-000000000030",
+    );
     expect(workHref("2026-10-12")).toBe("/work?week=2026-10-12");
     expect(matchRoute("/categories")).toEqual({ name: "categories" });
     expect(matchRoute("/projects/web/roadmap")).toEqual({ name: "roadmap", project: "web" });
@@ -532,6 +542,9 @@ describe("createConsole", () => {
     work: never,
     personWork: never,
     myDecisions: never,
+    decision: never,
+    awaitDecision: never,
+    answerDecision: never,
     plugins: never,
     plugin: () => {
       throw new Error("no plugins in this test");

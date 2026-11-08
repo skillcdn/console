@@ -23,6 +23,31 @@ describe("rolesHeld", () => {
       rolesHeld({ admin: false, declared, defaultRole: undefined, granted: ["stranger"] }),
     ).toEqual([]);
   });
+
+  it("gives a member the roles that follow what they are, where the directory says they are it (ADR-0068)", () => {
+    const declared = ["employee", "manager"];
+    expect(
+      rolesHeld({
+        admin: false,
+        declared,
+        defaultRole: "employee",
+        granted: [],
+        followed: ["manager"],
+      }),
+    ).toEqual(["employee", "manager"]);
+    expect(
+      rolesHeld({ admin: false, declared, defaultRole: "employee", granted: [], followed: [] }),
+    ).toEqual(["employee"]);
+    expect(
+      rolesHeld({
+        admin: false,
+        declared,
+        defaultRole: undefined,
+        granted: [],
+        followed: ["boss"],
+      }),
+    ).toEqual([]);
+  });
 });
 
 describe("mayUse", () => {
