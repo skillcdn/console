@@ -1,6 +1,49 @@
 import { describe, expect, it } from "vitest";
+import type { RestPluginOperation } from "../plugin/rest-schemas.js";
 import { restDecisionSchema, restGoalSchema, restTaskSchema } from "../schemas.js";
-import { formatDecision, formatGoal, formatTask } from "./format.js";
+import { formatDecision, formatGoal, formatOperationUsage, formatTask } from "./format.js";
+
+describe("the usage of a plugin's command", () => {
+  const argument = (extra: Record<string, unknown>) => ({
+    type: "text",
+    optional: false,
+    positional: false,
+    ...extra,
+  });
+  const announce: RestPluginOperation = {
+    name: "announcement",
+    kind: "command",
+    about: "Writes an announcement.",
+    args: {
+      title: argument({ positional: true }),
+      body: argument({ type: "markdown" }),
+      pin: argument({ type: "boolean", optional: true }),
+      picture: argument({ type: "file", optional: true }),
+      tags: argument({ type: "list", optional: true, of: argument({}) }),
+    } as RestPluginOperation["args"],
+    roles: null,
+  };
+
+  it("is whole in help, a file as --file <path>, which the command takes, not a flag of the argument's name", () => {
+    expect(formatOperationUsage("hr", announce)).toBe(
+      "console plugin hr announcement <title> --body <markdown> [--pin] [--file <path>] [--tags <text,...>]",
+    );
+  });
+
+  it("is brief in the listing: the positionals, the required flags, and [options] for the rest", () => {
+    expect(formatOperationUsage("hr", announce, { brief: true })).toBe(
+      "console plugin hr announcement <title> --body <markdown> [options]",
+    );
+    // Nothing to fold: no [options].
+    expect(
+      formatOperationUsage(
+        "hr",
+        { ...announce, args: { title: argument({ positional: true }) } } as RestPluginOperation,
+        { brief: true },
+      ),
+    ).toBe("console plugin hr announcement <title>");
+  });
+});
 
 const alice = {
   id: "0199c4d8-0000-7000-8000-000000000001",

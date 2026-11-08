@@ -74,6 +74,7 @@ export * from "./plugin/limits.js";
 export {
   CURRENT_PLUGIN_API,
   capabilitiesAsked,
+  isCalendarDay,
   isPluginKey,
   type Localized,
   legacyWidgetSize,

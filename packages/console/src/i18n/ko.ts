@@ -310,6 +310,9 @@ export const ko: Messages = {
       console: "콘솔 버전",
       consoleRange: (range) => `콘솔 ${range}`,
       timeZoneHint: "워크스페이스 시간대 기준입니다.",
+      needsTimeZone:
+        "워크스페이스에 시간대가 없어 이 플러그인의 시각은 시간대를 정할 때까지 UTC로 돕니다.",
+      setTimeZone: "시간대 정하기",
       addItem: "추가",
       itemPlaceholder: "입력한 뒤 추가",
       choose: "선택…",

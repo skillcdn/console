@@ -3693,7 +3693,13 @@ describe("the plugins on the command line (ADR-0049, ADR-0053)", () => {
     expect(one.out()).toContain("For agents: Keeps greetings as records");
     expect(one.out()).toContain("Your roles in it: greeter.");
     expect(one.out()).toContain("Board project: none yet.");
-    expect(one.out()).toContain("  console plugin hello greet <to> [--text <text>] [--loud]");
+    // The listing, which an agent reads whole at every first use, shows the positionals and the
+    // required flags and folds the rest into [options]; help <command> has them all.
+    expect(one.out()).toContain("  console plugin hello greet <to> [options]");
+    expect(one.out()).not.toContain("greet <to> [--text <text>] [--loud]");
+    expect(one.out()).toContain(
+      "One in full, with every option: console plugin hello help <command>.",
+    );
     expect(one.out()).toContain("[query] The latest greetings, newest first.");
     expect(one.out()).toContain("console plugin hello skills lists them");
     expect(one.out()).toContain('  greeting (text): "Hi"  Greeting');
@@ -3711,9 +3717,7 @@ describe("the plugins on the command line (ADR-0049, ADR-0053)", () => {
     expect(help.out()).toContain("plugin.invalid_args: a word does not fit the definition");
     const every = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["plugin", "hello", "help"], every.io)).toBe(EXIT.ok);
-    expect(every.out()).toContain(
-      "console plugin hello latest [--limit <number>]\n    [query] The latest",
-    );
+    expect(every.out()).toContain("console plugin hello latest [options]\n    [query] The latest");
     const unknown = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["plugin", "hello", "help", "nothing"], unknown.io)).toBe(EXIT.usage);
     expect(unknown.err()).toContain("Not a command or a query of hello you may run: nothing.");
@@ -4061,6 +4065,22 @@ describe("the plugins on the command line (ADR-0049, ADR-0053)", () => {
     });
     expect(enabled.out()).toContain(
       "Enabled hello, with the board project hello-board; on every project.",
+    );
+    expect(enabled.out()).not.toContain("The workspace has no time zone");
+    // A plugin that reads a time of day while the workspace has no time zone: the administrator is told.
+    const zoneless = fakeConsole({
+      [`GET ${AT}`]: { body: { ...DETAIL, state: "installed", capabilities: ["files"] } },
+      "GET /api/v1/me": { body: ME },
+      [`POST ${AT}/enable`]: {
+        body: { ...DETAIL, board: null, projects: "all", needsTimeZone: true },
+      },
+    });
+    const told = harness({ fetch: zoneless.fetch, env: SIGNED_IN });
+    expect(await runCli(["plugin", "hello", "enable", "--consent", "files"], told.io)).toBe(
+      EXIT.ok,
+    );
+    expect(told.out()).toContain(
+      "The workspace has no time zone: the plugin's times of day run on UTC until an administrator sets one, with console workspace edit --time-zone <zone>.",
     );
     const chosen = harness({ fetch, env: SIGNED_IN });
     expect(

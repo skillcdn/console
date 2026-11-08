@@ -1919,6 +1919,11 @@ async function pluginEnable(
   answer(io, session, enabled, () =>
     [
       `Enabled ${enabled.key}${enabled.board === null ? "" : `, with the board project ${enabled.board.key}`}; on ${enabled.projects === "all" || enabled.projects === null ? "every project" : enabled.projects.join(", ") || "no project"}.`,
+      ...(enabled.needsTimeZone === true
+        ? [
+            "The workspace has no time zone: the plugin's times of day run on UTC until an administrator sets one, with console workspace edit --time-zone <zone>.",
+          ]
+        : []),
       ...(enabled.settings.length === 0
         ? []
         : [

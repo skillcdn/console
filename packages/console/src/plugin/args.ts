@@ -4,7 +4,7 @@
 // crosses from the plugin's thread to the console is exactly that object.
 import { PluginDefinitionError } from "./definition-error.js";
 import { MAX_PLUGIN_ABOUT_LENGTH, MAX_PLUGIN_OPTIONS } from "./limits.js";
-import { PLUGIN_KEY_PATTERN } from "./manifest.js";
+import { isCalendarDay, PLUGIN_KEY_PATTERN } from "./manifest.js";
 
 export const ARG_TYPES = [
   "text",
@@ -269,7 +269,6 @@ export const arg = {
   },
 };
 
-const DAY = /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/;
 const DEFAULT_TEXT_MAX = 2000;
 const DEFAULT_MARKDOWN_MAX = 20_000;
 const DEFAULT_LIST_MAX = 100;
@@ -304,9 +303,8 @@ export function argProblem(
       return undefined;
     }
     case "day":
-      return typeof value === "string" && DAY.test(value)
-        ? undefined
-        : `${name} is not a day as YYYY-MM-DD`;
+      // The shape, and the calendar: February 30 fits the shape and is no day.
+      return isCalendarDay(value) ? undefined : `${name} is not a day as YYYY-MM-DD`;
     case "number": {
       if (typeof value !== "number" || !Number.isFinite(value)) {
         return `${name} is not a number`;
@@ -512,15 +510,22 @@ export function parseArgv(
   return { values };
 }
 
-/** The usage of an argument, as help prints it: `<from>` for a positional, `--to <day>` for a flag, in brackets where optional. */
+/**
+ * The usage of an argument, as help prints it: `<from>` for a positional, `--to <day>` for a
+ * flag, in brackets where optional; a file as `--file <path>`, the flag the command itself takes,
+ * since the command uploads the file first and hands the plugin a handle, never a flag of the
+ * argument's name.
+ */
 export function argUsage(name: string, description: ArgDescription): string {
   const placeholder =
     description.type === "list" ? `${description.of?.type ?? "item"},...` : description.type;
   const form =
-    description.type === "boolean" && !description.positional
-      ? `--${name}`
-      : description.positional
-        ? `<${name}>`
-        : `--${name} <${placeholder}>`;
+    description.type === "file"
+      ? "--file <path>"
+      : description.type === "boolean" && !description.positional
+        ? `--${name}`
+        : description.positional
+          ? `<${name}>`
+          : `--${name} <${placeholder}>`;
   return description.optional ? `[${form}]` : form;
 }

@@ -319,6 +319,15 @@ describe("a plugin's settings page", () => {
     expect(html).not.toContain("삭제하려면 먼저 비활성화하세요.");
   });
 
+  it("tells an administrator when the plugin reads a time of day and the workspace has no time zone", () => {
+    const html = render({ ...DETAIL, needsTimeZone: true });
+    expect(html).toContain(
+      "워크스페이스에 시간대가 없어 이 플러그인의 시각은 시간대를 정할 때까지 UTC로 돕니다.",
+    );
+    expect(html).toContain('href="/settings?workspace"');
+    expect(render(DETAIL)).not.toContain("UTC로 돕니다");
+  });
+
   it("marks what a new version requires, and keeps what an enabled plugin can go without a choice", () => {
     const waiting = render({
       ...DETAIL,

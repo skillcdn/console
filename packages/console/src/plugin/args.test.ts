@@ -98,7 +98,7 @@ describe("argProblem", () => {
     expect(argProblem("to", arg.text(), "a\nb")).toBe("to is one line");
     expect(argProblem("to", arg.text(), undefined)).toBe("to is required");
     expect(argProblem("to", arg.text({ optional: true }), undefined)).toBeUndefined();
-    expect(argProblem("day", arg.day(), "2026-02-30")).toBeUndefined();
+    expect(argProblem("day", arg.day(), "2026-02-27")).toBeUndefined();
     expect(argProblem("day", arg.day(), "2026-13-01")).toBe("day is not a day as YYYY-MM-DD");
     expect(argProblem("n", arg.number({ integer: true }), 1.5)).toBe("n is not a whole number");
     expect(argProblem("n", arg.number({ min: 1 }), 0)).toBe("n is below 1");
@@ -144,6 +144,23 @@ describe("argUsage", () => {
     expect(argUsage("reason", arg.text({ optional: true }))).toBe("[--reason <text>]");
     expect(argUsage("all", arg.boolean({ optional: true }))).toBe("[--all]");
     expect(argUsage("people", arg.list(arg.person()))).toBe("--people <person,...>");
+  });
+
+  it("writes a file argument as the flag the command takes, --file <path>, never as a flag of its name", () => {
+    expect(argUsage("picture", arg.file())).toBe("--file <path>");
+    expect(argUsage("picture", arg.file({ optional: true }))).toBe("[--file <path>]");
+  });
+});
+
+describe("a day", () => {
+  it("is one the calendar has: the shape alone lets February 30 through", () => {
+    expect(argProblem("from", arg.day(), "2026-02-28")).toBeUndefined();
+    expect(argProblem("from", arg.day(), "2028-02-29")).toBeUndefined();
+    expect(argProblem("from", arg.day(), "2027-02-30")).toBe("from is not a day as YYYY-MM-DD");
+    expect(argProblem("from", arg.day(), "2027-02-29")).toBe("from is not a day as YYYY-MM-DD");
+    expect(argProblem("from", arg.day(), "2026-04-31")).toBe("from is not a day as YYYY-MM-DD");
+    expect(argProblem("from", arg.day(), "2026-13-01")).toBe("from is not a day as YYYY-MM-DD");
+    expect(argProblem("from", arg.day(), "26-04-01")).toBe("from is not a day as YYYY-MM-DD");
   });
 });
 

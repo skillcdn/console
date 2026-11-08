@@ -637,12 +637,22 @@ export function formatPlugins(plugins: RestPlugins, language: string | null | un
   ].join("\n");
 }
 
-/** How a command or a query of a plugin is given, as help prints it: the positionals, then the flags. */
-export function formatOperationUsage(key: string, operation: RestPluginOperation): string {
+/**
+ * How a command or a query of a plugin is given, as help prints it: the positionals, then the
+ * flags. In brief, for a listing that an agent reads whole at every first use, the positionals
+ * and the required flags alone, the rest as `[options]`, since `help <command>` has them all.
+ */
+export function formatOperationUsage(
+  key: string,
+  operation: RestPluginOperation,
+  { brief = false }: { readonly brief?: boolean } = {},
+): string {
   const entries = Object.entries(operation.args);
+  const shown = brief ? entries.filter(([, arg]) => arg.positional || !arg.optional) : entries;
   const usage = [
-    ...entries.filter(([, arg]) => arg.positional).map(([name, arg]) => argUsage(name, arg)),
-    ...entries.filter(([, arg]) => !arg.positional).map(([name, arg]) => argUsage(name, arg)),
+    ...shown.filter(([, arg]) => arg.positional).map(([name, arg]) => argUsage(name, arg)),
+    ...shown.filter(([, arg]) => !arg.positional).map(([name, arg]) => argUsage(name, arg)),
+    ...(brief && shown.length < entries.length ? ["[options]"] : []),
   ];
   return `console plugin ${key} ${operation.name}${usage.map((part) => ` ${part}`).join("")}`;
 }
@@ -703,11 +713,11 @@ export function formatPluginHelp(detail: RestPluginDetail, name: string | undefi
     }
     return [
       ...detail.operations.flatMap((operation) => [
-        formatOperationUsage(detail.key, operation),
+        formatOperationUsage(detail.key, operation, { brief: true }),
         `    ${operation.kind === "query" ? "[query] " : ""}${operation.about}`,
       ]),
       "",
-      `One in full: console plugin ${detail.key} help <command>.`,
+      `One in full, with every option: console plugin ${detail.key} help <command>.`,
     ].join("\n");
   }
   const operation = detail.operations.find((candidate) => candidate.name === name);
@@ -811,11 +821,11 @@ export function formatPlugin(
     lines.push("Commands and queries:");
     for (const operation of detail.operations) {
       lines.push(
-        `  ${formatOperationUsage(detail.key, operation)}`,
+        `  ${formatOperationUsage(detail.key, operation, { brief: true })}`,
         `      ${operation.kind === "query" ? "[query] " : ""}${operation.about}`,
       );
     }
-    lines.push(`One in full: console plugin ${detail.key} help <command>.`);
+    lines.push(`One in full, with every option: console plugin ${detail.key} help <command>.`);
   }
   if (detail.skills !== null) {
     lines.push(

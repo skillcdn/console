@@ -203,6 +203,12 @@ export const restPluginDetailSchema = z.extend(restPluginSchema, {
   grants: z.nullable(z.array(restPluginGrantSchema)),
   /** The plugin's own events are at this path. */
   events: z.string(),
+  /**
+   * Whether the plugin reads a time of day (a job at a time, a `time` setting) while the
+   * workspace has no time zone, so that its times run on UTC with nobody having said so: the
+   * pages and the command tell an administrator to set one. Answered from 0.4.5 and read as optional.
+   */
+  needsTimeZone: z.optional(z.boolean()),
 });
 export type RestPluginDetail = z.infer<typeof restPluginDetailSchema>;
 

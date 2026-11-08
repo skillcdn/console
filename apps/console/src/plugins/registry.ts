@@ -23,6 +23,7 @@ import {
   capabilitiesAsked,
   type EndpointRequest,
   type EndpointResponse,
+  isCalendarDay,
   type LinkTarget,
   legacyWidgetSize,
   MAX_PLUGIN_EVENT_BYTES,
@@ -157,6 +158,18 @@ export interface PluginsOptions {
   readonly outbound?: Outbound | undefined;
   /** The webhook requests one plugin takes a minute; the package's bound when left out, lower in tests. */
   readonly webhooksPerMinute?: number | undefined;
+  /**
+   * The console's public origin (`PUBLIC_URL`), which a plugin's server reads as
+   * `ctx.console.workspace().url` and in `ctx.endpoints.url(name)`, to register a callback with a
+   * service elsewhere or to write a link to the console; none where the deployment names none.
+   */
+  readonly publicUrl?: string | undefined;
+  /**
+   * A console a plugin is rebuilt on under one version, the preview of `pnpm dev:plugins`: its
+   * bundles are kept by no browser, or one that saw a build goes on running it against a server
+   * that answers something else.
+   */
+  readonly previewing?: boolean | undefined;
 }
 
 /** Who presents a request: the person, and the token where an agent acts. */
@@ -237,8 +250,6 @@ function responseOf(value: unknown): EndpointResponse {
         : { body: String(body) }),
   };
 }
-const DAY = /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/;
-
 /** The arguments as the event keeps them: a secret one as `[hidden]`. */
 function hiddenArgs(
   args: Readonly<Record<string, ArgDescription>>,
@@ -290,9 +301,7 @@ export function settingProblem(setting: PluginSetting, value: unknown): string |
           ? undefined
           : `${name} is one of ${(setting.options ?? []).map((option) => option.value).join(", ")}`;
       case "day":
-        return typeof candidate === "string" && DAY.test(candidate)
-          ? undefined
-          : `${name} is a day as YYYY-MM-DD`;
+        return isCalendarDay(candidate) ? undefined : `${name} is a day as YYYY-MM-DD`;
       case "time":
         return typeof candidate === "string" && TIME_OF_DAY.test(candidate)
           ? undefined
@@ -788,7 +797,23 @@ export class Plugins {
           )
         : null,
       events: `/api/v1/plugins/${key}/events`,
+      needsTimeZone: await this.needsTimeZone(entry, workspace),
     };
+  }
+
+  /**
+   * Whether the plugin reads a time of day while the workspace has no time zone: a job at a
+   * time, or a `time` setting, which then run on UTC with nobody having said so.
+   */
+  private async needsTimeZone(entry: Entry, workspace: WorkspaceRecord): Promise<boolean> {
+    const readsTime =
+      Object.values(entry.description?.jobs ?? {}).some((job) => job.at !== null) ||
+      (entry.manifest?.settings ?? []).some((setting) => setting.type === "time");
+    if (!readsTime) {
+      return false;
+    }
+    const settings = await readWorkspaceSettings(this.options.database, workspace.id);
+    return settings.timeZone === null;
   }
 
   /** The plugin, able to run: read, loaded, and with the key given. */
@@ -1798,6 +1823,8 @@ export class Plugins {
         readonly pages: readonly string[];
         readonly widgets: readonly string[];
         readonly holds: FrameHolds;
+        /** Whether a browser may keep the files for the version: not on the preview console. */
+        readonly kept: boolean;
       }
     | undefined
   > {
@@ -1816,6 +1843,7 @@ export class Plugins {
       pages: entry.manifest.pages.map((page) => page.key),
       widgets: entry.manifest.widgets.map((widget) => widget.key),
       holds: frameHoldsOf(entry.manifest, install.consent),
+      kept: this.options.previewing !== true,
     };
   }
 

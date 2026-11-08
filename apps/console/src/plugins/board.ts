@@ -140,6 +140,8 @@ export interface PluginBoardOptions {
   readonly clock: Clock;
   /** Where the plugins' records live, for a decision linked to the record it is about. */
   readonly records?: RecordStore | undefined;
+  /** The console's public origin, answered as `workspace().url`; none where the deployment names none. */
+  readonly publicUrl?: string | undefined;
 }
 
 /** A project as the plugin reaches it: by key, within the plugin's reach. */
@@ -208,8 +210,12 @@ export class PluginBoard {
         return {
           name: workspace.name,
           languages: [...CONSOLE_LANGUAGES],
+          // UTC where nobody set one, and `timeZoneSet` says so: a plugin that reads a time of
+          // day tells the administrator, instead of taking UTC for a choice.
           timeZone: settings.timeZone ?? "UTC",
+          timeZoneSet: settings.timeZone !== null,
           weekStart: settings.weekStart,
+          url: this.options.publicUrl ?? null,
           categories: categories.map(restCategory).map((category) => ({
             key: category.key,
             name: category.name,

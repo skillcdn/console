@@ -1324,7 +1324,7 @@ export function registerPluginsRest(
       return notFound(c);
     }
     const type = BUNDLE_TYPES[extname(file).toLowerCase()] ?? "application/octet-stream";
-    const served = frameFile(bytes, type, web.holds);
+    const served = frameFile(bytes, type, web.holds, { kept: web.kept });
     c.header("content-type", type);
     c.header("content-length", String(served.body.byteLength));
     c.header("cache-control", served.cacheControl);

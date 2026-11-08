@@ -1,4 +1,4 @@
-import { durationMs } from "@skillcdn/console/plugin";
+import { durationMs, TIME_OF_DAY } from "@skillcdn/console/plugin";
 import { sql } from "drizzle-orm";
 import { type Database, drizzleOf } from "../db/client.js";
 import { type PluginJobRecord, readJobs, writeJob } from "../db/queries/plugin-board.js";
@@ -95,7 +95,27 @@ export function nextRunAfter(
   while (candidate <= local) {
     candidate += step;
   }
-  return new Date(candidate - offset);
+  // The zone's offset at the candidate itself, where a clock change lies between `from` and it,
+  // so that the job runs at the time of day named and not an hour off.
+  const guess = new Date(candidate - offset);
+  return new Date(candidate - offsetMinutes(guess, zone) * 60_000);
+}
+
+/** The time of day an instant falls at in the zone, as `HH:MM`. */
+export function timeOfDayIn(at: Date, zone: string): string {
+  const offset = offsetMinutes(at, zone) * 60_000;
+  const local = at.getTime() + offset;
+  const minutes = Math.floor((local % DAY_MS) / 60_000);
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+}
+
+/**
+ * Whether a job's next time, kept when it last ran, no longer falls at its time of day in the
+ * zone: the workspace's time zone was set or changed since, and the next run is computed again,
+ * so that the first run after the change is not at the old zone's time.
+ */
+export function nextTimeMoved(nextAt: Date, at: string | null, zone: string): boolean {
+  return at !== null && TIME_OF_DAY.test(at) && timeOfDayIn(nextAt, zone) !== at;
 }
 
 export class PluginScheduler {
@@ -160,6 +180,24 @@ export class PluginScheduler {
             failedEventAt: row?.failedEventAt,
           });
           continue;
+        }
+        if (nextTimeMoved(row.nextAt, job.at, zone)) {
+          // The workspace's time zone was set or changed since the next time was written: the
+          // job runs next at its time of day in the zone it has now, not in the one it had.
+          const moved = nextRunAfter(now, job.every, job.at, zone);
+          if (moved !== undefined && moved.getTime() !== row.nextAt.getTime()) {
+            await writeJob(database, {
+              workspaceId: workspace.id,
+              key: target.key,
+              now,
+              name,
+              lastRunAt: row.lastRunAt,
+              lastOutcome: row.lastOutcome,
+              nextAt: moved,
+              failedEventAt: row.failedEventAt,
+            });
+            continue;
+          }
         }
         if (row.nextAt.getTime() > now.getTime()) {
           continue;

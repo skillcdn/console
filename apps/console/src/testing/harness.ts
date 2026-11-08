@@ -124,6 +124,12 @@ export interface HarnessOptions {
   readonly origin?: string | undefined;
   /** A loaded build of the default UI, for a browser to read the pages from. Left out, the API alone. */
   readonly web?: WebRoot | undefined;
+  /**
+   * The console's version the harness answers as (ADR-0025): {@link HARNESS_VERSION} when left
+   * out, so that the tests do not move with the package's; the package's own for a console a
+   * person connects the real command to.
+   */
+  readonly version?: string | undefined;
 }
 
 /** The skills as the api role is configured with them, at a deployment of the tests' own. */
@@ -198,7 +204,7 @@ export function createHarness(testDatabase: TestDatabase, options: HarnessOption
       blobs: options.blobs,
       plugins: options.plugins,
       web: options.web,
-      version: HARNESS_VERSION,
+      version: options.version ?? HARNESS_VERSION,
     },
   );
   const listener: EventListener | undefined =

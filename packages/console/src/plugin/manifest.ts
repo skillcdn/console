@@ -212,7 +212,28 @@ export const PLUGIN_BOARD_NEEDS = ["required", "optional", "none"] as const;
 export type PluginBoardNeeds = (typeof PLUGIN_BOARD_NEEDS)[number];
 
 const LANGUAGE_TAG = /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
-const DAY = /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/;
+const DAY = /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+
+/**
+ * True for a day as `YYYY-MM-DD` that the calendar has: February 30 and April 31 fit the shape
+ * and are no day, and a date made from them comes back as another day.
+ */
+export function isCalendarDay(value: unknown): value is string {
+  if (typeof value !== "string") {
+    return false;
+  }
+  const match = DAY.exec(value);
+  if (match === null) {
+    return false;
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+  );
+}
 /** A time of day as `HH:MM`, read in the workspace's time zone. */
 export const TIME_OF_DAY = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 /** A path within the package: relative, forward slashes, never climbing out. */
@@ -327,7 +348,7 @@ function fitsSettingType(
     case "enum":
       return typeof value === "string" && (options ?? []).includes(value);
     case "day":
-      return typeof value === "string" && DAY.test(value);
+      return isCalendarDay(value);
     case "time":
       return typeof value === "string" && TIME_OF_DAY.test(value);
     case "person":

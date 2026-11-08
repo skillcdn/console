@@ -3,6 +3,7 @@ import type { ConsoleClient } from "../client.js";
 import type { Messages } from "../i18n/en.js";
 import { useWords } from "../i18n/index.js";
 import { PLUGIN_CAPABILITIES, type PluginCapability } from "../plugin/capabilities.js";
+import { settingsHref } from "../router.js";
 import type {
   RestEvent,
   RestPerson,
@@ -1328,6 +1329,14 @@ export function PluginSettingsView(props: PluginSettingsViewProps) {
               <li key={problem}>{problem}</li>
             ))}
           </ul>
+        </Callout>
+      )}
+      {detail.needsTimeZone === true && (
+        <Callout
+          tone="warning"
+          action={<LinkButton href={settingsHref("workspace")}>{settings.setTimeZone}</LinkButton>}
+        >
+          {settings.needsTimeZone}
         </Callout>
       )}
       <Overview

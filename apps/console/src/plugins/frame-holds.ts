@@ -46,18 +46,22 @@ const KEPT = "public, max-age=31536000, immutable";
 /**
  * A file of a bundle as a frame is served it, and how long it may be kept. A script whose first
  * line can change under one version is kept nowhere, or a browser or a cache on the way would go
- * on running one without the line after the capability is withdrawn.
+ * on running one without the line after the capability is withdrawn. Nor is anything kept where
+ * the bundle itself changes under one version (`kept: false`): the console a plugin is looked at
+ * on while it is written, where a browser that kept the build before would run it against a
+ * server that answers something else.
  */
 export function frameFile(
   bytes: Uint8Array,
   contentType: string,
   holds: FrameHolds,
+  { kept = true }: { readonly kept?: boolean } = {},
 ): { readonly body: Uint8Array; readonly cacheControl: string } {
   if (!contentType.startsWith("text/javascript")) {
-    return { body: bytes, cacheControl: KEPT };
+    return { body: bytes, cacheControl: kept ? KEPT : "no-store" };
   }
   return {
     body: holds.webrtc ? bytes : Buffer.concat([NO_WEBRTC, bytes]),
-    cacheControl: holds.changing ? "no-store" : KEPT,
+    cacheControl: holds.changing || !kept ? "no-store" : KEPT,
   };
 }

@@ -20,6 +20,7 @@ import { allowedReadRoots } from "../plugins/paths.js";
 import { RecordStore } from "../plugins/records.js";
 import { Plugins } from "../plugins/registry.js";
 import { PluginScheduler } from "../plugins/scheduler.js";
+import { APP_VERSION } from "../version.js";
 import { createFixtureProvider, type FixtureProvider } from "./fixture-provider.js";
 import { createHarness, type Harness } from "./harness.js";
 import {
@@ -160,6 +161,9 @@ export async function startBrowserConsole(options: BrowserConsoleOptions): Promi
       clock,
       logger,
       timeouts: { command: 5_000, query: 5_000, endpoint: 5_000, lifecycle: 5_000 },
+      publicUrl: origin,
+      // A plugin looked at here is rebuilt under one version: no browser keeps its bundle.
+      previewing: true,
     });
     holder.current = plugins;
     await host.start();
@@ -186,12 +190,15 @@ export async function startBrowserConsole(options: BrowserConsoleOptions): Promi
     const provider = createFixtureProvider("gh", {
       authorize: () => `${origin}${FIXTURE_AUTHORIZE}`,
     });
+    // The package's own version, so that the real `console` command, which is held to the
+    // console's line (ADR-0025), signs in here and runs a plugin's commands as an agent would.
     const harness = createHarness(testDatabase, {
       providers: [provider],
       admins: [BROWSER_ADMIN],
       plugins,
       origin,
       web,
+      version: APP_VERSION,
     });
     const admin = await harness.signIn(BROWSER_ADMIN);
     // The members too, once each, so that the people the fixture knows are the workspace's

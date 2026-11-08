@@ -54,4 +54,15 @@ describe("what a plugin's frames hold (ADR-0066)", () => {
     expect(text(style.body)).toBe("run();\n");
     expect(style.cacheControl).toBe("public, max-age=31536000, immutable");
   });
+
+  it("keeps nothing where the bundle changes under one version, as on the preview console", () => {
+    const holds = { webrtc: false, changing: false };
+    expect(frameFile(bytes, SCRIPT, holds, { kept: false }).cacheControl).toBe("no-store");
+    expect(frameFile(bytes, "text/css; charset=utf-8", holds, { kept: false }).cacheControl).toBe(
+      "no-store",
+    );
+    expect(frameFile(bytes, SCRIPT, holds, { kept: true }).cacheControl).toBe(
+      "public, max-age=31536000, immutable",
+    );
+  });
 });
