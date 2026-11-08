@@ -367,12 +367,38 @@ const smallHex = (encoded: string): string =>
 /** Base64 in the alphabet of a URL. */
 const urlAlphabet = (base64: string): string => base64.replaceAll("+", "-").replaceAll("/", "_");
 
+/** A value as a query or a form encodes it: `+` for a space, the rest percent-encoded with big hex digits. */
+const formEncoded = (text: string): string => new URLSearchParams([["", text]]).toString().slice(1);
+
+/** A value as JSON spells it between its quotes. */
+const jsonEscaped = (text: string): string => JSON.stringify(text).slice(1, -1);
+
 /** A value as it is, escaped as JSON, URL-encoded as a URL's part and as a query or a form encodes it, each with its hex digits big or small. */
 function spelledForms(text: string): readonly string[] {
   // A lone surrogate, which an answer's JSON may hold, is encoded as a form encodes it, not thrown on.
   const part = encodeURIComponent(text.toWellFormed());
-  const query = new URLSearchParams([["", text]]).toString().slice(1);
-  return [text, JSON.stringify(text).slice(1, -1), part, query, smallHex(part), smallHex(query)];
+  const query = formEncoded(text);
+  return [text, jsonEscaped(text), part, query, smallHex(part), smallHex(query)];
+}
+
+/**
+ * What the request carries for a value, by its placement, which is what a service that encodes
+ * the request again in base64 encodes, rather than the value itself: the value, as a header or
+ * a bearer carries it; with it, as a query or a form spells it in a query parameter or a form
+ * body's field, and as JSON spells it in a JSON body's; and for basic authentication the base64
+ * of the pair, which the header holds.
+ */
+function carriedForms(value: string, as: SecretPlacement | undefined): readonly string[] {
+  if (as === "basic") {
+    return [value, Buffer.from(value.toWellFormed(), "utf8").toString("base64")];
+  }
+  if (as?.startsWith("query:") === true) {
+    return [value, formEncoded(value)];
+  }
+  if (as?.startsWith("body:") === true) {
+    return [value, jsonEscaped(value), formEncoded(value)];
+  }
+  return [value];
 }
 
 /**
@@ -404,12 +430,15 @@ function base64Forms(text: string): readonly string[] {
 /**
  * The forms a value may come back in, to be taken out of an answer: as it is, escaped as JSON,
  * URL-encoded as a URL's part and as a query or a form encodes it, with the hex digits big or
- * small; in base64, whole or inside a longer run of it, in a header's alphabet or a URL's; and
- * each with its slashes escaped, as some JSON spells them. For basic authentication, the pair's
- * forms and the password's alone.
+ * small; in base64, whole or inside a longer run of it, in a header's alphabet or a URL's, of the
+ * value and of what the request carried for it; and each with its slashes escaped, as some JSON
+ * spells them. For basic authentication, the pair's forms and the password's alone.
  */
 export function formsOf(value: string, as?: SecretPlacement): readonly string[] {
-  const forms = [...spelledForms(value), ...base64Forms(value)];
+  const forms = [
+    ...spelledForms(value),
+    ...carriedForms(value, as).flatMap((carried) => base64Forms(carried)),
+  ];
   if (as === "basic") {
     // The header carries the pair as this, however short it is.
     forms.push(Buffer.from(value.toWellFormed(), "utf8").toString("base64"));

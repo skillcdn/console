@@ -14,10 +14,11 @@ The forms widen, for every placement:
 
 - URL-encoded with the hex digits big or small, as a URL's part and as a query or a form encodes it;
 - each form with its slashes escaped as some JSON spells them, and as it is;
-- in base64, in a header's alphabet and a URL's: whole, padded or not, and inside a longer run of base64, at each of the three places its first byte may fall, without the letters it shares with what is around it. A value under 8 bytes is not looked for in base64, where its letters would turn up by chance; the pair of `basic` is, as the header carries it, whatever its length.
+- in base64, in a header's alphabet and a URL's: whole, padded or not, and inside a longer run of base64, at each of the three places its first byte may fall, without the letters it shares with what is around it; of the value, and of what the request carried for it, which is what a service that encodes the request again encodes: a query's or a form's spelling of it in a query parameter or a form body's field, a JSON body's in its field, and for `basic` the base64 of the pair the header holds. A value under 8 bytes is not looked for in base64, where its letters would turn up by chance; the pair of `basic` is, as the header carries it, whatever its length.
 
 ## Consequences
 
 - A service that echoes a request in any of these encodings hands the plugin none of the secrets in it.
 - A run of base64 in an answer that holds a secret loses its letters to `"[withheld]"` and no longer decodes there.
+- A value a service sends back by design is taken out too when a request carried it as a secret: a client id inside a token the service issues, say, which then reaches the plugin as `"[withheld]"`. Such a value is no secret, and goes in a plain setting.
 - An encoding the console does not know still goes past it; the forms are one list (`formsOf`), which a new one joins.

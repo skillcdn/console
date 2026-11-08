@@ -1,3 +1,4 @@
+import type { SecretPlacement } from "@skillcdn/console/plugin";
 import { describe, expect, it } from "vitest";
 import {
   formsOf,
@@ -302,6 +303,35 @@ describe("what of an answer is scrubbed", () => {
         ).toString("latin1");
         expect(rest).not.toContain(token);
       }
+    }
+    // In base64 of what the request carried, which a service that encodes the request again
+    // encodes: a query's spelling of a value in a query parameter, a JSON body's of one in its
+    // field, and for basic the header's base64 of the pair.
+    const spelled = 'ab/cd+ef"12345678';
+    const pair = "client:s3cr et";
+    const carried: readonly [string, SecretPlacement, string, string][] = [
+      [
+        spelled,
+        "query:key",
+        "ab%2Fcd%2Bef%2212345678",
+        "https://api.example.test/cb?key=ab%2Fcd%2Bef%2212345678",
+      ],
+      [spelled, "body:secret", 'ab/cd+ef\\"12345678', JSON.stringify({ secret: spelled })],
+      [
+        pair,
+        "basic",
+        Buffer.from(pair).toString("base64"),
+        `authorization: Basic ${Buffer.from(pair).toString("base64")}`,
+      ],
+    ];
+    for (const [placed, as, asCarried, request] of carried) {
+      expect(request, as).toContain(asCarried);
+      const run = Buffer.from(request).toString("base64");
+      const left = text(scrubAnswer({}, new TextEncoder().encode(run), formsOf(placed, as)).bytes);
+      expect(left, as).toContain("[withheld]");
+      const rest = Buffer.from(left.replaceAll("[withheld]", ""), "base64").toString("latin1");
+      expect(rest, as).not.toContain(placed);
+      expect(rest, as).not.toContain(asCarried);
     }
     // A run of base64 without it comes through as it was.
     const other = Buffer.from("nothing of the token in here").toString("base64");
