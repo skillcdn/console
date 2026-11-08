@@ -1,12 +1,16 @@
 import process from "node:process";
-import { type CollectionDescription, MAX_PLUGIN_RECORD_BYTES } from "@skillcdn/console/plugin";
-import { eq } from "drizzle-orm";
+import {
+  type CollectionDescription,
+  MAX_PLUGIN_RECORD_BYTES,
+  type PluginRecord,
+} from "@skillcdn/console/plugin";
+import { eq, inArray } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createPgBlobStore } from "../adapters/pg-blob-store.js";
 import { drizzleOf } from "../db/client.js";
 import { findPerson, type PersonRecord } from "../db/queries/people.js";
 import { ensureWorkspace } from "../db/queries/workspaces.js";
-import { pluginRecords } from "../db/schema.js";
+import { pluginRecords, pluginRecordVersions } from "../db/schema.js";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "../db/testing.js";
 import { createFixtureProvider } from "../testing/fixture-provider.js";
 import { createHarness, type Harness } from "../testing/harness.js";
@@ -446,6 +450,58 @@ describe("the record store", () => {
     expect(await store.get(lines, line.id)).toBeUndefined();
     expect(await store.get(lines, kept.id)).toBeDefined();
     expect(await store.sweepExpired({ ...own, collection: notes }, now)).toBe(0);
+  });
+
+  it("forgets a step at a time, in the order the records were made, until the pass's time is up", async () => {
+    // One statement for a whole collection with its history could outlast the statement
+    // timeout, every hour, and never finish.
+    const own = {
+      ...scope,
+      plugin: "stepping",
+      collection: {
+        ...notes,
+        name: "steps",
+        history: true,
+        retention: { days: 7, by: "createdAt" },
+      },
+    };
+    const now = new Date("2026-11-08T12:00:00.000Z");
+    const old: PluginRecord[] = [];
+    for (let n = 0; n < 5; n += 1) {
+      old.push(await store.create(own, { n }, {}, CONSOLE));
+    }
+    const kept = await store.create(own, { n: 5 }, {}, CONSOLE);
+    const [first] = old;
+    if (first === undefined) {
+      throw new Error("no record");
+    }
+    await store.update(own, first.id, { n: 0, again: true }, {}, CONSOLE);
+    await drizzleOf(testDatabase.database)
+      .update(pluginRecords)
+      .set({ createdAt: new Date("2026-10-01T00:00:00.000Z") })
+      .where(
+        inArray(
+          pluginRecords.id,
+          old.map((record) => record.id),
+        ),
+      );
+    // A pass whose time is up after its first step removes the two made first, history and all.
+    expect(await store.sweepExpired(own, now, { batch: 2, more: () => false })).toBe(2);
+    expect(
+      await Promise.all(old.map(async (record) => (await store.get(own, record.id)) !== undefined)),
+    ).toEqual([false, false, true, true, true]);
+    expect(
+      await drizzleOf(testDatabase.database)
+        .select()
+        .from(pluginRecordVersions)
+        .where(eq(pluginRecordVersions.recordId, first.id)),
+    ).toEqual([]);
+    // The next pass goes on to the end of the collection, a step at a time.
+    expect(await store.sweepExpired(own, now, { batch: 2 })).toBe(3);
+    for (const record of old) {
+      expect(await store.get(own, record.id)).toBeUndefined();
+    }
+    expect(await store.get(own, kept.id)).toBeDefined();
   });
 
   it("exports everything it keeps, and purges it", async () => {

@@ -1,5 +1,5 @@
 import type { PluginHookEvent } from "@skillcdn/console/plugin";
-import { PLUGIN_HOOK_RETRIES } from "@skillcdn/console/plugin";
+import { PLUGIN_HOOK_MS, PLUGIN_HOOK_RETRIES } from "@skillcdn/console/plugin";
 import { sql } from "drizzle-orm";
 import { type Database, drizzleOf } from "../db/client.js";
 import { type EventRecord, latestEventId, listAllEventsAfter } from "../db/queries/events.js";
@@ -24,18 +24,55 @@ import { lockKeyOf } from "./scheduler.js";
 
 // The hooks (docs/specs/plugins.md, "Events, hooks and jobs"): the console's events and the
 // plugins' events, read from a cursor per plugin, each plugin under an advisory lock of its own,
-// so that one process dispatches to a plugin at a time and a slow or failing plugin holds up no
-// other, and delivered to the handler that named each kind. A console event reaches a plugin for
-// its board projects, the projects it is on, and the items it made. Delivery is at least once: a
-// handler that fails is tried again with backoff, five times, then the event is skipped with a
-// `plugin.failed` event. Runs in the worker role, or in the api role when it carries the worker.
+// held for as long as its delivery takes, so that one process dispatches to a plugin at a time;
+// a few plugins at once, so that a slow or failing plugin holds up few others and the pool keeps
+// room for everything else; delivered to the handler that named each kind. A console event
+// reaches a plugin for its board projects, the projects it is on, and the items it made. Delivery
+// is at least once: a handler that fails is tried again with backoff, five times, then the event
+// is skipped with a `plugin.failed` event. Runs in the worker role, or in the api role when it
+// carries the worker.
 
 /** How many events of each stream one pass reads for one plugin. */
 const BATCH = 100;
 /** How long one pass spends on one plugin before leaving the rest of its events to the next pass. */
 const PLUGIN_PASS_MS = 20_000;
+/**
+ * How long the transaction that holds a plugin's lock may sit idle before the server ends it, set
+ * for that transaction alone in place of the pool's thirty seconds: the pass's time on the plugin,
+ * the hook begun just before it ran out, and a minute for the host's fence behind the hook and the
+ * queries around it. The lock is not taken from a pass still delivering, and a process that
+ * vanished without closing its connection gives it up within two minutes.
+ */
+const LOCK_IDLE_MS = PLUGIN_PASS_MS + PLUGIN_HOOK_MS + 60_000;
+/** The most plugins one process delivers to at once, however large its pool. */
+const LANES_AT_MOST = 4;
+/**
+ * The first of the two keys of a plugin's dispatch lock, "hook" in ASCII: PostgreSQL keeps the
+ * locks taken with two keys apart from those taken with one, as a job's is.
+ */
+const DISPATCH_LOCK_SPACE = 0x686f6f6b;
 /** The longest a hook may ask the next try to wait, by `retryAfterMs` on its refusal. */
 const RETRY_AFTER_MS_AT_MOST = 60 * 60_000;
+
+/**
+ * How many plugins one process delivers to at once: a quarter of its pool's connections, at least
+ * one and at most four. Each holds a connection for its lock and takes another for its queries, and
+ * its hook's calls on `ctx` take more of the same pool, which the API shares where the process
+ * carries the worker; every plugin with hooks at once took the whole pool, and every pass then
+ * waited out the pool's timeout.
+ */
+export function lanesFor(connections: number): number {
+  return Math.max(1, Math.min(LANES_AT_MOST, Math.floor(connections / 4)));
+}
+
+/**
+ * The lock one plugin's delivery is under, as two keys: the dispatcher's space and the plugin's.
+ * A job's lock is one key (`lockKeyOf`), and PostgreSQL keeps the two kinds apart, so that a job,
+ * whatever it is called, never holds up its plugin's hooks, nor they it.
+ */
+export function dispatchLockOf(key: string): readonly [number, number] {
+  return [DISPATCH_LOCK_SPACE, lockKeyOf(key, "dispatch")];
+}
 
 /** A plugin as the dispatcher delivers to it. */
 export interface DispatchTarget {
@@ -71,11 +108,14 @@ const defaultBackoff = (attempts: number): number => 2 ** Math.min(attempts, 8) 
 
 export class PluginDispatcher {
   private readonly options: PluginDispatcherOptions;
+  /** How many plugins a pass delivers to at once, from the pool it has (`lanesFor`). */
+  private readonly lanes: number;
   private timer: ReturnType<typeof setInterval> | undefined;
   private running: Promise<void> = Promise.resolve();
 
   constructor(options: PluginDispatcherOptions) {
     this.options = options;
+    this.lanes = lanesFor(options.database.maxConnections);
   }
 
   /** One pass: every plugin with hooks is brought up to date with both streams, as far as its handlers allow. */
@@ -111,29 +151,44 @@ export class PluginDispatcher {
       return;
     }
     const workspace = await this.options.workspace();
-    // Each plugin under a lock of its own, side by side: a plugin whose hook calls a slow
-    // service, or waits out its backoff, holds up no other plugin's delivery, and two processes
+    // Each plugin under a lock of its own, a few side by side: a plugin whose hook calls a slow
+    // service, or waits out its backoff, holds up no plugin in another lane, and two processes
     // may dispatch to two plugins at once, never to one.
-    await Promise.all(
-      targets.map((target) =>
-        drizzleOf(this.options.database)
-          .transaction(async (tx) => {
-            const locked = await tx.execute<{ locked: boolean }>(
-              sql`select pg_try_advisory_xact_lock(${lockKeyOf(target.key, "dispatch")}) as locked`,
-            );
-            if (locked.rows[0]?.locked !== true) {
-              return;
-            }
-            await this.deliverTo(workspace, target);
-          })
-          .catch((error: unknown) => {
-            this.options.logger.warn(
-              { err: error, plugin: target.key },
-              "a plugin's hooks were not delivered to",
-            );
-          }),
-      ),
-    );
+    const waiting = [...targets];
+    const lane = async (): Promise<void> => {
+      for (let target = waiting.shift(); target !== undefined; target = waiting.shift()) {
+        await this.dispatchTo(workspace, target);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(this.lanes, waiting.length) }, lane));
+  }
+
+  /**
+   * One plugin's delivery under its lock, taken by a transaction that the server lets idle for as
+   * long as the delivery may take, and given up with it. A plugin another process holds is that
+   * process's to deliver to this time.
+   */
+  private async dispatchTo(workspace: WorkspaceRecord, target: DispatchTarget): Promise<void> {
+    const [space, key] = dispatchLockOf(target.key);
+    try {
+      await drizzleOf(this.options.database).transaction(async (tx) => {
+        await tx.execute(
+          sql`select set_config('idle_in_transaction_session_timeout', ${String(LOCK_IDLE_MS)}, true)`,
+        );
+        const locked = await tx.execute<{ locked: boolean }>(
+          sql`select pg_try_advisory_xact_lock(${space}, ${key}) as locked`,
+        );
+        if (locked.rows[0]?.locked !== true) {
+          return;
+        }
+        await this.deliverTo(workspace, target);
+      });
+    } catch (error) {
+      this.options.logger.warn(
+        { err: error, plugin: target.key },
+        "a plugin's hooks were not delivered to",
+      );
+    }
   }
 
   private async deliverTo(workspace: WorkspaceRecord, target: DispatchTarget): Promise<void> {

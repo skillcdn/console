@@ -37,7 +37,11 @@ export interface PluginSchedulerOptions {
   readonly logger: Logger;
 }
 
-/** The lock of one job, or of one plugin's dispatch, from its plugin's key and a name: a stable number every process agrees on. */
+/**
+ * The lock of one job, from its plugin's key and its name: a stable number every process agrees
+ * on, taken as one key. A plugin's dispatch lock is two keys (`dispatchLockOf`), which PostgreSQL
+ * keeps apart from every lock of one, so that no job's name can be it.
+ */
 export function lockKeyOf(key: string, name: string): number {
   let hash = 2166136261;
   for (const char of `${key}:${name}`) {

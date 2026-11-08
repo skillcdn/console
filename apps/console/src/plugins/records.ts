@@ -24,7 +24,7 @@ import {
   type WhereScalar,
   type WhereValue,
 } from "@skillcdn/console/plugin";
-import { and, asc, desc, eq, isNull, lt, or, type SQL, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lt, or, type SQL, sql } from "drizzle-orm";
 import { projectVisibleTo } from "../auth/policy.js";
 import { type Database, drizzleOf, type Transaction } from "../db/client.js";
 import type { PersonRecord } from "../db/queries/people.js";
@@ -69,6 +69,11 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const FIELD = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
 /** How many records one page of an export reads at a time. */
 const EXPORT_PAGE = 500;
+/**
+ * How many records one step of the retention sweep looks at, and so removes at most: with a
+ * hundred versions of 64 KiB behind every one, still a statement within the timeout.
+ */
+const SWEEP_BATCH = 100;
 
 type Handle = Transaction | ReturnType<typeof drizzleOf>;
 
@@ -1137,15 +1142,25 @@ export class RecordStore {
     }
   }
 
-  /** Removes everything the plugin keeps here: records with their versions, files and links, and its uploads. */
   /**
    * Removes the records of a collection that are past its retention (docs/specs/plugins.md,
    * "Records"): older than `days` by the record's own moment, or by a day or an instant an indexed
    * field holds as ISO 8601 text, compared as text, which the shape sorts right and a malformed
    * value cannot break; what does not look like one is kept. Their versions, links and files go
    * with them. Nothing where the collection has no retention.
+   *
+   * A step at a time, in the order the records were made (their ids are UUIDv7, which the
+   * collection's index keeps in order): a step looks at the next `batch` records and removes those
+   * past, so that each statement stays well within the statement timeout however much history the
+   * records carry, and every record is looked at once. It goes on to the end of the collection, or
+   * until `more` says the pass's time is up, the rest then being the next pass's. Answers how many
+   * records went.
    */
-  async sweepExpired(scope: RecordScope, now: Date): Promise<number> {
+  async sweepExpired(
+    scope: RecordScope,
+    now: Date,
+    options: { readonly batch?: number; readonly more?: () => boolean } = {},
+  ): Promise<number> {
     const retention = scope.collection.retention ?? null;
     if (retention === null) {
       return 0;
@@ -1162,13 +1177,40 @@ export class RecordStore {
     } else {
       return 0;
     }
-    const removed = await drizzleOf(this.database)
-      .delete(pluginRecords)
-      .where(and(this.within(scope), past))
-      .returning({ id: pluginRecords.id });
-    return removed.length;
+    const db = drizzleOf(this.database);
+    const batch = options.batch ?? SWEEP_BATCH;
+    let removed = 0;
+    let after: string | undefined;
+    for (;;) {
+      const rows = await db
+        .select({ id: pluginRecords.id, past: sql<boolean | null>`${past}` })
+        .from(pluginRecords)
+        .where(
+          and(
+            this.within(scope),
+            after === undefined ? undefined : sql`${pluginRecords.id} > ${after}::uuid`,
+          ),
+        )
+        .orderBy(asc(pluginRecords.id))
+        .limit(batch);
+      const expired = rows.filter((row) => row.past === true).map((row) => row.id);
+      if (expired.length > 0) {
+        // Past again as it is removed, so that a record written since it was looked at stays.
+        const gone = await db
+          .delete(pluginRecords)
+          .where(and(this.within(scope), inArray(pluginRecords.id, expired), past))
+          .returning({ id: pluginRecords.id });
+        removed += gone.length;
+      }
+      const last = rows.at(-1);
+      if (rows.length < batch || last === undefined || options.more?.() === false) {
+        return removed;
+      }
+      after = last.id;
+    }
   }
 
+  /** Removes everything the plugin keeps here: records with their versions, files and links, and its uploads. */
   async purge(
     workspaceId: string,
     plugin: string,

@@ -87,8 +87,10 @@ src/
                  resolved and pinned, a secret put in by the console, the bounds), frame-holds.ts (what
                  a plugin's frames hold beyond the bridge and how they are held to it, the one place that
                  knows how), dispatcher.ts (the
-                 hooks: both streams from a cursor per plugin under one lock, at least once, retries
-                 with backoff, then a plugin.failed event), scheduler.ts (the jobs: every and at in
+                 hooks: both streams from a cursor per plugin under a lock of its own, a few plugins
+                 at once by the pool's size, at least once, retries with backoff, then a
+                 plugin.failed event), retention.ts (the hourly sweep of what is past a
+                 collection's retention), scheduler.ts (the jobs: every and at in
                  the workspace's zone, a lock per job, a failure told once an hour); the queries are
                  db/queries/plugins.ts and db/queries/plugin-board.ts, the routes
                  http/plugins-rest.ts (the plugins' routes, the frame document under its own

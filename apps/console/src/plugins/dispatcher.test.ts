@@ -1,12 +1,37 @@
 import { describe, expect, it } from "vitest";
 import {
   contentFor,
+  dispatchLockOf,
   hookEventId,
   isPeopleEvent,
+  lanesFor,
   lifecycleOf,
   ownAnswerOf,
   retryAfterOf,
 } from "./dispatcher.js";
+
+describe("how many plugins one process delivers to at once", () => {
+  it("is a quarter of its pool's connections, at least one and at most four", () => {
+    expect(lanesFor(1)).toBe(1);
+    expect(lanesFor(4)).toBe(1);
+    expect(lanesFor(7)).toBe(1);
+    expect(lanesFor(8)).toBe(2);
+    expect(lanesFor(10)).toBe(2);
+    expect(lanesFor(16)).toBe(4);
+    expect(lanesFor(200)).toBe(4);
+  });
+});
+
+describe("a plugin's dispatch lock", () => {
+  it("is two keys, the dispatcher's space and the plugin's, each an integer as PostgreSQL takes them", () => {
+    const [space, key] = dispatchLockOf("leave");
+    expect(dispatchLockOf("audit")[0]).toBe(space);
+    expect(dispatchLockOf("audit")[1]).not.toBe(key);
+    for (const part of [space, key]) {
+      expect(Number.isInteger(part) && part >= -(2 ** 31) && part < 2 ** 31).toBe(true);
+    }
+  });
+});
 
 describe("what a failed hook asks of the next try", () => {
   it("waits retryAfterMs from the refusal's data, within an hour, and nothing otherwise", () => {

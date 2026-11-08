@@ -15,6 +15,11 @@ export interface DatabaseOptions {
   /** Shows up in `pg_stat_activity`. */
   readonly applicationName?: string;
   readonly statementTimeoutMs?: number;
+  /**
+   * How long a transaction may sit idle before the server ends its session: thirty seconds unless
+   * said. A transaction that holds a lock across slow work sets its own, longer, for itself.
+   */
+  readonly idleInTransactionMs?: number;
 }
 
 /**
@@ -22,6 +27,8 @@ export interface DatabaseOptions {
  * the functions under `db/queries/`; nothing outside this directory sees the ORM or SQL.
  */
 export interface Database {
+  /** The most connections the pool opens at once, for what sizes its own work to the pool. */
+  readonly maxConnections: number;
   /** True when a query reaches the server. Never throws. */
   ping(): Promise<boolean>;
   /** Waits for checked-out connections to come back, then closes the pool. */
@@ -43,22 +50,31 @@ export function sslOf(
 }
 
 export function createDatabase(options: DatabaseOptions): Database {
+  const maxConnections = options.maxConnections ?? 10;
   const pool = new Pool({
     connectionString: options.connectionString,
     ssl: sslOf(options.ca),
-    max: options.maxConnections ?? 10,
+    max: maxConnections,
     application_name: options.applicationName ?? "console",
     connectionTimeoutMillis: 5000,
     idleTimeoutMillis: 30_000,
     statement_timeout: options.statementTimeoutMs ?? 15_000,
     lock_timeout: 5000,
-    idle_in_transaction_session_timeout: 30_000,
+    idle_in_transaction_session_timeout: options.idleInTransactionMs ?? 30_000,
   });
   // An idle client that loses its connection emits "error"; without a listener that is fatal.
   // The pool replaces the client on its own, so there is nothing to do here.
   pool.on("error", () => {});
+  // So does a client checked out of the pool, which the pool listens for no longer: a session the
+  // server ends while its transaction waits on other work (a timeout, a restart, a failover) would
+  // end the process. The holder's next query fails instead, and the pool drops the client when it
+  // comes back.
+  pool.on("connect", (client) => {
+    client.on("error", () => {});
+  });
 
   const database: Database = Object.freeze({
+    maxConnections,
     ping: async () => {
       try {
         await pool.query("select 1");

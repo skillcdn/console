@@ -120,6 +120,7 @@ import { type OpenedSecret, Outbound } from "./outbound.js";
 import { type CallResult, measure, type PluginCall, UNAVAILABLE } from "./protocol.js";
 import { createRateLimiter, type RateLimiter } from "./rate.js";
 import type { RecordScope, RecordStore, Visibility, Writer } from "./records.js";
+import { type SweepTarget, sweepCollections } from "./retention.js";
 import { mayUse, rolesHeld } from "./roles.js";
 import type { JobTarget } from "./scheduler.js";
 import type { PluginSqlService } from "./sql.js";
@@ -2846,38 +2847,38 @@ export class Plugins {
 
   /**
    * Removes what is past its retention in every enabled plugin's collections (docs/specs/plugins.md,
-   * "Records"): the sweep the worker runs on its schedule. Answers how many records went, by plugin.
+   * "Records"): the sweep the worker runs on its schedule, each collection apart from the others,
+   * a step at a time until `more` says the pass's time is up. Answers how many records went, by
+   * plugin.
    */
-  async sweepExpired(now: Date): Promise<Record<string, number>> {
+  async sweepExpired(now: Date, more: () => boolean = () => true): Promise<Record<string, number>> {
     const store = this.options.records;
     if (store === undefined) {
       return {};
     }
     const workspace = await this.options.workspace();
-    const swept: Record<string, number> = {};
+    const targets: SweepTarget[] = [];
     for (const install of await listInstalls(this.options.database, workspace.id)) {
       const entry = this.entries.get(install.key);
       if (install.state !== "enabled" || entry?.description === undefined) {
         continue;
       }
       for (const collection of entry.description.collections) {
-        if ((collection.retention ?? null) === null) {
-          continue;
-        }
-        const removed = await store.sweepExpired(
-          { workspaceId: workspace.id, plugin: install.key, collection },
-          now,
-        );
-        if (removed > 0) {
-          swept[install.key] = (swept[install.key] ?? 0) + removed;
-          this.options.logger.info(
-            { plugin: install.key, collection: collection.name, removed },
-            "plugin records past their retention were removed",
-          );
+        if ((collection.retention ?? null) !== null) {
+          targets.push({ plugin: install.key, collection });
         }
       }
     }
-    return swept;
+    return sweepCollections(
+      targets,
+      (target) =>
+        store.sweepExpired(
+          { workspaceId: workspace.id, plugin: target.plugin, collection: target.collection },
+          now,
+          { more },
+        ),
+      { logger: this.options.logger, more },
+    );
   }
 
   /** Writes that the plugin failed, as a `plugin.failed` event in its board project. */
