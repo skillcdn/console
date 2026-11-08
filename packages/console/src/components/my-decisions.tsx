@@ -1,5 +1,11 @@
 import type { ReactNode } from "react";
-import type { RestAnswerInput, RestDecision, RestMyDecisions } from "../api.js";
+import {
+  decisionFilePath,
+  type RestAnswerInput,
+  type RestDecision,
+  type RestMyDecisions,
+  type RestReachedDecision,
+} from "../api.js";
 import { useWords } from "../i18n/index.js";
 import { DecisionCard, DecisionLog } from "./decision-list.js";
 import { ProjectMark } from "./projects.js";
@@ -11,7 +17,9 @@ import { Button } from "./ui.js";
 // whom they wait for; in the second the record, the answered ones of both kinds, newest first.
 // Every card and row names the project, and who asked and who answers, as the cards do
 // everywhere. Takes its data as props and nothing from the network; the page reads more when
-// asked.
+// asked. A decision here may be in a project the person may not see (ADR-0068), so the files
+// put on it are read at the decision's own address, which serves them to whoever the decision
+// reaches, and not at the project's.
 
 /** One kind of a person's decisions, a page at a time. */
 export interface DecisionsPage {
@@ -27,8 +35,14 @@ export interface MyDecisionsProps {
   /** The decisions the person asked of someone else: waiting and answered. */
   readonly raised: DecisionsPage;
   readonly decisionHref: (projectKey: string, decisionId: string) => string;
-  /** Where a file put on a decision is read, by its project's key and its id (ADR-0055). */
-  readonly fileHref?: ((projectKey: string, fileId: string) => string) | undefined;
+  /**
+   * Where a file put on a decision is read (ADR-0055), by the project's key, the file's id and
+   * the decision's; left out, at the decision's own address, `decisionFilePath`, which serves it
+   * to whoever the decision reaches, in a project they may see or not (ADR-0068).
+   */
+  readonly fileHref?:
+    | ((projectKey: string, fileId: string, decisionId: string) => string)
+    | undefined;
   /** Called with the person's answer on a decision of theirs, in its project. Left out, a waiting decision is answered on its own page. */
   readonly onAnswer?:
     | ((projectKey: string, decision: RestDecision, input: RestAnswerInput) => void)
@@ -82,7 +96,11 @@ export function MyDecisions(props: MyDecisionsProps) {
       decision={item.decision}
       href={props.decisionHref(item.project.key, item.decision.id)}
       project={<InProject project={item.project} />}
-      fileHref={fileHref === undefined ? undefined : (fileId) => fileHref(item.project.key, fileId)}
+      fileHref={(fileId) =>
+        fileHref === undefined
+          ? decisionFilePath(item.decision.id, fileId)
+          : fileHref(item.project.key, fileId, item.decision.id)
+      }
       onAnswer={
         answerable && onAnswer !== undefined
           ? (decision, input) => onAnswer(item.project.key, decision, input)
@@ -137,5 +155,32 @@ export function MyDecisions(props: MyDecisionsProps) {
         )}
       </section>
     </div>
+  );
+}
+
+export interface ReachedDecisionProps {
+  /** The decision as the person reaches it (ADR-0068): its project, the decision, and whether they may answer it. */
+  readonly reached: RestReachedDecision;
+  /** Called with the person's answer; the decision is answered here only where `mayAnswer` says they may. */
+  readonly onAnswer?: ((decision: RestDecision, input: RestAnswerInput) => void) | undefined;
+  readonly busy?: boolean | undefined;
+}
+
+/**
+ * One decision wherever it is (ADR-0068), on its own page: the card with its project named, the
+ * files put on it read at the decision's own address, since the project may be one the person
+ * may not see, and the way to answer it where they may.
+ */
+export function ReachedDecision(props: ReachedDecisionProps) {
+  const { reached } = props;
+  const { decision } = reached;
+  return (
+    <DecisionCard
+      decision={decision}
+      project={<InProject project={reached.project} />}
+      fileHref={(fileId) => decisionFilePath(decision.id, fileId)}
+      onAnswer={reached.mayAnswer === true ? props.onAnswer : undefined}
+      busy={props.busy}
+    />
   );
 }

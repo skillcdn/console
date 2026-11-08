@@ -3,6 +3,7 @@ import {
   CLAIM_PATH,
   categoryPath,
   connectPath,
+  decisionFilePath,
   decisionPath,
   personTokensPath,
   personWorkPath,
@@ -658,6 +659,12 @@ export interface ConsoleClient {
   ): Promise<RestReachedDecision>;
   /** Answers a decision wherever it is, as whoever it reaches with the right to answer (ADR-0068). */
   answerDecision(id: string, input: RestAnswerInput): Promise<RestDecision>;
+  /**
+   * Where the bytes of a file put on a decision (ADR-0055) are read at the decision's own address,
+   * by the decision's id and the file's: for whoever the decision reaches, in a project they may
+   * see or not (ADR-0068), as the project's `fileUrl` is for whoever may see the project.
+   */
+  decisionFileUrl(decisionId: string, fileId: string): string;
   /** Another person's plate, within what the asker may see: for an administrator, or an owner of a project they are in. */
   personWork(personId: string, signal?: AbortSignal): Promise<RestPersonWork>;
   /** The tokens of whoever asks. */
@@ -1393,6 +1400,7 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
       ),
     answerDecision: (id, input) =>
       request("POST", `${base}${decisionPath(id)}/answer`, input, restDecisionSchema),
+    decisionFileUrl: (decisionId, fileId) => `${base}${decisionFilePath(decisionId, fileId)}`,
     personWork: (personId, signal) =>
       request("GET", `${base}${personWorkPath(personId)}`, undefined, restPersonWorkSchema, signal),
     tokens: (signal) =>

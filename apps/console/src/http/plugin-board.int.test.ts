@@ -616,6 +616,35 @@ describe("a plugin on the board", () => {
     await h.request(`${REST_ROUTES.people}/${bobId}`, json({ managerId: null }, admin, "PATCH"));
   });
 
+  it("says the project a decision its command raised waits in: the one it was raised in, which may not be its board", async () => {
+    const made = await h.request(
+      REST_ROUTES.projects,
+      json({ key: "leave-elsewhere", name: "Elsewhere", visibility: "workspace" }, admin),
+    );
+    expect(made.status, await made.clone().text()).toBe(201);
+    // The call is on another project, and the command asks there: the decision waits there.
+    const response = await h.request(
+      pluginPath("leave", "invoke"),
+      json({ argv: ["ask-here", "--approver", aliceLogin], project: "leave-elsewhere" }, member),
+    );
+    expect(response.status, await response.clone().text()).toBe(200);
+    const elsewhere = restPluginInvocationSchema.parse(await response.json());
+    expect(elsewhere.text).toBe("asked in leave-elsewhere");
+    expect(elsewhere.project).toBe("leave-elsewhere");
+    const raised = restDecisionSchema.parse(
+      await (
+        await h.request(projectPath("leave-elsewhere", "decisions", elsewhere.waiting ?? ""), {
+          headers: { cookie: member },
+        })
+      ).json(),
+    );
+    expect(raised.plugin).toBe("leave");
+    // A call on no project asks in the board, and says the board.
+    const atBoard = await invoked("leave", member, ["ask-here", "--approver", aliceLogin]);
+    expect(atBoard.text).toBe(`asked in ${BOARD}`);
+    expect(atBoard.project).toBe(BOARD);
+  });
+
   it("changes, comments on and reads its own items; another plugin reads them and may not change them", async () => {
     const made = await invoked("leave", member, ["task", "Fix the leave form"]);
     const { task } = made.data as { task: { number: number; plugin: string; priority: string } };

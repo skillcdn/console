@@ -127,6 +127,7 @@ export {
   CLAIM_PATH,
   categoryPath,
   connectPath,
+  decisionFilePath,
   decisionPath,
   isSignInFailure,
   loginPath,

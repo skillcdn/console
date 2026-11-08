@@ -1055,9 +1055,9 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
   };
 
   /**
-   * The bytes of a file the console keeps, for whoever may see the project. A few kinds are
-   * shown in place; the rest are handed over as bytes. Never sniffed, never run: the file is
-   * an agent's, or a person's.
+   * The bytes of a file the console keeps, for whoever may see the project, or whoever a decision
+   * reaches for a file put on it. A few kinds are shown in place; the rest are handed over as
+   * bytes. Never sniffed, never run: the file is an agent's, or a person's.
    */
   const serveFile = async (
     c: Context<AppEnv>,
@@ -1798,6 +1798,30 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       mayAnswer: reached.mayAnswer,
     };
     return c.json(body);
+  });
+
+  // A file put on a decision (ADR-0055), read at the decision's own address (ADR-0068): for
+  // whoever the decision reaches, wherever it is, as its question and its answer are, and only a
+  // file of that decision, never another of its project. A decision out of reach and a file not
+  // its own are the same answer, so that neither is learned of; served as the project's files are.
+  app.get(`${REST_ROUTES.decisions}/:id/files/:fileId`, async (c) => {
+    const person = await asking(c);
+    if (person instanceof Response) {
+      return person;
+    }
+    const id = c.req.param("id");
+    const fileId = c.req.param("fileId");
+    if (!UUID.test(id) || !UUID.test(fileId)) {
+      return noSuchFile(c);
+    }
+    const reached = await findDecisionReachable(database, person.workspaceId, id, person);
+    const attached = reached?.decision.files.find(
+      (candidate) => candidate.id === fileId.toLowerCase(),
+    );
+    if (attached === undefined) {
+      return noSuchFile(c);
+    }
+    return serveFile(c, attached.file, { decisionFile: attached.id });
   });
 
   // The answer, by whoever the decision reaches with the right to answer it (ADR-0068): anyone

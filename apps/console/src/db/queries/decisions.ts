@@ -739,11 +739,15 @@ export async function countWaitingDecisionsFor(
   return row?.count ?? 0;
 }
 
+/** A decision's id as the database keeps one; anything else names no decision. */
+const DECISION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * A decision as `person` reaches it (ADR-0068), with its project and whether they may answer
  * it: one of a project they may see, as before; or, wherever it is, one addressed to them, one
  * they raised, or a plugin's addressed to someone they manage. Nothing for a decision out of
- * their reach, which is not told apart from one that is not there.
+ * their reach, which is not told apart from one that is not there, nor from text that is no id:
+ * a plugin may name anything as the decision its command waits for.
  */
 export async function findDecisionReachable(
   database: Database,
@@ -759,6 +763,9 @@ export async function findDecisionReachable(
     }
   | undefined
 > {
+  if (!DECISION_ID.test(decisionId)) {
+    return undefined;
+  }
   const handle = drizzleOf(database);
   const [row] = await selectDecisions(handle)
     .innerJoin(projects, eq(projects.id, decisions.projectId))

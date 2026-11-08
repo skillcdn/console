@@ -271,6 +271,8 @@ describe("a command by the words as typed", () => {
     expect(response.status).toBe(200);
     const result = restPluginInvocationSchema.parse(await response.json());
     expect(result.waiting).toBe("0199c4d8-0000-7000-8000-0000000000d1");
+    // What it names is no decision the caller reaches, so it waits in no project the console names.
+    expect(result.project).toBeNull();
     const events = restEventsSchema.parse(
       await (await h.request(pluginPath("gate", "events"), { headers: { cookie: admin } })).json(),
     );

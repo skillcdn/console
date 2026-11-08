@@ -127,6 +127,33 @@ export default {
         return { text: decision.question, data: { language, decision } };
       },
     ),
+    "ask-here": command(
+      "Asks the approver in the project the call is on, or in its board where the call names none.",
+      { approver: argument("person") },
+      async (ctx, args) => {
+        const where =
+          ctx.caller.kind === "person" && ctx.caller.project !== null
+            ? ctx.caller.project.key
+            : ctx.plugin.board.key;
+        const record = await ctx.records(requests).create({
+          personId: ctx.caller.kind === "person" ? ctx.caller.person.id : "",
+          from: "2026-12-28",
+          to: "2026-12-28",
+          state: "requested",
+          decisionId: null,
+        });
+        const decision = await ctx.console.decisions.ask(where, {
+          question: "Leave on the 28th?",
+          options: [
+            { label: "Approve", key: "approve" },
+            { label: "Reject", key: "reject" },
+          ],
+          deciderId: args.approver.id,
+          about: { collection: "requests", id: record.id },
+        });
+        return { text: `asked in ${where}`, waiting: decision.id };
+      },
+    ),
     several: command("Writes a title in two languages at once.", {}, async (ctx) => {
       await ctx.console.tasks.create(ctx.plugin.board.key, {
         title: { en: "Settle the year's leave", ko: "연말 휴가 정산" },

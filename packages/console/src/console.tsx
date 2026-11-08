@@ -50,7 +50,7 @@ import { DecisionCard, DecisionList, type DecisionListProps } from "./components
 import { EventFeed, type EventFeedProps } from "./components/event-feed.js";
 import { GoalForm, GoalList, type GoalListProps, GoalView, goalMonth } from "./components/goals.js";
 import { HomeGrid, type HomeGridProps } from "./components/home.js";
-import { MyDecisions } from "./components/my-decisions.js";
+import { MyDecisions, ReachedDecision } from "./components/my-decisions.js";
 import { PackTokenWays } from "./components/pack-token.js";
 import { PAGE_SIZE } from "./components/paged.js";
 import {
@@ -2303,25 +2303,15 @@ function MyDecisionPage(props: { readonly id: string; readonly data: ConsoleData
           </div>
         )
       ) : (
-        <DecisionCard
-          decision={reached.decision}
-          project={
-            <span className="sc-task-row-project">
-              <ProjectMark project={reached.project} size="sm" />{" "}
-              {words.work.inProject(reached.project.name)}
-            </span>
-          }
-          fileHref={(fileId) => projectPath(reached.project.key, "files", fileId)}
-          onAnswer={
-            reached.mayAnswer === true
-              ? (_decision, input) =>
-                  void act(async () => {
-                    const answered = await answerReachedDecision(id, input);
-                    setReached((current) =>
-                      current === undefined ? current : { ...current, decision: answered },
-                    );
-                  })
-              : undefined
+        <ReachedDecision
+          reached={reached}
+          onAnswer={(_decision, input) =>
+            void act(async () => {
+              const answered = await answerReachedDecision(id, input);
+              setReached((current) =>
+                current === undefined ? current : { ...current, decision: answered },
+              );
+            })
           }
           busy={busy}
         />
@@ -2429,7 +2419,6 @@ function MyDecisionsPage(props: { readonly data: ConsoleData }) {
               ? decisionHref(projectKey, decisionId)
               : myDecisionHref(decisionId)
           }
-          fileHref={(projectKey, fileId) => projectPath(projectKey, "files", fileId)}
           onAnswer={onAnswer}
           busy={busy || addressed.busy || raised.busy}
         />

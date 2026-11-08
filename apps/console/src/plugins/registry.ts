@@ -59,6 +59,7 @@ import { sql } from "drizzle-orm";
 import { configuresPlugins, personVisibleTo } from "../auth/policy.js";
 import type { Secrets } from "../auth/secrets.js";
 import type { Database } from "../db/client.js";
+import { findDecisionReachable } from "../db/queries/decisions.js";
 import {
   type Actor,
   type EventRecord,
@@ -212,7 +213,10 @@ export interface Invocation {
   readonly text: string;
   readonly data: unknown;
   readonly waiting: string | null;
-  /** The key of the plugin's board project, where a decision it raised waits; `null` for none. */
+  /**
+   * The key of the project the decision a command raised waits in, where the caller reaches it;
+   * with nothing waiting, of the plugin's board project; `null` for none.
+   */
   readonly project: string | null;
 }
 
@@ -1575,12 +1579,20 @@ export class Plugins {
       return { kind, text: "", data: result.value, waiting: null, project };
     }
     const value = (result.value ?? {}) as { text?: unknown; data?: unknown; waiting?: unknown };
+    const waiting = typeof value.waiting === "string" ? value.waiting : null;
+    // A decision waits in the project it was raised in, the board or another the plugin is on,
+    // told as the caller reaches the decision (ADR-0068); nowhere where they do not reach it, or
+    // where what the plugin named is no decision.
+    const reached =
+      waiting === null
+        ? undefined
+        : await findDecisionReachable(this.options.database, workspace.id, waiting, by.person);
     return {
       kind,
       text: typeof value.text === "string" ? value.text : "",
       data: value.data ?? null,
-      waiting: typeof value.waiting === "string" ? value.waiting : null,
-      project,
+      waiting,
+      project: waiting === null ? project : (reached?.project.key ?? null),
     };
   }
 

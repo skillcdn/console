@@ -407,6 +407,24 @@ describe("createClient", () => {
     );
   });
 
+  it("says where a file put on a decision is read at the decision's own address, wherever the decision is (ADR-0068)", () => {
+    const { send, calls } = fakeFetch({});
+    const client = createClient({ baseUrl: "https://console.test", fetch: send });
+    expect(
+      client.decisionFileUrl(
+        "0199c4d8-0000-7000-8000-000000000030",
+        "0199c4d8-0000-7000-8000-000000000041",
+      ),
+    ).toBe(
+      "https://console.test/api/v1/decisions/0199c4d8-0000-7000-8000-000000000030/files/0199c4d8-0000-7000-8000-000000000041",
+    );
+    // What is not an id stays one segment of the path.
+    expect(createClient({ fetch: send }).decisionFileUrl("a/b", "c?d")).toBe(
+      "/api/v1/decisions/a%2Fb/files/c%3Fd",
+    );
+    expect(calls).toEqual([]);
+  });
+
   it("names the person whose role changes", async () => {
     const { send, calls } = fakeFetch({
       [`PATCH /api/v1/people/${PERSON.id}`]: { body: { ...PERSON, role: "admin" } },

@@ -362,7 +362,11 @@ export const restPluginInvocationSchema = z.object({
   text: z.string(),
   data: z.unknown(),
   waiting: z.nullable(z.string()),
-  /** The key of the plugin's board project, where a decision it raised waits, or `null`; answered from 0.4.5 and read as optional. */
+  /**
+   * The key of the project the decision in `waiting` waits in, the one it was raised in, where
+   * the caller reaches it, else `null`; with nothing waiting, the plugin's board project's, or
+   * `null`. Answered from 0.4.5 and read as optional.
+   */
   project: z.optional(z.nullable(z.string())),
 });
 export type RestPluginInvocation = z.infer<typeof restPluginInvocationSchema>;

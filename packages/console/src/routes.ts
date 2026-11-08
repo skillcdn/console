@@ -75,6 +75,14 @@ export function decisionPath(id: string): string {
   return `${REST_ROUTES.decisions}/${encodeURIComponent(id)}`;
 }
 
+/**
+ * The REST path of a file put on a decision (ADR-0055), read at the decision's own address, for
+ * whoever the decision reaches wherever it is (ADR-0068), in a project they may see or not.
+ */
+export function decisionFilePath(decisionId: string, fileId: string): string {
+  return `${decisionPath(decisionId)}/files/${encodeURIComponent(fileId)}`;
+}
+
 /** The REST path of a person's tokens, or of one of them: for an administrator. */
 export function personTokensPath(personId: string, tokenId?: string): string {
   const base = `${restPath("people", personId)}/tokens`;

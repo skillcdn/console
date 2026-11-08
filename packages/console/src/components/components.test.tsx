@@ -40,7 +40,7 @@ import { describeEvent, EventFeed } from "./event-feed.js";
 import { GoalForm, GoalList, GoalView, goalMonth } from "./goals.js";
 import { HomeGrid, type HomeGridProps } from "./home.js";
 import { Markdown } from "./markdown.js";
-import { MyDecisions } from "./my-decisions.js";
+import { MyDecisions, ReachedDecision } from "./my-decisions.js";
 import { PackConnect } from "./pack-connect.js";
 import { ListingForm, PeopleList, TeamForm, TeamList } from "./people.js";
 import { opensAbove, Picker } from "./picker.js";
@@ -518,6 +518,71 @@ describe("decisions", () => {
     expect(nothing).toContain("Nothing waits for your answer.");
     expect(nothing).toContain("You have asked nothing of others.");
     expect(nothing).toContain("Nothing answered yet.");
+  });
+
+  it("read the files put on a decision at the decision's own address away from its project: a person's decisions, and a decision reached by its id (ADR-0068)", () => {
+    // A decision of a project the person may not see, with a picture its context names and a file after it.
+    const vault = { key: "vault", name: "The vault", color: null, symbol: null, icon: null };
+    const picture = "0199c4d8-0000-7000-8000-000000000041";
+    const notes = "0199c4d8-0000-7000-8000-000000000043";
+    const withFiles = decision({
+      body: "The first: ![the first](first.png)",
+      files: [
+        {
+          id: picture,
+          file: { name: "first.png", size: 12, contentType: "image/png", sha256: "a" },
+        },
+        { id: notes, file: { name: "notes.txt", size: 2, contentType: "text/plain", sha256: "c" } },
+      ],
+    });
+    const at = (fileId: string) => `/api/v1/decisions/${withFiles.id}/files/${fileId}`;
+    // The person's decisions, as the page shows them: read at the decision's address, never the project's.
+    const mine = renderToStaticMarkup(
+      <MyDecisions
+        addressed={{ items: [{ project: vault, decision: withFiles }] }}
+        raised={{ items: [] }}
+        decisionHref={(_key, id) => `/decisions/${id}`}
+        onAnswer={() => undefined}
+      />,
+    );
+    expect(mine).toContain(`src="${at(picture)}"`);
+    expect(mine).toContain(`href="${at(notes)}"`);
+    expect(mine).not.toContain("/projects/vault/files/");
+    // A console that reads them elsewhere is given the project, the file and the decision.
+    const asked: string[] = [];
+    renderToStaticMarkup(
+      <MyDecisions
+        addressed={{ items: [{ project: vault, decision: withFiles }] }}
+        raised={{ items: [] }}
+        decisionHref={(_key, id) => `/decisions/${id}`}
+        fileHref={(key, fileId, decisionId) => {
+          asked.push(`${key} ${fileId} ${decisionId}`);
+          return `/elsewhere/${fileId}`;
+        }}
+      />,
+    );
+    expect(asked).toContain(`vault ${notes} ${withFiles.id}`);
+    // The decision reached by its id, on its own page: the same address, its project named, and
+    // the way to answer only where the person may.
+    const reached = renderToStaticMarkup(
+      <ReachedDecision
+        reached={{ project: vault, decision: withFiles, mayAnswer: true }}
+        onAnswer={() => undefined}
+      />,
+    );
+    expect(reached).toContain(`src="${at(picture)}"`);
+    expect(reached).toContain(`href="${at(notes)}"`);
+    expect(reached).not.toContain("/projects/vault/files/");
+    expect(reached).toContain("in The vault");
+    expect(reached).toContain('role="radiogroup"');
+    const readOnly = renderToStaticMarkup(
+      <ReachedDecision
+        reached={{ project: vault, decision: withFiles, mayAnswer: false }}
+        onAnswer={() => undefined}
+      />,
+    );
+    expect(readOnly).not.toContain('role="radiogroup"');
+    expect(readOnly).toContain(`href="${at(notes)}"`);
   });
 
   it("name the agent an answer and what followed came through, and the one a goal or a task was written through (ADR-0056)", () => {
