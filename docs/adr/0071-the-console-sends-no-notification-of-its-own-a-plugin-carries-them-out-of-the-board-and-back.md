@@ -16,7 +16,7 @@ The console sends no notification of its own. Carrying what happens on the board
 
 What the console provides is what a carrier needs and nothing a carrier does:
 
-- the events, the board's and the plugins' own, delivered to hooks in order ([ADR-0052](0052-a-plugin-may-be-on-the-board-with-a-project-of-its-own-hooks-on-its-events-and-jobs-on-a-schedule.md)), and a decision that reaches whom it is for wherever they are ([ADR-0068](0068-a-decision-reaches-whom-it-is-addressed-to-wherever-it-is-and-a-plugins-reaches-the-managers-above-them.md));
+- the events, the board's and the plugins' own, delivered to hooks in order ([ADR-0052](0052-a-plugins-board-is-a-project-made-or-chosen-when-it-is-enabled-and-what-it-puts-there-carries-its-name.md)), and a decision that reaches whom it is for wherever they are ([ADR-0068](0068-a-decision-reaches-whom-it-is-addressed-to-wherever-it-is-and-a-plugins-reaches-the-managers-above-them.md));
 - the work email that matches a person to their account elsewhere ([ADR-0069](0069-the-directory-keeps-a-work-email-read-by-an-administrator-the-person-and-a-plugin-allowed-to.md));
 - the secrets a messenger's API takes, sealed and put in by the console ([ADR-0070](0070-a-secret-is-sealed-by-the-console-from-an-answer-and-goes-where-its-setting-says.md)), and the console's own address and the plugin's endpoints, for a link back and a callback;
 - the standing to act as the carrier must: to read another plugin's detail under a role granted to it, and to run a command or answer a decision for the person who pressed a button elsewhere, within what that person may do, which is the next decision.
