@@ -557,6 +557,7 @@ describe("createConsole", () => {
     answerDecision: never,
     decisionFileUrl: (decisionId: string, fileId: string) =>
       `/api/v1/decisions/${decisionId}/files/${fileId}`,
+    readDecisionFile: never,
     plugins: never,
     plugin: () => {
       throw new Error("no plugins in this test");

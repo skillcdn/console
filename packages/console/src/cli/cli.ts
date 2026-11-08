@@ -2434,14 +2434,25 @@ async function attachmentsOf(io: CliIo, paths: readonly string[]): Promise<FileU
 /**
  * A file of the project, read from the console and written on this machine: one a run handed
  * in, one put in a comment or on a decision, or one attached to a page, by its id, so that an
- * agent can look at a picture a person put on the board.
+ * agent can look at a picture a person put on the board. With `--decision`, a file of that
+ * decision, read at the decision's own address (ADR-0068): wherever it is, in the project the
+ * command works in or one it does not name.
  */
 const file: Command = async (args, io) => {
-  const { values, positionals } = parse(args, { out: { type: "string" } });
-  const id = theOne(positionals, "Say which file: console file <id> [--out <path>]");
+  const { values, positionals } = parse(args, {
+    out: { type: "string" },
+    decision: { type: "string" },
+  });
+  const id = theOne(
+    positionals,
+    "Say which file: console file <id> [--decision <id>] [--out <path>]",
+  );
+  const decisionId = text(values, "decision");
   const session = await open(io, values);
-  const project = await session.project();
-  const read = await project.readFile(id);
+  const read =
+    decisionId === undefined
+      ? await (await session.project()).readFile(id)
+      : await session.client.readDecisionFile(decisionId, id);
   const target = text(values, "out") ?? read.name;
   let saved: string;
   try {
@@ -2712,11 +2723,11 @@ const answering: Command = async (args, io) => {
   }
   const note = await bodyOf(io, values, text(values, "note"));
   const session = await open(io, values);
-  const answered = await answerReached(session, id, {
+  const { decision: answered, atItsAddress } = await answerReached(session, id, {
     ...(own === undefined ? { option } : { own }),
     ...(note === undefined ? {} : { note }),
   });
-  answer(io, session, answered, () => formatDecision(answered));
+  answer(io, session, answered, () => formatDecision(answered, { atItsAddress }));
   return EXIT.ok;
 };
 
@@ -2735,11 +2746,16 @@ const notInProject = (error: unknown): boolean =>
 async function reachDecision(
   session: Session,
   id: string,
-): Promise<{ readonly decision: RestDecision; readonly waiter: Waiter }> {
+): Promise<{
+  readonly decision: RestDecision;
+  readonly waiter: Waiter;
+  /** Whether it was reached at its own address, outside the project the command works in. */
+  readonly atItsAddress: boolean;
+}> {
   if ((await session.projectKey()) !== undefined) {
     const project = await session.project();
     try {
-      return { decision: await project.decision(id), waiter: project };
+      return { decision: await project.decision(id), waiter: project, atItsAddress: false };
     } catch (error) {
       if (!notInProject(error)) {
         throw error;
@@ -2755,6 +2771,7 @@ async function reachDecision(
         awaitDecision: async (decisionId, seconds) =>
           (await anywhere.awaitDecision(decisionId, seconds)).decision,
       },
+      atItsAddress: true,
     };
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) {
@@ -2769,10 +2786,13 @@ async function answerReached(
   session: Session,
   id: string,
   input: RestAnswerInput,
-): Promise<RestDecision> {
+): Promise<{ readonly decision: RestDecision; readonly atItsAddress: boolean }> {
   if ((await session.projectKey()) !== undefined) {
     try {
-      return await (await session.project()).answerDecision(id, input);
+      return {
+        decision: await (await session.project()).answerDecision(id, input),
+        atItsAddress: false,
+      };
     } catch (error) {
       if (!notInProject(error)) {
         throw error;
@@ -2780,7 +2800,7 @@ async function answerReached(
     }
   }
   try {
-    return await session.client.answerDecision(id, input);
+    return { decision: await session.client.answerDecision(id, input), atItsAddress: true };
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) {
       throw new ApiError(404, "decision.not_found", "The decision was not found.");
@@ -2809,9 +2829,9 @@ const decision: Command = async (args, io) => {
     answer(io, session, grown, () => formatDecision(grown));
     return EXIT.ok;
   }
-  const { decision: found, waiter } = await reachDecision(session, id);
+  const { decision: found, waiter, atItsAddress } = await reachDecision(session, id);
   if (seconds === 0) {
-    answer(io, session, found, () => formatDecision(found));
+    answer(io, session, found, () => formatDecision(found, { atItsAddress }));
     return EXIT.ok;
   }
   return settle(io, session, waiter, found, seconds);

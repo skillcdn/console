@@ -665,6 +665,8 @@ export interface ConsoleClient {
    * see or not (ADR-0068), as the project's `fileUrl` is for whoever may see the project.
    */
   decisionFileUrl(decisionId: string, fileId: string): string;
+  /** The bytes of a file put on a decision, read at the decision's own address: wherever the decision is, as `decisionFileUrl` names it. */
+  readDecisionFile(decisionId: string, fileId: string, signal?: AbortSignal): Promise<FileRead>;
   /** Another person's plate, within what the asker may see: for an administrator, or an owner of a project they are in. */
   personWork(personId: string, signal?: AbortSignal): Promise<RestPersonWork>;
   /** The tokens of whoever asks. */
@@ -1401,6 +1403,8 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
     answerDecision: (id, input) =>
       request("POST", `${base}${decisionPath(id)}/answer`, input, restDecisionSchema),
     decisionFileUrl: (decisionId, fileId) => `${base}${decisionFilePath(decisionId, fileId)}`,
+    readDecisionFile: (decisionId, fileId, signal) =>
+      read(`${base}${decisionFilePath(decisionId, fileId)}`, fileId, signal),
     personWork: (personId, signal) =>
       request("GET", `${base}${personWorkPath(personId)}`, undefined, restPersonWorkSchema, signal),
     tokens: (signal) =>

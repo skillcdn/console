@@ -589,11 +589,13 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     ],
   },
   file: {
-    usage: "file <id> [--out <path>]",
-    synopsis: "Reads a file of the project to this machine, by its id.",
+    usage: "file <id> [--decision <id>] [--out <path>]",
+    synopsis: "Reads a file of the project, or of a decision, to this machine, by its id.",
     about:
-      "Reads a file of the project from the console and writes it on this machine: one a run handed in, one put in a comment or on a decision, or one attached to a page, by the id the task, the run, the decision or the page shows. Written under its own name in the working directory, at --out <path>, or into --out <directory>. Then look at it with your own tools.",
-    refusals: ["file.not_found: no file of this project has that id"],
+      "Reads a file of the project from the console and writes it on this machine: one a run handed in, one put in a comment or on a decision, or one attached to a page, by the id the task, the run, the decision or the page shows. With --decision <id>, a file put on that decision, read at the decision's own address (ADR-0068): wherever the decision is, in this project or in one this directory does not name, as console decision reaches it and names the command for each of its files. Written under its own name in the working directory, at --out <path>, or into --out <directory>. Then look at it with your own tools.",
+    refusals: [
+      "file.not_found: no file of this project has that id, or, with --decision, none of that decision that reaches you",
+    ],
   },
   docs: {
     usage: "docs [<folder>] [--search <words>] [--archived]",
@@ -763,7 +765,17 @@ const SECTIONS: readonly { readonly title: string; readonly commands: readonly s
   {
     title:
       "Configuring, as the person: what an administrator or an owner does on the pages, their agent does here, named on it",
-    commands: ["workspace", "people", "person", "project", "members", "member", "category"],
+    commands: [
+      "workspace",
+      "people",
+      "person",
+      "teams",
+      "team",
+      "project",
+      "members",
+      "member",
+      "category",
+    ],
   },
 ];
 

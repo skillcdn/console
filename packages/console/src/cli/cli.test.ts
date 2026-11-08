@@ -3,6 +3,7 @@ import { MAX_SUMMARY_LENGTH } from "../limits.js";
 import { type CliIo, EXIT, runCli } from "./cli.js";
 import { type CredentialStore, type Credentials, CredentialsError } from "./credentials.js";
 import type { DirectorySettings, DirectoryStore } from "./directory.js";
+import { COMMAND_HELP } from "./help.js";
 import type { Install } from "./install.js";
 import type { NoticeStore, VersionNotice } from "./notices.js";
 import type { Listen, ServeHandler } from "./serve.js";
@@ -392,6 +393,12 @@ describe("the console command", () => {
       "  console take <number|id> [--agent <name>]\n      Takes a task: a run begins",
     );
     expect(whole.out()).toContain("task new <title> [flags]");
+    // Every command is on the map, but the one a person serves a console of their own with.
+    for (const [name, help] of Object.entries(COMMAND_HELP)) {
+      if (name !== "serve") {
+        expect(whole.out()).toContain(`  console ${help.overview ?? help.usage}\n`);
+      }
+    }
     expect(whole.out()).not.toContain("--token-stdin reads a token");
     expect(whole.out()).not.toContain("--parent <number|id>");
     expect(whole.out().length).toBeLessThan(11_000);
@@ -1516,6 +1523,75 @@ describe("the console command", () => {
     const gone = harness({ fetch: older.fetch, env: SIGNED_IN });
     expect(await runCli(["decision", DECISION.id], gone.io)).toBe(EXIT.failed);
     expect(gone.err()).toContain("decision.not_found");
+  });
+
+  it("names the files of a decision reached outside the project by the decision, and reads them at its address (ADR-0068)", async () => {
+    const elsewhere = { key: "hr", name: "HR", color: null, symbol: null, icon: null };
+    const attached = {
+      id: "0199c4d8-0000-7000-8000-000000000032",
+      file: { name: "plan.pdf", size: 3, contentType: "application/pdf", sha256: "x" },
+    };
+    const decision = { ...DECISION, files: [attached] };
+    const bytes = new Uint8Array([37, 80, 68]);
+    const asked: string[] = [];
+    const json = (status: number, body: unknown) =>
+      new Response(JSON.stringify(body), {
+        status,
+        headers: { "content-type": "application/json" },
+      });
+    const fetch: CliIo["fetch"] = async (url) => {
+      asked.push(url.replace(ORIGIN, ""));
+      if (url === `${ORIGIN}${IN}/decisions/${DECISION.id}`) {
+        return json(404, {
+          error: { code: "decision.not_found", message: "The decision was not found." },
+        });
+      }
+      if (url === `${ORIGIN}/api/v1/decisions/${DECISION.id}`) {
+        return json(200, { project: elsewhere, decision, mayAnswer: true });
+      }
+      if (url === `${ORIGIN}/api/v1/decisions/${DECISION.id}/files/${attached.id}`) {
+        return new Response(bytes, {
+          status: 200,
+          headers: {
+            "content-type": "application/pdf",
+            "content-disposition": `attachment; filename="plan.pdf"`,
+          },
+        });
+      }
+      return json(404, { error: { code: "file.not_found", message: "The file was not found." } });
+    };
+    const written: { path: string; name: string; size: number }[] = [];
+    const io = () =>
+      harness({
+        fetch,
+        env: SIGNED_IN,
+        writeBytes: async (path, data, name) => {
+          written.push({ path, name, size: data.byteLength });
+          return `/work/app/${path === "." ? name : path}`;
+        },
+      });
+    // Reached at its own address, it names each file with the command that reads it there.
+    const read = io();
+    expect(await runCli(["decision", DECISION.id], read.io)).toBe(EXIT.ok);
+    expect(read.out()).toContain(
+      `file: plan.pdf (3 bytes, application/pdf): console file ${attached.id} --decision ${DECISION.id}`,
+    );
+    // Which reads it by the decision, and nothing of the project.
+    const saved = io();
+    asked.length = 0;
+    expect(await runCli(["file", attached.id, "--decision", DECISION.id], saved.io)).toBe(EXIT.ok);
+    expect(asked).toEqual([`/api/v1/decisions/${DECISION.id}/files/${attached.id}`]);
+    expect(written).toEqual([{ path: "plan.pdf", name: "plan.pdf", size: 3 }]);
+    expect(saved.out()).toBe("Saved plan.pdf (3 bytes, application/pdf) at /work/app/plan.pdf\n");
+    // A file that is not the decision's is not found, as one out of reach is.
+    const other = io();
+    expect(
+      await runCli(
+        ["file", "0199c4d8-0000-7000-8000-000000000099", "--decision", DECISION.id],
+        other.io,
+      ),
+    ).toBe(EXIT.failed);
+    expect(other.err()).toContain("file.not_found");
   });
 
   it("ends a run as finished, failed or abandoned", async () => {

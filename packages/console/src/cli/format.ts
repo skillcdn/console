@@ -489,7 +489,19 @@ export function formatAnswer(decision: RestDecision): string {
   return lines.join("\n");
 }
 
-export function formatDecision(decision: RestDecision): string {
+/**
+ * One decision in full. A decision reached at its own address (ADR-0068), outside the project the
+ * command works in, names its files with the command that reads them there, by the decision too:
+ * the project's own address knows nothing of it.
+ */
+export function formatDecision(
+  decision: RestDecision,
+  options: { readonly atItsAddress?: boolean } = {},
+): string {
+  const reads = (fileId: string): string =>
+    options.atItsAddress === true
+      ? `console file ${fileId} --decision ${decision.id}`
+      : `console file ${fileId}`;
   const lines = [
     `decision ${decision.id}: ${decision.question}`,
     `asked by ${asker(decision)}${addressed(decision)}${decision.taskNumber === null ? "" : `, about task #${decision.taskNumber}`}`,
@@ -504,7 +516,7 @@ export function formatDecision(decision: RestDecision): string {
       "",
       ...files.map(
         (attached) =>
-          `file: ${attached.file.name} (${attached.file.size} bytes, ${attached.file.contentType}): console file ${attached.id}`,
+          `file: ${attached.file.name} (${attached.file.size} bytes, ${attached.file.contentType}): ${reads(attached.id)}`,
       ),
     );
   }
