@@ -1,0 +1,5 @@
+---
+"@skillcdn/console": patch
+---
+
+Breaking: a plugin reaches its board project and the projects it is placed on, and no other (ADR-0080). A person's call took it to the project the call was on, wherever an administrator had placed it; `ctx.console.decisions.ask`, `tasks.create` and the other calls on such a project are `plugin.forbidden` now, until the plugin is placed on it. Whoever may use a plugin is a requester in its board project: a person's call, or a plugin's call for a person, raises a decision there with `ask` whether the person may see the project or not, and the decision reaches them as its raiser, at its own address and among the decisions they raised, nothing else of the project opening to them; before, the call was `plugin.not_found`, and every requester had to be listed in the project, where they read and answered everyone's. `decisions.get` and `runs.get` for a person answer only what the person may see, as a listing does. The model of who may do what through a plugin is stated whole in the spec's "Security model".

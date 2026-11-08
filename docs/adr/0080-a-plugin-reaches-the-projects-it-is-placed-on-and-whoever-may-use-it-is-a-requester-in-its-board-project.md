@@ -1,0 +1,32 @@
+# ADR-0080: A plugin reaches the projects it is placed on, and whoever may use it is a requester in its board project
+
+- Status: Accepted
+- Date: 2026-11-08
+- Amends [ADR-0052](0052-a-plugins-board-is-a-project-made-or-chosen-when-it-is-enabled-and-what-it-puts-there-carries-its-name.md), whose second point let a plugin raise a decision or a task in the project a person's call was on; extends [ADR-0068](0068-a-decision-reaches-whom-it-is-addressed-to-wherever-it-is-and-a-plugins-reaches-the-managers-above-them.md) and [ADR-0072](0072-a-plugin-is-a-principal-it-holds-roles-granted-to-it-calls-as-itself-and-acts-for-a-person-within-what-both-may-do.md), whose rules it states as one. The contract is in [specs/plugins.md](../specs/plugins.md), "The board" and "Security model".
+
+## Context
+
+The rules of who may do what grew one decision at a time: a plugin's capabilities ([ADR-0050](0050-plugin-code-runs-in-a-host-process-of-its-own-and-reaches-the-console-only-through-the-capabilities-it-declared.md)), its board project (ADR-0052), a decision's reach past its project (ADR-0068, [ADR-0077](0077-a-persons-own-decision-is-its-projects-and-reaches-nobody-out-of-it.md)), a plugin as a principal acting for a person within what both may do (ADR-0072, [ADR-0076](0076-a-plugin-acting-for-a-person-stands-as-a-member-and-answers-only-what-is-on-their-plate.md)), roles granted to people, to teams and to plugins. Read together they are one model, and the shape of models in wide use: scopes a party in charge consents to, delegation held to the intersection of the delegate's permission and the principal's and recorded with both, grants of roles, and a relation that says who reaches what. Nothing said so, and two things stood out of it.
+
+A plugin reached three kinds of project: its board project, the projects an administrator placed it on, and the project a person's call happened to be on. The third let a plugin act where nobody placed it, as the caller moved: an administrator who placed a plugin on two projects had it on any project a person called it from.
+
+And the first plugin could not be used by the people it is for. A person asks for leave through its command, and the plugin raises the approval as a decision in its board project, which is private. A call for a person was held to what the person may see, so a person who was not a member of the board project was refused, and every applicant had to be listed in the project, where every member reads and answers every decision, their colleagues' requests among them, or the project had to be opened to the workspace. A requester is not a member: they put one thing into the plugin's project and read that one thing back.
+
+## Decision
+
+The model, stated whole:
+
+1. **Three kinds of principal.** A person, with their standing in the workspace, administrator or member, and in each project, member or not; their agent, which is the person, with a token of its own and its name on what it does; and a plugin, with an identity of its own.
+2. **A plugin's own permission is what an administrator consented to**: the capabilities of its manifest, read on every call as the scopes of a grant; the roles other plugins' administrators granted it; and the projects it is placed on. It reaches its board project and the projects it is placed on, as itself and for anyone, and no other: a person's call takes it nowhere it is not placed. This amends ADR-0052's second point: a decision or a task goes in the project the matter belongs to where the plugin is placed there too.
+3. **Acting for a person is the intersection** (ADR-0072, ADR-0076): what the plugin may do and what the person may do as a member, both, nothing of the person's administration; the act is recorded as the person's, through the plugin, as a token exchanged for another names the actor beside the subject.
+4. **A decision's reach is a relation of the decision**, not of its project alone (ADR-0042, ADR-0068, ADR-0077): whoever may work in its project; whom it is addressed to, and who raised it; for a plugin's decision, the managers above whom it is addressed to; a person's own decision within its project alone.
+5. **Whoever may use a plugin is a requester in its board project.** Through the plugin's commands, a person who holds a role in it raises a decision in the board project whether they may see the project or not, themselves or through a plugin acting for them; the decision is theirs as its raiser, read at its own address and among the decisions they raised, and nothing else of the project opens to them: not its board, not its tasks, not another decision. A task or a document is not raised this way, since nothing of it would reach the requester. Point 3 holds: a plugin acting for a person raises what the person could raise through it.
+
+## Consequences
+
+- A leave request comes from anyone the plugin is for, and the board project lists its approvers alone; an applicant reads their own request and nobody else's. The first plugin drops the listing it asked administrators for, and the refusal it gave an applicant who was not listed.
+- A plugin's reach is the administrator's configuration and nothing else; a plugin that is to act in a project is placed on it. Breaking for a plugin that raised a decision or a task in the project a call was on without being placed there; none published did.
+- A plugin's read of one item by its id, for a person, is held to what the person may see, as a listing is, so that no page of a plugin hands a person an item of a project closed to them.
+- The rules are few enough to stand in one table ([specs/plugins.md](../specs/plugins.md), "Security model"), each the shape of a rule in wide use, and a new rule is weighed against them.
+- What stays out of the model, for a later decision: a plugin's own acts on the board, a job's or a hook's, are recorded as the administrator who enabled it, with the plugin's key beside, because a record names a person. An identity of the plugin's own on the board would name the plugin alone ([architecture.md](../architecture.md), open questions).
+- Rejected: opening a plugin's board project to the workspace, which lets everyone read and answer every request; a view-only role in a project, a new kind of membership for one use; the plugin raising for a person as itself, which would record the administrator who enabled it as the raiser and leave the requester nothing to read; keeping the project a call is on within a plugin's reach, which made the reach the caller's and not the administrator's.

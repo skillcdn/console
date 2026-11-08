@@ -230,6 +230,12 @@ beforeAll(async () => {
       },
     },
   });
+  // A second project the plugin is placed on, beside its board (ADR-0080): a call on it asks there.
+  const elsewhere = await h.request(
+    REST_ROUTES.projects,
+    json({ key: "leave-elsewhere", name: "Elsewhere", visibility: "workspace" }, admin),
+  );
+  expect(elsewhere.status, await elsewhere.clone().text()).toBe(201);
   const leave = await h.request(
     pluginPath("leave", "enable"),
     json(
@@ -246,7 +252,7 @@ beforeAll(async () => {
           "outbound:api.example.test",
         ],
         board: { create: { key: BOARD, name: "Leave", description: "Leave and its approval." } },
-        projects: [BOARD],
+        projects: [BOARD, "leave-elsewhere"],
       },
       admin,
     ),
@@ -680,13 +686,58 @@ describe("a plugin on the board", () => {
     await h.request(`${REST_ROUTES.people}/${bobId}`, json({ managerId: null }, admin, "PATCH"));
   });
 
-  it("says the project a decision its command raised waits in: the one it was raised in, which may not be its board", async () => {
-    const made = await h.request(
-      REST_ROUTES.projects,
-      json({ key: "leave-elsewhere", name: "Elsewhere", visibility: "workspace" }, admin),
+  it("raises a decision for a person who may not see its board project, who reads it as its raiser and nothing else of the project (ADR-0080)", async () => {
+    // Carol is of the workspace and not in the board project: a requester there, through the
+    // plugin's command, which she may use as everyone may.
+    const carol = await h.signIn("carol");
+    expect((await h.request(projectPath(BOARD), { headers: { cookie: carol } })).status).toBe(404);
+    const requested = await invoked("leave", carol, [
+      "request",
+      "--from",
+      "2026-12-10",
+      "--to",
+      "2026-12-11",
+      "--approver",
+      aliceLogin,
+    ]);
+    const decisionId = requested.waiting ?? "";
+    expect(decisionId).not.toBe("");
+    expect(requested.project).toBe(BOARD);
+    // She reads it at its own address, as its raiser, and may not answer it; it is among the
+    // decisions she raised.
+    const reached = restReachedDecisionSchema.parse(
+      await (await h.request(decisionPath(decisionId), { headers: { cookie: carol } })).json(),
     );
-    expect(made.status, await made.clone().text()).toBe(201);
-    // The call is on another project, and the command asks there: the decision waits there.
+    expect(reached.decision.plugin).toBe("leave");
+    expect(reached.decision.raisedBy.login).toBe("carol");
+    expect(reached.mayAnswer).toBe(false);
+    const raised = restMyDecisionsSchema.parse(
+      await (
+        await h.request(`${REST_ROUTES.decisions}?raised=true`, { headers: { cookie: carol } })
+      ).json(),
+    );
+    expect(raised.items.some((item) => item.decision.id === decisionId)).toBe(true);
+    // Nothing else of the project opens to her: not the project, not the decision through it.
+    expect((await h.request(projectPath(BOARD), { headers: { cookie: carol } })).status).toBe(404);
+    expect(
+      (await h.request(projectPath(BOARD, "decisions", decisionId), { headers: { cookie: carol } }))
+        .status,
+    ).toBe(404);
+    // A task there is refused as before: nothing of it would reach her.
+    const task = await invoke("leave", carol, ["task", "A task by a requester"]);
+    expect(task.status, await task.clone().text()).toBe(404);
+    expect(restErrorSchema.parse(await task.json()).error.code).toBe("plugin.not_found");
+    // Alice, the approver, answers it at its address as before.
+    const answered = await h.request(
+      `${decisionPath(decisionId)}/answer`,
+      json({ option: "1" }, admin),
+    );
+    expect(answered.status, await answered.clone().text()).toBe(200);
+  });
+
+  it("says the project a decision its command raised waits in, which may not be its board, and acts in no project it is not placed on (ADR-0080)", async () => {
+    // The call is on another project the plugin is placed on, and the command asks there: the
+    // decision waits there.
     const response = await h.request(
       pluginPath("leave", "invoke"),
       json({ argv: ["ask-here", "--approver", aliceLogin], project: "leave-elsewhere" }, member),
@@ -707,6 +758,19 @@ describe("a plugin on the board", () => {
     const atBoard = await invoked("leave", member, ["ask-here", "--approver", aliceLogin]);
     expect(atBoard.text).toBe(`asked in ${BOARD}`);
     expect(atBoard.project).toBe(BOARD);
+    // On a project the plugin is not placed on, a call takes the plugin nowhere: the ask there is
+    // refused, though the person may work in the project.
+    const made = await h.request(
+      REST_ROUTES.projects,
+      json({ key: "leave-nowhere", name: "Nowhere", visibility: "workspace" }, admin),
+    );
+    expect(made.status, await made.clone().text()).toBe(201);
+    const refused = await h.request(
+      pluginPath("leave", "invoke"),
+      json({ argv: ["ask-here", "--approver", aliceLogin], project: "leave-nowhere" }, member),
+    );
+    expect(refused.status, await refused.clone().text()).toBe(403);
+    expect(restErrorSchema.parse(await refused.json()).error.code).toBe("plugin.forbidden");
   });
 
   it("changes, comments on and reads its own items; another plugin reads them and may not change them", async () => {

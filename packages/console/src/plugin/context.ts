@@ -255,7 +255,7 @@ export interface PersonCaller {
   readonly roles: readonly string[];
   /** The caller's open run in the board project, if any. */
   readonly run: { readonly id: string; readonly taskNumber: number | null } | null;
-  /** The project the call is on, if any. */
+  /** The project the call is on, if any: one the plugin acts in only where it is placed on it (ADR-0080). */
   readonly project: CallerProject | null;
 }
 
@@ -371,6 +371,12 @@ export interface PluginConsole {
   decisions: {
     list(project: string): Promise<readonly RestDecision[]>;
     get(id: string): Promise<RestDecision | null>;
+    /**
+     * Raises a decision in a project the plugin reaches, its board project or one it is placed on
+     * (`board:decisions`); for a person, one they may see, or the board project whether they see
+     * it or not, where whoever may use the plugin is a requester (ADR-0080): the decision reaches
+     * them as its raiser, and nothing else of the project opens to them.
+     */
     ask(project: string, decision: DecisionAsk): Promise<RestDecision>;
     /**
      * Answers a decision for a person who answered elsewhere (ADR-0072), with `people:act`: one on

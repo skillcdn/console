@@ -611,7 +611,11 @@ export class PluginBoard {
       }
       case "ask": {
         needs("board:decisions");
-        const project = await this.reach(context, workspace, text(args[0], "the project's key"));
+        const project = await this.reachToAsk(
+          context,
+          workspace,
+          text(args[0], "the project's key"),
+        );
         const ask = decisionAskSchema.safeParse(args[1]);
         if (!ask.success) {
           throw invalid(`the decision does not fit: ${ask.error.issues[0]?.message ?? ""}`);
@@ -841,14 +845,13 @@ export class PluginBoard {
     return { workspaceId: workspace.id, projectId: project.id };
   }
 
-  /** Whether the plugin reaches a project: its board project, one it is on, or the project a person's call is on. */
+  /** Whether the plugin reaches a project (ADR-0080): its board project, or one it is placed on; a call takes it nowhere else. */
   private withinReach(context: BoardContext, project: Reached): boolean {
-    const { install, caller } = context;
+    const { install } = context;
     return (
       install.boardProjectId === project.id ||
       install.projects === "all" ||
-      install.projects.includes(project.key) ||
-      (caller.kind !== "console" && caller.project?.id === project.id)
+      install.projects.includes(project.key)
     );
   }
 
@@ -875,11 +878,8 @@ export class PluginBoard {
     workspace: WorkspaceRecord,
     projectId: string,
   ): Promise<boolean> {
-    const { install, caller } = context;
+    const { install } = context;
     if (install.boardProjectId === projectId || install.projects === "all") {
-      return true;
-    }
-    if (caller.kind !== "console" && caller.project?.id === projectId) {
       return true;
     }
     if (install.projects.length === 0) {
@@ -895,8 +895,8 @@ export class PluginBoard {
   }
 
   /**
-   * The project a call names, as the plugin reaches it: for a person, one they may see, among the
-   * plugin's or the one the call is on; for the console, one of the plugin's.
+   * The project a call names, as the plugin reaches it (ADR-0080): its board project or one it is
+   * placed on, and for a person one of them they may see; a call takes the plugin nowhere else.
    */
   private async reach(
     context: BoardContext,
@@ -917,6 +917,29 @@ export class PluginBoard {
       throw forbidden(`the plugin is not on the project ${key}`);
     }
     return project;
+  }
+
+  /**
+   * The project a decision is asked in: the one `reach` finds; or the plugin's board project for
+   * a person who may not see it, who is a requester there (ADR-0080): the one thing they do in it
+   * is raise a decision through the plugin, which reaches them as its raiser (ADR-0068), and
+   * nothing else of the project opens to them.
+   */
+  private async reachToAsk(
+    context: BoardContext,
+    workspace: WorkspaceRecord,
+    key: string,
+  ): Promise<Reached> {
+    const { install, caller } = context;
+    if (actsAsPerson(caller) && install.boardProjectId !== undefined) {
+      const board = await findProjectByKey(this.options.database, workspace.id, key);
+      if (board !== undefined && board.id === install.boardProjectId) {
+        // Still a person of the workspace to raise it as, as `reach` asks of anyone.
+        await this.actingPerson(context, workspace);
+        return board;
+      }
+    }
+    return this.reach(context, workspace, key);
   }
 
   /**

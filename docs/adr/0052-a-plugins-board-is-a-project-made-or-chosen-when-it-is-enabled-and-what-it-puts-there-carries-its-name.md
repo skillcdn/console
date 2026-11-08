@@ -1,6 +1,6 @@
 # ADR-0052: A plugin's board is a project, made or chosen when it is enabled, and what it puts there carries its name
 
-- Status: Accepted
+- Status: Accepted; the second point is amended by [ADR-0080](0080-a-plugin-reaches-the-projects-it-is-placed-on-and-whoever-may-use-it-is-a-requester-in-its-board-project.md): the project the matter belongs to is one the plugin is placed on
 - Date: 2026-11-01
 
 ## Context
