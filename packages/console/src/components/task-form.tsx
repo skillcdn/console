@@ -16,6 +16,7 @@ import {
 } from "../api.js";
 import { useWords } from "../i18n/index.js";
 import { Picker, type PickerSearch } from "./picker.js";
+import { peopleSearch } from "./searches.js";
 import { Button, GoalStateBadge, PersonChip, personName, StateBadge } from "./ui.js";
 
 // Writing a task, or changing one. The bounds are the package's, said before a request is made.
@@ -236,23 +237,19 @@ export function TaskForm(props: TaskFormProps) {
           ))}
           {chosenWorkers.length === 0 && <span className="sc-muted">{words.common.nobody}</span>}
           {otherPeople.length > 0 && workerIds.length < MAX_WORKERS && (
-            <select
-              className="sc-input sc-chip-add"
-              aria-label={form.addWorker}
-              value=""
-              onChange={(event) => {
-                if (event.target.value !== "") {
-                  setWorkerIds([...workerIds, event.target.value]);
+            <Picker
+              value={undefined}
+              search={peopleSearch(otherPeople)}
+              keyOf={(person) => person.id}
+              render={(person) => <PersonChip person={person} size="sm" />}
+              label={form.addWorker}
+              placeholder={form.addWorker}
+              onChange={(person) => {
+                if (person !== undefined) {
+                  setWorkerIds([...workerIds, person.id]);
                 }
               }}
-            >
-              <option value="">{form.addWorker}</option>
-              {otherPeople.map((person) => (
-                <option key={person.id} value={person.id}>
-                  {personName(person)}
-                </option>
-              ))}
-            </select>
+            />
           )}
         </div>
       </fieldset>

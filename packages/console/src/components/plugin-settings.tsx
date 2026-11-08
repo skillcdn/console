@@ -17,6 +17,8 @@ import type {
 } from "../schemas.js";
 import { useAction } from "../use-action.js";
 import { EventFeed } from "./event-feed.js";
+import { Picker } from "./picker.js";
+import { listSearch, peopleSearch, projectsSearch } from "./searches.js";
 import {
   Badge,
   Button,
@@ -411,6 +413,9 @@ function EnumListControl(props: {
   );
 }
 
+/** One of a list setting's choices: a person or a project, by id, as it reads. */
+type Candidate = { readonly id: string; readonly label: string };
+
 /**
  * A list of people or of projects: each chosen one a chip with the way to take it out, and one
  * choice to add another among those not chosen yet; the value is their ids.
@@ -420,12 +425,13 @@ function RefListControl(props: {
   readonly value: unknown;
   readonly onChange: (value: unknown) => void;
   readonly id: string;
+  readonly language: string;
   readonly people: readonly RestPerson[];
   readonly projects: readonly RestProject[];
 }) {
   const words = useWords();
   const chosen = itemsOf(props.value).map(String);
-  const candidates: readonly { readonly id: string; readonly label: string }[] =
+  const candidates: readonly Candidate[] =
     props.setting.of === "person"
       ? props.people
           .filter((person) => person.status === "active" || chosen.includes(person.id))
@@ -453,25 +459,23 @@ function RefListControl(props: {
         </span>
       ))}
       {!full && (
-        <select
+        <Picker<Candidate>
           id={props.id}
-          className="sc-input sc-chip-add"
-          value=""
-          onChange={(event) => {
-            if (event.target.value !== "") {
-              set([...chosen, event.target.value]);
+          value={undefined}
+          search={listSearch(
+            candidates.filter((candidate) => !chosen.includes(candidate.id)),
+            (candidate, typed) => candidate.label.toLowerCase().includes(typed),
+          )}
+          keyOf={(candidate) => candidate.id}
+          render={(candidate) => candidate.label}
+          label={pluginWord(props.setting.name, props.language)}
+          placeholder={words.plugins.settings.choose}
+          onChange={(candidate) => {
+            if (candidate !== undefined) {
+              set([...chosen, candidate.id]);
             }
           }}
-        >
-          <option value="">{words.plugins.settings.choose}</option>
-          {candidates
-            .filter((candidate) => !chosen.includes(candidate.id))
-            .map((candidate) => (
-              <option key={candidate.id} value={candidate.id}>
-                {candidate.label}
-              </option>
-            ))}
-        </select>
+        />
       )}
     </div>
   );
@@ -563,42 +567,43 @@ function SettingControl(props: {
   const words = useWords();
   const { setting, value, onChange, id } = props;
   const chosen = typeof value === "string" ? value : "";
-  const choose = (event: { readonly target: { readonly value: string } }) =>
-    onChange(event.target.value === "" ? null : event.target.value);
   switch (setting.type) {
     case "person": {
       // The people in; the one chosen stays listed when they have left, so that the value shows.
       const people = props.people.filter(
         (person) => person.status === "active" || person.id === chosen,
       );
+      const current = people.find((person) => person.id === chosen);
       return (
-        <select id={id} className="sc-input" value={chosen} onChange={choose}>
-          <option value="">—</option>
-          {people.map((person) => (
-            <option key={person.id} value={person.id}>
-              {personChoice(person)}
-            </option>
-          ))}
-          {chosen !== "" && !people.some((person) => person.id === chosen) && (
-            <option value={chosen}>{chosen}</option>
-          )}
-        </select>
+        <Picker
+          id={id}
+          value={current}
+          held={chosen !== "" && current === undefined ? chosen : undefined}
+          search={peopleSearch(people)}
+          keyOf={(person) => person.id}
+          render={personChoice}
+          label={pluginWord(setting.name, props.language)}
+          placeholder={words.plugins.settings.choose}
+          onChange={(person) => onChange(person?.id ?? null)}
+        />
       );
     }
-    case "project":
+    case "project": {
+      const current = props.projects.find((project) => project.id === chosen);
       return (
-        <select id={id} className="sc-input" value={chosen} onChange={choose}>
-          <option value="">—</option>
-          {props.projects.map((project) => (
-            <option key={project.id} value={project.id}>
-              {project.name} ({project.key})
-            </option>
-          ))}
-          {chosen !== "" && !props.projects.some((project) => project.id === chosen) && (
-            <option value={chosen}>{chosen}</option>
-          )}
-        </select>
+        <Picker
+          id={id}
+          value={current}
+          held={chosen !== "" && current === undefined ? chosen : undefined}
+          search={projectsSearch(props.projects)}
+          keyOf={(project) => project.id}
+          render={(project) => `${project.name} (${project.key})`}
+          label={pluginWord(setting.name, props.language)}
+          placeholder={words.plugins.settings.choose}
+          onChange={(project) => onChange(project?.id ?? null)}
+        />
       );
+    }
     case "boolean":
       return (
         <input
@@ -675,6 +680,7 @@ function SettingControl(props: {
       if (setting.of === "person" || setting.of === "project") {
         return (
           <RefListControl
+            language={props.language}
             setting={setting}
             value={value}
             onChange={onChange}
@@ -804,6 +810,13 @@ function secretStanding(
       : settings.secretExpires(expires)
   }`;
 }
+
+/** Whom a role may go to (ADR-0072): everyone, a project's members, a person, or a plugin. */
+type GrantChoice =
+  | { readonly kind: "everyone" }
+  | { readonly kind: "project"; readonly project: RestProject }
+  | { readonly kind: "person"; readonly person: RestPerson }
+  | { readonly kind: "plugin"; readonly plugin: RestPlugin };
 
 /** One secret: whether and when it is set, a field to set it anew with its buttons on the line. */
 function SecretRow(props: {
@@ -1072,18 +1085,16 @@ function EnableForm(props: {
                 <label className="sc-field-label" htmlFor={ids.choose}>
                   {settings.boardChoose}
                 </label>
-                <select
+                <Picker
                   id={ids.choose}
-                  className="sc-input"
-                  value={chosen}
-                  onChange={(event) => setChosen(event.target.value)}
-                >
-                  {props.projects.map((project) => (
-                    <option key={project.key} value={project.key}>
-                      {project.name} ({project.key})
-                    </option>
-                  ))}
-                </select>
+                  value={props.projects.find((project) => project.key === chosen)}
+                  search={projectsSearch(props.projects)}
+                  keyOf={(project) => project.key}
+                  render={(project) => `${project.name} (${project.key})`}
+                  label={settings.boardChoose}
+                  placeholder={settings.boardChoose}
+                  onChange={(project) => setChosen(project?.key ?? "")}
+                />
               </div>
             </div>
           )}
@@ -1216,7 +1227,7 @@ function RoleRow(props: {
   readonly onRevoke: (id: string) => void;
 }) {
   const settings = useWords().plugins.settings;
-  const [whom, setWhom] = useState("");
+  const [whom, setWhom] = useState<GrantChoice | undefined>(undefined);
   const id = useId();
   const { role, grants } = props;
   const everyoneHas = grants.some((grant) => grant.everyone);
@@ -1237,18 +1248,52 @@ function RoleRow(props: {
     (person) => person.status === "active" && !peopleWith.has(person.id),
   );
   const description = pluginWord(role.description, props.language);
+  // Whom the role may go to, searched for as one list (ADR-0037): everyone where it may, then
+  // the projects, the people and the plugins without it.
+  const choices: readonly GrantChoice[] = [
+    ...(!props.isDefault && !everyoneHas ? [{ kind: "everyone" as const }] : []),
+    ...projects.map((project) => ({ kind: "project" as const, project })),
+    ...people.map((person) => ({ kind: "person" as const, person })),
+    ...plugins.map((plugin) => ({ kind: "plugin" as const, plugin })),
+  ];
+  const choiceWords = (choice: GrantChoice): string => {
+    switch (choice.kind) {
+      case "everyone":
+        return settings.grantEveryone;
+      case "project":
+        return settings.grantMembersOf(choice.project.name);
+      case "person":
+        return personChoice(choice.person);
+      case "plugin":
+        return `${settings.grantPlugin(choice.plugin.key)} · ${pluginWord(choice.plugin.name, props.language)}`;
+    }
+  };
+  const findWhom = listSearch(choices, (choice, typed) =>
+    choiceWords(choice).toLowerCase().includes(typed),
+  );
+  const keyOfChoice = (choice: GrantChoice): string =>
+    choice.kind === "everyone"
+      ? "everyone"
+      : choice.kind === "project"
+        ? `project:${choice.project.key}`
+        : choice.kind === "person"
+          ? `person:${choice.person.id}`
+          : `plugin:${choice.plugin.key}`;
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (whom === "everyone") {
-      props.onGrant({ role: role.key, everyone: true });
-    } else if (whom.startsWith("project:")) {
-      props.onGrant({ role: role.key, project: whom.slice("project:".length) });
-    } else if (whom.startsWith("person:")) {
-      props.onGrant({ role: role.key, person: whom.slice("person:".length) });
-    } else if (whom.startsWith("plugin:")) {
-      props.onGrant({ role: role.key, plugin: whom.slice("plugin:".length) });
+    if (whom === undefined) {
+      return;
     }
-    setWhom("");
+    if (whom.kind === "everyone") {
+      props.onGrant({ role: role.key, everyone: true });
+    } else if (whom.kind === "project") {
+      props.onGrant({ role: role.key, project: whom.project.key });
+    } else if (whom.kind === "person") {
+      props.onGrant({ role: role.key, person: whom.person.id });
+    } else {
+      props.onGrant({ role: role.key, plugin: whom.plugin.key });
+    }
+    setWhom(undefined);
   };
   return (
     <li className="sc-plugin-role">
@@ -1294,45 +1339,18 @@ function RoleRow(props: {
           <label htmlFor={id} className="sc-visually-hidden">
             {settings.grantWhom}
           </label>
-          <select
+          <Picker
             id={id}
-            className="sc-input sc-plugin-grant-input"
             value={whom}
-            onChange={(event) => setWhom(event.target.value)}
-          >
-            <option value="">{settings.grantWhom}</option>
-            {!props.isDefault && !everyoneHas && (
-              <option value="everyone">{settings.grantEveryone}</option>
-            )}
-            {projects.length > 0 && (
-              <optgroup label={settings.grantProjects}>
-                {projects.map((project) => (
-                  <option key={project.key} value={`project:${project.key}`}>
-                    {project.name}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            {people.length > 0 && (
-              <optgroup label={settings.grantPeople}>
-                {people.map((person) => (
-                  <option key={person.id} value={`person:${person.id}`}>
-                    {personChoice(person)}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            {plugins.length > 0 && (
-              <optgroup label={settings.grantPlugins}>
-                {plugins.map((plugin) => (
-                  <option key={plugin.key} value={`plugin:${plugin.key}`}>
-                    {pluginWord(plugin.name, props.language)} ({plugin.key})
-                  </option>
-                ))}
-              </optgroup>
-            )}
-          </select>
-          <Button type="submit" disabled={props.busy || whom === ""}>
+            search={findWhom}
+            keyOf={keyOfChoice}
+            render={choiceWords}
+            label={settings.grantWhom}
+            placeholder={settings.grantWhom}
+            disabled={props.busy}
+            onChange={setWhom}
+          />
+          <Button type="submit" disabled={props.busy || whom === undefined}>
             {settings.grant}
           </Button>
         </form>

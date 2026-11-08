@@ -230,9 +230,10 @@ describe("a plugin's settings page", () => {
     expect(html).toContain("api.example.test의 응답에서 봉인함");
     expect(html).toContain("에 만료");
     expect(html).toContain("api.example.test에만 보냅니다.");
-    // A person and a project are chosen by name and held as ids.
-    expect(html).toContain(`<option value="${BOB}" selected="">Bob (bob)</option>`);
-    expect(html).toContain(`<option value="${WEB}" selected="">Web (web)</option>`);
+    // A person and a project are searched for (ADR-0037) and stand in the field's place, held as ids.
+    expect(html).toMatch(/sc-picker-chosen[\s\S]*?Bob \(bob\)/);
+    expect(html).toMatch(/sc-picker-chosen[\s\S]*?Web \(web\)/);
+    expect(html).not.toContain(`<option value="${BOB}"`);
     // The roles: the default one is every member's; a grant is a chip with the way to revoke it.
     expect(html).toContain("직원");
     expect(html).toContain("모든 멤버");
@@ -241,19 +242,12 @@ describe("a plugin's settings page", () => {
     // A plugin holds a role as itself (ADR-0072): a chip of its own; the enabled plugins are
     // offered a role they do not hold, never the plugin itself or one that is off.
     expect(html).toContain('aria-label="회수: 플러그인 messenger"');
-    expect(count(html, 'value="plugin:messenger"')).toBe(1);
-    expect(count(html, 'value="plugin:crm"')).toBe(2);
-    expect(html).not.toContain('value="plugin:leave"');
-    expect(html).not.toContain('value="plugin:gate"');
+    // Whom to grant is searched for, one field per role (ADR-0037).
+    expect(count(html, 'placeholder="부여할 대상…"')).toBe(2);
     // What it asks of other plugins: granted now where the plugin is enabled, waited for where not.
     expect(html).toContain("다른 플러그인에 요청한 역할");
     expect(html).toContain("지금 부여");
     expect(html).toContain("crm이(가) 꺼져 있습니다.");
-    // Whoever holds a role is not offered it again; the deactivated are not offered at all.
-    expect(count(html, `value="person:${BOB}"`)).toBe(1);
-    expect(count(html, `value="person:${CAROL}"`)).toBe(2);
-    expect(html).not.toContain(`value="person:${DAVE}"`);
-    expect(html).toContain("carol</option>");
     // The purge waits for the plugin to be disabled.
     expect(html).toContain("삭제하려면 먼저 비활성화하세요.");
     expect(html).not.toContain('placeholder="leave 입력"');
@@ -340,10 +334,10 @@ describe("a plugin's settings page", () => {
     expect(count(html, 'type="checkbox" checked=""')).toBe(2);
     expect(html).toContain("월");
     expect(html).not.toContain("mon, tue");
-    // A list of people: the chosen as a chip, the rest offered.
+    // A list of people: the chosen as a chip, the rest searched for (ADR-0037).
     expect(html).toContain('class="sc-chip">Bob (bob)');
-    expect(html).toContain(`<option value="${CAROL}">carol</option>`);
-    expect(html).not.toContain(`<option value="${BOB}">Bob (bob)</option>`);
+    expect(html).toContain('placeholder="선택…"');
+    expect(html).not.toContain(`<option value="${CAROL}">carol</option>`);
     // A list of days: a date field that adds one; a time, with the time zone said.
     expect(html).toContain('type="date"');
     expect(html).toContain('type="time"');

@@ -13,7 +13,8 @@ import {
 } from "../api.js";
 import { useWords } from "../i18n/index.js";
 import { isPicture, placing, unusedName } from "./files.js";
-import { Picker, type PickerSearch } from "./picker.js";
+import { Picker } from "./picker.js";
+import { peopleSearch } from "./searches.js";
 import { type TaskSearch, taskLabel } from "./task-form.js";
 import { Button, formatBytes, PersonChip, personName } from "./ui.js";
 
@@ -55,23 +56,6 @@ export function decidersInput(
   }
   const first = ids[0] ?? "";
   return ids.length === 1 ? { deciderId: first } : { deciderId: first, deciderIds: ids };
-}
-
-/** The people of the project found by the words typed, a page at a time, as a picker searches. */
-export function peopleSearch(people: readonly RestPerson[]): PickerSearch<RestPerson> {
-  return async (query, page) => {
-    const words = query.trim().toLowerCase();
-    const found = people.filter(
-      (person) =>
-        words.length === 0 ||
-        personName(person).toLowerCase().includes(words) ||
-        person.login.toLowerCase().includes(words),
-    );
-    return {
-      items: found.slice(page.offset, page.offset + page.limit),
-      more: found.length > page.offset + page.limit,
-    };
-  };
 }
 
 export function DecisionForm(props: DecisionFormProps) {

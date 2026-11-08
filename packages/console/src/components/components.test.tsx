@@ -1366,12 +1366,13 @@ describe("people", () => {
     const change = renderToStaticMarkup(
       <PeopleList people={[alice, managed]} me={alice} onChangeManager={() => undefined} />,
     );
-    // One select per person, each offering everyone but themselves, with the manager as it stands.
-    expect(change.match(/<select/g)).toHaveLength(2);
-    expect(change.match(/>None<[/]option>/g)).toHaveLength(2);
-    expect(change.match(/>Alice Example<\/option>/g)).toHaveLength(1);
-    expect(change.match(/>bob<\/option>/g)).toHaveLength(1);
-    expect(change).toContain(`value="${alice.id}" selected=""`);
+    // A picker per person (ADR-0037): the manager as it stands in the field's place, or the
+    // field that searches everyone but themselves.
+    expect(change).not.toContain("<select");
+    expect(change.match(/role="combobox"/g)).toHaveLength(1);
+    expect(change).toContain('aria-label="Manager of Alice Example"');
+    expect(change).toContain('placeholder="None"');
+    expect(change).toMatch(/sc-picker-chosen[\s\S]*?Alice Example/);
   });
 
   it("shows a person's work email where the console answers one, and lets an administrator write it (ADR-0069)", () => {
@@ -1867,9 +1868,9 @@ describe("projects", () => {
     expect(change).toContain('aria-label="Add a member"');
     expect(change).toContain(`href="/people/${alice.id}/work"`);
     expect(read).not.toContain("/work");
-    // Only those not listed yet are offered.
-    expect(change).toContain(`<option value="${bob.id}">bob</option>`);
-    expect(change).not.toContain(`<option value="${alice.id}"`);
+    // Whom to add is searched for among those not listed yet (ADR-0037).
+    expect(change).toContain('placeholder="Choose someone"');
+    expect(change).toContain('aria-label="Person"');
     expect(change).toContain("Remove");
     const full = renderToStaticMarkup(
       <MemberList members={members} people={[alice]} onAdd={() => undefined} empty={<p>none</p>} />,
@@ -2073,9 +2074,25 @@ describe("the schedule on the board", () => {
     expect(html).toContain('placeholder="Title, number or person"');
     expect(html).toContain("1 of 2 tasks");
     expect(html).toContain("Show everything");
-    expect(html).toContain("Ship v1");
-    expect(html).not.toContain("Gone");
-    expect(html).toContain("Mine");
+    // The goal and the person are searched for (ADR-0037); what the address names stands in the field's place.
+    expect(html).toContain('placeholder="Any goal"');
+    expect(html).toContain('placeholder="Everyone"');
+    expect(html).not.toContain("<select[^>]*Ship v1");
+    const narrowed = renderToStaticMarkup(
+      <BoardFilters
+        filter={{ goal: goal().id, mine: true }}
+        categories={[engineering]}
+        goals={[goal()]}
+        people={[alice, bob]}
+        me={alice}
+        shown={1}
+        total={2}
+        onChange={() => undefined}
+      />,
+    );
+    expect(narrowed).toContain("Ship v1");
+    expect(narrowed).toContain("Mine");
+    expect(narrowed.match(/sc-picker-chosen/g)).toHaveLength(2);
   });
 
   it("lists tasks as rows with the project named when asked, and says the plan on a task's page", () => {
@@ -3769,7 +3786,9 @@ describe("the workers of a task, and what a form finds by searching (ADR-0037)",
     // Bob is a chip; Alice and Carol are who can be added.
     expect(html).toContain('aria-label="Remove: bob"');
     expect(html).not.toContain('aria-label="Remove: Alice Example"');
-    expect(html).toMatch(/<select[^>]*aria-label="Add a worker"[^>]*>(?:(?!<\/select>).)*Carol/s);
+    expect(html).toMatch(/<input[^>]*aria-label="Add a worker"/);
+    // The state and the priority, short and fixed, stay lists.
+    expect(html.match(/<select/g)).toHaveLength(2);
     // The parent stands in the field's place; the goal, none yet, is searched for.
     expect(html).toContain("sc-picker-chosen");
     expect(html).toContain("Launch");
@@ -3788,7 +3807,8 @@ describe("the workers of a task, and what a form finds by searching (ADR-0037)",
     expect(held).toContain("\u2026");
     // Without a search given, neither field is offered; a new task starts with nobody on it.
     const bare = renderToStaticMarkup(<TaskForm people={[alice]} onSubmit={() => undefined} />);
-    expect(bare).not.toContain('role="combobox"');
+    // The one combobox left is the worker's, searched for (ADR-0037).
+    expect(bare.match(/role="combobox"/g)).toHaveLength(1);
     expect(bare).not.toContain("Part of");
     expect(bare).toContain("Nobody");
   });

@@ -23,6 +23,8 @@ import {
   type RestProjectPatch,
 } from "../api.js";
 import { useWords } from "../i18n/index.js";
+import { Picker } from "./picker.js";
+import { peopleSearch } from "./searches.js";
 import { Badge, Button, cx, PersonChip, personName, Time } from "./ui.js";
 
 /**
@@ -462,21 +464,19 @@ export function MemberList(props: MemberListProps) {
           }}
         >
           <div className="sc-field-row">
-            <label className="sc-field">
+            <div className="sc-field">
               <span className="sc-field-label">{members.person}</span>
-              <select
-                className="sc-input"
-                value={personId}
-                onChange={(event) => setPersonId(event.target.value)}
-              >
-                <option value="">{members.chooseSomeone}</option>
-                {candidates.map((person) => (
-                  <option key={person.id} value={person.id}>
-                    {personName(person)}
-                  </option>
-                ))}
-              </select>
-            </label>
+              <Picker
+                value={candidates.find((person) => person.id === personId)}
+                search={peopleSearch(candidates)}
+                keyOf={(person) => person.id}
+                render={(person) => <PersonChip person={person} size="sm" />}
+                label={members.person}
+                placeholder={members.chooseSomeone}
+                disabled={props.busy === true}
+                onChange={(person) => setPersonId(person?.id ?? "")}
+              />
+            </div>
             <label className="sc-field">
               <span className="sc-field-label">{members.as}</span>
               <select

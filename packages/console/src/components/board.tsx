@@ -18,6 +18,8 @@ import {
 } from "../api.js";
 import { useWords } from "../i18n/index.js";
 import type { BoardFilter } from "../router.js";
+import { Picker } from "./picker.js";
+import { listSearch } from "./searches.js";
 import { isPlainClick } from "./shell.js";
 import {
   Badge,
@@ -25,6 +27,7 @@ import {
   CategoryBadge,
   cx,
   DueBadge,
+  PersonChip,
   PriorityBadge,
   personName,
   Workers,
@@ -727,6 +730,13 @@ export function filterTasks(
   });
 }
 
+/** A goal to narrow the board to, or no goal at all. */
+type GoalChoice = { readonly kind: "none" } | { readonly kind: "goal"; readonly goal: RestGoal };
+/** A person to narrow the board to, or whoever is looking. */
+type PersonChoice =
+  | { readonly kind: "mine" }
+  | { readonly kind: "person"; readonly person: RestPerson };
+
 export interface BoardFiltersProps {
   readonly filter: BoardFilter;
   readonly categories: readonly RestCategory[];
@@ -754,6 +764,44 @@ export function BoardFilters(props: BoardFiltersProps) {
     }
     props.onChange(next as BoardFilter);
   };
+  // The goal and the person are searched for (ADR-0037), among the page's own; what the address
+  // names and the page does not hold is held as it is, so that the filter still shows.
+  const goalChoices: readonly GoalChoice[] = [
+    { kind: "none" },
+    ...goals.map((goal) => ({ kind: "goal" as const, goal })),
+  ];
+  const chosenGoal = goals.find((goal) => goal.id === filter.goal);
+  const goalChoice: GoalChoice | undefined =
+    filter.goal === undefined
+      ? undefined
+      : filter.goal === ""
+        ? { kind: "none" }
+        : chosenGoal === undefined
+          ? undefined
+          : { kind: "goal", goal: chosenGoal };
+  const goalWords = (choice: GoalChoice) =>
+    choice.kind === "none" ? words.noGoal : choice.goal.title;
+  const findGoal = listSearch(goalChoices, (choice, typed) =>
+    goalWords(choice).toLowerCase().includes(typed),
+  );
+  const personChoices: readonly PersonChoice[] = [
+    ...(props.me === undefined ? [] : [{ kind: "mine" as const }]),
+    ...props.people
+      .filter((person) => person.id !== props.me?.id)
+      .map((person) => ({ kind: "person" as const, person })),
+  ];
+  const chosenPerson = props.people.find((person) => person.id === filter.person);
+  const personChoice: PersonChoice | undefined =
+    filter.mine === true
+      ? { kind: "mine" }
+      : filter.person === undefined || chosenPerson === undefined
+        ? undefined
+        : { kind: "person", person: chosenPerson };
+  const personWords = (choice: PersonChoice) =>
+    choice.kind === "mine" ? words.mine : `${personName(choice.person)} ${choice.person.login}`;
+  const findPerson = listSearch(personChoices, (choice, typed) =>
+    personWords(choice).toLowerCase().includes(typed),
+  );
   return (
     <form
       className="sc-filters"
@@ -795,54 +843,47 @@ export function BoardFilters(props: BoardFiltersProps) {
         </select>
       </label>
       {goals.length > 0 && (
-        <label className="sc-field sc-field-inline">
-          <span className="sc-visually-hidden">{words.anyGoal}</span>
-          <select
-            className="sc-input"
-            value={filter.goal ?? "*"}
-            onChange={(event) =>
-              event.target.value === "*" ? change({}, "goal") : change({ goal: event.target.value })
+        <div className="sc-field sc-field-inline">
+          <Picker
+            value={goalChoice}
+            held={goalChoice === undefined && filter.goal !== undefined ? filter.goal : undefined}
+            search={findGoal}
+            keyOf={(choice) => (choice.kind === "none" ? "" : choice.goal.id)}
+            render={goalWords}
+            label={words.anyGoal}
+            placeholder={words.anyGoal}
+            onChange={(choice) =>
+              choice === undefined
+                ? change({}, "goal")
+                : change({ goal: choice.kind === "none" ? "" : choice.goal.id })
             }
-          >
-            <option value="*">{words.anyGoal}</option>
-            <option value="">{words.noGoal}</option>
-            {goals.map((goal) => (
-              <option key={goal.id} value={goal.id}>
-                {goal.title}
-              </option>
-            ))}
-          </select>
-        </label>
+          />
+        </div>
       )}
-      <label className="sc-field sc-field-inline">
-        <span className="sc-visually-hidden">{words.everyone}</span>
-        <select
-          className="sc-input"
-          value={filter.mine === true ? "mine" : (filter.person ?? "*")}
-          onChange={(event) => {
-            const value = event.target.value;
-            if (value === "*") {
+      <div className="sc-field sc-field-inline">
+        <Picker
+          value={personChoice}
+          held={
+            personChoice === undefined && filter.person !== undefined ? filter.person : undefined
+          }
+          search={findPerson}
+          keyOf={(choice) => (choice.kind === "mine" ? "mine" : choice.person.id)}
+          render={(choice) =>
+            choice.kind === "mine" ? words.mine : <PersonChip person={choice.person} size="sm" />
+          }
+          label={words.everyone}
+          placeholder={words.everyone}
+          onChange={(choice) => {
+            if (choice === undefined) {
               change({ mine: undefined, person: undefined });
-              return;
-            }
-            if (value === "mine") {
+            } else if (choice.kind === "mine") {
               change({ mine: true, person: undefined });
-              return;
+            } else {
+              change({ person: choice.person.id, mine: undefined });
             }
-            change({ person: value, mine: undefined });
           }}
-        >
-          <option value="*">{words.everyone}</option>
-          {props.me !== undefined && <option value="mine">{words.mine}</option>}
-          {props.people
-            .filter((person) => person.id !== props.me?.id)
-            .map((person) => (
-              <option key={person.id} value={person.id}>
-                {personName(person)}
-              </option>
-            ))}
-        </select>
-      </label>
+        />
+      </div>
       <span className="sc-filters-count sc-muted">{words.showing(props.shown, props.total)}</span>
       {narrowed && (
         <Button variant="ghost" size="sm" onClick={() => props.onChange({})}>

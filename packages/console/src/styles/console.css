@@ -1515,6 +1515,15 @@ select.sc-input {
   padding: var(--sc-space-2);
 }
 
+/* A picker among chips, in a fact of a person or in the board's filters: wide enough for a name, never the whole row. */
+.sc-chips .sc-picker,
+.sc-person-fact .sc-picker,
+.sc-filters .sc-picker,
+.sc-member-form .sc-picker {
+  flex: 0 1 14rem;
+  min-width: 11rem;
+}
+
 /* The workers of a task on a card or a row: pictures side by side, and how many more. */
 .sc-workers {
   display: inline-flex;

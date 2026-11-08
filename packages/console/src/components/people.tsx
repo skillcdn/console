@@ -14,6 +14,8 @@ import {
 import { useWords } from "../i18n/index.js";
 import { MAX_LOGIN_LENGTH } from "../limits.js";
 import { PERSON_ROLES } from "../vocabulary.js";
+import { Picker } from "./picker.js";
+import { peopleSearch } from "./searches.js";
 import { Avatar, Badge, Button, PersonChip, personName, RoleBadge, Time, Workers } from "./ui.js";
 
 // The people of the board, with what each may do and whether they are in (ADR-0022): those in,
@@ -191,31 +193,24 @@ export function PeopleList(props: PeopleListProps) {
                         <PersonChip person={manager} />
                       )
                     ) : (
-                      <select
-                        className="sc-input sc-input-quiet"
-                        aria-label={people.managerOf(personName(person))}
-                        value={person.managerId ?? ""}
-                        disabled={props.busy === true}
-                        onChange={(event) =>
-                          props.onChangeManager?.(
-                            person,
-                            event.target.value === "" ? null : event.target.value,
-                          )
-                        }
-                      >
-                        <option value="">{people.nobody}</option>
-                        {props.people
-                          .filter(
+                      <Picker
+                        value={manager}
+                        search={peopleSearch(
+                          props.people.filter(
                             (candidate) =>
                               candidate.id !== person.id &&
                               (candidate.status === "active" || candidate.id === person.managerId),
-                          )
-                          .map((candidate) => (
-                            <option key={candidate.id} value={candidate.id}>
-                              {personName(candidate)}
-                            </option>
-                          ))}
-                      </select>
+                          ),
+                        )}
+                        keyOf={(candidate) => candidate.id}
+                        render={(candidate) => <PersonChip person={candidate} size="sm" />}
+                        label={people.managerOf(personName(person))}
+                        placeholder={people.nobody}
+                        disabled={props.busy === true}
+                        onChange={(candidate) =>
+                          props.onChangeManager?.(person, candidate?.id ?? null)
+                        }
+                      />
                     )}
                   </dd>
                 </div>

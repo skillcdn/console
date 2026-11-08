@@ -179,6 +179,12 @@ export {
   RunStatusBadge,
 } from "./components/runs.js";
 export {
+  goalsSearch,
+  listSearch,
+  peopleSearch,
+  projectsSearch,
+} from "./components/searches.js";
+export {
   type Brand,
   isPlainClick,
   type LanguageChoice,

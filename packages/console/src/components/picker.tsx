@@ -62,6 +62,8 @@ export interface PickerProps<T> {
   readonly onChange: (item: T | undefined) => void;
   /** The field's name, for the input and the list. */
   readonly label: string;
+  /** The input's id, where a label points at it. */
+  readonly id?: string | undefined;
   readonly placeholder: string;
   readonly disabled?: boolean | undefined;
   /** What the search may answer with but cannot be chosen: a task, as its own parent. */
@@ -225,6 +227,7 @@ export function Picker<T>(props: PickerProps<T>) {
     <div className="sc-picker">
       <input
         ref={field}
+        id={props.id}
         className="sc-input"
         type="text"
         role="combobox"
