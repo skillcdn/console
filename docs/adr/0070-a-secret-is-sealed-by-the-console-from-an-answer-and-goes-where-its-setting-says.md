@@ -1,6 +1,6 @@
 # ADR-0070: A secret is sealed by the console from an answer the plugin received, and goes where its setting says
 
-- Status: Accepted
+- Status: Accepted; what a value that cannot be sealed becomes, where a seal may come from, and what an answer carries back are amended by [ADR-0075](0075-a-secret-never-comes-back-to-a-plugin-and-sealing-fails-closed.md), sealing failing closed and nothing a request carried coming back
 - Date: 2026-11-08
 - Extends [ADR-0050](0050-plugin-code-runs-in-a-host-process-of-its-own-and-reaches-the-console-only-through-the-capabilities-it-declared.md), under which a plugin's secrets are set by an administrator, sealed by the console and put into a request by the console where the plugin names them, never read by the plugin. The contract is in [specs/plugins.md](../specs/plugins.md).
 
