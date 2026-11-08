@@ -9,7 +9,9 @@ import {
   decisionAddressedTo,
   decisionAnswerableBy,
   decisionOnPlateOf,
+  decisionRaisedBy,
   decisionReachableBy,
+  decisionWaitsFor,
   mayWorkIn,
   memberOfProject,
   peopleNarrowedFor,
@@ -112,12 +114,30 @@ describe("the policy", () => {
     expect(reach.sql).toContain(`"plugin_links"."target_kind" = 'decision'`);
     expect(reach.sql).toContain("with recursive above(id) as");
     expect(reach.sql).toContain(`"people"."manager_id" is not null`);
-    expect(reach.params).toEqual([member.id, member.id, member.id, member.id]);
+    // A person's own decision only while they are a member of its project (ADR-0077).
+    expect(reach.sql).toContain(`"projects"."id" = "decisions"."project_id"`);
+    expect(reach.sql).toContain(`"projects"."visibility" = 'workspace'`);
+    expect(reach.params).toEqual([member.id, member.id, member.id, member.id, member.id]);
     // Answering from outside the project is for those addressed and those above them, never for the raiser alone.
     const answer = render(decisionAnswerableBy(member));
     expect(answer.sql).not.toContain("raised_by_id");
     expect(answer.sql).toContain("with recursive above(id) as");
-    expect(answer.params).toEqual([member.id, member.id, member.id]);
+    expect(answer.sql).toContain(`"projects"."id" = "decisions"."project_id"`);
+    expect(answer.params).toEqual([member.id, member.id, member.id, member.id]);
+  });
+
+  it("keeps a person's own decision in its project: whom it is addressed to and who raised it find it while they are in it (ADR-0077)", () => {
+    const mine = render(decisionWaitsFor(member));
+    expect(mine.sql).toContain(render(decisionAddressedTo(member.id)).sql);
+    expect(mine.sql).toContain(`"plugin_links"."target_kind" = 'decision'`);
+    expect(mine.sql).toContain(`"projects"."visibility" = 'workspace'`);
+    expect(mine.params).toEqual([member.id, member.id, member.id]);
+    const raised = render(decisionRaisedBy(member));
+    expect(raised.sql).toContain(`"decisions"."raised_by_id" = $1::uuid`);
+    expect(raised.sql).toContain(`"projects"."visibility" = 'workspace'`);
+    // An administrator may work in every project: theirs wherever it is.
+    expect(render(decisionWaitsFor(admin)).sql).toBe(render(decisionAddressedTo(admin.id)).sql);
+    expect(render(decisionRaisedBy(admin)).sql).toBe(`"decisions"."raised_by_id" = $1::uuid`);
   });
 
   it("holds whom a plugin acts for to a member's standing, and what it answers for them to their plate (ADR-0072)", () => {
@@ -131,7 +151,7 @@ describe("the policy", () => {
     // addressed to someone they manage; never `true`.
     const plate = render(decisionOnPlateOf(admin.id));
     expect(plate.sql).toBe(render(decisionAnswerableBy(member)).sql);
-    expect(plate.params).toEqual([admin.id, admin.id, admin.id]);
+    expect(plate.params).toEqual([admin.id, admin.id, admin.id, admin.id]);
   });
 
   it("lets an active administrator or member of the project work in it, and nobody else", () => {

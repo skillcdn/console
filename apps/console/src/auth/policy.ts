@@ -135,25 +135,61 @@ const aboveADecider = (person: PersonRef): SQL =>
   sql`exists (with recursive above(id) as (select ${people.managerId} from ${people} where ${people.id} = any(${decisions.deciderIds}) and ${people.managerId} is not null union select p.manager_id from people p join above on p.id = above.id where p.manager_id is not null) select 1 from above where above.id = ${person}::uuid)`;
 
 /**
+ * On a `decisions` row: whether `person` is a member of the decision's project, as
+ * `memberOfProject` has it: everyone for a project open to the workspace, those listed for a
+ * private one.
+ */
+const memberOfDecisionProject = (person: PersonRef): SQL =>
+  sql`exists (select 1 from ${projects} where ${projects.id} = ${decisions.projectId} and ${memberOfProject(person)})`;
+
+/**
+ * On a `decisions` row: whether the decision may reach `person` past what its project shows them
+ * (ADR-0077). A plugin's reaches past its project, as ADR-0068 has it; a person's own is the
+ * project's, and reaches whom it is addressed to and who raised it only while they are members of
+ * the project, so that whoever leaves a private project leaves its decisions there.
+ */
+const stillReaches = (person: PersonRef): SQL =>
+  sql`(${raisedByAPlugin()} or ${memberOfDecisionProject(person)})`;
+
+/**
  * On a `decisions` row: whether `person` may read the decision wherever it is, in a project they
  * may see or not (ADR-0068): they raised it, it is addressed to them, or it is a plugin's and
- * addressed to someone they manage. An administrator reads every one.
+ * addressed to someone they manage; a person's own decision only while they are a member of its
+ * project (ADR-0077). An administrator reads every one.
  */
 export function decisionReachableBy(person: PersonRecord): SQL {
   if (administers(person)) {
     return sql`true`;
   }
-  return sql`(${decisions.raisedById} = ${person.id}::uuid or ${decisionAddressedTo(person.id)} or (${raisedByAPlugin()} and ${aboveADecider(person.id)}))`;
+  return sql`((${decisions.raisedById} = ${person.id}::uuid or ${decisionAddressedTo(person.id)} or (${raisedByAPlugin()} and ${aboveADecider(person.id)})) and ${stillReaches(person.id)})`;
 }
 
 /**
  * On a `decisions` row: whether the decision is on `person`'s own plate, wherever it is
  * (ADR-0068): addressed to them, or a plugin's addressed to someone they manage, up the reporting
- * line. Neither their administration nor their membership of the project adds to it; what a
- * plugin answers for a person is held to it (ADR-0072).
+ * line; a person's own decision only while they are a member of its project (ADR-0077). Their
+ * administration adds nothing to it; what a plugin answers for a person is held to it (ADR-0072).
  */
 export function decisionOnPlateOf(person: PersonRef): SQL {
-  return sql`(${decisionAddressedTo(person)} or (${raisedByAPlugin()} and ${aboveADecider(person)}))`;
+  return sql`((${decisionAddressedTo(person)} or (${raisedByAPlugin()} and ${aboveADecider(person)})) and ${stillReaches(person)})`;
+}
+
+/**
+ * On a `decisions` row: whether the decision is addressed to `person` and is among their own, on
+ * their plate and in My decisions (ADR-0042, ADR-0068): a plugin's wherever it is; a person's own
+ * while they may work in its project, a member of it or an administrator (ADR-0077).
+ */
+export function decisionWaitsFor(person: PersonRecord): SQL {
+  return administers(person)
+    ? decisionAddressedTo(person.id)
+    : sql`(${decisionAddressedTo(person.id)} and ${stillReaches(person.id)})`;
+}
+
+/** On a `decisions` row: whether `person` raised the decision and it is still theirs to read, as `decisionWaitsFor` has it. */
+export function decisionRaisedBy(person: PersonRecord): SQL {
+  return administers(person)
+    ? sql`${decisions.raisedById} = ${person.id}::uuid`
+    : sql`(${decisions.raisedById} = ${person.id}::uuid and ${stillReaches(person.id)})`;
 }
 
 /**

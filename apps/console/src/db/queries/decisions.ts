@@ -6,9 +6,12 @@ import {
 } from "@skillcdn/console/api";
 import { and, asc, count, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import {
+  decisionAddressedTo,
   decisionAnswerableBy,
   decisionOnPlateOf,
+  decisionRaisedBy,
   decisionReachableBy,
+  decisionWaitsFor,
   memberOfProject,
 } from "../../auth/policy.js";
 import { DomainError } from "../../errors.js";
@@ -715,17 +718,10 @@ export async function findDecisionOnPlate(
 }
 
 /**
- * On a `decisions` row: whether the decision is addressed to the person, alone or among others
- * (ADR-0057). The first of them is asked for too: the version before the list goes on serving for
- * a moment after the migration, and what it raises then has none.
- */
-const addressedTo = (person: PersonRecord) =>
-  sql`(${person.id}::uuid = any(${decisions.deciderIds}) or ${decisions.deciderId} = ${person.id}::uuid)`;
-
-/**
  * The decisions that wait for `person`'s answer (ADR-0042), the oldest first: what has waited
- * longest comes first on their own page of what is theirs to do. A decision addressed to the
- * person is theirs wherever it is, in a project they may see or not (ADR-0068).
+ * longest comes first on their own page of what is theirs to do. A plugin's decision addressed to
+ * the person is theirs wherever it is, in a project they may see or not (ADR-0068); a person's own
+ * while they are in its project (ADR-0077).
  */
 export async function listWaitingDecisionsFor(
   database: Database,
@@ -737,7 +733,7 @@ export async function listWaitingDecisionsFor(
     .where(
       and(
         eq(decisions.workspaceId, workspaceId),
-        addressedTo(person),
+        decisionWaitsFor(person),
         isNull(decisions.answeredAt),
       ),
     )
@@ -761,7 +757,7 @@ export async function countWaitingDecisionsFor(
     .where(
       and(
         eq(decisions.workspaceId, workspaceId),
-        addressedTo(person),
+        decisionWaitsFor(person),
         isNull(decisions.answeredAt),
       ),
     );
@@ -865,8 +861,8 @@ export async function listDecisionsFor(
       and(
         eq(decisions.workspaceId, workspaceId),
         filter.raised === true
-          ? and(eq(decisions.raisedById, person.id), sql`not ${addressedTo(person)}`)
-          : addressedTo(person),
+          ? and(decisionRaisedBy(person), sql`not ${decisionAddressedTo(person.id)}`)
+          : decisionWaitsFor(person),
         filter.open === true ? isNull(decisions.answeredAt) : undefined,
       ),
     )

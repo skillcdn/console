@@ -20,10 +20,11 @@ import { createFixtureProvider } from "./testing/fixture-provider.js";
 import { createHarness, type Harness, SIGN_IN_URL } from "./testing/harness.js";
 
 // A file put on a decision (ADR-0055), read at the decision's own address (ADR-0068): by whoever
-// the decision reaches wherever it is, the person it is addressed to outside its project and,
-// for a plugin's, whoever manages them up the reporting line; with a session as with a token;
-// served as the project serves its files; and never a file of the project that is not the
-// decision's, nor to whom the decision does not reach, both refused with the same answer.
+// the decision reaches wherever it is, for a plugin's the person it is addressed to outside its
+// project and whoever manages them up the reporting line; with a session as with a token; served
+// as the project serves its files; and never a file of the project that is not the decision's,
+// nor to whom the decision does not reach, both refused with the same answer. A person's own
+// decision is the project's (ADR-0077): it reaches nobody who is out of the project.
 
 let testDatabase: TestDatabase;
 let h: Harness;
@@ -98,8 +99,9 @@ describe("a file put on a decision, at the decision's own address (ADR-0068)", (
     const [bobId, carolId, daveId] = [idOf("bob"), idOf("carol"), idOf("dave@acme.test")];
     expect([bobId, carolId, daveId]).not.toContain("");
 
-    // A private project Bob is listed in when a decision with files is raised for him, and taken
-    // out of afterwards: the decision is still his, and the project is closed to him.
+    // A private project Bob is listed in when decisions with files are raised for him, and taken
+    // out of afterwards: a plugin's decision is still his, a person's own is not, and the project
+    // is closed to him.
     await h.project(alice, { key: "vault", name: "The vault", visibility: "private" });
     const listed = await send(alice, "POST", projectPath("vault", "members"), { personId: bobId });
     expect(listed.status).toBe(201);
@@ -125,14 +127,37 @@ describe("a file put on a decision, at the decision's own address (ADR-0068)", (
       { question: "Mine alone?", options: [{ label: "Yes" }, { label: "No" }] },
       [{ name: "secret.txt", type: "text/plain", bytes: "s\n" }],
     );
+    // A person's own decision for Bob, which stays the project's.
+    const ours = await raise(
+      alice,
+      "vault",
+      { question: "Ours?", options: [{ label: "Yes" }, { label: "No" }], deciderId: bobId },
+      [{ name: "kept.txt", type: "text/plain", bytes: "k\n" }],
+    );
+    // The mark a plugin leaves on a decision it raised (ADR-0052), here on one that carries files.
+    const workspace = await ensureWorkspace(testDatabase.database, {
+      name: "Acme",
+      now: new Date(),
+    });
+    await markPluginItem(drizzleOf(testDatabase.database), {
+      workspaceId: workspace.id,
+      key: "leave",
+      kind: "decision",
+      id: forBob.id,
+    });
+    // Listed, Bob reaches both at their address.
+    expect((await get(bob, decisionPath(ours.id))).status).toBe(200);
+    expect((await get(bob, decisionPath(forBob.id))).status).toBe(200);
     expect((await send(alice, "DELETE", projectPath("vault", "members", bobId))).status).toBe(204);
     const [picture, notes, plans] = forBob.files ?? [];
     const [secret] = own.files ?? [];
+    const [ourFile] = ours.files ?? [];
     if (
       picture === undefined ||
       notes === undefined ||
       plans === undefined ||
-      secret === undefined
+      secret === undefined ||
+      ourFile === undefined
     ) {
       throw new Error("the decisions came back without their files");
     }
@@ -196,6 +221,27 @@ describe("a file put on a decision, at the decision's own address (ADR-0068)", (
       notFound,
     );
 
+    // Out of the project, the person's own decision addressed to Bob is not his (ADR-0077): not
+    // at its address, not its files, not to answer, and not among his decisions or on his plate.
+    expect((await get(bob, decisionPath(ours.id))).status).toBe(404);
+    expect(await refused(await get(bob, decisionFilePath(ours.id, ourFile.id)))).toEqual(notFound);
+    const answered = await send(bob, "POST", `${decisionPath(ours.id)}/answer`, { option: "1" });
+    expect(answered.status).toBe(404);
+    const mine = (await (await get(bob, REST_ROUTES.decisions)).json()) as {
+      items: { decision: { id: string } }[];
+    };
+    expect(mine.items.map((item) => item.decision.id)).toEqual([forBob.id]);
+    const plate = (await (await get(bob, REST_ROUTES.work)).json()) as {
+      decisions: { decision: { id: string } }[];
+    };
+    expect(plate.decisions.map((item) => item.decision.id)).toEqual([forBob.id]);
+    const me = (await (await get(bob, REST_ROUTES.me)).json()) as {
+      decisions: { waiting: number };
+    };
+    expect(me.decisions.waiting).toBe(1);
+    // Alice, who raised it and administers the workspace, reads it as before.
+    expect((await get(alice, decisionPath(ours.id))).status).toBe(200);
+
     // An agent's token reads what its person reads, and no more.
     const bobsAgent = await tokenOf(bob, "Bob's agent");
     const throughAgent = await bearer(bobsAgent, decisionFilePath(forBob.id, picture.id));
@@ -222,20 +268,16 @@ describe("a file put on a decision, at the decision's own address (ADR-0068)", (
       managerId: daveId,
     });
     expect(above.status, await above.clone().text()).toBe(200);
-    expect(await refused(await get(carol, decisionFilePath(forBob.id, picture.id)))).toEqual(
+    // Listed again, Bob has the person's own decision back; it climbs no line to Carol.
+    const relisted = await send(alice, "POST", projectPath("vault", "members"), {
+      personId: bobId,
+    });
+    expect(relisted.status).toBe(201);
+    expect((await get(bob, decisionPath(ours.id))).status).toBe(200);
+    expect((await get(carol, decisionPath(ours.id))).status).toBe(404);
+    expect(await refused(await get(carol, decisionFilePath(ours.id, ourFile.id)))).toEqual(
       notFound,
     );
-    // The mark a plugin leaves on a decision it raised (ADR-0052), here on one that carries files.
-    const workspace = await ensureWorkspace(testDatabase.database, {
-      name: "Acme",
-      now: new Date(),
-    });
-    await markPluginItem(drizzleOf(testDatabase.database), {
-      workspaceId: workspace.id,
-      key: "leave",
-      kind: "decision",
-      id: forBob.id,
-    });
     const reached = restReachedDecisionSchema.parse(
       await (await get(carol, decisionPath(forBob.id))).json(),
     );

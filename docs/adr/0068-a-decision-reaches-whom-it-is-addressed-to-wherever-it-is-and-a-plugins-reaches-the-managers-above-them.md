@@ -1,6 +1,6 @@
 # ADR-0068: A decision reaches whom it is addressed to wherever it is, and a plugin's reaches the managers above them
 
-- Status: Accepted
+- Status: Accepted; a person's own decision reaching past its project is amended by [ADR-0077](0077-a-persons-own-decision-is-its-projects-and-reaches-nobody-out-of-it.md), a person's own decision being its project's
 - Date: 2026-11-08
 - Extends [ADR-0042](0042-a-decision-is-addressed-to-a-person-its-raiser-unless-another-is-named.md) and [ADR-0057](0057-a-decision-may-be-addressed-to-several-people-and-the-first-answer-ends-it.md), which address a decision to people of the project, and [ADR-0052](0052-a-plugins-board-is-a-project-made-or-chosen-when-it-is-enabled-and-what-it-puts-there-carries-its-name.md), whose board project is private. The contract is in [specs/rest.md](../specs/rest.md), [specs/cli.md](../specs/cli.md) and [specs/plugins.md](../specs/plugins.md).
 
