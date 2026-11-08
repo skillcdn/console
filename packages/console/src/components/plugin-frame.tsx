@@ -10,7 +10,7 @@ import {
   type BridgeToFrame,
   isBridgePath,
   isBridgeToPage,
-  isBridgeUrl,
+  isOpenableFrom,
   PLUGIN_BRIDGE_VERSION,
 } from "../plugin/bridge.js";
 import type { Navigation } from "../router.js";
@@ -340,7 +340,7 @@ export function PluginFrame(props: PluginFrameProps) {
           // A link a person pressed in the frame (ADR-0067): a web or a mail address, opened in a
           // new tab with no opener and no referrer, and only while the press is recent, which a
           // press in the frame gives this page too.
-          if (isBridgeUrl(message.url) && recentlyPressed()) {
+          if (isOpenableFrom(message.url, window.location.origin) && recentlyPressed()) {
             window.open(message.url, "_blank", "noopener,noreferrer");
           }
           return;

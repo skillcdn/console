@@ -154,7 +154,6 @@ type ProjectRow = {
 const isIconType = (value: string): value is ProjectIconType =>
   (PROJECT_ICON_TYPES as readonly string[]).includes(value);
 
-/** The image a row names, when it names one of a kind the pages show; a row cannot name another. */
 /** A project's own image for its mark from its two columns, or none: what every read of a project's mark goes through. */
 export const projectIconOf = (row: {
   readonly iconSha256: string | null;
@@ -164,6 +163,7 @@ export const projectIconOf = (row: {
     ? { sha256: row.iconSha256, contentType: row.iconContentType }
     : undefined;
 
+/** The image a row names, when it names one of a kind the pages show; a row cannot name another. */
 const iconOf = (row: ProjectRow): ProjectIcon | undefined =>
   row.iconSha256 !== null && row.iconContentType !== null && isIconType(row.iconContentType)
     ? { sha256: row.iconSha256, contentType: row.iconContentType }

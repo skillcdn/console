@@ -400,4 +400,27 @@ describe("the plugins' routes", () => {
       true,
     );
   });
+
+  it("takes away with a purged plugin the roles it held in other plugins, and says so where they were (ADR-0072)", async () => {
+    // evil holds hello's greeter from the grants above; purged, it holds nothing, so that a package
+    // installed later under its key would hold nothing it was not granted.
+    const before = restPluginGrantsSchema.parse(
+      await (await h.request(pluginPath("hello", "grants"), { headers: { cookie: admin } })).json(),
+    );
+    expect(before.items.some((grant) => grant.plugin === "evil")).toBe(true);
+    expect((await h.request(pluginPath("evil", "disable"), json({}, admin))).status).toBe(200);
+    const purged = await h.request(pluginPath("evil", "purge"), json({ confirm: "evil" }, admin));
+    expect(purged.status, await purged.clone().text()).toBe(204);
+    const after = restPluginGrantsSchema.parse(
+      await (await h.request(pluginPath("hello", "grants"), { headers: { cookie: admin } })).json(),
+    );
+    expect(after.items.some((grant) => grant.plugin === "evil")).toBe(false);
+    const events = restEventsSchema.parse(
+      await (await h.request(pluginPath("hello", "events"), { headers: { cookie: admin } })).json(),
+    );
+    expect(events.items[0]).toMatchObject({
+      kind: "plugin.revoked",
+      data: expect.objectContaining({ role: "greeter", grantee: "evil" }),
+    });
+  });
 });

@@ -5040,6 +5040,13 @@ describe("teams", () => {
     });
     expect(teamsKey.status).toBe(409);
     expect(await teamsKey.json()).toMatchObject({ error: { code: "project.key_taken" } });
+    // A name is one line of words: a control or an invisible character is refused.
+    for (const name of [
+      `Ops${String.fromCodePoint(0x202e)}`,
+      `Ops${String.fromCodePoint(0x1b)}[2J`,
+    ]) {
+      expect((await call(admin, "POST", REST_ROUTES.teams, { key: "odd", name })).status).toBe(400);
+    }
     for (const key of ["Platform", "-ops", "new", "a b", "x".repeat(41)]) {
       expect((await call(admin, "POST", REST_ROUTES.teams, { key, name: "Odd" })).status).toBe(400);
     }

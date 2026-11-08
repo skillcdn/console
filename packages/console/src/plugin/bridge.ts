@@ -246,6 +246,15 @@ export function isBridgeUrl(value: unknown): value is string {
   return OPENABLE_SCHEMES.has(new URL(value).protocol);
 }
 
+/**
+ * True for an address the page opens for a frame (ADR-0067): a web or a mail address that is not
+ * the console's own, given as `origin`, since a page of the console's is `navigate`'s, in the
+ * person's tab.
+ */
+export function isOpenableFrom(value: unknown, origin: string): value is string {
+  return isBridgeUrl(value) && new URL(value).origin !== origin;
+}
+
 function isTheme(value: unknown): value is Record<string, string> {
   if (!isRecord(value)) {
     return false;

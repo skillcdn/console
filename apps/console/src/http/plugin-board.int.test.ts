@@ -333,7 +333,7 @@ describe("what a plugin reads of the people (ADR-0063)", () => {
       ).status,
     ).toBe(200);
     expect((await asked("approver")).data).toEqual([]);
-    await revoke(toCrew);
+    // Removing the team takes the role granted to it, said on the plugin's board as a revoke is.
     expect(
       (
         await h.request(`${REST_ROUTES.teams}/${crewId}`, {
@@ -342,6 +342,21 @@ describe("what a plugin reads of the people (ADR-0063)", () => {
         })
       ).status,
     ).toBe(204);
+    const leftGrants = (await (
+      await h.request(pluginPath("leave", "grants"), { headers: { cookie: admin } })
+    ).json()) as { items: { team?: { key: string } | null }[] };
+    expect(leftGrants.items.some((grant) => grant.team?.key === crewId)).toBe(false);
+    const leaveEvents = (await (
+      await h.request(pluginPath("leave", "events"), { headers: { cookie: admin } })
+    ).json()) as { items: { kind: string; data: Record<string, unknown> }[] };
+    expect(leaveEvents.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "plugin.revoked",
+          data: expect.objectContaining({ role: "approver", team: "Approvers" }),
+        }),
+      ]),
+    );
     // Through a project, it is everyone in the project, an open one having all of the workspace.
     const open = await h.request(
       REST_ROUTES.projects,

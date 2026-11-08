@@ -313,7 +313,7 @@ export const restPluginGrantInputSchema = z
           input.team !== undefined,
           input.everyone === true,
         ].filter(Boolean).length === 1,
-      "names a person, a project or everyone, one of the three",
+      "names a person, a project, a plugin, a team or everyone, one of the five",
     ),
   );
 export type RestPluginGrantInput = z.infer<typeof restPluginGrantInputSchema>;

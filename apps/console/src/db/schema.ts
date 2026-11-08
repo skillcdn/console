@@ -166,12 +166,6 @@ export const people = pgTable(
 );
 
 /**
- * A login an administrator let in (ADR-0022): whoever signs in with that account at that host
- * becomes the person, and the row is bound to them from then on, so that a renamed account
- * stays let in and no other account can take the login. Deactivating a listed person takes the
- * row away with their standing; reactivating them lists them again. Rows go with their person.
- */
-/**
  * A team of the workspace (ADR-0073): a name and its members, a unit to call people by and to
  * grant a plugin's role to; no head and no team above it, since the reporting line says who is
  * above whom.
@@ -219,6 +213,12 @@ export const teamMembers = pgTable(
   ],
 );
 
+/**
+ * A login an administrator let in (ADR-0022): whoever signs in with that account at that host
+ * becomes the person, and the row is bound to them from then on, so that a renamed account
+ * stays let in and no other account can take the login. Deactivating a listed person takes the
+ * row away with their standing; reactivating them lists them again. Rows go with their person.
+ */
 export const listings = pgTable(
   "listings",
   {
@@ -1052,8 +1052,9 @@ export const pluginInstalls = pgTable(
 
 /**
  * A role of a plugin given by an administrator (docs/specs/plugins.md, "Roles and grants"): to a
- * person, to the members of a project, which follows the membership, or to everyone of the
- * workspace. Exactly one of the three, checked. A plugin's grants are read on every call that
+ * person, to the members of a project, which follows the membership, to another plugin, which
+ * holds it as itself (ADR-0072), to the members of a team, which follows the membership
+ * (ADR-0073), or to everyone of the workspace. Exactly one of the five, checked. A plugin's grants are read on every call that
  * names a role; an administrator holds every role without a row.
  */
 export const pluginGrants = pgTable(

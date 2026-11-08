@@ -226,13 +226,13 @@ export type RestTeams = z.infer<typeof restTeamsSchema>;
 /** What `POST /api/v1/teams` is sent: the key, which stays, and the name. */
 export const restTeamInputSchema = z.object({
   key: teamKey,
-  name: z.string().check(z.trim(), z.minLength(1), z.maxLength(MAX_TEAM_NAME_LENGTH)),
+  name: line(MAX_TEAM_NAME_LENGTH),
 });
 export type RestTeamInput = z.infer<typeof restTeamInputSchema>;
 
 /** What `PATCH /api/v1/teams/<key>` is sent: the name; the key never changes. */
 export const restTeamPatchSchema = z.object({
-  name: z.string().check(z.trim(), z.minLength(1), z.maxLength(MAX_TEAM_NAME_LENGTH)),
+  name: line(MAX_TEAM_NAME_LENGTH),
 });
 export type RestTeamPatch = z.infer<typeof restTeamPatchSchema>;
 

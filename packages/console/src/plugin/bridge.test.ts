@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { isBridgePath, isBridgeToFrame, isBridgeToPage, isBridgeUrl } from "./bridge.js";
+import {
+  isBridgePath,
+  isBridgeToFrame,
+  isBridgeToPage,
+  isBridgeUrl,
+  isOpenableFrom,
+} from "./bridge.js";
 
 const INIT = {
   v: 1,
@@ -146,6 +152,18 @@ describe("isBridgeUrl", () => {
     expect(isBridgeUrl(`https://forms.example/${"a".repeat(2048)}`)).toBe(false);
     expect(isBridgeUrl("")).toBe(false);
     expect(isBridgeUrl(42)).toBe(false);
+  });
+});
+
+describe("isOpenableFrom", () => {
+  it("opens an address elsewhere for a frame, and never a page of the console's own (ADR-0067)", () => {
+    const origin = "https://console.example";
+    expect(isOpenableFrom("https://forms.example/leave", origin)).toBe(true);
+    expect(isOpenableFrom("mailto:hr@example.com", origin)).toBe(true);
+    expect(isOpenableFrom("https://console.example/settings/plugins/leave", origin)).toBe(false);
+    expect(isOpenableFrom("https://CONSOLE.example:443/people", origin)).toBe(false);
+    expect(isOpenableFrom("http://console.example/people", origin)).toBe(true);
+    expect(isOpenableFrom("javascript:alert(1)", origin)).toBe(false);
   });
 });
 

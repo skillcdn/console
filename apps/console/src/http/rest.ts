@@ -805,7 +805,11 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
     if (error instanceof TeamError) {
       const status =
-        error.code === "team.not_found" ? 404 : error.code === "team.invalid_member" ? 400 : 409;
+        error.code === "team.not_found"
+          ? 404
+          : error.code === "team.invalid_member" || error.code === "team.invalid_name"
+            ? 400
+            : 409;
       return c.json(errorBody(error.code, error.message), status);
     }
     if (error instanceof ProjectError) {
@@ -1197,7 +1201,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         ? membersSyncedAt(database, person.workspaceId)
         : undefined,
     ]);
-    // The work email is an administrator's to read, and one's own; nobody else's (ADR-0022).
+    // The work email is an administrator's to read, and one's own; nobody else's (ADR-0069).
     // The teams each is in (ADR-0073), by their keys (ADR-0074), come with every reading.
     const administrator = configuresWorkspace(person);
     const teamsOf = await teamKeysByPerson(database, person.workspaceId);

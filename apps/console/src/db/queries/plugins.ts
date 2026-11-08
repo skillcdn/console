@@ -1,5 +1,5 @@
 import type { PluginCommandOutcome } from "@skillcdn/console/api";
-import { and, asc, eq, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, or, type SQL, sql } from "drizzle-orm";
 import { memberOfProject } from "../../auth/policy.js";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
@@ -704,20 +704,74 @@ export async function removeGrant(
       kind: "plugin.revoked",
       actor: input.actor,
       plugin: input.key,
-      data: {
-        role: grant.role,
-        ...(grant.person === undefined ? {} : { login: grant.person.login }),
-        ...(grant.project === undefined
-          ? {}
-          : { key: grant.project.key, name: grant.project.name }),
-        ...(grant.plugin === undefined ? {} : { grantee: grant.plugin }),
-        ...(grant.team === undefined ? {} : { team: grant.team.name }),
-        everyone: grant.everyone,
-      },
+      data: revokedData(grant),
       now: input.now,
     });
     return grant;
   });
+}
+
+/** What `plugin.revoked` says of a grant taken away: the role, and whom it had gone to. */
+function revokedData(grant: PluginGrantRecord) {
+  return {
+    role: grant.role,
+    ...(grant.person === undefined ? {} : { login: grant.person.login }),
+    ...(grant.project === undefined ? {} : { key: grant.project.key, name: grant.project.name }),
+    ...(grant.plugin === undefined ? {} : { grantee: grant.plugin }),
+    ...(grant.team === undefined ? {} : { team: grant.team.name }),
+    everyone: grant.everyone,
+  };
+}
+
+/**
+ * Takes away the grants of the workspace the condition names, in the caller's transaction, and
+ * tells each plugin's board project as a revoke does: what goes with a team removed (ADR-0073),
+ * and the roles a purged plugin held in other plugins (ADR-0072), so that neither stays behind
+ * nor goes unsaid. The caller holds the workspace's row.
+ */
+export async function revokeGrantsWhere(
+  tx: Transaction,
+  input: {
+    readonly workspaceId: string;
+    readonly where: SQL;
+    readonly actor: Actor;
+    readonly now: Date;
+  },
+): Promise<void> {
+  const rows = await selectGrants(tx).where(
+    and(eq(pluginGrants.workspaceId, input.workspaceId), input.where),
+  );
+  if (rows.length === 0) {
+    return;
+  }
+  const installs = await tx
+    .select({ key: pluginInstalls.key, boardProjectId: pluginInstalls.boardProjectId })
+    .from(pluginInstalls)
+    .where(
+      and(
+        eq(pluginInstalls.workspaceId, input.workspaceId),
+        inArray(pluginInstalls.key, [...new Set(rows.map((row) => row.pluginKey))]),
+      ),
+    );
+  const boardOf = new Map(installs.map((install) => [install.key, install.boardProjectId]));
+  await tx.delete(pluginGrants).where(
+    inArray(
+      pluginGrants.id,
+      rows.map((row) => row.id),
+    ),
+  );
+  for (const row of rows) {
+    const grant = toGrant(row);
+    await recordEvent(tx, {
+      workspaceId: input.workspaceId,
+      projectId: boardOf.get(grant.pluginKey) ?? undefined,
+      kind: "plugin.revoked",
+      actor: input.actor,
+      plugin: grant.pluginKey,
+      data: revokedData(grant),
+      now: input.now,
+    });
+  }
 }
 
 /**
@@ -953,6 +1007,14 @@ export async function purgeInstall(
       .where(
         and(eq(pluginGrants.workspaceId, input.workspaceId), eq(pluginGrants.pluginKey, input.key)),
       );
+    // The roles the plugin held in other plugins (ADR-0072) go too, said on their boards, so that
+    // a package installed later under the same key holds nothing it was not granted.
+    await revokeGrantsWhere(tx, {
+      workspaceId: input.workspaceId,
+      where: eq(pluginGrants.granteePluginKey, input.key),
+      actor: input.actor,
+      now: input.now,
+    });
     await tx
       .delete(pluginSecrets)
       .where(

@@ -1,9 +1,10 @@
-import { MAX_TEAM_NAME_LENGTH, MAX_TEAMS } from "@skillcdn/console/api";
+import { hasForbiddenCodePoint, MAX_TEAM_NAME_LENGTH, MAX_TEAMS } from "@skillcdn/console/api";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
-import { people, projects, teamMembers, teams, workspaces } from "../schema.js";
+import { people, pluginGrants, projects, teamMembers, teams, workspaces } from "../schema.js";
 import { type Actor, recordEvent } from "./events.js";
+import { revokeGrantsWhere } from "./plugins.js";
 
 // The teams of a workspace (ADR-0073): a name and its members, kept by an administrator. A team
 // is a unit to call people by and to grant a plugin's role to, nothing more: no head, no team
@@ -25,6 +26,7 @@ export interface TeamRecord {
 export type TeamErrorCode =
   | "team.not_found"
   | "team.key_taken"
+  | "team.invalid_name"
   | "team.name_taken"
   | "team.too_many"
   | "team.invalid_member"
@@ -33,6 +35,7 @@ export type TeamErrorCode =
 const MESSAGES: Record<TeamErrorCode, string> = {
   "team.not_found": "The team was not found.",
   "team.key_taken": "A team or a project of that key is there already.",
+  "team.invalid_name": "A team's name is one line of words.",
   "team.name_taken": "A team of that name is there already.",
   "team.too_many": `The workspace holds ${MAX_TEAMS} teams already.`,
   "team.invalid_member": "The person is not an active person of the workspace.",
@@ -152,6 +155,8 @@ export async function teamKeysByPerson(
 /**
  * Holds the workspace's row while teams change, so that two changes never race past the bounds,
  * and a team and a project are never made under one key at once: a project is made under it too.
+ * Every write to the teams takes it first, before the team's own row, and the event each writes
+ * takes a share of it in turn, so that two writes never hold each other's row.
  */
 async function lockWorkspace(tx: Transaction, workspaceId: string): Promise<void> {
   await tx
@@ -206,11 +211,11 @@ async function lockedTeam(tx: Transaction, workspaceId: string, key: string): Pr
   return row;
 }
 
-/** The name as it is kept: trimmed, within the bound; the pages and the command hold it to that already. */
+/** The name as it is kept: trimmed, one line within the bound; the REST edge holds it to that already. */
 function nameOf(given: string): string {
   const name = given.trim();
-  if (name.length === 0 || name.length > MAX_TEAM_NAME_LENGTH) {
-    throw new TeamError("team.name_taken");
+  if (name.length === 0 || name.length > MAX_TEAM_NAME_LENGTH || hasForbiddenCodePoint(name)) {
+    throw new TeamError("team.invalid_name");
   }
   return name;
 }
@@ -312,7 +317,15 @@ export async function removeTeam(
 ): Promise<void> {
   const { workspaceId, actor, key, now } = input;
   await drizzleOf(database).transaction(async (tx) => {
+    await lockWorkspace(tx, workspaceId);
     const current = await lockedTeam(tx, workspaceId, key);
+    // The roles granted to the team go with it, each said on its plugin's board as a revoke is.
+    await revokeGrantsWhere(tx, {
+      workspaceId,
+      where: eq(pluginGrants.teamId, current.id),
+      actor,
+      now,
+    });
     await tx.delete(teams).where(eq(teams.id, current.id));
     await recordEvent(tx, {
       workspaceId,
@@ -337,6 +350,7 @@ export async function addTeamMember(
 ): Promise<TeamRecord> {
   const { workspaceId, actor, key, personId, now } = input;
   return drizzleOf(database).transaction(async (tx) => {
+    await lockWorkspace(tx, workspaceId);
     const current = await lockedTeam(tx, workspaceId, key);
     const [person] = await tx
       .select({ id: people.id, login: people.login })
@@ -387,6 +401,7 @@ export async function removeTeamMember(
 ): Promise<TeamRecord> {
   const { workspaceId, actor, key, personId, now } = input;
   return drizzleOf(database).transaction(async (tx) => {
+    await lockWorkspace(tx, workspaceId);
     const current = await lockedTeam(tx, workspaceId, key);
     const removed = await tx
       .delete(teamMembers)

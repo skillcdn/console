@@ -167,6 +167,7 @@ export const ko: Messages = {
     "team.not_found": "팀을 찾을 수 없습니다.",
     "team.name_taken": "같은 이름의 팀이 이미 있습니다.",
     "team.key_taken": "같은 키의 팀이나 프로젝트가 이미 있습니다.",
+    "team.invalid_name": "팀 이름은 한 줄의 글자여야 합니다.",
     "team.too_many": "워크스페이스가 가질 수 있는 만큼의 팀이 이미 있습니다.",
     "team.invalid_member": "활성 상태인 워크스페이스의 사람만 팀에 넣을 수 있습니다.",
     "team.not_a_member": "그 사람은 이 팀에 없습니다.",

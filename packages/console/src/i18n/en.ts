@@ -211,6 +211,7 @@ export const en = {
     "team.not_found": "The team was not found.",
     "team.name_taken": "A team of that name is there already.",
     "team.key_taken": "A team or a project of that key is there already.",
+    "team.invalid_name": "A team's name is one line of words.",
     "team.too_many": "The workspace holds as many teams as one may.",
     "team.invalid_member": "Only an active person of the workspace is put in a team.",
     "team.not_a_member": "The person is not in the team.",
