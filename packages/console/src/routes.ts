@@ -17,6 +17,8 @@ export const REST_ROUTES = {
   workspacePackToken: "/api/v1/workspace/pack-token",
   /** The people of the workspace: everyone who has signed in, and the logins let in that have not. */
   people: "/api/v1/people",
+  /** The teams of the workspace (ADR-0073): a name and its members, kept by an administrator. */
+  teams: "/api/v1/teams",
   /** The logins an administrator let in (ADR-0022), made and removed by one. */
   listings: "/api/v1/listings",
   /** The projects the asker may see; the board of each is under its key. */
@@ -131,9 +133,9 @@ export function signInPath(page: string, failure: SignInFailure): string {
   return `${page}${page.includes("?") ? "&" : "?"}${SIGN_IN_PARAM}=${failure}`;
 }
 
-/** The REST path of one person, listing, token or project: the collection, then the id or the key. */
+/** The REST path of one person, listing, token, project or team: the collection, then the id or the key. */
 export function restPath(
-  collection: "people" | "listings" | "tokens" | "projects",
+  collection: "people" | "listings" | "tokens" | "projects" | "teams",
   id: string,
 ): string {
   return `${REST_ROUTES[collection]}/${encodeURIComponent(id)}`;

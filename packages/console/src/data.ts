@@ -54,6 +54,8 @@ import {
   type RestTaskInput,
   type RestTaskPatch,
   type RestTasks,
+  type RestTeam,
+  type RestTeamInput,
   type RestToken,
   type RestTokenCreated,
   type RestTokenInput,
@@ -178,6 +180,12 @@ export interface ConsoleActions {
   createListing(input: RestListingInput): Promise<RestListing>;
   /** Takes a listing away that nobody signed in with; for an administrator. */
   removeListing(id: string): Promise<void>;
+  /** The teams (ADR-0073): made, renamed and removed, a person put in or taken out; for an administrator. */
+  createTeam(input: RestTeamInput): Promise<RestTeam>;
+  renameTeam(id: string, input: RestTeamInput): Promise<RestTeam>;
+  removeTeam(id: string): Promise<void>;
+  addTeamMember(id: string, personId: string): Promise<RestTeam>;
+  removeTeamMember(id: string, personId: string): Promise<RestTeam>;
   /** Keeps the person's language (ADR-0065) or their front page. */
   updateMe(patch: RestMePatch): Promise<RestMe>;
   /** Changes the workspace's settings (ADR-0035); for an administrator. `me` says them from then on. */
@@ -231,6 +239,8 @@ export interface ConsoleData {
   readonly people: readonly RestPerson[];
   /** The logins let in that nobody has signed in with yet. */
   readonly listed: readonly RestListing[];
+  /** The teams of the workspace (ADR-0073), by name, each with the members the person may see. */
+  readonly teams: readonly RestTeam[];
   /** The organization at the git host that says who is in, where the deployment names one. */
   readonly organization: RestOrganization | null;
   /** The categories tasks are sorted into, by name. */
@@ -369,6 +379,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
   const [projects, setProjects] = useState<readonly RestProject[]>([]);
   const [people, setPeople] = useState<readonly RestPerson[]>([]);
   const [listed, setListed] = useState<readonly RestListing[]>([]);
+  const [teams, setTeams] = useState<readonly RestTeam[]>([]);
   const [organization, setOrganization] = useState<RestOrganization | null>(null);
   const [categories, setCategories] = useState<readonly RestCategory[]>([]);
   const [plugins, setPlugins] = useState<readonly RestPlugin[]>([]);
@@ -408,12 +419,14 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
   /** Loads the workspace's lists again. What fails stays as it was. */
   const refreshWorkspace = useCallback(
     async (signal?: AbortSignal) => {
-      const [nextProjects, nextPeople, nextCategories, nextPlugins] = await Promise.all([
+      const [nextProjects, nextPeople, nextCategories, nextPlugins, nextTeams] = await Promise.all([
         client.projects(signal),
         client.people(signal),
         client.categories(signal),
         // A console without plugins answers none; one older than them answers nothing, which is none too.
         client.plugins(signal).catch(() => ({ items: [], sql: false })),
+        // A console older than teams (ADR-0073) answers nothing, which is no team.
+        client.teams(signal).catch(() => ({ items: [] })),
       ]);
       if (signal?.aborted === true) {
         return;
@@ -421,6 +434,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
       setProjects(nextProjects.items);
       setPeople(nextPeople.items);
       setListed(nextPeople.listed);
+      setTeams(nextTeams.items);
       setOrganization(nextPeople.organization);
       setCategories(nextCategories.items);
       setPlugins(nextPlugins.items);
@@ -792,6 +806,30 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
         await client.removeListing(id);
         await refreshWorkspace();
       },
+      async createTeam(input) {
+        const team = await client.createTeam(input);
+        await refreshWorkspace();
+        return team;
+      },
+      async renameTeam(id, input) {
+        const team = await client.renameTeam(id, input);
+        await refreshWorkspace();
+        return team;
+      },
+      async removeTeam(id) {
+        await client.removeTeam(id);
+        await refreshWorkspace();
+      },
+      async addTeamMember(id, personId) {
+        const team = await client.addTeamMember(id, personId);
+        await refreshWorkspace();
+        return team;
+      },
+      async removeTeamMember(id, personId) {
+        const team = await client.removeTeamMember(id, personId);
+        await refreshWorkspace();
+        return team;
+      },
       async updateMe(patch) {
         const answer = await client.updateMe(patch);
         setMe(answer);
@@ -884,6 +922,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
     projects,
     people,
     listed,
+    teams,
     organization,
     categories,
     plugins,

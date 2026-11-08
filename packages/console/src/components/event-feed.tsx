@@ -47,11 +47,13 @@ function sentenceOf(event: RestEvent, words: Messages): string {
       ? feed.everyone
       : data.grantee !== undefined
         ? feed.thePlugin(data.grantee)
-        : data.login !== undefined
-          ? data.login
-          : data.key !== undefined
-            ? feed.membersOf(data.name ?? data.key)
-            : feed.someone;
+        : data.team !== undefined
+          ? feed.theTeam(data.team)
+          : data.login !== undefined
+            ? data.login
+            : data.key !== undefined
+              ? feed.membersOf(data.name ?? data.key)
+              : feed.someone;
   switch (event.kind) {
     case "person.joined":
       return feed.event.personJoined();
@@ -71,6 +73,16 @@ function sentenceOf(event: RestEvent, words: Messages): string {
         : feed.event.managerChanged(login, data.manager);
     case "person.email_changed":
       return data.set === true ? feed.event.emailChanged(login) : feed.event.emailCleared(login);
+    case "team.created":
+      return feed.event.teamCreated(data.team ?? feed.aTeam);
+    case "team.renamed":
+      return feed.event.teamRenamed(data.name ?? feed.aTeam, data.team ?? feed.aTeam);
+    case "team.removed":
+      return feed.event.teamRemoved(data.team ?? feed.aTeam);
+    case "team.member_added":
+      return feed.event.teamMemberAdded(login, data.team ?? feed.aTeam);
+    case "team.member_removed":
+      return feed.event.teamMemberRemoved(login, data.team ?? feed.aTeam);
     case "workspace.updated":
       return feed.event.workspaceUpdated(fields);
     case "project.created":

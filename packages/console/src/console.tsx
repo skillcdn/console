@@ -646,6 +646,8 @@ function PluginSettingsPage(props: {
       detail={detail}
       projects={data.projects}
       people={data.people}
+      plugins={data.plugins}
+      teams={data.teams}
       language={language}
       client={client}
       onChanged={async () => {
@@ -2636,6 +2638,28 @@ function WorkspacePage(props: {
           onUnlist={
             administrator
               ? (listing) => void act(() => data.actions.removeListing(listing.id))
+              : undefined
+          }
+          teams={data.teams}
+          onCreateTeam={
+            administrator ? (name) => void act(() => data.actions.createTeam({ name })) : undefined
+          }
+          onRenameTeam={
+            administrator
+              ? (team, name) => void act(() => data.actions.renameTeam(team.id, { name }))
+              : undefined
+          }
+          onRemoveTeam={
+            administrator ? (team) => void act(() => data.actions.removeTeam(team.id)) : undefined
+          }
+          onJoinTeam={
+            administrator
+              ? (person, team) => void act(() => data.actions.addTeamMember(team.id, person.id))
+              : undefined
+          }
+          onLeaveTeam={
+            administrator
+              ? (person, team) => void act(() => data.actions.removeTeamMember(team.id, person.id))
               : undefined
           }
           workHref={oversees ? (person) => personWorkHref(person.id) : undefined}

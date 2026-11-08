@@ -48,6 +48,7 @@ import {
   type RestSkillLoad,
   type RestSkills,
   type RestTaskPatch,
+  type RestTeam,
 } from "../schemas.js";
 import {
   COLOR_NAMES,
@@ -117,6 +118,7 @@ import {
   formatRunLine,
   formatTask,
   formatTaskLine,
+  formatTeamLine,
   formatVersion,
   formatVersionLine,
   formatWork,
@@ -3303,6 +3305,86 @@ const people: Command = async (args, io) => {
   return EXIT.ok;
 };
 
+/** The teams of the workspace (ADR-0073): each with who is in it, by login. */
+const teams: Command = async (args, io) => {
+  const { values } = parse(args, {}, false);
+  const session = await open(io, values);
+  const [found, everyone] = await Promise.all([session.client.teams(), session.client.people()]);
+  const loginOf = new Map(everyone.items.map((person) => [person.id, person.login]));
+  answer(io, session, found, () =>
+    found.items.length === 0
+      ? "No teams yet. console team new <name> makes one."
+      : found.items.map((team) => formatTeamLine(team, loginOf)).join("\n"),
+  );
+  return EXIT.ok;
+};
+
+const TEAM_USAGE =
+  "Say what to do: console team new <name>  |  team rename <name> <new name>  |  team remove <name>  |  team add <name> <login>  |  team drop <name> <login>";
+
+/** A team by its name, compared without regard to case, among the workspace's. */
+async function teamNamed(session: Session, name: string): Promise<RestTeam> {
+  const { items } = await session.client.teams();
+  const found = items.find((team) => team.name.toLowerCase() === name.trim().toLowerCase());
+  if (found === undefined) {
+    throw failed(`No team is called ${name}. console teams lists them.`);
+  }
+  return found;
+}
+
+const team: Command = async (args, io) => {
+  const what = args[0];
+  if (what === "new") {
+    const { values, positionals } = parse(args.slice(1), {});
+    const name = theOne(positionals, "Say the name: console team new <name>");
+    const session = await open(io, values);
+    const made = await session.client.createTeam({ name });
+    answer(io, session, made, () => formatTeamLine(made, new Map()));
+    return EXIT.ok;
+  }
+  if (what === "rename") {
+    const { values, positionals } = parse(args.slice(1), {});
+    const [name, next] = theTwo(
+      positionals,
+      "Say which team and its new name: console team rename <name> <new name>",
+    );
+    const session = await open(io, values);
+    const found = await teamNamed(session, name);
+    const changed = await session.client.renameTeam(found.id, { name: next });
+    answer(io, session, changed, () => formatTeamLine(changed, new Map()));
+    return EXIT.ok;
+  }
+  if (what === "remove") {
+    const { values, positionals } = parse(args.slice(1), {});
+    const name = theOne(positionals, "Say which team: console team remove <name>");
+    const session = await open(io, values);
+    const found = await teamNamed(session, name);
+    await session.client.removeTeam(found.id);
+    answer(io, session, { removed: found }, () => `The team ${found.name} is no more.`);
+    return EXIT.ok;
+  }
+  if (what === "add" || what === "drop") {
+    const { values, positionals } = parse(args.slice(1), {});
+    const [name, login] = theTwo(
+      positionals,
+      `Say which team and whom: console team ${what} <name> <login>`,
+    );
+    const session = await open(io, values);
+    const found = await teamNamed(session, name);
+    const person = await personOf(session, login);
+    const changed =
+      what === "add"
+        ? await session.client.addTeamMember(found.id, person.id)
+        : await session.client.removeTeamMember(found.id, person.id);
+    const everyone = await session.client.people();
+    answer(io, session, changed, () =>
+      formatTeamLine(changed, new Map(everyone.items.map((one) => [one.id, one.login]))),
+    );
+    return EXIT.ok;
+  }
+  throw misuse(TEAM_USAGE);
+};
+
 // The workspace's settings (ADR-0035): read by everyone, changed by an administrator, themselves
 // on the Settings page or through their agent here (ADR-0021).
 const WORKSPACE_FLAGS =
@@ -3871,6 +3953,8 @@ const COMMANDS: Readonly<Record<string, Command>> = {
   plugin,
   people,
   person,
+  teams,
+  team,
   workspace,
   project,
   members,

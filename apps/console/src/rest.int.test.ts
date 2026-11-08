@@ -61,6 +61,8 @@ import {
   restSkillsSchema,
   restTaskSchema,
   restTasksSchema,
+  restTeamSchema,
+  restTeamsSchema,
   restTokenCreatedSchema,
   restTokensSchema,
   restVersionSchema,
@@ -4972,5 +4974,80 @@ describe("the workspace's SkillCDN token (ADR-0036)", () => {
     } finally {
       await token(h, admin, "DELETE");
     }
+  });
+});
+
+describe("teams", () => {
+  it("keeps teams: a name and its members, made by an administrator, read by everyone with the members they see (ADR-0073)", async () => {
+    // An administrator keeps the teams; a member reads them. Two people no other test leans on,
+    // since the harness makes one of them an administrator of the shared workspace.
+    const keeping = createHarness(testDatabase, {
+      providers: [createFixtureProvider(), createFixtureProvider("google")],
+      listed: ["dave@acme.test", "erin@mail.test"],
+      admins: ["erin@mail.test"],
+    });
+    const admin = await keeping.signIn("erin");
+    const member = await keeping.signIn("dave");
+    const call = (
+      cookie: string,
+      method: "POST" | "PATCH" | "DELETE",
+      path: string,
+      body?: unknown,
+    ) =>
+      keeping.request(path, {
+        method,
+        headers: { cookie, origin: SIGN_IN_URL, "content-type": "application/json" },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+    const read = async (cookie: string, path: string) =>
+      (await keeping.request(path, { headers: { cookie } })).json();
+    const people = restPeopleSchema.parse(await read(admin, REST_ROUTES.people));
+    const bobId = people.items.find((person) => person.login === "dave@acme.test")?.id ?? "";
+    const made = await call(admin, "POST", REST_ROUTES.teams, { name: "Platform" });
+    expect(made.status, await made.clone().text()).toBe(201);
+    const team = restTeamSchema.parse(await made.json());
+    expect(team).toMatchObject({ name: "Platform", memberIds: [] });
+    // A member keeps no team; a name is one per workspace, whatever its case.
+    expect((await call(member, "POST", REST_ROUTES.teams, { name: "Ops" })).status).toBe(403);
+    expect((await call(admin, "POST", REST_ROUTES.teams, { name: "platform" })).status).toBe(409);
+    const joined = await call(admin, "POST", `${REST_ROUTES.teams}/${team.id}/members`, {
+      personId: bobId,
+    });
+    expect(joined.status, await joined.clone().text()).toBe(200);
+    expect(restTeamSchema.parse(await joined.json()).memberIds).toEqual([bobId]);
+    const renamed = await call(admin, "PATCH", `${REST_ROUTES.teams}/${team.id}`, {
+      name: "Platform team",
+    });
+    expect(renamed.status).toBe(200);
+    // Everyone reads the teams, and the people listing names each person's teams.
+    const listed = restTeamsSchema.parse(await read(member, REST_ROUTES.teams));
+    expect(listed.items).toEqual([
+      expect.objectContaining({ id: team.id, name: "Platform team", memberIds: [bobId] }),
+    ]);
+    const listedPeople = restPeopleSchema.parse(await read(member, REST_ROUTES.people));
+    expect(listedPeople.items.find((person) => person.id === bobId)?.teamIds).toEqual([team.id]);
+    // The person is taken out, once; the team is removed with what it held, once.
+    const left = await call(admin, "DELETE", `${REST_ROUTES.teams}/${team.id}/members/${bobId}`);
+    expect(left.status).toBe(200);
+    expect(
+      (await call(admin, "DELETE", `${REST_ROUTES.teams}/${team.id}/members/${bobId}`)).status,
+    ).toBe(409);
+    expect((await call(admin, "DELETE", `${REST_ROUTES.teams}/${team.id}`)).status).toBe(204);
+    expect((await call(admin, "DELETE", `${REST_ROUTES.teams}/${team.id}`)).status).toBe(404);
+    // The feed says each step, as the workspace's own.
+    const events = restEventsSchema.parse(await read(admin, `${REST_ROUTES.events}?after=0`));
+    expect(
+      events.items
+        .filter((event) => event.kind.startsWith("team."))
+        .map((event) => [event.kind, event.data.team, event.data.login ?? event.data.name]),
+    ).toEqual(
+      expect.arrayContaining([
+        ["team.created", "Platform", undefined],
+        ["team.member_added", "Platform", "dave@acme.test"],
+        ["team.renamed", "Platform team", "Platform"],
+        ["team.member_removed", "Platform team", "dave@acme.test"],
+        ["team.removed", "Platform team", undefined],
+      ]),
+    );
   });
 });

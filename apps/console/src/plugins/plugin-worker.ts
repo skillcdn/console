@@ -186,6 +186,10 @@ function contextOf(
         get: group("console.people")("get") as never,
         granted: group("console.people")("granted") as never,
       },
+      teams: {
+        list: group("console.teams")("list") as never,
+        get: group("console.teams")("get") as never,
+      },
       projects: {
         list: group("console.projects")("list") as never,
         get: group("console.projects")("get") as never,

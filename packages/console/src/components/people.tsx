@@ -10,12 +10,13 @@ import {
   type RestOrganization,
   type RestPerson,
   type RestProvider,
+  type RestTeam,
 } from "../api.js";
 import { useWords } from "../i18n/index.js";
-import { MAX_LOGIN_LENGTH } from "../limits.js";
+import { MAX_LOGIN_LENGTH, MAX_TEAM_NAME_LENGTH } from "../limits.js";
 import { PERSON_ROLES } from "../vocabulary.js";
 import { Picker } from "./picker.js";
-import { peopleSearch } from "./searches.js";
+import { listSearch, peopleSearch } from "./searches.js";
 import { Avatar, Badge, Button, PersonChip, personName, RoleBadge, Time, Workers } from "./ui.js";
 
 // The people of the board, with what each may do and whether they are in (ADR-0022): those in,
@@ -45,6 +46,14 @@ export interface PeopleListProps {
   readonly onChangeEmail?: ((person: RestPerson, email: string | null) => void) | undefined;
   /** Called when an administrator takes a listing away. Left out, listings are read here. */
   readonly onUnlist?: ((listing: RestListing) => void) | undefined;
+  /** The teams of the workspace (ADR-0073), each with the members the person may see; left out, none are shown. */
+  readonly teams?: readonly RestTeam[] | undefined;
+  /** The ways an administrator keeps the teams. Left out, the teams are read here. */
+  readonly onCreateTeam?: ((name: string) => void) | undefined;
+  readonly onRenameTeam?: ((team: RestTeam, name: string) => void) | undefined;
+  readonly onRemoveTeam?: ((team: RestTeam) => void) | undefined;
+  readonly onJoinTeam?: ((person: RestPerson, team: RestTeam) => void) | undefined;
+  readonly onLeaveTeam?: ((person: RestPerson, team: RestTeam) => void) | undefined;
   /** Where a person's work is seen; given to an administrator, or an owner of a project. */
   readonly workHref?: ((person: RestPerson) => string) | undefined;
   /** Where a person's agents are seen; given to an administrator. */
@@ -103,6 +112,12 @@ export function PeopleList(props: PeopleListProps) {
     props.me?.id !== person.id;
   const organization = props.organization ?? undefined;
   const byId = new Map(props.people.map((person) => [person.id, person]));
+  const teamList = props.teams ?? [];
+  /** The teams the person is in, and those they could be put in. */
+  const teamsOf = (person: RestPerson): readonly RestTeam[] =>
+    teamList.filter((team) => team.memberIds.includes(person.id));
+  const teamsToJoin = (person: RestPerson): readonly RestTeam[] =>
+    teamList.filter((team) => !team.memberIds.includes(person.id));
   /** The person's manager, where they have one that can be named here. */
   const managerOf = (person: RestPerson): RestPerson | undefined =>
     person.managerId === null || person.managerId === undefined
@@ -239,6 +254,50 @@ export function PeopleList(props: PeopleListProps) {
                     </dd>
                   </div>
                 )}
+                {(teamsOf(person).length > 0 ||
+                  (props.onJoinTeam !== undefined && teamsToJoin(person).length > 0)) && (
+                  <div className="sc-person-fact">
+                    <dt>{people.teams}</dt>
+                    <dd>
+                      <div className="sc-chips">
+                        {teamsOf(person).map((joined) => (
+                          <span key={joined.id} className="sc-chip">
+                            {joined.name}
+                            {props.onLeaveTeam !== undefined && (
+                              <button
+                                type="button"
+                                className="sc-chip-remove"
+                                aria-label={`${words.common.remove}: ${joined.name}`}
+                                disabled={props.busy === true}
+                                onClick={() => props.onLeaveTeam?.(person, joined)}
+                              >
+                                <span aria-hidden="true">&times;</span>
+                              </button>
+                            )}
+                          </span>
+                        ))}
+                        {props.onJoinTeam !== undefined && teamsToJoin(person).length > 0 && (
+                          <Picker<RestTeam>
+                            value={undefined}
+                            search={listSearch(teamsToJoin(person), (candidate, typed) =>
+                              candidate.name.toLowerCase().includes(typed),
+                            )}
+                            keyOf={(candidate) => candidate.id}
+                            render={(candidate) => candidate.name}
+                            label={people.joinTeamOf(personName(person))}
+                            placeholder={people.joinTeam}
+                            disabled={props.busy === true}
+                            onChange={(candidate) => {
+                              if (candidate !== undefined) {
+                                props.onJoinTeam?.(person, candidate);
+                              }
+                            }}
+                          />
+                        )}
+                      </div>
+                    </dd>
+                  </div>
+                )}
               </dl>
               {hasWays && (
                 <div className="sc-person-card-ways">
@@ -338,7 +397,147 @@ export function PeopleList(props: PeopleListProps) {
           </ul>
         </section>
       )}
+      {props.teams !== undefined && (
+        <TeamSection
+          teams={props.teams}
+          byId={byId}
+          busy={props.busy === true}
+          onCreateTeam={props.onCreateTeam}
+          onRenameTeam={props.onRenameTeam}
+          onRemoveTeam={props.onRemoveTeam}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * A team's name as an administrator writes it anew: kept while typed, written when the field is
+ * left or Enter is pressed, and only where it changed; emptied, it goes back to the name.
+ */
+function TeamNameField(props: {
+  readonly team: RestTeam;
+  readonly label: string;
+  readonly busy: boolean;
+  readonly onChange: (name: string) => void;
+}) {
+  const current = props.team.name;
+  const [value, setValue] = useState(current);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the field follows the name as the console answers it
+  useEffect(() => setValue(current), [current, props.team.id]);
+  const commit = () => {
+    const next = value.trim();
+    if (next === "") {
+      setValue(current);
+    } else if (next !== current) {
+      props.onChange(next);
+    }
+  };
+  return (
+    <input
+      className="sc-input sc-input-quiet"
+      aria-label={props.label}
+      value={value}
+      maxLength={MAX_TEAM_NAME_LENGTH}
+      disabled={props.busy}
+      onChange={(event) => setValue(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          commit();
+        }
+      }}
+    />
+  );
+}
+
+/**
+ * The teams of the workspace (ADR-0073): each with who is in it, among the people the page
+ * holds; for an administrator, named anew, removed, and a new one made.
+ */
+function TeamSection(props: {
+  readonly teams: readonly RestTeam[];
+  readonly byId: ReadonlyMap<string, RestPerson>;
+  readonly busy: boolean;
+  readonly onCreateTeam?: ((name: string) => void) | undefined;
+  readonly onRenameTeam?: ((team: RestTeam, name: string) => void) | undefined;
+  readonly onRemoveTeam?: ((team: RestTeam) => void) | undefined;
+}) {
+  const words = useWords();
+  const people = words.people;
+  const [draft, setDraft] = useState("");
+  return (
+    <section className="sc-people-section" aria-label={people.teams}>
+      <h2 className="sc-section-title">{people.teams}</h2>
+      {props.teams.length === 0 && <p className="sc-muted">{people.teamsNone}</p>}
+      {props.teams.length > 0 && (
+        <ul className="sc-people">
+          {props.teams.map((team) => {
+            const members = team.memberIds.flatMap((id) => {
+              const member = props.byId.get(id);
+              return member === undefined ? [] : [member];
+            });
+            return (
+              <li key={team.id} className="sc-person-row">
+                {props.onRenameTeam === undefined ? (
+                  <span className="sc-person-login">{team.name}</span>
+                ) : (
+                  <TeamNameField
+                    team={team}
+                    label={people.teamNameOf(team.name)}
+                    busy={props.busy}
+                    onChange={(name) => props.onRenameTeam?.(team, name)}
+                  />
+                )}
+                <span className="sc-person-name sc-muted">
+                  {people.teamMembers(team.memberIds.length)}
+                </span>
+                {members.length > 0 && <Workers workers={members} />}
+                {props.onRemoveTeam !== undefined && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={props.busy}
+                    onClick={() => props.onRemoveTeam?.(team)}
+                  >
+                    {words.common.remove}
+                  </Button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {props.onCreateTeam !== undefined && (
+        <form
+          className="sc-form sc-member-form"
+          aria-label={people.newTeam}
+          onSubmit={(event) => {
+            event.preventDefault();
+            const name = draft.trim();
+            if (name.length > 0) {
+              props.onCreateTeam?.(name);
+              setDraft("");
+            }
+          }}
+        >
+          <label className="sc-field">
+            <span className="sc-field-label">{people.teamName}</span>
+            <input
+              className="sc-input"
+              value={draft}
+              maxLength={MAX_TEAM_NAME_LENGTH}
+              disabled={props.busy}
+              onChange={(event) => setDraft(event.target.value)}
+            />
+          </label>
+          <Button type="submit" disabled={props.busy || draft.trim().length === 0}>
+            {people.newTeam}
+          </Button>
+        </form>
+      )}
+    </section>
   );
 }
 

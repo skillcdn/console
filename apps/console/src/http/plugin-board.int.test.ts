@@ -294,6 +294,39 @@ describe("what a plugin reads of the people (ADR-0063)", () => {
     };
     await revoke(granted);
     expect((await asked("approver")).data).toEqual([]);
+    // A role granted to a team (ADR-0073) is held by whoever is in it, as the membership stands.
+    const crew = await h.request(REST_ROUTES.teams, json({ name: "Approvers" }, admin));
+    expect(crew.status, await crew.clone().text()).toBe(201);
+    const crewId = ((await crew.json()) as { id: string }).id;
+    const toCrew = await h.request(
+      pluginPath("leave", "grants"),
+      json({ role: "approver", team: crewId }, admin),
+    );
+    expect(toCrew.status, await toCrew.clone().text()).toBe(201);
+    expect((await asked("approver")).data).toEqual([]);
+    expect(
+      (await h.request(`${REST_ROUTES.teams}/${crewId}/members`, json({ personId: bobId }, admin)))
+        .status,
+    ).toBe(200);
+    expect((await asked("approver")).data).toEqual(["bob"]);
+    expect(
+      (
+        await h.request(`${REST_ROUTES.teams}/${crewId}/members/${bobId}`, {
+          method: "DELETE",
+          headers: { cookie: admin, origin: SIGN_IN_URL },
+        })
+      ).status,
+    ).toBe(200);
+    expect((await asked("approver")).data).toEqual([]);
+    await revoke(toCrew);
+    expect(
+      (
+        await h.request(`${REST_ROUTES.teams}/${crewId}`, {
+          method: "DELETE",
+          headers: { cookie: admin, origin: SIGN_IN_URL },
+        })
+      ).status,
+    ).toBe(204);
     // Through a project, it is everyone in the project, an open one having all of the workspace.
     const open = await h.request(
       REST_ROUTES.projects,
@@ -593,14 +626,26 @@ describe("a plugin on the board", () => {
     );
     expect(page.plugin).toBe("leave");
     expect(page.updatedBy.login).toBe("bob");
+    // A team of the workspace (ADR-0073), with bob in it, read by the plugin with the people.
+    const crew = await h.request(REST_ROUTES.teams, json({ name: "Crew" }, admin));
+    expect(crew.status, await crew.clone().text()).toBe(201);
+    const crewId = ((await crew.json()) as { id: string }).id;
+    expect(
+      (await h.request(`${REST_ROUTES.teams}/${crewId}/members`, json({ personId: bobId }, admin)))
+        .status,
+    ).toBe(200);
     const seen = await invoked("leave", member, ["people"]);
     const data = seen.data as {
       people: string[];
+      teams: string[];
+      teamsOf: Record<string, string[]>;
       projects: string;
       workspace: { name: string; timeZone: string; languages: string[] };
       endpoint: string;
     };
     expect(data.people).toEqual(expect.arrayContaining([aliceLogin, "bob"]));
+    expect(data.teams).toEqual(["Crew"]);
+    expect(data.teamsOf.bob).toEqual([crewId]);
     expect(data.projects).toBe("plugin.forbidden");
     // UTC because nobody set a zone, and said so; the console's public address, for a link elsewhere.
     expect(data.workspace).toMatchObject({

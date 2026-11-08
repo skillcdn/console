@@ -48,6 +48,10 @@ export const MAX_FILE_NAME_LENGTH = 200;
 export const MAX_TOKEN_NAME_LENGTH = 80;
 /** A login at a git host, or an address at a Workspace, as an administrator lists one. */
 export const MAX_LOGIN_LENGTH = 254;
+/** A team's name (ADR-0073). */
+export const MAX_TEAM_NAME_LENGTH = 60;
+/** How many teams one workspace may hold. */
+export const MAX_TEAMS = 200;
 /** How long a token may be good for, in days, and how long one is when nothing is said. */
 export const MAX_TOKEN_DAYS = 365;
 export const DEFAULT_TOKEN_DAYS = 90;

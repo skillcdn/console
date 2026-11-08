@@ -30,6 +30,7 @@ import type {
   RestRulesPlugin,
   RestRun,
   RestTask,
+  RestTeam,
   RestVersion,
   RestVersionSummary,
   RestWork,
@@ -791,6 +792,13 @@ export function formatPluginGrantLine(grant: RestPluginGrant): string {
           ? `the members of ${grant.project.key}`
           : "everyone";
   return `${grant.id}  ${grant.role} to ${whom}  since ${moment(grant.createdAt)}`;
+}
+
+/** A team in a line (ADR-0073): its name, how many are in it, and their logins. */
+export function formatTeamLine(team: RestTeam, loginOf: ReadonlyMap<string, string>): string {
+  const logins = team.memberIds.map((id) => loginOf.get(id) ?? id);
+  const count = team.memberIds.length === 1 ? "1 member" : `${team.memberIds.length} members`;
+  return `${team.name}  ${count}${logins.length === 0 ? "" : `: ${logins.join(", ")}`}`;
 }
 
 /** One plugin in full: what it is, how it stands, what one may run, its skills and its settings. */

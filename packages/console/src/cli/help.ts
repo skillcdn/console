@@ -229,6 +229,28 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     about:
       "The people of the workspace you see, by login, with their name where the host gives one and what they are in it: admin, who configures the workspace, or member, who works in the projects they are in; a person taken out is marked deactivated. Everyone, unless the workspace shows a member only the people they share a project with (console workspace says which; an administrator sees everyone). Then, where you see everyone, the logins an administrator let in that nobody has signed in with yet. The logins are what --worker, member and person take; a login is found exactly, so an owner lists someone the list does not show.",
   },
+  teams: {
+    usage: "teams",
+    synopsis: "The teams of the workspace, each with who is in it.",
+    about:
+      "The teams of the workspace (a name and its members: a unit to call people by, and to grant a plugin's role to, ADR-0073), by name, each with how many are in it and their logins. console team makes and keeps them, for an administrator.",
+  },
+  team: {
+    usage:
+      "team new <name>  |  team rename <name> <new name>  |  team remove <name>  |  team add <name> <login>  |  team drop <name> <login>",
+    synopsis:
+      "Makes, renames or removes a team, or puts a person in one or takes them out; for an administrator.",
+    about:
+      "For an administrator: a team is a name, one per workspace, and its members, any number per person. new makes one; rename gives it another name; remove takes it away, with its memberships and the plugin roles granted to it; add and drop put a person in and take them out, by login. The board records each as the workspace's own event, and a plugin with people:read:all hears of them.",
+    refusals: [
+      "auth.forbidden: only an administrator keeps the teams",
+      "team.not_found: no team has that name",
+      "team.name_taken: a team of that name is there already",
+      "team.too_many: the workspace holds as many teams as one may",
+      "team.invalid_member: the person is not an active person of the workspace",
+      "team.not_a_member: the person is not in the team",
+    ],
+  },
   workspace: {
     usage:
       "workspace  |  workspace edit [--people-visibility <everyone|shared-projects>] [--week-start <auto|monday|sunday>] [--time-zone <zone|none>]  |  workspace pack-token --connect  |  workspace pack-token --stdin  |  workspace pack-token --remove",

@@ -173,6 +173,9 @@ export default {
         text: String(people.length),
         data: {
           people: people.map((p) => p.login),
+          // The teams (ADR-0073), and whose each person is in.
+          teams: (await ctx.console.teams.list()).map((team) => team.name),
+          teamsOf: Object.fromEntries(people.map((p) => [p.login, p.teamIds ?? []])),
           // The work email, where the plugin holds people:read:email; nothing otherwise.
           emails: Object.fromEntries(people.map((p) => [p.login, p.email ?? null])),
           projects,

@@ -55,6 +55,7 @@ import { type PluginInstallRecord, peopleGranted } from "../db/queries/plugins.j
 import { findProjectFor, listMembers, listProjectsFor } from "../db/queries/projects.js";
 import { findRun, listRuns } from "../db/queries/runs.js";
 import { createTask, findTaskByNumber, listTasks, updateTask } from "../db/queries/tasks.js";
+import { findTeam, listTeams, teamIdsByPerson } from "../db/queries/teams.js";
 import { readWorkspaceSettings, type WorkspaceRecord } from "../db/queries/workspaces.js";
 import { DomainError } from "../errors.js";
 import {
@@ -69,6 +70,7 @@ import {
   restProject,
   restRun,
   restTask,
+  restTeam,
 } from "../http/rest-shapes.js";
 import type { Clock } from "../ports/clock.js";
 import type { RecordStore } from "./records.js";
@@ -269,10 +271,15 @@ export class PluginBoard {
           ? sql`true`
           : personVisibleTo(viewer, settings);
         const people = await listPeople(this.options.database, workspace.id, { visible });
-        // The work email with `people:read:email` alone, to match a person to an account elsewhere.
-        const shape = context.consent.includes("people:read:email")
-          ? restPersonWithEmail
-          : restPerson;
+        // The work email with `people:read:email` alone, to match a person to an account elsewhere;
+        // the teams each is in (ADR-0073) with every reading.
+        const teamIdsOf = await teamIdsByPerson(this.options.database, workspace.id);
+        const shape = (person: PersonRecord) => ({
+          ...(context.consent.includes("people:read:email")
+            ? restPersonWithEmail(person)
+            : restPerson(person)),
+          teamIds: teamIdsOf.get(person.id) ?? [],
+        });
         if (method === "list") {
           const options = (args[0] ?? {}) as { readonly q?: unknown };
           const words = typeof options.q === "string" ? options.q.trim().toLowerCase() : "";
@@ -312,6 +319,35 @@ export class PluginBoard {
             )
             .slice(0, READ_LIMIT)
             .map(shape);
+        }
+        break;
+      }
+      case "console.teams": {
+        // The teams (ADR-0073), with the members among the people the caller may see.
+        needs(actsAsPerson(context.caller) ? "people:read" : "people:read:all");
+        const viewer = await this.actingPerson(context, workspace);
+        const settings = await readWorkspaceSettings(this.options.database, workspace.id);
+        const visible = new Set(
+          (
+            await listPeople(this.options.database, workspace.id, {
+              visible: context.consent.includes("people:read:all")
+                ? sql`true`
+                : personVisibleTo(viewer, settings),
+            })
+          ).map((person) => person.id),
+        );
+        if (method === "list") {
+          return (await listTeams(this.options.database, workspace.id)).map((team) =>
+            restTeam(team, visible),
+          );
+        }
+        if (method === "get") {
+          const team = await findTeam(
+            this.options.database,
+            workspace.id,
+            text(args[0], "the team's id"),
+          );
+          return team === undefined ? null : restTeam(team, visible);
         }
         break;
       }

@@ -14,6 +14,7 @@ import type {
   RestRules,
   RestRun,
   RestTask,
+  RestTeam,
   RestToken,
   RestVersion,
   RestVersionSummary,
@@ -35,6 +36,7 @@ import type { MemberRecord, ProjectView } from "../db/queries/projects.js";
 import type { RulesRecord } from "../db/queries/rules.js";
 import type { RunRecord } from "../db/queries/runs.js";
 import type { TaskRecord } from "../db/queries/tasks.js";
+import type { TeamRecord } from "../db/queries/teams.js";
 import type { TokenRecord } from "../db/queries/tokens.js";
 
 // What the records of the database are on the wire. The shapes are the package's; this is the
@@ -62,6 +64,17 @@ export function restPerson(person: PersonRecord): RestPerson {
  */
 export function restPersonWithEmail(person: PersonRecord): RestPerson {
   return { ...restPerson(person), email: person.email ?? null };
+}
+
+/** A team (ADR-0073), with the members among `visible`, or every member where nobody narrows the reading. */
+export function restTeam(team: TeamRecord, visible?: ReadonlySet<string>): RestTeam {
+  return {
+    id: team.id,
+    name: team.name,
+    memberIds:
+      visible === undefined ? [...team.memberIds] : team.memberIds.filter((id) => visible.has(id)),
+    createdAt: team.createdAt.toISOString(),
+  };
 }
 
 /** A login let in that nobody has signed in with yet (ADR-0022). */

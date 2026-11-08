@@ -91,6 +91,9 @@ import {
   type RestTaskInput,
   type RestTaskPatch,
   type RestTasks,
+  type RestTeam,
+  type RestTeamInput,
+  type RestTeams,
   type RestTokenCreated,
   type RestTokenInput,
   type RestTokens,
@@ -150,6 +153,8 @@ import {
   restSkillsSchema,
   restTaskSchema,
   restTasksSchema,
+  restTeamSchema,
+  restTeamsSchema,
   restTokenCreatedSchema,
   restTokensSchema,
   restVersionSchema,
@@ -591,6 +596,14 @@ export interface ConsoleClient {
   createListing(input: RestListingInput): Promise<RestListing>;
   /** Takes a listing away before anyone signed in with it; for an administrator. */
   removeListing(id: string): Promise<void>;
+  /** The teams of the workspace (ADR-0073), each with the members the asker may see. */
+  teams(signal?: AbortSignal): Promise<RestTeams>;
+  /** Makes, renames and removes a team, and puts a person in one or takes them out; for an administrator. */
+  createTeam(input: RestTeamInput): Promise<RestTeam>;
+  renameTeam(id: string, input: RestTeamInput): Promise<RestTeam>;
+  removeTeam(id: string): Promise<void>;
+  addTeamMember(id: string, personId: string): Promise<RestTeam>;
+  removeTeamMember(id: string, personId: string): Promise<RestTeam>;
   /** The projects the asker may see, with what they are in each. */
   projects(signal?: AbortSignal): Promise<RestProjects>;
   /** Makes a project, whose owner the asker becomes. */
@@ -1302,6 +1315,21 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
       request("POST", `${base}${REST_ROUTES.listings}`, input, restListingSchema),
     removeListing: (id) =>
       request("DELETE", `${base}${restPath("listings", id)}`, undefined, undefined),
+    teams: (signal) =>
+      request("GET", `${base}${REST_ROUTES.teams}`, undefined, restTeamsSchema, signal),
+    createTeam: (input) => request("POST", `${base}${REST_ROUTES.teams}`, input, restTeamSchema),
+    renameTeam: (id, input) =>
+      request("PATCH", `${base}${restPath("teams", id)}`, input, restTeamSchema),
+    removeTeam: (id) => request("DELETE", `${base}${restPath("teams", id)}`, undefined, undefined),
+    addTeamMember: (id, personId) =>
+      request("POST", `${base}${restPath("teams", id)}/members`, { personId }, restTeamSchema),
+    removeTeamMember: (id, personId) =>
+      request(
+        "DELETE",
+        `${base}${restPath("teams", id)}/members/${encodeURIComponent(personId)}`,
+        undefined,
+        restTeamSchema,
+      ),
     projects: (signal) =>
       request("GET", `${base}${REST_ROUTES.projects}`, undefined, restProjectsSchema, signal),
     createProject: (input) =>

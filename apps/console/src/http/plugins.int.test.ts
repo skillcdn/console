@@ -302,6 +302,21 @@ describe("the plugins' routes", () => {
     const me = (await (
       await h.request(REST_ROUTES.me, { headers: { cookie: member } })
     ).json()) as { person: { id: string } };
+    // To a team (ADR-0073): whoever is in it holds the role, as the membership stands.
+    const teamMade = await h.request(REST_ROUTES.teams, json({ name: "Greeters" }, admin));
+    expect(teamMade.status, await teamMade.clone().text()).toBe(201);
+    const teamId = ((await teamMade.json()) as { id: string }).id;
+    const toTeam = await h.request(
+      pluginPath("hello", "grants"),
+      json({ role: "greeter", team: teamId }, admin),
+    );
+    expect(toTeam.status).toBe(201);
+    expect(restPluginGrantSchema.parse(await toTeam.json())).toMatchObject({
+      role: "greeter",
+      team: { id: teamId, name: "Greeters" },
+    });
+    // Whoever is in the team holds the role as the membership stands: plugin-board.int.test.ts
+    // shows it on a role that is not everyone's; greeter is hello's default role.
     const granted = await h.request(
       pluginPath("hello", "grants"),
       json({ role: "greeter", person: me.person.id }, admin),
@@ -320,7 +335,7 @@ describe("the plugins' routes", () => {
     );
     expect(again.status).toBe(409);
     const listed = await h.request(pluginPath("hello", "grants"), { headers: { cookie: admin } });
-    expect(restPluginGrantsSchema.parse(await listed.json()).items).toHaveLength(2);
+    expect(restPluginGrantsSchema.parse(await listed.json()).items).toHaveLength(3);
     const revoked = await h.request(pluginPath("hello", "grants", grant.id), {
       method: "DELETE",
       headers: { cookie: admin, origin: SIGN_IN_URL },
@@ -344,6 +359,7 @@ describe("the plugins' routes", () => {
     ).toEqual([
       expect.objectContaining({ role: "greeter", login: "bob", everyone: false }),
       expect.objectContaining({ role: "greeter", login: "bob", everyone: false }),
+      expect.objectContaining({ role: "greeter", team: "Greeters", everyone: false }),
       expect.objectContaining({ role: "greeter", grantee: "evil", everyone: false }),
     ]);
   });

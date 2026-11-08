@@ -198,6 +198,8 @@ export const restPluginGrantSchema = z.object({
   everyone: z.boolean(),
   /** The plugin the role went to (ADR-0072), by key, or `null`; answered from 0.4.5 and read as optional. */
   plugin: z.optional(z.nullable(z.string())),
+  /** The team the role went to (ADR-0073), whose members hold it, or `null`; answered from 0.4.5 and read as optional. */
+  team: z.optional(z.nullable(z.object({ id: uuid, name: z.string() }))),
   createdAt: instant,
 });
 export type RestPluginGrant = z.infer<typeof restPluginGrantSchema>;
@@ -296,6 +298,8 @@ export const restPluginGrantInputSchema = z
     project: z.optional(projectKey),
     /** A plugin, by key, to hold the role as itself (ADR-0072). */
     plugin: z.optional(pluginKey),
+    /** A team, by id, whose members hold the role (ADR-0073). */
+    team: z.optional(uuid),
     everyone: z.optional(z.literal(true)),
   })
   .check(
@@ -305,6 +309,7 @@ export const restPluginGrantInputSchema = z
           input.person !== undefined,
           input.project !== undefined,
           input.plugin !== undefined,
+          input.team !== undefined,
           input.everyone === true,
         ].filter(Boolean).length === 1,
       "names a person, a project or everyone, one of the three",

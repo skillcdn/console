@@ -171,6 +171,45 @@ export const people = pgTable(
  * stays let in and no other account can take the login. Deactivating a listed person takes the
  * row away with their standing; reactivating them lists them again. Rows go with their person.
  */
+/**
+ * A team of the workspace (ADR-0073): a name and its members, a unit to call people by and to
+ * grant a plugin's role to; no head and no team above it, since the reporting line says who is
+ * above whom.
+ */
+export const teams = pgTable(
+  "teams",
+  {
+    id: id(),
+    workspaceId: uuid()
+      .notNull()
+      .references(() => workspaces.id),
+    /** As the administrator spelled it; one per workspace without regard to case. */
+    name: text().notNull(),
+    createdAt: createdAt(),
+    createdBy: uuid().references(() => people.id),
+  },
+  (table) => [uniqueIndex("teams_name_key").on(table.workspaceId, sql`lower(${table.name})`)],
+);
+
+/** Who is in a team: a person is in any number of them. */
+export const teamMembers = pgTable(
+  "team_members",
+  {
+    teamId: uuid()
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    personId: uuid()
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    addedAt: instant().notNull(),
+    addedBy: uuid().references(() => people.id),
+  },
+  (table) => [
+    primaryKey({ columns: [table.teamId, table.personId] }),
+    index("team_members_person_idx").on(table.personId),
+  ],
+);
+
 export const listings = pgTable(
   "listings",
   {
@@ -1021,6 +1060,8 @@ export const pluginGrants = pgTable(
     projectId: uuid().references(() => projects.id, { onDelete: "cascade" }),
     /** The plugin the role went to (ADR-0072), by key: one that holds it as itself. */
     granteePluginKey: text(),
+    /** The team the role went to (ADR-0073): its members hold it, following the membership. */
+    teamId: uuid().references(() => teams.id, { onDelete: "cascade" }),
     everyone: boolean().notNull().default(false),
     createdAt: createdAt(),
     createdBy: uuid().references(() => people.id),
@@ -1030,9 +1071,10 @@ export const pluginGrants = pgTable(
     index("plugin_grants_person_idx").on(table.personId),
     index("plugin_grants_project_idx").on(table.projectId),
     index("plugin_grants_grantee_idx").on(table.workspaceId, table.granteePluginKey),
+    index("plugin_grants_team_idx").on(table.teamId),
     check(
       "plugin_grants_target_check",
-      sql`((${table.personId} is not null)::int + (${table.projectId} is not null)::int + (${table.granteePluginKey} is not null)::int + (${table.everyone})::int) = 1`,
+      sql`((${table.personId} is not null)::int + (${table.projectId} is not null)::int + (${table.granteePluginKey} is not null)::int + (${table.teamId} is not null)::int + (${table.everyone})::int) = 1`,
     ),
   ],
 );

@@ -14,6 +14,7 @@ import type {
   RestPluginGrantInput,
   RestPluginSetting,
   RestProject,
+  RestTeam,
 } from "../schemas.js";
 import { useAction } from "../use-action.js";
 import { EventFeed } from "./event-feed.js";
@@ -139,6 +140,8 @@ export interface PluginSettingsViewProps {
   readonly client: ConsoleClient;
   /** The plugins of the console, to grant a role of this one to another (ADR-0072); none when left out. */
   readonly plugins?: readonly RestPlugin[] | undefined;
+  /** The teams of the workspace, to grant a role to one (ADR-0073); none when left out. */
+  readonly teams?: readonly RestTeam[] | undefined;
   /** Called after a change, so that the page reads the plugin again. */
   readonly onChanged: () => Promise<void>;
   /** Where the list is, for after a purge. */
@@ -816,7 +819,8 @@ type GrantChoice =
   | { readonly kind: "everyone" }
   | { readonly kind: "project"; readonly project: RestProject }
   | { readonly kind: "person"; readonly person: RestPerson }
-  | { readonly kind: "plugin"; readonly plugin: RestPlugin };
+  | { readonly kind: "plugin"; readonly plugin: RestPlugin }
+  | { readonly kind: "team"; readonly team: RestTeam };
 
 /** One secret: whether and when it is set, a field to set it anew with its buttons on the line. */
 function SecretRow(props: {
@@ -1196,6 +1200,9 @@ function holderOf(grant: RestPluginGrant, words: Messages["plugins"]["settings"]
   if (grant.plugin !== null && grant.plugin !== undefined) {
     return words.grantPlugin(grant.plugin);
   }
+  if (grant.team !== null && grant.team !== undefined) {
+    return words.grantTeam(grant.team.name);
+  }
   if (grant.person !== null) {
     return personName(grant.person);
   }
@@ -1221,6 +1228,8 @@ function RoleRow(props: {
   readonly people: readonly RestPerson[];
   /** The other plugins that are enabled, to hold the role as themselves (ADR-0072). */
   readonly plugins: readonly RestPlugin[];
+  /** The teams, whose members hold the role granted to one (ADR-0073). */
+  readonly teams: readonly RestTeam[];
   readonly language: string;
   readonly busy: boolean;
   readonly onGrant: (input: RestPluginGrantInput) => void;
@@ -1243,6 +1252,12 @@ function RoleRow(props: {
     ),
   );
   const plugins = props.plugins.filter((plugin) => !pluginsWith.has(plugin.key));
+  const teamsWith = new Set(
+    grants.flatMap((grant) =>
+      grant.team === null || grant.team === undefined ? [] : [grant.team.id],
+    ),
+  );
+  const teams = props.teams.filter((team) => !teamsWith.has(team.id));
   const projects = props.projects.filter((project) => !projectsWith.has(project.key));
   const people = props.people.filter(
     (person) => person.status === "active" && !peopleWith.has(person.id),
@@ -1255,6 +1270,7 @@ function RoleRow(props: {
     ...projects.map((project) => ({ kind: "project" as const, project })),
     ...people.map((person) => ({ kind: "person" as const, person })),
     ...plugins.map((plugin) => ({ kind: "plugin" as const, plugin })),
+    ...teams.map((team) => ({ kind: "team" as const, team })),
   ];
   const choiceWords = (choice: GrantChoice): string => {
     switch (choice.kind) {
@@ -1264,6 +1280,8 @@ function RoleRow(props: {
         return settings.grantMembersOf(choice.project.name);
       case "person":
         return personChoice(choice.person);
+      case "team":
+        return settings.grantTeam(choice.team.name);
       case "plugin":
         return `${settings.grantPlugin(choice.plugin.key)} · ${pluginWord(choice.plugin.name, props.language)}`;
     }
@@ -1278,7 +1296,9 @@ function RoleRow(props: {
         ? `project:${choice.project.key}`
         : choice.kind === "person"
           ? `person:${choice.person.id}`
-          : `plugin:${choice.plugin.key}`;
+          : choice.kind === "team"
+            ? `team:${choice.team.id}`
+            : `plugin:${choice.plugin.key}`;
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (whom === undefined) {
@@ -1290,6 +1310,8 @@ function RoleRow(props: {
       props.onGrant({ role: role.key, project: whom.project.key });
     } else if (whom.kind === "person") {
       props.onGrant({ role: role.key, person: whom.person.id });
+    } else if (whom.kind === "team") {
+      props.onGrant({ role: role.key, team: whom.team.id });
     } else {
       props.onGrant({ role: role.key, plugin: whom.plugin.key });
     }
@@ -1365,6 +1387,7 @@ function RolesSection(props: {
   readonly projects: readonly RestProject[];
   readonly people: readonly RestPerson[];
   readonly plugins: readonly RestPlugin[];
+  readonly teams: readonly RestTeam[];
   readonly language: string;
   readonly busy: boolean;
   readonly onGrant: (input: RestPluginGrantInput) => void;
@@ -1395,6 +1418,7 @@ function RolesSection(props: {
               projects={props.projects}
               people={props.people}
               plugins={others}
+              teams={props.teams}
               language={props.language}
               busy={props.busy}
               onGrant={props.onGrant}
@@ -1567,6 +1591,7 @@ export function PluginSettingsView(props: PluginSettingsViewProps) {
         <RolesSection
           detail={detail}
           plugins={props.plugins ?? []}
+          teams={props.teams ?? []}
           onGrantAsked={(other, role) =>
             change(() => client.plugin(other).grant({ role, plugin: detail.key }))
           }

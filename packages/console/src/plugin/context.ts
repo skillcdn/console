@@ -15,6 +15,7 @@ import type {
   RestTask,
   RestTaskInput,
   RestTaskPatch,
+  RestTeam,
 } from "../schemas.js";
 import type { WeekStart } from "../vocabulary.js";
 import type { PluginFileHandle } from "./args.js";
@@ -347,6 +348,11 @@ export interface PluginConsole {
      * is listed only where they were granted it.
      */
     granted(role: string): Promise<readonly RestPerson[]>;
+  };
+  /** The teams of the workspace (ADR-0073): a name and its members, among the people the caller may see. */
+  teams: {
+    list(): Promise<readonly RestTeam[]>;
+    get(id: string): Promise<RestTeam | null>;
   };
   projects: {
     list(): Promise<readonly RestProject[]>;

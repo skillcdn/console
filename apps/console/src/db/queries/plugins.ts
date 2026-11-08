@@ -9,6 +9,8 @@ import {
   pluginInstalls,
   pluginSecrets,
   projects,
+  teamMembers,
+  teams,
   workspaces,
 } from "../schema.js";
 import { type Actor, recordEvent } from "./events.js";
@@ -54,6 +56,8 @@ export interface PluginGrantRecord {
   readonly everyone: boolean;
   /** The plugin the role went to (ADR-0072), by key, where it went to one. */
   readonly plugin: string | undefined;
+  /** The team the role went to (ADR-0073), whose members hold it, where it went to one. */
+  readonly team: { readonly id: string; readonly name: string } | undefined;
   readonly createdAt: Date;
   readonly createdBy: string | undefined;
 }
@@ -487,6 +491,8 @@ const grantColumns = {
   projectName: projects.name,
   everyone: pluginGrants.everyone,
   granteePluginKey: pluginGrants.granteePluginKey,
+  teamId: pluginGrants.teamId,
+  teamName: teams.name,
   createdAt: pluginGrants.createdAt,
   createdBy: pluginGrants.createdBy,
 };
@@ -504,6 +510,8 @@ function toGrant(row: {
   projectName: string | null;
   everyone: boolean;
   granteePluginKey: string | null;
+  teamId: string | null;
+  teamName: string | null;
   createdAt: Date;
   createdBy: string | null;
 }): PluginGrantRecord {
@@ -522,6 +530,7 @@ function toGrant(row: {
         : { id: row.projectId, key: row.projectKey ?? "", name: row.projectName ?? "" },
     everyone: row.everyone,
     plugin: row.granteePluginKey ?? undefined,
+    team: row.teamId === null ? undefined : { id: row.teamId, name: row.teamName ?? "" },
     createdAt: row.createdAt,
     createdBy: row.createdBy ?? undefined,
   };
@@ -532,7 +541,8 @@ function selectGrants(handle: Handle) {
     .select(grantColumns)
     .from(pluginGrants)
     .leftJoin(people, eq(people.id, pluginGrants.personId))
-    .leftJoin(projects, eq(projects.id, pluginGrants.projectId));
+    .leftJoin(projects, eq(projects.id, pluginGrants.projectId))
+    .leftJoin(teams, eq(teams.id, pluginGrants.teamId));
 }
 
 /** The grants of one plugin, oldest first. */
@@ -558,6 +568,8 @@ export interface GrantInput {
   readonly projectId?: string | undefined;
   /** A plugin, by key, to hold the role as itself (ADR-0072). */
   readonly grantee?: string | undefined;
+  /** A team, by id, whose members hold the role (ADR-0073). */
+  readonly teamId?: string | undefined;
   readonly everyone: boolean;
   readonly actor: Actor;
   readonly now: Date;
@@ -586,6 +598,9 @@ export async function addGrant(database: Database, input: GrantInput): Promise<P
           input.grantee === undefined
             ? sql`${pluginGrants.granteePluginKey} is null`
             : eq(pluginGrants.granteePluginKey, input.grantee),
+          input.teamId === undefined
+            ? sql`${pluginGrants.teamId} is null`
+            : eq(pluginGrants.teamId, input.teamId),
           eq(pluginGrants.everyone, input.everyone),
         ),
       )
@@ -614,6 +629,7 @@ export async function addGrant(database: Database, input: GrantInput): Promise<P
         personId: input.personId ?? null,
         projectId: input.projectId ?? null,
         granteePluginKey: input.grantee ?? null,
+        teamId: input.teamId ?? null,
         everyone: input.everyone,
         createdAt: input.now,
         createdBy: input.actor.id,
@@ -640,6 +656,7 @@ export async function addGrant(database: Database, input: GrantInput): Promise<P
           ? {}
           : { key: grant.project.key, name: grant.project.name }),
         ...(grant.plugin === undefined ? {} : { grantee: grant.plugin }),
+        ...(grant.team === undefined ? {} : { team: grant.team.name }),
         everyone: grant.everyone,
       },
       now: input.now,
@@ -689,6 +706,7 @@ export async function removeGrant(
           ? {}
           : { key: grant.project.key, name: grant.project.name }),
         ...(grant.plugin === undefined ? {} : { grantee: grant.plugin }),
+        ...(grant.team === undefined ? {} : { team: grant.team.name }),
         everyone: grant.everyone,
       },
       now: input.now,
@@ -718,6 +736,7 @@ export async function grantedRoles(
           eq(pluginGrants.personId, person.id),
           eq(pluginGrants.everyone, true),
           sql`exists (select 1 from ${projects} where ${projects.id} = ${pluginGrants.projectId} and ${memberOfProject(person.id)})`,
+          sql`exists (select 1 from ${teamMembers} where ${teamMembers.teamId} = ${pluginGrants.teamId} and ${teamMembers.personId} = ${person.id})`,
         ),
       ),
     );
@@ -741,7 +760,7 @@ export async function peopleGranted(
     .where(
       and(
         eq(people.workspaceId, workspaceId),
-        sql`exists (select 1 from ${pluginGrants} where ${pluginGrants.workspaceId} = ${workspaceId} and ${pluginGrants.pluginKey} = ${key} and ${pluginGrants.role} = ${role} and (${pluginGrants.personId} = ${people.id} or ${pluginGrants.everyone} or exists (select 1 from ${projects} where ${projects.id} = ${pluginGrants.projectId} and ${memberOfProject(people.id)})))`,
+        sql`exists (select 1 from ${pluginGrants} where ${pluginGrants.workspaceId} = ${workspaceId} and ${pluginGrants.pluginKey} = ${key} and ${pluginGrants.role} = ${role} and (${pluginGrants.personId} = ${people.id} or ${pluginGrants.everyone} or exists (select 1 from ${projects} where ${projects.id} = ${pluginGrants.projectId} and ${memberOfProject(people.id)}) or exists (select 1 from ${teamMembers} where ${teamMembers.teamId} = ${pluginGrants.teamId} and ${teamMembers.personId} = ${people.id})))`,
       ),
     );
   return new Set(rows.map((row) => row.id));

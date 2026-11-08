@@ -54,6 +54,7 @@ import {
   type RestSkillLoad,
   type RestSkills,
   type RestTasks,
+  type RestTeams,
   type RestTokenCreated,
   type RestTokens,
   type RestVersions,
@@ -89,6 +90,8 @@ import {
   restRunInputSchema,
   restTaskInputSchema,
   restTaskPatchSchema,
+  restTeamInputSchema,
+  restTeamMemberInputSchema,
   restTokenInputSchema,
   rulesPath,
   TASK_STATES,
@@ -230,6 +233,16 @@ import {
   type TaskRecord,
   updateTask,
 } from "../db/queries/tasks.js";
+import {
+  addTeamMember,
+  createTeam,
+  listTeams,
+  removeTeam,
+  removeTeamMember,
+  renameTeam,
+  TeamError,
+  teamIdsByPerson,
+} from "../db/queries/teams.js";
 import { TokenError, type TokenRecord } from "../db/queries/tokens.js";
 import {
   membersSyncedAt,
@@ -274,6 +287,7 @@ import {
   restRules,
   restRun,
   restTask,
+  restTeam,
   restToken,
   restVersion,
   restVersionSummary,
@@ -787,6 +801,11 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         error.code === "listing.not_found" ? 404 : 409,
       );
     }
+    if (error instanceof TeamError) {
+      const status =
+        error.code === "team.not_found" ? 404 : error.code === "team.invalid_member" ? 400 : 409;
+      return c.json(errorBody(error.code, error.message), status);
+    }
     if (error instanceof ProjectError) {
       const status =
         error.code === "project.not_found" || error.code === "member.not_found"
@@ -1177,11 +1196,14 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         : undefined,
     ]);
     // The work email is an administrator's to read, and one's own; nobody else's (ADR-0022).
+    // The teams each is in (ADR-0073) come with every reading.
     const administrator = configuresWorkspace(person);
+    const teamIdsOf = await teamIdsByPerson(database, person.workspaceId);
     const body: RestPeople = {
-      items: items.map((item) =>
-        administrator || item.id === person.id ? restPersonWithEmail(item) : restPerson(item),
-      ),
+      items: items.map((item) => ({
+        ...(administrator || item.id === person.id ? restPersonWithEmail(item) : restPerson(item)),
+        teamIds: teamIdsOf.get(item.id) ?? [],
+      })),
       listed: listed.map(restListing),
       organization:
         organization === undefined || !whole
@@ -1331,6 +1353,174 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         now: clock.now(),
       });
       return c.body(null, 204);
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
+  // The teams (ADR-0073): read by anyone signed in, with the members they may see; kept by an administrator.
+  app.get(REST_ROUTES.teams, async (c) => {
+    const person = await asking(c);
+    if (person instanceof Response) {
+      return person;
+    }
+    const settings = await readWorkspaceSettings(database, person.workspaceId);
+    const visible = new Set(
+      (
+        await listPeople(database, person.workspaceId, {
+          visible: personVisibleTo(person, settings),
+        })
+      ).map((item) => item.id),
+    );
+    const body: RestTeams = {
+      items: (await listTeams(database, person.workspaceId)).map((team) => restTeam(team, visible)),
+    };
+    return c.json(body);
+  });
+
+  /** The administrator a change to the teams is from, or the refusal. */
+  const administeringTeams = async (c: Context<AppEnv>) => {
+    const caller = await changingCaller(c);
+    if (caller instanceof Response) {
+      return caller;
+    }
+    return caller.person.role === "admin" ? caller : administratorRequired(c);
+  };
+
+  /** The team's id in the path, or the refusal. */
+  const teamIdOf = (c: Context<AppEnv>): string | Response => {
+    const id = c.req.param("id") ?? "";
+    return UUID.test(id) ? id : notFound(c, "team.not_found", "The team was not found.");
+  };
+
+  app.post(REST_ROUTES.teams, tooLarge, async (c) => {
+    const caller = await administeringTeams(c);
+    if (caller instanceof Response) {
+      return caller;
+    }
+    const input = await bodyOf(c, restTeamInputSchema);
+    if (input instanceof Response) {
+      return input;
+    }
+    try {
+      const team = await createTeam(database, {
+        workspaceId: caller.person.workspaceId,
+        actor: actorOf(caller),
+        name: input.name,
+        now: clock.now(),
+      });
+      logger.info(
+        { person: caller.person.id, team: team.id, requestId: c.get("requestId") },
+        "a team was made",
+      );
+      return c.json(restTeam(team), 201);
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
+  app.patch(`${REST_ROUTES.teams}/:id`, tooLarge, async (c) => {
+    const caller = await administeringTeams(c);
+    if (caller instanceof Response) {
+      return caller;
+    }
+    const id = teamIdOf(c);
+    if (id instanceof Response) {
+      return id;
+    }
+    const input = await bodyOf(c, restTeamInputSchema);
+    if (input instanceof Response) {
+      return input;
+    }
+    try {
+      const team = await renameTeam(database, {
+        workspaceId: caller.person.workspaceId,
+        actor: actorOf(caller),
+        teamId: id,
+        name: input.name,
+        now: clock.now(),
+      });
+      return c.json(restTeam(team));
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
+  app.delete(`${REST_ROUTES.teams}/:id`, async (c) => {
+    const caller = await administeringTeams(c);
+    if (caller instanceof Response) {
+      return caller;
+    }
+    const id = teamIdOf(c);
+    if (id instanceof Response) {
+      return id;
+    }
+    try {
+      await removeTeam(database, {
+        workspaceId: caller.person.workspaceId,
+        actor: actorOf(caller),
+        teamId: id,
+        now: clock.now(),
+      });
+      logger.info(
+        { person: caller.person.id, team: id, requestId: c.get("requestId") },
+        "a team was removed",
+      );
+      return c.body(null, 204);
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
+  app.post(`${REST_ROUTES.teams}/:id/members`, tooLarge, async (c) => {
+    const caller = await administeringTeams(c);
+    if (caller instanceof Response) {
+      return caller;
+    }
+    const id = teamIdOf(c);
+    if (id instanceof Response) {
+      return id;
+    }
+    const input = await bodyOf(c, restTeamMemberInputSchema);
+    if (input instanceof Response) {
+      return input;
+    }
+    try {
+      const team = await addTeamMember(database, {
+        workspaceId: caller.person.workspaceId,
+        actor: actorOf(caller),
+        teamId: id,
+        personId: input.personId,
+        now: clock.now(),
+      });
+      return c.json(restTeam(team));
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
+  app.delete(`${REST_ROUTES.teams}/:id/members/:personId`, async (c) => {
+    const caller = await administeringTeams(c);
+    if (caller instanceof Response) {
+      return caller;
+    }
+    const id = teamIdOf(c);
+    if (id instanceof Response) {
+      return id;
+    }
+    const personId = c.req.param("personId") ?? "";
+    if (!UUID.test(personId)) {
+      return notFound(c, "team.not_a_member", "The person is not in the team.");
+    }
+    try {
+      const team = await removeTeamMember(database, {
+        workspaceId: caller.person.workspaceId,
+        actor: actorOf(caller),
+        teamId: id,
+        personId,
+        now: clock.now(),
+      });
+      return c.json(restTeam(team));
     } catch (error) {
       return failure(c, error);
     }

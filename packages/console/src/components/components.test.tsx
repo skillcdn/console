@@ -1360,7 +1360,7 @@ describe("people", () => {
     const managed: RestPerson = { ...bob, managerId: alice.id };
     const read = renderToStaticMarkup(<PeopleList people={[alice, managed]} me={bob} />);
     expect(read).toMatch(/<dt>Manager<\/dt><dd><span class="sc-person"[^>]*>.*?Alice Example/);
-    expect(read).toMatch(/<dt>Team<\/dt><dd><span class="sc-workers" title="bob">/);
+    expect(read).toMatch(/<dt>Reports<\/dt><dd><span class="sc-workers" title="bob">/);
     expect(read).toMatch(/<dt>Manager<\/dt><dd><span class="sc-muted">None/);
     expect(read).not.toContain("<select");
     const change = renderToStaticMarkup(
@@ -1373,6 +1373,40 @@ describe("people", () => {
     expect(change).toContain('aria-label="Manager of Alice Example"');
     expect(change).toContain('placeholder="None"');
     expect(change).toMatch(/sc-picker-chosen[\s\S]*?Alice Example/);
+  });
+
+  it("names the teams a person is in, and lets an administrator keep the teams (ADR-0073)", () => {
+    const team = {
+      id: "0199c4d8-0000-7000-8000-000000000071",
+      name: "Platform",
+      memberIds: [bob.id],
+      createdAt: "2026-11-02T01:00:00.000Z",
+    };
+    const read = renderToStaticMarkup(<PeopleList people={[alice, bob]} me={bob} teams={[team]} />);
+    expect(read).toMatch(/<dt>Teams<\/dt><dd>[\s\S]*?Platform/);
+    expect(read).toContain("1 member");
+    expect(read).not.toContain("New team");
+    expect(read).not.toContain('aria-label="Remove: Platform"');
+    const kept = renderToStaticMarkup(
+      <PeopleList
+        people={[alice, bob]}
+        me={alice}
+        teams={[team]}
+        onCreateTeam={() => undefined}
+        onRenameTeam={() => undefined}
+        onRemoveTeam={() => undefined}
+        onJoinTeam={() => undefined}
+        onLeaveTeam={() => undefined}
+      />,
+    );
+    expect(kept).toContain('aria-label="New team"');
+    expect(kept).toContain('aria-label="Name of the team Platform"');
+    expect(kept).toContain('aria-label="Remove: Platform"');
+    expect(kept).toContain('aria-label="Add Alice Example to a team"');
+    expect(kept).not.toContain('aria-label="Add bob to a team"');
+    expect(renderToStaticMarkup(<PeopleList people={[alice]} teams={[]} />)).toContain(
+      "No teams yet.",
+    );
   });
 
   it("shows a person's work email where the console answers one, and lets an administrator write it (ADR-0069)", () => {

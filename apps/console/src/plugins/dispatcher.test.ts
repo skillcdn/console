@@ -32,6 +32,7 @@ describe("the workspace's people events", () => {
   it("reach a plugin that reads the directory, with their content, and no other hook gets content without board:read", () => {
     expect(isPeopleEvent("person.deactivated")).toBe(true);
     expect(isPeopleEvent("person.joined")).toBe(true);
+    expect(isPeopleEvent("team.member_added")).toBe(true);
     expect(isPeopleEvent("task.created")).toBe(false);
     expect(contentFor(["people:read:all"], "person.deactivated")).toBe(true);
     expect(contentFor(["people:read:all"], "task.created")).toBe(false);

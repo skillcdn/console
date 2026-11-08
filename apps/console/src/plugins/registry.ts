@@ -106,6 +106,7 @@ import {
 } from "../db/queries/plugins.js";
 import { createProject, findProjectFor, type ProjectView } from "../db/queries/projects.js";
 import { listRuns } from "../db/queries/runs.js";
+import { findTeam } from "../db/queries/teams.js";
 import { readWorkspaceSettings, type WorkspaceRecord } from "../db/queries/workspaces.js";
 import type { Logger } from "../logger.js";
 import type { Clock } from "../ports/clock.js";
@@ -822,6 +823,7 @@ export class Plugins {
         grant.project === undefined ? null : { key: grant.project.key, name: grant.project.name },
       everyone: grant.everyone,
       plugin: grant.plugin ?? null,
+      team: grant.team ?? null,
       createdAt: grant.createdAt.toISOString(),
     };
   }
@@ -1373,6 +1375,8 @@ export class Plugins {
       readonly project?: string | undefined;
       /** Another plugin, by key, to hold the role as itself (ADR-0072). */
       readonly plugin?: string | undefined;
+      /** A team, by id, whose members hold the role (ADR-0073). */
+      readonly team?: string | undefined;
       readonly everyone?: boolean | undefined;
     },
     by: Administrator,
@@ -1406,6 +1410,12 @@ export class Plugins {
           : `the plugin ${input.plugin} is not installed`,
       );
     }
+    if (
+      input.team !== undefined &&
+      (await findTeam(this.options.database, workspace.id, input.team)) === undefined
+    ) {
+      throw new PluginRefusal("plugin.invalid_args", "the team was not found");
+    }
     const install = await findInstall(this.options.database, workspace.id, key);
     const grant = await addGrant(this.options.database, {
       workspaceId: workspace.id,
@@ -1414,6 +1424,7 @@ export class Plugins {
       personId: input.person,
       projectId,
       grantee: input.plugin,
+      teamId: input.team,
       everyone: input.everyone === true,
       actor: by.actor,
       now: this.options.clock.now(),
@@ -2077,6 +2088,7 @@ export class Plugins {
       }
       case "console.workspace":
       case "console.people":
+      case "console.teams":
       case "console.projects":
       case "console.tasks":
       case "console.decisions":

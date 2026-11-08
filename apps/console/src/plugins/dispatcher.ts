@@ -496,7 +496,7 @@ export function lifecycleOf(event: {
 }
 
 export function isPeopleEvent(kind: string): boolean {
-  return kind.startsWith("person.");
+  return kind.startsWith("person.") || kind.startsWith("team.");
 }
 
 /**
