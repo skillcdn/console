@@ -36,6 +36,7 @@ import {
   answerDecision,
   findDecision,
   findDecisionOnPlate,
+  findDecisionReachable,
   listDecisions,
   raiseDecision,
 } from "../db/queries/decisions.js";
@@ -54,7 +55,12 @@ import {
   type PluginItemKind,
 } from "../db/queries/plugin-board.js";
 import { type PluginInstallRecord, peopleGranted } from "../db/queries/plugins.js";
-import { findProjectFor, listMembers, listProjectsFor } from "../db/queries/projects.js";
+import {
+  findProjectFor,
+  listMembers,
+  listProjectsFor,
+  seesProject,
+} from "../db/queries/projects.js";
 import { findRun, listRuns } from "../db/queries/runs.js";
 import { createTask, findTaskByNumber, listTasks, updateTask } from "../db/queries/tasks.js";
 import { findTeam, listTeams, teamKeysByPerson } from "../db/queries/teams.js";
@@ -416,7 +422,11 @@ export class PluginBoard {
           const run = UUID.test(id)
             ? await findRun(this.options.database, workspace.id, id)
             : undefined;
-          if (run === undefined || !(await this.reaches(context, workspace, run.projectId))) {
+          if (
+            run === undefined ||
+            !(await this.reaches(context, workspace, run.projectId)) ||
+            !(await this.seenBy(context, workspace, run.projectId))
+          ) {
             return null;
           }
           return restRun(run);
@@ -586,6 +596,17 @@ export class PluginBoard {
         ) {
           return null;
         }
+        if (actsAsPerson(context.caller)) {
+          // For a person, as the decision's own address answers them (ADR-0068): one of a project
+          // they may see, or one that reaches them past it; nothing of a project closed to them.
+          const person = await this.actingPerson(context, workspace);
+          if (
+            (await findDecisionReachable(this.options.database, workspace.id, id, person)) ===
+            undefined
+          ) {
+            return null;
+          }
+        }
         return restDecision(decision);
       }
       case "ask": {
@@ -642,10 +663,10 @@ export class PluginBoard {
       }
       case "answer": {
         // For a person who answered elsewhere (ADR-0072): a decision on their own plate alone,
-        // addressed to them or reaching them up the reporting line (ADR-0068), whatever else they
-        // administer or are a member of, so that a plugin's mistake about who pressed a button
-        // answers nothing that was never theirs; the answer is theirs, through this plugin. A
-        // plugin answers nothing itself.
+        // addressed to them or reaching them up the reporting line (ADR-0068), a person's own
+        // while they are in its project (ADR-0077), whatever else they administer or are a member
+        // of, so that a plugin's mistake about who pressed a button answers nothing that was never
+        // theirs; the answer is theirs, through this plugin. A plugin answers nothing itself.
         needs("people:act");
         const id = text(args[0], "the decision's id");
         if (!UUID.test(id)) {
@@ -684,7 +705,7 @@ export class PluginBoard {
         );
         if (decision === undefined) {
           throw forbidden(
-            "the person may not answer this decision: it is addressed neither to them nor, being a plugin's, to anyone they manage",
+            "the person may not answer this decision: it is not on their plate, addressed neither to them nor, being a plugin's, to anyone they manage, or a person's own in a project they are not in",
           );
         }
         const chosen = decision.options.find((option) =>
@@ -829,6 +850,24 @@ export class PluginBoard {
       install.projects.includes(project.key) ||
       (caller.kind !== "console" && caller.project?.id === project.id)
     );
+  }
+
+  /**
+   * Whether a call may be shown an item of `projectId` it names by its id: for a person, one of
+   * a project they may see, as a listing shows them, so that a plugin's page hands a person
+   * nothing of a project closed to them (ADR-0072); the console and a plugin as itself are shown
+   * what the plugin reaches.
+   */
+  private async seenBy(
+    context: BoardContext,
+    workspace: WorkspaceRecord,
+    projectId: string,
+  ): Promise<boolean> {
+    if (!actsAsPerson(context.caller)) {
+      return true;
+    }
+    const person = await this.actingPerson(context, workspace);
+    return seesProject(this.options.database, workspace.id, projectId, person);
   }
 
   private async reaches(

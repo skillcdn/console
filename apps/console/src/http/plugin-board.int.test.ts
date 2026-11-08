@@ -1181,6 +1181,45 @@ describe("a plugin on the board", () => {
     } finally {
       await h.request(`${REST_ROUTES.people}/${bobId}`, json({ managerId: null }, admin, "PATCH"));
     }
+    // A person's own decision is on their plate only while they are in its project (ADR-0077):
+    // addressed to bob in the board project, it is answered for him by nobody once he is taken
+    // out of it, and again once he is listed again.
+    const plain = restDecisionSchema.parse(
+      await (
+        await h.request(
+          projectPath(BOARD, "decisions"),
+          json(
+            {
+              question: "Still Bob's?",
+              options: [
+                { label: "Yes", key: "approve" },
+                { label: "No", key: "reject" },
+              ],
+              deciderId: bobId,
+            },
+            admin,
+          ),
+        )
+      ).json(),
+    );
+    const unlisted = await h.request(projectPath(BOARD, "members", bobId), {
+      method: "DELETE",
+      headers: { cookie: admin, origin: SIGN_IN_URL },
+    });
+    expect(unlisted.status, await unlisted.clone().text()).toBe(204);
+    try {
+      const gone = await answerFor(bobId, plain.id);
+      expect(gone.status, await gone.clone().text()).toBe(403);
+      expect(restErrorSchema.parse(await gone.json()).error.code).toBe("plugin.forbidden");
+    } finally {
+      const relisted = await h.request(
+        projectPath(BOARD, "members"),
+        json({ personId: bobId, role: "member" }, admin),
+      );
+      expect(relisted.status, await relisted.clone().text()).toBe(201);
+    }
+    const back = await answerFor(bobId, plain.id);
+    expect(back.status, await back.clone().text()).toBe(200);
   });
 
   it("reads for a person what they may as a member, whatever they administer, and never as the administrator who enabled it (ADR-0072)", async () => {

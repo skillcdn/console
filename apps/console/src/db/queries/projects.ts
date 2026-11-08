@@ -253,6 +253,31 @@ export async function findProjectFor(
 }
 
 /**
+ * Whether `person` may see the project `projectId`, by the one policy: an administrator every
+ * project, anyone else those they are a member of. What a plugin's read of one item for a person
+ * is held to (ADR-0072), as a listing is held to it by `findProjectFor`.
+ */
+export async function seesProject(
+  database: Database,
+  workspaceId: string,
+  projectId: string,
+  person: PersonRecord,
+): Promise<boolean> {
+  const [row] = await drizzleOf(database)
+    .select({ id: projects.id })
+    .from(projects)
+    .where(
+      and(
+        eq(projects.workspaceId, workspaceId),
+        eq(projects.id, projectId),
+        projectVisibleTo(person),
+      ),
+    )
+    .limit(1);
+  return row !== undefined;
+}
+
+/**
  * The mark and the name of projects by their ids, for the pages to say and link what reaches a
  * person from a project they may not see (ADR-0068): a decision addressed to them there. The key
  * and the name of the project, and nothing else of it.

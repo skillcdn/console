@@ -1769,7 +1769,8 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
 
   // One decision by its id, wherever it is (ADR-0068): in a project the asker may see, or one
   // that reaches them from elsewhere, addressed to them, raised by them, or a plugin's addressed
-  // to someone they manage; with `wait`, held while it waits, as the project's route holds.
+  // to someone they manage, a person's own while they are in its project (ADR-0077); with
+  // `wait`, held while it waits, as the project's route holds.
   app.get(`${REST_ROUTES.decisions}/:id`, async (c) => {
     const query = decisionQuery.safeParse(c.req.query());
     if (!query.success) {
@@ -1787,15 +1788,26 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     if (reached === undefined) {
       return noSuchDecision(c);
     }
-    const waited = await waitForAnswer(
-      { workspaceId: person.workspaceId, projectId: reached.project.id },
-      id,
-      Math.min(query.data.wait * 1000, agents.waitMs),
-    );
+    const waitMs = Math.min(query.data.wait * 1000, agents.waitMs);
+    let shown = reached;
+    if (waitMs > 0) {
+      await waitForAnswer(
+        { workspaceId: person.workspaceId, projectId: reached.project.id },
+        id,
+        waitMs,
+      );
+      // Read again once the wait ends (ADR-0077): whoever was taken out of the project meanwhile
+      // is told nothing of the answer, as the stream tells them nothing.
+      const still = await findDecisionReachable(database, person.workspaceId, id, person);
+      if (still === undefined) {
+        return noSuchDecision(c);
+      }
+      shown = still;
+    }
     const body: RestReachedDecision = {
-      project: projectRefOf(reached.project),
-      decision: restDecision(waited ?? reached.decision),
-      mayAnswer: reached.mayAnswer,
+      project: projectRefOf(shown.project),
+      decision: restDecision(shown.decision),
+      mayAnswer: shown.mayAnswer,
     };
     return c.json(body);
   });
@@ -1826,7 +1838,8 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
 
   // The answer, by whoever the decision reaches with the right to answer it (ADR-0068): anyone
   // who may work in the project, as on the project's route; and from outside it, those it is
-  // addressed to and, for a plugin's decision, whoever manages one of them.
+  // addressed to and, for a plugin's decision, whoever manages one of them; a person's own
+  // decision reaches nobody out of its project (ADR-0077).
   app.post(`${REST_ROUTES.decisions}/:id/answer`, tooLarge, async (c) => {
     const caller = await changingCaller(c);
     if (caller instanceof Response) {

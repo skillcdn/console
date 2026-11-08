@@ -134,6 +134,17 @@ describe("a file put on a decision, at the decision's own address (ADR-0068)", (
       { question: "Ours?", options: [{ label: "Yes" }, { label: "No" }], deciderId: bobId },
       [{ name: "kept.txt", type: "text/plain", bytes: "k\n" }],
     );
+    // One Bob raised himself, addressed to Alice: his to read while he is in the project.
+    const raisedByBob = await raise(
+      bob,
+      "vault",
+      {
+        question: "Alice?",
+        options: [{ label: "Yes" }, { label: "No" }],
+        deciderId: idOf("Alice"),
+      },
+      [{ name: "why.txt", type: "text/plain", bytes: "w\n" }],
+    );
     // The mark a plugin leaves on a decision it raised (ADR-0052), here on one that carries files.
     const workspace = await ensureWorkspace(testDatabase.database, {
       name: "Acme",
@@ -145,9 +156,17 @@ describe("a file put on a decision, at the decision's own address (ADR-0068)", (
       kind: "decision",
       id: forBob.id,
     });
-    // Listed, Bob reaches both at their address.
+    // Listed, Bob reaches all three at their address, and the one he raised is among those he raised.
     expect((await get(bob, decisionPath(ours.id))).status).toBe(200);
     expect((await get(bob, decisionPath(forBob.id))).status).toBe(200);
+    expect((await get(bob, decisionPath(raisedByBob.id))).status).toBe(200);
+    const raisedBy = async (cookie: string): Promise<string[]> =>
+      (
+        (await (await get(cookie, `${REST_ROUTES.decisions}?raised=true`)).json()) as {
+          items: { decision: { id: string } }[];
+        }
+      ).items.map((item) => item.decision.id);
+    expect(await raisedBy(bob)).toContain(raisedByBob.id);
     expect((await send(alice, "DELETE", projectPath("vault", "members", bobId))).status).toBe(204);
     const [picture, notes, plans] = forBob.files ?? [];
     const [secret] = own.files ?? [];
@@ -239,6 +258,9 @@ describe("a file put on a decision, at the decision's own address (ADR-0068)", (
       decisions: { waiting: number };
     };
     expect(me.decisions.waiting).toBe(1);
+    // Nor is the one he raised his any more: not at its address, not among those he raised.
+    expect((await get(bob, decisionPath(raisedByBob.id))).status).toBe(404);
+    expect(await raisedBy(bob)).not.toContain(raisedByBob.id);
     // Alice, who raised it and administers the workspace, reads it as before.
     expect((await get(alice, decisionPath(ours.id))).status).toBe(200);
 
@@ -274,6 +296,8 @@ describe("a file put on a decision, at the decision's own address (ADR-0068)", (
     });
     expect(relisted.status).toBe(201);
     expect((await get(bob, decisionPath(ours.id))).status).toBe(200);
+    expect((await get(bob, decisionPath(raisedByBob.id))).status).toBe(200);
+    expect(await raisedBy(bob)).toContain(raisedByBob.id);
     expect((await get(carol, decisionPath(ours.id))).status).toBe(404);
     expect(await refused(await get(carol, decisionFilePath(ours.id, ourFile.id)))).toEqual(
       notFound,

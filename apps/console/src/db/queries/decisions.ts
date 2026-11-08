@@ -770,7 +770,8 @@ const DECISION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 /**
  * A decision as `person` reaches it (ADR-0068), with its project and whether they may answer
  * it: one of a project they may see, as before; or, wherever it is, one addressed to them, one
- * they raised, or a plugin's addressed to someone they manage. Nothing for a decision out of
+ * they raised, or a plugin's addressed to someone they manage, a person's own only while they
+ * are a member of its project (ADR-0077). Nothing for a decision out of
  * their reach, which is not told apart from one that is not there, nor from text that is no id:
  * a plugin may name anything as the decision its command waits for.
  */
