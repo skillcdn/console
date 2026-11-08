@@ -222,6 +222,8 @@ export interface Invocation {
 }
 
 const EMPTY_DISCOVERY: Discovery = { plugins: [], failed: [] };
+/** An id as the console keeps one: what plugin code names otherwise is refused before a query. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** The headers an endpoint may set on its answer. */
 const RESPONSE_HEADERS: ReadonlySet<string> = new Set([
   "content-type",
@@ -631,16 +633,18 @@ export class Plugins {
     });
   }
 
-  /** What the manifest asks of other plugins (ADR-0072), each role with how it stands, for the pages and the command. */
+  /**
+   * What the manifest asks of other plugins (ADR-0072), each role with how it stands, for the
+   * administrator's pages and command: granted where the plugin holds it, by a grant to it or as
+   * the callee's default role, which it holds as a member does.
+   */
   private async asksOf(entry: Entry, workspaceId: string): Promise<RestPluginDetail["asks"]> {
     const asks: NonNullable<RestPluginDetail["asks"]> = [];
     for (const [other, asked] of Object.entries(entry.manifest?.grants ?? {})) {
       const install = await findInstall(this.options.database, workspaceId, other);
       const available =
         install?.state === "enabled" && this.entries.get(other)?.manifest !== undefined;
-      const held = available
-        ? await rolesGrantedToPlugin(this.options.database, workspaceId, other, entry.key)
-        : [];
+      const held = available ? await this.rolesOfPlugin(other, entry.key) : [];
       for (const role of asked.roles) {
         asks.push({
           plugin: other,
@@ -877,7 +881,8 @@ export class Plugins {
             this.restGrant(grant),
           )
         : null,
-      asks: await this.asksOf(entry, workspace.id),
+      // How the grants a plugin asks for stand is the administrator's to read, as the grants are.
+      ...(admin ? { asks: await this.asksOf(entry, workspace.id) } : {}),
       events: `/api/v1/plugins/${key}/events`,
       needsTimeZone: await this.needsTimeZone(entry, workspace),
       // What the plugin forgets, and when, for the administrator who turns it on to read.
@@ -2612,6 +2617,11 @@ export class Plugins {
     args: readonly unknown[],
   ): Promise<unknown> {
     const other = typeof args[0] === "string" ? args[0] : "";
+    if (other === call.plugin) {
+      // A plugin runs its own code directly; through its api it would call itself as another,
+      // and with `people:act` make every call of its own for anyone.
+      throw new PluginRefusal("plugin.forbidden", "a plugin calls no api of its own");
+    }
     if (!consent.includes(`plugins:${other}`)) {
       throw new PluginRefusal(
         "plugin.forbidden",
@@ -2653,7 +2663,9 @@ export class Plugins {
           "the plugin has not been given the capability people:act",
         );
       }
-      const person = await findPerson(this.options.database, workspace.id, forId);
+      const person = UUID.test(forId)
+        ? await findPerson(this.options.database, workspace.id, forId)
+        : undefined;
       if (person === undefined || person.status !== "active") {
         throw new PluginRefusal(
           "plugin.not_found",

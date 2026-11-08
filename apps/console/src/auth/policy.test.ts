@@ -4,9 +4,11 @@ import type { PersonRecord } from "../db/queries/people.js";
 import {
   type AccessSettings,
   administers,
+  asActedFor,
   configuresWorkspace,
   decisionAddressedTo,
   decisionAnswerableBy,
+  decisionOnPlateOf,
   decisionReachableBy,
   mayWorkIn,
   memberOfProject,
@@ -116,6 +118,20 @@ describe("the policy", () => {
     expect(answer.sql).not.toContain("raised_by_id");
     expect(answer.sql).toContain("with recursive above(id) as");
     expect(answer.params).toEqual([member.id, member.id, member.id]);
+  });
+
+  it("holds whom a plugin acts for to a member's standing, and what it answers for them to their plate (ADR-0072)", () => {
+    const acted = asActedFor(admin);
+    expect(administers(acted)).toBe(false);
+    expect(acted.id).toBe(admin.id);
+    expect(render(projectVisibleTo(acted)).sql).toBe(render(projectVisibleTo(member)).sql);
+    expect(peopleNarrowedFor(acted, shared)).toBe(true);
+    expect(asActedFor(member)).toBe(member);
+    // The plate is the same for an administrator as for anyone: addressed to them, or a plugin's
+    // addressed to someone they manage; never `true`.
+    const plate = render(decisionOnPlateOf(admin.id));
+    expect(plate.sql).toBe(render(decisionAnswerableBy(member)).sql);
+    expect(plate.params).toEqual([admin.id, admin.id, admin.id]);
   });
 
   it("lets an active administrator or member of the project work in it, and nobody else", () => {

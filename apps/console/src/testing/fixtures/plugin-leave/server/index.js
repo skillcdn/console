@@ -429,6 +429,23 @@ export default {
   },
   upgrades: [],
   api: {
+    // What the caller reads of the projects: for a person a plugin acts for, as a member (ADR-0072).
+    look: {
+      about: "The projects the caller reads.",
+      input: anyObject,
+      async run(ctx) {
+        return { projects: (await ctx.console.projects.list()).map((project) => project.key) };
+      },
+    },
+    // A task left on the board as the caller, which the feed names as theirs.
+    note: {
+      about: "Leaves a task on the board as the caller.",
+      input: anyObject,
+      async run(ctx, input) {
+        const task = await ctx.console.tasks.create(ctx.plugin.board.key, { title: input.title });
+        return { number: task.number };
+      },
+    },
     balance: {
       about: "The days a person has left.",
       input: anyObject,

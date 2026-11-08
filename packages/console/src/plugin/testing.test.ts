@@ -162,6 +162,29 @@ describe("createTestContext", () => {
     expect(itself.plugin.grants).toEqual([]);
   });
 
+  it("answers a decision for a person where the test gives the answer, and refuses it where not (ADR-0072)", async () => {
+    const answered: unknown[] = [];
+    const ctx = createTestContext({
+      console: {
+        decisions: {
+          answer: async (id, answer, as) => {
+            answered.push({ id, answer, as });
+            return { id } as never;
+          },
+        },
+      },
+    });
+    expect(
+      await ctx.console.decisions.answer("d1", { optionKey: "approve" }, { for: "person-2" }),
+    ).toEqual({ id: "d1" });
+    expect(answered).toEqual([
+      { id: "d1", answer: { optionKey: "approve" }, as: { for: "person-2" } },
+    ]);
+    await expect(
+      createTestContext().console.decisions.answer("d1", { option: "Approve" }, { for: "p" }),
+    ).rejects.toMatchObject({ code: "plugin.forbidden" });
+  });
+
   it("refuses the console where nothing was given, and answers where it was", async () => {
     const ctx = createTestContext({
       console: {

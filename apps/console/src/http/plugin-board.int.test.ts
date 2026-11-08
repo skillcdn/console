@@ -406,6 +406,40 @@ describe("what a plugin reads of the people (ADR-0063)", () => {
     expect(restErrorSchema.parse(await refused.json()).error.code).toBe("plugin.invalid_args");
   });
 
+  it("tells it who holds a role that follows the reporting line: whoever manages someone, and whoever was granted it (ADR-0068)", async () => {
+    const asked = async () =>
+      ((await invoked("leave", member, ["granted", "--role", "manager"])).data as string[]).sort();
+    expect(await asked()).toEqual([]);
+    let grantId: string | undefined;
+    try {
+      // Alice manages bob: she holds the role by the directory, granted it by nobody.
+      const managed = await h.request(
+        `${REST_ROUTES.people}/${bobId}`,
+        json({ managerId: aliceId }, admin, "PATCH"),
+      );
+      expect(managed.status, await managed.clone().text()).toBe(200);
+      expect(await asked()).toEqual([aliceLogin]);
+      // A grant of it is held as any other, and listed beside whoever manages someone.
+      const granted = await h.request(
+        pluginPath("leave", "grants"),
+        json({ role: "manager", person: bobId }, admin),
+      );
+      expect(granted.status, await granted.clone().text()).toBe(201);
+      grantId = restPluginGrantSchema.parse(await granted.json()).id;
+      expect(await asked()).toEqual([aliceLogin, "bob"].sort());
+    } finally {
+      if (grantId !== undefined) {
+        const revoked = await h.request(pluginPath("leave", "grants", grantId), {
+          method: "DELETE",
+          headers: { cookie: admin, origin: SIGN_IN_URL },
+        });
+        expect(revoked.status).toBe(200);
+      }
+      await h.request(`${REST_ROUTES.people}/${bobId}`, json({ managerId: null }, admin, "PATCH"));
+    }
+    expect(await asked()).toEqual([]);
+  });
+
   it("serves a frame a person's picture, by the person and never by an address", async () => {
     const at = (id: string, plugin = "leave") => pluginPath(plugin, "people", id, "picture");
     const seen = await h.request(at(aliceId), { headers: { cookie: member } });
@@ -977,7 +1011,12 @@ describe("a plugin on the board", () => {
         await (await h.request(pluginPath("leave"), { headers: { cookie: admin } })).json(),
       );
     const before = await consentNow();
-    expect(before.optionalCapabilities).toEqual(["outbound:api.example.test", "people:read:email"]);
+    expect(before.optionalCapabilities).toEqual([
+      "outbound:api.example.test",
+      "people:read:email",
+      "projects:read",
+      "projects:read:all",
+    ]);
     expect(before.capabilities).not.toContain("outbound:api.example.test");
     expect(before.consent).toContain("outbound:api.example.test");
     const consent = (body: readonly string[], cookie = admin) =>
@@ -1047,15 +1086,23 @@ describe("a plugin on the board", () => {
     expect((await invoked("audit", member, ["peekFor", "--person", bobId])).data).toMatchObject({
       roles: ["employee", "approver"],
     });
-    // Nobody to act for: refused before the callee hears of it.
-    const nobody = await invoke("audit", member, [
-      "peekFor",
-      "--person",
-      "0199c4d8-0000-7000-8000-0000000000dd",
-    ]);
-    expect(nobody.status).toBe(404);
-    // A decision answered for a person: carol, outside the board project, may not; bob may, and
-    // the feed names him, through audit.
+    // Nobody to act for, or an id that is nobody's: refused before the callee hears of it, and
+    // before the database is asked.
+    for (const person of ["0199c4d8-0000-7000-8000-0000000000dd", "not-a-person"]) {
+      const nobody = await invoke("audit", member, ["peekFor", "--person", person]);
+      expect(nobody.status, await nobody.clone().text()).toBe(404);
+      expect(restErrorSchema.parse(await nobody.json()).error.code).toBe("plugin.not_found");
+    }
+    // A decision is answered for a person where it is on their own plate (ADR-0068), whatever
+    // else they administer or work in: addressed to carol, who is outside the board project, it
+    // is answered for neither alice, who administers the workspace, nor bob, who works in the
+    // project and asked for it.
+    const carol = await h.signIn("carol");
+    const carolId = (
+      (await (await h.request(REST_ROUTES.me, { headers: { cookie: carol } })).json()) as {
+        person: { id: string };
+      }
+    ).person.id;
     const requested = await invoked("leave", member, [
       "request",
       "--from",
@@ -1063,50 +1110,199 @@ describe("a plugin on the board", () => {
       "--to",
       "2026-12-02",
       "--approver",
-      "alice",
+      "carol",
     ]);
     const decisionId = requested.waiting ?? "";
     expect(decisionId).not.toBe("");
-    const carol = await h.signIn("carol");
-    const carolId = (
-      (await (await h.request(REST_ROUTES.me, { headers: { cookie: carol } })).json()) as {
-        person: { id: string };
-      }
-    ).person.id;
-    const refused = await invoke("audit", member, [
-      "answerFor",
-      "--decision",
-      decisionId,
-      "--option",
-      "approve",
-      "--person",
-      carolId,
-    ]);
-    expect(refused.status).toBe(403);
-    const answered = await invoked("audit", member, [
-      "answerFor",
-      "--decision",
-      decisionId,
-      "--option",
-      "approve",
-      "--person",
-      bobId,
-    ]);
-    expect(answered.text).toBe("answered");
-    const feed = restEventsSchema.parse(
-      await (
-        await h.request(`${projectPath(BOARD, "events")}?after=0`, { headers: { cookie: admin } })
-      ).json(),
-    );
-    const event = feed.items.find(
-      (candidate) => candidate.kind === "decision.answered" && candidate.decisionId === decisionId,
-    );
-    expect(event).toMatchObject({
-      actor: { login: "bob" },
+    const answerFor = (person: string, decision = decisionId, option = "approve") =>
+      invoke("audit", member, [
+        "answerFor",
+        "--decision",
+        decision,
+        "--option",
+        option,
+        "--person",
+        person,
+      ]);
+    for (const person of [aliceId, bobId]) {
+      const refused = await answerFor(person);
+      expect(refused.status, await refused.clone().text()).toBe(403);
+      expect(restErrorSchema.parse(await refused.json()).error.code).toBe("plugin.forbidden");
+    }
+    // An id that is none is the plugin's mistake: the decision's said so, the person's nobody.
+    const malformed = await answerFor(carolId, "not-a-decision");
+    expect(malformed.status, await malformed.clone().text()).toBe(400);
+    expect(restErrorSchema.parse(await malformed.json()).error.code).toBe("plugin.invalid_args");
+    const noOne = await answerFor("not-a-person");
+    expect(noOne.status, await noOne.clone().text()).toBe(404);
+    expect(restErrorSchema.parse(await noOne.json()).error.code).toBe("plugin.not_found");
+    // Carol's to answer, and the feed names her, through audit.
+    const answered = await answerFor(carolId);
+    expect(answered.status, await answered.clone().text()).toBe(200);
+    const answeredEvent = async (id: string) =>
+      restEventsSchema
+        .parse(
+          await (
+            await h.request(`${projectPath(BOARD, "events")}?decision=${id}`, {
+              headers: { cookie: admin },
+            })
+          ).json(),
+        )
+        .items.find((candidate) => candidate.kind === "decision.answered");
+    expect(await answeredEvent(decisionId)).toMatchObject({
+      actor: { login: "carol" },
       agent: null,
       plugin: "audit",
       via: "audit",
     });
+    // Whoever manages the person it is addressed to answers it too, up the reporting line:
+    // carol manages bob.
+    const managed = await h.request(
+      `${REST_ROUTES.people}/${bobId}`,
+      json({ managerId: carolId }, admin, "PATCH"),
+    );
+    expect(managed.status, await managed.clone().text()).toBe(200);
+    try {
+      const forBob = await invoked("leave", member, [
+        "request",
+        "--from",
+        "2026-12-03",
+        "--to",
+        "2026-12-03",
+        "--approver",
+        "bob",
+      ]);
+      const byManager = await answerFor(carolId, forBob.waiting ?? "", "reject");
+      expect(byManager.status, await byManager.clone().text()).toBe(200);
+      expect(await answeredEvent(forBob.waiting ?? "")).toMatchObject({
+        actor: { login: "carol" },
+        via: "audit",
+      });
+    } finally {
+      await h.request(`${REST_ROUTES.people}/${bobId}`, json({ managerId: null }, admin, "PATCH"));
+    }
+  });
+
+  it("reads for a person what they may as a member, whatever they administer, and never as the administrator who enabled it (ADR-0072)", async () => {
+    // A private project alice is not listed in: hers to see as an administrator alone.
+    const vault = await h.request(
+      REST_ROUTES.projects,
+      json({ key: "vault", name: "Vault", visibility: "private" }, admin),
+    );
+    expect(vault.status, await vault.clone().text()).toBe(201);
+    const unlisted = await h.request(projectPath("vault", "members", aliceId), {
+      method: "DELETE",
+      headers: { cookie: admin, origin: SIGN_IN_URL },
+    });
+    expect(unlisted.status, await unlisted.clone().text()).toBe(204);
+    const before =
+      restPluginDetailSchema.parse(
+        await (await h.request(pluginPath("leave"), { headers: { cookie: admin } })).json(),
+      ).consent ?? [];
+    const consent = async (body: readonly string[]) => {
+      const changed = await h.request(
+        pluginPath("leave", "consent"),
+        json({ consent: body }, admin, "PATCH"),
+      );
+      expect(changed.status, await changed.clone().text()).toBe(200);
+    };
+    const looked = async (person: string) =>
+      (
+        (await invoked("audit", member, ["lookFor", "--person", person])).data as {
+          projects: string[];
+        }
+      ).projects;
+    try {
+      await consent([...before, "projects:read"]);
+      expect(await looked(aliceId)).toContain(BOARD);
+      expect(await looked(aliceId)).not.toContain("vault");
+      expect(await looked(bobId)).not.toContain("vault");
+      // Every project, with projects:read:all, is a person's own call's and the plugin's own,
+      // never a call's for a person.
+      await consent([...before, "projects:read", "projects:read:all"]);
+      expect(await looked(aliceId)).not.toContain("vault");
+      const own = (await invoked("leave", member, ["people"])).data as { projects: string[] };
+      expect(own.projects).toContain("vault");
+    } finally {
+      await consent(before);
+    }
+  });
+
+  it("names the plugin that acted for a person beside them, and none where a plugin called as itself (ADR-0072)", async () => {
+    const noted = await invoked("audit", member, [
+      "noteFor",
+      "--person",
+      bobId,
+      "--title",
+      "Noted for bob",
+    ]);
+    expect(noted.text).toBe("noted");
+    const tasks = restTasksSchema.parse(
+      await (
+        await h.request(`${projectPath(BOARD, "tasks")}?q=Noted`, { headers: { cookie: admin } })
+      ).json(),
+    );
+    const createdOf = async (titled: (title: string) => boolean) => {
+      const task = tasks.items.find((candidate) => titled(candidate.title));
+      expect(task).toBeDefined();
+      return restEventsSchema
+        .parse(
+          await (
+            await h.request(`${projectPath(BOARD, "events")}?task=${task?.id ?? ""}`, {
+              headers: { cookie: admin },
+            })
+          ).json(),
+        )
+        .items.find((event) => event.kind === "task.created");
+    };
+    // For bob: his, through audit, by leave's code.
+    expect(await createdOf((title) => title === "Noted for bob")).toMatchObject({
+      actor: { login: "bob" },
+      plugin: "leave",
+      via: "audit",
+    });
+    // From audit's hook, which called leave as itself: the console's own act, through no one.
+    expect(
+      await createdOf((title) => title.startsWith("Noted ") && title !== "Noted for bob"),
+    ).toMatchObject({ actor: { login: aliceLogin }, plugin: "leave", via: null });
+  });
+
+  it("tells an administrator alone how the roles a plugin asks of others stand, a callee's default role held (ADR-0072)", async () => {
+    const asks = async (cookie: string) =>
+      restPluginDetailSchema.parse(
+        await (await h.request(pluginPath("audit"), { headers: { cookie } })).json(),
+      ).asks;
+    expect((await asks(admin))?.map((ask) => [ask.plugin, ask.role, ask.state])).toEqual([
+      ["leave", "approver", "granted"],
+      ["leave", "employee", "granted"],
+    ]);
+    expect(await asks(member)).toBeUndefined();
+  });
+
+  it("refuses a plugin calling its own api, whatever its install was given (ADR-0072)", async () => {
+    const installs = drizzleOf(testDatabase.database);
+    const [install] = await installs
+      .select({ consent: pluginInstalls.consent })
+      .from(pluginInstalls)
+      .where(eq(pluginInstalls.key, "audit"));
+    const held = install?.consent ?? [];
+    const consented = (consent: readonly string[]) =>
+      installs
+        .update(pluginInstalls)
+        .set({ consent: [...consent] })
+        .where(eq(pluginInstalls.key, "audit"));
+    // No manifest may ask it any more; an install that holds it from before is refused at the call.
+    await consented([...held, "plugins:audit"]);
+    try {
+      const refused = await invoke("audit", member, ["itself"]);
+      expect(refused.status, await refused.clone().text()).toBe(403);
+      expect(restErrorSchema.parse(await refused.json()).error).toMatchObject({
+        code: "plugin.forbidden",
+        message: expect.stringContaining("no api of its own"),
+      });
+    } finally {
+      await consented(held);
+    }
   });
 
   it("hears of the workspace's people with people:read:all: who was deactivated, by login", async () => {

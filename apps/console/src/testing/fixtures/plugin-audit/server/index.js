@@ -62,6 +62,29 @@ export default {
       text: String(ctx.plugin.grants.length),
       data: ctx.plugin.grants,
     })),
+    lookFor: command(
+      "Asks Leave which projects a person reads, as them (ADR-0072).",
+      { person: argument("text") },
+      async (ctx, args) => {
+        const leave = await ctx.plugins.get("leave");
+        return { text: "looked", data: await leave.for(args.person).api.look({}) };
+      },
+    ),
+    noteFor: command(
+      "Has Leave leave a task on the board for a person, as them (ADR-0072).",
+      { person: argument("text"), title: argument("text") },
+      async (ctx, args) => {
+        const leave = await ctx.plugins.get("leave");
+        return {
+          text: "noted",
+          data: await leave.for(args.person).api.note({ title: args.title }),
+        };
+      },
+    ),
+    itself: command("Calls its own api, as if it were another plugin.", {}, async (ctx) => {
+      const itself = await ctx.plugins.get("audit");
+      return { text: "called itself", data: itself.version };
+    }),
   },
   queries: {},
   endpoints: {},
@@ -74,6 +97,8 @@ export default {
         title: `Audit ${event.data.requestId}: ${event.data.state}`,
         body: `Decided on ${event.at}, told by ${event.plugin}; seen as ${seen.caller} ${seen.by ?? ""} with ${seen.roles.join(", ")}.`,
       });
+      // Leave writes on the board for this plugin calling as itself: for nobody, through no one.
+      await leave.api.note({ title: `Noted ${event.data.requestId}` });
     },
   },
   jobs: {},

@@ -342,6 +342,15 @@ describe("parsePluginManifest", () => {
     ).toEqual(["grants: a plugin asks nothing of itself"]);
   });
 
+  it("refuses a plugin's capability on itself, required or optional, and takes one on another (ADR-0072)", () => {
+    const itself = `capabilities: plugins:${LEAVE.key} is the plugin itself; a plugin calls no api of its own`;
+    expect(problemsOf({ capabilities: [`plugins:${LEAVE.key}`] })).toEqual([itself]);
+    expect(problemsOf({ optionalCapabilities: [`plugins:${LEAVE.key}`, "people:act"] })).toEqual([
+      itself,
+    ]);
+    expect(problemsOf({ capabilities: ["plugins:hr", "people:act"] })).toEqual([]);
+  });
+
   it("refuses what is not a manifest at all, and unknown fields", () => {
     expect(parsePluginManifest(null).ok).toBe(false);
     expect(parsePluginManifest("leave").ok).toBe(false);

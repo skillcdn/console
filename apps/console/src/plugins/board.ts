@@ -16,9 +16,11 @@ import {
   type RestTask,
   restTaskInputSchema,
   restTaskPatchSchema,
+  TASK_STATES,
 } from "@skillcdn/console/api";
 import {
   type CollectionDescription,
+  isCalendarDay,
   PLUGIN_LIST_LIMIT,
   type PluginCaller,
   type PluginManifest,
@@ -26,14 +28,14 @@ import {
 } from "@skillcdn/console/plugin";
 import { sql } from "drizzle-orm";
 import * as z from "zod";
-import { personVisibleTo } from "../auth/policy.js";
+import { asActedFor, personVisibleTo } from "../auth/policy.js";
 import { type Database, drizzleOf } from "../db/client.js";
 import { listCategories } from "../db/queries/categories.js";
 import { writeComment } from "../db/queries/comments.js";
 import {
   answerDecision,
   findDecision,
-  findDecisionReachable,
+  findDecisionOnPlate,
   listDecisions,
   raiseDecision,
 } from "../db/queries/decisions.js";
@@ -77,12 +79,17 @@ import type { RecordStore } from "./records.js";
 
 // The board as a plugin reaches it (ADR-0052, docs/specs/plugins.md, "The board" and "The
 // context"): `ctx.console`, decided by the capabilities consented to and by the console's own
-// policy. A person's call reads what the person may see and acts as them; a console caller, a job
-// or a hook, acts as the administrator who enabled the plugin, within the plugin's projects. What
-// the plugin makes is marked as its, and it changes its own items alone.
+// policy. A person's call reads what the person may see and acts as them; a call a plugin makes
+// for a person, the same, as a member whatever the person administers (ADR-0072); a console
+// caller, a job or a hook, and a plugin calling as itself act as the administrator who enabled the
+// plugin, within the plugin's projects. What the plugin makes is marked as its, and it changes its
+// own items alone.
 
 /** How many items one read answers at most: a page of the board's own size. */
 const READ_LIMIT = PLUGIN_LIST_LIMIT;
+
+/** An id as the console keeps one: what plugin code names otherwise is refused here, before a query. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** A text a plugin writes on the board, as the API takes any: within the bound, with no control characters. */
 const boardText = (max: number, { atLeast = 1, multiline = false } = {}) =>
@@ -124,14 +131,16 @@ const documentWriteSchema = z.object({
   baseVersion: z.number().int().positive().optional(),
 });
 
+// As the REST API takes a filter: what the database would refuse to compare is the plugin's
+// invalid argument, never the database's error.
 const taskFilterSchema = z.object({
-  state: z.string().optional(),
+  state: z.enum(TASK_STATES).optional(),
   open: z.boolean().optional(),
   category: z.string().optional(),
-  goal: z.string().optional(),
-  worker: z.string().optional(),
+  goal: z.string().regex(UUID, "a goal's id").optional(),
+  worker: z.string().regex(UUID, "a person's id").optional(),
   unassigned: z.boolean().optional(),
-  dueBy: z.string().optional(),
+  dueBy: z.string().refine(isCalendarDay, "a day as YYYY-MM-DD").optional(),
   q: z.string().max(200).optional(),
   archived: z.boolean().optional(),
   limit: z.number().int().min(1).max(READ_LIMIT).optional(),
@@ -172,19 +181,14 @@ const forbidden = (message: string): PluginRefusal =>
 const invalid = (message: string): PluginRefusal =>
   new PluginRefusal("plugin.invalid_args", message);
 
-/** A query's refusal as the plugin gets it: the console's code and words, as an invalid argument. */
 /** Whether a caller acts as a person: a person themselves, or a plugin for one (ADR-0072); the console and a plugin as itself do not. */
 function actsAsPerson(caller: PluginCaller): boolean {
-  return caller.kind === "person" || (caller.kind === "plugin" && caller.for !== null);
+  return caller.kind === "person" || actsFor(caller);
 }
 
-/** The person a caller acts as, by id, where it acts as one. */
-function personIdOf(caller: PluginCaller): string | undefined {
-  return caller.kind === "person"
-    ? caller.person.id
-    : caller.kind === "plugin"
-      ? caller.for?.id
-      : undefined;
+/** Whether a plugin calls for a person who did something elsewhere (ADR-0072), and not as itself. */
+function actsFor(caller: PluginCaller): boolean {
+  return caller.kind === "plugin" && caller.for !== null;
 }
 
 /** An answer a plugin gives for a person (ADR-0072): the option by its key or by its label, one of the two, and a note. */
@@ -199,6 +203,7 @@ const decisionAnswerSchema = z
     "one of optionKey and option",
   );
 
+/** A query's refusal as the plugin gets it: the console's code and words, as an invalid argument. */
 function refusalOf(error: unknown): never {
   if (error instanceof PluginRefusal) {
     throw error;
@@ -304,14 +309,24 @@ export class PluginBoard {
           if (declared === undefined) {
             throw invalid(`the plugin declares no role ${role}`);
           }
-          // Everyone for the default role; whoever manages someone for a role that follows the
-          // reporting line (ADR-0068); else those granted it.
-          const granted =
-            context.manifest.defaultRole === role
-              ? undefined
-              : declared.follows === "reports"
-                ? await peopleWithReports(this.options.database, workspace.id)
-                : await peopleGranted(this.options.database, workspace.id, context.key, role);
+          // Everyone for the default role; else those granted it, and for a role that follows the
+          // reporting line (ADR-0068) whoever manages someone besides, as the role is held.
+          let granted: ReadonlySet<string> | undefined;
+          if (context.manifest.defaultRole !== role) {
+            const given = await peopleGranted(
+              this.options.database,
+              workspace.id,
+              context.key,
+              role,
+            );
+            granted =
+              declared.follows === "reports"
+                ? new Set([
+                    ...given,
+                    ...(await peopleWithReports(this.options.database, workspace.id)),
+                  ])
+                : given;
+          }
           return people
             .filter(
               (person) =>
@@ -353,10 +368,12 @@ export class PluginBoard {
       }
       case "console.projects": {
         needs(actsAsPerson(context.caller) ? "projects:read" : "projects:read:all");
-        // With `:all`, the view is the administrator's who enabled the plugin, who sees every project.
-        const viewer = context.consent.includes("projects:read:all")
-          ? await this.enabler(context, workspace)
-          : await this.actingPerson(context, workspace);
+        // With `:all`, the view is the administrator's who enabled the plugin, who sees every
+        // project; never in a call for a person, which reads what the person may (ADR-0072).
+        const viewer =
+          context.consent.includes("projects:read:all") && !actsFor(context.caller)
+            ? await this.enabler(context, workspace)
+            : await this.actingPerson(context, workspace);
         if (method === "list") {
           return (await listProjectsFor(this.options.database, workspace.id, viewer)).map(
             restProject,
@@ -395,11 +412,10 @@ export class PluginBoard {
           return items.map(restRun);
         }
         if (method === "get") {
-          const run = await findRun(
-            this.options.database,
-            workspace.id,
-            text(args[0], "the run's id"),
-          );
+          const id = text(args[0], "the run's id");
+          const run = UUID.test(id)
+            ? await findRun(this.options.database, workspace.id, id)
+            : undefined;
           if (run === undefined || !(await this.reaches(context, workspace, run.projectId))) {
             return null;
           }
@@ -430,7 +446,7 @@ export class PluginBoard {
           throw invalid(`the filter does not fit: ${filter.error.issues[0]?.message ?? ""}`);
         }
         const { items } = await listTasks(this.options.database, scope, {
-          state: filter.data.state as never,
+          state: filter.data.state,
           open: filter.data.open,
           category: filter.data.category,
           goalId: filter.data.goal,
@@ -560,11 +576,10 @@ export class PluginBoard {
       }
       case "get": {
         needs("board:read");
-        const decision = await findDecision(
-          this.options.database,
-          workspace.id,
-          text(args[0], "the decision's id"),
-        );
+        const id = text(args[0], "the decision's id");
+        const decision = UUID.test(id)
+          ? await findDecision(this.options.database, workspace.id, id)
+          : undefined;
         if (
           decision === undefined ||
           !(await this.reaches(context, workspace, decision.projectId))
@@ -626,10 +641,16 @@ export class PluginBoard {
         }
       }
       case "answer": {
-        // For a person who answered elsewhere (ADR-0072): their own standing decides, as on the
-        // board; the answer is theirs, through this plugin. A plugin answers nothing itself.
+        // For a person who answered elsewhere (ADR-0072): a decision on their own plate alone,
+        // addressed to them or reaching them up the reporting line (ADR-0068), whatever else they
+        // administer or are a member of, so that a plugin's mistake about who pressed a button
+        // answers nothing that was never theirs; the answer is theirs, through this plugin. A
+        // plugin answers nothing itself.
         needs("people:act");
         const id = text(args[0], "the decision's id");
+        if (!UUID.test(id)) {
+          throw invalid("the decision's id is not one");
+        }
         const given = decisionAnswerSchema.safeParse(args[1]);
         if (!given.success) {
           throw invalid(`the answer does not fit: ${given.error.issues[0]?.message ?? ""}`);
@@ -646,23 +667,27 @@ export class PluginBoard {
             "answer names whom it is for, { for: <person id> }; a plugin answers no decision itself",
           );
         }
-        const person = await findPerson(this.options.database, workspace.id, forWhom);
+        const person = UUID.test(forWhom)
+          ? await findPerson(this.options.database, workspace.id, forWhom)
+          : undefined;
         if (person === undefined || person.status !== "active") {
           throw new PluginRefusal(
             "plugin.not_found",
             "the person to answer for is not an active person of the workspace",
           );
         }
-        const reached = await findDecisionReachable(
+        const decision = await findDecisionOnPlate(
           this.options.database,
           workspace.id,
           id,
-          person,
+          person.id,
         );
-        if (reached === undefined || !reached.mayAnswer) {
-          throw forbidden("the person may not answer this decision");
+        if (decision === undefined) {
+          throw forbidden(
+            "the person may not answer this decision: it is addressed neither to them nor, being a plugin's, to anyone they manage",
+          );
         }
-        const chosen = reached.decision.options.find((option) =>
+        const chosen = decision.options.find((option) =>
           given.data.optionKey !== undefined
             ? option.key === given.data.optionKey
             : option.label === given.data.option,
@@ -670,10 +695,15 @@ export class PluginBoard {
         if (chosen === undefined) {
           throw invalid("the option is not one of the decision's");
         }
-        const via = context.caller.kind === "plugin" ? context.caller.plugin : context.key;
+        // The plugin that acted for the person: the one that called this one for them, where one
+        // did; else this one, which names them itself.
+        const via =
+          context.caller.kind === "plugin" && context.caller.for?.id === person.id
+            ? context.caller.plugin
+            : context.key;
         try {
-          const decision = await answerDecision(this.options.database, {
-            scope: { workspaceId: workspace.id, projectId: reached.project.id },
+          const answered = await answerDecision(this.options.database, {
+            scope: { workspaceId: workspace.id, projectId: decision.projectId },
             actor: { id: person.id, plugin: context.key, via },
             decisionId: id,
             option: chosen.id,
@@ -681,7 +711,7 @@ export class PluginBoard {
             note: given.data.note,
             now: this.options.clock.now(),
           });
-          return restDecision(decision);
+          return restDecision(answered);
         } catch (error) {
           return refusalOf(error);
         }
@@ -850,26 +880,38 @@ export class PluginBoard {
     return project;
   }
 
-  /** The person a call acts as: the caller, or, for the console, the administrator who enabled the plugin. */
+  /**
+   * The person a call acts as: the caller themselves; the person a plugin acts for, as a member
+   * whatever they administer, since acting for a person never carries their administration
+   * (ADR-0072); or, for the console and a plugin calling as itself, the administrator who enabled
+   * the plugin.
+   */
   private async actingPerson(
     context: BoardContext,
     workspace: WorkspaceRecord,
   ): Promise<PersonRecord> {
-    const personId = personIdOf(context.caller);
-    if (personId !== undefined) {
-      const person = await findPerson(this.options.database, workspace.id, personId);
-      if (
-        person === undefined ||
-        (context.caller.kind === "plugin" && person.status !== "active")
-      ) {
+    const { caller } = context;
+    if (caller.kind === "person") {
+      const person = await findPerson(this.options.database, workspace.id, caller.person.id);
+      if (person === undefined) {
         throw forbidden("the caller is no longer a person of the workspace");
       }
       return person;
     }
+    if (caller.kind === "plugin" && caller.for !== null) {
+      const person = await findPerson(this.options.database, workspace.id, caller.for.id);
+      if (person === undefined || person.status !== "active") {
+        throw forbidden("the caller is no longer a person of the workspace");
+      }
+      return asActedFor(person);
+    }
     return this.enabler(context, workspace);
   }
 
-  /** The administrator who enabled the plugin: who owns what the console's own calls make on the board. */
+  /**
+   * The administrator who enabled the plugin: who owns what the console's own calls make on the
+   * board, and whose view of every project `projects:read:all` opens; never whom a call is for.
+   */
   private async enabler(context: BoardContext, workspace: WorkspaceRecord): Promise<PersonRecord> {
     const id = context.install.enabledBy;
     const person =
@@ -885,8 +927,12 @@ export class PluginBoard {
     const person = await this.actingPerson(context, workspace);
     const agent =
       context.caller.kind === "person" ? (context.caller.agent ?? undefined) : undefined;
-    // A plugin that acts for a person is named beside them (ADR-0072), as an agent is.
-    const via = context.caller.kind === "plugin" ? context.caller.plugin : undefined;
+    // A plugin that acts for a person is named beside them (ADR-0072), as an agent is; one that
+    // calls as itself acts for nobody, and its act is the console's own, through no one.
+    const via =
+      context.caller.kind === "plugin" && context.caller.for !== null
+        ? context.caller.plugin
+        : undefined;
     return {
       id: person.id,
       ...(agent === undefined ? {} : { agent }),

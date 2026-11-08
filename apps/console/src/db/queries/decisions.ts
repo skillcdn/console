@@ -5,7 +5,12 @@ import {
   type RestDecisionOption,
 } from "@skillcdn/console/api";
 import { and, asc, count, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
-import { decisionAnswerableBy, decisionReachableBy, memberOfProject } from "../../auth/policy.js";
+import {
+  decisionAnswerableBy,
+  decisionOnPlateOf,
+  decisionReachableBy,
+  memberOfProject,
+} from "../../auth/policy.js";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
 import { decisionFiles, decisions, people, pluginLinks, projects, runs, tasks } from "../schema.js";
@@ -681,6 +686,30 @@ export async function findDecision(
 ): Promise<DecisionRecord | undefined> {
   const [row] = await selectDecisions(drizzleOf(database))
     .where(and(eq(decisions.workspaceId, workspaceId), eq(decisions.id, decisionId)))
+    .limit(1);
+  return row === undefined ? undefined : toDecision(row);
+}
+
+/**
+ * A decision on the person's own plate, wherever it is (ADR-0068): addressed to them, or a
+ * plugin's addressed to someone they manage, up the reporting line. Nothing of their
+ * administration or of their membership of its project finds one: what a plugin answers for a
+ * person (ADR-0072) is held to this.
+ */
+export async function findDecisionOnPlate(
+  database: Database,
+  workspaceId: string,
+  decisionId: string,
+  personId: string,
+): Promise<DecisionRecord | undefined> {
+  const [row] = await selectDecisions(drizzleOf(database))
+    .where(
+      and(
+        eq(decisions.workspaceId, workspaceId),
+        eq(decisions.id, decisionId),
+        decisionOnPlateOf(personId),
+      ),
+    )
     .limit(1);
   return row === undefined ? undefined : toDecision(row);
 }

@@ -344,8 +344,9 @@ export interface PluginConsole {
     get(id: string): Promise<RestPerson | null>;
     /**
      * The active people a role of the plugin was granted to, by name, through a project or with
-     * everyone, and everyone for `defaultRole` (ADR-0063). An administrator holds every role, and
-     * is listed only where they were granted it.
+     * everyone, and everyone for `defaultRole` (ADR-0063); for a role that follows the reporting
+     * line, whoever manages someone besides (ADR-0068). An administrator holds every role, and is
+     * listed only where they were granted it or manage someone.
      */
     granted(role: string): Promise<readonly RestPerson[]>;
   };
@@ -372,9 +373,11 @@ export interface PluginConsole {
     get(id: string): Promise<RestDecision | null>;
     ask(project: string, decision: DecisionAsk): Promise<RestDecision>;
     /**
-     * Answers a decision for a person who answered elsewhere (ADR-0072), with `people:act`: the
-     * person's own standing decides whether they may, as on the board, and the answer is theirs,
-     * through this plugin. A plugin answers no decision itself.
+     * Answers a decision for a person who answered elsewhere (ADR-0072), with `people:act`: one on
+     * the person's own plate, addressed to them or a plugin's addressed to someone they manage, up
+     * the reporting line (ADR-0068), and `plugin.forbidden` for any other, whatever they
+     * administer or are a member of. The answer is theirs, through this plugin. A plugin answers
+     * no decision itself.
      */
     answer(id: string, answer: DecisionAnswer, as: { readonly for: string }): Promise<RestDecision>;
   };
@@ -509,8 +512,9 @@ export interface OtherPlugin {
   readonly api: Readonly<Record<string, (input: unknown) => Promise<unknown>>>;
   /**
    * The same plugin, called for a person who did something elsewhere (ADR-0072): with the roles
-   * this plugin and the person both hold in it, in the person's language, recorded as theirs
-   * through this plugin. Needs `people:act`; the person is active, or the call is `plugin.not_found`.
+   * this plugin and the person both hold in it, in the person's language, what it reads of the
+   * console the person's as a member's, whatever they administer, recorded as theirs through this
+   * plugin. Needs `people:act`; the person is active, or the call is `plugin.not_found`.
    */
   for(personId: string): OtherPlugin;
 }

@@ -617,6 +617,13 @@ export const pluginManifestSchema = z
       for (const problem of [
         ...manifestProblems(manifest),
         ...(manifest.key in manifest.grants ? ["grants: a plugin asks nothing of itself"] : []),
+        // Its own api through `ctx.plugins` would be itself called as another plugin, and, with
+        // `people:act`, every call of its own made for anyone (ADR-0072).
+        ...(capabilitiesAsked(manifest).includes(`plugins:${manifest.key}`)
+          ? [
+              `capabilities: plugins:${manifest.key} is the plugin itself; a plugin calls no api of its own`,
+            ]
+          : []),
       ]) {
         ctx.addIssue({ code: "custom", message: problem, input: manifest });
       }

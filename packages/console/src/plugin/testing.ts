@@ -538,7 +538,7 @@ function refusingConsole(given: TestConsoleOptions | undefined): PluginConsole {
     teams: fill("teams", ["list", "get"], given?.teams),
     projects: fill("projects", ["list", "get", "members"], given?.projects),
     tasks: fill("tasks", ["list", "get", "create", "update", "comment"], given?.tasks),
-    decisions: fill("decisions", ["list", "get", "ask"], given?.decisions),
+    decisions: fill("decisions", ["list", "get", "ask", "answer"], given?.decisions),
     documents: fill("documents", ["list", "read", "write"], given?.documents),
     runs: fill("runs", ["list", "get"], given?.runs),
   };

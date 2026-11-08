@@ -38,6 +38,15 @@ export function administers(person: PersonRecord): boolean {
   return person.role === "admin";
 }
 
+/**
+ * The person as a plugin acting for them stands (ADR-0072): a member, whatever they administer,
+ * so that neither a mistake in matching them to an account elsewhere nor a bug in the plugin
+ * carries an administrator's reach into what is done in their name.
+ */
+export function asActedFor(person: PersonRecord): PersonRecord {
+  return administers(person) ? { ...person, role: "member" } : person;
+}
+
 /** On a `projects` row: whether `person` may see the project. An administrator sees every one. */
 export function projectVisibleTo(person: PersonRecord): SQL {
   return administers(person) ? sql`true` : memberOfProject(person.id);
@@ -138,15 +147,25 @@ export function decisionReachableBy(person: PersonRecord): SQL {
 }
 
 /**
+ * On a `decisions` row: whether the decision is on `person`'s own plate, wherever it is
+ * (ADR-0068): addressed to them, or a plugin's addressed to someone they manage, up the reporting
+ * line. Neither their administration nor their membership of the project adds to it; what a
+ * plugin answers for a person is held to it (ADR-0072).
+ */
+export function decisionOnPlateOf(person: PersonRef): SQL {
+  return sql`(${decisionAddressedTo(person)} or (${raisedByAPlugin()} and ${aboveADecider(person)}))`;
+}
+
+/**
  * On a `decisions` row: whether `person` may answer the decision from outside the project
- * (ADR-0068): it is addressed to them, or it is a plugin's and addressed to someone they manage.
- * Within the project, anyone who may work there answers, as before; an administrator always.
+ * (ADR-0068): it is on their plate. Within the project, anyone who may work there answers, as
+ * before; an administrator always.
  */
 export function decisionAnswerableBy(person: PersonRecord): SQL {
   if (administers(person)) {
     return sql`true`;
   }
-  return sql`(${decisionAddressedTo(person.id)} or (${raisedByAPlugin()} and ${aboveADecider(person.id)}))`;
+  return decisionOnPlateOf(person.id);
 }
 
 /** Whether `person` configures the workspace: its settings, its categories, who is in and what they are. */

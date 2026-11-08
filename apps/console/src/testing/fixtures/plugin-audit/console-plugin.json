@@ -15,7 +15,7 @@
   "requires": { "leave": "*" },
   "grants": {
     "leave": {
-      "roles": ["approver"],
+      "roles": ["approver", "employee"],
       "why": { "en": "To read every request it audits, as itself." }
     }
   }
