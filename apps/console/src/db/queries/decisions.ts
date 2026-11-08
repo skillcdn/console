@@ -141,8 +141,9 @@ const decisionColumns = {
       readonly deactivatedAt: string | null;
       readonly managerId: string | null;
       readonly language: string | null;
+      readonly email: string | null;
     }[]
-  >`(select coalesce(json_agg(json_build_object('id', ${people.id}, 'workspaceId', ${people.workspaceId}, 'host', ${people.host}, 'hostAccountId', ${people.hostAccountId}, 'login', ${people.login}, 'name', ${people.name}, 'avatarUrl', ${people.avatarUrl}, 'role', ${people.role}, 'status', ${people.status}, 'source', ${people.source}, 'deactivatedAt', ${people.deactivatedAt}, 'managerId', ${people.managerId}, 'language', ${people.language}) order by named.ordinality), '[]'::json) from unnest(${decisions.deciderIds}) with ordinality as named(id, ordinality) join ${people} on ${people.id} = named.id)`,
+  >`(select coalesce(json_agg(json_build_object('id', ${people.id}, 'workspaceId', ${people.workspaceId}, 'host', ${people.host}, 'hostAccountId', ${people.hostAccountId}, 'login', ${people.login}, 'name', ${people.name}, 'avatarUrl', ${people.avatarUrl}, 'role', ${people.role}, 'status', ${people.status}, 'source', ${people.source}, 'deactivatedAt', ${people.deactivatedAt}, 'managerId', ${people.managerId}, 'language', ${people.language}, 'email', ${people.email}) order by named.ordinality), '[]'::json) from unnest(${decisions.deciderIds}) with ordinality as named(id, ordinality) join ${people} on ${people.id} = named.id)`,
   answeredBy: personColumns(answerers),
   answeredAgent: decisions.answeredAgent,
   outcomeBy: personColumns(outcomeWriters),

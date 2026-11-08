@@ -16,7 +16,7 @@
     "people:read",
     "people:read:all"
   ],
-  "optionalCapabilities": ["outbound:api.example.test"],
+  "optionalCapabilities": ["outbound:api.example.test", "people:read:email"],
   "roles": {
     "employee": { "name": { "en": "Employee" }, "description": { "en": "Requests leave." } },
     "approver": { "name": { "en": "Approver" }, "description": { "en": "Approves leave." } }

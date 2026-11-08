@@ -56,6 +56,14 @@ export function restPerson(person: PersonRecord): RestPerson {
   };
 }
 
+/**
+ * A person with their work email: for an administrator, for the person themselves, and for a
+ * plugin with `people:read:email`; everyone else reads `restPerson`, which carries none.
+ */
+export function restPersonWithEmail(person: PersonRecord): RestPerson {
+  return { ...restPerson(person), email: person.email ?? null };
+}
+
 /** A login let in that nobody has signed in with yet (ADR-0022). */
 export function restListing(listing: ListingRecord): RestListing {
   return {

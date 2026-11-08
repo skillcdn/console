@@ -1374,6 +1374,21 @@ describe("people", () => {
     expect(change).toContain(`value="${alice.id}" selected=""`);
   });
 
+  it("shows a person's work email where the console answers one, and lets an administrator write it (ADR-0069)", () => {
+    const mailed: RestPerson = { ...bob, email: "bob@example.test" };
+    const read = renderToStaticMarkup(<PeopleList people={[alice, mailed]} me={bob} />);
+    expect(read).toMatch(/<dt>Work email<\/dt><dd>bob@example.test/);
+    expect(read).not.toContain('type="email"');
+    // A person the console answers no address for has no row; an administrator writes everyone's.
+    expect(read.match(/<dt>Work email<\/dt>/g)).toHaveLength(1);
+    const change = renderToStaticMarkup(
+      <PeopleList people={[alice, mailed]} me={alice} onChangeEmail={() => undefined} />,
+    );
+    expect(change.match(/type="email"/g)).toHaveLength(2);
+    expect(change).toContain('value="bob@example.test"');
+    expect(change).toContain('aria-label="Work email of bob"');
+  });
+
   it("keeps those out apart, with the way back in, and shows the logins let in with the way out", () => {
     const carol: RestPerson = {
       ...bob,

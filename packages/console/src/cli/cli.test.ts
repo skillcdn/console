@@ -2038,6 +2038,26 @@ describe("configuring, as the person", () => {
   };
   const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
+  it("writes a person's work email, or none, and prints it where the console answers one (ADR-0069)", async () => {
+    const mailed = { ...BOB, email: "bob@example.test" };
+    const { fetch, calls } = fakeConsole({
+      "GET /api/v1/people?login=bob": { body: { items: [BOB], listed: [], organization: null } },
+      [`PATCH /api/v1/people/${BOB.id}`]: [{ body: mailed }, { body: { ...BOB, email: null } }],
+    });
+    const written = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["person", "email", "bob", "Bob@Example.test"], written.io)).toBe(EXIT.ok);
+    expect(calls.find((call) => call.key === `PATCH /api/v1/people/${BOB.id}`)?.body).toEqual({
+      email: "Bob@Example.test",
+    });
+    expect(written.out()).toBe("bob  Bob Example  <bob@example.test>  (member)\n");
+    const cleared = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["person", "email", "bob", "none"], cleared.io)).toBe(EXIT.ok);
+    expect(calls.at(-1)?.body).toEqual({ email: null });
+    expect(cleared.out()).toBe("bob  Bob Example  (member)\n");
+    const missing = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["person", "email", "bob"], missing.io)).toBe(EXIT.usage);
+  });
+
   it("lists the people and says what one is", async () => {
     const dana = {
       id: "0199c4d8-0000-7000-8000-000000000077",

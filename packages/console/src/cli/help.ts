@@ -248,15 +248,16 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   },
   person: {
     usage:
-      "person role <login> <admin|member>  |  person manager <login> <manager login|none>  |  person add <login> [--host gh|google]  |  person remove <login>  |  person deactivate <login>  |  person reactivate <login>",
+      "person role <login> <admin|member>  |  person manager <login> <manager login|none>  |  person email <login> <address|none>  |  person add <login> [--host gh|google]  |  person remove <login>  |  person deactivate <login>  |  person reactivate <login>",
     synopsis:
-      "Says what a person is in the workspace and whom they report to, lets a login in or takes one out; for an administrator.",
+      "Says what a person is in the workspace, whom they report to and their work email, lets a login in or takes one out; for an administrator.",
     about:
-      "For an administrator: the person themselves on the People page, or their agent here, named on it. role says what a person is in the workspace; the board keeps at least one administrator in. manager says whom a person reports to, the reporting line of the directory, which the plugins read as a default (the approver of their leave, say) in place of a line of their own: another active person of the workspace who does not report to them, directly or through others, or none; console people shows it. add lets a login in: whoever signs in with that account at that host is a person from then on; the host is read off the login (an address is Google's, anything else GitHub's) unless --host says. remove takes a login away that nobody has signed in with yet. deactivate takes a person out: refused on every request at once, their agents with them, kept with everything they did, and listed nowhere; reactivate takes them back in. A person the organization let in comes and goes with it, and is neither.",
+      "For an administrator: the person themselves on the People page, or their agent here, named on it. role says what a person is in the workspace; the board keeps at least one administrator in. manager says whom a person reports to, the reporting line of the directory, which the plugins read as a default (the approver of their leave, say) in place of a line of their own: another active person of the workspace who does not report to them, directly or through others, or none; console people shows it. email writes the person's work email, or none, by which a plugin allowed to read it matches them to an account elsewhere: a person who signs in at Google has their address from the sign-in, and an administrator writes everyone else's; it is read by an administrator, the person and such a plugin, and by nobody from the feed, which says only that it changed. add lets a login in: whoever signs in with that account at that host is a person from then on; the host is read off the login (an address is Google's, anything else GitHub's) unless --host says. remove takes a login away that nobody has signed in with yet. deactivate takes a person out: refused on every request at once, their agents with them, kept with everything they did, and listed nowhere; reactivate takes them back in. A person the organization let in comes and goes with it, and is neither.",
     refusals: [
       "auth.forbidden: only an administrator says who is in and what they are",
       "person.last_admin: the board keeps at least one administrator in; make another one first",
       "person.invalid_manager: the manager is not another active person of the workspace, or reports to this person already",
+      "person.email_taken: the address is another person's in this workspace",
       "person.of_organization: the organization says whether that person is in",
       "listing.exists: the login is let in already, or is a person's who is in",
       "listing.unknown_host: nobody signs in through that provider here",

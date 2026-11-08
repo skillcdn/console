@@ -116,6 +116,7 @@ describe("the Google provider", () => {
     expect(await google.getAccount("ya29.token")).toEqual({
       accountId: "110248495921238986420",
       login: "dave@acme.test",
+      email: "dave@acme.test",
       name: "Dave Example",
       avatarUrl: "https://pictures.example/dave.png",
       domain: "acme.test",
@@ -132,6 +133,7 @@ describe("the Google provider", () => {
       name: undefined,
       avatarUrl: undefined,
       domain: undefined,
+      email: "erin@mail.test",
     });
   });
 

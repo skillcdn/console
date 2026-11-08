@@ -133,6 +133,13 @@ export const people = pgTable(
     language: text(),
     /** Whom the person reports to, another person of the workspace, set by an administrator; null for nobody. */
     managerId: uuid().references((): AnyPgColumn => people.id),
+    /**
+     * The person's work email, lowercase, one per workspace: the address they sign in with at
+     * Google, else what an administrator wrote; read by a plugin with `people:read:email` to
+     * match them to an account elsewhere, and by nobody else but an administrator and
+     * themselves. Null until known.
+     */
+    email: text(),
     /** The person's own front page (ADR-0061), what they took off it and what they arranged at each width; null while they have arranged nothing. */
     home: jsonb().$type<RestHome>(),
     lastLoginAt: instant().notNull(),
@@ -141,6 +148,9 @@ export const people = pgTable(
   },
   (table) => [
     uniqueIndex("people_host_account_key").on(table.workspaceId, table.host, table.hostAccountId),
+    uniqueIndex("people_email_key")
+      .on(table.workspaceId, table.email)
+      .where(sql`${table.email} is not null`),
     index("people_manager_idx").on(table.managerId),
     check("people_role_check", sql`${table.role} in (${sql.raw(literals(PERSON_ROLES))})`),
     check("people_status_check", sql`${table.status} in (${sql.raw(literals(PERSON_STATUSES))})`),

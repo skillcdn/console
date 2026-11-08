@@ -43,7 +43,7 @@ import type { Clock } from "../ports/clock.js";
 import type { OrganizationDirectory } from "../ports/organization.js";
 import { errorBody } from "./app.js";
 import type { AppEnv } from "./request-context.js";
-import { restPerson } from "./rest-shapes.js";
+import { restPersonWithEmail } from "./rest-shapes.js";
 import { restWorkspace } from "./workspace.js";
 
 /** What signing in is made of, on a deployment where people can. */
@@ -241,7 +241,7 @@ export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies):
     const person = caller?.person;
     return {
       workspace: workspaceOf(found, await readWorkspaceSettings(database, found.id)),
-      person: person === undefined ? null : restPerson(person),
+      person: person === undefined ? null : restPersonWithEmail(person),
       agent: caller?.token?.name ?? null,
       language: person === undefined ? null : ((await languageOf(database, person.id)) ?? null),
       // The person's own arrangement of the front page's widgets (ADR-0059), or the manifests'.

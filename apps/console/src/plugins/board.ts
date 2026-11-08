@@ -59,6 +59,7 @@ import {
   restDocumentSummary,
   restMember,
   restPerson,
+  restPersonWithEmail,
   restProject,
   restRun,
   restTask,
@@ -236,6 +237,10 @@ export class PluginBoard {
           ? sql`true`
           : personVisibleTo(viewer, settings);
         const people = await listPeople(this.options.database, workspace.id, { visible });
+        // The work email with `people:read:email` alone, to match a person to an account elsewhere.
+        const shape = context.consent.includes("people:read:email")
+          ? restPersonWithEmail
+          : restPerson;
         if (method === "list") {
           const options = (args[0] ?? {}) as { readonly q?: unknown };
           const words = typeof options.q === "string" ? options.q.trim().toLowerCase() : "";
@@ -247,12 +252,12 @@ export class PluginBoard {
                 (person.name ?? "").toLowerCase().includes(words),
             )
             .slice(0, READ_LIMIT)
-            .map(restPerson);
+            .map(shape);
         }
         if (method === "get") {
           const id = text(args[0], "the person's id");
           const found = people.find((person) => person.id === id);
-          return found === undefined ? null : restPerson(found);
+          return found === undefined ? null : shape(found);
         }
         if (method === "granted") {
           const role = text(args[0], "the role");
@@ -274,7 +279,7 @@ export class PluginBoard {
                 person.status === "active" && (granted === undefined || granted.has(person.id)),
             )
             .slice(0, READ_LIMIT)
-            .map(restPerson);
+            .map(shape);
         }
         break;
       }

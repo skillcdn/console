@@ -141,12 +141,15 @@ export function createGoogleProvider(options: GoogleProviderOptions): IdentityPr
         throw new ProviderError("invalid", `${WHO} did not vouch for the account's email`);
       }
       const domain = clean(account.hd)?.toLowerCase();
+      const email = account.email.trim().toLowerCase();
       return {
         accountId: account.sub,
-        login: account.email.trim().toLowerCase(),
+        login: email,
         name: clean(account.name),
         avatarUrl: httpsOnly(account.picture),
         domain,
+        // Verified above: what a plugin matches the person to an account elsewhere by.
+        email,
       };
     },
   };

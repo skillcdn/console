@@ -67,6 +67,8 @@ function sentenceOf(event: RestEvent, words: Messages): string {
       return data.manager === null || data.manager === undefined
         ? feed.event.managerCleared(login)
         : feed.event.managerChanged(login, data.manager);
+    case "person.email_changed":
+      return data.set === true ? feed.event.emailChanged(login) : feed.event.emailCleared(login);
     case "workspace.updated":
       return feed.event.workspaceUpdated(fields);
     case "project.created":

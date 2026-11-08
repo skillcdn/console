@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import {
   hostOfLogin,
   isLoginAt,
@@ -39,6 +39,8 @@ export interface PeopleListProps {
   readonly onChangeStatus?: ((person: RestPerson, status: PersonStatus) => void) | undefined;
   /** Called with the manager an administrator chose for the person, or null for none. Left out, managers are read here, not changed. */
   readonly onChangeManager?: ((person: RestPerson, managerId: string | null) => void) | undefined;
+  /** Called with the work email an administrator wrote for the person, or null for none. Left out, an address is read here where the console answers one. */
+  readonly onChangeEmail?: ((person: RestPerson, email: string | null) => void) | undefined;
   /** Called when an administrator takes a listing away. Left out, listings are read here. */
   readonly onUnlist?: ((listing: RestListing) => void) | undefined;
   /** Where a person's work is seen; given to an administrator, or an owner of a project. */
@@ -46,6 +48,45 @@ export interface PeopleListProps {
   /** Where a person's agents are seen; given to an administrator. */
   readonly agentsHref?: ((person: RestPerson) => string) | undefined;
   readonly busy?: boolean | undefined;
+}
+
+/**
+ * A person's work email as an administrator writes it: kept while typed, written when the field
+ * is left or Enter is pressed, and only where it changed; emptied, it clears the address.
+ */
+function EmailField(props: {
+  readonly person: RestPerson;
+  readonly label: string;
+  readonly busy: boolean;
+  readonly onChange: (email: string | null) => void;
+}) {
+  const current = props.person.email ?? "";
+  const [value, setValue] = useState(current);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the field follows what the console answers for the person
+  useEffect(() => setValue(current), [current, props.person.id]);
+  const commit = () => {
+    const next = value.trim().toLowerCase();
+    if (next !== current) {
+      props.onChange(next === "" ? null : next);
+    }
+  };
+  return (
+    <input
+      type="email"
+      className="sc-input sc-input-quiet"
+      aria-label={props.label}
+      value={value}
+      disabled={props.busy}
+      onChange={(event) => setValue(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          commit();
+        }
+      }}
+    />
+  );
 }
 
 export function PeopleList(props: PeopleListProps) {
@@ -178,6 +219,23 @@ export function PeopleList(props: PeopleListProps) {
                     )}
                   </dd>
                 </div>
+                {(props.onChangeEmail !== undefined || typeof person.email === "string") && (
+                  <div className="sc-person-fact">
+                    <dt>{people.email}</dt>
+                    <dd>
+                      {props.onChangeEmail === undefined ? (
+                        person.email
+                      ) : (
+                        <EmailField
+                          person={person}
+                          label={people.emailOf(personName(person))}
+                          busy={props.busy === true}
+                          onChange={(email) => props.onChangeEmail?.(person, email)}
+                        />
+                      )}
+                    </dd>
+                  </div>
+                )}
                 {team.length > 0 && (
                   <div className="sc-person-fact">
                     <dt>{people.team}</dt>

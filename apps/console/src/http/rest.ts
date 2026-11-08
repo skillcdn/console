@@ -181,6 +181,7 @@ import {
   listPeople,
   PersonError,
   type PersonRecord,
+  updatePersonEmail,
   updatePersonManager,
   updatePersonRole,
   updatePersonStatus,
@@ -268,6 +269,7 @@ import {
   restListing,
   restMember,
   restPerson,
+  restPersonWithEmail,
   restProject,
   restRules,
   restRun,
@@ -1174,8 +1176,12 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         ? membersSyncedAt(database, person.workspaceId)
         : undefined,
     ]);
+    // The work email is an administrator's to read, and one's own; nobody else's (ADR-0022).
+    const administrator = configuresWorkspace(person);
     const body: RestPeople = {
-      items: items.map(restPerson),
+      items: items.map((item) =>
+        administrator || item.id === person.id ? restPersonWithEmail(item) : restPerson(item),
+      ),
       listed: listed.map(restListing),
       organization:
         organization === undefined || !whole
@@ -1237,6 +1243,15 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
           now: clock.now(),
         });
       }
+      if (patch.email !== undefined) {
+        changed = await updatePersonEmail(database, {
+          workspaceId: person.workspaceId,
+          actor: actorOf(caller),
+          personId: id,
+          email: patch.email,
+          now: clock.now(),
+        });
+      }
       if (changed === undefined) {
         return invalid(c, "The patch names nothing to change.");
       }
@@ -1250,7 +1265,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         },
         "person changed",
       );
-      return c.json(restPerson(changed));
+      return c.json(restPersonWithEmail(changed));
     } catch (error) {
       return failure(c, error);
     }

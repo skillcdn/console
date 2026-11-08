@@ -141,6 +141,13 @@ export const restPersonSchema = z.object({
    * for them in. Answered from 0.4.4 and read as optional, as `managerId` is.
    */
   language: z.optional(z.nullable(languageTag)),
+  /**
+   * The person's work email, lowercase: the address they sign in with at Google, else what an
+   * administrator wrote; `null` until known. Answered to an administrator and to the person
+   * themselves alone, and left out everywhere else, so that a task's owner or a comment's author
+   * carries none. Answered from 0.4.5 and read as optional.
+   */
+  email: z.optional(z.nullable(z.string())),
 });
 export type RestPerson = z.infer<typeof restPersonSchema>;
 
@@ -388,12 +395,17 @@ export const restPersonPatchSchema = z
     status: z.optional(z.enum(PERSON_STATUSES)),
     /** Whom the person reports to: another active person of the workspace, or `null` for nobody. */
     managerId: z.optional(z.nullable(uuid)),
+    /** The person's work email, one per workspace, or `null` for none; an administrator's to write. */
+    email: z.optional(z.nullable(z.email().check(z.maxLength(254)))),
   })
   .check(
     z.refine(
       (patch) =>
-        patch.role !== undefined || patch.status !== undefined || patch.managerId !== undefined,
-      "must name a role, a status or a manager",
+        patch.role !== undefined ||
+        patch.status !== undefined ||
+        patch.managerId !== undefined ||
+        patch.email !== undefined,
+      "must name a role, a status, a manager or an email",
     ),
   );
 export type RestPersonPatch = z.infer<typeof restPersonPatchSchema>;
@@ -993,6 +1005,8 @@ export const restEventDataSchema = z.object({
   role: z.optional(z.string()),
   /** For `person.manager_changed`: the login of whom the person reports to now, or `null` for nobody. */
   manager: z.optional(z.nullable(z.string())),
+  /** For `person.email_changed`: whether the person has an address now; never the address itself. */
+  set: z.optional(z.boolean()),
   /** For the events about a project: its key and its name. */
   key: z.optional(z.string()),
   name: z.optional(z.string()),

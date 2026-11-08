@@ -224,6 +224,7 @@ export class Login {
         login: account.login,
         name: account.name,
         avatarUrl: account.avatarUrl,
+        email: account.email,
       },
       // The operator's naming makes administrators; what a person is otherwise is the board's record.
       role: membership.administers(account.login) ? "admin" : undefined,

@@ -2628,6 +2628,11 @@ function WorkspacePage(props: {
                   void act(() => data.actions.updatePerson(person.id, { managerId }))
               : undefined
           }
+          onChangeEmail={
+            administrator
+              ? (person, email) => void act(() => data.actions.updatePerson(person.id, { email }))
+              : undefined
+          }
           onUnlist={
             administrator
               ? (listing) => void act(() => data.actions.removeListing(listing.id))

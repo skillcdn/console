@@ -123,9 +123,11 @@ export function formatProject(project: RestProject): string {
 export function formatPersonLine(person: RestPerson, reportsTo?: string | undefined): string {
   const standing = person.status === "active" ? person.role : `${person.role}, deactivated`;
   const line = reportsTo === undefined ? "" : `, reports to ${reportsTo}`;
+  // The work email where the console answers one: to an administrator, and for oneself.
+  const email = typeof person.email === "string" ? `  <${person.email}>` : "";
   return person.name === null
-    ? `${person.login}  (${standing}${line})`
-    : `${person.login}  ${person.name}  (${standing}${line})`;
+    ? `${person.login}${email}  (${standing}${line})`
+    : `${person.login}  ${person.name}${email}  (${standing}${line})`;
 }
 
 /** The provider a listing names, as people call it. */

@@ -2431,6 +2431,58 @@ describe("roles", () => {
     ]);
     expect((await change(admin, carolId, { managerId: null })).status).toBe(200);
   });
+
+  it("keep a work email an administrator writes, read by an administrator and the person alone, and told as changed, never what it is (ADR-0069)", async () => {
+    const named = createHarness(testDatabase, {
+      providers: [createFixtureProvider()],
+      admins: ["alice"],
+    });
+    const admin = await named.signIn("alice");
+    const carol = await named.signIn("carol");
+    const change = (cookie: string, id: string, body: unknown) =>
+      named.request(`${REST_ROUTES.people}/${id}`, {
+        method: "PATCH",
+        headers: { cookie, origin: SIGN_IN_URL, "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    const people = restPeopleSchema.parse(await (await get(alice, REST_ROUTES.people)).json());
+    const bobId = people.items.find((person) => person.login === "bob")?.id ?? "";
+    const carolId = people.items.find((person) => person.login === "carol")?.id ?? "";
+    const before = restEventsSchema.parse(
+      await (await get(alice, `${REST_ROUTES.events}?after=0`)).json(),
+    );
+    const latest = before.items.at(-1)?.id ?? 0;
+    // A member may not write one, their own included; an administrator may, and it is kept lowercase.
+    expect((await change(bob, bobId, { email: "bob@example.test" })).status).toBe(403);
+    const written = await change(admin, bobId, { email: "Bob@Example.test" });
+    expect(written.status, await written.clone().text()).toBe(200);
+    expect(restPersonSchema.parse(await written.json()).email).toBe("bob@example.test");
+    // One address per workspace, and an address at all.
+    const taken = await change(admin, carolId, { email: "BOB@example.test" });
+    expect(taken.status).toBe(409);
+    expect(await errorOf(taken)).toBe("person.email_taken");
+    expect((await change(admin, carolId, { email: "nonsense" })).status).toBe(400);
+    // An administrator reads everyone's; a member reads their own and nobody else's, here and on me.
+    const asAdmin = restPeopleSchema.parse(await (await get(alice, REST_ROUTES.people)).json());
+    expect(asAdmin.items.find((person) => person.id === bobId)?.email).toBe("bob@example.test");
+    const asCarol = restPeopleSchema.parse(await (await get(carol, REST_ROUTES.people)).json());
+    expect(asCarol.items.find((person) => person.id === bobId)?.email).toBeUndefined();
+    expect(asCarol.items.find((person) => person.id === carolId)?.email).toBeNull();
+    expect(restMeSchema.parse(await (await get(bob, REST_ROUTES.me)).json()).person?.email).toBe(
+      "bob@example.test",
+    );
+    // The feed says that it changed, and never the address; cleared, it says so too.
+    expect((await change(admin, bobId, { email: null })).status).toBe(200);
+    expect((await change(admin, bobId, { email: null })).status).toBe(200);
+    const since = restEventsSchema.parse(
+      await (await get(alice, `${REST_ROUTES.events}?after=${latest}`)).json(),
+    );
+    expect(since.items.map((event) => [event.kind, event.data])).toEqual([
+      ["person.email_changed", { login: "bob", set: true }],
+      ["person.email_changed", { login: "bob", set: false }],
+    ]);
+    expect(JSON.stringify(since.items)).not.toContain("example.test");
+  });
 });
 
 /** A pack whose reads are never asked: what the tests of the listing need of them. */

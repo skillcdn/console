@@ -3370,7 +3370,7 @@ const workspace: Command = async (args, io) => {
 };
 
 const PERSON_USAGE =
-  "Say what to do: console person role <login> <admin|member>  |  person manager <login> <manager login|none>  |  person add <login> [--host gh|google]  |  person remove <login>  |  person deactivate <login>  |  person reactivate <login>";
+  "Say what to do: console person role <login> <admin|member>  |  person manager <login> <manager login|none>  |  person email <login> <address|none>  |  person add <login> [--host gh|google]  |  person remove <login>  |  person deactivate <login>  |  person reactivate <login>";
 
 const person: Command = async (args, io) => {
   const what = args[0];
@@ -3384,6 +3384,20 @@ const person: Command = async (args, io) => {
     const session = await open(io, values);
     const found = await personOf(session, login);
     const changed = await session.client.updatePerson(found.id, { role: wanted });
+    answer(io, session, changed, () => formatPersonLine(changed));
+    return EXIT.ok;
+  }
+  if (what === "email") {
+    const { values, positionals } = parse(args.slice(1), {});
+    const [login, address] = theTwo(
+      positionals,
+      "Say whom and their address: console person email <login> <address|none>",
+    );
+    const session = await open(io, values);
+    const found = await personOf(session, login);
+    const changed = await session.client.updatePerson(found.id, {
+      email: address === "none" ? null : address,
+    });
     answer(io, session, changed, () => formatPersonLine(changed));
     return EXIT.ok;
   }

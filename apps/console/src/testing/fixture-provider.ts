@@ -59,6 +59,7 @@ const PEOPLE: Readonly<Record<ProviderKey, Readonly<Record<string, ProviderAccou
     dave: {
       accountId: "2001",
       login: "dave@acme.test",
+      email: "dave@acme.test",
       name: "Dave Example",
       avatarUrl: "https://pictures.example/dave.png",
       domain: "acme.test",
@@ -66,6 +67,7 @@ const PEOPLE: Readonly<Record<ProviderKey, Readonly<Record<string, ProviderAccou
     erin: {
       accountId: "2002",
       login: "erin@mail.test",
+      email: "erin@mail.test",
       name: undefined,
       avatarUrl: undefined,
       domain: undefined,

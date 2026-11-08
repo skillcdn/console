@@ -176,6 +176,7 @@ const workerRow = z.object({
   deactivatedAt: z.nullable(z.string()),
   managerId: z.nullable(z.string()),
   language: z.nullable(z.string()),
+  email: z.nullable(z.string()),
 });
 const workerRows = z.array(workerRow);
 
@@ -194,7 +195,7 @@ function toWorkers(value: unknown): PersonRecord[] {
  * The workers of the task being read, in the order they came to it, as one JSON array: a page of
  * tasks stays one query, however many people are on each.
  */
-const workersOf = sql<unknown>`(select coalesce(json_agg(json_build_object('id', ${people.id}, 'workspaceId', ${people.workspaceId}, 'host', ${people.host}, 'hostAccountId', ${people.hostAccountId}, 'login', ${people.login}, 'name', ${people.name}, 'avatarUrl', ${people.avatarUrl}, 'role', ${people.role}, 'status', ${people.status}, 'source', ${people.source}, 'deactivatedAt', ${people.deactivatedAt}, 'managerId', ${people.managerId}, 'language', ${people.language}) order by ${taskWorkers.addedAt}, ${people.login}), '[]'::json) from ${taskWorkers} join ${people} on ${people.id} = ${taskWorkers.personId} where ${taskWorkers.taskId} = ${tasks.id})`;
+const workersOf = sql<unknown>`(select coalesce(json_agg(json_build_object('id', ${people.id}, 'workspaceId', ${people.workspaceId}, 'host', ${people.host}, 'hostAccountId', ${people.hostAccountId}, 'login', ${people.login}, 'name', ${people.name}, 'avatarUrl', ${people.avatarUrl}, 'role', ${people.role}, 'status', ${people.status}, 'source', ${people.source}, 'deactivatedAt', ${people.deactivatedAt}, 'managerId', ${people.managerId}, 'language', ${people.language}, 'email', ${people.email}) order by ${taskWorkers.addedAt}, ${people.login}), '[]'::json) from ${taskWorkers} join ${people} on ${people.id} = ${taskWorkers.personId} where ${taskWorkers.taskId} = ${tasks.id})`;
 
 const taskColumns = {
   id: tasks.id,

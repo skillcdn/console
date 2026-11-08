@@ -36,6 +36,8 @@ export interface PersonRecord {
   readonly managerId: string | undefined;
   /** The language the person reads in (ADR-0065), a tag: the one they chose, else the one the pages first saw them in; none until then. */
   readonly language: string | undefined;
+  /** The person's work email, lowercase: Google's at sign-in, else an administrator's word; none until known. */
+  readonly email: string | undefined;
 }
 
 /** What is wrong with a change to a person. `code` is what the API answers with. */
@@ -45,7 +47,8 @@ export class PersonError extends DomainError {
       | "person.not_found"
       | "person.last_admin"
       | "person.of_organization"
-      | "person.invalid_manager",
+      | "person.invalid_manager"
+      | "person.email_taken",
   ) {
     super(code, PERSON_ERROR_WORDS[code]);
   }
@@ -57,6 +60,7 @@ const PERSON_ERROR_WORDS = {
   "person.of_organization": "the organization says who is in; the person cannot be changed here",
   "person.invalid_manager":
     "the manager is not another active person of the workspace, or reports to this person already",
+  "person.email_taken": "the address is another person's in this workspace",
 } as const;
 
 /** What is wrong with a listing. `code` is what the API answers with. */
@@ -77,6 +81,8 @@ export interface HostAccount {
   readonly login: string;
   readonly name: string | undefined;
   readonly avatarUrl: string | undefined;
+  /** The account's verified address, where the provider vouches for one (Google); kept as the person's work email at every sign-in. */
+  readonly email?: string | undefined;
 }
 
 /** A login an administrator let in, bound to the person once someone signed in with it. */
@@ -104,6 +110,7 @@ interface PersonTable {
   readonly deactivatedAt: AnyPgColumn;
   readonly managerId: AnyPgColumn;
   readonly language: AnyPgColumn;
+  readonly email: AnyPgColumn;
 }
 
 /** For this directory only: the columns a {@link PersonRecord} is made of, from `table`. */
@@ -123,6 +130,7 @@ export const personColumns = <T extends PersonTable>(
   deactivatedAt: table.deactivatedAt,
   managerId: table.managerId,
   language: table.language,
+  email: table.email,
 });
 
 type PersonRow = {
@@ -139,6 +147,7 @@ type PersonRow = {
   readonly deactivatedAt: Date | null;
   readonly managerId: string | null;
   readonly language: string | null;
+  readonly email: string | null;
 };
 
 export const toPerson = (row: PersonRow): PersonRecord => ({
@@ -155,6 +164,7 @@ export const toPerson = (row: PersonRow): PersonRecord => ({
   deactivatedAt: row.deactivatedAt ?? undefined,
   managerId: row.managerId ?? undefined,
   language: row.language ?? undefined,
+  email: row.email ?? undefined,
 });
 
 const listingColumns = {
@@ -314,6 +324,8 @@ export async function savePerson(
         avatarUrl: account.avatarUrl ?? null,
         role: role ?? "member",
         source,
+        // The address the provider vouches for is the person's work email, kept at every sign-in.
+        ...(account.email === undefined ? {} : { email: account.email }),
         lastLoginAt: now,
         updatedAt: now,
       })
@@ -323,6 +335,7 @@ export async function savePerson(
           login: account.login,
           name: account.name ?? null,
           avatarUrl: account.avatarUrl ?? null,
+          ...(account.email === undefined ? {} : { email: account.email }),
           ...(role === undefined ? {} : { role }),
           source,
           status: "active",
@@ -535,6 +548,65 @@ export async function updatePersonManager(
       kind: "person.manager_changed",
       actor,
       data: { login: person.login, manager: managerLogin },
+      now,
+    });
+    return toPerson(row);
+  });
+}
+
+/**
+ * Writes a person's work email, or clears it, and tells the board that it changed, never what
+ * it is: the address is read by an administrator, the person and a plugin with
+ * `people:read:email`, and by nobody from the feed. Lowercase, one per workspace
+ * (`person.email_taken`). What is already so writes nothing.
+ */
+export async function updatePersonEmail(
+  database: Database,
+  input: {
+    readonly workspaceId: string;
+    readonly actor: Actor;
+    readonly personId: string;
+    /** The address, or null for none. */
+    readonly email: string | null;
+    readonly now: Date;
+  },
+): Promise<PersonRecord> {
+  const { workspaceId, actor, personId, now } = input;
+  const email = input.email === null ? null : input.email.trim().toLowerCase();
+  return drizzleOf(database).transaction(async (tx) => {
+    const person = await lockedPerson(tx, workspaceId, personId);
+    if ((person.email ?? null) === email) {
+      return person;
+    }
+    if (email !== null) {
+      const [other] = await tx
+        .select({ id: people.id })
+        .from(people)
+        .where(
+          and(
+            eq(people.workspaceId, workspaceId),
+            eq(people.email, email),
+            sql`${people.id} <> ${personId}`,
+          ),
+        )
+        .limit(1);
+      if (other !== undefined) {
+        throw new PersonError("person.email_taken");
+      }
+    }
+    const [row] = await tx
+      .update(people)
+      .set({ email, updatedAt: now })
+      .where(eq(people.id, personId))
+      .returning(personColumns(people));
+    if (row === undefined) {
+      throw new PersonError("person.not_found");
+    }
+    await recordEvent(tx, {
+      workspaceId,
+      kind: "person.email_changed",
+      actor,
+      data: { login: person.login, set: email !== null },
       now,
     });
     return toPerson(row);

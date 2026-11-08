@@ -281,6 +281,13 @@
       "when": 1794051646738,
       "tag": "0039_drop_board_translations",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1794119334474,
+      "tag": "0040_person_email",
+      "breakpoints": true
     }
   ]
 }

@@ -163,6 +163,7 @@ export const ko: Messages = {
     "member.open_project": "공개 프로젝트라서 워크스페이스의 모든 사람이 이미 멤버입니다.",
     "mount.ref_not_found": "팩의 그 버전을 찾을 수 없습니다.",
     "mount.repo_not_found": "팩을 찾을 수 없습니다.",
+    "person.email_taken": "이 워크스페이스의 다른 사람이 쓰는 주소입니다.",
     "person.invalid_manager": "본인, 본인의 팀원, 비활성화된 사람은 매니저로 지정할 수 없습니다.",
     "person.last_admin": "관리자가 한 명은 있어야 합니다.",
     "person.not_found": "사람을 찾을 수 없습니다.",
@@ -326,6 +327,10 @@ export const ko: Messages = {
       "people:read:all": {
         name: "모든 사람 읽기",
         opens: "워크스페이스의 모든 사람을 읽습니다. 예약 실행과 훅에서도.",
+      },
+      "people:read:email": {
+        name: "업무 이메일",
+        opens: "읽을 수 있는 사람의 업무 이메일을 읽습니다. 다른 서비스의 계정과 맞추는 데 씁니다.",
       },
       "projects:read": {
         name: "프로젝트 읽기",
@@ -937,6 +942,8 @@ export const ko: Messages = {
       personReactivated: (login) => `${login}을(를) 다시 활성화했습니다`,
       managerChanged: (login, manager) => `${login}의 매니저를 ${manager}(으)로 지정했습니다`,
       managerCleared: (login) => `${login}의 매니저 지정을 해제했습니다`,
+      emailChanged: (login) => `${login}의 업무 이메일을 바꿨습니다`,
+      emailCleared: (login) => `${login}의 업무 이메일을 지웠습니다`,
       projectCreated: (project) => `프로젝트 ${project}을(를) 만들었습니다`,
       projectUpdated: (fields, project) => `프로젝트 ${project}의 ${fields}을(를) 바꿨습니다`,
       memberAdded: (login, project, role) =>
@@ -1169,6 +1176,10 @@ export const ko: Messages = {
     role: "역할",
     manager: "매니저",
     managerOf: (name) => `${name}의 매니저`,
+    email: "업무 이메일",
+    emailOf: (name) => `${name}의 업무 이메일`,
+    emailHint:
+      "Google 로그인은 로그인 주소가 들어오고, 그 밖은 여기서 적습니다. 관리자, 본인, 권한 있는 플러그인만 읽습니다.",
     team: "팀원",
     nobody: "없음",
     letIn: "사람 추가",

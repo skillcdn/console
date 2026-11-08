@@ -32,6 +32,7 @@ const person = (role: "admin" | "member", id = `id-${role}`): PersonRecord => ({
   deactivatedAt: undefined,
   managerId: undefined,
   language: undefined,
+  email: undefined,
 });
 
 const admin = person("admin");

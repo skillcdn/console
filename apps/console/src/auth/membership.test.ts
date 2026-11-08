@@ -17,6 +17,7 @@ const person = (fields: Partial<PersonRecord>): PersonRecord => ({
   deactivatedAt: undefined,
   managerId: undefined,
   language: undefined,
+  email: undefined,
   ...fields,
 });
 

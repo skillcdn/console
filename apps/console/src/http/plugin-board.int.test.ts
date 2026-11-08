@@ -594,6 +594,37 @@ describe("a plugin on the board", () => {
     expect(data.endpoint).toBe("plugin.not_found");
   });
 
+  it("reads a person's work email with people:read:email alone (ADR-0069)", async () => {
+    const written = await h.request(
+      `${REST_ROUTES.people}/${bobId}`,
+      json({ email: "bob@example.test" }, admin, "PATCH"),
+    );
+    expect(written.status, await written.clone().text()).toBe(200);
+    const detail = restPluginDetailSchema.parse(
+      await (await h.request(pluginPath("leave"), { headers: { cookie: admin } })).json(),
+    );
+    const before = detail.consent ?? [];
+    expect(before).not.toContain("people:read:email");
+    const read = async () =>
+      ((await invoked("leave", member, ["people"])).data as { emails: Record<string, unknown> })
+        .emails;
+    expect((await read()).bob).toBeNull();
+    const consented = await h.request(
+      pluginPath("leave", "consent"),
+      json({ consent: [...before, "people:read:email"] }, admin, "PATCH"),
+    );
+    expect(consented.status, await consented.clone().text()).toBe(200);
+    expect((await read()).bob).toBe("bob@example.test");
+    expect((await read()).carol).toBeNull();
+    // Withdrawn, and the address with it.
+    expect(
+      (await h.request(pluginPath("leave", "consent"), json({ consent: before }, admin, "PATCH")))
+        .status,
+    ).toBe(200);
+    expect((await read()).bob).toBeNull();
+    await h.request(`${REST_ROUTES.people}/${bobId}`, json({ email: null }, admin, "PATCH"));
+  });
+
   it("makes outbound requests to the host declared, the secret put in by the console, and to no other", async () => {
     const probed = await invoked("leave", member, ["probe"]);
     expect(probed.data).toMatchObject({
@@ -617,7 +648,7 @@ describe("a plugin on the board", () => {
         await (await h.request(pluginPath("leave"), { headers: { cookie: admin } })).json(),
       );
     const before = await consentNow();
-    expect(before.optionalCapabilities).toEqual(["outbound:api.example.test"]);
+    expect(before.optionalCapabilities).toEqual(["outbound:api.example.test", "people:read:email"]);
     expect(before.capabilities).not.toContain("outbound:api.example.test");
     expect(before.consent).toContain("outbound:api.example.test");
     const consent = (body: readonly string[], cookie = admin) =>

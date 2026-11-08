@@ -184,6 +184,7 @@ export const EVENT_KINDS = [
   "person.deactivated",
   "person.reactivated",
   "person.manager_changed",
+  "person.email_changed",
   "workspace.updated",
   "category.created",
   "category.updated",

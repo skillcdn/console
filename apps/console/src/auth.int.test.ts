@@ -126,6 +126,7 @@ describe("signing in", () => {
         status: "active",
         source: "listed",
         deactivatedAt: null,
+        email: null,
         managerId: null,
         language: null,
       },
@@ -519,11 +520,13 @@ describe("a Workspace as a second provider", () => {
       { key: "google", label: "Google", admits: { organization: null, domains: ["acme.test"] } },
     ]);
     const dave = await h.signIn("dave");
+    // The address Google vouched for is the person's work email, which they read on themselves.
     expect((await me(h, dave)).person).toMatchObject({
       login: "dave@acme.test",
       name: "Dave Example",
       role: "member",
       source: "domain",
+      email: "dave@acme.test",
     });
     // Erin's account is of no domain, and she is not listed.
     const begun = await h.request(AUTH_ROUTES.login("google"));

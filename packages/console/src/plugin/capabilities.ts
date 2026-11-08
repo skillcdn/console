@@ -8,6 +8,7 @@ export const PLUGIN_CAPABILITIES = [
   "files",
   "people:read",
   "people:read:all",
+  "people:read:email",
   "projects:read",
   "projects:read:all",
   "board:read",
@@ -59,6 +60,10 @@ export const CAPABILITY_WORDS: Readonly<Record<PluginCapability, CapabilityWords
   "people:read:all": {
     opens: "everyone in the workspace, for its jobs and hooks too",
     reach: "the directory",
+  },
+  "people:read:email": {
+    opens: "the work email of the people it may read, to match them to accounts elsewhere",
+    reach: "the addresses of the people its role holders may see",
   },
   "projects:read": {
     opens: "the projects and members the caller may see",

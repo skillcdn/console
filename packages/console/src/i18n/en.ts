@@ -207,6 +207,7 @@ export const en = {
     "member.open_project": "The project is open to the workspace, so everyone is already a member.",
     "mount.ref_not_found": "That version of the pack was not found.",
     "mount.repo_not_found": "The pack was not found.",
+    "person.email_taken": "That address is another person's in this workspace.",
     "person.invalid_manager":
       "A manager must be another active person, and not one of this person's own team.",
     "person.last_admin": "The workspace needs at least one administrator.",
@@ -377,6 +378,11 @@ export const en = {
       "people:read:all": {
         name: "Everyone",
         opens: "Reads everyone in the workspace, from its jobs and hooks too.",
+      },
+      "people:read:email": {
+        name: "Work email",
+        opens:
+          "Reads the work email of the people it may read, to match them to accounts elsewhere.",
       },
       "projects:read": {
         name: "Projects",
@@ -1005,6 +1011,8 @@ export const en = {
       personReactivated: (login: string) => `reactivated ${login}`,
       managerChanged: (login: string, manager: string) => `set ${login}'s manager to ${manager}`,
       managerCleared: (login: string) => `cleared ${login}'s manager`,
+      emailChanged: (login: string) => `changed ${login}'s work email`,
+      emailCleared: (login: string) => `cleared ${login}'s work email`,
       projectCreated: (project: string) => `made the project ${project}`,
       projectUpdated: (fields: string, project: string) =>
         `changed ${fields} of the project ${project}`,
@@ -1243,6 +1251,10 @@ export const en = {
     role: "Role",
     manager: "Manager",
     managerOf: (name: string) => `Manager of ${name}`,
+    email: "Work email",
+    emailOf: (name: string) => `Work email of ${name}`,
+    emailHint:
+      "Google's at sign-in; written here otherwise. Read by an administrator, the person, and a plugin allowed to.",
     team: "Team",
     nobody: "None",
     letIn: "Add a person",

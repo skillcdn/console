@@ -13,6 +13,8 @@ export interface ProviderAccount {
   readonly avatarUrl: string | undefined;
   /** The organization's domain the account belongs to, when the provider vouches for one. */
   readonly domain: string | undefined;
+  /** The account's address, where the provider vouches for it: a Workspace's; a git host gives none. */
+  readonly email?: string | undefined;
 }
 
 export type ProviderErrorKind = "unauthorized" | "rate_limited" | "transient" | "invalid";

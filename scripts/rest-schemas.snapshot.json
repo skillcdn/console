@@ -1,6 +1,6 @@
 {
   "floors": {
-    "client": "0.4.4",
+    "client": "0.4.5",
     "console": "0.4.2"
   },
   "schemas": {
@@ -618,6 +618,12 @@
                   "type": "null"
                 }
               ]
+            },
+            "email": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -800,6 +806,12 @@
                       {
                         "type": "null"
                       }
+                    ]
+                  },
+                  "email": {
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   }
                 },
@@ -1277,6 +1289,12 @@
                   "type": "null"
                 }
               ]
+            },
+            "email": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -1370,6 +1388,12 @@
                 {
                   "type": "null"
                 }
+              ]
+            },
+            "email": {
+              "type": [
+                "string",
+                "null"
               ]
             }
           },
@@ -1466,6 +1490,12 @@
                   {
                     "type": "null"
                   }
+                ]
+              },
+              "email": {
+                "type": [
+                  "string",
+                  "null"
                 ]
               }
             },
@@ -1607,6 +1637,12 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "email": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     }
                   },
                   "required": [
@@ -1733,6 +1769,12 @@
                     {
                       "type": "null"
                     }
+                  ]
+                },
+                "email": {
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 }
               },
@@ -1993,6 +2035,12 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "email": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   }
                 },
                 "required": [
@@ -2086,6 +2134,12 @@
                       {
                         "type": "null"
                       }
+                    ]
+                  },
+                  "email": {
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   }
                 },
@@ -2182,6 +2236,12 @@
                         {
                           "type": "null"
                         }
+                      ]
+                    },
+                    "email": {
+                      "type": [
+                        "string",
+                        "null"
                       ]
                     }
                   },
@@ -2323,6 +2383,12 @@
                                 "type": "null"
                               }
                             ]
+                          },
+                          "email": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           }
                         },
                         "required": [
@@ -2449,6 +2515,12 @@
                           {
                             "type": "null"
                           }
+                        ]
+                      },
+                      "email": {
+                        "type": [
+                          "string",
+                          "null"
                         ]
                       }
                     },
@@ -2691,6 +2763,12 @@
                   "type": "null"
                 }
               ]
+            },
+            "email": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -2872,6 +2950,12 @@
                   "type": "null"
                 }
               ]
+            },
+            "email": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -3002,6 +3086,12 @@
                 {
                   "type": "null"
                 }
+              ]
+            },
+            "email": {
+              "type": [
+                "string",
+                "null"
               ]
             }
           },
@@ -3211,6 +3301,12 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "email": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   }
                 },
                 "required": [
@@ -3367,6 +3463,12 @@
                 {
                   "type": "null"
                 }
+              ]
+            },
+            "email": {
+              "type": [
+                "string",
+                "null"
               ]
             }
           },
@@ -3545,6 +3647,12 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "email": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   }
                 },
                 "required": [
@@ -3711,6 +3819,9 @@
             "null"
           ]
         },
+        "set": {
+          "type": "boolean"
+        },
         "key": {
           "type": "string"
         },
@@ -3806,6 +3917,7 @@
             "person.deactivated",
             "person.reactivated",
             "person.manager_changed",
+            "person.email_changed",
             "workspace.updated",
             "category.created",
             "category.updated",
@@ -3927,6 +4039,12 @@
                     {
                       "type": "null"
                     }
+                  ]
+                },
+                "email": {
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 }
               },
@@ -4099,6 +4217,9 @@
                 "null"
               ]
             },
+            "set": {
+              "type": "boolean"
+            },
             "key": {
               "type": "string"
             },
@@ -4222,6 +4343,7 @@
                   "person.deactivated",
                   "person.reactivated",
                   "person.manager_changed",
+                  "person.email_changed",
                   "workspace.updated",
                   "category.created",
                   "category.updated",
@@ -4343,6 +4465,12 @@
                           {
                             "type": "null"
                           }
+                        ]
+                      },
+                      "email": {
+                        "type": [
+                          "string",
+                          "null"
                         ]
                       }
                     },
@@ -4514,6 +4642,9 @@
                       "string",
                       "null"
                     ]
+                  },
+                  "set": {
+                    "type": "boolean"
                   },
                   "key": {
                     "type": "string"
@@ -4964,6 +5095,12 @@
                   "type": "null"
                 }
               ]
+            },
+            "email": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -5223,6 +5360,12 @@
                       {
                         "type": "null"
                       }
+                    ]
+                  },
+                  "email": {
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   }
                 },
@@ -5994,6 +6137,12 @@
                       "type": "null"
                     }
                   ]
+                },
+                "email": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
                 }
               },
               "required": [
@@ -6439,6 +6588,12 @@
                   "type": "null"
                 }
               ]
+            },
+            "email": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -6564,6 +6719,12 @@
                       {
                         "type": "null"
                       }
+                    ]
+                  },
+                  "email": {
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   }
                 },
@@ -6839,6 +7000,12 @@
                             "type": "null"
                           }
                         ]
+                      },
+                      "email": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
                       }
                     },
                     "required": [
@@ -6932,6 +7099,12 @@
                           {
                             "type": "null"
                           }
+                        ]
+                      },
+                      "email": {
+                        "type": [
+                          "string",
+                          "null"
                         ]
                       }
                     },
@@ -7028,6 +7201,12 @@
                             {
                               "type": "null"
                             }
+                          ]
+                        },
+                        "email": {
+                          "type": [
+                            "string",
+                            "null"
                           ]
                         }
                       },
@@ -7169,6 +7348,12 @@
                                     "type": "null"
                                   }
                                 ]
+                              },
+                              "email": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
                               }
                             },
                             "required": [
@@ -7295,6 +7480,12 @@
                               {
                                 "type": "null"
                               }
+                            ]
+                          },
+                          "email": {
+                            "type": [
+                              "string",
+                              "null"
                             ]
                           }
                         },
@@ -7861,6 +8052,12 @@
                     "type": "null"
                   }
                 ]
+              },
+              "email": {
+                "type": [
+                  "string",
+                  "null"
+                ]
               }
             },
             "required": [
@@ -7988,6 +8185,19 @@
               "type": "null"
             }
           ]
+        },
+        "email": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 254,
+              "format": "email",
+              "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },
@@ -8071,6 +8281,12 @@
             {
               "type": "null"
             }
+          ]
+        },
+        "email": {
+          "type": [
+            "string",
+            "null"
           ]
         }
       },
@@ -8291,6 +8507,12 @@
                             "type": "null"
                           }
                         ]
+                      },
+                      "email": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
                       }
                     },
                     "required": [
@@ -8398,6 +8620,12 @@
                             {
                               "type": "null"
                             }
+                          ]
+                        },
+                        "email": {
+                          "type": [
+                            "string",
+                            "null"
                           ]
                         }
                       },
@@ -8812,6 +9040,12 @@
                             "type": "null"
                           }
                         ]
+                      },
+                      "email": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
                       }
                     },
                     "required": [
@@ -8919,6 +9153,12 @@
                             {
                               "type": "null"
                             }
+                          ]
+                        },
+                        "email": {
+                          "type": [
+                            "string",
+                            "null"
                           ]
                         }
                       },
@@ -9340,6 +9580,17 @@
                 "additionalProperties": {
                   "type": "string"
                 }
+              },
+              "follows": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "const": "reports"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             },
             "required": [
@@ -9996,6 +10247,30 @@
         },
         "events": {
           "type": "string"
+        },
+        "needsTimeZone": {
+          "type": "boolean"
+        },
+        "keeps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "collection": {
+                "type": "string"
+              },
+              "days": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "collection",
+              "days"
+            ],
+            "additionalProperties": false
+          }
         }
       },
       "required": [
@@ -10515,6 +10790,12 @@
         },
         "data": {},
         "waiting": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "project": {
           "type": [
             "string",
             "null"
@@ -11223,6 +11504,17 @@
                 "additionalProperties": {
                   "type": "string"
                 }
+              },
+              "follows": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "const": "reports"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             },
             "required": [
@@ -11865,6 +12157,17 @@
                       "additionalProperties": {
                         "type": "string"
                       }
+                    },
+                    "follows": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "reports"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
                   "required": [
@@ -12453,6 +12756,12 @@
                               "type": "null"
                             }
                           ]
+                        },
+                        "email": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         }
                       },
                       "required": [
@@ -12705,6 +13014,12 @@
                             {
                               "type": "null"
                             }
+                          ]
+                        },
+                        "email": {
+                          "type": [
+                            "string",
+                            "null"
                           ]
                         }
                       },
@@ -13275,6 +13590,837 @@
       ],
       "additionalProperties": false
     },
+    "restReachedDecisionSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "project": {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string",
+              "maxLength": 40,
+              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+            },
+            "name": {
+              "type": "string"
+            },
+            "color": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "gray",
+                    "blue",
+                    "green",
+                    "orange",
+                    "pink",
+                    "purple",
+                    "teal",
+                    "yellow"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "symbol": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "icon": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "sha256": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "contentType": {
+                      "type": "string",
+                      "enum": [
+                        "image/png",
+                        "image/jpeg",
+                        "image/gif",
+                        "image/webp"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "sha256",
+                    "contentType"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "key",
+            "name",
+            "color",
+            "symbol",
+            "icon"
+          ],
+          "additionalProperties": false
+        },
+        "decision": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "question": {
+              "type": "string"
+            },
+            "body": {
+              "type": "string"
+            },
+            "options": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": "string"
+                  },
+                  "own": {
+                    "type": "boolean",
+                    "const": true
+                  }
+                },
+                "required": [
+                  "id",
+                  "label"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "taskId": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "taskNumber": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "raisedBy": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "login": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "avatar": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "role": {
+                  "type": "string",
+                  "enum": [
+                    "admin",
+                    "member"
+                  ]
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "active",
+                    "deactivated"
+                  ]
+                },
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "organization",
+                    "domain",
+                    "listed"
+                  ]
+                },
+                "deactivatedAt": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "managerId": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "language": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 35,
+                      "pattern": "^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "email": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "login",
+                "name",
+                "avatar",
+                "role",
+                "status",
+                "source",
+                "deactivatedAt"
+              ],
+              "additionalProperties": false
+            },
+            "decider": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "login": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "avatar": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "role": {
+                  "type": "string",
+                  "enum": [
+                    "admin",
+                    "member"
+                  ]
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "active",
+                    "deactivated"
+                  ]
+                },
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "organization",
+                    "domain",
+                    "listed"
+                  ]
+                },
+                "deactivatedAt": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "managerId": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "language": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 35,
+                      "pattern": "^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "email": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "login",
+                "name",
+                "avatar",
+                "role",
+                "status",
+                "source",
+                "deactivatedAt"
+              ],
+              "additionalProperties": false
+            },
+            "deciders": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "login": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "avatar": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "admin",
+                      "member"
+                    ]
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "deactivated"
+                    ]
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": [
+                      "organization",
+                      "domain",
+                      "listed"
+                    ]
+                  },
+                  "deactivatedAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "managerId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "language": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 35,
+                        "pattern": "^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "email": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "login",
+                  "name",
+                  "avatar",
+                  "role",
+                  "status",
+                  "source",
+                  "deactivatedAt"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "run": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "agent": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "agent"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "plugin": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "answer": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "option": {
+                      "type": "string"
+                    },
+                    "note": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "by": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "login": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "avatar": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "admin",
+                            "member"
+                          ]
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "active",
+                            "deactivated"
+                          ]
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "organization",
+                            "domain",
+                            "listed"
+                          ]
+                        },
+                        "deactivatedAt": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "managerId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "language": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "maxLength": 35,
+                              "pattern": "^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "email": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "login",
+                        "name",
+                        "avatar",
+                        "role",
+                        "status",
+                        "source",
+                        "deactivatedAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    },
+                    "agent": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "option",
+                    "note",
+                    "by",
+                    "at"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "outcome": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "outcomeBy": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "login": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "avatar": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "admin",
+                        "member"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "active",
+                        "deactivated"
+                      ]
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "organization",
+                        "domain",
+                        "listed"
+                      ]
+                    },
+                    "deactivatedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "managerId": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "language": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 35,
+                          "pattern": "^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "email": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "login",
+                    "name",
+                    "avatar",
+                    "role",
+                    "status",
+                    "source",
+                    "deactivatedAt"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "outcomeAgent": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "outcomeAt": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "files": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "file": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "size": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "contentType": {
+                        "type": "string"
+                      },
+                      "sha256": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "size",
+                      "contentType",
+                      "sha256"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "file"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "createdAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+            },
+            "updatedAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+            }
+          },
+          "required": [
+            "id",
+            "question",
+            "body",
+            "options",
+            "taskId",
+            "taskNumber",
+            "raisedBy",
+            "decider",
+            "run",
+            "answer",
+            "outcome",
+            "createdAt",
+            "updatedAt"
+          ],
+          "additionalProperties": false
+        },
+        "mayAnswer": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "project",
+        "decision"
+      ],
+      "additionalProperties": false
+    },
     "restReportInputSchema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
@@ -13507,6 +14653,12 @@
                         {
                           "type": "null"
                         }
+                      ]
+                    },
+                    "email": {
+                      "type": [
+                        "string",
+                        "null"
                       ]
                     }
                   },
@@ -13780,6 +14932,12 @@
                 {
                   "type": "null"
                 }
+              ]
+            },
+            "email": {
+              "type": [
+                "string",
+                "null"
               ]
             }
           },
@@ -14075,6 +15233,12 @@
                       {
                         "type": "null"
                       }
+                    ]
+                  },
+                  "email": {
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   }
                 },
@@ -17253,6 +18417,12 @@
                   "type": "null"
                 }
               ]
+            },
+            "email": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -17360,6 +18530,12 @@
                   {
                     "type": "null"
                   }
+                ]
+              },
+              "email": {
+                "type": [
+                  "string",
+                  "null"
                 ]
               }
             },
@@ -17690,6 +18866,12 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "email": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   }
                 },
                 "required": [
@@ -17797,6 +18979,12 @@
                         {
                           "type": "null"
                         }
+                      ]
+                    },
+                    "email": {
+                      "type": [
+                        "string",
+                        "null"
                       ]
                     }
                   },
@@ -18330,6 +19518,12 @@
                   "type": "null"
                 }
               ]
+            },
+            "email": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -18460,6 +19654,12 @@
                 {
                   "type": "null"
                 }
+              ]
+            },
+            "email": {
+              "type": [
+                "string",
+                "null"
               ]
             }
           },
@@ -18592,6 +19792,12 @@
                       {
                         "type": "null"
                       }
+                    ]
+                  },
+                  "email": {
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   }
                 },
@@ -18840,6 +20046,12 @@
                             "type": "null"
                           }
                         ]
+                      },
+                      "email": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
                       }
                     },
                     "required": [
@@ -18947,6 +20159,12 @@
                             {
                               "type": "null"
                             }
+                          ]
+                        },
+                        "email": {
+                          "type": [
+                            "string",
+                            "null"
                           ]
                         }
                       },
@@ -19361,6 +20579,12 @@
                             "type": "null"
                           }
                         ]
+                      },
+                      "email": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
                       }
                     },
                     "required": [
@@ -19468,6 +20692,12 @@
                             {
                               "type": "null"
                             }
+                          ]
+                        },
+                        "email": {
+                          "type": [
+                            "string",
+                            "null"
                           ]
                         }
                       },
@@ -19907,6 +21137,12 @@
                             "type": "null"
                           }
                         ]
+                      },
+                      "email": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
                       }
                     },
                     "required": [
@@ -20000,6 +21236,12 @@
                           {
                             "type": "null"
                           }
+                        ]
+                      },
+                      "email": {
+                        "type": [
+                          "string",
+                          "null"
                         ]
                       }
                     },
@@ -20096,6 +21338,12 @@
                             {
                               "type": "null"
                             }
+                          ]
+                        },
+                        "email": {
+                          "type": [
+                            "string",
+                            "null"
                           ]
                         }
                       },
@@ -20237,6 +21485,12 @@
                                     "type": "null"
                                   }
                                 ]
+                              },
+                              "email": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
                               }
                             },
                             "required": [
@@ -20363,6 +21617,12 @@
                               {
                                 "type": "null"
                               }
+                            ]
+                          },
+                          "email": {
+                            "type": [
+                              "string",
+                              "null"
                             ]
                           }
                         },
