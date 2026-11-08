@@ -5,7 +5,19 @@ import type {
   ProviderKey,
   RestHome,
 } from "@skillcdn/console/api";
-import { and, asc, count, eq, inArray, isNull, notInArray, or, type SQL, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  eq,
+  inArray,
+  isNull,
+  ne,
+  notInArray,
+  or,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
@@ -282,7 +294,10 @@ async function bindListing(
  * `role` given is written; left out, a person keeps what they are, and a new one is a member.
  * A listing the person came in on is bound to them. A person deactivated by an administrator
  * stays out while their domain is what admits them (`"deactivated"`, and nothing is written);
- * one a listing admits again is reactivated, since an administrator listed them again.
+ * one a listing admits again is reactivated, since an administrator listed them again. The
+ * address the provider vouches for is the person's work email, written at every sign-in
+ * (ADR-0069): whoever else of the workspace held it gives it up, and the board is told of each
+ * address that changed, as an administrator's change tells it, by nobody.
  */
 export async function savePerson(
   database: Database,
@@ -297,9 +312,19 @@ export async function savePerson(
   },
 ): Promise<{ readonly person: PersonRecord; readonly joined: boolean } | "deactivated"> {
   const { workspaceId, host, account, role, source, listing, now } = login;
+  const { email } = account;
   return drizzleOf(database).transaction(async (tx) => {
+    // The workspace's row before any person's, as every change to the directory takes it: a
+    // sign-in and an administrator writing an address come one after the other, and neither
+    // holds a row the other waits for. `no key update`, on it and on the person, holds up
+    // nothing that merely refers to them, an event, a task, a session, and waits on none.
+    await tx
+      .select({ id: workspaces.id })
+      .from(workspaces)
+      .where(eq(workspaces.id, workspaceId))
+      .for("no key update");
     const [before] = await tx
-      .select({ status: people.status })
+      .select({ status: people.status, email: people.email })
       .from(people)
       .where(
         and(
@@ -308,11 +333,28 @@ export async function savePerson(
           eq(people.hostAccountId, account.hostAccountId),
         ),
       )
-      .for("update");
+      .for("no key update");
     const reactivated = before?.status === "deactivated";
     if (reactivated && source === "domain") {
       return "deactivated";
     }
+    // The address the provider vouches for is this person's, one per workspace: whoever else
+    // holds it gives it up, whether an administrator wrote it on them or they are the person of
+    // an account the provider has since made again under another id.
+    const gaveUp =
+      email === undefined
+        ? []
+        : await tx
+            .update(people)
+            .set({ email: null, updatedAt: now })
+            .where(
+              and(
+                eq(people.workspaceId, workspaceId),
+                eq(people.email, email),
+                or(ne(people.host, host), ne(people.hostAccountId, account.hostAccountId)),
+              ),
+            )
+            .returning({ login: people.login });
     const [row] = await tx
       .insert(people)
       .values({
@@ -325,7 +367,7 @@ export async function savePerson(
         role: role ?? "member",
         source,
         // The address the provider vouches for is the person's work email, kept at every sign-in.
-        ...(account.email === undefined ? {} : { email: account.email }),
+        ...(email === undefined ? {} : { email }),
         lastLoginAt: now,
         updatedAt: now,
       })
@@ -335,7 +377,7 @@ export async function savePerson(
           login: account.login,
           name: account.name ?? null,
           avatarUrl: account.avatarUrl ?? null,
-          ...(account.email === undefined ? {} : { email: account.email }),
+          ...(email === undefined ? {} : { email }),
           ...(role === undefined ? {} : { role }),
           source,
           status: "active",
@@ -356,6 +398,17 @@ export async function savePerson(
     if (source === "listed") {
       await bindListing(tx, person, listing);
     }
+    // Said as the PATCH says it, the login and whether an address is set, never the address:
+    // what a plugin that matches people by address needs to match them again.
+    for (const other of gaveUp) {
+      await recordEvent(tx, {
+        workspaceId,
+        kind: "person.email_changed",
+        actor: undefined,
+        data: { login: other.login, set: false },
+        now,
+      });
+    }
     if (row.inserted) {
       await recordEvent(tx, {
         workspaceId,
@@ -364,14 +417,25 @@ export async function savePerson(
         data: {},
         now,
       });
-    } else if (reactivated) {
-      await recordEvent(tx, {
-        workspaceId,
-        kind: "person.reactivated",
-        actor: undefined,
-        data: { login: person.login },
-        now,
-      });
+    } else {
+      if (reactivated) {
+        await recordEvent(tx, {
+          workspaceId,
+          kind: "person.reactivated",
+          actor: undefined,
+          data: { login: person.login },
+          now,
+        });
+      }
+      if (email !== undefined && before?.email !== email) {
+        await recordEvent(tx, {
+          workspaceId,
+          kind: "person.email_changed",
+          actor: undefined,
+          data: { login: person.login, set: true },
+          now,
+        });
+      }
     }
     return { person, joined: row.inserted };
   });

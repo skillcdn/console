@@ -3,10 +3,11 @@ import {
   REST_ROUTES,
   restErrorSchema,
   restMeSchema,
+  restPeopleSchema,
   restTokenCreatedSchema,
 } from "@skillcdn/console/api";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { listEventsAfter } from "./db/queries/events.js";
+import { latestEventId, listEventsAfter } from "./db/queries/events.js";
 import { ensureWorkspace } from "./db/queries/workspaces.js";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "./db/testing.js";
 import { createFixtureOrganization } from "./testing/fixture-organization.js";
@@ -53,6 +54,24 @@ const me = async (h: Harness, cookie?: string) =>
       await h.request(REST_ROUTES.me, cookie === undefined ? {} : { headers: { cookie } })
     ).json(),
   );
+
+/** The number of the workspace's newest event, to read what happens after it. */
+async function latestEvent(): Promise<number> {
+  const workspace = await ensureWorkspace(testDatabase.database, { name: "Acme", now: new Date() });
+  return latestEventId(testDatabase.database, workspace.id);
+}
+
+/** The workspace's own events after the one numbered `after`: what, by whom, and with what. */
+async function workspaceEventsAfter(after: number) {
+  const workspace = await ensureWorkspace(testDatabase.database, { name: "Acme", now: new Date() });
+  const { items } = await listEventsAfter(
+    testDatabase.database,
+    { workspaceId: workspace.id, projectId: null },
+    after,
+    100,
+  );
+  return items.map((event) => [event.kind, event.actor?.login ?? null, event.data]);
+}
 
 describe("signing in", () => {
   it("sends the browser to the git host with a state and a challenge, and remembers both", async () => {
@@ -564,5 +583,125 @@ describe("a Workspace as a second provider", () => {
     );
     expect(elsewhere.headers.get("location")).toBe("/tasks?sign_in=failed");
     expect(git.calls.exchangeCode).toBe(0);
+  });
+
+  it("gives the address Google vouches for to whoever signs in with it, off another person an administrator wrote it on (ADR-0069)", async () => {
+    const h = createHarness(testDatabase, {
+      providers: [createFixtureProvider("gh"), createFixtureProvider("google")],
+      listed: ["alice", "bob"],
+      admins: ["alice"],
+      domains: ["acme.test"],
+    });
+    const admin = await h.signIn("alice");
+    const bob = (await me(h, await h.signIn("bob"))).person;
+    const dave = (await me(h, await h.signIn("dave"))).person;
+    const writeEmail = async (id: string | undefined, email: string | null) => {
+      const written = await h.request(`${REST_ROUTES.people}/${id}`, {
+        method: "PATCH",
+        headers: { cookie: admin, origin: SIGN_IN_URL, "content-type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      expect(written.status, await written.clone().text()).toBe(200);
+    };
+    // An administrator takes Dave's address off him and writes it on Bob by mistake.
+    await writeEmail(dave?.id, null);
+    await writeEmail(bob?.id, "dave@acme.test");
+    const latest = await latestEvent();
+    // Dave signs in at Google again, and is in: the address Google vouches for is his, and Bob gives it up.
+    expect((await me(h, await h.signIn("dave"))).person?.email).toBe("dave@acme.test");
+    const people = restPeopleSchema.parse(
+      await (await h.request(REST_ROUTES.people, { headers: { cookie: admin } })).json(),
+    );
+    expect(people.items.find((person) => person.id === bob?.id)?.email).toBeNull();
+    // The feed says both, as the console's doing, and never the address but in Dave's login.
+    expect(await workspaceEventsAfter(latest)).toEqual([
+      ["person.email_changed", null, { login: "bob", set: false }],
+      ["person.email_changed", null, { login: "dave@acme.test", set: true }],
+    ]);
+    // Nothing failed on the way, and nothing logged the address.
+    expect(JSON.stringify(h.logs)).not.toContain("dave@acme.test");
+  });
+
+  it("lets a person in with their address while an administrator writes it on someone else at the same moment (ADR-0069)", async () => {
+    const h = createHarness(testDatabase, {
+      providers: [createFixtureProvider("gh"), createFixtureProvider("google")],
+      listed: ["alice", "bob"],
+      admins: ["alice"],
+      domains: ["acme.test"],
+    });
+    const admin = await h.signIn("alice");
+    const bob = (await me(h, await h.signIn("bob"))).person;
+    const dave = (await me(h, await h.signIn("dave"))).person;
+    const writeEmail = (id: string | undefined, email: string | null) =>
+      h.request(`${REST_ROUTES.people}/${id}`, {
+        method: "PATCH",
+        headers: { cookie: admin, origin: SIGN_IN_URL, "content-type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+    for (let round = 0; round < 10; round += 1) {
+      expect((await writeEmail(dave?.id, null)).status).toBe(200);
+      const [written, signedIn] = await Promise.all([
+        writeEmail(bob?.id, "dave@acme.test"),
+        h.signIn("dave"),
+      ]);
+      // Whichever comes first, Dave is in with his address: Bob is refused it, or gives it up.
+      expect([200, 409]).toContain(written.status);
+      expect((await me(h, signedIn)).person?.email).toBe("dave@acme.test");
+    }
+    const people = restPeopleSchema.parse(
+      await (await h.request(REST_ROUTES.people, { headers: { cookie: admin } })).json(),
+    );
+    expect(people.items.find((person) => person.id === bob?.id)?.email).toBeNull();
+  });
+
+  it("writes the address Google gives at a later sign-in, and tells the feed that it changed, once (ADR-0069)", async () => {
+    const h = createHarness(testDatabase, {
+      providers: [createFixtureProvider("google")],
+      domains: ["acme.test"],
+    });
+    const before = (await me(h, await h.signIn("dave"))).person;
+    expect(before?.email).toBe("dave@acme.test");
+    const latest = await latestEvent();
+    // The Workspace renamed Dave's account: the same account, under another address.
+    const renamed = createHarness(testDatabase, {
+      providers: [
+        createFixtureProvider("google", {
+          changed: { dave: { login: "dave.example@acme.test", email: "dave.example@acme.test" } },
+        }),
+      ],
+      domains: ["acme.test"],
+    });
+    expect((await me(renamed, await renamed.signIn("dave"))).person).toMatchObject({
+      id: before?.id,
+      login: "dave.example@acme.test",
+      email: "dave.example@acme.test",
+    });
+    // Signed in again with it, nothing changed, and nothing is said.
+    await renamed.signIn("dave");
+    expect(await workspaceEventsAfter(latest)).toEqual([
+      ["person.email_changed", null, { login: "dave.example@acme.test", set: true }],
+    ]);
+  });
+
+  it("gives the address to an account Google made again under another id, off the old one's person (ADR-0069)", async () => {
+    const h = createHarness(testDatabase, {
+      providers: [createFixtureProvider("google")],
+      domains: ["acme.test"],
+    });
+    const old = (await me(h, await h.signIn("dave"))).person;
+    expect(old?.email).toBe("dave@acme.test");
+    const latest = await latestEvent();
+    const again = createHarness(testDatabase, {
+      providers: [createFixtureProvider("google", { changed: { dave: { accountId: "2101" } } })],
+      domains: ["acme.test"],
+    });
+    const remade = (await me(again, await again.signIn("dave"))).person;
+    expect(remade).toMatchObject({ login: "dave@acme.test", email: "dave@acme.test" });
+    expect(remade?.id).not.toBe(old?.id);
+    // The old account's person gives the address up, and the new one joins with it.
+    expect(await workspaceEventsAfter(latest)).toEqual([
+      ["person.email_changed", null, { login: "dave@acme.test", set: false }],
+      ["person.joined", "dave@acme.test", {}],
+    ]);
   });
 });

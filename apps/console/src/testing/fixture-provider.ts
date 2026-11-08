@@ -29,6 +29,11 @@ export interface FixtureProviderOptions {
    * answers as the host would, with the code for the person whose sign-in it is.
    */
   readonly authorize?: (() => string) | undefined;
+  /**
+   * What the provider says otherwise of its own people, by name: an account renamed at the
+   * provider, or made again there under another id, for a sign-in after the first.
+   */
+  readonly changed?: Readonly<Record<string, Partial<ProviderAccount>>> | undefined;
 }
 
 const PEOPLE: Readonly<Record<ProviderKey, Readonly<Record<string, ProviderAccount>>>> = {
@@ -79,7 +84,14 @@ export function createFixtureProvider(
   key: ProviderKey = "gh",
   options: FixtureProviderOptions = {},
 ): FixtureProvider {
-  const people = PEOPLE[key];
+  const people: Record<string, ProviderAccount> = { ...PEOPLE[key] };
+  for (const [name, change] of Object.entries(options.changed ?? {})) {
+    const account = people[name];
+    if (account === undefined) {
+      throw new Error(`the fixture provider knows nobody called ${name}`);
+    }
+    people[name] = { ...account, ...change };
+  }
   const calls = { exchangeCode: 0, getAccount: 0 };
   /** What a sign-in was started with, by its state: the challenge a code is redeemed against. */
   const started = new Map<string, string>();
