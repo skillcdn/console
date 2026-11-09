@@ -1,6 +1,7 @@
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import process from "node:process";
+import { secretKeys } from "./keys.js";
 
 // The terminal's side of the command: what is read from it. Nothing here is reached by tests,
 // which hand the command readers of their own.
@@ -21,7 +22,7 @@ export function readStdin(): Promise<string> {
 /**
  * A secret typed at the terminal, unseen: the prompt goes to standard error, what is typed is
  * echoed nowhere, Enter ends it, Backspace takes a character back, and Ctrl-C gives the command
- * up as it does elsewhere. A pipe or a file in place of the terminal is read whole, as
+ * up as it does elsewhere; what a key that types nothing sends is not taken ({@link secretKeys}). A pipe or a file in place of the terminal is read whole, as
  * {@link readStdin} reads it, so that a script hands the value over as before.
  */
 export function readSecret(prompt: string): Promise<string> {
@@ -34,7 +35,7 @@ export function readSecret(prompt: string): Promise<string> {
   stdin.resume();
   stdin.setEncoding("utf8");
   return new Promise((resolve) => {
-    let typed = "";
+    const keys = secretKeys();
     const finish = (interrupted: boolean): void => {
       stdin.off("data", onData);
       stdin.setRawMode(false);
@@ -45,26 +46,12 @@ export function readSecret(prompt: string): Promise<string> {
         process.kill(process.pid, "SIGINT");
         return;
       }
-      resolve(typed);
+      resolve(keys.typed);
     };
     const onData = (chunk: string): void => {
-      for (const character of chunk) {
-        switch (character) {
-          case "\u0003":
-            finish(true);
-            return;
-          case "\r":
-          case "\n":
-          case "\u0004":
-            finish(false);
-            return;
-          case "\u007f":
-          case "\b":
-            typed = typed.slice(0, -1);
-            break;
-          default:
-            typed += character;
-        }
+      const state = keys.take(chunk);
+      if (state !== "reading") {
+        finish(state === "interrupted");
       }
     };
     stdin.on("data", onData);
