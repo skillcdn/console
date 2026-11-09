@@ -49,6 +49,8 @@ import {
   type RestRulesInput,
   type RestRulesPlugin,
   type RestRun,
+  type RestSession,
+  type RestSessions,
   type RestSkills,
   type RestTask,
   type RestTaskInput,
@@ -212,6 +214,10 @@ export interface ConsoleActions {
   /** Makes a token for whoever is signed in; the answer carries the secret, this once. */
   createToken(input: RestTokenInput): Promise<RestTokenCreated>;
   revokeToken(id: string): Promise<void>;
+  /** Ends one of the person's other sessions (board #309); the list is read again. */
+  endSession(id: string): Promise<void>;
+  /** Ends every session of the person but this browser's. */
+  endOtherSessions(): Promise<void>;
   /** What asks to connect under a code (ADR-0011), for the person who approves it. */
   connectRequest(code: string, signal?: AbortSignal): Promise<RestConnectRequest>;
   approveConnection(code: string, input: RestTokenInput): Promise<RestConnectRequest>;
@@ -251,6 +257,10 @@ export interface ConsoleData {
   readonly plugins: readonly RestPlugin[];
   /** The tokens of whoever is signed in, newest first. */
   readonly tokens: readonly RestToken[];
+  /** The browsers whoever is signed in is signed in on (board #309), the current first; none for a console that holds a token. */
+  readonly sessions: readonly RestSession[];
+  /** How many days a session lasts unused, as the deployment has it; nothing until the sessions are loaded. */
+  readonly sessionIdleDays: number | undefined;
   /** The project the page is on, once loaded; `undefined` while loading, or when the page is on none. */
   readonly project: RestProject | undefined;
   /** True once the project the page is on has been loaded; false while it loads, or when there is none. */
@@ -386,6 +396,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
   const [categories, setCategories] = useState<readonly RestCategory[]>([]);
   const [plugins, setPlugins] = useState<readonly RestPlugin[]>([]);
   const [tokens, setTokens] = useState<readonly RestToken[]>([]);
+  const [sessions, setSessions] = useState<RestSessions | undefined>(undefined);
   const [project, setProject] = useState<RestProject | undefined>(undefined);
   const [projectLoaded, setProjectLoaded] = useState(false);
   const [projectError, setProjectError] = useState<string | undefined>(undefined);
@@ -506,15 +517,17 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
         return;
       }
       try {
-        const [, mine] = await Promise.all([
+        const [, mine, browsers] = await Promise.all([
           refreshWorkspace(signal),
-          // A token cannot list tokens: a console that holds one has none to show.
+          // A token cannot list tokens, nor sessions: a console that holds one has none to show.
           answer.agent === null ? client.tokens(signal) : Promise.resolve({ items: [] }),
+          answer.agent === null ? client.sessions(signal) : Promise.resolve(undefined),
         ]);
         if (signal.aborted) {
           return;
         }
         setTokens(mine.items);
+        setSessions(browsers);
         setLoaded(true);
       } catch (failure) {
         if (!signal.aborted) {
@@ -898,6 +911,14 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
         await client.revokeToken(id);
         setTokens((current) => current.filter((token) => token.id !== id));
       },
+      async endSession(id) {
+        await client.endSession(id);
+        setSessions(await client.sessions());
+      },
+      async endOtherSessions() {
+        await client.endOtherSessions();
+        setSessions(await client.sessions());
+      },
       rules: (signal) => client.rules(signal),
       writeRules: (input) => client.writeRules(input),
       archiveRules: () => client.archiveRules(),
@@ -929,6 +950,8 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
     categories,
     plugins,
     tokens,
+    sessions: sessions?.items ?? [],
+    sessionIdleDays: sessions?.idleDays,
     project,
     projectLoaded,
     projectError,

@@ -133,6 +133,7 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
     workspace,
     access,
     tokens: auth?.tokens,
+    sessions: auth?.sessions,
     connections: auth?.connections,
     feed,
     quotas: dependencies.quotas,

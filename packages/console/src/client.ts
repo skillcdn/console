@@ -83,6 +83,7 @@ import {
   type RestRunEndInput,
   type RestRunInput,
   type RestRuns,
+  type RestSessions,
   type RestSkillBrowse,
   type RestSkillFile,
   type RestSkillFind,
@@ -148,6 +149,7 @@ import {
   restRulesSchema,
   restRunSchema,
   restRunsSchema,
+  restSessionsSchema,
   restSkillBrowseSchema,
   restSkillFileSchema,
   restSkillFindSchema,
@@ -671,6 +673,12 @@ export interface ConsoleClient {
   personWork(personId: string, signal?: AbortSignal): Promise<RestPersonWork>;
   /** The tokens of whoever asks. */
   tokens(signal?: AbortSignal): Promise<RestTokens>;
+  /** The browsers whoever asks is signed in on (board #309): the current first, then the last used first. */
+  sessions(signal?: AbortSignal): Promise<RestSessions>;
+  /** Ends one of the asker's sessions; the current one ends with the cookie. */
+  endSession(id: string): Promise<void>;
+  /** Ends every session of the asker but the one the request is made on. */
+  endOtherSessions(): Promise<void>;
   /** The tokens of another person: for an administrator. */
   personTokens(personId: string, signal?: AbortSignal): Promise<RestTokens>;
   /** Takes another person's token away: for an administrator. */
@@ -1409,6 +1417,12 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
       request("GET", `${base}${personWorkPath(personId)}`, undefined, restPersonWorkSchema, signal),
     tokens: (signal) =>
       request("GET", `${base}${REST_ROUTES.tokens}`, undefined, restTokensSchema, signal),
+    sessions: (signal) =>
+      request("GET", `${base}${REST_ROUTES.sessions}`, undefined, restSessionsSchema, signal),
+    endSession: (id) =>
+      request("DELETE", `${base}${restPath("sessions", id)}`, undefined, undefined),
+    endOtherSessions: () =>
+      request("DELETE", `${base}${REST_ROUTES.sessions}/others`, undefined, undefined),
     createToken: (input) =>
       request("POST", `${base}${REST_ROUTES.tokens}`, input, restTokenCreatedSchema),
     revokeToken: (id) =>

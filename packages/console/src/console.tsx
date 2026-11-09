@@ -72,6 +72,7 @@ import {
 import { type RemotePictureSrc, RemotePicturesContext } from "./components/remote-pictures.js";
 import { GoalTimeline } from "./components/roadmap.js";
 import { RulesForm, RulesView } from "./components/rules.js";
+import { SessionList, type SessionListProps } from "./components/sessions.js";
 import {
   type Brand,
   isPlainClick,
@@ -166,6 +167,7 @@ export interface ConsoleComponents {
   readonly EventFeed: ComponentType<EventFeedProps>;
   readonly SignIn: ComponentType<SignInProps>;
   readonly TokenList: ComponentType<TokenListProps>;
+  readonly SessionList: ComponentType<SessionListProps>;
   readonly PeopleList: ComponentType<PeopleListProps>;
   readonly TeamList: ComponentType<TeamListProps>;
   readonly SkillList: ComponentType<SkillListProps>;
@@ -185,6 +187,7 @@ export const DEFAULT_COMPONENTS: ConsoleComponents = {
   EventFeed,
   SignIn,
   TokenList,
+  SessionList,
   PeopleList,
   TeamList,
   SkillList,
@@ -2790,6 +2793,13 @@ function WorkspacePage(props: {
           empty={<EmptyState title={agents.empty.title} body={agents.empty.body} />}
         />
         <ConnectWords origin={origin} />
+        <components.SessionList
+          sessions={data.sessions}
+          idleDays={data.sessionIdleDays}
+          busy={busy}
+          onEnd={(session) => void act(() => data.actions.endSession(session.id))}
+          onEndOthers={() => void act(() => data.actions.endOtherSessions())}
+        />
       </>
     );
   }

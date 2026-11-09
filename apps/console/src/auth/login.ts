@@ -8,7 +8,7 @@ import type { Clock } from "../ports/clock.js";
 import { type IdentityProvider, ProviderError } from "../ports/identity-provider.js";
 import type { Membership } from "./membership.js";
 import { openJson, pkceChallenge, type Secrets, sameSecret, sealJson } from "./secrets.js";
-import { readCookie, type Sessions, writeCookie } from "./sessions.js";
+import { readCookie, type SessionClient, type Sessions, writeCookie } from "./sessions.js";
 
 // Signing in through an identity provider. The browser leaves for the provider with a cookie
 // that remembers what it left for, and comes back with a code; the code becomes the provider's
@@ -133,6 +133,8 @@ export class Login {
   async complete(
     query: { readonly code?: string; readonly state?: string; readonly error?: string },
     cookieHeader: string | null | undefined,
+    /** The browser the answer comes from, noted on the session it begins. */
+    client: SessionClient,
   ): Promise<LoginStep> {
     const { provider, secrets, clock, logger, origin, membership } = this.#options;
     const forget = this.#cookie("", 0);
@@ -189,7 +191,7 @@ export class Login {
       // Checked when it was sealed, and again here: where a browser is sent never rests on the
       // seal alone.
       redirect: safeReturnTo(returnTo, origin),
-      cookies: [forget, await this.#options.sessions.start(person)],
+      cookies: [forget, await this.#options.sessions.start(person, client)],
     };
   }
 

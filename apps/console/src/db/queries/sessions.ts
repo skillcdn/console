@@ -1,4 +1,4 @@
-import { and, eq, gt, lte } from "drizzle-orm";
+import { and, desc, eq, gt, lte, ne } from "drizzle-orm";
 import { type Database, drizzleOf } from "../client.js";
 import { people, sessions } from "../schema.js";
 import { type PersonRecord, personColumns, toPerson } from "./people.js";
@@ -11,6 +11,20 @@ export interface SessionRecord {
   readonly person: PersonRecord;
   readonly expiresAt: Date;
   readonly lastSeenAt: Date;
+  /** Where the browser last came from, as the server saw it; null until seen. */
+  readonly address: string | null;
+}
+
+/** One of a person's sessions as the table has it, for the person's own view of them (board #309). */
+export interface SessionRow {
+  readonly id: string;
+  readonly tokenHash: string;
+  readonly createdAt: Date;
+  readonly lastSeenAt: Date;
+  readonly expiresAt: Date;
+  /** What the browser called itself when the session began; null for one begun before that was kept. */
+  readonly userAgent: string | null;
+  readonly address: string | null;
 }
 
 export async function createSession(
@@ -20,6 +34,8 @@ export async function createSession(
     readonly tokenHash: string;
     readonly expiresAt: Date;
     readonly now: Date;
+    readonly userAgent: string | null;
+    readonly address: string | null;
   },
 ): Promise<void> {
   await drizzleOf(database).insert(sessions).values({
@@ -27,6 +43,8 @@ export async function createSession(
     tokenHash: session.tokenHash,
     expiresAt: session.expiresAt,
     lastSeenAt: session.now,
+    userAgent: session.userAgent,
+    address: session.address,
   });
 }
 
@@ -41,6 +59,7 @@ export async function findSession(
       sessionId: sessions.id,
       expiresAt: sessions.expiresAt,
       lastSeenAt: sessions.lastSeenAt,
+      address: sessions.address,
       ...personColumns(people),
     })
     .from(sessions)
@@ -54,18 +73,22 @@ export async function findSession(
         person: toPerson(row),
         expiresAt: row.expiresAt,
         lastSeenAt: row.lastSeenAt,
+        address: row.address,
       };
 }
 
-/** Notes that a session was used, and moves its end when the caller keeps it alive by use. */
+/**
+ * Notes that a session was used, from where, and moves its end when the caller keeps it alive
+ * by use.
+ */
 export async function touchSession(
   database: Database,
   sessionId: string,
-  seen: { readonly now: Date; readonly expiresAt: Date },
+  seen: { readonly now: Date; readonly expiresAt: Date; readonly address: string | null },
 ): Promise<void> {
   await drizzleOf(database)
     .update(sessions)
-    .set({ lastSeenAt: seen.now, expiresAt: seen.expiresAt })
+    .set({ lastSeenAt: seen.now, expiresAt: seen.expiresAt, address: seen.address })
     .where(eq(sessions.id, sessionId));
 }
 
@@ -83,6 +106,62 @@ export async function deleteSessionsOf(database: Database, personId: string): Pr
   const rows = await drizzleOf(database)
     .delete(sessions)
     .where(eq(sessions.personId, personId))
+    .returning({ id: sessions.id });
+  return rows.length;
+}
+
+/** The live sessions of a person, the last used first (board #309). */
+export async function listSessionsOf(
+  database: Database,
+  personId: string,
+  now: Date,
+): Promise<SessionRow[]> {
+  return drizzleOf(database)
+    .select({
+      id: sessions.id,
+      tokenHash: sessions.tokenHash,
+      createdAt: sessions.createdAt,
+      lastSeenAt: sessions.lastSeenAt,
+      expiresAt: sessions.expiresAt,
+      userAgent: sessions.userAgent,
+      address: sessions.address,
+    })
+    .from(sessions)
+    .where(and(eq(sessions.personId, personId), gt(sessions.expiresAt, now)))
+    .orderBy(desc(sessions.lastSeenAt), desc(sessions.createdAt));
+}
+
+/**
+ * Ends one session of a person, by its id: the hash of its token when it was there, so that
+ * the caller knows whether it was the one the request came on; nothing for another person's,
+ * which is as if it were not there.
+ */
+export async function deleteSessionOf(
+  database: Database,
+  personId: string,
+  sessionId: string,
+): Promise<string | undefined> {
+  const rows = await drizzleOf(database)
+    .delete(sessions)
+    .where(and(eq(sessions.id, sessionId), eq(sessions.personId, personId)))
+    .returning({ tokenHash: sessions.tokenHash });
+  return rows[0]?.tokenHash;
+}
+
+/** Ends every session of a person but the one whose token hashes to `keptTokenHash`; all of them when none is kept. */
+export async function deleteOtherSessionsOf(
+  database: Database,
+  personId: string,
+  keptTokenHash: string | undefined,
+): Promise<number> {
+  const rows = await drizzleOf(database)
+    .delete(sessions)
+    .where(
+      and(
+        eq(sessions.personId, personId),
+        keptTokenHash === undefined ? undefined : ne(sessions.tokenHash, keptTokenHash),
+      ),
+    )
     .returning({ id: sessions.id });
   return rows.length;
 }

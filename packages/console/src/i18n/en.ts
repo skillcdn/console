@@ -266,6 +266,7 @@ export const en = {
     "task.too_many": "The project has as many tasks as it can hold.",
     "token.expiry_at_most": "A token can't last that many days here.",
     "token.not_found": "The token was not found.",
+    "session.not_found": "The session was not found.",
     "token.too_many": "You have as many tokens as you can hold. Remove one first.",
     "workspace.pack_connect_refused": "SkillCDN refused the connection.",
     "workspace.pack_connect_unsupported": "This console can't connect a pack.",
@@ -1423,6 +1424,22 @@ export const en = {
       goodUntilBefore: "It is good until",
       goodUntilAfter: ", and you can remove it here at any time.",
     },
+  },
+
+  sessions: {
+    title: "Where you are signed in",
+    list: "Signed-in browsers",
+    intro: "The browsers signed in as you. Sign out of one you do not recognize, or no longer use.",
+    introIdle: (days: string) =>
+      `The browsers signed in as you. Sign out of one you do not recognize, or no longer use; a browser not used for ${days} days is signed out on its own.`,
+    thisBrowser: "This browser",
+    on: (browser: string, platform: string) => `${browser} on ${platform}`,
+    unknownBrowser: "A browser",
+    lastActive: "Last active",
+    signedIn: "Signed in",
+    from: (address: string) => `from ${address}`,
+    end: "Sign out",
+    endOthers: "Sign out of every other browser",
   },
 
   connect: {

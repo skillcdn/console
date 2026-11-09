@@ -188,6 +188,7 @@ export {
   peopleSearch,
   projectsSearch,
 } from "./components/searches.js";
+export { SessionList, type SessionListProps } from "./components/sessions.js";
 export {
   type Brand,
   isPlainClick,

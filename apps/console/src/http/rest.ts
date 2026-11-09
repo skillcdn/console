@@ -49,6 +49,7 @@ import {
   type RestReachedDecision,
   type RestRules,
   type RestRuns,
+  type RestSessions,
   type RestSkillBrowse,
   type RestSkillFile,
   type RestSkillFind,
@@ -119,6 +120,7 @@ import {
   readsWorkspaceEvents,
 } from "../auth/policy.js";
 import type { Secrets } from "../auth/secrets.js";
+import type { Sessions } from "../auth/sessions.js";
 import type { Tokens } from "../auth/tokens.js";
 import type { Database } from "../db/client.js";
 import {
@@ -288,6 +290,7 @@ import {
   restProject,
   restRules,
   restRun,
+  restSession,
   restTask,
   restTeam,
   restToken,
@@ -325,6 +328,8 @@ export interface RestDependencies {
   readonly access: Access;
   /** The tokens people make; left out where nobody signs in, and then nobody has one. */
   readonly tokens: Tokens | undefined;
+  /** The sessions people hold, for each to see and end their own (board #309); left out where nobody signs in. */
+  readonly sessions: Sessions | undefined;
   /** Agents connecting with a code (ADR-0011); left out where nobody signs in. */
   readonly connections: Connections | undefined;
   readonly feed: LiveFeed;
@@ -551,6 +556,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     workspace,
     access,
     tokens,
+    sessions,
     connections,
     feed,
     quotas,
@@ -2056,6 +2062,64 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     logger.info(
       { person: caller.person.id, tokenId: caller.token.id, requestId: c.get("requestId") },
       "token given up",
+    );
+    return c.body(null, 204);
+  });
+
+  // The browsers whoever is signed in is signed in on (board #309): seen and ended by a person
+  // on the console's own pages, never with a token, so that a token which leaks reaches no
+  // browser of its person's.
+  app.get(REST_ROUTES.sessions, async (c) => {
+    const person = await signedIn(c);
+    if (person instanceof Response) {
+      return person;
+    }
+    if (sessions === undefined) {
+      return signInRequired(c);
+    }
+    const body: RestSessions = {
+      items: (await sessions.list(person, c.req.header("cookie"))).map(restSession),
+      idleDays: sessions.idleDays,
+    };
+    return c.json(body);
+  });
+
+  app.delete(`${REST_ROUTES.sessions}/others`, async (c) => {
+    const person = await signedInOnOwnPages(c);
+    if (person instanceof Response) {
+      return person;
+    }
+    if (sessions === undefined) {
+      return signInRequired(c);
+    }
+    const ended = await sessions.endOthers(person, c.req.header("cookie"));
+    logger.info(
+      { person: person.id, ended, requestId: c.get("requestId") },
+      "other sessions ended",
+    );
+    return c.body(null, 204);
+  });
+
+  app.delete(`${REST_ROUTES.sessions}/:id`, async (c) => {
+    const person = await signedInOnOwnPages(c);
+    if (person instanceof Response) {
+      return person;
+    }
+    const id = c.req.param("id");
+    const outcome =
+      sessions === undefined || !UUID.test(id)
+        ? undefined
+        : await sessions.endOne(person, id, c.req.header("cookie"));
+    if (sessions === undefined || outcome === undefined || !outcome.ended) {
+      return notFound(c, "session.not_found", "The session was not found.");
+    }
+    if (outcome.current) {
+      // The browser this request came from is signed out: its cookie goes with the answer.
+      c.header("set-cookie", sessions.clear());
+    }
+    logger.info(
+      { person: person.id, sessionId: id, requestId: c.get("requestId") },
+      "session ended",
     );
     return c.body(null, 204);
   });

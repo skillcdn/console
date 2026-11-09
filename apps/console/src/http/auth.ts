@@ -20,7 +20,7 @@ import { safeReturnTo } from "../auth/login.js";
 import { type Membership, refusalOf } from "../auth/membership.js";
 import { configuresWorkspace } from "../auth/policy.js";
 import type { Secrets } from "../auth/secrets.js";
-import type { Sessions } from "../auth/sessions.js";
+import type { SessionClient, Sessions } from "../auth/sessions.js";
 import type { Tokens } from "../auth/tokens.js";
 import type { Database } from "../db/client.js";
 import { countWaitingDecisionsFor } from "../db/queries/decisions.js";
@@ -108,6 +108,12 @@ export interface Access {
   fromOwnPages(c: Context<AppEnv>): boolean;
 }
 
+/** What the request says of the browser it comes from: what it calls itself, and its address as the server saw it. */
+export const clientOf = (c: Context<AppEnv>): SessionClient => ({
+  userAgent: c.req.header("user-agent"),
+  address: c.get("clientAddress"),
+});
+
 export function createAccess(auth: AppAuth | undefined): Access {
   return {
     async caller(c) {
@@ -134,7 +140,7 @@ export function createAccess(auth: AppAuth | undefined): Access {
         }
         return { person: found.person, token: found.token };
       }
-      const person = await auth.sessions.resolve(c.req.header("cookie"));
+      const person = await auth.sessions.resolve(c.req.header("cookie"), clientOf(c));
       if (person === undefined) {
         return undefined;
       }
@@ -416,6 +422,7 @@ export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies):
           ...(error === undefined ? {} : { error }),
         },
         c.req.header("cookie"),
+        clientOf(c),
       ),
     );
   });

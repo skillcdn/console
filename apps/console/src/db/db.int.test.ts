@@ -46,9 +46,12 @@ import {
 import {
   createSession,
   deleteExpiredSessions,
+  deleteOtherSessionsOf,
   deleteSession,
+  deleteSessionOf,
   deleteSessionsOf,
   findSession,
+  listSessionsOf,
   touchSession,
 } from "./queries/sessions.js";
 import {
@@ -212,17 +215,78 @@ describe("sessions", () => {
       tokenHash: "hash-a",
       expiresAt: minutes(60),
       now: T0,
+      userAgent: "Mozilla/5.0 (X11; Linux x86_64) Firefox/144.0",
+      address: "203.0.113.5",
     });
     const found = await findSession(database, "hash-a", minutes(30));
     expect(found?.person.id).toBe(alice.id);
     expect(found?.expiresAt).toEqual(minutes(60));
+    expect(found?.address).toBe("203.0.113.5");
     expect(await findSession(database, "hash-a", minutes(60))).toBeUndefined();
     expect(await findSession(database, "hash-b", T0)).toBeUndefined();
 
-    await touchSession(database, found?.id ?? "", { now: minutes(30), expiresAt: minutes(90) });
+    await touchSession(database, found?.id ?? "", {
+      now: minutes(30),
+      expiresAt: minutes(90),
+      address: "198.51.100.7",
+    });
     const touched = await findSession(database, "hash-a", minutes(61));
     expect(touched?.lastSeenAt).toEqual(minutes(30));
     expect(touched?.expiresAt).toEqual(minutes(90));
+    expect(touched?.address).toBe("198.51.100.7");
+  });
+
+  it("are listed to their person while they last, and ended one by one or all but one (board #309)", async () => {
+    await createSession(database, {
+      personId: alice.id,
+      tokenHash: "hash-list-1",
+      expiresAt: minutes(60),
+      now: T0,
+      userAgent: null,
+      address: null,
+    });
+    await createSession(database, {
+      personId: alice.id,
+      tokenHash: "hash-list-2",
+      expiresAt: minutes(60),
+      now: minutes(1),
+      userAgent: "a browser",
+      address: "203.0.113.9",
+    });
+    await createSession(database, {
+      personId: alice.id,
+      tokenHash: "hash-list-gone",
+      expiresAt: minutes(5),
+      now: T0,
+      userAgent: null,
+      address: null,
+    });
+    // The last used first, among what this test made; what time has ended is not listed, and
+    // goes with the sweep; nobody else's is listed.
+    const listed = await listSessionsOf(database, alice.id, minutes(10));
+    const hashes = listed.map((session) => session.tokenHash);
+    expect(hashes.filter((hash) => hash.startsWith("hash-list-"))).toEqual([
+      "hash-list-2",
+      "hash-list-1",
+    ]);
+    expect(listed.find((session) => session.tokenHash === "hash-list-2")).toMatchObject({
+      userAgent: "a browser",
+      address: "203.0.113.9",
+    });
+    expect(await deleteExpiredSessions(database, minutes(10))).toBe(1);
+    expect(await listSessionsOf(database, bob.id, minutes(10))).toHaveLength(0);
+    // Ended by id for its person alone, answering the hash so that the caller knows which went.
+    const second = listed.find((session) => session.tokenHash === "hash-list-2");
+    expect(await deleteSessionOf(database, bob.id, second?.id ?? "")).toBeUndefined();
+    expect(await deleteSessionOf(database, alice.id, second?.id ?? "")).toBe("hash-list-2");
+    expect(await deleteSessionOf(database, alice.id, second?.id ?? "")).toBeUndefined();
+    // Every other but the one kept, by the hash of its token.
+    const others = await deleteOtherSessionsOf(database, alice.id, "hash-list-1");
+    expect(others).toBeGreaterThanOrEqual(1);
+    expect(
+      (await listSessionsOf(database, alice.id, minutes(10))).map((session) => session.tokenHash),
+    ).toEqual(["hash-list-1"]);
+    expect(await deleteOtherSessionsOf(database, alice.id, undefined)).toBe(1);
   });
 
   it("end when deleted, when the person signs out of everything, and when time has ended them", async () => {
@@ -231,12 +295,16 @@ describe("sessions", () => {
       tokenHash: "hash-bob-1",
       expiresAt: minutes(60),
       now: T0,
+      userAgent: null,
+      address: null,
     });
     await createSession(database, {
       personId: bob.id,
       tokenHash: "hash-bob-2",
       expiresAt: minutes(5),
       now: T0,
+      userAgent: null,
+      address: null,
     });
     expect(await deleteSession(database, "hash-bob-1")).toBe(true);
     expect(await deleteSession(database, "hash-bob-1")).toBe(false);
@@ -246,6 +314,8 @@ describe("sessions", () => {
       tokenHash: "hash-bob-3",
       expiresAt: minutes(60),
       now: T0,
+      userAgent: null,
+      address: null,
     });
     expect(await deleteSessionsOf(database, bob.id)).toBe(1);
     expect(await findSession(database, "hash-bob-3", T0)).toBeUndefined();

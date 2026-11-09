@@ -58,6 +58,7 @@ import { RemotePicturesContext } from "./remote-pictures.js";
 import { GoalTimeline, timelineBars } from "./roadmap.js";
 import { RulesForm, RulesView } from "./rules.js";
 import { RunList } from "./runs.js";
+import { SessionList } from "./sessions.js";
 import { Shell } from "./shell.js";
 import { SignIn } from "./sign-in.js";
 import { SkillList } from "./skills.js";
@@ -1356,6 +1357,48 @@ describe("tokens", () => {
     const readOnly = renderToStaticMarkup(<TokenList tokens={[token]} />);
     expect(readOnly).not.toContain("Disconnect");
     expect(renderToStaticMarkup(<TokenList tokens={[]} empty={<p>none</p>} />)).toBe("<p>none</p>");
+  });
+
+  it("lists the browsers a person is signed in on, this one marked, with the way to end the others (board #309)", () => {
+    const session = {
+      id: "0199c4d8-0000-7000-8000-000000000041",
+      current: true,
+      createdAt: "2026-10-01T09:00:00.000Z",
+      lastSeenAt: "2026-10-09T12:00:00.000Z",
+      expiresAt: "2026-11-08T12:00:00.000Z",
+      browser: "Chrome",
+      platform: "Windows",
+      address: "203.0.113.5",
+    };
+    const other = {
+      ...session,
+      id: "0199c4d8-0000-7000-8000-000000000042",
+      current: false,
+      browser: "Safari",
+      platform: null,
+      address: null,
+    };
+    const html = renderToStaticMarkup(
+      <SessionList
+        sessions={[session, other]}
+        idleDays={30}
+        onEnd={() => undefined}
+        onEndOthers={() => undefined}
+      />,
+    );
+    expect(html).toContain("Chrome on Windows");
+    expect(html).toContain("This browser");
+    expect(html).toContain("from 203.0.113.5");
+    expect(html).toContain("Safari");
+    expect(html).toContain("30 days");
+    // The current one is not ended from here; the other is, and all the others at once.
+    expect(html.match(/>Sign out</g)).toHaveLength(1);
+    expect(html).toContain("Sign out of every other browser");
+    const alone = renderToStaticMarkup(
+      <SessionList sessions={[session]} onEnd={() => undefined} onEndOthers={() => undefined} />,
+    );
+    expect(alone.match(/>Sign out</g)).toBeNull();
+    expect(alone).not.toContain("Sign out of every other browser");
   });
 
   it("asks for a name and a span, and shows a new token's secret this once", () => {

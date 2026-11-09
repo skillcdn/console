@@ -4,6 +4,7 @@ import {
   restErrorSchema,
   restMeSchema,
   restPeopleSchema,
+  restSessionsSchema,
   restTokenCreatedSchema,
 } from "@skillcdn/console/api";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -329,6 +330,103 @@ describe("a session", () => {
       (await h.request(AUTH_ROUTES.logout, { method: "POST", headers: { origin: SIGN_IN_URL } }))
         .status,
     ).toBe(204);
+  });
+
+  it("is listed to its person with the browser and the last use, and ended one by one or all the others (board #309)", async () => {
+    const h = harness();
+    // Two browsers: one that says what it is, and one as the harness signs in.
+    const begun = await h.request(AUTH_ROUTES.login(h.login.key));
+    const state = new URL(begun.headers.get("location") ?? "").searchParams.get("state") ?? "";
+    const done = await h.request(
+      `${AUTH_ROUTES.callback(h.login.key)}?code=${h.login.codeFor("alice", state)}&state=${state}`,
+      {
+        headers: {
+          cookie: cookieOf(begun, "console_login"),
+          "user-agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+        },
+      },
+    );
+    const second = cookieOf(done, "console_session");
+    const sessionsOf = async (cookie: string) =>
+      restSessionsSchema.parse(
+        await (await h.request(REST_ROUTES.sessions, { headers: { cookie } })).json(),
+      );
+    // A clean slate: the sessions the tests before this one left behind go, this one stays.
+    expect(
+      (
+        await h.request(`${REST_ROUTES.sessions}/others`, {
+          method: "DELETE",
+          headers: { cookie: second, origin: SIGN_IN_URL },
+        })
+      ).status,
+    ).toBe(204);
+    const first = await h.signIn("alice");
+    const listed = await sessionsOf(second);
+    expect(listed.idleDays).toBeGreaterThan(0);
+    expect(listed.items).toHaveLength(2);
+    const [current, other] = listed.items;
+    // The one asked from first, read as a browser on a platform; the harness's names nothing,
+    // and comes from no address, since the app is called without a socket.
+    expect(current).toMatchObject({
+      current: true,
+      browser: "Chrome",
+      platform: "Windows",
+      address: null,
+    });
+    expect(other).toMatchObject({ current: false, browser: null, platform: null });
+    expect(JSON.stringify(listed)).not.toContain("cns_s_");
+
+    // A token sees no sessions, and another site's request ends none.
+    const made = restTokenCreatedSchema.parse(
+      await (
+        await h.request(REST_ROUTES.tokens, {
+          method: "POST",
+          headers: { cookie: second, origin: SIGN_IN_URL, "content-type": "application/json" },
+          body: JSON.stringify({ name: "an agent" }),
+        })
+      ).json(),
+    );
+    expect(
+      (
+        await h.request(REST_ROUTES.sessions, {
+          headers: { authorization: `Bearer ${made.secret}` },
+        })
+      ).status,
+    ).toBe(403);
+    const end = (cookie: string, id: string, origin = SIGN_IN_URL) =>
+      h.request(`${REST_ROUTES.sessions}/${id}`, { method: "DELETE", headers: { cookie, origin } });
+    expect((await end(second, other?.id ?? "", "https://evil.test")).status).toBe(403);
+
+    // The other browser ended: it is out, this one stays; gone is gone.
+    expect((await end(second, other?.id ?? "")).status).toBe(204);
+    expect((await me(h, first)).person).toBeNull();
+    expect((await me(h, second)).person?.login).toBe("Alice");
+    expect((await end(second, other?.id ?? "")).status).toBe(404);
+
+    // Every other at once: two more browsers go in one request, this one stays.
+    const third = await h.signIn("alice");
+    const fourth = await h.signIn("alice");
+    expect((await sessionsOf(second)).items).toHaveLength(3);
+    expect(
+      (
+        await h.request(`${REST_ROUTES.sessions}/others`, {
+          method: "DELETE",
+          headers: { cookie: second, origin: SIGN_IN_URL },
+        })
+      ).status,
+    ).toBe(204);
+    expect((await me(h, third)).person).toBeNull();
+    expect((await me(h, fourth)).person).toBeNull();
+    expect((await me(h, second)).person?.login).toBe("Alice");
+    const [mine] = (await sessionsOf(second)).items;
+    expect(mine?.current).toBe(true);
+
+    // This browser's own session ended here: signed out, cookie and all.
+    const out = await end(second, mine?.id ?? "");
+    expect(out.status).toBe(204);
+    expect(out.headers.getSetCookie()[0]).toMatch(/console_session=; .*Max-Age=0/);
+    expect((await me(h, second)).person).toBeNull();
   });
 
   it("ends when its time is up, and lives longer while it is used", async () => {

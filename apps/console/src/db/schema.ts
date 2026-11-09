@@ -244,7 +244,8 @@ export const listings = pgTable(
 
 /**
  * A browser a person is signed in on: the SHA-256 of the cookie's token, never the token. The
- * end moves while the session is used.
+ * end moves while the session is used, and the person sees each of theirs, what it is and
+ * where it was last used from (board #309).
  */
 export const sessions = pgTable(
   "sessions",
@@ -256,6 +257,10 @@ export const sessions = pgTable(
     tokenHash: text().notNull(),
     expiresAt: instant().notNull(),
     lastSeenAt: instant().notNull(),
+    /** What the browser called itself when the session began, cut to a line; null for one begun before this was kept. */
+    userAgent: text(),
+    /** Where the browser last came from, as the server saw it (deploy/README.md); null until seen. */
+    address: text(),
     createdAt: createdAt(),
   },
   (table) => [

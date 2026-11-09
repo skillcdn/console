@@ -1224,6 +1224,37 @@ export type RestToken = z.infer<typeof restTokenSchema>;
 export const restTokensSchema = z.object({ items: z.array(restTokenSchema) });
 export type RestTokens = z.infer<typeof restTokensSchema>;
 
+/**
+ * A browser a person is signed in on, as their own page lists it (board #309): what the browser
+ * called itself, read as a browser and a platform, where it last came from and when; never the
+ * cookie's token.
+ */
+export const restSessionSchema = z.object({
+  id: uuid,
+  /** Whether it is the session the request was made on: the browser the person looks from. */
+  current: z.boolean(),
+  createdAt: instant,
+  /** When the session was last used, noted at most hourly. */
+  lastSeenAt: instant,
+  /** When it ends unless it is used before: the idle limit from the last use. */
+  expiresAt: instant,
+  /** The browser by family (`Chrome`), or `null` when what it called itself names none the console knows. */
+  browser: z.nullable(z.string()),
+  /** The platform by family (`Windows`), or `null`. */
+  platform: z.nullable(z.string()),
+  /** Where the browser last came from, as the server saw it, or `null` until seen. */
+  address: z.nullable(z.string()),
+});
+export type RestSession = z.infer<typeof restSessionSchema>;
+
+/** `GET /api/v1/sessions`: the sessions of whoever asks, the current first and then the last used first, and how long one lives unused. */
+export const restSessionsSchema = z.object({
+  items: z.array(restSessionSchema),
+  /** How many days a session lasts without being used: the deployment's `SESSION_TTL_DAYS`. */
+  idleDays: z.int(),
+});
+export type RestSessions = z.infer<typeof restSessionsSchema>;
+
 /** What `POST /api/v1/tokens` is sent: a name, and for how many days it is good. */
 export const restTokenInputSchema = z.object({
   name: line(MAX_TOKEN_NAME_LENGTH),

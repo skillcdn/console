@@ -27,6 +27,8 @@ export const REST_ROUTES = {
   events: "/api/v1/events",
   /** The tokens of whoever asks: what their agents, scripts and consoles act as them with. */
   tokens: "/api/v1/tokens",
+  /** The browsers whoever asks is signed in on (board #309), seen and ended by a person on the console's own pages; `/others` under it ends every other. */
+  sessions: "/api/v1/sessions",
   /** Connecting an agent (ADR-0011): begun as nobody, approved by a person, claimed by the command. */
   connect: "/api/v1/connect",
   /** The categories tasks are sorted into (ADR-0019): the workspace's vocabulary, kept by an administrator. */
@@ -143,7 +145,7 @@ export function signInPath(page: string, failure: SignInFailure): string {
 
 /** The REST path of one person, listing, token, project or team: the collection, then the id or the key. */
 export function restPath(
-  collection: "people" | "listings" | "tokens" | "projects" | "teams",
+  collection: "people" | "listings" | "tokens" | "sessions" | "projects" | "teams",
   id: string,
 ): string {
   return `${REST_ROUTES[collection]}/${encodeURIComponent(id)}`;

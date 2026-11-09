@@ -222,6 +222,7 @@ export const ko: Messages = {
     "task.too_many": "프로젝트에 만들 수 있는 작업 수를 다 채웠습니다.",
     "token.expiry_at_most": "이 콘솔에서는 토큰을 그렇게 오래 쓰도록 만들 수 없습니다.",
     "token.not_found": "토큰을 찾을 수 없습니다.",
+    "session.not_found": "세션을 찾을 수 없습니다.",
     "token.too_many": "만들 수 있는 토큰 수를 다 채웠습니다. 먼저 하나를 삭제하세요.",
     "workspace.pack_connect_refused": "SkillCDN이 연결을 거부했습니다.",
     "workspace.pack_connect_unsupported": "이 콘솔에서는 팩을 연결할 수 없습니다.",
@@ -1343,6 +1344,22 @@ export const ko: Messages = {
       goodUntilBefore: "유효 기간은",
       goodUntilAfter: "까지이며, 언제든 여기서 제거할 수 있습니다.",
     },
+  },
+
+  sessions: {
+    title: "로그인된 곳",
+    list: "로그인된 브라우저",
+    intro: "내 계정으로 로그인된 브라우저입니다. 모르는 것이나 더 쓰지 않는 것은 로그아웃하세요.",
+    introIdle: (days) =>
+      `내 계정으로 로그인된 브라우저입니다. 모르는 것이나 더 쓰지 않는 것은 로그아웃하세요. ${days}일 동안 쓰지 않은 브라우저는 저절로 로그아웃됩니다.`,
+    thisBrowser: "이 브라우저",
+    on: (browser, platform) => `${platform}의 ${browser}`,
+    unknownBrowser: "브라우저",
+    lastActive: "마지막 활동",
+    signedIn: "로그인",
+    from: (address) => `${address}에서`,
+    end: "로그아웃",
+    endOthers: "다른 브라우저 모두 로그아웃",
   },
 
   connect: {

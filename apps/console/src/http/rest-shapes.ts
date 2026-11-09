@@ -13,12 +13,15 @@ import type {
   RestProject,
   RestRules,
   RestRun,
+  RestSession,
   RestTask,
   RestTeam,
   RestToken,
   RestVersion,
   RestVersionSummary,
 } from "@skillcdn/console/api";
+import type { SessionView } from "../auth/sessions.js";
+import { describeUserAgent } from "../auth/user-agent.js";
 import type { CategoryRecord } from "../db/queries/categories.js";
 import type { CommentRecord } from "../db/queries/comments.js";
 import type { DecisionRecord } from "../db/queries/decisions.js";
@@ -249,6 +252,21 @@ export function restToken(token: TokenRecord): RestToken {
     expiresAt: token.expiresAt?.toISOString() ?? null,
     lastUsedAt: token.lastUsedAt?.toISOString() ?? null,
     client: token.client ?? null,
+  };
+}
+
+/** A session as its person sees it: the browser and the platform read from what it called itself, never the token. */
+export function restSession(session: SessionView): RestSession {
+  const { browser, platform } = describeUserAgent(session.userAgent);
+  return {
+    id: session.id,
+    current: session.current,
+    createdAt: session.createdAt.toISOString(),
+    lastSeenAt: session.lastSeenAt.toISOString(),
+    expiresAt: session.expiresAt.toISOString(),
+    browser,
+    platform,
+    address: session.address,
   };
 }
 
