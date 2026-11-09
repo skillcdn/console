@@ -44,9 +44,10 @@ const HOP_BY_HOP: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * What of the browser's request does not go to the console: the loopback's host, anything of a
- * session (the token is the credential), what names the page's origin (a token's request needs
- * none), and the encodings the browser takes, since what comes back is passed on decoded.
+ * What of the browser's request does not go to the console as it came: the loopback's host,
+ * anything of a session (the token is the credential), what names the page (a token's request
+ * needs none, but for the referrer's origin, below), and the encodings the browser takes, since
+ * what comes back is passed on decoded.
  */
 const NOT_FORWARDED: ReadonlySet<string> = new Set([
   "host",
@@ -63,6 +64,23 @@ const NOT_ANSWERED: ReadonlySet<string> = new Set([
   "content-encoding",
   "content-length",
 ]);
+
+/** An origin on this machine: the loopback by any of its names, on any port. */
+const LOOPBACK_ORIGIN = /^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/;
+
+/**
+ * The origin of the page a request comes from, when that page is on this machine (ADR-0083): the
+ * console reads it to know which page may embed a plugin's frame, and allows the loopback's.
+ * Nothing else of the referrer travels, its path least of all, nor a page anywhere else.
+ */
+function loopbackReferrer(request: Request): string | undefined {
+  const referer = request.headers.get("referer");
+  if (referer === null || !URL.canParse(referer)) {
+    return undefined;
+  }
+  const { origin } = new URL(referer);
+  return LOOPBACK_ORIGIN.test(origin) ? `${origin}/` : undefined;
+}
 
 const json = (status: number, code: string, message: string): Response =>
   new Response(JSON.stringify({ error: { code, message } }), {
@@ -106,6 +124,10 @@ async function forward(
   });
   headers.set("authorization", `Bearer ${options.token}`);
   headers.set("accept-encoding", "identity");
+  const referrer = loopbackReferrer(request);
+  if (referrer !== undefined) {
+    headers.set("referer", referrer);
+  }
   const withBody = request.method !== "GET" && request.method !== "HEAD";
   let answer: Response;
   try {

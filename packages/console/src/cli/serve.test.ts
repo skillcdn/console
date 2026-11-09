@@ -113,9 +113,29 @@ describe("console serve", () => {
     expect(call?.headers.get("accept-encoding")).toBe("identity");
     expect(call?.headers.get("accept")).toBe("application/json");
     expect(call?.headers.get("accept-language")).toBe("ko");
-    for (const name of ["cookie", "referer", "sec-fetch-site", "sec-fetch-mode", "host"]) {
+    for (const name of ["cookie", "sec-fetch-site", "sec-fetch-mode", "host"]) {
       expect(call?.headers.get(name), name).toBeNull();
     }
+    // Of the referrer, the page's origin alone: the console reads it for a plugin's frame.
+    expect(call?.headers.get("referer")).toBe(`${AT}/`);
+  });
+
+  it("names the page a plugin's frame is embedded in by its origin on this machine, and no page elsewhere (ADR-0083)", async () => {
+    const { fetch, calls } = fakeConsole();
+    const handler = handlerWith(fetch);
+    const frame = "/api/v1/plugins/hr/frame?widget=balance";
+    const sent = async (referer: string) => {
+      await handler(new Request(`${AT}${frame}`, { headers: { ...fromPage, referer } }));
+      return calls.at(-1)?.headers.get("referer") ?? null;
+    };
+    // The command's own page, and a development server's on this machine sending it the API.
+    expect(await sent(`${AT}/`)).toBe(`${AT}/`);
+    expect(await sent("http://localhost:11198/projects?x=1#y")).toBe("http://localhost:11198/");
+    expect(await sent("http://[::1]:5173/")).toBe("http://[::1]:5173/");
+    // Anywhere else, or not an address: nothing.
+    expect(await sent("https://console.test/")).toBeNull();
+    expect(await sent("http://localhost.evil.example/")).toBeNull();
+    expect(await sent("not an address")).toBeNull();
   });
 
   it("passes a body through, and an answer as it streams, without the loopback's cookies", async () => {
