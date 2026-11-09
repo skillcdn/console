@@ -1,16 +1,46 @@
 import { readFile, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
-// What `pnpm dev:plugins` is told on the command line: the port, and the built plugins of other
+// What `pnpm dev:plugins` is told on the command line: the port, the built plugins of other
 // checkouts to install beside the fixtures, each a directory laid out as the image lays a plugin
 // out (its package.json, its console-plugin.json, its dist/), so that a plugin's pages are looked
-// at here without a provider. Not compiled.
+// at here without a provider; the address the console is reached at from outside, through a
+// tunnel, for a plugin that receives requests; and whether the database is kept. Not compiled.
 
 export interface PreviewArguments {
   /** `--port <n>`; none for the default. */
   readonly port: number | undefined;
   /** `--plugin <dir>`, as often as given, in order. */
   readonly pluginDirs: readonly string[];
+  /** `--public-url <origin>`: an http or https origin the console is reached at from outside; none for the loopback. */
+  readonly publicUrl: string | undefined;
+  /** `--keep`: the database is kept when the console ends, and started from when it is there. */
+  readonly keep: boolean;
+}
+
+/** An origin as `--public-url` takes it: http or https, a host, nothing after it. */
+function originGiven(value: string | undefined): string {
+  let url: URL;
+  try {
+    url = new URL(value ?? "");
+  } catch {
+    throw new Error(
+      `--public-url takes an address such as https://preview.example.com, not ${String(value)}`,
+    );
+  }
+  if (
+    (url.protocol !== "https:" && url.protocol !== "http:") ||
+    url.pathname !== "/" ||
+    url.search !== "" ||
+    url.hash !== "" ||
+    url.username !== "" ||
+    url.password !== ""
+  ) {
+    throw new Error(
+      `--public-url takes an http or https origin and nothing after it, not ${value}`,
+    );
+  }
+  return url.origin;
 }
 
 /**
@@ -20,6 +50,8 @@ export interface PreviewArguments {
  */
 export function parsePreviewArguments(argv: readonly string[]): PreviewArguments {
   let port: number | undefined;
+  let publicUrl: string | undefined;
+  let keep = false;
   const pluginDirs: string[] = [];
   for (let at = 0; at < argv.length; at += 1) {
     const flag = argv[at];
@@ -40,11 +72,18 @@ export function parsePreviewArguments(argv: readonly string[]): PreviewArguments
       }
       pluginDirs.push(value);
       at += 1;
+    } else if (flag === "--public-url") {
+      publicUrl = originGiven(value);
+      at += 1;
+    } else if (flag === "--keep") {
+      keep = true;
     } else {
-      throw new Error(`${String(flag)} is not understood: --port <n>, --plugin <dir>`);
+      throw new Error(
+        `${String(flag)} is not understood: --port <n>, --plugin <dir>, --public-url <origin>, --keep`,
+      );
     }
   }
-  return { port, pluginDirs };
+  return { port, pluginDirs, publicUrl, keep };
 }
 
 const kindOf = async (path: string): Promise<"file" | "directory" | undefined> => {

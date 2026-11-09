@@ -18,22 +18,43 @@ afterAll(async () => {
 
 describe("what dev:plugins is told", () => {
   it("takes a port once and a plugin's directory as often as given, and refuses the rest", () => {
-    expect(parsePreviewArguments([])).toEqual({ port: undefined, pluginDirs: [] });
+    const bare = { port: undefined, pluginDirs: [], publicUrl: undefined, keep: false };
+    expect(parsePreviewArguments([])).toEqual(bare);
     expect(
       parsePreviewArguments(["--plugin", "../plugins/hr", "--port", "11201", "--plugin", "x"]),
-    ).toEqual({ port: 11201, pluginDirs: ["../plugins/hr", "x"] });
+    ).toEqual({ ...bare, port: 11201, pluginDirs: ["../plugins/hr", "x"] });
     expect(() => parsePreviewArguments(["--port", "many"])).toThrow(/--port takes a port number/);
     expect(() => parsePreviewArguments(["--plugin"])).toThrow(/--plugin takes the directory/);
     expect(() => parsePreviewArguments(["--plugin", "--port"])).toThrow(/--plugin takes/);
     expect(() => parsePreviewArguments(["--verbose"])).toThrow(/is not understood/);
   });
 
+  it("takes the address the console is reached at from outside, an origin and nothing more, and whether to keep the database", () => {
+    expect(
+      parsePreviewArguments(["--public-url", "https://preview.example.com/", "--keep"]),
+    ).toMatchObject({ publicUrl: "https://preview.example.com", keep: true });
+    expect(parsePreviewArguments(["--public-url", "http://10.0.0.5:8080"])).toMatchObject({
+      publicUrl: "http://10.0.0.5:8080",
+      keep: false,
+    });
+    for (const wrong of [
+      "preview.example.com",
+      "ftp://preview.example.com",
+      "https://preview.example.com/console",
+      "https://preview.example.com/?x=1",
+      "https://user:pass@preview.example.com",
+    ]) {
+      expect(() => parsePreviewArguments(["--public-url", wrong])).toThrow(/--public-url takes/);
+    }
+    expect(() => parsePreviewArguments(["--public-url"])).toThrow(/--public-url takes/);
+  });
+
   it("passes over the -- that pnpm hands on with the flags that followed it", () => {
-    expect(parsePreviewArguments(["--", "--plugin", "../plugins/hr"])).toEqual({
+    expect(parsePreviewArguments(["--", "--plugin", "../plugins/hr"])).toMatchObject({
       port: undefined,
       pluginDirs: ["../plugins/hr"],
     });
-    expect(parsePreviewArguments(["--port", "11201", "--", "--plugin", "x"])).toEqual({
+    expect(parsePreviewArguments(["--port", "11201", "--", "--plugin", "x"])).toMatchObject({
       port: 11201,
       pluginDirs: ["x"],
     });

@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -7,6 +8,7 @@ import { AUTH_ROUTES, pluginPath } from "@skillcdn/console/api";
 import { loadWebRoot } from "@skillcdn/console/web";
 import { Hono } from "hono";
 import { pino } from "pino";
+import * as z from "zod/mini";
 import { createPgBlobStore } from "../adapters/pg-blob-store.js";
 import { createSecrets } from "../auth/secrets.js";
 import { ensureWorkspace } from "../db/queries/workspaces.js";
@@ -58,10 +60,20 @@ export const BROWSER_ADMIN = "alice";
 export const PREVIEW_DISPATCH_INTERVAL_MS = 2_000;
 export const PREVIEW_SCHEDULE_INTERVAL_MS = 15_000;
 
-/** Where a browser begins signing in as one of the fixture's people. */
-const FIXTURE_SIGN_IN = "/__fixture/sign-in";
-/** Where the fixture's host would send the browser back from, answered here. */
-const FIXTURE_AUTHORIZE = "/__fixture/authorize";
+/**
+ * Where the fixture's sign-in lives: a browser begins signing in as one of the fixture's people
+ * under `/sign-in`, and the fixture's host would send it back from `/authorize`, answered here.
+ * Reached from outside, through a tunnel, the path carries a secret of the run: whoever reaches
+ * the sign-in page signs in as the administrator.
+ */
+const fixturePrefix = (reachedFromOutside: boolean): string =>
+  reachedFromOutside ? `/__fixture/${randomBytes(12).toString("hex")}` : "/__fixture";
+
+/** The database a preview keeps between runs (`--keep`), one on the server. */
+const PREVIEW_DATABASE = "console_preview";
+
+/** What `GET /api/v1/plugins/<key>` says of a plugin's state, as much as this needs. */
+const pluginStateSchema = z.object({ state: z.string() });
 
 export interface BrowserConsoleOptions {
   /** The port to listen on; a free one when left out. */
@@ -76,11 +88,25 @@ export interface BrowserConsoleOptions {
    * look at its pages here, enabled on the settings page as the administrator.
    */
   readonly plugins?: readonly { readonly name: string; readonly dir: string }[] | undefined;
+  /**
+   * The address the console is reached at from outside, a tunnel's origin, which is then its
+   * PUBLIC_URL and the origin its own pages are known by; it listens on the loopback still. Left
+   * out, where it listens. For a plugin that receives requests from outside: a webhook, a
+   * service sending the browser back.
+   */
+  readonly publicUrl?: string | undefined;
+  /**
+   * Keep the database when this ends, and start from it when it is there (the one named
+   * {@link PREVIEW_DATABASE}), for what cannot be made twice: a token rotated at first use.
+   */
+  readonly keep?: boolean | undefined;
 }
 
 export interface BrowserConsole {
-  /** Where it listens, `http://127.0.0.1:<port>`, which is also its PUBLIC_URL. */
+  /** Where it listens, `http://127.0.0.1:<port>`. */
   readonly origin: string;
+  /** Where it is reached: the public address given, else where it listens; its PUBLIC_URL. */
+  readonly publicUrl: string;
   readonly harness: Harness;
   readonly plugins: Plugins;
   readonly provider: FixtureProvider;
@@ -114,10 +140,15 @@ async function freePort(): Promise<number> {
 export async function startBrowserConsole(options: BrowserConsoleOptions): Promise<BrowserConsole> {
   const port = options.port ?? (await freePort());
   const origin = `http://127.0.0.1:${port}`;
+  const publicUrl = options.publicUrl ?? origin;
+  const fixture = fixturePrefix(options.publicUrl !== undefined);
   const web = await loadWebRoot(WEB_DIST).catch((error: unknown) => {
     throw new Error("the default UI is not built: run `pnpm build` first", { cause: error });
   });
-  const testDatabase = await createTestDatabase(options.databaseUrl ?? DEV_DATABASE_URL);
+  const testDatabase = await createTestDatabase(
+    options.databaseUrl ?? DEV_DATABASE_URL,
+    options.keep === true ? { name: PREVIEW_DATABASE, keep: true } : {},
+  );
   const root = await writePluginsDir(await mkdtemp(join(tmpdir(), "console-browser-")), [
     { name: HELLO_PLUGIN_NAME, dir: HELLO_PLUGIN_DIR },
     { name: "console-plugin-leave", dir: LEAVE_PLUGIN_DIR },
@@ -161,7 +192,7 @@ export async function startBrowserConsole(options: BrowserConsoleOptions): Promi
       clock,
       logger,
       timeouts: { command: 5_000, query: 5_000, endpoint: 5_000, lifecycle: 5_000 },
-      publicUrl: origin,
+      publicUrl,
       // A plugin looked at here is rebuilt under one version: no browser keeps its bundle.
       previewing: true,
     });
@@ -188,7 +219,7 @@ export async function startBrowserConsole(options: BrowserConsoleOptions): Promi
     scheduler.start(PREVIEW_SCHEDULE_INTERVAL_MS);
     holder.streams = { dispatcher, scheduler };
     const provider = createFixtureProvider("gh", {
-      authorize: () => `${origin}${FIXTURE_AUTHORIZE}`,
+      authorize: () => `${publicUrl}${fixture}/authorize`,
     });
     // The package's own version, so that the real `console` command, which is held to the
     // console's line (ADR-0025), signs in here and runs a plugin's commands as an agent would.
@@ -196,7 +227,7 @@ export async function startBrowserConsole(options: BrowserConsoleOptions): Promi
       providers: [provider],
       admins: [BROWSER_ADMIN],
       plugins,
-      origin,
+      origin: publicUrl,
       web,
       version: APP_VERSION,
     });
@@ -206,15 +237,21 @@ export async function startBrowserConsole(options: BrowserConsoleOptions): Promi
     // in a setting.
     await harness.signIn("bob");
     await harness.signIn("carol");
-    const enabled = await harness.request(pluginPath("hello", "enable"), {
-      method: "POST",
-      headers: { cookie: admin, origin, "content-type": "application/json" },
-      body: JSON.stringify({ consent: [], board: null, projects: "all" }),
-    });
-    if (enabled.status !== 200) {
-      throw new Error(
-        `the example plugin could not be enabled: ${enabled.status} ${await enabled.text()}`,
-      );
+    // Enabled once: a database kept from an earlier run has it enabled already.
+    const hello = pluginStateSchema.parse(
+      await (await harness.request(pluginPath("hello"), { headers: { cookie: admin } })).json(),
+    );
+    if (hello.state !== "enabled") {
+      const enabled = await harness.request(pluginPath("hello", "enable"), {
+        method: "POST",
+        headers: { cookie: admin, origin: publicUrl, "content-type": "application/json" },
+        body: JSON.stringify({ consent: [], board: null, projects: "all" }),
+      });
+      if (enabled.status !== 200) {
+        throw new Error(
+          `the example plugin could not be enabled: ${enabled.status} ${await enabled.text()}`,
+        );
+      }
     }
 
     // The browser's sign-in: who it is for, then the host's answer, then the console's own routes.
@@ -223,17 +260,17 @@ export async function startBrowserConsole(options: BrowserConsoleOptions): Promi
     const outer = new Hono<AppEnv>();
     let pending: string | undefined;
     const people = Object.keys(provider.people);
-    outer.get(FIXTURE_SIGN_IN, (c) =>
+    outer.get(`${fixture}/sign-in`, (c) =>
       c.html(
         `<!doctype html><meta charset="utf-8"><title>Sign in</title><h1>Sign in as</h1><ul>${people
           .map(
             (person) =>
-              `<li><a href="${FIXTURE_SIGN_IN}/${person}">${person}${person === BROWSER_ADMIN ? " (administrator)" : ""}</a></li>`,
+              `<li><a href="${fixture}/sign-in/${person}">${person}${person === BROWSER_ADMIN ? " (administrator)" : ""}</a></li>`,
           )
           .join("")}</ul>`,
       ),
     );
-    outer.get(`${FIXTURE_SIGN_IN}/:person`, (c) => {
+    outer.get(`${fixture}/sign-in/:person`, (c) => {
       const person = c.req.param("person");
       if (!people.includes(person)) {
         return c.text(`the fixture knows nobody called ${person}`, 404);
@@ -244,7 +281,7 @@ export async function startBrowserConsole(options: BrowserConsoleOptions): Promi
         `<!doctype html><meta charset="utf-8"><title>Signing in</title><p>Signing in as ${person}…</p><script>location.replace(${JSON.stringify(AUTH_ROUTES.login(provider.key))})</script>`,
       );
     });
-    outer.get(FIXTURE_AUTHORIZE, (c) => {
+    outer.get(`${fixture}/authorize`, (c) => {
       const state = c.req.query("state");
       const redirect = c.req.query("redirect_uri");
       if (state === undefined || redirect === undefined || pending === undefined) {
@@ -265,13 +302,14 @@ export async function startBrowserConsole(options: BrowserConsoleOptions): Promi
     });
     return {
       origin,
+      publicUrl,
       harness,
       plugins,
       provider,
       signInUrl: (person) =>
         person === undefined
-          ? `${origin}${FIXTURE_SIGN_IN}`
-          : `${origin}${FIXTURE_SIGN_IN}/${encodeURIComponent(person)}`,
+          ? `${publicUrl}${fixture}/sign-in`
+          : `${publicUrl}${fixture}/sign-in/${encodeURIComponent(person)}`,
       async close() {
         await server.close(2_000);
         await dispatcher.close();

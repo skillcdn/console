@@ -1,5 +1,5 @@
 import process from "node:process";
-import { pluginPath, projectPath } from "@skillcdn/console/api";
+import { pluginPath, projectPath, REST_ROUTES } from "@skillcdn/console/api";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { BROWSER_ADMIN, type BrowserConsole, startBrowserConsole } from "./browser-console.js";
 
@@ -43,6 +43,40 @@ afterAll(async () => {
 });
 
 describe("the preview console", () => {
+  it("is reached at the public address it is given, by sign-in addresses that carry a secret of the run", async () => {
+    const outside = await startBrowserConsole({
+      databaseUrl: process.env.TEST_DATABASE_URL,
+      env: process.env,
+      publicUrl: "https://preview.example.test",
+    });
+    try {
+      expect(outside.origin).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+      expect(outside.publicUrl).toBe("https://preview.example.test");
+      const signIn = outside.signInUrl(BROWSER_ADMIN);
+      expect(signIn).toMatch(
+        /^https:\/\/preview\.example\.test\/__fixture\/[0-9a-f]{24}\/sign-in\/alice$/,
+      );
+      // The page is at the secret address on the listener, and not at the plain one.
+      const secret = new URL(signIn).pathname.replace(/\/alice$/, "");
+      const found = await fetch(`${outside.origin}${secret}`);
+      expect(found.status).toBe(200);
+      expect(await found.text()).toContain("Sign in as");
+      const plain = await fetch(`${outside.origin}/__fixture/sign-in`);
+      expect(await plain.text()).not.toContain("Sign in as");
+      // The console's own pages are the public address's: a request from the loopback's origin
+      // is another site's.
+      const admin = await outside.harness.signIn(BROWSER_ADMIN);
+      const foreign = await outside.harness.request(REST_ROUTES.projects, {
+        method: "POST",
+        headers: { cookie: admin, origin: outside.origin, "content-type": "application/json" },
+        body: JSON.stringify({ key: "x", name: "X" }),
+      });
+      expect(foreign.status).toBe(403);
+    } finally {
+      await outside.close();
+    }
+  });
+
   it("runs a plugin's hooks itself: a decision answered on the board moves the plugin's record", async () => {
     const admin = await started.harness.signIn(BROWSER_ADMIN);
     const bob = await started.harness.signIn("bob");

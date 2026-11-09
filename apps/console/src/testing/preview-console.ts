@@ -9,8 +9,10 @@ import { builtPluginAt, type PreviewArguments, parsePreviewArguments } from "./p
 // plugin is looked at here without a provider; the plugins' hooks and jobs running in this
 // process, so that a decision answered reaches the plugin and a job runs at its time; the
 // fixture's people signing in from the browser at the addresses printed, and a database of its
-// own that goes when this ends.
-// `pnpm dev:plugins`, which builds first; `--port <n>` for another port. Not compiled.
+// own that goes when this ends, unless --keep says to keep it for the next run.
+// `pnpm dev:plugins`, which builds first; `--port <n>` for another port; `--public-url <origin>`
+// for the address a tunnel reaches it at, so that a plugin receiving requests from outside is
+// tried here. Not compiled.
 
 const DEFAULT_PORT = 11200;
 
@@ -41,9 +43,16 @@ const started = await startBrowserConsole({
   databaseUrl: process.env.TEST_DATABASE_URL,
   env: process.env,
   plugins,
+  publicUrl: wanted.publicUrl,
+  keep: wanted.keep,
 });
 const lines = [
-  `The console, with the example plugin enabled and the fixtures leave and gate installed: ${started.origin}`,
+  `The console, with the example plugin enabled and the fixtures leave and gate installed: ${started.publicUrl}`,
+  ...(wanted.publicUrl === undefined
+    ? []
+    : [
+        `  listening on ${started.origin}, reached from outside at ${started.publicUrl}: the sign-in addresses below carry a secret of this run, since whoever reaches one signs in as that person, and what is typed into a plugin's page passes through the tunnel's provider.`,
+      ]),
   `  sign in as ${BROWSER_ADMIN}, an administrator: ${started.signInUrl(BROWSER_ADMIN)}`,
   `  as a member: ${started.signInUrl("bob")} or ${started.signInUrl("carol")}`,
   ...plugins.map(
@@ -51,7 +60,9 @@ const lines = [
       `  installed and not enabled, for ${BROWSER_ADMIN} to enable on the settings page: ${plugin.name} from ${plugin.dir}`,
   ),
   "  The plugins' hooks run here within seconds of an event, and their jobs on their schedule, as on a deployment.",
-  "  Ctrl-C ends it and drops its database.",
+  wanted.keep
+    ? "  Ctrl-C ends it; the database console_preview is kept, and --keep starts from it next time."
+    : "  Ctrl-C ends it and drops its database.",
 ];
 process.stdout.write(`${lines.join("\n")}\n`);
 
