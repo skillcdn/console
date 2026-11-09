@@ -207,7 +207,7 @@ describe("the header over the pages", () => {
         }
         // What the browser finds at the link's place is the link, and the list is within the window.
         const atPoint = await page.evaluate(
-          `document.elementFromPoint(${box.x + box.width / 2}, ${box.y + box.height / 2})?.getAttribute("href") ?? null`,
+          `document.elementFromPoint(${box.x + box.width / 2}, ${box.y + box.height / 2})?.closest("a")?.getAttribute("href") ?? null`,
         );
         expect(atPoint, `at ${width}`).toBe("/plugins/call/room");
         expect(box.x, `at ${width}`).toBeGreaterThanOrEqual(0);

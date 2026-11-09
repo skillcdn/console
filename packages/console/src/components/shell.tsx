@@ -15,6 +15,8 @@ export interface NavItem {
   readonly count?: number | undefined;
   /** The pages the tab opens a list of, as a group of plugins does (ADR-0054); the tab itself leads to the first. */
   readonly children?: readonly NavItem[] | undefined;
+  /** What the page is, in a line: said under its name in a group's list, as a plugin describes itself. */
+  readonly description?: string | undefined;
 }
 
 /** The addresses of a brand's marks (ADR-0013): shown beside the workspace's name, and above it when signing in. */
@@ -69,13 +71,21 @@ export function isPlainClick(event: {
   return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
 }
 
-/** A page of a menu: followed in place for a plain click, and the menu closes. */
-function MenuLink(props: { readonly item: NavItem; readonly onFollow: (href: string) => void }) {
+/**
+ * A page of a menu: followed in place for a plain click, and the menu closes. In a group's list
+ * it says what the page is under its name, where the item has a description.
+ */
+function MenuLink(props: {
+  readonly item: NavItem;
+  readonly onFollow: (href: string) => void;
+  readonly described?: boolean | undefined;
+}) {
   const { item } = props;
+  const described = props.described === true;
   return (
     <a
       href={item.href}
-      className="sc-menu-link"
+      className={cx("sc-menu-link", described && "sc-group-link")}
       aria-current={item.current ? "page" : undefined}
       onClick={(event) => {
         if (isPlainClick(event)) {
@@ -84,17 +94,41 @@ function MenuLink(props: { readonly item: NavItem; readonly onFollow: (href: str
         }
       }}
     >
-      {item.label}
+      {described ? (
+        <>
+          <span className="sc-group-link-name">{item.label}</span>
+          {item.description !== undefined && item.description !== "" && (
+            <span className="sc-group-link-note">{item.description}</span>
+          )}
+        </>
+      ) : (
+        item.label
+      )}
     </a>
   );
 }
 
+/**
+ * The longest name a tab shows whole: the stylesheet stops a longer one short with an ellipsis,
+ * about here, and the tab's title carries it whole. A plugin's name runs to 40 characters.
+ */
+const TAB_LABEL_WHOLE = 28;
+
+/** A tab's name, as the stylesheet may stop it short, and the title that then says it whole. */
+function tabLabel(label: string): { readonly title: string | undefined } {
+  return { title: label.length > TAB_LABEL_WHOLE ? label : undefined };
+}
+
 /** How close to the window's edge a list opened from a tab may come. */
 const PANEL_GUTTER_PX = 8;
+/** How far below its tab, off the header's line, a list opens. */
+const PANEL_DROP_PX = 6;
+/** How far a list's edge stands before the names in it: its own padding and a link's. */
+const PANEL_INSET_PX = 14;
 
 /**
- * Puts the list a tab opened under the tab's left edge, within the window: the list is in the
- * top layer, where nothing of the page places it.
+ * Puts the list a tab opened under the tab, the names in it lined up with the tab's, within the
+ * window: the list is in the top layer, where nothing of the page places it.
  */
 function placeUnder(tab: HTMLElement | null, box: HTMLElement | null): void {
   if (tab === null || box === null) {
@@ -102,8 +136,8 @@ function placeUnder(tab: HTMLElement | null, box: HTMLElement | null): void {
   }
   const at = tab.getBoundingClientRect();
   const room = window.innerWidth - box.offsetWidth - PANEL_GUTTER_PX;
-  box.style.left = `${Math.max(PANEL_GUTTER_PX, Math.min(at.left, room))}px`;
-  box.style.top = `${at.bottom}px`;
+  box.style.left = `${Math.max(PANEL_GUTTER_PX, Math.min(at.left - PANEL_INSET_PX, room))}px`;
+  box.style.top = `${at.bottom + PANEL_DROP_PX}px`;
 }
 
 /**
@@ -154,10 +188,11 @@ function TabGroup(props: { readonly item: NavItem; readonly onNavigate: (href: s
         aria-expanded={open}
         aria-controls={id}
         popoverTarget={id}
+        {...tabLabel(item.label)}
         // Placed before the browser shows it, so that it never shows anywhere else first.
         onClick={() => placeUnder(tab.current, panel.current)}
       >
-        {item.label}
+        <span className="sc-tab-label">{item.label}</span>
         <svg className="sc-menu-caret" viewBox="0 0 16 16" aria-hidden="true">
           <path
             d="M4 6l4 4 4-4"
@@ -175,6 +210,7 @@ function TabGroup(props: { readonly item: NavItem; readonly onNavigate: (href: s
             <MenuLink
               key={child.href}
               item={child}
+              described
               onFollow={(href) => {
                 panel.current?.hidePopover();
                 props.onNavigate(href);
@@ -425,9 +461,10 @@ export function Shell(props: ShellProps) {
                     href={item.href}
                     className={cx("sc-tab", item.current && "sc-tab-current")}
                     aria-current={item.current ? "page" : undefined}
+                    {...tabLabel(item.label)}
                     onClick={follow(item.href)}
                   >
-                    {item.label}
+                    <span className="sc-tab-label">{item.label}</span>
                     {item.count !== undefined && item.count > 0 && (
                       <span className="sc-nav-count">{item.count}</span>
                     )}

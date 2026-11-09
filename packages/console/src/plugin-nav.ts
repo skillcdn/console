@@ -110,6 +110,7 @@ export function pluginNavItems(input: {
                 href,
                 label: pluginWordOf(plugin.name, language),
                 current: current.plugin === plugin.key,
+                description: pluginWordOf(plugin.description, language) || undefined,
               },
             ];
       });

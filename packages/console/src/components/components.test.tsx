@@ -1184,8 +1184,18 @@ describe("the shell and signing in", () => {
       label: "Operations",
       current: true,
       children: [
-        { href: "/plugins/hello/greetings", label: "Hello", current: true },
-        { href: "/plugins/call/room", label: "Call", current: false },
+        {
+          href: "/plugins/hello/greetings",
+          label: "Hello",
+          current: true,
+          description: "Greetings kept as records.",
+        },
+        {
+          href: "/plugins/call/room",
+          label: "Call",
+          current: false,
+          description: "A room to talk in.",
+        },
       ],
     };
     const html = renderToStaticMarkup(
@@ -1201,6 +1211,33 @@ describe("the shell and signing in", () => {
     // In the list and in the person's menu alike, each plugin of the group is a link of its own.
     expect(html.match(/href="\/plugins\/call\/room"/g)).toHaveLength(2);
     expect(html).toContain('<p class="sc-menu-heading">Operations</p>');
+    // The list says what each is under its name, the page's own marked; the menu names them alone.
+    expect(html).toContain(
+      '<span class="sc-group-link-name">Call</span><span class="sc-group-link-note">A room to talk in.</span>',
+    );
+    expect(html.match(/sc-group-link-note/g)).toHaveLength(2);
+    expect(html).toMatch(/class="sc-menu-link sc-group-link" aria-current="page"/);
+  });
+
+  it("stops a long name of a tab short, its title saying it whole", () => {
+    const long = "Customer relationships and the sales pipeline";
+    const html = renderToStaticMarkup(
+      <Shell
+        title="Acme"
+        nav={[
+          { href: "/work", label: "My work", current: true },
+          { href: "/plugins/crm/home", label: long, current: false },
+        ]}
+        person={alice}
+        onNavigate={() => undefined}
+      >
+        <p>content</p>
+      </Shell>,
+    );
+    expect(html).toContain(`title="${long}"`);
+    expect(html).toContain(`<span class="sc-tab-label">${long}</span>`);
+    // A short name has no title to say it again.
+    expect(html).not.toContain('title="My work"');
   });
 
   it("names the board, the pages and the person", () => {
