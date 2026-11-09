@@ -399,7 +399,9 @@ describe("the console command", () => {
         expect(whole.out()).toContain(`  console ${help.overview ?? help.usage}\n`);
       }
     }
-    expect(whole.out()).not.toContain("--token-stdin reads a token");
+    expect(whole.out()).not.toContain(
+      "--token-stdin takes a token made by hand instead, typed unseen",
+    );
     expect(whole.out()).not.toContain("--parent <number|id>");
     expect(whole.out().length).toBeLessThan(11_000);
     // What holds everywhere: every exit code, the fourth included.
@@ -424,7 +426,7 @@ describe("the console command", () => {
     );
     const login = harness({ fetch });
     expect(await runCli(["help", "login"], login.io)).toBe(EXIT.ok);
-    expect(login.out()).toContain("--token-stdin reads a token");
+    expect(login.out()).toContain("--token-stdin takes a token made by hand instead, typed unseen");
     const task = harness({ fetch });
     expect(await runCli(["help", "task"], task.io)).toBe(EXIT.ok);
     expect(task.out()).toContain("--parent <number|id>");
@@ -4324,8 +4326,28 @@ describe("the plugins on the command line (ADR-0049, ADR-0053)", () => {
     expect(calls.at(-1)?.key).toBe(`PUT ${AT}/secrets/token`);
     expect(calls.at(-1)?.body).toEqual({ value: "s3cret" });
     expect(sealed.out()).not.toContain("s3cret");
+    // At a terminal the value is typed unseen, after a prompt naming the secret; it reaches the
+    // console and nothing the command prints.
+    const prompts: string[] = [];
+    const typed = harness({
+      fetch,
+      env: SIGNED_IN,
+      readStdin: async () => {
+        throw new Error("standard input is not read when the terminal is asked");
+      },
+      readSecret: async (prompt) => {
+        prompts.push(prompt);
+        return "typ3d\n";
+      },
+    });
+    expect(await runCli(["plugin", "hello", "secret", "token"], typed.io)).toBe(EXIT.ok);
+    expect(prompts).toEqual(["Secret token of hello (typed unseen; Enter ends it): "]);
+    expect(calls.at(-1)?.body).toEqual({ value: "typ3d" });
+    expect(typed.out() + typed.err()).not.toContain("typ3d");
     const empty = harness({ fetch, env: SIGNED_IN, readStdin: async () => "" });
     expect(await runCli(["plugin", "hello", "secret", "token"], empty.io)).toBe(EXIT.usage);
+    expect(empty.err()).toContain("Type the value at the prompt, or redirect a file into it");
+    expect(empty.err()).toContain("Never give it on the command line");
     const removed = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["plugin", "hello", "secret", "token", "--remove"], removed.io)).toBe(
       EXIT.ok,

@@ -12,7 +12,7 @@ import { createDirectoryStore } from "./directory.js";
 import { detectInstall } from "./install.js";
 import { createNoticeStore } from "./notices.js";
 import { listenOn } from "./serve.js";
-import { readBytesAt, readFileAt, readStdin, writeBytesAt } from "./terminal.js";
+import { readBytesAt, readFileAt, readSecret, readStdin, writeBytesAt } from "./terminal.js";
 
 // The `console` command: the only place the command reads the process. Everything it does is in
 // cli.ts, which takes what it needs and is what the tests run.
@@ -38,6 +38,7 @@ process.exitCode = await runCli(process.argv.slice(2), {
   },
   fetch: (input, init) => fetch(input, init),
   readStdin,
+  readSecret,
   hostname: hostname(),
   readFile: readFileAt,
   readBytes: readBytesAt,

@@ -18,6 +18,59 @@ export function readStdin(): Promise<string> {
   });
 }
 
+/**
+ * A secret typed at the terminal, unseen: the prompt goes to standard error, what is typed is
+ * echoed nowhere, Enter ends it, Backspace takes a character back, and Ctrl-C gives the command
+ * up as it does elsewhere. A pipe or a file in place of the terminal is read whole, as
+ * {@link readStdin} reads it, so that a script hands the value over as before.
+ */
+export function readSecret(prompt: string): Promise<string> {
+  const { stdin, stderr } = process;
+  if (!stdin.isTTY) {
+    return readStdin();
+  }
+  stderr.write(prompt);
+  stdin.setRawMode(true);
+  stdin.resume();
+  stdin.setEncoding("utf8");
+  return new Promise((resolve) => {
+    let typed = "";
+    const finish = (interrupted: boolean): void => {
+      stdin.off("data", onData);
+      stdin.setRawMode(false);
+      stdin.pause();
+      stderr.write("\n");
+      if (interrupted) {
+        // Raw mode delivers no signal for Ctrl-C: the command ends as any does on one.
+        process.kill(process.pid, "SIGINT");
+        return;
+      }
+      resolve(typed);
+    };
+    const onData = (chunk: string): void => {
+      for (const character of chunk) {
+        switch (character) {
+          case "\u0003":
+            finish(true);
+            return;
+          case "\r":
+          case "\n":
+          case "\u0004":
+            finish(false);
+            return;
+          case "\u007f":
+          case "\b":
+            typed = typed.slice(0, -1);
+            break;
+          default:
+            typed += character;
+        }
+      }
+    };
+    stdin.on("data", onData);
+  });
+}
+
 /** A file named on the command line, as text. */
 export function readFileAt(path: string): Promise<string> {
   return readFile(path, "utf8");

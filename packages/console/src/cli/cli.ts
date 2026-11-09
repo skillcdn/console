@@ -185,6 +185,12 @@ export interface CliIo {
   readonly fetch: FetchLike;
   /** All of standard input, for a body given as `-`, or a token given to login. */
   readonly readStdin: () => Promise<string>;
+  /**
+   * A secret the command asks for: typed unseen at the terminal after the prompt, or all of
+   * standard input where that is a pipe or a file. Left out, standard input as `readStdin` reads
+   * it, which the tests hand the command.
+   */
+  readonly readSecret?: ((prompt: string) => Promise<string>) | undefined;
   /** The name of the machine, for the agent to say where it runs; nothing when unknown. */
   readonly hostname?: string | undefined;
   /** A file named with `--file`, as text. */
@@ -229,6 +235,15 @@ class CliExit extends Error {
 
 const failed = (message: string): CliExit => new CliExit(EXIT.failed, message);
 const misuse = (message: string): CliExit => new CliExit(EXIT.usage, message);
+
+/**
+ * A secret given to the command, never as an argument, which a shell keeps in its history and a
+ * process list shows: typed unseen at the terminal after `prompt`, or piped in; one line.
+ */
+async function secretGiven(io: CliIo, prompt: string): Promise<string> {
+  const given = io.readSecret === undefined ? await io.readStdin() : await io.readSecret(prompt);
+  return given.replace(/\r?\n$/, "");
+}
 
 type OptionSpec = Readonly<
   Record<string, { readonly type: "string" | "boolean"; readonly multiple?: boolean }>
@@ -753,7 +768,7 @@ const login: Command = async (args, io) => {
   const url = originOf(wanted);
   const asDefault = on(values, "default");
   if (on(values, "token-stdin")) {
-    const token = (await io.readStdin()).trim();
+    const token = (await secretGiven(io, "Token (typed unseen; Enter ends it): ")).trim();
     if (token.length === 0) {
       throw failed("No token was given.");
     }
@@ -1776,7 +1791,7 @@ function settingValuesOf(
     }
     if (setting.type === "secret") {
       throw misuse(
-        `${key} is a secret: console plugin ${detail.key} secret ${key} reads it from standard input.`,
+        `${key} is a secret: console plugin ${detail.key} secret ${key} asks for it, typed unseen.`,
       );
     }
     if (word.length === 0) {
@@ -1980,7 +1995,10 @@ async function pluginSettings(
   return EXIT.ok;
 }
 
-/** Seals a secret of the plugin, read from standard input and shown never; or takes it away. */
+/**
+ * Seals a secret of the plugin, typed unseen at the terminal or piped in, never an argument, and
+ * shown never; or takes it away.
+ */
 async function pluginSecret(
   io: CliIo,
   session: Session,
@@ -1990,17 +2008,20 @@ async function pluginSecret(
   const { values, positionals } = parse(rest, { remove: { type: "boolean" } });
   const name = theOne(
     positionals,
-    `Say which secret: console plugin ${client.key} secret <name> [--remove]; the value is read from standard input.`,
+    `Say which secret: console plugin ${client.key} secret <name> [--remove]; the value is typed at the prompt, unseen, or piped in.`,
   );
   if (on(values, "remove")) {
     await client.removeSecret(name);
     answer(io, session, { name, set: false }, () => `Removed the secret ${name} of ${client.key}.`);
     return EXIT.ok;
   }
-  const value = (await io.readStdin()).replace(/\r?\n$/, "");
+  const value = await secretGiven(
+    io,
+    `Secret ${name} of ${client.key} (typed unseen; Enter ends it): `,
+  );
   if (value.length === 0) {
     throw misuse(
-      `Pipe the value in: console plugin ${client.key} secret ${name} < file. It is sealed by the console and shown never.`,
+      `Type the value at the prompt, or redirect a file into it: console plugin ${client.key} secret ${name} < file. Never give it on the command line or through echo, which a shell keeps; the console seals it and shows it never.`,
     );
   }
   await client.setSecret(name, value);
@@ -3648,7 +3669,7 @@ const wayOf = (values: Values): "connect" | "stdin" | "remove" => {
   const [way] = ways;
   if (way === undefined || ways.length !== 1) {
     throw misuse(
-      "Say one of --connect, which asks SkillCDN for a code a person approves; --stdin, which reads a token made by hand from standard input; and --remove, which takes the token away.",
+      "Say one of --connect, which asks SkillCDN for a code a person approves; --stdin, which takes a token made by hand, typed unseen at the terminal or piped in; and --remove, which takes the token away.",
     );
   }
   return way;
@@ -3670,8 +3691,8 @@ interface TokenHolder<T> {
 
 /**
  * The SkillCDN token (ADR-0028): connected with a code a person approves at SkillCDN (ADR-0036),
- * or read from standard input and never from an argument, so that no shell keeps it; or taken
- * away. The same for a project's and for the workspace's.
+ * or typed unseen at the terminal or piped in, never an argument, so that no shell keeps it; or
+ * taken away. The same for a project's and for the workspace's.
  */
 async function packToken<T>(
   io: CliIo,
@@ -3708,9 +3729,9 @@ async function packToken<T>(
       );
     }
   }
-  const token = (await io.readStdin()).trim();
+  const token = (await secretGiven(io, "SkillCDN token (typed unseen; Enter ends it): ")).trim();
   if (token.length === 0) {
-    throw failed("No token was given on standard input.");
+    throw failed("No token was given.");
   }
   const changed = await holder.set(token);
   answer(io, session, changed, () => format(changed));
