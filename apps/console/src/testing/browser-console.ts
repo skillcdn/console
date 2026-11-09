@@ -61,6 +61,22 @@ export const BROWSER_ADMIN = "alice";
 export const PREVIEW_DISPATCH_INTERVAL_MS = 2_000;
 export const PREVIEW_SCHEDULE_INTERVAL_MS = 15_000;
 
+/** The cookie that holds the word a browser signs in by on a preview, and how long the word lasts. */
+const SIGN_IN_COOKIE = "console_fixture_sign_in";
+const SIGN_IN_WORD_MS = 5 * 60_000;
+
+/** The word a browser was given by the page of a person, from its cookies; nothing without one. */
+function wordOf(cookies: string | undefined): string | undefined {
+  for (const part of (cookies ?? "").split(";")) {
+    const [name, ...value] = part.trim().split("=");
+    if (name === SIGN_IN_COOKIE) {
+      const word = value.join("=");
+      return /^[0-9a-f]{32}$/.test(word) ? word : undefined;
+    }
+  }
+  return undefined;
+}
+
 /**
  * Where the fixture's sign-in lives: a browser begins signing in as one of the fixture's people
  * under `/sign-in`, and the fixture's host would send it back from `/authorize`, answered here.
@@ -261,9 +277,16 @@ export async function startBrowserConsole(options: BrowserConsoleOptions): Promi
 
     // The browser's sign-in: who it is for, then the host's answer, then the console's own routes.
     // The console begins a sign-in from its own pages alone (sec-fetch-site), so the page of the
-    // person is a page of this origin that goes on to the console's login itself.
+    // person is a page of this origin that goes on to the console's login itself. Whom the host
+    // answers for is the browser's own: the page of the person gives it a word, once, that the
+    // answer uses up. Whoever reaches the console's login, as anyone may through a tunnel, is
+    // sent to the answer's address, which names the run's secret, and is answered nothing there
+    // without the word; and the answer goes back to the console's callback, nowhere else.
     const outer = new Hono<AppEnv>();
-    let pending: string | undefined;
+    const begun = new Map<string, { readonly person: string; readonly until: number }>();
+    const callback = `${publicUrl}${AUTH_ROUTES.callback(provider.key)}`;
+    const wordCookie = (value: string, maxAge: number): string =>
+      `${SIGN_IN_COOKIE}=${value}; Path=${fixture}; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${publicUrl.startsWith("https:") ? "; Secure" : ""}`;
     const people = Object.keys(provider.people);
     outer.get(`${fixture}/sign-in`, (c) =>
       c.html(
@@ -280,7 +303,15 @@ export async function startBrowserConsole(options: BrowserConsoleOptions): Promi
       if (!people.includes(person)) {
         return c.text(`the fixture knows nobody called ${person}`, 404);
       }
-      pending = person;
+      const now = Date.now();
+      for (const [word, sign] of begun) {
+        if (sign.until <= now) {
+          begun.delete(word);
+        }
+      }
+      const word = randomBytes(16).toString("hex");
+      begun.set(word, { person, until: now + SIGN_IN_WORD_MS });
+      c.header("set-cookie", wordCookie(word, SIGN_IN_WORD_MS / 1000));
       c.header("cache-control", "no-store");
       return c.html(
         `<!doctype html><meta charset="utf-8"><title>Signing in</title><p>Signing in as ${person}…</p><script>location.replace(${JSON.stringify(AUTH_ROUTES.login(provider.key))})</script>`,
@@ -289,11 +320,21 @@ export async function startBrowserConsole(options: BrowserConsoleOptions): Promi
     outer.get(`${fixture}/authorize`, (c) => {
       const state = c.req.query("state");
       const redirect = c.req.query("redirect_uri");
-      if (state === undefined || redirect === undefined || pending === undefined) {
-        return c.text("no sign-in was begun", 400);
+      if (state === undefined || redirect !== callback) {
+        return c.text("not a sign-in this console began", 400);
       }
-      const query = new URLSearchParams({ code: provider.codeFor(pending, state), state });
-      return c.redirect(`${redirect}?${query}`);
+      const word = wordOf(c.req.header("cookie"));
+      const sign = word === undefined ? undefined : begun.get(word);
+      if (word !== undefined) {
+        begun.delete(word);
+      }
+      c.header("set-cookie", wordCookie("", 0));
+      c.header("cache-control", "no-store");
+      if (sign === undefined || sign.until <= Date.now()) {
+        return c.text("no sign-in was begun in this browser: open the address of a person", 403);
+      }
+      const query = new URLSearchParams({ code: provider.codeFor(sign.person, state), state });
+      return c.redirect(`${callback}?${query}`);
     });
     outer.all("*", (c) => harness.app.fetch(c.req.raw, c.env));
 

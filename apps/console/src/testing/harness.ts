@@ -6,6 +6,7 @@ import {
   type RestProjectInput,
   restMeSchema,
   restProjectSchema,
+  SIGN_IN_PARAM,
 } from "@skillcdn/console/api";
 import type { WebRoot } from "@skillcdn/console/web";
 import { formatAddress, parseAddress } from "@skillcdn/core";
@@ -271,6 +272,15 @@ export function createHarness(testDatabase: TestDatabase, options: HarnessOption
         `${AUTH_ROUTES.callback(provider.key)}?code=${provider.codeFor(person, state)}&state=${state}`,
         { headers: { cookie: cookieOf(begun, "console_login") } },
       );
+      // A sign-in the console refused comes back to a page that says why.
+      const refused = new URL(done.headers.get("location") ?? "/", origin).searchParams.get(
+        SIGN_IN_PARAM,
+      );
+      if (refused !== null) {
+        throw new Error(
+          `${person} was not signed in: the console answered ${SIGN_IN_PARAM}=${refused}`,
+        );
+      }
       return cookieOf(done, "console_session");
     },
     async project(cookie, input) {

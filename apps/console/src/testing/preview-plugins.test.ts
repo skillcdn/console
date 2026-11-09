@@ -22,17 +22,18 @@ afterAll(async () => {
 });
 
 describe("what dev:plugins is told", () => {
-  it("says what to do when the database it kept is not its own", () => {
+  it("says what to do when the database it kept will not sign the fixture's people in", () => {
     const failure = keptSignInFailure(
       "bob",
-      new Error("the response set no console_session cookie"),
+      new Error("bob was not signed in: the console answered sign_in=refused"),
     );
     expect(failure.message).toContain(
-      `bob could not sign in on the kept database ${PREVIEW_DATABASE}`,
+      `bob could not sign in on the kept database ${PREVIEW_DATABASE} (bob was not signed in: the console answered sign_in=refused)`,
     );
+    // Both reasons the console does not tell apart, and the way out of each.
+    expect(failure.message).toContain("took bob out, which the People page undoes");
     expect(failure.message).toContain(`drop database ${PREVIEW_DATABASE} with (force)`);
     expect(failure.message).toContain("without --keep");
-    expect((failure.cause as Error).message).toBe("the response set no console_session cookie");
   });
 
   it("takes a port once and a plugin's directory as often as given, and refuses the rest", () => {

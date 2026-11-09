@@ -1,5 +1,5 @@
 import process from "node:process";
-import { pluginPath, projectPath, REST_ROUTES } from "@skillcdn/console/api";
+import { AUTH_ROUTES, pluginPath, projectPath, REST_ROUTES } from "@skillcdn/console/api";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { BROWSER_ADMIN, type BrowserConsole, startBrowserConsole } from "./browser-console.js";
 
@@ -72,6 +72,74 @@ describe("the preview console", () => {
         body: JSON.stringify({ key: "x", name: "X" }),
       });
       expect(foreign.status).toBe(403);
+
+      // Whom the host answers for is the browser's own. Anyone who reaches the tunnel may begin
+      // the console's login, which sends them to the answer's address, the run's secret in it;
+      // the answer gives a code only to the browser the page of a person gave its word to, once,
+      // and only back to the console's callback.
+      const atListener = (url: string): string => {
+        const at = new URL(url);
+        return `${outside.origin}${at.pathname}${at.search}`;
+      };
+      const pairOf = (response: Response, name: string): string =>
+        response.headers
+          .getSetCookie()
+          .map((cookie) => cookie.split(";")[0] ?? "")
+          .find((pair) => pair.split("=")[0]?.endsWith(name) === true) ?? "";
+      const word = pairOf(
+        await fetch(`${outside.origin}${secret}/alice`),
+        "console_fixture_sign_in",
+      );
+      expect(word).toMatch(/^console_fixture_sign_in=[0-9a-f]{32}$/);
+      const login = async () => {
+        const begun = await fetch(`${outside.origin}${AUTH_ROUTES.login("gh")}`, {
+          redirect: "manual",
+        });
+        expect(begun.status).toBe(302);
+        return {
+          authorize: begun.headers.get("location") ?? "",
+          cookie: pairOf(begun, "console_login"),
+        };
+      };
+      const stranger = await login();
+      expect(new URL(stranger.authorize).pathname).toBe(secret.replace(/\/sign-in$/, "/authorize"));
+      expect((await fetch(atListener(stranger.authorize), { redirect: "manual" })).status).toBe(
+        403,
+      );
+      const mine = await login();
+      const answered = await fetch(atListener(mine.authorize), {
+        redirect: "manual",
+        headers: { cookie: word },
+      });
+      expect(answered.status).toBe(302);
+      const back = answered.headers.get("location") ?? "";
+      expect(back.startsWith(`https://preview.example.test${AUTH_ROUTES.callback("gh")}?`)).toBe(
+        true,
+      );
+      const signedIn = await fetch(atListener(back), {
+        redirect: "manual",
+        headers: { cookie: mine.cookie },
+      });
+      expect(pairOf(signedIn, "console_session")).not.toBe("");
+      // The word is used once.
+      const again = await login();
+      const twice = await fetch(atListener(again.authorize), {
+        redirect: "manual",
+        headers: { cookie: word },
+      });
+      expect(twice.status).toBe(403);
+      // And the answer goes back to the console's callback alone.
+      const fresh = pairOf(
+        await fetch(`${outside.origin}${secret}/alice`),
+        "console_fixture_sign_in",
+      );
+      const elsewhere = new URL((await login()).authorize);
+      elsewhere.searchParams.set("redirect_uri", "https://elsewhere.example.test/callback");
+      const away = await fetch(atListener(elsewhere.toString()), {
+        redirect: "manual",
+        headers: { cookie: fresh },
+      });
+      expect(away.status).toBe(400);
     } finally {
       await outside.close();
     }

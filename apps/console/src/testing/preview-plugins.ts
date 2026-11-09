@@ -130,13 +130,16 @@ export async function builtPluginAt(
 export const PREVIEW_DATABASE = "console_preview";
 
 /**
- * What a preview says when one of the fixture's people cannot sign in on the database it kept:
- * a database of that name made by something else holds other accounts under the same logins,
- * which the console refuses to take for the fixture's, and only dropping it starts over.
+ * What a preview says when one of the fixture's people cannot sign in on the database it kept,
+ * with what the console answered: an earlier run took the person out, which the People page
+ * undoes; or a database of that name made by something else holds other accounts under the
+ * same logins, which the console refuses to take for the fixture's, and only dropping it starts
+ * over. The console's answer does not say which, so the preview names both.
  */
 export function keptSignInFailure(person: string, cause: unknown): Error {
+  const reason = cause instanceof Error ? cause.message : String(cause);
   return new Error(
-    `${person} could not sign in on the kept database ${PREVIEW_DATABASE}: it holds other accounts under the fixture's logins, as one made by something other than this preview does. Drop it (drop database ${PREVIEW_DATABASE} with (force)), or start without --keep.`,
+    `${person} could not sign in on the kept database ${PREVIEW_DATABASE} (${reason}). Either an earlier run took ${person} out, which the People page undoes for an administrator, or the database holds other accounts under the fixture's logins, as one made by something other than this preview does: then drop it (drop database ${PREVIEW_DATABASE} with (force)), or start without --keep.`,
     { cause },
   );
 }
