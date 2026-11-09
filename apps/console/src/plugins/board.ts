@@ -2,6 +2,7 @@ import {
   CONSOLE_LANGUAGES,
   hasForbiddenCodePoint,
   isDocumentPath,
+  languagesFirst,
   MAX_BODY_LENGTH,
   MAX_COMMENTS_PER_TASK,
   MAX_DECIDERS,
@@ -258,9 +259,14 @@ export class PluginBoard {
       case "console.workspace": {
         const settings = await readWorkspaceSettings(this.options.database, workspace.id);
         const categories = await listCategories(this.options.database, workspace.id);
+        // The workspace's language where an administrator set one (ADR-0081), else the first the
+        // console speaks, and `languageSet` says which: what a plugin writes to whoever has none.
+        const language = settings.language ?? CONSOLE_LANGUAGES[0];
         return {
           name: workspace.name,
-          languages: [...CONSOLE_LANGUAGES],
+          language,
+          languageSet: settings.language !== null,
+          languages: languagesFirst(language),
           // UTC where nobody set one, and `timeZoneSet` says so: a plugin that reads a time of
           // day tells the administrator, instead of taking UTC for a choice.
           timeZone: settings.timeZone ?? "UTC",

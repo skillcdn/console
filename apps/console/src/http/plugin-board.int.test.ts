@@ -841,6 +841,9 @@ describe("a plugin on the board", () => {
       timeZone: "UTC",
       timeZoneSet: false,
       weekStart: "auto",
+      // English because nobody set a language, and said so (ADR-0081).
+      language: "en",
+      languageSet: false,
       languages: ["en", "ko"],
       url: SIGN_IN_URL,
     });
@@ -1494,6 +1497,39 @@ describe("a plugin on the board", () => {
     const refused = await invoke("leave", member, ["several"]);
     expect(refused.status, await refused.clone().text()).toBe(400);
     expect(restErrorSchema.parse(await refused.json()).error.code).toBe("plugin.invalid_args");
+  });
+
+  it("tells a plugin the workspace's language, and calls for whoever has none of their own in it (ADR-0081)", async () => {
+    const setWorkspace = async (language: string | null) => {
+      const answer = await h.request(REST_ROUTES.workspace, json({ language }, admin, "PATCH"));
+      expect(answer.status, await answer.clone().text()).toBe(200);
+    };
+    const seen = async () =>
+      ((await invoked("leave", member, ["people"])).data as { workspace: Record<string, unknown> })
+        .workspace;
+    const forBob = async () =>
+      (
+        (await invoked("audit", member, ["peekFor", "--person", bobId])).data as {
+          language: string;
+        }
+      ).language;
+    // bob has no language of his own: the pages have not seen him.
+    const unset = await h.request(REST_ROUTES.me, json({ language: null }, member, "PATCH"));
+    expect(unset.status, await unset.clone().text()).toBe(200);
+    expect(await forBob()).toBe("en");
+    await setWorkspace("ko");
+    try {
+      expect(await seen()).toMatchObject({
+        language: "ko",
+        languageSet: true,
+        languages: ["ko", "en"],
+      });
+      // A call for him, and his own command, run in the workspace's language.
+      expect(await forBob()).toBe("ko");
+    } finally {
+      await setWorkspace(null);
+    }
+    expect(await seen()).toMatchObject({ language: "en", languageSet: false });
   });
 
   it("tells a plugin nothing of what happened while it did not hold the stream", async () => {

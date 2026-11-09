@@ -941,6 +941,10 @@ export const en = {
       aria: "Workspace settings",
       consoleVersion: "Console version",
       consoleTakes: (range: string) => `Takes the console command ${range}`,
+      language: "Default language",
+      languageHint:
+        "For whoever has not chosen a language: the pages speak it to someone whose browser asks for none the console speaks, and plugins write in it to someone who has never opened the pages, in a decision, a task or a chat. Everyone who chose a language keeps their own.",
+      languageNone: "Not set: English",
       peopleVisibility: "Member visibility",
       peopleVisibilityHint:
         "Whom a member sees on the People page and in the pickers: everyone of the workspace, or only the people they share a project with. An administrator always sees everyone, and a project open to the workspace has everyone in it.",
@@ -1037,6 +1041,7 @@ export const en = {
       peopleVisibility: "the member visibility",
       weekStart: "the first day of the week",
       timeZone: "the time zone",
+      language: "the default language",
       packToken: "the SkillCDN token",
     } as Readonly<Record<string, string>>,
     event: {

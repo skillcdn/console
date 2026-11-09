@@ -872,6 +872,10 @@ export const ko: Messages = {
       aria: "워크스페이스 설정",
       consoleVersion: "콘솔 버전",
       consoleTakes: (range) => `받는 console 명령: ${range}`,
+      language: "기본 언어",
+      languageHint:
+        "언어를 정하지 않은 사람에게 쓰는 언어입니다. 브라우저가 콘솔이 쓰지 않는 언어만 요청하는 사람에게 화면이 이 언어로 나오고, 콘솔을 한 번도 열지 않은 사람에게 플러그인이 결정·태스크·채팅으로 쓰는 글도 이 언어로 씁니다. 자기 언어를 정한 사람은 그대로입니다.",
+      languageNone: "정하지 않음: 영어",
       peopleVisibility: "멤버 공개 범위",
       peopleVisibilityHint:
         "멤버가 사람들 페이지와 선택 목록에서 보는 범위: 워크스페이스의 모두, 또는 같은 프로젝트에 속한 사람만. 관리자는 언제나 모두를 보고, 워크스페이스에 공개된 프로젝트에는 모두가 속합니다.",
@@ -967,6 +971,7 @@ export const ko: Messages = {
       peopleVisibility: "멤버 공개 범위",
       weekStart: "주의 시작 요일",
       timeZone: "타임존",
+      language: "기본 언어",
       packToken: "SkillCDN 토큰",
     },
     event: {

@@ -6,6 +6,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { join } from "node:path";
 import {
+  CONSOLE_LANGUAGES,
   type PluginState,
   pluginPath,
   type RestPlugin,
@@ -980,6 +981,20 @@ export class Plugins {
     return { kind: "console", roles: Object.keys(entry.manifest.roles), project: null };
   }
 
+  /** The language an administrator set for the workspace (ADR-0081); `null` where none is set. */
+  private async workspaceLanguageSet(): Promise<string | null> {
+    const workspace = await this.options.workspace();
+    return (await readWorkspaceSettings(this.options.database, workspace.id)).language;
+  }
+
+  /**
+   * The language a call runs in for whoever has none of their own, the console's own calls
+   * included (ADR-0081): the workspace's, else the first the console speaks.
+   */
+  private async workspaceLanguage(): Promise<string> {
+    return (await this.workspaceLanguageSet()) ?? CONSOLE_LANGUAGES[0];
+  }
+
   private async infoOf(entry: Entry, install: PluginInstallRecord): Promise<PluginInfo> {
     const workspace = await this.options.workspace();
     const board =
@@ -1161,7 +1176,7 @@ export class Plugins {
         payload: null,
         info: await this.infoOf(entry, install),
         caller: this.consoleCaller(entry),
-        language: "en",
+        language: await this.workspaceLanguage(),
         timeoutMs: this.options.timeouts?.lifecycle ?? PLUGIN_LIFECYCLE_MS,
       });
       if (!result.ok) {
@@ -1214,7 +1229,7 @@ export class Plugins {
         payload: null,
         info: await this.infoOf(entry, install),
         caller: this.consoleCaller(entry as Entry & { manifest: PluginManifest }),
-        language: "en",
+        language: await this.workspaceLanguage(),
         timeoutMs: this.options.timeouts?.lifecycle ?? PLUGIN_LIFECYCLE_MS,
       });
       if (!result.ok) {
@@ -1809,7 +1824,7 @@ export class Plugins {
       payload: { ...request, headers },
       info,
       caller,
-      language: by?.language ?? "en",
+      language: by?.language ?? (await this.workspaceLanguage()),
       timeoutMs: this.options.timeouts?.endpoint ?? PLUGIN_ENDPOINT_MS,
     };
     const startedAt = performance.now();
@@ -1896,7 +1911,8 @@ export class Plugins {
       agent: token?.name,
       run,
       project,
-      language: (await languageOf(this.options.database, person.id)) ?? "en",
+      language:
+        (await languageOf(this.options.database, person.id)) ?? (await this.workspaceLanguage()),
     };
   }
 
@@ -2683,12 +2699,12 @@ export class Plugins {
           id: person.id,
           login: person.login,
           name: person.name ?? null,
-          language: person.language ?? call.call.language,
+          language: person.language ?? (await this.workspaceLanguageSet()) ?? call.call.language,
           admin: false,
         },
         project: caller.kind === "console" ? null : caller.project,
       };
-      language = person.language ?? call.call.language;
+      language = person.language ?? (await this.workspaceLanguageSet()) ?? call.call.language;
     } else if (caller.kind === "person") {
       const person = await findPerson(this.options.database, workspace.id, caller.person.id);
       passed = { ...caller, roles: person === undefined ? [] : await this.rolesOf(other, person) };
@@ -2834,7 +2850,7 @@ export class Plugins {
         payload,
         info: await this.infoOf(entry, install),
         caller: this.consoleCaller(entry as Entry & { manifest: PluginManifest }),
-        language: "en",
+        language: await this.workspaceLanguage(),
         timeoutMs,
       });
       this.options.logger.info(

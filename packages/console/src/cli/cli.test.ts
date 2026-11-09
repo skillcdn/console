@@ -2429,6 +2429,29 @@ describe("configuring, as the person", () => {
     ).toBe(EXIT.usage);
     const nothing = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["workspace", "edit"], nothing.io)).toBe(EXIT.usage);
+    // The workspace's language (ADR-0081): one the console speaks, or none.
+    const before = calls.length;
+    expect(
+      await runCli(
+        ["workspace", "edit", "--language", "ko"],
+        harness({ fetch, env: SIGNED_IN }).io,
+      ),
+    ).toBe(EXIT.ok);
+    expect(
+      await runCli(
+        ["workspace", "edit", "--language", "none"],
+        harness({ fetch, env: SIGNED_IN }).io,
+      ),
+    ).toBe(EXIT.ok);
+    expect(
+      calls
+        .slice(before)
+        .filter((call) => call.key === "PATCH /api/v1/workspace")
+        .map((call) => call.body),
+    ).toEqual([{ language: "ko" }, { language: null }]);
+    const french = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["workspace", "edit", "--language", "fr"], french.io)).toBe(EXIT.usage);
+    expect(french.err()).toContain("a language the console speaks, or none");
   });
 
   it("sets, connects and removes the workspace's SkillCDN token for an administrator, and shows it to nobody", async () => {

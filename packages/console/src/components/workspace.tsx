@@ -8,7 +8,8 @@ import {
   WEEK_STARTS,
   type WeekStart,
 } from "../api.js";
-import { useWords } from "../i18n/index.js";
+import { DEFAULT_LANGUAGES, packFor, useWords } from "../i18n/index.js";
+import { CONSOLE_LANGUAGES } from "../vocabulary.js";
 import { Button } from "./ui.js";
 
 // The workspace's own settings (ADR-0035), as an administrator keeps them on the Settings page:
@@ -33,6 +34,14 @@ export function weekStartOf(workspace: RestWorkspace | undefined): WeekStart {
 export function timeZoneOf(workspace: RestWorkspace | undefined): string | undefined {
   return workspace?.timeZone ?? undefined;
 }
+
+/** The workspace's language (ADR-0081), or none. */
+export function workspaceLanguageOf(workspace: RestWorkspace | undefined): string | undefined {
+  return workspace?.language ?? undefined;
+}
+
+/** A language as it calls itself, `한국어`, from the packs the package ships; the tag where none speaks it. */
+const languageLabel = (tag: string): string => packFor(tag, DEFAULT_LANGUAGES)?.label ?? tag;
 
 /** The zones this browser knows, for the picker to offer; none where it cannot say. */
 export function knownTimeZones(): readonly string[] {
@@ -133,6 +142,7 @@ export function WorkspaceSettingsView(props: WorkspaceSettingsViewProps) {
   const zone = timeZoneOf(props.workspace);
   const device = deviceTimeZone();
   const offset = zone === undefined ? undefined : offsetOf(zone, new Date());
+  const language = workspaceLanguageOf(props.workspace);
   return (
     <dl className="sc-settings-list">
       {props.console !== undefined && (
@@ -170,6 +180,10 @@ export function WorkspaceSettingsView(props: WorkspaceSettingsViewProps) {
           )}
         </dd>
       </div>
+      <div className="sc-settings-item">
+        <dt>{settings.language}</dt>
+        <dd>{language === undefined ? settings.languageNone : languageLabel(language)}</dd>
+      </div>
     </dl>
   );
 }
@@ -186,17 +200,19 @@ export interface WorkspaceSettingsFormProps {
 export function WorkspaceSettingsForm(props: WorkspaceSettingsFormProps) {
   const words = useWords();
   const settings = words.settings.workspace;
-  const ids = { people: useId(), week: useId(), zone: useId() };
+  const ids = { people: useId(), week: useId(), zone: useId(), language: useId() };
   const current = {
     peopleVisibility: peopleVisibilityOf(props.workspace),
     weekStart: weekStartOf(props.workspace),
     timeZone: timeZoneOf(props.workspace) ?? "",
+    language: workspaceLanguageOf(props.workspace) ?? "",
   };
   const [peopleVisibility, setPeopleVisibility] = useState<PeopleVisibility>(
     current.peopleVisibility,
   );
   const [weekStart, setWeekStart] = useState<WeekStart>(current.weekStart);
   const [timeZone, setTimeZone] = useState(current.timeZone);
+  const [language, setLanguage] = useState(current.language);
   const device = useMemo(deviceTimeZone, []);
   // UTC is offered whatever the browser lists, beside the zone set and the device's.
   const groups = useMemo(
@@ -207,6 +223,11 @@ export function WorkspaceSettingsForm(props: WorkspaceSettingsFormProps) {
     ...(peopleVisibility === current.peopleVisibility ? {} : { peopleVisibility }),
     ...(weekStart === current.weekStart ? {} : { weekStart }),
     ...(timeZone === current.timeZone ? {} : { timeZone: timeZone === "" ? null : timeZone }),
+    ...(language === current.language
+      ? {}
+      : {
+          language: CONSOLE_LANGUAGES.find((candidate) => candidate === language) ?? null,
+        }),
   };
   const changed = Object.keys(patch).length > 0;
   const submit = (event: FormEvent) => {
@@ -299,6 +320,29 @@ export function WorkspaceSettingsForm(props: WorkspaceSettingsFormProps) {
               {settings.timeZoneUseDevice(device)}
             </Button>
           )}
+        </div>
+      </div>
+      <div className="sc-settings-row">
+        <div className="sc-settings-words">
+          <label className="sc-settings-label" htmlFor={ids.language}>
+            {settings.language}
+          </label>
+          <p className="sc-settings-hint">{settings.languageHint}</p>
+        </div>
+        <div className="sc-settings-control">
+          <select
+            id={ids.language}
+            className="sc-input"
+            value={language}
+            onChange={(event) => setLanguage(event.target.value)}
+          >
+            <option value="">{settings.languageNone}</option>
+            {CONSOLE_LANGUAGES.map((candidate) => (
+              <option key={candidate} value={candidate} lang={candidate}>
+                {languageLabel(candidate)}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
       <div className="sc-form-actions">

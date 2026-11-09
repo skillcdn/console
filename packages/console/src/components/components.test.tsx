@@ -3981,6 +3981,11 @@ describe("the workspace's settings", () => {
     expect(html).toContain("Everyone of the workspace");
     expect(html).toContain("System default");
     expect(html).toContain("<dd>None");
+    // The language for whoever has none (ADR-0081): none set, English then; or the one set, by its own name.
+    expect(html).toContain("<dt>Default language</dt><dd>Not set: English</dd>");
+    expect(
+      renderToStaticMarkup(<WorkspaceSettingsView workspace={{ ...workspace, language: "ko" }} />),
+    ).toContain("<dt>Default language</dt><dd>한국어</dd>");
     const seoul = renderToStaticMarkup(
       <WorkspaceSettingsView workspace={{ ...workspace, timeZone: "Asia/Seoul" }} />,
     );
@@ -4020,6 +4025,9 @@ describe("the workspace's settings", () => {
     if (deviceTimeZone() !== undefined) {
       expect(html).toContain("Use this device");
     }
+    // The languages the console speaks, each by its own name, and none.
+    expect(html).toContain('<option value="" selected="">Not set: English</option>');
+    expect(html).toContain('<option value="ko" lang="ko">한국어</option>');
     // Nothing changed yet: nothing to save.
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Save the settings<\/button>/);
   });

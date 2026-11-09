@@ -4,7 +4,8 @@ import { ko } from "./ko.js";
 
 // The languages the pages speak (ADR-0012): a pack is a tag, a label and every word the
 // default console shows; the components take their words from a context, with English where
-// there is none above them; the person's choice, else the browser's languages, else English.
+// there is none above them; the person's choice, else the browser's languages, else the
+// workspace's language (ADR-0081), else English.
 
 export type { Messages } from "./en.js";
 
@@ -68,12 +69,19 @@ export function browserPack(
 
 /**
  * The language to speak: the person's own when it names a pack, else the first of the browser's
- * languages that does, else the first pack.
+ * languages that does, else the workspace's (ADR-0081) when it names one, else the first pack.
  */
 export function chooseLanguage(
   chosen: string | null | undefined,
   browser: readonly string[],
   packs: readonly LanguagePack[] = DEFAULT_LANGUAGES,
+  workspace?: string | null | undefined,
 ): LanguagePack {
-  return packFor(chosen, packs) ?? browserPack(browser, packs) ?? packs[0] ?? ENGLISH;
+  return (
+    packFor(chosen, packs) ??
+    browserPack(browser, packs) ??
+    packFor(workspace, packs) ??
+    packs[0] ??
+    ENGLISH
+  );
 }

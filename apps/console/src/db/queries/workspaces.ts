@@ -25,6 +25,11 @@ export interface WorkspaceSettings {
   /** The workspace's time zone, an IANA name, which the command prints moments in; null for none. */
   readonly timeZone: string | null;
   /**
+   * The workspace's language (ADR-0081), for whoever has no language of their own: the pages',
+   * where the browser asks for none the console speaks, and the plugins' calls'; null for none.
+   */
+  readonly language: string | null;
+  /**
    * When the SkillCDN token the organization's pack is read with was set (ADR-0036); null for
    * none. The token itself is {@link readWorkspacePackToken}'s to read, where it is needed.
    */
@@ -36,17 +41,19 @@ export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
   peopleVisibility: "everyone",
   weekStart: "auto",
   timeZone: null,
+  language: null,
   packTokenSetAt: null,
 };
 
 /** The settings an administrator changes on the form; the token has routes of its own. */
-const PATCHABLE = ["peopleVisibility", "weekStart", "timeZone"] as const;
+const PATCHABLE = ["peopleVisibility", "weekStart", "timeZone", "language"] as const;
 export type WorkspaceSettingsPatch = Partial<Pick<WorkspaceSettings, (typeof PATCHABLE)[number]>>;
 
 const settingsColumns = {
   peopleVisibility: workspaces.peopleVisibility,
   weekStart: workspaces.weekStart,
   timeZone: workspaces.timeZone,
+  language: workspaces.language,
   packTokenSetAt: workspaces.packTokenSetAt,
 };
 
@@ -200,6 +207,7 @@ export async function updateWorkspaceSettings(
       peopleVisibility: patch.peopleVisibility ?? current.peopleVisibility,
       weekStart: patch.weekStart ?? current.weekStart,
       timeZone: patch.timeZone === undefined ? current.timeZone : patch.timeZone,
+      language: patch.language === undefined ? current.language : patch.language,
       packTokenSetAt: current.packTokenSetAt,
     };
     const fields = PATCHABLE.filter((field) => next[field] !== current[field]);
@@ -212,6 +220,7 @@ export async function updateWorkspaceSettings(
         peopleVisibility: next.peopleVisibility,
         weekStart: next.weekStart,
         timeZone: next.timeZone,
+        language: next.language,
         updatedAt: now,
       })
       .where(eq(workspaces.id, workspaceId));

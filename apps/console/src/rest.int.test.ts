@@ -4609,6 +4609,25 @@ describe("who sees whom (ADR-0035)", () => {
       timeZone: null,
     });
   });
+
+  it("keeps the workspace's language, one the console speaks, for whoever has none of their own (ADR-0081)", async () => {
+    const before = restMeSchema.parse(await (await get(member, REST_ROUTES.me)).json());
+    expect(before.workspace.language).toBeNull();
+    const set = await asAdmin("PATCH", REST_ROUTES.workspace, { language: "ko" });
+    expect(set.status, await set.clone().text()).toBe(200);
+    expect(restWorkspaceSchema.parse(await set.json())).toMatchObject({ language: "ko" });
+    const me = restMeSchema.parse(await (await get(member, REST_ROUTES.me)).json());
+    expect(me.workspace.language).toBe("ko");
+    // Only a language the console speaks, and a tag, not a name.
+    for (const language of ["fr", "ko-KR", "Korean", ""]) {
+      const refused = await asAdmin("PATCH", REST_ROUTES.workspace, { language });
+      expect(refused.status, language).toBe(400);
+      expect(await errorOf(refused)).toBe("request.invalid");
+    }
+    const back = await asAdmin("PATCH", REST_ROUTES.workspace, { language: null });
+    expect(back.status).toBe(200);
+    expect(restWorkspaceSchema.parse(await back.json())).toMatchObject({ language: null });
+  });
 });
 
 describe("a private pack connected with a code (ADR-0036)", () => {

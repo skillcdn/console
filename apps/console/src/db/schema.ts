@@ -80,6 +80,11 @@ export const workspaces = pgTable(
     /** The workspace's time zone, an IANA name the command prints moments in; null for none. */
     timeZone: text(),
     /**
+     * The workspace's language (ADR-0081), the tag of one the console speaks, for whoever has no
+     * language of their own; null for none, English then.
+     */
+    language: text(),
+    /**
      * The SkillCDN token the organization's pack is read with (ADR-0036), sealed with the
      * console's secret, and when it was set; null for none. A project that names no address and
      * holds no token of its own reads with it.

@@ -45,6 +45,9 @@ export interface BridgePerson {
 /** The workspace as a page lays itself out for it: what it is called, the languages it writes in, its clock and the day its week begins on. */
 export interface BridgeWorkspace {
   readonly name: string;
+  /** The language for whoever has none of their own (ADR-0081): the workspace's, else `en`; none from a console older than it. */
+  readonly language?: string;
+  /** The languages the console speaks, the workspace's first. */
   readonly languages: readonly string[];
   readonly timeZone: string;
   /** The workspace's setting (ADR-0035): `auto` leaves the week to the language of the pages. */

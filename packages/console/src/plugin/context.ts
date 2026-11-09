@@ -287,6 +287,15 @@ export type PluginCaller = PersonCaller | ConsoleCaller | PluginAsCaller;
 
 export interface PluginWorkspace {
   readonly name: string;
+  /**
+   * The language for whoever has none of their own (ADR-0081): the workspace's, else `en`, as
+   * `languageSet` says, so that what a plugin writes to someone who never opened the pages, in a
+   * decision, a task or a message elsewhere, is in the organization's language.
+   */
+  readonly language: string;
+  /** Whether an administrator set the workspace's language: `false` where it is English because nobody said otherwise. */
+  readonly languageSet: boolean;
+  /** The languages the console speaks, `language` first. */
   readonly languages: readonly string[];
   /** The zone the workspace's times of day are read in; `UTC` where none is set, as `timeZoneSet` says. */
   readonly timeZone: string;

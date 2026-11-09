@@ -53,6 +53,7 @@ import {
   ARTIFACT_KINDS,
   CATEGORY_COLORS,
   COLOR_NAMES,
+  CONSOLE_LANGUAGES,
   EVENT_KINDS,
   GOAL_STATES,
   LINK_SOURCES,
@@ -363,6 +364,13 @@ export const restWorkspaceSchema = z.object({
    * none, when they stay as the API gives them, in UTC. Optional as above; none then.
    */
   timeZone: z.optional(z.nullable(timeZoneName)),
+  /**
+   * The workspace's language (ADR-0081), one the console speaks: the pages speak it to whoever
+   * has no language of their own and a browser that asks for none the console speaks, and a
+   * plugin writes to whoever has none in it; `null` for none set, English then. Optional as
+   * above; none then.
+   */
+  language: z.optional(z.nullable(languageTag)),
 });
 export type RestWorkspace = z.infer<typeof restWorkspaceSchema>;
 
@@ -373,6 +381,8 @@ export const restWorkspacePatchSchema = z
     weekStart: z.optional(z.enum(WEEK_STARTS)),
     /** A zone's name, or `null` for none. */
     timeZone: z.optional(z.nullable(timeZoneName)),
+    /** One of the languages the console speaks, or `null` for none. */
+    language: z.optional(z.nullable(z.enum(CONSOLE_LANGUAGES))),
   })
   .check(
     z.refine((patch) => Object.values(patch).some((value) => value !== undefined), {

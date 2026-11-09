@@ -323,6 +323,13 @@
       "when": 1794198402287,
       "tag": "0045_session_client",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1794201695745,
+      "tag": "0046_workspace_language",
+      "breakpoints": true
     }
   ]
 }

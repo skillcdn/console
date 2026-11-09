@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { languagesFirst } from "../vocabulary.js";
 import { en } from "./en.js";
 import { chooseLanguage, DEFAULT_LANGUAGES, ENGLISH, KOREAN, packFor } from "./index.js";
 import { ko } from "./ko.js";
@@ -35,6 +36,15 @@ describe("the language packs", () => {
     expect(chooseLanguage(null, ["fr-FR"])).toBe(ENGLISH);
     expect(chooseLanguage("xx", [])).toBe(ENGLISH);
     expect(chooseLanguage(undefined, [], [KOREAN, ENGLISH])).toBe(KOREAN);
+    // The workspace's language (ADR-0081): after the person's and the browser's, before English.
+    expect(chooseLanguage(null, ["fr-FR"], DEFAULT_LANGUAGES, "ko")).toBe(KOREAN);
+    expect(chooseLanguage(null, ["en-US"], DEFAULT_LANGUAGES, "ko")).toBe(ENGLISH);
+    expect(chooseLanguage("en", ["fr-FR"], DEFAULT_LANGUAGES, "ko")).toBe(ENGLISH);
+    expect(chooseLanguage(null, [], DEFAULT_LANGUAGES, "de")).toBe(ENGLISH);
+    expect(chooseLanguage(null, [], DEFAULT_LANGUAGES, null)).toBe(ENGLISH);
+    // What a plugin reads as the workspace's languages: the set one first.
+    expect(languagesFirst("ko")).toEqual(["ko", "en"]);
+    expect(languagesFirst("en")).toEqual(["en", "ko"]);
     expect(packFor("KO-kr", DEFAULT_LANGUAGES)).toBe(KOREAN);
     expect(packFor("", DEFAULT_LANGUAGES)).toBeUndefined();
     expect(packFor("de", DEFAULT_LANGUAGES)).toBeUndefined();

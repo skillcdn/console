@@ -17,7 +17,7 @@ import type { Navigation } from "../router.js";
 import type { RestEvent, RestMe, RestPlugin, RestProject } from "../schemas.js";
 import { CONSOLE_TOKENS } from "../tokens.js";
 import { wordsForFailure } from "../use-action.js";
-import { CONSOLE_LANGUAGES } from "../vocabulary.js";
+import { CONSOLE_LANGUAGES, languagesFirst } from "../vocabulary.js";
 import { weekStartOf } from "./workspace.js";
 
 // A plugin's page or widget on the console's page (ADR-0054, docs/specs/plugins.md, "Pages"):
@@ -291,7 +291,8 @@ export function PluginFrame(props: PluginFrameProps) {
             },
             workspace: {
               name: me.workspace.name,
-              languages: [...CONSOLE_LANGUAGES],
+              language: me.workspace.language ?? CONSOLE_LANGUAGES[0],
+              languages: languagesFirst(me.workspace.language ?? CONSOLE_LANGUAGES[0]),
               timeZone: me.workspace.timeZone ?? "UTC",
               weekStart: weekStartOf(me.workspace),
               firstDay: firstDayOfWeek(language, weekStartOf(me.workspace)),

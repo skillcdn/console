@@ -51,6 +51,7 @@ import {
 } from "../schemas.js";
 import {
   COLOR_NAMES,
+  CONSOLE_LANGUAGES,
   type ColorName,
   GOAL_STATES,
   type GoalState,
@@ -1050,12 +1051,23 @@ const use: Command = async (args, io) => {
 };
 
 /**
+ * The language a person reads the plugins' words and the rules in: their own, else the
+ * workspace's (ADR-0081), else none, which the formats take for English.
+ */
+function readingLanguage(me: {
+  readonly language: string | null;
+  readonly workspace: { readonly language?: string | null | undefined };
+}): string | null {
+  return me.language ?? me.workspace.language ?? null;
+}
+
+/**
  * The last day of this week (ADR-0039): the week begins as the workspace says, or, left to the
  * language, as the person's language has it, else this machine's.
  */
 async function endOfWeek(io: CliIo, session: Session, today: string): Promise<string> {
   const me = await session.client.me();
-  const language = me.language ?? io.locale ?? "en";
+  const language = me.language ?? io.locale ?? me.workspace.language ?? "en";
   return weekOf(today, firstDayOfWeek(language, me.workspace.weekStart ?? "auto")).at(-1) ?? today;
 }
 
@@ -1424,7 +1436,7 @@ const plugins: Command = async (args, io) => {
   const { values } = parse(args, {}, false);
   const session = await open(io, values);
   const [listed, me] = await Promise.all([session.client.plugins(), session.client.me()]);
-  answer(io, session, listed, () => formatPlugins(listed, me.language));
+  answer(io, session, listed, () => formatPlugins(listed, readingLanguage(me)));
   return EXIT.ok;
 };
 
@@ -1502,7 +1514,7 @@ const plugin: Command = async (args, io) => {
   switch (verb) {
     case undefined: {
       const [detail, me] = await Promise.all([client.get(), session.client.me()]);
-      answer(io, session, detail, () => formatPlugin(detail, me.language));
+      answer(io, session, detail, () => formatPlugin(detail, readingLanguage(me)));
       return EXIT.ok;
     }
     case "help": {
@@ -1921,8 +1933,8 @@ async function pluginEnable(
     board = {
       create: {
         key: detail.boardDefaults.key,
-        name: localized(detail.boardDefaults.name, me.language),
-        description: localized(detail.boardDefaults.description, me.language),
+        name: localized(detail.boardDefaults.name, readingLanguage(me)),
+        description: localized(detail.boardDefaults.description, readingLanguage(me)),
       },
     };
   } else if (boardFlag !== undefined) {
@@ -1951,9 +1963,11 @@ async function pluginEnable(
         ? []
         : [
             "Settings:",
-            ...enabled.settings.map((setting) => formatPluginSettingLine(setting, me.language)),
+            ...enabled.settings.map((setting) =>
+              formatPluginSettingLine(setting, readingLanguage(me)),
+            ),
           ]),
-      ...formatPluginAsks(enabled, me.language),
+      ...formatPluginAsks(enabled, readingLanguage(me)),
     ].join("\n"),
   );
   return EXIT.ok;
@@ -1980,7 +1994,9 @@ async function pluginSettings(
         ? `${detail.key} has no settings.`
         : [
             `Settings of ${detail.key}:`,
-            ...detail.settings.map((setting) => formatPluginSettingLine(setting, me.language)),
+            ...detail.settings.map((setting) =>
+              formatPluginSettingLine(setting, readingLanguage(me)),
+            ),
           ].join("\n"),
     );
     return EXIT.ok;
@@ -1989,7 +2005,7 @@ async function pluginSettings(
   answer(io, session, changed.settings, () =>
     [
       `Changed the settings of ${changed.key}:`,
-      ...changed.settings.map((setting) => formatPluginSettingLine(setting, me.language)),
+      ...changed.settings.map((setting) => formatPluginSettingLine(setting, readingLanguage(me))),
     ].join("\n"),
   );
   return EXIT.ok;
@@ -2178,12 +2194,12 @@ const rules: Command = async (args, io) => {
   const read =
     "workspace" in found
       ? {
-          workspace: forPerson(found.workspace, me.language),
-          project: forPerson(found.project, me.language),
+          workspace: forPerson(found.workspace, readingLanguage(me)),
+          project: forPerson(found.project, readingLanguage(me)),
           ...(found.plugins === undefined ? {} : { plugins: found.plugins }),
         }
-      : forPerson(found, me.language);
-  answer(io, session, read, () => formatRules(read, me.language));
+      : forPerson(found, readingLanguage(me));
+  answer(io, session, read, () => formatRules(read, readingLanguage(me)));
   return EXIT.ok;
 };
 
@@ -2529,8 +2545,8 @@ const take: Command = async (args, io) => {
       ? ""
       : `\nOther runs of yours are open in this project (${others.map((item) => `#${item.taskNumber}`).join(", ")}): say which run on report, hand-in, ask, finish and fail, --run ${run.id} for this one.`;
   const rules = {
-    workspace: forPerson(ruling.workspace, me.language),
-    project: forPerson(ruling.project, me.language),
+    workspace: forPerson(ruling.workspace, readingLanguage(me)),
+    project: forPerson(ruling.project, readingLanguage(me)),
     ...(ruling.plugins === undefined ? {} : { plugins: ruling.plugins }),
   };
   answer(io, session, { run, task: taken, comments: comments.items, rules }, () =>
@@ -2542,7 +2558,7 @@ const take: Command = async (args, io) => {
       "",
       formatTask(taken, undefined, undefined, comments.items),
       "",
-      formatRules(rules, me.language),
+      formatRules(rules, readingLanguage(me)),
       "",
       'Say how it goes: console report "<what you found or did>". Hand in what you make: console hand-in <https url | file path>.',
       'Ask when a person must decide: console ask "<question>" --option "..." --option "...". A word for the task\'s people that is not a report: console comment <number> "<markdown>". End with: console finish --summary "<what was done, what is left>".',
@@ -3431,7 +3447,7 @@ const team: Command = async (args, io) => {
 // The workspace's settings (ADR-0035): read by everyone, changed by an administrator, themselves
 // on the Settings page or through their agent here (ADR-0021).
 const WORKSPACE_FLAGS =
-  "--people-visibility <everyone|shared-projects>, --week-start <auto|monday|sunday>, --time-zone <zone|none>";
+  "--people-visibility <everyone|shared-projects>, --week-start <auto|monday|sunday>, --time-zone <zone|none>, --language <en|ko|none>";
 const WORKSPACE_USAGE = `Say what to do: console workspace  |  console workspace edit [${WORKSPACE_FLAGS.replaceAll(", ", "] [")}]  |  console workspace pack-token --connect|--stdin|--remove`;
 
 const workspace: Command = async (args, io) => {
@@ -3451,13 +3467,20 @@ const workspace: Command = async (args, io) => {
         "people-visibility": { type: "string" },
         "week-start": { type: "string" },
         "time-zone": { type: "string" },
+        language: { type: "string" },
       },
       false,
     );
     const visibility = text(values, "people-visibility");
     const weekStart = text(values, "week-start");
     const zone = text(values, "time-zone");
-    if (visibility === undefined && weekStart === undefined && zone === undefined) {
+    const language = text(values, "language");
+    if (
+      visibility === undefined &&
+      weekStart === undefined &&
+      zone === undefined &&
+      language === undefined
+    ) {
       throw misuse(`Say what to change: ${WORKSPACE_FLAGS}`);
     }
     const session = await open(io, values);
@@ -3467,6 +3490,14 @@ const workspace: Command = async (args, io) => {
         ? {}
         : { weekStart: wordOf(weekStart, WEEK_STARTS, "a day the week begins on") }),
       ...(zone === undefined ? {} : { timeZone: zone === "none" ? null : zone }),
+      ...(language === undefined
+        ? {}
+        : {
+            language:
+              language === "none"
+                ? null
+                : wordOf(language, CONSOLE_LANGUAGES, "a language the console speaks, or none"),
+          }),
     });
     await rememberZone(io, session, changed.timeZone ?? undefined);
     answer(io, session, changed, () => formatWorkspace(changed));

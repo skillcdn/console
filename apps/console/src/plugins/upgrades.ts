@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { PLUGIN_LIFECYCLE_MS } from "@skillcdn/console/plugin";
 import type { Database } from "../db/client.js";
 import { listInstalls, recordPluginFailure, upgradeInstall } from "../db/queries/plugins.js";
-import type { WorkspaceRecord } from "../db/queries/workspaces.js";
+import { readWorkspaceSettings, type WorkspaceRecord } from "../db/queries/workspaces.js";
 import type { Logger } from "../logger.js";
 import type { Clock } from "../ports/clock.js";
 import type { Discovery } from "./discovery.js";
@@ -30,6 +30,8 @@ export interface UpgradeOptions {
 export async function runPluginUpgrades(options: UpgradeOptions): Promise<number> {
   const { database, workspace, host, discovery, logger, clock } = options;
   const installs = await listInstalls(database, workspace.id);
+  // The language the upgrades run in: the workspace's (ADR-0081), else the first the console speaks.
+  const language = (await readWorkspaceSettings(database, workspace.id)).language ?? "en";
   let steps = 0;
   for (const install of installs) {
     if (install.state !== "enabled") {
@@ -120,7 +122,7 @@ export async function runPluginUpgrades(options: UpgradeOptions): Promise<number
           projects: install.projects === "all" ? "all" : [...install.projects],
         },
         caller: { kind: "console", roles: Object.keys(plugin.manifest.roles), project: null },
-        language: "en",
+        language,
         timeoutMs: PLUGIN_LIFECYCLE_MS,
       });
       if (!result.ok) {

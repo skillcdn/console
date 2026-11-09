@@ -2920,16 +2920,19 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
     const failure = signInFailureOf(location.search);
     const title = data.me?.workspace.name ?? fallbackTitle;
     const viaToken = holdsToken(data);
-    // The language: the person's own, else the browser's, else the first the console speaks.
+    // The language: the person's own, else the browser's, else the workspace's (ADR-0081), else
+    // the first the console speaks.
     const chosen = data.me?.language;
+    const fallback = data.me?.workspace.language;
     const pack = useMemo(
       () =>
         chooseLanguage(
           chosen,
           typeof navigator === "undefined" ? [] : navigator.languages,
           languages,
+          fallback,
         ),
-      [chosen],
+      [chosen, fallback],
     );
     const words = pack.messages;
 

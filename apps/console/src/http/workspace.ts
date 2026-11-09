@@ -23,5 +23,6 @@ export function restWorkspace(
     peopleVisibility: settings.peopleVisibility,
     weekStart: settings.weekStart,
     timeZone: settings.timeZone,
+    language: settings.language,
   };
 }

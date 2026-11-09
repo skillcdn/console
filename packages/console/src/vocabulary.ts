@@ -62,6 +62,15 @@ export type ProjectIconType = (typeof PROJECT_ICON_TYPES)[number];
 /** The identity providers people may sign in through: the git host, and Google (Workspace). */
 /** The languages the console's pages speak, and a plugin's words are given in. */
 export const CONSOLE_LANGUAGES = ["en", "ko"] as const;
+export type ConsoleLanguage = (typeof CONSOLE_LANGUAGES)[number];
+
+/**
+ * The languages the console speaks with one of them first: the workspace's (ADR-0081), so that
+ * the first of what a plugin reads as `languages` is the language for whoever has none of their own.
+ */
+export function languagesFirst(first: string): string[] {
+  return [first, ...CONSOLE_LANGUAGES.filter((tag) => tag !== first)];
+}
 
 export const PROVIDER_KEYS = ["gh", "google"] as const;
 
