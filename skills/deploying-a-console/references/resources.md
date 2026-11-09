@@ -573,7 +573,6 @@ Only on request, each step confirmed, in this order, after a last snapshot of th
 | The mirror step cannot pull `cloudflare/cloudflared` | Docker Hub's anonymous pull limit on the runner | Run the workflow again (`gh run rerun <id>`); the pull happens once per connector version, and the tasks pull from the repository afterwards |
 | `gh run watch` shows the build failing on `npm ci` in `console-ui` | The UI's lockfile is out of step | Fix in `console-ui/` (building-a-console), push |
 | A 524 at Cloudflare on a long read | A request held longer than the proxy's 100 seconds | The console holds a decision's read for 50 at most; look for a slow database |
-| Every request takes half a second or more, however small its answer, and the pages feel slow where the people are | Cloudflare serves them from a data centre far from them: `curl -sI https://<hostname>/readyz` answers `cf-ray: <id>-<code>`, the code the data centre's (`ICN` Seoul, `NRT` Tokyo, `LAX` Los Angeles), and on the Free plan people in some countries, Korea among them, are served from abroad, so that every request crosses an ocean twice, to the data centre and from it to the tunnel | A paid plan of the zone, on which such traffic is served from a nearer data centre (read `cf-ray` again after the change); or the load balancer in the tunnel's place (sizing.md "Options the plan offers") with its record left unproxied, so that the browser reaches the console directly and nothing of Cloudflare stands in the path |
 
 ## As infrastructure code
 
