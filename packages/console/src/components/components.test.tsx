@@ -2118,7 +2118,9 @@ describe("projects", () => {
         plugins: [plugin],
         renderWidget: (tile, size) => <i>{`frame of ${tile.widget.key} at ${size}`}</i>,
       });
-    expect(drawn(hello)).toContain("frame of latest at small");
+    // Alone on a page nobody arranged, it takes the size of its own that leaves the fewest cells
+    // empty (ADR-0082): a medium four across, where a small would leave twelve.
+    expect(drawn(hello)).toContain("frame of latest at medium");
     expect(drawn(hello)).toContain(">Latest</h2>");
     expect(drawn({ ...hello, state: "disabled" })).not.toContain("frame of");
   });

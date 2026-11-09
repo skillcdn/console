@@ -2,13 +2,17 @@ import { describe, expect, it } from "vitest";
 import {
   added,
   arranged,
+  type ComposedTile,
   columnsFor,
+  composed,
+  composedRows,
   footprintOf,
   type HomeColumns,
   type HomeTile,
   homeTiles,
   homeWith,
   moved,
+  nobodyArranged,
   type PlacedTile,
   resized,
   rowsOf,
@@ -105,6 +109,42 @@ function holdsTogether(placed: readonly PlacedTile[], columns: number): boolean 
   return true;
 }
 
+/** Where each composed tile stands and how far it reaches, to two places, and its size. */
+const boxesOf = (boxes: readonly ComposedTile[]) =>
+  Object.fromEntries(
+    boxes.map(({ tile, x, y, w, h, size }) => [
+      tile.id,
+      [...[x, y, w, h].map((value) => Math.round(value * 100) / 100), size],
+    ]),
+  );
+
+/** Whether composed boxes cover the page whole, edge to edge, none over another. */
+function coversWhole(boxes: readonly ComposedTile[], columns: number): boolean {
+  const near = (a: number, b: number) => Math.abs(a - b) < 1e-9;
+  const area = boxes.reduce((sum, { w, h }) => sum + w * h, 0);
+  const apart = boxes.every((a, at) =>
+    boxes
+      .slice(at + 1)
+      .every(
+        (b) =>
+          a.x + a.w <= b.x + 1e-9 ||
+          b.x + b.w <= a.x + 1e-9 ||
+          a.y + a.h <= b.y + 1e-9 ||
+          b.y + b.h <= a.y + 1e-9,
+      ),
+  );
+  const within = boxes.every(({ x, y, w }) => x >= -1e-9 && y >= -1e-9 && x + w <= columns + 1e-9);
+  return apart && within && near(area, columns * composedRows(boxes));
+}
+
+/** The cells left empty within the rows the page takes. */
+const emptyCells = (placed: readonly PlacedTile[], columns: number): number =>
+  rowsOf(placed, columns) * columns -
+  placed.reduce((cells, { size }) => {
+    const { w, h } = footprintOf(size, columns);
+    return cells + w * h;
+  }, 0);
+
 const layout = (columns: HomeColumns, tiles: RestHome["layouts"][8]): RestHome => ({
   hidden: [],
   layouts: { [columns]: tiles },
@@ -145,18 +185,123 @@ describe("the front page's grid (ADR-0061)", () => {
     }
   });
 
-  it("stands everything at the first room for someone who has arranged nothing", () => {
-    const placed = arranged(homeTiles([hr, hello], [project(1), project(2), project(3)]), null, 8);
+  it("composes the page of someone who has arranged nothing: the first widget leads, the next and the projects beside it, edge to edge (ADR-0082)", () => {
+    const tiles = homeTiles([hr, hello], [project(1), project(2), project(3)]);
+    const page = composed(tiles, null, 8);
+    // The lead half the page wide; beside it the next widget, given the rows the column has
+    // over, and the projects in a row as wide as the column; the widget of the bottom across.
+    expect(boxesOf(page)).toEqual({
+      [BALANCE]: [0, 0, 4, 4, "medium"],
+      [TODAY]: [4, 0, 4, 3, "medium"],
+      [P1]: [4, 3, 1.33, 1, "icon"],
+      [P2]: [5.33, 3, 1.33, 1, "icon"],
+      [P3]: [6.67, 3, 1.33, 1, "icon"],
+      "widget:hello:latest": [0, 4, 8, 2, "wide"],
+    });
+    expect(composedRows(page)).toBe(6);
+    expect(composedRows([])).toBe(0);
+    // On six columns or fewer, one under the other.
+    expect(boxesOf(composed(tiles, null, 4))).toEqual({
+      [BALANCE]: [0, 0, 4, 4, "medium"],
+      [TODAY]: [0, 4, 4, 2, "medium"],
+      [P1]: [0, 6, 1.33, 1, "icon"],
+      [P2]: [1.33, 6, 1.33, 1, "icon"],
+      [P3]: [2.67, 6, 1.33, 1, "icon"],
+      "widget:hello:latest": [0, 7, 4, 2, "medium"],
+    });
+    // At every width the boxes cover the page whole, none over another, each frame told a size
+    // its widget comes in there.
+    for (const columns of [12, 8, 6, 4] as const) {
+      const boxes = composed(tiles, null, columns);
+      expect(coversWhole(boxes, columns)).toBe(true);
+      for (const { tile, size } of boxes) {
+        expect(tile.kind === "project" ? ["icon"] : sizesAt(tile, columns)).toContain(size);
+      }
+    }
+    // What the person took off stays off.
+    const without = composed(tiles, { hidden: [TODAY], layouts: {} }, 8);
+    expect(without.some(({ tile }) => tile.id === TODAY)).toBe(false);
+    expect(coversWhole(without, 8)).toBe(true);
+    expect(nobodyArranged({ hidden: [TODAY], layouts: {} })).toBe(true);
+    expect(nobodyArranged(layout(8, []))).toBe(false);
+  });
+
+  it("starts arranging from the page as composed, each tile on the cells nearest it", () => {
+    const tiles = homeTiles([hr, hello], [project(1), project(2), project(3)]);
+    expect(places(arranged(tiles, null, 8))).toEqual({
+      [BALANCE]: [0, 0, "medium"],
+      [TODAY]: [4, 0, "medium"],
+      [P1]: [4, 3, "icon"],
+      [P2]: [5, 3, "icon"],
+      [P3]: [6, 3, "icon"],
+      "widget:hello:latest": [0, 4, "wide"],
+    });
+    for (const columns of [12, 8, 6, 4] as const) {
+      expect(holdsTogether(arranged(tiles, null, columns), columns)).toBe(true);
+    }
+  });
+
+  it("closes up a width nobody arranged when another was, from the sizes the tiles come in (ADR-0082)", () => {
+    const tiles = homeTiles([hr, hello], [project(1), project(2), project(3)]);
+    const phone = layout(4, [
+      { tile: BALANCE, x: 0, y: 0, size: "small" },
+      { tile: TODAY, x: 0, y: 2, size: "medium" },
+      { tile: P1, x: 0, y: 4, size: "icon" },
+      { tile: P2, x: 1, y: 4, size: "icon" },
+      { tile: P3, x: 2, y: 4, size: "icon" },
+      { tile: "widget:hello:latest", x: 0, y: 5, size: "medium" },
+    ]);
+    const placed = arranged(tiles, phone, 8);
+    // At the phone's sizes the three icons left five cells empty beside the widgets; as cards,
+    // alike, the page closes.
     expect(places(placed)).toEqual({
       [BALANCE]: [0, 0, "small"],
       [TODAY]: [2, 0, "medium"],
-      [P1]: [6, 0, "icon"],
-      [P2]: [7, 0, "icon"],
-      [P3]: [6, 1, "icon"],
-      "widget:hello:latest": [0, 2, "wide"],
+      [P1]: [6, 0, "small"],
+      [P2]: [0, 2, "small"],
+      [P3]: [2, 2, "small"],
+      "widget:hello:latest": [4, 2, "medium"],
     });
+    expect(emptyCells(placed, 8)).toBe(0);
     expect(rowsOf(placed, 8)).toBe(4);
     expect(rowsOf([], 8)).toBe(0);
+    // Every width closes, each tile at a size it comes in there, the projects alike.
+    for (const columns of [12, 8, 6] as const) {
+      const at = arranged(tiles, phone, columns);
+      expect(emptyCells(at, columns)).toBe(0);
+      expect(holdsTogether(at, columns)).toBe(true);
+      for (const { tile, size } of at) {
+        expect(sizesAt(tile, columns)).toContain(size);
+      }
+      const projectSizes = at.filter(({ tile }) => tile.kind === "project").map(({ size }) => size);
+      expect(new Set(projectSizes).size).toBe(1);
+    }
+  });
+
+  it("keeps the sizes the tiles would rather have where the page closes with them, and leaves the fewest cells empty where it cannot", () => {
+    // Eight icons fill a row of eight: nothing changes size.
+    const eight = [1, 2, 3, 4, 5, 6, 7, 8].map(project);
+    const icons = layout(
+      4,
+      eight.map((one, at) => ({
+        tile: `project:${one.id}`,
+        x: at % 4,
+        y: Math.floor(at / 4),
+        size: "icon" as const,
+      })),
+    );
+    const row = arranged(homeTiles([], eight), icons, 8);
+    expect(row.every(({ size }) => size === "icon")).toBe(true);
+    expect(emptyCells(row, 8)).toBe(0);
+    // One project alone on twelve columns cannot close: as an icon it leaves eleven cells of its
+    // row, where a card two rows high would leave twenty.
+    const alone = arranged(
+      homeTiles([], [project(1)]),
+      layout(4, [{ tile: P1, x: 3, y: 0, size: "icon" }]),
+      12,
+    );
+    expect(places(alone)).toEqual({ [P1]: [0, 0, "icon"] });
+    expect(emptyCells(alone, 12)).toBe(11);
   });
 
   it("keeps what the person arranged, leaving what is empty empty", () => {
@@ -206,7 +351,7 @@ describe("the front page's grid (ADR-0061)", () => {
     expect(holdsTogether(placed, 8)).toBe(true);
   });
 
-  it("reads a width nobody arranged in the same order from the top, and keeps each width to itself", () => {
+  it("reads a width nobody arranged in the same order from the top, closed up, and keeps each width to itself", () => {
     const tiles = homeTiles([hr], [project(1)]);
     const wide = layout(8, [
       { tile: P1, x: 6, y: 4, size: "icon" },
@@ -214,15 +359,17 @@ describe("the front page's grid (ADR-0061)", () => {
       { tile: BALANCE, x: 0, y: 0, size: "small" },
     ]);
     const narrow = arranged(tiles, wide, 4);
+    // The icon beside the small widget would leave three cells empty; as a card it closes the row.
     expect(places(narrow)).toEqual({
       [BALANCE]: [0, 0, "small"],
       [TODAY]: [0, 2, "large"],
-      [P1]: [2, 0, "icon"],
+      [P1]: [2, 0, "small"],
     });
     expect(holdsTogether(narrow, 4)).toBe(true);
+    expect(emptyCells(narrow, 4)).toBe(0);
     // Arranged on the phone, the phone has its own; the laptop's stands.
-    const kept = homeWith(wide, moved(narrow, P1, 3, 1, 4), [], 4);
-    expect(places(arranged(tiles, kept, 4))[P1]).toEqual([3, 1, "icon"]);
+    const kept = homeWith(wide, moved(narrow, P1, 0, 6, 4), [], 4);
+    expect(places(arranged(tiles, kept, 4))[P1]).toEqual([0, 6, "small"]);
     expect(kept.layouts[8]).toEqual(wide.layouts[8]);
     expect(places(arranged(tiles, kept, 8))[P1]).toEqual([6, 4, "icon"]);
   });
@@ -279,7 +426,15 @@ describe("the front page's grid (ADR-0061)", () => {
 
 describe("moving a tile (ADR-0061)", () => {
   const row = homeTiles([], [project(1), project(2), project(3)]);
-  const standing = arranged(row, null, 8);
+  const standing = arranged(
+    row,
+    layout(8, [
+      { tile: P1, x: 0, y: 0, size: "icon" },
+      { tile: P2, x: 1, y: 0, size: "icon" },
+      { tile: P3, x: 2, y: 0, size: "icon" },
+    ]),
+    8,
+  );
 
   it("stands it where the place is free, up, down, left or right, leaving a gap where the person wants one", () => {
     expect(places(moved(standing, P1, 5, 2, 8))).toMatchObject({
@@ -346,7 +501,16 @@ describe("moving a tile (ADR-0061)", () => {
 
 describe("the other changes to the page (ADR-0061)", () => {
   const tiles = homeTiles([hr], [project(1), project(2)]);
-  const placed = arranged(tiles, null, 8);
+  const placed = arranged(
+    tiles,
+    layout(8, [
+      { tile: BALANCE, x: 0, y: 0, size: "small" },
+      { tile: TODAY, x: 2, y: 0, size: "medium" },
+      { tile: P1, x: 6, y: 0, size: "icon" },
+      { tile: P2, x: 7, y: 0, size: "icon" },
+    ]),
+    8,
+  );
 
   it("gives a tile another size where it stands, what its cells cover moving aside", () => {
     const larger = resized(placed, BALANCE, "medium", 8);

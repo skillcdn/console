@@ -452,7 +452,10 @@ const pluginWidgetSchema = z
     sizes: z.optional(
       z.array(z.enum(PLUGIN_WIDGET_SIZE_NAMES)).check(z.minLength(1), z.maxLength(5)),
     ),
-    /** The size it starts at, one of `sizes`; the first of them when left out. */
+    /**
+     * The size it would rather start at, one of `sizes`; the first of them when left out. A page
+     * nobody arranged may tell it another of `sizes`, the nearest the box it has (ADR-0082).
+     */
     defaultSize: z.optional(z.enum(PLUGIN_WIDGET_SIZE_NAMES)),
     roles: z.optional(roleList),
   })

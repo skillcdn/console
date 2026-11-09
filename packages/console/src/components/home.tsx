@@ -6,13 +6,17 @@ import {
   type RefObject,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
 import {
   added,
   arranged,
+  type ComposedTile,
   columnsFor,
+  composed,
+  composedRows,
   footprintOf,
   HOME_TILE_CELLS,
   type HomeColumns,
@@ -22,6 +26,7 @@ import {
   homeTiles,
   homeWith,
   moved,
+  nobodyArranged,
   type PlacedTile,
   resized,
   rowsOf,
@@ -224,14 +229,19 @@ export function HomeGrid(props: HomeGridProps) {
   const allWords = useWords();
   const words = allWords.home;
   const { editing, home, nameOf } = props;
-  const tiles = homeTiles(props.plugins, props.projects);
+  const tiles = useMemo(
+    () => homeTiles(props.plugins, props.projects),
+    [props.plugins, props.projects],
+  );
   const [page, columns] = useHomeColumns();
   const grid = useRef<HTMLUListElement>(null);
   /** What the person has changed since they began: kept when they are done, let go if they cancel. */
   const [draft, setDraft] = useState<RestHome | null>(null);
   const working = draft ?? home;
   const hidden = working?.hidden ?? NONE;
-  const placed = arranged(tiles, working, columns);
+  // A width nobody arranged is closed up by trying the sizes the tiles come in: once a render, not
+  // once a pointer's move.
+  const placed = useMemo(() => arranged(tiles, working, columns), [tiles, working, columns]);
   const [drag, setDrag] = useState<Drag | null>(null);
   const { busy, error, act } = useAction();
   /** The tile in hand, once it has come loose; nothing while one is merely pressed. */
@@ -453,20 +463,32 @@ export function HomeGrid(props: HomeGridProps) {
     tile.kind === "project" ? tile.project.name : nameOf(tile.widget.name);
   // Moved in the page, a frame would load again: the tiles keep the order they came in for as
   // long as the page is open, and each stands where its style says.
+  // Someone who has arranged nothing sees the page composed, edge to edge; arranging it puts the
+  // same tiles on the grid's cells, where they move from (ADR-0082).
+  const composing = !editing && nobodyArranged(working);
+  const boxes: readonly ComposedTile[] = useMemo(
+    () =>
+      composing
+        ? composed(tiles, working, columns)
+        : shown.map((tile) => ({ ...tile, ...footprintOf(tile.size, columns) })),
+    [composing, tiles, working, columns, shown],
+  );
   const order = useRef<readonly string[]>(NONE);
-  const inOrder = [...shown].sort((a, b) => a.y - b.y || a.x - b.x).map((tile) => tile.tile.id);
+  const inOrder = [...boxes].sort((a, b) => a.y - b.y || a.x - b.x).map((tile) => tile.tile.id);
   order.current = [
     ...order.current.filter((id) => inOrder.includes(id)),
     ...inOrder.filter((id) => !order.current.includes(id)),
   ];
-  const standing = [...shown].sort(
+  const standing = [...boxes].sort(
     (a, b) => order.current.indexOf(a.tile.id) - order.current.indexOf(b.tile.id),
   );
   const out = editing
     ? tiles.filter((tile) => !shown.some((candidate) => candidate.tile.id === tile.id))
     : [];
   const slot = dragging === null ? undefined : shown.find((tile) => tile.tile.id === dragging.id);
-  const rows = rowsOf(shown, columns) + (editing ? SPARE_ROWS : 0);
+  const rows = composing
+    ? composedRows(boxes)
+    : rowsOf(shown, columns) + (editing ? SPARE_ROWS : 0);
   return (
     <div
       ref={page}
@@ -521,7 +543,7 @@ export function HomeGrid(props: HomeGridProps) {
         }
       >
         {standing.map((tile) => {
-          const { w, h } = footprintOf(tile.size, columns);
+          const { w, h } = tile;
           const inHand = dragging?.id === tile.tile.id ? dragging : undefined;
           const name = nameOfTile(tile.tile);
           return (

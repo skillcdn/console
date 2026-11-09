@@ -12,8 +12,10 @@ import type {
 // The front page as a person arranges it (ADR-0061): one grid of square cells, on which the
 // projects and the plugins' widgets are tiles alike, each at a place of its own. What there is
 // comes from what the person may see; where each stands comes from what they kept, one layout
-// for each width of the grid. What is new takes the first room, what they took off stays off,
-// and what they may no longer see waits out of sight for its place. Pure functions, so that the
+// for each width of the grid. Someone who has arranged nothing sees the page composed edge to
+// edge, and a width nobody arranged when another was is closed up from the sizes the tiles come
+// in (ADR-0082); on one they arranged, what is new takes the first room. What they took off stays
+// off, and what they may no longer see waits out of sight for its place. Pure functions, so that the
 // page and the tests read the same arrangement.
 
 /** The grid's columns at each width: wide, a laptop's, a tablet's, a phone's. */
@@ -237,12 +239,111 @@ function keptAt(
   return { entries: [], placed: false };
 }
 
+/** A tile waiting for a place on a width nobody arranged, and the size it would rather have. */
+interface Wanted {
+  readonly tile: HomeTile;
+  readonly size: HomeTileSize;
+}
+
+/** The size combinations tried at most, so that a page of many widgets is still laid out at once. */
+const MOST_COMBINATIONS = 4096;
+
+/** Whether one score comes before another, read from its first number. */
+function lessThan(score: readonly number[], than: readonly number[]): boolean {
+  const at = score.findIndex((value, index) => value !== than[index]);
+  return at >= 0 && (score[at] ?? 0) < (than[at] ?? 0);
+}
+
+/** The tiles in order, each at its size, at the first room reading from the top. */
+function packed(
+  wanted: readonly Wanted[],
+  sizes: readonly HomeTileSize[],
+  columns: number,
+): PlacedTile[] {
+  const taken = new Set<number>();
+  return wanted.map(({ tile }, at) => {
+    const size = sizes[at] ?? startingSizeAt(tile, columns);
+    const shape = footprintOf(size, columns);
+    const place = firstRoom(taken, shape, columns);
+    occupy(taken, place, shape, columns);
+    return { tile, size, ...place };
+  });
+}
+
 /**
- * The page as it stands: what the person kept for this width where they stand, or, kept for
- * another width, the same order packed from the top; a tile they may no longer see stays out, a
- * size it no longer comes in, or that is too wide for this grid, becomes the one it starts at
- * here, and a tile on another's cells moves to the nearest room. What they have not seen yet takes the first room, a plugin's widgets as soon
- * as it is on; what they took off stays off.
+ * A width nobody arranged, closed up (ADR-0082): the same order, each tile at one of the sizes it
+ * comes in here, chosen so that the fewest cells stand empty within the page, then so that the
+ * fewest tiles leave the size they would rather have, then so that the page is the shortest. The
+ * projects take one size together, so that they line up as a row of the same tiles; a widget
+ * takes any of its own. A page that cannot close leaves the fewest cells empty it can.
+ */
+function closedUp(wanted: readonly Wanted[], columns: number): PlacedTile[] {
+  const projects = wanted.flatMap((entry, at) => (entry.tile.kind === "project" ? [at] : []));
+  // The choices: for each widget its sizes, the one it would rather have first; for the projects
+  // together, each its own, then each of the sizes a project comes in, all alike.
+  const choices: { readonly at: readonly number[]; readonly options: HomeTileSize[][] }[] = [];
+  if (projects.length > 0) {
+    const own = projects.map((at) => wanted[at]?.size ?? "icon");
+    const alike = PROJECT_SIZES.filter((size) => HOME_TILE_CELLS[size].columns <= columns).map(
+      (size) => projects.map(() => size),
+    );
+    const options = [own, ...alike].filter(
+      (option, index, all) => all.findIndex((other) => other.join() === option.join()) === index,
+    );
+    choices.push({ at: projects, options });
+  }
+  let combinations = choices[0]?.options.length ?? 1;
+  wanted.forEach((entry, at) => {
+    if (entry.tile.kind !== "widget") {
+      return;
+    }
+    const others = sizesAt(entry.tile, columns).filter((size) => size !== entry.size);
+    const all = [entry.size, ...others];
+    // Past what can be tried at once, a widget keeps the size it would rather have.
+    const options = combinations * all.length <= MOST_COMBINATIONS ? all : [entry.size];
+    combinations *= options.length;
+    choices.push({ at: [at], options: options.map((size) => [size]) });
+  });
+
+  const preferred = wanted.map((entry) => entry.size);
+  let best: { readonly placed: PlacedTile[]; readonly score: readonly number[] } | undefined;
+  const trying = (index: number, sizes: HomeTileSize[], changed: number): void => {
+    const choice = choices[index];
+    if (choice === undefined) {
+      const placed = packed(wanted, sizes, columns);
+      const rows = rowsOf(placed, columns);
+      const filled = placed.reduce((cells, { size }) => {
+        const { w, h } = footprintOf(size, columns);
+        return cells + w * h;
+      }, 0);
+      const score = [rows * columns - filled, changed, rows];
+      if (best === undefined || lessThan(score, best.score)) {
+        best = { placed, score };
+      }
+      return;
+    }
+    choice.options.forEach((option) => {
+      const next = [...sizes];
+      choice.at.forEach((at, nth) => {
+        next[at] = option[nth] ?? (preferred[at] as HomeTileSize);
+      });
+      const differs = choice.at.some((at) => next[at] !== preferred[at]) ? 1 : 0;
+      trying(index + 1, next, changed + differs);
+    });
+  };
+  trying(0, [...preferred], 0);
+  return best?.placed ?? packed(wanted, preferred, columns);
+}
+
+/**
+ * The page as it stands on the grid: what the person kept for this width where they stand; for
+ * someone who has arranged nothing, the composed page on the cells nearest it; for a width nobody
+ * arranged when another was, the order kept there, closed up so that no cell stands empty where
+ * the sizes the tiles come in allow it (ADR-0082). A tile they may no longer
+ * see stays out, a size it no longer comes in, or that is too wide for this grid, becomes the one
+ * it starts at here, and a tile on another's cells moves to the nearest room. What they have not
+ * seen yet takes the first room of a width they arranged, a plugin's widgets as soon as it is on;
+ * what they took off stays off.
  */
 export function arranged(
   tiles: readonly HomeTile[],
@@ -252,6 +353,52 @@ export function arranged(
   const byId = new Map(tiles.map((tile) => [tile.id, tile]));
   const hidden = new Set(home?.hidden ?? []);
   const { entries, placed: keepsPlaces } = keptAt(home, columns);
+  if (nobodyArranged(home)) {
+    // Arranging starts from the page as it was composed, each widget on the cells nearest it, the
+    // projects one to a cell from the corner of theirs, in their order.
+    const boxes = composed(tiles, home, columns);
+    const projects = boxes.filter(({ tile }) => tile.kind === "project");
+    const left = Math.round(Math.min(...projects.map((box) => box.x)));
+    const top = Math.round(Math.min(...projects.map((box) => box.y)));
+    const across = Math.max(
+      1,
+      Math.round(Math.max(...projects.map((box) => box.x + box.w))) - left,
+    );
+    const taken = new Set<number>();
+    return boxes.map(({ tile, size, x, y }) => {
+      const shape = footprintOf(size, columns);
+      const nth = projects.findIndex((box) => box.tile.id === tile.id);
+      const near =
+        nth < 0
+          ? { x: Math.round(x), y: Math.round(y) }
+          : { x: left + (nth % across), y: top + Math.floor(nth / across) };
+      const place = fits(taken, near, shape, columns)
+        ? near
+        : nearestRoom(taken, shape, near, columns);
+      occupy(taken, place, shape, columns);
+      return { tile, size, ...place };
+    });
+  }
+  if (!keepsPlaces) {
+    const wanted: Wanted[] = [];
+    const seen = new Set<string>();
+    for (const entry of entries) {
+      const tile = byId.get(entry.tile);
+      if (tile !== undefined && !hidden.has(tile.id) && !seen.has(tile.id)) {
+        const size = sizesAt(tile, columns).includes(entry.size)
+          ? entry.size
+          : startingSizeAt(tile, columns);
+        wanted.push({ tile, size });
+        seen.add(tile.id);
+      }
+    }
+    for (const tile of tiles) {
+      if (!hidden.has(tile.id) && !seen.has(tile.id)) {
+        wanted.push({ tile, size: startingSizeAt(tile, columns) });
+      }
+    }
+    return closedUp(wanted, columns);
+  }
   const taken = new Set<number>();
   const placed: PlacedTile[] = [];
   const seen = new Set<string>();
@@ -273,7 +420,7 @@ export function arranged(
       const size = sizesAt(tile, columns).includes(entry.size)
         ? entry.size
         : startingSizeAt(tile, columns);
-      put(tile, size, keepsPlaces ? { x: entry.x, y: entry.y } : undefined);
+      put(tile, size, { x: entry.x, y: entry.y });
     }
   }
   for (const tile of tiles) {
@@ -287,6 +434,153 @@ export function arranged(
 /** How many rows the page takes. */
 export function rowsOf(placed: readonly PlacedTile[], columns: number): number {
   return Math.max(0, ...placed.map((tile) => tile.y + footprintOf(tile.size, columns).h));
+}
+
+/** Whether the person has arranged no width of the page, whatever they took off it. */
+export function nobodyArranged(home: RestHome | null | undefined): boolean {
+  return home === null || home === undefined || Object.keys(home.layouts).length === 0;
+}
+
+/**
+ * A tile of the composed page: where it stands and how far it reaches, in cells, which need not
+ * be whole, and the size its frame is told, the one of its own nearest that shape.
+ */
+export interface ComposedTile extends PlacedTile {
+  readonly w: number;
+  readonly h: number;
+}
+
+/** The rows a widget beside the lead takes, and those the lead takes at least. */
+const SIDE_ROWS = 2;
+const LEAD_ROWS = 4;
+/** The widgets that stand beside the lead at most; the others stand below, two to a row. */
+const MOST_BESIDE = 2;
+/** The rows of projects the column beside the lead holds at most; more go below, across the page. */
+const MOST_PROJECT_ROWS_BESIDE = 2;
+
+/**
+ * Of the sizes a tile comes in on this grid, the one nearest a shape; on a tie the one that fits
+ * within it, so that a frame is never told of more room than it has, then its own, then the smaller.
+ */
+function nearestSize(tile: HomeTile, w: number, h: number, columns: number): HomeTileSize {
+  if (tile.kind === "project") {
+    return "icon";
+  }
+  const away = (size: HomeTileSize) => {
+    const cells = footprintOf(size, columns);
+    return Math.abs(cells.w - w) + Math.abs(cells.h - h);
+  };
+  const within = (size: HomeTileSize) => {
+    const cells = footprintOf(size, columns);
+    return cells.w <= w && cells.h <= h;
+  };
+  const area = (size: HomeTileSize) => HOME_TILE_CELLS[size].columns * HOME_TILE_CELLS[size].rows;
+  return [...sizesAt(tile, columns)].sort(
+    (a, b) =>
+      away(a) - away(b) ||
+      Number(within(b)) - Number(within(a)) ||
+      Number(b === tile.defaultSize) - Number(a === tile.defaultSize) ||
+      area(a) - area(b),
+  )[0] as HomeTileSize;
+}
+
+/**
+ * The page of someone who has arranged nothing, composed (ADR-0082): the first widget leads,
+ * half the page wide, and beside it stand the next two widgets and the projects, the column as
+ * high as the lead; on a grid of six columns or fewer they stand one under the other. The projects
+ * are icons in rows of as many as are alike, each row as wide as its column, so that no row ends
+ * short; the other widgets stand below, two to a row. Every edge meets another or the page's.
+ */
+export function composed(
+  tiles: readonly HomeTile[],
+  home: RestHome | null | undefined,
+  columns: HomeColumns,
+): ComposedTile[] {
+  const hidden = new Set(home?.hidden ?? []);
+  const shown = tiles.filter((tile) => !hidden.has(tile.id));
+  const widgets = shown.filter((tile): tile is HomeWidgetTile => tile.kind === "widget");
+  const top = widgets.filter((tile) => tile.widget.place === "home:top");
+  const bottom = widgets.filter((tile) => tile.widget.place !== "home:top");
+  const projects = shown.filter((tile) => tile.kind === "project");
+  const boxes: ComposedTile[] = [];
+  const put = (tile: HomeTile, x: number, y: number, w: number, h: number) => {
+    boxes.push({ tile, size: nearestSize(tile, w, h, columns), x, y, w, h });
+  };
+  /** The rows the projects take in a column so wide: as many to a row as a cell each allows. */
+  const projectRows = (width: number) =>
+    projects.length === 0 ? 0 : Math.ceil(projects.length / Math.max(1, Math.floor(width)));
+  /** The projects in rows from a place, as many in each as alike, each row filling the width. */
+  const putProjects = (x: number, y: number, width: number): number => {
+    const rows = projectRows(width);
+    let next = 0;
+    for (let row = 0; row < rows; row += 1) {
+      const count = Math.floor(projects.length / rows) + (row < projects.length % rows ? 1 : 0);
+      for (let at = 0; at < count; at += 1) {
+        const tile = projects[next];
+        if (tile !== undefined) {
+          put(tile, x + (at * width) / count, y + row, width / count, 1);
+        }
+        next += 1;
+      }
+    }
+    return rows;
+  };
+  /** Widgets two to a row across the page, one alone as wide as the page. */
+  const putInPairs = (list: readonly HomeTile[], from: number): number => {
+    let y = from;
+    for (let at = 0; at < list.length; at += 2) {
+      const first = list[at];
+      const second = list[at + 1];
+      if (first !== undefined && second !== undefined) {
+        put(first, 0, y, columns / 2, SIDE_ROWS);
+        put(second, columns / 2, y, columns / 2, SIDE_ROWS);
+      } else if (first !== undefined) {
+        put(first, 0, y, columns, SIDE_ROWS);
+      }
+      y += SIDE_ROWS;
+    }
+    return y;
+  };
+
+  const [lead, ...others] = top;
+  const beside = others.slice(0, MOST_BESIDE);
+  let y = 0;
+  if (lead !== undefined && beside.length > 0 && columns >= 8) {
+    const half = columns / 2;
+    const projectsBeside = projectRows(half) <= MOST_PROJECT_ROWS_BESIDE;
+    const besideRows = beside.length * SIDE_ROWS + (projectsBeside ? projectRows(half) : 0);
+    const height = Math.max(besideRows, LEAD_ROWS);
+    // A column shorter than the lead gives its widgets the rows left over, alike.
+    const widgetRows = SIDE_ROWS + (height - besideRows) / beside.length;
+    put(lead, 0, 0, half, height);
+    let at = 0;
+    for (const tile of beside) {
+      put(tile, half, at, half, widgetRows);
+      at += widgetRows;
+    }
+    if (projectsBeside) {
+      putProjects(half, at, half);
+    }
+    y = height;
+    if (!projectsBeside) {
+      y += putProjects(0, y, columns);
+    }
+    y = putInPairs([...others.slice(MOST_BESIDE), ...bottom], y);
+  } else {
+    if (lead !== undefined) {
+      put(lead, 0, 0, columns, LEAD_ROWS);
+      y = LEAD_ROWS;
+    }
+    y = putInPairs(others, y);
+    y += putProjects(0, y, columns);
+    putInPairs(bottom, y);
+  }
+  return boxes;
+}
+
+/** How many rows the composed page takes, which need not be whole. */
+export function composedRows(boxes: readonly ComposedTile[]): number {
+  return Math.max(0, ...boxes.map((box) => box.y + box.h));
 }
 
 const sameTile = (a: PlacedTile, b: PlacedTile): boolean => a.tile.id === b.tile.id;
