@@ -277,9 +277,14 @@ describe("sessions", () => {
     expect(await listSessionsOf(database, bob.id, minutes(10))).toHaveLength(0);
     // Ended by id for its person alone, answering the hash so that the caller knows which went.
     const second = listed.find((session) => session.tokenHash === "hash-list-2");
-    expect(await deleteSessionOf(database, bob.id, second?.id ?? "")).toBeUndefined();
-    expect(await deleteSessionOf(database, alice.id, second?.id ?? "")).toBe("hash-list-2");
-    expect(await deleteSessionOf(database, alice.id, second?.id ?? "")).toBeUndefined();
+    const at = minutes(10);
+    expect(await deleteSessionOf(database, bob.id, second?.id ?? "", at)).toBeUndefined();
+    // One whose time ended, ended already: as if it were not there.
+    expect(
+      await deleteSessionOf(database, alice.id, second?.id ?? "", minutes(24 * 60 * 365)),
+    ).toBeUndefined();
+    expect(await deleteSessionOf(database, alice.id, second?.id ?? "", at)).toBe("hash-list-2");
+    expect(await deleteSessionOf(database, alice.id, second?.id ?? "", at)).toBeUndefined();
     // Every other but the one kept, by the hash of its token.
     const others = await deleteOtherSessionsOf(database, alice.id, "hash-list-1");
     expect(others).toBeGreaterThanOrEqual(1);

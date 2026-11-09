@@ -190,7 +190,12 @@ export class Sessions {
     sessionId: string,
     cookieHeader: string | null | undefined,
   ): Promise<{ readonly ended: boolean; readonly current: boolean }> {
-    const ended = await deleteSessionOf(this.#options.database, person.id, sessionId);
+    const ended = await deleteSessionOf(
+      this.#options.database,
+      person.id,
+      sessionId,
+      this.#options.clock.now(),
+    );
     return {
       ended: ended !== undefined,
       current: ended !== undefined && ended === this.#hashOf(cookieHeader),

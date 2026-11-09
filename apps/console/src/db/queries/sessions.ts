@@ -134,16 +134,20 @@ export async function listSessionsOf(
 /**
  * Ends one session of a person, by its id: the hash of its token when it was there, so that
  * the caller knows whether it was the one the request came on; nothing for another person's,
- * which is as if it were not there.
+ * which is as if it were not there, and nothing for one whose time ended, which ended already
+ * and goes with the sweep.
  */
 export async function deleteSessionOf(
   database: Database,
   personId: string,
   sessionId: string,
+  now: Date,
 ): Promise<string | undefined> {
   const rows = await drizzleOf(database)
     .delete(sessions)
-    .where(and(eq(sessions.id, sessionId), eq(sessions.personId, personId)))
+    .where(
+      and(eq(sessions.id, sessionId), eq(sessions.personId, personId), gt(sessions.expiresAt, now)),
+    )
     .returning({ tokenHash: sessions.tokenHash });
   return rows[0]?.tokenHash;
 }

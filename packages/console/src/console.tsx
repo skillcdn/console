@@ -1878,14 +1878,22 @@ function SessionsPage(props: {
           busy={busy}
           onEnd={(session) =>
             void act(async () => {
-              await data.actions.endSession(session.id);
-              setSessions(await read());
+              // Read again whether it went or not: one ended from elsewhere, or whose time
+              // ended, is not found, and its row goes all the same.
+              try {
+                await data.actions.endSession(session.id);
+              } finally {
+                setSessions(await read());
+              }
             })
           }
           onEndOthers={() =>
             void act(async () => {
-              await data.actions.endOtherSessions();
-              setSessions(await read());
+              try {
+                await data.actions.endOtherSessions();
+              } finally {
+                setSessions(await read());
+              }
             })
           }
         />
