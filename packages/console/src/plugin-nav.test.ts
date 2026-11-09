@@ -76,8 +76,6 @@ describe("pluginNavItems", () => {
     });
     expect(items.map((item) => item.label)).toEqual(["법무"]);
     expect(items[0]?.children?.map((child) => child.label)).toEqual(["a-ko", "b-ko"]);
-    // What each is, as its list says it under its name: none where the manifest says nothing.
-    expect(items[0]?.children?.map((child) => child.description)).toEqual(["계약", undefined]);
   });
 
   it("shows on a project the plugins bound to it that have a project page, and nothing else", () => {

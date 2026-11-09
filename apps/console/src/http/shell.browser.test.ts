@@ -169,7 +169,7 @@ describe("the header over the pages", () => {
     await context.close();
   });
 
-  it("opens a group of plugins from its tab, the list in front of the page and pressable, at both widths", async () => {
+  it("opens a group of plugins from its tab, the list in front of the page and pressable: to a mouse resting on it, and to a finger's tap", async () => {
     const context = await browser.newContext({
       locale: "en-US",
       viewport: { width: 1280, height: 720 },
@@ -192,43 +192,72 @@ describe("the header over the pages", () => {
     expect(
       await sent("/api/v1/plugins/call/enable", { consent: [], board: null, projects: "all" }),
     ).toBe(200);
+    // A finger's browser: a phone's width, touching.
+    const touching = await browser.newContext({
+      locale: "en-US",
+      viewport: { width: 390, height: 720 },
+      hasTouch: true,
+    });
     try {
-      for (const width of [1280, 390]) {
-        await page.setViewportSize({ width, height: 720 });
-        // A page of the group, whose frame is what the browser found in the list's place before.
-        await page.goto(`${console_.origin}/plugins/hello/greetings`);
-        await page.waitForSelector("iframe.sc-plugin-frame", { state: "attached" });
-        await page.locator(".sc-tabs .sc-tab-summary", { hasText: "Operations" }).click();
-        const link = page.locator('.sc-tab-group-panel a.sc-menu-link[href="/plugins/call/room"]');
+      const openCount = 'document.querySelectorAll(".sc-tab-group-panel:popover-open").length';
+      const linkOf = (where: Page) =>
+        where.locator('.sc-tab-group-panel a.sc-menu-link[href="/plugins/call/room"]');
+      /** The link is what the browser finds at its place, within the window, and names the plugin alone. */
+      const pressable = async (where: Page, width: number) => {
+        const link = linkOf(where);
         await link.waitFor({ state: "visible" });
         const box = await link.boundingBox();
         if (box === null) {
           throw new Error("the link has no box");
         }
-        // What the browser finds at the link's place is the link, and the list is within the window.
-        const atPoint = await page.evaluate(
+        const atPoint = await where.evaluate(
           `document.elementFromPoint(${box.x + box.width / 2}, ${box.y + box.height / 2})?.closest("a")?.getAttribute("href") ?? null`,
         );
         expect(atPoint, `at ${width}`).toBe("/plugins/call/room");
         expect(box.x, `at ${width}`).toBeGreaterThanOrEqual(0);
         expect(box.x + box.width, `at ${width}`).toBeLessThanOrEqual(width);
-        await link.click();
-        await page.waitForURL((url) => url.pathname === "/plugins/call/room");
-        // Closed once used.
-        expect(
-          await page.evaluate(
-            'document.querySelectorAll(".sc-tab-group-panel:popover-open").length',
-          ),
-        ).toBe(0);
-      }
+        expect(await link.textContent()).toBe("Call");
+      };
+      // A mouse resting on the tab opens the list, over a page of the group, whose frame is what
+      // the browser found in the list's place before; a click on a link follows it and closes it.
+      await page.goto(`${console_.origin}/plugins/hello/greetings`);
+      await page.waitForSelector("iframe.sc-plugin-frame", { state: "attached" });
+      const tab = page.locator(".sc-tabs .sc-tab-summary", { hasText: "Operations" });
+      await tab.hover();
+      await pressable(page, 1280);
+      await linkOf(page).click();
+      await page.waitForURL((url) => url.pathname === "/plugins/call/room");
+      expect(await page.evaluate(openCount)).toBe(0);
+      // Resting on the tab again opens it; leaving the tab and the list closes it a moment later.
+      await tab.hover();
+      await linkOf(page).waitFor({ state: "visible" });
+      await page.mouse.move(640, 600);
+      await expect.poll(() => page.evaluate(openCount)).toBe(0);
+      // A mouse's click on the tab goes where the tab leads: the group's first page, which is
+      // Call's, the keys ordering the two.
+      await page.goto(`${console_.origin}/plugins/hello/greetings`);
+      await page.waitForSelector("iframe.sc-plugin-frame", { state: "attached" });
+      await tab.click();
+      await page.waitForURL((url) => url.pathname === "/plugins/call/room");
+      expect(await page.evaluate(openCount)).toBe(0);
+      // A finger: a tap on the tab opens the list, and a tap on a link follows it.
+      const phone = await touching.newPage();
+      await phone.goto(console_.signInUrl(BROWSER_ADMIN));
+      await phone.waitForURL((url) => url.origin === console_.origin && url.pathname === "/");
+      await phone.goto(`${console_.origin}/plugins/hello/greetings`);
+      await phone.waitForSelector("iframe.sc-plugin-frame", { state: "attached" });
+      await phone.locator(".sc-tabs .sc-tab-summary", { hasText: "Operations" }).tap();
+      await pressable(phone, 390);
+      await linkOf(phone).tap();
+      await phone.waitForURL((url) => url.pathname === "/plugins/call/room");
+      expect(await phone.evaluate(openCount)).toBe(0);
       // A window too short for the list: it scrolls within itself, a scroll there leaves it
       // open, and the window losing the focus, as to a click in a plugin's frame, closes it.
       await page.setViewportSize({ width: 390, height: 260 });
       await page.goto(`${console_.origin}/plugins/hello/greetings`);
       await page.waitForSelector("iframe.sc-plugin-frame", { state: "attached" });
-      await page.locator(".sc-tabs .sc-tab-summary", { hasText: "Operations" }).click();
-      const openCount = 'document.querySelectorAll(".sc-tab-group-panel:popover-open").length';
-      expect(await page.evaluate(openCount)).toBe(1);
+      await page.locator(".sc-tabs .sc-tab-summary", { hasText: "Operations" }).hover();
+      await expect.poll(() => page.evaluate(openCount)).toBe(1);
       const fits = await page.evaluate(
         `(() => { const box = document.querySelector(".sc-tab-group-panel").getBoundingClientRect(); return box.bottom <= document.documentElement.clientHeight; })()`,
       );
@@ -242,6 +271,7 @@ describe("the header over the pages", () => {
       await expect.poll(() => page.evaluate(openCount)).toBe(0);
     } finally {
       await sent("/api/v1/plugins/call/disable", {});
+      await touching.close();
       await context.close();
     }
   });

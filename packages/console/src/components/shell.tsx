@@ -15,8 +15,6 @@ export interface NavItem {
   readonly count?: number | undefined;
   /** The pages the tab opens a list of, as a group of plugins does (ADR-0054); the tab itself leads to the first. */
   readonly children?: readonly NavItem[] | undefined;
-  /** What the page is, in a line: said under its name in a group's list, as a plugin describes itself. */
-  readonly description?: string | undefined;
 }
 
 /** The addresses of a brand's marks (ADR-0013): shown beside the workspace's name, and above it when signing in. */
@@ -71,21 +69,17 @@ export function isPlainClick(event: {
   return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
 }
 
-/**
- * A page of a menu: followed in place for a plain click, and the menu closes. In a group's list
- * it says what the page is under its name, where the item has a description.
- */
+/** A page of a menu, by its name: followed in place for a plain click, and the menu closes. */
 function MenuLink(props: {
   readonly item: NavItem;
   readonly onFollow: (href: string) => void;
-  readonly described?: boolean | undefined;
+  readonly className?: string | undefined;
 }) {
   const { item } = props;
-  const described = props.described === true;
   return (
     <a
       href={item.href}
-      className={cx("sc-menu-link", described && "sc-group-link")}
+      className={cx("sc-menu-link", props.className)}
       aria-current={item.current ? "page" : undefined}
       onClick={(event) => {
         if (isPlainClick(event)) {
@@ -94,16 +88,7 @@ function MenuLink(props: {
         }
       }}
     >
-      {described ? (
-        <>
-          <span className="sc-group-link-name">{item.label}</span>
-          {item.description !== undefined && item.description !== "" && (
-            <span className="sc-group-link-note">{item.description}</span>
-          )}
-        </>
-      ) : (
-        item.label
-      )}
+      {item.label}
     </a>
   );
 }
@@ -180,19 +165,60 @@ function hideList(box: HTMLElement | null, setOpen: (open: boolean) => void): vo
   }
 }
 
+/** How long a mouse rests on a tab before its list opens: one passing along the row opens nothing. */
+const HOVER_OPEN_MS = 80;
+/** How long a list stays once the mouse has left it and its tab: the moment it takes to cross from one to the other. */
+const HOVER_LEAVE_MS = 200;
+
+/** Whether a click is a mouse's, which had the list open under it before it clicked; a finger's, a pen's or a key's otherwise. */
+function byMouse(event: Event): boolean {
+  return (
+    typeof PointerEvent !== "undefined" &&
+    event instanceof PointerEvent &&
+    event.pointerType === "mouse"
+  );
+}
+
 /**
  * A tab that opens a list of pages, as a group of several plugins does. The list is a popover:
  * in the top layer, out of the row of tabs, which scrolls sideways and clips whatever hangs out
- * of it, and dismissed by a click elsewhere or the escape key, as the browser does it. Placed
- * under its tab when it opens; closed once used, when the row scrolls or the window changes,
- * and when the window loses the focus, as it does to a click in a plugin's frame, which the page
- * never sees.
+ * of it, and dismissed by a click elsewhere or the escape key, as the browser does it. A mouse
+ * resting on the tab opens it, and leaving the tab and the list closes it; a mouse's click on
+ * the tab, with the list open under it already, goes where the tab leads, the group's first
+ * page; a finger, a pen or a key opens and closes the list by a press. Placed under its tab
+ * when it opens; closed once used, when the row scrolls or the window changes, and when the
+ * window loses the focus, as it does to a click in a plugin's frame, which the page never sees.
  */
 function TabGroup(props: { readonly item: NavItem; readonly onNavigate: (href: string) => void }) {
   const id = useId();
   const tab = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
+  const resting = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const { item } = props;
+  const after = (ms: number, what: () => void) => {
+    clearTimeout(resting.current);
+    resting.current = setTimeout(what, ms);
+  };
+  // Shown here rather than by the browser, and placed at once, before anything is painted: the
+  // list has its width only once it shows, and a list placed before that, then again once the
+  // browser said it opened, could stand out of the window in between. The button stays its
+  // invoker, so that a click on it is not a click outside that closes it first.
+  const show = () => {
+    const box = panel.current;
+    if (box === null) {
+      return;
+    }
+    if (!POPOVERS) {
+      setOpen(true);
+      return;
+    }
+    if (!box.matches(":popover-open")) {
+      box.showPopover();
+      placeUnder(tab.current, box);
+    }
+  };
+  const hide = () => hideList(panel.current, setOpen);
   useEffect(() => {
     const box = panel.current;
     if (box === null) {
@@ -218,6 +244,7 @@ function TabGroup(props: { readonly item: NavItem; readonly onNavigate: (href: s
     window.addEventListener("scroll", close, true);
     window.addEventListener("blur", close);
     return () => {
+      clearTimeout(resting.current);
       box.removeEventListener("toggle", onToggle);
       window.removeEventListener("resize", close);
       window.removeEventListener("scroll", close, true);
@@ -230,9 +257,22 @@ function TabGroup(props: { readonly item: NavItem; readonly onNavigate: (href: s
       placeUnder(tab.current, panel.current);
     }
   }, [open]);
-  const { item } = props;
   return (
-    <div className="sc-tab-group">
+    <div
+      className="sc-tab-group"
+      // The list is a child of this box, wherever the browser draws it: a mouse over either is
+      // over the box, and leaving the box is leaving both.
+      onPointerEnter={(event) => {
+        if (event.pointerType === "mouse") {
+          after(HOVER_OPEN_MS, show);
+        }
+      }}
+      onPointerLeave={(event) => {
+        if (event.pointerType === "mouse") {
+          after(HOVER_LEAVE_MS, hide);
+        }
+      }}
+    >
       <button
         type="button"
         ref={tab}
@@ -242,26 +282,20 @@ function TabGroup(props: { readonly item: NavItem; readonly onNavigate: (href: s
         aria-controls={id}
         popoverTarget={id}
         {...tabLabel(item.label)}
-        // Shown here rather than by the browser, and placed at once, before anything is painted:
-        // the list has its width only once it shows, and a list placed before that, then again
-        // once the browser said it opened, could stand out of the window in between. The button
-        // stays its invoker, so that a click on it is not a click outside that closes it first.
         onClick={(event) => {
           event.preventDefault();
-          const box = panel.current;
-          if (box === null) {
+          clearTimeout(resting.current);
+          if (byMouse(event.nativeEvent)) {
+            hide();
+            props.onNavigate(item.href);
             return;
           }
-          if (!POPOVERS) {
-            setOpen((was) => !was);
-            return;
+          const shown = POPOVERS ? panel.current?.matches(":popover-open") === true : open;
+          if (shown) {
+            hide();
+          } else {
+            show();
           }
-          if (box.matches(":popover-open")) {
-            box.hidePopover();
-            return;
-          }
-          box.showPopover();
-          placeUnder(tab.current, box);
         }}
       >
         <span className="sc-tab-label">{item.label}</span>
@@ -288,9 +322,9 @@ function TabGroup(props: { readonly item: NavItem; readonly onNavigate: (href: s
             <MenuLink
               key={child.href}
               item={child}
-              described
+              className="sc-group-link"
               onFollow={(href) => {
-                hideList(panel.current, setOpen);
+                hide();
                 props.onNavigate(href);
               }}
             />

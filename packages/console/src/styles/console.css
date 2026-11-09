@@ -511,6 +511,10 @@ table {
   transform: rotate(180deg);
 }
 
+.sc-tab-summary[aria-expanded="true"] {
+  color: var(--sc-color-text);
+}
+
 /* A tab's name: a long one stops short with an ellipsis, and the tab's title says it whole. */
 .sc-tab-label {
   min-width: 0;
@@ -681,13 +685,13 @@ html[data-console] body {
 
 /* The list a group tab opens: a popover in the top layer, placed under its tab by the shell, so
    that the row of tabs, which scrolls sideways and clips whatever hangs out of it, clips nothing
-   of the list. In the type of the tabs; as wide as its names and what they say, within a
-   column a line of which reads at a glance, and within the window. */
+   of the list. In the type of the tabs; as wide as its names, within a column a name reads at a
+   glance in, and within the window. */
 .sc-tab-group-panel {
   position: fixed;
   inset: auto;
-  min-width: 15rem;
-  max-width: min(21rem, calc(100vw - 1rem));
+  min-width: 11rem;
+  max-width: min(18rem, calc(100vw - 1rem));
   margin: 0;
   color: var(--sc-color-text);
   font-size: var(--sc-text-sm);
@@ -715,43 +719,21 @@ html[data-console] body {
   }
 }
 
-/* A plugin in a group's list: its name, which wraps rather than run out of the list, and what it
-   is under it, in two lines at most. The one the page is on is in the accent. */
+/* A plugin in a group's list: its name alone, lined up under the tab's, which wraps rather than
+   run out of the list. The one the page is on is in the accent. */
 .sc-menu-link.sc-group-link {
-  display: grid;
-  gap: 0.125rem;
   padding: var(--sc-space-2) 0.625rem;
+  color: var(--sc-color-text);
+  line-height: var(--sc-leading-snug);
+  overflow-wrap: anywhere;
 }
 
 .sc-group-link + .sc-group-link {
   margin-top: 0.125rem;
 }
 
-.sc-group-link-name,
-.sc-group-link-note {
-  display: -webkit-box;
-  overflow: hidden;
-  line-height: var(--sc-leading-snug);
-  overflow-wrap: anywhere;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.sc-group-link-name {
-  color: var(--sc-color-text);
-  font-weight: var(--sc-weight-medium);
-}
-
-.sc-group-link-note {
-  color: var(--sc-color-text-faint);
-  font-size: var(--sc-text-xs);
-}
-
 .sc-group-link[aria-current="page"] {
   background: color-mix(in srgb, var(--sc-color-accent-subtle) 55%, transparent);
-}
-
-.sc-group-link[aria-current="page"] .sc-group-link-name {
   color: var(--sc-color-accent);
 }
 

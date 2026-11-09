@@ -1184,18 +1184,8 @@ describe("the shell and signing in", () => {
       label: "Operations",
       current: true,
       children: [
-        {
-          href: "/plugins/hello/greetings",
-          label: "Hello",
-          current: true,
-          description: "Greetings kept as records.",
-        },
-        {
-          href: "/plugins/call/room",
-          label: "Call",
-          current: false,
-          description: "A room to talk in.",
-        },
+        { href: "/plugins/hello/greetings", label: "Hello", current: true },
+        { href: "/plugins/call/room", label: "Call", current: false },
       ],
     };
     const html = renderToStaticMarkup(
@@ -1211,12 +1201,10 @@ describe("the shell and signing in", () => {
     // In the list and in the person's menu alike, each plugin of the group is a link of its own.
     expect(html.match(/href="\/plugins\/call\/room"/g)).toHaveLength(2);
     expect(html).toContain('<p class="sc-menu-heading">Operations</p>');
-    // The list says what each is under its name, the page's own marked; the menu names them alone.
-    expect(html).toContain(
-      '<span class="sc-group-link-name">Call</span><span class="sc-group-link-note">A room to talk in.</span>',
-    );
-    expect(html.match(/sc-group-link-note/g)).toHaveLength(2);
-    expect(html).toMatch(/class="sc-menu-link sc-group-link" aria-current="page"/);
+    // The list names each alone, the page's own marked; so does the menu.
+    expect(html).toContain('class="sc-menu-link sc-group-link" aria-current="page">Hello</a>');
+    expect(html).toContain('class="sc-menu-link sc-group-link">Call</a>');
+    expect(html).not.toContain("sc-group-link-note");
   });
 
   it("stops a long name of a tab short, its title saying it whole", () => {
