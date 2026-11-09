@@ -2276,10 +2276,23 @@ interface Plate {
  * A plate, read when the page is opened: the person's own, or another person's for whoever
  * oversees them. The week at the top is the address's.
  */
+/**
+ * What a person's own pages showed last, by what each read: come back to, a page stands at once
+ * with what it showed and reads again behind it, rather than wait on the server every time a
+ * tab is pressed. Forgotten when the person signs out.
+ */
+const shownBefore = new Map<string, unknown>();
+
+function rememberedAs<T>(key: string): T | undefined {
+  return shownBefore.get(key) as T | undefined;
+}
+
 function PlatePage(props: {
   readonly components: ConsoleComponents;
   /** Reads the plate; stable across renders, since the page reads again whenever it changes. */
   readonly load: (signal: AbortSignal) => Promise<Plate>;
+  /** What the plate is remembered by, with whose it is: come back to, the page shows it at once and reads again. */
+  readonly remember: string;
   readonly title: string;
   /** What stands beside the title: the way back, on another person's plate. */
   readonly aside?: ReactNode;
@@ -2295,18 +2308,19 @@ function PlatePage(props: {
   readonly weekStart?: WeekStart | undefined;
 }) {
   const words = useWords();
-  const { components, load, couldNotLoad, refused } = props;
-  const [plate, setPlate] = useState<Plate | undefined>(undefined);
+  const { components, load, couldNotLoad, refused, remember } = props;
+  const [plate, setPlate] = useState<Plate | undefined>(() => rememberedAs<Plate>(remember));
   const [problem, setProblem] = useState<string | undefined>(undefined);
   const [forbidden, setForbidden] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
-    setPlate(undefined);
+    setPlate(rememberedAs<Plate>(remember));
     setProblem(undefined);
     setForbidden(false);
     load(controller.signal)
       .then((answer) => {
         if (!controller.signal.aborted) {
+          shownBefore.set(remember, answer);
           setPlate(answer);
         }
       })
@@ -2325,7 +2339,7 @@ function PlatePage(props: {
         }
       });
     return () => controller.abort();
-  }, [load, couldNotLoad, refused]);
+  }, [load, couldNotLoad, refused, remember]);
   return (
     <>
       <div className="sc-page-head">
@@ -2443,13 +2457,25 @@ interface DecisionsRead {
 }
 
 /** The decisions addressed to the person, or, with `raised`, those they raised for someone else (ADR-0042). */
+/** The first page of a person's decisions as it was shown last, remembered for the next time. */
+interface RememberedDecisions {
+  readonly items: RestMyDecisions["items"];
+  readonly more: boolean;
+}
+
 function useMyDecisions(
   myDecisions: ConsoleData["actions"]["myDecisions"],
   raised: boolean,
   couldNotLoad: string,
+  /** What the first page is remembered by, with whose it is. */
+  remember: string,
 ): DecisionsRead {
-  const [items, setItems] = useState<RestMyDecisions["items"] | undefined>(undefined);
-  const [more, setMore] = useState(false);
+  const [items, setItems] = useState<RestMyDecisions["items"] | undefined>(
+    () => rememberedAs<RememberedDecisions>(remember)?.items,
+  );
+  const [more, setMore] = useState(
+    () => rememberedAs<RememberedDecisions>(remember)?.more ?? false,
+  );
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | undefined>(undefined);
   const read = useCallback(
@@ -2459,6 +2485,9 @@ function useMyDecisions(
         const page = await myDecisions({ raised, limit: MY_DECISIONS_PAGE, offset }, signal);
         if (signal?.aborted === true) {
           return;
+        }
+        if (offset === 0) {
+          shownBefore.set(remember, { items: page.items, more: page.more });
         }
         setItems((before) => (offset === 0 ? page.items : [...(before ?? []), ...page.items]));
         setMore(page.more);
@@ -2472,15 +2501,17 @@ function useMyDecisions(
         }
       }
     },
-    [myDecisions, raised, couldNotLoad],
+    [myDecisions, raised, couldNotLoad, remember],
   );
   useEffect(() => {
     const controller = new AbortController();
-    setItems(undefined);
+    const kept = rememberedAs<RememberedDecisions>(remember);
+    setItems(kept?.items);
+    setMore(kept?.more ?? false);
     setProblem(undefined);
     void read(0, controller.signal);
     return () => controller.abort();
-  }, [read]);
+  }, [read, remember]);
   const readMore = useCallback(() => void read(items?.length ?? 0), [read, items]);
   const reload = useCallback(() => void read(0), [read]);
   return { items, more, busy, problem, readMore, reload };
@@ -2493,8 +2524,19 @@ function useMyDecisions(
 function MyDecisionsPage(props: { readonly data: ConsoleData }) {
   const words = useWords();
   const { myDecisions, answerReachedDecision } = props.data.actions;
-  const addressed = useMyDecisions(myDecisions, false, words.myDecisions.couldNotLoad);
-  const raised = useMyDecisions(myDecisions, true, words.myDecisions.couldNotLoad);
+  const whose = props.data.me?.person?.id ?? "";
+  const addressed = useMyDecisions(
+    myDecisions,
+    false,
+    words.myDecisions.couldNotLoad,
+    `decisions:${whose}:addressed`,
+  );
+  const raised = useMyDecisions(
+    myDecisions,
+    true,
+    words.myDecisions.couldNotLoad,
+    `decisions:${whose}:raised`,
+  );
   const { busy, error, act } = useAction();
   const problem = addressed.problem ?? raised.problem ?? error;
   // Answered at the decision's own address (ADR-0068), so that one that reaches the person from a
@@ -2548,6 +2590,7 @@ function WorkPage(props: {
     <PlatePage
       components={props.components}
       load={work}
+      remember={`work:${props.data.me?.person?.id ?? ""}`}
       title={words.work.title}
       week={props.week}
       weekStart={weekStartOf(props.data.me?.workspace)}
@@ -2576,6 +2619,7 @@ function PersonWorkPage(props: {
     <PlatePage
       components={props.components}
       load={load}
+      remember={`work:${data.me?.person?.id ?? ""}:${id}`}
       title={words.people.workOf(name)}
       aside={<LinkButton href={PATHS.people}>{words.nav.people}</LinkButton>}
       week={props.week}
@@ -3261,7 +3305,14 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
               ))
           }
           onNavigate={(href) => navigation.go(href)}
-          onSignOut={viaToken ? undefined : () => void data.actions.signOut()}
+          onSignOut={
+            viaToken
+              ? undefined
+              : () => {
+                  shownBefore.clear();
+                  void data.actions.signOut();
+                }
+          }
         >
           {page}
         </components.Shell>

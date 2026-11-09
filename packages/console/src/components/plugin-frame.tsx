@@ -18,6 +18,7 @@ import type { RestEvent, RestMe, RestPlugin, RestProject } from "../schemas.js";
 import { CONSOLE_TOKENS } from "../tokens.js";
 import { wordsForFailure } from "../use-action.js";
 import { CONSOLE_LANGUAGES, languagesFirst } from "../vocabulary.js";
+import { cx, Spinner } from "./ui.js";
 import { weekStartOf } from "./workspace.js";
 
 // A plugin's page or widget on the console's page (ADR-0054, docs/specs/plugins.md, "Pages"):
@@ -30,6 +31,11 @@ import { weekStartOf } from "./workspace.js";
 const MAX_PAGE_HEIGHT = 20_000;
 /** How often the plugin's own events are asked for while a frame listens for them. */
 const EVENTS_POLL_MS = 5_000;
+/**
+ * How long after a frame has loaded, or said it is ready, the spinner stands in its place when
+ * the page has not grown: a page that draws nothing to measure, or says no height.
+ */
+const DRAW_WAIT_MS = 5_000;
 
 export interface PluginFrameProps {
   readonly plugin: RestPlugin;
@@ -231,6 +237,14 @@ export function PluginFrame(props: PluginFrameProps) {
   const [height, setHeight] = useState(480);
   /** Whether the console served the frame nothing to show: a plugin turned off since the page read it, say. */
   const [unavailable, setUnavailable] = useState(false);
+  /**
+   * Whether the plugin's page has yet to draw: a spinner stands in the frame's place until the
+   * page grows past the height it had before it drew anything, which it says first, or for a
+   * while after the frame loaded, so that a page that draws nothing is shown as it is.
+   */
+  const [drawing, setDrawing] = useState(true);
+  const drawWait = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const emptyHeight = useRef<number | undefined>(undefined);
   const subscribed = useRef<Set<BridgeEventKind>>(new Set());
   const ready = useRef(false);
   const lastPluginEvent = useRef(0);
@@ -247,7 +261,22 @@ export function PluginFrame(props: PluginFrameProps) {
     [scoped, page, widget, project],
   );
   // biome-ignore lint/correctness/useExhaustiveDependencies: another address is another document
-  useEffect(() => setUnavailable(false), [src]);
+  useEffect(() => {
+    setUnavailable(false);
+    setDrawing(true);
+    emptyHeight.current = undefined;
+    clearTimeout(drawWait.current);
+  }, [src]);
+  useEffect(() => () => clearTimeout(drawWait.current), []);
+  const drawn = useCallback(() => {
+    clearTimeout(drawWait.current);
+    setDrawing(false);
+  }, []);
+  /** The page is shown as it stands a while from now, whether or not it says a height by then. */
+  const drawnSoon = useCallback(() => {
+    clearTimeout(drawWait.current);
+    drawWait.current = setTimeout(() => setDrawing(false), DRAW_WAIT_MS);
+  }, []);
 
   const post = useCallback((message: BridgeToFrame, transfer?: Transferable[]) => {
     // The frame's origin is opaque, so the target is any: the frame itself checks the sender.
@@ -274,6 +303,7 @@ export function PluginFrame(props: PluginFrameProps) {
           return;
         case "ready":
           ready.current = true;
+          drawnSoon();
           post({
             v: PLUGIN_BRIDGE_VERSION,
             t: "init",
@@ -327,6 +357,13 @@ export function PluginFrame(props: PluginFrameProps) {
           }
           return;
         case "resize":
+          // The first height is the empty page's, said before the page drew anything, its own
+          // padding included; a greater one is the page drawn.
+          if (emptyHeight.current === undefined) {
+            emptyHeight.current = message.height;
+          } else if (message.height > emptyHeight.current) {
+            drawn();
+          }
           // A widget fills the cells its size gives it (ADR-0059); a page is as tall as it asks.
           if (!isWidget) {
             setHeight(Math.max(40, Math.min(Math.ceil(message.height), MAX_PAGE_HEIGHT)));
@@ -454,20 +491,37 @@ export function PluginFrame(props: PluginFrameProps) {
     return <p className="sc-plugin-frame-unavailable">{words.frameUnavailable}</p>;
   }
   return (
-    <iframe
-      ref={frame}
-      className={
-        isWidget ? "sc-plugin-frame sc-plugin-frame-widget" : "sc-plugin-frame sc-plugin-frame-page"
-      }
-      src={src}
-      title={props.title}
-      // As the document's own policy says: scripts; forms firing their submit event, which the
-      // policy's form-action 'none' keeps from going anywhere; and a window for a link a person
-      // pressed in the frame, which the browser holds to the press (ADR-0078), opened out of the
-      // sandbox so that the page it shows is a page as any.
-      sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
-      referrerPolicy="origin"
+    <div
+      className={cx(
+        "sc-plugin-frame-box",
+        isWidget ? "sc-plugin-frame-box-widget" : "sc-plugin-frame-box-page",
+        drawing && "sc-plugin-frame-loading",
+      )}
       style={isWidget ? undefined : { height: `${height}px` }}
-    />
+    >
+      <iframe
+        ref={frame}
+        className={
+          isWidget
+            ? "sc-plugin-frame sc-plugin-frame-widget"
+            : "sc-plugin-frame sc-plugin-frame-page"
+        }
+        src={src}
+        title={props.title}
+        // As the document's own policy says: scripts; forms firing their submit event, which the
+        // policy's form-action 'none' keeps from going anywhere; and a window for a link a person
+        // pressed in the frame, which the browser holds to the press (ADR-0078), opened out of the
+        // sandbox so that the page it shows is a page as any.
+        sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+        referrerPolicy="origin"
+        // Loaded, with its scripts run: a page that never says it is ready is shown as it is.
+        onLoad={drawnSoon}
+      />
+      {drawing && (
+        <div className="sc-plugin-frame-wait">
+          <Spinner label={pack.common.loading} />
+        </div>
+      )}
+    </div>
   );
 }

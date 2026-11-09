@@ -170,6 +170,14 @@ describe("the example plugin in a browser", () => {
     await page.goto(`${console_.origin}/plugins/hello/greetings`);
     const frame = await frameOf(page, "iframe.sc-plugin-frame");
     await frame.waitForSelector("text=Nobody has been greeted yet.");
+    // The spinner the console stood in the frame's place while the page drew is gone, and the
+    // frame is shown.
+    await page.waitForSelector(".sc-plugin-frame-wait", { state: "detached" });
+    await expect
+      .poll(() =>
+        page.evaluate('getComputedStyle(document.querySelector("iframe.sc-plugin-frame")).opacity'),
+      )
+      .toBe("1");
     // A page pads itself by a step, which its frame takes back, so that it lines up with the tabs.
     expect(await page.evaluate(FRAME_OUTSIDE_THE_COLUMN)).toBe(16);
     // The console's theme reached the frame with `init`: its tokens are on the frame's root.
@@ -211,6 +219,7 @@ describe("the example plugin in a browser", () => {
     const widget = await frameOf(page, "iframe.sc-plugin-frame-widget");
     await widget.waitForSelector(".pl-hello-text");
     expect(await widget.textContent(".pl-hello-text")).toBe("Hello, Bob!");
+    await page.waitForSelector(".sc-plugin-frame-wait", { state: "detached" });
     // The widget's frame fills the cells its size gives it (ADR-0059), a row of the grid, and
     // not the one line it asks for: the height it says is not read.
     expect(await widget.evaluate("document.documentElement.clientHeight")).toBeGreaterThan(120);

@@ -494,10 +494,27 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
     setError(undefined);
     setFailure(undefined);
     const run = async () => {
+      // The workspace's lists and the person's tokens are asked for along with who is signed
+      // in, rather than once that answer has come: a round trip fewer before a page stands.
+      // Where nobody is signed in they are given up unheard, and so are the tokens where an
+      // agent's token asks, since a token cannot list tokens: a console that holds one has none
+      // to show.
+      const asked = new AbortController();
+      const askedTokens = new AbortController();
+      const giveUp = () => {
+        asked.abort();
+        askedTokens.abort();
+      };
+      signal.addEventListener("abort", giveUp);
+      const lists = refreshWorkspace(asked.signal);
+      const tokens = client.tokens(askedTokens.signal);
+      lists.catch(() => undefined);
+      tokens.catch(() => undefined);
       let answer: RestMe;
       try {
         answer = await client.me(signal);
       } catch (failure) {
+        giveUp();
         if (!signal.aborted) {
           setFailure(failure);
           setError(wordsOf(failure, "The server could not be reached."));
@@ -509,15 +526,16 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
       }
       setMe(answer);
       if (answer.person === null) {
+        giveUp();
         setLoaded(false);
         return;
       }
+      if (answer.agent !== null) {
+        askedTokens.abort();
+      }
       try {
-        const [, mine] = await Promise.all([
-          refreshWorkspace(signal),
-          // A token cannot list tokens: a console that holds one has none to show.
-          answer.agent === null ? client.tokens(signal) : Promise.resolve({ items: [] }),
-        ]);
+        await lists;
+        const mine = answer.agent === null ? await tokens : { items: [] };
         if (signal.aborted) {
           return;
         }
