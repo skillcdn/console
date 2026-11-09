@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef } from "react";
+import { Fragment, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import type { RestPerson } from "../api.js";
 import { useWords } from "../i18n/index.js";
 import { Avatar, cx, personName } from "./ui.js";
@@ -69,28 +69,93 @@ export function isPlainClick(event: {
   return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
 }
 
-/** A tab that opens a list of pages, as a group of several plugins does: a details, as the person's menu is. Closes once used. */
-function TabGroup(props: { readonly item: NavItem; readonly onNavigate: (href: string) => void }) {
-  const details = useRef<HTMLDetailsElement>(null);
-  useEffect(() => {
-    const onClick = (event: MouseEvent) => {
-      const element = details.current;
-      if (
-        element?.open === true &&
-        !(event.target instanceof Node && element.contains(event.target))
-      ) {
-        element.open = false;
-      }
-    };
-    document.addEventListener("click", onClick);
-    return () => document.removeEventListener("click", onClick);
-  }, []);
+/** A page of a menu: followed in place for a plain click, and the menu closes. */
+function MenuLink(props: { readonly item: NavItem; readonly onFollow: (href: string) => void }) {
   const { item } = props;
   return (
-    <details className="sc-tab-group" ref={details}>
-      <summary
+    <a
+      href={item.href}
+      className="sc-menu-link"
+      aria-current={item.current ? "page" : undefined}
+      onClick={(event) => {
+        if (isPlainClick(event)) {
+          event.preventDefault();
+          props.onFollow(item.href);
+        }
+      }}
+    >
+      {item.label}
+    </a>
+  );
+}
+
+/** How close to the window's edge a list opened from a tab may come. */
+const PANEL_GUTTER_PX = 8;
+
+/**
+ * Puts the list a tab opened under the tab's left edge, within the window: the list is in the
+ * top layer, where nothing of the page places it.
+ */
+function placeUnder(tab: HTMLElement | null, box: HTMLElement | null): void {
+  if (tab === null || box === null) {
+    return;
+  }
+  const at = tab.getBoundingClientRect();
+  const room = window.innerWidth - box.offsetWidth - PANEL_GUTTER_PX;
+  box.style.left = `${Math.max(PANEL_GUTTER_PX, Math.min(at.left, room))}px`;
+  box.style.top = `${at.bottom}px`;
+}
+
+/**
+ * A tab that opens a list of pages, as a group of several plugins does. The list is a popover:
+ * in the top layer, out of the row of tabs, which scrolls sideways and clips whatever hangs out
+ * of it, and dismissed by a click elsewhere or the escape key, as the browser does it. Placed
+ * under its tab when it opens; closed once used, and when the row scrolls or the window changes.
+ */
+function TabGroup(props: { readonly item: NavItem; readonly onNavigate: (href: string) => void }) {
+  const id = useId();
+  const tab = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const box = panel.current;
+    if (box === null) {
+      return;
+    }
+    const onToggle = (event: Event) => {
+      setOpen((event as ToggleEvent).newState === "open");
+    };
+    box.addEventListener("toggle", onToggle);
+    return () => box.removeEventListener("toggle", onToggle);
+  }, []);
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    // Placed again now that the list has its width. The row of tabs scrolling, or the window
+    // changing, would leave it where the tab no longer is.
+    placeUnder(tab.current, panel.current);
+    const close = () => panel.current?.hidePopover();
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [open]);
+  const { item } = props;
+  return (
+    <div className="sc-tab-group">
+      <button
+        type="button"
+        ref={tab}
         className={cx("sc-tab", "sc-tab-summary", item.current && "sc-tab-current")}
         aria-current={item.current ? "page" : undefined}
+        aria-expanded={open}
+        aria-controls={id}
+        popoverTarget={id}
+        // Placed before the browser shows it, so that it never shows anywhere else first.
+        onClick={() => placeUnder(tab.current, panel.current)}
       >
         {item.label}
         <svg className="sc-menu-caret" viewBox="0 0 16 16" aria-hidden="true">
@@ -103,31 +168,22 @@ function TabGroup(props: { readonly item: NavItem; readonly onNavigate: (href: s
             strokeLinejoin="round"
           />
         </svg>
-      </summary>
-      <div className="sc-menu-panel sc-tab-group-panel">
+      </button>
+      <div id={id} ref={panel} popover="auto" className="sc-menu-panel sc-tab-group-panel">
         <div className="sc-menu-list">
           {(item.children ?? []).map((child) => (
-            <a
+            <MenuLink
               key={child.href}
-              href={child.href}
-              className="sc-menu-link"
-              aria-current={child.current ? "page" : undefined}
-              onClick={(event) => {
-                if (isPlainClick(event)) {
-                  event.preventDefault();
-                  if (details.current !== null) {
-                    details.current.open = false;
-                  }
-                  props.onNavigate(child.href);
-                }
+              item={child}
+              onFollow={(href) => {
+                panel.current?.hidePopover();
+                props.onNavigate(href);
               }}
-            >
-              {child.label}
-            </a>
+            />
           ))}
         </div>
       </div>
-    </details>
+    </div>
   );
 }
 
@@ -146,6 +202,10 @@ function PersonMenu(props: {
     if (details.current !== null) {
       details.current.open = false;
     }
+  };
+  const follow = (href: string) => {
+    close();
+    props.onNavigate(href);
   };
   // A click elsewhere, or the escape key, closes it, as a menu is expected to.
   useEffect(() => {
@@ -193,23 +253,19 @@ function PersonMenu(props: {
           {person.name !== null && <span className="sc-muted">{person.login}</span>}
         </p>
         <nav className="sc-menu-list" aria-label={words.shell.workspace}>
-          {props.items.map((item) => (
-            <a
-              key={item.href}
-              href={item.href}
-              className="sc-menu-link"
-              aria-current={item.current ? "page" : undefined}
-              onClick={(event) => {
-                if (isPlainClick(event)) {
-                  event.preventDefault();
-                  close();
-                  props.onNavigate(item.href);
-                }
-              }}
-            >
-              {item.label}
-            </a>
-          ))}
+          {props.items.map((item) =>
+            item.children !== undefined && item.children.length > 0 ? (
+              // A group of plugins, one by one under the group's name: where a tab opens a list.
+              <Fragment key={item.href}>
+                <p className="sc-menu-heading">{item.label}</p>
+                {item.children.map((child) => (
+                  <MenuLink key={child.href} item={child} onFollow={follow} />
+                ))}
+              </Fragment>
+            ) : (
+              <MenuLink key={item.href} item={item} onFollow={follow} />
+            ),
+          )}
         </nav>
         {props.languages.length > 1 && props.onLanguage !== undefined && (
           <fieldset className="sc-menu-languages">

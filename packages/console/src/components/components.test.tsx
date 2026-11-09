@@ -1177,6 +1177,31 @@ describe("documents", () => {
 });
 
 describe("the shell and signing in", () => {
+  it("opens a group of plugins from a tab over the page, and lists them one by one in the menu", () => {
+    const group = {
+      href: "/plugins/hello/greetings",
+      label: "Operations",
+      current: true,
+      children: [
+        { href: "/plugins/hello/greetings", label: "Hello", current: true },
+        { href: "/plugins/call/room", label: "Call", current: false },
+      ],
+    };
+    const html = renderToStaticMarkup(
+      <Shell title="Acme" nav={[group]} menu={[group]} person={alice} onNavigate={() => undefined}>
+        <p>content</p>
+      </Shell>,
+    );
+    // The tab is a button that opens a popover: in the top layer, where the row of tabs, which
+    // scrolls sideways and clips what hangs out of it, clips nothing of the list.
+    expect(html).toContain('class="sc-tab sc-tab-summary sc-tab-current"');
+    expect(html).toMatch(/<button[^>]* popovertarget="[^"]+"/i);
+    expect(html).toMatch(/<div[^>]* popover="auto"[^>]* class="sc-menu-panel sc-tab-group-panel"/);
+    // In the list and in the person's menu alike, each plugin of the group is a link of its own.
+    expect(html.match(/href="\/plugins\/call\/room"/g)).toHaveLength(2);
+    expect(html).toContain('<p class="sc-menu-heading">Operations</p>');
+  });
+
   it("names the board, the pages and the person", () => {
     const html = renderToStaticMarkup(
       <Shell

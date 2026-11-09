@@ -487,25 +487,17 @@ table {
   color: var(--sc-color-text);
 }
 
-/* A tab that opens a list of pages: a group of several plugins (ADR-0054). */
+/* A tab that opens a list of pages: a group of several plugins (ADR-0054). A button; its list is
+   a popover, .sc-tab-group-panel below the menu's panel. */
 
 .sc-tab-group {
-  position: relative;
+  display: inline-flex;
 }
 
 .sc-tab-summary {
-  list-style: none;
+  font-family: inherit;
+  line-height: inherit;
   cursor: pointer;
-}
-
-.sc-tab-summary::-webkit-details-marker {
-  display: none;
-}
-
-.sc-tab-group-panel {
-  right: auto;
-  left: 0;
-  top: 100%;
 }
 
 /* The pages of a plugin: the header's tabs going on a row lower, on the same gutters, the line
@@ -661,6 +653,16 @@ html[data-console] body {
   border-radius: var(--sc-radius-lg);
   background: var(--sc-color-bg-inset);
   box-shadow: var(--sc-shadow-stage);
+}
+
+/* The list a group tab opens: a popover in the top layer, placed under its tab by the shell, so
+   that the row of tabs, which scrolls sideways and clips whatever hangs out of it, clips nothing
+   of the list. */
+.sc-tab-group-panel {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  overflow: visible;
 }
 
 .sc-menu-who {

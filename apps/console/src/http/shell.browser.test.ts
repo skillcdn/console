@@ -6,6 +6,7 @@ import {
   type BrowserConsole,
   startBrowserConsole,
 } from "../testing/browser-console.js";
+import { CALL_PLUGIN_DIR } from "../testing/plugins.js";
 
 // The header over the pages as they scroll: what stands in front of what comes of every rule on
 // the way up from an element, and only a browser works it out. Everything of a page passes under
@@ -19,6 +20,9 @@ beforeAll(async () => {
   console_ = await startBrowserConsole({
     databaseUrl: process.env.TEST_DATABASE_URL,
     env: process.env,
+    // A second plugin of the operations group, beside the example plugin, once enabled: the
+    // group becomes a tab that opens a list.
+    plugins: [{ name: "console-plugin-call", dir: CALL_PLUGIN_DIR }],
   });
   browser = await chromium.launch();
 }, 180_000);
@@ -163,5 +167,63 @@ describe("the header over the pages", () => {
 
     expect(inFront).toEqual({});
     await context.close();
+  });
+
+  it("opens a group of plugins from its tab, the list in front of the page and pressable, at both widths", async () => {
+    const context = await browser.newContext({
+      locale: "en-US",
+      viewport: { width: 1280, height: 720 },
+    });
+    const page = await context.newPage();
+    await page.goto(console_.signInUrl(BROWSER_ADMIN));
+    await page.waitForURL((url) => url.origin === console_.origin && url.pathname === "/");
+    const sent = (path: string, body: unknown) =>
+      page.evaluate(
+        async (request) => {
+          const answer = await fetch(request.path, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(request.body),
+          });
+          return answer.status;
+        },
+        { path, body },
+      );
+    expect(
+      await sent("/api/v1/plugins/call/enable", { consent: [], board: null, projects: "all" }),
+    ).toBe(200);
+    try {
+      for (const width of [1280, 390]) {
+        await page.setViewportSize({ width, height: 720 });
+        // A page of the group, whose frame is what the browser found in the list's place before.
+        await page.goto(`${console_.origin}/plugins/hello/greetings`);
+        await page.waitForSelector("iframe.sc-plugin-frame", { state: "attached" });
+        await page.locator(".sc-tabs .sc-tab-summary", { hasText: "Operations" }).click();
+        const link = page.locator('.sc-tab-group-panel a.sc-menu-link[href="/plugins/call/room"]');
+        await link.waitFor({ state: "visible" });
+        const box = await link.boundingBox();
+        if (box === null) {
+          throw new Error("the link has no box");
+        }
+        // What the browser finds at the link's place is the link, and the list is within the window.
+        const atPoint = await page.evaluate(
+          `document.elementFromPoint(${box.x + box.width / 2}, ${box.y + box.height / 2})?.getAttribute("href") ?? null`,
+        );
+        expect(atPoint, `at ${width}`).toBe("/plugins/call/room");
+        expect(box.x, `at ${width}`).toBeGreaterThanOrEqual(0);
+        expect(box.x + box.width, `at ${width}`).toBeLessThanOrEqual(width);
+        await link.click();
+        await page.waitForURL((url) => url.pathname === "/plugins/call/room");
+        // Closed once used.
+        expect(
+          await page.evaluate(
+            'document.querySelectorAll(".sc-tab-group-panel:popover-open").length',
+          ),
+        ).toBe(0);
+      }
+    } finally {
+      await sent("/api/v1/plugins/call/disable", {});
+      await context.close();
+    }
   });
 });
