@@ -166,9 +166,8 @@ function TabGroup(props: { readonly item: NavItem; readonly onNavigate: (href: s
     if (!open) {
       return;
     }
-    // Placed again now that the list has its width. The row of tabs scrolling, or the window
-    // changing, would leave it where the tab no longer is.
-    placeUnder(tab.current, panel.current);
+    // Open, it is where its tab is; the row of tabs scrolling, or the window changing, would
+    // leave it where the tab no longer is, so either closes it.
     const close = () => panel.current?.hidePopover();
     window.addEventListener("resize", close);
     window.addEventListener("scroll", close, true);
@@ -189,8 +188,23 @@ function TabGroup(props: { readonly item: NavItem; readonly onNavigate: (href: s
         aria-controls={id}
         popoverTarget={id}
         {...tabLabel(item.label)}
-        // Placed before the browser shows it, so that it never shows anywhere else first.
-        onClick={() => placeUnder(tab.current, panel.current)}
+        // Shown here rather than by the browser, and placed at once, before anything is painted:
+        // the list has its width only once it shows, and a list placed before that, then again
+        // once the browser said it opened, could stand out of the window in between. The button
+        // stays its invoker, so that a click on it is not a click outside that closes it first.
+        onClick={(event) => {
+          event.preventDefault();
+          const box = panel.current;
+          if (box === null) {
+            return;
+          }
+          if (box.matches(":popover-open")) {
+            box.hidePopover();
+            return;
+          }
+          box.showPopover();
+          placeUnder(tab.current, box);
+        }}
       >
         <span className="sc-tab-label">{item.label}</span>
         <svg className="sc-menu-caret" viewBox="0 0 16 16" aria-hidden="true">

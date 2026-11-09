@@ -254,9 +254,11 @@ describe("the example plugin in a browser", () => {
     }
     // The bridge performs its own methods, and a call it does not know is dropped unanswered.
     expect(await frame.evaluate(BRIDGE_CALLS)).toEqual({ known: "performed", unknown: "ignored" });
-    // A frame is told the workspace, with the day its week begins on worked out for it.
+    // A frame is told the workspace, with the day its week begins on worked out for it, and the
+    // language for whoever has none, first of the languages (ADR-0081): English, none being set.
     expect(await frame.evaluate(WORKSPACE_TOLD)).toEqual({
       name: expect.any(String),
+      language: "en",
       languages: ["en", "ko"],
       timeZone: expect.any(String),
       weekStart: "auto",
