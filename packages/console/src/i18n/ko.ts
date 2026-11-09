@@ -855,6 +855,7 @@ export const ko: Messages = {
 
   settings: {
     title: "설정",
+    views: { aria: "설정", workspace: "워크스페이스", sessions: "로그인 세션" },
     categories: "카테고리",
     manageCategories: "카테고리 관리",
     skills: "스킬",
@@ -1347,19 +1348,21 @@ export const ko: Messages = {
   },
 
   sessions: {
-    title: "로그인된 곳",
-    list: "로그인된 브라우저",
-    intro: "내 계정으로 로그인된 브라우저입니다. 모르는 것이나 더 쓰지 않는 것은 로그아웃하세요.",
+    title: "로그인 세션",
+    list: "내 로그인 세션",
+    loading: "로그인 세션을 불러오는 중",
+    intro:
+      "내 계정으로 로그인한 브라우저입니다. 모르는 브라우저나 더 쓰지 않는 브라우저는 로그아웃하세요.",
     introIdle: (days) =>
-      `내 계정으로 로그인된 브라우저입니다. 모르는 것이나 더 쓰지 않는 것은 로그아웃하세요. ${days}일 동안 쓰지 않은 브라우저는 저절로 로그아웃됩니다.`,
-    thisBrowser: "이 브라우저",
-    on: (browser, platform) => `${platform}의 ${browser}`,
-    unknownBrowser: "브라우저",
+      `내 계정으로 로그인한 브라우저입니다. 모르는 브라우저나 더 쓰지 않는 브라우저는 로그아웃하세요. ${days}일 동안 쓰지 않은 세션은 자동으로 로그아웃됩니다.`,
+    current: "현재 세션",
+    on: (browser, platform) => `${browser} · ${platform}`,
+    unknownBrowser: "알 수 없는 브라우저",
     lastActive: "마지막 활동",
     signedIn: "로그인",
-    from: (address) => `${address}에서`,
+    from: (address) => `IP ${address}`,
     end: "로그아웃",
-    endOthers: "다른 브라우저 모두 로그아웃",
+    endOthers: "다른 세션 모두 로그아웃",
   },
 
   connect: {

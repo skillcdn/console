@@ -924,6 +924,7 @@ export const en = {
 
   settings: {
     title: "Settings",
+    views: { aria: "Settings", workspace: "Workspace", sessions: "Sessions" },
     categories: "Categories",
     manageCategories: "Manage the categories",
     skills: "Skills",
@@ -1427,19 +1428,21 @@ export const en = {
   },
 
   sessions: {
-    title: "Where you are signed in",
-    list: "Signed-in browsers",
-    intro: "The browsers signed in as you. Sign out of one you do not recognize, or no longer use.",
+    title: "Sessions",
+    list: "Your sessions",
+    loading: "Loading the sessions",
+    intro:
+      "The browsers signed in to your account. Sign out of any you do not recognize or no longer use.",
     introIdle: (days: string) =>
-      `The browsers signed in as you. Sign out of one you do not recognize, or no longer use; a browser not used for ${days} days is signed out on its own.`,
-    thisBrowser: "This browser",
+      `The browsers signed in to your account. Sign out of any you do not recognize or no longer use. A session not used for ${days} days ends on its own.`,
+    current: "Current session",
     on: (browser: string, platform: string) => `${browser} on ${platform}`,
-    unknownBrowser: "A browser",
+    unknownBrowser: "Unknown browser",
     lastActive: "Last active",
     signedIn: "Signed in",
-    from: (address: string) => `from ${address}`,
+    from: (address: string) => `IP ${address}`,
     end: "Sign out",
-    endOthers: "Sign out of every other browser",
+    endOthers: "Sign out of all other sessions",
   },
 
   connect: {

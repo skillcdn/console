@@ -408,6 +408,9 @@ describe("matchRoute", () => {
     expect(matchRoute("/settings/plugins/leave/more")).toEqual({ name: "not-found" });
     expect(pluginSettingsHref()).toBe("/settings/plugins");
     expect(pluginSettingsHref("leave")).toBe("/settings/plugins/leave");
+    // The person's own sessions, a view of the settings (board #309).
+    expect(matchRoute("/settings/sessions")).toEqual({ name: "sessions" });
+    expect(matchRoute("/settings/sessions/more")).toEqual({ name: "not-found" });
   });
 
   it("takes the addresses of the line before to the new ones", () => {
@@ -597,7 +600,7 @@ describe("createConsole", () => {
   it("knows which pages a console that holds a token does not offer", () => {
     // The tokens themselves, and an agent's approval, are a person's own doing on the console's
     // own pages; configuring is the token's too, as its person's (ADR-0021).
-    for (const path of ["/agents", "/agents/new"]) {
+    for (const path of ["/agents", "/agents/new", "/settings/sessions"]) {
       expect(onlyOnOwnPages(matchRoute(path)), path).toBe(true);
     }
     expect(onlyOnOwnPages(matchRoute(`/people/${ID}/agents`))).toBe(true);

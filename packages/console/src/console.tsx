@@ -31,6 +31,7 @@ import {
   type RestProjectRules,
   type RestReachedDecision,
   type RestRules,
+  type RestSessions,
   type RestTask,
   type RestTaskInput,
   type RestToken,
@@ -417,12 +418,14 @@ export function languageToKeep(
 
 /**
  * The pages a console that holds a token does not offer: the tokens themselves, and the
- * approval of an agent's connection, which makes one; a person's own doing on the console's
- * own pages, signed in. Everything else a person may do, their agent may (ADR-0021).
+ * approval of an agent's connection, which makes one; the browsers signed in; a person's own
+ * doing on the console's own pages, signed in. Everything else a person may do, their agent may
+ * (ADR-0021).
  */
 export function onlyOnOwnPages(route: Route): boolean {
   return (
     route.name === "agents" ||
+    route.name === "sessions" ||
     route.name === "new-token" ||
     route.name === "person-agents" ||
     route.name === "connect"
@@ -1800,6 +1803,98 @@ function ProjectSettingsPage(props: {
 }
 
 /**
+ * The views of the settings: the workspace's, read by everyone, and the browsers the person is
+ * signed in on (board #309), which a console that holds a token does not offer, and so does not
+ * name.
+ */
+function SettingsViews(props: { readonly on: "workspace" | "sessions" }) {
+  const views = useWords().settings.views;
+  return (
+    <nav className="sc-subtabs sc-settings-views" aria-label={views.aria}>
+      <a
+        className={cx("sc-tab", props.on === "workspace" && "sc-tab-current")}
+        href={PATHS.settings}
+        aria-current={props.on === "workspace" ? "page" : undefined}
+      >
+        {views.workspace}
+      </a>
+      <a
+        className={cx("sc-tab", props.on === "sessions" && "sc-tab-current")}
+        href={PATHS.sessions}
+        aria-current={props.on === "sessions" ? "page" : undefined}
+      >
+        {views.sessions}
+      </a>
+    </nav>
+  );
+}
+
+/**
+ * The browsers whoever is signed in is signed in on (board #309): read when the page opens, and
+ * again once one of them, or all the others, are signed out.
+ */
+function SessionsPage(props: {
+  readonly data: ConsoleData;
+  readonly components: ConsoleComponents;
+}) {
+  const words = useWords();
+  const { data, components } = props;
+  const { busy, error, act } = useAction();
+  const [sessions, setSessions] = useState<RestSessions | undefined>(undefined);
+  const [failure, setFailure] = useState<string | undefined>(undefined);
+  const read = data.actions.sessions;
+  useEffect(() => {
+    const controller = new AbortController();
+    read(controller.signal)
+      .then((found) => {
+        if (!controller.signal.aborted) {
+          setSessions(found);
+        }
+      })
+      .catch((caught: unknown) => {
+        if (!controller.signal.aborted) {
+          setFailure(errorWords(caught, words.common.somethingWentWrong, words));
+        }
+      });
+    return () => controller.abort();
+  }, [read, words]);
+  return (
+    <>
+      <div className="sc-page-head">
+        <h1 className="sc-page-title">{words.settings.title}</h1>
+      </div>
+      <SettingsViews on="sessions" />
+      {(error ?? failure) !== undefined && <Callout tone="danger">{error ?? failure}</Callout>}
+      {sessions === undefined ? (
+        failure === undefined && (
+          <div className="sc-loading">
+            <Spinner label={words.sessions.loading} />
+          </div>
+        )
+      ) : (
+        <components.SessionList
+          sessions={sessions.items}
+          idleDays={sessions.idleDays}
+          busy={busy}
+          onEnd={(session) =>
+            void act(async () => {
+              await data.actions.endSession(session.id);
+              setSessions(await read());
+            })
+          }
+          onEndOthers={() =>
+            void act(async () => {
+              await data.actions.endOtherSessions();
+              setSessions(await read());
+            })
+          }
+        />
+      )}
+    </>
+  );
+}
+
+/**
  * The workspace's settings (ADR-0023): its rules, the console's own until an administrator
  * writes the organization's; its categories, kept on their own page; and where its skills come
  * from, which whoever runs the console set. Read by everyone; the rules written by an administrator.
@@ -1946,6 +2041,7 @@ function WorkspaceSettingsPage(props: {
   return (
     <>
       {head}
+      {!holdsToken(data) && <SettingsViews on="workspace" />}
       {error !== undefined && <Callout tone="danger">{error}</Callout>}
       {workspace !== undefined && (
         <section className="sc-panel" aria-label={words.settings.workspace.aria}>
@@ -2533,6 +2629,9 @@ function WorkspacePage(props: {
   if (route.name === "person-work") {
     return <PersonWorkPage id={route.id} data={data} components={components} week={route.week} />;
   }
+  if (route.name === "sessions") {
+    return <SessionsPage data={data} components={components} />;
+  }
   if (route.name === "workspace-settings") {
     return (
       <WorkspaceSettingsPage
@@ -2793,13 +2892,6 @@ function WorkspacePage(props: {
           empty={<EmptyState title={agents.empty.title} body={agents.empty.body} />}
         />
         <ConnectWords origin={origin} />
-        <components.SessionList
-          sessions={data.sessions}
-          idleDays={data.sessionIdleDays}
-          busy={busy}
-          onEnd={(session) => void act(() => data.actions.endSession(session.id))}
-          onEndOthers={() => void act(() => data.actions.endOtherSessions())}
-        />
       </>
     );
   }
@@ -2961,6 +3053,7 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
           label: words.nav.settings,
           current:
             route.name === "workspace-settings" ||
+            route.name === "sessions" ||
             route.name === "categories" ||
             route.name === "plugins-settings",
         },

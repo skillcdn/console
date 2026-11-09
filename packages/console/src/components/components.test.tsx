@@ -1424,18 +1424,30 @@ describe("tokens", () => {
       />,
     );
     expect(html).toContain("Chrome on Windows");
-    expect(html).toContain("This browser");
-    expect(html).toContain("from 203.0.113.5");
+    expect(html).toContain("Current session");
+    expect(html.match(/class="sc-session sc-session-current"/g)).toHaveLength(1);
+    expect(html).toContain("IP 203.0.113.5");
     expect(html).toContain("Safari");
     expect(html).toContain("30 days");
     // The current one is not ended from here; the other is, and all the others at once.
     expect(html.match(/>Sign out</g)).toHaveLength(1);
-    expect(html).toContain("Sign out of every other browser");
+    expect(html).toContain("Sign out of all other sessions");
     const alone = renderToStaticMarkup(
       <SessionList sessions={[session]} onEnd={() => undefined} onEndOthers={() => undefined} />,
     );
     expect(alone.match(/>Sign out</g)).toBeNull();
-    expect(alone).not.toContain("Sign out of every other browser");
+    expect(alone).not.toContain("Sign out of all other sessions");
+    // A phone is drawn as one, and a browser the server could not name is said to be unknown.
+    const phone = renderToStaticMarkup(
+      <SessionList
+        sessions={[
+          { ...other, browser: "Safari", platform: "iOS" },
+          { ...other, id: "0199c4d8-0000-7000-8000-000000000043", browser: null },
+        ]}
+      />,
+    );
+    expect(phone).toContain('<rect x="5.5" y="2.5" width="9" height="15" rx="2">');
+    expect(phone).toContain("Unknown browser");
   });
 
   it("asks for a name and a span, and shows a new token's secret this once", () => {

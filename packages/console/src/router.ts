@@ -93,6 +93,8 @@ export type Route =
       readonly name: "workspace-settings";
       readonly form: "rules" | "workspace" | "pack-token" | undefined;
     }
+  /** The browsers whoever is signed in is signed in on (board #309): the settings' view of their own. */
+  | { readonly name: "sessions" }
   | { readonly name: "people" }
   /** The form where an administrator lets someone in by login (ADR-0022). */
   | { readonly name: "new-listing" }
@@ -184,6 +186,8 @@ export const PATHS = {
   categories: "/categories",
   /** The workspace's settings: the rules, the categories, the skills (ADR-0023). */
   settings: "/settings",
+  /** The browsers whoever is signed in is signed in on: the settings' view of their own (board #309). */
+  sessions: "/settings/sessions",
   /** Where the pages a console adds of its own are: `/pages/<key>`, and `/projects/<key>/pages/<page>` on a project. */
   pages: "/pages",
   /** Where the plugins' pages are: `/plugins/<key>[/<page>[/<rest>]]`, and `/projects/<key>/plugins/<key>...` on a project (ADR-0054). */
@@ -327,6 +331,9 @@ export function matchRoute(pathname: string, search = ""): Route {
   }
   if (path === PATHS.categories) {
     return { name: "categories" };
+  }
+  if (path === PATHS.sessions) {
+    return { name: "sessions" };
   }
   if (path === PATHS.pluginSettings) {
     return { name: "plugins-settings", plugin: undefined };
