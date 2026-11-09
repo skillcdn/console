@@ -109,14 +109,28 @@ function MenuLink(props: {
 }
 
 /**
- * The longest name a tab shows whole: the stylesheet stops a longer one short with an ellipsis,
- * about here, and the tab's title carries it whole. A plugin's name runs to 40 characters.
+ * The widest name a tab shows whole, in Latin letters: the stylesheet stops a wider one short
+ * with an ellipsis, about here, and the tab's title carries it whole. A plugin's name runs to
+ * 40 characters.
  */
 const TAB_LABEL_WHOLE = 28;
 
+/** The characters a name runs about twice as wide in: Hangul, the Chinese characters, kana, the full-width forms. */
+const WIDE =
+  /[\u1100-\u115f\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff00-\uff60\uffe0-\uffe6]/u;
+
+/** How wide a name runs, in Latin letters. */
+function widthOf(label: string): number {
+  let width = 0;
+  for (const character of label) {
+    width += WIDE.test(character) ? 2 : 1;
+  }
+  return width;
+}
+
 /** A tab's name, as the stylesheet may stop it short, and the title that then says it whole. */
 function tabLabel(label: string): { readonly title: string | undefined } {
-  return { title: label.length > TAB_LABEL_WHOLE ? label : undefined };
+  return { title: widthOf(label) > TAB_LABEL_WHOLE ? label : undefined };
 }
 
 /** How close to the window's edge a list opened from a tab may come. */
@@ -126,25 +140,53 @@ const PANEL_DROP_PX = 6;
 /** How far a list's edge stands before the names in it: its own padding and a link's. */
 const PANEL_INSET_PX = 14;
 
+/** The least a list is let be tall where the window is short: a few of its pages, scrolled. */
+const PANEL_SHORTEST_PX = 120;
+
+/**
+ * Whether the browser shows a popover. One that does not, as Safari before 17, has the list
+ * shown and hidden by the tab itself, without the browser's ways of closing it.
+ */
+const POPOVERS =
+  typeof HTMLElement === "undefined" || typeof HTMLElement.prototype.showPopover === "function";
+
 /**
  * Puts the list a tab opened under the tab, the names in it lined up with the tab's, within the
- * window: the list is in the top layer, where nothing of the page places it.
+ * page's width, the scrollbar left out, and no taller than the window has room for below it, a
+ * longer list scrolling within itself: the list is in the top layer, where nothing of the page
+ * places it.
  */
 function placeUnder(tab: HTMLElement | null, box: HTMLElement | null): void {
   if (tab === null || box === null) {
     return;
   }
   const at = tab.getBoundingClientRect();
-  const room = window.innerWidth - box.offsetWidth - PANEL_GUTTER_PX;
+  const { clientWidth, clientHeight } = document.documentElement;
+  const room = clientWidth - box.offsetWidth - PANEL_GUTTER_PX;
+  const top = at.bottom + PANEL_DROP_PX;
   box.style.left = `${Math.max(PANEL_GUTTER_PX, Math.min(at.left - PANEL_INSET_PX, room))}px`;
-  box.style.top = `${at.bottom + PANEL_DROP_PX}px`;
+  box.style.top = `${top}px`;
+  box.style.maxHeight = `${Math.max(PANEL_SHORTEST_PX, clientHeight - top - PANEL_GUTTER_PX)}px`;
+}
+
+/** Closes a list: the browser's popover, or the list the tab shows by hand where there is none. */
+function hideList(box: HTMLElement | null, setOpen: (open: boolean) => void): void {
+  if (!POPOVERS) {
+    setOpen(false);
+    return;
+  }
+  if (box?.matches(":popover-open") === true) {
+    box.hidePopover();
+  }
 }
 
 /**
  * A tab that opens a list of pages, as a group of several plugins does. The list is a popover:
  * in the top layer, out of the row of tabs, which scrolls sideways and clips whatever hangs out
  * of it, and dismissed by a click elsewhere or the escape key, as the browser does it. Placed
- * under its tab when it opens; closed once used, and when the row scrolls or the window changes.
+ * under its tab when it opens; closed once used, when the row scrolls or the window changes,
+ * and when the window loses the focus, as it does to a click in a plugin's frame, which the page
+ * never sees.
  */
 function TabGroup(props: { readonly item: NavItem; readonly onNavigate: (href: string) => void }) {
   const id = useId();
@@ -159,22 +201,34 @@ function TabGroup(props: { readonly item: NavItem; readonly onNavigate: (href: s
     const onToggle = (event: Event) => {
       setOpen((event as ToggleEvent).newState === "open");
     };
-    box.addEventListener("toggle", onToggle);
-    return () => box.removeEventListener("toggle", onToggle);
-  }, []);
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
     // Open, it is where its tab is; the row of tabs scrolling, or the window changing, would
-    // leave it where the tab no longer is, so either closes it.
-    const close = () => panel.current?.hidePopover();
+    // leave it where the tab no longer is, so either closes it, and so does the window losing
+    // the focus. A scroll within the list is the list's own. Heard from the start rather than
+    // once the page knows it opened, which comes a moment after it shows.
+    const close = (event: Event) => {
+      const shown = POPOVERS ? box.matches(":popover-open") : !box.hidden;
+      const within =
+        event.type === "scroll" && event.target instanceof Node && box.contains(event.target);
+      if (shown && !within) {
+        hideList(box, setOpen);
+      }
+    };
+    box.addEventListener("toggle", onToggle);
     window.addEventListener("resize", close);
     window.addEventListener("scroll", close, true);
+    window.addEventListener("blur", close);
     return () => {
+      box.removeEventListener("toggle", onToggle);
       window.removeEventListener("resize", close);
       window.removeEventListener("scroll", close, true);
+      window.removeEventListener("blur", close);
     };
+  }, []);
+  useEffect(() => {
+    // Shown by the tab itself where the browser has no popover: placed now that it shows.
+    if (open && !POPOVERS) {
+      placeUnder(tab.current, panel.current);
+    }
   }, [open]);
   const { item } = props;
   return (
@@ -198,6 +252,10 @@ function TabGroup(props: { readonly item: NavItem; readonly onNavigate: (href: s
           if (box === null) {
             return;
           }
+          if (!POPOVERS) {
+            setOpen((was) => !was);
+            return;
+          }
           if (box.matches(":popover-open")) {
             box.hidePopover();
             return;
@@ -218,7 +276,13 @@ function TabGroup(props: { readonly item: NavItem; readonly onNavigate: (href: s
           />
         </svg>
       </button>
-      <div id={id} ref={panel} popover="auto" className="sc-menu-panel sc-tab-group-panel">
+      <div
+        id={id}
+        ref={panel}
+        popover="auto"
+        hidden={!POPOVERS && !open}
+        className="sc-menu-panel sc-tab-group-panel"
+      >
         <div className="sc-menu-list">
           {(item.children ?? []).map((child) => (
             <MenuLink
@@ -226,7 +290,7 @@ function TabGroup(props: { readonly item: NavItem; readonly onNavigate: (href: s
               item={child}
               described
               onFollow={(href) => {
-                panel.current?.hidePopover();
+                hideList(panel.current, setOpen);
                 props.onNavigate(href);
               }}
             />
@@ -273,11 +337,19 @@ function PersonMenu(props: {
         details.current.open = false;
       }
     };
+    // A click in a plugin's frame is a click elsewhere the page never sees: the window loses the focus.
+    const onBlur = () => {
+      if (details.current !== null) {
+        details.current.open = false;
+      }
+    };
     document.addEventListener("click", onClick);
     document.addEventListener("keydown", onKey);
+    window.addEventListener("blur", onBlur);
     return () => {
       document.removeEventListener("click", onClick);
       document.removeEventListener("keydown", onKey);
+      window.removeEventListener("blur", onBlur);
     };
   }, []);
   const { person } = props;

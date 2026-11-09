@@ -221,6 +221,25 @@ describe("the header over the pages", () => {
           ),
         ).toBe(0);
       }
+      // A window too short for the list: it scrolls within itself, a scroll there leaves it
+      // open, and the window losing the focus, as to a click in a plugin's frame, closes it.
+      await page.setViewportSize({ width: 390, height: 260 });
+      await page.goto(`${console_.origin}/plugins/hello/greetings`);
+      await page.waitForSelector("iframe.sc-plugin-frame", { state: "attached" });
+      await page.locator(".sc-tabs .sc-tab-summary", { hasText: "Operations" }).click();
+      const openCount = 'document.querySelectorAll(".sc-tab-group-panel:popover-open").length';
+      expect(await page.evaluate(openCount)).toBe(1);
+      const fits = await page.evaluate(
+        `(() => { const box = document.querySelector(".sc-tab-group-panel").getBoundingClientRect(); return box.bottom <= document.documentElement.clientHeight; })()`,
+      );
+      expect(fits).toBe(true);
+      await page.evaluate(
+        `(() => { const list = document.querySelector(".sc-tab-group-panel"); list.scrollTop = list.scrollHeight; list.dispatchEvent(new Event("scroll")); })()`,
+      );
+      expect(await page.evaluate(openCount)).toBe(1);
+      await page.evaluate('window.dispatchEvent(new Event("blur"))');
+      // Polled from outside: the console's policy evaluates no string in the page.
+      await expect.poll(() => page.evaluate(openCount)).toBe(0);
     } finally {
       await sent("/api/v1/plugins/call/disable", {});
       await context.close();

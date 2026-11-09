@@ -672,6 +672,11 @@ html[data-console] body {
   border-radius: var(--sc-radius-lg);
   background: var(--sc-color-bg-raised);
   box-shadow: var(--sc-shadow-menu);
+  /* A menu longer than the window has room for under the header scrolls within itself, so that
+     its last items, the way out among them, are always reached. */
+  max-height: calc(100dvh - 4.5rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 /* The list a group tab opens: a popover in the top layer, placed under its tab by the shell, so
@@ -684,9 +689,13 @@ html[data-console] body {
   min-width: 15rem;
   max-width: min(21rem, calc(100vw - 1rem));
   margin: 0;
-  overflow: visible;
   color: var(--sc-color-text);
   font-size: var(--sc-text-sm);
+}
+
+/* Where the browser has no popover, the tab shows and hides the list itself. */
+.sc-tab-group-panel[hidden] {
+  display: none;
 }
 
 .sc-tab-group-panel:popover-open {

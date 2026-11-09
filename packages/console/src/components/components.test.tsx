@@ -1238,6 +1238,23 @@ describe("the shell and signing in", () => {
     expect(html).toContain(`<span class="sc-tab-label">${long}</span>`);
     // A short name has no title to say it again.
     expect(html).not.toContain('title="My work"');
+    // Hangul runs about twice as wide: a name of fifteen syllables may stop short, and has one.
+    const korean = "인사와 급여와 근태를 한곳에서 관리";
+    const wide = renderToStaticMarkup(
+      <Shell
+        title="Acme"
+        nav={[
+          { href: "/plugins/hr/home", label: korean, current: false },
+          { href: "/plugins/leave/home", label: "휴가", current: false },
+        ]}
+        person={alice}
+        onNavigate={() => undefined}
+      >
+        <p>content</p>
+      </Shell>,
+    );
+    expect(wide).toContain(`title="${korean}"`);
+    expect(wide).not.toContain('title="휴가"');
   });
 
   it("names the board, the pages and the person", () => {

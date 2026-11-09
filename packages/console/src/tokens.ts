@@ -49,6 +49,7 @@ export const CONSOLE_TOKENS: readonly string[] = [
   "--sc-color-sheet-hover",
   "--sc-glow",
   "--sc-shadow-stage",
+  "--sc-shadow-menu",
   "--sc-font-sans",
   "--sc-font-mono",
   "--sc-text-xs",
