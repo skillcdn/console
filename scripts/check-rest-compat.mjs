@@ -205,18 +205,27 @@ function compareValues(before, after, io, path, found) {
   }
 }
 
-/** Members of a union, compared whole: an answer may not gain one, a sender may not lose one. */
+/**
+ * Members of a union, each compared as a field is: an answer may not gain a member that no
+ * member of before reads, and a sender may not lose one that no member of now takes. A member
+ * that only gained what the other side ignores, an object with a field more, is still the
+ * member it was; one with another value, another kind or a field gone is not.
+ */
 function compareMembers(before, after, io, path, found) {
-  const has = (members, member) => members.some((other) => same(other, member));
+  const fits = (older, newer) => {
+    const broken = [];
+    breaksOf(older, newer, io, path, broken);
+    return broken.length === 0;
+  };
   if (io === "output") {
     for (const member of after) {
-      if (!has(before, member)) {
+      if (!before.some((older) => fits(older, member))) {
         found.push(`${path}: a member of the union was added, which a reader of before refuses`);
       }
     }
   } else {
     for (const member of before) {
-      if (!has(after, member)) {
+      if (!after.some((newer) => fits(member, newer))) {
         found.push(`${path}: a member of the union was removed, which a sender of before may send`);
       }
     }
