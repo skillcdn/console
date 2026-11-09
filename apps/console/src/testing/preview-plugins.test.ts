@@ -2,7 +2,12 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { builtPluginAt, parsePreviewArguments } from "./preview-plugins.js";
+import {
+  builtPluginAt,
+  keptSignInFailure,
+  PREVIEW_DATABASE,
+  parsePreviewArguments,
+} from "./preview-plugins.js";
 
 const made: string[] = [];
 const scratch = async (): Promise<string> => {
@@ -17,6 +22,19 @@ afterAll(async () => {
 });
 
 describe("what dev:plugins is told", () => {
+  it("says what to do when the database it kept is not its own", () => {
+    const failure = keptSignInFailure(
+      "bob",
+      new Error("the response set no console_session cookie"),
+    );
+    expect(failure.message).toContain(
+      `bob could not sign in on the kept database ${PREVIEW_DATABASE}`,
+    );
+    expect(failure.message).toContain(`drop database ${PREVIEW_DATABASE} with (force)`);
+    expect(failure.message).toContain("without --keep");
+    expect((failure.cause as Error).message).toBe("the response set no console_session cookie");
+  });
+
   it("takes a port once and a plugin's directory as often as given, and refuses the rest", () => {
     const bare = { port: undefined, pluginDirs: [], publicUrl: undefined, keep: false };
     expect(parsePreviewArguments([])).toEqual(bare);

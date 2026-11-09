@@ -33,6 +33,7 @@ import {
   LEAVE_PLUGIN_DIR,
   writePluginsDir,
 } from "./plugins.js";
+import { keptSignInFailure, PREVIEW_DATABASE } from "./preview-plugins.js";
 
 // Test support: the console as a real browser meets it, listening on this machine with the
 // default UI, the example plugin enabled, two of the fixtures installed and not enabled, the
@@ -68,9 +69,6 @@ export const PREVIEW_SCHEDULE_INTERVAL_MS = 15_000;
  */
 const fixturePrefix = (reachedFromOutside: boolean): string =>
   reachedFromOutside ? `/__fixture/${randomBytes(12).toString("hex")}` : "/__fixture";
-
-/** The database a preview keeps between runs (`--keep`), one on the server. */
-const PREVIEW_DATABASE = "console_preview";
 
 /** What `GET /api/v1/plugins/<key>` says of a plugin's state, as much as this needs. */
 const pluginStateSchema = z.object({ state: z.string() });
@@ -231,12 +229,19 @@ export async function startBrowserConsole(options: BrowserConsoleOptions): Promi
       web,
       version: APP_VERSION,
     });
-    const admin = await harness.signIn(BROWSER_ADMIN);
+    const signIn = async (person: string): Promise<string> => {
+      try {
+        return await harness.signIn(person);
+      } catch (error) {
+        throw options.keep === true ? keptSignInFailure(person, error) : error;
+      }
+    };
+    const admin = await signIn(BROWSER_ADMIN);
     // The members too, once each, so that the people the fixture knows are the workspace's
     // people before any of them signs in from the browser: someone to grant a role or to name
     // in a setting.
-    await harness.signIn("bob");
-    await harness.signIn("carol");
+    await signIn("bob");
+    await signIn("carol");
     // Enabled once: a database kept from an earlier run has it enabled already.
     const hello = pluginStateSchema.parse(
       await (await harness.request(pluginPath("hello"), { headers: { cookie: admin } })).json(),

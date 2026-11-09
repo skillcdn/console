@@ -125,3 +125,18 @@ export async function builtPluginAt(
   }
   return { name, dir: root };
 }
+
+/** The database a preview keeps between runs (`--keep`), one on the server. */
+export const PREVIEW_DATABASE = "console_preview";
+
+/**
+ * What a preview says when one of the fixture's people cannot sign in on the database it kept:
+ * a database of that name made by something else holds other accounts under the same logins,
+ * which the console refuses to take for the fixture's, and only dropping it starts over.
+ */
+export function keptSignInFailure(person: string, cause: unknown): Error {
+  return new Error(
+    `${person} could not sign in on the kept database ${PREVIEW_DATABASE}: it holds other accounts under the fixture's logins, as one made by something other than this preview does. Drop it (drop database ${PREVIEW_DATABASE} with (force)), or start without --keep.`,
+    { cause },
+  );
+}

@@ -38,14 +38,19 @@ for (const dir of wanted.pluginDirs) {
   }
 }
 
-const started = await startBrowserConsole({
-  port: wanted.port ?? DEFAULT_PORT,
-  databaseUrl: process.env.TEST_DATABASE_URL,
-  env: process.env,
-  plugins,
-  publicUrl: wanted.publicUrl,
-  keep: wanted.keep,
-});
+let started: Awaited<ReturnType<typeof startBrowserConsole>>;
+try {
+  started = await startBrowserConsole({
+    port: wanted.port ?? DEFAULT_PORT,
+    databaseUrl: process.env.TEST_DATABASE_URL,
+    env: process.env,
+    plugins,
+    publicUrl: wanted.publicUrl,
+    keep: wanted.keep,
+  });
+} catch (error) {
+  started = stop(reasonOf(error));
+}
 const lines = [
   `The console, with the example plugin enabled and the fixtures leave and gate installed: ${started.publicUrl}`,
   ...(wanted.publicUrl === undefined
