@@ -18,6 +18,7 @@ import type { RestEvent, RestMe, RestPlugin, RestProject } from "../schemas.js";
 import { CONSOLE_TOKENS } from "../tokens.js";
 import { wordsForFailure } from "../use-action.js";
 import { CONSOLE_LANGUAGES, languagesFirst } from "../vocabulary.js";
+import { pluginEventsReaderOf } from "./plugin-events.js";
 import { cx, Spinner } from "./ui.js";
 import { weekStartOf } from "./workspace.js";
 
@@ -29,8 +30,6 @@ import { weekStartOf } from "./workspace.js";
 
 /** How tall a page's frame may grow: far above any page, below what would break the layout. */
 const MAX_PAGE_HEIGHT = 20_000;
-/** How often the plugin's own events are asked for while a frame listens for them. */
-const EVENTS_POLL_MS = 5_000;
 /**
  * How long after a frame has loaded, or said it is ready, the spinner stands in its place when
  * the page has not grown: a page that draws nothing to measure, or says no height.
@@ -246,8 +245,9 @@ export function PluginFrame(props: PluginFrameProps) {
   const drawWait = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const emptyHeight = useRef<number | undefined>(undefined);
   const subscribed = useRef<Set<BridgeEventKind>>(new Set());
+  /** Whether the frame listens for the plugin's own events, as it said with `subscribe`. */
+  const [hearing, setHearing] = useState(false);
   const ready = useRef(false);
-  const lastPluginEvent = useRef(0);
   const seenEvents = useRef(0);
   const path = props.path ?? "";
   const scoped = useMemo(() => client.plugin(plugin.key), [client, plugin.key]);
@@ -266,6 +266,7 @@ export function PluginFrame(props: PluginFrameProps) {
     setDrawing(true);
     emptyHeight.current = undefined;
     clearTimeout(drawWait.current);
+    setHearing(false);
   }, [src]);
   useEffect(() => () => clearTimeout(drawWait.current), []);
   const drawn = useCallback(() => {
@@ -395,6 +396,7 @@ export function PluginFrame(props: PluginFrameProps) {
           return;
         case "subscribe":
           subscribed.current = new Set(message.kinds);
+          setHearing(message.kinds.includes("plugin"));
           return;
         default:
           return;
@@ -449,43 +451,17 @@ export function PluginFrame(props: PluginFrameProps) {
     }
   }, [events, plugin.key, post]);
 
-  // The plugin's own events, asked for while a frame listens for them.
+  // The plugin's own events, while the frame listens for them: heard through the one reader of
+  // the plugin's events on the page, which its other frames share, from where the stream stood
+  // when the first of them listened.
   useEffect(() => {
-    if (typeof window === "undefined") {
+    if (!hearing) {
       return;
     }
-    const timer = setInterval(() => {
-      if (!ready.current || !subscribed.current.has("plugin")) {
-        return;
-      }
-      scoped
-        .pluginEvents({ after: lastPluginEvent.current, limit: 50 })
-        .then((page) => {
-          for (const event of page.items) {
-            lastPluginEvent.current = Math.max(lastPluginEvent.current, event.id);
-            post({ v: PLUGIN_BRIDGE_VERSION, t: "event", kind: "plugin", data: event });
-          }
-        })
-        .catch(() => undefined);
-    }, EVENTS_POLL_MS);
-    return () => clearInterval(timer);
-  }, [scoped, post]);
-
-  // What the plugin emitted before the frame came is not replayed: the stream is read from now.
-  useEffect(() => {
-    scoped
-      .pluginEvents({ after: 0, limit: 1 })
-      .then((page) => {
-        if (page.more || page.items.length > 0) {
-          // The newest number is past the first page; a frame hears of what comes after it listens.
-          return scoped.pluginEvents({ after: 0, limit: 200 }).then((all) => {
-            lastPluginEvent.current = all.items.at(-1)?.id ?? 0;
-          });
-        }
-        return undefined;
-      })
-      .catch(() => undefined);
-  }, [scoped]);
+    return pluginEventsReaderOf(client, plugin.key).listen((event) => {
+      post({ v: PLUGIN_BRIDGE_VERSION, t: "event", kind: "plugin", data: event });
+    });
+  }, [hearing, client, plugin.key, post]);
 
   if (unavailable) {
     return <p className="sc-plugin-frame-unavailable">{words.frameUnavailable}</p>;

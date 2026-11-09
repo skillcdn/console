@@ -195,6 +195,19 @@ export async function listPluginEventsOf(
   };
 }
 
+/** The number of a plugin's newest event, 0 where it has none: where its stream stands. */
+export async function newestPluginEventOf(
+  database: Database,
+  workspaceId: string,
+  key: string,
+): Promise<number> {
+  const [row] = await drizzleOf(database)
+    .select({ newest: sql<number | string | null>`max(${pluginEvents.id})` })
+    .from(pluginEvents)
+    .where(and(eq(pluginEvents.workspaceId, workspaceId), eq(pluginEvents.pluginKey, key)));
+  return Number(row?.newest ?? 0);
+}
+
 /**
  * Removes the plugins' events past their time, and the oldest of a plugin beyond what it keeps
  * (docs/specs/plugins.md, "Limits and refusals"). Answers how many went.

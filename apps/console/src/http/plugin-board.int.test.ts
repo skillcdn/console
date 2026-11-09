@@ -532,6 +532,8 @@ describe("a plugin on the board", () => {
       ).json(),
     );
     expect(emitted.items.map((event) => event.kind)).toEqual(["decided"]);
+    // Where the stream stands, for a frame that reads it from now.
+    expect(emitted.newest).toBe(emitted.items[0]?.id);
     // The hook was told the event's id and that this was its first delivery, by which a plugin
     // keeps from acting twice on a delivery repeated.
     expect(emitted.items[0]?.data).toMatchObject({

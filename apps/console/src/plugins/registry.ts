@@ -79,6 +79,7 @@ import {
   emitPluginEvent,
   latestPluginEventId,
   listPluginEventsOf,
+  newestPluginEventOf,
   purgePluginStreams,
 } from "../db/queries/plugin-board.js";
 import {
@@ -2928,10 +2929,15 @@ export class Plugins {
   ): Promise<{
     readonly items: { id: number; kind: string; data: unknown; at: string }[];
     readonly more: boolean;
+    /** The number of the newest event, 0 where there is none: where the stream stands. */
+    readonly newest: number;
   }> {
     this.entryOf(key);
     const workspace = await this.options.workspace();
-    const read = await listPluginEventsOf(this.options.database, workspace.id, key, page);
+    const [read, newest] = await Promise.all([
+      listPluginEventsOf(this.options.database, workspace.id, key, page),
+      newestPluginEventOf(this.options.database, workspace.id, key),
+    ]);
     return {
       items: read.items.map((event) => ({
         id: event.id,
@@ -2940,6 +2946,7 @@ export class Plugins {
         at: event.createdAt.toISOString(),
       })),
       more: read.more,
+      newest,
     };
   }
 

@@ -429,6 +429,11 @@ export type RestPluginEvent = z.infer<typeof restPluginEventSchema>;
 export const restPluginEventsSchema = z.object({
   items: z.array(restPluginEventSchema),
   more: z.boolean(),
+  /**
+   * The number of the plugin's newest event, 0 where it has none: where the stream stands, for
+   * a frame that reads it from now. Answered from 0.4.8 and read as optional.
+   */
+  newest: z.optional(z.int().check(z.nonnegative())),
 });
 export type RestPluginEvents = z.infer<typeof restPluginEventsSchema>;
 
