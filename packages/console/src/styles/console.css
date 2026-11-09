@@ -4996,16 +4996,23 @@ select.sc-input-quiet {
   margin-right: var(--sc-space-1);
 }
 
-/* What is on a person's plate: the week across the page, the lists below it at reading width. */
+/* What is on a person's plate: the week across the page, and the lists under it as wide as the
+   week, two side by side where each still has a reading width, one under the other below that.
+   Every list is as wide as the others, so that their rows line up whatever their number. */
 .sc-work {
   display: grid;
   gap: var(--sc-space-6);
 }
 
 .sc-work-lists {
+  --sc-work-gap: var(--sc-space-7);
   display: grid;
-  gap: var(--sc-space-6);
-  max-width: var(--sc-width-prose);
+  grid-template-columns: repeat(
+      auto-fill,
+      minmax(min(100%, max(24rem, calc((100% - var(--sc-work-gap)) / 2))), 1fr)
+    );
+  align-items: start;
+  gap: var(--sc-space-6) var(--sc-work-gap);
 }
 
 /* Small screens. */
