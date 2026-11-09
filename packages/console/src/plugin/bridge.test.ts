@@ -63,7 +63,11 @@ describe("isBridgeToFrame", () => {
     };
     expect(isBridgeToFrame({ ...INIT, workspace })).toBe(true);
     expect(isBridgeToFrame(INIT)).toBe(true);
+    // The language for whoever has none (ADR-0081), from a console that says it.
+    expect(isBridgeToFrame({ ...INIT, workspace: { ...workspace, language: "ko" } })).toBe(true);
     for (const wrong of [
+      { ...workspace, language: 7 },
+      { ...workspace, language: "" },
       { ...workspace, name: 7 },
       { ...workspace, languages: "ko" },
       { ...workspace, languages: [7] },

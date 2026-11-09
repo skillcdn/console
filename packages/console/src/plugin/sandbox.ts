@@ -59,12 +59,14 @@ export function forbiddenImportsIn(source: string): string[] {
 }
 
 /**
- * A call of a removed global by its bare name, or through `globalThis`: `fetch(` and
- * `globalThis.fetch(`, and not `ctx.fetch(`, a member of the context, which is what the host
- * offers in the global's place.
+ * A call of a removed global by its bare name, or through the global object, `globalThis` or
+ * Node's `global`: `fetch(`, `globalThis.fetch(` and `global?.fetch(`, and not `ctx.fetch(` or
+ * `this.#fetch(`, a member, which is what the host offers in the global's place. Text, not a
+ * parse: a name bound to the context's fetch, `({ fetch }) => fetch(url)`, or a method of that
+ * name, reads as the global too.
  */
 const GLOBAL_USES =
-  /(?:\bglobalThis\s*\.\s*|(?<![.\w$]))(fetch|WebSocket|EventSource|process\.binding|process\.dlopen)\s*\(/g;
+  /(?:\b(?:globalThis|global)\s*\??\.\s*|(?<![.\w$#]))(fetch|WebSocket|EventSource|process\.binding|process\.dlopen)\s*\(/g;
 
 /** The removed globals a bundle's text calls, each once; a plugin that calls them fails at runtime. */
 export function removedGlobalsIn(source: string): string[] {

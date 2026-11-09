@@ -277,6 +277,7 @@ function isWorkspace(value: unknown): boolean {
   return (
     isRecord(value) &&
     typeof value.name === "string" &&
+    (value.language === undefined || isLine(value.language, 35)) &&
     Array.isArray(value.languages) &&
     value.languages.every((language) => typeof language === "string") &&
     isLine(value.timeZone, 100) &&

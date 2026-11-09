@@ -122,8 +122,13 @@ describe("removedGlobalsIn", () => {
       ).sort(),
     ).toEqual(["WebSocket", "fetch", "process.binding"]);
     // The context's own fetch is not the global, whatever the bundle calls the context.
-    expect(removedGlobalsIn("ctx.fetch(url); c?.fetch(url); this.fetch(url)")).toEqual([]);
+    expect(
+      removedGlobalsIn("ctx.fetch(url); c?.fetch(url); this.fetch(url); this.#fetch(url)"),
+    ).toEqual([]);
     expect(removedGlobalsIn("globalThis.fetch(url)")).toEqual(["fetch"]);
+    // Node's other name for the global object, and a call through it that may be undefined.
+    expect(removedGlobalsIn("global.fetch(url)")).toEqual(["fetch"]);
+    expect(removedGlobalsIn("globalThis?.WebSocket(url)")).toEqual(["WebSocket"]);
     expect(removedGlobalsIn("ctx.process.binding(x)")).toEqual([]);
     expect(removedGlobalsIn("const fetched = 1; prefetch(x); $fetch(x)")).toEqual([]);
   });
