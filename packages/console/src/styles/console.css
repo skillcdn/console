@@ -139,8 +139,10 @@
   --sc-hairline: 1px solid color-mix(in srgb, var(--sc-color-border) 70%, transparent);
   --sc-border-strong: 1px solid var(--sc-color-border-strong);
 
-  /* Layout. */
-  --sc-gutter: var(--sc-space-7);
+  /* Layout. The gutter at the sides of the header, the tabs and every page grows with the
+     window, from a step of the grid on a laptop to a wide margin on a large screen, so that a
+     page on a wide screen does not run to its very edges; a phone narrows it further below. */
+  --sc-gutter: clamp(var(--sc-space-7), 5vw, 10rem);
   --sc-width-prose: 46rem;
   --sc-width-aside: 18rem;
   --sc-column-width: 13.5rem;
