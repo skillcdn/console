@@ -48,6 +48,7 @@ import {
   restPackConnectStartedSchema,
   restPeopleSchema,
   restPersonSchema,
+  restPersonWorkBriefSchema,
   restPersonWorkSchema,
   restProjectRulesSchema,
   restProjectSchema,
@@ -67,6 +68,7 @@ import {
   restTokensSchema,
   restVersionSchema,
   restVersionsSchema,
+  restWorkBriefSchema,
   restWorkSchema,
   restWorkspacePackConnectSchema,
   restWorkspaceSchema,
@@ -2990,6 +2992,46 @@ describe("the schedule and the roadmap", () => {
       expect(response.status, query).toBe(400);
       expect(await errorOf(response)).toBe("request.invalid");
     }
+  });
+
+  it("answers the plate brief, without the bodies its page does not show", async () => {
+    const aliceId = await personId("Alice");
+    const task = await createTask(alice, {
+      title: "Brief me",
+      body: "A long body the plate's page never shows.",
+      workerIds: [aliceId],
+    });
+    const decision = restDecisionSchema.parse(
+      await (
+        await send(bob, "POST", `${IN}/decisions`, {
+          question: "Brief?",
+          body: "Context the plate's page does not show.",
+          options: [{ label: "Yes" }, { label: "No" }],
+          deciderId: aliceId,
+        })
+      ).json(),
+    );
+    const brief = restWorkBriefSchema.parse(
+      await (await get(alice, `${REST_ROUTES.work}?brief=true`)).json(),
+    );
+    const mine = brief.tasks.find((item) => item.task.id === task.id);
+    expect(mine?.task.title).toBe("Brief me");
+    expect(mine?.task).not.toHaveProperty("body");
+    const waiting = brief.decisions.find((item) => item.decision.id === decision.id);
+    expect(waiting?.decision.question).toBe("Brief?");
+    expect(waiting?.decision).not.toHaveProperty("body");
+    // The plate as the command reads it keeps the bodies.
+    const whole = restWorkSchema.parse(await (await get(alice, REST_ROUTES.work)).json());
+    expect(whole.tasks.find((item) => item.task.id === task.id)?.task.body).toBe(
+      "A long body the plate's page never shows.",
+    );
+    // Another person's plate, brief, for whoever oversees them.
+    const overseen = restPersonWorkBriefSchema.parse(
+      await (await get(alice, `${personWorkPath(aliceId)}?brief=true`)).json(),
+    );
+    expect(overseen.tasks.find((item) => item.task.id === task.id)?.task).not.toHaveProperty(
+      "body",
+    );
   });
 
   it("list what is on a person's plate across the projects they may see", async () => {

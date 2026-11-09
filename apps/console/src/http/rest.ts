@@ -43,7 +43,7 @@ import {
   type RestPackConnect,
   type RestPackConnectStarted,
   type RestPeople,
-  type RestPersonWork,
+  type RestPersonWorkBrief,
   type RestProjectRules,
   type RestProjects,
   type RestReachedDecision,
@@ -60,7 +60,7 @@ import {
   type RestTokenCreated,
   type RestTokens,
   type RestVersions,
-  type RestWork,
+  type RestWorkBrief,
   type RestWorkspace,
   type RestWorkspacePackConnect,
   RULES_PATH,
@@ -279,6 +279,7 @@ import {
   restCategory,
   restComment,
   restDecision,
+  restDecisionBrief,
   restDocument,
   restDocumentSummary,
   restEvent,
@@ -292,6 +293,7 @@ import {
   restRun,
   restSession,
   restTask,
+  restTaskBrief,
   restTeam,
   restToken,
   restVersion,
@@ -1905,16 +1907,21 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       listWaitingDecisionsFor(database, person.workspaceId, person, LIST_LIMIT),
     ]);
     const projectOf = await projectsOfDecisions(person, projects, decisions);
+    // The pages ask for the plate brief: without the bodies, which they do not show and which
+    // weigh more than the rest of the plate together; the command reads it whole.
+    const brief = c.req.query("brief") === "true";
+    const taskOf: typeof restTaskBrief = brief ? restTaskBrief : restTask;
+    const decisionOf: typeof restDecisionBrief = brief ? restDecisionBrief : restDecision;
     const withProject = (task: TaskRecord) => {
       const project = projectOf(task.projectId);
-      return project === undefined ? [] : [{ project, task: restTask(task) }];
+      return project === undefined ? [] : [{ project, task: taskOf(task) }];
     };
-    const body: RestWork = {
+    const body: RestWorkBrief = {
       tasks: tasks.flatMap(withProject),
       closed: closed.flatMap(withProject),
       decisions: decisions.flatMap((decision) => {
         const project = projectOf(decision.projectId);
-        return project === undefined ? [] : [{ project, decision: restDecision(decision) }];
+        return project === undefined ? [] : [{ project, decision: decisionOf(decision) }];
       }),
     };
     return c.json(body);
@@ -1951,11 +1958,12 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       listClosedTasksOf(database, asker.workspaceId, subject, asker, LIST_LIMIT),
     ]);
     const projectOf = projectRefsOf(projects);
+    const taskOf: typeof restTaskBrief = c.req.query("brief") === "true" ? restTaskBrief : restTask;
     const withProject = (task: TaskRecord) => {
       const project = projectOf(task.projectId);
-      return project === undefined ? [] : [{ project, task: restTask(task) }];
+      return project === undefined ? [] : [{ project, task: taskOf(task) }];
     };
-    const body: RestPersonWork = {
+    const body: RestPersonWorkBrief = {
       tasks: tasks.flatMap(withProject),
       closed: closed.flatMap(withProject),
     };

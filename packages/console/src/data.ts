@@ -39,6 +39,7 @@ import {
   type RestPerson,
   type RestPersonPatch,
   type RestPersonWork,
+  type RestPersonWorkBrief,
   type RestPlugin,
   type RestProject,
   type RestProjectInput,
@@ -65,6 +66,7 @@ import {
   type RestVersion,
   type RestVersions,
   type RestWork,
+  type RestWorkBrief,
   type RestWorkspace,
   type RestWorkspacePackConnect,
   type RestWorkspacePatch,
@@ -142,6 +144,8 @@ export interface ConsoleActions {
   updateGoal(id: string, patch: RestGoalPatch): Promise<RestGoal>;
   /** What is on the person's plate across their projects, read when the page asks. */
   work(signal?: AbortSignal): Promise<RestWork>;
+  /** The plate as its page shows it: without the bodies of the tasks and the decisions. */
+  plate(signal?: AbortSignal): Promise<RestWorkBrief>;
   /** The decisions addressed to the person (ADR-0042) across their projects, a page at a time, read when the page asks. */
   myDecisions(
     filter: {
@@ -227,6 +231,8 @@ export interface ConsoleActions {
   refreshPlugins(): Promise<void>;
   /** Another person's plate: for an administrator, or an owner of a project they are in. */
   personWork(personId: string, signal?: AbortSignal): Promise<RestPersonWork>;
+  /** Another person's plate as its page shows it: without the tasks' bodies. */
+  personPlate(personId: string, signal?: AbortSignal): Promise<RestPersonWorkBrief>;
   /** The tokens of another person, and the way to take one away: for an administrator. */
   personTokens(personId: string, signal?: AbortSignal): Promise<RestTokens>;
   revokePersonToken(personId: string, tokenId: string): Promise<void>;
@@ -789,6 +795,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
         return goal;
       },
       work: (signal) => client.work(signal),
+      plate: (signal) => client.plate(signal),
       myDecisions: (filter, signal) => client.myDecisions(filter, signal),
       reachDecision: (id, signal) => client.decision(id, signal),
       async answerReachedDecision(id, input) {
@@ -934,6 +941,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
       approveConnection: (code, input) => client.approveConnection(code, input),
       denyConnection: (code) => client.denyConnection(code),
       personWork: (personId, signal) => client.personWork(personId, signal),
+      personPlate: (personId, signal) => client.personPlate(personId, signal),
       personTokens: (personId, signal) => client.personTokens(personId, signal),
       revokePersonToken: (personId, tokenId) => client.revokePersonToken(personId, tokenId),
       async signOut() {

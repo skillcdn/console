@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { RestTask } from "../api.js";
+import type { RestTaskBrief } from "../api.js";
 import { useWords } from "../i18n/index.js";
 import { ShowMore, usePaged } from "./paged.js";
 import { Badge, CategoryBadge, DueBadge, StateBadge, Workers } from "./ui.js";
@@ -9,20 +9,21 @@ import { Badge, CategoryBadge, DueBadge, StateBadge, Workers } from "./ui.js";
 // in one line; a long list shows a page at a time. Takes its data as props and nothing from
 // the network.
 
-export interface TaskListProps {
-  readonly tasks: readonly RestTask[];
-  readonly taskHref: (task: RestTask) => string;
+/** The tasks as they came, with at least what a row says (`RestTaskBrief`); the callbacks are given them as they are. */
+export interface TaskListProps<T extends RestTaskBrief = RestTaskBrief> {
+  readonly tasks: readonly T[];
+  readonly taskHref: (task: T) => string;
   /** Whether each row says the task's state: where the rows are not grouped by it. */
   readonly showState?: boolean | undefined;
   /** What the row says the task belongs to, where tasks of several projects are listed together. */
-  readonly projectOf?: ((task: RestTask) => ReactNode) | undefined;
+  readonly projectOf?: ((task: T) => ReactNode) | undefined;
   /** The day to count due days from; the browser's today when left out. */
   readonly today?: string | undefined;
   readonly label?: string | undefined;
   readonly empty?: ReactNode;
 }
 
-export function TaskList(props: TaskListProps) {
+export function TaskList<T extends RestTaskBrief>(props: TaskListProps<T>) {
   const words = useWords();
   const { shown, rest, more } = usePaged(props.tasks);
   if (props.tasks.length === 0) {

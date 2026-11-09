@@ -2,6 +2,7 @@ import type {
   RestCategory,
   RestComment,
   RestDecision,
+  RestDecisionBrief,
   RestDocument,
   RestDocumentFile,
   RestDocumentSummary,
@@ -15,6 +16,7 @@ import type {
   RestRun,
   RestSession,
   RestTask,
+  RestTaskBrief,
   RestTeam,
   RestToken,
   RestVersion,
@@ -175,6 +177,18 @@ export function restTask(task: TaskRecord): RestTask {
     createdAt: task.createdAt.toISOString(),
     updatedAt: task.updatedAt.toISOString(),
   };
+}
+
+/** A task as the plate's page asks for it (`brief=true`): everything but its body. */
+export function restTaskBrief(task: TaskRecord): RestTaskBrief {
+  const { body: _body, ...brief } = restTask(task);
+  return brief;
+}
+
+/** A decision as the plate's page asks for it (`brief=true`): everything but its body. */
+export function restDecisionBrief(decision: DecisionRecord): RestDecisionBrief {
+  const { body: _body, ...brief } = restDecision(decision);
+  return brief;
 }
 
 export function restDecision(decision: DecisionRecord): RestDecision {

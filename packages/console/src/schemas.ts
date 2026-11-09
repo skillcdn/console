@@ -976,6 +976,33 @@ export const restPersonWorkSchema = z.object({
 });
 export type RestPersonWork = z.infer<typeof restPersonWorkSchema>;
 
+/** A task as the plate's page asks for it: everything but its body, which the page does not show. */
+export const restTaskBriefSchema = z.omit(restTaskSchema, { body: true });
+export type RestTaskBrief = z.infer<typeof restTaskBriefSchema>;
+
+/** A decision as the plate's page asks for it: everything but its body. */
+export const restDecisionBriefSchema = z.omit(restDecisionSchema, { body: true });
+export type RestDecisionBrief = z.infer<typeof restDecisionBriefSchema>;
+
+/**
+ * `GET /api/v1/work?brief=true`: the plate as `GET /api/v1/work` answers it, the tasks and the
+ * decisions without their bodies, which the plate's page does not show and which weigh more
+ * than the rest of the plate together. What the pages read; the command reads the plate whole.
+ */
+export const restWorkBriefSchema = z.object({
+  tasks: z.array(z.object({ project: projectRef, task: restTaskBriefSchema })),
+  closed: z.optional(z.array(z.object({ project: projectRef, task: restTaskBriefSchema }))),
+  decisions: z.array(z.object({ project: projectRef, decision: restDecisionBriefSchema })),
+});
+export type RestWorkBrief = z.infer<typeof restWorkBriefSchema>;
+
+/** `GET /api/v1/people/<id>/work?brief=true`: another person's plate without the tasks' bodies. */
+export const restPersonWorkBriefSchema = z.object({
+  tasks: restWorkBriefSchema.shape.tasks,
+  closed: restWorkBriefSchema.shape.closed,
+});
+export type RestPersonWorkBrief = z.infer<typeof restPersonWorkBriefSchema>;
+
 /**
  * What `POST /api/v1/projects/<key>/decisions` is sent: the question, its context, and the
  * options. As JSON; or, with files put on the decision (ADR-0055), as the part `decision` of a

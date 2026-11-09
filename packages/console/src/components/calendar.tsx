@@ -4,7 +4,7 @@ import {
   type RestCategory,
   type RestGoal,
   type RestPerson,
-  type RestTask,
+  type RestTaskBrief,
   type WeekStart,
 } from "../api.js";
 import {
@@ -37,14 +37,14 @@ import { CategoryBadge, cx, PersonChip, personName, StateBadge, Time, Workers } 
 // facts its own page lists, above or below it where there is more room. Takes its data as props
 // and nothing from the network; the month or the week shown is the address's (ADR-0010).
 
-const isOpen = (task: RestTask): boolean => OPEN_TASK_STATES.includes(task.state);
+const isOpen = (task: RestTaskBrief): boolean => OPEN_TASK_STATES.includes(task.state);
 
 /** Whether a task lies across days: a start and a due day, and the due day after the start. */
-const spans = (task: RestTask): boolean =>
+const spans = (task: RestTaskBrief): boolean =>
   task.startsOn !== null && task.dueOn !== null && task.startsOn < task.dueOn;
 
-export interface CalendarProps {
-  readonly tasks: readonly RestTask[];
+export interface CalendarProps<T extends RestTaskBrief = RestTaskBrief> {
+  readonly tasks: readonly T[];
   /** The month shown: `2026-10`. */
   readonly month: string;
   /** The day to count from; the browser's today when left out. */
@@ -53,7 +53,7 @@ export interface CalendarProps {
   readonly categories?: readonly RestCategory[] | undefined;
   /** The project's goals, so that the task under the pointer is shown with its goal's title, and, given `goalHref`, so that each goal marks its target day. */
   readonly goals?: readonly RestGoal[] | undefined;
-  readonly taskHref: (task: RestTask) => string;
+  readonly taskHref: (task: T) => string;
   /** Where a goal's page is: given, the goals mark their target days on the month (ADR-0026). */
   readonly goalHref?: ((goal: RestGoal) => string) | undefined;
   /** Where the calendar is on another month. */
@@ -63,8 +63,8 @@ export interface CalendarProps {
 }
 
 /** One task's stretch across one week: which columns it covers, and in which lane it lies. */
-export interface WeekSegment {
-  readonly task: RestTask;
+export interface WeekSegment<T extends RestTaskBrief = RestTaskBrief> {
+  readonly task: T;
   /** The first and the last column (0 to 6) the task covers in this week. */
   readonly from: number;
   readonly to: number;
@@ -79,7 +79,10 @@ export interface WeekSegment {
  * in the first lane where it crosses nothing that was laid before it. The longest and earliest
  * go first, so that the lanes stay few.
  */
-export function weekSegments(week: readonly GridDay[], tasks: readonly RestTask[]): WeekSegment[] {
+export function weekSegments<T extends RestTaskBrief>(
+  week: readonly GridDay[],
+  tasks: readonly T[],
+): WeekSegment<T>[] {
   const first = week[0]?.day;
   const last = week[week.length - 1]?.day;
   if (first === undefined || last === undefined) {
@@ -113,7 +116,7 @@ export function weekSegments(week: readonly GridDay[], tasks: readonly RestTask[
   });
 }
 
-function push(map: Map<string, RestTask[]>, day: string, task: RestTask): void {
+function push<T extends RestTaskBrief>(map: Map<string, T[]>, day: string, task: T): void {
   const list = map.get(day);
   if (list === undefined) {
     map.set(day, [task]);
@@ -123,8 +126,8 @@ function push(map: Map<string, RestTask[]>, day: string, task: RestTask): void {
 }
 
 /** The tasks that sit on one day each, by day: due on it, or beginning on it with no due day yet. */
-function onDays(tasks: readonly RestTask[]): ReadonlyMap<string, readonly RestTask[]> {
-  const on = new Map<string, RestTask[]>();
+function onDays<T extends RestTaskBrief>(tasks: readonly T[]): ReadonlyMap<string, readonly T[]> {
+  const on = new Map<string, T[]>();
   for (const task of tasks) {
     if (spans(task)) {
       continue;
@@ -142,7 +145,7 @@ function onDays(tasks: readonly RestTask[]): ReadonlyMap<string, readonly RestTa
 }
 
 /** The tasks of one day: those on it alone and those lying across it, the open ones first. */
-export function tasksOn(day: string, tasks: readonly RestTask[]): RestTask[] {
+export function tasksOn<T extends RestTaskBrief>(day: string, tasks: readonly T[]): T[] {
   return tasks
     .filter((task) =>
       spans(task)
@@ -153,7 +156,7 @@ export function tasksOn(day: string, tasks: readonly RestTask[]): RestTask[] {
 }
 
 /** How a task reads: struck through once it is over, and marked once its due day is past. */
-const tone = (task: RestTask, now: string): string =>
+const tone = (task: RestTaskBrief, now: string): string =>
   cx(
     !isOpen(task) && "sc-calendar-over",
     isOpen(task) && task.dueOn !== null && task.dueOn < now && "sc-calendar-late",
@@ -187,7 +190,7 @@ export function placeTip(
 
 /** The item the pointer is on: a task on a day, since a bar has an item on each of its days, and where its card goes. */
 interface Pointed {
-  readonly task: RestTask;
+  readonly task: RestTaskBrief;
   readonly day: string;
   readonly place: TipPlace;
 }
@@ -195,11 +198,11 @@ interface Pointed {
 /** The item under the pointer, measured as the pointer arrives, since only the browser knows where it is. */
 function usePointed(): [
   Pointed | null,
-  (task: RestTask, day: string, item: HTMLElement) => void,
+  (task: RestTaskBrief, day: string, item: HTMLElement) => void,
   () => void,
 ] {
   const [pointed, setPointed] = useState<Pointed | null>(null);
-  const point = (task: RestTask, day: string, item: HTMLElement): void =>
+  const point = (task: RestTaskBrief, day: string, item: HTMLElement): void =>
     setPointed({
       task,
       day,
@@ -213,7 +216,7 @@ function usePointed(): [
 }
 
 export interface TaskTipProps {
-  readonly task: RestTask;
+  readonly task: RestTaskBrief;
   /** The project's goals, so that the task's goal is named by its title; without them the row is left out. */
   readonly goals?: readonly RestGoal[] | undefined;
   readonly place: TipPlace;
@@ -333,15 +336,15 @@ export function TaskTip(props: TaskTipProps) {
   );
 }
 
-interface WeekRowProps {
+interface WeekRowProps<T extends RestTaskBrief> {
   readonly week: readonly GridDay[];
-  readonly segments: readonly WeekSegment[];
+  readonly segments: readonly WeekSegment<T>[];
   /** The tasks on one day each, by day. */
-  readonly on: ReadonlyMap<string, readonly RestTask[]>;
+  readonly on: ReadonlyMap<string, readonly T[]>;
   readonly now: string;
-  readonly taskHref: (task: RestTask) => string;
+  readonly taskHref: (task: T) => string;
   /** What stands before a task's title where the tasks are of several projects: the project's mark. */
-  readonly markOf?: ((task: RestTask) => ReactNode) | undefined;
+  readonly markOf?: ((task: T) => ReactNode) | undefined;
   /** Whether the person who has a task stands before its title, where the days hold several people's work. */
   readonly people?: boolean | undefined;
   /** The item under the pointer, shown in full within that item, or none. */
@@ -352,7 +355,7 @@ interface WeekRowProps {
   readonly goalsOn?: ReadonlyMap<string, readonly RestGoal[]> | undefined;
   readonly goalHref?: ((goal: RestGoal) => string) | undefined;
   /** The pointer, or the focus, arrived on a task's item on a day. */
-  readonly onPoint: (task: RestTask, day: string, item: HTMLElement) => void;
+  readonly onPoint: (task: T, day: string, item: HTMLElement) => void;
   /** It left. */
   readonly onLeave: () => void;
   /** The day whose tasks are listed under the month, where a day can be picked. */
@@ -385,7 +388,7 @@ const spanStyle = (span: number): CSSProperties => ({ "--sc-span": span }) as CS
 export const DAY_SHOWN = 3;
 
 /** One week as a row of cells: the bars across the days in their lanes, then the tasks on each day. */
-function WeekRow(props: WeekRowProps) {
+function WeekRow<T extends RestTaskBrief>(props: WeekRowProps<T>) {
   const { week, segments, now } = props;
   const words = useWords().calendar;
   const { tag } = useLanguage();
@@ -401,18 +404,18 @@ function WeekRow(props: WeekRowProps) {
       }
       return after;
     });
-  const pointing = (task: RestTask, day: string) => ({
+  const pointing = (task: T, day: string) => ({
     onMouseEnter: (event: SyntheticEvent<HTMLElement>) =>
       props.onPoint(task, day, event.currentTarget),
     onMouseLeave: props.onLeave,
     onFocus: (event: SyntheticEvent<HTMLElement>) => props.onPoint(task, day, event.currentTarget),
     onBlur: props.onLeave,
   });
-  const tipIn = (task: RestTask, day: string): ReactNode =>
+  const tipIn = (task: RestTaskBrief, day: string): ReactNode =>
     props.pointed !== null && props.pointed.task.id === task.id && props.pointed.day === day ? (
       <TaskTip task={task} goals={props.goals} place={props.pointed.place} />
     ) : null;
-  const who = (task: RestTask): ReactNode =>
+  const who = (task: RestTaskBrief): ReactNode =>
     props.people === true ? <Workers workers={task.workers} size="xs" shown={2} /> : null;
   const lanes = segments.reduce((most, segment) => Math.max(most, segment.lane + 1), 0);
   return (
@@ -569,7 +572,7 @@ function WeekRow(props: WeekRowProps) {
   );
 }
 
-export function Calendar(props: CalendarProps) {
+export function Calendar<T extends RestTaskBrief>(props: CalendarProps<T>) {
   const words = useWords().calendar;
   const { tag } = useLanguage();
   const [pointed, point, leave] = usePointed();
@@ -689,23 +692,23 @@ export function Calendar(props: CalendarProps) {
   );
 }
 
-export interface WeekProps {
-  readonly tasks: readonly RestTask[];
+export interface WeekProps<T extends RestTaskBrief = RestTaskBrief> {
+  readonly tasks: readonly T[];
   /** A day of the week shown; today's week when left out. */
   readonly day?: string | undefined;
   /** The day to count from; the browser's today when left out. */
   readonly today?: string | undefined;
-  readonly taskHref: (task: RestTask) => string;
+  readonly taskHref: (task: T) => string;
   /** Where the week of a day is shown. */
   readonly weekHref: (day: string) => string;
   /** What stands before a task's title where the tasks are of several projects: the project's mark. */
-  readonly markOf?: ((task: RestTask) => ReactNode) | undefined;
+  readonly markOf?: ((task: T) => ReactNode) | undefined;
   /** The day the week begins on, as the workspace says (ADR-0035); the language's when left out. */
   readonly weekStart?: WeekStart | undefined;
 }
 
 /** One week on its own: the days as columns, the tasks on them, and the weeks around a step away. */
-export function Week(props: WeekProps) {
+export function Week<T extends RestTaskBrief>(props: WeekProps<T>) {
   const words = useWords().calendar.week;
   const { tag } = useLanguage();
   const [pointed, point, leave] = usePointed();
@@ -788,9 +791,13 @@ export interface WorkloadRow {
  * tasks with none last; this week is the days from today through the week's last day, the week
  * beginning on `firstDay` (1 for Monday, 7 for Sunday).
  */
-export function workloadOf(tasks: readonly RestTask[], today: string, firstDay = 1): WorkloadRow[] {
+export function workloadOf(
+  tasks: readonly RestTaskBrief[],
+  today: string,
+  firstDay = 1,
+): WorkloadRow[] {
   const weekEnd = weekOf(today, firstDay).at(-1) ?? today;
-  const rows = new Map<string, { person: RestPerson | undefined; tasks: RestTask[] }>();
+  const rows = new Map<string, { person: RestPerson | undefined; tasks: RestTaskBrief[] }>();
   for (const task of tasks.filter(isOpen)) {
     const workers: readonly (RestPerson | undefined)[] =
       task.workers.length === 0 ? [undefined] : task.workers;
@@ -804,7 +811,7 @@ export function workloadOf(tasks: readonly RestTask[], today: string, firstDay =
       }
     }
   }
-  const count = (list: readonly RestTask[]): Omit<WorkloadRow, "person"> => ({
+  const count = (list: readonly RestTaskBrief[]): Omit<WorkloadRow, "person"> => ({
     open: list.length,
     inProgress: list.filter((task) => task.state === "in_progress" || task.state === "in_review")
       .length,
@@ -827,7 +834,7 @@ export function workloadOf(tasks: readonly RestTask[], today: string, firstDay =
 }
 
 export interface WorkloadProps {
-  readonly tasks: readonly RestTask[];
+  readonly tasks: readonly RestTaskBrief[];
   readonly today?: string | undefined;
   /** The day the week begins on, as the workspace says (ADR-0035); the language's when left out. */
   readonly weekStart?: WeekStart | undefined;

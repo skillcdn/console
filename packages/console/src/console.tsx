@@ -36,7 +36,7 @@ import {
   type RestTaskInput,
   type RestToken,
   type RestTokenCreated,
-  type RestWork,
+  type RestWorkBrief,
   RULES_PATH,
   RULES_TITLE,
   type TaskState,
@@ -972,7 +972,7 @@ function ProjectPage(props: {
   const { busy, error, act } = useAction();
   const tasksById = useMemo(() => new Map(data.tasks.map((task) => [task.id, task])), [data.tasks]);
   const key = project.key;
-  const href = (task: RestTask) => taskHref(key, task.number);
+  const href = (task: { readonly number: number }) => taskHref(key, task.number);
   const toDoc = (path: string) => docHref(key, path);
   const owner = project.role === "owner";
 
@@ -2267,9 +2267,9 @@ function PersonAgentsPage(props: {
 
 /** What a plate's page shows: the tasks, open and lately closed, and the decisions waiting on the person's own. */
 interface Plate {
-  readonly tasks: RestWork["tasks"];
-  readonly closed?: RestWork["closed"] | undefined;
-  readonly decisions?: RestWork["decisions"] | undefined;
+  readonly tasks: RestWorkBrief["tasks"];
+  readonly closed?: RestWorkBrief["closed"] | undefined;
+  readonly decisions?: RestWorkBrief["decisions"] | undefined;
 }
 
 /**
@@ -2287,12 +2287,38 @@ function rememberedAs<T>(key: string): T | undefined {
   return shownBefore.get(key) as T | undefined;
 }
 
+/** How long an answer asked for early stands for the page's own; past it, the page reads anew. */
+const EARLY_FRESH_MS = 30_000;
+/**
+ * What the page the console opened on asked for along with who is signed in, by the name the
+ * page takes it under: its own data a round trip sooner than once the person and the workspace
+ * are known. Taken once, by the page it was asked for.
+ */
+const askedEarly = new Map<string, { readonly answer: Promise<unknown>; readonly at: number }>();
+function askEarly(name: string, ask: () => Promise<unknown>): void {
+  if (!askedEarly.has(name)) {
+    const answer = ask();
+    answer.catch(() => undefined);
+    askedEarly.set(name, { answer, at: Date.now() });
+  }
+}
+/** The answer asked for early under the name, once, while it is fresh; nothing otherwise. */
+function takeEarly<T>(name: string): Promise<T> | undefined {
+  const asked = askedEarly.get(name);
+  askedEarly.delete(name);
+  return asked !== undefined && Date.now() - asked.at <= EARLY_FRESH_MS
+    ? (asked.answer as Promise<T>)
+    : undefined;
+}
+
 function PlatePage(props: {
   readonly components: ConsoleComponents;
   /** Reads the plate; stable across renders, since the page reads again whenever it changes. */
   readonly load: (signal: AbortSignal) => Promise<Plate>;
   /** What the plate is remembered by, with whose it is: come back to, the page shows it at once and reads again. */
   readonly remember: string;
+  /** The name the plate was asked for under as the console opened (`askEarly`), where it was; taken once. */
+  readonly early?: string | undefined;
   readonly title: string;
   /** What stands beside the title: the way back, on another person's plate. */
   readonly aside?: ReactNode;
@@ -2308,7 +2334,7 @@ function PlatePage(props: {
   readonly weekStart?: WeekStart | undefined;
 }) {
   const words = useWords();
-  const { components, load, couldNotLoad, refused, remember } = props;
+  const { components, load, couldNotLoad, refused, remember, early } = props;
   const [plate, setPlate] = useState<Plate | undefined>(() => rememberedAs<Plate>(remember));
   const [problem, setProblem] = useState<string | undefined>(undefined);
   const [forbidden, setForbidden] = useState(false);
@@ -2317,7 +2343,9 @@ function PlatePage(props: {
     setPlate(rememberedAs<Plate>(remember));
     setProblem(undefined);
     setForbidden(false);
-    load(controller.signal)
+    // What was asked for as the console opened is taken; else the plate is read now.
+    const asked = early === undefined ? undefined : takeEarly<Plate>(early);
+    (asked === undefined ? load(controller.signal) : asked.catch(() => load(controller.signal)))
       .then((answer) => {
         if (!controller.signal.aborted) {
           shownBefore.set(remember, answer);
@@ -2339,7 +2367,7 @@ function PlatePage(props: {
         }
       });
     return () => controller.abort();
-  }, [load, couldNotLoad, refused, remember]);
+  }, [load, couldNotLoad, refused, remember, early]);
   return (
     <>
       <div className="sc-page-head">
@@ -2482,7 +2510,13 @@ function useMyDecisions(
     async (offset: number, signal?: AbortSignal) => {
       setBusy(true);
       try {
-        const page = await myDecisions({ raised, limit: MY_DECISIONS_PAGE, offset }, signal);
+        const ask = () => myDecisions({ raised, limit: MY_DECISIONS_PAGE, offset }, signal);
+        // The first page may have been asked for as the console opened: taken, else read now.
+        const asked =
+          offset === 0
+            ? takeEarly<RestMyDecisions>(`decisions:${raised ? "raised" : "addressed"}`)
+            : undefined;
+        const page = asked === undefined ? await ask() : await asked.catch(ask);
         if (signal?.aborted === true) {
           return;
         }
@@ -2585,12 +2619,13 @@ function WorkPage(props: {
   readonly week: string | undefined;
 }) {
   const words = useWords();
-  const { work } = props.data.actions;
+  const { plate } = props.data.actions;
   return (
     <PlatePage
       components={props.components}
-      load={work}
+      load={plate}
       remember={`work:${props.data.me?.person?.id ?? ""}`}
+      early="work"
       title={words.work.title}
       week={props.week}
       weekStart={weekStartOf(props.data.me?.workspace)}
@@ -2613,8 +2648,8 @@ function PersonWorkPage(props: {
   const { id, data } = props;
   const person = data.people.find((candidate) => candidate.id === id);
   const name = person === undefined ? "?" : personName(person);
-  const { personWork } = data.actions;
-  const load = useCallback((signal: AbortSignal) => personWork(id, signal), [personWork, id]);
+  const { personPlate } = data.actions;
+  const load = useCallback((signal: AbortSignal) => personPlate(id, signal), [personPlate, id]);
   return (
     <PlatePage
       components={props.components}
@@ -2969,6 +3004,22 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
     );
     const projectKey = projectOf(route);
     const data = useConsoleData(client, projectKey);
+    // The page the console opens on asks for its own data along with who is signed in, which
+    // useConsoleData asks for in the same breath, rather than once that answer has come: a
+    // round trip fewer before the page stands.
+    // biome-ignore lint/correctness/useExhaustiveDependencies: the page the console opened on, once
+    useEffect(() => {
+      if (route.name === "work") {
+        askEarly("work", () => client.plate());
+      } else if (route.name === "my-decisions") {
+        askEarly("decisions:addressed", () =>
+          client.myDecisions({ limit: MY_DECISIONS_PAGE, offset: 0 }),
+        );
+        askEarly("decisions:raised", () =>
+          client.myDecisions({ raised: true, limit: MY_DECISIONS_PAGE, offset: 0 }),
+        );
+      }
+    }, []);
     const failure = signInFailureOf(location.search);
     const title = data.me?.workspace.name ?? fallbackTitle;
     const viaToken = holdsToken(data);

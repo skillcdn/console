@@ -55,6 +55,7 @@ import {
   type RestPerson,
   type RestPersonPatch,
   type RestPersonWork,
+  type RestPersonWorkBrief,
   type RestPluginCommandInput,
   type RestPluginDetail,
   type RestPluginEnableInput,
@@ -103,6 +104,7 @@ import {
   type RestVersion,
   type RestVersions,
   type RestWork,
+  type RestWorkBrief,
   type RestWorkspace,
   type RestWorkspacePackConnect,
   type RestWorkspacePatch,
@@ -131,6 +133,7 @@ import {
   restPackConnectStartedSchema,
   restPeopleSchema,
   restPersonSchema,
+  restPersonWorkBriefSchema,
   restPersonWorkSchema,
   restPluginDetailSchema,
   restPluginEventsSchema,
@@ -163,6 +166,7 @@ import {
   restTokensSchema,
   restVersionSchema,
   restVersionsSchema,
+  restWorkBriefSchema,
   restWorkSchema,
   restWorkspacePackConnectSchema,
   restWorkspaceSchema,
@@ -642,6 +646,8 @@ export interface ConsoleClient {
   removeCategory(key: string): Promise<void>;
   /** What is on the asker's plate across the projects they may see: their open tasks, and the decisions waiting for them. */
   work(signal?: AbortSignal): Promise<RestWork>;
+  /** The plate as its page shows it: the same without the bodies of the tasks and the decisions, which weigh more than the rest of the plate together. */
+  plate(signal?: AbortSignal): Promise<RestWorkBrief>;
   /** The decisions addressed to the asker (ADR-0042) across the projects they may see, or with `raised` those they raised for someone else: a page, the waiting first; or only those. */
   myDecisions(
     filter?: { readonly open?: boolean; readonly raised?: boolean } & Page,
@@ -671,6 +677,8 @@ export interface ConsoleClient {
   readDecisionFile(decisionId: string, fileId: string, signal?: AbortSignal): Promise<FileRead>;
   /** Another person's plate, within what the asker may see: for an administrator, or an owner of a project they are in. */
   personWork(personId: string, signal?: AbortSignal): Promise<RestPersonWork>;
+  /** Another person's plate as its page shows it: without the tasks' bodies. */
+  personPlate(personId: string, signal?: AbortSignal): Promise<RestPersonWorkBrief>;
   /** The tokens of whoever asks. */
   tokens(signal?: AbortSignal): Promise<RestTokens>;
   /** The browsers whoever asks is signed in on (board #309): the current first, then the last used first. */
@@ -1385,6 +1393,14 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
     removeCategory: (key) => request("DELETE", `${base}${categoryPath(key)}`, undefined, undefined),
     work: (signal) =>
       request("GET", `${base}${REST_ROUTES.work}`, undefined, restWorkSchema, signal),
+    plate: (signal) =>
+      request(
+        "GET",
+        withQuery(REST_ROUTES.work, { brief: "true" }),
+        undefined,
+        restWorkBriefSchema,
+        signal,
+      ),
     myDecisions: (filter = {}, signal) =>
       request(
         "GET",
@@ -1415,6 +1431,14 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
       read(`${base}${decisionFilePath(decisionId, fileId)}`, fileId, signal),
     personWork: (personId, signal) =>
       request("GET", `${base}${personWorkPath(personId)}`, undefined, restPersonWorkSchema, signal),
+    personPlate: (personId, signal) =>
+      request(
+        "GET",
+        withQuery(personWorkPath(personId), { brief: "true" }),
+        undefined,
+        restPersonWorkBriefSchema,
+        signal,
+      ),
     tokens: (signal) =>
       request("GET", `${base}${REST_ROUTES.tokens}`, undefined, restTokensSchema, signal),
     sessions: (signal) =>

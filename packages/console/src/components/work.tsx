@@ -1,4 +1,4 @@
-import type { RestTask, RestWork, WeekStart } from "../api.js";
+import type { RestTaskBrief, RestWorkBrief, WeekStart } from "../api.js";
 import { deviceLanguage, firstDayOfWeek, today as todayOf, weekOf } from "../dates.js";
 import { useLanguage, useWords } from "../i18n/index.js";
 import { Week } from "./calendar.js";
@@ -15,16 +15,16 @@ import { PersonChip, Time } from "./ui.js";
 export interface WorkListProps {
   /** The tasks on the plate; and the decisions waiting on the person's own plate, left out on another's. */
   readonly work: {
-    readonly tasks: RestWork["tasks"];
+    readonly tasks: RestWorkBrief["tasks"];
     /** The person's tasks done or dropped and not yet put away: on the week, not in the lists. */
-    readonly closed?: RestWork["closed"] | undefined;
-    readonly decisions?: RestWork["decisions"] | undefined;
+    readonly closed?: RestWorkBrief["closed"] | undefined;
+    readonly decisions?: RestWorkBrief["decisions"] | undefined;
   };
   /** The day to count from; the browser's today when left out. */
   readonly today?: string | undefined;
   /** A day of the week shown at the top; today's week when left out. */
   readonly week?: string | undefined;
-  readonly taskHref: (projectKey: string, task: RestTask) => string;
+  readonly taskHref: (projectKey: string, task: RestTaskBrief) => string;
   readonly decisionHref: (projectKey: string, decisionId: string) => string;
   /** Where the page is with the week of a day at the top. */
   readonly weekHref: (day: string) => string;
@@ -42,12 +42,12 @@ export function WorkList(props: WorkListProps) {
   const { tasks, decisions } = props.work;
   const closed = props.work.closed ?? [];
   const projectOf = new Map([...tasks, ...closed].map((item) => [item.task.id, item.project]));
-  const hrefOf = (task: RestTask) => props.taskHref(projectOf.get(task.id)?.key ?? "", task);
-  const markOf = (task: RestTask) => {
+  const hrefOf = (task: RestTaskBrief) => props.taskHref(projectOf.get(task.id)?.key ?? "", task);
+  const markOf = (task: RestTaskBrief) => {
     const project = projectOf.get(task.id);
     return project === undefined ? undefined : <ProjectMark project={project} size="sm" />;
   };
-  const nameOf = (task: RestTask) => {
+  const nameOf = (task: RestTaskBrief) => {
     const project = projectOf.get(task.id);
     return project === undefined ? undefined : (
       <>
@@ -55,7 +55,7 @@ export function WorkList(props: WorkListProps) {
       </>
     );
   };
-  const groups: { readonly title: string; readonly tasks: RestTask[] }[] = [
+  const groups: { readonly title: string; readonly tasks: RestTaskBrief[] }[] = [
     { title: work.overdue, tasks: [] },
     { title: work.thisWeek, tasks: [] },
     { title: work.later, tasks: [] },
