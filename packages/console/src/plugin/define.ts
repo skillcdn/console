@@ -28,6 +28,7 @@ import {
   PLUGIN_KEY_PATTERN,
   RESERVED_ARG_NAMES,
   RESERVED_COMMAND_NAMES,
+  SETTING_KEY_PATTERN,
 } from "./manifest.js";
 
 const FIELD = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
@@ -363,8 +364,15 @@ export function defineEndpoint(input: EndpointInput): EndpointDefinition {
   if (input?.auth === "webhook" && input.roles !== undefined) {
     problems.push("a webhook endpoint names no roles: nobody is signed in");
   }
-  if (input?.secret !== undefined && (!isKey(input.secret) || input.auth !== "webhook")) {
-    problems.push("an endpoint's secret names a secret setting, for a webhook alone");
+  if (
+    input?.secret !== undefined &&
+    (typeof input.secret !== "string" ||
+      !SETTING_KEY_PATTERN.test(input.secret) ||
+      input.auth !== "webhook")
+  ) {
+    problems.push(
+      "an endpoint's secret names a secret setting, as settings are named (slackSigningSecret), for a webhook alone",
+    );
   }
   const methods = input?.methods ?? ["POST"];
   if (

@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-11-08
-- Closes open question 2 of [architecture.md](../architecture.md), under which notifications were a port of the console's with adapters to come. Follows [ADR-0049](0049-a-plugin-is-an-npm-package-installed-into-the-image-and-enabled-by-an-administrator.md), under which a feature of an organization's work is a plugin, and [console-plugins ADR-0008](https://github.com/skillcdn/console-plugins/blob/main/docs/adr/0008-every-notification-leaves-the-console-through-the-messenger-plugin.md), where the plugins' side of this was decided first.
+- Closes open question 2 of [architecture.md](../architecture.md), under which notifications were a port of the console's with adapters to come. Follows [ADR-0049](0049-a-plugin-is-an-npm-package-installed-into-the-image-and-enabled-by-an-administrator.md), under which a feature of an organization's work is a plugin, and [console-plugins ADR-0008](https://github.com/skillcdn/console-plugins/blob/main/docs/adr/0008-every-notification-leaves-the-console-through-the-messenger-plugin-which-reads-what-it-tells-as-a-principal.md), where the plugins' side of this was decided first.
 
 ## Context
 

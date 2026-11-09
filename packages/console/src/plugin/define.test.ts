@@ -298,6 +298,21 @@ describe("the definers", () => {
     expect(() =>
       defineEndpoint({ auth: "person", secret: "token", run: async () => ({ status: 200 }) }),
     ).toThrow(/for a webhook alone/);
+    // A secret setting is named as settings are (camelCase), not as a plugin key is.
+    expect(() =>
+      defineEndpoint({
+        auth: "webhook",
+        secret: "slack-signing",
+        run: async () => ({ status: 200 }),
+      }),
+    ).toThrow(/as settings are named/);
+    expect(
+      defineEndpoint({
+        auth: "webhook",
+        secret: "slackSigningSecret",
+        run: async () => ({ status: 200 }),
+      }).secret,
+    ).toBe("slackSigningSecret");
     expect(() =>
       defineEndpoint({ auth: "person", methods: ["TRACE"], run: async () => ({ status: 200 }) }),
     ).toThrow(/methods are among/);

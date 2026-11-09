@@ -58,7 +58,13 @@ export function forbiddenImportsIn(source: string): string[] {
   return [...found];
 }
 
-const GLOBAL_USES = /\b(fetch|WebSocket|EventSource|process\.binding|process\.dlopen)\s*\(/g;
+/**
+ * A call of a removed global by its bare name, or through `globalThis`: `fetch(` and
+ * `globalThis.fetch(`, and not `ctx.fetch(`, a member of the context, which is what the host
+ * offers in the global's place.
+ */
+const GLOBAL_USES =
+  /(?:\bglobalThis\s*\.\s*|(?<![.\w$]))(fetch|WebSocket|EventSource|process\.binding|process\.dlopen)\s*\(/g;
 
 /** The removed globals a bundle's text calls, each once; a plugin that calls them fails at runtime. */
 export function removedGlobalsIn(source: string): string[] {
