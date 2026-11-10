@@ -37,8 +37,9 @@
   /* Status. */
   --sc-color-success: #146b44;
   --sc-color-success-subtle: #d4efe1;
-  --sc-color-warning: #8f6100;
-  --sc-color-warning-subtle: #fff4cc;
+  /* Warning: an amber, its words at 5:1 or better on its own fill and on the page. */
+  --sc-color-warning: #a64b07;
+  --sc-color-warning-subtle: #fef3c7;
   --sc-color-danger: #b0273a;
   --sc-color-danger-subtle: #fadadf;
   /* For the plugins' pages (ADR-0054): a state that informs, one neither good nor bad, a palette for figures, tabular numerals. */
@@ -1181,11 +1182,11 @@ html[data-console] body {
   color: var(--sc-color-success);
 }
 
-/* Words on a yellow fill are a warm charcoal: a dark yellow reads as a muddy brown. */
+/* A pale amber with amber words and no line: dark words or a line on it read as a muddy brown. */
 .sc-badge-warning {
   background: var(--sc-color-warning-subtle);
   border-color: transparent;
-  color: #44403c;
+  color: var(--sc-color-warning);
 }
 
 .sc-badge-danger {
@@ -1274,8 +1275,9 @@ html[data-console] body {
   font-size: var(--sc-text-sm);
 }
 
+/* The line a clear amber: one of the warning's words on its pale amber reads as a brown outline. */
 .sc-callout-warning {
-  border-color: var(--sc-color-warning);
+  border-color: #e9a23b;
   background: var(--sc-color-warning-subtle);
 }
 
@@ -4049,7 +4051,8 @@ select.sc-input-quiet {
 /* A badge's kind in how it is filled, so that a plain badge, a category, a state, a priority
    and a due day beside each other are kinds and not five of one thing; the pill is the shape
    of them all and nothing stands before the words:
-   - a plain badge (a role, a count, public or private): a soft fill with a line of its hue;
+   - a plain badge (a role, a count, public or private): a soft fill with a line of its hue,
+     but for a warning, whose line on its pale amber reads as a brown outline;
    - a category and a state: a soft fill, no line;
    - a priority: a soft fill with dark words of its hue, low a grey, high an orange, urgent a red;
    - a due day: a line, a very light fill and bold words, all in the hue of how near the day
@@ -4058,7 +4061,8 @@ select.sc-input-quiet {
   border-color: color-mix(in srgb, currentColor 40%, transparent);
 }
 
-.sc-badge.sc-badge-kind-state {
+.sc-badge.sc-badge-kind-state,
+.sc-badge.sc-badge-warning {
   border-color: transparent;
 }
 
