@@ -1,6 +1,7 @@
 import { argUsage } from "../plugin/args.js";
 import type {
   RestAgent,
+  RestAgentSecret,
   RestArtifact,
   RestCategory,
   RestComment,
@@ -171,6 +172,16 @@ export function formatAgent(agent: RestAgent): string {
       ? "You supervise it: an administrator, or above it in the reporting line."
       : "You do not supervise it.",
   ].join("\n");
+}
+
+/** One secret of an agent account's store (ADR-0087): its name, when it was set and by which side, and the day it ends on where one is known. Never its value. */
+export function formatSecretLine(secret: RestAgentSecret): string {
+  const facts = [
+    `set ${moment(secret.setAt)}`,
+    ...(secret.seeded ? ["seeded by a supervisor"] : []),
+    ...(secret.expiresOn === null ? [] : [`ends on ${secret.expiresOn}`]),
+  ];
+  return `${secret.name}  (${facts.join(", ")})`;
 }
 
 /** The provider a listing names, as people call it. */

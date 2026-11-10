@@ -55,6 +55,10 @@ export const MIN_HANDLE_LENGTH = 2;
 export const MAX_HANDLE_LENGTH = 39;
 /** An agent account's name, in any language: one line. */
 export const MAX_PERSON_NAME_LENGTH = 80;
+/** A secret of an agent account's store (ADR-0087): its name, its value in bytes of UTF-8, and how many one account keeps. */
+export const MAX_AGENT_SECRET_NAME_LENGTH = 64;
+export const MAX_AGENT_SECRET_BYTES = 8 * 1024;
+export const MAX_AGENT_SECRETS = 200;
 /** A team's name (ADR-0073). */
 export const MAX_TEAM_NAME_LENGTH = 60;
 /** A team's key (ADR-0074), as long as a project's may be: the two are one set of names. */

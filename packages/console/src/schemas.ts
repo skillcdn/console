@@ -13,6 +13,8 @@ import * as z from "zod/mini";
 import { isDocumentPath } from "./documents.js";
 import {
   MAX_AGENT_LENGTH,
+  MAX_AGENT_SECRET_BYTES,
+  MAX_AGENT_SECRET_NAME_LENGTH,
   MAX_BODY_LENGTH,
   MAX_CATEGORY_KEY_LENGTH,
   MAX_CATEGORY_NAME_LENGTH,
@@ -77,6 +79,7 @@ import {
   RULES_SOURCES,
   RUN_ENDINGS,
   RUN_STATUSES,
+  SECRET_ACCESSES,
   SESSION_KINDS,
   SKILLS_STATUSES,
   TASK_PRIORITIES,
@@ -538,8 +541,28 @@ export const restPersonPatchSchema = z
   );
 export type RestPersonPatch = z.infer<typeof restPersonPatchSchema>;
 
-/** The words under `/agents/` and `/api/v1/agents/` that are the console's own, which no agent account may be called. */
-export const RESERVED_HANDLES: readonly string[] = ["new", "me", "proposals", "setup"];
+/**
+ * The words that are the console's own, which no agent account may be called: what stands under
+ * `/agents/` and `/api/v1/agents/` in an address, and what follows `console agent` in the
+ * command, where a handle stands too.
+ */
+export const RESERVED_HANDLES: readonly string[] = [
+  "new",
+  "me",
+  "proposals",
+  "setup",
+  "invite",
+  "secret",
+  "secrets",
+  "signals",
+  "tell",
+  "interrupt",
+  "stop",
+  "restart",
+  "reset",
+  "set",
+  "wake",
+];
 
 /** Whether `value` is spelled as a handle is: lowercase letters, digits and hyphens, a letter or a digit first and last, of the length one may be. */
 export function isHandle(value: string): boolean {
@@ -558,6 +581,73 @@ const handle = z.string().check(
   z.refine(isHandle, "must be 2 to 39 lowercase letters, digits and hyphens"),
   z.refine((value) => !RESERVED_HANDLES.includes(value), "is a word the addresses use"),
 );
+
+/** Whether `value` is spelled as a secret's name is: lowercase letters, digits, dots, hyphens and underscores, a letter or a digit first and last. */
+export function isSecretName(value: string): boolean {
+  return (
+    value.length <= MAX_AGENT_SECRET_NAME_LENGTH &&
+    /^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/.test(value)
+  );
+}
+
+/**
+ * A secret of an agent account's store as a listing says it (ADR-0087): its name, when it was
+ * set, whether a supervisor seeded it, and the day its value ends on where one is known. Never
+ * its value.
+ */
+export const restAgentSecretSchema = z.object({
+  name: z.string(),
+  setAt: instant,
+  seeded: z.boolean(),
+  expiresOn: z.nullable(day),
+});
+export type RestAgentSecret = z.infer<typeof restAgentSecretSchema>;
+
+/** `GET /api/v1/agents/me/secrets` and `GET /api/v1/agents/<handle>/secrets`: the names, by name. */
+export const restAgentSecretsSchema = z.object({ items: z.array(restAgentSecretSchema) });
+export type RestAgentSecrets = z.infer<typeof restAgentSecretsSchema>;
+
+/** `GET /api/v1/agents/me/secrets/<name>`: the secret with its value, for the account itself alone. */
+export const restAgentSecretValueSchema = z.object({
+  name: z.string(),
+  setAt: instant,
+  seeded: z.boolean(),
+  expiresOn: z.nullable(day),
+  value: z.string(),
+});
+export type RestAgentSecretValue = z.infer<typeof restAgentSecretValueSchema>;
+
+/**
+ * What `PUT .../secrets/<name>` is sent: the value, up to `MAX_AGENT_SECRET_BYTES` of UTF-8,
+ * and optionally the day it ends on, a product's long-lived token say, `null` for none.
+ */
+export const restAgentSecretInputSchema = z.object({
+  value: z.string().check(z.minLength(1), z.maxLength(MAX_AGENT_SECRET_BYTES)),
+  expiresOn: z.optional(z.nullable(day)),
+});
+export type RestAgentSecretInput = z.infer<typeof restAgentSecretInputSchema>;
+
+/** One line of the account's record of its store (ADR-0087): what was done to which secret, by whom and through which agent; never a value. */
+export const restAgentSecretAccessSchema = z.object({
+  id: z.int().check(z.positive()),
+  name: z.string(),
+  action: z.enum(SECRET_ACCESSES),
+  /** Who did it: the account itself, or a supervisor; `null` for someone who is no longer there. */
+  by: z.nullable(restPersonSchema),
+  /** The agent they did it through, when they acted with a token; `null` when they did it themselves. */
+  agent: z.nullable(z.string()),
+  /** Whether a supervisor's doing, where the account's own otherwise. */
+  seeded: z.boolean(),
+  at: instant,
+});
+export type RestAgentSecretAccess = z.infer<typeof restAgentSecretAccessSchema>;
+
+/** `GET /api/v1/agents/<handle>/secret-accesses?before=&limit=`: the record, the newest first, and whether there is more before. */
+export const restAgentSecretAccessesSchema = z.object({
+  items: z.array(restAgentSecretAccessSchema),
+  more: z.boolean(),
+});
+export type RestAgentSecretAccesses = z.infer<typeof restAgentSecretAccessesSchema>;
 
 /**
  * `GET /api/v1/me/manager`: whom whoever asks reports to, a person or an agent account, `null`

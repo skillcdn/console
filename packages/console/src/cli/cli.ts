@@ -120,6 +120,7 @@ import {
   formatRules,
   formatRun,
   formatRunLine,
+  formatSecretLine,
   formatTask,
   formatTaskLine,
   formatTeamLine,
@@ -3499,11 +3500,141 @@ const agentNew = async (args: readonly string[], io: CliIo): Promise<number> => 
   return EXIT.ok;
 };
 
+/** A day a secret's value ends on, as the flag gives one: a calendar day, or `none`. */
+function expiryOf(io: CliIo, values: Values): string | null | undefined {
+  return dayOf(io, text(values, "expires"), true);
+}
+
+/**
+ * The value of a secret being set: typed unseen at the terminal, or all of standard input where
+ * that is a pipe, or a file's whole text with --file; never an argument, which a shell would
+ * keep and a process list show.
+ */
+async function secretValue(io: CliIo, values: Values, prompt: string): Promise<string> {
+  const file = text(values, "file");
+  const value =
+    file === undefined
+      ? await secretGiven(io, prompt)
+      : (await io.readFile(file)).replace(/\r?\n$/, "");
+  if (value.length === 0) {
+    throw failed("No value was given.");
+  }
+  return value;
+}
+
+const SECRET_FLAGS: OptionSpec = {
+  set: { type: "boolean" },
+  remove: { type: "boolean" },
+  file: { type: "string" },
+  expires: { type: "string" },
+};
+
+// An agent account's own secret store (ADR-0087): the names it keeps, for the account itself,
+// signed in as itself.
+const secrets: Command = async (args, io) => {
+  const { values } = parse(args, {}, false);
+  const session = await open(io, values);
+  const found = await session.client.secrets();
+  answer(io, session, found, () =>
+    found.items.length === 0
+      ? "No secret is kept yet: console secret <name> --set keeps one."
+      : found.items.map((item) => formatSecretLine(item)).join("\n"),
+  );
+  return EXIT.ok;
+};
+
+const SECRET_USAGE =
+  "Say which secret: console secret <name>  |  secret <name> --set [--file <path>] [--expires <day|none>]  |  secret <name> --remove";
+
+// One secret of the account's own: its value, read and noted; or set, typed unseen; or removed.
+const secret: Command = async (args, io) => {
+  const { values, positionals } = parse(args, SECRET_FLAGS);
+  const name = theOne(positionals, SECRET_USAGE);
+  const session = await open(io, values);
+  if (on(values, "remove")) {
+    await session.client.removeSecret(name);
+    answer(io, session, { removed: name }, () => `The secret ${name} is removed.`);
+    return EXIT.ok;
+  }
+  if (on(values, "set")) {
+    const expiresOn = expiryOf(io, values);
+    const value = await secretValue(io, values, `Value of ${name} (typed unseen; Enter ends it): `);
+    const kept = await session.client.setSecret(name, {
+      value,
+      ...(expiresOn === undefined ? {} : { expiresOn }),
+    });
+    answer(io, session, kept, () => `Kept: ${formatSecretLine(kept)}`);
+    return EXIT.ok;
+  }
+  // The value alone, for whatever reads it next; the reading is on the account's record.
+  const found = await session.client.secret(name);
+  io.stdout(session.json ? `${JSON.stringify(found, null, 2)}\n` : `${found.value}\n`);
+  return EXIT.ok;
+};
+
+// A supervisor's part of an agent account's store (ADR-0087): the names; a secret seeded,
+// write-only, which only the account reads back; one removed. Never a value.
+const agentSecrets = async (args: readonly string[], io: CliIo): Promise<number> => {
+  const { values, positionals } = parse(args, {});
+  const handle = handleOf(theOne(positionals, "Say whose: console agent secrets <handle>"));
+  const session = await open(io, values);
+  const found = await session.client.agentSecrets(handle);
+  answer(io, session, found, () =>
+    found.items.length === 0
+      ? `@${handle} keeps no secret yet.`
+      : found.items.map((item) => formatSecretLine(item)).join("\n"),
+  );
+  return EXIT.ok;
+};
+
+const agentSecret = async (args: readonly string[], io: CliIo): Promise<number> => {
+  const { values, positionals } = parse(args, SECRET_FLAGS);
+  const [given, name] = theTwo(
+    positionals,
+    "Say whose and which: console agent secret <handle> <name> [--file <path>] [--expires <day|none>]  |  agent secret <handle> <name> --remove",
+  );
+  const handle = handleOf(given);
+  const session = await open(io, values);
+  if (on(values, "remove")) {
+    await session.client.removeAgentSecret(handle, name);
+    answer(
+      io,
+      session,
+      { handle, removed: name },
+      () => `The secret ${name} of @${handle} is removed.`,
+    );
+    return EXIT.ok;
+  }
+  const expiresOn = expiryOf(io, values);
+  const value = await secretValue(
+    io,
+    values,
+    `Value of ${name} for @${handle} (typed unseen; Enter ends it): `,
+  );
+  const kept = await session.client.seedAgentSecret(handle, name, {
+    value,
+    ...(expiresOn === undefined ? {} : { expiresOn }),
+  });
+  answer(
+    io,
+    session,
+    kept,
+    () => `Seeded for @${handle}, which alone reads it back: ${formatSecretLine(kept)}`,
+  );
+  return EXIT.ok;
+};
+
 // One agent account by its handle; with --avatar, its picture written as a file (ADR-0084): the
 // parts are drawn here, by the package's own function, and the console sends no picture.
 const agent: Command = async (args, io) => {
   if (args[0] === "new") {
     return agentNew(args.slice(1), io);
+  }
+  if (args[0] === "secrets") {
+    return agentSecrets(args.slice(1), io);
+  }
+  if (args[0] === "secret") {
+    return agentSecret(args.slice(1), io);
   }
   const { values, positionals } = parse(args, { avatar: { type: "string" } });
   const handle = handleOf(theOne(positionals, AGENT_USAGE));
@@ -4201,6 +4332,8 @@ const COMMANDS: Readonly<Record<string, Command>> = {
   manager,
   agents,
   agent,
+  secrets,
+  secret,
   teams,
   team,
   workspace,

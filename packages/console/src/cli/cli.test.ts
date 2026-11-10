@@ -403,7 +403,9 @@ describe("the console command", () => {
       "--token-stdin takes a token made by hand instead, typed unseen",
     );
     expect(whole.out()).not.toContain("--parent <number|id>");
-    expect(whole.out().length).toBeLessThan(11_000);
+    // A map stays one: what the agent accounts added (ADR-0084, ADR-0087) is five commands, a
+    // line each.
+    expect(whole.out().length).toBeLessThan(11_300);
     // What holds everywhere: every exit code, the fourth included.
     expect(whole.out()).toContain("4 the command and the\nconsole do not go together");
     // Where the skill is, when the command knows; else where to ask.
@@ -2453,6 +2455,83 @@ describe("configuring, as the person", () => {
     const unsaid = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["agent", "new", "mira"], unsaid.io)).toBe(EXIT.usage);
     expect(unsaid.err()).toContain("--login <login>");
+  });
+
+  it("keeps an agent account's secrets: the names, a value read alone, one set unseen, one removed (ADR-0087)", async () => {
+    const kept = { name: "git.token", setAt: WHEN, seeded: false, expiresOn: "2027-11-10" };
+    const { fetch, calls } = fakeConsole({
+      "GET /api/v1/agents/me/secrets": [{ body: { items: [kept] } }, { body: { items: [] } }],
+      "GET /api/v1/agents/me/secrets/git.token": { body: { ...kept, value: "the-value" } },
+      "PUT /api/v1/agents/me/secrets/git.token": { body: kept },
+      "DELETE /api/v1/agents/me/secrets/git.token": { status: 204 },
+    });
+    const names = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["secrets"], names.io)).toBe(EXIT.ok);
+    expect(names.out()).toBe(`git.token  (set ${WHEN}, ends on 2027-11-10)\n`);
+    const none = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["secrets"], none.io)).toBe(EXIT.ok);
+    expect(none.out()).toContain("No secret is kept yet");
+    // The value and nothing else, for whatever reads it next.
+    const read = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["secret", "git.token"], read.io)).toBe(EXIT.ok);
+    expect(read.out()).toBe("the-value\n");
+    // Set from what is typed unseen, never from an argument; the value is not said back.
+    const set = harness({
+      fetch,
+      env: SIGNED_IN,
+      readStdin: async () => "typed-unseen\n",
+    });
+    expect(await runCli(["secret", "git.token", "--set", "--expires", "2027-11-10"], set.io)).toBe(
+      EXIT.ok,
+    );
+    expect(calls.at(-1)?.body).toEqual({ value: "typed-unseen", expiresOn: "2027-11-10" });
+    expect(set.out()).toBe(`Kept: git.token  (set ${WHEN}, ends on 2027-11-10)\n`);
+    expect(set.out()).not.toContain("typed-unseen");
+    // Or from a file, whole, without the newline that ends it.
+    const filed = harness({
+      fetch,
+      env: SIGNED_IN,
+      readFile: async (path) => {
+        expect(path).toBe("token.txt");
+        return "from-a-file\n";
+      },
+    });
+    expect(await runCli(["secret", "git.token", "--set", "--file", "token.txt"], filed.io)).toBe(
+      EXIT.ok,
+    );
+    expect(calls.at(-1)?.body).toEqual({ value: "from-a-file" });
+    const empty = harness({ fetch, env: SIGNED_IN, readStdin: async () => "\n" });
+    expect(await runCli(["secret", "git.token", "--set"], empty.io)).toBe(EXIT.failed);
+    expect(empty.err()).toContain("No value was given");
+    const removed = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["secret", "git.token", "--remove"], removed.io)).toBe(EXIT.ok);
+    expect(removed.out()).toBe("The secret git.token is removed.\n");
+    expect(await runCli(["secret"], harness({ fetch, env: SIGNED_IN }).io)).toBe(EXIT.usage);
+  });
+
+  it("seeds a secret for an agent account one supervises, write-only, and lists and removes them (ADR-0087)", async () => {
+    const seeded = { name: "mail.password", setAt: WHEN, seeded: true, expiresOn: null };
+    const { fetch, calls } = fakeConsole({
+      "GET /api/v1/agents/mira/secrets": { body: { items: [seeded] } },
+      "PUT /api/v1/agents/mira/secrets/mail.password": { body: seeded },
+      "DELETE /api/v1/agents/mira/secrets/mail.password": { status: 204 },
+    });
+    const names = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["agent", "secrets", "@mira"], names.io)).toBe(EXIT.ok);
+    expect(names.out()).toBe(`mail.password  (set ${WHEN}, seeded by a supervisor)\n`);
+    const seed = harness({ fetch, env: SIGNED_IN, readStdin: async () => "first-password\n" });
+    expect(await runCli(["agent", "secret", "mira", "mail.password"], seed.io)).toBe(EXIT.ok);
+    expect(calls.at(-1)?.body).toEqual({ value: "first-password" });
+    expect(seed.out()).toContain("Seeded for @mira, which alone reads it back: mail.password");
+    expect(seed.out()).not.toContain("first-password");
+    const removed = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["agent", "secret", "mira", "mail.password", "--remove"], removed.io)).toBe(
+      EXIT.ok,
+    );
+    expect(calls.at(-1)?.key).toBe("DELETE /api/v1/agents/mira/secrets/mail.password");
+    expect(removed.out()).toBe("The secret mail.password of @mira is removed.\n");
+    const unsaid = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["agent", "secret", "mira"], unsaid.io)).toBe(EXIT.usage);
   });
 
   it("lists the people and says what one is", async () => {

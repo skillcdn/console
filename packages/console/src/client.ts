@@ -19,6 +19,11 @@ import {
   type RestAgentInput,
   type RestAgentPatch,
   type RestAgentProposals,
+  type RestAgentSecret,
+  type RestAgentSecretAccesses,
+  type RestAgentSecretInput,
+  type RestAgentSecrets,
+  type RestAgentSecretValue,
   type RestAgents,
   type RestAnswerInput,
   type RestArchivedTasks,
@@ -117,6 +122,10 @@ import {
   type RestWorkspacePatch,
   restAgentProposalsSchema,
   restAgentSchema,
+  restAgentSecretAccessesSchema,
+  restAgentSecretSchema,
+  restAgentSecretsSchema,
+  restAgentSecretValueSchema,
   restAgentsSchema,
   restArchivedTasksSchema,
   restCategoriesSchema,
@@ -613,6 +622,28 @@ export interface ConsoleClient {
   updatePerson(id: string, patch: RestPersonPatch): Promise<RestPerson>;
   /** Whom whoever asks reports to, and the administrators, who stand in where there is nobody (ADR-0084). */
   manager(signal?: AbortSignal): Promise<RestManager>;
+  /**
+   * An agent account's secret store (ADR-0087), for the account itself on a session of its own:
+   * the names; one with its value; one set; one removed. Every reading of a value is noted.
+   */
+  secrets(signal?: AbortSignal): Promise<RestAgentSecrets>;
+  secret(name: string, signal?: AbortSignal): Promise<RestAgentSecretValue>;
+  setSecret(name: string, input: RestAgentSecretInput): Promise<RestAgentSecret>;
+  removeSecret(name: string): Promise<void>;
+  /** An agent account's secrets for a supervisor: the names, one seeded write-only, one removed; never a value. */
+  agentSecrets(handle: string, signal?: AbortSignal): Promise<RestAgentSecrets>;
+  seedAgentSecret(
+    handle: string,
+    name: string,
+    input: RestAgentSecretInput,
+  ): Promise<RestAgentSecret>;
+  removeAgentSecret(handle: string, name: string): Promise<void>;
+  /** The account's record of its store, the newest first, for a supervisor. */
+  agentSecretAccesses(
+    handle: string,
+    query?: { readonly before?: number | undefined; readonly limit?: number | undefined },
+    signal?: AbortSignal,
+  ): Promise<RestAgentSecretAccesses>;
   /** Where an agent account is signed in, its browsers and its command; for a supervisor, on the console's own pages. */
   agentSignIns(handle: string, signal?: AbortSignal): Promise<RestSessions>;
   /** Ends one of an agent account's sessions; for a supervisor, on the console's own pages. */
@@ -1372,6 +1403,49 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
       request("PATCH", `${base}${restPath("people", id)}`, patch, restPersonSchema),
     manager: (signal) =>
       request("GET", `${base}${REST_ROUTES.meManager}`, undefined, restManagerSchema, signal),
+    secrets: (signal) =>
+      request(
+        "GET",
+        `${base}${agentPath("me", "secrets")}`,
+        undefined,
+        restAgentSecretsSchema,
+        signal,
+      ),
+    secret: (name, signal) =>
+      request(
+        "GET",
+        `${base}${agentPath("me", "secrets", name)}`,
+        undefined,
+        restAgentSecretValueSchema,
+        signal,
+      ),
+    setSecret: (name, input) =>
+      request("PUT", `${base}${agentPath("me", "secrets", name)}`, input, restAgentSecretSchema),
+    removeSecret: (name) =>
+      request("DELETE", `${base}${agentPath("me", "secrets", name)}`, undefined, undefined),
+    agentSecrets: (handle, signal) =>
+      request(
+        "GET",
+        `${base}${agentPath(handle, "secrets")}`,
+        undefined,
+        restAgentSecretsSchema,
+        signal,
+      ),
+    seedAgentSecret: (handle, name, input) =>
+      request("PUT", `${base}${agentPath(handle, "secrets", name)}`, input, restAgentSecretSchema),
+    removeAgentSecret: (handle, name) =>
+      request("DELETE", `${base}${agentPath(handle, "secrets", name)}`, undefined, undefined),
+    agentSecretAccesses: (handle, query, signal) =>
+      request(
+        "GET",
+        withQuery(agentPath(handle, "secret-accesses"), {
+          before: query?.before === undefined ? undefined : String(query.before),
+          limit: query?.limit === undefined ? undefined : String(query.limit),
+        }),
+        undefined,
+        restAgentSecretAccessesSchema,
+        signal,
+      ),
     agentSignIns: (handle, signal) =>
       request(
         "GET",

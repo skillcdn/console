@@ -19,7 +19,9 @@ export type SealPurpose =
   /** The secret the deployment handed the console to claim a pack token with (ADR-0036), while the person has not approved. */
   | "pack-connect"
   /** A secret setting of a plugin (docs/specs/plugins.md, "Settings"), never handed to plugin code. */
-  | "plugin-secret";
+  | "plugin-secret"
+  /** A value of an agent account's secret store (ADR-0087), read back by the account alone. */
+  | "agent-secret";
 
 const VERSION = "v1";
 const IV_BYTES = 12;

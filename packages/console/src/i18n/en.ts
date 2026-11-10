@@ -221,6 +221,13 @@ export const en = {
     "person.agent_admin": "An agent account is never an administrator.",
     "person.manager_required":
       "An agent account always has a manager. Name another; the manager is never taken away.",
+    "secret.not_found": "The account keeps no secret of that name.",
+    "secret.too_many": "The account keeps as many secrets as one may.",
+    "secret.too_large": "A secret's value is at most 8 KiB.",
+    "secret.unreadable":
+      "The value cannot be opened with this deployment's key. Whoever has it sets it again.",
+    "secret.own_session":
+      "The secret store is read by the account itself, signed in, not with a token it made.",
     "agent.not_found": "The agent account was not found.",
     "agent.handle_taken": "Another agent account has this handle.",
     "agent.exists": "This login is an agent account already.",

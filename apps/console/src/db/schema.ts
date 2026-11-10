@@ -19,6 +19,7 @@ import {
   type RestHome,
   type RestTaskLink,
   RUN_STATUSES,
+  SECRET_ACCESSES,
   SESSION_KINDS,
   TASK_PRIORITIES,
   TASK_STATES,
@@ -354,6 +355,62 @@ export const tokens = pgTable(
     uniqueIndex("tokens_token_hash_key").on(table.tokenHash),
     index("tokens_person_idx").on(table.personId),
     index("tokens_expires_idx").on(table.expiresAt),
+  ],
+);
+
+/**
+ * A secret of an agent account's store (ADR-0087): a named value, sealed with the console's
+ * key, which the account alone reads back; a supervisor seeds one write-only and removes one.
+ * The value is never here in the clear, and never in a log.
+ */
+export const agentSecrets = pgTable(
+  "agent_secrets",
+  {
+    personId: uuid()
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    /** What the account calls it: lowercase letters, digits, dots, hyphens and underscores (`git.token`). */
+    name: text().notNull(),
+    /** The value, sealed for this account and this name: moved to another row, it opens for nobody. */
+    sealed: text().notNull(),
+    /** The day the value ends on, where it is known to: a product's long-lived token, say; null otherwise. */
+    expiresOn: date(),
+    /** Whether a supervisor set it, where the account did otherwise. */
+    seeded: boolean().notNull().default(false),
+    setById: uuid().references(() => people.id),
+    setAt: instant().notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [primaryKey({ columns: [table.personId, table.name] })],
+);
+
+/**
+ * The account's record of its secret store (ADR-0087): every time a secret was set, read or
+ * removed, by whom and through which agent, and whether it was seeded; the name, never the
+ * value. Read by the account's supervisors. Not an event of the board's feed.
+ */
+export const agentSecretAccesses = pgTable(
+  "agent_secret_accesses",
+  {
+    id: bigint({ mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    personId: uuid()
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    name: text().notNull(),
+    action: text({ enum: SECRET_ACCESSES }).notNull(),
+    /** Who did it: the account itself, or a supervisor. */
+    actorId: uuid().references(() => people.id),
+    /** The agent a supervisor did it through, when they acted with a token (ADR-0056); null when they did it themselves. */
+    agent: text(),
+    seeded: boolean().notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index("agent_secret_accesses_person_idx").on(table.personId, table.id),
+    check(
+      "agent_secret_accesses_action_check",
+      sql`${table.action} in (${sql.raw(literals(SECRET_ACCESSES))})`,
+    ),
   ],
 );
 

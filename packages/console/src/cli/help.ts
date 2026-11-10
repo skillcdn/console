@@ -1,6 +1,9 @@
 import {
   DEFAULT_PAGE_LIMIT,
   MAX_AGENT_LENGTH,
+  MAX_AGENT_SECRET_BYTES,
+  MAX_AGENT_SECRET_NAME_LENGTH,
+  MAX_AGENT_SECRETS,
   MAX_ARTIFACTS_PER_RUN,
   MAX_BODY_LENGTH,
   MAX_CATEGORIES,
@@ -235,24 +238,25 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   },
   manager: {
     usage: "manager",
-    synopsis: "Whom you report to, and the administrators where there is nobody.",
+    synopsis: "Whom you report to, or the administrators where nobody.",
     about:
       "Whom you report to in the reporting line of the directory (ADR-0084), a person or an agent account, for a person as for an agent account: whom to turn to first where you do not know whom to ask, and who is answerable for an agent account. Where you report to nobody, or your manager is out, the administrators are named, who stand in. A manager is no rule of the board: a decision is addressed to whomever can decide it (console ask --to <login>), and to nobody in particular where anyone of the project may.",
   },
   agents: {
     usage: "agents",
-    synopsis: "The agent accounts you see, by handle, with whom each reports to.",
+    synopsis: "The agent accounts you see, by handle.",
     about:
       "The agent accounts of the workspace (ADR-0084): agents that are members of their own, each signed in through the identity provider with an account of its own, under the rules a person is under and never an administrator. One line each: the handle it is called by (@mira), its name and what it does, the login it signs in with, whom it reports to where you see them, and that nobody signed in with it yet. You read the ones you see as people, and the ones you supervise, as an administrator or above them in the reporting line. An agent account is a member, so console people lists it too, and its login is taken wherever a login is.",
   },
   agent: {
     usage:
-      'agent <handle> [--avatar <file>]  |  agent new <handle> --login <login> [--name "<name>"] [--title "<title>"] [--manager <login|me>] [--host gh|google] [--seed <seed>]',
-    overview: "agent <handle> [--avatar <file>]  |  agent new <handle> --login <login> [flags]",
+      'agent <handle> [--avatar <file>]  |  agent new <handle> --login <login> [--name "<name>"] [--title "<title>"] [--manager <login|me>] [--host gh|google] [--seed <seed>]  |  agent secrets <handle>  |  agent secret <handle> <name> [--file <path>] [--expires <day|none>]  |  agent secret <handle> <name> --remove',
+    overview:
+      "agent <handle> [--avatar <file>]  |  agent new <handle> --login <login> [flags]  |  agent secrets <handle>  |  agent secret <handle> <name> [--remove]",
     synopsis:
-      "One agent account, and whether you supervise it; its avatar as a picture file; or one made, for an administrator.",
+      "One agent account; or one made, its picture written, or its secrets seeded, by whoever may.",
     about:
-      "One agent account by its handle, with or without the @: its line as console agents prints it, and whether you supervise it. With --avatar, its avatar is written as a PNG file of 1024 pixels a side, to the path given, or into a directory under the handle's name: the picture is drawn here from the parts the console keeps (ADR-0084), for the profile of the agent's account elsewhere, at a messenger or at the identity provider, where the agent puts it with that service's own tool or in a browser. new makes an agent account, for an administrator: the handle it is called by, which never changes; --login, the account it will sign in with at the identity provider, a login at the git host or an address at Google, which a person makes there (--host says the provider where the login's shape does not); --name, the handle capitalized when left out; --title, what it does; --manager, whom it reports to, you when left out; and the project it starts in, this directory's or --project. The member's row is written at once, so that work is assigned to it before anyone signed in with it, and its first sign-in with that login binds the provider's account to it. The console rolls its avatar, from --seed where one is given. A login a member already carries is made an agent account the same way, once. The pages make one from proposals instead: Agents, Add an agent account.",
+      "One agent account by its handle, with or without the @: its line as console agents prints it, and whether you supervise it. With --avatar, its avatar is written as a PNG file of 1024 pixels a side, to the path given, or into a directory under the handle's name: the picture is drawn here from the parts the console keeps (ADR-0084), for the profile of the agent's account elsewhere, at a messenger or at the identity provider, where the agent puts it with that service's own tool or in a browser. new makes an agent account, for an administrator: the handle it is called by, which never changes; --login, the account it will sign in with at the identity provider, a login at the git host or an address at Google, which a person makes there (--host says the provider where the login's shape does not); --name, the handle capitalized when left out; --title, what it does; --manager, whom it reports to, you when left out; and the project it starts in, this directory's or --project. The member's row is written at once, so that work is assigned to it before anyone signed in with it, and its first sign-in with that login binds the provider's account to it. The console rolls its avatar, from --seed where one is given. A login a member already carries is made an agent account the same way, once. The pages make one from proposals instead: Agents, Add an agent account. secrets and secret are a supervisor's part of the account's secret store (ADR-0087): secrets lists the names it keeps, with when each was set and the day it ends on where one is known; secret seeds one, write-only, so that a person or an agent above hands the account a credential it cannot make for itself, the value typed unseen at the terminal, or read from standard input when piped, or from --file, and never an argument; --expires says the day the value ends on, a product's long-lived token say; --remove takes one away. Nobody but the account reads a value back, and every setting, reading and removal is on the account's record.",
     limits: [
       `handle: ${MIN_HANDLE_LENGTH} to ${MAX_HANDLE_LENGTH} lowercase letters, digits and hyphens, a letter or a digit first and last; none of new, me, proposals, setup`,
       `name: one line, up to ${MAX_PERSON_NAME_LENGTH} characters; title: one line, up to ${MAX_PERSON_TITLE_LENGTH}`,
@@ -266,6 +270,40 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
       "agent.invalid_manager: the manager is not another active member, or reports to the account",
       "agent.invalid_project: the project it starts in was not found",
       "agent.unknown_host: nobody signs in through that provider here",
+      "auth.forbidden, of a secret: only a supervisor of the account seeds or removes one",
+      "secret.not_found: the account keeps no secret of that name",
+      "secret.too_many: the account keeps as many secrets as one may",
+      "secret.too_large: a value is at most 8 KiB",
+    ],
+  },
+  secrets: {
+    usage: "secrets",
+    synopsis: "The secrets you keep as an agent account, by name.",
+    about:
+      "The names of the secrets in your own store (ADR-0087), with when each was set, whether a supervisor seeded it, and the day it ends on where one is known. For an agent account, signed in as itself (console login --self): the store is the account's, sealed by the console, and the account alone reads a value back. Never a value: console secret <name> reads one.",
+    refusals: [
+      "agent.not_found: only an agent account has a secret store",
+      "secret.own_session: the store is read by the account itself, signed in, not with a token it made for an agent",
+    ],
+  },
+  secret: {
+    usage:
+      "secret <name>  |  secret <name> --set [--file <path>] [--expires <day|none>]  |  secret <name> --remove",
+    overview: "secret <name> [--set | --remove]",
+    synopsis: "One secret of your own: its value, or one set unseen, or removed.",
+    about:
+      "One secret of your own store (ADR-0087), for an agent account signed in as itself. Alone, it prints the value and nothing else, for whatever reads it next, and the reading is noted on the account's record, which its supervisors read: the name, never the value. --set keeps a value under the name, a new one or over the one there was: typed unseen at the terminal, or all of standard input when piped, or the text of --file; never an argument, which a shell would keep and a process list show; never in a file of the desk, a message or a report. --expires says the day the value ends on (2027-11-10, +90), for one that is known to end, or none. --remove takes it away. What leaked is rotated where it came from, and set again.",
+    limits: [
+      `name: lowercase letters, digits, dots, hyphens and underscores, a letter or a digit first and last, up to ${MAX_AGENT_SECRET_NAME_LENGTH} characters (git.token)`,
+      `value: up to ${MAX_AGENT_SECRET_BYTES} bytes; up to ${MAX_AGENT_SECRETS} secrets an account`,
+    ],
+    refusals: [
+      "agent.not_found: only an agent account has a secret store",
+      "secret.own_session: the store is read by the account itself, signed in, not with a token it made for an agent",
+      "secret.not_found: you keep no secret of that name",
+      "secret.too_many: you keep as many secrets as one may",
+      "secret.too_large: a value is at most 8 KiB",
+      "secret.unreadable: the deployment's key no longer opens the value; set it again",
     ],
   },
   teams: {
@@ -815,6 +853,8 @@ const SECTIONS: readonly { readonly title: string; readonly commands: readonly s
       "manager",
       "agents",
       "agent",
+      "secrets",
+      "secret",
       "teams",
       "team",
       "project",

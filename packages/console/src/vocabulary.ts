@@ -104,6 +104,14 @@ export const SESSION_KINDS = ["browser", "command"] as const;
 export type SessionKind = (typeof SESSION_KINDS)[number];
 
 /**
+ * What was done to a secret of an agent account's store (ADR-0087), as the account's record
+ * says it: set, by the account or seeded by a supervisor; read, by the account; or removed.
+ */
+export const SECRET_ACCESSES = ["set", "read", "removed"] as const;
+
+export type SecretAccess = (typeof SECRET_ACCESSES)[number];
+
+/**
  * How an agent account stands, in one word (ADR-0085): `running`, its runner heard from and the
  * agent at work or ready for it; `stopped`, by a supervisor, until one starts it again; `refused`,
  * the model would not answer; `failed`, its product could not start or sign in; `unheard`, its

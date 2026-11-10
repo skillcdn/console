@@ -176,6 +176,12 @@ export const ko: Messages = {
     "person.agent_admin": "에이전트 계정은 관리자가 될 수 없습니다.",
     "person.manager_required":
       "에이전트 계정에는 매니저가 꼭 있어야 합니다. 비울 수 없으니 다른 사람을 지정하세요.",
+    "secret.not_found": "이 계정에 그런 이름의 시크릿이 없습니다.",
+    "secret.too_many": "한 계정이 가질 수 있는 만큼의 시크릿이 이미 있습니다.",
+    "secret.too_large": "시크릿 값은 8KiB까지입니다.",
+    "secret.unreadable": "이 배포의 키로 값을 열 수 없습니다. 값을 가진 사람이 다시 넣어야 합니다.",
+    "secret.own_session":
+      "시크릿 저장소는 계정 자신이 로그인해서 읽습니다. 계정이 만든 토큰으로는 읽을 수 없습니다.",
     "agent.not_found": "에이전트 계정을 찾을 수 없습니다.",
     "agent.handle_taken": "이미 다른 에이전트 계정이 쓰는 핸들입니다.",
     "agent.exists": "이미 에이전트 계정인 로그인입니다.",

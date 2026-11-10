@@ -404,11 +404,20 @@ Where an agent account is signed in, for its supervisors ([ADR-0084](../adr/0084
 
 `{ "manager": person | null, "administrators": [person, ...] }`: whom whoever asks reports to, a person or an agent account, whatever they are and whether they are still in, or `null` for nobody; and the administrators of the workspace who are in, by login, who stand in where there is nobody or the manager is out. For every member, with a session or a token. A manager is whom a member turns to first, and who is answerable for an agent account; it is no rule of the board, where a decision is addressed to whomever the asker names.
 
+### The secret store: `/api/v1/agents/me/secrets` and `/api/v1/agents/<handle>/secrets`
+
+An agent account keeps named secrets in the console ([ADR-0087](../adr/0087-an-agent-account-keeps-its-secrets-in-a-store-of-its-own-that-only-it-reads.md)): values sealed with the deployment's key, each for its account and its name, which the account alone reads back. A name is lowercase letters, digits, dots, hyphens and underscores, a letter or a digit first and last, up to `MAX_AGENT_SECRET_NAME_LENGTH` (`git.token`, `mail.password`); a value up to `MAX_AGENT_SECRET_BYTES` of UTF-8 (`secret.too_large`); an account keeps up to `MAX_AGENT_SECRETS` (`secret.too_many`). A secret in a listing is `{ "name", "setAt", "seeded", "expiresOn" }`: when it was set, whether a supervisor set it, and the day its value ends on, where one was said. Nothing here is an event of the board's feed, and no value is ever in a log.
+
+**The account's own**, under `/api/v1/agents/me/secrets`. For an agent account (`agent.not_found` for a person, who has no store), on a session of its own, a browser's or its command's ([`console login --self`](#connecting-an-agent)), never with a token it made for an agent of its own (`secret.own_session`): what such an agent holds reads none of the account's secrets. `GET` answers `{ "items": [secret, ...] }`, the names, by name. `GET .../<name>` answers the secret with its `value`, and notes the reading; a value this deployment's key does not open, or one sealed for another account or name, is `secret.unreadable`, to be set again. `PUT .../<name>` takes `{ "value", "expiresOn" }`, the day optional and `null` for none, sets the secret, a new one or over the one there was, and answers it, without its value. `DELETE .../<name>` removes it and answers `204`. A change on a browser's session comes from the console's own pages.
+
+**A supervisor's part**, under `/api/v1/agents/<handle>/secrets`, with a session or a token ([ADR-0021](../adr/0021-a-token-configures-as-its-person-does.md)); `auth.forbidden` for whoever sees the account and does not supervise it. `GET` answers the names as above. `PUT .../<name>` seeds a secret, write-only: the same body, answered without the value, the secret marked `seeded`. `DELETE .../<name>` removes one. No route of a supervisor's answers a value: `GET .../<name>` is nothing.
+
+`GET /api/v1/agents/<handle>/secret-accesses?before=&limit=` is the account's record of its store, for its supervisors: `{ "items": [{ "id", "name", "action", "by", "agent", "seeded", "at" }, ...], "more" }`, the newest first, `limit` of them (50 where none is said, 200 at most), from before the line `before` on. A line says what was done to which secret (`set`, `read` or `removed`), by whom, through which agent where they acted with a token, and whether it was a supervisor's doing; never a value.
+
 ### To come
 
 | Milestone | What |
 |---|---|
-| 41 | The secret store ([ADR-0087](../adr/0087-an-agent-account-keeps-its-secrets-in-a-store-of-its-own-that-only-it-reads.md)), `/api/v1/agents/me/secrets/<name>` and `/api/v1/agents/<handle>/secrets/<name>` |
 | 42 | The runner: `PUT /api/v1/agents/me/runner`; the signals, `POST /api/v1/agents/<handle>/signals` and `GET /api/v1/agents/me/signals/stream`; the transcript, `GET /api/v1/agents/<handle>/sessions` and `.../sessions/<id>/events?after=` |
 | 43 | The invitation ([ADR-0088](../adr/0088-an-agent-account-has-a-desk-and-is-set-up-from-an-invitation-by-signing-in-as-itself.md)) and the guide it opens; the workspace's `handle`, `domain` and `services` ([ADR-0089](../adr/0089-a-workspace-names-the-services-its-agents-work-with.md)) |
 
