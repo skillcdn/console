@@ -54,6 +54,7 @@ import type { Clock } from "../ports/clock.js";
 import { createAgentGuards } from "./agent-guards.js";
 import { errorBody } from "./app.js";
 import type { Access } from "./auth.js";
+import { imageTypeOf, type KeptPictureType, pictureResponse } from "./kept-pictures.js";
 import type { AgentWakes } from "./live-feed.js";
 import type { AppEnv } from "./request-context.js";
 import { restPerson } from "./rest-shapes.js";
@@ -309,13 +310,18 @@ export function registerAgentTranscriptRest(
     if (part.size > MAX_FILE_BYTES) {
       return c.json(errorBody("request.too_large", "The file is too large."), 413);
     }
+    const bytes = new Uint8Array(await part.arrayBuffer());
+    // What it is is read off its bytes: a picture said to be one kind and being another is none.
+    if (imageTypeOf(bytes) !== type) {
+      return invalid(c, "file: the bytes are not a picture of the kind it is said to be.");
+    }
     try {
       const kept = await addTranscriptFile(database, blobs, {
         account: caller.person,
         sessionId: id,
         name: parsed.data.name,
         contentType: type,
-        bytes: new Uint8Array(await part.arrayBuffer()),
+        bytes,
         now: clock.now(),
       });
       return c.json(restFile(kept), 201);
@@ -538,14 +544,7 @@ export function registerAgentTranscriptRest(
     if (file === undefined || bytes === undefined) {
       return c.json(errorBody("file.not_found", "The file was not found."), 404);
     }
-    c.header("content-type", file.contentType);
-    c.header("content-length", String(bytes.byteLength));
-    c.header("content-disposition", "inline");
-    c.header("x-content-type-options", "nosniff");
-    c.header("content-security-policy", "default-src 'none'; sandbox");
-    c.header("cross-origin-resource-policy", "same-origin");
-    // A copy of its own: what the driver hands over may be a view of a larger buffer.
-    return c.body(new Uint8Array(bytes).buffer);
+    return pictureResponse(c, file.contentType as KeptPictureType, bytes);
   });
 
   // An administrator seals an event (ADR-0086, point 5): what it held is replaced by who

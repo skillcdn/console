@@ -531,6 +531,8 @@ describe("createConsole", () => {
     agentProposals: never,
     manager: never,
     sendSignal: never,
+    signalFileUrl: () => "",
+    readSignalFile: never,
     signals: never,
     runnerHeartbeat: never,
     signalStream: () => ({

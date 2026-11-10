@@ -51,6 +51,7 @@ export type RunnerClient = Pick<
   | "agentSession"
   | "secrets"
   | "secret"
+  | "readSignalFile"
 >;
 
 /** What the runner keeps between its own restarts. No secret is in it. */
@@ -579,13 +580,29 @@ export function createRunner(options: RunnerOptions): Runner {
     }
     const batch = pending;
     pending = [];
+    // The pictures a supervisor sent, read from the console for the product to see.
+    const pictures = new Map<number, Picture[]>();
+    for (const signal of batch) {
+      for (const file of signal.attachments) {
+        try {
+          const read = await client.readSignalFile(signal.number, file.id, abort.signal);
+          pictures.set(signal.number, [
+            ...(pictures.get(signal.number) ?? []),
+            { name: file.name, contentType: file.contentType, bytes: read.bytes },
+          ]);
+        } catch (error) {
+          log(`a picture of signal #${signal.number} could not be read (${codeOf(error)})`);
+        }
+      }
+    }
+    const images = driver.can.images ? [...pictures.values()].flat() : [];
     const composed = composeSignals(batch, { mark: target.mark, time: options.time });
     const intro = target.first
       ? introOf(target.mark, resetBy === undefined ? undefined : { by: resetBy })
       : undefined;
     const text = [intro, composed.text].filter((part) => part !== undefined).join("\n\n");
     try {
-      await target.driver.send({ text, images: [], priority });
+      await target.driver.send({ text, images, priority });
     } catch (error) {
       // Not handed over: kept, and what the product says of itself decides what is next.
       log(`a message could not be handed to the product (${codeOf(error)})`);
@@ -598,14 +615,20 @@ export function createRunner(options: RunnerOptions): Runner {
     }
     target.turn = true;
     for (const signal of batch) {
-      record(target, signal.source === "person" ? "person" : "wake", signal.text, {
-        signal: signal.number,
-        kind: signal.kind,
-        source: signal.source,
-        key: signal.key,
-        by: signal.by?.login ?? null,
-        agent: signal.agent,
-      });
+      record(
+        target,
+        signal.source === "person" ? "person" : "wake",
+        signal.text,
+        {
+          signal: signal.number,
+          kind: signal.kind,
+          source: signal.source,
+          key: signal.key,
+          by: signal.by?.login ?? null,
+          agent: signal.agent,
+        },
+        pictures.get(signal.number),
+      );
     }
     target.sent = batch;
     delivered = Math.max(delivered, ...batch.map((signal) => signal.number));

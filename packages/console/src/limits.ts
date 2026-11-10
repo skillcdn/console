@@ -65,6 +65,8 @@ export const MAX_SIGNAL_LENGTH = 8000;
 export const MAX_RUNNER_LINE_LENGTH = 120;
 export const MAX_RUNNER_OFFERS = 50;
 /** How many signals one page of an account's record carries when none is asked for, and the most it may. */
+/** How many pictures a supervisor sends with one tell, together within `MAX_FILE_BYTES`. */
+export const MAX_SIGNAL_ATTACHMENTS = 4;
 export const SIGNALS_PAGE_LIMIT = 50;
 export const MAX_SIGNALS_PAGE_LIMIT = 200;
 /** A batch of a transcript's events (ADR-0086): how many events, and how many bytes, one request carries. */

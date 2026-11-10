@@ -38,6 +38,7 @@ import {
   check,
   customType,
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -450,6 +451,32 @@ export const agentSignals = pgTable(
       "agent_signals_source_check",
       sql`${table.source} in (${sql.raw(literals(SIGNAL_SOURCES))})`,
     ),
+  ],
+);
+
+/**
+ * A picture a supervisor sent with a tell (ADR-0086, point 4): of that signal, kept with the
+ * account's record, its bytes among the board's files under their hash.
+ */
+export const agentSignalFiles = pgTable(
+  "agent_signal_files",
+  {
+    id: id(),
+    personId: uuid().notNull(),
+    number: integer().notNull(),
+    name: text().notNull(),
+    size: integer().notNull(),
+    contentType: text().notNull(),
+    sha256: text().notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    foreignKey({
+      name: "agent_signal_files_signal_fk",
+      columns: [table.personId, table.number],
+      foreignColumns: [agentSignals.personId, agentSignals.number],
+    }).onDelete("cascade"),
+    index("agent_signal_files_signal_idx").on(table.personId, table.number),
   ],
 );
 

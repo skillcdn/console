@@ -675,7 +675,16 @@ export interface ConsoleClient {
    * The signals of an agent account (ADR-0085): one sent, by a supervisor; and the record of
    * them, the newest first, for its supervisors, or with `me` for the account itself.
    */
-  sendSignal(handle: string, input: RestSignalInput): Promise<RestSignal>;
+  sendSignal(
+    handle: string,
+    input: RestSignalInput,
+    /** The pictures a tell or an interrupt carries: sent with it, as the parts of a form. */
+    pictures?: readonly FileUpload[],
+  ): Promise<RestSignal>;
+  /** Where the bytes of a picture sent with a signal are read, for a supervisor of the account. */
+  signalFileUrl(handle: string, number: number, fileId: string): string;
+  /** The bytes of a picture sent with a signal of the account's own, for its runner to hand to the product. */
+  readSignalFile(number: number, fileId: string, signal?: AbortSignal): Promise<FileRead>;
   signals(
     handle: string,
     query?: { readonly before?: number | undefined; readonly limit?: number | undefined },
@@ -1531,8 +1540,20 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
         restAgentSecretAccessesSchema,
         signal,
       ),
-    sendSignal: (handle, input) =>
-      request("POST", `${base}${agentPath(handle, "signals")}`, input, restSignalSchema),
+    sendSignal: (handle, input, pictures = []) => {
+      let body: unknown = input;
+      if (pictures.length > 0) {
+        const form = new FormData();
+        form.set("signal", JSON.stringify(input));
+        appendFiles(form, pictures);
+        body = form;
+      }
+      return request("POST", `${base}${agentPath(handle, "signals")}`, body, restSignalSchema);
+    },
+    signalFileUrl: (handle, number, fileId) =>
+      `${base}${agentPath(handle, "signals", String(number), "files", fileId)}`,
+    readSignalFile: (number, fileId, signal) =>
+      read(`${base}${agentPath("me", "signals", String(number), "files", fileId)}`, fileId, signal),
     signals: (handle, query, signal) =>
       request(
         "GET",

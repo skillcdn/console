@@ -559,4 +559,105 @@ describe("an agent account's runner (ADR-0085)", () => {
       detail: "resumed",
     });
   });
+
+  it("carries the pictures a supervisor sends with a tell, read by the account's runner and its supervisors", async () => {
+    const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+    const GIF = Uint8Array.from([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 1, 2, 3]);
+    const form = (signal: unknown, files: readonly [Uint8Array, string, string][]) => {
+      const body = new FormData();
+      if (signal !== undefined) {
+        body.set("signal", JSON.stringify(signal));
+      }
+      for (const [bytes, name, type] of files) {
+        body.append("file", new File([Uint8Array.from(bytes)], name, { type }));
+      }
+      return h.request(SIGNALS, { method: "POST", headers: fromPages(alice), body });
+    };
+    const sent = await form({ kind: "tell", text: "Look at these." }, [
+      [PNG, "screen.png", "image/png"],
+      // What it is is read off its bytes, whatever the form called it.
+      [GIF, "moving.bin", "application/octet-stream"],
+    ]);
+    expect(sent.status).toBe(201);
+    const told = restSignalSchema.parse(await sent.json());
+    expect(told).toMatchObject({ kind: "tell", text: "Look at these." });
+    expect(told.attachments).toMatchObject([
+      { name: "screen.png", size: PNG.byteLength, contentType: "image/png" },
+      { name: "moving.bin", size: GIF.byteLength, contentType: "image/gif" },
+    ]);
+    expect(JSON.stringify(told)).not.toContain("sha256");
+    const [first, second] = told.attachments;
+    const file = (number: number, id: string, who = "mira") =>
+      agentPath(who, "signals", String(number), "files", id);
+
+    // Its supervisors read them, shown in place and never run; and the account's runner, for the product.
+    const read = await get({ cookie: alice }, file(told.number, first?.id ?? ""));
+    expect(read.status).toBe(200);
+    expect(read.headers.get("content-type")).toBe("image/png");
+    expect(read.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(read.headers.get("content-security-policy")).toBe("default-src 'none'; sandbox");
+    expect(new Uint8Array(await read.arrayBuffer())).toEqual(PNG);
+    const own = await get(bearer(command), file(told.number, second?.id ?? "", "me"));
+    expect(own.headers.get("content-type")).toBe("image/gif");
+    expect(new Uint8Array(await own.arrayBuffer())).toEqual(GIF);
+    expect((await get({ cookie: bob }, file(told.number, first?.id ?? ""))).status).toBe(403);
+    expect((await get({ cookie: bob }, file(told.number, first?.id ?? "", "me"))).status).toBe(404);
+    // A picture is its own signal's, and nothing else's.
+    expect((await get({ cookie: alice }, file(told.number - 1, first?.id ?? ""))).status).toBe(404);
+    expect((await get({ cookie: alice }, file(told.number, "not-an-id"))).status).toBe(404);
+    expect(
+      (await get({ cookie: alice }, file(told.number, "0199c4d8-0000-7000-8000-00000000dead")))
+        .status,
+    ).toBe(404);
+
+    // The record and the stream carry what was sent with it.
+    const record = restSignalsSchema.parse(
+      await (await get({ cookie: alice }, `${SIGNALS}?limit=1`)).json(),
+    );
+    expect(record.items[0]?.attachments).toEqual(told.attachments);
+    const stream = await h.request(`${STREAM}?after=${told.number - 1}`, {
+      headers: bearer(command),
+    });
+    const reading = tail(stream);
+    const carried = signalsOf(await reading.until((text) => text.includes("data:")));
+    expect(carried[0]?.signal.attachments).toEqual(told.attachments);
+    await reading.cancel();
+
+    // A few pictures, pictures by their bytes, with a tell or an interrupt, and what says which.
+    for (const [signal, files] of [
+      [
+        { kind: "tell", text: "Too many." },
+        Array.from({ length: 5 }, () => [PNG, "a.png", "image/png"]),
+      ],
+      [
+        { kind: "tell", text: "Not a picture." },
+        [[new TextEncoder().encode("<script>alert(1)</script>"), "page.png", "image/png"]],
+      ],
+      [
+        { kind: "tell", text: "A drawing that runs." },
+        [[new TextEncoder().encode("<svg onload=alert(1)>"), "x.svg", "image/svg+xml"]],
+      ],
+      [{ kind: "tell", text: "Empty." }, [[new Uint8Array(), "empty.png", "image/png"]]],
+      [{ kind: "tell", text: "A path." }, [[PNG, "../screen.png", "image/png"]]],
+      [{ kind: "stop" }, [[PNG, "screen.png", "image/png"]]],
+      [{ kind: "tell" }, [[PNG, "screen.png", "image/png"]]],
+      [undefined, [[PNG, "screen.png", "image/png"]]],
+    ] as [unknown, [Uint8Array, string, string][]][]) {
+      const refused = await form(signal, files);
+      expect(refused.status, JSON.stringify(signal)).toBe(400);
+      expect(await errorOf(refused)).toBe("request.invalid");
+    }
+    const heavy = new Uint8Array(6 * 1024 * 1024);
+    heavy.set(PNG);
+    const large = await form({ kind: "tell", text: "Too large together." }, [
+      [heavy, "a.png", "image/png"],
+      [heavy, "b.png", "image/png"],
+    ]);
+    expect(large.status).toBe(413);
+    // An interrupt carries them too; and none of what was refused is on the record.
+    const interrupt = await form({ kind: "interrupt", text: "This instead." }, [
+      [PNG, "this.png", "image/png"],
+    ]);
+    expect(restSignalSchema.parse(await interrupt.json()).number).toBe(told.number + 1);
+  });
 });

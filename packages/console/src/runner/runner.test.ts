@@ -126,6 +126,8 @@ function fakeConsole() {
   const signals: RestSignal[] = [];
   const secrets = new Map<string, string>();
   const read: string[] = [];
+  /** The pictures of signals the runner asked for, as number and id. */
+  const fetched: string[] = [];
   const listeners = new Set<() => void>();
   const says = {
     delivered: 0,
@@ -234,6 +236,10 @@ function fakeConsole() {
         expiresOn: null,
       })),
     }),
+    readSignalFile: async (number, fileId) => {
+      fetched.push(`${number}/${fileId}`);
+      return { name: fileId, contentType: "image/png", bytes: Uint8Array.from([9, 8, 7]) };
+    },
     secret: async (name) => {
       read.push(name);
       return { name, value: secrets.get(name) ?? "", setAt: WHEN, seeded: false, expiresOn: null };
@@ -249,6 +255,7 @@ function fakeConsole() {
     uploads,
     secrets,
     read,
+    fetched,
     says,
     /** Sends a signal: the next number of the record. */
     signal(over: Partial<RestSignal> = {}): RestSignal {
@@ -730,6 +737,31 @@ describe("the runner", () => {
     session.emit({ type: "event", kind: "assistant", text: "And later." });
     await sleep(50);
     expect(console.events()).toHaveLength(1);
+  });
+
+  it("hands the product the pictures a supervisor sent, and keeps them with what the agent was sent", async () => {
+    const { console, product } = setup();
+    const picture = {
+      id: "0199c4d8-0000-7000-8000-0000000000a1",
+      name: "screen.png",
+      size: 3,
+      contentType: "image/png",
+    };
+    console.signal({ text: "Look at this.", attachments: [picture] });
+    const session = await sessionOf(product);
+    await until("the message", () => session.sent.length === 1);
+    expect(console.fetched).toEqual([`1/${picture.id}`]);
+    expect(session.sent[0]?.images).toEqual([
+      { name: "screen.png", contentType: "image/png", bytes: Uint8Array.from([9, 8, 7]) },
+    ]);
+    // The transcript says what the agent was sent, the picture with it.
+    await until("the transcript", () => console.events().length === 1);
+    expect(console.uploads).toEqual(["screen.png"]);
+    expect(console.kept.values().next().value?.[0]).toMatchObject({
+      kind: "person",
+      text: "Look at this.",
+      files: ["0199c4d8-0000-7000-8000-0000000000f1"],
+    });
   });
 
   it("holds a stop the console says stands, which the runner did not see itself", async () => {

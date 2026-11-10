@@ -444,6 +444,9 @@ describe("the sessions of an agent account and their transcript (ADR-0086)", () 
       [PNG, "screen.png", ""],
       [new Uint8Array(), "empty.png", "image/png"],
       [PNG, "../screen.png", "image/png"],
+      // Said to be a picture and not one by its bytes; and one kind said, another sent.
+      [new TextEncoder().encode("<script>alert(1)</script>"), "screen.png", "image/png"],
+      [PNG, "screen.gif", "image/gif"],
     ] as const) {
       const refused = await upload(session, bytes, name, type);
       expect(refused.status, `${name} ${type}`).toBe(400);

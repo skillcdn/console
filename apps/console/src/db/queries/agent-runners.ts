@@ -7,7 +7,7 @@ import type {
 } from "@skillcdn/console/api";
 import { and, asc, desc, eq, gt, inArray, isNotNull, lt, ne, or, sql } from "drizzle-orm";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
-import { agentRunners, agentSignals, people } from "../schema.js";
+import { agentRunners, agentSignalFiles, agentSignals, people } from "../schema.js";
 import { type Actor, recordEvent } from "./events.js";
 import { type PersonRecord, personColumns, toPerson } from "./people.js";
 
@@ -77,7 +77,18 @@ export interface SignalRecord {
   readonly key: string | undefined;
   readonly text: string;
   readonly set: { model: string | null; effort: string | null } | undefined;
+  /** The pictures sent with it. */
+  readonly attachments: readonly SignalFileRecord[];
   readonly at: Date;
+}
+
+/** A picture sent with a signal, as it is kept: what it is called, and the hash its bytes are under. */
+export interface SignalFileRecord {
+  readonly id: string;
+  readonly name: string;
+  readonly size: number;
+  readonly contentType: string;
+  readonly sha256: string;
 }
 
 const signalColumns = {
@@ -106,7 +117,8 @@ type SignalRow = {
   readonly by: Parameters<typeof toPerson>[0] | null;
 };
 
-const toSignal = (row: SignalRow): SignalRecord => ({
+const toSignal = (row: SignalRow, attachments: readonly SignalFileRecord[] = []): SignalRecord => ({
+  attachments,
   number: row.number,
   kind: row.kind,
   by: row.by === null ? undefined : toPerson(row.by),
@@ -262,6 +274,8 @@ export async function sendSignal(
     readonly set:
       | { model?: string | null | undefined; effort?: string | null | undefined }
       | undefined;
+    /** The pictures sent with it, their bytes kept already. */
+    readonly files?: readonly Omit<SignalFileRecord, "id">[] | undefined;
     readonly now: Date;
   },
 ): Promise<SignalRecord> {
@@ -289,6 +303,19 @@ export async function sendSignal(
       set: chosen ?? null,
       createdAt: now,
     });
+    if (input.files !== undefined && input.files.length > 0) {
+      await tx.insert(agentSignalFiles).values(
+        input.files.map((file) => ({
+          personId: account.id,
+          number: next,
+          name: file.name,
+          size: file.size,
+          contentType: file.contentType,
+          sha256: file.sha256,
+          createdAt: now,
+        })),
+      );
+    }
     const stops = kind === "stop";
     const starts = kind === "restart" || kind === "reset";
     const becomesStopped = stops && before.state !== "stopped";
@@ -337,7 +364,74 @@ export async function listSignalsAfter(
     .where(and(eq(agentSignals.personId, personId), gt(agentSignals.number, after)))
     .orderBy(asc(agentSignals.number))
     .limit(limit);
-  return rows.map(toSignal);
+  return withFiles(database, personId, rows);
+}
+
+/** The signals of some rows, each with the pictures sent with it. */
+async function withFiles(
+  database: Database,
+  personId: string,
+  rows: readonly SignalRow[],
+): Promise<SignalRecord[]> {
+  if (rows.length === 0) {
+    return [];
+  }
+  const files = await drizzleOf(database)
+    .select()
+    .from(agentSignalFiles)
+    .where(
+      and(
+        eq(agentSignalFiles.personId, personId),
+        inArray(
+          agentSignalFiles.number,
+          rows.map((row) => row.number),
+        ),
+      ),
+    )
+    .orderBy(asc(agentSignalFiles.id));
+  return rows.map((row) =>
+    toSignal(
+      row,
+      files
+        .filter((file) => file.number === row.number)
+        .map((file) => ({
+          id: file.id,
+          name: file.name,
+          size: file.size,
+          contentType: file.contentType,
+          sha256: file.sha256,
+        })),
+    ),
+  );
+}
+
+/** One picture of one signal of an account, or nothing: of that signal, never another's. */
+export async function findSignalFile(
+  database: Database,
+  personId: string,
+  number: number,
+  fileId: string,
+): Promise<SignalFileRecord | undefined> {
+  const [file] = await drizzleOf(database)
+    .select()
+    .from(agentSignalFiles)
+    .where(
+      and(
+        eq(agentSignalFiles.id, fileId),
+        eq(agentSignalFiles.personId, personId),
+        eq(agentSignalFiles.number, number),
+      ),
+    )
+    .limit(1);
+  return file === undefined
+    ? undefined
+    : {
+        id: file.id,
+        name: file.name,
+        size: file.size,
+        contentType: file.contentType,
+        sha256: file.sha256,
+      };
 }
 
 /** The account's record of signals, the newest first: a page of it, from before `before` on. */
@@ -358,7 +452,10 @@ export async function listSignals(
     )
     .orderBy(desc(agentSignals.number))
     .limit(page.limit + 1);
-  return { items: rows.slice(0, page.limit).map(toSignal), more: rows.length > page.limit };
+  return {
+    items: await withFiles(database, personId, rows.slice(0, page.limit)),
+    more: rows.length > page.limit,
+  };
 }
 
 /**
