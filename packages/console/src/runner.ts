@@ -10,6 +10,12 @@ export {
   runnerConfigSchema,
 } from "./runner/config.js";
 export {
+  DESK_SECTIONS,
+  type DeskInput,
+  deskFiles,
+  deskServicesOf,
+} from "./runner/desk.js";
+export {
   composeSignals,
   fenced,
   GROUP_WINDOW_MS,

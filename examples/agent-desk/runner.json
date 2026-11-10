@@ -1,0 +1,12 @@
+{
+  "driver": "claude",
+  "wake": [
+    "console"
+  ],
+  "conversation": "continuous",
+  "secrets": {
+    "env": {},
+    "files": {}
+  },
+  "autosave": true
+}

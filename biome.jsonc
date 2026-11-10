@@ -8,7 +8,10 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!scripts/rest-schemas.snapshot.json"]
+    // Two files are written by the code and held to it by a test, so they are left as written:
+    // the REST contract's snapshot, and the runner.json of the example desk, which is what the
+    // desk's template writes.
+    "includes": ["**", "!scripts/rest-schemas.snapshot.json", "!examples/agent-desk/runner.json"]
   },
   "formatter": {
     "indentStyle": "space",

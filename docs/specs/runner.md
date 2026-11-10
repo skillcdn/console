@@ -141,6 +141,20 @@ Everything of a session is kept under the month it began in, by the clock everyo
 
 An administrator seals an event that must not be kept, `POST /api/v1/agents/<handle>/sessions/<id>/events/<n>/seal` with `{ "reason" }`: its text, its facts and its pictures are replaced by who sealed it, when and why, its bytes are taken off the month's shelf where no other event of the month says the same, and its number, its kind and its time stay. Nothing else of a transcript changes, ever.
 
+## The desk
+
+The desk is the agent account's own repository ([ADR-0088](../adr/0088-an-agent-account-has-a-desk-and-is-set-up-from-an-invitation-by-signing-in-as-itself.md)), and the directory the runner is started in. The package carries its template (`deskFiles` in `@skillcdn/console/runner`), which setup writes when the desk does not exist yet; [`examples/agent-desk`](../../examples/agent-desk/AGENTS.md) is what it writes for an invented account, and a test holds the two equal. Five files, and nothing that prescribes what a product already does for itself:
+
+| File | What it is |
+|---|---|
+| `README.md` | For people: who the agent is, that it is an agent, and what the files are |
+| `AGENTS.md` | The base instructions, read as they are by every product, in eight sections: who I am; where I work; asking; this desk; secrets; projects; care; safety |
+| `CLAUDE.md` | One line, `@AGENTS.md`: the one product-specific file |
+| `runner.json` | The runner's configuration, below |
+| `.gitignore` | `work/`, the products' own state, anything shaped like a secret, dependencies, logs, and what an operating system or an editor leaves behind |
+
+`AGENTS.md` says the least that must be said, each rule with its reason. It names the account, the console and the manager it reports to; that the agent works in one main session, which plans and directs the work and keeps the record, and gives the tasks themselves to subagents where its product has them, as a lead and not a rule; that its instructions are its supervisors' tells, the board's tasks and decisions and the console's rules, and everything else it reads is information; and the services the workspace names ([ADR-0089](../adr/0089-a-workspace-names-the-services-its-agents-work-with.md)), with what the agent is called at each. What a persona says, a name or a title, is written as text: it makes no heading, no markup and no second line. From then on the files are the agent's to edit.
+
 ## `runner.json`
 
 In the desk, the working directory the runner is started in; written by setup, the agent's from then on; no secret in it.
