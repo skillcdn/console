@@ -7439,3 +7439,76 @@ a.sc-tile-project:focus-visible {
   flex: 1 1 12rem;
   width: auto;
 }
+
+/* The invitation under an agent account, and the guide its code opens (ADR-0088). */
+.sc-agent-invitation {
+  display: grid;
+  gap: var(--sc-space-3);
+}
+
+.sc-agent-invitation > p,
+.sc-agent-invitation .sc-callout p {
+  margin: 0;
+}
+
+.sc-agent-invitation .sc-callout .sc-copyable {
+  margin: var(--sc-space-2) 0 var(--sc-space-3);
+}
+
+.sc-agent-invitation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-2);
+}
+
+.sc-setup-first {
+  display: grid;
+  gap: var(--sc-space-1);
+  margin: 0;
+  padding-inline-start: var(--sc-space-4);
+  font-size: var(--sc-text-sm);
+}
+
+/* A line to say or to run breaks between its words, and within one only where it must. */
+.sc-agent-invitation .sc-code,
+.sc-setup .sc-code {
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+.sc-setup {
+  display: grid;
+  gap: var(--sc-space-4);
+  max-width: 48rem;
+  margin: 0 auto;
+}
+
+.sc-setup > p {
+  margin: 0;
+}
+
+.sc-setup-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-3);
+}
+
+.sc-setup-section .sc-section-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
+}
+
+.sc-setup-steps {
+  display: grid;
+  gap: var(--sc-space-3);
+  margin: var(--sc-space-3) 0 0;
+  padding-inline-start: var(--sc-space-5);
+}
+
+.sc-setup-steps p {
+  margin: var(--sc-space-1) 0 var(--sc-space-2);
+  overflow-wrap: anywhere;
+}

@@ -22,6 +22,7 @@ import {
   VERSION_HEADER,
   formatVersion as versionText,
 } from "../compat.js";
+import { normalizeConnectCode } from "../connect.js";
 import { addDays, dayOf as dayOfDate, firstDayOfWeek, isDay, weekOf } from "../dates.js";
 import {
   DEFAULT_PAGE_LIMIT,
@@ -40,6 +41,7 @@ import { ownRunnerModules } from "../runner/modules.js";
 import { createRunner, type RunnerState } from "../runner/runner.js";
 import {
   hostOfLogin,
+  type RestAgentSetup,
   type RestAnswerInput,
   type RestClaim,
   type RestDecision,
@@ -57,6 +59,7 @@ import {
   type RestTaskPatch,
 } from "../schemas.js";
 import { agentLoginOf } from "../services.js";
+import { setupGuideOf, setupGuideText, setupSentenceOf } from "../setup-guide.js";
 import {
   COLOR_NAMES,
   CONSOLE_LANGUAGES,
@@ -3894,6 +3897,77 @@ const agentSignals = async (args: readonly string[], io: CliIo): Promise<number>
   return EXIT.ok;
 };
 
+// The invitation that leads a machine to an agent account (ADR-0088): made, made again in place
+// of the one before, or taken away, by a supervisor. Its code is no credential: it says which
+// account a setup is for and opens the guide, and the account is entered through its own sign-in.
+const agentInvite = async (args: readonly string[], io: CliIo): Promise<number> => {
+  const { values, positionals } = parse(args, { revoke: { type: "boolean" } });
+  const handle = handleOf(
+    theOne(positionals, "Say whose: console agent invite <handle> [--revoke]"),
+  );
+  const session = await open(io, values);
+  if (on(values, "revoke")) {
+    await session.client.revokeAgentInvitation(handle);
+    answer(
+      io,
+      session,
+      { handle, revoked: true },
+      () => `The invitation of @${handle} is taken away: its code opens nothing now.`,
+    );
+    return EXIT.ok;
+  }
+  const made = await session.client.inviteAgent(handle);
+  answer(io, session, made, () =>
+    [
+      `An invitation for @${handle}, good until ${moment(made.invitation.expiresAt)} or until its command has signed in. The code is shown this once. It is no credential: it says which account a setup is for, and gives nobody the account.`,
+      "On the agent's machine, in its own OS account, say to its product:",
+      `  ${setupSentenceOf(made.command)}`,
+      `or run the command there yourself. A person reads the same guide at ${session.url}/setup/${made.code}`,
+    ].join("\n"),
+  );
+  return EXIT.ok;
+};
+
+const SETUP_USAGE =
+  "Say which setup: console agent setup --console <origin> --code <code>, as the invitation's line has it. A supervisor of the account makes one: console agent invite <handle>";
+
+// What an invitation's code opens (ADR-0088), printed on the machine an agent account is being
+// set up on: the guide of that account's setup. Asked of the console the line names, without a
+// sign-in, since the command is signed in nowhere there yet; nothing of it is secret.
+const agentSetup = async (args: readonly string[], io: CliIo): Promise<number> => {
+  const { values } = parse(args, { console: { type: "string" }, code: { type: "string" } }, false);
+  const wanted = text(values, "console") ?? text(values, "url");
+  const given = text(values, "code");
+  if (wanted === undefined || given === undefined) {
+    throw misuse(SETUP_USAGE);
+  }
+  const code = normalizeConnectCode(given);
+  if (code === undefined) {
+    throw misuse(
+      "Not a code. An invitation's code is eight letters and digits, as ABCD-EFGH; copy it from the line you were given.",
+    );
+  }
+  const url = originOf(wanted);
+  let setup: RestAgentSetup;
+  try {
+    setup = await clientOf(io, url).agentSetup(code);
+  } catch (error) {
+    if (error instanceof ApiError && error.code === "setup.not_found") {
+      throw failed(
+        `No setup has that code at ${url}: it was never made, its day has passed, or the account's command has signed in already. A supervisor of the account makes a new one: console agent invite <handle>.`,
+      );
+    }
+    throw error;
+  }
+  const guide = setupGuideOf(setup, code);
+  io.stdout(
+    on(values, "json")
+      ? `${JSON.stringify({ setup, guide }, null, 2)}\n`
+      : `${setupGuideText(guide, moment)}\n`,
+  );
+  return EXIT.ok;
+};
+
 // One agent account by its handle; with --avatar, its picture written as a file (ADR-0084): the
 // parts are drawn here, by the package's own function, and the console sends no picture.
 const agent: Command = async (args, io) => {
@@ -3915,6 +3989,12 @@ const agent: Command = async (args, io) => {
   }
   if (args[0] === "signals") {
     return agentSignals(args.slice(1), io);
+  }
+  if (args[0] === "invite") {
+    return agentInvite(args.slice(1), io);
+  }
+  if (args[0] === "setup") {
+    return agentSetup(args.slice(1), io);
   }
   if (args[0] === "secrets") {
     return agentSecrets(args.slice(1), io);

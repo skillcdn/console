@@ -463,6 +463,29 @@ export const agentSignals = pgTable(
 );
 
 /**
+ * The invitation that leads a machine to an agent account (ADR-0088): the hash of a code that
+ * says which account a setup is for, and gives nobody the account. One per account, made again
+ * in place of the one before, good until its day or until the account's command has signed in.
+ */
+export const agentInvitations = pgTable(
+  "agent_invitations",
+  {
+    personId: uuid()
+      .primaryKey()
+      .references(() => people.id, { onDelete: "cascade" }),
+    codeHash: text().notNull(),
+    createdById: uuid()
+      .notNull()
+      .references(() => people.id),
+    /** The agent whoever made it acted through, when with a token. */
+    agent: text(),
+    createdAt: createdAt(),
+    expiresAt: instant().notNull(),
+  },
+  (table) => [uniqueIndex("agent_invitations_code_key").on(table.codeHash)],
+);
+
+/**
  * A picture a supervisor sent with a tell (ADR-0086, point 4): of that signal, kept with the
  * account's record, its bytes among the board's files under their hash.
  */

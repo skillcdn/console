@@ -890,6 +890,59 @@ export const restSignalInputSchema = z
   );
 export type RestSignalInput = z.infer<typeof restSignalInputSchema>;
 
+/**
+ * The invitation that leads a machine to an agent account (ADR-0088), as it stands: when it was
+ * made, by whom, and when it ends. Never its code, which is shown once, when it is made.
+ */
+export const restAgentInvitationSchema = z.object({
+  createdAt: instant,
+  expiresAt: instant,
+  by: z.nullable(restPersonSchema),
+});
+export type RestAgentInvitation = z.infer<typeof restAgentInvitationSchema>;
+
+/** `GET /api/v1/agents/<handle>/invitation`: the invitation, or `null` where none stands. */
+export const restAgentInvitationStateSchema = z.object({
+  invitation: z.nullable(restAgentInvitationSchema),
+});
+export type RestAgentInvitationState = z.infer<typeof restAgentInvitationStateSchema>;
+
+/**
+ * What making an invitation answers, this once: the code, and the command that sets a machine
+ * up with it. The code is no credential: it says which account a setup is for.
+ */
+export const restAgentInvitationMadeSchema = z.object({
+  invitation: restAgentInvitationSchema,
+  code: z.string(),
+  command: z.string(),
+});
+export type RestAgentInvitationMade = z.infer<typeof restAgentInvitationMadeSchema>;
+
+/**
+ * `GET /api/v1/setup/<code>`: what an invitation's code opens, for whoever holds it, signed in or
+ * not: the account a setup is for, with the login it signs in with; its workspace, with the
+ * services its agents work with; and the console to come back to. Nothing secret.
+ */
+export const restAgentSetupSchema = z.object({
+  account: z.object({
+    handle: z.string(),
+    name: z.nullable(z.string()),
+    title: z.nullable(z.string()),
+    login: z.string(),
+    host: z.enum(PROVIDER_KEYS),
+    avatarParts: z.optional(z.nullable(restAvatarPartsSchema)),
+  }),
+  workspace: z.object({
+    name: z.string(),
+    handle: z.nullable(z.string()),
+    domain: z.nullable(z.string()),
+    services: restWorkspaceServicesSchema,
+  }),
+  console: z.object({ url: z.string() }),
+  expiresAt: instant,
+});
+export type RestAgentSetup = z.infer<typeof restAgentSetupSchema>;
+
 /** How many bytes of UTF-8 a text is, without encoding one that cannot be over or under the bound anyway. */
 function utf8Within(value: string, bytes: number): boolean {
   if (value.length > bytes) {

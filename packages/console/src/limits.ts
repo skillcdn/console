@@ -90,6 +90,8 @@ export const SESSIONS_PAGE_LIMIT = 50;
 export const MAX_SESSIONS_PAGE_LIMIT = 200;
 /** Why an event was sealed, in a line. */
 export const MAX_SEAL_REASON_LENGTH = 500;
+/** How many days an invitation to set an agent account up is good for (ADR-0088). */
+export const INVITATION_DAYS = 7;
 /** A service a workspace names (ADR-0089): how many parameters one has beside its kind, and how long one is. */
 export const MAX_SERVICE_PARAMETERS = 8;
 export const MAX_SERVICE_VALUE_LENGTH = 200;

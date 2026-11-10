@@ -9,6 +9,7 @@ import type { BlobStore } from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
 import type { PackConnector } from "../ports/skill-source.js";
 import type { Skills } from "../skills.js";
+import { registerAgentInvitationsRest } from "./agent-invitations-rest.js";
 import { registerAgentRunnerRest } from "./agent-runner-rest.js";
 import { registerAgentSecretsRest } from "./agent-secrets-rest.js";
 import { registerAgentTranscriptRest } from "./agent-transcript-rest.js";
@@ -175,6 +176,18 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
     clock,
     logger,
   });
+
+  // An invitation leads to an account's own sign-in: where nobody signs in, there is none.
+  if (auth !== undefined) {
+    registerAgentInvitationsRest(app, {
+      database,
+      access,
+      workspace,
+      origin: auth.origin,
+      clock,
+      logger,
+    });
+  }
 
   registerAgentsRest(app, {
     database,

@@ -35,6 +35,7 @@ import {
   projectSettingsHref,
   roadmapHref,
   settingsHref,
+  setupHref,
   signInFailureOf,
   taskHref,
   withoutSignInParam,
@@ -186,6 +187,11 @@ describe("matchRoute", () => {
     expect(matchRoute("/connect")).toEqual({ name: "connect", code: undefined });
     expect(matchRoute("/connect/abcd-efgh")).toEqual({ name: "connect", code: "abcd-efgh" });
     expect(connectHref("ABCD-EFGH")).toBe("/connect/ABCD-EFGH");
+    // What an invitation's code opens (ADR-0088).
+    expect(matchRoute("/setup/abcd-efgh")).toEqual({ name: "setup", code: "abcd-efgh" });
+    expect(setupHref("ABCD-EFGH")).toBe("/setup/ABCD-EFGH");
+    expect(matchRoute("/setup")).toEqual({ name: "not-found" });
+    expect(matchRoute("/setup/a/b")).toEqual({ name: "not-found" });
     expect(matchRoute(`/people/${ID}/agents`)).toEqual({ name: "person-agents", id: ID });
     expect(personAgentsHref(ID)).toBe(`/people/${ID}/agents`);
     expect(matchRoute(`/people/${ID}/work`)).toEqual({
@@ -572,6 +578,10 @@ describe("createConsole", () => {
     agentProposals: never,
     manager: never,
     sendSignal: never,
+    agentInvitation: never,
+    inviteAgent: never,
+    revokeAgentInvitation: never,
+    agentSetup: never,
     signalFileUrl: () => "",
     readSignalFile: never,
     signals: never,

@@ -176,6 +176,8 @@ export const ko: Messages = {
     "person.agent_admin": "에이전트 계정은 관리자가 될 수 없습니다.",
     "person.manager_required":
       "에이전트 계정에는 매니저가 꼭 있어야 합니다. 비울 수 없으니 다른 사람을 지정하세요.",
+    "setup.not_found":
+      "이 코드의 셋업이 없습니다. 만든 적이 없거나, 기한이 지났거나, 계정의 명령이 이미 로그인했습니다.",
     "secret.not_found": "이 계정에 그런 이름의 시크릿이 없습니다.",
     "secret.too_many": "한 계정이 가질 수 있는 만큼의 시크릿이 이미 있습니다.",
     "secret.too_large": "시크릿 값은 8KiB까지입니다.",
@@ -1611,6 +1613,27 @@ export const ko: Messages = {
           signals: "신호",
           delivered: (delivered: number, latest: number) => `${latest}개 중 ${delivered}개 전달됨`,
         },
+        machine: {
+          title: "머신",
+          intro:
+            "초대는 머신을 이 계정으로 이끕니다. 그 머신에서 에이전트의 제품에 한 줄을 말하면 됩니다. 초대 코드는 자격 증명이 아닙니다. 어떤 계정의 셋업인지 알려 주고 가이드를 열 뿐이며, 계정에는 계정 자신의 로그인으로만 들어갑니다.",
+          first: "먼저 사람이 할 일:",
+          none: "유효한 초대가 없습니다.",
+          stands: "초대 유효 기한:",
+          by: (name) => `${name} 님이 만듦`,
+          shownOnce:
+            "코드는 만들 때 한 번만 보입니다. 다시 만들면 새 코드가 이전 코드를 대신합니다.",
+          invite: "초대 만들기",
+          again: "다시 만들기",
+          revoke: "초대 취소",
+          made: {
+            title: "초대를 만들었습니다",
+            say: "에이전트의 머신에서, 에이전트의 OS 계정으로, 에이전트의 제품에 이렇게 말하세요:",
+            orRun: "또는 그 머신에서 명령을 직접 실행하세요:",
+            guide: "사람이 읽는 가이드",
+            once: "코드는 지금 한 번만 보입니다. 유효 기한:",
+          },
+        },
         signIns: {
           title: "로그인된 곳",
           empty: "없습니다.",
@@ -1713,6 +1736,21 @@ export const ko: Messages = {
     endOthers: "다른 세션 모두 로그아웃",
   },
 
+  setup: {
+    goodUntil: "초대 유효 기한:",
+    inEnglish: "가이드 본문은 에이전트가 읽는 그대로 영어입니다",
+    who: {
+      operator: "머신을 준비하는 사람",
+      agent: "에이전트",
+      manager: "매니저",
+    },
+    notFound: {
+      title: "셋업을 찾을 수 없습니다",
+      body: "이 코드의 셋업이 없습니다. 만든 적이 없거나, 기한이 지났거나, 계정의 명령이 이미 로그인했습니다. 계정의 감독자가 계정 페이지에서 새 초대를 만들 수 있습니다.",
+    },
+    couldNotLoad: "셋업을 읽지 못했습니다.",
+    home: "콘솔로 가기",
+  },
   connect: {
     title: "에이전트 연결",
     aria: "연결",

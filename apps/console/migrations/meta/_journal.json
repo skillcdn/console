@@ -379,6 +379,13 @@
       "when": 1794289743516,
       "tag": "0053_workspace_services",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1794291980801,
+      "tag": "0054_agent_invitations",
+      "breakpoints": true
     }
   ]
 }

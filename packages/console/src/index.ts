@@ -199,6 +199,12 @@ export {
 } from "./components/searches.js";
 export { SessionList, type SessionListProps } from "./components/sessions.js";
 export {
+  AgentInvitationPanel,
+  type AgentInvitationPanelProps,
+  SetupGuideView,
+  type SetupGuideViewProps,
+} from "./components/setup.js";
+export {
   type Brand,
   isPlainClick,
   type LanguageChoice,
@@ -351,6 +357,7 @@ export {
   type Route,
   roadmapHref,
   settingsHref,
+  setupHref,
   signInFailureOf,
   type TaskFormKind,
   taskHref,

@@ -221,6 +221,8 @@ export const en = {
     "person.agent_admin": "An agent account is never an administrator.",
     "person.manager_required":
       "An agent account always has a manager. Name another; the manager is never taken away.",
+    "setup.not_found":
+      "No setup has that code: it was never made, its day has passed, or the account's command has signed in already.",
     "secret.not_found": "The account keeps no secret of that name.",
     "secret.too_many": "The account keeps as many secrets as one may.",
     "secret.too_large": "A secret's value is at most 8 KiB.",
@@ -1695,6 +1697,26 @@ export const en = {
           signals: "Signals",
           delivered: (delivered: number, latest: number) => `${delivered} of ${latest} delivered`,
         },
+        machine: {
+          title: "Its machine",
+          intro:
+            "An invitation leads a machine to this account, with one line said to the agent's product there. Its code is no credential: it says which account a setup is for and opens the guide, and the account is entered through its own sign-in alone.",
+          first: "First, a person:",
+          none: "No invitation stands.",
+          stands: "An invitation stands until",
+          by: (name: string) => `made by ${name}`,
+          shownOnce: "Its code was shown when it was made; made again, a new code takes its place.",
+          invite: "Make an invitation",
+          again: "Make it again",
+          revoke: "Take it away",
+          made: {
+            title: "The invitation is made",
+            say: "On the agent's machine, in its own OS account, say this to its product:",
+            orRun: "Or run the command there yourself:",
+            guide: "The guide, for a person to read",
+            once: "The code is shown this once. It is good until",
+          },
+        },
         signIns: {
           title: "Where it is signed in",
           empty: "Nowhere.",
@@ -1797,6 +1819,22 @@ export const en = {
     endOthers: "Sign out of all other sessions",
   },
 
+  setup: {
+    goodUntil: "The invitation is good until",
+    /** What a language other than English says of the guide's own words; nothing in English. */
+    inEnglish: "",
+    who: {
+      operator: "Whoever prepares the machine",
+      agent: "The agent",
+      manager: "Its manager",
+    },
+    notFound: {
+      title: "No setup is here",
+      body: "No setup has that code: it was never made, its day has passed, or the account's command has signed in already. A supervisor of the account makes a new invitation on the account's page.",
+    },
+    couldNotLoad: "The setup could not be read.",
+    home: "To the console",
+  },
   connect: {
     title: "Connect an agent",
     aria: "Connect",

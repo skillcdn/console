@@ -2699,6 +2699,120 @@ describe("configuring, as the person", () => {
     );
   });
 
+  it("makes the invitation that leads a machine to an agent account, and takes it away (ADR-0088)", async () => {
+    const { fetch, calls } = fakeConsole({
+      "POST /api/v1/agents/mira/invitation": {
+        status: 201,
+        body: {
+          invitation: { createdAt: WHEN, expiresAt: "2026-10-16T10:00:00.000Z", by: BOB },
+          code: "ABCD-EFGH",
+          command: "console agent setup --console https://console.test --code ABCD-EFGH",
+        },
+      },
+      "DELETE /api/v1/agents/mira/invitation": { status: 204 },
+    });
+    const made = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["agent", "invite", "@mira"], made.io)).toBe(EXIT.ok);
+    expect(calls.at(-1)?.key).toBe("POST /api/v1/agents/mira/invitation");
+    expect(made.out()).toContain("An invitation for @mira, good until 2026-10-16T10:00:00.000Z");
+    expect(made.out()).toContain("It is no credential");
+    // The one line for the agent's product, and where a person reads the same guide.
+    expect(made.out()).toContain(
+      "  Run: console agent setup --console https://console.test --code ABCD-EFGH (before it: npm i -g @skillcdn/console), then do what it prints",
+    );
+    expect(made.out()).toContain("https://console.test/setup/ABCD-EFGH");
+    const revoked = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["agent", "invite", "mira", "--revoke"], revoked.io)).toBe(EXIT.ok);
+    expect(calls.at(-1)?.key).toBe("DELETE /api/v1/agents/mira/invitation");
+    expect(revoked.out()).toBe(
+      "The invitation of @mira is taken away: its code opens nothing now.\n",
+    );
+    expect(await runCli(["agent", "invite"], harness({ fetch, env: SIGNED_IN }).io)).toBe(
+      EXIT.usage,
+    );
+  });
+
+  it("prints the guide an invitation's code opens, on a machine signed in nowhere (ADR-0088)", async () => {
+    const setup = {
+      account: {
+        handle: "mira",
+        name: "Mira",
+        title: "Release engineer",
+        login: "carol",
+        host: "gh",
+        avatarParts: null,
+      },
+      workspace: {
+        name: "Acme",
+        handle: "acme",
+        domain: null,
+        services: { git: { kind: "github", organization: "acme" } },
+      },
+      console: { url: ORIGIN },
+      expiresAt: "2026-10-16T10:00:00.000Z",
+    };
+    const { fetch, calls } = fakeConsole({
+      "GET /api/v1/setup/ABCD-EFGH": { body: setup },
+      "GET /api/v1/setup/WXYZ-2345": {
+        status: 404,
+        body: { error: { code: "setup.not_found", message: "No setup has that code." } },
+      },
+    });
+    // No login on this machine, and none is asked for: the line names the console, and the code
+    // is taken as a person types one.
+    const read = harness({ fetch });
+    expect(
+      await runCli(["agent", "setup", "--console", ORIGIN, "--code", "abcdefgh"], read.io),
+    ).toBe(EXIT.ok);
+    expect(calls.map((call) => call.key)).toEqual(["GET /api/v1/setup/ABCD-EFGH"]);
+    expect(new Headers(calls[0]?.init?.headers).get("authorization")).toBeNull();
+    expect(read.out()).toContain("# Setting up @mira (Mira, Release engineer)");
+    expect(read.out()).toContain("The invitation is good until 2026-10-16T10:00:00.000Z.");
+    expect(read.out()).toContain("## 2. On the machine (the agent)");
+    expect(read.out()).toContain(`      console login --url ${ORIGIN} --self`);
+    expect(read.out()).toContain("`acme-mira`");
+    expect(read.err()).toBe("");
+
+    const json = harness({ fetch });
+    expect(
+      await runCli(["agent", "setup", "--url", ORIGIN, "--code", "ABCD-EFGH", "--json"], json.io),
+    ).toBe(EXIT.ok);
+    const said = JSON.parse(json.out()) as {
+      setup: unknown;
+      guide: { sections: { key: string }[] };
+    };
+    expect(said.setup).toEqual(setup);
+    expect(said.guide.sections.map((section) => section.key)).toEqual([
+      "before",
+      "machine",
+      "start",
+      "asked",
+    ]);
+
+    // A code that opens nothing says so, and who makes another.
+    const gone = harness({ fetch });
+    expect(
+      await runCli(["agent", "setup", "--console", ORIGIN, "--code", "WXYZ-2345"], gone.io),
+    ).toBe(EXIT.failed);
+    expect(gone.err()).toContain("No setup has that code");
+    expect(gone.err()).toContain("console agent invite <handle>");
+    expect(gone.out()).toBe("");
+
+    // What is no code, no console or no origin never leaves the machine.
+    const before = calls.length;
+    for (const args of [
+      ["agent", "setup"],
+      ["agent", "setup", "--code", "ABCD-EFGH"],
+      ["agent", "setup", "--console", ORIGIN],
+      ["agent", "setup", "--console", ORIGIN, "--code", "ABC"],
+      ["agent", "setup", "--console", "console.test/path", "--code", "ABCD-EFGH"],
+      ["agent", "setup", "--console", "http://console.test", "--code", "ABCD-EFGH"],
+    ]) {
+      expect(await runCli(args, harness({ fetch }).io), args.join(" ")).toBe(EXIT.usage);
+    }
+    expect(calls.length).toBe(before);
+  });
+
   it("lists the people and says what one is", async () => {
     const dana = {
       id: "0199c4d8-0000-7000-8000-000000000077",

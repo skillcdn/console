@@ -20,6 +20,7 @@ import type {
 } from "../api.js";
 import { addDays, deviceLanguage, firstDayOfWeek, weekOf } from "../dates.js";
 import { KOREAN, LanguageContext } from "../i18n/index.js";
+import { setupGuideOf } from "../setup-guide.js";
 import {
   AgentChoice,
   AgentRunnerFacts,
@@ -70,6 +71,7 @@ import { GoalTimeline, timelineBars } from "./roadmap.js";
 import { RulesForm, RulesView } from "./rules.js";
 import { RunList } from "./runs.js";
 import { SessionList } from "./sessions.js";
+import { AgentInvitationPanel, SetupGuideView } from "./setup.js";
 import { Shell } from "./shell.js";
 import { SignIn } from "./sign-in.js";
 import { SkillList } from "./skills.js";
@@ -1940,6 +1942,117 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     expect(seen).toContain('type="password"');
     expect(seen).toContain("only the account reads it back");
     expect(seen.match(/>Remove</g)).toHaveLength(2);
+  });
+
+  it("shows the invitation under the account: the one line once, and never the code again (ADR-0088)", () => {
+    const invitation = { createdAt: WHEN, expiresAt: "2026-11-17T14:02:11.000Z", by: alice };
+    const command = "console agent setup --console https://console.test --code ABCD-EFGH";
+    const nothing = () => undefined;
+    const href = (code: string) => `/setup/${code}`;
+    // None stands: the way to make one, and what a person does first, in the service's words.
+    const none = renderToStaticMarkup(
+      <AgentInvitationPanel
+        invitation={null}
+        first={["An administrator makes the user `mira@acme.example`, with a mailbox."]}
+        guideHref={href}
+        onInvite={nothing}
+        onRevoke={nothing}
+      />,
+    );
+    expect(none).toContain("No invitation stands.");
+    expect(none).toContain("Its code is no credential");
+    expect(none).toContain("makes the user <code>mira@acme.example</code>, with a mailbox.");
+    expect(none).toContain(">Make an invitation</button>");
+    expect(none).not.toContain("Take it away");
+    // Just made: the sentence and the command to copy, the guide's address, and its day.
+    const made = renderToStaticMarkup(
+      <AgentInvitationPanel
+        invitation={invitation}
+        made={{ invitation, code: "ABCD-EFGH", command }}
+        guideHref={href}
+        onInvite={nothing}
+        onRevoke={nothing}
+      />,
+    );
+    expect(made).toContain(
+      `<pre class="sc-code">Run: ${command} (before it: npm i -g @skillcdn/console), then do what it prints</pre>`,
+    );
+    expect(made).toContain(`<pre class="sc-code">${command}</pre>`);
+    expect(made).toContain('href="/setup/ABCD-EFGH"');
+    expect(made).toContain("The code is shown this once.");
+    expect(made).toContain(">Make it again</button>");
+    expect(made).toContain(">Take it away</button>");
+    // Standing, read again: who made it and until when, and no code anywhere.
+    const standsThere = renderToStaticMarkup(
+      <AgentInvitationPanel
+        invitation={invitation}
+        guideHref={href}
+        onInvite={nothing}
+        onRevoke={nothing}
+      />,
+    );
+    expect(standsThere).toContain("An invitation stands until");
+    expect(standsThere).toContain("made by Alice Example");
+    expect(standsThere).not.toContain("ABCD");
+    expect(standsThere).not.toContain("console agent setup");
+    // Not read yet: nothing is said of it, and nothing is made over it.
+    const unread = renderToStaticMarkup(
+      <AgentInvitationPanel
+        invitation={undefined}
+        guideHref={href}
+        onInvite={nothing}
+        onRevoke={nothing}
+      />,
+    );
+    expect(unread).not.toContain("No invitation stands.");
+    expect(unread).toMatch(/<button[^>]*disabled=""[^>]*>Make an invitation<\/button>/);
+  });
+
+  it("shows the guide a code opens, in its order, with every line to copy as it is (ADR-0088)", () => {
+    const setup = {
+      account: {
+        handle: "mira",
+        name: "<b>Mira</b>",
+        title: "Release engineer",
+        login: "carol",
+        host: "gh" as const,
+        avatarParts: null,
+      },
+      workspace: {
+        name: "Acme",
+        handle: "acme",
+        domain: null,
+        services: { git: { kind: "github", organization: "acme" } },
+      },
+      console: { url: "https://console.test" },
+      expiresAt: "2026-11-17T14:02:11.000Z",
+    };
+    const guide = setupGuideOf(setup, "ABCD-EFGH");
+    const seen = renderToStaticMarkup(<SetupGuideView guide={guide} account={setup.account} />);
+    // What the account is called is words, never markup.
+    expect(seen).toContain("Setting up @mira (&lt;b&gt;Mira&lt;/b&gt;, Release engineer)");
+    expect(seen).not.toContain("<b>Mira</b>");
+    expect(seen).toContain("signs in there as <code>carol</code> through GitHub");
+    expect(seen).toContain("The invitation is good until");
+    expect(seen).toContain("1. Before the line");
+    expect(seen).toContain("Whoever prepares the machine");
+    expect(seen).toContain("2. On the machine");
+    expect(seen).toContain(
+      '<pre class="sc-code">console login --url https://console.test --self</pre>',
+    );
+    expect(seen).toContain(
+      '<pre class="sc-code">Run: console agent setup --console https://console.test --code ABCD-EFGH (before it: npm i -g @skillcdn/console), then do what it prints</pre>',
+    );
+    // English says nothing of the guide's language; another language says the guide is English.
+    expect(seen).not.toContain(" · </p>");
+    const korean = renderToStaticMarkup(
+      <LanguageContext.Provider value={KOREAN}>
+        <SetupGuideView guide={guide} account={setup.account} />
+      </LanguageContext.Provider>,
+    );
+    expect(korean).toContain("머신을 준비하는 사람");
+    expect(korean).toContain("가이드 본문은 에이전트가 읽는 그대로 영어입니다");
+    expect(korean).toContain("1. Before the line");
   });
 
   it("puts the agents that report to a person and are not running on that person's plate", () => {

@@ -1,14 +1,26 @@
-import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import {
+  type FormEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ApiError,
   type ConsoleClient,
+  describeService,
   type RestAgent,
+  type RestAgentInvitationMade,
   type RestAgentSecret,
   type RestAgentSession,
   type RestSession,
   type RestTranscriptEvent,
+  type RestWorkspace,
   restAgentSessionSchema,
   restTranscriptEventSchema,
+  serviceNamesOf,
 } from "./api.js";
 import {
   AgentChoice,
@@ -19,6 +31,7 @@ import {
   SignalComposer,
   TranscriptView,
 } from "./components/agent-page.js";
+import { AgentInvitationPanel } from "./components/setup.js";
 import {
   Avatar,
   Button,
@@ -31,7 +44,7 @@ import {
   Time,
 } from "./components/ui.js";
 import { useWords } from "./i18n/index.js";
-import { type AgentTab, agentHref, PATHS } from "./router.js";
+import { type AgentTab, agentHref, PATHS, setupHref } from "./router.js";
 import { useAction } from "./use-action.js";
 
 // An agent account's page (ADR-0085, ADR-0086): how it stands, what it is doing as it happens
@@ -46,7 +59,7 @@ const TAIL = 200;
 const TABS: readonly AgentTab[] = ["live", "sessions", "work", "settings"];
 
 /** Something read from the console and read again on a timer: what it answered last, and the way to read it now. */
-function useRead<T>(
+export function useRead<T>(
   read: (signal: AbortSignal) => Promise<T>,
   everyMs?: number,
 ): { readonly value: T | undefined; readonly failed: unknown; readonly again: () => void } {
@@ -361,12 +374,27 @@ function AgentSettings(props: {
   readonly handle: string;
   /** Whether the console is held through a token, which reads no sign-in. */
   readonly viaToken: boolean;
+  /** The workspace's names and services, in whose words the first step of a setup is said. */
+  readonly workspace: Pick<RestWorkspace, "handle" | "domain" | "services"> | undefined;
   readonly onChanged: () => void;
 }) {
   const words = useWords();
   const page = words.agents.page;
-  const { client, agent, handle, viaToken, onChanged } = props;
+  const { client, agent, handle, viaToken, workspace, onChanged } = props;
   const { busy, error, act } = useAction();
+  const readInvitation = useCallback(
+    (signal: AbortSignal) => client.agentInvitation(handle, signal),
+    [client, handle],
+  );
+  const invitation = useRead(readInvitation);
+  // The invitation just made: its code is shown this once, and is gone with the page.
+  const [made, setMade] = useState<RestAgentInvitationMade | undefined>(undefined);
+  const first = useMemo(() => {
+    const identity = workspace?.services?.identity;
+    return workspace === undefined || identity === undefined
+      ? []
+      : describeService("identity", identity, serviceNamesOf(workspace, handle)).guide;
+  }, [workspace, handle]);
   const readSecrets = useCallback(
     (signal: AbortSignal) => client.agentSecrets(handle, signal),
     [client, handle],
@@ -410,6 +438,29 @@ function AgentSettings(props: {
             void act(async () => {
               await client.sendSignal(handle, { kind: "set", set: choice });
               onChanged();
+            })
+          }
+        />
+      </section>
+      <section className="sc-panel" aria-label={page.settings.machine.title}>
+        <h2 className="sc-section-title">{page.settings.machine.title}</h2>
+        <AgentInvitationPanel
+          invitation={invitation.failed === undefined ? invitation.value?.invitation : null}
+          made={made}
+          first={first}
+          guideHref={setupHref}
+          busy={busy}
+          onInvite={() =>
+            void act(async () => {
+              setMade(await client.inviteAgent(handle));
+              invitation.again();
+            })
+          }
+          onRevoke={() =>
+            void act(async () => {
+              await client.revokeAgentInvitation(handle);
+              setMade(undefined);
+              invitation.again();
             })
           }
         />
@@ -506,6 +557,8 @@ export interface AgentPageProps {
   readonly client: ConsoleClient;
   /** Whether the console is held through a token: such a console reads no sign-in. */
   readonly viaToken: boolean;
+  /** The workspace's names and services, in whose words the first step of a setup is said. */
+  readonly workspace?: Pick<RestWorkspace, "handle" | "domain" | "services"> | undefined;
   /** The agent's plate, which the console draws as it draws a person's. */
   readonly work: (agent: RestAgent) => ReactNode;
 }
@@ -575,6 +628,7 @@ export function AgentPage(props: AgentPageProps) {
           agent={agent}
           handle={handle}
           viaToken={props.viaToken}
+          workspace={props.workspace}
           onChanged={found.again}
         />
       )}

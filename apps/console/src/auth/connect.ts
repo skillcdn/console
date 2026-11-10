@@ -1,6 +1,7 @@
 import { randomInt } from "node:crypto";
 import { CONNECT_CODE_ALPHABET, CONNECT_CODE_LENGTH, type ConnectAs } from "@skillcdn/console/api";
 import type { Database } from "../db/client.js";
+import { revokeInvitation } from "../db/queries/agent-invitations.js";
 import {
   approveConnectRequest,
   type ConnectRequestRecord,
@@ -194,6 +195,10 @@ export class Connections {
     }
     if (claim.as === "self") {
       const signedIn = await sessions.startCommand(person, claim.name, client);
+      // The invitation that led a machine to an agent account ends when its command has signed in.
+      if (person.kind === "agent") {
+        await revokeInvitation(database, person.id);
+      }
       logger.info(
         { person: person.id, sessionId: signedIn.session.id },
         "a command signed in as its account",

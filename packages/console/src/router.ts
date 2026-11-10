@@ -139,6 +139,8 @@ export type Route =
   | { readonly name: "categories" }
   /** Where a person approves an agent's connection, by the code it showed, or types one. */
   | { readonly name: "connect"; readonly code: string | undefined }
+  /** What an invitation's code opens (ADR-0088): the guide of an agent account's setup, read without a sign-in. */
+  | { readonly name: "setup"; readonly code: string }
   /** An address that moved: the page takes the person to `to` in its place. */
   | { readonly name: "moved"; readonly to: string }
   /** A page a console adds of its own (`createConsole({ pages })`): on the workspace, or on a project. */
@@ -218,6 +220,8 @@ export const PATHS = {
   pluginSettings: "/settings/plugins",
   /** Where an agent's connection is approved (ADR-0011): `/connect/<code>`, or the code typed. */
   connect: "/connect",
+  /** Where the guide of an agent account's setup is read, by the code of its invitation (ADR-0088): `/setup/<code>`. */
+  setup: "/setup",
 } as const;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -419,6 +423,10 @@ export function matchRoute(pathname: string, search = ""): Route {
     const code = path.slice(PATHS.connect.length + 1);
     return CODE_TEXT.test(code) ? { name: "connect", code } : NOT_FOUND;
   }
+  if (path.startsWith(`${PATHS.setup}/`)) {
+    const code = path.slice(PATHS.setup.length + 1);
+    return CODE_TEXT.test(code) ? { name: "setup", code } : NOT_FOUND;
+  }
   if (path.startsWith(`${PATHS.people}/`)) {
     const [id, page, ...more] = path.slice(PATHS.people.length + 1).split("/");
     if (id === undefined || !UUID.test(id) || more.length > 0) {
@@ -566,6 +574,11 @@ export function matchRoute(pathname: string, search = ""): Route {
 /** Where a person approves an agent's connection by its code, or types one. */
 export function connectHref(code?: string): string {
   return code === undefined ? PATHS.connect : `${PATHS.connect}/${encodeURIComponent(code)}`;
+}
+
+/** Where the guide of an agent account's setup is read, by the code of its invitation. */
+export function setupHref(code: string): string {
+  return `${PATHS.setup}/${encodeURIComponent(code)}`;
 }
 
 /** The views of an agent account's page. */

@@ -45,6 +45,8 @@ export const REST_ROUTES = {
   plugins: "/api/v1/plugins",
   /** The agent accounts (ADR-0084): members of their own, made by an administrator; each under its handle. */
   agents: "/api/v1/agents",
+  /** What an invitation's code opens, for whoever holds it (ADR-0088): `/api/v1/setup/<code>`. */
+  setup: "/api/v1/setup",
 } as const;
 
 /** The REST path of one agent account, by its handle, and of what is under it. */

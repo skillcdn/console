@@ -168,6 +168,7 @@ import {
   workHref,
 } from "./router.js";
 import { projectPath } from "./routes.js";
+import { SetupPage } from "./setup-page.js";
 import { errorWords, useAction } from "./use-action.js";
 
 // The composition of the default console: the pages assembled from the components, with the
@@ -2869,7 +2870,8 @@ function NewAgentPage(props: {
             onSubmit={(input) =>
               void act(async () => {
                 await data.actions.createAgent(input);
-                navigation.replace(PATHS.agents);
+                // To the account's settings, where the invitation that leads a machine to it is made.
+                navigation.replace(agentHref(input.handle, "settings"));
               })
             }
             onCancel={() => navigation.back(PATHS.agents)}
@@ -3164,6 +3166,7 @@ function WorkspacePage(props: {
         session={route.session}
         client={client}
         viaToken={holdsToken(data)}
+        workspace={data.me?.workspace}
         work={(agent) => (
           <AgentWork agent={agent} data={data} components={components} week={route.week} />
         )}
@@ -3363,6 +3366,14 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
               </Callout>
             )}
           </div>
+        </Ground>
+      );
+    } else if (route.name === "setup") {
+      // What an invitation's code opens is read without a sign-in (ADR-0088): the guide, and
+      // nothing else of the console.
+      content = (
+        <Ground>
+          <SetupPage client={client} code={route.code} />
         </Ground>
       );
     } else if (data.me.person === null) {

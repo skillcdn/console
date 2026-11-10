@@ -17,6 +17,8 @@ import {
 import {
   type RestAgent,
   type RestAgentInput,
+  type RestAgentInvitationMade,
+  type RestAgentInvitationState,
   type RestAgentPatch,
   type RestAgentProposals,
   type RestAgentSecret,
@@ -28,6 +30,7 @@ import {
   type RestAgentSessionEndInput,
   type RestAgentSessionInput,
   type RestAgentSessions,
+  type RestAgentSetup,
   type RestAgents,
   type RestAnswerInput,
   type RestArchivedTasks,
@@ -136,6 +139,8 @@ import {
   type RestWorkspace,
   type RestWorkspacePackConnect,
   type RestWorkspacePatch,
+  restAgentInvitationMadeSchema,
+  restAgentInvitationStateSchema,
   restAgentProposalsSchema,
   restAgentSchema,
   restAgentSecretAccessesSchema,
@@ -144,6 +149,7 @@ import {
   restAgentSecretValueSchema,
   restAgentSessionSchema,
   restAgentSessionsSchema,
+  restAgentSetupSchema,
   restAgentsSchema,
   restArchivedTasksSchema,
   restCategoriesSchema,
@@ -665,6 +671,14 @@ export interface ConsoleClient {
     input: RestAgentSecretInput,
   ): Promise<RestAgentSecret>;
   removeAgentSecret(handle: string, name: string): Promise<void>;
+  /** The invitation that leads a machine to an agent account (ADR-0088), as it stands; for a supervisor. */
+  agentInvitation(handle: string, signal?: AbortSignal): Promise<RestAgentInvitationState>;
+  /** Makes the invitation, in place of the one there was: the code this once, and the command to run with it. */
+  inviteAgent(handle: string): Promise<RestAgentInvitationMade>;
+  /** Takes the invitation away. */
+  revokeAgentInvitation(handle: string): Promise<void>;
+  /** What an invitation's code opens, for whoever holds it, signed in or not. */
+  agentSetup(code: string, signal?: AbortSignal): Promise<RestAgentSetup>;
   /** The account's record of its store, the newest first, for a supervisor. */
   agentSecretAccesses(
     handle: string,
@@ -1538,6 +1552,31 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
         }),
         undefined,
         restAgentSecretAccessesSchema,
+        signal,
+      ),
+    agentInvitation: (handle, signal) =>
+      request(
+        "GET",
+        `${base}${agentPath(handle, "invitation")}`,
+        undefined,
+        restAgentInvitationStateSchema,
+        signal,
+      ),
+    inviteAgent: (handle) =>
+      request(
+        "POST",
+        `${base}${agentPath(handle, "invitation")}`,
+        undefined,
+        restAgentInvitationMadeSchema,
+      ),
+    revokeAgentInvitation: (handle) =>
+      request("DELETE", `${base}${agentPath(handle, "invitation")}`, undefined, undefined),
+    agentSetup: (code, signal) =>
+      request(
+        "GET",
+        `${base}${REST_ROUTES.setup}/${encodeURIComponent(code)}`,
+        undefined,
+        restAgentSetupSchema,
         signal,
       ),
     sendSignal: (handle, input, pictures = []) => {

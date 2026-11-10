@@ -457,11 +457,21 @@ A session is `{ "id", "month", "startedAt", "endedAt", "ended", "product", "mode
 
 A run carries `sessionId`, the session of an agent account's runner it was begun in, or `null`: set by the console for a run the account's command begins while a session of the account is open.
 
+### The invitation: `/api/v1/agents/<handle>/invitation` and `GET /api/v1/setup/<code>`
+
+The invitation that leads a machine to an agent account ([ADR-0088](../adr/0088-an-agent-account-has-a-desk-and-is-set-up-from-an-invitation-by-signing-in-as-itself.md), point 4), and what its code opens. Both exist where the deployment signs people in, and nowhere else.
+
+`GET`, `POST` and `DELETE /api/v1/agents/<handle>/invitation` are a supervisor's, an administrator or whoever is above the account on its reporting line, with a session or a token ([ADR-0021](../adr/0021-a-token-configures-as-its-person-does.md)): `auth.forbidden` for a member who sees the account and supervises nothing of it, `agent.not_found` for a handle that is none. `GET` answers `{ "invitation": { "createdAt", "expiresAt", "by": person | null } | null }`, the invitation as it stands, or `null` where none was made or its day has passed; never the code. `POST` makes one, in place of the one there was, and answers `201` with `{ "invitation", "code", "command" }`: the code, eight characters of the alphabet of connection codes in two groups (`ABCD-EFGH`), which is answered this once and of which the console keeps the hash alone; and the command that sets a machine up with it, `console agent setup --console <the console's origin> --code <code>`. An account has one invitation, good for `INVITATION_DAYS` (7) days or until the account's command has signed in, whichever is first: a connection approved `as: "self"` for the account ends it. `DELETE` takes it away and answers `204`, whether there was one. An invitation is on no feed; the console logs who invited which account, and never the code.
+
+`GET /api/v1/setup/<code>` is read without a sign-in, by whoever holds the code, typed in any case and with or without its hyphen. It answers `{ "account": { "handle", "name", "title", "login", "host", "avatarParts" }, "workspace": { "name", "handle", "domain", "services" }, "console": { "url" }, "expiresAt" }`: which account the setup is for, the login it signs in with and the provider it signs in through, the names and the services of its workspace ([ADR-0089](../adr/0089-a-workspace-names-the-services-its-agents-work-with.md)), and the console to come back to. Nothing secret is among them, nothing by which the account or anyone is entered, and nobody else of the workspace. A code that opens nothing is `setup.not_found` (404), one answer whatever the reason: no invitation was made with it, its day has passed, it was taken away or made again, the account's command has signed in, or the account is out. It is answered with `cache-control: no-store`. The code is an invitation and no credential: it says which account a setup is for, and gives nobody the account.
+
+The guide is made from that answer by the package (`setupGuideOf`, `setupGuideText`), for that account and those services, in the order a setup is done and by whom: what whoever prepares the machine does before the line, how the account signs the command in as itself, what the agent does when it starts and what is asked of a person. `console agent setup --console <origin> --code <code>` prints it for the agent and the page `/setup/<code>` shows it to a person, who is asked for no sign-in there ([cli.md](cli.md#agent-accounts)).
+
 ### To come
 
 | Milestone | What |
 |---|---|
-| 43 | The invitation ([ADR-0088](../adr/0088-an-agent-account-has-a-desk-and-is-set-up-from-an-invitation-by-signing-in-as-itself.md)) and the guide it opens |
+| 43 | The hours an account's briefings go by, `dayStart` and `dayEnd` ([ADR-0085](../adr/0085-a-runner-on-the-agents-machine-is-told-by-signals-and-runs-one-session-at-a-time.md), point 11) |
 
 ## Signing in
 
