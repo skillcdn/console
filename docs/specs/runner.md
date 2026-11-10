@@ -106,7 +106,25 @@ Hold the release until the migration is checked.
 
 What the agent itself does on the board raises no wake to it.
 
-The first signal of an account's record is the wake of its onboarding task ([ADR-0088](../adr/0088-an-agent-account-has-a-desk-and-is-set-up-from-an-invitation-by-signing-in-as-itself.md)), from the `board` with the task's number as its key: the console sends it when the account is made ([rest.md](rest.md#get-apiv1agents-and-post-apiv1agents)), and it waits on the record until a runner first connects.
+## The board's wakes
+
+The board wakes an agent account by rules ([ADR-0085](../adr/0085-a-runner-on-the-agents-machine-is-told-by-signals-and-runs-one-session-at-a-time.md), point 10), which the worker role applies from where it read the feed to, as the plugins' hooks are dispatched; an `api` role that carries the worker's work applies them itself. Each wake is a signal on the account's record, a `wake` from the `board` whose `by` is whoever did what woke it and whose `key` says what it is about, so that the runner says several wakes of one thing once:
+
+| What happened | Who is woken | `key` |
+|---|---|---|
+| A task is written ready, or made ready, and its due day is unset, today or past | The agent accounts at work on it | `<project>#<number>` |
+| An agent account is made a worker of such a task | That account, and nobody who was at work on it already | `<project>#<number>` |
+| The due day of such a task is moved to today or before, or taken away | The agent accounts at work on it | `<project>#<number>` |
+| A comment on a task | The agent accounts that own it or are at work on it, whatever its state and its day | `<project>#<number>` |
+| A decision is raised | The agent accounts it is addressed to | `decision:<id>` |
+| A decision is answered | The agent account that raised it | `decision:<id>` |
+| The workspace's `handle`, `domain` or `services` change | Every agent account that was there, from the `console` and by nobody | `services` |
+
+"Today" is the day in the workspace's time zone, UTC where it has none: a task planned for a later day wakes nobody, and appears in that day's briefing. A task is read as it stands when the worker reads the event, which is what the agent will find. What an account did itself wakes it for nothing; an account that is out is woken for nothing; a task that is put away wakes nobody. A wake says what it is about in the console's own words, with the command that reads it (`console task 412 --project ops`, `console decision <id>`): a task's title and a decision's question on one line, and never what a comment says, which the agent reads on the board as a comment.
+
+The first wake of an account is its onboarding task ([ADR-0088](../adr/0088-an-agent-account-has-a-desk-and-is-set-up-from-an-invitation-by-signing-in-as-itself.md)), by the first rule: the console writes the task ready, with the account at work on it, when the account is made ([rest.md](rest.md#get-apiv1agents-and-post-apiv1agents)), and the wake waits on the record until a runner first connects.
+
+The worker reads the feed every five seconds, a hundred events at a time, one pass at a time whatever the number of processes: the place it read to is a row a pass locks. An event's wakes are sent before the place moves past it, so a pass that ends halfway sends an event's wakes again and never loses one. A workspace that had a history when the rules came begins at the feed's end, and a new one at its beginning.
 
 ## A session's life
 

@@ -33,6 +33,7 @@ import { type Quotas, quotasOf } from "../http/quotas.js";
 import type { AppEnv } from "../http/request-context.js";
 import { startServer } from "../http/server.js";
 import { Archivist } from "../jobs/archivist.js";
+import { BoardWakes } from "../jobs/board-wakes.js";
 import { Janitor } from "../jobs/janitor.js";
 import { OrganizationSync } from "../jobs/organization-sync.js";
 import { RunCloser } from "../jobs/run-closer.js";
@@ -508,6 +509,15 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
     : undefined;
   runnerWatch?.start();
   const workspace = workspaceResolver(database, systemClock, config.workspace.name);
+  const boardWakes = config.worker.inProcess
+    ? new BoardWakes({
+        database,
+        workspaceId: async () => (await workspace()).id,
+        clock: systemClock,
+        logger,
+      })
+    : undefined;
+  boardWakes?.start();
   const sync =
     config.worker.inProcess && organization !== undefined
       ? new OrganizationSync({
@@ -553,6 +563,7 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
   await archivist?.close();
   await runCloser?.close();
   await runnerWatch?.close();
+  await boardWakes?.close();
   await sync?.close();
   await streams?.close();
   await plugins?.stop();

@@ -199,10 +199,8 @@ describe("an agent account's runner (ADR-0085)", () => {
 
     const first = await send(bearer(command), "PUT", RUNNER, beat());
     expect(first.status).toBe(200);
-    // One signal waits on the record already: the wake of its onboarding task, which the
-    // console sent when the account was made (ADR-0088).
     expect(restRunnerHeartbeatSchema.parse(await first.json())).toEqual({
-      latest: 1,
+      latest: 0,
       delivered: 0,
       settings: { model: null, effort: null },
       state: "running",
@@ -235,7 +233,7 @@ describe("an agent account's runner (ADR-0085)", () => {
     expect(supervised.state?.heardAt).not.toBeNull();
     expect(supervised.runner).toMatchObject({
       delivered: 0,
-      latest: 1,
+      latest: 0,
       session: null,
       machine: { name: "mac-mini", os: "macOS 15.1", user: "mira" },
       runner: "0.4.8",
@@ -318,7 +316,7 @@ describe("an agent account's runner (ADR-0085)", () => {
     });
     expect(told.status).toBe(201);
     expect(restSignalSchema.parse(await told.json())).toMatchObject({
-      number: 2,
+      number: 1,
       kind: "tell",
       by: { login: "Alice" },
       agent: null,
@@ -333,7 +331,7 @@ describe("an agent account's runner (ADR-0085)", () => {
     const made = await send(fromPages(alice), "POST", REST_ROUTES.tokens, { name: "Claude Code" });
     const alicesAgent = restTokenCreatedSchema.parse(await made.json()).secret;
     expect(await signal(bearer(alicesAgent), { kind: "wake" })).toMatchObject({
-      number: 3,
+      number: 2,
       kind: "wake",
       by: { login: "Alice" },
       agent: "Claude Code",
@@ -341,9 +339,9 @@ describe("an agent account's runner (ADR-0085)", () => {
     });
     // The heartbeat is answered where the record stands, and what the console has as delivered:
     // the most it was ever told, for a runner that lost its own count.
-    expect(await heartbeat({ delivered: 1 })).toMatchObject({ latest: 3, delivered: 1 });
+    expect(await heartbeat({ delivered: 1 })).toMatchObject({ latest: 2, delivered: 1 });
     expect((await heartbeat({ delivered: 0 })).delivered).toBe(1);
-    expect((await agentOf({ cookie: alice })).runner).toMatchObject({ delivered: 1, latest: 3 });
+    expect((await agentOf({ cookie: alice })).runner).toMatchObject({ delivered: 1, latest: 2 });
 
     // Only a supervisor sends one; from a browser, from the console's own pages.
     const beside = await send(fromPages(bob), "POST", SIGNALS, { kind: "tell", text: "Hello" });
@@ -379,28 +377,27 @@ describe("an agent account's runner (ADR-0085)", () => {
 
     // The record, the newest first, for its supervisors and for the account itself.
     const record = restSignalsSchema.parse(await (await get({ cookie: alice }, SIGNALS)).json());
-    expect(record.items.map((item) => [item.number, item.kind, item.source])).toEqual([
-      [3, "wake", "person"],
-      [2, "tell", "person"],
-      [1, "wake", "board"],
+    expect(record.items.map((item) => [item.number, item.kind])).toEqual([
+      [2, "wake"],
+      [1, "tell"],
     ]);
     expect(record.more).toBe(false);
     const page = restSignalsSchema.parse(
       await (await get({ cookie: alice }, `${SIGNALS}?limit=1`)).json(),
     );
-    expect(page.items.map((item) => item.number)).toEqual([3]);
+    expect(page.items.map((item) => item.number)).toEqual([2]);
     expect(page.more).toBe(true);
     const before = restSignalsSchema.parse(
-      await (await get({ cookie: alice }, `${SIGNALS}?before=3`)).json(),
+      await (await get({ cookie: alice }, `${SIGNALS}?before=2`)).json(),
     );
-    expect(before.items.map((item) => item.number)).toEqual([2, 1]);
+    expect(before.items.map((item) => item.number)).toEqual([1]);
     for (const query of ["limit=0", "limit=1000", "limit=x", "before=0", "before=1.5"]) {
       expect((await get({ cookie: alice }, `${SIGNALS}?${query}`)).status, query).toBe(400);
     }
     expect((await get({ cookie: bob }, SIGNALS)).status).toBe(403);
     for (const headers of [bearer(command), { cookie: mira }]) {
       const mine = restSignalsSchema.parse(await (await get(headers, OWN_SIGNALS)).json());
-      expect(mine.items.map((item) => item.number)).toEqual([3, 2, 1]);
+      expect(mine.items.map((item) => item.number)).toEqual([2, 1]);
     }
     expect((await get({ cookie: bob }, OWN_SIGNALS)).status).toBe(404);
 
@@ -411,7 +408,7 @@ describe("an agent account's runner (ADR-0085)", () => {
 
   it("keeps the model and the effort chosen for it, among those its runner offered", async () => {
     const chosen = await signal(fromPages(alice), { kind: "set", set: { model: "opus" } });
-    expect(chosen).toMatchObject({ number: 4, kind: "set", set: { model: "opus", effort: null } });
+    expect(chosen).toMatchObject({ number: 3, kind: "set", set: { model: "opus", effort: null } });
     // A field left out stays as it is; `null` is the product's own again.
     expect((await signal(fromPages(alice), { kind: "set", set: { effort: "high" } })).set).toEqual({
       model: "opus",
@@ -432,12 +429,12 @@ describe("an agent account's runner (ADR-0085)", () => {
       expect(refused.status).toBe(400);
       expect(await errorOf(refused)).toBe("signal.not_offered");
     }
-    expect((await heartbeat()).latest).toBe(6);
+    expect((await heartbeat()).latest).toBe(5);
   });
 
   it("is stopped by a supervisor at once, and stays so until a restart, whatever the runner says", async () => {
     const stopped = await signal(fromPages(alice), { kind: "stop", text: "Wait for the review." });
-    expect(stopped).toMatchObject({ number: 7, kind: "stop", text: "Wait for the review." });
+    expect(stopped).toMatchObject({ number: 6, kind: "stop", text: "Wait for the review." });
     expect((await agentOf({ cookie: bob })).state).toMatchObject({
       state: "stopped",
       reason: "stop",

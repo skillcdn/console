@@ -1916,6 +1916,8 @@ export const restEventDataSchema = z.object({
   title: z.optional(z.string()),
   /** For `task.updated`, `project.updated`, `goal.updated`, `decision.updated` and `person.updated`: which fields changed. */
   fields: z.optional(z.array(z.string())),
+  /** For a `task.updated` that put anyone to work on the task: their ids. */
+  workersAdded: z.optional(z.array(uuid)),
   /** For the events about a document: its path, and the version written. */
   path: z.optional(z.string()),
   version: z.optional(z.int()),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { onboardingOf, onboardingTitle, onboardingWake } from "./onboarding.js";
+import { onboardingOf, onboardingTitle } from "./onboarding.js";
 
 // The onboarding task of an agent account (ADR-0088): its words, made for one account and the
 // services of its workspace.
@@ -15,12 +15,9 @@ const WORKSPACE = {
 };
 
 describe("the onboarding task of an agent account", () => {
-  it("is called after the account, and its first wake says where it is", () => {
+  it("is called after the account", () => {
     expect(onboardingTitle("mira")).toBe("Set up @mira");
     expect(onboardingOf({ handle: "mira", workspace: WORKSPACE }).title).toBe("Set up @mira");
-    expect(onboardingWake("mira", "ops", 412)).toBe(
-      'Your first task is #412 in ops, "Set up @mira": making your account ready to work. Read it (console task 412 --project ops), then take it.',
-    );
   });
 
   it("says what the agent does itself, in the words of the services, then what is its own everywhere", () => {

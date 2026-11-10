@@ -13,13 +13,17 @@ import {
   restTasksSchema,
   restTokenCreatedSchema,
 } from "@skillcdn/console/api";
+import { pino } from "pino";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { drizzleOf } from "./db/client.js";
+import { workspaces } from "./db/schema.js";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "./db/testing.js";
+import { BoardWakes } from "./jobs/board-wakes.js";
 import { createFixtureProvider } from "./testing/fixture-provider.js";
 import { createHarness, type Harness, SIGN_IN_URL } from "./testing/harness.js";
 
 // The onboarding of an agent account (ADR-0088, points 4 to 6): its first task, made with the
-// account, and the wake that waits for its runner; and the accounts it holds elsewhere
+// account, with which the board wakes it; and the accounts it holds elsewhere
 // (ADR-0089), which the account records of itself and a supervisor may. On a database of its own.
 
 let testDatabase: TestDatabase;
@@ -77,7 +81,7 @@ afterAll(async () => {
 });
 
 describe("the onboarding of an agent account (ADR-0088)", () => {
-  it("makes its first task with the account, and the wake that waits for its runner", async () => {
+  it("makes its first task with the account, and the board wakes it with it", async () => {
     const made = await send(fromPages(alice), "POST", REST_ROUTES.agents, {
       host: "gh",
       login: "carol",
@@ -112,22 +116,35 @@ describe("the onboarding of an agent account (ADR-0088)", () => {
     expect(task.body).toContain("**Invite mira to the messenger.**");
     expect(task.body).not.toContain("Make the account `acme-mira` at GitHub");
 
-    // The wake is on the account's record from the start, sent by the console itself, and is
-    // what a runner reads first when one connects.
-    const signals = restSignalsSchema.parse(
-      await (await get({ cookie: alice }, agentPath("mira", "signals"))).json(),
-    ).items;
+    // The board wakes the account with it, as with any ready task it is at work on, and the
+    // wake waits on the account's record for a runner's first connection: nothing is there
+    // until the worker has read the feed, and one wake after.
+    const signalsOf = async () =>
+      restSignalsSchema.parse(
+        await (await get({ cookie: alice }, agentPath("mira", "signals"))).json(),
+      ).items;
+    expect(await signalsOf()).toEqual([]);
+    const [workspace] = await drizzleOf(testDatabase.database).select().from(workspaces).limit(1);
+    const wakes = new BoardWakes({
+      database: testDatabase.database,
+      workspaceId: async () => workspace?.id ?? "",
+      clock: { now: () => new Date() },
+      logger: pino({ level: "silent" }),
+    });
+    await wakes.sweep();
+    const signals = await signalsOf();
     expect(signals).toHaveLength(1);
     expect(signals[0]).toMatchObject({
       number: 1,
       kind: "wake",
       source: "board",
-      key: "#1",
-      by: null,
+      key: "ops#1",
+      by: { login: "Alice" },
     });
     expect(signals[0]?.text).toBe(
-      'Your first task is #1 in ops, "Set up @mira": making your account ready to work. Read it (console task 1 --project ops), then take it.',
+      '#1 "Set up @mira" in ops is ready, and you are at work on it. Read it: console task 1 --project ops',
     );
+    await wakes.close();
 
     // Made through an administrator's agent, the task names the agent it was written through.
     const token = restTokenCreatedSchema.parse(

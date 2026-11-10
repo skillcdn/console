@@ -478,6 +478,8 @@ describe("tasks", () => {
           number: task.number,
           title: "Review the design, again",
           fields: ["title", "priority", "workers"],
+          // Whom the change put to work on it, which is what wakes an agent made a worker.
+          workersAdded: [bob.id],
         },
       ],
     ]);

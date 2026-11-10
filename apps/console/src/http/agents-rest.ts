@@ -11,7 +11,6 @@ import {
   MAX_LANGUAGE_TAG_LENGTH,
   MAX_PROPOSALS,
   onboardingOf,
-  onboardingWake,
   type ProviderKey,
   proposeAgents,
   RESERVED_HANDLES,
@@ -35,7 +34,7 @@ import {
 } from "../auth/policy.js";
 import type { Sessions } from "../auth/sessions.js";
 import type { Database } from "../db/client.js";
-import { findRunner, runnersOf, sendSignal } from "../db/queries/agent-runners.js";
+import { findRunner, runnersOf } from "../db/queries/agent-runners.js";
 import {
   AgentError,
   type AgentReader,
@@ -305,8 +304,9 @@ export function registerAgentsRest(app: Hono<AppEnv>, dependencies: AgentsRestDe
   /**
    * The onboarding of an account just made (ADR-0088, points 4 and 5): its first task, in the
    * project it starts in, with the account as its worker and whoever made the account as its
-   * owner, in the words of the workspace's services; and the wake its runner is sent with it,
-   * which waits on the account's record until a runner first connects.
+   * owner, in the words of the workspace's services. The board wakes the account with it, as
+   * with any ready task it is at work on (ADR-0085), and the wake waits on the account's record
+   * until a runner first connects.
    */
   const onboard = async (
     caller: Caller,
@@ -320,22 +320,11 @@ export function registerAgentsRest(app: Hono<AppEnv>, dependencies: AgentsRestDe
     }
     const settings = await readWorkspaceSettings(database, account.workspaceId);
     const words = onboardingOf({ handle, workspace: settings });
-    const now = clock.now();
     const task = await createTask(database, {
       scope: { workspaceId: account.workspaceId, projectId: project.id },
       actor: actorOf(caller),
       task: { title: words.title, body: words.body, state: "ready", workerIds: [account.id] },
-      now,
-    });
-    await sendSignal(database, {
-      account,
-      kind: "wake",
-      by: undefined,
-      source: "board",
-      key: `#${task.number}`,
-      text: onboardingWake(handle, projectKey, task.number),
-      set: undefined,
-      now,
+      now: clock.now(),
     });
     return { project: projectKey, number: task.number };
   };

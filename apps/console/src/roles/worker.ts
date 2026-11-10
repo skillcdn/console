@@ -2,6 +2,7 @@ import { systemClock } from "../adapters/system-clock.js";
 import type { Config } from "../config/config.js";
 import { createDatabase } from "../db/client.js";
 import { Archivist } from "../jobs/archivist.js";
+import { BoardWakes } from "../jobs/board-wakes.js";
 import { Janitor } from "../jobs/janitor.js";
 import { OrganizationSync } from "../jobs/organization-sync.js";
 import { RunCloser } from "../jobs/run-closer.js";
@@ -95,6 +96,15 @@ export async function runWorker(config: Config, logger: Logger): Promise<void> {
   const runnerWatch = new RunnerWatch({ database, clock: systemClock, logger });
   await runnerWatch.sweep();
   runnerWatch.start();
+  // The board wakes the agent accounts by its rules, from where the feed was read to (ADR-0085).
+  const boardWakes = new BoardWakes({
+    database,
+    workspaceId: async () => (await workspace()).id,
+    clock: systemClock,
+    logger,
+  });
+  await boardWakes.sweep();
+  boardWakes.start();
   if (archivist !== undefined) {
     await archivist.sweep();
     archivist.start(ARCHIVE_INTERVAL_MS);
@@ -112,6 +122,7 @@ export async function runWorker(config: Config, logger: Logger): Promise<void> {
   logger.info({ signal }, "shutting down");
   await janitor.close();
   await runnerWatch.close();
+  await boardWakes.close();
   await archivist?.close();
   await runCloser?.close();
   await sync?.close();

@@ -178,7 +178,6 @@ export {
   type OnboardingInput,
   onboardingOf,
   onboardingTitle,
-  onboardingWake,
 } from "./onboarding.js";
 export {
   DEFAULT_PROPOSALS,

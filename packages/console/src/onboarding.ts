@@ -4,7 +4,8 @@ import { guideServicesOf } from "./setup-guide.js";
 // The onboarding of an agent account (ADR-0088, points 4 to 6): its first task, which the
 // console makes when the account is made, with the agent as its worker. The agent works it as
 // any task, with a run, reports and decisions; what only a person can do it asks for as a
-// decision, of whoever can do it. The task's words are made here, for one account and the
+// decision, of whoever can do it; the board wakes the agent with it as with any ready task it
+// is at work on, which is its first wake. The task's words are made here, for one account and the
 // services of its workspace, in the words of their modules: English, as a skill is, for the
 // agent to read as they are.
 
@@ -18,11 +19,6 @@ export interface OnboardingInput {
 /** What the onboarding task of an account is called. */
 export function onboardingTitle(handle: string): string {
   return `Set up @${handle}`;
-}
-
-/** What the runner's first wake says: where the first task is. */
-export function onboardingWake(handle: string, project: string, number: number): string {
-  return `Your first task is #${number} in ${project}, "${onboardingTitle(handle)}": making your account ready to work. Read it (console task ${number} --project ${project}), then take it.`;
 }
 
 const item = (title: string, body: string): string => `- **${title}.** ${body}`;

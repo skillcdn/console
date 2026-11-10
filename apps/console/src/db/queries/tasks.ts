@@ -575,6 +575,7 @@ export async function updateTaskIn(tx: Transaction, input: TaskUpdate): Promise<
   if (workersChanged) {
     changed.push("workers");
   }
+  const workersAdded = nextWorkers.filter((id) => !currentWorkers.includes(id));
   // Named on the wire as the API takes them, so that a feed says what a person changed.
   if (next.categoryId !== current.categoryId) {
     changed.push("category");
@@ -634,6 +635,8 @@ export async function updateTaskIn(tx: Transaction, input: TaskUpdate): Promise<
         number: current.number,
         title: next.title,
         fields: changed,
+        // Whom the change put to work on it: what wakes an agent made a worker (ADR-0085).
+        ...(workersAdded.length === 0 ? {} : { workersAdded }),
       },
       now,
     });

@@ -191,12 +191,7 @@ describe("a runner and the console, together (ADR-0085, ADR-0086)", () => {
       random: Math.random,
       time: () => "14:02",
       files: { write: async () => undefined, remove: async () => undefined },
-      // The wake of its onboarding task, the first signal of the account's record (ADR-0088),
-      // was handed to the product in a session before these.
-      state: {
-        load: async () => ({ delivered: 1, conversation: undefined }),
-        save: async () => undefined,
-      },
+      state: { load: async () => undefined, save: async () => undefined },
       log: (line) => log.push(line),
       timing: { heartbeatMs: 200, batchMs: 30, groupWindowMs: 30, reconnectMs: 50 },
     });
@@ -232,13 +227,13 @@ describe("a runner and the console, together (ADR-0085, ADR-0086)", () => {
       ]);
       expect(product.started[0]?.options.env).toEqual({ GIT_TOKEN: TOKEN });
       expect(product.started[0]?.sent[0]?.text).toMatch(
-        /^\[console [a-z0-9]{6} · session\]\n[\s\S]+\n\n\[console [a-z0-9]{6} #2 · tell · Alice Example · 14:02\]\nHold the release\.$/,
+        /^\[console [a-z0-9]{6} · session\]\n[\s\S]+\n\n\[console [a-z0-9]{6} #1 · tell · Alice Example · 14:02\]\nHold the release\.$/,
       );
       // The mark is the session's own: nothing of it is in what the console keeps.
       const mark = /^\[console ([a-z0-9]{6})/.exec(product.started[0]?.sent[0]?.text ?? "")?.[1];
       expect(JSON.stringify(first.events)).not.toContain(mark);
       await until("the delivery to be said", async () =>
-        (await agent()).runner?.delivered === 2 ? true : undefined,
+        (await agent()).runner?.delivered === 1 ? true : undefined,
       );
       expect((await agent()).runner?.session).toBe(first.open.id);
 

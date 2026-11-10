@@ -486,6 +486,19 @@ export const agentInvitations = pgTable(
 );
 
 /**
+ * Where the board's wake rules have read the feed to (ADR-0085, point 10): the number of the
+ * last event whose wakes were sent, a row for the workspace, which is also what one pass locks
+ * against another.
+ */
+export const agentWakeCursors = pgTable("agent_wake_cursors", {
+  workspaceId: uuid()
+    .primaryKey()
+    .references(() => workspaces.id),
+  after: bigint({ mode: "number" }).notNull().default(0),
+  updatedAt: updatedAt(),
+});
+
+/**
  * An account an agent account holds elsewhere (ADR-0089): what it is called at a service, by
  * the service's short name, and no secret. Recorded by the account or a supervisor, so that
  * taking the account out knows what to close.
