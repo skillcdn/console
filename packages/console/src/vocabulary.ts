@@ -140,6 +140,14 @@ export const SIGNAL_KINDS = [
 
 export type SignalKind = (typeof SIGNAL_KINDS)[number];
 
+/**
+ * What a service is to a workspace's agents (ADR-0089): the one their accounts sign in through,
+ * the git host, the messenger.
+ */
+export const SERVICE_ROLES = ["identity", "git", "messenger"] as const;
+
+export type ServiceRole = (typeof SERVICE_ROLES)[number];
+
 /** Where a signal came from: a supervisor's own, the board, the schedule, a messenger, or the console's own housekeeping. */
 export const SIGNAL_SOURCES = ["person", "board", "schedule", "messenger", "console"] as const;
 

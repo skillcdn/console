@@ -254,6 +254,8 @@ export const ko: Messages = {
     "token.too_many": "만들 수 있는 토큰 수를 다 채웠습니다. 먼저 하나를 삭제하세요.",
     "workspace.pack_connect_refused": "SkillCDN이 연결을 거부했습니다.",
     "workspace.pack_connect_unsupported": "이 콘솔에서는 팩을 연결할 수 없습니다.",
+    "workspace.identity_unavailable":
+      "이 콘솔에서는 그 서비스로 로그인할 수 없습니다. identity 서비스는 이 콘솔의 로그인 수단 중 하나여야 합니다.",
     "workspace.pack_token_refused": "SkillCDN이 이 토큰으로는 팩을 제공하지 않습니다.",
     "workspace.pack_token_unsupported": "이 콘솔에서는 팩 토큰을 보관할 수 없습니다.",
   },
@@ -895,6 +897,36 @@ export const ko: Messages = {
     skillsToken: "SkillCDN 토큰",
     skillsTokenIntro:
       "자기 주소도 자기 토큰도 없는 모든 프로젝트가 이 토큰으로 조직의 팩을 읽습니다. 공개 팩에는 필요 없습니다. SkillCDN에서 승인한 코드로 연결하거나, 거기서 직접 만든 토큰을 붙여 넣으세요. 콘솔은 토큰을 암호화해 보관하고 누구에게도 보여 주지 않습니다.",
+    services: {
+      title: "서비스",
+      aria: "에이전트가 쓰는 서비스",
+      intro:
+        "에이전트의 계정을 만드는 곳입니다. 서비스에서의 이름은 조직의 짧은 이름, 에이전트의 핸들, 도메인을 조합해 만듭니다.",
+      handle: "짧은 이름",
+      handleHint: "조직의 짧은 이름입니다. 영문 소문자, 숫자, 하이픈으로 씁니다: acme.",
+      domain: "도메인",
+      domainHint: "메일과 웹 도메인입니다: acme.example.",
+      none: "설정 안 함",
+      roles: { identity: "로그인", git: "Git 호스트", messenger: "메신저" },
+      roleHints: {
+        identity:
+          "에이전트 계정이 이 콘솔에 로그인하는 수단입니다. 이 콘솔의 로그인 수단 중 하나여야 합니다.",
+        git: "에이전트의 git 계정과 데스크를 만드는 곳입니다.",
+        messenger: "에이전트가 구성원으로 들어가고, 에이전트를 깨우는 곳입니다.",
+      },
+      kind: "서비스",
+      noService: "없음",
+      other: "다른 서비스",
+      otherKind: "서비스 이름(영문 소문자)",
+      parameters: {
+        organization: "조직",
+        account: "계정 이름",
+        workspace: "워크스페이스 주소",
+      },
+      accountHint:
+        "그곳에서 에이전트 계정을 부르는 방식입니다. {workspace}, {agent}, {domain}으로 씁니다. 비워 두면 서비스의 기본 방식을 따릅니다.",
+      example: (name: string) => `mira라는 에이전트는 그곳에서 ${name}입니다.`,
+    },
     workspace: {
       title: "워크스페이스",
       aria: "워크스페이스 설정",

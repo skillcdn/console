@@ -90,6 +90,9 @@ export const SESSIONS_PAGE_LIMIT = 50;
 export const MAX_SESSIONS_PAGE_LIMIT = 200;
 /** Why an event was sealed, in a line. */
 export const MAX_SEAL_REASON_LENGTH = 500;
+/** A service a workspace names (ADR-0089): how many parameters one has beside its kind, and how long one is. */
+export const MAX_SERVICE_PARAMETERS = 8;
+export const MAX_SERVICE_VALUE_LENGTH = 200;
 /** A team's name (ADR-0073). */
 export const MAX_TEAM_NAME_LENGTH = 60;
 /** A team's key (ADR-0074), as long as a project's may be: the two are one set of names. */

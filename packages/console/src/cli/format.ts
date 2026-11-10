@@ -258,8 +258,23 @@ export function formatWorkspace(workspace: RestWorkspace): string {
   const visibility = workspace.peopleVisibility ?? "everyone";
   const zone = workspace.timeZone ?? null;
   const token = workspace.skills.packToken ?? null;
+  const services = Object.entries(workspace.services ?? {}).filter(
+    (entry): entry is [string, Record<string, string>] => entry[1] !== undefined,
+  );
   return [
     `workspace ${workspace.name}`,
+    `handle: ${workspace.handle ?? "none"}  domain: ${workspace.domain ?? "none"}  (what a name at a service is put together from, with an agent account's handle)`,
+    ...(services.length === 0
+      ? ["services: none  (what the agents' accounts are made at: identity, git, messenger)"]
+      : services.map(
+          ([role, service]) =>
+            `service ${role}: ${[
+              service.kind ?? "?",
+              ...Object.entries(service)
+                .filter(([name]) => name !== "kind")
+                .map(([name, value]) => `${name}=${value}`),
+            ].join(", ")}`,
+        )),
     `people visibility: ${visibility}  (${visibility === "everyone" ? "everyone sees everyone" : "a member sees only the people they share a project with; an administrator sees everyone"})`,
     `week begins on: ${workspace.weekStart ?? "auto"}  (auto: the system default, as each device has it)`,
     `time zone: ${zone ?? "none"}  (${zone === null ? "moments are printed as the API gives them, in UTC" : "moments are printed in it, as ISO 8601 with its offset"})`,

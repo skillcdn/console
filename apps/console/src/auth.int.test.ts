@@ -125,6 +125,9 @@ describe("signing in", () => {
     expect(restMeSchema.parse(await answer.json())).toEqual({
       workspace: {
         name: "Acme",
+        handle: null,
+        domain: null,
+        services: {},
         tokenDaysAtMost: null,
         skills: { source: "https://skillcdn.ai", address: null, packToken: null },
         peopleVisibility: "everyone",
@@ -162,6 +165,9 @@ describe("signing in", () => {
     expect(await me(h)).toEqual({
       workspace: {
         name: "Acme",
+        handle: null,
+        domain: null,
+        services: {},
         tokenDaysAtMost: null,
         skills: { source: "https://skillcdn.ai", address: null, packToken: null },
         peopleVisibility: "everyone",
@@ -612,6 +618,9 @@ describe("a deployment where nobody signs in", () => {
     expect(await me(h)).toEqual({
       workspace: {
         name: "Acme",
+        handle: null,
+        domain: null,
+        services: {},
         tokenDaysAtMost: null,
         skills: { source: "https://skillcdn.ai", address: null, packToken: null },
         peopleVisibility: "everyone",

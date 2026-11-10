@@ -92,6 +92,8 @@ import {
   deviceTimeZone,
   offsetOf,
   timeZoneGroups,
+  WorkspaceServicesForm,
+  WorkspaceServicesView,
   WorkspaceSettingsForm,
   WorkspaceSettingsView,
 } from "./workspace.js";
@@ -1652,6 +1654,36 @@ describe("the agent accounts (ADR-0084)", () => {
     expect(form).toMatch(
       /<button[^>]*type="submit"[^>]*disabled=""|<button[^>]*disabled=""[^>]*type="submit"/,
     );
+  });
+
+  it("signs an account in through the service the workspace names for it, whichever provider comes first (ADR-0089)", () => {
+    const providers = [
+      { key: "gh" as const, label: "GitHub" },
+      { key: "google" as const, label: "Google", admits: { organization: null, domains: [] } },
+    ];
+    const render = (services: object) =>
+      renderToStaticMarkup(
+        <AgentAccountForm
+          proposals={[]}
+          providers={providers}
+          workspace={{
+            name: "Acme",
+            tokenDaysAtMost: null,
+            skills: { source: "https://skillcdn.test", address: null },
+            handle: "acme",
+            domain: "acme.example",
+            services,
+          }}
+          people={[alice]}
+          me={alice}
+          projects={[]}
+          onSubmit={() => undefined}
+        />,
+      );
+    expect(render({ identity: { kind: "google-workspace" } })).toContain("First, at Google");
+    expect(render({ identity: { kind: "github" } })).toContain("First, at GitHub");
+    // With no identity service named, the first way people sign in here.
+    expect(render({})).toContain("First, at GitHub");
   });
 });
 
@@ -4543,6 +4575,57 @@ describe("the workspace's settings", () => {
       { name: "Asia/Tokyo", offset: "UTC+09:00" },
     ]);
     expect(offsetOf("Nowhere/Nothing", at)).toBeUndefined();
+  });
+
+  it("shows the services its agents work with, and what an agent is called at each (ADR-0089)", () => {
+    const bare = renderToStaticMarkup(<WorkspaceServicesView workspace={workspace} />);
+    expect(bare.match(/Not set/g)).toHaveLength(5);
+    const named = {
+      ...workspace,
+      handle: "acme",
+      domain: "acme.example",
+      services: {
+        identity: { kind: "google-workspace" },
+        git: { kind: "github", organization: "acme" },
+        messenger: { kind: "matrix", server: "<b>chat</b>.acme.example" },
+      },
+    };
+    const html = renderToStaticMarkup(<WorkspaceServicesView workspace={named} />);
+    expect(html).toContain("<dt>Short name</dt><dd>acme</dd>");
+    expect(html).toContain("<dt>Domain</dt><dd>acme.example</dd>");
+    expect(html).toContain("Google Workspace");
+    expect(html).toContain("An agent called mira is mira@acme.example there.");
+    expect(html).toContain("GitHub");
+    expect(html).toContain("organization: acme");
+    expect(html).toContain("An agent called mira is acme-mira there.");
+    // A kind the console does not know is named as it came, as text.
+    expect(html).toContain("matrix");
+    expect(html).toContain("&lt;b&gt;chat&lt;/b&gt;.acme.example");
+
+    const form = renderToStaticMarkup(
+      <WorkspaceServicesForm workspace={named} onSubmit={() => undefined} />,
+    );
+    expect(form).toContain('value="acme"');
+    expect(form).toContain(
+      '<option value="google-workspace" selected="">Google Workspace</option>',
+    );
+    // Each role offers the kinds it may have, none, and another.
+    expect(form.match(/<option value="github"/g)).toHaveLength(2);
+    expect(form.match(/<option value="slack"/g)).toHaveLength(1);
+    expect(form.match(/<option value="\*"/g)).toHaveLength(3);
+    expect(form).toContain('placeholder="{workspace}-{agent}"');
+    // The kind it does not know is shown as another, by its name.
+    expect(form).toContain('<option value="*" selected="">Another</option>');
+    expect(form).toContain('value="matrix"');
+    // Nothing changed yet: nothing to save.
+    expect(/<button[^>]*type="submit"[^>]*>/.exec(form)?.[0]).toContain('disabled=""');
+    const korean = renderToStaticMarkup(
+      <LanguageContext.Provider value={KOREAN}>
+        <WorkspaceServicesView workspace={named} />
+      </LanguageContext.Provider>,
+    );
+    expect(korean).not.toContain("Short name");
+    expect(korean).toContain("mira@acme.example");
   });
 
   it("shows the settings as rows, the zone with its offset and the device's beside it", () => {

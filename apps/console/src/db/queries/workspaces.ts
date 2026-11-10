@@ -34,6 +34,11 @@ export interface WorkspaceSettings {
    * none. The token itself is {@link readWorkspacePackToken}'s to read, where it is needed.
    */
   readonly packTokenSetAt: Date | null;
+  /** The organization's short name and its domain (ADR-0089); null each for none. */
+  readonly handle: string | null;
+  readonly domain: string | null;
+  /** The services its agents work with, by role: a kind and a few short parameters each. */
+  readonly services: Readonly<Record<string, Readonly<Record<string, string>>>>;
 }
 
 /** What a workspace is set to until an administrator says otherwise. */
@@ -43,11 +48,28 @@ export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
   timeZone: null,
   language: null,
   packTokenSetAt: null,
+  handle: null,
+  domain: null,
+  services: {},
 };
 
 /** The settings an administrator changes on the form; the token has routes of its own. */
-const PATCHABLE = ["peopleVisibility", "weekStart", "timeZone", "language"] as const;
-export type WorkspaceSettingsPatch = Partial<Pick<WorkspaceSettings, (typeof PATCHABLE)[number]>>;
+const PATCHABLE = [
+  "peopleVisibility",
+  "weekStart",
+  "timeZone",
+  "language",
+  "handle",
+  "domain",
+] as const;
+export type WorkspaceSettingsPatch = Partial<
+  Pick<WorkspaceSettings, (typeof PATCHABLE)[number]>
+> & {
+  /** The services named anew, by role: one left out stays, null takes one away. */
+  readonly services?:
+    | Readonly<Record<string, Readonly<Record<string, string>> | null | undefined>>
+    | undefined;
+};
 
 const settingsColumns = {
   peopleVisibility: workspaces.peopleVisibility,
@@ -55,7 +77,21 @@ const settingsColumns = {
   timeZone: workspaces.timeZone,
   language: workspaces.language,
   packTokenSetAt: workspaces.packTokenSetAt,
+  handle: workspaces.handle,
+  domain: workspaces.domain,
+  services: workspaces.services,
 };
+
+/** The same parameters under the same names, whatever order they were written in. */
+const sameService = (
+  a: Readonly<Record<string, string>> | undefined,
+  b: Readonly<Record<string, string>> | undefined,
+): boolean =>
+  a === b ||
+  (a !== undefined &&
+    b !== undefined &&
+    Object.keys(a).length === Object.keys(b).length &&
+    Object.entries(a).every(([name, value]) => b[name] === value));
 
 /** The SkillCDN token the organization's pack is read with (ADR-0036), sealed, and when it was set. */
 export interface WorkspacePackToken {
@@ -209,8 +245,29 @@ export async function updateWorkspaceSettings(
       timeZone: patch.timeZone === undefined ? current.timeZone : patch.timeZone,
       language: patch.language === undefined ? current.language : patch.language,
       packTokenSetAt: current.packTokenSetAt,
+      handle: patch.handle === undefined ? current.handle : patch.handle,
+      domain: patch.domain === undefined ? current.domain : patch.domain,
+      services: (() => {
+        const services: Record<string, Readonly<Record<string, string>>> = { ...current.services };
+        for (const [role, service] of Object.entries(patch.services ?? {})) {
+          if (service === null) {
+            delete services[role];
+          } else if (service !== undefined) {
+            services[role] = service;
+          }
+        }
+        return services;
+      })(),
     };
-    const fields = PATCHABLE.filter((field) => next[field] !== current[field]);
+    const roles = new Set([...Object.keys(current.services), ...Object.keys(next.services)]);
+    const fields: string[] = [
+      ...PATCHABLE.filter((field) => next[field] !== current[field]),
+      // A service that changed is said by its role: `services.git`.
+      ...[...roles]
+        .filter((role) => !sameService(current.services[role], next.services[role]))
+        .sort()
+        .map((role) => `services.${role}`),
+    ];
     if (fields.length === 0) {
       return next;
     }
@@ -221,6 +278,9 @@ export async function updateWorkspaceSettings(
         weekStart: next.weekStart,
         timeZone: next.timeZone,
         language: next.language,
+        handle: next.handle,
+        domain: next.domain,
+        services: { ...next.services },
         updatedAt: now,
       })
       .where(eq(workspaces.id, workspaceId));

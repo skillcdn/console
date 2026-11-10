@@ -57,6 +57,11 @@ describe("matchRoute", () => {
     expect(matchRoute("/agents/new")).toEqual({ name: "new-token" });
     // The form for an agent account (ADR-0084), under `new`, which no account's handle may be.
     expect(matchRoute("/agents/new/account")).toEqual({ name: "new-agent" });
+    expect(matchRoute("/settings", "?services")).toEqual({
+      name: "workspace-settings",
+      form: "services",
+    });
+    expect(settingsHref("services")).toBe("/settings?services");
     // An agent account's page, by its handle, and its views.
     const agent = { name: "agent", handle: "mira", session: undefined, week: undefined };
     expect(matchRoute("/agents/mira")).toEqual({ ...agent, tab: "live" });

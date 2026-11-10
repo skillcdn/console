@@ -56,6 +56,7 @@ import {
   type RestSkills,
   type RestTaskPatch,
 } from "../schemas.js";
+import { agentLoginOf } from "../services.js";
 import {
   COLOR_NAMES,
   CONSOLE_LANGUAGES,
@@ -72,6 +73,8 @@ import {
   type ProjectRole,
   type ProjectVisibility,
   type ProviderKey,
+  SERVICE_ROLES,
+  type ServiceRole,
   TASK_PRIORITIES,
   TASK_STATES,
   type TaskPriority,
@@ -3604,15 +3607,23 @@ const agentNew = async (args: readonly string[], io: CliIo): Promise<number> => 
     seed: { type: "string" },
   });
   const handle = handleOf(theOne(positionals, AGENT_USAGE));
-  const login = text(values, "login");
+  const session = await open(io, values);
+  // The account it signs in with: said, or what the workspace's identity service makes of the
+  // two handles and the domain (ADR-0089).
+  // A console that does not say its workspace's services names no login: one is asked for.
+  const asked =
+    text(values, "login") === undefined
+      ? await session.client.me().catch(() => undefined)
+      : undefined;
+  const derived = asked === undefined ? undefined : agentLoginOf(asked.workspace, handle);
+  const login = text(values, "login") ?? derived?.login;
   if (login === undefined) {
     throw misuse(
       `Say the account it will sign in with: console agent new ${handle} --login <login> --project <key>`,
     );
   }
   const chosen = text(values, "host");
-  const host = chosen === undefined ? hostOfLogin(login) : providerOf(chosen);
-  const session = await open(io, values);
+  const host = chosen === undefined ? (derived?.host ?? hostOfLogin(login)) : providerOf(chosen);
   const project = await session.projectKey();
   if (project === undefined) {
     throw misuse(
@@ -4010,7 +4021,41 @@ const team: Command = async (args, io) => {
 // The workspace's settings (ADR-0035): read by everyone, changed by an administrator, themselves
 // on the Settings page or through their agent here (ADR-0021).
 const WORKSPACE_FLAGS =
-  "--people-visibility <everyone|shared-projects>, --week-start <auto|monday|sunday>, --time-zone <zone|none>, --language <en|ko|none>";
+  "--people-visibility <everyone|shared-projects>, --week-start <auto|monday|sunday>, --time-zone <zone|none>, --language <en|ko|none>, --handle <name|none>, --domain <domain|none>, --service <role>=<kind|none>[,<parameter>=<value>]...";
+
+/**
+ * A service as `--service` names one (ADR-0089): `git=github,organization=acme`, or `git=none`
+ * to take it away. The role is one of the three; the kind and its parameters are the console's
+ * to judge.
+ */
+function serviceOf(word: string): {
+  readonly role: ServiceRole;
+  readonly service: Record<string, string> | null;
+} {
+  const [first = "", ...rest] = word.split(",");
+  const equals = first.indexOf("=");
+  const role = equals === -1 ? "" : first.slice(0, equals).trim();
+  const kind = equals === -1 ? "" : first.slice(equals + 1).trim();
+  if (!SERVICE_ROLES.some((known) => known === role) || kind.length === 0) {
+    throw misuse(
+      `Not a service: ${word}. Say --service <${SERVICE_ROLES.join("|")}>=<kind|none>[,<parameter>=<value>]...`,
+    );
+  }
+  if (kind === "none") {
+    return { role: role as ServiceRole, service: null };
+  }
+  const service: Record<string, string> = { kind };
+  for (const pair of rest) {
+    const at = pair.indexOf("=");
+    const name = at === -1 ? "" : pair.slice(0, at).trim();
+    const value = at === -1 ? "" : pair.slice(at + 1).trim();
+    if (name.length === 0 || value.length === 0 || name === "kind") {
+      throw misuse(`Not a parameter of a service: ${pair}. Say <parameter>=<value>.`);
+    }
+    service[name] = value;
+  }
+  return { role: role as ServiceRole, service };
+}
 const WORKSPACE_USAGE = `Say what to do: console workspace  |  console workspace edit [${WORKSPACE_FLAGS.replaceAll(", ", "] [")}]  |  console workspace pack-token --connect|--stdin|--remove`;
 
 const workspace: Command = async (args, io) => {
@@ -4031,6 +4076,9 @@ const workspace: Command = async (args, io) => {
         "week-start": { type: "string" },
         "time-zone": { type: "string" },
         language: { type: "string" },
+        handle: { type: "string" },
+        domain: { type: "string" },
+        service: { type: "string", multiple: true },
       },
       false,
     );
@@ -4038,11 +4086,18 @@ const workspace: Command = async (args, io) => {
     const weekStart = text(values, "week-start");
     const zone = text(values, "time-zone");
     const language = text(values, "language");
+    const handle = text(values, "handle");
+    const domain = text(values, "domain");
+    const named = values.service;
+    const services = (Array.isArray(named) ? named : []).map((word) => serviceOf(String(word)));
     if (
       visibility === undefined &&
       weekStart === undefined &&
       zone === undefined &&
-      language === undefined
+      language === undefined &&
+      handle === undefined &&
+      domain === undefined &&
+      services.length === 0
     ) {
       throw misuse(`Say what to change: ${WORKSPACE_FLAGS}`);
     }
@@ -4060,6 +4115,13 @@ const workspace: Command = async (args, io) => {
               language === "none"
                 ? null
                 : wordOf(language, CONSOLE_LANGUAGES, "a language the console speaks, or none"),
+          }),
+      ...(handle === undefined ? {} : { handle: handle === "none" ? null : handleOf(handle) }),
+      ...(domain === undefined ? {} : { domain: domain === "none" ? null : domain.toLowerCase() }),
+      ...(services.length === 0
+        ? {}
+        : {
+            services: Object.fromEntries(services.map((one) => [one.role, one.service])),
           }),
     });
     await rememberZone(io, session, changed.timeZone ?? undefined);

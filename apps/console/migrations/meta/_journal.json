@@ -372,6 +372,13 @@
       "when": 1794288399031,
       "tag": "0052_agent_signal_files",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1794289743516,
+      "tag": "0053_workspace_services",
+      "breakpoints": true
     }
   ]
 }

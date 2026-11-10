@@ -1,14 +1,26 @@
 import { type FormEvent, useId, useMemo, useState } from "react";
 import {
+  isDomain,
+  isHandle,
   PEOPLE_VISIBILITIES,
   type PeopleVisibility,
   type RestMe,
   type RestWorkspace,
   type RestWorkspacePatch,
+  SERVICE_ROLES,
+  type ServiceRole,
+  serviceProblem,
   WEEK_STARTS,
   type WeekStart,
 } from "../api.js";
 import { DEFAULT_LANGUAGES, packFor, useWords } from "../i18n/index.js";
+import {
+  SERVICE_PROVIDERS,
+  type ServiceProvider,
+  serviceAccountOf,
+  serviceNamesOf,
+  serviceProviderOf,
+} from "../services.js";
 import { CONSOLE_LANGUAGES } from "../vocabulary.js";
 import { Button } from "./ui.js";
 
@@ -352,6 +364,268 @@ export function WorkspaceSettingsForm(props: WorkspaceSettingsFormProps) {
         {props.onCancel !== undefined && (
           <Button type="button" variant="ghost" onClick={props.onCancel}>
             {words.common.cancel}
+          </Button>
+        )}
+      </div>
+    </form>
+  );
+}
+
+/** The kinds a role's service is chosen among: the ones the package knows for it. */
+const kindsFor = (role: ServiceRole): readonly ServiceProvider[] =>
+  SERVICE_PROVIDERS.filter((provider) => provider.roles.includes(role));
+
+/** The parameters the form asks of a kind the package knows, beside the account's template. */
+const PARAMETERS: Readonly<Record<string, readonly ("organization" | "workspace")[]>> = {
+  github: ["organization"],
+  "google-workspace": [],
+  slack: ["workspace"],
+};
+
+/** The services a workspace's agents work with (ADR-0089), as they stand: a row each. */
+export function WorkspaceServicesView(props: { readonly workspace: RestWorkspace }) {
+  const words = useWords().settings.services;
+  const { workspace } = props;
+  const names = serviceNamesOf(workspace, "mira");
+  return (
+    <dl className="sc-settings-list">
+      <div className="sc-settings-item">
+        <dt>{words.handle}</dt>
+        <dd>{workspace.handle ?? words.none}</dd>
+      </div>
+      <div className="sc-settings-item">
+        <dt>{words.domain}</dt>
+        <dd>{workspace.domain ?? words.none}</dd>
+      </div>
+      {SERVICE_ROLES.map((role) => {
+        const service = workspace.services?.[role];
+        const account = service === undefined ? undefined : serviceAccountOf(service, names);
+        return (
+          <div key={role} className="sc-settings-item">
+            <dt>{words.roles[role]}</dt>
+            <dd>
+              {service === undefined ? (
+                words.none
+              ) : (
+                <>
+                  {serviceProviderOf(service.kind ?? "").name}
+                  {Object.entries(service)
+                    .filter(([name]) => name !== "kind")
+                    .map(([name, value]) => (
+                      <span key={name} className="sc-muted">
+                        {" "}
+                        · {name}: {value}
+                      </span>
+                    ))}
+                  {account !== undefined && (
+                    <span className="sc-settings-note">{words.example(account)}</span>
+                  )}
+                </>
+              )}
+            </dd>
+          </div>
+        );
+      })}
+    </dl>
+  );
+}
+
+export interface WorkspaceServicesFormProps {
+  readonly workspace: RestWorkspace;
+  readonly busy?: boolean | undefined;
+  /** Called with what changed; nothing is sent when nothing did. */
+  readonly onSubmit: (patch: RestWorkspacePatch) => void;
+  readonly onCancel?: (() => void) | undefined;
+}
+
+/** A role's service as the form holds it: its kind, `""` for none, and its parameters as typed. */
+type ServiceDraft = Readonly<Record<string, string>>;
+
+const draftOf = (service: Readonly<Record<string, string>> | undefined): ServiceDraft =>
+  service === undefined ? { kind: "" } : { ...service };
+
+/** A draft as it is sent: nothing for none, and no parameter left empty. */
+const serviceOf = (draft: ServiceDraft): Record<string, string> | null => {
+  const kind = (draft.kind ?? "").trim();
+  if (kind.length === 0) {
+    return null;
+  }
+  const service: Record<string, string> = { kind };
+  for (const [name, value] of Object.entries(draft)) {
+    if (name !== "kind" && value.trim().length > 0) {
+      service[name] = value.trim();
+    }
+  }
+  return service;
+};
+
+const same = (a: Record<string, string> | null, b: Record<string, string> | null): boolean =>
+  JSON.stringify(a === null ? null : Object.entries(a).sort()) ===
+  JSON.stringify(b === null ? null : Object.entries(b).sort());
+
+/**
+ * Where an administrator names the organization's short name, its domain and the services its
+ * agents work with (ADR-0089). A kind the package knows asks for its own parameters; another is
+ * named by its kind, and takes its parameters from the command.
+ */
+export function WorkspaceServicesForm(props: WorkspaceServicesFormProps) {
+  const all = useWords();
+  const words = all.settings.services;
+  const { workspace } = props;
+  const [handle, setHandle] = useState(workspace.handle ?? "");
+  const [domain, setDomain] = useState(workspace.domain ?? "");
+  const [drafts, setDrafts] = useState<Readonly<Record<ServiceRole, ServiceDraft>>>({
+    identity: draftOf(workspace.services?.identity),
+    git: draftOf(workspace.services?.git),
+    messenger: draftOf(workspace.services?.messenger),
+  });
+  const set = (role: ServiceRole, name: string, value: string) =>
+    setDrafts((current) => ({ ...current, [role]: { ...current[role], [name]: value } }));
+  const patch: RestWorkspacePatch = {};
+  const short = handle.trim().toLowerCase();
+  const web = domain.trim().toLowerCase();
+  if (short !== (workspace.handle ?? "")) {
+    patch.handle = short.length === 0 ? null : short;
+  }
+  if (web !== (workspace.domain ?? "")) {
+    patch.domain = web.length === 0 ? null : web;
+  }
+  const services: Partial<Record<ServiceRole, Record<string, string> | null>> = {};
+  for (const role of SERVICE_ROLES) {
+    const next = serviceOf(drafts[role]);
+    if (!same(next, workspace.services?.[role] ?? null)) {
+      services[role] = next;
+    }
+  }
+  if (Object.keys(services).length > 0) {
+    patch.services = services;
+  }
+  const unchanged = Object.keys(patch).length === 0;
+  const invalid =
+    (short.length > 0 && !isHandle(short)) ||
+    (web.length > 0 && !isDomain(web)) ||
+    SERVICE_ROLES.some((role) => {
+      const service = serviceOf(drafts[role]);
+      return service !== null && serviceProblem(role, service) !== undefined;
+    });
+  const names = {
+    workspace: short.length === 0 ? null : short,
+    agent: "mira",
+    domain: web.length === 0 ? null : web,
+  };
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (!unchanged && !invalid && props.busy !== true) {
+      props.onSubmit(patch);
+    }
+  };
+  return (
+    <form className="sc-form" onSubmit={submit}>
+      <p className="sc-field-hint">{words.intro}</p>
+      <label className="sc-field">
+        <span className="sc-field-label">{words.handle}</span>
+        <input
+          className="sc-input"
+          value={handle}
+          autoComplete="off"
+          onChange={(event) => setHandle(event.target.value)}
+        />
+        <span className="sc-field-hint">{words.handleHint}</span>
+      </label>
+      <label className="sc-field">
+        <span className="sc-field-label">{words.domain}</span>
+        <input
+          className="sc-input"
+          value={domain}
+          autoComplete="off"
+          onChange={(event) => setDomain(event.target.value)}
+        />
+        <span className="sc-field-hint">{words.domainHint}</span>
+      </label>
+      {SERVICE_ROLES.map((role) => {
+        const draft = drafts[role];
+        const kind = draft.kind ?? "";
+        const known = kindsFor(role);
+        const other = kind.length > 0 && !known.some((provider) => provider.kind === kind);
+        const service = serviceOf(draft);
+        const account = service === null ? undefined : serviceAccountOf(service, names);
+        return (
+          <fieldset key={role} className="sc-fieldset sc-service-fields">
+            <legend className="sc-field-label">{words.roles[role]}</legend>
+            <span className="sc-field-hint">{words.roleHints[role]}</span>
+            <label className="sc-field">
+              <span className="sc-field-label">{words.kind}</span>
+              <select
+                className="sc-input"
+                value={other ? "*" : kind}
+                onChange={(event) =>
+                  setDrafts((current) => ({
+                    ...current,
+                    [role]: { kind: event.target.value === "*" ? "other" : event.target.value },
+                  }))
+                }
+              >
+                <option value="">{words.noService}</option>
+                {known.map((provider) => (
+                  <option key={provider.kind} value={provider.kind}>
+                    {provider.name}
+                  </option>
+                ))}
+                <option value="*">{words.other}</option>
+              </select>
+            </label>
+            {other && (
+              <label className="sc-field">
+                <span className="sc-field-label">{words.otherKind}</span>
+                <input
+                  className="sc-input"
+                  value={kind}
+                  autoComplete="off"
+                  onChange={(event) => set(role, "kind", event.target.value)}
+                />
+              </label>
+            )}
+            {(PARAMETERS[kind] ?? []).map((name) => (
+              <label key={name} className="sc-field">
+                <span className="sc-field-label">{words.parameters[name]}</span>
+                <input
+                  className="sc-input"
+                  value={draft[name] ?? ""}
+                  autoComplete="off"
+                  onChange={(event) => set(role, name, event.target.value)}
+                />
+              </label>
+            ))}
+            {serviceProviderOf(kind).account !== undefined && !other && kind.length > 0 && (
+              <label className="sc-field">
+                <span className="sc-field-label">{words.parameters.account}</span>
+                <input
+                  className="sc-input"
+                  value={draft.account ?? ""}
+                  placeholder={serviceProviderOf(kind).account}
+                  autoComplete="off"
+                  onChange={(event) => set(role, "account", event.target.value)}
+                />
+                <span className="sc-field-hint">{words.accountHint}</span>
+              </label>
+            )}
+            {account !== undefined && (
+              <span className="sc-field-hint">{words.example(account)}</span>
+            )}
+          </fieldset>
+        );
+      })}
+      <div className="sc-form-actions">
+        <Button
+          type="submit"
+          variant="primary"
+          disabled={props.busy === true || unchanged || invalid}
+        >
+          {all.common.save}
+        </Button>
+        {props.onCancel !== undefined && (
+          <Button variant="ghost" onClick={props.onCancel}>
+            {all.common.cancel}
           </Button>
         )}
       </div>

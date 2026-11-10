@@ -103,6 +103,14 @@ export const workspaces = pgTable(
      */
     packToken: text(),
     packTokenSetAt: instant(),
+    /**
+     * The organization's short name and its mail and web domain (ADR-0089), from which a name at
+     * a service is put together; and the services its agents work with, by role, each its kind
+     * and a few short parameters, no secret among them.
+     */
+    handle: text(),
+    domain: text(),
+    services: jsonb().$type<Record<string, Record<string, string>>>().notNull().default({}),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

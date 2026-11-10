@@ -44,6 +44,8 @@ import {
   MAX_RUNNER_OFFERS,
   MAX_SEAL_REASON_LENGTH,
   MAX_SECRET_LENGTH,
+  MAX_SERVICE_PARAMETERS,
+  MAX_SERVICE_VALUE_LENGTH,
   MAX_SIGNAL_LENGTH,
   MAX_SKILLS_ADDRESS_LENGTH,
   MAX_SUMMARY_LENGTH,
@@ -91,8 +93,10 @@ import {
   RUN_ENDINGS,
   RUN_STATUSES,
   SECRET_ACCESSES,
+  SERVICE_ROLES,
   SESSION_ENDS,
   SESSION_KINDS,
+  type ServiceRole,
   SIGNAL_KINDS,
   SIGNAL_SOURCES,
   SKILLS_STATUSES,
@@ -409,8 +413,108 @@ export type RestMePatch = z.infer<typeof restMePatchSchema>;
  * the board is called, what the deployment's configuration says of it, and the settings an
  * administrator keeps on the Settings page (ADR-0035).
  */
+const DOMAIN =
+  /^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+
+/** Whether `value` is spelled as a mail and web domain is, in small letters (`acme.example`). */
+export function isDomain(value: string): boolean {
+  return DOMAIN.test(value);
+}
+
+const SERVICE_KIND = /^[a-z][a-z0-9-]{0,39}$/;
+const SERVICE_PARAMETER = /^[a-z][A-Za-z0-9]{0,39}$/;
+/** A name's template: what a name is made of, and the three places. */
+const SERVICE_TEMPLATE = /^(?:[A-Za-z0-9._@-]|\{(?:workspace|agent|domain)\})+$/;
+/** An organization or an account as a git host spells one. */
+const HOST_ACCOUNT = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
+
+/**
+ * The parameters the kinds the package knows take, and the roles each may be named for
+ * (ADR-0089). A kind that is not here is kept with whatever short parameters it came with.
+ */
+const SERVICE_SHAPES: Readonly<
+  Record<
+    string,
+    {
+      readonly roles: readonly ServiceRole[];
+      readonly parameters: Readonly<Record<string, RegExp>>;
+    }
+  >
+> = {
+  github: {
+    roles: ["identity", "git"],
+    parameters: { organization: HOST_ACCOUNT, account: SERVICE_TEMPLATE },
+  },
+  "google-workspace": { roles: ["identity"], parameters: { account: SERVICE_TEMPLATE } },
+  slack: { roles: ["messenger"], parameters: { workspace: DOMAIN } },
+};
+
+/**
+ * What is wrong with a service named for a role, in a few words, or nothing: a kind the package
+ * knows takes its own parameters, spelled as they are, and is named for a role it may have.
+ */
+export function serviceProblem(
+  role: ServiceRole,
+  service: Readonly<Record<string, string>>,
+): string | undefined {
+  const kind = service.kind;
+  if (kind === undefined || !SERVICE_KIND.test(kind)) {
+    return "names no kind";
+  }
+  const names = Object.keys(service).filter((name) => name !== "kind");
+  if (
+    names.length > MAX_SERVICE_PARAMETERS ||
+    names.some((name) => !SERVICE_PARAMETER.test(name))
+  ) {
+    return "has more parameters than one may, or one that is no word";
+  }
+  const shape = SERVICE_SHAPES[kind];
+  if (shape === undefined) {
+    return undefined;
+  }
+  if (!shape.roles.includes(role)) {
+    return `is no ${role} service`;
+  }
+  for (const name of names) {
+    const spelled = shape.parameters[name];
+    if (spelled === undefined) {
+      return `takes no ${name}`;
+    }
+    if (!spelled.test(service[name] ?? "")) {
+      return `${name} is not spelled as one is`;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * A service a workspace's agents work with (ADR-0089), as it is answered: its `kind`, and its
+ * parameters as short strings. No secret is among them.
+ */
+export const restWorkspaceServiceSchema = z.record(z.string(), z.string());
+export type RestWorkspaceService = z.infer<typeof restWorkspaceServiceSchema>;
+
+/** The services of a workspace, by what each is to its agents; a role with none is left out. */
+export const restWorkspaceServicesSchema = z.object({
+  identity: z.optional(restWorkspaceServiceSchema),
+  git: z.optional(restWorkspaceServiceSchema),
+  messenger: z.optional(restWorkspaceServiceSchema),
+});
+export type RestWorkspaceServices = z.infer<typeof restWorkspaceServicesSchema>;
+
+/** A service as an administrator names one: a kind and a few parameters, each a short line. */
+const serviceInput = z.record(z.string(), line(MAX_SERVICE_VALUE_LENGTH));
+
 export const restWorkspaceSchema = z.object({
   name: z.string(),
+  /**
+   * The organization's short name (`acme`) and its mail and web domain (ADR-0089), from which
+   * with an agent account's handle a name at a service is put together; `null` each for none.
+   * And the services its agents work with. Answered from 0.4.8 and read as optional.
+   */
+  handle: z.optional(z.nullable(z.string())),
+  domain: z.optional(z.nullable(z.string())),
+  services: z.optional(restWorkspaceServicesSchema),
   /** The most days a token may be good for here, or `null` when a person chooses. */
   tokenDaysAtMost: z.nullable(z.int().check(z.positive())),
   /**
@@ -459,11 +563,33 @@ export const restWorkspacePatchSchema = z
     timeZone: z.optional(z.nullable(timeZoneName)),
     /** One of the languages the console speaks, or `null` for none. */
     language: z.optional(z.nullable(z.enum(CONSOLE_LANGUAGES))),
+    /** The organization's short name, spelled as an agent account's handle is; `null` for none. */
+    handle: z.optional(z.nullable(z.string().check(z.refine(isHandle, "is a short name")))),
+    /** Its mail and web domain, in small letters; `null` for none. */
+    domain: z.optional(z.nullable(z.string().check(z.refine(isDomain, "is a domain")))),
+    /** The services named anew, by role: one left out stays as it is, `null` takes one away. */
+    services: z.optional(
+      z.object({
+        identity: z.optional(z.nullable(serviceInput)),
+        git: z.optional(z.nullable(serviceInput)),
+        messenger: z.optional(z.nullable(serviceInput)),
+      }),
+    ),
   })
   .check(
     z.refine((patch) => Object.values(patch).some((value) => value !== undefined), {
       message: "names nothing to change",
     }),
+    z.refine(
+      (patch) =>
+        SERVICE_ROLES.every((role) => {
+          const service = patch.services?.[role];
+          return (
+            service === undefined || service === null || serviceProblem(role, service) === undefined
+          );
+        }),
+      { message: "names a service that does not read" },
+    ),
   );
 export type RestWorkspacePatch = z.infer<typeof restWorkspacePatchSchema>;
 

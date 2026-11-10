@@ -2970,6 +2970,99 @@ describe("configuring, as the person", () => {
     expect(french.err()).toContain("a language the console speaks, or none");
   });
 
+  it("names the organization's short name, its domain and the services its agents work with (ADR-0089)", async () => {
+    const named = {
+      ...ME.workspace,
+      handle: "acme",
+      domain: "acme.example",
+      services: {
+        identity: { kind: "google-workspace" },
+        git: { kind: "github", organization: "acme" },
+      },
+    };
+    const { fetch, calls } = fakeConsole({
+      "GET /api/v1/me": [{ body: ME }, { body: { ...ME, workspace: named } }],
+      "PATCH /api/v1/workspace": { body: named },
+      "POST /api/v1/agents": {
+        status: 201,
+        body: {
+          person: {
+            ...PERSON,
+            login: "mira@acme.example",
+            kind: "agent",
+            handle: "mira",
+            name: "Mira",
+          },
+          manager: null,
+          supervised: true,
+        },
+      },
+    });
+    const bare = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["workspace"], bare.io)).toBe(EXIT.ok);
+    expect(bare.out()).toContain("handle: none  domain: none");
+    expect(bare.out()).toContain("services: none");
+    const changed = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(
+        [
+          "workspace",
+          "edit",
+          "--handle",
+          "@acme",
+          "--domain",
+          "Acme.Example",
+          "--service",
+          "identity=google-workspace",
+          "--service",
+          "git=github,organization=acme",
+          "--service",
+          "messenger=none",
+        ],
+        changed.io,
+      ),
+    ).toBe(EXIT.ok);
+    expect(calls.find((call) => call.key === "PATCH /api/v1/workspace")?.body).toEqual({
+      handle: "acme",
+      domain: "acme.example",
+      services: {
+        identity: { kind: "google-workspace" },
+        git: { kind: "github", organization: "acme" },
+        messenger: null,
+      },
+    });
+    expect(changed.out()).toContain("handle: acme  domain: acme.example");
+    expect(changed.out()).toContain("service identity: google-workspace");
+    expect(changed.out()).toContain("service git: github, organization=acme");
+    // Taken away with none.
+    const cleared = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(["workspace", "edit", "--handle", "none", "--domain", "none"], cleared.io),
+    ).toBe(EXIT.ok);
+    expect(calls.at(-1)?.body).toEqual({ handle: null, domain: null });
+    for (const service of [
+      "github",
+      "calendar=google",
+      "git=",
+      "git=github,organization",
+      "git=github,kind=x",
+    ]) {
+      const wrong = harness({ fetch, env: SIGNED_IN });
+      expect(await runCli(["workspace", "edit", "--service", service], wrong.io), service).toBe(
+        EXIT.usage,
+      );
+    }
+
+    // An agent account's login is what the identity service makes of the names, unless one is said.
+    const made = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["agent", "new", "mira"], made.io)).toBe(EXIT.ok);
+    expect(calls.find((call) => call.key === "POST /api/v1/agents")?.body).toMatchObject({
+      host: "google",
+      login: "mira@acme.example",
+      handle: "mira",
+    });
+  });
+
   it("sets, connects and removes the workspace's SkillCDN token for an administrator, and shows it to nobody", async () => {
     const held = {
       ...ME.workspace,

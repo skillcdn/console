@@ -333,7 +333,7 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   },
   workspace: {
     usage:
-      "workspace  |  workspace edit [--people-visibility <everyone|shared-projects>] [--week-start <auto|monday|sunday>] [--time-zone <zone|none>] [--language <en|ko|none>]  |  workspace pack-token --connect  |  workspace pack-token --stdin  |  workspace pack-token --remove",
+      "workspace  |  workspace edit [--people-visibility <everyone|shared-projects>] [--week-start <auto|monday|sunday>] [--time-zone <zone|none>] [--language <en|ko|none>] [--handle <name|none>] [--domain <domain|none>] [--service <role>=<kind|none>[,<parameter>=<value>]...]...  |  workspace pack-token --connect  |  workspace pack-token --stdin  |  workspace pack-token --remove",
     overview:
       "workspace  |  workspace edit [flags]  |  workspace pack-token --connect|--stdin|--remove",
     synopsis:
@@ -342,7 +342,8 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
       "What the workspace is called; who sees whom on the People page and in the pickers (everyone; or shared-projects: a member sees only the people they share a project with, an administrator everyone; a project open to the workspace has everyone in it, so a member of one sees everyone); the day the calendars begin a week on (auto: the system default, as each device has it); the workspace's time zone, an IANA name such as Asia/Seoul, in which this command prints moments as ISO 8601 with its offset, as the login kept it at login or whoami, or none, which leaves them as the API gives them, in UTC; the workspace's language (ADR-0081), en or ko, for whoever has not chosen one: what the pages speak to someone whose browser asks for no language the console speaks, and what the plugins write to someone who has never opened the pages, or none, English then; where the organization's skills come from; and the most days a token may last. edit changes any of the first four, for an administrator; --json leaves moments as the API gives them. pack-token is the SkillCDN token the organization's pack is read with, by every project that names no address of its own and holds no token of its own (ADR-0036), for an administrator: with --connect, the console asks SkillCDN for a code, this command prints the page and the code, a person who may open the repository approves there, signed in at SkillCDN, and the console receives the token, shown to nobody; with --stdin, a token made by hand at SkillCDN is typed unseen at the terminal, or read from standard input when piped, and never an argument; --remove takes the token away.",
     refusals: [
       "auth.forbidden: only an administrator changes the workspace's settings or its token",
-      "request.invalid: the time zone is not a name the console knows",
+      "request.invalid: the time zone is not a name the console knows; or a service does not read: a kind the console knows takes its own parameters, for a role it may have",
+      "workspace.identity_unavailable: nobody signs in to this console through the service named for identity",
       "workspace.pack_token_refused: SkillCDN does not serve the organization's pack to the token, or the console names no address for the organization's skills",
       "workspace.pack_connect_refused: the console names no address for the organization's skills, the pack is on the console's machine, or SkillCDN refused to begin",
       "workspace.pack_token_unsupported, workspace.pack_connect_unsupported: the console keeps no secret to seal a token with (AUTH_SECRET), or reaches no deployment",

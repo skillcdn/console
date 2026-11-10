@@ -300,6 +300,8 @@ export const en = {
     "token.too_many": "You have as many tokens as you can hold. Remove one first.",
     "workspace.pack_connect_refused": "SkillCDN refused the connection.",
     "workspace.pack_connect_unsupported": "This console can't connect a pack.",
+    "workspace.identity_unavailable":
+      "Nobody signs in to this console through that service: the identity service is one people sign in through here.",
     "workspace.pack_token_refused": "SkillCDN doesn't serve the pack to this token.",
     "workspace.pack_token_unsupported": "This console can't keep a pack token.",
   },
@@ -966,6 +968,36 @@ export const en = {
     skillsToken: "SkillCDN token",
     skillsTokenIntro:
       "Every project that names no address of its own, and holds no token of its own, reads the organization's pack with this token; a public pack needs none. Connect it with a code approved at SkillCDN, or paste a token made there by hand. The console keeps the token sealed and shows it to nobody.",
+    services: {
+      title: "Services",
+      aria: "The services agents work with",
+      intro:
+        "What the agents' accounts are made at. A name at a service is put together from the organization's short name, an agent's handle and the domain.",
+      handle: "Short name",
+      handleHint: "The organization's short name, in small letters, digits and hyphens: acme.",
+      domain: "Domain",
+      domainHint: "Its mail and web domain: acme.example.",
+      none: "Not set",
+      roles: { identity: "Sign-in", git: "Git host", messenger: "Messenger" },
+      roleHints: {
+        identity:
+          "What an agent account signs in to this console through: one of the ways people sign in here.",
+        git: "Where an agent's git account and its desk are made.",
+        messenger: "Where an agent is a member, and what wakes it.",
+      },
+      kind: "Service",
+      noService: "None",
+      other: "Another",
+      otherKind: "Its name, in small letters",
+      parameters: {
+        organization: "Organization",
+        account: "Account name",
+        workspace: "Workspace address",
+      },
+      accountHint:
+        "How an agent's account is called there, from {workspace}, {agent} and {domain}. Left empty, the service's own way.",
+      example: (name: string) => `An agent called mira is ${name} there.`,
+    },
     workspace: {
       title: "Workspace",
       aria: "Workspace settings",

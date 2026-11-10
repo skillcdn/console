@@ -114,6 +114,8 @@ import {
 import { WorkList, type WorkListProps } from "./components/work.js";
 import {
   peopleVisibilityOf,
+  WorkspaceServicesForm,
+  WorkspaceServicesView,
   WorkspaceSettingsForm,
   WorkspaceSettingsView,
   weekStartOf,
@@ -1940,7 +1942,7 @@ function SessionsPage(props: {
  * from, which whoever runs the console set. Read by everyone; the rules written by an administrator.
  */
 function WorkspaceSettingsPage(props: {
-  readonly form: "rules" | "workspace" | "pack-token" | undefined;
+  readonly form: "rules" | "workspace" | "services" | "pack-token" | undefined;
   readonly data: ConsoleData;
   readonly navigation: Navigation;
   readonly language: string;
@@ -2053,6 +2055,31 @@ function WorkspaceSettingsPage(props: {
       </>
     );
   }
+  if (form === "services") {
+    if (!administrator || workspace === undefined) {
+      return <NothingHere />;
+    }
+    return (
+      <>
+        {head}
+        {error !== undefined && <Callout tone="danger">{error}</Callout>}
+        <section className="sc-panel sc-panel-form" aria-label={words.settings.services.aria}>
+          <h2 className="sc-section-title">{words.settings.services.title}</h2>
+          <WorkspaceServicesForm
+            workspace={workspace}
+            busy={busy}
+            onSubmit={(patch) =>
+              void act(async () => {
+                await data.actions.updateWorkspace(patch);
+                navigation.replace(PATHS.settings);
+              })
+            }
+            onCancel={() => navigation.back(PATHS.settings)}
+          />
+        </section>
+      </>
+    );
+  }
   if (form === "workspace") {
     if (!administrator || workspace === undefined) {
       return <NothingHere />;
@@ -2097,6 +2124,23 @@ function WorkspaceSettingsPage(props: {
             )}
           </div>
           <WorkspaceSettingsView workspace={workspace} console={data.me?.console} />
+        </section>
+      )}
+      {workspace !== undefined && (
+        <section className="sc-panel" aria-label={words.settings.services.aria}>
+          <div className="sc-section-head">
+            <h2 className="sc-section-title">{words.settings.services.title}</h2>
+            {administrator && (
+              <a
+                className="sc-button sc-button-secondary sc-button-sm"
+                href={settingsHref("services")}
+              >
+                {words.common.edit}
+              </a>
+            )}
+          </div>
+          <p className="sc-settings-hint">{words.settings.services.intro}</p>
+          <WorkspaceServicesView workspace={workspace} />
         </section>
       )}
       <section className="sc-panel" aria-label={words.rules.title}>
@@ -2816,6 +2860,7 @@ function NewAgentPage(props: {
             proposals={proposals}
             onRoll={() => setRound((current) => current + 1)}
             providers={data.me?.signIn ?? []}
+            workspace={data.me?.workspace}
             people={data.people}
             me={me}
             projects={data.projects}

@@ -11,6 +11,7 @@ import {
   type RestWorkspace,
   restMePatchSchema,
   restWorkspacePatchSchema,
+  serviceProviderOf,
 } from "@skillcdn/console/api";
 import type { Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -371,6 +372,22 @@ export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies):
         errorBody("request.invalid", "timeZone: not a time zone the console knows."),
         400,
       );
+    }
+    // The identity service is one the deployment signs people in through (ADR-0089): an agent
+    // account signs in with it, so one nobody can sign in with here is none.
+    const identity = parsed.data.services?.identity;
+    if (identity !== undefined && identity !== null) {
+      const through = serviceProviderOf(identity.kind ?? "").signsInThrough;
+      const offered = auth?.providers.map((provider) => provider.key) ?? [];
+      if (through === undefined || !offered.includes(through)) {
+        return c.json(
+          errorBody(
+            "workspace.identity_unavailable",
+            "services.identity: nobody signs in to this console through that service.",
+          ),
+          400,
+        );
+      }
     }
     const found = await workspace();
     const settings = await updateWorkspaceSettings(database, {

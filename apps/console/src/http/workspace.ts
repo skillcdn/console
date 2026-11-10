@@ -13,6 +13,9 @@ export function restWorkspace(
 ): RestWorkspace {
   return {
     name: found.name,
+    handle: settings.handle,
+    domain: settings.domain,
+    services: { ...settings.services },
     tokenDaysAtMost: tokenDaysAtMost ?? null,
     skills: {
       source: skills.source,

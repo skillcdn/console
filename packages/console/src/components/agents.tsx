@@ -10,6 +10,7 @@ import {
   type RestPerson,
   type RestProject,
   type RestProvider,
+  type RestWorkspace,
 } from "../api.js";
 import { type AvatarSet, avatarScanlines, MAX_AVATAR_PIXELS, pngFile } from "../avatar.js";
 import { useWords } from "../i18n/index.js";
@@ -19,6 +20,7 @@ import {
   MAX_PERSON_NAME_LENGTH,
   MAX_PERSON_TITLE_LENGTH,
 } from "../limits.js";
+import { agentLoginOf } from "../services.js";
 import { AgentStateBadge } from "./agent-page.js";
 import { Picker } from "./picker.js";
 import { peopleSearch } from "./searches.js";
@@ -185,6 +187,11 @@ export interface AgentAccountFormProps {
   readonly onRoll?: (() => void) | undefined;
   /** The providers people sign in through here: what the account's login is at. */
   readonly providers: readonly RestProvider[];
+  /**
+   * The workspace, whose identity service says what an agent account signs in with (ADR-0089):
+   * the login is put together from its names where it names one. Left out, the provider's way.
+   */
+  readonly workspace?: RestWorkspace | undefined;
   /** The people a manager is chosen among. */
   readonly people: readonly RestPerson[];
   /** Whoever makes the account, who is its manager unless another is chosen. */
@@ -209,13 +216,25 @@ export function AgentAccountForm(props: AgentAccountFormProps) {
   const [name, setName] = useState("");
   const [handle, setHandle] = useState("");
   const [title, setTitle] = useState("");
-  const [host, setHost] = useState<ProviderKey | undefined>(props.providers[0]?.key);
+  // Where the workspace names the service its agents sign in through, that is the provider.
+  const through =
+    props.workspace === undefined ? undefined : agentLoginOf(props.workspace, "agent")?.host;
+  const [host, setHost] = useState<ProviderKey | undefined>(
+    props.providers.some((candidate) => candidate.key === through)
+      ? through
+      : props.providers[0]?.key,
+  );
   /** The login as typed; while nothing was typed, the one the handle and the provider suggest. */
   const [typedLogin, setTypedLogin] = useState<string | undefined>(undefined);
   const [manager, setManager] = useState<RestPerson | undefined>(props.me);
   const [project, setProject] = useState(props.projects[0]?.key ?? "");
   const provider = props.providers.find((candidate) => candidate.key === host);
-  const login = typedLogin ?? suggestLogin(handle, provider);
+  const named = props.workspace === undefined ? undefined : agentLoginOf(props.workspace, handle);
+  const login =
+    typedLogin ??
+    (named !== undefined && named.host === host && handle.length > 0
+      ? named.login
+      : suggestLogin(handle, provider));
 
   // The first proposal stands chosen as soon as there is one, and again when they are rolled.
   const [first] = props.proposals;
