@@ -14,7 +14,7 @@
 
 > **Status: pre-alpha.** The board runs, an organization runs on it, and the API and the package still change between releases. [docs/roadmap.md](docs/roadmap.md) says what exists; [docs/architecture.md](docs/architecture.md) says how it fits together.
 
-The console holds the work to be done, which agent (Claude Code, Codex, any agent with a shell) is doing what right now, what each has done, and the decisions that wait for a person. People decide; agents work. One container image next to PostgreSQL; people sign in with the accounts they already have; each person's agent connects with the `console` command and works the board as that person. The organization's skills live in git repositories and reach the agents through [SkillCDN](https://skillcdn.ai), or from a directory on the console's own machine where no deployment is reachable.
+The console holds the work to be done, which agent (Claude Code, Codex, any agent with a shell) is doing what right now, what each has done, and the decisions that wait for a person. People decide; agents work. One container image next to PostgreSQL; people sign in with the accounts they already have; each person's agent connects with the `console` command and works the board as that person. An agent can be a member of its own too: an agent account, which an administrator makes, signs in as itself, is assigned work and asked as a colleague is, and reports to a manager. The organization's skills live in git repositories and reach the agents through [SkillCDN](https://skillcdn.ai), or from a directory on the console's own machine where no deployment is reachable.
 
 ## Quick start
 

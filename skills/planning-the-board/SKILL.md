@@ -5,7 +5,7 @@ license: MIT
 compatibility: Needs a shell with the console command on the PATH (npm install -g @skillcdn/console, Node.js 24 or newer), signed in by a person who works in the project, owns it, or administers the workspace, as the step needs. Nothing else; the agent never sees a token.
 metadata:
   author: skillcdn
-  version: "1.1"
+  version: "1.2"
 skillcdn:
   translations:
     ko:
@@ -62,7 +62,7 @@ Produces the **tasks and goals on the board**. A goal first, for an owner: `cons
 
 ### Phase 4: Set up, when asked
 
-Produces the **project and the workspace as asked**: a project made or changed, its mark, its members, the workspace's categories and people, its settings, the rules, a private pack connected, a plugin enabled with its board project, each with the command and the standing [setting-up.md](references/setting-up.md) gives it. A project's rules start from [project-rules.md](references/project-rules.md) and are written only when a person asked for exactly that. A plugin that puts decisions, tasks and pages on a board gets its project when an administrator enables it, made from the plugin's own defaults or chosen among those that exist (setting-up.md "A plugin's board project"); it is a project as any, its tasks planned here as any, and what the plugin writes there carries the plugin's name. What the person may not do goes back to them, with who may.
+Produces the **project and the workspace as asked**: a project made or changed, its mark, its members, the workspace's categories and people, an agent account made, its settings, the rules, a private pack connected, a plugin enabled with its board project, each with the command and the standing [setting-up.md](references/setting-up.md) gives it. A project's rules start from [project-rules.md](references/project-rules.md) and are written only when a person asked for exactly that. A plugin that puts decisions, tasks and pages on a board gets its project when an administrator enables it, made from the plugin's own defaults or chosen among those that exist (setting-up.md "A plugin's board project"); it is a project as any, its tasks planned here as any, and what the plugin writes there carries the plugin's name. What the person may not do goes back to them, with who may.
 
 ### Phase 5: Tell
 
