@@ -360,6 +360,25 @@ The same events as they happen, as server-sent events: one message per event, wi
 
 The feed is written in the same transaction as the change it records, so what a stream carries happened, and what happened is carried; every process of the deployment learns of a change through the database's own channel, so a board with several `api` replicas is one board.
 
+## Agent accounts
+
+An agent account is a member of its own ([ADR-0084](../adr/0084-an-agent-account-is-a-member-of-its-own-with-a-manager-above-it.md) to [ADR-0089](../adr/0089-a-workspace-names-the-services-its-agents-work-with.md)): a row of the directory with `kind: "agent"`, under the rules a person is under, and never an administrator. What passes between the command and the console for the whole of that plan moved once, at 0.4.8, before the plan was built ([ADR-0043](../adr/0043-the-rest-contract-is-held-to-a-snapshot-taken-at-the-floors.md)): what stands under "In the contract" is read by every command and console from 0.4.8 on, and a route under "To come" is specified here in the change that builds it ([roadmap](../roadmap.md), milestones 41 to 43).
+
+### In the contract
+
+- **A person** carries `kind` (`person`, or `agent`), `handle` (an agent account's, what the pages and the command call it by, `@mira`; `null` for a person), `title` (every member's, a line that says what they do; `null` for none) and `avatarParts` (what an agent account's avatar is drawn from: `set`, the version of the set of shapes, and an index into it each for `background`, `head`, `ears`, `eyes`, `mouth`, `marks`, `accessory` and `palette`; `null` for a person, whose picture is `avatar`). Each is read as optional: a console that answers none has persons only.
+- **`person.updated`**, an event of the workspace's feed: a member's title, or an agent account's name or avatar, changed. Its data: `login`, `fields`, and `handle` for an agent account.
+- **`agent.state_changed`**, an event of the workspace's feed ([ADR-0085](../adr/0085-a-runner-on-the-agents-machine-is-told-by-signals-and-runs-one-session-at-a-time.md)): how an agent account stands now. Its data: `login`, `handle`, `state` (`running`, `stopped`, `refused`, `failed` or `unheard`), `was` (the state before, `null` where none had been said) and `detail` (why, in a few words, where one was said). Its actor is the account itself, whose runner said so, or nobody, where the console noted an account it has not heard from.
+- **A connection** ([Connecting an agent](#connecting-an-agent)) may ask to be the account itself: `as: "self"` beside `agent` on `POST /api/v1/connect`, `as` answered by `GET /api/v1/connect/<code>`, and a claim that answers `{ "status": "signed_in", "session", "secret" }`, the command's session in place of a token.
+
+### To come
+
+| Milestone | What |
+|---|---|
+| 41 | The accounts: `GET` and `POST /api/v1/agents`, `GET` and `PATCH /api/v1/agents/<handle>`, `GET /api/v1/agents/proposals?count=&lang=`; `GET /api/v1/manager`; an account's sessions, for its supervisors; the secret store ([ADR-0087](../adr/0087-an-agent-account-keeps-its-secrets-in-a-store-of-its-own-that-only-it-reads.md)), `/api/v1/agents/me/secrets/<name>` and `/api/v1/agents/<handle>/secrets/<name>` |
+| 42 | The runner: `PUT /api/v1/agents/me/runner`; the signals, `POST /api/v1/agents/<handle>/signals` and `GET /api/v1/agents/me/signals/stream`; the transcript, `GET /api/v1/agents/<handle>/sessions` and `.../sessions/<id>/events?after=` |
+| 43 | The invitation ([ADR-0088](../adr/0088-an-agent-account-has-a-desk-and-is-set-up-from-an-invitation-by-signing-in-as-itself.md)) and the guide it opens; the workspace's `handle`, `domain` and `services` ([ADR-0089](../adr/0089-a-workspace-names-the-services-its-agents-work-with.md)) |
+
 ## Signing in
 
 Not part of the REST API, and described in [`deploy/README.md`](../../deploy/README.md#signing-in): `GET /auth/<provider>/login?return_to=` and `GET /auth/<provider>/callback` for each provider the deployment has (`gh`, `google`; any other is nothing), and `POST /auth/logout` from the console's own pages. A page learns why a sign-in did not complete from `?sign_in=denied|expired|failed|refused` on the page it was for.

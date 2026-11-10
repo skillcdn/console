@@ -86,9 +86,10 @@ describe("the common rule", () => {
     // The floors on both sides: the 0.4 line was adopted whole (ADR-0034, ADR-0038), the plugins
     // raised them to 0.4.2, where every event gained the plugin that caused it and eight kinds, and
     // the reporting line raised the console's to 0.4.4, where the event person.manager_changed came,
-    // and the work email to 0.4.5, where person.email_changed came; the command's stays, since it
-    // needs nothing new of the console.
-    expect(CLIENT_POLICY).toEqual({ atLeast: "0.4.5" });
+    // the work email to 0.4.5, where person.email_changed came, and the agent accounts to 0.4.8,
+    // once for their whole plan (ADR-0084): the events person.updated and agent.state_changed, and
+    // a claim that answers a session; the command's stays, since it needs nothing new of the console.
+    expect(CLIENT_POLICY).toEqual({ atLeast: "0.4.8" });
     expect(CONSOLE_AT_LEAST).toBe("0.4.2");
     expect(formatRange(clientRange(v("1.4.2"), { atLeast: "1.4.1" }))).toBe(">=1.4.1 <1.6.0");
     expect(formatRange(clientRange(v("1.4.2"), { atLeast: "1.2.0" }))).toBe(">=1.3.0 <1.6.0");
@@ -114,11 +115,11 @@ describe("judging a command", () => {
     expect(judgeClient(v("0.3.1"), v("0.3.4"), { atLeast: "0.3.2" }).verdict).toBe("outdated");
     expect(judgeClient(v("0.3.2"), v("0.3.4"), { atLeast: "0.3.2" }).verdict).toBe("behind");
     // The console's own policy: a command of the line before is refused, one of the line from
-    // the floor on answered, one below the floor refused (the work email raised it to 0.4.5).
-    expect(judgeClient(v("0.3.9"), v("0.4.6")).verdict).toBe("outdated");
-    expect(judgeClient(v("0.4.4"), v("0.4.6")).verdict).toBe("outdated");
-    expect(judgeClient(v("0.4.5"), v("0.4.6")).verdict).toBe("behind");
-    expect(formatRange(judgeClient(v("0.4.5"), v("0.4.6")).range)).toBe(">=0.4.5 <0.5.0");
+    // the floor on answered, one below the floor refused (the agent accounts raised it to 0.4.8).
+    expect(judgeClient(v("0.3.9"), v("0.4.9")).verdict).toBe("outdated");
+    expect(judgeClient(v("0.4.7"), v("0.4.9")).verdict).toBe("outdated");
+    expect(judgeClient(v("0.4.8"), v("0.4.9")).verdict).toBe("behind");
+    expect(formatRange(judgeClient(v("0.4.8"), v("0.4.9")).range)).toBe(">=0.4.8 <0.5.0");
   });
 
   it("from 1.0 answers a minor within one and refuses the rest", () => {

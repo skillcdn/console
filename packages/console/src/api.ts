@@ -84,6 +84,7 @@ export {
   MAX_FILES_PER_DECISION,
   MAX_FILES_PER_DOCUMENT,
   MAX_GOALS_PER_PROJECT,
+  MAX_HANDLE_LENGTH,
   MAX_LANGUAGE_TAG_LENGTH,
   MAX_LINK_LABEL_LENGTH,
   MAX_LINKS,
@@ -91,6 +92,8 @@ export {
   MAX_NOTE_LENGTH,
   MAX_OPTION_LABEL_LENGTH,
   MAX_OPTIONS,
+  MAX_PERSON_NAME_LENGTH,
+  MAX_PERSON_TITLE_LENGTH,
   MAX_PROJECT_DESCRIPTION_LENGTH,
   MAX_PROJECT_ICON_BYTES,
   MAX_PROJECT_KEY_LENGTH,
@@ -118,6 +121,7 @@ export {
   MAX_URL_LENGTH,
   MAX_VERSIONS_PER_DOCUMENT,
   MAX_WORKERS,
+  MIN_HANDLE_LENGTH,
   MIN_OPTIONS,
 } from "./limits.js";
 export { projectColorOf, projectSymbolOf } from "./marks.js";
@@ -158,6 +162,8 @@ export {
   RULES_TITLE,
 } from "./rules.js";
 export {
+  CONNECT_AS,
+  type ConnectAs,
   hostOfLogin,
   isLoginAt,
   OPTION_KEY_PATTERN,
@@ -166,6 +172,7 @@ export {
   type RestArchiveTasksInput,
   type RestArtifact,
   type RestArtifactInput,
+  type RestAvatarParts,
   type RestBacklink,
   type RestCategories,
   type RestCategory,
@@ -278,6 +285,7 @@ export {
   restArchiveTasksInputSchema,
   restArtifactInputSchema,
   restArtifactSchema,
+  restAvatarPartsSchema,
   restBacklinkSchema,
   restCategoriesSchema,
   restCategoryInputSchema,
@@ -388,6 +396,8 @@ export {
 } from "./schemas.js";
 export { hasForbiddenCodePoint } from "./text.js";
 export {
+  AGENT_STATES,
+  type AgentState,
   ARTIFACT_KINDS,
   type ArtifactKind,
   CATEGORY_COLORS,
@@ -411,9 +421,11 @@ export {
   PACK_CONNECT_ENDINGS,
   type PackConnectEnding,
   PEOPLE_VISIBILITIES,
+  PERSON_KINDS,
   PERSON_ROLES,
   PERSON_STATUSES,
   type PeopleVisibility,
+  type PersonKind,
   type PersonRole,
   type PersonStatus,
   PLUGIN_COMMAND_OUTCOMES,

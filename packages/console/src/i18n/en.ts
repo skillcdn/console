@@ -1044,6 +1044,13 @@ export const en = {
       language: "the default language",
       packToken: "the SkillCDN token",
     } as Readonly<Record<string, string>>,
+    /** What changed of a member, for `person.updated`: where a word differs from a task's or a project's. */
+    personField: {
+      title: "the title",
+      name: "the name",
+      avatar: "the avatar",
+      kind: "the kind of account",
+    } as Readonly<Record<string, string>>,
     event: {
       personJoined: () => "joined the board",
       workspaceUpdated: (fields: string) => `changed ${fields} of the workspace`,
@@ -1056,6 +1063,20 @@ export const en = {
       managerCleared: (login: string) => `cleared ${login}'s manager`,
       emailChanged: (login: string) => `changed ${login}'s work email`,
       emailCleared: (login: string) => `cleared ${login}'s work email`,
+      personUpdated: (fields: string, login: string) => `changed ${fields} of ${login}`,
+      /** How an agent account stands now (ADR-0085): said by the account itself, or of `agent` by another. */
+      agentRunning: (agent: string | undefined) =>
+        agent === undefined ? "is running" : `found ${agent} running`,
+      agentStopped: (agent: string | undefined) =>
+        agent === undefined ? "stopped" : `found ${agent} stopped`,
+      agentRefused: (agent: string | undefined) =>
+        agent === undefined
+          ? "was refused by its model, and waits"
+          : `found ${agent} refused by its model`,
+      agentFailed: (agent: string | undefined) =>
+        agent === undefined ? "could not start, and waits" : `found ${agent} unable to start`,
+      agentUnheard: (agent: string | undefined) =>
+        agent === undefined ? "is not heard from" : `has not heard from ${agent}`,
       teamCreated: (team: string) => `made the team ${team}`,
       teamRenamed: (from: string, team: string) => `renamed the team ${from} to ${team}`,
       teamRemoved: (team: string) => `deleted the team ${team}`,

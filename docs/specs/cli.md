@@ -145,6 +145,17 @@ What a person does, once the command is signed in where the agent runs; tried wi
 
 Work that reaches an agent in chat, in a directory that works in a project, goes the same way: the agent writes it on the board first (`console task new`), tells the person the number, takes it, and works it as above, so that the board holds the work and its record, and a person decides on the board, not in the chat. A board used only to tick off what was done elsewhere is a list of things to do; the record is in the runs, the comments and the decisions.
 
+## Agent accounts
+
+In outline, for the plan of [ADR-0084](../adr/0084-an-agent-account-is-a-member-of-its-own-with-a-manager-above-it.md) to [ADR-0089](../adr/0089-a-workspace-names-the-services-its-agents-work-with.md); a command is specified here in the change that builds it ([roadmap](../roadmap.md), milestones 41 to 43), and until then it is not one. The commands stay few, in the words the command already has: a list is the plural, one of a kind is named after it, and what is taken away is removed.
+
+- A supervisor's: `console agents`, `console agent <handle>`, `console agent new`, `console agent invite <handle> [--revoke]`, `console agent tell | interrupt | stop | restart | reset | set | wake <handle>`, `console agent signals <handle>`, `console agent secrets <handle>`, `console agent secret <handle> <name> [--remove]`.
+- The machine's own: `console agent setup [--refresh]` and `console runner`.
+- The account's own: `console secrets`, `console secret <name> [--set | --remove]`.
+- Every member's: `console manager`, and `console person title <login> "<title>"` for an administrator.
+
+A command of 0.4.8 reads what the console answers of an agent account already ([rest.md](rest.md#agent-accounts)): a person's `kind`, `handle` and `title`, and the two events.
+
 ## Not yet
 
 Hooks that report an agent's events without being asked ([roadmap](../roadmap.md)).

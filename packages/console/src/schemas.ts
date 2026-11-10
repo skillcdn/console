@@ -50,6 +50,7 @@ import {
 import { PLUGIN_WIDGET_SIZE_NAMES } from "./plugin/manifest.js";
 import { hasForbiddenCodePoint } from "./text.js";
 import {
+  AGENT_STATES,
   ARTIFACT_KINDS,
   CATEGORY_COLORS,
   COLOR_NAMES,
@@ -60,6 +61,7 @@ import {
   MEMBERSHIP_SOURCES,
   PACK_CONNECT_ENDINGS,
   PEOPLE_VISIBILITIES,
+  PERSON_KINDS,
   PERSON_ROLES,
   PERSON_STATUSES,
   PLUGIN_COMMAND_OUTCOMES,
@@ -115,6 +117,30 @@ const languageTag = z
     z.regex(/^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/, "must be a language tag"),
   );
 
+/** One part of an avatar: which of the set's shapes of that part, by its place in the set. */
+const avatarPart = z.int().check(z.gte(0), z.lte(255));
+
+/**
+ * What an agent account's avatar is made of (ADR-0084): flat parts, each an index into the set
+ * of shapes the package ships, with that set's version. Nothing drawn is kept or sent: whoever
+ * shows the picture draws it from these, with the package's own function. A released set never
+ * changes, so an avatar keeps the look it was made with.
+ */
+export const restAvatarPartsSchema = z.object({
+  /** The version of the set of shapes the indexes are into. */
+  set: z.int().check(z.gte(1), z.lte(9999)),
+  background: avatarPart,
+  head: avatarPart,
+  /** `0` for none, as for every part that may be left out. */
+  ears: avatarPart,
+  eyes: avatarPart,
+  mouth: avatarPart,
+  marks: avatarPart,
+  accessory: avatarPart,
+  palette: avatarPart,
+});
+export type RestAvatarParts = z.infer<typeof restAvatarPartsSchema>;
+
 export const restPersonSchema = z.object({
   id: uuid,
   /** What the account is called at its provider: a login at the git host, an address at Google. */
@@ -153,6 +179,27 @@ export const restPersonSchema = z.object({
    * carries none. Answered from 0.4.5 and read as optional.
    */
   email: z.optional(z.nullable(z.string())),
+  /**
+   * What the member is (ADR-0084): a person, or an agent account, a member of its own under the
+   * same rules. Answered from 0.4.8 and read as optional: a person, where a console says nothing.
+   */
+  kind: z.optional(z.enum(PERSON_KINDS)),
+  /**
+   * An agent account's handle, what the pages and the command call it by (`mira`, addressed as
+   * `@mira`); it never changes. `null` for a person. Answered from 0.4.8 and read as optional.
+   */
+  handle: z.optional(z.nullable(z.string())),
+  /**
+   * What the member does, in a line (`Release engineer`): every member's, a person's as an agent
+   * account's, kept by an administrator; `null` for none. It is not `role`. Answered from 0.4.8
+   * and read as optional.
+   */
+  title: z.optional(z.nullable(z.string())),
+  /**
+   * What an agent account's avatar is drawn from, where the picture of a person is `avatar`,
+   * the provider's; `null` for a person. Answered from 0.4.8 and read as optional.
+   */
+  avatarParts: z.optional(z.nullable(restAvatarPartsSchema)),
 });
 export type RestPerson = z.infer<typeof restPersonSchema>;
 
@@ -1070,7 +1117,7 @@ export type RestAnswerInput = z.infer<typeof restAnswerInputSchema>;
 export const restEventDataSchema = z.object({
   number: z.optional(z.int()),
   title: z.optional(z.string()),
-  /** For `task.updated`, `project.updated`, `goal.updated` and `decision.updated`: which fields changed. */
+  /** For `task.updated`, `project.updated`, `goal.updated`, `decision.updated` and `person.updated`: which fields changed. */
   fields: z.optional(z.array(z.string())),
   /** For the events about a document: its path, and the version written. */
   path: z.optional(z.string()),
@@ -1091,6 +1138,16 @@ export const restEventDataSchema = z.object({
   team: z.optional(z.string()),
   /** For `person.email_changed`: whether the person has an address now; never the address itself. */
   set: z.optional(z.boolean()),
+  /** For `person.updated` of an agent account and for `agent.state_changed`: the account's handle. */
+  handle: z.optional(z.string()),
+  /**
+   * For `agent.state_changed` (ADR-0085): how the agent account stands now; how it stood before,
+   * `null` where nothing had been said of it; and why, in a few words, where the runner or the
+   * console said.
+   */
+  state: z.optional(z.enum(AGENT_STATES)),
+  was: z.optional(z.nullable(z.enum(AGENT_STATES))),
+  detail: z.optional(z.string()),
   /** For the events about a project: its key and its name. */
   key: z.optional(z.string()),
   name: z.optional(z.string()),
@@ -1308,8 +1365,22 @@ export const restTokenCreatedSchema = z.object({
 });
 export type RestTokenCreated = z.infer<typeof restTokenCreatedSchema>;
 
-/** What `POST /api/v1/connect` is sent by the command: what the agent calls itself, and where it runs. */
-export const restConnectInputSchema = z.object({ agent: line(MAX_TOKEN_NAME_LENGTH) });
+/**
+ * What a connection asks to be (ADR-0011, ADR-0084): an agent of whoever approves it, which holds
+ * a token of theirs, or the approver themselves, where the command is signed in as the account
+ * and holds a session of its own.
+ */
+export const CONNECT_AS = ["agent", "self"] as const;
+export type ConnectAs = (typeof CONNECT_AS)[number];
+
+/**
+ * What `POST /api/v1/connect` is sent by the command: what the agent calls itself, and where it
+ * runs; and what it asks to be, an agent where nothing is said.
+ */
+export const restConnectInputSchema = z.object({
+  agent: line(MAX_TOKEN_NAME_LENGTH),
+  as: z.optional(z.enum(CONNECT_AS)),
+});
 export type RestConnectInput = z.infer<typeof restConnectInputSchema>;
 
 /**
@@ -1334,6 +1405,8 @@ export const restConnectRequestSchema = z.object({
   createdAt: instant,
   expiresAt: instant,
   approved: z.boolean(),
+  /** What it asks to be: an agent of the approver's, or the approver themselves. Answered from 0.4.8 and read as optional; an agent then. */
+  as: z.optional(z.enum(CONNECT_AS)),
 });
 export type RestConnectRequest = z.infer<typeof restConnectRequestSchema>;
 
@@ -1343,10 +1416,15 @@ export const restClaimInputSchema = z.object({
 });
 export type RestClaimInput = z.infer<typeof restClaimInputSchema>;
 
-/** What the claim answers: wait, or the token this once, with its secret. */
+/**
+ * What the claim answers: wait; or the token this once, with its secret; or, for a connection
+ * that asked to be the account itself, the command's session this once, with its secret, which is
+ * presented as a token's is (ADR-0084).
+ */
 export const restClaimSchema = z.union([
   z.object({ status: z.literal("pending"), expiresAt: instant }),
   z.object({ status: z.literal("connected"), token: restTokenSchema, secret: z.string() }),
+  z.object({ status: z.literal("signed_in"), session: restSessionSchema, secret: z.string() }),
 ]);
 export type RestClaim = z.infer<typeof restClaimSchema>;
 

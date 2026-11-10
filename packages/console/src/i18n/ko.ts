@@ -974,6 +974,12 @@ export const ko: Messages = {
       language: "기본 언어",
       packToken: "SkillCDN 토큰",
     },
+    personField: {
+      title: "직함",
+      name: "이름",
+      avatar: "아바타",
+      kind: "계정 종류",
+    },
     event: {
       personJoined: () => "보드에 들어왔습니다",
       workspaceUpdated: (fields) => `워크스페이스의 ${fields}을(를) 바꿨습니다`,
@@ -986,6 +992,21 @@ export const ko: Messages = {
       managerCleared: (login) => `${login}의 매니저 지정을 해제했습니다`,
       emailChanged: (login) => `${login}의 업무 이메일을 바꿨습니다`,
       emailCleared: (login) => `${login}의 업무 이메일을 지웠습니다`,
+      personUpdated: (fields, login) => `${login}의 ${fields}을(를) 바꿨습니다`,
+      agentRunning: (agent) =>
+        agent === undefined ? "실행 중입니다" : `${agent}이(가) 실행 중임을 확인했습니다`,
+      agentStopped: (agent) =>
+        agent === undefined ? "정지했습니다" : `${agent}이(가) 정지했음을 확인했습니다`,
+      agentRefused: (agent) =>
+        agent === undefined
+          ? "모델이 응답을 거부해 기다리고 있습니다"
+          : `${agent}의 모델이 응답을 거부했음을 확인했습니다`,
+      agentFailed: (agent) =>
+        agent === undefined
+          ? "시작하지 못해 기다리고 있습니다"
+          : `${agent}이(가) 시작하지 못했음을 확인했습니다`,
+      agentUnheard: (agent) =>
+        agent === undefined ? "소식이 없습니다" : `${agent}의 소식을 듣지 못하고 있습니다`,
       teamCreated: (team) => `팀 ${team}을(를) 만들었습니다`,
       teamRenamed: (from, team) => `팀 ${from}의 이름을 ${team}(으)로 바꿨습니다`,
       teamRemoved: (team) => `팀 ${team}을(를) 삭제했습니다`,

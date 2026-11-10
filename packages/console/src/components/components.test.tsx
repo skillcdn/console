@@ -826,6 +826,31 @@ describe("the feed", () => {
     ).toBe('wrote what followed of the decision "Which one?"');
   });
 
+  it("says what changed of a member, and how an agent account stands (ADR-0084, ADR-0085)", () => {
+    const titled = event({ kind: "person.updated", data: { login: "bob", fields: ["title"] } });
+    expect(describeEvent(titled)).toBe("changed the title of bob");
+    // A member's title is not a task's: the Korean pack words the two apart.
+    expect(describeEvent(titled, KOREAN.messages)).toBe("bob의 직함을(를) 바꿨습니다");
+    const mira = { ...alice, login: "mira@acme.example", kind: "agent" as const, handle: "mira" };
+    const state = (data: RestEvent["data"], actor: RestEvent["actor"] = mira) =>
+      describeEvent(
+        event({
+          kind: "agent.state_changed",
+          actor,
+          data: { login: mira.login, handle: "mira", ...data },
+        }),
+      );
+    // The account says so itself, through its runner.
+    expect(state({ state: "running", was: "refused" })).toBe("is running");
+    expect(state({ state: "refused", was: "running", detail: "the model would not answer" })).toBe(
+      "was refused by its model, and waits: the model would not answer",
+    );
+    expect(state({ state: "failed" })).toBe("could not start, and waits");
+    expect(state({ state: "stopped" })).toBe("stopped");
+    // The console says it of an account it has not heard from, and names it.
+    expect(state({ state: "unheard", was: "running" }, null)).toBe("has not heard from @mira");
+  });
+
   it("says what happened in a sentence, per kind", () => {
     expect(describeEvent(event({ kind: "person.joined" }))).toBe("joined the board");
     expect(describeEvent(event({ data: { number: 7, title: "Ship" } }))).toBe("wrote #7 Ship");

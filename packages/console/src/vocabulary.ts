@@ -86,6 +86,25 @@ export const PERSON_ROLES = ["admin", "member"] as const;
 export type PersonRole = (typeof PERSON_ROLES)[number];
 
 /**
+ * What a member is (ADR-0084): a person, as every member has been, or an agent account, an
+ * agent that is a member of its own. The rules make no difference between them but one: an
+ * agent account is never a workspace administrator.
+ */
+export const PERSON_KINDS = ["person", "agent"] as const;
+
+export type PersonKind = (typeof PERSON_KINDS)[number];
+
+/**
+ * How an agent account stands, in one word (ADR-0085): `running`, its runner heard from and the
+ * agent at work or ready for it; `stopped`, by a supervisor, until one starts it again; `refused`,
+ * the model would not answer; `failed`, its product could not start or sign in; `unheard`, its
+ * runner not heard from for a while. `null` where no runner has ever said.
+ */
+export const AGENT_STATES = ["running", "stopped", "refused", "failed", "unheard"] as const;
+
+export type AgentState = (typeof AGENT_STATES)[number];
+
+/**
  * Whether a person is in: `active`, or `deactivated`, which is kept rather than deleted so that
  * what they did stays theirs (ADR-0022). A deactivated person is refused on every request.
  */
@@ -194,6 +213,8 @@ export const EVENT_KINDS = [
   "person.reactivated",
   "person.manager_changed",
   "person.email_changed",
+  "person.updated",
+  "agent.state_changed",
   "team.created",
   "team.renamed",
   "team.removed",

@@ -18,7 +18,7 @@ describe("the vocabulary", () => {
     expect(new Set(EVENT_KINDS).size).toBe(EVENT_KINDS.length);
     for (const kind of EVENT_KINDS) {
       expect(kind).toMatch(
-        /^(person|team|workspace|category|project|goal|task|decision|run|document|plugin)\.[a-z_]+$/,
+        /^(person|agent|team|workspace|category|project|goal|task|decision|run|document|plugin)\.[a-z_]+$/,
       );
     }
   });

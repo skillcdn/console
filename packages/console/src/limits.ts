@@ -48,6 +48,13 @@ export const MAX_FILE_NAME_LENGTH = 200;
 export const MAX_TOKEN_NAME_LENGTH = 80;
 /** A login at a git host, or an address at a Workspace, as an administrator lists one. */
 export const MAX_LOGIN_LENGTH = 254;
+/** A member's title (ADR-0084): one line that says what they do. */
+export const MAX_PERSON_TITLE_LENGTH = 80;
+/** An agent account's handle (ADR-0084): what the pages and the command call it by, as long as a login at a git host may be. */
+export const MIN_HANDLE_LENGTH = 2;
+export const MAX_HANDLE_LENGTH = 39;
+/** An agent account's name, in any language: one line. */
+export const MAX_PERSON_NAME_LENGTH = 80;
 /** A team's name (ADR-0073). */
 export const MAX_TEAM_NAME_LENGTH = 60;
 /** A team's key (ADR-0074), as long as a project's may be: the two are one set of names. */

@@ -113,7 +113,7 @@ export interface ClientPolicy {
  * last changed what the command reads or sends (ADR-0038), whose changelog entry begins with
  * `Breaking:`; `pnpm check` holds it to a version the package has, or is about to have.
  */
-export const CLIENT_POLICY: ClientPolicy = { atLeast: "0.4.5" };
+export const CLIENT_POLICY: ClientPolicy = { atLeast: "0.4.8" };
 
 /**
  * The oldest console this command works with (ADR-0038): raised by the release that last

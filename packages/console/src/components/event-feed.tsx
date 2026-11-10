@@ -73,6 +73,29 @@ function sentenceOf(event: RestEvent, words: Messages): string {
         : feed.event.managerChanged(login, data.manager);
     case "person.email_changed":
       return data.set === true ? feed.event.emailChanged(login) : feed.event.emailCleared(login);
+    case "person.updated": {
+      const of = (data.fields ?? []).map(
+        (field) => feed.personField[field] ?? feed.field[field] ?? field,
+      );
+      return feed.event.personUpdated(of.length === 0 ? feed.something : of.join(", "), login);
+    }
+    case "agent.state_changed": {
+      // The account says how it stands itself, through its runner; the console says it of an
+      // account it has not heard from, and names it.
+      const own = event.actor !== null && event.actor.login === data.login;
+      const agent = own ? undefined : data.handle === undefined ? login : `@${data.handle}`;
+      const said =
+        data.state === "stopped"
+          ? feed.event.agentStopped(agent)
+          : data.state === "refused"
+            ? feed.event.agentRefused(agent)
+            : data.state === "failed"
+              ? feed.event.agentFailed(agent)
+              : data.state === "unheard"
+                ? feed.event.agentUnheard(agent)
+                : feed.event.agentRunning(agent);
+      return data.detail === undefined ? said : `${said}: ${data.detail}`;
+    }
     case "team.created":
       return feed.event.teamCreated(data.team ?? feed.aTeam);
     case "team.renamed":
