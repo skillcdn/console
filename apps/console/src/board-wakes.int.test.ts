@@ -8,10 +8,11 @@ import {
   restSignalsSchema,
   restTaskSchema,
 } from "@skillcdn/console/api";
+import { inArray } from "drizzle-orm";
 import { pino } from "pino";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { drizzleOf } from "./db/client.js";
-import { workspaces } from "./db/schema.js";
+import { people, workspaces } from "./db/schema.js";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "./db/testing.js";
 import { BoardWakes, dayIn } from "./jobs/board-wakes.js";
 import { createFixtureProvider } from "./testing/fixture-provider.js";
@@ -96,6 +97,13 @@ beforeAll(async () => {
     ).person.id;
   miraId = await made("carol", "mira");
   noorId = await made("dana", "noor");
+  // A member's row is dated by the database, whose clock is the day this runs on, and an event
+  // by the clock the test moves: the accounts are dated as made before anything here happens,
+  // so that whether they were there when a thing happened is not read from today's date.
+  await drizzleOf(testDatabase.database)
+    .update(people)
+    .set({ createdAt: new Date(now.getTime() - 3_600_000) })
+    .where(inArray(people.id, [miraId, noorId]));
   mira = await h.signIn("carol");
   const [workspace] = await drizzleOf(testDatabase.database).select().from(workspaces).limit(1);
   wakes = new BoardWakes({
