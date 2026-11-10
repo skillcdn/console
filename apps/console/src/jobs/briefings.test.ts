@@ -5,6 +5,7 @@ import {
   briefingsDue,
   clockIn,
   dayAfter,
+  MAX_BRIEFING_LENGTH,
   secretWake,
   WRAP_BRIEFING,
 } from "./briefings.js";
@@ -104,13 +105,14 @@ describe("the words of a briefing", () => {
       "Your day's briefing, Tuesday 2026-11-10.",
       'Planned for today: 2 (#412 "Cut the release" in ops; #415 "Task 415" in ops).',
       'Carried over from before today: 1 (#398 "Task 398" in ops).',
-      'Open with no day: 1 (#420 "Task 420" in ops).',
+      // Work with no day is counted: the plate names it.
+      "Open with no day: 1.",
       "Decisions waiting for you: 2.",
       "Your whole plate, with the decisions: console work",
     ]);
   });
 
-  it("adds the week on its first day, and says none where there is none", () => {
+  it("adds the week on its first day, and has no line for what there is none of", () => {
     const text = briefingOf("week", {
       today: "2026-11-09",
       tasks: [task(430, "2026-11-12"), task(431, "2026-11-15"), task(440, "2026-11-16")],
@@ -118,22 +120,24 @@ describe("the words of a briefing", () => {
     });
     expect(text.split("\n")).toEqual([
       "Your week's briefing, Monday 2026-11-09.",
-      "Planned for today: none.",
-      "Carried over from before today: none.",
-      "Open with no day: none.",
       'Planned for the six days after today: 2 (#430 "Task 430" in ops; #431 "Task 431" in ops).',
-      "Decisions waiting for you: 0.",
       "Your whole plate, with the decisions: console work",
     ]);
+    // A day's briefing says nothing of the week, and a day with nothing says so in a line.
+    expect(
+      briefingOf("day", { today: "2026-11-09", tasks: [task(430, "2026-11-12")], decisions: 0 }),
+    ).toBe(
+      "Your day's briefing, Monday 2026-11-09.\nNothing is planned, and nothing waits for you.\nYour whole plate, with the decisions: console work",
+    );
   });
 
-  it("is bounded: a few tasks by name, the rest counted, and a title on one line", () => {
+  it("is short, whatever the plate holds: a few tasks by name, the rest counted, and a title on one line", () => {
     const many = Array.from({ length: 40 }, (_, index) => task(index + 1, TODAY));
     const text = briefingOf("day", { today: TODAY, tasks: many, decisions: 0 });
     expect(text).toContain('Planned for today: 40 (#1 "Task 1" in ops;');
     expect(text).toContain('#5 "Task 5" in ops; and 35 more).');
     expect(text).not.toContain("#6 ");
-    expect(text.length).toBeLessThan(600);
+    expect(text.length).toBeLessThan(300);
     const odd = briefingOf("day", {
       today: TODAY,
       tasks: [
@@ -142,8 +146,47 @@ describe("the words of a briefing", () => {
       decisions: 0,
     });
     // A title that tries to be more than a title is one line of a sentence, cut short.
-    expect(odd.split("\n")).toHaveLength(6);
-    expect(odd.split("\n")[1]?.length).toBeLessThan(140);
+    expect(odd.split("\n")).toHaveLength(3);
+    expect(odd.split("\n")[1]?.length).toBeLessThan(110);
+
+    // The most a plate can make of it: every kind full, the longest titles, the longest names
+    // of projects and the highest numbers, on the week's first day.
+    const full = (count: number, dueOn: string | undefined, from: number) =>
+      Array.from({ length: count }, (_, index) => ({
+        project: "p".repeat(40),
+        number: 2_000_000_000 - from - index,
+        title: "T".repeat(200),
+        state: "ready",
+        dueOn,
+      }));
+    const most = briefingOf("week", {
+      today: TODAY,
+      tasks: [
+        ...full(500, TODAY, 0),
+        ...full(500, "2026-11-01", 1000),
+        ...full(500, "2026-11-13", 2000),
+        ...full(500, undefined, 3000),
+      ],
+      decisions: 1_000_000,
+    });
+    expect(most.split("\n")).toHaveLength(7);
+    expect(most.length).toBeLessThanOrEqual(MAX_BRIEFING_LENGTH);
+    // Five of today's by name, three of those carried over and three of the week's: eleven in all.
+    expect(most.match(/#\d+ "/g)).toHaveLength(11);
+    expect(most).toContain("Open with no day: 500.");
+    // What a day usually is stays a few lines of a screen.
+    expect(
+      briefingOf("day", {
+        today: TODAY,
+        tasks: [
+          task(412, TODAY, "ready", "Cut the release of the week and write its notes"),
+          task(415, TODAY, "in_progress", "Answer the review of the import"),
+          task(398, "2026-11-07", "ready", "Renew the certificate of the staging site"),
+          task(420, undefined),
+        ],
+        decisions: 1,
+      }).length,
+    ).toBeLessThan(400);
   });
 
   it("says the day's end, and a secret's day that is near", () => {

@@ -6,8 +6,18 @@
 
 import { DEFAULT_DAY_START } from "@skillcdn/console/api";
 
-/** How many tasks a briefing names of a kind, before it says how many more there are. */
-const NAMED = 5;
+// A briefing is read by an agent at the start of every day, so it is kept short: what the day
+// is, in a few lines, and the command that reads the rest. What it names at most, a title's
+// length included, is what bounds it, whatever the plate holds.
+
+/** How many tasks a briefing names of those planned for today, before it counts the rest. */
+const NAMED_TODAY = 5;
+/** How many it names of those carried over, and of those planned for the week. */
+const NAMED_OTHERS = 3;
+/** How much of a title it says. */
+const TITLE_LENGTH = 60;
+/** The most a briefing is, in characters: what the bounds above come to, with room. */
+export const MAX_BRIEFING_LENGTH = 2000;
 
 /** The hour and the minute it is in a time zone, as `HH:MM`; in UTC where the zone is none or unknown. */
 export function clockIn(zone: string | null | undefined, now: Date): string {
@@ -70,16 +80,13 @@ export interface BriefingInput {
 
 const inline = (text: string): string => {
   const line = text.replaceAll(/\s+/g, " ").trim();
-  return line.length > 80 ? `${line.slice(0, 79)}…` : line;
+  return line.length > TITLE_LENGTH ? `${line.slice(0, TITLE_LENGTH - 1)}…` : line;
 };
 
-/** A few tasks by name and the count of the rest: a briefing is bounded, and says where the rest is. */
-function named(tasks: readonly BriefedTask[]): string {
-  if (tasks.length === 0) {
-    return "none";
-  }
+/** How many tasks there are, and the first few by name: a briefing says where the rest is. */
+function named(tasks: readonly BriefedTask[], most: number): string {
   const first = tasks
-    .slice(0, NAMED)
+    .slice(0, most)
     .map((task) => `#${task.number} "${inline(task.title)}" in ${task.project}`);
   const more = tasks.length - first.length;
   return `${tasks.length} (${first.join("; ")}${more > 0 ? `; and ${more} more` : ""})`;
@@ -87,8 +94,9 @@ function named(tasks: readonly BriefedTask[]): string {
 
 /**
  * The words of a `day` briefing, and of a `week` briefing, which adds the week: the tasks
- * planned for today, those carried over, those ready with no day, the decisions that wait, and
- * the command that reads the whole plate. A task's title on one line; nothing else of the board.
+ * planned for today and those carried over, a few by name; how many are open with no day; how
+ * many decisions wait; and the command that reads the whole plate. A line for what there is
+ * and none for what there is not; a task's title on one line; nothing else of the board.
  */
 export function briefingOf(kind: "day" | "week", input: BriefingInput): string {
   const { today, tasks } = input;
@@ -99,13 +107,21 @@ export function briefingOf(kind: "day" | "week", input: BriefingInput): string {
   const later = tasks.filter(
     (task) => task.dueOn !== undefined && task.dueOn > today && task.dueOn <= weekEnd,
   );
+  const lines = [
+    ...(planned.length > 0 ? [`Planned for today: ${named(planned, NAMED_TODAY)}.`] : []),
+    ...(carried.length > 0
+      ? [`Carried over from before today: ${named(carried, NAMED_OTHERS)}.`]
+      : []),
+    ...(kind === "week" && later.length > 0
+      ? [`Planned for the six days after today: ${named(later, NAMED_OTHERS)}.`]
+      : []),
+    // Work with no day is not the day's plan: counted, and read with the plate.
+    ...(unplanned.length > 0 ? [`Open with no day: ${unplanned.length}.`] : []),
+    ...(input.decisions > 0 ? [`Decisions waiting for you: ${input.decisions}.`] : []),
+  ];
   return [
     `Your ${kind === "week" ? "week's" : "day's"} briefing, ${weekdayOf(today)} ${today}.`,
-    `Planned for today: ${named(planned)}.`,
-    `Carried over from before today: ${named(carried)}.`,
-    `Open with no day: ${named(unplanned)}.`,
-    ...(kind === "week" ? [`Planned for the six days after today: ${named(later)}.`] : []),
-    `Decisions waiting for you: ${input.decisions}.`,
+    ...(lines.length > 0 ? lines : ["Nothing is planned, and nothing waits for you."]),
     "Your whole plate, with the decisions: console work",
   ].join("\n");
 }

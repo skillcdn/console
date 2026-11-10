@@ -126,9 +126,8 @@ describe("the briefings of an agent account (ADR-0085)", () => {
         text: [
           "Your day's briefing, Tuesday 2026-11-10.",
           `Planned for today: 1 (#${planned.number} "Cut the release" in ops).`,
-          "Carried over from before today: none.",
-          'Open with no day: 1 (#1 "Set up @mira" in ops).',
-          "Decisions waiting for you: 0.",
+          // Its onboarding task, which has no day: counted, and named by its plate.
+          "Open with no day: 1.",
           "Your whole plate, with the decisions: console work",
         ].join("\n"),
       },
