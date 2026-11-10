@@ -39,6 +39,8 @@ export interface DriverHost {
   readonly cwd: string;
   /** The product's binary, where the machine names another than the driver's own. */
   readonly command?: string | undefined;
+  /** The ids a driver writes its messages under, where a test wants to know them; random otherwise. */
+  readonly uuid?: (() => string) | undefined;
 }
 
 export interface RunnerModules {

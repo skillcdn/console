@@ -5,8 +5,10 @@ import { createSpawn } from "./process.js";
 import type { Child, DriverEvent, Spawn } from "./types.js";
 
 // The `claude` driver against a product that is not there: a child whose lines the test writes,
-// in the shapes the product's documentation gives for its streaming JSON output. Nothing here
-// was recorded from a binary; a version the driver was tried with brings its own fixtures.
+// in the shapes the binary printed when the driver was run against it (2.1.321): each line cut
+// down to what a reader could take from it, with every id, name and path invented. What the
+// binary was not seen to print, a refusal and a sign-in that ran out, is in the shapes its
+// documentation gives.
 
 /** A child the test speaks for: what it was started with, what it was sent, and its output to write. */
 function fakeChild() {
@@ -81,7 +83,13 @@ function started(over: Partial<Parameters<typeof claudeArguments>[0]> = {}) {
     calls.push({ command, args, cwd: options.cwd, env: options.env });
     return fake.child;
   };
-  const driver = createClaudeDriver({ spawn, cwd: "/home/mira/desk" });
+  // The ids the driver writes under, in order: m1, m2 and so on, for the test to say back.
+  let made = 0;
+  const uuid = () => {
+    made += 1;
+    return `m${made}`;
+  };
+  const driver = createClaudeDriver({ spawn, cwd: "/home/mira/desk", uuid });
   const session = driver.start({
     cwd: "/home/mira/desk",
     env: { GIT_TOKEN: "not-a-real-token" },
@@ -101,15 +109,70 @@ async function collect(events: AsyncIterable<DriverEvent>): Promise<DriverEvent[
   return all;
 }
 
+const CONVERSATION = "0199c4d8-0000-7000-8000-0000000000c1";
+/** How the product says it runs: when it starts, and again at the start of every turn. */
 const INIT = {
   type: "system",
   subtype: "init",
-  session_id: "0199c4d8-0000-7000-8000-0000000000c1",
-  model: "claude-opus-5-5",
-  effort: "high",
-  claude_code_version: "2.1.0",
+  cwd: "/home/mira/desk",
+  session_id: CONVERSATION,
+  tools: ["Bash", "Read", "Write"],
+  mcp_servers: [],
+  model: "claude-sonnet-5-5",
+  permissionMode: "auto",
+  apiKeySource: "none",
+  claude_code_version: "2.1.321",
+  capabilities: ["interrupt_receipt_v1", "msg_lifecycle_v1"],
+  uuid: "0199c4d8-0000-7000-8000-00000000e001",
 };
-const RESULT = { type: "result", subtype: "success", is_error: false, result: "Done." };
+const STARTED = [
+  { type: "running", model: "claude-sonnet-5-5", effort: null, version: "2.1.321" },
+  { type: "conversation", id: CONVERSATION },
+  {
+    type: "event",
+    kind: "status",
+    text: "The product started.",
+    data: { model: "claude-sonnet-5-5", effort: null, version: "2.1.321", mode: "auto" },
+  },
+];
+/** A turn that completed. */
+const RESULT = {
+  type: "result",
+  subtype: "success",
+  is_error: false,
+  stop_reason: "end_turn",
+  terminal_reason: "completed",
+  result: "Done.",
+  permission_denials: [],
+  num_turns: 1,
+  session_id: CONVERSATION,
+};
+/** A message the product took off its input, said back under the id it was written with. */
+const taken = (uuid: string, text: string) => ({
+  type: "user",
+  message: { role: "user", content: [{ type: "text", text }] },
+  parent_tool_use_id: null,
+  uuid,
+  isReplay: true,
+});
+/** What the product says became of a message. */
+const became = (uuid: string, state: "queued" | "started" | "completed" | "cancelled") => ({
+  type: "command_lifecycle",
+  command_uuid: uuid,
+  state,
+  session_id: CONVERSATION,
+});
+const says1 = (text: string) => ({
+  type: "assistant",
+  message: { role: "assistant", content: [{ type: "text", text }] },
+  parent_tool_use_id: null,
+  session_id: CONVERSATION,
+});
+const message = (text: string, priority: "now" | "next" = "next") => ({
+  text,
+  images: [],
+  priority,
+});
 
 describe("the claude driver", () => {
   it("starts the unmodified binary over its streaming JSON, with nobody at the terminal", () => {
@@ -124,6 +187,8 @@ describe("the claude driver", () => {
           "--output-format",
           "stream-json",
           "--verbose",
+          "--replay-user-messages",
+          // Named because the product does not start a run nobody attends in it by itself.
           "--permission-mode",
           "auto",
           "--permission-prompts",
@@ -140,7 +205,7 @@ describe("the claude driver", () => {
         model: "opus",
         effort: "high",
         resume: "0199c4d8-0000-7000-8000-0000000000c1",
-      }).slice(10),
+      }).slice(11),
     ).toEqual([
       "--model",
       "opus",
@@ -166,28 +231,32 @@ describe("the claude driver", () => {
     expect(modeOf(undefined)).toBe("auto");
     expect(modeOf("dontAsk")).toBe("dontAsk");
     expect(modeOf("bypassPermissions")).toBe("bypassPermissions");
+    // The product's two words for the mode that asks, as the desk writes either.
+    expect(modeOf("manual")).toBe("manual");
+    expect(modeOf("default")).toBe("default");
     expect(modeOf("dontask")).toBe("dontAsk");
     expect(modeOf("everything")).toBe("dontAsk");
     expect(plain.driver.permissions).toEqual({
-      modes: ["default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions"],
+      modes: ["default", "manual", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions"],
       unattended: "auto",
       least: "dontAsk",
     });
-    // No version is said to be tried until the driver was run against it.
-    expect(plain.driver.product).toEqual({ name: "Claude Code", tried: [] });
+    // The builds the driver was run against, and no other.
+    expect(plain.driver.product).toEqual({ name: "Claude Code", tried: ["2.1.321"] });
   });
 
-  it("sends a message as one line, with its pictures as image blocks and the product's own priority", async () => {
+  it("sends a message as one line under an id of its own, with its pictures as image blocks and the product's own priority", async () => {
     const { session, sent } = started();
     await session.send({
       text: "[console k3f9a2 #1 · tell · Jane · 14:02]\nLook at this.",
       images: [{ name: "shot.png", contentType: "image/png", bytes: Uint8Array.from([1, 2, 3]) }],
-      priority: "now",
+      priority: "next",
     });
     expect(sent).toHaveLength(1);
     expect(sent[0]).not.toContain("\n");
     expect(JSON.parse(sent[0] ?? "")).toEqual({
       type: "user",
+      uuid: "m1",
       message: {
         role: "user",
         content: [
@@ -196,8 +265,21 @@ describe("the claude driver", () => {
         ],
       },
       parent_tool_use_id: null,
-      priority: "now",
+      priority: "next",
     });
+    // A message to be read now stops what is under way first, the tool call in it too: the
+    // product's own request for it, and then the message.
+    await session.send(message("Stop that.", "now"));
+    expect(sent.slice(1).map((line) => JSON.parse(line))).toEqual([
+      { type: "control_request", request_id: "m3", request: { subtype: "interrupt" } },
+      {
+        type: "user",
+        uuid: "m2",
+        message: { role: "user", content: [{ type: "text", text: "Stop that." }] },
+        parent_tool_use_id: null,
+        priority: "now",
+      },
+    ]);
     // The model and the effort are taken when the product starts.
     expect(await session.set({ model: "opus" })).toBe(false);
   });
@@ -243,7 +325,15 @@ describe("the claude driver", () => {
       },
     });
     // What the runner sent comes back as a line of its own: the runner's to record, not the driver's.
-    says({ type: "user", message: { content: [{ type: "text", text: "Hold the release." }] } });
+    says(taken("0199c4d8-0000-7000-8000-00000000a001", "Hold the release."));
+    // Lines that are the product's own business: what its commands are, how much of its
+    // allowance is left, a task of a shell begun and ended, what became of a message.
+    says({ type: "system", subtype: "commands_changed", commands: [{ name: "review" }] });
+    says({ type: "rate_limit_event", rate_limit_info: { status: "allowed" } });
+    says({ type: "system", subtype: "task_started", task_id: "b1", tool_use_id: "toolu_01" });
+    says({ type: "system", subtype: "task_notification", task_id: "b1", status: "completed" });
+    says(became("0199c4d8-0000-7000-8000-00000000a001", "started"));
+    says({ type: "control_response", response: { subtype: "success", request_id: "r1" } });
     says({ type: "system", subtype: "compact_boundary" });
     says({ type: "system", subtype: "api_retry", attempt: 2 });
     says({
@@ -254,14 +344,7 @@ describe("the claude driver", () => {
     });
     exits(0);
     expect(await collect(session.events)).toEqual([
-      { type: "running", model: "claude-opus-5-5", effort: "high", version: "2.1.0" },
-      { type: "conversation", id: "0199c4d8-0000-7000-8000-0000000000c1" },
-      {
-        type: "event",
-        kind: "status",
-        text: "The product started.",
-        data: { model: "claude-opus-5-5", effort: "high", version: "2.1.0" },
-      },
+      ...STARTED,
       { type: "event", kind: "thinking", text: "The release waits on a migration." },
       { type: "event", kind: "assistant", text: "I will check the migration." },
       {
@@ -436,17 +519,285 @@ describe("the claude driver", () => {
     ]);
   });
 
-  it("stops a turn with the signal the product documents, and the process by closing its input", async () => {
-    const { session, killed, exits, child } = started();
+  it("stops a turn with the product's own request for it, and the process by closing its input", async () => {
+    const { session, sent, killed, says, exits } = started();
+    says(INIT);
+    await session.send(message("Run the tests."));
+    says(taken("m1", "Run the tests."));
     await session.interrupt();
-    expect(killed).toEqual(["SIGINT"]);
+    expect(JSON.parse(sent[1] ?? "")).toEqual({
+      type: "control_request",
+      request_id: "m2",
+      request: { subtype: "interrupt" },
+    });
+    // How the product ends a turn that was stopped: the tool call given up, and a result that
+    // calls itself an error. It is what was asked for: a status, and the agent waits for more.
+    says({ type: "control_response", response: { subtype: "success", request_id: "m2" } });
+    says({
+      type: "user",
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "toolu_01",
+            is_error: true,
+            content: "The user doesn't want to proceed with this tool use.",
+          },
+        ],
+      },
+    });
+    says({
+      type: "user",
+      message: {
+        role: "user",
+        content: [{ type: "text", text: "[Request interrupted by user for tool use]" }],
+      },
+    });
+    says({
+      type: "result",
+      subtype: "error_during_execution",
+      is_error: true,
+      stop_reason: "tool_use",
+      terminal_reason: "aborted_tools",
+      errors: ["[ede_diagnostic] result_type=user last_content_type=n/a stop_reason=tool_use"],
+      permission_denials: [],
+    });
     const stopping = session.stop();
     // Asked first: the input closes, and a process that ends by itself is not made to.
     exits(0);
     await stopping;
-    expect(killed).toEqual(["SIGINT"]);
-    expect(await collect(session.events)).toEqual([{ type: "ended", how: "exited" }]);
-    void child;
+    expect(killed).toEqual([]);
+    expect((await collect(session.events)).slice(3)).toEqual([
+      {
+        type: "event",
+        kind: "tool_result",
+        text: "The user doesn't want to proceed with this tool use.",
+        data: { id: "toolu_01", error: true },
+        pictures: [],
+      },
+      { type: "event", kind: "status", text: "The turn was stopped." },
+      { type: "turn_completed" },
+      { type: "ended", how: "exited" },
+    ]);
+  });
+
+  it("says once how the product runs, though the product says it at every turn, and again when it changes", async () => {
+    const { session, says, exits } = started();
+    says(INIT);
+    says(says1("ready"));
+    says({ ...RESULT, result: "ready" });
+    // The second turn begins as the first did: nothing new, and nothing said.
+    says({ ...INIT, uuid: "0199c4d8-0000-7000-8000-00000000e002" });
+    says(says1("again"));
+    says({ ...RESULT, result: "again" });
+    // Another model answers the third: said, since it is what the agent runs with now.
+    says({ ...INIT, model: "claude-opus-5-5" });
+    says(RESULT);
+    exits(0);
+    expect(await collect(session.events)).toEqual([
+      ...STARTED,
+      { type: "event", kind: "assistant", text: "ready" },
+      { type: "turn_completed" },
+      { type: "event", kind: "assistant", text: "again" },
+      { type: "turn_completed" },
+      { type: "running", model: "claude-opus-5-5", effort: null, version: "2.1.321" },
+      {
+        type: "event",
+        kind: "status",
+        text: "The product goes on with another model, or in another permission mode.",
+        data: { model: "claude-opus-5-5", effort: null, version: "2.1.321", mode: "auto" },
+      },
+      { type: "turn_completed" },
+      { type: "ended", how: "exited" },
+    ]);
+  });
+
+  it("says the mode the product started in where it is not the one asked for", async () => {
+    // Asked for `auto`, where nothing names another: a product that starts in its manual mode
+    // says so, by the word it has for it.
+    const manual = started();
+    manual.says({ ...INIT, permissionMode: "default" });
+    manual.exits(0);
+    expect((await collect(manual.session.events))[2]).toEqual({
+      type: "event",
+      kind: "status",
+      text: "The product started, in the permission mode default and not in auto, which it was asked for.",
+      data: { model: "claude-sonnet-5-5", effort: null, version: "2.1.321", mode: "default" },
+    });
+    // The mode that asks has two words, one the product takes and one it says: the same mode.
+    const asked = started({ permissions: "manual" });
+    asked.says({ ...INIT, permissionMode: "default" });
+    asked.exits(0);
+    expect((await collect(asked.session.events))[2]).toMatchObject({
+      text: "The product started.",
+    });
+    // A build that says an effort is read for it.
+    const older = started();
+    older.says({ ...INIT, effort: "high", permissionMode: undefined });
+    older.exits(0);
+    expect((await collect(older.session.events)).slice(0, 3)).toEqual([
+      { type: "running", model: "claude-sonnet-5-5", effort: "high", version: "2.1.321" },
+      { type: "conversation", id: CONVERSATION },
+      {
+        type: "event",
+        kind: "status",
+        text: "The product started.",
+        data: { model: "claude-sonnet-5-5", effort: "high", version: "2.1.321", mode: null },
+      },
+    ]);
+  });
+
+  it("says a turn completed when nothing it was sent still waits: a message read in the turn, after it, or in its place", async () => {
+    // A message written while a tool call is under way is read when the call finishes, in the
+    // same turn: two messages, and one turn.
+    const within = started();
+    within.says(INIT);
+    await within.session.send(message("Run the tests."));
+    within.says(taken("m1", "Run the tests."));
+    await within.session.send(message("And say which failed."));
+    within.says(taken("m2", "And say which failed."));
+    within.says(says1("Two failed."));
+    within.says(RESULT);
+    within.exits(0);
+    expect((await collect(within.session.events)).slice(3)).toEqual([
+      { type: "event", kind: "assistant", text: "Two failed." },
+      { type: "turn_completed" },
+      { type: "ended", how: "exited" },
+    ]);
+
+    // A message written as a turn was ending starts a turn of its own: the first result is not
+    // the agent done, and the second is.
+    const after = started();
+    await after.session.send(message("One."));
+    await after.session.send(message("Two."));
+    after.says(INIT);
+    after.says(taken("m1", "One."));
+    after.says(says1("one"));
+    after.says(RESULT);
+    after.says(became("m1", "completed"));
+    after.says(INIT);
+    after.says(taken("m2", "Two."));
+    after.says(says1("two"));
+    after.says(RESULT);
+    after.exits(0);
+    expect((await collect(after.session.events)).slice(3)).toEqual([
+      { type: "event", kind: "assistant", text: "one" },
+      { type: "event", kind: "assistant", text: "two" },
+      { type: "turn_completed" },
+      { type: "ended", how: "exited" },
+    ]);
+
+    // A turn stopped for a message: its result is no error and no end, and the message's turn follows.
+    const instead = started();
+    instead.says(INIT);
+    await instead.session.send(message("Run the tests."));
+    instead.says(taken("m1", "Run the tests."));
+    await instead.session.send(message("Stop that.", "now"));
+    instead.says({
+      type: "result",
+      subtype: "error_during_execution",
+      is_error: true,
+      stop_reason: "tool_use",
+      terminal_reason: "aborted_tools",
+      permission_denials: [],
+    });
+    instead.says(became("m1", "cancelled"));
+    instead.says(INIT);
+    instead.says(taken("m2", "Stop that."));
+    instead.says(says1("halted"));
+    instead.says(RESULT);
+    instead.exits(0);
+    expect((await collect(instead.session.events)).slice(3)).toEqual([
+      { type: "event", kind: "status", text: "The turn was stopped for a message." },
+      { type: "event", kind: "assistant", text: "halted" },
+      { type: "turn_completed" },
+      { type: "ended", how: "exited" },
+    ]);
+  });
+
+  it("waits for no message the product is done with or says nothing of", async () => {
+    // A message the product says it will not take is not waited for, said back or not.
+    const dropped = started();
+    dropped.says(INIT);
+    await dropped.session.send(message("One."));
+    dropped.says(taken("m1", "One."));
+    await dropped.session.send(message("Two."));
+    dropped.says(became("m2", "cancelled"));
+    dropped.says(RESULT);
+    dropped.exits(0);
+    expect((await collect(dropped.session.events)).slice(3)).toEqual([
+      { type: "turn_completed" },
+      { type: "ended", how: "exited" },
+    ]);
+
+    // A build that says no message back is read without: every result ends a turn.
+    const silent = started();
+    silent.says(INIT);
+    await silent.session.send(message("One."));
+    await silent.session.send(message("Two."));
+    silent.says(RESULT);
+    silent.says(RESULT);
+    silent.exits(0);
+    expect((await collect(silent.session.events)).slice(3)).toEqual([
+      { type: "turn_completed" },
+      { type: "turn_completed" },
+      { type: "ended", how: "exited" },
+    ]);
+
+    // Someone else's line that calls itself a message taken is nobody's the driver wrote.
+    const forged = started();
+    forged.says(INIT);
+    await forged.session.send(message("One."));
+    forged.says(taken("not-the-drivers", "One."));
+    forged.says(RESULT);
+    forged.exits(0);
+    expect((await collect(forged.session.events)).slice(3)).toEqual([
+      { type: "turn_completed" },
+      { type: "ended", how: "exited" },
+    ]);
+  });
+
+  it("says a denial once: when it happens, and not again with the turn's result", async () => {
+    const { session, says, exits } = started({ permissions: "dontAsk" });
+    says({ ...INIT, permissionMode: "dontAsk" });
+    says({
+      type: "system",
+      subtype: "permission_denied",
+      tool_name: "Write",
+      tool_use_id: "toolu_01",
+      decision_reason_type: "mode",
+      message: "Permission to use Write has been denied.",
+    });
+    says({
+      ...RESULT,
+      permission_denials: [
+        {
+          tool_name: "Write",
+          tool_use_id: "toolu_01",
+          tool_input: { file_path: "/home/mira/desk/note.txt", content: "hello" },
+        },
+        // One the product said nothing of before is said here.
+        { tool_name: "Bash", tool_use_id: "toolu_02", tool_input: { command: "sudo true" } },
+      ],
+    });
+    exits(0);
+    expect((await collect(session.events)).slice(3)).toEqual([
+      {
+        type: "event",
+        kind: "permission",
+        text: "Denied, with nobody at the terminal to ask: Write",
+        data: { tool: "Write", answer: "denied", id: "toolu_01" },
+      },
+      {
+        type: "event",
+        kind: "permission",
+        text: "Denied, with nobody at the terminal to ask: Bash sudo true",
+        data: { tool: "Bash", answer: "denied", id: "toolu_02" },
+      },
+      { type: "turn_completed" },
+      { type: "ended", how: "exited" },
+    ]);
   });
 
   it("asks the installed product what it is, without starting a session", async () => {

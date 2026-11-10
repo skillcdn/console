@@ -695,7 +695,8 @@ export function createRunner(options: RunnerOptions): Runner {
         pictures.get(signal.number),
       );
     }
-    target.sent = batch;
+    // Everything handed over since the agent was last done: what a product that took nothing is sent again.
+    target.sent = [...target.sent, ...batch];
     delivered = Math.max(delivered, ...batch.map((signal) => signal.number));
     await persist();
     await account();
@@ -802,7 +803,11 @@ export function createRunner(options: RunnerOptions): Runner {
     }
     switch (event.type) {
       case "running": {
-        target.running = { model: event.model, effort: event.effort };
+        // What the product does not say of itself stays what the session was started with.
+        target.running = {
+          model: event.model ?? target.running.model,
+          effort: event.effort ?? target.running.effort,
+        };
         productVersion = event.version ?? productVersion;
         push({ t: "heartbeat" });
         return;
