@@ -1,6 +1,6 @@
 # ADR-0087: An agent account keeps its secrets in a store of its own that only it reads
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-10
 - Follows [ADR-0084](0084-an-agent-account-is-a-member-of-its-own-with-a-manager-above-it.md). Keeps the console's sealing as a plugin's secrets have it ([ADR-0070](0070-a-secret-is-sealed-by-the-console-from-an-answer-and-goes-where-its-setting-says.md), [ADR-0075](0075-a-secret-never-comes-back-to-a-plugin-and-sealing-fails-closed.md)), and the rule that no credential of another member's ever reaches an agent ([AGENTS.md](../../AGENTS.md), rules 3 and 4).
 

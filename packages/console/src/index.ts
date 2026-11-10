@@ -315,6 +315,9 @@ export {
   useWords,
 } from "./i18n/index.js";
 export {
+  type AgentTab,
+  agentHref,
+  agentWorkHref,
   type BoardFilter,
   boardHref,
   calendarHref,

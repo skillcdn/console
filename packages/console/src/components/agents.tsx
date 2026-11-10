@@ -19,6 +19,7 @@ import {
   MAX_PERSON_NAME_LENGTH,
   MAX_PERSON_TITLE_LENGTH,
 } from "../limits.js";
+import { AgentStateBadge } from "./agent-page.js";
 import { Picker } from "./picker.js";
 import { peopleSearch } from "./searches.js";
 import {
@@ -75,6 +76,8 @@ export interface AgentAccountListProps {
   readonly busy?: boolean | undefined;
   /** Shown where there is no agent account to list. */
   readonly empty?: React.ReactNode;
+  /** Where an account's own page is; left out, its name is not a link. */
+  readonly href?: ((agent: RestAgent) => string) | undefined;
 }
 
 /** The workspace's agent accounts: who each is, the login it signs in with, and whom it reports to. */
@@ -109,7 +112,8 @@ export function AgentAccountList(props: AgentAccountListProps) {
               <Avatar person={person} size="lg" />
               <div className="sc-person-card-who">
                 <span className="sc-person-card-name">
-                  {name}
+                  {props.href === undefined ? name : <a href={props.href(agent)}>{name}</a>}
+                  <AgentStateBadge state={agent.state} />
                   {person.invited === true && <Badge tone="warning">{accounts.invited}</Badge>}
                   {out && <Badge>{words.people.deactivated}</Badge>}
                 </span>

@@ -1,4 +1,11 @@
-import { isFolderPath, isSignInFailure, SIGN_IN_PARAM, type SignInFailure } from "./api.js";
+import {
+  isFolderPath,
+  isHandle,
+  isSignInFailure,
+  RESERVED_HANDLES,
+  SIGN_IN_PARAM,
+  type SignInFailure,
+} from "./api.js";
 import { isDay, isMonth } from "./dates.js";
 
 // The addresses of the default console (ADR-0010): the router is a function from a URL to a
@@ -110,6 +117,17 @@ export type Route =
   | { readonly name: "new-token" }
   /** The form where an administrator adds an agent account (ADR-0084). */
   | { readonly name: "new-agent" }
+  /**
+   * One agent account's page (ADR-0085, ADR-0086): what it is doing now, its sessions or one of
+   * them, its plate with a day of the week shown at the top, and what is kept of it.
+   */
+  | {
+      readonly name: "agent";
+      readonly handle: string;
+      readonly tab: AgentTab;
+      readonly session: string | undefined;
+      readonly week: string | undefined;
+    }
   /** What is on the person's plate across their projects. */
   /** What is on the person's plate: a day of the week shown at the top, or today's when the address names none. */
   | { readonly name: "work"; readonly week: string | undefined }
@@ -336,6 +354,35 @@ export function matchRoute(pathname: string, search = ""): Route {
   if (path === PATHS.newAgent) {
     return { name: "new-agent" };
   }
+  if (path.startsWith(`${PATHS.agents}/`)) {
+    // Under the agents' own page, by the handle an account is called by; `new` is none.
+    const [handle, tab, session, ...more] = path.slice(PATHS.agents.length + 1).split("/");
+    if (
+      handle === undefined ||
+      !isHandle(handle) ||
+      RESERVED_HANDLES.includes(handle) ||
+      more.length > 0
+    ) {
+      return NOT_FOUND;
+    }
+    const agent = { name: "agent", handle, session: undefined, week: undefined } as const;
+    if (tab === undefined) {
+      return { ...agent, tab: "live" };
+    }
+    if (tab === "sessions") {
+      return session === undefined || UUID.test(session)
+        ? { ...agent, tab: "sessions", session: session?.toLowerCase() }
+        : NOT_FOUND;
+    }
+    if (session !== undefined) {
+      return NOT_FOUND;
+    }
+    if (tab === "work") {
+      const shown = weekShown(params);
+      return shown === undefined ? NOT_FOUND : { ...agent, tab: "work", ...shown };
+    }
+    return tab === "settings" ? { ...agent, tab: "settings" } : NOT_FOUND;
+  }
   if (path === PATHS.categories) {
     return { name: "categories" };
   }
@@ -517,6 +564,26 @@ export function matchRoute(pathname: string, search = ""): Route {
 /** Where a person approves an agent's connection by its code, or types one. */
 export function connectHref(code?: string): string {
   return code === undefined ? PATHS.connect : `${PATHS.connect}/${encodeURIComponent(code)}`;
+}
+
+/** The views of an agent account's page. */
+export type AgentTab = "live" | "sessions" | "work" | "settings";
+
+/** Where an agent account's page is, by its handle: what it is doing now, another of its views, or one session. */
+export function agentHref(handle: string, tab: AgentTab = "live", session?: string): string {
+  const base = `${PATHS.agents}/${handle}`;
+  if (tab === "live") {
+    return base;
+  }
+  return tab === "sessions" && session !== undefined
+    ? `${base}/sessions/${session}`
+    : `${base}/${tab}`;
+}
+
+/** Where an agent account's plate is, with the week of a day at the top, or this week's. */
+export function agentWorkHref(handle: string, week?: string): string {
+  const base = agentHref(handle, "work");
+  return week === undefined ? base : `${base}?week=${week}`;
 }
 
 /** Where an administrator sees one person's agents. */

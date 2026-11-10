@@ -1,6 +1,6 @@
 # ADR-0086: A session leaves a transcript that is kept for good
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-10
 - Follows [ADR-0085](0085-a-runner-on-the-agents-machine-is-told-by-signals-and-runs-one-session-at-a-time.md). Closes open question 4 of [architecture.md](../architecture.md), what of a run is kept: for a person's agent, its reports, as before; for an agent account, the whole transcript of every session.
 

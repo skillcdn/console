@@ -11,6 +11,8 @@ import {
 } from "./console.js";
 import { ENGLISH, KOREAN } from "./i18n/index.js";
 import {
+  agentHref,
+  agentWorkHref,
   boardHref,
   calendarHref,
   connectHref,
@@ -55,6 +57,40 @@ describe("matchRoute", () => {
     expect(matchRoute("/agents/new")).toEqual({ name: "new-token" });
     // The form for an agent account (ADR-0084), under `new`, which no account's handle may be.
     expect(matchRoute("/agents/new/account")).toEqual({ name: "new-agent" });
+    // An agent account's page, by its handle, and its views.
+    const agent = { name: "agent", handle: "mira", session: undefined, week: undefined };
+    expect(matchRoute("/agents/mira")).toEqual({ ...agent, tab: "live" });
+    expect(matchRoute("/agents/mira/")).toEqual({ ...agent, tab: "live" });
+    expect(matchRoute("/agents/mira/sessions")).toEqual({ ...agent, tab: "sessions" });
+    expect(matchRoute(`/agents/mira/sessions/${ID}`)).toEqual({
+      ...agent,
+      tab: "sessions",
+      session: ID,
+    });
+    expect(matchRoute("/agents/mira/work", "?week=2026-11-09")).toEqual({
+      ...agent,
+      tab: "work",
+      week: "2026-11-09",
+    });
+    expect(matchRoute("/agents/mira/settings")).toEqual({ ...agent, tab: "settings" });
+    for (const path of [
+      "/agents/Mira",
+      "/agents/-mira",
+      "/agents/me",
+      "/agents/secrets",
+      "/agents/mira/sessions/not-an-id",
+      "/agents/mira/settings/more",
+      "/agents/mira/work/more",
+      "/agents/mira/elsewhere",
+      `/agents/mira/sessions/${ID}/more`,
+    ]) {
+      expect(matchRoute(path), path).toEqual({ name: "not-found" });
+    }
+    expect(matchRoute("/agents/mira/work", "?week=soon")).toEqual({ name: "not-found" });
+    expect(agentHref("mira")).toBe("/agents/mira");
+    expect(agentHref("mira", "settings")).toBe("/agents/mira/settings");
+    expect(agentHref("mira", "sessions", ID)).toBe(`/agents/mira/sessions/${ID}`);
+    expect(agentWorkHref("mira", "2026-11-09")).toBe("/agents/mira/work?week=2026-11-09");
     expect(matchRoute("/projects/web")).toEqual({ name: "board", project: "web", filter: {} });
     expect(matchRoute("/projects/web/")).toEqual({ name: "board", project: "web", filter: {} });
     expect(matchRoute("/work")).toEqual({ name: "work", week: undefined });

@@ -7198,3 +7198,244 @@ a.sc-tile-project:focus-visible {
     animation: none;
   }
 }
+
+/* An agent account's page (ADR-0085, ADR-0086): who it is and how it stands, then its views. */
+.sc-agent-head {
+  justify-content: flex-start;
+  gap: var(--sc-space-4);
+}
+
+.sc-agent-head-who {
+  min-width: 0;
+}
+
+.sc-agent-head-who .sc-lead {
+  margin-bottom: var(--sc-space-2);
+}
+
+.sc-agent-state {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
+}
+
+.sc-agent-state-why {
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+/* What a supervisor says to the agent: the words, then the pictures and the ways to send them. */
+.sc-signal-composer {
+  display: grid;
+  gap: var(--sc-space-3);
+  margin-bottom: var(--sc-space-4);
+}
+
+.sc-signal-text {
+  width: 100%;
+  resize: vertical;
+}
+
+.sc-signal-row,
+.sc-signal-ways {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
+}
+
+.sc-signal-ways {
+  margin-left: auto;
+}
+
+.sc-signal-pictures {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-agent-choice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--sc-space-3) var(--sc-space-4);
+  margin-bottom: var(--sc-space-5);
+}
+
+.sc-agent-choice .sc-field-hint {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+/* A session's transcript: a block for each event, what it is and when above what it says. What an
+   agent's product printed keeps its spaces and its lines, and wraps rather than widen the page. */
+.sc-transcript {
+  display: grid;
+  gap: var(--sc-space-2);
+  margin: var(--sc-space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sc-transcript-event {
+  min-width: 0;
+  padding: var(--sc-space-2) var(--sc-space-3);
+  border: var(--sc-hairline);
+  border-left: 3px solid var(--sc-color-border-strong);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-bg-raised);
+}
+
+.sc-transcript-person,
+.sc-transcript-wake {
+  border-left-color: var(--sc-color-accent-solid);
+  background: var(--sc-color-accent-subtle);
+}
+
+.sc-transcript-assistant {
+  border-left-color: var(--sc-color-success);
+}
+
+.sc-transcript-error,
+.sc-transcript-permission {
+  border-left-color: var(--sc-color-danger);
+}
+
+.sc-transcript-thinking .sc-transcript-text {
+  color: var(--sc-color-text-muted);
+}
+
+.sc-transcript-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sc-space-2);
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-xs);
+}
+
+.sc-transcript-kind {
+  color: var(--sc-color-text);
+  font-weight: 600;
+}
+
+.sc-transcript-facts {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sc-transcript-head .sc-time {
+  margin-left: auto;
+}
+
+.sc-transcript-text {
+  max-height: 28rem;
+  margin: var(--sc-space-1) 0 0;
+  overflow: auto;
+  font-family: var(--sc-font-mono);
+  font-size: var(--sc-text-sm);
+  line-height: var(--sc-leading-code);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.sc-transcript-cut,
+.sc-transcript-sealed {
+  margin: var(--sc-space-1) 0 0;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-transcript-pictures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-2);
+  margin: var(--sc-space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sc-transcript-pictures img {
+  display: block;
+  max-width: min(100%, 24rem);
+  max-height: 16rem;
+  border: var(--sc-hairline);
+  border-radius: var(--sc-radius-sm);
+}
+
+/* An agent's sessions, a line each; and the short lists of its settings, a line each with what is done to it at the end. */
+.sc-agent-sessions,
+.sc-agent-secret-list {
+  display: grid;
+  gap: var(--sc-space-2);
+  margin: 0 0 var(--sc-space-3);
+  padding: 0;
+  list-style: none;
+}
+
+.sc-agent-session,
+.sc-agent-secret {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2) var(--sc-space-3);
+  min-width: 0;
+}
+
+.sc-agent-session-facts {
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+  overflow-wrap: anywhere;
+}
+
+.sc-agent-secret > :last-child {
+  margin-left: auto;
+}
+
+.sc-agent-settings {
+  display: grid;
+  gap: var(--sc-space-4);
+}
+
+.sc-agent-secret-form,
+.sc-agent-persona {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--sc-space-2) var(--sc-space-3);
+}
+
+.sc-agents-need-you {
+  margin-bottom: var(--sc-space-5);
+}
+
+.sc-agent-need-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sc-space-2);
+}
+
+.sc-agent-tabs {
+  margin-bottom: var(--sc-space-4);
+}
+
+.sc-agent-settings-sub {
+  display: block;
+  margin: var(--sc-space-4) 0 var(--sc-space-2);
+}
+
+.sc-agent-product {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
+}
+
+.sc-agent-secret-form .sc-input {
+  flex: 1 1 12rem;
+  width: auto;
+}

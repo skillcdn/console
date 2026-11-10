@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { AgentPage, AgentsNeedingYou } from "./agent-page.js";
 import {
   ApiError,
   type ConsoleClient,
@@ -16,6 +17,7 @@ import {
   OPEN_TASK_STATES,
   PROJECT_RULES_TEMPLATE,
   REFERENCE_RULES,
+  type RestAgent,
   type RestAgentProposal,
   type RestAnswerInput,
   type RestComment,
@@ -132,6 +134,8 @@ import {
 import { type PersonaName, proposeAgents } from "./persona.js";
 import { pluginNavItems, pluginPagesAt, pluginWordOf } from "./plugin-nav.js";
 import {
+  agentHref,
+  agentWorkHref,
   boardHref,
   calendarHref,
   customPageHref,
@@ -2652,19 +2656,22 @@ function WorkPage(props: {
   const words = useWords();
   const { plate } = props.data.actions;
   return (
-    <PlatePage
-      components={props.components}
-      load={plate}
-      remember={`work:${props.data.me?.person?.id ?? ""}`}
-      early="work"
-      title={words.work.title}
-      week={props.week}
-      weekStart={weekStartOf(props.data.me?.workspace)}
-      weekHref={workHref}
-      loading={words.work.loading}
-      couldNotLoad={words.work.couldNotLoad}
-      empty={words.work.empty}
-    />
+    <>
+      <AgentsNeedingYou agents={props.data.agents} me={props.data.me?.person?.id} />
+      <PlatePage
+        components={props.components}
+        load={plate}
+        remember={`work:${props.data.me?.person?.id ?? ""}`}
+        early="work"
+        title={words.work.title}
+        week={props.week}
+        weekStart={weekStartOf(props.data.me?.workspace)}
+        weekHref={workHref}
+        loading={words.work.loading}
+        couldNotLoad={words.work.couldNotLoad}
+        empty={words.work.empty}
+      />
+    </>
   );
 }
 
@@ -2692,6 +2699,37 @@ function PersonWorkPage(props: {
       week={props.week}
       weekStart={weekStartOf(data.me?.workspace)}
       weekHref={(day) => personWorkHref(id, day)}
+      loading={words.people.loadingWork}
+      couldNotLoad={words.people.couldNotLoadWork}
+      empty={{ title: words.people.noWork.title(name), body: words.people.noWork.body }}
+      refused={words.people.notOverseen}
+    />
+  );
+}
+
+/** An agent account's plate on its own page (ADR-0084): its work as a member's, for whoever oversees it. */
+function AgentWork(props: {
+  readonly agent: RestAgent;
+  readonly data: ConsoleData;
+  readonly components: ConsoleComponents;
+  readonly week: string | undefined;
+}) {
+  const words = useWords();
+  const { agent, data } = props;
+  const { id } = agent.person;
+  const handle = agent.person.handle ?? "";
+  const name = personName(agent.person);
+  const { personPlate } = data.actions;
+  const load = useCallback((signal: AbortSignal) => personPlate(id, signal), [personPlate, id]);
+  return (
+    <PlatePage
+      components={props.components}
+      load={load}
+      remember={`work:${data.me?.person?.id ?? ""}:${id}`}
+      title={words.people.workOf(name)}
+      week={props.week}
+      weekStart={weekStartOf(data.me?.workspace)}
+      weekHref={(day) => agentWorkHref(handle, day)}
       loading={words.people.loadingWork}
       couldNotLoad={words.people.couldNotLoadWork}
       empty={{ title: words.people.noWork.title(name), body: words.people.noWork.body }}
@@ -3073,6 +3111,20 @@ function WorkspacePage(props: {
   if (route.name === "connect") {
     return <ConnectPage code={route.code} data={data} navigation={navigation} />;
   }
+  if (route.name === "agent") {
+    return (
+      <AgentPage
+        handle={route.handle}
+        tab={route.tab}
+        session={route.session}
+        client={client}
+        viaToken={holdsToken(data)}
+        work={(agent) => (
+          <AgentWork agent={agent} data={data} components={components} week={route.week} />
+        )}
+      />
+    );
+  }
   if (route.name === "new-agent") {
     return (
       <NewAgentPage
@@ -3107,6 +3159,7 @@ function WorkspacePage(props: {
         <components.AgentAccountList
           agents={data.agents}
           busy={busy}
+          href={(agent) => agentHref(agent.person.handle ?? "")}
           empty={<EmptyState title={accounts.empty.title} body={accounts.empty.body} />}
         />
       </section>
@@ -3309,7 +3362,10 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
           href: PATHS.agents,
           label: words.nav.agents,
           current:
-            route.name === "agents" || route.name === "new-token" || route.name === "new-agent",
+            route.name === "agents" ||
+            route.name === "new-token" ||
+            route.name === "new-agent" ||
+            route.name === "agent",
         },
         ...pages
           .filter((candidate) => candidate.level === "workspace")

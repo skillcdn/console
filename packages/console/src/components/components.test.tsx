@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { AgentsNeedingYou } from "../agent-page.js";
 import type {
   RestCategory,
   RestComment,
@@ -19,6 +20,15 @@ import type {
 } from "../api.js";
 import { addDays, deviceLanguage, firstDayOfWeek, weekOf } from "../dates.js";
 import { KOREAN, LanguageContext } from "../i18n/index.js";
+import {
+  AgentChoice,
+  AgentRunnerFacts,
+  AgentSecretList,
+  AgentSessionList,
+  AgentStateBadge,
+  SignalComposer,
+  TranscriptView,
+} from "./agent-page.js";
 import { AgentAccountForm, AgentAccountList, suggestLogin } from "./agents.js";
 import { Board, BoardFilters, byDue, columnStateOf, edgeScrollOf, filterTasks } from "./board.js";
 import {
@@ -1642,6 +1652,313 @@ describe("the agent accounts (ADR-0084)", () => {
     expect(form).toMatch(
       /<button[^>]*type="submit"[^>]*disabled=""|<button[^>]*disabled=""[^>]*type="submit"/,
     );
+  });
+});
+
+describe("an agent account's page (ADR-0085, ADR-0086)", () => {
+  const WHEN = "2026-11-10T14:02:11.000Z";
+  /** Someone who manages nobody here. */
+  const CAROL = "0199c4d8-0000-7000-8000-00000000000c";
+  const mira: RestPerson = {
+    ...bob,
+    id: "0199c4d8-0000-7000-8000-000000000009",
+    login: "acme-mira",
+    name: "Mira",
+    kind: "agent",
+    handle: "mira",
+    title: null,
+    managerId: alice.id,
+  };
+  const standing = (
+    state: "running" | "stopped" | "refused" | "failed" | "unheard",
+    reason: string,
+  ) => ({
+    state,
+    reason,
+    since: WHEN,
+    heardAt: WHEN,
+  });
+  const runner = {
+    delivered: 8,
+    latest: 10,
+    session: null,
+    machine: { name: "mac-mini", os: "Darwin 24.1.0", user: "mira" },
+    runner: "0.4.8",
+    product: { driver: "claude", name: "Claude Code", version: "2.1.0", tried: false },
+    offers: {
+      models: ["opus", "sonnet"],
+      efforts: ["low", "high"],
+      steer: true,
+      images: true,
+      resume: true,
+    },
+    running: { model: "opus", effort: null },
+    settings: { model: "sonnet", effort: null },
+  };
+  const event = (n: number, over: object = {}) => ({
+    n,
+    kind: "assistant" as const,
+    at: WHEN,
+    text: `Event ${n}.`,
+    whole: null,
+    data: {},
+    files: [],
+    sealed: null,
+    ...over,
+  });
+  const session = (over: object = {}) => ({
+    id: "0199c4d8-0000-7000-8000-0000000000a1",
+    month: "2026-11",
+    startedAt: WHEN,
+    endedAt: null,
+    ended: null,
+    product: { driver: "claude", name: "Claude Code", version: "2.1.0", tried: false },
+    model: "opus",
+    effort: null,
+    resumed: false,
+    machine: { name: "mac-mini", os: "Darwin 24.1.0", user: "mira" },
+    events: 12,
+    lastEventAt: WHEN,
+    away: false,
+    ...over,
+  });
+
+  it("says how an agent stands in a word, and why and since when where there is room", () => {
+    expect(renderToStaticMarkup(<AgentStateBadge state={null} />)).toBe("");
+    expect(renderToStaticMarkup(<AgentStateBadge state={undefined} full />)).toContain(
+      "No runner has been heard from yet",
+    );
+    const brief = renderToStaticMarkup(<AgentStateBadge state={standing("running", "started")} />);
+    expect(brief).toContain("sc-badge-success");
+    expect(brief).toContain(">Running<");
+    expect(brief).not.toContain("since");
+    const full = renderToStaticMarkup(
+      <AgentStateBadge state={standing("refused", "model_refused")} full />,
+    );
+    expect(full).toContain("sc-badge-warning");
+    expect(full).toContain(">Refused<");
+    expect(full).toContain("the model refused · since");
+    expect(full).toContain("runner last heard from");
+    // A reason the page has no words for is said as it came, as text.
+    expect(
+      renderToStaticMarkup(<AgentStateBadge state={standing("failed", "<b>new</b>")} full />),
+    ).toContain("&lt;b&gt;new&lt;/b&gt;");
+    for (const [state, word, tone] of [
+      ["stopped", "Stopped", "neutral"],
+      ["failed", "Failed", "danger"],
+      ["unheard", "Not heard from", "warning"],
+    ] as const) {
+      const seen = renderToStaticMarkup(<AgentStateBadge state={standing(state, "stop")} />);
+      expect(seen).toContain(`>${word}<`);
+      expect(seen).toContain(`sc-badge-${tone}`);
+    }
+  });
+
+  it("leads from the list of accounts to an account's page, with how it stands beside its name", () => {
+    const seen = renderToStaticMarkup(
+      <AgentAccountList
+        agents={[
+          { person: mira, manager: alice, supervised: true, state: standing("stopped", "stop") },
+        ]}
+        href={(agent) => `/agents/${agent.person.handle}`}
+      />,
+    );
+    expect(seen).toContain('<a href="/agents/mira">Mira</a>');
+    expect(seen).toContain(">Stopped<");
+  });
+
+  it("shows what an agent did as text, a block each, and never as markup", () => {
+    const seen = renderToStaticMarkup(
+      <TranscriptView
+        events={[
+          event(1, {
+            kind: "person",
+            text: "Hold the release.",
+            data: { signal: 3, by: "alice", key: null },
+          }),
+          event(2, { text: "<script>alert(1)</script>\n  [x](javascript:alert(1))" }),
+          event(3, { kind: "tool_result", text: "The beginning", whole: 60_000 }),
+          event(4, {
+            kind: "tool_result",
+            text: "",
+            files: [
+              {
+                id: "0199c4d8-0000-7000-8000-0000000000f1",
+                name: "screen.png",
+                size: 2048,
+                contentType: "image/png",
+              },
+            ],
+          }),
+          event(5, { text: "", sealed: { by: alice, at: WHEN, reason: "A token in it." } }),
+        ]}
+        fileHref={(id) => `/api/v1/agents/mira/sessions/s/files/${id}`}
+        onReadWhole={async () => "whole"}
+      />,
+    );
+    expect(seen).toContain('<span class="sc-transcript-kind">Told</span>');
+    expect(seen).toContain("signal: 3 · by: alice");
+    expect(seen).not.toContain("key:");
+    // Whatever the product printed is text in a block that keeps its lines.
+    expect(seen).toContain(
+      '<pre class="sc-transcript-text">&lt;script&gt;alert(1)&lt;/script&gt;\n  [x](javascript:alert(1))</pre>',
+    );
+    expect(seen).not.toContain("<script>");
+    expect(seen).not.toContain('href="javascript:');
+    expect(seen).toContain("The beginning of 59 KB.");
+    expect(seen).toContain(">Read it whole<");
+    expect(seen).toContain(
+      '<img src="/api/v1/agents/mira/sessions/s/files/0199c4d8-0000-7000-8000-0000000000f1" alt="screen.png"',
+    );
+    expect(seen).toContain("Sealed by Alice Example: A token in it.");
+    expect(seen.match(/sc-transcript-event/g)).toHaveLength(5);
+    expect(
+      renderToStaticMarkup(<TranscriptView events={[]} fileHref={() => ""} empty={<p>none</p>} />),
+    ).toBe("<p>none</p>");
+  });
+
+  it("offers what a supervisor says to it: a tell, an interrupt, and a stop or a restart as it stands", () => {
+    const running = renderToStaticMarkup(
+      <SignalComposer state="running" onSend={() => undefined} />,
+    );
+    expect(running).toContain(">Tell<");
+    expect(running).toContain(">Interrupt<");
+    expect(running).toContain(">Stop<");
+    expect(running).not.toContain(">Restart<");
+    expect(running).toContain(">Reset<");
+    // Nothing is said yet: there is nothing to tell.
+    expect(/<button[^>]*type="submit"[^>]*>/.exec(running)?.[0]).toContain('disabled=""');
+    expect(running).toContain('accept="image/png,image/jpeg,image/gif,image/webp"');
+    const stopped = renderToStaticMarkup(
+      <SignalComposer state="stopped" note="Sent as #4: stop." onSend={() => undefined} />,
+    );
+    expect(stopped).toContain(">Restart<");
+    expect(stopped).not.toContain(">Stop<");
+    expect(stopped).toContain("Sent as #4: stop.");
+  });
+
+  it("offers the model and the effort its product offers, and says what the open session runs with", () => {
+    expect(renderToStaticMarkup(<AgentChoice runner={null} onSet={() => undefined} />)).toContain(
+      "offered nothing to choose from yet",
+    );
+    const seen = renderToStaticMarkup(<AgentChoice runner={runner} onSet={() => undefined} />);
+    expect(seen).toContain('<option value="">the product&#x27;s own</option>');
+    expect(seen).toContain('<option value="sonnet" selected="">sonnet</option>');
+    expect(seen).toContain('<option value="high">high</option>');
+    expect(seen).toContain("The open session runs with model opus, effort the product&#x27;s own.");
+    // What is chosen stays choosable when the product offers it no more.
+    const gone = renderToStaticMarkup(
+      <AgentChoice
+        runner={{ ...runner, settings: { model: "an-older-model", effort: null } }}
+        onSet={() => undefined}
+      />,
+    );
+    expect(gone).toContain('<option value="an-older-model" selected="">an-older-model</option>');
+  });
+
+  it("lists its sessions with how each ended and what it holds, and what its runner said of itself", () => {
+    const seen = renderToStaticMarkup(
+      <AgentSessionList
+        sessions={[
+          session(),
+          session({
+            id: "0199c4d8-0000-7000-8000-0000000000a2",
+            ended: "taken_over",
+            endedAt: WHEN,
+            events: 1,
+            resumed: true,
+            away: true,
+          }),
+        ]}
+        href={(one) => `/agents/mira/sessions/${one.id}`}
+      />,
+    );
+    expect(seen).toContain('href="/agents/mira/sessions/0199c4d8-0000-7000-8000-0000000000a1"');
+    expect(seen).toContain(">open<");
+    expect(seen).toContain(">taken over<");
+    expect(seen).toContain(">put away<");
+    expect(seen).toContain("12 events · Claude Code 2.1.0 · opus · mac-mini");
+    expect(seen).toContain(
+      "1 event · Claude Code 2.1.0 · opus · goes on with the conversation before",
+    );
+    const facts = renderToStaticMarkup(<AgentRunnerFacts runner={runner} />);
+    expect(facts).toContain("<dt>Machine</dt><dd>mac-mini · Darwin 24.1.0</dd>");
+    expect(facts).toContain("<dt>OS account</dt><dd>mira</dd>");
+    expect(facts).toContain("a version the driver was not tried with");
+    expect(facts).toContain("8 of 10 delivered");
+    expect(renderToStaticMarkup(<AgentRunnerFacts runner={null} />)).toContain(
+      "No runner has been heard from.",
+    );
+  });
+
+  it("lists its secrets by name, with the way to seed one, and never a value", () => {
+    const seen = renderToStaticMarkup(
+      <AgentSecretList
+        secrets={[
+          { name: "git.token", setAt: WHEN, seeded: false, expiresOn: "2027-11-10" },
+          { name: "mail.password", setAt: WHEN, seeded: true, expiresOn: null },
+        ]}
+        onSeed={() => undefined}
+        onRemove={() => undefined}
+      />,
+    );
+    expect(seen).toContain("<code>git.token</code>");
+    expect(seen).toContain("ends on 2027-11-10");
+    expect(seen).toContain("seeded by a supervisor");
+    expect(seen).toContain('type="password"');
+    expect(seen).toContain("only the account reads it back");
+    expect(seen.match(/>Remove</g)).toHaveLength(2);
+  });
+
+  it("puts the agents that report to a person and are not running on that person's plate", () => {
+    const agents = [
+      {
+        person: mira,
+        manager: alice,
+        supervised: true,
+        state: standing("refused", "model_refused"),
+      },
+      {
+        person: { ...mira, id: bob.id, handle: "dex", name: "Dex" },
+        manager: alice,
+        supervised: true,
+        state: standing("running", "started"),
+      },
+      {
+        person: { ...mira, id: CAROL, handle: "noor", name: "Noor" },
+        manager: bob,
+        supervised: true,
+        state: standing("failed", "crashed"),
+      },
+      {
+        person: {
+          ...mira,
+          id: "0199c4d8-0000-7000-8000-00000000000a",
+          handle: "new",
+          name: "Newcomer",
+        },
+        manager: alice,
+        supervised: true,
+        state: null,
+      },
+    ];
+    const seen = renderToStaticMarkup(<AgentsNeedingYou agents={agents} me={alice.id} />);
+    expect(seen).toContain("Agents that need you");
+    expect(seen).toContain('href="/agents/mira"');
+    expect(seen).toContain(">Refused<");
+    // One that runs, one that reports to someone else, and one no runner said anything of yet.
+    expect(seen).not.toContain("Dex");
+    expect(seen).not.toContain("Noor");
+    expect(seen).not.toContain("Newcomer");
+    expect(renderToStaticMarkup(<AgentsNeedingYou agents={agents} me={CAROL} />)).toBe("");
+    expect(renderToStaticMarkup(<AgentsNeedingYou agents={agents} me={undefined} />)).toBe("");
+    const korean = renderToStaticMarkup(
+      <LanguageContext.Provider value={KOREAN}>
+        <AgentsNeedingYou agents={agents} me={alice.id} />
+      </LanguageContext.Provider>,
+    );
+    expect(korean).not.toContain("Agents that need you");
+    expect(korean).not.toContain(">Refused<");
   });
 });
 
