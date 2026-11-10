@@ -25,7 +25,7 @@ import {
 import { useWords } from "../i18n/index.js";
 import { Picker } from "./picker.js";
 import { peopleSearch } from "./searches.js";
-import { Badge, Button, cx, PersonChip, personName, Time } from "./ui.js";
+import { Badge, Button, cx, PersonChip, PersonOption, personName, Time } from "./ui.js";
 
 /**
  * A project's mark: its symbol on its colour, so that projects tell apart at a glance; its own
@@ -471,6 +471,7 @@ export function MemberList(props: MemberListProps) {
                 search={peopleSearch(candidates)}
                 keyOf={(person) => person.id}
                 render={(person) => <PersonChip person={person} size="sm" />}
+                renderOption={(person) => <PersonOption person={person} />}
                 label={members.person}
                 placeholder={members.chooseSomeone}
                 disabled={props.busy === true}

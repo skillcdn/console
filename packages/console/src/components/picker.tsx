@@ -59,6 +59,8 @@ export interface PickerProps<T> {
   readonly keyOf: (item: T) => string;
   /** How an item reads, in the list and once chosen. */
   readonly render: (item: T) => ReactNode;
+  /** How an item reads in the list to choose from, where there is room for more than where it is shown chosen; `render` when left out. */
+  readonly renderOption?: ((item: T) => ReactNode) | undefined;
   readonly onChange: (item: T | undefined) => void;
   /** The field's name, for the input and the list. */
   readonly label: string;
@@ -278,7 +280,7 @@ export function Picker<T>(props: PickerProps<T>) {
               }}
               onMouseEnter={() => setActive(index)}
             >
-              {props.render(item)}
+              {(props.renderOption ?? props.render)(item)}
             </div>
           ))}
           {!loading && items.length === 0 && (

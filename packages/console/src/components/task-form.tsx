@@ -17,7 +17,15 @@ import {
 import { useWords } from "../i18n/index.js";
 import { Picker, type PickerSearch } from "./picker.js";
 import { peopleSearch } from "./searches.js";
-import { Button, Chip, GoalStateBadge, PersonChip, personName, StateBadge } from "./ui.js";
+import {
+  Button,
+  Chip,
+  GoalStateBadge,
+  PersonChip,
+  PersonOption,
+  personName,
+  StateBadge,
+} from "./ui.js";
 
 // Writing a task, or changing one. The bounds are the package's, said before a request is made.
 // The plan is two days (ADR-0019); what happened to the task is the board's to keep, not a
@@ -238,6 +246,7 @@ export function TaskForm(props: TaskFormProps) {
               search={peopleSearch(otherPeople)}
               keyOf={(person) => person.id}
               render={(person) => <PersonChip person={person} size="sm" />}
+              renderOption={(person) => <PersonOption person={person} />}
               label={form.addWorker}
               placeholder={form.addWorker}
               onChange={(person) => {

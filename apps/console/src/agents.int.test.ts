@@ -411,4 +411,54 @@ describe("an agent account (ADR-0084)", () => {
     });
     expect(restored.status).toBe(200);
   });
+  it("has a title, as every member has: an administrator's to write, and of an agent account its supervisors' too", async () => {
+    const title = (cookie: string, id: string, value: unknown) =>
+      send(cookie, "PATCH", `${REST_ROUTES.people}/${id}`, { title: value });
+    // Of a person, by an administrator alone; the board is told that it changed.
+    const own = await title(alice, aliceId, "  Founder  ");
+    expect(own.status).toBe(200);
+    expect(restPersonSchema.parse(await own.json()).title).toBe("Founder");
+    const byAgent = await title(mira, aliceId, "Boss");
+    expect(byAgent.status).toBe(403);
+    expect(await errorOf(byAgent)).toBe("auth.forbidden");
+    const told = (await eventsOf(alice)).filter((event) => event.kind === "person.updated");
+    expect(told.at(-1)).toMatchObject({
+      actor: { id: aliceId },
+      data: { login: "Alice", fields: ["title"] },
+    });
+    expect(told.at(-1)?.data).not.toHaveProperty("handle");
+
+    // Of an agent account, by whoever supervises it: Echo is Mira's manager, Dex above Echo;
+    // Bolt works beside Mira and supervises it no longer.
+    const byManager = await title(echo, miraId, "Release captain");
+    expect(byManager.status).toBe(200);
+    const written = restPersonSchema.parse(await byManager.json());
+    expect(written).toMatchObject({ title: "Release captain", handle: "mira" });
+    // A supervisor who is no administrator reads no work email with what they wrote.
+    expect(written).not.toHaveProperty("email");
+    expect((await title(dex, miraId, "Release lead")).status).toBe(200);
+    const beside = await title(bob, miraId, "Mine");
+    expect(beside.status).toBe(403);
+    // Nothing else of the account is a supervisor's to say here, with a title or without.
+    const more = await send(echo, "PATCH", `${REST_ROUTES.people}/${miraId}`, {
+      title: "Lead",
+      status: "deactivated",
+    });
+    expect(more.status).toBe(403);
+    const events = (await eventsOf(alice)).filter((event) => event.kind === "person.updated");
+    expect(events.at(-1)).toMatchObject({
+      actor: { id: dexId },
+      data: { login: "carol", handle: "mira", fields: ["title"] },
+    });
+
+    // Cleared with null; what is already so writes nothing; a title is one bounded line.
+    const before = (await eventsOf(alice)).length;
+    expect((await title(alice, miraId, "Release lead")).status).toBe(200);
+    expect((await eventsOf(alice)).length).toBe(before);
+    const cleared = await title(alice, miraId, null);
+    expect(restPersonSchema.parse(await cleared.json()).title).toBeNull();
+    expect((await title(alice, miraId, "x".repeat(81))).status).toBe(400);
+    expect((await title(alice, miraId, "two\nlines")).status).toBe(400);
+    expect((await title(alice, "0199c4d8-0000-7000-8000-00000000dead", "Ghost")).status).toBe(404);
+  });
 });

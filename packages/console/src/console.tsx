@@ -58,6 +58,7 @@ import {
   ListingForm,
   PeopleList,
   type PeopleListProps,
+  supervisedBy,
   TeamForm,
   TeamList,
   type TeamListProps,
@@ -2320,6 +2321,8 @@ function PlatePage(props: {
   /** The name the plate was asked for under as the console opened (`askEarly`), where it was; taken once. */
   readonly early?: string | undefined;
   readonly title: string;
+  /** A line under the title: what the member whose plate it is does (ADR-0084), where a title says. */
+  readonly lead?: string | undefined;
   /** What stands beside the title: the way back, on another person's plate. */
   readonly aside?: ReactNode;
   /** A day of the week shown at the top, from the address; today's week when it names none. */
@@ -2372,6 +2375,7 @@ function PlatePage(props: {
     <>
       <div className="sc-page-head">
         <h1 className="sc-page-title">{props.title}</h1>
+        {props.lead !== undefined && <p className="sc-page-lead">{props.lead}</p>}
         {props.aside}
       </div>
       {problem !== undefined && <Callout tone="danger">{problem}</Callout>}
@@ -2656,6 +2660,7 @@ function PersonWorkPage(props: {
       load={load}
       remember={`work:${data.me?.person?.id ?? ""}:${id}`}
       title={words.people.workOf(name)}
+      lead={person?.title ?? undefined}
       aside={<LinkButton href={PATHS.people}>{words.nav.people}</LinkButton>}
       week={props.week}
       weekStart={weekStartOf(data.me?.workspace)}
@@ -2908,6 +2913,10 @@ function WorkspacePage(props: {
                 ? (person, email) => void act(() => data.actions.updatePerson(person.id, { email }))
                 : undefined
             }
+            onChangeTitle={(person, title) =>
+              void act(() => data.actions.updatePerson(person.id, { title }))
+            }
+            mayChangeTitle={(person) => administrator || supervisedBy(me, person, data.people)}
             onUnlist={
               administrator
                 ? (listing) => void act(() => data.actions.removeListing(listing.id))

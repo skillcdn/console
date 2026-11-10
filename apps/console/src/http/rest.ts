@@ -118,6 +118,7 @@ import {
   personVisibleTo,
   readsListings,
   readsWorkspaceEvents,
+  supervises,
 } from "../auth/policy.js";
 import type { Secrets } from "../auth/secrets.js";
 import type { Sessions } from "../auth/sessions.js";
@@ -183,6 +184,7 @@ import {
   createListing,
   deleteListing,
   findPerson,
+  isSupervised,
   ListingError,
   listListings,
   listPeople,
@@ -192,6 +194,7 @@ import {
   updatePersonManager,
   updatePersonRole,
   updatePersonStatus,
+  updatePersonTitle,
 } from "../db/queries/people.js";
 import {
   addMember,
@@ -1232,21 +1235,35 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
   });
 
   // What a person is, and whether they are in: said by an administrator, themselves or through
-  // their agent (ADR-0021, ADR-0022).
+  // their agent (ADR-0021, ADR-0022). A member's title alone is said of an agent account by its
+  // supervisors too (ADR-0084).
   app.patch(`${REST_ROUTES.people}/:id`, tooLarge, async (c) => {
     const caller = await changingCaller(c);
     if (caller instanceof Response) {
       return caller;
     }
     const { person } = caller;
-    if (person.role !== "admin") {
-      return administratorRequired(c);
-    }
     const patch = await bodyOf(c, restPersonPatchSchema);
     if (patch instanceof Response) {
       return patch;
     }
     const id = c.req.param("id");
+    const titleAlone =
+      patch.title !== undefined &&
+      patch.role === undefined &&
+      patch.status === undefined &&
+      patch.managerId === undefined &&
+      patch.email === undefined;
+    if (
+      !configuresWorkspace(person) &&
+      !(
+        titleAlone &&
+        UUID.test(id) &&
+        (await isSupervised(database, person.workspaceId, id, supervises(person)))
+      )
+    ) {
+      return administratorRequired(c);
+    }
     if (!UUID.test(id)) {
       return notFound(c, "person.not_found", "The person was not found.");
     }
@@ -1288,6 +1305,15 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
           now: clock.now(),
         });
       }
+      if (patch.title !== undefined) {
+        changed = await updatePersonTitle(database, {
+          workspaceId: person.workspaceId,
+          actor: actorOf(caller),
+          personId: id,
+          title: patch.title,
+          now: clock.now(),
+        });
+      }
       if (changed === undefined) {
         return invalid(c, "The patch names nothing to change.");
       }
@@ -1301,7 +1327,10 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         },
         "person changed",
       );
-      return c.json(restPersonWithEmail(changed));
+      // The work email is an administrator's to read; a supervisor who wrote a title reads none.
+      return c.json(
+        configuresWorkspace(person) ? restPersonWithEmail(changed) : restPerson(changed),
+      );
     } catch (error) {
       return failure(c, error);
     }

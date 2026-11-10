@@ -2840,6 +2840,32 @@ select.sc-input {
   font-weight: var(--sc-weight-normal);
 }
 
+/* A person to choose from: the name, and a second line under it, what they do or their login. */
+.sc-person-option {
+  align-items: center;
+}
+
+.sc-person-option-who {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sc-person-option-note {
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* What the member does, in a line under the name (ADR-0084). */
+.sc-person-card-title {
+  color: var(--sc-color-text);
+  font-size: var(--sc-text-sm);
+  overflow-wrap: anywhere;
+}
+
 .sc-person-card-note {
   color: var(--sc-color-text-muted);
   font-size: var(--sc-text-xs);

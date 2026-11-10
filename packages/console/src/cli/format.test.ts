@@ -5,6 +5,7 @@ import {
   formatDecision,
   formatGoal,
   formatOperationUsage,
+  formatPersonLine,
   formatPluginGrantLine,
   formatTask,
 } from "./format.js";
@@ -216,5 +217,37 @@ describe("a grant in a line", () => {
     expect(formatPluginGrantLine({ ...grant, team: null, everyone: true })).toContain(
       "approver to everyone",
     );
+  });
+});
+
+describe("a member's line", () => {
+  const person = {
+    id: "0199c4d8-0000-7000-8000-000000000001",
+    login: "carol",
+    name: "Carol",
+    avatar: null,
+    role: "member",
+    status: "active",
+    source: "listed",
+    deactivatedAt: null,
+  } as const;
+
+  it("says a person as it always did, and what they do where a title says", () => {
+    expect(formatPersonLine(person)).toBe("carol  Carol  (member)");
+    expect(formatPersonLine({ ...person, name: null })).toBe("carol  (member)");
+    expect(formatPersonLine({ ...person, title: "Designer" }, "alice")).toBe(
+      "carol  Carol, Designer  (member, reports to alice)",
+    );
+    expect(formatPersonLine({ ...person, status: "deactivated" })).toBe(
+      "carol  Carol  (member, deactivated)",
+    );
+  });
+
+  it("says an agent account by its handle too, that it is one, and that nobody signed in with it yet (ADR-0084)", () => {
+    const mira = { ...person, name: "Mira", kind: "agent", handle: "mira" } as const;
+    expect(formatPersonLine({ ...mira, title: "Release engineer", invited: true }, "alice")).toBe(
+      "carol @mira  Mira, Release engineer  (agent account, member, not signed in yet, reports to alice)",
+    );
+    expect(formatPersonLine(mira)).toBe("carol @mira  Mira  (agent account, member)");
   });
 });

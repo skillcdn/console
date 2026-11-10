@@ -14,7 +14,12 @@ import {
   type RestTeamInput,
 } from "../api.js";
 import { useWords } from "../i18n/index.js";
-import { MAX_LOGIN_LENGTH, MAX_TEAM_KEY_LENGTH, MAX_TEAM_NAME_LENGTH } from "../limits.js";
+import {
+  MAX_LOGIN_LENGTH,
+  MAX_PERSON_TITLE_LENGTH,
+  MAX_TEAM_KEY_LENGTH,
+  MAX_TEAM_NAME_LENGTH,
+} from "../limits.js";
 import { PERSON_ROLES } from "../vocabulary.js";
 import { Picker } from "./picker.js";
 import { keyOf } from "./projects.js";
@@ -27,6 +32,7 @@ import {
   cx,
   EmptyState,
   PersonChip,
+  PersonOption,
   personName,
   RoleBadge,
   Time,
@@ -58,6 +64,14 @@ export interface PeopleListProps {
   readonly onChangeManager?: ((person: RestPerson, managerId: string | null) => void) | undefined;
   /** Called with the work email an administrator wrote for the person, or null for none. Left out, an address is read here where the console answers one. */
   readonly onChangeEmail?: ((person: RestPerson, email: string | null) => void) | undefined;
+  /**
+   * Called with the title written for a member (ADR-0084), or null for none: an administrator's
+   * to write of anyone, and of an agent account its supervisors' too. Left out, titles are read
+   * here, not changed.
+   */
+  readonly onChangeTitle?: ((person: RestPerson, title: string | null) => void) | undefined;
+  /** Whose title whoever is looking may write, where `onChangeTitle` is given; everyone's when left out. */
+  readonly mayChangeTitle?: ((person: RestPerson) => boolean) | undefined;
   /** Called when an administrator takes a listing away. Left out, listings are read here. */
   readonly onUnlist?: ((listing: RestListing) => void) | undefined;
   /** The teams of the workspace (ADR-0073), so that each person's card names theirs; left out, none are named. */
@@ -71,6 +85,32 @@ export interface PeopleListProps {
   /** Where a person's agents are seen; given to an administrator. */
   readonly agentsHref?: ((person: RestPerson) => string) | undefined;
   readonly busy?: boolean | undefined;
+}
+
+/**
+ * Whether `above` supervises `person` as the reporting line has it (ADR-0084): the person is an
+ * agent account, and `above` is its manager or the manager of one above it, among the `people`
+ * the page holds. What an administrator supervises besides is the caller's to say; the console
+ * decides either way.
+ */
+export function supervisedBy(
+  above: RestPerson | undefined,
+  person: RestPerson,
+  people: readonly RestPerson[],
+): boolean {
+  if (above === undefined || person.kind !== "agent") {
+    return false;
+  }
+  const byId = new Map(people.map((one) => [one.id, one]));
+  let next = person.managerId ?? null;
+  // The line never loops, and a page's copy of it is not trusted to: the climb is bounded.
+  for (let steps = 0; next !== null && steps < people.length + 1; steps += 1) {
+    if (next === above.id) {
+      return true;
+    }
+    next = byId.get(next)?.managerId ?? null;
+  }
+  return false;
 }
 
 /** How many of a manager's reports are shown as pictures before the rest are a count. */
@@ -188,6 +228,10 @@ export function PeopleList(props: PeopleListProps) {
           const name = personName(person);
           const hasWays =
             props.workHref !== undefined || props.agentsHref !== undefined || mayChange(person);
+          const agent = person.kind === "agent";
+          const title = person.title ?? "";
+          const writesTitle =
+            props.onChangeTitle !== undefined && (props.mayChangeTitle?.(person) ?? true);
           return (
             <li key={person.id} className="sc-person-card">
               <div className="sc-person-card-head">
@@ -195,21 +239,43 @@ export function PeopleList(props: PeopleListProps) {
                 <div className="sc-person-card-who">
                   <span className="sc-person-card-name">
                     {name}
+                    {agent && <Badge title={people.agentHint}>{people.agent}</Badge>}
                     {props.me?.id === person.id && (
                       <span className="sc-person-you">{words.common.you}</span>
                     )}
                   </span>
+                  {title !== "" && <span className="sc-person-card-title">{title}</span>}
                   <span className="sc-person-card-note">
+                    {typeof person.handle === "string" && <>@{person.handle} · </>}
                     {person.name !== null && <>{person.login} · </>}
-                    {noteOf(person)}
+                    {person.invited === true ? people.invited : noteOf(person)}
                   </span>
                 </div>
               </div>
               <dl className="sc-person-facts">
+                {writesTitle && (
+                  <div className="sc-person-fact">
+                    <dt>{people.jobTitle}</dt>
+                    <dd>
+                      <QuietField
+                        value={title}
+                        label={people.titleOf(name)}
+                        title={people.titleHint}
+                        placeholder={people.nobody}
+                        maxLength={MAX_PERSON_TITLE_LENGTH}
+                        busy={busy}
+                        normalize={(typed) => typed.trim()}
+                        onEmpty="clear"
+                        onChange={(next) => props.onChangeTitle?.(person, next)}
+                      />
+                    </dd>
+                  </div>
+                )}
                 <div className="sc-person-fact">
                   <dt>{people.role}</dt>
                   <dd>
-                    {props.onChangeRole === undefined ? (
+                    {/* An agent account is never an administrator (ADR-0084): its role is read. */}
+                    {props.onChangeRole === undefined || agent ? (
                       <RoleBadge role={person.role} />
                     ) : (
                       <select
@@ -252,6 +318,7 @@ export function PeopleList(props: PeopleListProps) {
                         )}
                         keyOf={(candidate) => candidate.id}
                         render={(candidate) => <PersonChip person={candidate} />}
+                        renderOption={(candidate) => <PersonOption person={candidate} />}
                         label={people.managerOf(name)}
                         placeholder={people.nobody}
                         disabled={busy}
@@ -539,6 +606,7 @@ export function TeamList(props: TeamListProps) {
                   search={peopleSearch(candidates)}
                   keyOf={(candidate) => candidate.id}
                   render={(candidate) => <PersonChip person={candidate} />}
+                  renderOption={(candidate) => <PersonOption person={candidate} />}
                   label={teams.addMemberTo(team.name)}
                   placeholder={teams.addMember}
                   disabled={busy}

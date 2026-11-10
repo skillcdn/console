@@ -2183,6 +2183,26 @@ describe("configuring, as the person", () => {
     expect(await runCli(["person", "email", "bob"], missing.io)).toBe(EXIT.usage);
   });
 
+  it("writes what a member does, or none, and prints it beside their name (ADR-0084)", async () => {
+    const titled = { ...BOB, title: "Release engineer" };
+    const { fetch, calls } = fakeConsole({
+      "GET /api/v1/people?login=bob": { body: { items: [BOB], listed: [], organization: null } },
+      [`PATCH /api/v1/people/${BOB.id}`]: [{ body: titled }, { body: { ...BOB, title: null } }],
+    });
+    const written = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["person", "title", "bob", "Release engineer"], written.io)).toBe(EXIT.ok);
+    expect(calls.find((call) => call.key === `PATCH /api/v1/people/${BOB.id}`)?.body).toEqual({
+      title: "Release engineer",
+    });
+    expect(written.out()).toBe("bob  Bob Example, Release engineer  (member)\n");
+    const cleared = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["person", "title", "bob", "none"], cleared.io)).toBe(EXIT.ok);
+    expect(calls.at(-1)?.body).toEqual({ title: null });
+    expect(cleared.out()).toBe("bob  Bob Example  (member)\n");
+    const missing = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["person", "title", "bob"], missing.io)).toBe(EXIT.usage);
+  });
+
   it("lists the people and says what one is", async () => {
     const dana = {
       id: "0199c4d8-0000-7000-8000-000000000077",

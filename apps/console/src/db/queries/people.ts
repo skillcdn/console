@@ -815,6 +815,65 @@ export async function updatePersonEmail(
   });
 }
 
+/**
+ * Says what a member does, in a line, or clears it, and tells the board (ADR-0084): every
+ * member's, a person's as an agent account's. What is already so writes nothing.
+ */
+export async function updatePersonTitle(
+  database: Database,
+  input: {
+    readonly workspaceId: string;
+    readonly actor: Actor;
+    readonly personId: string;
+    /** The title, or null for none. */
+    readonly title: string | null;
+    readonly now: Date;
+  },
+): Promise<PersonRecord> {
+  const { workspaceId, actor, personId, title, now } = input;
+  return drizzleOf(database).transaction(async (tx) => {
+    const person = await lockedPerson(tx, workspaceId, personId);
+    if ((person.title ?? null) === title) {
+      return person;
+    }
+    const [row] = await tx
+      .update(people)
+      .set({ title, updatedAt: now })
+      .where(eq(people.id, personId))
+      .returning(personColumns(people));
+    if (row === undefined) {
+      throw new PersonError("person.not_found");
+    }
+    await recordEvent(tx, {
+      workspaceId,
+      kind: "person.updated",
+      actor,
+      data: {
+        login: person.login,
+        fields: ["title"],
+        ...(person.handle === undefined ? {} : { handle: person.handle }),
+      },
+      now,
+    });
+    return toPerson(row);
+  });
+}
+
+/** Whether `asker` supervises the member (`supervises`, the policy's condition on a `people` row): an agent account they administer or are above. */
+export async function isSupervised(
+  database: Database,
+  workspaceId: string,
+  personId: string,
+  supervises: SQL,
+): Promise<boolean> {
+  const [row] = await drizzleOf(database)
+    .select({ id: people.id })
+    .from(people)
+    .where(and(eq(people.workspaceId, workspaceId), eq(people.id, personId), supervises))
+    .limit(1);
+  return row !== undefined;
+}
+
 /** Whether someone active reports to the person: what a plugin's role that follows the reporting line is held by (ADR-0068). */
 export async function hasActiveReports(
   database: Database,

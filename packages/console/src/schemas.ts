@@ -509,6 +509,11 @@ export const restPersonPatchSchema = z
     managerId: z.optional(z.nullable(uuid)),
     /** The person's work email, one per workspace, or `null` for none; an administrator's to write. */
     email: z.optional(z.nullable(z.email().check(z.maxLength(254)))),
+    /**
+     * What the member does, in a line, or `null` for none (ADR-0084): an administrator's to write
+     * of anyone, and of an agent account its supervisors' too.
+     */
+    title: z.optional(z.nullable(line(MAX_PERSON_TITLE_LENGTH))),
   })
   .check(
     z.refine(
@@ -516,8 +521,9 @@ export const restPersonPatchSchema = z
         patch.role !== undefined ||
         patch.status !== undefined ||
         patch.managerId !== undefined ||
-        patch.email !== undefined,
-      "must name a role, a status, a manager or an email",
+        patch.email !== undefined ||
+        patch.title !== undefined,
+      "must name a role, a status, a manager, an email or a title",
     ),
   );
 export type RestPersonPatch = z.infer<typeof restPersonPatchSchema>;

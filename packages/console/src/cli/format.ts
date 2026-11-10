@@ -122,13 +122,25 @@ export function formatProject(project: RestProject): string {
 
 /** One person: their login, their name where the host gives one, what they are in the workspace, that they are out when they are, and whom they report to where known. */
 export function formatPersonLine(person: RestPerson, reportsTo?: string | undefined): string {
-  const standing = person.status === "active" ? person.role : `${person.role}, deactivated`;
+  // An agent account says so, and that nobody has signed in with it yet (ADR-0084).
+  const standing = [
+    ...(person.kind === "agent" ? ["agent account"] : []),
+    person.role,
+    ...(person.status === "active" ? [] : ["deactivated"]),
+    ...(person.invited === true ? ["not signed in yet"] : []),
+  ].join(", ");
   const line = reportsTo === undefined ? "" : `, reports to ${reportsTo}`;
   // The work email where the console answers one: to an administrator, and for oneself.
   const email = typeof person.email === "string" ? `  <${person.email}>` : "";
-  return person.name === null
-    ? `${person.login}${email}  (${standing}${line})`
-    : `${person.login}  ${person.name}${email}  (${standing}${line})`;
+  // Called by its handle too, where it has one; and by what they do, where a title says.
+  const who =
+    typeof person.handle === "string" ? `${person.login} @${person.handle}` : person.login;
+  const called = [person.name, person.title].filter(
+    (word): word is string => typeof word === "string" && word.length > 0,
+  );
+  return called.length === 0
+    ? `${who}${email}  (${standing}${line})`
+    : `${who}  ${called.join(", ")}${email}  (${standing}${line})`;
 }
 
 /** The provider a listing names, as people call it. */

@@ -1336,6 +1336,12 @@ export const en = {
     managerOf: (name: string) => `Manager of ${name}`,
     email: "Work email",
     emailOf: (name: string) => `Work email of ${name}`,
+    jobTitle: "Title",
+    titleOf: (name: string) => `Title of ${name}`,
+    titleHint: "What they do, in a line.",
+    agent: "Agent",
+    agentHint: "An agent account: an agent that is a member of its own.",
+    invited: "Invited, not signed in yet",
     emailHint:
       "Google's at sign-in; written here otherwise. Read by an administrator, the person, and a plugin allowed to.",
     team: "Direct reports",

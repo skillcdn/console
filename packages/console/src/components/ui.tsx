@@ -165,6 +165,25 @@ export function PersonChip(props: { readonly person: RestPerson; readonly size?:
 }
 
 /**
+ * A person among others to choose from, where there is room for a second line: the picture, the
+ * name, and under it what they do (ADR-0084), or their login where no title says.
+ */
+export function PersonOption(props: { readonly person: RestPerson }) {
+  const { person } = props;
+  const title = person.title ?? "";
+  const handle = typeof person.handle === "string" ? `@${person.handle}` : person.login;
+  return (
+    <span className="sc-person sc-person-option" title={person.login}>
+      <Avatar person={person} size="sm" />
+      <span className="sc-person-option-who">
+        <span className="sc-person-login">{personName(person)}</span>
+        <span className="sc-person-option-note">{title === "" ? handle : title}</span>
+      </span>
+    </span>
+  );
+}
+
+/**
  * A thing named among others in a row (`sc-chips`): a person (a `PersonChip` inside), a team, an
  * item of a list, a holder of a role. Given `onRemove`, it carries the way to take it out, named
  * for a screen reader by `removeLabel`; left out, the chip is read, not changed. Every row of

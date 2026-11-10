@@ -42,7 +42,7 @@ import { HomeGrid, type HomeGridProps } from "./home.js";
 import { Markdown } from "./markdown.js";
 import { MyDecisions, ReachedDecision } from "./my-decisions.js";
 import { PackConnect } from "./pack-connect.js";
-import { ListingForm, PeopleList, TeamForm, TeamList } from "./people.js";
+import { ListingForm, PeopleList, supervisedBy, TeamForm, TeamList } from "./people.js";
 import { opensAbove, Picker } from "./picker.js";
 import {
   clampScale,
@@ -1592,6 +1592,65 @@ describe("people", () => {
     // Changed in place, the manager reads as a fact does until the pointer or the focus is on it.
     expect(change.match(/class="sc-picker sc-picker-quiet"/g)).toHaveLength(1);
     expect(change.match(/class="sc-picker sc-picker-chosen sc-picker-quiet"/g)).toHaveLength(1);
+  });
+
+  it("says what a member does under their name, marks an agent account, and lets whoever may write a title (ADR-0084)", () => {
+    const mira: RestPerson = {
+      ...bob,
+      id: "0199c4d8-0000-7000-8000-000000000009",
+      login: "carol",
+      name: "Mira",
+      kind: "agent",
+      handle: "mira",
+      title: "Release engineer",
+      managerId: bob.id,
+      invited: true,
+      avatarParts: {
+        set: 1,
+        background: 0,
+        head: 0,
+        ears: 0,
+        eyes: 0,
+        mouth: 0,
+        marks: 0,
+        accessory: 0,
+        palette: 0,
+      },
+    };
+    const read = renderToStaticMarkup(<PeopleList people={[alice, bob, mira]} me={alice} />);
+    expect(read).toContain('<span class="sc-person-card-title">Release engineer</span>');
+    // The account is called by its handle, said to be an agent, and to be waiting for its sign-in.
+    expect(read).toMatch(/Mira<span class="sc-badge sc-badge-neutral"[^>]*>Agent<\/span>/);
+    expect(read).toContain("@mira · carol · Invited, not signed in yet");
+    expect(read).not.toContain("<dt>Title</dt>");
+    // An administrator writes anyone's; an agent account's role is read, never chosen.
+    const administered = renderToStaticMarkup(
+      <PeopleList
+        people={[alice, bob, mira]}
+        me={alice}
+        onChangeRole={() => undefined}
+        onChangeTitle={() => undefined}
+      />,
+    );
+    expect(administered.match(/<dt>Title<\/dt>/g)).toHaveLength(3);
+    expect(administered).toContain('aria-label="Title of Mira"');
+    expect(administered).toContain('value="Release engineer"');
+    expect(administered.match(/<select/g)).toHaveLength(2);
+    // A supervisor writes the title of the agent account below them, and nobody else's.
+    expect(supervisedBy(bob, mira, [alice, bob, mira])).toBe(true);
+    expect(supervisedBy(alice, mira, [alice, bob, mira])).toBe(false);
+    expect(supervisedBy(alice, mira, [alice, { ...bob, managerId: alice.id }, mira])).toBe(true);
+    expect(supervisedBy(alice, { ...bob, managerId: alice.id }, [alice, bob])).toBe(false);
+    const supervised = renderToStaticMarkup(
+      <PeopleList
+        people={[alice, bob, mira]}
+        me={bob}
+        onChangeTitle={() => undefined}
+        mayChangeTitle={(person) => supervisedBy(bob, person, [alice, bob, mira])}
+      />,
+    );
+    expect(supervised.match(/<dt>Title<\/dt>/g)).toHaveLength(1);
+    expect(supervised).toContain('aria-label="Title of Mira"');
   });
 
   it("names the teams a person is in as chips, and lets an administrator put them in one from their card (ADR-0073)", () => {

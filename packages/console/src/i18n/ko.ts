@@ -1259,6 +1259,12 @@ export const ko: Messages = {
     managerOf: (name) => `${name}의 매니저`,
     email: "업무 이메일",
     emailOf: (name) => `${name}의 업무 이메일`,
+    jobTitle: "직함",
+    titleOf: (name) => `${name}의 직함`,
+    titleHint: "하는 일을 한 줄로 적습니다.",
+    agent: "에이전트",
+    agentHint: "에이전트 계정: 자기 계정으로 일하는 에이전트입니다.",
+    invited: "초대됨, 아직 로그인하지 않음",
     emailHint:
       "Google 로그인은 로그인 주소가 들어오고, 그 밖은 여기서 적습니다. 관리자, 본인, 권한 있는 플러그인만 읽습니다.",
     team: "직속 구성원",
