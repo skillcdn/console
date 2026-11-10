@@ -1,8 +1,19 @@
-import { and, eq, inArray, isNull, lte } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, lte } from "drizzle-orm";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
-import { agentWakeCursors, decisions, people, projects, tasks, taskWorkers } from "../schema.js";
+import {
+  agentRunners,
+  agentSecrets,
+  agentWakeCursors,
+  decisions,
+  people,
+  projects,
+  tasks,
+  taskWorkers,
+} from "../schema.js";
+import { listWaitingDecisionsFor } from "./decisions.js";
 import type { EventRecord } from "./events.js";
 import { type PersonRecord, personColumns, toPerson } from "./people.js";
+import { listTasksOf } from "./tasks.js";
 
 // The board's wake rules (ADR-0085, point 10): what an event of the feed means to the agent
 // accounts it concerns. Read by the worker from a cursor over the feed, as the plugins' hooks
@@ -224,6 +235,150 @@ export async function boardWakesOf(
     default:
       return [];
   }
+}
+
+/** An agent account whose runner was heard from, with the hours it keeps and what it was briefed of last. */
+export interface BriefedAccount {
+  readonly account: PersonRecord;
+  readonly dayStart: string | undefined;
+  readonly dayEnd: string | undefined;
+  readonly briefedOn: string | undefined;
+  readonly wrappedOn: string | undefined;
+}
+
+/**
+ * The agent accounts a briefing is for (ADR-0085, point 11): those that are in, and whose runner
+ * was ever heard from. An account no machine was set up for is briefed of nothing.
+ */
+export async function accountsToBrief(
+  database: Database,
+  workspaceId: string,
+): Promise<BriefedAccount[]> {
+  const rows = await drizzleOf(database)
+    .select({
+      account: personColumns(people),
+      dayStart: agentRunners.dayStart,
+      dayEnd: agentRunners.dayEnd,
+      briefedOn: agentRunners.briefedOn,
+      wrappedOn: agentRunners.wrappedOn,
+    })
+    .from(agentRunners)
+    .innerJoin(people, eq(people.id, agentRunners.personId))
+    .where(
+      and(
+        eq(people.workspaceId, workspaceId),
+        eq(people.kind, "agent"),
+        eq(people.status, "active"),
+        isNotNull(agentRunners.heardAt),
+      ),
+    );
+  return rows.map((row) => ({
+    account: toPerson(row.account),
+    dayStart: row.dayStart ?? undefined,
+    dayEnd: row.dayEnd ?? undefined,
+    briefedOn: row.briefedOn ?? undefined,
+    wrappedOn: row.wrappedOn ?? undefined,
+  }));
+}
+
+/** Notes the day an account was sent its day's briefing, or its wrap. */
+export async function noteBriefed(
+  database: Database,
+  personId: string,
+  noted: { readonly briefedOn?: string | undefined; readonly wrappedOn?: string | undefined },
+): Promise<void> {
+  await drizzleOf(database)
+    .update(agentRunners)
+    .set({
+      ...(noted.briefedOn === undefined ? {} : { briefedOn: noted.briefedOn }),
+      ...(noted.wrappedOn === undefined ? {} : { wrappedOn: noted.wrappedOn }),
+    })
+    .where(eq(agentRunners.personId, personId));
+}
+
+/** How many open tasks and waiting decisions a briefing reads at most: it names a few and counts the rest. */
+const BRIEFING_LIMIT = 200;
+
+/** What a briefing is made from: the open tasks the account is at work on, as it may see them, and how many decisions wait for it. */
+export async function plateOf(
+  database: Database,
+  workspaceId: string,
+  account: PersonRecord,
+): Promise<{
+  readonly tasks: {
+    readonly project: string;
+    readonly number: number;
+    readonly title: string;
+    readonly state: string;
+    readonly dueOn: string | undefined;
+  }[];
+  readonly decisions: number;
+}> {
+  const [open, waiting, keys] = await Promise.all([
+    listTasksOf(database, workspaceId, account, account, BRIEFING_LIMIT),
+    listWaitingDecisionsFor(database, workspaceId, account, BRIEFING_LIMIT),
+    drizzleOf(database)
+      .select({ id: projects.id, key: projects.key })
+      .from(projects)
+      .where(eq(projects.workspaceId, workspaceId)),
+  ]);
+  const keyOf = new Map(keys.map((project) => [project.id, project.key]));
+  return {
+    tasks: open.map((task) => ({
+      project: keyOf.get(task.projectId) ?? "?",
+      number: task.number,
+      title: task.title,
+      state: task.state,
+      dueOn: task.dueOn,
+    })),
+    decisions: waiting.length,
+  };
+}
+
+/** The secrets of the workspace's agent accounts whose day comes on or before `by`, and which their account was not told of yet. */
+export async function secretsEnding(
+  database: Database,
+  workspaceId: string,
+  by: string,
+): Promise<
+  { readonly account: PersonRecord; readonly name: string; readonly expiresOn: string }[]
+> {
+  const rows = await drizzleOf(database)
+    .select({
+      account: personColumns(people),
+      name: agentSecrets.name,
+      expiresOn: agentSecrets.expiresOn,
+    })
+    .from(agentSecrets)
+    .innerJoin(people, eq(people.id, agentSecrets.personId))
+    .where(
+      and(
+        eq(people.workspaceId, workspaceId),
+        eq(people.kind, "agent"),
+        eq(people.status, "active"),
+        isNotNull(agentSecrets.expiresOn),
+        lte(agentSecrets.expiresOn, by),
+        isNull(agentSecrets.warnedOn),
+      ),
+    );
+  return rows.flatMap((row) =>
+    row.expiresOn === null
+      ? []
+      : [{ account: toPerson(row.account), name: row.name, expiresOn: row.expiresOn }],
+  );
+}
+
+/** Notes that an account was told of a secret's day. */
+export async function noteSecretWarned(
+  database: Database,
+  personId: string,
+  name: string,
+  day: string,
+): Promise<void> {
+  await drizzleOf(database)
+    .update(agentSecrets)
+    .set({ warnedOn: day })
+    .where(and(eq(agentSecrets.personId, personId), eq(agentSecrets.name, name)));
 }
 
 /**

@@ -417,6 +417,15 @@ export const agentRunners = pgTable(
     /** What its supervisors or the account chose for it to run with; null each for the product's own. */
     model: text(),
     effort: text(),
+    /**
+     * The hours the account keeps (ADR-0085, point 11), `HH:MM` in the workspace's time zone:
+     * when its day starts, the usual hour where null, and when it ends, with no end where null.
+     */
+    dayStart: text(),
+    dayEnd: text(),
+    /** The day its last briefing of a day's start was sent on, and its last wrap. */
+    briefedOn: date({ mode: "string" }),
+    wrappedOn: date({ mode: "string" }),
     updatedAt: updatedAt(),
   },
   (table) => [
@@ -689,6 +698,8 @@ export const agentSecrets = pgTable(
     seeded: boolean().notNull().default(false),
     setById: uuid().references(() => people.id),
     setAt: instant().notNull(),
+    /** The day the account was told that the value's day is near; null until then, and again when the value is set anew. */
+    warnedOn: date({ mode: "string" }),
     createdAt: createdAt(),
   },
   (table) => [primaryKey({ columns: [table.personId, table.name] })],

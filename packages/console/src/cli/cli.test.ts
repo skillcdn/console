@@ -2755,6 +2755,41 @@ describe("configuring, as the person", () => {
     expect(calls.length).toBe(before);
   });
 
+  it("keeps the hours of an agent's day (ADR-0085)", async () => {
+    const mira = {
+      person: { ...PERSON, login: "acme-mira", name: "Mira", kind: "agent", handle: "mira" },
+      manager: null,
+      supervised: true,
+    };
+    const { fetch, calls } = fakeConsole({
+      "PATCH /api/v1/agents/mira": [
+        { body: { ...mira, hours: { dayStart: "08:30", dayEnd: "18:00" } } },
+        { body: { ...mira, hours: { dayStart: "09:00", dayEnd: null } } },
+      ],
+    });
+    const kept = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(["agent", "mira", "--day-start", "08:30", "--day-end", "18:00"], kept.io),
+    ).toBe(EXIT.ok);
+    expect(calls.at(-1)?.body).toEqual({ dayStart: "08:30", dayEnd: "18:00" });
+    expect(kept.out()).toContain("day: starts 08:30, ends 18:00, in the workspace's time zone");
+    // none takes an hour away: the usual start, and no end.
+    const usual = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(["agent", "mira", "--day-start", "none", "--day-end", "none"], usual.io),
+    ).toBe(EXIT.ok);
+    expect(calls.at(-1)?.body).toEqual({ dayStart: null, dayEnd: null });
+    expect(usual.out()).toContain("day: starts 09:00, with no end, in the workspace's time zone");
+    // What is no hour never leaves the machine.
+    const before = calls.length;
+    for (const word of ["9", "9:00", "24:00", "18:60", "noon"]) {
+      const wrong = harness({ fetch, env: SIGNED_IN });
+      expect(await runCli(["agent", "mira", "--day-end", word], wrong.io), word).toBe(EXIT.usage);
+      expect(wrong.err()).toContain("Say one as 09:00 or 18:30, or none.");
+    }
+    expect(calls.length).toBe(before);
+  });
+
   it("makes the invitation that leads a machine to an agent account, and takes it away (ADR-0088)", async () => {
     const { fetch, calls } = fakeConsole({
       "POST /api/v1/agents/mira/invitation": {

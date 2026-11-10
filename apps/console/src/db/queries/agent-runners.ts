@@ -43,6 +43,9 @@ export interface RunnerRecord {
   /** What was chosen for it to run with; none each for the product's own. */
   readonly model: string | undefined;
   readonly effort: string | undefined;
+  /** The hours its day starts and ends at, where the account keeps its own. */
+  readonly dayStart: string | undefined;
+  readonly dayEnd: string | undefined;
 }
 
 type RunnerRow = typeof agentRunners.$inferSelect;
@@ -64,6 +67,8 @@ const toRunner = (row: RunnerRow): RunnerRecord => ({
   running: row.running ?? undefined,
   model: row.model ?? undefined,
   effort: row.effort ?? undefined,
+  dayStart: row.dayStart ?? undefined,
+  dayEnd: row.dayEnd ?? undefined,
 });
 
 /** A signal as the record keeps it. */
@@ -250,6 +255,51 @@ export async function recordHeartbeat(
       });
     }
     return toRunner(row);
+  });
+}
+
+/**
+ * Keeps the hours of an account's day (ADR-0085, point 11), and tells the board: an hour named
+ * is kept, `null` is the usual start or no end again, one left out stays. What is already so
+ * writes nothing. Answers the runner's row as it is from then on.
+ */
+export async function setAgentHours(
+  database: Database,
+  input: {
+    readonly account: PersonRecord;
+    readonly actor: Actor;
+    readonly dayStart?: string | null | undefined;
+    readonly dayEnd?: string | null | undefined;
+    readonly now: Date;
+  },
+): Promise<RunnerRecord> {
+  const { account, actor, now } = input;
+  return drizzleOf(database).transaction(async (tx) => {
+    const before = await lockedRunner(tx, account.id, now);
+    const fields = [
+      ...(input.dayStart !== undefined && input.dayStart !== before.dayStart ? ["dayStart"] : []),
+      ...(input.dayEnd !== undefined && input.dayEnd !== before.dayEnd ? ["dayEnd"] : []),
+    ];
+    if (fields.length === 0) {
+      return toRunner(before);
+    }
+    const [row] = await tx
+      .update(agentRunners)
+      .set({
+        ...(fields.includes("dayStart") ? { dayStart: input.dayStart } : {}),
+        ...(fields.includes("dayEnd") ? { dayEnd: input.dayEnd } : {}),
+        updatedAt: now,
+      })
+      .where(eq(agentRunners.personId, account.id))
+      .returning();
+    await recordEvent(tx, {
+      workspaceId: account.workspaceId,
+      kind: "person.updated",
+      actor,
+      data: { login: account.login, handle: account.handle, fields },
+      now,
+    });
+    return toRunner(row ?? before);
   });
 }
 

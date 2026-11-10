@@ -4379,11 +4379,29 @@ const agent: Command = async (args, io) => {
   const { values, positionals } = parse(args, {
     avatar: { type: "string" },
     account: { type: "string", multiple: true },
+    "day-start": { type: "string" },
+    "day-end": { type: "string" },
   });
   const handle = handleOf(theOne(positionals, AGENT_USAGE));
   const session = await open(io, values);
   const held = texts(values, "account");
-  if (held.length > 0) {
+  // The hours of its day (ADR-0085): an hour as 09:00, or none for the usual start and no end.
+  const hourOf = (flag: string): string | null | undefined => {
+    const word = text(values, flag);
+    if (word === undefined) {
+      return undefined;
+    }
+    if (word === "none") {
+      return null;
+    }
+    if (!/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/.test(word)) {
+      throw misuse(`Not an hour: ${word}. Say one as 09:00 or 18:30, or none.`);
+    }
+    return word;
+  };
+  const dayStart = hourOf("day-start");
+  const dayEnd = hourOf("day-end");
+  if (held.length > 0 || dayStart !== undefined || dayEnd !== undefined) {
     // The accounts it holds elsewhere (ADR-0089), each as <service>=<name>, or =none to take
     // one away: what it is called there, and never a secret.
     const accounts: Record<string, string | null> = {};
@@ -4398,7 +4416,11 @@ const agent: Command = async (args, io) => {
       }
       accounts[service] = name === "none" ? null : name;
     }
-    const kept = await session.client.updateAgent(handle, { accounts });
+    const kept = await session.client.updateAgent(handle, {
+      ...(held.length === 0 ? {} : { accounts }),
+      ...(dayStart === undefined ? {} : { dayStart }),
+      ...(dayEnd === undefined ? {} : { dayEnd }),
+    });
     answer(io, session, kept, () => formatAgent(kept));
     return EXIT.ok;
   }

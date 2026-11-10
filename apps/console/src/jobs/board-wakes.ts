@@ -1,17 +1,36 @@
 import type { Database } from "../db/client.js";
 import { drizzleOf } from "../db/client.js";
 import { sendSignal } from "../db/queries/agent-runners.js";
-import { boardWakesOf, moveWakeCursor, takeWakeCursor } from "../db/queries/board-wakes.js";
+import {
+  accountsToBrief,
+  boardWakesOf,
+  moveWakeCursor,
+  noteBriefed,
+  noteSecretWarned,
+  plateOf,
+  secretsEnding,
+  takeWakeCursor,
+} from "../db/queries/board-wakes.js";
 import { listAllEventsAfter } from "../db/queries/events.js";
 import { readWorkspaceSettings } from "../db/queries/workspaces.js";
 import type { Logger } from "../logger.js";
 import type { Clock } from "../ports/clock.js";
+import {
+  briefingOf,
+  briefingsDue,
+  clockIn,
+  dayAfter,
+  secretWake,
+  WRAP_BRIEFING,
+} from "./briefings.js";
 
 /** How often the worker reads the feed for the agent accounts (ADR-0085). */
 export const BOARD_WAKES_INTERVAL_MS = 5_000;
 /** How many events one pass reads, and how many times it reads on while there are more. */
 const BATCH = 100;
 const MAX_BATCHES = 10;
+/** How many days before a secret's day its account is told of it. */
+export const SECRET_WARNING_DAYS = 30;
 
 /** The day it is in a time zone, as the board writes a day; in UTC where the zone is none or unknown. */
 export function dayIn(zone: string | null | undefined, now: Date): string {
@@ -119,8 +138,82 @@ export class BoardWakes {
       if (after !== taken) {
         await moveWakeCursor(tx, workspaceId, after, now);
       }
+      // What the schedule sends, under the same lock: one pass at a time notes a day as sent.
+      const scheduled = { now, today, clock: clockIn(settings.timeZone, now) };
+      sent += await this.#brief(workspaceId, settings.weekStart, scheduled);
+      sent += await this.#warn(workspaceId, scheduled);
       return sent;
     });
+  }
+
+  /**
+   * The briefings (ADR-0085, point 11): to each account whose runner was heard from, at the
+   * hours it keeps, once a day each. The day is noted before the next account is looked at, so
+   * that a pass that ends halfway sends nobody the same briefing twice.
+   */
+  async #brief(
+    workspaceId: string,
+    weekStart: string,
+    at: { readonly now: Date; readonly today: string; readonly clock: string },
+  ): Promise<number> {
+    const database = this.#database;
+    let sent = 0;
+    for (const one of await accountsToBrief(database, workspaceId)) {
+      const due = briefingsDue({ ...one, today: at.today, clock: at.clock, weekStart });
+      for (const kind of due) {
+        const text =
+          kind === "wrap"
+            ? WRAP_BRIEFING
+            : briefingOf(kind, {
+                today: at.today,
+                ...(await plateOf(database, workspaceId, one.account)),
+              });
+        await noteBriefed(
+          database,
+          one.account.id,
+          kind === "wrap" ? { wrappedOn: at.today } : { briefedOn: at.today },
+        );
+        await sendSignal(database, {
+          account: one.account,
+          kind: "wake",
+          by: undefined,
+          source: "schedule",
+          key: kind,
+          text,
+          set: undefined,
+          now: at.now,
+        });
+        sent += 1;
+      }
+    }
+    return sent;
+  }
+
+  /** A wake from the console a month before a secret's day (ADR-0087), once for a value. */
+  async #warn(
+    workspaceId: string,
+    at: { readonly now: Date; readonly today: string },
+  ): Promise<number> {
+    const database = this.#database;
+    const ending = await secretsEnding(
+      database,
+      workspaceId,
+      dayAfter(at.today, SECRET_WARNING_DAYS),
+    );
+    for (const secret of ending) {
+      await noteSecretWarned(database, secret.account.id, secret.name, at.today);
+      await sendSignal(database, {
+        account: secret.account,
+        kind: "wake",
+        by: undefined,
+        source: "console",
+        key: `secret:${secret.name}`,
+        text: secretWake(secret.name, secret.expiresOn),
+        set: undefined,
+        now: at.now,
+      });
+    }
+    return ending.length;
   }
 
   start(intervalMs: number = BOARD_WAKES_INTERVAL_MS): void {

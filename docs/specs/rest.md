@@ -400,6 +400,8 @@ A few personas to choose from, for whoever makes an account: `{ "items": [{ "see
 
 `PATCH` also records the accounts it holds elsewhere, `accounts`, for a supervisor and for the account itself, which keeps nothing else of itself here: a service named with a name is kept, one named with `null` is taken away, one left out stays as it is. A service is spelled as a kind is, lowercase letters, digits and hyphens; a name is a line up to `MAX_ELSEWHERE_NAME_LENGTH`; an account records up to `MAX_AGENT_ELSEWHERE` (`agent.too_many_accounts`, 409). It answers the agent with its `accounts` as they are from then on, and writes `person.updated` with `fields: ["accounts"]`, once for a request that changed any; what is already so writes nothing.
 
+And it keeps the hours of the account's day ([ADR-0085](../adr/0085-a-runner-on-the-agents-machine-is-told-by-signals-and-runs-one-session-at-a-time.md), point 11), for a supervisor and for the account itself: `dayStart` and `dayEnd`, each an hour and a minute as `09:00` in the workspace's time zone, or `null`, which is the usual start, `DEFAULT_DAY_START`, and a day with no end. The console sends the account its briefings by them ([runner.md](runner.md#the-boards-wakes)). An agent read by a supervisor or by itself carries `hours`, `{ "dayStart", "dayEnd" }`, the start as it is acted on; a change writes `person.updated` with the `fields` that changed, `dayStart` and `dayEnd`.
+
 An avatar is nothing but its parts ([ADR-0084](../adr/0084-an-agent-account-is-a-member-of-its-own-with-a-manager-above-it.md), point 8): a person object carries `avatarParts`, and whoever shows the picture draws it with the package (`avatarSvg`, `avatarPixels`, the `Avatar` component). The console serves no picture of an agent account, and takes none: `avatar` is `null` for one. Each part is an index into the set of shapes `set` names by its version, counted round the end of what the set has, so that parts a reader's set does not have still draw; a released set never changes.
 
 ### `GET /api/v1/agents/<handle>/sign-ins` and `DELETE .../sign-ins/<id>`
@@ -475,7 +477,7 @@ The guide is made from that answer by the package (`setupGuideOf`, `setupGuideTe
 
 | Milestone | What |
 |---|---|
-| 43 | The hours an account's briefings go by, `dayStart` and `dayEnd` ([ADR-0085](../adr/0085-a-runner-on-the-agents-machine-is-told-by-signals-and-runs-one-session-at-a-time.md), point 11) |
+| 43 | A wake the runner raises itself from a wake source on its machine, `POST /api/v1/agents/me/signals` ([ADR-0085](../adr/0085-a-runner-on-the-agents-machine-is-told-by-signals-and-runs-one-session-at-a-time.md)) |
 
 ## Signing in
 

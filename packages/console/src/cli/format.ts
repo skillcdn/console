@@ -198,6 +198,11 @@ export function formatAgent(agent: RestAgent): string {
               ]),
           `signals: ${runner.delivered} of ${runner.latest} delivered`,
         ]),
+    ...(agent.hours === undefined
+      ? []
+      : [
+          `day: starts ${agent.hours.dayStart}${agent.hours.dayEnd === null ? ", with no end" : `, ends ${agent.hours.dayEnd}`}, in the workspace's time zone`,
+        ]),
     ...(agent.accounts === undefined || Object.keys(agent.accounts).length === 0
       ? []
       : [

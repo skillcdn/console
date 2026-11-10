@@ -1737,6 +1737,14 @@ export const en = {
           seed: "Seed",
           remove: "Remove",
         },
+        hours: {
+          title: "Its day",
+          start: "Starts",
+          end: "Ends",
+          save: "Save",
+          intro:
+            "In the workspace's time zone. At the start the console sends it the day's briefing: its tasks planned for today, those carried over and the decisions that wait; on the week's first day, the week's. At the end, where it has one, a wrap: to write the day down and push its desk. An hour left empty is 09:00 for the start, and no end.",
+        },
         elsewhere: {
           title: "Accounts elsewhere",
           empty: "None is recorded yet.",

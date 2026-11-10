@@ -82,6 +82,7 @@ export {
   nameOf,
 } from "./documents.js";
 export {
+  DEFAULT_DAY_START,
   DEFAULT_PAGE_LIMIT,
   DEFAULT_TOKEN_DAYS,
   EVENTS_PAGE_LIMIT,
@@ -237,6 +238,7 @@ export {
   type RestAgent,
   type RestAgentChoice,
   type RestAgentElsewhere,
+  type RestAgentHours,
   type RestAgentInput,
   type RestAgentInvitation,
   type RestAgentInvitationMade,
@@ -389,6 +391,7 @@ export {
   type RestWorkspaceServices,
   restAgentChoiceSchema,
   restAgentElsewhereSchema,
+  restAgentHoursSchema,
   restAgentInputSchema,
   restAgentInvitationMadeSchema,
   restAgentInvitationSchema,

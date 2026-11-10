@@ -95,6 +95,8 @@ export const INVITATION_DAYS = 7;
 /** The accounts an agent account holds elsewhere (ADR-0089): how many it records, and how long what it is called at one is. */
 export const MAX_AGENT_ELSEWHERE = 20;
 export const MAX_ELSEWHERE_NAME_LENGTH = 200;
+/** When an agent account's day starts, in the workspace's time zone, where the account says no other hour (ADR-0085). */
+export const DEFAULT_DAY_START = "09:00";
 /** A service a workspace names (ADR-0089): how many parameters one has beside its kind, and how long one is. */
 export const MAX_SERVICE_PARAMETERS = 8;
 export const MAX_SERVICE_VALUE_LENGTH = 200;

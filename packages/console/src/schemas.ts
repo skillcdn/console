@@ -1210,6 +1210,19 @@ export type RestAgentProposals = z.infer<typeof restAgentProposalsSchema>;
 const elsewhereService = z.string().check(z.regex(/^[a-z][a-z0-9-]{0,39}$/));
 /** What the agent is called at a service: a line, and no secret. */
 const elsewhereName = line(MAX_ELSEWHERE_NAME_LENGTH);
+/** An hour and a minute of the day, as `09:00`. */
+const clockTime = z.string().check(z.regex(/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/));
+/**
+ * The hours an agent account keeps (ADR-0085, point 11), in the workspace's time zone: when its
+ * day starts, which is when its day's briefing is sent, and when it ends, with a wrap then, or
+ * `null` for a day with no end.
+ */
+export const restAgentHoursSchema = z.object({
+  dayStart: clockTime,
+  dayEnd: z.nullable(clockTime),
+});
+export type RestAgentHours = z.infer<typeof restAgentHoursSchema>;
+
 /** The accounts an agent account holds elsewhere (ADR-0089): what it is called at each, by service. */
 export const restAgentElsewhereSchema = z.record(elsewhereService, elsewhereName);
 export type RestAgentElsewhere = z.infer<typeof restAgentElsewhereSchema>;
@@ -1217,10 +1230,13 @@ export type RestAgentElsewhere = z.infer<typeof restAgentElsewhereSchema>;
 /**
  * What `PATCH /api/v1/agents/<handle>` is sent: by a supervisor, the persona to keep, one or
  * more of its name, its title (`null` for none) and its avatar; by a supervisor or the account
- * itself, the accounts it holds elsewhere. The handle never changes.
+ * itself, the accounts it holds elsewhere and the hours of its day. The handle never changes.
  */
 export const restAgentPatchSchema = z
   .object({
+    /** When its day starts, `null` for the hour an account starts at where it says none; and when it ends, `null` for no end. */
+    dayStart: z.optional(z.nullable(clockTime)),
+    dayEnd: z.optional(z.nullable(clockTime)),
     /** The accounts it holds elsewhere, by service: one left out stays as it is, `null` takes one away. */
     accounts: z.optional(
       z
@@ -1244,8 +1260,10 @@ export const restAgentPatchSchema = z
         patch.name !== undefined ||
         patch.title !== undefined ||
         patch.avatarParts !== undefined ||
+        patch.dayStart !== undefined ||
+        patch.dayEnd !== undefined ||
         (patch.accounts !== undefined && Object.keys(patch.accounts).length > 0),
-      "must name a name, a title, the parts of an avatar or an account held elsewhere",
+      "must name a name, a title, the parts of an avatar, an hour of its day or an account held elsewhere",
     ),
   );
 export type RestAgentPatch = z.infer<typeof restAgentPatchSchema>;
@@ -1274,6 +1292,8 @@ export const restAgentSchema = z.object({
    * to close.
    */
   accounts: z.optional(restAgentElsewhereSchema),
+  /** The hours it keeps: answered where one account is read, to its supervisors and to the account. */
+  hours: z.optional(restAgentHoursSchema),
   /** Its onboarding task (ADR-0088), where the console made one with the account: answered when the account is made. */
   onboarding: z.optional(
     z.nullable(z.object({ project: z.string(), number: z.number().check(z.int()) })),

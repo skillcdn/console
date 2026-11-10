@@ -23,6 +23,7 @@ import type {
   RestVersion,
   RestVersionSummary,
 } from "@skillcdn/console/api";
+import { DEFAULT_DAY_START } from "@skillcdn/console/api";
 import type { SessionView } from "../auth/sessions.js";
 import { describeUserAgent } from "../auth/user-agent.js";
 import type { RunnerRecord } from "../db/queries/agent-runners.js";
@@ -89,6 +90,15 @@ export function restAgent(
   } = {},
 ): RestAgent {
   return {
+    // The hours it keeps, for whoever reads what else is chosen for it.
+    ...(detailed
+      ? {
+          hours: {
+            dayStart: runner?.dayStart ?? DEFAULT_DAY_START,
+            dayEnd: runner?.dayEnd ?? null,
+          },
+        }
+      : {}),
     ...(more.accounts === undefined ? {} : { accounts: { ...more.accounts } }),
     ...(more.onboarding === undefined ? {} : { onboarding: more.onboarding }),
     person: restPerson(agent.person),

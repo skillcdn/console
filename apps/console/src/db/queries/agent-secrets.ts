@@ -174,6 +174,8 @@ export async function setSecret(
       seeded,
       setById: actor.id,
       setAt: now,
+      // A value set anew has a day of its own to be told of.
+      warnedOn: null,
     };
     const [row] = await tx
       .insert(agentSecrets)

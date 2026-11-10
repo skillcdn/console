@@ -409,6 +409,20 @@ function AgentSettings(props: {
   const signIns = useRead(readSignIns);
   const [name, setName] = useState(agent.person.name ?? "");
   const [role, setRole] = useState(agent.person.title ?? "");
+  const [dayStart, setDayStart] = useState(agent.hours?.dayStart ?? "");
+  const [dayEnd, setDayEnd] = useState(agent.hours?.dayEnd ?? "");
+  const hoursUnchanged =
+    dayStart === (agent.hours?.dayStart ?? "") && dayEnd === (agent.hours?.dayEnd ?? "");
+  const saveHours = (event: FormEvent) => {
+    event.preventDefault();
+    void act(async () => {
+      await client.updateAgent(handle, {
+        dayStart: dayStart.length === 0 ? null : dayStart,
+        dayEnd: dayEnd.length === 0 ? null : dayEnd,
+      });
+      onChanged();
+    });
+  };
   const kept: readonly RestAgentSecret[] = secrets.value?.items ?? [];
   const where: readonly RestSession[] = signIns.value?.items ?? [];
   const savePersona = (event: FormEvent) => {
@@ -522,6 +536,33 @@ function AgentSettings(props: {
             })
           }
         />
+      </section>
+      <section className="sc-panel" aria-label={page.settings.hours.title}>
+        <h2 className="sc-section-title">{page.settings.hours.title}</h2>
+        <form className="sc-agent-persona" onSubmit={saveHours}>
+          <label className="sc-field">
+            <span className="sc-field-label">{page.settings.hours.start}</span>
+            <input
+              className="sc-input"
+              type="time"
+              value={dayStart}
+              onChange={(event) => setDayStart(event.target.value)}
+            />
+          </label>
+          <label className="sc-field">
+            <span className="sc-field-label">{page.settings.hours.end}</span>
+            <input
+              className="sc-input"
+              type="time"
+              value={dayEnd}
+              onChange={(event) => setDayEnd(event.target.value)}
+            />
+          </label>
+          <Button type="submit" disabled={busy || hoursUnchanged}>
+            {page.settings.hours.save}
+          </Button>
+        </form>
+        <p className="sc-field-hint">{page.settings.hours.intro}</p>
       </section>
       <section className="sc-panel" aria-label={page.settings.elsewhere.title}>
         <h2 className="sc-section-title">{page.settings.elsewhere.title}</h2>

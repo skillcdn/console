@@ -34,7 +34,7 @@ import {
 } from "../auth/policy.js";
 import type { Sessions } from "../auth/sessions.js";
 import type { Database } from "../db/client.js";
-import { findRunner, runnersOf } from "../db/queries/agent-runners.js";
+import { findRunner, runnersOf, setAgentHours } from "../db/queries/agent-runners.js";
 import {
   AgentError,
   type AgentReader,
@@ -461,7 +461,9 @@ export function registerAgentsRest(app: Hono<AppEnv>, dependencies: AgentsRestDe
     if (seen === undefined) {
       return notFound(c);
     }
-    const { accounts, ...persona } = parsed.data;
+    // The accounts it holds elsewhere and the hours of its day are what the account keeps of
+    // itself, as its supervisors may; its persona is theirs alone.
+    const { accounts, dayStart, dayEnd, ...persona } = parsed.data;
     const keepsPersona = Object.values(persona).some((value) => value !== undefined);
     const own = seen.person.id === person.id;
     if (!seen.supervised && (!own || keepsPersona)) {
@@ -495,9 +497,17 @@ export function registerAgentsRest(app: Hono<AppEnv>, dependencies: AgentsRestDe
               limit: MAX_AGENT_ELSEWHERE,
               now: clock.now(),
             });
-      return c.json(
-        restAgent(agent, await findRunner(database, agent.person.id), true, { accounts: held }),
-      );
+      const runner =
+        dayStart === undefined && dayEnd === undefined
+          ? await findRunner(database, agent.person.id)
+          : await setAgentHours(database, {
+              account: agent.person,
+              actor: actorOf(caller),
+              dayStart,
+              dayEnd,
+              now: clock.now(),
+            });
+      return c.json(restAgent(agent, runner, true, { accounts: held }));
     } catch (error) {
       return failure(c, error);
     }
