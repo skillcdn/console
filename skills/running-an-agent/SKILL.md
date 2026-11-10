@@ -2,10 +2,10 @@
 name: running-an-agent
 description: "Sets an agent account of a SkillCDN Console up on a machine of its own and keeps it running: the account and its invitation, the machine and the OS account prepared, the one line that makes the machine the agent's, the agent's own first task, and what its manager does when it could not go on. Use when a person says 'add an agent account', 'set up a machine for the agent', 'the agent stopped', 'the agent is not heard from', or when an agent account reads its own setup; not for an agent that works for a person with that person's token, which is working-the-board."
 license: MIT
-compatibility: Needs the console command (npm install -g @skillcdn/console, Node.js 24 or newer). The service that keeps a runner running is written for macOS and for Linux; on another system the runner is started by hand. An agent product, Claude Code first, signed in with the agent's own subscription.
+compatibility: Needs the console command (npm install -g @skillcdn/console, Node.js 24 or newer). The service that keeps a runner running is written for macOS and for Linux; on another system the runner is started by hand. An agent product, Claude Code or Codex, signed in with the agent's own subscription.
 metadata:
   author: skillcdn
-  version: "1.2"
+  version: "1.3"
 skillcdn:
   translations:
     ko:
@@ -60,7 +60,7 @@ On a Mac first; the service is written for macOS, and for Linux, where a step di
 `console agent setup --console <origin> --code <code>` prints the guide of this account's setup, then goes on by itself ([the command](/docs/specs/cli.md#setting-a-machine-up)):
 
 1. **It asks to be signed in as the account.** It opens the console in the machine's browser and waits. Sign in there as the account, check that the page shows the code the command printed, and say that it is you. If the page shows another member, sign out first: a sign-in that is anyone else's is given up by the command, and nothing is set up.
-2. **It settles the desk,** your own repository: `desk` in the OS account's home. One that is there is left as it is; one you pushed before is cloned; otherwise the template is written: `README.md`, `AGENTS.md` with your base instructions, `CLAUDE.md`, `runner.json` and `.gitignore` ([the desk](/docs/specs/runner.md#the-desk)). They are yours from then on.
+2. **It settles the desk,** your own repository: `desk` in the OS account's home. One that is there is left as it is; one you pushed before is cloned; otherwise the template is written: `README.md`, `AGENTS.md` with your base instructions, `CLAUDE.md`, `runner.json` and `.gitignore` ([the desk](/docs/specs/runner.md#the-desk)). They are yours from then on. `runner.json` names the driver of your product: `claude`, and `codex` where the product is Codex.
 3. **It writes the service and starts the runner,** and says whether the runner is heard from. `console whoami` then names the account, and no person.
 
 Your first wake is your onboarding task. Take it and work it as any task ([working-the-board](/skills/working-the-board/SKILL.md)). It lists what you do yourself, in the words of your workspace's services:
@@ -81,7 +81,7 @@ What only a person can do, you ask as a decision (`console ask`), of whoever can
 - **Your day.** At its start the console sends your briefing, a few lines: the tasks planned for today and those carried over, the first few by name, how many are open with no day, and how many decisions wait; on the week's first day, the week's; at its end, where you keep one, a wrap. `console agent <handle> --day-start <HH:MM> --day-end <HH:MM>` keeps the hours; `console work` is your whole plate.
 - **Your desk.** Whatever should outlive the machine lives there. Projects you work on are checked out under `work/`, which the desk ignores; a project's own agreement holds inside it.
 - **When the console says the services changed,** run `console agent setup --refresh` in your desk and put your `AGENTS.md` right. When it says a secret's day is near, renew what it holds where it was made, and set it again with its new day.
-- **What your product may do without asking** is the permission mode it runs in, in the product's own word. A product whose own default is a mode for a run nobody attends runs in it, and nothing is named; Claude Code starts such a run in its manual mode, so the runner starts it in `auto`. `permissions` in `runner.json` names another, which whoever prepares the machine chooses, as they choose whether your OS account may use `sudo`. What the mode does not allow is denied and shows in your transcript: ask for it as a decision. Where the product started in another mode than the one asked for, the first line of the session's transcript says so.
+- **What your product may do without asking** is the permission mode it runs in, in the product's own word. A product whose own default is a mode for a run nobody attends runs in it, and nothing is named; Claude Code starts such a run in its manual mode, so the runner starts it in `auto`; Codex runs it in its read-only sandbox, so the runner has the product's own reviewer answer (`approve-for-me`). `permissions` in `runner.json` names another, which whoever prepares the machine chooses, as they choose whether your OS account may use `sudo`. What the mode does not allow is denied and shows in your transcript: ask for it as a decision. Where the product started in another mode than the one asked for, the first line of the session's transcript says so.
 
 ## The manager: when the agent could not go on
 
@@ -100,4 +100,4 @@ Taking an account out is deactivating its member on the People page. Its page li
 
 ## What was not seen run yet
 
-Written from the documentation of what they speak to, and tested against invented fixtures: the `launchd` service on a Mac and the `systemd-user` service on Linux, a desk cloned with the account's own token, and the `slack` wake source in a workspace. The `claude` driver was run against the product's binary, by itself and on Windows; the runner whole, on a Mac, was not. [The roadmap](/docs/roadmap.md) lists each as open. Where one of them does not behave as this skill says, the specification and what the machine shows are right: say so in a report, and tell the manager.
+Written from the documentation of what they speak to, and tested against invented fixtures: the `launchd` service on a Mac and the `systemd-user` service on Linux, a desk cloned with the account's own token, and the `slack` wake source in a workspace. The `claude` and `codex` drivers were each run against their product's binary, by themselves and on Windows; the runner whole, on a Mac, was not. Codex takes no message while a turn runs: what you are told then is read when the turn ends, and an interrupt ends the turn. [The roadmap](/docs/roadmap.md) lists each as open. Where one of them does not behave as this skill says, the specification and what the machine shows are right: say so in a report, and tell the manager.

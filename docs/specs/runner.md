@@ -11,7 +11,7 @@ The runner is the program on an agent account's machine that keeps its agent goi
 |---|---|
 | runner | `console runner`: one process per agent account on its machine, started by hand or kept running by a service |
 | product | The agent product the runner starts: Claude Code first. The runner never modifies it and holds none of its credentials |
-| driver | The module that speaks to one product: starts it, sends it messages, reads what it does. `claude` first |
+| driver | The module that speaks to one product: starts it, sends it messages, reads what it does. `claude` first, then `codex` |
 | wake source | A module that raises wakes from outside the console, a messenger say. `console`, the console's own stream of signals, is built in |
 | service | The module that keeps the runner running across restarts of the machine: `launchd` first |
 | boundary | What keeps one agent apart from another on a machine: `os-user`, an OS account each |
@@ -193,10 +193,10 @@ In the desk, the working directory the runner is started in; written by setup, t
 }
 ```
 
-- `driver`: the product's driver, `claude` when the file names none. `wake`: the wake sources beside the console's own, `slack` for one ([Wake sources](#wake-sources)).
+- `driver`: the product's driver, `claude` when the file names none, `codex` for Codex. `wake`: the wake sources beside the console's own, `slack` for one ([Wake sources](#wake-sources)).
 - `conversation`: `continuous`, or `daily` or `weekly` to begin a new conversation with that briefing when the session is idle then.
 - `secrets`: which secrets of the account's store the runner hands a session, as environment variables and as files of mode 600 under the desk's ignored `work/`, written at the session's start and removed at its end. A variable's name is a variable's, a file's path stays under `work/`, and a secret's name is one the store could hold; a file that does not read is used in no part. Whatever the file names, the runner reads every value of the store, when a session starts and when the store says one changed, to take them out of what it reports.
-- `permissions`, left out of the example: the permission mode the product is started in, in the product's own word (`dontAsk`, `bypassPermissions`), for whoever prepares the machine to say what the agent does there without asking, as they say whether its OS account may use `sudo`. Left out, the product runs in its own default where that is one for a run nobody attends; where it is not, the driver names one: `auto` for `claude`, which starts such a run in its manual mode otherwise.
+- `permissions`, left out of the example: the permission mode the product is started in, in the product's own word (`dontAsk` or `bypassPermissions` for `claude`, `workspace-write` or `danger-full-access` for `codex`), for whoever prepares the machine to say what the agent does there without asking, as they say whether its OS account may use `sudo`. Left out, the product runs in its own default where that is one for a run nobody attends; where it is not, the driver names one: `auto` for `claude`, which starts such a run in its manual mode otherwise, and `approve-for-me` for `codex`, which runs it in its read-only sandbox otherwise.
 - `autosave`: at the end of every session the runner commits and pushes the desk ([ADR-0088](../adr/0088-an-agent-account-has-a-desk-and-is-set-up-from-an-invitation-by-signing-in-as-itself.md)), a net under the agent's own commits: where the desk is a repository, everything it does not ignore is staged, committed where anything changed, as `Autosave at the end of a session`, and pushed. Git asks nobody at a terminal, what it prints is not kept, and a step that does not succeed is said in the runner's line by how git ended; the runner goes on. `false` turns it off.
 - A runner started where there is no `runner.json` runs with these defaults and hands the session no secret.
 
@@ -255,7 +255,7 @@ interface Service {
 
 ## The driver
 
-The runner knows its modules by name, from four registries (`createRunnerModules`): drivers, wake sources, services and boundaries. The package registers `claude`, `console`, which is the console's own stream of signals, and `os-user`; what `runner.json` names is looked up there and is never a path to load. A driver is a module of the first, a product each:
+The runner knows its modules by name, from four registries (`createRunnerModules`): drivers, wake sources, services and boundaries. The package registers `claude` and `codex`, `console`, which is the console's own stream of signals, and `os-user`; what `runner.json` names is looked up there and is never a path to load. A driver is a module of the first, a product each:
 
 ```ts
 interface Driver {
@@ -297,3 +297,19 @@ The Claude Code binary, unmodified, over its streaming JSON input and output, as
 - **The model and the effort** are the product's aliases and levels, as its documentation lists them, `opus`, `sonnet`, `haiku` and `fable`, and `low`, `medium`, `high`, `xhigh` and `max`; the binary offers no list of its own to ask, and its version is read from `claude --version`. They are given when the process starts, so a `set` is applied at the next session: the open one ends as soon as no turn is under way, and the next goes on with the same conversation.
 - **Stopping**: the standard input is closed and the process is given a moment to end; then it is ended. A turn alone is stopped with the same request an interrupt begins with, which leaves the process open for the next message.
 - **Signing in** is the product's: a subscription signed in through its own flow in the agent's OS account, or the long-lived token its own command issues, which the runner provides in the environment the product reads it from when `runner.json` maps a secret to it. The driver never reads or keeps either.
+
+### The `codex` driver
+
+The Codex binary, unmodified, run with nobody at its terminal: `codex exec --json`, as its own help has it. A process a turn, since that is how the product runs without a terminal, and the conversation gone on with by the id its first turn names. Written from what the binary printed when the driver was run against it, 0.164.0 first, and held by fixtures written down from that, in tests that call nobody.
+
+- **A turn** is started as `codex exec --json --skip-git-repo-check`, in the desk, with `-m` and `-c model_reasoning_effort` where the account's settings name them, and the message on its standard input; a turn of a conversation gone on with as `codex exec resume ... <id>`. The desk is the agent's own, a repository or not one yet. A model, an effort or an id that is no plain word is left out, so that nothing the driver is handed becomes an option of the product's.
+- **The mode** is said at every turn, since a turn keeps nothing of the mode the turn before ran in, in the product's own words: its three sandboxes, `read-only`, `workspace-write` and `danger-full-access`, in which whatever the sandbox does not allow is asked of nobody and refused; and `approve-for-me`, in which the desk may be written and the product's own reviewer answers what would otherwise be asked of a person. With nobody at its terminal the product runs in `read-only`, where a file written is refused, so the driver names `approve-for-me` where `runner.json` names none. A mode named that is none of these starts the turn in `read-only`.
+- **No message is taken in a turn** (`steer: false`). One that arrives while a turn runs waits for the turn to end and is the next turn's, read with whatever else waited; one that is to be read now, an `interrupt` with its words, ends the turn's process first, and the product goes on from there knowing that what it was doing was cut. `turn_completed` is said when a turn ended and nothing waits.
+- **What it reads**, a line each: `thread.started`, written at every turn, names the conversation and becomes a `status` event the first time; an `item` that is an `agent_message` becomes `assistant`; a `command_execution` or a `file_change` becomes `tool_call` when it starts and `tool_result` when it completes, a command with its output and what it ended in; `turn.failed` and `error` become an `error`, said once though the product writes it twice. Its reasoning, a tool of a server and a search are read as its documentation gives them, and were not seen.
+- **An agent that cannot go on.** A product that is not there to start is `failed` with `start`. An error that says it is not signed in is `failed` with `sign_in`, read by pattern: its words for it were not seen, since that takes signing it out. Any other turn that failed is a turn that ended, and the agent takes the next message. The product has no word of its own for an answer the model would not give.
+- **The model and the effort** are each turn's, so a `set` is taken from the next turn on, with no session ended for it. What the product offers is asked of the product: `codex debug models`, the models it lists for a person to choose from and their levels of effort; its version is read from `codex --version`.
+- **Pictures** are not handed to it (`images: false`): the product takes a picture as a file, and the driver has nowhere to write one yet.
+- **Stopping** ends the turn under way, if there is one: the process is asked to end, and then ended.
+- **Signing in** is the product's own, in the agent's OS account, as with `claude`.
+
+The product also has an app server, which takes a message in a turn and is what its own editor extension speaks; the product calls it experimental, and a driver over it is a later one.

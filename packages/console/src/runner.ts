@@ -3,6 +3,7 @@
 // against a console. The command's `console runner` is made of the same.
 
 export { createClaudeDriver } from "./runner/claude.js";
+export { createCodexDriver } from "./runner/codex.js";
 export {
   DEFAULT_RUNNER_CONFIG,
   parseRunnerConfig,

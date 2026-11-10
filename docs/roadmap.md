@@ -513,7 +513,8 @@ Ends with: one line pasted on a Mac sets an agent account up, the board and the 
 
 - [x] Ubuntu: the `systemd-user` service module and the guide for it, in the skill `running-an-agent`. Written from the system's documentation, its unit checked with the system's own analyzer; started on a machine with the Mac's setup, above.
 - [ ] The Windows service module.
-- [ ] The `acp` driver, for every product that speaks the Agent Client Protocol, and a direct driver for a product whose protocol lacks steering.
+- [x] The `codex` driver (2026-11-10), a direct driver for a product that takes no message in a turn: the Codex binary run without a terminal, `codex exec --json`, a process a turn and the conversation gone on with by its id; a message that arrives in a turn kept for the turn after, and the turn's process ended for one that is to be read now; the mode said at every turn, `approve-for-me` where the desk names none; the models and the efforts asked of the product. Run against the binary, 0.164.0, a turn, a command, a patch, a message during a turn, an interrupt and a conversation gone on with, and its fixtures written down from that. Pictures are not handed to it yet, and it was not run under the runner whole.
+- [ ] The `acp` driver, for every product that speaks the Agent Client Protocol.
 - [ ] A screenshot of the agent's desktop on request, an attachment of the transcript, opted in.
 - [ ] A shared messenger app through the console: a plugin raising wakes through a capability of its own.
 - [ ] The per-session hash chain, by which a month that was put away is checked.
