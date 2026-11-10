@@ -330,6 +330,13 @@
       "when": 1794201695745,
       "tag": "0046_workspace_language",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1794278714430,
+      "tag": "0047_agent_accounts",
+      "breakpoints": true
     }
   ]
 }

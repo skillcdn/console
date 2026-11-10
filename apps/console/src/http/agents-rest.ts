@@ -1,0 +1,197 @@
+// The agent accounts' routes (docs/specs/rest.md, "Agent accounts"; ADR-0084). An agent account
+// is a member, so everything a member is asked or told goes through the board's own routes; what
+// is here is what only an agent account has. Every route runs as the board's do: parse, ask who
+// is asking and whether they may, then do the work; what the asker may not see is not found.
+
+import {
+  isHandle,
+  type ProviderKey,
+  RESERVED_HANDLES,
+  REST_ROUTES,
+  type RestAgents,
+  restAgentInputSchema,
+} from "@skillcdn/console/api";
+import type { Context, Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
+import { configuresWorkspace, personVisibleTo } from "../auth/policy.js";
+import type { Database } from "../db/client.js";
+import { AgentError, createAgentAccount, findAgent, listAgents } from "../db/queries/agents.js";
+import type { Actor } from "../db/queries/events.js";
+import { PersonError, type PersonRecord } from "../db/queries/people.js";
+import type { TokenRecord } from "../db/queries/tokens.js";
+import { readWorkspaceSettings } from "../db/queries/workspaces.js";
+import type { Logger } from "../logger.js";
+import type { Clock } from "../ports/clock.js";
+import { errorBody } from "./app.js";
+import { type Access, administratorRequired, foreignOrigin, signInRequired } from "./auth.js";
+import type { AppEnv } from "./request-context.js";
+import { restAgent } from "./rest-shapes.js";
+
+export interface AgentsRestDependencies {
+  readonly database: Database;
+  readonly access: Access;
+  readonly clock: Clock;
+  readonly logger: Logger;
+  /** The providers people sign in through: what an account may name. None where nobody signs in. */
+  readonly signIn: readonly ProviderKey[];
+}
+
+const MAX_BODY_BYTES = 256 * 1024;
+
+interface Caller {
+  readonly person: PersonRecord;
+  readonly token: TokenRecord | undefined;
+}
+
+/** Who a change is attributed to: the person, and the agent they act as when with a token. */
+const actorOf = (caller: Caller): Actor =>
+  caller.token === undefined
+    ? { id: caller.person.id }
+    : { id: caller.person.id, agent: caller.token.name };
+
+export function registerAgentsRest(app: Hono<AppEnv>, dependencies: AgentsRestDependencies): void {
+  const { database, access, clock, logger, signIn } = dependencies;
+
+  /** Who is asking and with what, or the refusal to answer with. */
+  const asking = async (c: Context<AppEnv>): Promise<Caller | Response> =>
+    (await access.caller(c)) ?? signInRequired(c);
+  /** Who is asking something that changes the board: from the console's own pages on a session, or with a token. */
+  const changing = async (c: Context<AppEnv>): Promise<Caller | Response> => {
+    if (!access.presentsToken(c) && !access.fromOwnPages(c)) {
+      return foreignOrigin(c);
+    }
+    return asking(c);
+  };
+  const invalid = (c: Context<AppEnv>, message: string): Response =>
+    c.json(errorBody("request.invalid", message), 400);
+  const notFound = (c: Context<AppEnv>): Response =>
+    c.json(errorBody("agent.not_found", "The agent account was not found."), 404);
+  /** The handle in the path, or nothing for text that is not one. */
+  const handleOf = (c: Context<AppEnv>): string | undefined => {
+    const handle = c.req.param("handle") ?? "";
+    return isHandle(handle) && !RESERVED_HANDLES.includes(handle) ? handle : undefined;
+  };
+  const tooLarge = bodyLimit({
+    maxSize: MAX_BODY_BYTES,
+    onError: (c) => c.json(errorBody("request.too_large", "The request body is too large."), 413),
+  });
+  const failure = (c: Context<AppEnv>, error: unknown): Response => {
+    if (error instanceof AgentError) {
+      const status =
+        error.code === "agent.not_found"
+          ? 404
+          : error.code === "agent.invalid_manager" || error.code === "agent.invalid_project"
+            ? 400
+            : 409;
+      return c.json(errorBody(error.code, error.message), status);
+    }
+    if (error instanceof PersonError) {
+      return c.json(
+        errorBody(error.code, error.message),
+        error.code === "person.not_found" ? 404 : 409,
+      );
+    }
+    throw error;
+  };
+
+  // The agent accounts the asker may see, as the people are seen: everything that lists people
+  // lists them among it, and this lists them alone, with whom each reports to.
+  app.get(REST_ROUTES.agents, async (c) => {
+    const caller = await asking(c);
+    if (caller instanceof Response) {
+      return caller;
+    }
+    const { person } = caller;
+    const settings = await readWorkspaceSettings(database, person.workspaceId);
+    const agents = await listAgents(
+      database,
+      person.workspaceId,
+      personVisibleTo(person, settings),
+    );
+    const body: RestAgents = { items: agents.map(restAgent) };
+    return c.json(body);
+  });
+
+  // An administrator makes an agent account (ADR-0084), signed in or through their agent's
+  // token (ADR-0021): the member's row at once, and the login let in.
+  app.post(REST_ROUTES.agents, tooLarge, async (c) => {
+    const caller = await changing(c);
+    if (caller instanceof Response) {
+      return caller;
+    }
+    const { person } = caller;
+    if (!configuresWorkspace(person)) {
+      return administratorRequired(c);
+    }
+    let json: unknown;
+    try {
+      json = await c.req.json();
+    } catch {
+      return invalid(c, "The request body is not readable JSON.");
+    }
+    const parsed = restAgentInputSchema.safeParse(json);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      const path = (issue?.path ?? []).map(String).join(".");
+      return invalid(
+        c,
+        issue === undefined
+          ? "The request is not readable."
+          : path.length === 0
+            ? issue.message
+            : `${path}: ${issue.message}`,
+      );
+    }
+    const input = parsed.data;
+    if (!signIn.includes(input.host)) {
+      return c.json(
+        errorBody("agent.unknown_host", "Nobody signs in through that provider here."),
+        400,
+      );
+    }
+    try {
+      const agent = await createAgentAccount(database, {
+        workspaceId: person.workspaceId,
+        actor: actorOf(caller),
+        host: input.host,
+        login: input.login,
+        handle: input.handle,
+        name: input.name,
+        title: input.title ?? undefined,
+        avatarSeed: input.avatarSeed,
+        avatarParts: input.avatarParts,
+        // Whoever makes it answers for it, unless they name another.
+        managerId: input.managerId ?? person.id,
+        projectKey: input.project,
+        now: clock.now(),
+      });
+      logger.info(
+        { person: person.id, agent: agent.person.id, requestId: c.get("requestId") },
+        "an agent account was made",
+      );
+      return c.json(restAgent(agent), 201);
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
+  app.get(`${REST_ROUTES.agents}/:handle`, async (c) => {
+    const caller = await asking(c);
+    if (caller instanceof Response) {
+      return caller;
+    }
+    const { person } = caller;
+    const handle = handleOf(c);
+    if (handle === undefined) {
+      return notFound(c);
+    }
+    const settings = await readWorkspaceSettings(database, person.workspaceId);
+    const agent = await findAgent(
+      database,
+      person.workspaceId,
+      handle,
+      personVisibleTo(person, settings),
+    );
+    return agent === undefined ? notFound(c) : c.json(restAgent(agent));
+  });
+}

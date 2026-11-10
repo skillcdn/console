@@ -20,7 +20,6 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
-import * as z from "zod";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
 import {
@@ -36,7 +35,15 @@ import {
 } from "../schema.js";
 import { recordLinks } from "./documents.js";
 import { type Actor, recordEvent, type Scope } from "./events.js";
-import { owners, type PersonRecord, personColumns, toPerson, workers } from "./people.js";
+import {
+  owners,
+  type PersonRecord,
+  peopleFromJson,
+  personColumns,
+  personJson,
+  toPerson,
+  workers,
+} from "./people.js";
 import { mayWorkIn, visibleTo } from "./projects.js";
 import { titleMatches } from "./search.js";
 
@@ -161,41 +168,11 @@ const STARTED_STATES: readonly TaskState[] = ["in_progress", "in_review", "done"
 const openDecisionsOf = sql<number>`(select count(*) from ${decisions} where ${decisions.taskId} = ${tasks.id} and ${decisions.answeredAt} is null)`;
 const openRunsOf = sql<number>`(select count(*) from ${runs} where ${runs.taskId} = ${tasks.id} and ${runs.status} in ('running', 'waiting'))`;
 
-/** A worker as the database hands one back inside the task's row: the person's columns, as JSON. */
-const workerRow = z.object({
-  id: z.string(),
-  workspaceId: z.string(),
-  host: z.string(),
-  hostAccountId: z.string(),
-  login: z.string(),
-  name: z.nullable(z.string()),
-  avatarUrl: z.nullable(z.string()),
-  role: z.string(),
-  status: z.string(),
-  source: z.string(),
-  deactivatedAt: z.nullable(z.string()),
-  managerId: z.nullable(z.string()),
-  language: z.nullable(z.string()),
-  email: z.nullable(z.string()),
-});
-const workerRows = z.array(workerRow);
-
-/** The workers of a task, read back from the JSON the row carries them in. */
-function toWorkers(value: unknown): PersonRecord[] {
-  const parsed: unknown = typeof value === "string" ? JSON.parse(value) : value;
-  return workerRows.parse(parsed ?? []).map((row) =>
-    toPerson({
-      ...row,
-      deactivatedAt: row.deactivatedAt === null ? null : new Date(row.deactivatedAt),
-    }),
-  );
-}
-
 /**
  * The workers of the task being read, in the order they came to it, as one JSON array: a page of
  * tasks stays one query, however many people are on each.
  */
-const workersOf = sql<unknown>`(select coalesce(json_agg(json_build_object('id', ${people.id}, 'workspaceId', ${people.workspaceId}, 'host', ${people.host}, 'hostAccountId', ${people.hostAccountId}, 'login', ${people.login}, 'name', ${people.name}, 'avatarUrl', ${people.avatarUrl}, 'role', ${people.role}, 'status', ${people.status}, 'source', ${people.source}, 'deactivatedAt', ${people.deactivatedAt}, 'managerId', ${people.managerId}, 'language', ${people.language}, 'email', ${people.email}) order by ${taskWorkers.addedAt}, ${people.login}), '[]'::json) from ${taskWorkers} join ${people} on ${people.id} = ${taskWorkers.personId} where ${taskWorkers.taskId} = ${tasks.id})`;
+const workersOf = sql<unknown>`(select coalesce(json_agg(${personJson(people)} order by ${taskWorkers.addedAt}, ${people.login}), '[]'::json) from ${taskWorkers} join ${people} on ${people.id} = ${taskWorkers.personId} where ${taskWorkers.taskId} = ${tasks.id})`;
 
 const taskColumns = {
   id: tasks.id,
@@ -218,7 +195,7 @@ const taskColumns = {
   updatedAt: tasks.updatedAt,
   owner: personColumns(owners),
   agent: tasks.agent,
-  workers: workersOf.mapWith(toWorkers),
+  workers: workersOf.mapWith(peopleFromJson),
   categoryKey: categories.key,
   categoryName: categories.name,
   categoryColor: categories.color,

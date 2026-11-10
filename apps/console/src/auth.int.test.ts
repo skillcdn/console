@@ -150,6 +150,11 @@ describe("signing in", () => {
         email: null,
         managerId: null,
         language: null,
+        // A person, as every member was before agent accounts (ADR-0084).
+        kind: "person",
+        handle: null,
+        title: null,
+        avatarParts: null,
       },
       signIn: [{ key: "gh", label: "GitHub", admits: { organization: null, domains: [] } }],
     });

@@ -218,6 +218,18 @@ export const en = {
     "person.invalid_manager":
       "A manager must be another active person, and not one of this person's own team.",
     "person.last_admin": "The workspace needs at least one administrator.",
+    "person.agent_admin": "An agent account is never an administrator.",
+    "person.manager_required":
+      "An agent account always has a manager. Name another; the manager is never taken away.",
+    "agent.not_found": "The agent account was not found.",
+    "agent.handle_taken": "Another agent account has this handle.",
+    "agent.exists": "This login is an agent account already.",
+    "agent.administrator":
+      "An administrator is not made an agent account. Make them a member first.",
+    "agent.invalid_manager":
+      "A manager must be another active member, and not one who reports to this account.",
+    "agent.invalid_project": "The project it starts in was not found.",
+    "agent.unknown_host": "Nobody signs in through that provider here.",
     "person.not_found": "The person was not found.",
     "person.of_organization": "The organization decides who is in. This can't be changed here.",
     "picture.refused": "This picture can't be shown.",

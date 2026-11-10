@@ -20,6 +20,7 @@ import {
   MAX_DOCUMENT_LENGTH,
   MAX_DOCUMENT_PATH_LENGTH,
   MAX_FILE_NAME_LENGTH,
+  MAX_HANDLE_LENGTH,
   MAX_HOME_ROW,
   MAX_HOME_TILES,
   MAX_LANGUAGE_TAG_LENGTH,
@@ -29,6 +30,8 @@ import {
   MAX_NOTE_LENGTH,
   MAX_OPTION_LABEL_LENGTH,
   MAX_OPTIONS,
+  MAX_PERSON_NAME_LENGTH,
+  MAX_PERSON_TITLE_LENGTH,
   MAX_PROJECT_DESCRIPTION_LENGTH,
   MAX_PROJECT_KEY_LENGTH,
   MAX_PROJECT_NAME_LENGTH,
@@ -45,6 +48,7 @@ import {
   MAX_TOKEN_NAME_LENGTH,
   MAX_URL_LENGTH,
   MAX_WORKERS,
+  MIN_HANDLE_LENGTH,
   MIN_OPTIONS,
 } from "./limits.js";
 import { PLUGIN_WIDGET_SIZE_NAMES } from "./plugin/manifest.js";
@@ -200,6 +204,12 @@ export const restPersonSchema = z.object({
    * the provider's; `null` for a person. Answered from 0.4.8 and read as optional.
    */
   avatarParts: z.optional(z.nullable(restAvatarPartsSchema)),
+  /**
+   * `true` for an agent account nobody has signed in with yet: made by an administrator, so that
+   * work can be assigned to it, and "invited" on the pages until its first sign-in. Not a status
+   * of the directory. Left out otherwise.
+   */
+  invited: z.optional(z.boolean()),
 });
 export type RestPerson = z.infer<typeof restPersonSchema>;
 
@@ -511,6 +521,68 @@ export const restPersonPatchSchema = z
     ),
   );
 export type RestPersonPatch = z.infer<typeof restPersonPatchSchema>;
+
+/** The words under `/agents/` and `/api/v1/agents/` that are the console's own, which no agent account may be called. */
+export const RESERVED_HANDLES: readonly string[] = ["new", "me", "proposals", "setup"];
+
+/** Whether `value` is spelled as a handle is: lowercase letters, digits and hyphens, a letter or a digit first and last, of the length one may be. */
+export function isHandle(value: string): boolean {
+  return (
+    value.length >= MIN_HANDLE_LENGTH &&
+    value.length <= MAX_HANDLE_LENGTH &&
+    /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(value)
+  );
+}
+
+/**
+ * An agent account's handle (ADR-0084): what the pages and the command call it by, `@mira`. One
+ * among the workspace's agent accounts, and immutable once the account is made.
+ */
+const handle = z.string().check(
+  z.refine(isHandle, "must be 2 to 39 lowercase letters, digits and hyphens"),
+  z.refine((value) => !RESERVED_HANDLES.includes(value), "is a word the addresses use"),
+);
+
+/**
+ * An agent account as its own listing answers it (ADR-0084): the member it is, and whom it
+ * reports to.
+ */
+export const restAgentSchema = z.object({
+  /** The account as a member: `kind: "agent"`, with its handle, its title and what its avatar is drawn from. */
+  person: restPersonSchema,
+  /** Whom it reports to, as the asker may see them; `null` where they may not. */
+  manager: z.nullable(restPersonSchema),
+});
+export type RestAgent = z.infer<typeof restAgentSchema>;
+
+/** `GET /api/v1/agents`: the agent accounts the asker may see, by handle. */
+export const restAgentsSchema = z.object({ items: z.array(restAgentSchema) });
+export type RestAgents = z.infer<typeof restAgentsSchema>;
+
+/**
+ * What `POST /api/v1/agents` is sent, by an administrator: the account the agent will sign in
+ * with, at one of the providers the deployment has, as a listing names one; its persona; its
+ * manager, whoever makes it where none is named; and the project it starts in. A login a member
+ * already carries is made an agent account the same way, once.
+ */
+export const restAgentInputSchema = z
+  .object({
+    host: z.enum(PROVIDER_KEYS),
+    login: z.string().check(z.trim(), z.minLength(1), z.maxLength(MAX_LOGIN_LENGTH)),
+    handle,
+    name: line(MAX_PERSON_NAME_LENGTH),
+    title: z.optional(z.nullable(line(MAX_PERSON_TITLE_LENGTH))),
+    /** What the proposals rolled the parts from, kept beside them; left out where they were chosen by hand. */
+    avatarSeed: z.optional(
+      z.string().check(z.minLength(1), z.maxLength(64), z.regex(/^[A-Za-z0-9_-]+$/)),
+    ),
+    avatarParts: restAvatarPartsSchema,
+    managerId: z.optional(uuid),
+    /** The key of the project it starts in. */
+    project: z.string().check(z.minLength(1), z.maxLength(MAX_PROJECT_KEY_LENGTH)),
+  })
+  .check(z.refine((input) => isLoginAt(input.host, input.login), "must be a login at the host"));
+export type RestAgentInput = z.infer<typeof restAgentInputSchema>;
 
 /** The words under `/projects/` that are the pages' own, which no project may be called. */
 export const RESERVED_PROJECT_KEYS: readonly string[] = ["new"];

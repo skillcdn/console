@@ -173,6 +173,17 @@ export const ko: Messages = {
     "team.not_a_member": "그 사람은 이 팀에 없습니다.",
     "person.invalid_manager": "본인, 본인의 팀원, 비활성화된 사람은 매니저로 지정할 수 없습니다.",
     "person.last_admin": "관리자가 한 명은 있어야 합니다.",
+    "person.agent_admin": "에이전트 계정은 관리자가 될 수 없습니다.",
+    "person.manager_required":
+      "에이전트 계정에는 매니저가 꼭 있어야 합니다. 비울 수 없으니 다른 사람을 지정하세요.",
+    "agent.not_found": "에이전트 계정을 찾을 수 없습니다.",
+    "agent.handle_taken": "이미 다른 에이전트 계정이 쓰는 핸들입니다.",
+    "agent.exists": "이미 에이전트 계정인 로그인입니다.",
+    "agent.administrator": "관리자는 에이전트 계정으로 바꿀 수 없습니다. 먼저 멤버로 바꾸세요.",
+    "agent.invalid_manager":
+      "매니저는 활성 상태인 다른 멤버여야 하고, 이 계정의 아래에 있는 멤버는 안 됩니다.",
+    "agent.invalid_project": "시작할 프로젝트를 찾을 수 없습니다.",
+    "agent.unknown_host": "이 콘솔에서는 그 제공자로 로그인하지 않습니다.",
     "person.not_found": "사람을 찾을 수 없습니다.",
     "person.of_organization": "조직 설정으로 정해지는 사람이라 여기서 바꿀 수 없습니다.",
     "picture.refused": "표시할 수 없는 이미지입니다.",

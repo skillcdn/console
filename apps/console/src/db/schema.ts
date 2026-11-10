@@ -6,11 +6,13 @@ import {
   LINK_SOURCES,
   MEMBERSHIP_SOURCES,
   PEOPLE_VISIBILITIES,
+  PERSON_KINDS,
   PERSON_ROLES,
   PERSON_STATUSES,
   PROJECT_ROLES,
   PROJECT_VISIBILITIES,
   PROVIDER_KEYS,
+  type RestAvatarParts,
   type RestDecisionOption,
   type RestEventData,
   type RestHome,
@@ -111,7 +113,10 @@ export const workspaces = pgTable(
   ],
 );
 
-/** Someone who signed in through an identity provider and is a member of the workspace. */
+/**
+ * A member of the workspace: someone who signed in through an identity provider, or an agent
+ * account an administrator made (ADR-0084), which is a row before anyone signed in with it.
+ */
 export const people = pgTable(
   "people",
   {
@@ -119,14 +124,31 @@ export const people = pgTable(
     workspaceId: uuid()
       .notNull()
       .references(() => workspaces.id),
-    /** The identity provider (`gh`, `google`), and its immutable id of the account: what a person is known by. */
+    /**
+     * What the member is (ADR-0084): a person, or an agent account, a member of its own under the
+     * same rules, which is never an administrator and always has a manager. It never goes back.
+     */
+    kind: text({ enum: PERSON_KINDS }).notNull().default("person"),
+    /**
+     * The identity provider (`gh`, `google`), and its immutable id of the account: what a member is
+     * known by. The id is null for an agent account nobody has signed in with yet: its first
+     * sign-in, with the login it was made with, binds the provider's account to the row.
+     */
     host: text().notNull(),
-    hostAccountId: text().notNull(),
+    hostAccountId: text(),
     /** As the provider spells it now (a login, an address); a renamed account stays the same person. */
     login: text().notNull(),
+    /** As the provider says at each sign-in; an agent account's is the console's own, kept by its supervisors. */
     name: text(),
-    /** The account's picture as the host serves it, an https URL. */
+    /** The account's picture as the host serves it, an https URL; none for an agent account, whose picture is drawn from its parts. */
     avatarUrl: text(),
+    /** An agent account's handle (ADR-0084): what the pages and the command call it by, one per workspace, immutable; null for a person. */
+    handle: text(),
+    /** What the member does, in a line: every member's, kept by an administrator; null for none. */
+    title: text(),
+    /** What an agent account's avatar was rolled from, and the parts it is drawn from (ADR-0084): indexes into a set of shapes of the package, with the set's version. Nothing drawn is kept. */
+    avatarSeed: text(),
+    avatarParts: jsonb().$type<RestAvatarParts>(),
     /** An administrator configures the board, a member works on it: the console's own record. */
     role: text({ enum: PERSON_ROLES }).notNull().default("member"),
     /** Whether they are in (ADR-0022): a deactivated person is kept, for what they did, and refused. */
@@ -147,12 +169,34 @@ export const people = pgTable(
     email: text(),
     /** The person's own front page (ADR-0061), what they took off it and what they arranged at each width; null while they have arranged nothing. */
     home: jsonb().$type<RestHome>(),
-    lastLoginAt: instant().notNull(),
+    /** When the member last signed in; null for an agent account nobody has signed in with yet. */
+    lastLoginAt: instant(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (table) => [
     uniqueIndex("people_host_account_key").on(table.workspaceId, table.host, table.hostAccountId),
+    // A row nobody has signed in with is found by its login at its sign-in: one per login.
+    uniqueIndex("people_unbound_login_key")
+      .on(table.workspaceId, table.host, sql`lower(${table.login})`)
+      .where(sql`${table.hostAccountId} is null`),
+    uniqueIndex("people_handle_key")
+      .on(table.workspaceId, table.handle)
+      .where(sql`${table.handle} is not null`),
+    check("people_kind_check", sql`${table.kind} in (${sql.raw(literals(PERSON_KINDS))})`),
+    // An agent account has a handle, a manager and no administration; a person has signed in.
+    check(
+      "people_agent_check",
+      sql`(${table.kind} = 'agent') = (${table.handle} is not null) and (${table.kind} = 'agent') = (${table.avatarParts} is not null)`,
+    ),
+    check(
+      "people_agent_standing_check",
+      sql`${table.kind} <> 'agent' or (${table.role} = 'member' and ${table.managerId} is not null)`,
+    ),
+    check(
+      "people_signed_in_check",
+      sql`${table.kind} = 'agent' or (${table.hostAccountId} is not null and ${table.lastLoginAt} is not null)`,
+    ),
     uniqueIndex("people_email_key")
       .on(table.workspaceId, table.email)
       .where(sql`${table.email} is not null`),

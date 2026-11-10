@@ -1,8 +1,10 @@
 import type {
   MembershipSource,
+  PersonKind,
   PersonRole,
   PersonStatus,
   ProviderKey,
+  RestAvatarParts,
   RestHome,
 } from "@skillcdn/console/api";
 import {
@@ -19,6 +21,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
+import * as z from "zod";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
 import { listings, people, workspaces } from "../schema.js";
@@ -31,9 +34,14 @@ import { type Actor, recordEvent } from "./events.js";
 export interface PersonRecord {
   readonly id: string;
   readonly workspaceId: string;
-  /** The identity provider, and its immutable id of the account: what a person is known by. */
+  /** What the member is (ADR-0084): a person, or an agent account. */
+  readonly kind: PersonKind;
+  /**
+   * The identity provider, and its immutable id of the account: what a person is known by. The
+   * id is none for an agent account nobody has signed in with yet.
+   */
   readonly host: ProviderKey;
-  readonly hostAccountId: string;
+  readonly hostAccountId: string | undefined;
   readonly login: string;
   readonly name: string | undefined;
   readonly avatarUrl: string | undefined;
@@ -50,7 +58,16 @@ export interface PersonRecord {
   readonly language: string | undefined;
   /** The person's work email, lowercase: Google's at sign-in, else an administrator's word; none until known. */
   readonly email: string | undefined;
+  /** An agent account's handle (ADR-0084), which never changes; none for a person. */
+  readonly handle: string | undefined;
+  /** What the member does, in a line; none until an administrator says. */
+  readonly title: string | undefined;
+  /** What an agent account's avatar is drawn from; none for a person. */
+  readonly avatarParts: RestAvatarParts | undefined;
 }
+
+/** Whether nobody has signed in with the account yet: an agent account an administrator made, until its first sign-in. */
+export const isInvited = (person: PersonRecord): boolean => person.hostAccountId === undefined;
 
 /** What is wrong with a change to a person. `code` is what the API answers with. */
 export class PersonError extends DomainError {
@@ -60,7 +77,9 @@ export class PersonError extends DomainError {
       | "person.last_admin"
       | "person.of_organization"
       | "person.invalid_manager"
-      | "person.email_taken",
+      | "person.email_taken"
+      | "person.agent_admin"
+      | "person.manager_required",
   ) {
     super(code, PERSON_ERROR_WORDS[code]);
   }
@@ -73,6 +92,9 @@ const PERSON_ERROR_WORDS = {
   "person.invalid_manager":
     "the manager is not another active person of the workspace, or reports to this person already",
   "person.email_taken": "the address is another person's in this workspace",
+  "person.agent_admin": "an agent account is never an administrator",
+  "person.manager_required":
+    "an agent account always has a manager: name another, the manager is never taken away",
 } as const;
 
 /** What is wrong with a listing. `code` is what the API answers with. */
@@ -111,6 +133,7 @@ export interface ListingRecord {
 interface PersonTable {
   readonly id: AnyPgColumn;
   readonly workspaceId: AnyPgColumn;
+  readonly kind: AnyPgColumn;
   readonly host: AnyPgColumn;
   readonly hostAccountId: AnyPgColumn;
   readonly login: AnyPgColumn;
@@ -123,6 +146,9 @@ interface PersonTable {
   readonly managerId: AnyPgColumn;
   readonly language: AnyPgColumn;
   readonly email: AnyPgColumn;
+  readonly handle: AnyPgColumn;
+  readonly title: AnyPgColumn;
+  readonly avatarParts: AnyPgColumn;
 }
 
 /** For this directory only: the columns a {@link PersonRecord} is made of, from `table`. */
@@ -131,6 +157,7 @@ export const personColumns = <T extends PersonTable>(
 ): { [Column in keyof PersonTable]: T[Column] } => ({
   id: table.id,
   workspaceId: table.workspaceId,
+  kind: table.kind,
   host: table.host,
   hostAccountId: table.hostAccountId,
   login: table.login,
@@ -143,13 +170,17 @@ export const personColumns = <T extends PersonTable>(
   managerId: table.managerId,
   language: table.language,
   email: table.email,
+  handle: table.handle,
+  title: table.title,
+  avatarParts: table.avatarParts,
 });
 
 type PersonRow = {
   readonly id: string;
   readonly workspaceId: string;
+  readonly kind: string;
   readonly host: string;
-  readonly hostAccountId: string;
+  readonly hostAccountId: string | null;
   readonly login: string;
   readonly name: string | null;
   readonly avatarUrl: string | null;
@@ -160,13 +191,17 @@ type PersonRow = {
   readonly managerId: string | null;
   readonly language: string | null;
   readonly email: string | null;
+  readonly handle: string | null;
+  readonly title: string | null;
+  readonly avatarParts: RestAvatarParts | null;
 };
 
 export const toPerson = (row: PersonRow): PersonRecord => ({
   id: row.id,
   workspaceId: row.workspaceId,
+  kind: row.kind as PersonKind,
   host: row.host as ProviderKey,
-  hostAccountId: row.hostAccountId,
+  hostAccountId: row.hostAccountId ?? undefined,
   login: row.login,
   name: row.name ?? undefined,
   avatarUrl: row.avatarUrl ?? undefined,
@@ -177,7 +212,63 @@ export const toPerson = (row: PersonRow): PersonRecord => ({
   managerId: row.managerId ?? undefined,
   language: row.language ?? undefined,
   email: row.email ?? undefined,
+  handle: row.handle ?? undefined,
+  title: row.title ?? undefined,
+  avatarParts: row.avatarParts ?? undefined,
 });
+
+/**
+ * A person as one JSON object, for a query that reads several people inside one row: the workers
+ * of a task, whom a decision is addressed to. The columns of {@link personColumns}, under the same
+ * names; read back with {@link peopleFromJson}.
+ */
+export const personJson = (table: PersonTable): SQL =>
+  sql`json_build_object('id', ${table.id}, 'workspaceId', ${table.workspaceId}, 'kind', ${table.kind}, 'host', ${table.host}, 'hostAccountId', ${table.hostAccountId}, 'login', ${table.login}, 'name', ${table.name}, 'avatarUrl', ${table.avatarUrl}, 'role', ${table.role}, 'status', ${table.status}, 'source', ${table.source}, 'deactivatedAt', ${table.deactivatedAt}, 'managerId', ${table.managerId}, 'language', ${table.language}, 'email', ${table.email}, 'handle', ${table.handle}, 'title', ${table.title}, 'avatarParts', ${table.avatarParts})`;
+
+const avatarPartsRow = z.object({
+  set: z.number(),
+  background: z.number(),
+  head: z.number(),
+  ears: z.number(),
+  eyes: z.number(),
+  mouth: z.number(),
+  marks: z.number(),
+  accessory: z.number(),
+  palette: z.number(),
+});
+
+const personJsonRow = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  kind: z.string(),
+  host: z.string(),
+  hostAccountId: z.nullable(z.string()),
+  login: z.string(),
+  name: z.nullable(z.string()),
+  avatarUrl: z.nullable(z.string()),
+  role: z.string(),
+  status: z.string(),
+  source: z.string(),
+  deactivatedAt: z.nullable(z.string()),
+  managerId: z.nullable(z.string()),
+  language: z.nullable(z.string()),
+  email: z.nullable(z.string()),
+  handle: z.nullable(z.string()),
+  title: z.nullable(z.string()),
+  avatarParts: z.nullable(avatarPartsRow),
+});
+const personJsonRows = z.array(personJsonRow);
+
+/** The people a row carries as JSON ({@link personJson}), in the order the query gave them. */
+export function peopleFromJson(value: unknown): PersonRecord[] {
+  const parsed: unknown = typeof value === "string" ? JSON.parse(value) : value;
+  return personJsonRows.parse(parsed ?? []).map((row) =>
+    toPerson({
+      ...row,
+      deactivatedAt: row.deactivatedAt === null ? null : new Date(row.deactivatedAt),
+    }),
+  );
+}
 
 const listingColumns = {
   id: listings.id,
@@ -239,12 +330,17 @@ export async function findListingFor(
         eq(listings.host, host),
         or(
           eq(people.hostAccountId, account.accountId),
-          and(isNull(listings.personId), sameLogin(listings.login, account.login)),
+          // Nobody has signed in with it: a login an administrator let in, or an agent account
+          // an administrator made (ADR-0084), whose row waits for its first sign-in.
+          and(
+            or(isNull(listings.personId), isNull(people.hostAccountId)),
+            sameLogin(listings.login, account.login),
+          ),
         ),
       ),
     )
     // A listing bound to the account before one merely spelled as its login.
-    .orderBy(asc(sql`${listings.personId} is null`))
+    .orderBy(asc(sql`${people.hostAccountId} is null`))
     .limit(1);
   return row === undefined ? undefined : toListing(row);
 }
@@ -323,17 +419,45 @@ export async function savePerson(
       .from(workspaces)
       .where(eq(workspaces.id, workspaceId))
       .for("no key update");
-    const [before] = await tx
-      .select({ status: people.status, email: people.email })
-      .from(people)
-      .where(
-        and(
-          eq(people.workspaceId, workspaceId),
-          eq(people.host, host),
-          eq(people.hostAccountId, account.hostAccountId),
-        ),
-      )
-      .for("no key update");
+    const known = and(
+      eq(people.workspaceId, workspaceId),
+      eq(people.host, host),
+      eq(people.hostAccountId, account.hostAccountId),
+    );
+    const read = () =>
+      tx
+        .select({
+          status: people.status,
+          email: people.email,
+          kind: people.kind,
+          lastLoginAt: people.lastLoginAt,
+        })
+        .from(people)
+        .where(known)
+        .for("no key update");
+    let [before] = await read();
+    if (before === undefined) {
+      // An agent account an administrator made (ADR-0084) is a row nobody has signed in with:
+      // the first sign-in with the login it was made with binds the provider's account to it,
+      // and from then on it is known by that account, whatever the login becomes.
+      const [bound] = await tx
+        .update(people)
+        .set({ hostAccountId: account.hostAccountId })
+        .where(
+          and(
+            eq(people.workspaceId, workspaceId),
+            eq(people.host, host),
+            isNull(people.hostAccountId),
+            sameLogin(people.login, account.login),
+          ),
+        )
+        .returning({ id: people.id });
+      if (bound !== undefined) {
+        [before] = await read();
+      }
+    }
+    const agent = before?.kind === "agent";
+    const first = before === undefined || before.lastLoginAt === null;
     const reactivated = before?.status === "deactivated";
     if (reactivated && source === "domain") {
       return "deactivated";
@@ -351,7 +475,11 @@ export async function savePerson(
               and(
                 eq(people.workspaceId, workspaceId),
                 eq(people.email, email),
-                or(ne(people.host, host), ne(people.hostAccountId, account.hostAccountId)),
+                // Told apart with `is distinct from`: a row nobody has signed in with has no account.
+                or(
+                  ne(people.host, host),
+                  sql`${people.hostAccountId} is distinct from ${account.hostAccountId}`,
+                ),
               ),
             )
             .returning({ login: people.login });
@@ -375,10 +503,12 @@ export async function savePerson(
         target: [people.workspaceId, people.host, people.hostAccountId],
         set: {
           login: account.login,
-          name: account.name ?? null,
-          avatarUrl: account.avatarUrl ?? null,
+          // An agent account's name and picture are the console's own (ADR-0084), where a
+          // person's are the provider's at each sign-in; and it is never an administrator,
+          // whatever the operator's naming says of its login.
+          ...(agent ? {} : { name: account.name ?? null, avatarUrl: account.avatarUrl ?? null }),
           ...(email === undefined ? {} : { email }),
-          ...(role === undefined ? {} : { role }),
+          ...(role === undefined || agent ? {} : { role }),
           source,
           status: "active",
           deactivatedAt: null,
@@ -386,11 +516,7 @@ export async function savePerson(
           updatedAt: now,
         },
       })
-      .returning({
-        ...personColumns(people),
-        // A row an upsert inserted has no transaction that ever updated it.
-        inserted: sql<boolean>`(xmax = 0)`,
-      });
+      .returning(personColumns(people));
     if (row === undefined) {
       throw new Error("person upsert returned no row");
     }
@@ -409,7 +535,9 @@ export async function savePerson(
         now,
       });
     }
-    if (row.inserted) {
+    // The first sign-in is the joining: of a row written now, or of an agent account's, written
+    // when an administrator made it.
+    if (first) {
       await recordEvent(tx, {
         workspaceId,
         kind: "person.joined",
@@ -437,7 +565,7 @@ export async function savePerson(
         });
       }
     }
-    return { person, joined: row.inserted };
+    return { person, joined: first };
   });
 }
 
@@ -519,6 +647,10 @@ export async function updatePersonRole(
     if (person.role === role) {
       return person;
     }
+    // The one thing kept from an agent account (ADR-0084): it is never an administrator.
+    if (person.kind === "agent" && role === "admin") {
+      throw new PersonError("person.agent_admin");
+    }
     if (await lastAdministrator(tx, workspaceId, person)) {
       throw new PersonError("person.last_admin");
     }
@@ -564,6 +696,11 @@ export async function updatePersonManager(
     const person = await lockedPerson(tx, workspaceId, personId);
     if ((person.managerId ?? null) === managerId) {
       return person;
+    }
+    // An agent account always has someone answerable for it: its manager is replaced, never
+    // taken away (ADR-0084).
+    if (person.kind === "agent" && managerId === null) {
+      throw new PersonError("person.manager_required");
     }
     let managerLogin: string | null = null;
     if (managerId !== null) {

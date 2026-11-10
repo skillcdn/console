@@ -25,6 +25,7 @@ import {
 const person = (role: "admin" | "member", id = `id-${role}`): PersonRecord => ({
   id,
   workspaceId: "ws",
+  kind: "person",
   host: "gh",
   hostAccountId: id,
   login: role,
@@ -37,6 +38,9 @@ const person = (role: "admin" | "member", id = `id-${role}`): PersonRecord => ({
   managerId: undefined,
   language: undefined,
   email: undefined,
+  handle: undefined,
+  title: undefined,
+  avatarParts: undefined,
 });
 
 const admin = person("admin");

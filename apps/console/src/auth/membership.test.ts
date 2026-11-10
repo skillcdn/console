@@ -6,6 +6,7 @@ import { domainOf, Membership, refusalOf } from "./membership.js";
 const person = (fields: Partial<PersonRecord>): PersonRecord => ({
   id: "0199c4d8-0000-7000-8000-000000000001",
   workspaceId: "0199c4d8-0000-7000-8000-000000000000",
+  kind: "person",
   host: "gh",
   hostAccountId: "1001",
   login: "alice",
@@ -18,6 +19,9 @@ const person = (fields: Partial<PersonRecord>): PersonRecord => ({
   managerId: undefined,
   language: undefined,
   email: undefined,
+  handle: undefined,
+  title: undefined,
+  avatarParts: undefined,
   ...fields,
 });
 

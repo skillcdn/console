@@ -1,0 +1,334 @@
+import {
+  agentPath,
+  projectPath,
+  REST_ROUTES,
+  type RestAvatarParts,
+  restAgentSchema,
+  restAgentsSchema,
+  restErrorSchema,
+  restEventsSchema,
+  restMeSchema,
+  restPeopleSchema,
+  restPersonSchema,
+  restTaskSchema,
+} from "@skillcdn/console/api";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "./db/testing.js";
+import { createFixtureProvider } from "./testing/fixture-provider.js";
+import { createHarness, type Harness, SIGN_IN_URL } from "./testing/harness.js";
+
+// The agent accounts of the directory (ADR-0084): made by an administrator, a member before
+// anyone signed in with it, bound to its provider's account at its first sign-in, and under the
+// rules a person is under but one. On a database of its own.
+
+let testDatabase: TestDatabase;
+let h: Harness;
+let alice: string;
+let bob: string;
+let aliceId: string;
+let bobId: string;
+
+const PARTS: RestAvatarParts = {
+  set: 1,
+  background: 0,
+  head: 1,
+  ears: 0,
+  eyes: 2,
+  mouth: 1,
+  marks: 0,
+  accessory: 0,
+  palette: 3,
+};
+
+const JSON_HEADERS = { "content-type": "application/json" };
+/** The headers of a request from the console's own pages, as a signed-in person's browser sends one. */
+const fromPages = (cookie: string) => ({ cookie, origin: SIGN_IN_URL });
+const get = (cookie: string, path: string) => h.request(path, { headers: { cookie } });
+const send = (cookie: string, method: string, path: string, body: unknown) =>
+  h.request(path, {
+    method,
+    headers: { ...fromPages(cookie), ...JSON_HEADERS },
+    body: JSON.stringify(body),
+  });
+const errorOf = async (response: Response) =>
+  restErrorSchema.parse(await response.json()).error.code;
+const meOf = async (cookie: string) => {
+  const { person } = restMeSchema.parse(await (await get(cookie, REST_ROUTES.me)).json());
+  if (person === null) {
+    throw new Error("the cookie carries nobody's session");
+  }
+  return person;
+};
+const account = (fields: Record<string, unknown>) => ({
+  host: "gh",
+  name: "Mira",
+  avatarParts: PARTS,
+  project: "ops",
+  ...fields,
+});
+const eventsOf = async (cookie: string) =>
+  restEventsSchema.parse(await (await get(cookie, `${REST_ROUTES.events}?after=0`)).json()).items;
+
+beforeAll(async () => {
+  testDatabase = await createTestDatabase(process.env.TEST_DATABASE_URL ?? DEV_DATABASE_URL);
+  h = createHarness(testDatabase, {
+    providers: [createFixtureProvider("gh"), createFixtureProvider("google")],
+    // The operator names an agent's login an administrator too: it is made none (ADR-0084).
+    admins: ["alice", "erin@mail.test"],
+    domains: ["acme.test"],
+    listed: ["alice", "bob"],
+  });
+  alice = await h.signIn("alice");
+  bob = await h.signIn("bob");
+  aliceId = (await meOf(alice)).id;
+  bobId = (await meOf(bob)).id;
+  await h.project(alice, { key: "ops", name: "Operations", visibility: "private" });
+});
+
+afterAll(async () => {
+  await testDatabase?.drop();
+});
+
+describe("an agent account (ADR-0084)", () => {
+  let miraId: string;
+
+  it("is made by an administrator, and is a member before anyone signed in with it", async () => {
+    const byMember = await send(
+      bob,
+      "POST",
+      REST_ROUTES.agents,
+      account({ login: "carol", handle: "mira" }),
+    );
+    expect(byMember.status).toBe(403);
+    expect(await errorOf(byMember)).toBe("auth.forbidden");
+
+    const made = await send(
+      alice,
+      "POST",
+      REST_ROUTES.agents,
+      account({ login: "carol", handle: "mira", title: "Release engineer", avatarSeed: "s-1" }),
+    );
+    expect(made.status).toBe(201);
+    const agent = restAgentSchema.parse(await made.json());
+    expect(agent.person).toMatchObject({
+      login: "carol",
+      name: "Mira",
+      avatar: null,
+      kind: "agent",
+      handle: "mira",
+      title: "Release engineer",
+      avatarParts: PARTS,
+      role: "member",
+      status: "active",
+      source: "listed",
+      // Whoever makes it answers for it, unless they name another.
+      managerId: aliceId,
+      invited: true,
+    });
+    expect(agent.manager?.id).toBe(aliceId);
+    miraId = agent.person.id;
+
+    // Listed among the agent accounts, read by its handle, and among the people, where a login
+    // let in that nobody signed in with is no longer one of the listings.
+    const listed = restAgentsSchema.parse(await (await get(bob, REST_ROUTES.agents)).json());
+    expect(listed.items.map((item) => item.person.handle)).toEqual(["mira"]);
+    const one = await get(bob, agentPath("mira"));
+    expect(restAgentSchema.parse(await one.json()).person.id).toBe(miraId);
+    expect((await get(bob, agentPath("nobody"))).status).toBe(404);
+    expect((await get(bob, agentPath("new"))).status).toBe(404);
+    const people = restPeopleSchema.parse(await (await get(alice, REST_ROUTES.people)).json());
+    expect(people.items.find((person) => person.id === miraId)).toMatchObject({
+      kind: "agent",
+      invited: true,
+    });
+    expect(people.items.find((person) => person.id === aliceId)).toMatchObject({
+      kind: "person",
+      handle: null,
+      title: null,
+      avatarParts: null,
+    });
+    expect(people.items.find((person) => person.id === aliceId)).not.toHaveProperty("invited");
+    expect(people.listed.map((listing) => listing.login)).toEqual([]);
+
+    // The board is told as it is of a login let in, with the handle, and of the project it starts in.
+    const events = await eventsOf(alice);
+    expect(events.find((event) => event.kind === "person.listed")?.data).toMatchObject({
+      login: "carol",
+      handle: "mira",
+    });
+
+    // Work is assigned to it before it has signed in.
+    const task = await send(alice, "POST", projectPath("ops", "tasks"), {
+      title: "Cut the release",
+      workerIds: [miraId],
+    });
+    expect(task.status).toBe(201);
+    expect(restTaskSchema.parse(await task.json()).workers.map((worker) => worker.handle)).toEqual([
+      "mira",
+    ]);
+  });
+
+  it("is bound to its provider's account at its first sign-in, its name and picture the console's", async () => {
+    const mira = await h.signIn("carol");
+    const me = await meOf(mira);
+    // The row an administrator made, known by the provider's account from now on; what the
+    // provider calls the account, `Carol`, is not written over the console's name.
+    expect(me).toMatchObject({
+      id: miraId,
+      login: "carol",
+      name: "Mira",
+      avatar: null,
+      kind: "agent",
+      handle: "mira",
+      role: "member",
+    });
+    expect(me).not.toHaveProperty("invited");
+    const people = restPeopleSchema.parse(await (await get(alice, REST_ROUTES.people)).json());
+    expect(people.items.filter((person) => person.login === "carol")).toHaveLength(1);
+    // The first sign-in is the joining.
+    const joined = (await eventsOf(alice)).filter((event) => event.kind === "person.joined");
+    expect(joined.map((event) => event.actor?.id)).toContain(miraId);
+    // It is in the project it started in, as a member, and sees it.
+    expect((await get(mira, projectPath("ops"))).status).toBe(200);
+    // A second sign-in changes nothing of what it is.
+    const again = await meOf(await h.signIn("carol"));
+    expect(again).toMatchObject({ id: miraId, name: "Mira", kind: "agent" });
+  });
+
+  it("is the same row when its domain lets it in, and never an administrator by the operator's naming", async () => {
+    const dave = await send(
+      alice,
+      "POST",
+      REST_ROUTES.agents,
+      account({ host: "google", login: "dave@acme.test", handle: "dex", name: "Dex" }),
+    );
+    expect(dave.status).toBe(201);
+    const dexId = restAgentSchema.parse(await dave.json()).person.id;
+    expect(await meOf(await h.signIn("dave"))).toMatchObject({
+      id: dexId,
+      kind: "agent",
+      name: "Dex",
+      // What let it in at its sign-in: the domain the operator names.
+      source: "domain",
+      email: "dave@acme.test",
+    });
+
+    const erin = await send(
+      alice,
+      "POST",
+      REST_ROUTES.agents,
+      account({ host: "google", login: "erin@mail.test", handle: "echo", name: "Echo" }),
+    );
+    expect(erin.status).toBe(201);
+    expect(await meOf(await h.signIn("erin"))).toMatchObject({
+      kind: "agent",
+      handle: "echo",
+      role: "member",
+    });
+  });
+
+  it("refuses a handle taken or reserved, a login that is one already, and a manager or a project that is none", async () => {
+    const post = (fields: Record<string, unknown>) =>
+      send(alice, "POST", REST_ROUTES.agents, account({ login: "zed", handle: "zed", ...fields }));
+    const taken = await post({ handle: "mira" });
+    expect(taken.status).toBe(409);
+    expect(await errorOf(taken)).toBe("agent.handle_taken");
+    for (const handle of ["new", "me", "proposals", "setup", "Mira", "a", "-a", "a_b"]) {
+      const refused = await post({ handle });
+      expect(refused.status, handle).toBe(400);
+      expect(await errorOf(refused)).toBe("request.invalid");
+    }
+    const exists = await post({ login: "Carol" });
+    expect(exists.status).toBe(409);
+    expect(await errorOf(exists)).toBe("agent.exists");
+    const noProject = await post({ project: "nowhere" });
+    expect(noProject.status).toBe(400);
+    expect(await errorOf(noProject)).toBe("agent.invalid_project");
+    const noManager = await post({ managerId: "0199c4d8-0000-7000-8000-00000000dead" });
+    expect(noManager.status).toBe(400);
+    expect(await errorOf(noManager)).toBe("agent.invalid_manager");
+    // A login as the host spells one, at a provider the deployment has.
+    const address = await post({ login: "zed@acme.test" });
+    expect(address.status).toBe(400);
+    const only = createHarness(testDatabase, {
+      providers: [createFixtureProvider("gh")],
+      admins: ["alice"],
+      listed: ["alice", "bob"],
+    });
+    const unknown = await only.request(REST_ROUTES.agents, {
+      method: "POST",
+      headers: { ...fromPages(await only.signIn("alice")), ...JSON_HEADERS },
+      body: JSON.stringify(account({ host: "google", login: "zed@acme.test", handle: "zed" })),
+    });
+    expect(unknown.status).toBe(400);
+    expect(await errorOf(unknown)).toBe("agent.unknown_host");
+  });
+
+  it("is what a member's login is made, once, unless they administer the workspace", async () => {
+    const own = await send(
+      alice,
+      "POST",
+      REST_ROUTES.agents,
+      account({ login: "alice", handle: "ally" }),
+    );
+    expect(own.status).toBe(409);
+    expect(await errorOf(own)).toBe("agent.administrator");
+
+    const made = await send(
+      alice,
+      "POST",
+      REST_ROUTES.agents,
+      account({ login: "bob", handle: "bolt", name: "Bolt" }),
+    );
+    expect(made.status).toBe(201);
+    const agent = restAgentSchema.parse(await made.json());
+    // The member's own row, with everything it did: it has signed in, so nobody is invited.
+    expect(agent.person).toMatchObject({
+      id: bobId,
+      kind: "agent",
+      handle: "bolt",
+      name: "Bolt",
+      managerId: aliceId,
+    });
+    expect(agent.person).not.toHaveProperty("invited");
+    const updated = (await eventsOf(alice)).filter((event) => event.kind === "person.updated");
+    expect(updated.at(-1)?.data).toMatchObject({ login: "bob", handle: "bolt", fields: ["kind"] });
+    // The session it holds is the account's still.
+    expect(await meOf(bob)).toMatchObject({ id: bobId, kind: "agent", handle: "bolt" });
+
+    const again = await send(
+      alice,
+      "POST",
+      REST_ROUTES.agents,
+      account({ login: "bob", handle: "bolt-2" }),
+    );
+    expect(again.status).toBe(409);
+    expect(await errorOf(again)).toBe("agent.exists");
+  });
+
+  it("is never an administrator and always has a manager, who may be an agent account", async () => {
+    const patch = (id: string, body: unknown) =>
+      send(alice, "PATCH", `${REST_ROUTES.people}/${id}`, body);
+    const admin = await patch(miraId, { role: "admin" });
+    expect(admin.status).toBe(409);
+    expect(await errorOf(admin)).toBe("person.agent_admin");
+    const nobody = await patch(miraId, { managerId: null });
+    expect(nobody.status).toBe(409);
+    expect(await errorOf(nobody)).toBe("person.manager_required");
+    // Replaced, by an administrator, with a person or another agent account; never in a loop.
+    const replaced = await patch(miraId, { managerId: bobId });
+    expect(replaced.status).toBe(200);
+    expect(restPersonSchema.parse(await replaced.json()).managerId).toBe(bobId);
+    const loop = await patch(bobId, { managerId: miraId });
+    expect(loop.status).toBe(409);
+    expect(await errorOf(loop)).toBe("person.invalid_manager");
+    // The rest of what a member is said to be holds for it as it is: taken out, and back in.
+    const out = await patch(miraId, { status: "deactivated" });
+    expect(restPersonSchema.parse(await out.json()).status).toBe("deactivated");
+    const back = await patch(miraId, { status: "active" });
+    expect(restPersonSchema.parse(await back.json())).toMatchObject({
+      status: "active",
+      kind: "agent",
+    });
+  });
+});

@@ -1,4 +1,5 @@
 import type {
+  RestAgent,
   RestCategory,
   RestComment,
   RestDecision,
@@ -24,6 +25,7 @@ import type {
 } from "@skillcdn/console/api";
 import type { SessionView } from "../auth/sessions.js";
 import { describeUserAgent } from "../auth/user-agent.js";
+import type { AgentRecord } from "../db/queries/agents.js";
 import type { CategoryRecord } from "../db/queries/categories.js";
 import type { CommentRecord } from "../db/queries/comments.js";
 import type { DecisionRecord } from "../db/queries/decisions.js";
@@ -36,7 +38,7 @@ import type {
 } from "../db/queries/documents.js";
 import type { EventRecord } from "../db/queries/events.js";
 import type { GoalRecord } from "../db/queries/goals.js";
-import type { ListingRecord, PersonRecord } from "../db/queries/people.js";
+import { isInvited, type ListingRecord, type PersonRecord } from "../db/queries/people.js";
 import type { MemberRecord, ProjectView } from "../db/queries/projects.js";
 import type { RulesRecord } from "../db/queries/rules.js";
 import type { RunRecord } from "../db/queries/runs.js";
@@ -60,6 +62,20 @@ export function restPerson(person: PersonRecord): RestPerson {
     deactivatedAt: person.deactivatedAt?.toISOString() ?? null,
     managerId: person.managerId ?? null,
     language: person.language ?? null,
+    kind: person.kind,
+    handle: person.handle ?? null,
+    title: person.title ?? null,
+    avatarParts: person.avatarParts ?? null,
+    // Said only of an agent account nobody has signed in with yet (ADR-0084).
+    ...(isInvited(person) ? { invited: true } : {}),
+  };
+}
+
+/** An agent account (ADR-0084): the member it is, and whom it reports to, where the asker may see them. */
+export function restAgent(agent: AgentRecord): RestAgent {
+  return {
+    person: restPerson(agent.person),
+    manager: agent.manager === undefined ? null : restPerson(agent.manager),
   };
 }
 

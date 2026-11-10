@@ -41,7 +41,16 @@ export const REST_ROUTES = {
   rules: "/api/v1/rules",
   /** The plugins (ADR-0049): the ones a member may know of, and under each key the plugin's own routes. */
   plugins: "/api/v1/plugins",
+  /** The agent accounts (ADR-0084): members of their own, made by an administrator; each under its handle. */
+  agents: "/api/v1/agents",
 } as const;
+
+/** The REST path of one agent account, by its handle, and of what is under it. */
+export function agentPath(handle: string, ...parts: readonly string[]): string {
+  return [REST_ROUTES.agents, encodeURIComponent(handle), ...parts.map(encodeURIComponent)].join(
+    "/",
+  );
+}
 
 /** The REST path of one plugin, by its key, and of what is under it. */
 export function pluginPath(key: string, ...parts: readonly string[]): string {
