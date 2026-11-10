@@ -1076,6 +1076,25 @@ export async function syncOrganization(
   });
 }
 
+/** The administrators of the workspace who are in, by login: whom anyone may turn to. */
+export async function listAdministrators(
+  database: Database,
+  workspaceId: string,
+): Promise<PersonRecord[]> {
+  const rows = await drizzleOf(database)
+    .select(personColumns(people))
+    .from(people)
+    .where(
+      and(
+        eq(people.workspaceId, workspaceId),
+        eq(people.role, "admin"),
+        eq(people.status, "active"),
+      ),
+    )
+    .orderBy(asc(sql`lower(${people.login})`), asc(people.id));
+  return rows.map(toPerson);
+}
+
 /** The person's own front page (ADR-0061), or nothing while they have arranged nothing. */
 export async function homeOf(database: Database, personId: string): Promise<RestHome | undefined> {
   const [row] = await drizzleOf(database)
@@ -1131,6 +1150,8 @@ export interface PeopleQuery {
   readonly visible: SQL;
   /** One person, by their exact login, compared without regard to case. */
   readonly login?: string | undefined;
+  /** One agent account, by its handle (ADR-0084): what the command takes as `@mira` wherever it takes a login. */
+  readonly handle?: string | undefined;
 }
 
 /** The people of the workspace the asker may see, those in first, by login. */
@@ -1147,6 +1168,7 @@ export async function listPeople(
         eq(people.workspaceId, workspaceId),
         query.visible,
         query.login === undefined ? undefined : sql`lower(${people.login}) = lower(${query.login})`,
+        query.handle === undefined ? undefined : eq(people.handle, query.handle),
       ),
     )
     .orderBy(asc(people.status), asc(sql`lower(${people.login})`), asc(people.id));

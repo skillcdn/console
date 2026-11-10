@@ -410,11 +410,13 @@ function Ground(props: { readonly children: React.ReactNode }) {
 }
 
 /**
- * Whether the console holds a token rather than a session: a person's own console, served from
- * their machine with the token the command keeps (ADR-0014). The API says so with `me.agent`.
+ * Whether the console holds a token rather than a browser's session: a person's own console,
+ * served from their machine with what the command keeps (ADR-0014), a token or the command's own
+ * session (ADR-0084), which is held to what a token may ask. The API says so with `me.agent`,
+ * and with `me.session`.
  */
 function holdsToken(data: ConsoleData): boolean {
-  return data.me !== undefined && data.me.agent !== null;
+  return data.me !== undefined && (data.me.agent !== null || data.me.session?.kind === "command");
 }
 
 /**

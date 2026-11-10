@@ -1521,11 +1521,12 @@ export const en = {
     list: "Your sessions",
     loading: "Loading the sessions",
     intro:
-      "The browsers signed in to your account. Sign out of any you do not recognize or no longer use.",
+      "The browsers signed in to your account, and any command signed in as you. Sign out of any you do not recognize or no longer use.",
     introIdle: (days: string) =>
-      `The browsers signed in to your account. Sign out of any you do not recognize or no longer use. A session not used for ${days} days ends on its own.`,
+      `The browsers signed in to your account, and any command signed in as you. Sign out of any you do not recognize or no longer use. A session not used for ${days} days ends on its own.`,
     current: "Current session",
     on: (browser: string, platform: string) => `${browser} on ${platform}`,
+    command: (name: string) => `The console command: ${name}`.replace(/: $/, ""),
     unknownBrowser: "Unknown browser",
     lastActive: "Last active",
     signedIn: "Signed in",
@@ -1558,6 +1559,17 @@ export const en = {
     },
     approve: "Approve",
     notMine: "Not mine",
+    asSelf: {
+      title: "A command asks to sign in as you",
+      means:
+        "Approved, that command is you on its machine: it holds a session of your own, kept while it is used and ended when left unused, and does what a token may. You see it, and end it, among your sessions.",
+      approve: "This is me",
+      approved: {
+        title: (name: string) => `"${name}" is signed in as you`,
+        body: "The command gets its session on its own; there is nothing to copy. You can close this page, or see where you are signed in on your Sessions page.",
+        sessionsPage: "Sessions page",
+      },
+    },
     approved: {
       title: (agent: string) => `"${agent}" is connected as you`,
       body: "The agent gets its token on its own; there is nothing to copy. You can close this page, or see what is connected on your Agents page.",

@@ -113,11 +113,11 @@ const TASK_FIELD_REFUSALS = [
 
 export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   login: {
-    usage: "login --url <origin> [--agent <name>] [--token-stdin] [--default]",
+    usage: "login --url <origin> [--agent <name>] [--self] [--token-stdin] [--default]",
     synopsis:
       "Connects this agent to the console with a code a person approves; keeps the token, never shows it.",
     about:
-      "Connects this agent to the console: shows an address and a code, which a person opens signed in, names the agent and approves; the command then receives a token of its own and keeps it, with the console's address and the account, in your home directory, never showing it. One login per console and account: a second console adds a login beside the first, the first is the default console a directory that names none works at, and --default makes this one that. A login repeated for the same console and account replaces its token, which is given up at the console. An agent running the command relays the address and the code to its person and waits. --agent says what the agent calls itself; left out, the command names the agent it runs under where its environment says so (Claude Code, Codex), else An agent; the machine's name follows, and the pages show the name before 'on' with the whole on hover. --token-stdin takes a token made by hand instead, typed unseen at the terminal, or from standard input for a script or a job; never an argument, which a shell would keep.",
+      "Connects this agent to the console: shows an address and a code, which a person opens signed in, names the agent and approves; the command then receives a token of its own and keeps it, with the console's address and the account, in your home directory, never showing it. One login per console and account: a second console adds a login beside the first, the first is the default console a directory that names none works at, and --default makes this one that. A login repeated for the same console and account replaces its token, which is given up at the console. An agent running the command relays the address and the code to its person and waits. --agent says what the agent calls itself; left out, the command names the agent it runs under where its environment says so (Claude Code, Codex), else An agent; the machine's name follows, and the pages show the name before 'on' with the whole on hover. --token-stdin takes a token made by hand instead, typed unseen at the terminal, or from standard input for a script or a job; never an argument, which a shell would keep. --self signs the command in as the account itself (ADR-0084), which is how an agent account's own command signs in: the page asks whoever is signed in there whether the command is them, and what the command then holds is a session of its own in place of a token, kept for as long as it is used and ended when left unused as a browser's session is, so that an agent at work has nothing to renew. What is done with it is done by the account, with no agent named beside it; it does what a token may, and is seen and ended among the account's sessions. console logout gives it up.",
     refusals: [
       "connect.not_found: the code was not approved in time, or the person said it was not theirs; run login again",
       "the console does not know the token given: make one on the Agents page and try again",
@@ -229,6 +229,12 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     synopsis: "The people you see, by login, with what each is in the workspace.",
     about:
       "The people of the workspace you see, by login, with their name where the host gives one and what they are in it: admin, who configures the workspace, or member, who works in the projects they are in; a person taken out is marked deactivated. Everyone, unless the workspace shows a member only the people they share a project with (console workspace says which; an administrator sees everyone). Then, where you see everyone, the logins an administrator let in that nobody has signed in with yet. The logins are what --worker, member and person take; a login is found exactly, so an owner lists someone the list does not show.",
+  },
+  manager: {
+    usage: "manager",
+    synopsis: "Whom you report to, and the administrators where there is nobody.",
+    about:
+      "Whom you report to in the reporting line of the directory (ADR-0084), a person or an agent account, for a person as for an agent account: whom to turn to first where you do not know whom to ask, and who is answerable for an agent account. Where you report to nobody, or your manager is out, the administrators are named, who stand in. A manager is no rule of the board: a decision is addressed to whomever can decide it (console ask --to <login>), and to nobody in particular where anyone of the project may.",
   },
   agents: {
     usage: "agents",
@@ -788,6 +794,7 @@ const SECTIONS: readonly { readonly title: string; readonly commands: readonly s
       "workspace",
       "people",
       "person",
+      "manager",
       "agents",
       "agent",
       "teams",

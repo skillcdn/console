@@ -250,7 +250,7 @@ import {
   TeamError,
   teamKeysByPerson,
 } from "../db/queries/teams.js";
-import { TokenError, type TokenRecord } from "../db/queries/tokens.js";
+import { TokenError } from "../db/queries/tokens.js";
 import {
   membersSyncedAt,
   readWorkspacePackToken,
@@ -269,7 +269,9 @@ import type { Skills } from "../skills.js";
 import { errorBody } from "./app.js";
 import {
   type Access,
+  type AccessCaller,
   administratorRequired,
+  clientOf,
   foreignOrigin,
   sessionRequired,
   signInRequired,
@@ -505,11 +507,8 @@ interface ParseResult<T> {
   };
 }
 
-/** Who is asking, and with what: the token when one is presented. */
-interface Caller {
-  readonly person: PersonRecord;
-  readonly token: TokenRecord | undefined;
-}
+/** Who is asking, and with what: the token when one is presented, the command's session when the command is signed in as the account itself. */
+type Caller = AccessCaller;
 
 /** Who is asking, in which project, and what they are in it. */
 interface InProject extends Caller {
@@ -1205,8 +1204,16 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
             await ownsAProject(database, person.workspaceId, person.id),
           );
     const whole = login === undefined && readsListings(person, settings);
+    // An agent account is called by its handle too (ADR-0084): `@mira`, wherever a login is taken.
+    const named = login?.trim();
     const [items, listed, syncedAt] = await Promise.all([
-      listPeople(database, person.workspaceId, { visible, login: login?.trim() }),
+      listPeople(
+        database,
+        person.workspaceId,
+        named?.startsWith("@") === true
+          ? { visible, handle: named.slice(1).toLowerCase() }
+          : { visible, login: named },
+      ),
       whole ? listListings(database, person.workspaceId) : [],
       whole && organization !== undefined
         ? membersSyncedAt(database, person.workspaceId)
@@ -2081,11 +2088,27 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
   });
 
   // A token gives itself up: what `console logout` does, so that a token forgotten on a machine
-  // does not outlive it. The one thing a token does about the tokens; a session has none to give.
+  // does not outlive it. The one thing a token does about the tokens; a browser's session has
+  // none to give. A command signed in as the account itself gives its session up the same way
+  // (ADR-0084): what it holds is good for nothing from then on.
   app.delete(REST_ROUTES.meToken, async (c) => {
     const caller = await askingCaller(c);
     if (caller instanceof Response) {
       return caller;
+    }
+    if (caller.command !== undefined) {
+      if (sessions === undefined || !(await sessions.endCommand(caller.command))) {
+        return notFound(c, "session.not_found", "The session was not found.");
+      }
+      logger.info(
+        {
+          person: caller.person.id,
+          sessionId: caller.command.id,
+          requestId: c.get("requestId"),
+        },
+        "a command's session given up",
+      );
+      return c.body(null, 204);
     }
     if (caller.token === undefined) {
       return invalid(
@@ -2232,6 +2255,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     createdAt: request.createdAt.toISOString(),
     expiresAt: request.expiresAt.toISOString(),
     approved: request.approvedAt !== undefined,
+    as: request.as,
   });
   /** The code in the path, as it is written, or nothing for text that is not one. */
   const codeOf = (c: Context<AppEnv>): string | undefined =>
@@ -2246,7 +2270,7 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       return input;
     }
     try {
-      const begun = await connections.begin(input.agent, c.get("clientAddress"));
+      const begun = await connections.begin(input.agent, c.get("clientAddress"), input.as);
       // The code is what a person approves: a credential for its half hour, kept out of the log.
       logger.info({ requestId: c.get("requestId") }, "an agent asked to connect");
       const body: RestConnection = {
@@ -2271,13 +2295,22 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       return input;
     }
     try {
-      const claim = await connections.claim(input.secret);
+      const claim = await connections.claim(input.secret, clientOf(c));
       if (claim === undefined) {
         return noSuchConnection(c);
       }
       if (claim.status === "pending") {
         const body: RestClaim = { status: "pending", expiresAt: claim.expiresAt.toISOString() };
         return c.json(body, 202);
+      }
+      if (claim.status === "signed_in") {
+        // The command is signed in as the account itself (ADR-0084): its session, this once.
+        const body: RestClaim = {
+          status: "signed_in",
+          session: restSession(claim.session),
+          secret: claim.secret,
+        };
+        return c.json(body);
       }
       const body: RestClaim = {
         status: "connected",
@@ -2305,15 +2338,29 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     if (person instanceof Response) {
       return person;
     }
-    const input = await bodyOf(c, restTokenInputSchema);
-    if (input instanceof Response) {
-      return input;
-    }
     const code = codeOf(c);
     if (code === undefined || connections === undefined || tokens === undefined) {
       return noSuchConnection(c);
     }
     try {
+      // A connection that asks to be the account itself (ADR-0084) takes no name and no days:
+      // whoever approves says "this is me", and the command holds a session, called what the
+      // command called itself and kept while it is used.
+      const asked = await connections.look(code);
+      if (asked === undefined) {
+        return noSuchConnection(c);
+      }
+      if (asked.as === "self") {
+        const approved = await connections.approve(code, person, {
+          name: asked.agent,
+          days: undefined,
+        });
+        return approved === undefined ? noSuchConnection(c) : c.json(restConnectRequest(approved));
+      }
+      const input = await bodyOf(c, restTokenInputSchema);
+      if (input instanceof Response) {
+        return input;
+      }
       const approved = await connections.approve(code, person, {
         name: input.name,
         days: tokens.daysOf(input.expiresInDays),
@@ -3000,8 +3047,9 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         actor: found.actor,
         tokenId: token?.id,
         taskId: input.taskId,
-        // What people see at work: what the agent says it is, else what its person called the token.
-        agent: input.agent ?? token?.name ?? person.login,
+        // What people see at work: what the agent says it is, else what its person called the
+        // token, else what the command signed in as the account called itself.
+        agent: input.agent ?? token?.name ?? found.command?.name ?? person.login,
         now: clock.now(),
       });
       logger.info(

@@ -77,6 +77,7 @@ import {
   RULES_SOURCES,
   RUN_ENDINGS,
   RUN_STATUSES,
+  SESSION_KINDS,
   SKILLS_STATUSES,
   TASK_PRIORITIES,
   TASK_STATES,
@@ -461,6 +462,15 @@ export const restMeSchema = z.object({
    * person's own knows it holds one. `null` on a session, and for nobody.
    */
   agent: z.nullable(z.string()),
+  /**
+   * The session asking, when a session asks (ADR-0084): a browser's, or the command's, signed in
+   * as the account itself, with what it called itself. A console served through the command is
+   * told a command's session by it, as it is told a token by `agent`, and offers nothing either
+   * cannot do. `null` on a token, and for nobody. Answered from 0.4.8 and read as optional.
+   */
+  session: z.optional(
+    z.nullable(z.object({ kind: z.enum(SESSION_KINDS), name: z.nullable(z.string()) })),
+  ),
   /** The language the person reads in (ADR-0065): the one they chose, else the one the pages first saw them in; `null` until then. */
   language: z.nullable(languageTag),
   /**
@@ -548,6 +558,18 @@ const handle = z.string().check(
   z.refine(isHandle, "must be 2 to 39 lowercase letters, digits and hyphens"),
   z.refine((value) => !RESERVED_HANDLES.includes(value), "is a word the addresses use"),
 );
+
+/**
+ * `GET /api/v1/me/manager`: whom whoever asks reports to, a person or an agent account, `null`
+ * for nobody; and the administrators of the workspace, who stand in where there is nobody, or
+ * the manager is out (ADR-0084). A manager is whom a member turns to first, not a rule of the
+ * board: a decision is addressed to whomever the asker names.
+ */
+export const restManagerSchema = z.object({
+  manager: z.nullable(restPersonSchema),
+  administrators: z.array(restPersonSchema),
+});
+export type RestManager = z.infer<typeof restManagerSchema>;
 
 /** What an avatar's parts were rolled from: a short text of letters, digits, hyphens and underscores. */
 const avatarSeed = z.string().check(z.minLength(1), z.maxLength(64), z.regex(/^[A-Za-z0-9_-]+$/));
@@ -1461,6 +1483,13 @@ export const restSessionSchema = z.object({
   platform: z.nullable(z.string()),
   /** Where the browser last came from, as the server saw it, or `null` until seen. */
   address: z.nullable(z.string()),
+  /**
+   * What holds the session (ADR-0084): a browser, or the command signed in as the account
+   * itself. Answered from 0.4.8 and read as optional; a browser's then.
+   */
+  kind: z.optional(z.enum(SESSION_KINDS)),
+  /** For the command's: what it called itself when it signed in, and where it runs; `null` for a browser's. Optional as above. */
+  name: z.optional(z.nullable(z.string())),
 });
 export type RestSession = z.infer<typeof restSessionSchema>;
 

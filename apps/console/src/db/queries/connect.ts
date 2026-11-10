@@ -1,3 +1,4 @@
+import type { ConnectAs } from "@skillcdn/console/api";
 import { and, asc, count, eq, gt, inArray, isNull, lte } from "drizzle-orm";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf } from "../client.js";
@@ -13,6 +14,8 @@ export interface ConnectRequestRecord {
   readonly code: string;
   /** What the agent calls itself, and where it runs, as the command said. */
   readonly agent: string;
+  /** What it asks to be (ADR-0084): an agent of the approver's, with a token; or the approver themselves, with a session of the command's. */
+  readonly as: ConnectAs;
   /** The address the request came from, as the trusted proxies resolve it; nothing when the console could not tell. */
   readonly clientAddress: string | undefined;
   /** The person who approved, once one did. */
@@ -45,6 +48,7 @@ const columns = {
   workspaceId: connectRequests.workspaceId,
   code: connectRequests.code,
   agent: connectRequests.agent,
+  as: connectRequests.as,
   clientAddress: connectRequests.clientAddress,
   approvedById: connectRequests.approvedById,
   name: connectRequests.name,
@@ -59,6 +63,7 @@ interface Row {
   readonly workspaceId: string;
   readonly code: string;
   readonly agent: string;
+  readonly as: string;
   readonly clientAddress: string | null;
   readonly approvedById: string | null;
   readonly name: string | null;
@@ -73,6 +78,7 @@ const toRecord = (row: Row): ConnectRequestRecord => ({
   workspaceId: row.workspaceId,
   code: row.code,
   agent: row.agent,
+  as: row.as === "self" ? "self" : "agent",
   clientAddress: row.clientAddress ?? undefined,
   approvedById: row.approvedById ?? undefined,
   name: row.name ?? undefined,
@@ -100,6 +106,8 @@ export async function createConnectRequest(
     readonly code: string;
     readonly secretHash: string;
     readonly agent: string;
+    /** What it asks to be; an agent of the approver's when left out. */
+    readonly as?: ConnectAs | undefined;
     /** The address the request came from; nothing when the console could not tell, which bounds it by the workspace alone. */
     readonly clientAddress: string | undefined;
     readonly expiresAt: Date;
@@ -169,6 +177,7 @@ export async function createConnectRequest(
         code: request.code,
         secretHash: request.secretHash,
         agent: request.agent,
+        as: request.as ?? "agent",
         clientAddress: request.clientAddress ?? null,
         expiresAt: request.expiresAt,
         createdAt: request.now,
@@ -271,6 +280,8 @@ export type Claim =
       readonly personId: string;
       readonly name: string;
       readonly tokenDays: number | undefined;
+      /** What the request asked to be: what the claim hands over, a token or a session. */
+      readonly as: ConnectAs;
     };
 
 /**
@@ -300,6 +311,7 @@ export async function claimConnectRequest(
       personId: found.approvedById,
       name: found.name,
       tokenDays: found.tokenDays ?? undefined,
+      as: found.as === "self" ? "self" : "agent",
     };
   });
 }

@@ -724,6 +724,8 @@ async function keep(
   token: string,
   agent: string | undefined,
   asDefault: boolean,
+  /** Whether what is kept is the command's own session, signed in as the account itself (ADR-0084). */
+  self = false,
 ): Promise<number> {
   const me = await clientOf(io, url, token).me();
   const person = me.person;
@@ -747,6 +749,7 @@ async function keep(
       token,
       agent,
       since: new Date(io.now()).toISOString(),
+      ...(self ? { self: true } : {}),
       timeZone: me.workspace.timeZone ?? undefined,
     },
     { default: asDefault },
@@ -754,7 +757,9 @@ async function keep(
   const kept = await io.store.save(next);
   const standing = next.default === url ? ", the default console here" : "";
   io.stdout(
-    `${agent === undefined ? "Signed in" : `Connected as "${agent}"`} to ${me.workspace.name} at ${url} as ${person.login} (${person.role})${standing}. The token is kept in ${kept}.\nNext, say which project this directory works in: console use <key> (console projects lists them).\n`,
+    self
+      ? `Signed in to ${me.workspace.name} at ${url} as ${person.login} (${person.role}), the account itself${standing}: what this command does, ${person.login} does, and no agent is named beside it. The session is kept while it is used; its secret is kept in ${kept}.\nNext, say which project this directory works in: console use <key> (console projects lists them).\n`
+      : `${agent === undefined ? "Signed in" : `Connected as "${agent}"`} to ${me.workspace.name} at ${url} as ${person.login} (${person.role})${standing}. The token is kept in ${kept}.\nNext, say which project this directory works in: console use <key> (console projects lists them).\n`,
   );
   return EXIT.ok;
 }
@@ -762,7 +767,12 @@ async function keep(
 const login: Command = async (args, io) => {
   const { values } = parse(
     args,
-    { "token-stdin": { type: "boolean" }, agent: { type: "string" }, default: { type: "boolean" } },
+    {
+      "token-stdin": { type: "boolean" },
+      agent: { type: "string" },
+      self: { type: "boolean" },
+      default: { type: "boolean" },
+    },
     false,
   );
   const credentials = await loadCredentials(io);
@@ -784,11 +794,17 @@ const login: Command = async (args, io) => {
   const client = clientOf(io, url);
   // "<agent> on <machine>": the pages say the agent and keep the machine for a hover.
   const agent = text(values, "agent") ?? agentOf(io.env) ?? "An agent";
+  // With --self the command asks to be the account itself (ADR-0084): whoever approves says
+  // "this is me", and what is handed over is a session of the command's, in place of a token.
+  const self = on(values, "self");
   const begun = await client.connect({
     agent: io.hostname === undefined ? agent : `${agent} on ${io.hostname}`,
+    ...(self ? { as: "self" as const } : {}),
   });
   io.stdout(
-    `To connect this agent, a person opens ${begun.url} signed in, checks that the page shows the code ${begun.code}, names the agent and approves.\nWaiting for that, until ${begun.expiresAt}.\n`,
+    self
+      ? `To sign this command in as an account itself, open ${begun.url} signed in as that account, check that the page shows the code ${begun.code}, and say that it is you.\nWaiting for that, until ${begun.expiresAt}.\n`
+      : `To connect this agent, a person opens ${begun.url} signed in, checks that the page shows the code ${begun.code}, names the agent and approves.\nWaiting for that, until ${begun.expiresAt}.\n`,
   );
   for (;;) {
     await io.sleep(begun.interval * 1000);
@@ -805,6 +821,9 @@ const login: Command = async (args, io) => {
     }
     if (claim.status === "connected") {
       return keep(io, url, claim.secret, claim.token.name, asDefault);
+    }
+    if (claim.status === "signed_in") {
+      return keep(io, url, claim.secret, undefined, asDefault, true);
     }
   }
 };
@@ -895,6 +914,8 @@ const logins: Command = async (args, io) => {
     url: login.url,
     account: login.account ?? null,
     agent: login.agent ?? null,
+    // The command's own session, signed in as the account itself (ADR-0084), where so.
+    self: login.self === true,
     since: login.since ?? null,
     default: credentials?.default === login.url,
   }));
@@ -912,7 +933,7 @@ const logins: Command = async (args, io) => {
     `${kept
       .map(
         (login) =>
-          `${login.url}  ${login.account ?? "(account unknown)"}${login.agent === null ? "" : `  ${login.agent}`}${login.since === null ? "" : `  since ${login.since.slice(0, 10)}`}${login.default ? "  (default)" : ""}`,
+          `${login.url}  ${login.account ?? "(account unknown)"}${login.agent === null ? "" : `  ${login.agent}`}${login.self ? "  as the account itself" : ""}${login.since === null ? "" : `  since ${login.since.slice(0, 10)}`}${login.default ? "  (default)" : ""}`,
       )
       .join("\n")}\n`,
   );
@@ -984,7 +1005,7 @@ const whoami: Command = async (args, io) => {
     },
     () =>
       [
-        `${person.login} (${person.role}) at ${me.workspace.name}, ${session.url}${key === undefined ? "; no project named here" : `; project ${key}`}`,
+        `${person.login} (${person.role}) at ${me.workspace.name}, ${session.url}${key === undefined ? "; no project named here" : `; project ${key}`}${me.session?.kind === "command" ? "; signed in as the account itself" : ""}`,
         // The pack's rules send an agent here first; from here the rules and the skill are the next steps.
         ...(key === undefined
           ? []
@@ -3377,6 +3398,33 @@ const people: Command = async (args, io) => {
   return EXIT.ok;
 };
 
+// Whom whoever asks reports to (ADR-0084), for a person as for an agent account: whom to turn to
+// first where one does not know whom to ask, and the administrators where there is nobody.
+const manager: Command = async (args, io) => {
+  const { values } = parse(args, {}, false);
+  const session = await open(io, values);
+  const found = await session.client.manager();
+  answer(io, session, found, () => {
+    const lines: string[] = [];
+    if (found.manager === null) {
+      lines.push("You report to nobody.");
+    } else {
+      lines.push(`You report to: ${formatPersonLine(found.manager)}`);
+    }
+    // The administrators stand in where there is no manager, or the manager is out.
+    if (found.manager === null || found.manager.status !== "active") {
+      lines.push(
+        found.administrators.length === 0
+          ? "No administrator is in."
+          : "The administrators, who stand in:",
+        ...found.administrators.map((person) => `  ${formatPersonLine(person)}`),
+      );
+    }
+    return lines.join("\n");
+  });
+  return EXIT.ok;
+};
+
 /** A handle as the command takes one: with the `@` people call it by, or without. */
 const handleOf = (word: string): string => (word.startsWith("@") ? word.slice(1) : word);
 
@@ -4091,6 +4139,7 @@ const COMMANDS: Readonly<Record<string, Command>> = {
   plugin,
   people,
   person,
+  manager,
   agents,
   agent,
   teams,

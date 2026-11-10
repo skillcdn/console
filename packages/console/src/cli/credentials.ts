@@ -23,6 +23,11 @@ export interface Login {
   /** When the command was signed in, when known. */
   readonly since: string | undefined;
   /**
+   * Whether what is kept is a session of the command's own, signed in as the account itself
+   * (ADR-0084), where it is otherwise a token a person made for an agent.
+   */
+  readonly self?: boolean | undefined;
+  /**
    * The workspace's time zone as the console last said it, at login or whoami (ADR-0035): what
    * the command prints moments in, without asking again; none when the workspace names none.
    */
@@ -76,6 +81,7 @@ const loginSchema = z.object({
   token: z.string().check(z.minLength(1), z.maxLength(1024)),
   agent: z.optional(z.string().check(z.maxLength(200))),
   since: z.optional(z.string().check(z.maxLength(40))),
+  self: z.optional(z.boolean()),
   timeZone: z.optional(z.string().check(z.minLength(1), z.maxLength(64))),
 });
 const fileSchema = z.object({
@@ -101,6 +107,7 @@ export function parseCredentials(json: unknown): Credentials | undefined {
         token: login.token,
         agent: login.agent,
         since: login.since,
+        ...(login.self === true ? { self: true } : {}),
         ...(login.timeZone === undefined ? {} : { timeZone: login.timeZone }),
       })),
     };

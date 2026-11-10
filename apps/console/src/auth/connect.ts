@@ -1,5 +1,5 @@
 import { randomInt } from "node:crypto";
-import { CONNECT_CODE_ALPHABET, CONNECT_CODE_LENGTH } from "@skillcdn/console/api";
+import { CONNECT_CODE_ALPHABET, CONNECT_CODE_LENGTH, type ConnectAs } from "@skillcdn/console/api";
 import type { Database } from "../db/client.js";
 import {
   approveConnectRequest,
@@ -14,12 +14,15 @@ import type { TokenRecord } from "../db/queries/tokens.js";
 import type { Logger } from "../logger.js";
 import type { Clock } from "../ports/clock.js";
 import { hashToken, newToken } from "./secrets.js";
+import type { SessionClient, Sessions, SessionView } from "./sessions.js";
 import type { Tokens } from "./tokens.js";
 
 // Connecting an agent without a token to copy (ADR-0011): the command asks as nobody and gets
 // a code for a person and a secret for itself; the person approves on the console's own pages;
 // the command claims the token with its secret, and the token is made then and handed over
-// once. The database holds the hash of the secret and never a token.
+// once. The database holds the hash of the secret and never a token. A connection that asks to
+// be the account itself (ADR-0084) goes the same way, and what its claim hands over is a session
+// of the command's in place of a token: whoever approves says "this is me".
 
 /** What the command's secret begins with, so that whoever finds one knows what it found. */
 export const CONNECT_SECRET_PREFIX = "cns_c_";
@@ -61,16 +64,19 @@ export interface Connection {
   readonly interval: number;
 }
 
-/** What the command is answered when it claims: wait, or the token this once. */
+/** What the command is answered when it claims: wait, the token this once, or the command's session this once. */
 export type ClaimAnswer =
   | { readonly status: "pending"; readonly expiresAt: Date }
-  | { readonly status: "connected"; readonly token: TokenRecord; readonly secret: string };
+  | { readonly status: "connected"; readonly token: TokenRecord; readonly secret: string }
+  | { readonly status: "signed_in"; readonly session: SessionView; readonly secret: string };
 
 export interface ConnectionsOptions {
   readonly database: Database;
   readonly clock: Clock;
   readonly logger: Logger;
   readonly tokens: Tokens;
+  /** Where a connection that asked to be the account itself is signed in. */
+  readonly sessions: Sessions;
   readonly workspaceId: () => Promise<string>;
   /** The console's own page for a code: what the command shows and a person opens. */
   readonly pageFor: (code: string) => string;
@@ -85,9 +91,14 @@ export class Connections {
 
   /**
    * Begins a connection for an agent that says what it calls itself and where it runs, from
-   * the address the request came from, or from nowhere the console could tell.
+   * the address the request came from, or from nowhere the console could tell; and what it asks
+   * to be, an agent of whoever approves it unless it says the account itself.
    */
-  async begin(agent: string, clientAddress: string | undefined): Promise<Connection> {
+  async begin(
+    agent: string,
+    clientAddress: string | undefined,
+    as: ConnectAs = "agent",
+  ): Promise<Connection> {
     const { database, clock, pageFor } = this.#options;
     const now = clock.now();
     const expiresAt = new Date(now.getTime() + REQUEST_TTL_MS);
@@ -102,6 +113,7 @@ export class Connections {
           code,
           secretHash: hashToken(secret),
           agent,
+          as,
           clientAddress,
           expiresAt,
           now,
@@ -163,13 +175,15 @@ export class Connections {
 
   /**
    * What the command gets for its secret: wait while nobody approved; the token this once, made
-   * now for the approver as any token is; nothing for a secret no live request has.
+   * now for the approver as any token is; for a connection that asked to be the account itself,
+   * a session of the command's, begun now from where the claim comes; nothing for a secret no
+   * live request has.
    */
-  async claim(secret: string): Promise<ClaimAnswer | undefined> {
+  async claim(secret: string, client: SessionClient): Promise<ClaimAnswer | undefined> {
     if (!secret.startsWith(CONNECT_SECRET_PREFIX)) {
       return undefined;
     }
-    const { database, clock, logger, tokens } = this.#options;
+    const { database, clock, logger, tokens, sessions } = this.#options;
     const claim = await claimConnectRequest(database, hashToken(secret), clock.now());
     if (claim === undefined || claim.status === "pending") {
       return claim;
@@ -177,6 +191,14 @@ export class Connections {
     const person = await findPerson(database, await this.#options.workspaceId(), claim.personId);
     if (person === undefined) {
       return undefined;
+    }
+    if (claim.as === "self") {
+      const signedIn = await sessions.startCommand(person, claim.name, client);
+      logger.info(
+        { person: person.id, sessionId: signedIn.session.id },
+        "a command signed in as its account",
+      );
+      return { status: "signed_in", session: signedIn.session, secret: signedIn.secret };
     }
     const made = await tokens.issue(person, {
       name: claim.name,

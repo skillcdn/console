@@ -201,6 +201,7 @@ export function createApi(
         clock,
         logger,
         tokens,
+        sessions,
         workspaceId: async () => (await workspace()).id,
         // The page of the default UI for a code (ADR-0010); a custom console serves it where it likes.
         pageFor: (code) => `${origin}/connect/${code}`,

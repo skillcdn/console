@@ -47,6 +47,7 @@ import {
   type RestGoals,
   type RestListing,
   type RestListingInput,
+  type RestManager,
   type RestMe,
   type RestMember,
   type RestMemberInput,
@@ -134,6 +135,7 @@ import {
   restGoalSchema,
   restGoalsSchema,
   restListingSchema,
+  restManagerSchema,
   restMemberSchema,
   restMembersSchema,
   restMeSchema,
@@ -609,6 +611,12 @@ export interface ConsoleClient {
   findPerson(login: string, signal?: AbortSignal): Promise<RestPerson | undefined>;
   /** Changes what a person is, or whether they are in; for an administrator. */
   updatePerson(id: string, patch: RestPersonPatch): Promise<RestPerson>;
+  /** Whom whoever asks reports to, and the administrators, who stand in where there is nobody (ADR-0084). */
+  manager(signal?: AbortSignal): Promise<RestManager>;
+  /** Where an agent account is signed in, its browsers and its command; for a supervisor, on the console's own pages. */
+  agentSignIns(handle: string, signal?: AbortSignal): Promise<RestSessions>;
+  /** Ends one of an agent account's sessions; for a supervisor, on the console's own pages. */
+  endAgentSignIn(handle: string, sessionId: string): Promise<void>;
   /** Lets a login in (ADR-0022): whoever signs in with that account becomes a person; for an administrator. */
   createListing(input: RestListingInput): Promise<RestListing>;
   /** The agent accounts the asker may see, and the ones they supervise (ADR-0084), by handle. */
@@ -1362,6 +1370,18 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
       request("DELETE", `${base}${REST_ROUTES.workspacePackToken}/connect`, undefined, undefined),
     updatePerson: (id, patch) =>
       request("PATCH", `${base}${restPath("people", id)}`, patch, restPersonSchema),
+    manager: (signal) =>
+      request("GET", `${base}${REST_ROUTES.meManager}`, undefined, restManagerSchema, signal),
+    agentSignIns: (handle, signal) =>
+      request(
+        "GET",
+        `${base}${agentPath(handle, "sign-ins")}`,
+        undefined,
+        restSessionsSchema,
+        signal,
+      ),
+    endAgentSignIn: (handle, sessionId) =>
+      request("DELETE", `${base}${agentPath(handle, "sign-ins", sessionId)}`, undefined, undefined),
     createListing: (input) =>
       request("POST", `${base}${REST_ROUTES.listings}`, input, restListingSchema),
     agents: (signal) =>

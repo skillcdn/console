@@ -95,6 +95,15 @@ export const PERSON_KINDS = ["person", "agent"] as const;
 export type PersonKind = (typeof PERSON_KINDS)[number];
 
 /**
+ * What holds a session (ADR-0084): a browser a member is signed in on, or the command signed in
+ * as the account itself, which presents its session as a token is presented and is held to what
+ * a token may ask.
+ */
+export const SESSION_KINDS = ["browser", "command"] as const;
+
+export type SessionKind = (typeof SESSION_KINDS)[number];
+
+/**
  * How an agent account stands, in one word (ADR-0085): `running`, its runner heard from and the
  * agent at work or ready for it; `stopped`, by a supervisor, until one starts it again; `refused`,
  * the model would not answer; `failed`, its product could not start or sign in; `unheard`, its

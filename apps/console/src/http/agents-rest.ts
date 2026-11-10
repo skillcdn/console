@@ -16,6 +16,8 @@ import {
   type RestAgentProposals,
   type RestAgents,
   type RestAvatarParts,
+  type RestManager,
+  type RestSessions,
   restAgentInputSchema,
   restAgentPatchSchema,
   rollAvatar,
@@ -28,6 +30,7 @@ import {
   personVisibleTo,
   supervises,
 } from "../auth/policy.js";
+import type { Sessions } from "../auth/sessions.js";
 import type { Database } from "../db/client.js";
 import {
   AgentError,
@@ -39,19 +42,32 @@ import {
   updateAgentPersona,
 } from "../db/queries/agents.js";
 import type { Actor } from "../db/queries/events.js";
-import { PersonError, type PersonRecord } from "../db/queries/people.js";
+import {
+  findPerson,
+  listAdministrators,
+  PersonError,
+  type PersonRecord,
+} from "../db/queries/people.js";
 import type { TokenRecord } from "../db/queries/tokens.js";
 import { readWorkspaceSettings } from "../db/queries/workspaces.js";
 import type { Logger } from "../logger.js";
 import type { Clock } from "../ports/clock.js";
 import { errorBody } from "./app.js";
-import { type Access, administratorRequired, foreignOrigin, signInRequired } from "./auth.js";
+import {
+  type Access,
+  administratorRequired,
+  foreignOrigin,
+  sessionRequired,
+  signInRequired,
+} from "./auth.js";
 import type { AppEnv } from "./request-context.js";
-import { restAgent } from "./rest-shapes.js";
+import { restAgent, restPerson, restSession } from "./rest-shapes.js";
 
 export interface AgentsRestDependencies {
   readonly database: Database;
   readonly access: Access;
+  /** Where members are signed in; nothing where nobody signs in. */
+  readonly sessions: Sessions | undefined;
   readonly clock: Clock;
   readonly logger: Logger;
   /** The providers people sign in through: what an account may name. None where nobody signs in. */
@@ -59,6 +75,7 @@ export interface AgentsRestDependencies {
 }
 
 const MAX_BODY_BYTES = 256 * 1024;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface Caller {
   readonly person: PersonRecord;
@@ -99,7 +116,7 @@ const actorOf = (caller: Caller): Actor =>
     : { id: caller.person.id, agent: caller.token.name };
 
 export function registerAgentsRest(app: Hono<AppEnv>, dependencies: AgentsRestDependencies): void {
-  const { database, access, clock, logger, signIn } = dependencies;
+  const { database, access, sessions, clock, logger, signIn } = dependencies;
 
   /** Who is asking and with what, or the refusal to answer with. */
   const asking = async (c: Context<AppEnv>): Promise<Caller | Response> =>
@@ -147,6 +164,108 @@ export function registerAgentsRest(app: Hono<AppEnv>, dependencies: AgentsRestDe
     }
     throw error;
   };
+
+  // Whom whoever asks reports to (ADR-0084): a person or an agent account, or nobody; and the
+  // administrators, who stand in where there is nobody. For every member: a manager is whom one
+  // turns to first, and anyone may need to know who that is.
+  app.get(REST_ROUTES.meManager, async (c) => {
+    const caller = await asking(c);
+    if (caller instanceof Response) {
+      return caller;
+    }
+    const { person } = caller;
+    const [manager, administrators] = await Promise.all([
+      person.managerId === undefined
+        ? undefined
+        : findPerson(database, person.workspaceId, person.managerId),
+      listAdministrators(database, person.workspaceId),
+    ]);
+    const body: RestManager = {
+      manager: manager === undefined ? null : restPerson(manager),
+      administrators: administrators.map(restPerson),
+    };
+    return c.json(body);
+  });
+
+  /**
+   * The agent account a supervisor asks about on the console's own pages, or the refusal: where
+   * an account is signed in is seen and ended as a person's own sessions are, by a person signed
+   * in and never with a token (board #309), so that a credential which leaks reaches nobody's
+   * sessions; and of an agent account by its supervisors alone (ADR-0084).
+   */
+  const supervising = async (
+    c: Context<AppEnv>,
+    changes: boolean,
+  ): Promise<{ readonly person: PersonRecord; readonly agent: PersonRecord } | Response> => {
+    if (access.presentsToken(c)) {
+      return sessionRequired(c);
+    }
+    const caller = await (changes ? changing(c) : asking(c));
+    if (caller instanceof Response) {
+      return caller;
+    }
+    const handle = handleOf(c);
+    const settings = await readWorkspaceSettings(database, caller.person.workspaceId);
+    const found =
+      handle === undefined
+        ? undefined
+        : await findAgent(
+            database,
+            caller.person.workspaceId,
+            handle,
+            readerOf(caller.person, settings),
+          );
+    if (found === undefined) {
+      return notFound(c);
+    }
+    if (!found.supervised) {
+      return c.json(
+        errorBody("auth.forbidden", "Only a supervisor of the agent account may do this."),
+        403,
+      );
+    }
+    return { person: caller.person, agent: found.person };
+  };
+
+  app.get(`${REST_ROUTES.agents}/:handle/sign-ins`, async (c) => {
+    const found = await supervising(c, false);
+    if (found instanceof Response) {
+      return found;
+    }
+    if (sessions === undefined) {
+      return signInRequired(c);
+    }
+    const body: RestSessions = {
+      items: (await sessions.listOf(found.agent)).map(restSession),
+      idleDays: sessions.idleDays,
+    };
+    return c.json(body);
+  });
+
+  app.delete(`${REST_ROUTES.agents}/:handle/sign-ins/:id`, async (c) => {
+    const found = await supervising(c, true);
+    if (found instanceof Response) {
+      return found;
+    }
+    const id = c.req.param("id");
+    const outcome =
+      sessions === undefined || !UUID.test(id)
+        ? undefined
+        : await sessions.endOne(found.agent, id, undefined);
+    if (outcome === undefined || !outcome.ended) {
+      return c.json(errorBody("session.not_found", "The session was not found."), 404);
+    }
+    logger.info(
+      {
+        person: found.person.id,
+        agent: found.agent.id,
+        sessionId: id,
+        requestId: c.get("requestId"),
+      },
+      "an agent account's session ended by a supervisor",
+    );
+    return c.body(null, 204);
+  });
 
   // The agent accounts the asker may see, as the people are seen: everything that lists people
   // lists them among it, and this lists them alone, with whom each reports to.

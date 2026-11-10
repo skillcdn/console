@@ -157,6 +157,7 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
   registerAgentsRest(app, {
     database,
     access,
+    sessions: auth?.sessions,
     clock,
     logger,
     signIn: auth?.providers.map((provider) => provider.key) ?? [],

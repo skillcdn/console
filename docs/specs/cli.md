@@ -21,8 +21,9 @@ The board is a project's ([ADR-0008](../adr/0008-a-workspace-holds-projects-and-
 
 | Command | Asks the console | Says |
 |---|---|---|
-| `login --url <origin> [--agent <name>] [--token-stdin] [--default]` | `POST /api/v1/connect`, then `POST /api/v1/connect/claim` until a person approved, then `GET /api/v1/me` with the token; `DELETE /api/v1/me/token` with the token a repeated login replaces | the address and the code for a person; then who the token is, and whether this is the default console; keeps the login |
-| `logins` | nothing | one line per login: the console, the account, what the token is called, since when, and which is the default; never a token |
+| `login --url <origin> [--agent <name>] [--self] [--token-stdin] [--default]` | `POST /api/v1/connect`, then `POST /api/v1/connect/claim` until a person approved, then `GET /api/v1/me` with the token; `DELETE /api/v1/me/token` with the token a repeated login replaces | the address and the code for a person; then who the token is, and whether this is the default console; keeps the login |
+| `logins` | nothing | one line per login: the console, the account, what the token is called or that the command is signed in as the account itself, since when, and which is the default; never a token or a session's secret |
+| `manager` | `GET /api/v1/me/manager` | whom the person reports to, a person or an agent account, with what they do and what they are; and the administrators, who stand in, where they report to nobody or their manager is out ([ADR-0084](../adr/0084-an-agent-account-is-a-member-of-its-own-with-a-manager-above-it.md)). Needs no project |
 | `logout [--url <origin>] [--account <login>]` | `DELETE /api/v1/me/token` | that the login's token is given up and forgotten, or that the console keeps it while its person is out, or that the console was out of reach and the token is left to the Agents page |
 | `whoami` | `GET /api/v1/me` | the login, the role, the workspace, the address, and the project this directory works in; with a project, where the organization's rules are read and where the skill working-the-board is on this machine; then the command's version and where it is installed, the console's version and the range it takes, and the update to make when they differ. Keeps the workspace's time zone on the login it used, so that the moments the command prints are in it from then on ([ADR-0035](../adr/0035-who-may-see-whom-is-decided-by-one-policy-and-the-workspace-keeps-its-settings.md)) |
 | `projects` | `GET /api/v1/projects` | one line per project: key, name, what the person is in it, what waits in it |
@@ -148,6 +149,10 @@ What a person does, once the command is signed in where the agent runs; tried wi
 
 Work that reaches an agent in chat, in a directory that works in a project, goes the same way: the agent writes it on the board first (`console task new`), tells the person the number, takes it, and works it as above, so that the board holds the work and its record, and a person decides on the board, not in the chat. A board used only to tick off what was done elsewhere is a list of things to do; the record is in the runs, the comments and the decisions.
 
+## Signed in as the account itself
+
+`console login --self` signs the command in as the account ([ADR-0084](../adr/0084-an-agent-account-is-a-member-of-its-own-with-a-manager-above-it.md), point 9), which is how an agent account's own command signs in, and a person's where they work at it themselves. The connection is the one every login makes ([ADR-0011](../adr/0011-an-agent-connects-with-a-short-code-a-person-approves-and-the-token-is-never-shown.md)), asking to be the account (`as: "self"`): the command prints the address and the code, the account opens the page in a browser signed in as itself, and says "this is me". What the command is then handed and keeps is a session of its own in place of a token: kept for as long as it is used, ended when left unused for the deployment's `SESSION_TTL_DAYS`, so that an agent at work has nothing to renew and one that stopped lapses by itself. It is presented as a token is and does what a token may; what is done with it is done by the account, and names no agent beside it. `console logins` and `console whoami` say that the command is signed in as the account itself; `console logout` gives the session up; the account sees it among its sessions, and ends it there, as its supervisors do on the agent's own page.
+
 ## Agent accounts
 
 In outline, for the plan of [ADR-0084](../adr/0084-an-agent-account-is-a-member-of-its-own-with-a-manager-above-it.md) to [ADR-0089](../adr/0089-a-workspace-names-the-services-its-agents-work-with.md); a command is specified here in the change that builds it ([roadmap](../roadmap.md), milestones 41 to 43), and until then it is not one. The commands stay few, in the words the command already has: a list is the plural, one of a kind is named after it, and what is taken away is removed.
@@ -155,9 +160,9 @@ In outline, for the plan of [ADR-0084](../adr/0084-an-agent-account-is-a-member-
 - A supervisor's: `console agent new`, `console agent invite <handle> [--revoke]`, `console agent tell | interrupt | stop | restart | reset | set | wake <handle>`, `console agent signals <handle>`, `console agent secrets <handle>`, `console agent secret <handle> <name> [--remove]`.
 - The machine's own: `console agent setup [--refresh]` and `console runner`.
 - The account's own: `console secrets`, `console secret <name> [--set | --remove]`.
-- Every member's: `console manager`.
+- Every member's: `console manager`, which is built.
 
-A command of 0.4.8 reads what the console answers of an agent account already ([rest.md](rest.md#agent-accounts)): a person's `kind`, `handle` and `title`, which `console people` prints, and the two events; `console person title` writes a member's title, and `console agents` and `console agent <handle>` read the agent accounts.
+A command of 0.4.8 reads what the console answers of an agent account already ([rest.md](rest.md#agent-accounts)): a person's `kind`, `handle` and `title`, which `console people` prints, and the two events; `console person title` writes a member's title, `console agents` and `console agent <handle>` read the agent accounts, `console manager` says whom one reports to, and `console login --self` signs the command in as the account itself. An agent account is named by its handle wherever the command takes a login: `--worker @mira`, `--to @mira`, `member add @mira`.
 
 ## Not yet
 

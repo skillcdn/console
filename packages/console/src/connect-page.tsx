@@ -75,6 +75,19 @@ export function ConnectPage(props: ConnectPageProps) {
     </>
   );
 
+  if (outcome === "approved" && request !== undefined && request.as === "self") {
+    return (
+      <>
+        {head}
+        <Callout tone="info" title={words.asSelf.approved.title(request.agent)}>
+          <p>
+            {words.asSelf.approved.body}{" "}
+            <a href={PATHS.sessions}>{words.asSelf.approved.sessionsPage}</a>
+          </p>
+        </Callout>
+      </>
+    );
+  }
   if (outcome === "approved" && request !== undefined) {
     return (
       <>

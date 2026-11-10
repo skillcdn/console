@@ -71,6 +71,41 @@ export interface ConnectApprovalProps {
 export function ConnectApproval(props: ConnectApprovalProps) {
   const words = useWords().connect;
   const { request } = props;
+  if (request.as === "self") {
+    // The command asks to be the account itself (ADR-0084): there is no agent to name and no
+    // token to date, only whether whoever is signed in here is who sits at that command.
+    return (
+      <div className="sc-approval">
+        <Callout tone="warning" title={words.asSelf.title}>
+          <p>
+            {words.asks.callsItself} <strong>{request.agent}</strong>
+          </p>
+          <p>
+            {words.asks.showedCode} <code className="sc-code-shown">{request.code}</code>
+          </p>
+          <p>{words.asks.ifNot}</p>
+          <p>{words.asSelf.means}</p>
+          <p className="sc-muted">
+            {words.asks.asked} <Time iso={request.createdAt} />; {words.asks.goodUntil}{" "}
+            <Time iso={request.expiresAt} />.
+          </p>
+        </Callout>
+        {props.error !== undefined && <Callout tone="danger">{props.error}</Callout>}
+        <div className="sc-form-actions">
+          <Button
+            variant="primary"
+            disabled={props.busy === true}
+            onClick={() => props.onApprove({ name: request.agent })}
+          >
+            {words.asSelf.approve}
+          </Button>
+          <Button disabled={props.busy === true} onClick={props.onDeny}>
+            {words.notMine}
+          </Button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="sc-approval">
       <Callout tone="warning" title={words.asks.title}>

@@ -47,9 +47,12 @@ export function SessionList(props: SessionListProps) {
   const words = useWords().sessions;
   const others = props.sessions.filter((session) => !session.current);
   const deviceOf = (session: RestSession): string =>
-    session.browser !== null && session.platform !== null
-      ? words.on(session.browser, session.platform)
-      : (session.browser ?? session.platform ?? words.unknownBrowser);
+    // The command signed in as the account itself (ADR-0084), by what it called itself.
+    session.kind === "command"
+      ? words.command(session.name ?? "")
+      : session.browser !== null && session.platform !== null
+        ? words.on(session.browser, session.platform)
+        : (session.browser ?? session.platform ?? words.unknownBrowser);
   return (
     <section className="sc-panel sc-sessions" aria-label={words.title}>
       <div className="sc-section-head">

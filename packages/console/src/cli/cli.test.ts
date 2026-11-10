@@ -569,6 +569,112 @@ describe("the console command", () => {
     }
   });
 
+  it("signs in as the account itself with --self: a session of the command's, kept as a token is, and said to be one (ADR-0084)", async () => {
+    const session = {
+      id: "0199c4d8-0000-7000-8000-0000000000a1",
+      current: false,
+      createdAt: WHEN,
+      lastSeenAt: WHEN,
+      expiresAt: WHEN,
+      browser: null,
+      platform: null,
+      address: null,
+      kind: "command",
+      name: "console on mac-mini",
+    };
+    const itself = {
+      ...ME,
+      person: { ...PERSON, login: "mira@acme.example", kind: "agent", handle: "mira" },
+      agent: null,
+      session: { kind: "command", name: "console on mac-mini" },
+    };
+    const { fetch, calls } = fakeConsole({
+      "POST /api/v1/connect": { status: 201, body: CONNECTION },
+      "POST /api/v1/connect/claim": [
+        { status: 202, body: { status: "pending", expiresAt: WHEN } },
+        { body: { status: "signed_in", session, secret: "cns_a_handed" } },
+      ],
+      "GET /api/v1/me": { body: itself },
+    });
+    const memory = memoryStore();
+    const h = harness({ fetch, store: memory.store, hostname: "mac-mini" });
+    expect(await runCli(["login", "--url", ORIGIN, "--self", "--agent", "console"], h.io)).toBe(
+      EXIT.ok,
+    );
+    // The command says what it asks to be; the account says "this is me" on the page.
+    expect(calls[0]?.body).toEqual({ agent: "console on mac-mini", as: "self" });
+    expect(h.out()).toContain("signed in as that account");
+    expect(h.out()).toContain("code ABCD-EFGH");
+    expect(h.out()).toContain(
+      "Signed in to Acme at https://console.test as mira@acme.example (member), the account itself",
+    );
+    expect(h.out()).toContain("The session is kept while it is used");
+    expect(memory.kept()?.logins).toEqual([
+      {
+        url: ORIGIN,
+        account: "mira@acme.example",
+        token: "cns_a_handed",
+        agent: undefined,
+        since: "1970-01-01T00:00:00.000Z",
+        self: true,
+      },
+    ]);
+    expect(h.out()).not.toContain("cns_");
+    // What is kept is presented as a token is, and the listings say what it is.
+    const listed = harness({ fetch, store: memory.store });
+    expect(await runCli(["logins"], listed.io)).toBe(EXIT.ok);
+    expect(listed.out()).toBe(
+      "https://console.test  mira@acme.example  as the account itself  since 1970-01-01  (default)\n",
+    );
+    const who = harness({ fetch, store: memory.store });
+    expect(await runCli(["whoami"], who.io)).toBe(EXIT.ok);
+    expect(new Headers(calls.at(-1)?.init?.headers).get("authorization")).toBe(
+      "Bearer cns_a_handed",
+    );
+    expect(who.out()).toContain(
+      "mira@acme.example (member) at Acme, https://console.test; no project named here; signed in as the account itself",
+    );
+    // A login without --self asks for nothing in particular: an agent's token, as it always was.
+    const plain = harness({ fetch, store: memoryStore().store, hostname: "laptop" });
+    await runCli(["login", "--url", ORIGIN], plain.io);
+    expect(calls.filter((call) => call.key === "POST /api/v1/connect").at(-1)?.body).toEqual({
+      agent: "An agent on laptop",
+    });
+  });
+
+  it("says whom one reports to, and the administrators where there is nobody (ADR-0084)", async () => {
+    const boss = { ...PERSON, id: "0199c4d8-0000-7000-8000-0000000000b1", login: "jane" };
+    const admin = {
+      ...PERSON,
+      id: "0199c4d8-0000-7000-8000-0000000000b2",
+      login: "tom",
+      name: "Tom",
+      role: "admin",
+      title: "Founder",
+    };
+    const { fetch } = fakeConsole({
+      "GET /api/v1/me/manager": [
+        { body: { manager: boss, administrators: [admin] } },
+        { body: { manager: null, administrators: [admin] } },
+        { body: { manager: { ...boss, status: "deactivated" }, administrators: [admin] } },
+      ],
+    });
+    const reporting = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["manager"], reporting.io)).toBe(EXIT.ok);
+    expect(reporting.out()).toBe("You report to: jane  (member)\n");
+    const nobody = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["manager"], nobody.io)).toBe(EXIT.ok);
+    expect(nobody.out()).toBe(
+      "You report to nobody.\nThe administrators, who stand in:\n  tom  Tom, Founder  (admin)\n",
+    );
+    // A manager who is out is named still, with whoever stands in.
+    const out = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["manager"], out.io)).toBe(EXIT.ok);
+    expect(out.out()).toBe(
+      "You report to: jane  (member, deactivated)\nThe administrators, who stand in:\n  tom  Tom, Founder  (admin)\n",
+    );
+  });
+
   it("signs out: gives the token up at the console and forgets it here, and forgets it when the console is out of reach", async () => {
     const { fetch, calls } = fakeConsole({ "DELETE /api/v1/me/token": { status: 204 } });
     const memory = memoryStore(one(ORIGIN, "cns_t_kept"));
@@ -3158,8 +3264,15 @@ describe("the consoles the command is signed in to (ADR-0027)", () => {
     expect(JSON.parse(asJson.out())).toEqual({
       default: ORIGIN,
       logins: [
-        { url: ORIGIN, account: "alice", agent: null, since: null, default: true },
-        { url: OTHER, account: "alice", agent: "Codex", since: WHEN, default: false },
+        { url: ORIGIN, account: "alice", agent: null, self: false, since: null, default: true },
+        {
+          url: OTHER,
+          account: "alice",
+          agent: "Codex",
+          self: false,
+          since: WHEN,
+          default: false,
+        },
       ],
     });
     expect(asJson.out()).not.toContain("cns_t_");

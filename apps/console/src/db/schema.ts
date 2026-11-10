@@ -2,6 +2,7 @@ import {
   ARTIFACT_KINDS,
   CATEGORY_COLORS,
   COLOR_NAMES,
+  CONNECT_AS,
   GOAL_STATES,
   LINK_SOURCES,
   MEMBERSHIP_SOURCES,
@@ -18,6 +19,7 @@ import {
   type RestHome,
   type RestTaskLink,
   RUN_STATUSES,
+  SESSION_KINDS,
   TASK_PRIORITIES,
   TASK_STATES,
   WEEK_STARTS,
@@ -292,9 +294,10 @@ export const listings = pgTable(
 );
 
 /**
- * A browser a person is signed in on: the SHA-256 of the cookie's token, never the token. The
- * end moves while the session is used, and the person sees each of theirs, what it is and
- * where it was last used from (board #309).
+ * Where a member is signed in: a browser, by the SHA-256 of the cookie's token, or the command
+ * signed in as the account itself (ADR-0084), by the SHA-256 of the secret it presents as a
+ * token is presented; never the token or the secret. The end moves while the session is used,
+ * and the member sees each of theirs, what it is and where it was last used from (board #309).
  */
 export const sessions = pgTable(
   "sessions",
@@ -303,6 +306,10 @@ export const sessions = pgTable(
     personId: uuid()
       .notNull()
       .references(() => people.id, { onDelete: "cascade" }),
+    /** What holds it: a browser, whose cookie carries it, or the command, which presents it in the authorization header. Neither is read as the other. */
+    kind: text({ enum: SESSION_KINDS }).notNull().default("browser"),
+    /** For the command's: what it called itself when it signed in, and where it runs; null for a browser's. */
+    name: text(),
     tokenHash: text().notNull(),
     expiresAt: instant().notNull(),
     lastSeenAt: instant().notNull(),
@@ -316,6 +323,7 @@ export const sessions = pgTable(
     uniqueIndex("sessions_token_hash_key").on(table.tokenHash),
     index("sessions_person_idx").on(table.personId),
     index("sessions_expires_idx").on(table.expiresAt),
+    check("sessions_kind_check", sql`${table.kind} in (${sql.raw(literals(SESSION_KINDS))})`),
   ],
 );
 
@@ -946,6 +954,8 @@ export const connectRequests = pgTable(
     code: text().notNull(),
     secretHash: text().notNull(),
     agent: text().notNull(),
+    /** What it asks to be (ADR-0084): an agent of whoever approves it, with a token of theirs, or the approver themselves, the command signed in as the account with a session of its own. */
+    as: text({ enum: CONNECT_AS }).notNull().default("agent"),
     clientAddress: text(),
     approvedById: uuid().references(() => people.id, { onDelete: "cascade" }),
     name: text(),
@@ -958,6 +968,7 @@ export const connectRequests = pgTable(
     uniqueIndex("connect_requests_code_key").on(table.workspaceId, table.code),
     uniqueIndex("connect_requests_secret_hash_key").on(table.secretHash),
     index("connect_requests_expires_idx").on(table.expiresAt),
+    check("connect_requests_as_check", sql`${table.as} in (${sql.raw(literals(CONNECT_AS))})`),
   ],
 );
 

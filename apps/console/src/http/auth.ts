@@ -20,7 +20,7 @@ import { safeReturnTo } from "../auth/login.js";
 import { type Membership, refusalOf } from "../auth/membership.js";
 import { configuresWorkspace } from "../auth/policy.js";
 import type { Secrets } from "../auth/secrets.js";
-import type { SessionClient, Sessions } from "../auth/sessions.js";
+import type { CommandSession, SessionClient, Sessions } from "../auth/sessions.js";
 import type { Tokens } from "../auth/tokens.js";
 import type { Database } from "../db/client.js";
 import { countWaitingDecisionsFor } from "../db/queries/decisions.js";
@@ -74,10 +74,23 @@ const LOGIN_PATTERN = "/auth/:provider/login";
 const CALLBACK_PATTERN = "/auth/:provider/callback";
 
 /**
+ * Who is asking, and with what. A token when one is presented, so that an agent is told apart
+ * from its person's browser; the command's session when the command is signed in as the account
+ * itself (ADR-0084), which names no agent, since the account does it itself; neither on a
+ * browser's session.
+ */
+export interface AccessCaller {
+  readonly person: PersonRecord;
+  readonly token: TokenRecord | undefined;
+  readonly command?: CommandSession | undefined;
+}
+
+/**
  * Who a request is for, and whether it may change anything: what every route of the REST API
  * asks before it does its work. A request carries a session cookie, which a browser attaches on
- * its own, or a token in its authorization header, which whoever holds it attaches on purpose.
- * On a deployment where nobody signs in, every request is nobody's.
+ * its own, or a credential in its authorization header, which whoever holds it attaches on
+ * purpose: a token a person made, or the secret of a command's session. On a deployment where
+ * nobody signs in, every request is nobody's.
  */
 export interface Access {
   /**
@@ -91,12 +104,11 @@ export interface Access {
    * apart from its person's browser. A token the console knows, for a person who is out, is
    * nobody, and leaves why on the request for `signInRequired` to answer (ADR-0044).
    */
-  caller(
-    c: Context<AppEnv>,
-  ): Promise<
-    { readonly person: PersonRecord; readonly token: TokenRecord | undefined } | undefined
-  >;
-  /** Whether the request presents a token, whatever the token is worth. */
+  caller(c: Context<AppEnv>): Promise<AccessCaller | undefined>;
+  /**
+   * Whether the request presents a credential in its authorization header, a token or a
+   * command's session, whatever it is worth: what is held to what a token may ask (ADR-0021).
+   */
   presentsToken(c: Context<AppEnv>): boolean;
   /** A session the operator no longer honours is taken away with the answer. */
   signedOut(c: Context<AppEnv>): void;
@@ -125,10 +137,14 @@ export function createAccess(auth: AppAuth | undefined): Access {
         // The command names its version; the token keeps it, so that the Agents page says
         // which version each agent runs (ADR-0025).
         const client = clientVersionOf(c.req.header("user-agent"));
-        const found = await auth.tokens.resolve(
-          authorization,
-          client === undefined ? undefined : formatVersion(client),
-        );
+        const found =
+          (await auth.tokens.resolve(
+            authorization,
+            client === undefined ? undefined : formatVersion(client),
+          )) ??
+          // The command signed in as the account itself (ADR-0084): a session, presented as a
+          // token is, and held to what a token may ask by being presented so.
+          (await auth.sessions.resolveCommand(authorization, clientOf(c)));
         if (found === undefined) {
           return undefined;
         }
@@ -138,7 +154,9 @@ export function createAccess(auth: AppAuth | undefined): Access {
           c.set("refusal", refusalOf(found.person));
           return undefined;
         }
-        return { person: found.person, token: found.token };
+        return "token" in found
+          ? { person: found.person, token: found.token }
+          : { person: found.person, token: undefined, command: found.command };
       }
       const person = await auth.sessions.resolve(c.req.header("cookie"), clientOf(c));
       if (person === undefined) {
@@ -240,15 +258,21 @@ export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies):
       return false;
     }
   };
-  const meOf = async (
-    caller: { readonly person: PersonRecord; readonly token: TokenRecord | undefined } | undefined,
-  ): Promise<RestMe> => {
+  const meOf = async (caller: AccessCaller | undefined): Promise<RestMe> => {
     const found = await workspace();
     const person = caller?.person;
     return {
       workspace: workspaceOf(found, await readWorkspaceSettings(database, found.id)),
       person: person === undefined ? null : restPersonWithEmail(person),
       agent: caller?.token?.name ?? null,
+      // The session asking, where one asks: the command's, signed in as the account itself, which
+      // a console served through it is told by, as it is told a token by `agent`; a browser's.
+      session:
+        caller === undefined || caller.token !== undefined
+          ? null
+          : caller.command === undefined
+            ? { kind: "browser", name: null }
+            : { kind: "command", name: caller.command.name },
       language: person === undefined ? null : ((await languageOf(database, person.id)) ?? null),
       // The person's own arrangement of the front page's widgets (ADR-0059), or the manifests'.
       home: person === undefined ? null : ((await homeOf(database, person.id)) ?? null),

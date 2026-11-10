@@ -337,6 +337,13 @@
       "when": 1794278714430,
       "tag": "0047_agent_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1794280931460,
+      "tag": "0048_command_sessions",
+      "breakpoints": true
     }
   ]
 }

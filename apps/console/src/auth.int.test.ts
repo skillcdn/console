@@ -135,6 +135,7 @@ describe("signing in", () => {
       language: null,
       home: null,
       agent: null,
+      session: { kind: "browser", name: null },
       console: { version: "0.1.18", clientRange: ">=0.1.0 <0.2.0" },
       // Nothing waits for Alice yet.
       decisions: { waiting: 0 },
@@ -171,6 +172,7 @@ describe("signing in", () => {
       language: null,
       home: null,
       agent: null,
+      session: null,
       console: { version: "0.1.18", clientRange: ">=0.1.0 <0.2.0" },
       person: null,
       // Nobody has decisions to answer.
@@ -620,6 +622,7 @@ describe("a deployment where nobody signs in", () => {
       language: null,
       home: null,
       agent: null,
+      session: null,
       console: { version: "0.1.18", clientRange: ">=0.1.0 <0.2.0" },
       person: null,
       decisions: null,

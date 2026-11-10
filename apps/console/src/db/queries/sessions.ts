@@ -1,10 +1,12 @@
+import type { SessionKind } from "@skillcdn/console/api";
 import { and, desc, eq, gt, lte, ne } from "drizzle-orm";
 import { type Database, drizzleOf } from "../client.js";
 import { people, sessions } from "../schema.js";
 import { type PersonRecord, personColumns, toPerson } from "./people.js";
 
-// The browsers people are signed in on. The cookie holds a random token and the database its
-// hash, so the `api` role keeps no session of its own and any replica answers any request.
+// Where members are signed in: the browsers, each by its cookie's token, and the commands
+// signed in as an account itself (ADR-0084), each by the secret it presents. The database holds
+// the hash, so the `api` role keeps no session of its own and any replica answers any request.
 
 export interface SessionRecord {
   readonly id: string;
@@ -13,6 +15,8 @@ export interface SessionRecord {
   readonly lastSeenAt: Date;
   /** Where the browser last came from, as the server saw it; null until seen. */
   readonly address: string | null;
+  /** For the command's: what it called itself when it signed in; null for a browser's. */
+  readonly name: string | null;
 }
 
 /** One of a person's sessions as the table has it, for the person's own view of them (board #309). */
@@ -25,7 +29,23 @@ export interface SessionRow {
   /** What the browser called itself when the session began; null for one begun before that was kept. */
   readonly userAgent: string | null;
   readonly address: string | null;
+  /** What holds it: a browser, or the command signed in as the account itself. */
+  readonly kind: SessionKind;
+  /** For the command's: what it called itself when it signed in; null for a browser's. */
+  readonly name: string | null;
 }
+
+const rowColumns = {
+  id: sessions.id,
+  tokenHash: sessions.tokenHash,
+  createdAt: sessions.createdAt,
+  lastSeenAt: sessions.lastSeenAt,
+  expiresAt: sessions.expiresAt,
+  userAgent: sessions.userAgent,
+  address: sessions.address,
+  kind: sessions.kind,
+  name: sessions.name,
+};
 
 export async function createSession(
   database: Database,
@@ -36,23 +56,40 @@ export async function createSession(
     readonly now: Date;
     readonly userAgent: string | null;
     readonly address: string | null;
+    /** A browser's when left out. */
+    readonly kind?: SessionKind | undefined;
+    readonly name?: string | null | undefined;
   },
-): Promise<void> {
-  await drizzleOf(database).insert(sessions).values({
-    personId: session.personId,
-    tokenHash: session.tokenHash,
-    expiresAt: session.expiresAt,
-    lastSeenAt: session.now,
-    userAgent: session.userAgent,
-    address: session.address,
-  });
+): Promise<SessionRow> {
+  const [row] = await drizzleOf(database)
+    .insert(sessions)
+    .values({
+      personId: session.personId,
+      tokenHash: session.tokenHash,
+      expiresAt: session.expiresAt,
+      lastSeenAt: session.now,
+      userAgent: session.userAgent,
+      address: session.address,
+      kind: session.kind ?? "browser",
+      name: session.name ?? null,
+    })
+    .returning(rowColumns);
+  if (row === undefined) {
+    throw new Error("session insert returned no row");
+  }
+  return row;
 }
 
-/** The session a token names, with its person, while it has not expired. */
+/**
+ * The session of one kind a token names, with its member, while it has not expired. A browser's
+ * token is no command's and a command's no browser's: each is read only where its kind is
+ * presented, a cookie or an authorization header.
+ */
 export async function findSession(
   database: Database,
   tokenHash: string,
   now: Date,
+  kind: SessionKind = "browser",
 ): Promise<SessionRecord | undefined> {
   const [row] = await drizzleOf(database)
     .select({
@@ -60,11 +97,14 @@ export async function findSession(
       expiresAt: sessions.expiresAt,
       lastSeenAt: sessions.lastSeenAt,
       address: sessions.address,
+      sessionName: sessions.name,
       ...personColumns(people),
     })
     .from(sessions)
     .innerJoin(people, eq(people.id, sessions.personId))
-    .where(and(eq(sessions.tokenHash, tokenHash), gt(sessions.expiresAt, now)))
+    .where(
+      and(eq(sessions.tokenHash, tokenHash), eq(sessions.kind, kind), gt(sessions.expiresAt, now)),
+    )
     .limit(1);
   return row === undefined
     ? undefined
@@ -74,7 +114,17 @@ export async function findSession(
         expiresAt: row.expiresAt,
         lastSeenAt: row.lastSeenAt,
         address: row.address,
+        name: row.sessionName,
       };
+}
+
+/** Ends one session by its id, whoever holds it: what a command does of its own when it signs out. True when it was there. */
+export async function deleteSessionById(database: Database, sessionId: string): Promise<boolean> {
+  const rows = await drizzleOf(database)
+    .delete(sessions)
+    .where(eq(sessions.id, sessionId))
+    .returning({ id: sessions.id });
+  return rows.length > 0;
 }
 
 /**
@@ -117,15 +167,7 @@ export async function listSessionsOf(
   now: Date,
 ): Promise<SessionRow[]> {
   return drizzleOf(database)
-    .select({
-      id: sessions.id,
-      tokenHash: sessions.tokenHash,
-      createdAt: sessions.createdAt,
-      lastSeenAt: sessions.lastSeenAt,
-      expiresAt: sessions.expiresAt,
-      userAgent: sessions.userAgent,
-      address: sessions.address,
-    })
+    .select(rowColumns)
     .from(sessions)
     .where(and(eq(sessions.personId, personId), gt(sessions.expiresAt, now)))
     .orderBy(desc(sessions.lastSeenAt), desc(sessions.createdAt));

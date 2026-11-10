@@ -298,6 +298,8 @@ export function restSession(session: SessionView): RestSession {
     browser,
     platform,
     address: session.address,
+    kind: session.kind,
+    name: session.name,
   };
 }
 

@@ -1478,6 +1478,26 @@ describe("tokens", () => {
     );
     expect(phone).toContain('<rect x="5.5" y="2.5" width="9" height="15" rx="2">');
     expect(phone).toContain("Unknown browser");
+    // A command signed in as the account itself (ADR-0084) is one of its sessions, by what it
+    // called itself, and ended as any other.
+    const command = renderToStaticMarkup(
+      <SessionList
+        sessions={[
+          session,
+          {
+            ...other,
+            browser: null,
+            platform: null,
+            kind: "command" as const,
+            name: "console on <a> mac-mini",
+          },
+        ]}
+        onEnd={() => undefined}
+      />,
+    );
+    expect(command).toContain("The console command: console on &lt;a&gt; mac-mini");
+    expect(command).not.toContain("Unknown browser");
+    expect(command.match(/>Sign out</g)).toHaveLength(1);
   });
 
   it("asks for a name and a span, and shows a new token's secret this once", () => {
@@ -1534,6 +1554,24 @@ describe("connecting an agent", () => {
     expect(approval).toContain('value="Claude Code on &lt;the&gt; laptop"');
     expect(approval).toContain("30 days");
     expect(approval).not.toContain("Does not expire");
+    // A command that asks to be the account itself (ADR-0084): no agent to name and no token to
+    // date, only whether whoever is signed in is who sits at that command.
+    const itself = renderToStaticMarkup(
+      <ConnectApproval
+        request={{ ...request, as: "self" }}
+        daysAtMost={30}
+        onApprove={() => undefined}
+        onDeny={() => undefined}
+      />,
+    );
+    expect(itself).toContain("A command asks to sign in as you");
+    expect(itself).toContain("Claude Code on &lt;the&gt; laptop");
+    expect(itself).toContain("ABCD-EFGH");
+    expect(itself).toContain(">This is me<");
+    expect(itself).toContain(">Not mine<");
+    expect(itself).not.toContain(">Approve<");
+    expect(itself).not.toContain("<input");
+    expect(itself).not.toContain("30 days");
     const words = renderToStaticMarkup(<ConnectWords origin="https://console.test" />);
     expect(words).toContain(
       "npm install -g @skillcdn/console\nconsole login --url https://console.test</pre>",
