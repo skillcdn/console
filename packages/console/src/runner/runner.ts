@@ -76,6 +76,12 @@ export interface RunnerState {
   readonly delivered: number;
   /** The conversation the next session goes on with, where the product resumes one. */
   readonly conversation: string | undefined;
+  /**
+   * The driver the conversation was begun under. A conversation is a product's own: a desk whose
+   * `runner.json` names another product since begins a new one. Kept by a runner that did not
+   * say, it is taken as this driver's.
+   */
+  readonly driver?: string | undefined;
 }
 
 export interface RunnerOptions {
@@ -292,7 +298,7 @@ export function createRunner(options: RunnerOptions): Runner {
 
   const persist = async (): Promise<void> => {
     try {
-      await options.state.save({ delivered, conversation });
+      await options.state.save({ delivered, conversation, driver: driver.name });
     } catch {
       log("the runner's state could not be written; it goes on from the console's record");
     }
@@ -684,14 +690,7 @@ export function createRunner(options: RunnerOptions): Runner {
         target,
         signal.source === "person" ? "person" : "wake",
         signal.text,
-        {
-          signal: signal.number,
-          kind: signal.kind,
-          source: signal.source,
-          key: signal.key,
-          by: signal.by?.login ?? null,
-          agent: signal.agent,
-        },
+        signalData(signal),
         pictures.get(signal.number),
       );
     }
@@ -701,6 +700,20 @@ export function createRunner(options: RunnerOptions): Runner {
     await persist();
     await account();
   };
+
+  /**
+   * What the transcript says of a signal beside its words: its number and kind, where it came
+   * from, and who sent it, by the login, with the agent they sent it through. One shape for
+   * every signal, so that whoever reads a session reads who stopped it as who told it.
+   */
+  const signalData = (signal: RestSignal) => ({
+    signal: signal.number,
+    kind: signal.kind,
+    source: signal.source,
+    key: signal.key,
+    by: signal.by?.login ?? null,
+    agent: signal.agent,
+  });
 
   /** The next cool-down: the first, or twice the one before, up to the most. */
   const cooled = (before: typeof waits): { tries: number; until: number } => {
@@ -731,7 +744,7 @@ export function createRunner(options: RunnerOptions): Runner {
       case "stop": {
         held = true;
         if (session !== undefined) {
-          record(session, "person", signal.text, { signal: signal.number, kind: "stop", by });
+          record(session, "person", signal.text, signalData(signal));
         }
         await end("stopped");
         await account(signal);
@@ -1015,6 +1028,14 @@ export function createRunner(options: RunnerOptions): Runner {
       const kept = await options.state.load().catch(() => undefined);
       delivered = kept?.delivered ?? 0;
       conversation = kept?.conversation;
+      if (conversation !== undefined && kept?.driver !== undefined && kept.driver !== driver.name) {
+        // Another product's conversation is nothing this one can go on with: asked to, it fails
+        // at every turn until a supervisor resets it.
+        conversation = undefined;
+        log(
+          `the conversation kept was begun under the driver ${kept.driver}: a new one begins under ${driver.name}`,
+        );
+      }
       probe = await driver.probe();
       await readSecrets();
       // The first heartbeat says the runner is there, and learns where the console's record stands.

@@ -560,7 +560,7 @@ describe("the codex driver", () => {
     expect(third.killed).toEqual(["SIGTERM"]);
   });
 
-  it("says how a turn failed: the product not there, a turn the service refused, a sign-in that ran out, a process that ended", async () => {
+  it("says how a turn failed: the product not there, a turn the service refused, a sign-in that ran out, a process that fell over", async () => {
     const missing = started();
     await missing.session.send(message("Go."));
     (await missing.turn(0)).exits(null, null, "spawn codex ENOENT");
@@ -614,9 +614,12 @@ describe("the codex driver", () => {
     await tick();
     expect(signedOut.turns).toHaveLength(1);
 
-    // A process that ended before its turn did says how, with the end of what it wrote of it.
+    // A process that fell over in its turn, with no word of how the turn ended, says how it
+    // ended, with the end of what it wrote of it: the agent cannot go on by itself, and what the
+    // turn was at is not known, so nothing is sent again.
     const crashed = started();
     await crashed.session.send(message("Go."));
+    await crashed.session.send(message("And this."));
     const gone = await crashed.turn(0);
     gone.says(...BEGAN);
     gone.writes("a stack trace\n");
@@ -627,8 +630,31 @@ describe("the codex driver", () => {
         kind: "error",
         text: "The product's process ended with code 101 before the turn did.\na stack trace",
       },
-      { type: "turn_completed" },
+      { type: "cannot_go_on", state: "failed", reason: "crashed" },
     ]);
+    await tick();
+    expect(crashed.turns).toHaveLength(1);
+
+    // One that ended before any turn started took nothing, a conversation it does not find
+    // again say, in the words the binary had for it: what was sent is the runner's to send again.
+    const lost = started({ resume: THREAD });
+    await lost.session.send(message("Go."));
+    const none = await lost.turn(0);
+    none.writes(
+      `Error: thread/resume: thread/resume failed: no rollout found for thread id ${THREAD} (code -32600)\n`,
+    );
+    none.exits(1);
+    expect(await lost.said(2)).toEqual([
+      {
+        type: "event",
+        kind: "error",
+        text: `The product's process ended with code 1 before the turn did.\nError: thread/resume: thread/resume failed: no rollout found for thread id ${THREAD} (code -32600)`,
+      },
+      { type: "cannot_go_on", state: "failed", reason: "start" },
+    ]);
+    // A supervisor's next word is tried at once, in a process of its own.
+    await lost.session.send(message("Go."));
+    expect((await lost.turn(1)).args).toContain("resume");
   });
 
   it("takes the model and the effort from the next turn on, and says so when it runs with them", async () => {

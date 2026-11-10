@@ -611,7 +611,7 @@ describe("the console command", () => {
     expect(h.out()).toContain("signed in as that account");
     expect(h.out()).toContain("code ABCD-EFGH");
     expect(h.out()).toContain(
-      "Signed in to Acme at https://console.test as mira@acme.example (member), the account itself",
+      "Signed in to Acme at https://console.test as @mira (mira@acme.example, member), the account itself",
     );
     expect(h.out()).toContain("The session is kept while it is used");
     expect(memory.kept()?.logins).toEqual([
@@ -637,7 +637,11 @@ describe("the console command", () => {
       "Bearer cns_a_handed",
     );
     expect(who.out()).toContain(
-      "mira@acme.example (member) at Acme, https://console.test; no project named here; signed in as the account itself",
+      "@mira (mira@acme.example, member) at Acme, https://console.test; no project named here; signed in as the account itself",
+    );
+    // Its desk names no project, and the help sends an agent here for where the skill is.
+    expect(who.out()).toContain(
+      "What this organization asks of agents: console rules. How the board is worked: the skill working-the-board, shipped with this command",
     );
     // A login without --self asks for nothing in particular: an agent's token, as it always was.
     const plain = harness({ fetch, store: memoryStore().store, hostname: "laptop" });

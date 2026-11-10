@@ -182,6 +182,8 @@ interface Read {
   /** Whether the turn under way said that it completed, and what it said where it failed. */
   completed: boolean;
   failed: string | undefined;
+  /** Whether the process of the turn under way got as far as a turn: it said that one started. */
+  turned: boolean;
 }
 
 /** What a turn runs with, as the session's first event and the heartbeat say it. */
@@ -328,6 +330,9 @@ function eventsOf(line: Json, read: Read, runs: Runs): DriverEvent[] {
       }
       return events;
     }
+    case "turn.started":
+      read.turned = true;
+      return events;
     case "turn.completed":
       read.completed = true;
       return events;
@@ -404,6 +409,7 @@ function sessionOf(
     error: undefined,
     completed: false,
     failed: undefined,
+    turned: false,
   };
   const mode = codexMode(options.permissions);
   let conversation = word(options.resume);
@@ -434,6 +440,7 @@ function sessionOf(
     };
     read.completed = false;
     read.failed = undefined;
+    read.turned = false;
     read.error = undefined;
     read.called.clear();
     turn = mine;
@@ -492,7 +499,20 @@ function sessionOf(
           waiting = [];
           return;
         }
-        // A turn that ended with any other error is a turn that ended: the agent takes the next message.
+        if (read.failed === undefined) {
+          // The product fell over without a word of the turn: nothing says that the next one
+          // goes better, a conversation it cannot find again say (seen with 0.164.0), so the
+          // agent cannot go on by itself. Before a turn started nothing was taken, and the
+          // runner sends again what it sent; after, what the turn was at is not known.
+          emit({
+            type: "cannot_go_on",
+            state: "failed",
+            reason: read.turned ? "crashed" : "start",
+          });
+          waiting = [];
+          return;
+        }
+        // A turn the product itself said failed is a turn that ended: the agent takes the next message.
       }
       // The agent is done when nothing it was sent still waits: what arrived meanwhile is its next turn.
       if (waiting.length > 0) {

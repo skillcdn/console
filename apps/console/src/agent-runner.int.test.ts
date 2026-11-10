@@ -415,6 +415,24 @@ describe("an agent account's runner (ADR-0085)", () => {
       effort: "high",
     });
     expect((await heartbeat()).settings).toEqual({ model: "opus", effort: "high" });
+    // A runner that offers nothing to choose from takes nothing away.
+    const offers = { steer: false, images: false, resume: true };
+    expect((await heartbeat({ offers: { ...offers, models: [], efforts: [] } })).settings).toEqual({
+      model: "opus",
+      effort: "high",
+    });
+    // What was chosen is kept while the product offers it: a runner that says another product
+    // since, a desk whose driver changed, offers other models, and one it does not offer is the
+    // product's own again, where a level it still offers stays. Its runner is answered so, and
+    // hands the product no model it would refuse at every turn.
+    const other = { ...offers, models: ["gpt-6-luna"], efforts: ["low", "high"] };
+    expect((await heartbeat({ offers: other })).settings).toEqual({ model: null, effort: "high" });
+    expect((await agentOf({ cookie: alice })).runner?.settings).toEqual({
+      model: null,
+      effort: "high",
+    });
+    // And it does not come back with the product that offered it.
+    expect((await heartbeat()).settings).toEqual({ model: null, effort: "high" });
     expect((await signal(fromPages(alice), { kind: "set", set: { model: null } })).set).toEqual({
       model: null,
       effort: "high",

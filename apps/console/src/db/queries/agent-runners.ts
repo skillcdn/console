@@ -225,6 +225,12 @@ export async function recordHeartbeat(
     const state: AgentState = stopped ? "stopped" : heartbeat.state;
     const reason: AgentStateReason = stopped ? "stop" : heartbeat.reason;
     const changed = before.state !== state;
+    // What was chosen is kept among what the product offers, as a `set` holds it: a runner that
+    // says another product since, a desk whose driver changed, offers other models, and a model
+    // it does not offer would be refused at every turn. Such a choice is the product's own again;
+    // a runner that offers nothing to choose from takes nothing away.
+    const gone = (chosen: string | null, offered: readonly string[]): boolean =>
+      chosen !== null && offered.length > 0 && !offered.includes(chosen);
     const [row] = await tx
       .update(agentRunners)
       .set({
@@ -236,6 +242,8 @@ export async function recordHeartbeat(
         product: heartbeat.product,
         offers: heartbeat.offers,
         running: heartbeat.running,
+        ...(gone(before.model, heartbeat.offers.models) ? { model: null } : {}),
+        ...(gone(before.effort, heartbeat.offers.efforts) ? { effort: null } : {}),
         ...(changed ? { state, reason, stateAt: now } : { reason }),
         updatedAt: now,
       })

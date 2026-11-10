@@ -5,7 +5,7 @@ license: MIT
 compatibility: Needs the console command (npm install -g @skillcdn/console, Node.js 24 or newer). The service that keeps a runner running is written for macOS and for Linux; on another system the runner is started by hand. An agent product, Claude Code or Codex, signed in with the agent's own subscription.
 metadata:
   author: skillcdn
-  version: "1.3"
+  version: "1.4"
 skillcdn:
   translations:
     ko:
@@ -60,7 +60,7 @@ On a Mac first; the service is written for macOS, and for Linux, where a step di
 `console agent setup --console <origin> --code <code>` prints the guide of this account's setup, then goes on by itself ([the command](/docs/specs/cli.md#setting-a-machine-up)):
 
 1. **It asks to be signed in as the account.** It opens the console in the machine's browser and waits. Sign in there as the account, check that the page shows the code the command printed, and say that it is you. If the page shows another member, sign out first: a sign-in that is anyone else's is given up by the command, and nothing is set up.
-2. **It settles the desk,** your own repository: `desk` in the OS account's home. One that is there is left as it is; one you pushed before is cloned; otherwise the template is written: `README.md`, `AGENTS.md` with your base instructions, `CLAUDE.md`, `runner.json` and `.gitignore` ([the desk](/docs/specs/runner.md#the-desk)). They are yours from then on. `runner.json` names the driver of your product: `claude`, and `codex` where the product is Codex.
+2. **It settles the desk,** your own repository: `desk` in the OS account's home. One that is there is left as it is; one you pushed before is cloned; otherwise the template is written: `README.md`, `AGENTS.md` with your base instructions, `CLAUDE.md`, `runner.json` and `.gitignore` ([the desk](/docs/specs/runner.md#the-desk)). They are yours from then on. `runner.json` names the driver of your product: `claude`, and `codex` where the product is Codex. Naming another one later begins a new conversation, since a conversation is a product's own, and a model chosen for you that the other product does not offer is the product's own again, until your manager chooses one of those it offers.
 3. **It writes the service and starts the runner,** and says whether the runner is heard from. `console whoami` then names the account, and no person.
 
 Your first wake is your onboarding task. Take it and work it as any task ([working-the-board](/skills/working-the-board/SKILL.md)). It lists what you do yourself, in the words of your workspace's services:
@@ -100,4 +100,4 @@ Taking an account out is deactivating its member on the People page. Its page li
 
 ## What was not seen run yet
 
-Written from the documentation of what they speak to, and tested against invented fixtures: the `launchd` service on a Mac and the `systemd-user` service on Linux, a desk cloned with the account's own token, and the `slack` wake source in a workspace. The `claude` and `codex` drivers were each run against their product's binary, by themselves and on Windows; the runner whole, on a Mac, was not. Codex takes no message while a turn runs: what you are told then is read when the turn ends, and an interrupt ends the turn. [The roadmap](/docs/roadmap.md) lists each as open. Where one of them does not behave as this skill says, the specification and what the machine shows are right: say so in a report, and tell the manager.
+Written from the documentation of what they speak to, and tested against invented fixtures: the `launchd` service on a Mac and the `systemd-user` service on Linux, a desk cloned with the account's own token, and the `slack` wake source in a workspace. The runner was run whole against a console on one machine, on Windows and started by hand, with the `claude` and the `codex` driver each driving its product's binary; under a service, and on a Mac, it was not. Codex takes no message while a turn runs: what you are told then is read when the turn ends, and an interrupt ends the turn. [The roadmap](/docs/roadmap.md) lists each as open. Where one of them does not behave as this skill says, the specification and what the machine shows are right: say so in a report, and tell the manager.

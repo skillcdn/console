@@ -735,6 +735,22 @@ async function settle(
 type Command = (args: readonly string[], io: CliIo) => Promise<number>;
 
 /**
+ * Who the command is, in a few words: the login and the role, and an agent account by its
+ * handle first, which is what it is called by everywhere and what its setup's guide says the
+ * command names.
+ */
+function whoOf(person: {
+  readonly login: string;
+  readonly role: string;
+  readonly kind?: string | undefined;
+  readonly handle?: string | null | undefined;
+}): string {
+  return person.kind === "agent" && typeof person.handle === "string" && person.handle.length > 0
+    ? `@${person.handle} (${person.login}, ${person.role})`
+    : `${person.login} (${person.role})`;
+}
+
+/**
  * Checks a token against the console, keeps it as the login at that console for that account,
  * and says who it is. A token the login replaces is given up at the console on the way.
  */
@@ -780,8 +796,8 @@ async function keep(
   const standing = next.default === url ? ", the default console here" : "";
   say(
     self
-      ? `Signed in to ${me.workspace.name} at ${url} as ${person.login} (${person.role}), the account itself${standing}: what this command does, ${person.login} does, and no agent is named beside it. The session is kept while it is used; its secret is kept in ${kept}.\nNext, say which project this directory works in: console use <key> (console projects lists them).\n`
-      : `${agent === undefined ? "Signed in" : `Connected as "${agent}"`} to ${me.workspace.name} at ${url} as ${person.login} (${person.role})${standing}. The token is kept in ${kept}.\nNext, say which project this directory works in: console use <key> (console projects lists them).\n`,
+      ? `Signed in to ${me.workspace.name} at ${url} as ${whoOf(person)}, the account itself${standing}: what this command does, ${person.login} does, and no agent is named beside it. The session is kept while it is used; its secret is kept in ${kept}.\nNext, say which project this directory works in: console use <key> (console projects lists them).\n`
+      : `${agent === undefined ? "Signed in" : `Connected as "${agent}"`} to ${me.workspace.name} at ${url} as ${whoOf(person)}${standing}. The token is kept in ${kept}.\nNext, say which project this directory works in: console use <key> (console projects lists them).\n`,
   );
   return EXIT.ok;
 }
@@ -1027,13 +1043,12 @@ const whoami: Command = async (args, io) => {
     },
     () =>
       [
-        `${person.login} (${person.role}) at ${me.workspace.name}, ${session.url}${key === undefined ? "; no project named here" : `; project ${key}`}${me.session?.kind === "command" ? "; signed in as the account itself" : ""}`,
-        // The pack's rules send an agent here first; from here the rules and the skill are the next steps.
-        ...(key === undefined
-          ? []
-          : [
-              `What this organization asks of agents: console rules. How the board is worked: the skill working-the-board, shipped with this command${io.skillsDir === undefined ? " (console skills says where it is)." : `: ${ownSkillPath(io.skillsDir)}`}`,
-            ]),
+        `${whoOf(person)} at ${me.workspace.name}, ${session.url}${key === undefined ? "; no project named here" : `; project ${key}`}${me.session?.kind === "command" ? "; signed in as the account itself" : ""}`,
+        // The pack's rules send an agent here first; from here the rules and the skill are the next
+        // steps. In a directory that names no project too: an agent account's desk names none,
+        // the command's help sends an agent here for where the skill is, and the workspace has
+        // rules whatever the project.
+        `What this organization asks of agents: console rules. How the board is worked: the skill working-the-board, shipped with this command${io.skillsDir === undefined ? " (console skills says where it is)." : `: ${ownSkillPath(io.skillsDir)}`}`,
         `This command is ${io.version ?? "of a version it does not know"}${io.install === undefined ? "" : `, ${describeInstall(io.install)}`}; ${consoleWords}.`,
         ...(verdict === "behind"
           ? [`A newer command exists. Update it: ${updateWords(io, me.console?.version)}`]
@@ -3410,6 +3425,7 @@ function runnerStateOf(text: string | undefined): RunnerState | undefined {
   }
   const delivered = "delivered" in json ? json.delivered : undefined;
   const conversation = "conversation" in json ? json.conversation : undefined;
+  const driver = "driver" in json ? json.driver : undefined;
   if (typeof delivered !== "number" || !Number.isSafeInteger(delivered) || delivered < 0) {
     return undefined;
   }
@@ -3419,6 +3435,9 @@ function runnerStateOf(text: string | undefined): RunnerState | undefined {
       typeof conversation === "string" && conversation.length > 0 && conversation.length <= 200
         ? conversation
         : undefined,
+    // The driver the conversation was begun under, as a registry spells one.
+    driver:
+      typeof driver === "string" && /^[a-z][a-z0-9-]{0,39}$/.test(driver) ? driver : undefined,
   };
 }
 

@@ -495,11 +495,32 @@ describe("the runner", () => {
     });
     // What it keeps for its own next start: the last signal delivered, and the conversation.
     await until("the state", () => saved.at(-1)?.conversation === "c-1");
-    expect(saved.at(-1)).toEqual({ delivered: 1, conversation: "c-1" });
+    expect(saved.at(-1)).toEqual({ delivered: 1, conversation: "c-1", driver: "claude" });
     await until("a heartbeat with the session", () =>
       console.beats.some(
         (beat) => beat.session !== null && beat.delivered === 1 && beat.running.model === "opus",
       ),
+    );
+  });
+
+  it("goes on with the conversation kept for its own product, and begins a new one where it was another's", async () => {
+    // Kept under the same driver: gone on with.
+    const same = setup({ state: { delivered: 0, conversation: "c-0", driver: "claude" } });
+    same.console.signal({ text: "Go on." });
+    expect((await sessionOf(same.product)).options.resume).toBe("c-0");
+    // Kept by a runner that did not say under which: taken as this one's.
+    const unsaid = setup({ state: { delivered: 0, conversation: "c-0" } });
+    unsaid.console.signal({ text: "Go on." });
+    expect((await sessionOf(unsaid.product)).options.resume).toBe("c-0");
+    // Kept under another product's driver, by a desk whose runner.json named it then: a
+    // conversation is a product's own, and asking this one to go on with it fails every turn.
+    const other = setup({ state: { delivered: 0, conversation: "t-9", driver: "codex" } });
+    other.console.signal({ text: "Go on." });
+    expect((await sessionOf(other.product)).options.resume).toBeUndefined();
+    await until("the session", () => other.console.begun.length === 1);
+    expect(other.console.begun[0]).toMatchObject({ resumed: false });
+    expect(other.log).toContain(
+      "the conversation kept was begun under the driver codex: a new one begins under claude",
     );
   });
 
@@ -557,6 +578,15 @@ describe("the runner", () => {
       [expect.any(Number), "person", "Wait for the review."],
       [expect.any(Number), "status", "The session ended: stopped."],
     ]);
+    // Who stopped it is named as whoever told it anything is: by the login, with where it came from.
+    expect(console.kept.values().next().value?.at(-2)?.data).toEqual({
+      signal: 2,
+      kind: "stop",
+      source: "person",
+      key: null,
+      by: "jane",
+      agent: null,
+    });
 
     console.signal({ text: "Meanwhile." });
     await sleep(120);
