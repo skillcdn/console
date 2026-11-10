@@ -1182,7 +1182,8 @@ html[data-console] body {
   color: var(--sc-color-success);
 }
 
-/* A pale amber with amber words and no line: dark words or a line on it read as a muddy brown. */
+/* A pale amber with amber words: dark words on a yellow fill read as a muddy brown. Its line, as a
+   plain badge's, is drawn with the kinds below. */
 .sc-badge-warning {
   background: var(--sc-color-warning-subtle);
   border-color: transparent;
@@ -4051,8 +4052,8 @@ select.sc-input-quiet {
 /* A badge's kind in how it is filled, so that a plain badge, a category, a state, a priority
    and a due day beside each other are kinds and not five of one thing; the pill is the shape
    of them all and nothing stands before the words:
-   - a plain badge (a role, a count, public or private): a soft fill with a line of its hue,
-     but for a warning, whose line on its pale amber reads as a brown outline;
+   - a plain badge (a role, a count, public or private): a soft fill with a line of its hue, a
+     warning's a clear amber, since one mixed from its words reads as brown on its pale amber;
    - a category and a state: a soft fill, no line;
    - a priority: a soft fill with dark words of its hue, low a grey, high an orange, urgent a red;
    - a due day: a line, a very light fill and bold words, all in the hue of how near the day
@@ -4061,8 +4062,12 @@ select.sc-input-quiet {
   border-color: color-mix(in srgb, currentColor 40%, transparent);
 }
 
-.sc-badge.sc-badge-kind-state,
+/* The same clear amber as a warning callout's line. */
 .sc-badge.sc-badge-warning {
+  border-color: #e9a23b;
+}
+
+.sc-badge.sc-badge-kind-state {
   border-color: transparent;
 }
 
