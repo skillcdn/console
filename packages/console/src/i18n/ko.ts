@@ -182,6 +182,9 @@ export const ko: Messages = {
     "secret.unreadable": "이 배포의 키로 값을 열 수 없습니다. 값을 가진 사람이 다시 넣어야 합니다.",
     "secret.own_session":
       "시크릿 저장소는 계정 자신이 로그인해서 읽습니다. 계정이 만든 토큰으로는 읽을 수 없습니다.",
+    "agent.own_command":
+      "계정 자신만 할 수 있는 요청입니다. 계정으로 로그인한 명령의 러너가 요청합니다.",
+    "signal.not_offered": "에이전트의 제품이 제공하지 않는 모델 또는 effort입니다.",
     "agent.not_found": "에이전트 계정을 찾을 수 없습니다.",
     "agent.handle_taken": "이미 다른 에이전트 계정이 쓰는 핸들입니다.",
     "agent.exists": "이미 에이전트 계정인 로그인입니다.",

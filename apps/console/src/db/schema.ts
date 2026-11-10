@@ -1,4 +1,5 @@
 import {
+  AGENT_STATES,
   ARTIFACT_KINDS,
   CATEGORY_COLORS,
   COLOR_NAMES,
@@ -21,6 +22,8 @@ import {
   RUN_STATUSES,
   SECRET_ACCESSES,
   SESSION_KINDS,
+  SIGNAL_KINDS,
+  SIGNAL_SOURCES,
   TASK_PRIORITIES,
   TASK_STATES,
   WEEK_STARTS,
@@ -355,6 +358,95 @@ export const tokens = pgTable(
     uniqueIndex("tokens_token_hash_key").on(table.tokenHash),
     index("tokens_person_idx").on(table.personId),
     index("tokens_expires_idx").on(table.expiresAt),
+  ],
+);
+
+/**
+ * What the console knows of an agent account's runner (ADR-0085): how the agent stands and why,
+ * when the runner was last heard from, the last signal it delivered, what it said of its machine
+ * and its product, and what its supervisors chose for it to run with. A row from the first
+ * heartbeat, or the first signal, on.
+ */
+export const agentRunners = pgTable(
+  "agent_runners",
+  {
+    personId: uuid()
+      .primaryKey()
+      .references(() => people.id, { onDelete: "cascade" }),
+    /** How the agent stands; null until a runner has said, or the console has noted. */
+    state: text({ enum: AGENT_STATES }),
+    reason: text(),
+    stateAt: instant(),
+    heardAt: instant(),
+    /** The number of the last signal the runner handed to its product. */
+    delivered: integer().notNull().default(0),
+    /** The number the next signal of the account takes. */
+    nextSignal: integer().notNull().default(1),
+    /** The number of a supervisor's `stop` that stands, until a `restart` or a `reset` is sent; null for none. */
+    stopSignal: integer(),
+    /** The open session, as the runner last said. */
+    sessionId: uuid(),
+    machine: jsonb().$type<{ name: string; os: string; user: string }>(),
+    runner: text(),
+    product: jsonb().$type<{
+      driver: string;
+      name: string;
+      version: string | null;
+      tried: boolean;
+    }>(),
+    offers: jsonb().$type<{
+      models: string[];
+      efforts: string[];
+      steer: boolean;
+      images: boolean;
+      resume: boolean;
+    }>(),
+    running: jsonb().$type<{ model: string | null; effort: string | null }>(),
+    /** What its supervisors or the account chose for it to run with; null each for the product's own. */
+    model: text(),
+    effort: text(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    check(
+      "agent_runners_state_check",
+      sql`${table.state} is null or ${table.state} in (${sql.raw(literals(AGENT_STATES))})`,
+    ),
+    index("agent_runners_heard_idx").on(table.heardAt),
+  ],
+);
+
+/**
+ * A signal (ADR-0085): what the console sends an agent account's runner, numbered per account,
+ * with who sent it and where it came from. The account's record of what its agent was told;
+ * not an event of the board's feed.
+ */
+export const agentSignals = pgTable(
+  "agent_signals",
+  {
+    personId: uuid()
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    number: integer().notNull(),
+    kind: text({ enum: SIGNAL_KINDS }).notNull(),
+    /** Who sent it; null for the console itself. */
+    byId: uuid().references(() => people.id),
+    agent: text(),
+    plugin: text(),
+    source: text({ enum: SIGNAL_SOURCES }).notNull(),
+    key: text(),
+    text: text().notNull().default(""),
+    /** For `set`: the model and the effort to run with. */
+    set: jsonb().$type<{ model: string | null; effort: string | null }>(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.personId, table.number] }),
+    check("agent_signals_kind_check", sql`${table.kind} in (${sql.raw(literals(SIGNAL_KINDS))})`),
+    check(
+      "agent_signals_source_check",
+      sql`${table.source} in (${sql.raw(literals(SIGNAL_SOURCES))})`,
+    ),
   ],
 );
 

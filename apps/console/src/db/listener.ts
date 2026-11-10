@@ -1,6 +1,7 @@
 import { Client } from "pg";
 import type { Logger } from "../logger.js";
 import { sslOf } from "./client.js";
+import { AGENTS_CHANNEL } from "./queries/agent-runners.js";
 import { EVENTS_CHANNEL } from "./queries/events.js";
 
 // A connection of its own that listens for the nudge every change to the board sends with its
@@ -19,6 +20,12 @@ export interface EventListenerOptions {
   readonly logger: Logger;
   /** Called on every nudge, on no particular tick. It says nothing but that there is something new. */
   readonly onNudge: () => void;
+  /**
+   * Called when an agent account has something new, with the account's id; with none when a
+   * nudge may have been missed, and every account is to look. Left out, the channel is not
+   * listened on.
+   */
+  readonly onAgentNudge?: ((accountId: string | undefined) => void) | undefined;
   /** How long to wait before connecting again after the connection is lost, at first. */
   readonly reconnectDelayMs?: number | undefined;
 }
@@ -31,7 +38,7 @@ const MAX_RECONNECT_DELAY_MS = 30_000;
  * when it asks for what is after its cursor; the nudge only says to ask now.
  */
 export function startEventListener(options: EventListenerOptions): EventListener {
-  const { connectionString, logger, onNudge } = options;
+  const { connectionString, logger, onNudge, onAgentNudge } = options;
   const firstDelay = options.reconnectDelayMs ?? 1000;
   let client: Client | undefined;
   let closed = false;
@@ -47,8 +54,12 @@ export function startEventListener(options: EventListenerOptions): EventListener
       ssl: sslOf(options.ca),
       application_name: "console-listener",
     });
-    next.on("notification", () => {
-      onNudge();
+    next.on("notification", (message) => {
+      if (message.channel === AGENTS_CHANNEL) {
+        onAgentNudge?.(message.payload === "" ? undefined : message.payload);
+      } else {
+        onNudge();
+      }
     });
     const lost = (error?: unknown): void => {
       if (client !== next) {
@@ -68,6 +79,9 @@ export function startEventListener(options: EventListenerOptions): EventListener
     try {
       await next.connect();
       await next.query(`listen ${EVENTS_CHANNEL}`);
+      if (onAgentNudge !== undefined) {
+        await next.query(`listen ${AGENTS_CHANNEL}`);
+      }
     } catch (error) {
       await next.end().catch(() => {});
       if (!closed) {
@@ -82,6 +96,7 @@ export function startEventListener(options: EventListenerOptions): EventListener
     delay = firstDelay;
     // Whatever was missed while connecting is found by asking now.
     onNudge();
+    onAgentNudge?.(undefined);
   };
   void connect();
 

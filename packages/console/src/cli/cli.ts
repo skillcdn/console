@@ -28,6 +28,7 @@ import {
   LIST_LIMIT,
   MAX_DECIDERS,
   MAX_OPTIONS,
+  MAX_SIGNALS_PAGE_LIMIT,
   MIN_OPTIONS,
 } from "../limits.js";
 import { capabilityWords } from "../plugin/capabilities.js";
@@ -121,6 +122,7 @@ import {
   formatRun,
   formatRunLine,
   formatSecretLine,
+  formatSignalLine,
   formatTask,
   formatTaskLine,
   formatTeamLine,
@@ -3624,11 +3626,141 @@ const agentSecret = async (args: readonly string[], io: CliIo): Promise<number> 
   return EXIT.ok;
 };
 
+/** The kinds of signal a supervisor sends with words: which need them, and which take them. */
+const WORDED_SIGNALS: Readonly<Record<string, { readonly needs: boolean }>> = {
+  tell: { needs: true },
+  interrupt: { needs: true },
+  stop: { needs: false },
+  restart: { needs: false },
+  reset: { needs: false },
+  wake: { needs: false },
+};
+
+// A supervisor's signal to an agent account (ADR-0085): a tell, an interruption, a stop, a start
+// with the same conversation or with a new one, a wake; in their own name, on the account's
+// record. What it says is given as words, or with --file, or on standard input as `-`.
+const agentSignal = async (
+  kind: "tell" | "interrupt" | "stop" | "restart" | "reset" | "wake",
+  args: readonly string[],
+  io: CliIo,
+): Promise<number> => {
+  const { values, positionals } = parse(args, { file: { type: "string" } });
+  const [given, words, ...rest] = positionals;
+  const needs = WORDED_SIGNALS[kind]?.needs === true;
+  const usage = `Say whom${needs ? " and what" : ""}: console agent ${kind} <handle> ${needs ? '"<words>"' : '["<words>"]'} [--file <path>]`;
+  if (given === undefined || rest.length > 0) {
+    throw misuse(usage);
+  }
+  const said = ((await bodyOf(io, values, words)) ?? "").trim();
+  if (needs && said.length === 0) {
+    throw misuse(usage);
+  }
+  const handle = handleOf(given);
+  const session = await open(io, values);
+  const sent = await session.client.sendSignal(handle, {
+    kind,
+    ...(said.length === 0 ? {} : { text: said }),
+  });
+  answer(io, session, sent, () => `Sent to @${handle}: ${formatSignalLine(sent)}`);
+  return EXIT.ok;
+};
+
+// The model and the level of effort an agent account runs with (ADR-0085): a supervisor's
+// choice, kept with the account and applied by its runner.
+const agentSet = async (args: readonly string[], io: CliIo): Promise<number> => {
+  const { values, positionals } = parse(args, {
+    model: { type: "string" },
+    effort: { type: "string" },
+  });
+  const usage =
+    "Say whom and what: console agent set <handle> [--model <name|none>] [--effort <level|none>]";
+  const handle = handleOf(theOne(positionals, usage));
+  const model = orNone(text(values, "model"));
+  const effort = orNone(text(values, "effort"));
+  if (model === undefined && effort === undefined) {
+    throw misuse(usage);
+  }
+  const session = await open(io, values);
+  const sent = await session.client.sendSignal(handle, {
+    kind: "set",
+    set: {
+      ...(model === undefined ? {} : { model }),
+      ...(effort === undefined ? {} : { effort }),
+    },
+  });
+  answer(io, session, sent, () => `Sent to @${handle}: ${formatSignalLine(sent)}`);
+  return EXIT.ok;
+};
+
+// The record of what an agent account was told (ADR-0085), the newest first: for its
+// supervisors, and for the account itself as `console agent signals me`.
+const agentSignals = async (args: readonly string[], io: CliIo): Promise<number> => {
+  const { values, positionals } = parse(args, {
+    limit: { type: "string" },
+    before: { type: "string" },
+  });
+  const handle = handleOf(
+    theOne(
+      positionals,
+      "Say whose: console agent signals <handle|me> [--limit <n>] [--before <number>]",
+    ),
+  );
+  const limit = text(values, "limit");
+  const before = text(values, "before");
+  if (
+    limit !== undefined &&
+    !(
+      Number.isInteger(Number(limit)) &&
+      Number(limit) >= 1 &&
+      Number(limit) <= MAX_SIGNALS_PAGE_LIMIT
+    )
+  ) {
+    throw misuse(`Not a number of signals, 1 to ${MAX_SIGNALS_PAGE_LIMIT}: ${limit}`);
+  }
+  if (before !== undefined && !(Number.isSafeInteger(Number(before)) && Number(before) >= 1)) {
+    throw misuse(`Not a signal's number: ${before}`);
+  }
+  const session = await open(io, values);
+  const found = await session.client.signals(handle, {
+    ...(limit === undefined ? {} : { limit: Number(limit) }),
+    ...(before === undefined ? {} : { before: Number(before) }),
+  });
+  answer(io, session, found, () =>
+    found.items.length === 0
+      ? "No signal yet."
+      : [
+          ...found.items.map(formatSignalLine),
+          ...(found.more
+            ? [
+                `More before: console agent signals ${handle} --before ${found.items.at(-1)?.number}`,
+              ]
+            : []),
+        ].join("\n"),
+  );
+  return EXIT.ok;
+};
+
 // One agent account by its handle; with --avatar, its picture written as a file (ADR-0084): the
 // parts are drawn here, by the package's own function, and the console sends no picture.
 const agent: Command = async (args, io) => {
   if (args[0] === "new") {
     return agentNew(args.slice(1), io);
+  }
+  if (
+    args[0] === "tell" ||
+    args[0] === "interrupt" ||
+    args[0] === "stop" ||
+    args[0] === "restart" ||
+    args[0] === "reset" ||
+    args[0] === "wake"
+  ) {
+    return agentSignal(args[0], args.slice(1), io);
+  }
+  if (args[0] === "set") {
+    return agentSet(args.slice(1), io);
+  }
+  if (args[0] === "signals") {
+    return agentSignals(args.slice(1), io);
   }
   if (args[0] === "secrets") {
     return agentSecrets(args.slice(1), io);

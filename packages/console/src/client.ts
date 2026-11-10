@@ -95,8 +95,13 @@ import {
   type RestRun,
   type RestRunEndInput,
   type RestRunInput,
+  type RestRunnerHeartbeat,
+  type RestRunnerHeartbeatInput,
   type RestRuns,
   type RestSessions,
+  type RestSignal,
+  type RestSignalInput,
+  type RestSignals,
   type RestSkillBrowse,
   type RestSkillFile,
   type RestSkillFind,
@@ -170,9 +175,12 @@ import {
   restProjectsSchema,
   restReachedDecisionSchema,
   restRulesSchema,
+  restRunnerHeartbeatSchema,
   restRunSchema,
   restRunsSchema,
   restSessionsSchema,
+  restSignalSchema,
+  restSignalsSchema,
   restSkillBrowseSchema,
   restSkillFileSchema,
   restSkillFindSchema,
@@ -644,6 +652,18 @@ export interface ConsoleClient {
     query?: { readonly before?: number | undefined; readonly limit?: number | undefined },
     signal?: AbortSignal,
   ): Promise<RestAgentSecretAccesses>;
+  /**
+   * The signals of an agent account (ADR-0085): one sent, by a supervisor; and the record of
+   * them, the newest first, for its supervisors, or with `me` for the account itself.
+   */
+  sendSignal(handle: string, input: RestSignalInput): Promise<RestSignal>;
+  signals(
+    handle: string,
+    query?: { readonly before?: number | undefined; readonly limit?: number | undefined },
+    signal?: AbortSignal,
+  ): Promise<RestSignals>;
+  /** The runner's heartbeat, on the command signed in as the account itself. */
+  runnerHeartbeat(input: RestRunnerHeartbeatInput): Promise<RestRunnerHeartbeat>;
   /** Where an agent account is signed in, its browsers and its command; for a supervisor, on the console's own pages. */
   agentSignIns(handle: string, signal?: AbortSignal): Promise<RestSessions>;
   /** Ends one of an agent account's sessions; for a supervisor, on the console's own pages. */
@@ -1446,6 +1466,21 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
         restAgentSecretAccessesSchema,
         signal,
       ),
+    sendSignal: (handle, input) =>
+      request("POST", `${base}${agentPath(handle, "signals")}`, input, restSignalSchema),
+    signals: (handle, query, signal) =>
+      request(
+        "GET",
+        withQuery(agentPath(handle, "signals"), {
+          before: query?.before === undefined ? undefined : String(query.before),
+          limit: query?.limit === undefined ? undefined : String(query.limit),
+        }),
+        undefined,
+        restSignalsSchema,
+        signal,
+      ),
+    runnerHeartbeat: (input) =>
+      request("PUT", `${base}${agentPath("me", "runner")}`, input, restRunnerHeartbeatSchema),
     agentSignIns: (handle, signal) =>
       request(
         "GET",

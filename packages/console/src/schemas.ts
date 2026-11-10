@@ -40,7 +40,10 @@ import {
   MAX_PROJECT_SYMBOL_LENGTH,
   MAX_QUESTION_LENGTH,
   MAX_RULES_LENGTH,
+  MAX_RUNNER_LINE_LENGTH,
+  MAX_RUNNER_OFFERS,
   MAX_SECRET_LENGTH,
+  MAX_SIGNAL_LENGTH,
   MAX_SKILLS_ADDRESS_LENGTH,
   MAX_SUMMARY_LENGTH,
   MAX_TEAM_KEY_LENGTH,
@@ -56,6 +59,7 @@ import {
 import { PLUGIN_WIDGET_SIZE_NAMES } from "./plugin/manifest.js";
 import { hasForbiddenCodePoint } from "./text.js";
 import {
+  AGENT_STATE_REASONS,
   AGENT_STATES,
   ARTIFACT_KINDS,
   CATEGORY_COLORS,
@@ -81,6 +85,8 @@ import {
   RUN_STATUSES,
   SECRET_ACCESSES,
   SESSION_KINDS,
+  SIGNAL_KINDS,
+  SIGNAL_SOURCES,
   SKILLS_STATUSES,
   TASK_PRIORITIES,
   TASK_STATES,
@@ -582,6 +588,171 @@ const handle = z.string().check(
   z.refine((value) => !RESERVED_HANDLES.includes(value), "is a word the addresses use"),
 );
 
+/** A line a runner says: bounded, without characters that hide. */
+const runnerLine = line(MAX_RUNNER_LINE_LENGTH);
+/** A model or a level of effort, as the product spells one. */
+const runnerChoice = z
+  .string()
+  .check(
+    z.minLength(1),
+    z.maxLength(MAX_RUNNER_LINE_LENGTH),
+    z.regex(/^[A-Za-z0-9][A-Za-z0-9._:[\]-]*$/),
+  );
+
+/** The model and the level of effort an agent runs with, or is to; `null` each for "as the product has it". */
+export const restAgentChoiceSchema = z.object({
+  model: z.nullable(z.string()),
+  effort: z.nullable(z.string()),
+});
+export type RestAgentChoice = z.infer<typeof restAgentChoiceSchema>;
+
+/** Where a runner runs: the machine as it calls itself, its operating system, and the OS account. */
+const runnerMachine = z.object({ name: runnerLine, os: runnerLine, user: runnerLine });
+/** The product a runner starts: the driver, what the product is called, its version, and whether the driver was tried with it. */
+const runnerProduct = z.object({
+  driver: runnerLine,
+  name: runnerLine,
+  version: z.nullable(runnerLine),
+  tried: z.boolean(),
+});
+/** What the product offers to choose from, and what the driver can do. */
+const runnerOffers = z.object({
+  models: z.array(runnerChoice).check(z.maxLength(MAX_RUNNER_OFFERS)),
+  efforts: z.array(runnerChoice).check(z.maxLength(MAX_RUNNER_OFFERS)),
+  steer: z.boolean(),
+  images: z.boolean(),
+  resume: z.boolean(),
+});
+
+/**
+ * What `PUT /api/v1/agents/me/runner` is sent (ADR-0085, docs/specs/runner.md): the runner's
+ * heartbeat, every thirty seconds and when the agent's state changes.
+ */
+export const restRunnerHeartbeatInputSchema = z.object({
+  /** How the runner says its agent stands; `unheard` is the console's word, never the runner's. */
+  state: z.enum(["running", "stopped", "refused", "failed"]),
+  reason: z.enum(AGENT_STATE_REASONS),
+  /** The number of the last signal handed to the product; `0` for none. */
+  delivered: z.int().check(z.gte(0)),
+  /** The open session, or `null`. */
+  session: z.nullable(uuid),
+  machine: runnerMachine,
+  /** The package's version the runner runs from. */
+  runner: runnerLine,
+  product: runnerProduct,
+  offers: runnerOffers,
+  /** What the open session runs with; `null` each where the product's own choice stands. */
+  running: z.object({ model: z.nullable(runnerChoice), effort: z.nullable(runnerChoice) }),
+});
+export type RestRunnerHeartbeatInput = z.infer<typeof restRunnerHeartbeatInputSchema>;
+
+/** What the heartbeat is answered: where the account's record of signals stands, what its supervisors chose, and how the console has the agent. */
+export const restRunnerHeartbeatSchema = z.object({
+  latest: z.int().check(z.gte(0)),
+  settings: restAgentChoiceSchema,
+  state: z.enum(AGENT_STATES),
+});
+export type RestRunnerHeartbeat = z.infer<typeof restRunnerHeartbeatSchema>;
+
+/** How an agent account stands (ADR-0085), for whoever sees it: the state, why, since when, and when its runner was last heard from. */
+export const restAgentStateSchema = z.object({
+  state: z.enum(AGENT_STATES),
+  reason: z.nullable(z.string()),
+  since: instant,
+  heardAt: z.nullable(instant),
+});
+export type RestAgentState = z.infer<typeof restAgentStateSchema>;
+
+/** What a runner last said of itself, for the account's supervisors and for the account: where it runs, with what, what it offers and runs with, and what was chosen for it. */
+export const restAgentRunnerSchema = z.object({
+  delivered: z.int(),
+  latest: z.int(),
+  session: z.nullable(uuid),
+  machine: z.nullable(z.object({ name: z.string(), os: z.string(), user: z.string() })),
+  runner: z.nullable(z.string()),
+  product: z.nullable(
+    z.object({
+      driver: z.string(),
+      name: z.string(),
+      version: z.nullable(z.string()),
+      tried: z.boolean(),
+    }),
+  ),
+  offers: z.nullable(
+    z.object({
+      models: z.array(z.string()),
+      efforts: z.array(z.string()),
+      steer: z.boolean(),
+      images: z.boolean(),
+      resume: z.boolean(),
+    }),
+  ),
+  running: z.nullable(restAgentChoiceSchema),
+  settings: restAgentChoiceSchema,
+});
+export type RestAgentRunner = z.infer<typeof restAgentRunnerSchema>;
+
+/**
+ * A signal (ADR-0085): what the console sends an agent account's runner, a record numbered per
+ * account, with who sent it and where it came from.
+ */
+export const restSignalSchema = z.object({
+  number: z.int().check(z.positive()),
+  kind: z.enum(SIGNAL_KINDS),
+  /** Who sent it, with the agent and the plugin they acted through; `null` for the console itself. */
+  by: z.nullable(restPersonSchema),
+  agent: z.nullable(z.string()),
+  plugin: z.nullable(z.string()),
+  source: z.enum(SIGNAL_SOURCES),
+  /** What it refers to: a task (`#412`), a briefing (`day`), a thread; `null` for a supervisor's own. */
+  key: z.nullable(z.string()),
+  text: z.string(),
+  /** For `set`: the model and the effort to run with from then on, the whole choice, `null` each for the product's own. */
+  set: z.nullable(restAgentChoiceSchema),
+  attachments: z.array(
+    z.object({ id: uuid, name: z.string(), size: count, contentType: z.string() }),
+  ),
+  at: instant,
+});
+export type RestSignal = z.infer<typeof restSignalSchema>;
+
+/** `GET /api/v1/agents/<handle>/signals?before=&limit=`: the record, the newest first, and whether there is more before. */
+export const restSignalsSchema = z.object({ items: z.array(restSignalSchema), more: z.boolean() });
+export type RestSignals = z.infer<typeof restSignalsSchema>;
+
+/**
+ * What `POST /api/v1/agents/<handle>/signals` is sent, by a supervisor: the kind, the words for
+ * the agent, and for `set` the model or the effort. `tell` and `interrupt` need words; `set`
+ * needs one of its two, a field left out staying as it is and `null` meaning the product's own.
+ */
+export const restSignalInputSchema = z
+  .object({
+    kind: z.enum(SIGNAL_KINDS),
+    text: z.optional(paragraphs(MAX_SIGNAL_LENGTH)),
+    set: z.optional(
+      z.object({
+        model: z.optional(z.nullable(runnerChoice)),
+        effort: z.optional(z.nullable(runnerChoice)),
+      }),
+    ),
+  })
+  .check(
+    z.refine(
+      (input) =>
+        (input.kind !== "tell" && input.kind !== "interrupt") ||
+        (input.text ?? "").trim().length > 0,
+      "a tell and an interrupt need words",
+    ),
+    z.refine(
+      (input) =>
+        input.kind !== "set" ||
+        (input.set !== undefined &&
+          (input.set.model !== undefined || input.set.effort !== undefined)),
+      "a set names a model or an effort",
+    ),
+  );
+export type RestSignalInput = z.infer<typeof restSignalInputSchema>;
+
 /** Whether `value` is spelled as a secret's name is: lowercase letters, digits, dots, hyphens and underscores, a letter or a digit first and last. */
 export function isSecretName(value: string): boolean {
   return (
@@ -716,6 +887,10 @@ export const restAgentSchema = z.object({
    * line. What a supervisor may do of it, nobody else may.
    */
   supervised: z.boolean(),
+  /** How it stands, as its runner last said or the console noted (ADR-0085); `null` while no runner has ever said. */
+  state: z.optional(z.nullable(restAgentStateSchema)),
+  /** What its runner last said of itself and what was chosen for it: answered to its supervisors and to the account, `null` to anyone else and while there is none. */
+  runner: z.optional(z.nullable(restAgentRunnerSchema)),
 });
 export type RestAgent = z.infer<typeof restAgentSchema>;
 

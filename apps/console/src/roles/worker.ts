@@ -5,6 +5,7 @@ import { Archivist } from "../jobs/archivist.js";
 import { Janitor } from "../jobs/janitor.js";
 import { OrganizationSync } from "../jobs/organization-sync.js";
 import { RunCloser } from "../jobs/run-closer.js";
+import { RunnerWatch } from "../jobs/runner-watch.js";
 import type { Logger } from "../logger.js";
 import { APP_NAME, APP_VERSION } from "../version.js";
 import {
@@ -90,6 +91,10 @@ export async function runWorker(config: Config, logger: Logger): Promise<void> {
   }
   await janitor.sweep();
   janitor.start(JANITOR_INTERVAL_MS);
+  // The runners of the agent accounts not heard from for a while are noted (ADR-0085).
+  const runnerWatch = new RunnerWatch({ database, clock: systemClock, logger });
+  await runnerWatch.sweep();
+  runnerWatch.start();
   if (archivist !== undefined) {
     await archivist.sweep();
     archivist.start(ARCHIVE_INTERVAL_MS);
@@ -106,6 +111,7 @@ export async function runWorker(config: Config, logger: Logger): Promise<void> {
   const signal = await shutdownSignal();
   logger.info({ signal }, "shutting down");
   await janitor.close();
+  await runnerWatch.close();
   await archivist?.close();
   await runCloser?.close();
   await sync?.close();

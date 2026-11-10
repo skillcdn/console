@@ -25,6 +25,7 @@ import type {
 } from "@skillcdn/console/api";
 import type { SessionView } from "../auth/sessions.js";
 import { describeUserAgent } from "../auth/user-agent.js";
+import type { RunnerRecord } from "../db/queries/agent-runners.js";
 import type { AgentRecord } from "../db/queries/agents.js";
 import type { CategoryRecord } from "../db/queries/categories.js";
 import type { CommentRecord } from "../db/queries/comments.js";
@@ -71,12 +72,44 @@ export function restPerson(person: PersonRecord): RestPerson {
   };
 }
 
-/** An agent account (ADR-0084): the member it is, and whom it reports to, where the asker may see them. */
-export function restAgent(agent: AgentRecord): RestAgent {
+/**
+ * An agent account (ADR-0084): the member it is, whom it reports to where the asker may see
+ * them, and how it stands (ADR-0085) once a runner has said or the console has noted. What its
+ * runner said of itself, and what was chosen for it, is answered to its supervisors and to the
+ * account alone (`detailed`).
+ */
+export function restAgent(
+  agent: AgentRecord,
+  runner?: RunnerRecord | undefined,
+  detailed = false,
+): RestAgent {
   return {
     person: restPerson(agent.person),
     manager: agent.manager === undefined ? null : restPerson(agent.manager),
     supervised: agent.supervised,
+    state:
+      runner?.state === undefined || runner.stateAt === undefined
+        ? null
+        : {
+            state: runner.state,
+            reason: runner.reason ?? null,
+            since: runner.stateAt.toISOString(),
+            heardAt: runner.heardAt?.toISOString() ?? null,
+          },
+    runner:
+      runner === undefined || !detailed
+        ? null
+        : {
+            delivered: runner.delivered,
+            latest: runner.latest,
+            session: runner.sessionId ?? null,
+            machine: runner.machine ?? null,
+            runner: runner.runner ?? null,
+            product: runner.product ?? null,
+            offers: runner.offers ?? null,
+            running: runner.running ?? null,
+            settings: { model: runner.model ?? null, effort: runner.effort ?? null },
+          },
   };
 }
 

@@ -31,6 +31,7 @@ import type {
   RestRules,
   RestRulesPlugin,
   RestRun,
+  RestSignal,
   RestTask,
   RestTeam,
   RestVersion,
@@ -164,14 +165,74 @@ export function formatAgentLine(agent: RestAgent): string {
   return `@${person.handle ?? person.login}  ${called.join(", ")}  (${standing})`;
 }
 
-/** One agent account in full: its line, and whether whoever asks supervises it. */
+/** What stands for a model or an effort nobody chose: whatever the product runs with by itself. */
+const OWN_CHOICE = "the product's own";
+
+/**
+ * One agent account in full: its line, how it stands, what its runner last said of itself and
+ * what was chosen for it, where the asker is answered that, and whether they supervise it.
+ */
 export function formatAgent(agent: RestAgent): string {
+  const runner = agent.runner ?? null;
   return [
     formatAgentLine(agent),
+    `state: ${formatAgentState(agent)}`,
+    ...(runner === null
+      ? []
+      : [
+          ...(runner.machine === null
+            ? []
+            : [
+                `runner: ${runner.runner ?? "?"} on ${runner.machine.name} (${runner.machine.os}), as ${runner.machine.user}`,
+              ]),
+          ...(runner.product === null
+            ? []
+            : [
+                `product: ${runner.product.name} ${runner.product.version ?? "of a version it did not say"}${runner.product.tried ? "" : ", a version the driver was not tried with"}`,
+              ]),
+          `set to: model ${runner.settings.model ?? OWN_CHOICE}, effort ${runner.settings.effort ?? OWN_CHOICE}`,
+          ...(runner.running === null
+            ? []
+            : [
+                `runs with: model ${runner.running.model ?? OWN_CHOICE}, effort ${runner.running.effort ?? OWN_CHOICE}`,
+              ]),
+          `signals: ${runner.delivered} of ${runner.latest} delivered`,
+        ]),
     agent.supervised
       ? "You supervise it: an administrator, or above it in the reporting line."
       : "You do not supervise it.",
   ].join("\n");
+}
+
+/** How an agent account stands (ADR-0085), in a few words: the state, why, and when its runner was last heard from. */
+export function formatAgentState(agent: RestAgent): string {
+  const state = agent.state ?? null;
+  if (state === null) {
+    return "no runner has been heard from yet";
+  }
+  const reason = state.reason === null ? "" : ` (${state.reason.replaceAll("_", " ")})`;
+  const heard =
+    state.heardAt === null ? "" : `; its runner was last heard from ${moment(state.heardAt)}`;
+  return `${state.state}${reason} since ${moment(state.since)}${heard}`;
+}
+
+/**
+ * One signal of an agent account's record (ADR-0085): its number, its kind, who sent it or where
+ * it came from, when, and the first words of what it says.
+ */
+export function formatSignalLine(signal: RestSignal): string {
+  const who =
+    signal.by === null
+      ? `${signal.source}${signal.key === null ? "" : `: ${signal.key}`}`
+      : `${signal.by.login}${signal.agent === null ? "" : ` through ${signal.agent}`}`;
+  const set =
+    signal.set === null
+      ? ""
+      : `  model ${signal.set.model ?? OWN_CHOICE}, effort ${signal.set.effort ?? OWN_CHOICE}`;
+  const words = signal.text.replaceAll(/\s+/g, " ").trim();
+  const said =
+    words.length === 0 ? "" : `  ${words.length > 120 ? `${words.slice(0, 119)}…` : words}`;
+  return `#${signal.number}  ${signal.kind}  ${who}  ${moment(signal.at)}${set}${said}`;
 }
 
 /** One secret of an agent account's store (ADR-0087): its name, when it was set and by which side, and the day it ends on where one is known. Never its value. */

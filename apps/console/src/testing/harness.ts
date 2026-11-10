@@ -214,6 +214,7 @@ export function createHarness(testDatabase: TestDatabase, options: HarnessOption
           connectionString: testDatabase.connectionString,
           logger,
           onNudge: () => feed.nudge(),
+          onAgentNudge: (accountId) => feed.agents.nudge(accountId),
         })
       : undefined;
   /** The listings an administrator would have made, written once, before the first request. */

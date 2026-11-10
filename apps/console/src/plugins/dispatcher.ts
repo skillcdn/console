@@ -532,7 +532,6 @@ export function hookEventId(source: "console" | "plugin", number: number): strin
   return `${source}:${number}`;
 }
 
-/** Whether an event is one of the workspace's people events: someone joined, left, came back, changed role, or was listed. */
 /** The plugin kinds a plugin with `plugins:<key>` hears of (ADR-0072). */
 const LIFECYCLE_KINDS: readonly string[] = ["plugin.enabled", "plugin.disabled", "plugin.upgraded"];
 
@@ -550,8 +549,13 @@ export function lifecycleOf(event: {
     : undefined;
 }
 
+/**
+ * Whether an event is one of the workspace's people events: someone joined, left, came back,
+ * changed role, or was listed; a team changed; or an agent account stands otherwise now
+ * (ADR-0085), which is how a plugin tells whoever manages it.
+ */
 export function isPeopleEvent(kind: string): boolean {
-  return kind.startsWith("person.") || kind.startsWith("team.");
+  return kind.startsWith("person.") || kind.startsWith("team.") || kind.startsWith("agent.");
 }
 
 /**

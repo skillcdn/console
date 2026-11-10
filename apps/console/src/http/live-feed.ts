@@ -138,10 +138,88 @@ export class Subscription implements AsyncIterable<FeedMessage> {
 }
 
 /**
+ * Whoever waits in this process for something new of one agent account (ADR-0085, ADR-0086): its
+ * runner's stream of signals, a watcher of its transcript. Woken on a channel of the account's
+ * own, not on the board's, which would wake every reader of every feed for what one account is
+ * told or does.
+ */
+export class AgentWakes {
+  /** How long a wait goes in silence before whoever waits says it is alive and looks again, nudge or no nudge. */
+  readonly quietMs: number;
+  readonly #waiting = new Map<string, Set<() => void>>();
+  #closed = false;
+  #nudges = 0;
+
+  constructor(quietMs: number) {
+    this.quietMs = quietMs;
+  }
+
+  /**
+   * The nudges so far, to take before a look and hand to the wait after it: a nudge that came
+   * while looking, for something the look did not see yet, is then not slept through.
+   */
+  get mark(): number {
+    return this.#nudges;
+  }
+
+  /** Wakes whoever waits on the account; on every account where none is named, after a nudge may have been missed. */
+  nudge(accountId?: string): void {
+    this.#nudges += 1;
+    const sets =
+      accountId === undefined ? [...this.#waiting.values()] : [this.#waiting.get(accountId)];
+    for (const set of sets) {
+      for (const wake of [...(set ?? [])]) {
+        wake();
+      }
+    }
+  }
+
+  /**
+   * Resolves when the account is nudged, at once when anything was nudged since `mark` was
+   * taken, after the quiet time of nothing, or when the process is closing.
+   */
+  wait(accountId: string, mark: number): Promise<"woken" | "timeout" | "closed"> {
+    if (this.#closed) {
+      return Promise.resolve("closed");
+    }
+    if (mark !== this.#nudges) {
+      return Promise.resolve("woken");
+    }
+    return new Promise((resolve) => {
+      const set = this.#waiting.get(accountId) ?? new Set<() => void>();
+      this.#waiting.set(accountId, set);
+      const done = (how: "woken" | "timeout" | "closed") => {
+        clearTimeout(timer);
+        set.delete(wake);
+        if (set.size === 0) {
+          this.#waiting.delete(accountId);
+        }
+        resolve(how);
+      };
+      const wake = () => done(this.#closed ? "closed" : "woken");
+      const timer = setTimeout(() => done("timeout"), this.quietMs);
+      set.add(wake);
+    });
+  }
+
+  /** Whether the process is closing: a stream that never ends would hold the server open. */
+  get closed(): boolean {
+    return this.#closed;
+  }
+
+  close(): void {
+    this.#closed = true;
+    this.nudge();
+  }
+}
+
+/**
  * The subscribers of this process. `nudge` wakes them all; `close` ends them all, which is how
  * shutdown lets the listener go: a stream that never ends would hold the server open.
  */
 export class LiveFeed {
+  /** Whoever waits for something new of one agent account, woken apart from the board's readers. */
+  readonly agents: AgentWakes;
   readonly #options: LiveFeedOptions;
   readonly #subscriptions = new Set<Subscription>();
   /** How many streams each person holds, for the bound on them; a person with none is not here. */
@@ -150,6 +228,8 @@ export class LiveFeed {
 
   constructor(options: LiveFeedOptions) {
     this.#options = options;
+    // One time for both: when a waiter says it is alive, and when it looks without a nudge.
+    this.agents = new AgentWakes(Math.min(options.heartbeatMs, options.pollMs));
   }
 
   get size(): number {
@@ -211,6 +291,7 @@ export class LiveFeed {
   /** Ends every subscription and refuses new ones. */
   close(): void {
     this.#closed = true;
+    this.agents.close();
     for (const subscription of [...this.#subscriptions]) {
       subscription.end();
     }

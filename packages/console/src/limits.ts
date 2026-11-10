@@ -59,6 +59,14 @@ export const MAX_PERSON_NAME_LENGTH = 80;
 export const MAX_AGENT_SECRET_NAME_LENGTH = 64;
 export const MAX_AGENT_SECRET_BYTES = 8 * 1024;
 export const MAX_AGENT_SECRETS = 200;
+/** What a signal says to an agent (ADR-0085): a few paragraphs. */
+export const MAX_SIGNAL_LENGTH = 8000;
+/** A line a runner says of its machine, its product, a model or a level of effort; and how many of those a product offers. */
+export const MAX_RUNNER_LINE_LENGTH = 120;
+export const MAX_RUNNER_OFFERS = 50;
+/** How many signals one page of an account's record carries when none is asked for, and the most it may. */
+export const SIGNALS_PAGE_LIMIT = 50;
+export const MAX_SIGNALS_PAGE_LIMIT = 200;
 /** A team's name (ADR-0073). */
 export const MAX_TEAM_NAME_LENGTH = 60;
 /** A team's key (ADR-0074), as long as a project's may be: the two are one set of names. */

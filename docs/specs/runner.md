@@ -23,7 +23,7 @@ The runner is the program on an agent account's machine that keeps its agent goi
 
 ## The heartbeat
 
-`PUT /api/v1/agents/me/runner`, every thirty seconds, and at once when the state changes. For an agent account on its command's session (`secret.own_session`'s rule: never a token the account made). The body:
+`PUT /api/v1/agents/me/runner`, every thirty seconds, and at once when the state changes. For an agent account on the session of its command signed in as itself, which is the runner's one credential: its browser, or a token it made, is `agent.own_command`. Built on the console's side ([rest.md](rest.md#the-runner-put-apiv1agentsmerunner-and-the-signals)). The body:
 
 ```json
 {
@@ -75,16 +75,16 @@ A signal is a record of the console's, numbered per agent account from 1, whoeve
 }
 ```
 
-- `kind`: `wake` (there is something to do), `tell` (a supervisor's words), `interrupt` (stop the current turn, then take these words), `stop`, `restart`, `reset`, `set` (the model and the level of effort, in `set`: `{ "model", "effort" }`, either `null` for "as it is").
+- `kind`: `wake` (there is something to do), `tell` (a supervisor's words), `interrupt` (stop the current turn, then take these words), `stop`, `restart`, `reset`, `set` (the model and the level of effort, in `set`: `{ "model", "effort" }`, the whole choice from then on, either `null` for the product's own).
 - `by` is the member who sent it, with the `agent` and the `plugin` they acted through, or `null` for the console itself.
 - `source`: `person` (a supervisor's own signal), `board`, `schedule`, `messenger`, or `console` (the console's own housekeeping), with a reference in `key` (`#412`, `day`, a thread, `services`).
-- `text` is a paragraph of up to `MAX_SIGNAL_LENGTH` characters; `attachments` the pictures sent with a `tell`, each `{ "id", "name", "size", "contentType" }`.
+- `text` is a paragraph of up to `MAX_SIGNAL_LENGTH` characters; `attachments` the pictures sent with a `tell`, each `{ "id", "name", "size", "contentType" }`, which come with the agent's page: the list is empty until then.
 
-`POST /api/v1/agents/<handle>/signals`, for a supervisor, with a session or a token, takes `{ "kind", "text", "set" }` and answers `201` with the signal. `tell` and `interrupt` need words; `stop`, `restart` and `reset` take them for the agent; `set` needs a model or an effort among those the runner last offered, where it offered any. A `stop` sets the agent's state to `stopped` at once, by whoever sent it, and it stays so until a `restart` or a `reset` is sent, whatever the runner says meanwhile.
+`POST /api/v1/agents/<handle>/signals`, for a supervisor, with a session or a token, takes `{ "kind", "text", "set" }` and answers `201` with the signal. `tell` and `interrupt` need words; `stop`, `restart` and `reset` take them for the agent; `set` takes `{ "model", "effort" }`, one or both, a field left out staying as it is and `null` meaning the product's own again, each among those the runner last offered, where it offered any (`signal.not_offered`). A `stop` sets the agent's state to `stopped` at once, by whoever sent it, and it stays so until a `restart` or a `reset` is sent, whatever the runner says meanwhile.
 
-`GET /api/v1/agents/<handle>/signals?before=&limit=` reads the record, the newest first, for the account's supervisors and for the account. It is not an event of the board's feed.
+`GET /api/v1/agents/<handle>/signals?before=&limit=` reads the record, the newest first, for the account's supervisors, and `GET /api/v1/agents/me/signals` for the account itself. A signal is not an event of the board's feed. Sending, the record and the stream are built on the console's side.
 
-`GET /api/v1/agents/me/signals/stream?after=<number>` is the runner's: a stream of server-sent events, each `signal` with a signal as its data and its number as its id, from the number after `after` on, in order; a comment every fifteen seconds keeps the connection known to be alive. For the account on its command's session. The runner connects again from the last number it delivered, so that nothing is lost and nothing delivered twice; a signal it raised itself, from a wake source on the machine, it reports with `POST /api/v1/agents/me/signals` (`wake` alone, with its `source` and `key`), and receives back in order like any other.
+`GET /api/v1/agents/me/signals/stream?after=<number>` is the runner's: a stream of server-sent events, each `signal` with a signal as its data and its number as its id, from the number after `after` on, in order; a comment every fifteen seconds keeps the connection known to be alive. For the account on its command's session, and ended when that session is. The runner connects again from the last number it delivered, in `after` or as `Last-Event-ID`, so that nothing is lost and nothing delivered twice; a signal it raised itself, from a wake source on the machine, it reports with `POST /api/v1/agents/me/signals` (`wake` alone, with its `source` and `key`), which comes with the first wake source ([roadmap](../roadmap.md), milestone 43), and receives back in order like any other.
 
 `interrupt` and `stop` are for the session open when they are sent: the runner delivers neither to a session begun later.
 

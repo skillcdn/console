@@ -104,6 +104,48 @@ export const SESSION_KINDS = ["browser", "command"] as const;
 export type SessionKind = (typeof SESSION_KINDS)[number];
 
 /**
+ * Why an agent account stands as it does (ADR-0085), one of a short list and never what was
+ * said: the runner's word for what it reports, `stop` for a supervisor's, `no_heartbeat` for an
+ * account the console has not heard from.
+ */
+export const AGENT_STATE_REASONS = [
+  "started",
+  "resumed",
+  "reset",
+  "completed",
+  "stop",
+  "model_refused",
+  "sign_in",
+  "start",
+  "crashed",
+  "no_heartbeat",
+] as const;
+
+export type AgentStateReason = (typeof AGENT_STATE_REASONS)[number];
+
+/**
+ * What the console sends an agent account's runner (ADR-0085): a wake, a supervisor's words, an
+ * interruption with words, a stop, a start with the same conversation or with a new one, and
+ * the model and the level of effort to run with.
+ */
+export const SIGNAL_KINDS = [
+  "wake",
+  "tell",
+  "interrupt",
+  "stop",
+  "restart",
+  "reset",
+  "set",
+] as const;
+
+export type SignalKind = (typeof SIGNAL_KINDS)[number];
+
+/** Where a signal came from: a supervisor's own, the board, the schedule, a messenger, or the console's own housekeeping. */
+export const SIGNAL_SOURCES = ["person", "board", "schedule", "messenger", "console"] as const;
+
+export type SignalSource = (typeof SIGNAL_SOURCES)[number];
+
+/**
  * What was done to a secret of an agent account's store (ADR-0087), as the account's record
  * says it: set, by the account or seeded by a supervisor; read, by the account; or removed.
  */

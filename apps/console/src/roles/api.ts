@@ -36,6 +36,7 @@ import { Archivist } from "../jobs/archivist.js";
 import { Janitor } from "../jobs/janitor.js";
 import { OrganizationSync } from "../jobs/organization-sync.js";
 import { RunCloser } from "../jobs/run-closer.js";
+import { RunnerWatch } from "../jobs/runner-watch.js";
 import type { Logger } from "../logger.js";
 import { discoverPlugins } from "../plugins/discovery.js";
 import { PluginDispatcher } from "../plugins/dispatcher.js";
@@ -470,6 +471,7 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
     ca: config.database.ca,
     logger,
     onNudge: () => feed.nudge(),
+    onAgentNudge: (accountId) => feed.agents.nudge(accountId),
   });
   // A single-container install has no worker; the flag makes this process carry its work.
   const janitor = config.worker.inProcess
@@ -501,6 +503,10 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
         })
       : undefined;
   runCloser?.start(RUN_CLOSE_INTERVAL_MS);
+  const runnerWatch = config.worker.inProcess
+    ? new RunnerWatch({ database, clock: systemClock, logger })
+    : undefined;
+  runnerWatch?.start();
   const workspace = workspaceResolver(database, systemClock, config.workspace.name);
   const sync =
     config.worker.inProcess && organization !== undefined
@@ -546,6 +552,7 @@ export async function runApi(config: Config, logger: Logger): Promise<void> {
   await janitor?.close();
   await archivist?.close();
   await runCloser?.close();
+  await runnerWatch?.close();
   await sync?.close();
   await streams?.close();
   await plugins?.stop();

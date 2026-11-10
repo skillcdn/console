@@ -32,6 +32,7 @@ import {
 } from "../auth/policy.js";
 import type { Sessions } from "../auth/sessions.js";
 import type { Database } from "../db/client.js";
+import { findRunner, runnersOf } from "../db/queries/agent-runners.js";
 import {
   AgentError,
   type AgentReader,
@@ -277,7 +278,20 @@ export function registerAgentsRest(app: Hono<AppEnv>, dependencies: AgentsRestDe
     const { person } = caller;
     const settings = await readWorkspaceSettings(database, person.workspaceId);
     const agents = await listAgents(database, person.workspaceId, readerOf(person, settings));
-    const body: RestAgents = { items: agents.map(restAgent) };
+    // How each stands, for whoever sees it; what its runner said, for its supervisors and itself.
+    const runners = await runnersOf(
+      database,
+      agents.map((agent) => agent.person.id),
+    );
+    const body: RestAgents = {
+      items: agents.map((agent) =>
+        restAgent(
+          agent,
+          runners.get(agent.person.id),
+          agent.supervised || agent.person.id === person.id,
+        ),
+      ),
+    };
     return c.json(body);
   });
 
@@ -437,6 +451,15 @@ export function registerAgentsRest(app: Hono<AppEnv>, dependencies: AgentsRestDe
     }
     const settings = await readWorkspaceSettings(database, person.workspaceId);
     const agent = await findAgent(database, person.workspaceId, handle, readerOf(person, settings));
-    return agent === undefined ? notFound(c) : c.json(restAgent(agent));
+    if (agent === undefined) {
+      return notFound(c);
+    }
+    return c.json(
+      restAgent(
+        agent,
+        await findRunner(database, agent.person.id),
+        agent.supervised || agent.person.id === person.id,
+      ),
+    );
   });
 }

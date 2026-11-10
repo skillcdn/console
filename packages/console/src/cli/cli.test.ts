@@ -2354,7 +2354,7 @@ describe("configuring, as the person", () => {
     const one = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["agent", "@mira"], one.io)).toBe(EXIT.ok);
     expect(one.out()).toBe(
-      "@mira  Mira, Release engineer  (signs in as mira@acme.example, reports to bob, not signed in yet)\nYou supervise it: an administrator, or above it in the reporting line.\n",
+      "@mira  Mira, Release engineer  (signs in as mira@acme.example, reports to bob, not signed in yet)\nstate: no runner has been heard from yet\nYou supervise it: an administrator, or above it in the reporting line.\n",
     );
     // The picture is drawn here, from the parts: a PNG of 1024 pixels a side.
     const written: { path: string; name: string; bytes: Uint8Array }[] = [];
@@ -2532,6 +2532,169 @@ describe("configuring, as the person", () => {
     expect(removed.out()).toBe("The secret mail.password of @mira is removed.\n");
     const unsaid = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["agent", "secret", "mira"], unsaid.io)).toBe(EXIT.usage);
+  });
+
+  it("sends an agent account a signal for a supervisor, and reads the record of them (ADR-0085)", async () => {
+    const sent = (over: Record<string, unknown>) => ({
+      number: 7,
+      kind: "tell",
+      by: BOB,
+      agent: "Claude Code",
+      plugin: null,
+      source: "person",
+      key: null,
+      text: "",
+      set: null,
+      attachments: [],
+      at: WHEN,
+      ...over,
+    });
+    const { fetch, calls } = fakeConsole({
+      "POST /api/v1/agents/mira/signals": [
+        { status: 201, body: sent({ text: "Hold the release." }) },
+        { status: 201, body: sent({ number: 8, kind: "interrupt", text: "From a file." }) },
+        { status: 201, body: sent({ number: 9, kind: "stop" }) },
+        {
+          status: 201,
+          body: sent({ number: 10, kind: "set", set: { model: "opus", effort: null } }),
+        },
+        {
+          status: 400,
+          body: { error: { code: "signal.not_offered", message: "Its product offers no such." } },
+        },
+      ],
+      "GET /api/v1/agents/mira/signals?before=9&limit=2": {
+        body: {
+          items: [
+            sent({ number: 8, kind: "interrupt", text: "From a file,\n  on two lines." }),
+            sent({ number: 7, by: null, agent: null, source: "board", key: "#412", kind: "wake" }),
+          ],
+          more: true,
+        },
+      },
+      "GET /api/v1/agents/me/signals": { body: { items: [], more: false } },
+    });
+    const told = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["agent", "tell", "@mira", "Hold the release."], told.io)).toBe(EXIT.ok);
+    expect(calls.at(-1)?.body).toEqual({ kind: "tell", text: "Hold the release." });
+    expect(told.out()).toBe(
+      `Sent to @mira: #7  tell  bob through Claude Code  ${WHEN}  Hold the release.\n`,
+    );
+    // The words from a file, or from standard input, as a report's are.
+    const filed = harness({ fetch, env: SIGNED_IN, readFile: async () => "From a file.\n" });
+    expect(await runCli(["agent", "interrupt", "mira", "--file", "words.md"], filed.io)).toBe(
+      EXIT.ok,
+    );
+    expect(calls.at(-1)?.body).toEqual({ kind: "interrupt", text: "From a file." });
+    // A stop needs no words, and sends none.
+    const stopped = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["agent", "stop", "mira"], stopped.io)).toBe(EXIT.ok);
+    expect(calls.at(-1)?.body).toEqual({ kind: "stop" });
+    expect(stopped.out()).toBe(`Sent to @mira: #9  stop  bob through Claude Code  ${WHEN}\n`);
+    // The model and the effort: what is named changes, `none` is the product's own again.
+    const set = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(["agent", "set", "mira", "--model", "opus", "--effort", "none"], set.io),
+    ).toBe(EXIT.ok);
+    expect(calls.at(-1)?.body).toEqual({ kind: "set", set: { model: "opus", effort: null } });
+    expect(set.out()).toContain("#10  set  bob through Claude Code");
+    expect(set.out()).toContain("model opus, effort the product's own");
+    const refused = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["agent", "set", "mira", "--model", "gpt"], refused.io)).toBe(EXIT.failed);
+    expect(refused.err()).toContain("Its product offers no such.");
+
+    // What is not said is asked for, before the console is.
+    const asked = calls.length;
+    for (const args of [
+      ["agent", "tell", "mira"],
+      ["agent", "tell", "mira", "   "],
+      ["agent", "interrupt"],
+      ["agent", "stop"],
+      ["agent", "stop", "mira", "words", "more"],
+      ["agent", "set", "mira"],
+      ["agent", "set"],
+      ["agent", "signals"],
+      ["agent", "signals", "mira", "--limit", "0"],
+      ["agent", "signals", "mira", "--limit", "many"],
+      ["agent", "signals", "mira", "--before", "-3"],
+    ]) {
+      const unsaid = harness({ fetch, env: SIGNED_IN });
+      expect(await runCli(args, unsaid.io), args.join(" ")).toBe(EXIT.usage);
+    }
+    expect(calls.length).toBe(asked);
+
+    // The record, the newest first, a line each, and where it goes on.
+    const record = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(["agent", "signals", "@mira", "--limit", "2", "--before", "9"], record.io),
+    ).toBe(EXIT.ok);
+    expect(record.out()).toBe(
+      [
+        `#8  interrupt  bob through Claude Code  ${WHEN}  From a file, on two lines.`,
+        `#7  wake  board: #412  ${WHEN}`,
+        "More before: console agent signals mira --before 7",
+        "",
+      ].join("\n"),
+    );
+    // The account's own, as `me`.
+    const mine = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["agent", "signals", "me"], mine.io)).toBe(EXIT.ok);
+    expect(mine.out()).toBe("No signal yet.\n");
+  });
+
+  it("says how an agent account stands, and what its runner said, where the console answers it (ADR-0085)", async () => {
+    const mira = {
+      person: {
+        ...BOB,
+        id: "0199c4d8-0000-7000-8000-000000000009",
+        login: "acme-mira",
+        name: "Mira",
+        kind: "agent",
+        handle: "mira",
+        title: null,
+      },
+      manager: BOB,
+      supervised: true,
+    };
+    const { fetch } = fakeConsole({
+      "GET /api/v1/agents/mira": [
+        // A console that answers neither: an older one, or an account no runner said anything of.
+        { body: mira },
+        {
+          body: {
+            ...mira,
+            state: { state: "refused", reason: "model_refused", since: WHEN, heardAt: WHEN },
+            runner: {
+              delivered: 8,
+              latest: 10,
+              session: null,
+              machine: { name: "mac-mini", os: "macOS 15.1", user: "mira" },
+              runner: "0.4.8",
+              product: { driver: "claude", name: "Claude Code", version: "2.1.0", tried: false },
+              offers: { models: [], efforts: [], steer: true, images: true, resume: true },
+              running: { model: "opus", effort: null },
+              settings: { model: "sonnet", effort: "high" },
+            },
+          },
+        },
+      ],
+    });
+    const unheard = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["agent", "mira"], unheard.io)).toBe(EXIT.ok);
+    expect(unheard.out()).toContain("state: no runner has been heard from yet");
+    expect(unheard.out()).not.toContain("runner:");
+    const full = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["agent", "mira"], full.io)).toBe(EXIT.ok);
+    expect(full.out()).toContain(
+      [
+        `state: refused (model refused) since ${WHEN}; its runner was last heard from ${WHEN}`,
+        "runner: 0.4.8 on mac-mini (macOS 15.1), as mira",
+        "product: Claude Code 2.1.0, a version the driver was not tried with",
+        "set to: model sonnet, effort high",
+        "runs with: model opus, effort the product's own",
+        "signals: 8 of 10 delivered",
+      ].join("\n"),
+    );
   });
 
   it("lists the people and says what one is", async () => {

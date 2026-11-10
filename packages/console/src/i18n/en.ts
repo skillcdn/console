@@ -228,6 +228,9 @@ export const en = {
       "The value cannot be opened with this deployment's key. Whoever has it sets it again.",
     "secret.own_session":
       "The secret store is read by the account itself, signed in, not with a token it made.",
+    "agent.own_command":
+      "This is asked by the account itself: its runner, on the command signed in as the account.",
+    "signal.not_offered": "The model or the effort is none of those the agent's product offers.",
     "agent.not_found": "The agent account was not found.",
     "agent.handle_taken": "Another agent account has this handle.",
     "agent.exists": "This login is an agent account already.",
