@@ -220,6 +220,8 @@ export {
 } from "./components/tokens.js";
 export {
   Avatar,
+  AvatarPicture,
+  AvatarSetsContext,
   Badge,
   Button,
   Callout,

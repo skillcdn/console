@@ -338,3 +338,103 @@ export async function findAgent(
     .limit(1);
   return row === undefined ? undefined : toAgent(row);
 }
+
+/** Whether two avatars are made of the same parts, in whatever order each was written down. */
+function sameParts(a: RestAvatarParts, b: RestAvatarParts | null): boolean {
+  return (
+    b !== null &&
+    (Object.keys(a) as (keyof RestAvatarParts)[]).every((part) => a[part] === b[part]) &&
+    Object.keys(a).length === Object.keys(b).length
+  );
+}
+
+/** The handles the workspace's agent accounts have, whoever may see them: what a proposal must not repeat. */
+export async function takenHandles(database: Database, workspaceId: string): Promise<string[]> {
+  const rows = await drizzleOf(database)
+    .select({ handle: people.handle })
+    .from(people)
+    .where(and(eq(people.workspaceId, workspaceId), isNotNull(people.handle)));
+  return rows.flatMap((row) => (row.handle === null ? [] : [row.handle]));
+}
+
+/**
+ * Keeps an agent account's persona, and tells the board (ADR-0084): its name, its title, its
+ * avatar, one or more; the handle never changes. For whoever supervises it (`reader.supervises`):
+ * an account they do not is not found. What is already so writes nothing.
+ */
+export async function updateAgentPersona(
+  database: Database,
+  input: {
+    readonly workspaceId: string;
+    readonly actor: Actor;
+    readonly handle: string;
+    readonly reader: AgentReader;
+    readonly name?: string | undefined;
+    /** The title, or null for none. */
+    readonly title?: string | null | undefined;
+    readonly avatarParts?: RestAvatarParts | undefined;
+    /** What the parts were rolled from, or null for parts chosen by hand; read only with the parts. */
+    readonly avatarSeed?: string | null | undefined;
+    readonly now: Date;
+  },
+): Promise<AgentRecord> {
+  const { workspaceId, actor, handle, reader, now } = input;
+  await drizzleOf(database).transaction(async (tx) => {
+    await tx
+      .select({ id: workspaces.id })
+      .from(workspaces)
+      .where(eq(workspaces.id, workspaceId))
+      .for("update");
+    const [current] = await tx
+      .select(personColumns(people))
+      .from(people)
+      .where(
+        and(
+          eq(people.workspaceId, workspaceId),
+          eq(people.kind, "agent"),
+          eq(people.handle, handle),
+          reader.supervises,
+        ),
+      )
+      .limit(1);
+    if (current === undefined) {
+      throw new AgentError("agent.not_found");
+    }
+    const fields: string[] = [];
+    if (input.name !== undefined && input.name !== current.name) {
+      fields.push("name");
+    }
+    if (input.title !== undefined && input.title !== current.title) {
+      fields.push("title");
+    }
+    if (input.avatarParts !== undefined && !sameParts(input.avatarParts, current.avatarParts)) {
+      fields.push("avatar");
+    }
+    if (fields.length === 0) {
+      return;
+    }
+    await tx
+      .update(people)
+      .set({
+        ...(fields.includes("name") ? { name: input.name } : {}),
+        ...(fields.includes("title") ? { title: input.title } : {}),
+        ...(fields.includes("avatar")
+          ? { avatarParts: input.avatarParts, avatarSeed: input.avatarSeed ?? null }
+          : {}),
+        updatedAt: now,
+      })
+      .where(eq(people.id, current.id));
+    await recordEvent(tx, {
+      workspaceId,
+      kind: "person.updated",
+      actor,
+      data: { login: current.login, handle, fields },
+      now,
+    });
+  });
+  const changed = await findAgent(database, workspaceId, handle, reader);
+  if (changed === undefined) {
+    throw new AgentError("agent.not_found");
+  }
+  return changed;
+}

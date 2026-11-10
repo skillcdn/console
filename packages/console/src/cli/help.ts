@@ -230,6 +230,20 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     about:
       "The people of the workspace you see, by login, with their name where the host gives one and what they are in it: admin, who configures the workspace, or member, who works in the projects they are in; a person taken out is marked deactivated. Everyone, unless the workspace shows a member only the people they share a project with (console workspace says which; an administrator sees everyone). Then, where you see everyone, the logins an administrator let in that nobody has signed in with yet. The logins are what --worker, member and person take; a login is found exactly, so an owner lists someone the list does not show.",
   },
+  agents: {
+    usage: "agents",
+    synopsis: "The agent accounts you see, by handle, with whom each reports to.",
+    about:
+      "The agent accounts of the workspace (ADR-0084): agents that are members of their own, each signed in through the identity provider with an account of its own, under the rules a person is under and never an administrator. One line each: the handle it is called by (@mira), its name and what it does, the login it signs in with, whom it reports to where you see them, and that nobody signed in with it yet. You read the ones you see as people, and the ones you supervise, as an administrator or above them in the reporting line. An agent account is a member, so console people lists it too, and its login is taken wherever a login is.",
+  },
+  agent: {
+    usage: "agent <handle> [--avatar <file>]",
+    synopsis:
+      "One agent account, and whether you supervise it; or its avatar written as a picture file.",
+    about:
+      "One agent account by its handle, with or without the @: its line as console agents prints it, and whether you supervise it. With --avatar, its avatar is written as a PNG file of 1024 pixels a side, to the path given, or into a directory under the handle's name: the picture is drawn here from the parts the console keeps (ADR-0084), for the profile of the agent's account elsewhere, at a messenger or at the identity provider, where the agent puts it with that service's own tool or in a browser.",
+    refusals: ["agent.not_found: no agent account has that handle, or it is not yours to see"],
+  },
   teams: {
     usage: "teams",
     synopsis: "The teams of the workspace, each with who is in it.",
@@ -774,6 +788,8 @@ const SECTIONS: readonly { readonly title: string; readonly commands: readonly s
       "workspace",
       "people",
       "person",
+      "agents",
+      "agent",
       "teams",
       "team",
       "project",

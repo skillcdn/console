@@ -549,6 +549,47 @@ const handle = z.string().check(
   z.refine((value) => !RESERVED_HANDLES.includes(value), "is a word the addresses use"),
 );
 
+/** What an avatar's parts were rolled from: a short text of letters, digits, hyphens and underscores. */
+const avatarSeed = z.string().check(z.minLength(1), z.maxLength(64), z.regex(/^[A-Za-z0-9_-]+$/));
+
+/**
+ * A persona proposed for an agent account (ADR-0084): the seed it was rolled from, a name in the
+ * language asked for, the handle the name gives where nobody has it, and the parts of an avatar.
+ * A suggestion, edited freely by whoever makes the account.
+ */
+export const restAgentProposalSchema = z.object({
+  seed: z.string(),
+  name: z.string(),
+  handle: z.string(),
+  avatarParts: restAvatarPartsSchema,
+});
+export type RestAgentProposal = z.infer<typeof restAgentProposalSchema>;
+
+/** `GET /api/v1/agents/proposals?count=&lang=`: a few personas to choose from, rolled again at each asking. */
+export const restAgentProposalsSchema = z.object({ items: z.array(restAgentProposalSchema) });
+export type RestAgentProposals = z.infer<typeof restAgentProposalsSchema>;
+
+/**
+ * What `PATCH /api/v1/agents/<handle>` is sent, by a supervisor: the persona to keep, one or
+ * more of its name, its title (`null` for none) and its avatar; the handle never changes.
+ */
+export const restAgentPatchSchema = z
+  .object({
+    name: z.optional(line(MAX_PERSON_NAME_LENGTH)),
+    title: z.optional(z.nullable(line(MAX_PERSON_TITLE_LENGTH))),
+    /** The parts of the avatar, and optionally the seed they were rolled from, `null` for parts chosen by hand. */
+    avatarParts: z.optional(restAvatarPartsSchema),
+    avatarSeed: z.optional(z.nullable(avatarSeed)),
+  })
+  .check(
+    z.refine(
+      (patch) =>
+        patch.name !== undefined || patch.title !== undefined || patch.avatarParts !== undefined,
+      "must name a name, a title or the parts of an avatar",
+    ),
+  );
+export type RestAgentPatch = z.infer<typeof restAgentPatchSchema>;
+
 /**
  * An agent account as its own listing answers it (ADR-0084): the member it is, and whom it
  * reports to.
@@ -584,10 +625,9 @@ export const restAgentInputSchema = z
     name: line(MAX_PERSON_NAME_LENGTH),
     title: z.optional(z.nullable(line(MAX_PERSON_TITLE_LENGTH))),
     /** What the proposals rolled the parts from, kept beside them; left out where they were chosen by hand. */
-    avatarSeed: z.optional(
-      z.string().check(z.minLength(1), z.maxLength(64), z.regex(/^[A-Za-z0-9_-]+$/)),
-    ),
-    avatarParts: restAvatarPartsSchema,
+    avatarSeed: z.optional(avatarSeed),
+    /** Left out, the console rolls them: from the seed where one is given, from one of its own otherwise. */
+    avatarParts: z.optional(restAvatarPartsSchema),
     managerId: z.optional(uuid),
     /** The key of the project it starts in. */
     project: z.string().check(z.minLength(1), z.maxLength(MAX_PROJECT_KEY_LENGTH)),

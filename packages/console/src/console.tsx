@@ -42,6 +42,7 @@ import {
   type TaskState,
   type WeekStart,
 } from "./api.js";
+import { AVATAR_SETS, type AvatarSet } from "./avatar.js";
 import { Board, BoardFilters, type BoardProps, byDue, filterTasks } from "./components/board.js";
 import { Calendar, type CalendarProps, Workload } from "./components/calendar.js";
 import { CategoryList, type CategoryListProps } from "./components/categories.js";
@@ -89,6 +90,7 @@ import { TaskList } from "./components/task-list.js";
 import { TaskView, type TaskViewProps } from "./components/task-view.js";
 import { NewToken, TokenForm, TokenList, type TokenListProps } from "./components/tokens.js";
 import {
+  AvatarSetsContext,
   Button,
   Callout,
   CategoryBadge,
@@ -120,6 +122,7 @@ import {
   type Messages,
   useWords,
 } from "./i18n/index.js";
+import type { PersonaName } from "./persona.js";
 import { pluginNavItems, pluginPagesAt, pluginWordOf } from "./plugin-nav.js";
 import {
   boardHref,
@@ -262,6 +265,18 @@ export interface ConsoleConfig {
   readonly client?: ConsoleClient | undefined;
   /** Pages of the console's own, as tabs beside the default ones. */
   readonly pages?: readonly CustomPage[] | undefined;
+  /**
+   * What an agent account's persona is proposed and drawn from (ADR-0084), in place of the
+   * package's: the names a new account is proposed, in each language, and the sets of shapes the
+   * avatars are drawn from on this console's pages. A set keeps its version for good; a console
+   * that brings shapes of its own gives them versions the package does not use.
+   */
+  readonly persona?:
+    | {
+        readonly names?: readonly PersonaName[] | undefined;
+        readonly avatarSets?: readonly AvatarSet[] | undefined;
+      }
+    | undefined;
 }
 
 export interface ConsoleApp {
@@ -3002,6 +3017,8 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
   const fallbackTitle = config.title ?? "Console";
   const languages = config.languages ?? DEFAULT_LANGUAGES;
   const pages = config.pages ?? [];
+  /** The shapes the avatars of agent accounts are drawn from here (ADR-0084): the package's, unless this console brings its own. */
+  const avatarSets = config.persona?.avatarSets ?? AVATAR_SETS;
 
   // biome-ignore lint/correctness/noComponentHookFactories: createConsole runs once, when a console is built, never during a render; App is that console's one root component, closing over its config.
   function App(props: { readonly initialPath?: string | undefined }) {
@@ -3381,7 +3398,7 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
     return (
       <LanguageContext.Provider value={pack}>
         <RemotePicturesContext.Provider value={pictureSrc}>
-          {content}
+          <AvatarSetsContext.Provider value={avatarSets}>{content}</AvatarSetsContext.Provider>
         </RemotePicturesContext.Provider>
       </LanguageContext.Provider>
     );

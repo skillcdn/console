@@ -1,5 +1,6 @@
 import { argUsage } from "../plugin/args.js";
 import type {
+  RestAgent,
   RestArtifact,
   RestCategory,
   RestComment,
@@ -141,6 +142,35 @@ export function formatPersonLine(person: RestPerson, reportsTo?: string | undefi
   return called.length === 0
     ? `${who}${email}  (${standing}${line})`
     : `${who}  ${called.join(", ")}${email}  (${standing}${line})`;
+}
+
+/**
+ * One agent account (ADR-0084): its handle, its name and what it does, the login it signs in
+ * with, whom it reports to where the asker sees them, and that nobody signed in with it yet or
+ * that it is out, where so.
+ */
+export function formatAgentLine(agent: RestAgent): string {
+  const { person, manager } = agent;
+  const called = [person.name, person.title].filter(
+    (word): word is string => typeof word === "string" && word.length > 0,
+  );
+  const standing = [
+    `signs in as ${person.login}`,
+    ...(manager === null ? [] : [`reports to ${manager.login}`]),
+    ...(person.invited === true ? ["not signed in yet"] : []),
+    ...(person.status === "active" ? [] : ["deactivated"]),
+  ].join(", ");
+  return `@${person.handle ?? person.login}  ${called.join(", ")}  (${standing})`;
+}
+
+/** One agent account in full: its line, and whether whoever asks supervises it. */
+export function formatAgent(agent: RestAgent): string {
+  return [
+    formatAgentLine(agent),
+    agent.supervised
+      ? "You supervise it: an administrator, or above it in the reporting line."
+      : "You do not supervise it.",
+  ].join("\n");
 }
 
 /** The provider a listing names, as people call it. */

@@ -1,4 +1,10 @@
-import { type ButtonHTMLAttributes, type ReactNode, useState } from "react";
+import {
+  type ButtonHTMLAttributes,
+  createContext,
+  type ReactNode,
+  useContext,
+  useState,
+} from "react";
 import {
   type CategoryColor,
   type GoalState,
@@ -9,6 +15,7 @@ import {
   type TaskPriority,
   type TaskState,
 } from "../api.js";
+import { AVATAR_BOX, AVATAR_SETS, type AvatarSet, avatarShapes } from "../avatar.js";
 import { dayOf, daysBetween, formatDay, today } from "../dates.js";
 import { useLanguage, useWords } from "../i18n/index.js";
 import { useRemotePictureSrc } from "./remote-pictures.js";
@@ -97,9 +104,67 @@ export function personName(person: {
 }
 
 /**
- * A person's picture as the git host serves it, read through the console (ADR-0048): loaded
- * lazily, without a referrer, and gone as a whole when there is none or it cannot be loaded,
- * leaving the initial of the name instead.
+ * The sets of shapes the avatars of agent accounts are drawn from (ADR-0084): the package's,
+ * unless a console built on it brings its own (`createConsole`'s `persona.avatarSets`).
+ */
+export const AvatarSetsContext = createContext<readonly AvatarSet[]>(AVATAR_SETS);
+
+/**
+ * An agent account's avatar, drawn from its parts where it is shown (ADR-0084): a few shapes of
+ * the package's set in the palette's colours, as elements of the page and never as markup from
+ * anywhere. Sized by `className`, as a picture is.
+ */
+export function AvatarPicture(props: {
+  readonly parts: NonNullable<RestPerson["avatarParts"]>;
+  readonly className?: string | undefined;
+}) {
+  const sets = useContext(AvatarSetsContext);
+  return (
+    <svg
+      className={props.className}
+      viewBox={`0 0 ${AVATAR_BOX} ${AVATAR_BOX}`}
+      aria-hidden="true"
+      focusable="false"
+    >
+      {avatarShapes(props.parts, sets).map((shape, index) => {
+        // The shapes of one avatar never change place: their order is what they are.
+        const key = `${shape.kind}-${index}`;
+        if (shape.kind === "ellipse") {
+          return (
+            <ellipse
+              key={key}
+              cx={shape.cx}
+              cy={shape.cy}
+              rx={shape.rx}
+              ry={shape.ry}
+              fill={shape.color}
+            />
+          );
+        }
+        if (shape.kind === "rect") {
+          return (
+            <rect
+              key={key}
+              x={shape.x}
+              y={shape.y}
+              width={shape.w}
+              height={shape.h}
+              rx={shape.r}
+              fill={shape.color}
+            />
+          );
+        }
+        return <polygon key={key} points={shape.points.join(" ")} fill={shape.color} />;
+      })}
+    </svg>
+  );
+}
+
+/**
+ * A member's picture. A person's is as the git host serves it, read through the console
+ * (ADR-0048): loaded lazily, without a referrer, and gone as a whole when there is none or it
+ * cannot be loaded, leaving the initial of the name instead. An agent account's is drawn from
+ * its parts (ADR-0084).
  */
 export function Avatar(props: {
   readonly person: RestPerson;
@@ -108,9 +173,13 @@ export function Avatar(props: {
   const remote = useRemotePictureSrc();
   const size = props.size ?? "md";
   const initial = personName(props.person).slice(0, 1).toUpperCase();
+  const parts = props.person.avatarParts ?? undefined;
   const src = props.person.avatar === null ? undefined : remote(props.person.avatar);
   // A picture that would not load gives way to the initial, and never to a broken image.
   const [failed, setFailed] = useState<string | undefined>(undefined);
+  if (parts !== undefined) {
+    return <AvatarPicture parts={parts} className={cx("sc-avatar", `sc-avatar-${size}`)} />;
+  }
   if (src === undefined || src === failed) {
     return (
       <span

@@ -1,5 +1,7 @@
 import { basename, extname } from "node:path";
 import { parseArgs } from "node:util";
+import { deflateSync } from "node:zlib";
+import { avatarScanlines, MAX_AVATAR_PIXELS, pngFile } from "../avatar.js";
 import {
   ApiError,
   type ConsoleClient,
@@ -86,6 +88,8 @@ import {
 import { type DirectorySettings, type DirectoryStore, THE_SENTENCE } from "./directory.js";
 import {
   deciderLogins,
+  formatAgent,
+  formatAgentLine,
   formatAnswer,
   formatCategoryLine,
   formatComment,
@@ -3373,6 +3377,52 @@ const people: Command = async (args, io) => {
   return EXIT.ok;
 };
 
+/** A handle as the command takes one: with the `@` people call it by, or without. */
+const handleOf = (word: string): string => (word.startsWith("@") ? word.slice(1) : word);
+
+/** The agent accounts of the workspace (ADR-0084), by handle. */
+const agents: Command = async (args, io) => {
+  const { values } = parse(args, {}, false);
+  const session = await open(io, values);
+  const found = await session.client.agents();
+  answer(io, session, found, () =>
+    found.items.length === 0
+      ? "No agent accounts that you see. An administrator makes one on the Agents page."
+      : found.items.map(formatAgentLine).join("\n"),
+  );
+  return EXIT.ok;
+};
+
+const AGENT_USAGE = "Say which agent account: console agent <handle> [--avatar <file>]";
+
+// One agent account by its handle; with --avatar, its picture written as a file (ADR-0084): the
+// parts are drawn here, by the package's own function, and the console sends no picture.
+const agent: Command = async (args, io) => {
+  const { values, positionals } = parse(args, { avatar: { type: "string" } });
+  const handle = handleOf(theOne(positionals, AGENT_USAGE));
+  const session = await open(io, values);
+  const found = await session.client.agent(handle);
+  const file = text(values, "avatar");
+  if (file === undefined) {
+    answer(io, session, found, () => formatAgent(found));
+    return EXIT.ok;
+  }
+  const parts = found.person.avatarParts;
+  if (parts === null || parts === undefined) {
+    throw failed(`The console answered no avatar for @${handle}.`);
+  }
+  const png = pngFile(MAX_AVATAR_PIXELS, deflateSync(avatarScanlines(parts, MAX_AVATAR_PIXELS)));
+  const written = await io.writeBytes(file, png, `${handle}.png`);
+  answer(
+    io,
+    session,
+    { handle, file: written, pixels: MAX_AVATAR_PIXELS, bytes: png.length },
+    () =>
+      `The avatar of @${handle} is written to ${written}: a PNG of ${MAX_AVATAR_PIXELS} pixels a side, for its profile elsewhere.`,
+  );
+  return EXIT.ok;
+};
+
 /** The teams of the workspace (ADR-0073): each with who is in it, by login. */
 const teams: Command = async (args, io) => {
   const { values } = parse(args, {}, false);
@@ -4041,6 +4091,8 @@ const COMMANDS: Readonly<Record<string, Command>> = {
   plugin,
   people,
   person,
+  agents,
+  agent,
   teams,
   team,
   workspace,

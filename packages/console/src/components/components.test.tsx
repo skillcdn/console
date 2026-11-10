@@ -1619,6 +1619,11 @@ describe("people", () => {
     };
     const read = renderToStaticMarkup(<PeopleList people={[alice, bob, mira]} me={alice} />);
     expect(read).toContain('<span class="sc-person-card-title">Release engineer</span>');
+    // Its picture is drawn from its parts, where a person's is the provider's or an initial.
+    expect(read).toMatch(
+      /<svg class="sc-avatar sc-avatar-lg" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><rect [^>]*fill="#e4e7ff"/,
+    );
+    expect(read.match(/<svg class="sc-avatar sc-avatar-lg"/g)).toHaveLength(1);
     // The account is called by its handle, said to be an agent, and to be waiting for its sign-in.
     expect(read).toMatch(/Mira<span class="sc-badge sc-badge-neutral"[^>]*>Agent<\/span>/);
     expect(read).toContain("@mira · carol · Invited, not signed in yet");

@@ -3,6 +3,7 @@ import {
   projectPath,
   REST_ROUTES,
   type RestAvatarParts,
+  restAgentProposalsSchema,
   restAgentSchema,
   restAgentsSchema,
   restErrorSchema,
@@ -11,6 +12,7 @@ import {
   restPeopleSchema,
   restPersonSchema,
   restTaskSchema,
+  rollAvatar,
 } from "@skillcdn/console/api";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "./db/testing.js";
@@ -460,5 +462,107 @@ describe("an agent account (ADR-0084)", () => {
     expect((await title(alice, miraId, "x".repeat(81))).status).toBe(400);
     expect((await title(alice, miraId, "two\nlines")).status).toBe(400);
     expect((await title(alice, "0199c4d8-0000-7000-8000-00000000dead", "Ghost")).status).toBe(404);
+  });
+  it("is proposed a persona, a name, a handle nobody has and an avatar, and is made with one rolled where none is sent", async () => {
+    const proposals = async (cookie: string, query = "") =>
+      get(cookie, `${REST_ROUTES.agents}/proposals${query}`);
+    // For whoever makes accounts: an administrator.
+    expect((await proposals(mira)).status).toBe(403);
+    const asked = await proposals(alice);
+    expect(asked.status).toBe(200);
+    const { items } = restAgentProposalsSchema.parse(await asked.json());
+    expect(items).toHaveLength(4);
+    expect(new Set(items.map((item) => item.handle)).size).toBe(4);
+    for (const item of items) {
+      // The same seed draws the same avatar anywhere the package is, and no handle is one taken.
+      expect(item.avatarParts).toEqual(rollAvatar(item.seed));
+      expect(["mira", "dex", "echo", "bolt"]).not.toContain(item.handle);
+      expect(item.name).toMatch(/^[A-Z][a-z]+$/);
+    }
+    // Rolled again at each asking; as many as asked for, in the language asked for.
+    const again = restAgentProposalsSchema.parse(await (await proposals(alice)).json());
+    expect(again.items.map((item) => item.seed)).not.toEqual(items.map((item) => item.seed));
+    const korean = restAgentProposalsSchema.parse(
+      await (await proposals(alice, "?count=12&lang=ko")).json(),
+    );
+    expect(korean.items).toHaveLength(12);
+    expect(korean.items.every((item) => !/[A-Za-z]/.test(item.name))).toBe(true);
+    for (const query of ["?count=0", "?count=13", "?count=two", "?lang=not_a_tag"]) {
+      expect((await proposals(alice, query)).status, query).toBe(400);
+    }
+
+    // Made with a proposal as it was proposed; and with no parts at all, which the console rolls
+    // from the seed given, or from one of its own.
+    const [first] = items;
+    const { project: _, avatarParts: __, ...rest } = account({});
+    const seeded = await send(alice, "POST", REST_ROUTES.agents, {
+      ...rest,
+      login: "zed",
+      handle: first?.handle,
+      name: first?.name,
+      avatarSeed: first?.seed,
+      project: "lab",
+    });
+    expect(seeded.status).toBe(201);
+    expect(restAgentSchema.parse(await seeded.json()).person.avatarParts).toEqual(
+      first?.avatarParts,
+    );
+    const unseeded = await send(alice, "POST", REST_ROUTES.agents, {
+      ...rest,
+      login: "yan",
+      handle: "yan",
+      project: "lab",
+    });
+    expect(unseeded.status).toBe(201);
+    expect(restAgentSchema.parse(await unseeded.json()).person.avatarParts).toMatchObject({
+      set: 1,
+    });
+  });
+
+  it("has a persona its supervisors keep: its name, its title and its avatar, never its handle", async () => {
+    const keep = (cookie: string, handle: string, body: unknown) =>
+      send(cookie, "PATCH", agentPath(handle), body);
+    const parts = rollAvatar("another-face");
+    // Echo manages Mira, Dex is above Echo; Bolt works beside Mira.
+    const kept = await keep(echo, "mira", {
+      name: "Mira Kim",
+      title: "Release lead",
+      avatarParts: parts,
+      avatarSeed: "another-face",
+    });
+    expect(kept.status).toBe(200);
+    const agent = restAgentSchema.parse(await kept.json());
+    expect(agent.person).toMatchObject({
+      id: miraId,
+      handle: "mira",
+      name: "Mira Kim",
+      title: "Release lead",
+      avatarParts: parts,
+    });
+    expect(agent.supervised).toBe(true);
+    const told = (await eventsOf(alice)).filter((event) => event.kind === "person.updated").at(-1);
+    expect(told).toMatchObject({
+      actor: { id: echoId },
+      data: { login: "carol", handle: "mira", fields: ["name", "title", "avatar"] },
+    });
+    // What is already so writes nothing; one thing changed names that one.
+    const before = (await eventsOf(alice)).length;
+    expect((await keep(dex, "mira", { name: "Mira Kim", avatarParts: parts })).status).toBe(200);
+    expect((await eventsOf(alice)).length).toBe(before);
+    expect((await keep(alice, "mira", { title: null })).status).toBe(200);
+    expect((await eventsOf(alice)).at(-1)?.data).toMatchObject({ fields: ["title"] });
+    // The name survives a sign-in, as the console's own.
+    expect(await meOf(await h.signIn("carol"))).toMatchObject({ name: "Mira Kim", title: null });
+
+    // Whoever sees it and does not supervise it reads it, and keeps nothing of it; nobody keeps
+    // an account that is none, and a patch names something a persona has.
+    const beside = await keep(bob, "mira", { name: "Mine" });
+    expect(beside.status).toBe(403);
+    expect(await errorOf(beside)).toBe("auth.forbidden");
+    expect((await keep(mira, "mira", { name: "Myself" })).status).toBe(403);
+    expect((await keep(alice, "nobody", { name: "Ghost" })).status).toBe(404);
+    for (const body of [{}, { handle: "other" }, { name: "" }, { avatarParts: { set: 1 } }]) {
+      expect((await keep(alice, "mira", body)).status, JSON.stringify(body)).toBe(400);
+    }
   });
 });

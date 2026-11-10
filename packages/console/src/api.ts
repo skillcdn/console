@@ -5,6 +5,27 @@
 
 export { agentLabel } from "./agent-name.js";
 export {
+  AVATAR_BOX,
+  AVATAR_PARTS,
+  AVATAR_SET_1,
+  AVATAR_SETS,
+  type AvatarChoice,
+  type AvatarFill,
+  type AvatarPalette,
+  type AvatarPart,
+  type AvatarSet,
+  type AvatarShape,
+  avatarPixels,
+  avatarScanlines,
+  avatarSetOf,
+  avatarShapes,
+  avatarSvg,
+  type DrawnShape,
+  MAX_AVATAR_PIXELS,
+  pngFile,
+  rollAvatar,
+} from "./avatar.js";
+export {
   ApiError,
   type ClientOptions,
   type CommentInput,
@@ -125,6 +146,14 @@ export {
   MIN_OPTIONS,
 } from "./limits.js";
 export { projectColorOf, projectSymbolOf } from "./marks.js";
+export {
+  DEFAULT_PROPOSALS,
+  MAX_PROPOSALS,
+  PERSONA_NAMES,
+  type PersonaName,
+  type ProposeOptions,
+  proposeAgents,
+} from "./persona.js";
 export * from "./plugin/rest-schemas.js";
 export {
   AUTH_ROUTES,
@@ -172,6 +201,9 @@ export {
   RESERVED_HANDLES,
   type RestAgent,
   type RestAgentInput,
+  type RestAgentPatch,
+  type RestAgentProposal,
+  type RestAgentProposals,
   type RestAgents,
   type RestAnswerInput,
   type RestArchivedTasks,
@@ -287,6 +319,9 @@ export {
   type RestWorkspacePackConnect,
   type RestWorkspacePatch,
   restAgentInputSchema,
+  restAgentPatchSchema,
+  restAgentProposalSchema,
+  restAgentProposalsSchema,
   restAgentSchema,
   restAgentsSchema,
   restAnswerInputSchema,

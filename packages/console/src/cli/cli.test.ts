@@ -2203,6 +2203,73 @@ describe("configuring, as the person", () => {
     expect(await runCli(["person", "title", "bob"], missing.io)).toBe(EXIT.usage);
   });
 
+  it("lists the agent accounts, reads one by its handle, and writes its avatar as a picture file (ADR-0084)", async () => {
+    const parts = {
+      set: 1,
+      background: 0,
+      head: 1,
+      ears: 0,
+      eyes: 0,
+      mouth: 1,
+      marks: 0,
+      accessory: 0,
+      palette: 0,
+    };
+    const mira = {
+      person: {
+        ...BOB,
+        id: "0199c4d8-0000-7000-8000-000000000009",
+        login: "mira@acme.example",
+        name: "Mira",
+        kind: "agent",
+        handle: "mira",
+        title: "Release engineer",
+        avatarParts: parts,
+        invited: true,
+      },
+      manager: BOB,
+      supervised: true,
+    };
+    const { fetch } = fakeConsole({
+      "GET /api/v1/agents": [{ body: { items: [mira] } }, { body: { items: [] } }],
+      "GET /api/v1/agents/mira": { body: mira },
+    });
+    const listed = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["agents"], listed.io)).toBe(EXIT.ok);
+    expect(listed.out()).toBe(
+      "@mira  Mira, Release engineer  (signs in as mira@acme.example, reports to bob, not signed in yet)\n",
+    );
+    const none = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["agents"], none.io)).toBe(EXIT.ok);
+    expect(none.out()).toContain("No agent accounts that you see.");
+    // By its handle, with the @ people call it by or without.
+    const one = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["agent", "@mira"], one.io)).toBe(EXIT.ok);
+    expect(one.out()).toBe(
+      "@mira  Mira, Release engineer  (signs in as mira@acme.example, reports to bob, not signed in yet)\nYou supervise it: an administrator, or above it in the reporting line.\n",
+    );
+    // The picture is drawn here, from the parts: a PNG of 1024 pixels a side.
+    const written: { path: string; name: string; bytes: Uint8Array }[] = [];
+    const drawn = harness({
+      fetch,
+      env: SIGNED_IN,
+      writeBytes: async (path, bytes, name) => {
+        written.push({ path, name, bytes });
+        return `/home/mira/${path}`;
+      },
+    });
+    expect(await runCli(["agent", "mira", "--avatar", "me.png"], drawn.io)).toBe(EXIT.ok);
+    expect(drawn.out()).toBe(
+      "The avatar of @mira is written to /home/mira/me.png: a PNG of 1024 pixels a side, for its profile elsewhere.\n",
+    );
+    expect(written).toHaveLength(1);
+    expect(written[0]).toMatchObject({ path: "me.png", name: "mira.png" });
+    const png = written[0]?.bytes ?? new Uint8Array();
+    expect([...png.subarray(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    expect(new DataView(png.buffer, png.byteOffset).getUint32(16)).toBe(1024);
+    expect(await runCli(["agent"], harness({ fetch, env: SIGNED_IN }).io)).toBe(EXIT.usage);
+  });
+
   it("lists the people and says what one is", async () => {
     const dana = {
       id: "0199c4d8-0000-7000-8000-000000000077",

@@ -1,5 +1,6 @@
 import {
   AUTH_ROUTES,
+  agentPath,
   CLAIM_PATH,
   categoryPath,
   connectPath,
@@ -14,6 +15,11 @@ import {
   rulesPath,
 } from "./routes.js";
 import {
+  type RestAgent,
+  type RestAgentInput,
+  type RestAgentPatch,
+  type RestAgentProposals,
+  type RestAgents,
   type RestAnswerInput,
   type RestArchivedTasks,
   type RestArtifactInput,
@@ -108,6 +114,9 @@ import {
   type RestWorkspace,
   type RestWorkspacePackConnect,
   type RestWorkspacePatch,
+  restAgentProposalsSchema,
+  restAgentSchema,
+  restAgentsSchema,
   restArchivedTasksSchema,
   restCategoriesSchema,
   restCategorySchema,
@@ -602,6 +611,19 @@ export interface ConsoleClient {
   updatePerson(id: string, patch: RestPersonPatch): Promise<RestPerson>;
   /** Lets a login in (ADR-0022): whoever signs in with that account becomes a person; for an administrator. */
   createListing(input: RestListingInput): Promise<RestListing>;
+  /** The agent accounts the asker may see, and the ones they supervise (ADR-0084), by handle. */
+  agents(signal?: AbortSignal): Promise<RestAgents>;
+  /** One agent account by its handle. */
+  agent(handle: string, signal?: AbortSignal): Promise<RestAgent>;
+  /** Makes an agent account: the member's row at once, its login let in; for an administrator. */
+  createAgent(input: RestAgentInput): Promise<RestAgent>;
+  /** Keeps an agent account's persona, its name, its title, its avatar; for a supervisor. */
+  updateAgent(handle: string, patch: RestAgentPatch): Promise<RestAgent>;
+  /** A few personas to choose from, a name in `lang`, a handle nobody has and an avatar each; for an administrator. */
+  agentProposals(
+    query?: { readonly count?: number | undefined; readonly lang?: string | undefined },
+    signal?: AbortSignal,
+  ): Promise<RestAgentProposals>;
   /** Takes a listing away before anyone signed in with it; for an administrator. */
   removeListing(id: string): Promise<void>;
   /** The teams of the workspace (ADR-0073), each with the members the asker may see. */
@@ -1342,6 +1364,24 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
       request("PATCH", `${base}${restPath("people", id)}`, patch, restPersonSchema),
     createListing: (input) =>
       request("POST", `${base}${REST_ROUTES.listings}`, input, restListingSchema),
+    agents: (signal) =>
+      request("GET", `${base}${REST_ROUTES.agents}`, undefined, restAgentsSchema, signal),
+    agent: (handle, signal) =>
+      request("GET", `${base}${agentPath(handle)}`, undefined, restAgentSchema, signal),
+    createAgent: (input) => request("POST", `${base}${REST_ROUTES.agents}`, input, restAgentSchema),
+    updateAgent: (handle, patch) =>
+      request("PATCH", `${base}${agentPath(handle)}`, patch, restAgentSchema),
+    agentProposals: (query, signal) =>
+      request(
+        "GET",
+        withQuery(`${REST_ROUTES.agents}/proposals`, {
+          count: query?.count === undefined ? undefined : String(query.count),
+          lang: query?.lang,
+        }),
+        undefined,
+        restAgentProposalsSchema,
+        signal,
+      ),
     removeListing: (id) =>
       request("DELETE", `${base}${restPath("listings", id)}`, undefined, undefined),
     teams: (signal) =>

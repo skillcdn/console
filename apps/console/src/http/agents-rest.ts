@@ -3,13 +3,22 @@
 // is here is what only an agent account has. Every route runs as the board's do: parse, ask who
 // is asking and whether they may, then do the work; what the asker may not see is not found.
 
+import { randomBytes } from "node:crypto";
 import {
+  DEFAULT_PROPOSALS,
   isHandle,
+  MAX_LANGUAGE_TAG_LENGTH,
+  MAX_PROPOSALS,
   type ProviderKey,
+  proposeAgents,
   RESERVED_HANDLES,
   REST_ROUTES,
+  type RestAgentProposals,
   type RestAgents,
+  type RestAvatarParts,
   restAgentInputSchema,
+  restAgentPatchSchema,
+  rollAvatar,
 } from "@skillcdn/console/api";
 import type { Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -26,6 +35,8 @@ import {
   createAgentAccount,
   findAgent,
   listAgents,
+  takenHandles,
+  updateAgentPersona,
 } from "../db/queries/agents.js";
 import type { Actor } from "../db/queries/events.js";
 import { PersonError, type PersonRecord } from "../db/queries/people.js";
@@ -52,6 +63,33 @@ const MAX_BODY_BYTES = 256 * 1024;
 interface Caller {
   readonly person: PersonRecord;
   readonly token: TokenRecord | undefined;
+}
+
+/** A seed of the console's own for a persona: twelve characters nobody chose. */
+const freshSeed = (): string => randomBytes(9).toString("base64url");
+
+/** The avatar an account is made with: the parts as they were chosen, else rolled from the seed given or from one of the console's own. */
+function personaOf(input: {
+  readonly avatarSeed?: string | undefined;
+  readonly avatarParts?: RestAvatarParts | undefined;
+}): { readonly avatarSeed: string | undefined; readonly avatarParts: RestAvatarParts } {
+  if (input.avatarParts !== undefined) {
+    return { avatarSeed: input.avatarSeed, avatarParts: input.avatarParts };
+  }
+  const avatarSeed = input.avatarSeed ?? freshSeed();
+  return { avatarSeed, avatarParts: rollAvatar(avatarSeed) };
+}
+
+/** The first thing wrong with what was sent, for a person. */
+function problemOf(
+  issues: readonly { readonly path?: PropertyKey[]; readonly message: string }[],
+): string {
+  const issue = issues[0];
+  if (issue === undefined) {
+    return "The request is not readable.";
+  }
+  const path = (issue.path ?? []).map(String).join(".");
+  return path.length === 0 ? issue.message : `${path}: ${issue.message}`;
 }
 
 /** Who a change is attributed to: the person, and the agent they act as when with a token. */
@@ -143,16 +181,7 @@ export function registerAgentsRest(app: Hono<AppEnv>, dependencies: AgentsRestDe
     }
     const parsed = restAgentInputSchema.safeParse(json);
     if (!parsed.success) {
-      const issue = parsed.error.issues[0];
-      const path = (issue?.path ?? []).map(String).join(".");
-      return invalid(
-        c,
-        issue === undefined
-          ? "The request is not readable."
-          : path.length === 0
-            ? issue.message
-            : `${path}: ${issue.message}`,
-      );
+      return invalid(c, problemOf(parsed.error.issues));
     }
     const input = parsed.data;
     if (!signIn.includes(input.host)) {
@@ -170,8 +199,8 @@ export function registerAgentsRest(app: Hono<AppEnv>, dependencies: AgentsRestDe
         handle: input.handle,
         name: input.name,
         title: input.title ?? undefined,
-        avatarSeed: input.avatarSeed,
-        avatarParts: input.avatarParts,
+        // The parts as they were chosen; else rolled, from the seed given or one of the console's own.
+        ...personaOf(input),
         // Whoever makes it answers for it, unless they name another.
         managerId: input.managerId ?? person.id,
         projectKey: input.project,
@@ -182,6 +211,96 @@ export function registerAgentsRest(app: Hono<AppEnv>, dependencies: AgentsRestDe
         "an agent account was made",
       );
       return c.json(restAgent(agent), 201);
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
+  // A few personas to choose from, for whoever makes an account (ADR-0084): a name in the
+  // language asked for, a handle nobody has, and an avatar, rolled again at each asking. A
+  // suggestion: what is sent to make the account is whatever its maker settled on.
+  app.get(`${REST_ROUTES.agents}/proposals`, async (c) => {
+    const caller = await asking(c);
+    if (caller instanceof Response) {
+      return caller;
+    }
+    const { person } = caller;
+    if (!configuresWorkspace(person)) {
+      return administratorRequired(c);
+    }
+    const asked = c.req.query("count");
+    const count = asked === undefined ? DEFAULT_PROPOSALS : Number(asked);
+    if (!Number.isInteger(count) || count < 1 || count > MAX_PROPOSALS) {
+      return invalid(c, `count: must be a whole number from 1 to ${MAX_PROPOSALS}`);
+    }
+    const lang = c.req.query("lang");
+    if (
+      lang !== undefined &&
+      (lang.length > MAX_LANGUAGE_TAG_LENGTH || !/^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/.test(lang))
+    ) {
+      return invalid(c, "lang: must be a language tag");
+    }
+    const settings = await readWorkspaceSettings(database, person.workspaceId);
+    const body: RestAgentProposals = {
+      items: proposeAgents(
+        Array.from({ length: count }, () => freshSeed()),
+        {
+          // The language asked for; else the asker's own, else the workspace's (ADR-0081).
+          lang: lang ?? person.language ?? settings.language ?? undefined,
+          taken: await takenHandles(database, person.workspaceId),
+        },
+      ),
+    };
+    return c.json(body);
+  });
+
+  // A supervisor keeps the account's persona (ADR-0084): its name, its title, its avatar.
+  app.patch(`${REST_ROUTES.agents}/:handle`, tooLarge, async (c) => {
+    const caller = await changing(c);
+    if (caller instanceof Response) {
+      return caller;
+    }
+    const { person } = caller;
+    const handle = handleOf(c);
+    if (handle === undefined) {
+      return notFound(c);
+    }
+    let json: unknown;
+    try {
+      json = await c.req.json();
+    } catch {
+      return invalid(c, "The request body is not readable JSON.");
+    }
+    const parsed = restAgentPatchSchema.safeParse(json);
+    if (!parsed.success) {
+      return invalid(c, problemOf(parsed.error.issues));
+    }
+    const settings = await readWorkspaceSettings(database, person.workspaceId);
+    const reader = readerOf(person, settings);
+    // An account the asker may see and does not supervise is theirs to read, not to keep.
+    const seen = await findAgent(database, person.workspaceId, handle, reader);
+    if (seen === undefined) {
+      return notFound(c);
+    }
+    if (!seen.supervised) {
+      return c.json(
+        errorBody("auth.forbidden", "Only a supervisor of the agent account may do this."),
+        403,
+      );
+    }
+    try {
+      const agent = await updateAgentPersona(database, {
+        workspaceId: person.workspaceId,
+        actor: actorOf(caller),
+        handle,
+        reader,
+        name: parsed.data.name,
+        title: parsed.data.title,
+        avatarParts: parsed.data.avatarParts,
+        avatarSeed: parsed.data.avatarSeed,
+        now: clock.now(),
+      });
+      return c.json(restAgent(agent));
     } catch (error) {
       return failure(c, error);
     }
