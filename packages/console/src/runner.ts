@@ -49,6 +49,7 @@ export {
   type RunnerState,
 } from "./runner/runner.js";
 export { SLACK_APP_TOKEN, slack, slackWakeOf } from "./runner/slack.js";
+export { SYSTEMD_UNIT, systemdUnit, systemdUser } from "./runner/systemd-user.js";
 export type {
   Boundary,
   Child,

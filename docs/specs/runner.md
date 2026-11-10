@@ -237,7 +237,7 @@ One app for one agent account ([ADR-0085](../adr/0085-a-runner-on-the-agents-mac
 
 ## The service
 
-A service is the module that keeps the runner running across restarts of the machine, a platform each. It says what to write and what to run, and `console agent setup` does it ([cli.md](cli.md#setting-a-machine-up)):
+A service is the module that keeps the runner running across restarts of the machine, a platform each: `launchd` on macOS, `systemd-user` on Linux. It says what to write and what to run, and `console agent setup` does it ([cli.md](cli.md#setting-a-machine-up)):
 
 ```ts
 interface Service {
@@ -249,7 +249,9 @@ interface Service {
 }
 ```
 
-`launchd`, for macOS, plans a launch agent of the agent's own OS account: the unit `~/Library/LaunchAgents/ai.skillcdn.console.runner.plist`, which starts the runner in the desk when the account logs in (`RunAtLoad`) and again whenever it ends (`KeepAlive`), with the `PATH` setup ran with, so that the product is found where it was, and its lines in `~/Library/Logs/ai.skillcdn.console.runner.log`; then `launchctl bootout gui/<uid>/ai.skillcdn.console.runner`, which fails where none was loaded, and `launchctl bootstrap gui/<uid> <unit>`. Nothing of it needs an administrator's rights, and so the runner runs while the account is logged in at the machine: that the account is logged in when the machine starts is for whoever prepares it. The unit holds no secret: the runner signs in with what the command keeps. What a path or a login holds is written as text of the unit. It is written from the system's own documentation and was not run on a Mac yet; `systemd-user` for Ubuntu and a module for Windows follow (milestone 44).
+`launchd`, for macOS, plans a launch agent of the agent's own OS account: the unit `~/Library/LaunchAgents/ai.skillcdn.console.runner.plist`, which starts the runner in the desk when the account logs in (`RunAtLoad`) and again whenever it ends (`KeepAlive`), with the `PATH` setup ran with, so that the product is found where it was, and its lines in `~/Library/Logs/ai.skillcdn.console.runner.log`; then `launchctl bootout gui/<uid>/ai.skillcdn.console.runner`, which fails where none was loaded, and `launchctl bootstrap gui/<uid> <unit>`. Nothing of it needs an administrator's rights, and so the runner runs while the account is logged in at the machine: that the account is logged in when the machine starts is for whoever prepares it. The unit holds no secret: the runner signs in with what the command keeps. What a path or a login holds is written as text of the unit. It is written from the system's own documentation and was not run on a Mac yet.
+
+`systemd-user`, for Linux, plans a unit of the agent's own OS account, kept by that account's own instance of systemd: the unit `~/.config/systemd/user/skillcdn-console-runner.service`, which starts the runner in the desk and starts it again ten seconds after it ends (`Restart=always`), with the `PATH` setup ran with; then `systemctl --user daemon-reload`, `enable` and `restart` of the unit, so that a unit written again is the one that runs. Its lines are in the account's journal (`journalctl --user -u skillcdn-console-runner.service`). It needs no administrator's rights, and so the runner runs while the account has a session, or always where an administrator turned lingering on for the account (`loginctl enable-linger`), which is for whoever prepares the machine. What a path or a login holds is written as words of the unit: on one line, quoted, with what the system reads as a specifier or a variable said as itself. It is written from the system's own documentation; the unit it writes was checked with the system's own analyzer (`systemd-analyze verify`, systemd 255), and was not started on a machine yet. A module for Windows follows (milestone 44).
 
 ## The driver
 

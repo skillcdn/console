@@ -26,7 +26,12 @@ const UNIT = "/Users/mira/Library/LaunchAgents/ai.skillcdn.console.runner.plist"
 describe("the launchd service", () => {
   it("is the package's service for macOS, and for no other platform", () => {
     const modules = ownRunnerModules({ user: "mira" });
-    expect(modules.services.names()).toEqual(["launchd"]);
+    expect(modules.services.names()).toContain("launchd");
+    expect(
+      modules.services
+        .names()
+        .filter((name) => modules.services.get(name)?.platforms.includes("darwin") === true),
+    ).toEqual(["launchd"]);
     expect(modules.services.get("launchd")?.platforms).toEqual(["darwin"]);
     expect(LAUNCHD_LABEL).toBe("ai.skillcdn.console.runner");
   });

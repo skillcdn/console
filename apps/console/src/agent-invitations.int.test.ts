@@ -252,7 +252,7 @@ describe("the invitation that leads a machine to an agent account (ADR-0088)", (
       let kept: Parameters<CliIo["store"]["save"]>[0] | undefined;
       const machine: NonNullable<CliIo["machine"]> = {
         // A platform the package has no service for yet: nothing is run here.
-        platform: "linux",
+        platform: "freebsd",
         user: "mira",
         home: "/home/mira",
         uid: 1001,
@@ -364,7 +364,7 @@ describe("the invitation that leads a machine to an agent account (ADR-0088)", (
     // The desk says the services as the workspace names them, for this account.
     expect(own.files.get("/home/mira/desk/AGENTS.md")).toContain("@mira");
     expect(own.files.get("/home/mira/desk/AGENTS.md")).toContain("acme-mira");
-    expect(own.out.join("")).toContain("No service keeps a runner running on linux yet");
+    expect(own.out.join("")).toContain("No service keeps a runner running on freebsd yet");
     expect((await setup(code)).status).toBe(404);
     expect(await standing(alice)).toBeNull();
     // The account's page shows the OS account and the machine beside the session.

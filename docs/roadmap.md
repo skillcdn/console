@@ -511,7 +511,8 @@ Ends with: one line pasted on a Mac sets an agent account up, the board and the 
 
 ## Milestone 44, the second lap
 
-- [ ] Ubuntu: the `systemd-user` service module and the guide for it; then the Windows service module.
+- [x] Ubuntu: the `systemd-user` service module and the guide for it, in the skill `running-an-agent`. Written from the system's documentation, its unit checked with the system's own analyzer; started on a machine with the Mac's setup, above.
+- [ ] The Windows service module.
 - [ ] The `acp` driver, for every product that speaks the Agent Client Protocol, and a direct driver for a product whose protocol lacks steering.
 - [ ] A screenshot of the agent's desktop on request, an attachment of the transcript, opted in.
 - [ ] A shared messenger app through the console: a plugin raising wakes through a capability of its own.

@@ -4019,7 +4019,7 @@ describe("setting a machine up for an agent account (ADR-0088)", () => {
   });
 
   it("writes no service where the platform has none or when asked not to, and says when one was not loaded", async () => {
-    const elsewhere = fakeMachine({ platform: "linux" });
+    const elsewhere = fakeMachine({ platform: "freebsd" });
     const run = harness({
       fetch: consoleOf().fetch,
       machine: elsewhere.machine,
@@ -4027,7 +4027,7 @@ describe("setting a machine up for an agent account (ADR-0088)", () => {
     });
     expect(await runCli(LINE, run.io)).toBe(EXIT.ok);
     expect(run.out()).toContain(
-      `No service keeps a runner running on linux yet. Start the runner yourself and keep it running: cd /Users/mira/desk && console runner --url ${ORIGIN} --account acme-mira`,
+      `No service keeps a runner running on freebsd yet. Start the runner yourself and keep it running: cd /Users/mira/desk && console runner --url ${ORIGIN} --account acme-mira`,
     );
     expect(elsewhere.runs).toEqual([]);
     expect(elsewhere.files.has(UNIT)).toBe(false);
@@ -4074,6 +4074,43 @@ describe("setting a machine up for an agent account (ADR-0088)", () => {
     expect(quiet.out()).toContain(
       "The runner is not heard from yet. Its own lines are in /Users/mira/Library/Logs/ai.skillcdn.console.runner.log",
     );
+  });
+
+  it("writes the service of the platform the machine is: a unit of the account's own systemd on Linux", async () => {
+    const at = fakeMachine({ platform: "linux" });
+    const run = harness({
+      fetch: consoleOf().fetch,
+      machine: at.machine,
+      store: memoryStore(KEPT).store,
+    });
+    expect(await runCli(LINE, run.io)).toBe(EXIT.ok);
+    const unit = "/Users/mira/.config/systemd/user/skillcdn-console-runner.service";
+    expect(at.files.get(unit)).toContain(
+      `ExecStart="/usr/local/bin/node" "/opt/console/dist/cli/main.js" "runner" "--url" "${ORIGIN}" "--account" "acme-mira"`,
+    );
+    expect(at.files.get(unit)).toContain("WorkingDirectory=/Users/mira/desk");
+    expect(at.files.has(UNIT)).toBe(false);
+    expect(at.runs.map((ran) => [ran.command, ...ran.args])).toEqual([
+      ["systemctl", "--user", "daemon-reload"],
+      ["systemctl", "--user", "enable", "skillcdn-console-runner.service"],
+      ["systemctl", "--user", "restart", "skillcdn-console-runner.service"],
+    ]);
+    expect(run.out()).toContain(`The systemd-user service is written (${unit}) and loaded`);
+    expect(run.out()).toContain("journalctl --user -u skillcdn-console-runner.service");
+    // An account with no session of its own systemd: the unit stays written, and the words say what to do.
+    const sessionless = fakeMachine({
+      platform: "linux",
+      ran: () => ({ code: 1, out: "", err: "Failed to connect to bus: No medium found\n" }),
+    });
+    const failed = harness({
+      fetch: consoleOf().fetch,
+      machine: sessionless.machine,
+      store: memoryStore(KEPT).store,
+    });
+    expect(await runCli(LINE, failed.io)).toBe(EXIT.failed);
+    expect(failed.err()).toContain("Failed to connect to bus: No medium found.");
+    expect(failed.err()).toContain("loginctl enable-linger");
+    expect(sessionless.files.has(unit)).toBe(true);
   });
 
   it("derives a machine again with --refresh, for the account's own command, and unloads nothing", async () => {
