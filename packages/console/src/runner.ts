@@ -1,0 +1,57 @@
+// The runner of an agent account (ADR-0085, docs/specs/runner.md), for whoever builds on it: a
+// console of one's own that registers a driver for another product, or a test that runs one
+// against a console. The command's `console runner` is made of the same.
+
+export { createClaudeDriver } from "./runner/claude.js";
+export {
+  DEFAULT_RUNNER_CONFIG,
+  parseRunnerConfig,
+  type RunnerConfig,
+  runnerConfigSchema,
+} from "./runner/config.js";
+export {
+  composeSignals,
+  fenced,
+  GROUP_WINDOW_MS,
+  headerOf,
+  introOf,
+  MAX_GROUP_LENGTH,
+  MAX_GROUP_SIGNALS,
+  makeMark,
+} from "./runner/message.js";
+export { ownRunnerModules } from "./runner/modules.js";
+export { createSpawn } from "./runner/process.js";
+export { formsOf, redactorOf, WITHHELD } from "./runner/redact.js";
+export {
+  createRegistry,
+  createRunnerModules,
+  type DriverHost,
+  type Registry,
+  type RunnerModules,
+} from "./runner/registry.js";
+export {
+  BATCH_MS,
+  COOL_DOWN_MS,
+  createRunner,
+  HEARTBEAT_MS,
+  MAX_COOL_DOWN_MS,
+  type Runner,
+  type RunnerClient,
+  type RunnerOptions,
+  type RunnerState,
+} from "./runner/runner.js";
+export type {
+  Boundary,
+  Child,
+  Driver,
+  DriverEvent,
+  DriverMessage,
+  DriverSession,
+  Fact,
+  Picture,
+  Probe,
+  Service,
+  Spawn,
+  StartOptions,
+  WakeSource,
+} from "./runner/types.js";

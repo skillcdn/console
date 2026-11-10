@@ -533,6 +533,9 @@ describe("createConsole", () => {
     sendSignal: never,
     signals: never,
     runnerHeartbeat: never,
+    signalStream: () => ({
+      [Symbol.asyncIterator]: () => ({ next: async () => ({ done: true, value: undefined }) }),
+    }),
     beginAgentSession: never,
     sendTranscript: never,
     uploadTranscriptFile: never,

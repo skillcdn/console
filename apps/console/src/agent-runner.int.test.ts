@@ -201,6 +201,7 @@ describe("an agent account's runner (ADR-0085)", () => {
     expect(first.status).toBe(200);
     expect(restRunnerHeartbeatSchema.parse(await first.json())).toEqual({
       latest: 0,
+      delivered: 0,
       settings: { model: null, effort: null },
       state: "running",
     });
@@ -336,8 +337,10 @@ describe("an agent account's runner (ADR-0085)", () => {
       agent: "Claude Code",
       text: "",
     });
-    // The heartbeat is answered where the record stands.
-    expect((await heartbeat({ delivered: 1 })).latest).toBe(2);
+    // The heartbeat is answered where the record stands, and what the console has as delivered:
+    // the most it was ever told, for a runner that lost its own count.
+    expect(await heartbeat({ delivered: 1 })).toMatchObject({ latest: 2, delivered: 1 });
+    expect((await heartbeat({ delivered: 0 })).delivered).toBe(1);
     expect((await agentOf({ cookie: alice })).runner).toMatchObject({ delivered: 1, latest: 2 });
 
     // Only a supervisor sends one; from a browser, from the console's own pages.

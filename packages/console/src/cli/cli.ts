@@ -28,12 +28,16 @@ import {
   LIST_LIMIT,
   MAX_DECIDERS,
   MAX_OPTIONS,
+  MAX_RUNNER_LINE_LENGTH,
   MAX_SIGNALS_PAGE_LIMIT,
   MIN_OPTIONS,
 } from "../limits.js";
 import { capabilityWords } from "../plugin/capabilities.js";
 import { PLUGIN_LIST_LIMIT } from "../plugin/limits.js";
 import { fillRules, RULES_PATH, RULES_TITLE } from "../rules.js";
+import { DEFAULT_RUNNER_CONFIG, parseRunnerConfig } from "../runner/config.js";
+import { ownRunnerModules } from "../runner/modules.js";
+import { createRunner, type RunnerState } from "../runner/runner.js";
 import {
   hostOfLogin,
   type RestAnswerInput,
@@ -153,6 +157,7 @@ import {
   skillPathIn,
   summaryOf,
 } from "./pack.js";
+import { type RunnerHost, workPath } from "./runner-host.js";
 import { createServeHandler, DEFAULT_SERVE_PORT, type Listen } from "./serve.js";
 
 // The `console` command (docs/specs/cli.md): the agent's side of the console. A thin client of
@@ -228,6 +233,8 @@ export interface CliIo {
   readonly skillsDir?: string | undefined;
   /** How `serve` listens on the loopback (ADR-0014); left out, the command cannot serve. */
   readonly listen?: Listen | undefined;
+  /** What `runner` needs of the machine (ADR-0085); left out, the command cannot run one. */
+  readonly runner?: RunnerHost | undefined;
 }
 
 /** The command stops with an exit code and a word on stderr. */
@@ -3375,6 +3382,142 @@ const serve: Command = async (args, io) => {
   return EXIT.ok;
 };
 
+/** What the runner keeps between its own restarts, as its file says it; nothing for a file that does not read. */
+function runnerStateOf(text: string | undefined): RunnerState | undefined {
+  if (text === undefined) {
+    return undefined;
+  }
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+  if (typeof json !== "object" || json === null) {
+    return undefined;
+  }
+  const delivered = "delivered" in json ? json.delivered : undefined;
+  const conversation = "conversation" in json ? json.conversation : undefined;
+  if (typeof delivered !== "number" || !Number.isSafeInteger(delivered) || delivered < 0) {
+    return undefined;
+  }
+  return {
+    delivered,
+    conversation:
+      typeof conversation === "string" && conversation.length > 0 && conversation.length <= 200
+        ? conversation
+        : undefined,
+  };
+}
+
+/** A line a runner says of its machine, within what the console takes one in. */
+const machineLine = (text: string): string => {
+  const line = [...text]
+    .map((character) => {
+      const code = character.codePointAt(0) ?? 0;
+      return code < 0x20 || code === 0x7f ? " " : character;
+    })
+    .join("")
+    .trim()
+    .slice(0, MAX_RUNNER_LINE_LENGTH);
+  return line.length === 0 ? "unknown" : line;
+};
+
+// The runner of an agent account (ADR-0085, docs/specs/runner.md): started in the account's
+// desk, on the command signed in as the account itself. It keeps the agent's session going,
+// feeds it what the console sends and reports what it does, until it is stopped.
+const runner: Command = async (args, io) => {
+  const { values, positionals } = parse(args, {});
+  if (positionals.length > 0) {
+    throw misuse("console runner takes nothing: it is started in the agent's desk.");
+  }
+  const host = io.runner;
+  if (host === undefined) {
+    throw failed("A runner cannot be started here.");
+  }
+  const session = await open(io, values);
+  const me = await session.client.me();
+  if (me.person === null) {
+    throw failed("The console does not know this sign-in. Sign in again: console login --self");
+  }
+  if (me.person.kind !== "agent" || me.session?.kind !== "command") {
+    throw failed(
+      "A runner is an agent account's own, on the command signed in as the account itself: console login --self, approved in a browser signed in as the account.",
+    );
+  }
+  const written = await host.readText("runner.json");
+  const read =
+    written === undefined
+      ? { ok: true as const, config: DEFAULT_RUNNER_CONFIG }
+      : parseRunnerConfig(written);
+  if (!read.ok) {
+    throw failed(
+      `${read.problem}. Nothing of it is used: put it right, or remove it to run with the defaults.`,
+    );
+  }
+  const modules = ownRunnerModules({ user: host.user });
+  const driverOf = modules.drivers.get(read.config.driver);
+  if (driverOf === undefined) {
+    throw failed(
+      `runner.json names the driver ${read.config.driver}, which this command does not have. It has: ${modules.drivers.names().join(", ")}.`,
+    );
+  }
+  const unknown = read.config.wake.find((name) => modules.wakeSources.get(name) === undefined);
+  if (unknown !== undefined) {
+    throw failed(
+      `runner.json names the wake source ${unknown}, which this command does not have. It has: ${modules.wakeSources.names().join(", ")}.`,
+    );
+  }
+  // A header says the hour and the minute in the workspace's zone, or the machine's where it has none.
+  const zone = me.workspace.timeZone ?? undefined;
+  let clock: Intl.DateTimeFormat;
+  try {
+    clock = new Intl.DateTimeFormat("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+      ...(zone === undefined ? {} : { timeZone: zone }),
+    });
+  } catch {
+    clock = new Intl.DateTimeFormat("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    });
+  }
+  const statePath = workPath("runner-state.json");
+  const running = createRunner({
+    client: session.client,
+    driver: driverOf({ spawn: host.spawn, cwd: host.cwd }),
+    config: read.config,
+    cwd: host.cwd,
+    machine: {
+      name: machineLine(io.hostname ?? ""),
+      os: machineLine(host.os),
+      user: machineLine(modules.boundaries.get("os-user")?.user() ?? host.user),
+    },
+    version: io.version ?? "0.0.0",
+    now: io.now,
+    random: host.random,
+    time: (iso) => clock.format(new Date(iso)),
+    files: {
+      write: (path, text) => host.writePrivate(workPath(path), text),
+      remove: (path) => host.remove(workPath(path)),
+    },
+    state: {
+      load: async () => runnerStateOf(await host.readText(statePath)),
+      save: (state) => host.writePrivate(statePath, `${JSON.stringify(state)}\n`),
+    },
+    log: (line) => io.stdout(`${new Date(io.now()).toISOString()} ${line}\n`),
+  });
+  io.stdout(
+    `The runner of @${me.person.handle ?? me.person.login} at ${me.workspace.name} (${session.url}) starts in ${host.cwd}. Stop with Ctrl+C.\n`,
+  );
+  void host.untilStopped().then(() => running.stop());
+  await running.run();
+  return EXIT.ok;
+};
+
 // Configuring, as the person (ADR-0021): what an administrator or an owner does on the pages,
 // their agent does here, attributed to them as the agent. The console decides on every request
 // with the same roles; what the person may not, the agent may not (auth.forbidden). The tokens
@@ -4446,6 +4589,7 @@ const COMMANDS: Readonly<Record<string, Command>> = {
   logout,
   whoami,
   serve,
+  runner,
   projects,
   use,
   work,

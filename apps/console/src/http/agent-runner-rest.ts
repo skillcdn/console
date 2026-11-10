@@ -134,6 +134,7 @@ export function registerAgentRunnerRest(
     });
     const body: RestRunnerHeartbeat = {
       latest: runner.latest,
+      delivered: runner.delivered,
       settings: { model: runner.model ?? null, effort: runner.effort ?? null },
       state: runner.state ?? parsed.data.state,
     };

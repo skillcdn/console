@@ -6,6 +6,7 @@ import type { DirectorySettings, DirectoryStore } from "./directory.js";
 import { COMMAND_HELP } from "./help.js";
 import type { Install } from "./install.js";
 import type { NoticeStore, VersionNotice } from "./notices.js";
+import type { RunnerHost } from "./runner-host.js";
 import type { Listen, ServeHandler } from "./serve.js";
 
 const WHEN = "2026-10-09T10:00:00.000Z";
@@ -393,9 +394,10 @@ describe("the console command", () => {
       "  console take <number|id> [--agent <name>]\n      Takes a task: a run begins",
     );
     expect(whole.out()).toContain("task new <title> [flags]");
-    // Every command is on the map, but the one a person serves a console of their own with.
+    // Every command is on the map, but the two that are started on a machine and left to run:
+    // the one a person serves a console of their own with, and an agent account's runner.
     for (const [name, help] of Object.entries(COMMAND_HELP)) {
-      if (name !== "serve") {
+      if (name !== "serve" && name !== "runner") {
         expect(whole.out()).toContain(`  console ${help.overview ?? help.usage}\n`);
       }
     }
@@ -3191,6 +3193,135 @@ describe("configuring, as the person", () => {
     const project = harness({ fetch });
     expect(await runCli(["help", "project"], project.io)).toBe(EXIT.ok);
     expect(project.out()).toContain('project new <key> "<name>"');
+  });
+});
+
+describe("the runner on the command line (ADR-0085)", () => {
+  const MIRA = {
+    ...ME,
+    person: { ...PERSON, login: "acme-mira", name: "Mira", kind: "agent", handle: "mira" },
+    agent: null,
+    session: { kind: "command", name: "console on mac-mini" },
+  };
+  /** The machine the command is on, as a test hands it: nothing is started and nothing is written. */
+  const host = (over: Partial<RunnerHost> = {}): RunnerHost => ({
+    cwd: "/home/mira/desk",
+    spawn: () => {
+      throw new Error("nothing is started here");
+    },
+    os: "Darwin 24.1.0",
+    user: "mira",
+    readText: async () => undefined,
+    writePrivate: async () => undefined,
+    remove: async () => undefined,
+    untilStopped: () => new Promise(() => undefined),
+    random: () => 0.5,
+    ...over,
+  });
+
+  it("is an agent account's own, on the command signed in as the account, and nothing else's", async () => {
+    const { fetch, calls } = fakeConsole({
+      "GET /api/v1/me": [
+        { body: ME },
+        { body: { ...MIRA, session: null, agent: "a helper" } },
+        { body: { ...ME, person: null } },
+      ],
+    });
+    // A person's agent, a token an agent account made, and nobody.
+    for (const word of ["an agent account's own", "an agent account's own", "does not know"]) {
+      const refused = harness({ fetch, env: SIGNED_IN, runner: host() });
+      expect(await runCli(["runner"], refused.io)).toBe(EXIT.failed);
+      expect(refused.err()).toContain(word);
+    }
+    expect(calls.every((call) => call.key === "GET /api/v1/me")).toBe(true);
+    const nowhere = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["runner"], nowhere.io)).toBe(EXIT.failed);
+    expect(nowhere.err()).toContain("cannot be started here");
+    const worded = harness({ fetch, env: SIGNED_IN, runner: host() });
+    expect(await runCli(["runner", "now"], worded.io)).toBe(EXIT.usage);
+  });
+
+  it("uses nothing of a runner.json that does not read, and names no module it does not have", async () => {
+    const { fetch, calls } = fakeConsole({ "GET /api/v1/me": { body: MIRA } });
+    for (const [written, word] of [
+      ["{", "runner.json is not readable JSON. Nothing of it is used"],
+      [
+        JSON.stringify({ secrets: { files: { "../.ssh/id": "ssh.key" } } }),
+        "runner.json: secrets.files",
+      ],
+      [JSON.stringify({ driver: "another" }), "names the driver another"],
+      [JSON.stringify({ wake: ["console", "slack"] }), "names the wake source slack"],
+    ] as const) {
+      const refused = harness({
+        fetch,
+        env: SIGNED_IN,
+        runner: host({
+          readText: async (path) => {
+            expect(path).toBe("runner.json");
+            return written;
+          },
+        }),
+      });
+      expect(await runCli(["runner"], refused.io), written).toBe(EXIT.failed);
+      expect(refused.err(), written).toContain(word);
+    }
+    // Nothing was said to the console but who is asking.
+    expect(calls.every((call) => call.key === "GET /api/v1/me")).toBe(true);
+  });
+
+  it("says it is there with what this machine is, and stops when it is told to", async () => {
+    const { fetch, calls } = fakeConsole({
+      "GET /api/v1/me": {
+        body: { ...MIRA, workspace: { ...ME.workspace, timeZone: "Asia/Seoul" } },
+      },
+      "GET /api/v1/agents/me/secrets": { body: { items: [] } },
+      "PUT /api/v1/agents/me/runner": {
+        body: {
+          latest: 4,
+          delivered: 4,
+          settings: { model: null, effort: null },
+          state: "running",
+        },
+      },
+    });
+    const read: string[] = [];
+    const run = harness({
+      fetch,
+      env: SIGNED_IN,
+      hostname: "mac-mini",
+      version: "0.4.8",
+      runner: host({
+        readText: async (path) => {
+          read.push(path);
+          return path === "runner.json" ? "{}" : undefined;
+        },
+        // Told to stop as soon as it listens for it.
+        untilStopped: async () => undefined,
+      }),
+    });
+    expect(await runCli(["runner"], run.io)).toBe(EXIT.ok);
+    expect(run.out()).toContain(
+      "The runner of @mira at Acme (https://console.test) starts in /home/mira/desk.",
+    );
+    expect(run.out()).toContain(
+      "the runner is there: Claude Code of a version it did not say, signals after #4",
+    );
+    expect(run.out()).toContain("the runner stopped");
+    expect(read.map((path) => path.replaceAll("\\", "/"))).toEqual([
+      "runner.json",
+      "work/runner-state.json",
+    ]);
+    const beat = calls.find((call) => call.key === "PUT /api/v1/agents/me/runner")?.body;
+    expect(beat).toMatchObject({
+      state: "running",
+      reason: "started",
+      delivered: 0,
+      session: null,
+      machine: { name: "mac-mini", os: "Darwin 24.1.0", user: "mira" },
+      runner: "0.4.8",
+      product: { driver: "claude", name: "Claude Code", version: null, tried: false },
+      offers: { models: ["opus", "sonnet", "haiku", "fable"], steer: true, resume: true },
+    });
   });
 });
 

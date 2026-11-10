@@ -217,6 +217,7 @@ import {
   restWorkspacePackConnectSchema,
   restWorkspaceSchema,
 } from "./schemas.js";
+import { readSse } from "./sse.js";
 import type { GoalState, TaskState } from "./vocabulary.js";
 
 // The client of the console's REST API: what the default console and a custom one talk to the
@@ -682,6 +683,12 @@ export interface ConsoleClient {
   ): Promise<RestSignals>;
   /** The runner's heartbeat, on the command signed in as the account itself. */
   runnerHeartbeat(input: RestRunnerHeartbeatInput): Promise<RestRunnerHeartbeat>;
+  /**
+   * The runner's stream of the account's signals after number `after`, in order, as they are
+   * sent, until the console ends it or `signal` says to stop. What does not read as a signal is
+   * left out.
+   */
+  signalStream(after: number, signal: AbortSignal): AsyncIterable<RestSignal>;
   /** The runner begins a session (ADR-0086): the one that was open is taken over. */
   beginAgentSession(input: RestAgentSessionInput): Promise<RestAgentSession>;
   /** The runner reports a batch of a session's events, in order; the same number sent again changes nothing. */
@@ -1539,6 +1546,56 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
       ),
     runnerHeartbeat: (input) =>
       request("PUT", `${base}${agentPath("me", "runner")}`, input, restRunnerHeartbeatSchema),
+    async *signalStream(after, signal) {
+      let response: Response;
+      try {
+        response = await send(`${base}${agentPath("me", "signals", "stream")}?after=${after}`, {
+          method: "GET",
+          signal,
+          credentials: token === undefined ? "same-origin" : "omit",
+          headers: {
+            accept: "text/event-stream",
+            ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
+            ...named,
+          },
+        });
+      } catch (error) {
+        if (signal.aborted) {
+          return;
+        }
+        throw error instanceof ApiError
+          ? error
+          : new ApiError(0, "network", "The server could not be reached.");
+      }
+      if (!response.ok) {
+        throw await failure(response);
+      }
+      if (response.body === null) {
+        return;
+      }
+      try {
+        for await (const block of readSse(response.body, signal)) {
+          if (block.event !== "signal") {
+            continue;
+          }
+          let json: unknown;
+          try {
+            json = JSON.parse(block.data);
+          } catch {
+            continue;
+          }
+          const parsed = restSignalSchema.safeParse(json);
+          if (parsed.success) {
+            yield parsed.data;
+          }
+        }
+      } catch (error) {
+        if (!signal.aborted) {
+          throw new ApiError(0, "network", "The stream of signals ended before its end.");
+        }
+        void error;
+      }
+    },
     beginAgentSession: (input) =>
       request("POST", `${base}${agentPath("me", "sessions")}`, input, restAgentSessionSchema),
     sendTranscript: (sessionId, input) =>

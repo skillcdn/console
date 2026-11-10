@@ -39,6 +39,10 @@
       "types": "./dist/cli/cli.d.ts",
       "default": "./dist/cli/cli.js"
     },
+    "./runner": {
+      "types": "./dist/runner.d.ts",
+      "default": "./dist/runner.js"
+    },
     "./web": {
       "types": "./dist/web.d.ts",
       "default": "./dist/web.js"

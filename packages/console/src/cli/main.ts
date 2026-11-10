@@ -11,6 +11,7 @@ import { createFileStore, defaultConfigDir } from "./credentials.js";
 import { createDirectoryStore } from "./directory.js";
 import { detectInstall } from "./install.js";
 import { createNoticeStore } from "./notices.js";
+import { createRunnerHost } from "./runner-host.js";
 import { listenOn } from "./serve.js";
 import { readBytesAt, readFileAt, readSecret, readStdin, writeBytesAt } from "./terminal.js";
 
@@ -64,4 +65,6 @@ process.exitCode = await runCli(process.argv.slice(2), {
   locale: Intl.DateTimeFormat().resolvedOptions().locale,
   skillsDir: existsSync(skillsDir) ? skillsDir : undefined,
   listen: listenOn,
+  // A product's process begins from this process's environment, where its own sign-in is.
+  runner: createRunnerHost(process.cwd(), process.env),
 });

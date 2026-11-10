@@ -658,6 +658,8 @@ export type RestRunnerHeartbeatInput = z.infer<typeof restRunnerHeartbeatInputSc
 /** What the heartbeat is answered: where the account's record of signals stands, what its supervisors chose, and how the console has the agent. */
 export const restRunnerHeartbeatSchema = z.object({
   latest: z.int().check(z.gte(0)),
+  /** The number of the last signal the console has as handed to the product: where a runner that lost its own count goes on from. */
+  delivered: z.int().check(z.gte(0)),
   settings: restAgentChoiceSchema,
   state: z.enum(AGENT_STATES),
 });
