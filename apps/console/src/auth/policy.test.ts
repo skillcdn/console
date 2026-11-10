@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { PersonRecord } from "../db/queries/people.js";
 import {
   type AccessSettings,
+  aboveInLine,
   administers,
   asActedFor,
   configuresWorkspace,
@@ -12,6 +13,7 @@ import {
   decisionRaisedBy,
   decisionReachableBy,
   decisionWaitsFor,
+  mayAdminister,
   mayWorkIn,
   memberOfProject,
   peopleNarrowedFor,
@@ -20,6 +22,7 @@ import {
   projectVisibleTo,
   readsListings,
   readsWorkspaceEvents,
+  supervises,
 } from "./policy.js";
 
 const person = (role: "admin" | "member", id = `id-${role}`): PersonRecord => ({
@@ -90,7 +93,70 @@ describe("the policy", () => {
     expect(narrowed.sql).toContain(`"people"."role" = 'admin'`);
     // Both the asker and the person read are held to the membership condition of the same project.
     expect(narrowed.sql.match(/"projects"."visibility" = 'workspace'/g)).toHaveLength(2);
-    expect(narrowed.params).toEqual([member.id, member.id]);
+    // Whoever is below the asker in the reporting line, whatever the projects say (ADR-0084).
+    expect(narrowed.sql).toContain(render(aboveInLine(member.id)).sql.replace("$1", "$2"));
+    expect(narrowed.params).toEqual([member.id, member.id, member.id]);
+    // And whom the asker reports to, where they report to someone.
+    const reporting = render(personVisibleTo({ ...member, managerId: "id-boss" }, shared));
+    expect(reporting.sql).toContain(`"people"."id" = $2`);
+    expect(reporting.params).toEqual([member.id, "id-boss", member.id, member.id]);
+  });
+
+  it("keeps one thing from an agent account, the administration, and answers every other rule as for a person (ADR-0084)", () => {
+    const agent: PersonRecord = { ...member, kind: "agent", handle: "mira" };
+    // The one rule that reads the kind.
+    expect(mayAdminister(member)).toBe(true);
+    expect(mayAdminister(admin)).toBe(true);
+    expect(mayAdminister(agent)).toBe(false);
+    // Held closed: a row that named an agent account an administrator would administer nothing.
+    expect(administers({ ...agent, role: "admin" })).toBe(false);
+    expect(configuresWorkspace({ ...agent, role: "admin" })).toBe(false);
+
+    // Every other rule: an agent account in a person's place, and the same answer.
+    for (const settings of [everyone, shared]) {
+      expect(peopleNarrowedFor(agent, settings)).toBe(peopleNarrowedFor(member, settings));
+      expect(readsListings(agent, settings)).toBe(readsListings(member, settings));
+      expect(readsWorkspaceEvents(agent, settings)).toBe(readsWorkspaceEvents(member, settings));
+      expect(render(personVisibleTo(agent, settings))).toEqual(
+        render(personVisibleTo(member, settings)),
+      );
+      for (const owns of [true, false]) {
+        expect(render(personFindableBy(agent, settings, owns))).toEqual(
+          render(personFindableBy(member, settings, owns)),
+        );
+      }
+    }
+    expect(administers(agent)).toBe(administers(member));
+    expect(configuresWorkspace(agent)).toBe(configuresWorkspace(member));
+    expect(asActedFor(agent)).toBe(agent);
+    const same: [string, (who: PersonRecord) => ReturnType<typeof projectVisibleTo>][] = [
+      ["projectVisibleTo", projectVisibleTo],
+      ["decisionReachableBy", decisionReachableBy],
+      ["decisionAnswerableBy", decisionAnswerableBy],
+      ["decisionWaitsFor", decisionWaitsFor],
+      ["decisionRaisedBy", decisionRaisedBy],
+      ["supervises", supervises],
+    ];
+    for (const [name, rule] of same) {
+      expect(render(rule(agent)), name).toEqual(render(rule(member)));
+    }
+    // Where a rule takes the member by id or by column, it cannot tell the two apart at all.
+    expect(render(mayWorkIn("project-1", agent.id))).toEqual(
+      render(mayWorkIn("project-1", member.id)),
+    );
+    expect(render(decisionOnPlateOf(agent.id))).toEqual(render(decisionOnPlateOf(member.id)));
+  });
+
+  it("names the supervisors of an agent account: the administrators, and the line above it (ADR-0084)", () => {
+    // An administrator supervises every agent account, and nobody who is not one.
+    expect(render(supervises(admin)).sql).toBe(`"people"."kind" = 'agent'`);
+    const above = render(supervises(member));
+    expect(above.sql).toContain(`"people"."kind" = 'agent'`);
+    // Up the reporting line from the account, to its manager and whoever is above them.
+    expect(above.sql).toContain("with recursive above(id) as");
+    expect(above.sql).toContain(`select "people"."manager_id" union`);
+    expect(above.sql).toContain("above.id = $1::uuid");
+    expect(above.params).toEqual([member.id]);
   });
 
   it("lets an owner find anyone active by login when narrowed, and everyone else only whom they see", () => {

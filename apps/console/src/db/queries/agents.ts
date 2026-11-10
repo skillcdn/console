@@ -1,5 +1,5 @@
 import type { ProviderKey, RestAvatarParts } from "@skillcdn/console/api";
-import { and, asc, eq, isNotNull, isNull, type SQL, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, or, type SQL, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
@@ -37,11 +37,21 @@ const AGENT_ERROR_WORDS = {
   "agent.invalid_project": "the project it starts in was not found",
 } as const;
 
-/** An agent account with whom it reports to. */
+/** An agent account with whom it reports to, as one asker reads it. */
 export interface AgentRecord {
   readonly person: PersonRecord;
   /** Whom it reports to, where the asker may see them; an agent account always has a manager. */
   readonly manager: PersonRecord | undefined;
+  /** Whether the asker supervises it (auth/policy.ts). */
+  readonly supervised: boolean;
+}
+
+/** Who reads the agent accounts: the policy's conditions for the asker, each on a `people` row. */
+export interface AgentReader {
+  /** Whether the asker may see the member. */
+  readonly visible: SQL;
+  /** Whether the asker supervises the member. */
+  readonly supervises: SQL;
 }
 
 /** The managers of the agent accounts read: `people` again, under another name. */
@@ -264,62 +274,67 @@ export async function createAgentAccount(
         });
       }
     }
-    return { person, manager: toPerson(manager) };
+    // Made by an administrator, who supervises every agent account.
+    return { person, manager: toPerson(manager), supervised: true };
   });
 }
 
-/** The account, its manager, and whether the asker may see the manager (`visible`, read on the manager's own row). */
-const agentColumns = (visible: SQL) => ({
+/** The account, its manager, whether the asker may see the manager (`visible`, read on the manager's own row), and whether they supervise the account. */
+const agentColumns = (reader: AgentReader) => ({
   person: personColumns(people),
   manager: personColumns(managers),
-  managerVisible: sql<boolean>`exists (select 1 from ${people} where ${people.id} = ${managers.id} and ${visible})`,
+  managerVisible: sql<boolean>`exists (select 1 from ${people} where ${people.id} = ${managers.id} and ${reader.visible})`,
+  supervised: sql<boolean>`${reader.supervises}`,
 });
 
 type AgentRow = {
   readonly person: Parameters<typeof toPerson>[0];
   readonly manager: Parameters<typeof toPerson>[0] | null;
   readonly managerVisible: boolean;
+  readonly supervised: boolean;
 };
 
 const toAgent = (row: AgentRow): AgentRecord => ({
   person: toPerson(row.person),
   manager: row.manager === null || !row.managerVisible ? undefined : toPerson(row.manager),
+  supervised: row.supervised,
 });
 
-/** The agent accounts of the workspace the asker may see (`visible`, on a `people` row), by handle. */
+/** An agent account the asker may read: one they may see as a member, or one they supervise. */
+const readable = (workspaceId: string, reader: AgentReader): SQL | undefined =>
+  and(
+    eq(people.workspaceId, workspaceId),
+    eq(people.kind, "agent"),
+    or(reader.visible, reader.supervises),
+  );
+
+/** The agent accounts of the workspace the asker may read, those in first, by handle. */
 export async function listAgents(
   database: Database,
   workspaceId: string,
-  visible: SQL,
+  reader: AgentReader,
 ): Promise<AgentRecord[]> {
   const rows = await drizzleOf(database)
-    .select(agentColumns(visible))
+    .select(agentColumns(reader))
     .from(people)
     .leftJoin(managers, eq(managers.id, people.managerId))
-    .where(and(eq(people.workspaceId, workspaceId), eq(people.kind, "agent"), visible))
+    .where(readable(workspaceId, reader))
     .orderBy(asc(people.status), asc(people.handle));
   return rows.map(toAgent);
 }
 
-/** One agent account by its handle, as the asker may see it, or nothing. */
+/** One agent account by its handle, as the asker may read it, or nothing. */
 export async function findAgent(
   database: Database,
   workspaceId: string,
   handle: string,
-  visible: SQL,
+  reader: AgentReader,
 ): Promise<AgentRecord | undefined> {
   const [row] = await drizzleOf(database)
-    .select(agentColumns(visible))
+    .select(agentColumns(reader))
     .from(people)
     .leftJoin(managers, eq(managers.id, people.managerId))
-    .where(
-      and(
-        eq(people.workspaceId, workspaceId),
-        eq(people.kind, "agent"),
-        eq(people.handle, handle),
-        visible,
-      ),
-    )
+    .where(and(readable(workspaceId, reader), eq(people.handle, handle)))
     .limit(1);
   return row === undefined ? undefined : toAgent(row);
 }

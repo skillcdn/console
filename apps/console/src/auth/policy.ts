@@ -33,9 +33,20 @@ export function memberOfProject(person: PersonRef): SQL {
   return sql`(${projects.visibility} = 'workspace' or ${listedIn(person)})`;
 }
 
+/**
+ * Whether a member may be a workspace administrator at all: a person may, an agent account never
+ * (ADR-0084). The one rule of the policy that reads `kind`. Whatever else is kept from an agent
+ * account is kept as it would be from a person, by the project it is not listed in, the role it
+ * is not given, the grant it does not hold; every other function here answers the same for the
+ * two, and the table test says so.
+ */
+export function mayAdminister(person: Pick<PersonRecord, "kind">): boolean {
+  return person.kind !== "agent";
+}
+
 /** Whether `person` administers the workspace: sees every project and everyone, and configures it. */
 export function administers(person: PersonRecord): boolean {
-  return person.role === "admin";
+  return person.role === "admin" && mayAdminister(person);
 }
 
 /**
@@ -71,16 +82,42 @@ export function peopleNarrowedFor(person: PersonRecord, settings: AccessSettings
 }
 
 /**
+ * On a `people` row: whether `person` is above the member in the reporting line, their manager
+ * or the manager of one above them. The line never loops (`updatePersonManager` sees to it), so
+ * the climb ends.
+ */
+export function aboveInLine(person: PersonRef): SQL {
+  return sql`exists (with recursive above(id) as (select ${people.managerId} union select p.manager_id from people p join above on p.id = above.id where p.manager_id is not null) select 1 from above where above.id = ${person}::uuid)`;
+}
+
+/**
+ * On a `people` row: whether `asker` supervises the member (ADR-0084): the member is an agent
+ * account, and the asker is an administrator or above it in the reporting line. A supervisor
+ * watches its sessions, tells it, stops it and starts it again, sees where it is signed in, seeds
+ * its secrets and keeps its persona; nobody else does, an owner of a project it works in among
+ * them. Supervision is what is added over an agent account, and takes nothing from it.
+ */
+export function supervises(asker: PersonRecord): SQL {
+  return administers(asker)
+    ? sql`${people.kind} = 'agent'`
+    : sql`(${people.kind} = 'agent' and ${aboveInLine(asker.id)})`;
+}
+
+/**
  * On a `people` row: whether `asker` may see the person. Everyone, unless the people are
  * narrowed: then the active people who are in a project the asker is in, the asker themselves,
- * and the administrators, whom anyone may need to turn to. A project open to the workspace has
+ * the administrators, whom anyone may need to turn to, and the asker's own line, whom they
+ * report to and whoever is below them, whatever the projects say (ADR-0084): a member knows
+ * their manager, and a manager whom they answer for. A project open to the workspace has
  * everyone in it, so an asker in one sees everyone.
  */
 export function personVisibleTo(asker: PersonRecord, settings: AccessSettings): SQL {
   if (!peopleNarrowedFor(asker, settings)) {
     return sql`true`;
   }
-  return sql`(${people.status} = 'active' and (${people.id} = ${asker.id} or ${people.role} = 'admin' or exists (select 1 from ${projects} where ${projects.workspaceId} = ${people.workspaceId} and ${memberOfProject(asker.id)} and ${memberOfProject(people.id)})))`;
+  const manager =
+    asker.managerId === undefined ? sql`false` : sql`${people.id} = ${asker.managerId}`;
+  return sql`(${people.status} = 'active' and (${people.id} = ${asker.id} or ${people.role} = 'admin' or ${manager} or ${aboveInLine(asker.id)} or exists (select 1 from ${projects} where ${projects.workspaceId} = ${people.workspaceId} and ${memberOfProject(asker.id)} and ${memberOfProject(people.id)})))`;
 }
 
 /**

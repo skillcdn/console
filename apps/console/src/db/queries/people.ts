@@ -22,6 +22,7 @@ import {
 } from "drizzle-orm";
 import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
 import * as z from "zod";
+import { mayAdminister } from "../../auth/policy.js";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
 import { listings, people, workspaces } from "../schema.js";
@@ -648,7 +649,7 @@ export async function updatePersonRole(
       return person;
     }
     // The one thing kept from an agent account (ADR-0084): it is never an administrator.
-    if (person.kind === "agent" && role === "admin") {
+    if (role === "admin" && !mayAdminister(person)) {
       throw new PersonError("person.agent_admin");
     }
     if (await lastAdministrator(tx, workspaceId, person)) {

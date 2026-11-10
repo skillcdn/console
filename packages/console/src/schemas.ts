@@ -552,6 +552,11 @@ export const restAgentSchema = z.object({
   person: restPersonSchema,
   /** Whom it reports to, as the asker may see them; `null` where they may not. */
   manager: z.nullable(restPersonSchema),
+  /**
+   * Whether the asker supervises it (ADR-0084): an administrator, or above it in the reporting
+   * line. What a supervisor may do of it, nobody else may.
+   */
+  supervised: z.boolean(),
 });
 export type RestAgent = z.infer<typeof restAgentSchema>;
 

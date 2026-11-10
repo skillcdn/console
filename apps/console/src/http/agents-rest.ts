@@ -13,9 +13,20 @@ import {
 } from "@skillcdn/console/api";
 import type { Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
-import { configuresWorkspace, personVisibleTo } from "../auth/policy.js";
+import {
+  type AccessSettings,
+  configuresWorkspace,
+  personVisibleTo,
+  supervises,
+} from "../auth/policy.js";
 import type { Database } from "../db/client.js";
-import { AgentError, createAgentAccount, findAgent, listAgents } from "../db/queries/agents.js";
+import {
+  AgentError,
+  type AgentReader,
+  createAgentAccount,
+  findAgent,
+  listAgents,
+} from "../db/queries/agents.js";
 import type { Actor } from "../db/queries/events.js";
 import { PersonError, type PersonRecord } from "../db/queries/people.js";
 import type { TokenRecord } from "../db/queries/tokens.js";
@@ -62,6 +73,11 @@ export function registerAgentsRest(app: Hono<AppEnv>, dependencies: AgentsRestDe
     }
     return asking(c);
   };
+  /** How the asker reads the agent accounts: whom they may see as a member, and whom they supervise. */
+  const readerOf = (person: PersonRecord, settings: AccessSettings): AgentReader => ({
+    visible: personVisibleTo(person, settings),
+    supervises: supervises(person),
+  });
   const invalid = (c: Context<AppEnv>, message: string): Response =>
     c.json(errorBody("request.invalid", message), 400);
   const notFound = (c: Context<AppEnv>): Response =>
@@ -103,11 +119,7 @@ export function registerAgentsRest(app: Hono<AppEnv>, dependencies: AgentsRestDe
     }
     const { person } = caller;
     const settings = await readWorkspaceSettings(database, person.workspaceId);
-    const agents = await listAgents(
-      database,
-      person.workspaceId,
-      personVisibleTo(person, settings),
-    );
+    const agents = await listAgents(database, person.workspaceId, readerOf(person, settings));
     const body: RestAgents = { items: agents.map(restAgent) };
     return c.json(body);
   });
@@ -186,12 +198,7 @@ export function registerAgentsRest(app: Hono<AppEnv>, dependencies: AgentsRestDe
       return notFound(c);
     }
     const settings = await readWorkspaceSettings(database, person.workspaceId);
-    const agent = await findAgent(
-      database,
-      person.workspaceId,
-      handle,
-      personVisibleTo(person, settings),
-    );
+    const agent = await findAgent(database, person.workspaceId, handle, readerOf(person, settings));
     return agent === undefined ? notFound(c) : c.json(restAgent(agent));
   });
 }

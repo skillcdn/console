@@ -83,6 +83,7 @@ beforeAll(async () => {
   aliceId = (await meOf(alice)).id;
   bobId = (await meOf(bob)).id;
   await h.project(alice, { key: "ops", name: "Operations", visibility: "private" });
+  await h.project(alice, { key: "lab", name: "The lab", visibility: "private" });
 });
 
 afterAll(async () => {
@@ -91,6 +92,11 @@ afterAll(async () => {
 
 describe("an agent account (ADR-0084)", () => {
   let miraId: string;
+  let mira: string;
+  let dex: string;
+  let echo: string;
+  let dexId: string;
+  let echoId: string;
 
   it("is made by an administrator, and is a member before anyone signed in with it", async () => {
     const byMember = await send(
@@ -169,7 +175,7 @@ describe("an agent account (ADR-0084)", () => {
   });
 
   it("is bound to its provider's account at its first sign-in, its name and picture the console's", async () => {
-    const mira = await h.signIn("carol");
+    mira = await h.signIn("carol");
     const me = await meOf(mira);
     // The row an administrator made, known by the provider's account from now on; what the
     // provider calls the account, `Carol`, is not written over the console's name.
@@ -200,11 +206,18 @@ describe("an agent account (ADR-0084)", () => {
       alice,
       "POST",
       REST_ROUTES.agents,
-      account({ host: "google", login: "dave@acme.test", handle: "dex", name: "Dex" }),
+      account({
+        host: "google",
+        login: "dave@acme.test",
+        handle: "dex",
+        name: "Dex",
+        project: "lab",
+      }),
     );
     expect(dave.status).toBe(201);
-    const dexId = restAgentSchema.parse(await dave.json()).person.id;
-    expect(await meOf(await h.signIn("dave"))).toMatchObject({
+    dexId = restAgentSchema.parse(await dave.json()).person.id;
+    dex = await h.signIn("dave");
+    expect(await meOf(dex)).toMatchObject({
       id: dexId,
       kind: "agent",
       name: "Dex",
@@ -217,10 +230,18 @@ describe("an agent account (ADR-0084)", () => {
       alice,
       "POST",
       REST_ROUTES.agents,
-      account({ host: "google", login: "erin@mail.test", handle: "echo", name: "Echo" }),
+      account({
+        host: "google",
+        login: "erin@mail.test",
+        handle: "echo",
+        name: "Echo",
+        project: "lab",
+      }),
     );
     expect(erin.status).toBe(201);
-    expect(await meOf(await h.signIn("erin"))).toMatchObject({
+    echoId = restAgentSchema.parse(await erin.json()).person.id;
+    echo = await h.signIn("erin");
+    expect(await meOf(echo)).toMatchObject({
       kind: "agent",
       handle: "echo",
       role: "member",
@@ -330,5 +351,64 @@ describe("an agent account (ADR-0084)", () => {
       status: "active",
       kind: "agent",
     });
+  });
+  it("is supervised by the administrators and the line above it, and a member sees their own line whatever the projects say", async () => {
+    const agentsOf = async (cookie: string) =>
+      restAgentsSchema.parse(await (await get(cookie, REST_ROUTES.agents)).json()).items;
+    const seenBy = async (cookie: string) =>
+      restPeopleSchema
+        .parse(await (await get(cookie, REST_ROUTES.people)).json())
+        .items.map((person) => person.handle ?? person.login)
+        .sort();
+    const patch = (id: string, body: unknown) =>
+      send(alice, "PATCH", `${REST_ROUTES.people}/${id}`, body);
+    // An administrator supervises every agent account; its manager supervises it; a member
+    // who merely works beside it does not.
+    expect((await agentsOf(alice)).every((agent) => agent.supervised)).toBe(true);
+    const beside = await agentsOf(mira);
+    expect(beside.find((agent) => agent.person.id === bobId)?.supervised).toBe(false);
+    const asManager = await agentsOf(bob);
+    expect(asManager.find((agent) => agent.person.id === miraId)?.supervised).toBe(true);
+    expect(asManager.find((agent) => agent.person.id === dexId)?.supervised).toBe(false);
+
+    // Narrowed to the people one shares a project with (ADR-0035): Echo is in the lab with Dex,
+    // and sees neither Mira nor Bolt, who are in Operations.
+    const narrowed = await send(alice, "PATCH", REST_ROUTES.workspace, {
+      peopleVisibility: "shared_projects",
+    });
+    expect(narrowed.status).toBe(200);
+    expect(await seenBy(echo)).toEqual(["Alice", "dex", "echo"]);
+    expect((await agentsOf(echo)).map((agent) => agent.person.handle)).toEqual(["dex", "echo"]);
+    expect((await get(echo, agentPath("mira"))).status).toBe(404);
+
+    // Mira reports to Echo now: Echo sees whom it answers for, and Mira whom it reports to,
+    // though they share no project.
+    expect((await patch(miraId, { managerId: echoId })).status).toBe(200);
+    expect(await seenBy(echo)).toEqual(["Alice", "dex", "echo", "mira"]);
+    expect(await seenBy(mira)).toEqual(["Alice", "bolt", "echo", "mira"]);
+    const echos = await agentsOf(echo);
+    expect(echos.find((agent) => agent.person.id === miraId)).toMatchObject({ supervised: true });
+    expect(echos.find((agent) => agent.person.id === dexId)).toMatchObject({ supervised: false });
+    const miras = await agentsOf(mira);
+    // Its manager is read with it, and it supervises nobody above it.
+    expect(miras.find((agent) => agent.person.id === miraId)?.manager?.id).toBe(echoId);
+    expect(miras.find((agent) => agent.person.id === echoId)).toMatchObject({ supervised: false });
+    // Bolt works beside Mira and manages it no longer.
+    expect((await agentsOf(bob)).find((agent) => agent.person.id === miraId)).toMatchObject({
+      supervised: false,
+    });
+
+    // Up the line: Echo reports to Dex, so Dex supervises Mira through Echo, and sees it.
+    expect((await patch(echoId, { managerId: dexId })).status).toBe(200);
+    const dexes = await agentsOf(dex);
+    expect(dexes.find((agent) => agent.person.id === miraId)).toMatchObject({ supervised: true });
+    expect(await seenBy(dex)).toEqual(["Alice", "dex", "echo", "mira"]);
+    // And the one below sees its own manager, not the line above them.
+    expect(await seenBy(mira)).toEqual(["Alice", "bolt", "echo", "mira"]);
+
+    const restored = await send(alice, "PATCH", REST_ROUTES.workspace, {
+      peopleVisibility: "everyone",
+    });
+    expect(restored.status).toBe(200);
   });
 });

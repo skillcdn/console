@@ -76,6 +76,7 @@ export function restAgent(agent: AgentRecord): RestAgent {
   return {
     person: restPerson(agent.person),
     manager: agent.manager === undefined ? null : restPerson(agent.manager),
+    supervised: agent.supervised,
   };
 }
 
