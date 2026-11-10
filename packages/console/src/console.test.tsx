@@ -53,6 +53,8 @@ describe("matchRoute", () => {
     expect(matchRoute("/people/teams/other")).toEqual({ name: "not-found" });
     expect(matchRoute("/agents")).toEqual({ name: "agents" });
     expect(matchRoute("/agents/new")).toEqual({ name: "new-token" });
+    // The form for an agent account (ADR-0084), under `new`, which no account's handle may be.
+    expect(matchRoute("/agents/new/account")).toEqual({ name: "new-agent" });
     expect(matchRoute("/projects/web")).toEqual({ name: "board", project: "web", filter: {} });
     expect(matchRoute("/projects/web/")).toEqual({ name: "board", project: "web", filter: {} });
     expect(matchRoute("/work")).toEqual({ name: "work", week: undefined });
@@ -610,8 +612,13 @@ describe("createConsole", () => {
   it("knows which pages a console that holds a token does not offer", () => {
     // The tokens themselves, and an agent's approval, are a person's own doing on the console's
     // own pages; configuring is the token's too, as its person's (ADR-0021).
-    for (const path of ["/agents", "/agents/new", "/settings/sessions"]) {
+    for (const path of ["/agents/new", "/settings/sessions"]) {
       expect(onlyOnOwnPages(matchRoute(path)), path).toBe(true);
+    }
+    // The agent accounts are members anyone reads, with a token too (ADR-0084); the page then
+    // shows them alone, and making one is an administrator's on a token as on a session.
+    for (const path of ["/agents", "/agents/new/account"]) {
+      expect(onlyOnOwnPages(matchRoute(path)), path).toBe(false);
     }
     expect(onlyOnOwnPages(matchRoute(`/people/${ID}/agents`))).toBe(true);
     expect(onlyOnOwnPages(matchRoute("/connect/abcd-efgh"))).toBe(true);

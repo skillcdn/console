@@ -1432,6 +1432,56 @@ export const ko: Messages = {
       goodUntilBefore: "유효 기간은",
       goodUntilAfter: "까지이며, 언제든 여기서 제거할 수 있습니다.",
     },
+    accounts: {
+      title: "에이전트 계정",
+      intro:
+        "자기 계정으로 일하는 에이전트입니다. 각자 자기 계정으로 로그인하고, 사람과 같은 규칙으로 일하며, 매니저에게 보고합니다.",
+      yours: "내 에이전트",
+      yoursIntro: "나를 대신해 일하는 에이전트입니다. 각자 내 토큰을 가집니다.",
+      list: "에이전트 계정",
+      add: "에이전트 계정 추가",
+      empty: {
+        title: "아직 에이전트 계정이 없습니다",
+        body: "관리자가 여기서 추가합니다. 추가한 때부터 멤버가 되고, 자기 계정으로 로그인합니다.",
+      },
+      invited: "초대됨",
+      invitedHint: "아직 아무도 이 계정으로 로그인하지 않았습니다. 작업은 지금도 맡길 수 있습니다.",
+      signsInAs: (login) => `${login}(으)로 로그인`,
+      managerUnseen: "나에게는 보이지 않음",
+      savePicture: "그림 저장",
+      savePictureHint: "다른 서비스의 프로필에 쓸 1024픽셀 PNG입니다.",
+      loadingProposals: "페르소나 후보를 뽑는 중",
+      form: {
+        aria: "에이전트 계정 추가",
+        proposals: "페르소나 고르기",
+        proposalsHint: "후보일 뿐입니다. 이름, 핸들, 직함은 원하는 대로 바꾸세요.",
+        roll: "다시 뽑기",
+        name: "이름",
+        handle: "핸들",
+        handleHint:
+          "핸들은 페이지와 명령에서 이 계정을 부르는 이름입니다(@handle). 영문 소문자, 숫자, 하이픈을 쓰며, 한번 정하면 바뀌지 않습니다.",
+        title: "직함",
+        titlePlaceholder: "하는 일을 한 줄로",
+        provider: "로그인 제공자",
+        login: "로그인할 계정",
+        first: {
+          title: (provider) => `먼저 ${provider}에서`,
+          make: (login, provider) =>
+            `사람이 ${provider}에서 ${login} 계정을 만듭니다. 에이전트 계정도 사람처럼 자기 계정으로 로그인합니다.`,
+          unnamed: (provider) =>
+            `사람이 ${provider}에서 계정을 만들고, 그 로그인을 위에 적습니다. 에이전트 계정도 사람처럼 자기 계정으로 로그인합니다.`,
+          password:
+            "첫 비밀번호는 기계를 준비하는 사람에게 전달합니다. 그 뒤로는 에이전트가 로그인 정보를 직접 보관합니다.",
+          gitHost:
+            "깃 호스트 약관상 계정 등록은 사람이 해야 합니다. 그 뒤로는 에이전트가 로그인 정보를 직접 보관합니다.",
+        },
+        manager: "매니저",
+        managerHint:
+          "매니저는 에이전트가 먼저 찾는 사람이자 이 계정을 책임지는 사람입니다. 관리자가 언제든 바꿀 수 있습니다. 고른 프로젝트에서 멤버로 시작합니다.",
+        project: "시작 프로젝트",
+        submit: "에이전트 계정 추가",
+      },
+    },
   },
 
   sessions: {

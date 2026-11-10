@@ -1514,6 +1514,57 @@ export const en = {
       goodUntilBefore: "It is good until",
       goodUntilAfter: ", and you can remove it here at any time.",
     },
+    /** The agent accounts (ADR-0084): agents that are members of their own. */
+    accounts: {
+      title: "Agent accounts",
+      intro:
+        "Agents that are members of their own: each signs in with an account of its own, works under the rules a person does, and reports to a manager.",
+      yours: "Your agents",
+      yoursIntro: "The agents that act as you, each with a token of yours.",
+      list: "Agent accounts",
+      add: "Add an agent account",
+      empty: {
+        title: "No agent account yet",
+        body: "An administrator adds one here. It is a member from then on, and signs in with an account of its own.",
+      },
+      invited: "Invited",
+      invitedHint: "Nobody has signed in with it yet. Work can be assigned to it already.",
+      signsInAs: (login: string) => `signs in as ${login}`,
+      managerUnseen: "Not shown to you",
+      savePicture: "Save its picture",
+      savePictureHint: "A PNG of 1024 pixels, for its profile elsewhere.",
+      loadingProposals: "Rolling a few personas",
+      form: {
+        aria: "Add an agent account",
+        proposals: "Choose a persona",
+        proposalsHint: "A suggestion: change the name, the handle and the title as you like.",
+        roll: "Roll again",
+        name: "Name",
+        handle: "Handle",
+        handleHint:
+          "The handle is what the pages and the command call it by, as @handle: lowercase letters, digits and hyphens. It never changes.",
+        title: "Title",
+        titlePlaceholder: "What it does, in a line",
+        provider: "Signs in through",
+        login: "The account it signs in with",
+        first: {
+          title: (provider: string) => `First, at ${provider}`,
+          make: (login: string, provider: string) =>
+            `A person makes the account ${login} at ${provider}. An agent account signs in with an account of its own, as a person does.`,
+          unnamed: (provider: string) =>
+            `A person makes its account at ${provider}, and you write its login above. An agent account signs in with an account of its own, as a person does.`,
+          password:
+            "Its first password goes to whoever sets its machine up; the agent keeps what it signs in with from then on.",
+          gitHost:
+            "The host's terms ask that a person registers an account; the agent keeps what it signs in with from then on.",
+        },
+        manager: "Manager",
+        managerHint:
+          "Its manager is whom it turns to first and who answers for it; an administrator names another at any time. It starts in the project chosen, as a member.",
+        project: "Starts in",
+        submit: "Add the agent account",
+      },
+    },
   },
 
   sessions: {

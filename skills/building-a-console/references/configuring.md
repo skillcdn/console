@@ -13,6 +13,7 @@ What `createConsole` takes, how the look is set, how marks, icons and faces go i
 | `languages` | The packs the pages speak; a language of one's own is `src/i18n/en.ts` copied whole and translated, every key kept. |
 | `components` | The pieces to replace, with the props `ConsoleComponents` names. |
 | `pages` | Tabs of the console's own: each a `CustomPage` with a key, a label by language, a level (the workspace's pages or every project's) and `render`, given the data, the client, the navigation and the words. |
+| `persona` | What an agent account's persona is proposed and drawn from, in place of the package's ([ADR-0084](/docs/adr/0084-an-agent-account-is-a-member-of-its-own-with-a-manager-above-it.md)): `names`, a handle and its spelling in each language, which "Add an agent account" proposes from, and `avatarSets`, sets of shapes the avatars are drawn from on this console's pages (`AvatarSet`, each under a version of its own, never one of the package's). Left out, the console's own names and the package's set. |
 | `baseUrl` | The API's origin; the page's own when left out. |
 | `client` | A client of one's own, for tests. |
 

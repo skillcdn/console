@@ -108,6 +108,8 @@ export type Route =
   | { readonly name: "person-work"; readonly id: string; readonly week: string | undefined }
   | { readonly name: "agents" }
   | { readonly name: "new-token" }
+  /** The form where an administrator adds an agent account (ADR-0084). */
+  | { readonly name: "new-agent" }
   /** What is on the person's plate across their projects. */
   /** What is on the person's plate: a day of the week shown at the top, or today's when the address names none. */
   | { readonly name: "work"; readonly week: string | undefined }
@@ -182,6 +184,8 @@ export const PATHS = {
   agents: "/agents",
   /** The form for a token made by hand, for a script or a console of one's own. */
   newToken: "/agents/new",
+  /** The form where an administrator adds an agent account (ADR-0084): under `new`, which no account's handle may be. */
+  newAgent: "/agents/new/account",
   /** The categories tasks are sorted into, kept by an administrator; reached from the settings. */
   categories: "/categories",
   /** The workspace's settings: the rules, the categories, the skills (ADR-0023). */
@@ -328,6 +332,9 @@ export function matchRoute(pathname: string, search = ""): Route {
   }
   if (path === PATHS.newToken) {
     return { name: "new-token" };
+  }
+  if (path === PATHS.newAgent) {
+    return { name: "new-agent" };
   }
   if (path === PATHS.categories) {
     return { name: "categories" };

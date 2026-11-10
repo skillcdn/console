@@ -19,6 +19,7 @@ import type {
 } from "../api.js";
 import { addDays, deviceLanguage, firstDayOfWeek, weekOf } from "../dates.js";
 import { KOREAN, LanguageContext } from "../i18n/index.js";
+import { AgentAccountForm, AgentAccountList, suggestLogin } from "./agents.js";
 import { Board, BoardFilters, byDue, columnStateOf, edgeScrollOf, filterTasks } from "./board.js";
 import {
   Calendar,
@@ -1523,6 +1524,124 @@ describe("tokens", () => {
       <NewToken token={{ ...token, expiresAt: null }} secret="cns_t_x" onDone={() => undefined} />,
     );
     expect(forever).toContain("It does not expire");
+  });
+});
+
+describe("the agent accounts (ADR-0084)", () => {
+  const parts = {
+    set: 1,
+    background: 0,
+    head: 1,
+    ears: 0,
+    eyes: 0,
+    mouth: 1,
+    marks: 0,
+    accessory: 0,
+    palette: 0,
+  };
+  const mira: RestPerson = {
+    ...bob,
+    id: "0199c4d8-0000-7000-8000-000000000009",
+    login: "mira@acme.example",
+    name: "Mira",
+    kind: "agent",
+    handle: "mira",
+    title: "Release engineer",
+    managerId: alice.id,
+    avatarParts: parts,
+    invited: true,
+  };
+
+  it("lists each with who it is, the login it signs in with and whom it reports to, and offers its picture to its supervisors", () => {
+    const seen = renderToStaticMarkup(
+      <AgentAccountList agents={[{ person: mira, manager: alice, supervised: false }]} />,
+    );
+    expect(seen).toContain("Mira");
+    expect(seen).toContain('<span class="sc-person-card-title">Release engineer</span>');
+    expect(seen).toContain("@mira · signs in as mira@acme.example");
+    expect(seen).toContain(">Invited<");
+    expect(seen).toContain("Nobody has signed in with it yet.");
+    expect(seen).toMatch(/<dt>Manager<\/dt><dd><span class="sc-person"[^>]*>.*?Alice Example/);
+    expect(seen).toContain('<svg class="sc-avatar sc-avatar-lg"');
+    // Whoever reads it without supervising it keeps nothing of it, its picture included.
+    expect(seen).not.toContain("Save its picture");
+    const supervised = renderToStaticMarkup(
+      <AgentAccountList
+        agents={[
+          { person: { ...mira, invited: undefined }, manager: null, supervised: true },
+          {
+            person: { ...mira, id: bob.id, handle: "dex", status: "deactivated" },
+            manager: alice,
+            supervised: true,
+          },
+        ]}
+      />,
+    );
+    expect(supervised.match(/>Save its picture</g)).toHaveLength(2);
+    expect(supervised).toContain("Not shown to you");
+    expect(supervised).toContain(">Deactivated<");
+    expect(supervised.match(/>Invited</g)).toHaveLength(1);
+    expect(renderToStaticMarkup(<AgentAccountList agents={[]} empty={<p>none</p>} />)).toBe(
+      "<p>none</p>",
+    );
+  });
+
+  it("proposes the login an account signs in with from its handle and what the provider admits", () => {
+    const google = {
+      key: "google" as const,
+      label: "Google",
+      admits: { organization: null, domains: ["acme.example", "acme.test"] },
+    };
+    const gh = {
+      key: "gh" as const,
+      label: "GitHub",
+      admits: { organization: "Acme", domains: [] },
+    };
+    expect(suggestLogin("mira", google)).toBe("mira@acme.example");
+    expect(suggestLogin("mira", gh)).toBe("acme-mira");
+    // Nothing where the deployment names neither: the administrator writes the login.
+    expect(suggestLogin("mira", { key: "gh", label: "GitHub" })).toBe("");
+    expect(suggestLogin("mira", { ...google, admits: { organization: null, domains: [] } })).toBe(
+      "",
+    );
+    expect(suggestLogin("", google)).toBe("");
+    expect(suggestLogin("mira", undefined)).toBe("");
+  });
+
+  it("is added from a form: personas to choose from, what a person does first at the provider, a manager and a project", () => {
+    const form = renderToStaticMarkup(
+      <AgentAccountForm
+        proposals={[
+          { seed: "s-1", name: "Mira", handle: "mira", avatarParts: parts },
+          { seed: "s-2", name: "Juno", handle: "juno", avatarParts: { ...parts, palette: 1 } },
+        ]}
+        onRoll={() => undefined}
+        providers={[
+          { key: "google", label: "Google", admits: { organization: null, domains: [] } },
+          { key: "gh", label: "GitHub" },
+        ]}
+        people={[alice, bob]}
+        me={alice}
+        projects={[]}
+        onSubmit={() => undefined}
+        onCancel={() => undefined}
+      />,
+    );
+    expect(form).toContain("Choose a persona");
+    expect(form.match(/class="sc-agent-proposal"/g)).toHaveLength(2);
+    expect(form).toContain(">@mira<");
+    expect(form).toContain(">Roll again<");
+    // Whoever makes it is its manager, unless another is chosen.
+    expect(form).toMatch(/sc-picker-chosen[\s\S]*?Alice Example/);
+    // The account at the provider is a person's to make, and the page says so in plain words.
+    expect(form).toContain("First, at Google");
+    expect(form).toContain("A person makes its account at Google, and you write its login above.");
+    expect(form).toContain(">Signs in through<");
+    expect(form).toContain(">Add the agent account<");
+    // Nothing is sent until there is a persona, a login and a project.
+    expect(form).toMatch(
+      /<button[^>]*type="submit"[^>]*disabled=""|<button[^>]*disabled=""[^>]*type="submit"/,
+    );
   });
 });
 

@@ -16,6 +16,7 @@ import {
   OPEN_TASK_STATES,
   PROJECT_RULES_TEMPLATE,
   REFERENCE_RULES,
+  type RestAgentProposal,
   type RestAnswerInput,
   type RestComment,
   type RestDecision,
@@ -43,6 +44,12 @@ import {
   type WeekStart,
 } from "./api.js";
 import { AVATAR_SETS, type AvatarSet } from "./avatar.js";
+import {
+  AgentAccountForm,
+  type AgentAccountFormProps,
+  AgentAccountList,
+  type AgentAccountListProps,
+} from "./components/agents.js";
 import { Board, BoardFilters, type BoardProps, byDue, filterTasks } from "./components/board.js";
 import { Calendar, type CalendarProps, Workload } from "./components/calendar.js";
 import { CategoryList, type CategoryListProps } from "./components/categories.js";
@@ -122,7 +129,7 @@ import {
   type Messages,
   useWords,
 } from "./i18n/index.js";
-import type { PersonaName } from "./persona.js";
+import { type PersonaName, proposeAgents } from "./persona.js";
 import { pluginNavItems, pluginPagesAt, pluginWordOf } from "./plugin-nav.js";
 import {
   boardHref,
@@ -172,6 +179,8 @@ export interface ConsoleComponents {
   readonly EventFeed: ComponentType<EventFeedProps>;
   readonly SignIn: ComponentType<SignInProps>;
   readonly TokenList: ComponentType<TokenListProps>;
+  readonly AgentAccountList: ComponentType<AgentAccountListProps>;
+  readonly AgentAccountForm: ComponentType<AgentAccountFormProps>;
   readonly SessionList: ComponentType<SessionListProps>;
   readonly PeopleList: ComponentType<PeopleListProps>;
   readonly TeamList: ComponentType<TeamListProps>;
@@ -192,6 +201,8 @@ export const DEFAULT_COMPONENTS: ConsoleComponents = {
   EventFeed,
   SignIn,
   TokenList,
+  AgentAccountList,
+  AgentAccountForm,
   SessionList,
   PeopleList,
   TeamList,
@@ -442,7 +453,6 @@ export function languageToKeep(
  */
 export function onlyOnOwnPages(route: Route): boolean {
   return (
-    route.name === "agents" ||
     route.name === "sessions" ||
     route.name === "new-token" ||
     route.name === "person-agents" ||
@@ -2690,6 +2700,103 @@ function PersonWorkPage(props: {
   );
 }
 
+/** Seeds of the page's own for personas proposed here: twelve characters nobody chose, each. */
+function freshSeeds(count: number): string[] {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+  const bytes = crypto.getRandomValues(new Uint8Array(count * 12));
+  return Array.from({ length: count }, (_, index) =>
+    Array.from(
+      bytes.subarray(index * 12, (index + 1) * 12),
+      (byte) => alphabet[byte % alphabet.length],
+    ).join(""),
+  );
+}
+
+/** How many personas the form proposes at a time. */
+const PROPOSALS_SHOWN = 4;
+
+/**
+ * "Add an agent account" (ADR-0084), for an administrator: a few personas proposed, by the
+ * console, or from the names a console of one's own brings; the form; and back to the accounts
+ * once one is made.
+ */
+function NewAgentPage(props: {
+  readonly data: ConsoleData;
+  readonly components: ConsoleComponents;
+  readonly navigation: Navigation;
+  readonly language: string;
+  readonly names: readonly PersonaName[] | undefined;
+  readonly avatarSets: readonly AvatarSet[] | undefined;
+}) {
+  const words = useWords();
+  const accounts = words.agents.accounts;
+  const { data, components, navigation, language, names, avatarSets } = props;
+  const { busy, error, act } = useAction();
+  const [proposals, setProposals] = useState<readonly RestAgentProposal[]>([]);
+  const [round, setRound] = useState(0);
+  const { agentProposals } = data.actions;
+  const taken = data.agents.map((agent) => agent.person.handle ?? "").join(" ");
+  const me = data.me?.person ?? undefined;
+  const administrator = me?.role === "admin";
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `round` is the trigger, rolled again by the form
+  useEffect(() => {
+    if (!administrator) {
+      return;
+    }
+    if (names !== undefined) {
+      // A console that brings names of its own proposes from them here, as the console does.
+      setProposals(
+        proposeAgents(freshSeeds(PROPOSALS_SHOWN), {
+          names,
+          lang: language,
+          taken: taken.split(" "),
+          sets: avatarSets,
+        }),
+      );
+      return;
+    }
+    const controller = new AbortController();
+    agentProposals(PROPOSALS_SHOWN, language, controller.signal)
+      .then((answer) => {
+        if (!controller.signal.aborted) {
+          setProposals(answer.items);
+        }
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [round, administrator, names, avatarSets, language, taken, agentProposals]);
+  return (
+    <>
+      <div className="sc-page-head">
+        <h1 className="sc-page-title">{accounts.add}</h1>
+      </div>
+      {!administrator ? (
+        <Callout tone="warning">{words.errors["auth.forbidden"]}</Callout>
+      ) : (
+        <section className="sc-panel sc-panel-form" aria-label={accounts.add}>
+          <components.AgentAccountForm
+            proposals={proposals}
+            onRoll={() => setRound((current) => current + 1)}
+            providers={data.me?.signIn ?? []}
+            people={data.people}
+            me={me}
+            projects={data.projects}
+            busy={busy}
+            error={error}
+            onSubmit={(input) =>
+              void act(async () => {
+                await data.actions.createAgent(input);
+                navigation.replace(PATHS.agents);
+              })
+            }
+            onCancel={() => navigation.back(PATHS.agents)}
+          />
+        </section>
+      )}
+    </>
+  );
+}
+
 function WorkspacePage(props: {
   readonly route: Route;
   readonly data: ConsoleData;
@@ -2697,9 +2804,11 @@ function WorkspacePage(props: {
   readonly navigation: Navigation;
   readonly client: ConsoleClient;
   readonly language: string;
+  /** The names and the shapes a console of one's own proposes and draws agent accounts with (ADR-0084). */
+  readonly persona?: ConsoleConfig["persona"];
 }) {
   const words = useWords();
-  const { route, data, components, navigation, client, language } = props;
+  const { route, data, components, navigation, client, language, persona } = props;
   const [fresh, setFresh] = useState<RestTokenCreated | undefined>(undefined);
   const { busy, error, act } = useAction();
   if (route.name === "plugin" && route.level === "workspace") {
@@ -2964,10 +3073,54 @@ function WorkspacePage(props: {
   if (route.name === "connect") {
     return <ConnectPage code={route.code} data={data} navigation={navigation} />;
   }
+  if (route.name === "new-agent") {
+    return (
+      <NewAgentPage
+        data={data}
+        components={components}
+        navigation={navigation}
+        language={language}
+        names={persona?.names}
+        avatarSets={persona?.avatarSets}
+      />
+    );
+  }
   if (route.name === "agents" || route.name === "new-token") {
     const agents = words.agents;
+    const accounts = agents.accounts;
     const making = route.name === "new-token";
     const origin = typeof window === "undefined" ? "" : window.location.origin;
+    const administrator = data.me?.person?.role === "admin";
+    // The agent accounts (ADR-0084): members of their own, read by whoever sees them, with a
+    // token too. A person's own agents and their tokens stay on the console's own pages.
+    const accountsSection = (
+      <section className="sc-agents-section" aria-label={accounts.title}>
+        <div className="sc-section-head">
+          <h2 className="sc-section-title">{accounts.title}</h2>
+          {administrator && (
+            <LinkButton href={PATHS.newAgent} variant="primary">
+              {accounts.add}
+            </LinkButton>
+          )}
+        </div>
+        <p className="sc-settings-hint">{accounts.intro}</p>
+        <components.AgentAccountList
+          agents={data.agents}
+          busy={busy}
+          empty={<EmptyState title={accounts.empty.title} body={accounts.empty.body} />}
+        />
+      </section>
+    );
+    if (holdsToken(data)) {
+      return (
+        <>
+          <div className="sc-page-head">
+            <h1 className="sc-page-title">{agents.title}</h1>
+          </div>
+          {accountsSection}
+        </>
+      );
+    }
     return (
       <>
         <div className="sc-page-head">
@@ -2979,6 +3132,9 @@ function WorkspacePage(props: {
           )}
         </div>
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
+        {!making && accountsSection}
+        <h2 className="sc-section-title">{accounts.yours}</h2>
+        <p className="sc-settings-hint">{accounts.yoursIntro}</p>
         {fresh !== undefined && (
           <NewToken token={fresh.token} secret={fresh.secret} onDone={() => setFresh(undefined)} />
         )}
@@ -3149,15 +3305,12 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
             route.name === "new-team" ||
             route.name === "person-agents",
         },
-        ...(viaToken
-          ? []
-          : [
-              {
-                href: PATHS.agents,
-                label: words.nav.agents,
-                current: route.name === "agents" || route.name === "new-token",
-              },
-            ]),
+        {
+          href: PATHS.agents,
+          label: words.nav.agents,
+          current:
+            route.name === "agents" || route.name === "new-token" || route.name === "new-agent",
+        },
         ...pages
           .filter((candidate) => candidate.level === "workspace")
           .map((candidate) => ({
@@ -3311,6 +3464,7 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
             navigation={navigation}
             client={client}
             language={pack.tag}
+            persona={config.persona}
           />
         );
       } else if (data.projectError !== undefined) {

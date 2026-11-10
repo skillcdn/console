@@ -17,10 +17,12 @@ import {
   MAX_FILES_PER_DECISION,
   MAX_FILES_PER_DOCUMENT,
   MAX_GOALS_PER_PROJECT,
+  MAX_HANDLE_LENGTH,
   MAX_LINK_LABEL_LENGTH,
   MAX_NOTE_LENGTH,
   MAX_OPTION_LABEL_LENGTH,
   MAX_OPTIONS,
+  MAX_PERSON_NAME_LENGTH,
   MAX_PERSON_TITLE_LENGTH,
   MAX_PROJECT_DESCRIPTION_LENGTH,
   MAX_PROJECT_ICON_BYTES,
@@ -38,6 +40,7 @@ import {
   MAX_TITLE_LENGTH,
   MAX_VERSIONS_PER_DOCUMENT,
   MAX_WORKERS,
+  MIN_HANDLE_LENGTH,
   MIN_OPTIONS,
 } from "../limits.js";
 import { COLOR_NAMES } from "../vocabulary.js";
@@ -243,12 +246,27 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
       "The agent accounts of the workspace (ADR-0084): agents that are members of their own, each signed in through the identity provider with an account of its own, under the rules a person is under and never an administrator. One line each: the handle it is called by (@mira), its name and what it does, the login it signs in with, whom it reports to where you see them, and that nobody signed in with it yet. You read the ones you see as people, and the ones you supervise, as an administrator or above them in the reporting line. An agent account is a member, so console people lists it too, and its login is taken wherever a login is.",
   },
   agent: {
-    usage: "agent <handle> [--avatar <file>]",
+    usage:
+      'agent <handle> [--avatar <file>]  |  agent new <handle> --login <login> [--name "<name>"] [--title "<title>"] [--manager <login|me>] [--host gh|google] [--seed <seed>]',
+    overview: "agent <handle> [--avatar <file>]  |  agent new <handle> --login <login> [flags]",
     synopsis:
-      "One agent account, and whether you supervise it; or its avatar written as a picture file.",
+      "One agent account, and whether you supervise it; its avatar as a picture file; or one made, for an administrator.",
     about:
-      "One agent account by its handle, with or without the @: its line as console agents prints it, and whether you supervise it. With --avatar, its avatar is written as a PNG file of 1024 pixels a side, to the path given, or into a directory under the handle's name: the picture is drawn here from the parts the console keeps (ADR-0084), for the profile of the agent's account elsewhere, at a messenger or at the identity provider, where the agent puts it with that service's own tool or in a browser.",
-    refusals: ["agent.not_found: no agent account has that handle, or it is not yours to see"],
+      "One agent account by its handle, with or without the @: its line as console agents prints it, and whether you supervise it. With --avatar, its avatar is written as a PNG file of 1024 pixels a side, to the path given, or into a directory under the handle's name: the picture is drawn here from the parts the console keeps (ADR-0084), for the profile of the agent's account elsewhere, at a messenger or at the identity provider, where the agent puts it with that service's own tool or in a browser. new makes an agent account, for an administrator: the handle it is called by, which never changes; --login, the account it will sign in with at the identity provider, a login at the git host or an address at Google, which a person makes there (--host says the provider where the login's shape does not); --name, the handle capitalized when left out; --title, what it does; --manager, whom it reports to, you when left out; and the project it starts in, this directory's or --project. The member's row is written at once, so that work is assigned to it before anyone signed in with it, and its first sign-in with that login binds the provider's account to it. The console rolls its avatar, from --seed where one is given. A login a member already carries is made an agent account the same way, once. The pages make one from proposals instead: Agents, Add an agent account.",
+    limits: [
+      `handle: ${MIN_HANDLE_LENGTH} to ${MAX_HANDLE_LENGTH} lowercase letters, digits and hyphens, a letter or a digit first and last; none of new, me, proposals, setup`,
+      `name: one line, up to ${MAX_PERSON_NAME_LENGTH} characters; title: one line, up to ${MAX_PERSON_TITLE_LENGTH}`,
+    ],
+    refusals: [
+      "agent.not_found: no agent account has that handle, or it is not yours to see",
+      "auth.forbidden: only an administrator makes an agent account",
+      "agent.handle_taken: another agent account has the handle",
+      "agent.exists: the login is an agent account already",
+      "agent.administrator: an administrator is not made an agent account; make them a member first",
+      "agent.invalid_manager: the manager is not another active member, or reports to the account",
+      "agent.invalid_project: the project it starts in was not found",
+      "agent.unknown_host: nobody signs in through that provider here",
+    ],
   },
   teams: {
     usage: "teams",

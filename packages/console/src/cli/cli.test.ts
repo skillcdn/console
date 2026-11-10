@@ -2376,6 +2376,85 @@ describe("configuring, as the person", () => {
     expect(await runCli(["agent"], harness({ fetch, env: SIGNED_IN }).io)).toBe(EXIT.usage);
   });
 
+  it("makes an agent account for an administrator, from flags, with what is left out proposed (ADR-0084)", async () => {
+    const made = {
+      person: {
+        ...BOB,
+        id: "0199c4d8-0000-7000-8000-000000000009",
+        login: "acme-mira",
+        name: "Mira",
+        kind: "agent",
+        handle: "mira",
+        title: "Release engineer",
+        invited: true,
+      },
+      manager: BOB,
+      supervised: true,
+    };
+    const { fetch, calls } = fakeConsole({
+      "GET /api/v1/people?login=bob": { body: { items: [BOB], listed: [], organization: null } },
+      "POST /api/v1/agents": [
+        { status: 201, body: made },
+        { status: 201, body: { ...made, manager: null } },
+        {
+          status: 409,
+          body: { error: { code: "agent.handle_taken", message: "Another has it." } },
+        },
+      ],
+    });
+    const full = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(
+        [
+          "agent",
+          "new",
+          "@mira",
+          "--login",
+          "acme-mira",
+          "--title",
+          "Release engineer",
+          "--manager",
+          "bob",
+          "--seed",
+          "s-1",
+        ],
+        full.io,
+      ),
+    ).toBe(EXIT.ok);
+    // The host is read off the login, the name off the handle, and the project is the directory's.
+    expect(calls.find((call) => call.key === "POST /api/v1/agents")?.body).toEqual({
+      host: "gh",
+      login: "acme-mira",
+      handle: "mira",
+      name: "Mira",
+      title: "Release engineer",
+      avatarSeed: "s-1",
+      managerId: BOB.id,
+      project: "web",
+    });
+    expect(full.out()).toContain(
+      "@mira  Mira, Release engineer  (signs in as acme-mira, reports to bob, not signed in yet)",
+    );
+    expect(full.out()).toContain("A person makes the account acme-mira at the provider");
+    // The least there is to say: the handle and the login; whoever makes it is its manager.
+    const least = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["agent", "new", "mira", "--login", "mira@acme.example"], least.io)).toBe(
+      EXIT.ok,
+    );
+    expect(calls.at(-1)?.body).toEqual({
+      host: "google",
+      login: "mira@acme.example",
+      handle: "mira",
+      name: "Mira",
+      project: "web",
+    });
+    const taken = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["agent", "new", "mira", "--login", "x"], taken.io)).toBe(EXIT.failed);
+    const unsaid = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["agent", "new", "mira"], unsaid.io)).toBe(EXIT.usage);
+    expect(unsaid.err()).toContain("--login <login>");
+  });
+
   it("lists the people and says what one is", async () => {
     const dana = {
       id: "0199c4d8-0000-7000-8000-000000000077",

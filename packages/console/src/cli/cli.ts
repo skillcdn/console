@@ -3441,11 +3441,70 @@ const agents: Command = async (args, io) => {
   return EXIT.ok;
 };
 
-const AGENT_USAGE = "Say which agent account: console agent <handle> [--avatar <file>]";
+const AGENT_USAGE =
+  'Say what to do: console agent <handle> [--avatar <file>]  |  console agent new <handle> --login <login> --project <key> [--name "<name>"] [--title "<title>"] [--manager <login|me>] [--host gh|google] [--seed <seed>]';
+
+// An administrator makes an agent account with flags, where the pages make one from a form
+// (ADR-0084): the member's row at once, its login let in. What is left out is proposed: the
+// name is the handle's, capitalized, and the console rolls the avatar from the seed, or from one
+// of its own.
+const agentNew = async (args: readonly string[], io: CliIo): Promise<number> => {
+  const { values, positionals } = parse(args, {
+    login: { type: "string" },
+    name: { type: "string" },
+    title: { type: "string" },
+    manager: { type: "string" },
+    host: { type: "string" },
+    seed: { type: "string" },
+  });
+  const handle = handleOf(theOne(positionals, AGENT_USAGE));
+  const login = text(values, "login");
+  if (login === undefined) {
+    throw misuse(
+      `Say the account it will sign in with: console agent new ${handle} --login <login> --project <key>`,
+    );
+  }
+  const chosen = text(values, "host");
+  const host = chosen === undefined ? hostOfLogin(login) : providerOf(chosen);
+  const session = await open(io, values);
+  const project = await session.projectKey();
+  if (project === undefined) {
+    throw misuse(
+      `Say the project it starts in: console agent new ${handle} --login ${login} --project <key>`,
+    );
+  }
+  const manager = text(values, "manager");
+  const seed = text(values, "seed");
+  const title = text(values, "title");
+  const made = await session.client.createAgent({
+    host,
+    login,
+    handle,
+    name: text(values, "name") ?? `${handle.slice(0, 1).toUpperCase()}${handle.slice(1)}`,
+    ...(title === undefined ? {} : { title }),
+    ...(seed === undefined ? {} : { avatarSeed: seed }),
+    ...(manager === undefined || manager === "me"
+      ? {}
+      : { managerId: (await personOf(session, manager)).id }),
+    project,
+  });
+  answer(io, session, made, () =>
+    [
+      formatAgentLine(made),
+      made.person.invited === true
+        ? `It is a member now, and work can be assigned to it. A person makes the account ${made.person.login} at the provider, which is a person's to make; its first sign-in with that account binds it here.`
+        : `${made.person.login} is an agent account from now on, with everything it did.`,
+    ].join("\n"),
+  );
+  return EXIT.ok;
+};
 
 // One agent account by its handle; with --avatar, its picture written as a file (ADR-0084): the
 // parts are drawn here, by the package's own function, and the console sends no picture.
 const agent: Command = async (args, io) => {
+  if (args[0] === "new") {
+    return agentNew(args.slice(1), io);
+  }
   const { values, positionals } = parse(args, { avatar: { type: "string" } });
   const handle = handleOf(theOne(positionals, AGENT_USAGE));
   const session = await open(io, values);

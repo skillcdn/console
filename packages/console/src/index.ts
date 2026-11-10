@@ -5,6 +5,14 @@
 
 export * from "./api.js";
 export {
+  AgentAccountForm,
+  type AgentAccountFormProps,
+  AgentAccountList,
+  type AgentAccountListProps,
+  avatarPngBlob,
+  suggestLogin,
+} from "./components/agents.js";
+export {
   Board,
   BoardFilters,
   type BoardFiltersProps,

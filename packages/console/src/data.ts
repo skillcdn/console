@@ -8,6 +8,9 @@ import {
   type FileUpload,
   LIST_LIMIT,
   type ProjectClient,
+  type RestAgent,
+  type RestAgentInput,
+  type RestAgentProposals,
   type RestAnswerInput,
   type RestCategory,
   type RestCategoryInput,
@@ -184,6 +187,10 @@ export interface ConsoleActions {
   updatePerson(id: string, patch: RestPersonPatch): Promise<RestPerson>;
   /** Lets a login in (ADR-0022); for an administrator. */
   createListing(input: RestListingInput): Promise<RestListing>;
+  /** Makes an agent account (ADR-0084); for an administrator. The people and the accounts are read again. */
+  createAgent(input: RestAgentInput): Promise<RestAgent>;
+  /** A few personas to choose from, a name in `lang` each; for an administrator. */
+  agentProposals(count: number, lang: string, signal?: AbortSignal): Promise<RestAgentProposals>;
   /** Takes a listing away that nobody signed in with; for an administrator. */
   removeListing(id: string): Promise<void>;
   /** The teams (ADR-0073): made, renamed and removed, a person put in or taken out; for an administrator. */
@@ -256,6 +263,8 @@ export interface ConsoleData {
   readonly listed: readonly RestListing[];
   /** The teams of the workspace (ADR-0073), by name, each with the members the person may see. */
   readonly teams: readonly RestTeam[];
+  /** The agent accounts the person sees or supervises (ADR-0084), by handle. */
+  readonly agents: readonly RestAgent[];
   /** The organization at the git host that says who is in, where the deployment names one. */
   readonly organization: RestOrganization | null;
   /** The categories tasks are sorted into, by name. */
@@ -395,6 +404,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
   const [people, setPeople] = useState<readonly RestPerson[]>([]);
   const [listed, setListed] = useState<readonly RestListing[]>([]);
   const [teams, setTeams] = useState<readonly RestTeam[]>([]);
+  const [agents, setAgents] = useState<readonly RestAgent[]>([]);
   const [organization, setOrganization] = useState<RestOrganization | null>(null);
   const [categories, setCategories] = useState<readonly RestCategory[]>([]);
   const [plugins, setPlugins] = useState<readonly RestPlugin[]>([]);
@@ -434,15 +444,18 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
   /** Loads the workspace's lists again. What fails stays as it was. */
   const refreshWorkspace = useCallback(
     async (signal?: AbortSignal) => {
-      const [nextProjects, nextPeople, nextCategories, nextPlugins, nextTeams] = await Promise.all([
-        client.projects(signal),
-        client.people(signal),
-        client.categories(signal),
-        // A console without plugins answers none; one older than them answers nothing, which is none too.
-        client.plugins(signal).catch(() => ({ items: [], sql: false })),
-        // A console older than teams (ADR-0073) answers nothing, which is no team.
-        client.teams(signal).catch(() => ({ items: [] })),
-      ]);
+      const [nextProjects, nextPeople, nextCategories, nextPlugins, nextTeams, nextAgents] =
+        await Promise.all([
+          client.projects(signal),
+          client.people(signal),
+          client.categories(signal),
+          // A console without plugins answers none; one older than them answers nothing, which is none too.
+          client.plugins(signal).catch(() => ({ items: [], sql: false })),
+          // A console older than teams (ADR-0073) answers nothing, which is no team.
+          client.teams(signal).catch(() => ({ items: [] })),
+          // And one older than agent accounts (ADR-0084), no agent account.
+          client.agents(signal).catch(() => ({ items: [] })),
+        ]);
       if (signal?.aborted === true) {
         return;
       }
@@ -450,6 +463,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
       setPeople(nextPeople.items);
       setListed(nextPeople.listed);
       setTeams(nextTeams.items);
+      setAgents(nextAgents.items);
       setOrganization(nextPeople.organization);
       setCategories(nextCategories.items);
       setPlugins(nextPlugins.items);
@@ -831,6 +845,12 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
         await refreshWorkspace();
         return person;
       },
+      async createAgent(input) {
+        const agent = await client.createAgent(input);
+        await refreshWorkspace();
+        return agent;
+      },
+      agentProposals: (count, lang, signal) => client.agentProposals({ count, lang }, signal),
       async createListing(input) {
         const listing = await client.createListing(input);
         await refreshWorkspace();
@@ -961,6 +981,7 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
     people,
     listed,
     teams,
+    agents,
     organization,
     categories,
     plugins,
