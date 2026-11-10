@@ -99,7 +99,7 @@ packages/
 examples/     plugin-hello, the plugin `console-plugin init` writes, built and tested as a workspace
 deploy/       the contract for whoever operates the image; compose for local development
 docs/         architecture, roadmap, specs, ADRs; served with the skills
-skills/       the console's skills in the SkillCDN Format, for an agent working the board, planning it, building a console or a plugin, or deploying one; SKILLCDN.md at the root is their manifest
+skills/       the console's skills in the SkillCDN Format, for an agent working the board, planning it, building a console or a plugin, deploying one, or running an agent account; SKILLCDN.md at the root is their manifest
 ```
 
 TypeScript monorepo: pnpm workspaces, Turborepo, Node.js 24, PostgreSQL 18, with the toolchain and the conventions of the main repository ([ADR-0002](docs/adr/0002-one-image-one-database-and-the-main-repositorys-toolchain.md)).

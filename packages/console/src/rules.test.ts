@@ -37,6 +37,9 @@ describe("the console's own rules", () => {
       "working-the-board",
       "console skill <path>",
       "SKILLCDN.md",
+      // For an agent account: whom it asks, and the skill that says how one is run.
+      "console manager",
+      "running-an-agent",
     ]) {
       expect(REFERENCE_RULES).toContain(named);
     }

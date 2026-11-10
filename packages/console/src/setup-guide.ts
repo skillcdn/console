@@ -249,6 +249,7 @@ export function setupGuideOf(setup: RestAgentSetup, code: string): SetupGuide {
     about: [
       `This guide sets a machine up for the agent account ${called} of ${workspace.name}, whose console is at ${setup.console.url}. The account signs in there as \`${account.login}\` through ${provider}.`,
       `The code that opened this guide is an invitation and no credential: it says which account the setup is for, and gives nobody the account. It ends on its day, or when the account's command has signed in.`,
+      "The skill running-an-agent, shipped with the console's command, says the whole of it for the three who have a part in it: whoever prepares the machine, the agent, and its manager.",
     ],
     expiresAt: setup.expiresAt,
     sections,
