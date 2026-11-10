@@ -37,6 +37,7 @@ import { capabilityWords } from "../plugin/capabilities.js";
 import { PLUGIN_LIST_LIMIT } from "../plugin/limits.js";
 import { fillRules, RULES_PATH, RULES_TITLE } from "../rules.js";
 import { DEFAULT_RUNNER_CONFIG, parseRunnerConfig } from "../runner/config.js";
+import { deskFiles, deskServicesOf } from "../runner/desk.js";
 import { ownRunnerModules } from "../runner/modules.js";
 import { createRunner, type RunnerState } from "../runner/runner.js";
 import {
@@ -58,7 +59,7 @@ import {
   type RestSkills,
   type RestTaskPatch,
 } from "../schemas.js";
-import { agentLoginOf } from "../services.js";
+import { agentLoginOf, deskRemoteOf } from "../services.js";
 import { setupGuideOf, setupGuideText, setupSentenceOf } from "../setup-guide.js";
 import {
   COLOR_NAMES,
@@ -165,6 +166,7 @@ import {
 } from "./pack.js";
 import { type RunnerHost, workPath } from "./runner-host.js";
 import { createServeHandler, DEFAULT_SERVE_PORT, type Listen } from "./serve.js";
+import type { Ran, SetupMachine } from "./setup-machine.js";
 
 // The `console` command (docs/specs/cli.md): the agent's side of the console. A thin client of
 // the REST API with no logic of its own: every command is one or two requests and the words to
@@ -241,6 +243,8 @@ export interface CliIo {
   readonly listen?: Listen | undefined;
   /** What `runner` needs of the machine (ADR-0085); left out, the command cannot run one. */
   readonly runner?: RunnerHost | undefined;
+  /** What `agent setup` needs of the machine (ADR-0088); left out, the command sets none up. */
+  readonly machine?: SetupMachine | undefined;
 }
 
 /** The command stops with an exit code and a word on stderr. */
@@ -742,6 +746,8 @@ async function keep(
   asDefault: boolean,
   /** Whether what is kept is the command's own session, signed in as the account itself (ADR-0084). */
   self = false,
+  /** Where the words go: nowhere, for a command that says its own. */
+  say: (text: string) => void = io.stdout,
 ): Promise<number> {
   const me = await clientOf(io, url, token).me();
   const person = me.person;
@@ -772,7 +778,7 @@ async function keep(
   );
   const kept = await io.store.save(next);
   const standing = next.default === url ? ", the default console here" : "";
-  io.stdout(
+  say(
     self
       ? `Signed in to ${me.workspace.name} at ${url} as ${person.login} (${person.role}), the account itself${standing}: what this command does, ${person.login} does, and no agent is named beside it. The session is kept while it is used; its secret is kept in ${kept}.\nNext, say which project this directory works in: console use <key> (console projects lists them).\n`
       : `${agent === undefined ? "Signed in" : `Connected as "${agent}"`} to ${me.workspace.name} at ${url} as ${person.login} (${person.role})${standing}. The token is kept in ${kept}.\nNext, say which project this directory works in: console use <key> (console projects lists them).\n`,
@@ -3931,11 +3937,345 @@ const agentInvite = async (args: readonly string[], io: CliIo): Promise<number> 
 const SETUP_USAGE =
   "Say which setup: console agent setup --console <origin> --code <code>, as the invitation's line has it. A supervisor of the account makes one: console agent invite <handle>";
 
-// What an invitation's code opens (ADR-0088), printed on the machine an agent account is being
-// set up on: the guide of that account's setup. Asked of the console the line names, without a
-// sign-in, since the command is signed in nowhere there yet; nothing of it is secret.
+/** The secret of an agent account's store that its git host is read with. */
+const DESK_TOKEN = "git.token";
+/** How often, and how many times, a setup looks whether the runner it started is heard from. */
+const RUNNER_HEARD_PAUSE_MS = 2000;
+const RUNNER_HEARD_TRIES = 15;
+
+const SETUP_FLAGS: OptionSpec = {
+  console: { type: "string" },
+  code: { type: "string" },
+  desk: { type: "string" },
+  guide: { type: "boolean" },
+  refresh: { type: "boolean" },
+  "new-desk": { type: "boolean" },
+  "no-service": { type: "boolean" },
+};
+
+type Me = Awaited<ReturnType<ConsoleClient["me"]>>;
+
+/** The end of what a program said, for a refusal to carry: one line, bounded. */
+function lastWords(ran: Ran): string {
+  const line = ran.err.trim().split(/\r?\n/).at(-1) ?? "";
+  return line.length === 0 ? "it said nothing" : line.slice(0, 300);
+}
+
+/**
+ * What git is handed a token by, for one command: a credential helper named in the environment,
+ * which answers with the token from the environment. The token is on no command line, which a
+ * process list shows, and in no file of the repository.
+ */
+function gitTokenEnv(token: string): Record<string, string> {
+  return {
+    GIT_TERMINAL_PROMPT: "0",
+    GIT_CONFIG_COUNT: "2",
+    // An empty helper first: whatever the machine has configured is left out of this command.
+    GIT_CONFIG_KEY_0: "credential.helper",
+    GIT_CONFIG_VALUE_0: "",
+    GIT_CONFIG_KEY_1: "credential.helper",
+    GIT_CONFIG_VALUE_1:
+      '!f() { test "$1" = get && printf "username=x-access-token\\npassword=%s\\n" "$CONSOLE_DESK_TOKEN"; }; f',
+    CONSOLE_DESK_TOKEN: token,
+  };
+}
+
+/** The desk a setup is for: the place named, else this directory where it is a desk, else `desk` in the OS account's home. */
+async function deskOf(machine: SetupMachine, values: Values): Promise<string> {
+  const named = text(values, "desk");
+  if (named !== undefined) {
+    return machine.path(named);
+  }
+  const here = machine.path(".");
+  return (await machine.exists(machine.path(here, "runner.json")))
+    ? here
+    : machine.path(machine.home, "desk");
+}
+
+/**
+ * The desk on this machine (ADR-0088): left as it is where there is one; cloned from the git
+ * host where the account keeps the token that reads it there, which is an account that pushed a
+ * desk before; written from the template otherwise, and no file that is there is written over.
+ */
+async function settleDesk(
+  io: CliIo,
+  machine: SetupMachine,
+  client: ConsoleClient,
+  person: NonNullable<Me["person"]>,
+  workspace: Me["workspace"],
+  url: string,
+  values: Values,
+): Promise<string> {
+  const desk = await deskOf(machine, values);
+  const handle = person.handle ?? "";
+  if (
+    (await machine.exists(machine.path(desk, "runner.json"))) ||
+    (await machine.exists(machine.path(desk, "AGENTS.md")))
+  ) {
+    io.stdout(`The desk at ${desk} is there already, and is left as it is.\n`);
+    return desk;
+  }
+  const remote = on(values, "new-desk") ? undefined : deskRemoteOf(workspace, handle);
+  if (
+    remote !== undefined &&
+    (await client.secrets()).items.some((secret) => secret.name === DESK_TOKEN)
+  ) {
+    if (await machine.holds(desk)) {
+      throw failed(
+        `${desk} holds something that is no desk, and a desk is cloned into an empty place. Name another with --desk <dir>.`,
+      );
+    }
+    const token = (await client.secret(DESK_TOKEN)).value;
+    const cloned = await machine.run("git", ["clone", "--quiet", remote, desk], {
+      env: gitTokenEnv(token),
+    });
+    if (cloned.code !== 0) {
+      throw failed(
+        `The desk could not be cloned from ${remote}: ${lastWords(cloned)}. Put that right and run this again; or begin a new desk here with --new-desk, where the account never pushed one.`,
+      );
+    }
+    io.stdout(`The desk is cloned from ${remote} into ${desk}.\n`);
+    return desk;
+  }
+  const written: string[] = [];
+  for (const [path, body] of deskFiles({
+    agent: { name: person.name ?? handle, handle, title: person.title ?? null },
+    console: { url, workspace: workspace.name },
+    services: deskServicesOf(workspace, handle),
+  })) {
+    const file = machine.path(desk, path);
+    if (!(await machine.exists(file))) {
+      await machine.write(file, body, 0o644);
+      written.push(path);
+    }
+  }
+  io.stdout(
+    `A new desk is written at ${desk} (${written.join(", ")}). It is the agent's from now on: to edit, to make a repository of, and to push to its git host.\n`,
+  );
+  return desk;
+}
+
+/**
+ * The service that keeps the runner running (ADR-0085), by the module of this platform: its
+ * files written and, for a first setup, its commands run; answers where the runner's own lines
+ * are once it is loaded. A refresh runs none of them and never unloads a service, since it may
+ * be running under it: what it wrote again is read when the service is next loaded.
+ */
+async function settleService(
+  io: CliIo,
+  machine: SetupMachine,
+  desk: string,
+  url: string,
+  login: string,
+  how: "load" | "write",
+): Promise<string | undefined> {
+  const byHand = `cd ${desk} && console runner --url ${url} --account ${login}`;
+  const modules = ownRunnerModules({ user: machine.user });
+  const service = modules.services
+    .names()
+    .map((name) => modules.services.get(name))
+    .find((one) => one?.platforms.includes(machine.platform) === true);
+  if (service === undefined || machine.self === undefined) {
+    io.stdout(
+      `${service === undefined ? `No service keeps a runner running on ${machine.platform} yet` : "This command does not know how it was started, so it writes no service"}. Start the runner yourself and keep it running: ${byHand}\n`,
+    );
+    return undefined;
+  }
+  const plan = service.plan({
+    desk,
+    home: machine.home,
+    uid: machine.uid,
+    program: [...machine.self, "runner", "--url", url, "--account", login],
+    path: machine.searchPath,
+  });
+  if ("problem" in plan) {
+    throw failed(
+      `The ${service.name} service is not written: ${plan.problem}. Start the runner yourself and keep it running: ${byHand}`,
+    );
+  }
+  let changed = false;
+  for (const file of plan.files) {
+    if ((await machine.read(file.path)) !== file.text) {
+      await machine.write(file.path, file.text, file.mode);
+      changed = true;
+    }
+  }
+  const where = plan.files.map((file) => file.path).join(", ");
+  if (how === "write") {
+    io.stdout(
+      changed
+        ? `The ${service.name} service is written again (${where}). It is read ${plan.reload}\n`
+        : `The ${service.name} service is as it was (${where}).\n`,
+    );
+    return undefined;
+  }
+  for (const step of plan.commands) {
+    const ran = await machine.run(step.command, step.args);
+    if (ran.code !== 0 && step.mayFail !== true) {
+      throw failed(
+        `The ${service.name} service is written (${where}) and was not loaded: ${step.command} ${step.args.join(" ")} said: ${lastWords(ran)}. ${plan.failing} Or start the runner yourself and keep it running: ${byHand}`,
+      );
+    }
+  }
+  io.stdout(
+    `The ${service.name} service is written (${where}) and loaded: the runner starts with the OS account ${machine.user}, and is started again when it ends. Its own lines are in ${plan.log}.\n`,
+  );
+  return plan.log;
+}
+
+/**
+ * Signs the command in as the account a setup is for (ADR-0088, point 5), unless it is already:
+ * a connection that asks to be the account itself, opened in the machine's browser and approved
+ * there by the account. A sign-in that turns out to be anybody else's is given up at once:
+ * nobody answers for the account but the account.
+ */
+async function signInAsAccount(
+  io: CliIo,
+  machine: SetupMachine,
+  url: string,
+  setup: RestAgentSetup,
+): Promise<ConsoleClient> {
+  const { handle, login } = setup.account;
+  const isAccount = (me: Me): boolean =>
+    me.person?.kind === "agent" && me.person.handle === handle && me.session?.kind === "command";
+  const credentials = (await loadCredentials(io)) ?? EMPTY_CREDENTIALS;
+  for (const kept of loginsAt(credentials, url)) {
+    if (kept.self !== true) {
+      continue;
+    }
+    const client = clientOf(io, url, kept.token);
+    const me = await client.me().catch(() => undefined);
+    if (me !== undefined && isAccount(me)) {
+      io.stdout(`This command is signed in as @${handle} here already.\n`);
+      return client;
+    }
+  }
+  const anonymous = clientOf(io, url);
+  // What the account's page shows beside the session: the OS account, and the machine.
+  const label = `console as ${machine.user}`;
+  const begun = await anonymous.connect({
+    agent: io.hostname === undefined ? label : `${label} on ${io.hostname}`,
+    as: "self",
+  });
+  // The address is the console's own, or it is not opened: what a console answers is not run.
+  const opened =
+    URL.canParse(begun.url) && new URL(begun.url).origin === url
+      ? await machine.open(begun.url)
+      : false;
+  io.stdout(
+    `${opened ? `The page is opened in this machine's browser: ${begun.url}` : `Open ${begun.url} in this machine's browser`}. Sign in there as ${login}, check that the page shows the code ${begun.code}, and say that it is you. On a machine without a screen, open the address in any browser that is signed in as the account.\nWaiting for that, until ${begun.expiresAt}.\n`,
+  );
+  let secret: string;
+  for (;;) {
+    await io.sleep(begun.interval * 1000);
+    let claim: RestClaim;
+    try {
+      claim = await anonymous.claimConnection(begun.secret);
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "connect.not_found") {
+        throw failed(
+          "Nobody said in time that this command is the account, or someone said it is not theirs. Nothing was set up. Run the line again for a new code.",
+        );
+      }
+      throw error;
+    }
+    if (claim.status === "signed_in" || claim.status === "connected") {
+      secret = claim.secret;
+      break;
+    }
+  }
+  const client = clientOf(io, url, secret);
+  const me = await client.me();
+  if (!isAccount(me)) {
+    await client.giveUpToken().catch(() => undefined);
+    throw failed(
+      `The page said that this command is ${me.person?.login ?? "nobody"}, who is not @${handle}. That sign-in is given up, and nothing was set up. Sign out of the console in that browser, sign in as ${login}, and run the line again.`,
+    );
+  }
+  await keep(io, url, secret, undefined, true, true, () => undefined);
+  io.stdout(
+    `Signed in as @${handle}: what this command does from now on, the account does. The session is kept while it is used.\n`,
+  );
+  return client;
+}
+
+/** Looks for a little while whether the runner that was started is heard from, and says how it stands. */
+async function awaitRunner(
+  io: CliIo,
+  client: ConsoleClient,
+  handle: string,
+  heardBefore: string | null,
+  log: string,
+): Promise<void> {
+  for (let tries = 0; tries < RUNNER_HEARD_TRIES; tries += 1) {
+    await io.sleep(RUNNER_HEARD_PAUSE_MS);
+    const found = await client.agent(handle).catch(() => undefined);
+    const heard = found?.state?.heardAt ?? null;
+    const said = found?.runner?.machine ?? null;
+    if (heard !== null && heard !== heardBefore && said !== null) {
+      io.stdout(
+        `The runner is heard from: ${said.name}, ${said.os}, OS account ${said.user}. @${handle} is set up on this machine, and its page shows it.\n`,
+      );
+      return;
+    }
+  }
+  io.stdout(
+    `The runner is not heard from yet. Its own lines are in ${log}; the account's page says when it is.\n`,
+  );
+}
+
+// Derives a machine again (ADR-0088): by the account's own command, in its desk, when the
+// services or the account changed. It writes what is missing of the desk and the service where
+// it changed, and says the services as they are now; what the agent wrote stays the agent's.
+const agentRefresh = async (values: Values, io: CliIo): Promise<number> => {
+  const machine = io.machine;
+  if (machine === undefined) {
+    throw failed("A machine cannot be set up from here.");
+  }
+  const session = await open(io, values);
+  const me = await session.client.me();
+  const person = me.person;
+  if (person === null || person.kind !== "agent" || me.session?.kind !== "command") {
+    throw failed(
+      "A machine is refreshed by the agent account's own command, signed in as the account. One is set up from an invitation a supervisor makes: console agent setup --console <origin> --code <code>.",
+    );
+  }
+  const handle = person.handle ?? person.login;
+  const desk = await settleDesk(
+    io,
+    machine,
+    session.client,
+    person,
+    me.workspace,
+    session.url,
+    values,
+  );
+  if (!on(values, "no-service")) {
+    await settleService(io, machine, desk, session.url, person.login, "write");
+  }
+  const services = deskServicesOf(me.workspace, handle);
+  io.stdout(
+    services.length === 0
+      ? `${me.workspace.name} names no service for its agents.\n`
+      : `The services ${me.workspace.name} names now, with what @${handle} is called at each:\n${services
+          .map(
+            (one) =>
+              `  ${one.role}: ${one.name}${one.account === undefined ? "" : `, as ${one.account}`}`,
+          )
+          .join("\n")}\nWhere the desk says otherwise, put its AGENTS.md right: it is yours.\n`,
+  );
+  return EXIT.ok;
+};
+
+// Sets a machine up for an agent account (ADR-0088), from the line of its invitation: prints the
+// guide the code opens, which is asked of the console the line names without a sign-in, since
+// the command is signed in nowhere there yet; then signs the command in as the account, settles
+// the desk and the service that keeps the runner running, and says how the runner stands.
 const agentSetup = async (args: readonly string[], io: CliIo): Promise<number> => {
-  const { values } = parse(args, { console: { type: "string" }, code: { type: "string" } }, false);
+  const { values } = parse(args, SETUP_FLAGS, false);
+  if (on(values, "refresh")) {
+    return agentRefresh(values, io);
+  }
   const wanted = text(values, "console") ?? text(values, "url");
   const given = text(values, "code");
   if (wanted === undefined || given === undefined) {
@@ -3960,11 +4300,39 @@ const agentSetup = async (args: readonly string[], io: CliIo): Promise<number> =
     throw error;
   }
   const guide = setupGuideOf(setup, code);
+  if (on(values, "json")) {
+    io.stdout(`${JSON.stringify({ setup, guide }, null, 2)}\n`);
+    return EXIT.ok;
+  }
+  io.stdout(`${setupGuideText(guide, moment)}\n`);
+  if (on(values, "guide")) {
+    return EXIT.ok;
+  }
+  const machine = io.machine;
+  if (machine === undefined) {
+    throw failed("A machine cannot be set up from here. The guide above says what a setup takes.");
+  }
+  const { handle } = setup.account;
   io.stdout(
-    on(values, "json")
-      ? `${JSON.stringify({ setup, guide }, null, 2)}\n`
-      : `${setupGuideText(guide, moment)}\n`,
+    `\nSetting this machine up for @${handle}, in the OS account ${machine.user}${io.hostname === undefined ? "" : ` on ${io.hostname}`}.\n`,
   );
+  const client = await signInAsAccount(io, machine, url, setup);
+  const me = await client.me();
+  if (me.person === null) {
+    throw failed("The console does not know this sign-in any more. Run the line again.");
+  }
+  const heardBefore = (await client.agent(handle).catch(() => undefined))?.state?.heardAt ?? null;
+  const desk = await settleDesk(io, machine, client, me.person, me.workspace, url, values);
+  if (on(values, "no-service")) {
+    io.stdout(
+      `No service is written, as asked. Start the runner yourself and keep it running: cd ${desk} && console runner --url ${url} --account ${me.person.login}\n`,
+    );
+    return EXIT.ok;
+  }
+  const log = await settleService(io, machine, desk, url, me.person.login, "load");
+  if (log !== undefined) {
+    await awaitRunner(io, client, handle, heardBefore, log);
+  }
   return EXIT.ok;
 };
 

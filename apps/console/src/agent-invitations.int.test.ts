@@ -12,8 +12,10 @@ import {
   restErrorSchema,
   restEventsSchema,
   restMeSchema,
+  restSessionsSchema,
   restTokenCreatedSchema,
 } from "@skillcdn/console/api";
+import { type CliIo, EXIT, runCli } from "@skillcdn/console/cli";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { drizzleOf } from "./db/client.js";
@@ -239,5 +241,147 @@ describe("the invitation that leads a machine to an agent account (ADR-0088)", (
         .from(agentInvitations)
         .where(eq(agentInvitations.personId, mira.person.id)),
     ).toEqual([]);
+  });
+
+  it("sets a machine up from its line: the command signed in as the account, and as nobody else", async () => {
+    /** The command on a machine that touches nothing: what it said, kept and wrote. */
+    const onMachine = () => {
+      const out: string[] = [];
+      const err: string[] = [];
+      const files = new Map<string, string>();
+      let kept: Parameters<CliIo["store"]["save"]>[0] | undefined;
+      const machine: NonNullable<CliIo["machine"]> = {
+        // A platform the package has no service for yet: nothing is run here.
+        platform: "linux",
+        user: "mira",
+        home: "/home/mira",
+        uid: 1001,
+        self: ["/usr/bin/node", "/opt/console/dist/cli/main.js"],
+        searchPath: "/usr/bin:/bin",
+        path: (...parts) => {
+          const [first = "", ...rest] = parts;
+          const base =
+            first === "." ? "/home/mira" : first.startsWith("/") ? first : `/home/mira/${first}`;
+          return [base, ...rest].join("/");
+        },
+        exists: async (path) => files.has(path),
+        read: async (path) => files.get(path),
+        holds: async () => false,
+        write: async (path, text) => {
+          files.set(path, text);
+        },
+        run: async () => ({ code: null, out: "", err: "nothing is run here" }),
+        open: async () => false,
+      };
+      const io: CliIo = {
+        env: {},
+        stdout: (text) => {
+          out.push(text);
+        },
+        stderr: (text) => {
+          err.push(text);
+        },
+        fetch: async (url, init) => h.app.fetch(new Request(url, init)),
+        readStdin: async () => "",
+        hostname: "mac-mini",
+        readFile: async () => {
+          throw new Error("no files here");
+        },
+        readBytes: async () => {
+          throw new Error("no files here");
+        },
+        writeBytes: async () => {
+          throw new Error("nowhere to write");
+        },
+        store: {
+          load: async () => kept,
+          save: async (credentials) => {
+            kept = credentials;
+            return "nowhere";
+          },
+          clear: async () => {
+            kept = undefined;
+          },
+        },
+        directory: { load: async () => undefined, save: async () => "nowhere" },
+        sleep: () => new Promise((resolve) => setTimeout(resolve, 5)),
+        now: () => now.getTime(),
+        machine,
+      };
+      /** The code the command shows for the page, once it has. */
+      const shown = async (): Promise<string> => {
+        for (let tries = 0; tries < 400; tries += 1) {
+          const code = out.join("").match(/shows the code ([A-Z2-9]{4}-[A-Z2-9]{4})/)?.[1];
+          if (code !== undefined) {
+            return code;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+        throw new Error(`the command showed no code: ${err.join("")}`);
+      };
+      return { io, out, err, files, kept: () => kept, shown };
+    };
+    const commandsOf = async (cookie: string) =>
+      restSessionsSchema
+        .parse(await (await get({ cookie }, REST_ROUTES.sessions)).json())
+        .items.filter((session) => session.kind === "command");
+
+    const { code } = await invite();
+    const line = ["agent", "setup", "--console", SIGN_IN_URL, "--code", code];
+
+    // A person at the browser says that the command is them: the command gives that sign-in up,
+    // sets nothing up, and the invitation stands for the account.
+    const mistaken = onMachine();
+    const refused = runCli(line, mistaken.io);
+    await send(fromPages(bob), "POST", connectPath(await mistaken.shown(), "approve"));
+    expect(await refused).toBe(EXIT.failed);
+    expect(mistaken.err.join("")).toContain(
+      "The page said that this command is bob, who is not @mira.",
+    );
+    expect(mistaken.kept()).toBeUndefined();
+    expect(mistaken.files.size).toBe(0);
+    expect(await commandsOf(bob)).toEqual([]);
+    expect((await setup(code)).status).toBe(200);
+
+    // The account says so itself: the command is the account's from then on, the desk is
+    // written, and the invitation has done its work.
+    const carol = await h.signIn("carol");
+    const own = onMachine();
+    const done = runCli(line, own.io);
+    await send(fromPages(carol), "POST", connectPath(await own.shown(), "approve"));
+    expect(await done, own.err.join("")).toBe(EXIT.ok);
+    expect(own.out.join("")).toContain("# Setting up @mira (Mira, Release engineer)");
+    expect(own.out.join("")).toContain("Signed in as @mira");
+    expect(own.kept()).toMatchObject({
+      default: SIGN_IN_URL,
+      logins: [{ url: SIGN_IN_URL, account: "carol", self: true }],
+    });
+    expect([...own.files.keys()].sort()).toEqual(
+      [".gitignore", "AGENTS.md", "CLAUDE.md", "README.md", "runner.json"].map(
+        (name) => `/home/mira/desk/${name}`,
+      ),
+    );
+    // The desk says the services as the workspace names them, for this account.
+    expect(own.files.get("/home/mira/desk/AGENTS.md")).toContain("@mira");
+    expect(own.files.get("/home/mira/desk/AGENTS.md")).toContain("acme-mira");
+    expect(own.out.join("")).toContain("No service keeps a runner running on linux yet");
+    expect((await setup(code)).status).toBe(404);
+    expect(await standing(alice)).toBeNull();
+    // The account's page shows the OS account and the machine beside the session.
+    const names = (await commandsOf(carol)).map((session) => session.name);
+    expect(names).toContain("console as mira on mac-mini");
+
+    // The account's own command derives the machine again; a person's does not.
+    const secret = own.kept()?.logins[0]?.token ?? "";
+    const again = onMachine();
+    expect(
+      await runCli(["agent", "setup", "--refresh", "--desk", "/home/mira/desk"], {
+        ...again.io,
+        env: { CONSOLE_URL: SIGN_IN_URL, CONSOLE_TOKEN: secret },
+      }),
+      again.err.join(""),
+    ).toBe(EXIT.ok);
+    expect(again.out.join("")).toContain("The services Acme names now, with what @mira is called");
+    expect(again.out.join("")).toContain("git: GitHub, as acme-mira");
   });
 });

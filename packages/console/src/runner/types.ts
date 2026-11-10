@@ -79,6 +79,11 @@ export interface StartOptions {
   readonly effort: string | null;
   /** The conversation to go on with, or nothing for a new one. */
   readonly resume: string | undefined;
+  /**
+   * The permission mode the product is started in, in the product's own word, as `runner.json`
+   * names it; the driver's own for a run nobody attends where nothing names one.
+   */
+  readonly permissions?: string | undefined;
 }
 
 /** What the installed product is and offers, asked without starting a session. */
@@ -101,6 +106,16 @@ export interface Driver {
     readonly resume: boolean;
     /** Whether the model and the effort are taken in a running session. */
     readonly set: boolean;
+  };
+  /**
+   * The product's permission modes, in its own words: what runs without asking. `unattended` is
+   * the one the driver starts the product in where `runner.json` names none, and `least` the
+   * one it starts it in where what is named is none of the product's.
+   */
+  readonly permissions: {
+    readonly modes: readonly string[];
+    readonly unattended: string;
+    readonly least: string;
   };
   probe(): Promise<Probe>;
   start(options: StartOptions): DriverSession;
@@ -137,9 +152,48 @@ export interface WakeSource {
   readonly name: string;
 }
 
+/** What a service is told of the runner it keeps running. */
+export interface ServiceInput {
+  /** The desk, absolute: where the runner is started. */
+  readonly desk: string;
+  /** The home directory of the OS account the runner runs in, and the account's number where the system has one. */
+  readonly home: string;
+  readonly uid: number | undefined;
+  /** What starts the runner: the runtime, the command and its words, absolute where they are files. */
+  readonly program: readonly string[];
+  /** Where the runner's process, and the product it starts, look for programs. */
+  readonly path: string | undefined;
+}
+
+/** What a service writes and runs to keep a runner running. Nothing of it needs an administrator's rights. */
+export interface ServicePlan {
+  /** Whole files, each with the mode it is written in. */
+  readonly files: readonly {
+    readonly path: string;
+    readonly text: string;
+    readonly mode: number;
+  }[];
+  /** Commands, in order; one that fails where nothing was there before says so. */
+  readonly commands: readonly {
+    readonly command: string;
+    readonly args: readonly string[];
+    readonly mayFail?: boolean | undefined;
+  }[];
+  /** Where the runner's own lines are kept, for whoever looks when it is not heard from. */
+  readonly log: string;
+  /** What to look at when a command did not succeed, in a sentence. */
+  readonly failing: string;
+  /** When files written again are read, where the commands are not run: the end of a sentence. */
+  readonly reload: string;
+}
+
 /** A module that keeps the runner running across restarts of the machine. */
 export interface Service {
   readonly name: string;
+  /** The platforms it keeps a runner running on, as the runtime names them (`darwin`). */
+  readonly platforms: readonly string[];
+  /** What to write and to run; or why it cannot, in a few words. */
+  plan(input: ServiceInput): ServicePlan | { readonly problem: string };
 }
 
 /** A module that keeps one agent apart from another on a machine, and says whose the runner is. */

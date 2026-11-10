@@ -13,6 +13,7 @@ import { detectInstall } from "./install.js";
 import { createNoticeStore } from "./notices.js";
 import { createRunnerHost } from "./runner-host.js";
 import { listenOn } from "./serve.js";
+import { createSetupMachine } from "./setup-machine.js";
 import { readBytesAt, readFileAt, readSecret, readStdin, writeBytesAt } from "./terminal.js";
 
 // The `console` command: the only place the command reads the process. Everything it does is in
@@ -67,4 +68,6 @@ process.exitCode = await runCli(process.argv.slice(2), {
   listen: listenOn,
   // A product's process begins from this process's environment, where its own sign-in is.
   runner: createRunnerHost(process.cwd(), process.env),
+  // A machine is set up as the command was started: the same runtime, the same file, the same PATH.
+  machine: createSetupMachine(process.env, process.argv[1]),
 });

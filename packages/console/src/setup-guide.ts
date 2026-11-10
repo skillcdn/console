@@ -165,14 +165,22 @@ export function setupGuideOf(setup: RestAgentSetup, code: string): SetupGuide {
 
   const machine: SetupGuideStep[] = [
     {
-      title: "Sign the command in as the account",
-      body: `The command prints an address and a code. Open the address in the machine's browser, sign in through ${provider} as \`${account.login}\`, check that the page shows the same code, and say that it is you. On a machine without a screen, open the address in any browser that is signed in as the account. If the page shows another member, sign out there first: nobody else's sign-in answers for the account.`,
-      line: `console login --url ${setup.console.url} --self`,
+      title: "The command asks to be signed in as the account",
+      body: `After this guide the command goes on by itself, and waits. It opens an address in the machine's browser and prints it with a code: sign in there through ${provider} as \`${account.login}\`, check that the page shows the same code, and say that it is you. On a machine without a screen, open the address in any browser that is signed in as the account. If the page shows another member, sign out there first: nobody else's sign-in answers for the account, and the command gives up a sign-in that is not the account's.`,
+    },
+    {
+      title: "It makes the machine the agent's",
+      body: "Signed in, it reads the account and the services, writes the desk in the OS account's home from the template, or clones it where the account pushed one before, writes the service that keeps the runner running and starts it, and says the machine and the OS account, which the account's page shows. It needs no administrator's rights, and writes over no file of a desk that is there.",
     },
     {
       title: "Check who the command is",
       body: `It names @${account.handle}, and no person. From then on the invitation has done its work, and its code opens nothing.`,
       line: "console whoami",
+    },
+    {
+      title: "When the services or the account change",
+      body: "Run this in the desk: it writes what is missing there, writes the service again where it changed, and says the services as they are now.",
+      line: "console agent setup --refresh",
     },
   ];
 

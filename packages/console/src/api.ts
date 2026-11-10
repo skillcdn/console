@@ -536,6 +536,7 @@ export {
 export {
   agentLoginOf,
   describeService,
+  deskRemoteOf,
   fillTemplate,
   SERVICE_PROVIDERS,
   type ServiceContext,

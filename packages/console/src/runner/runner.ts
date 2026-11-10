@@ -496,6 +496,7 @@ export function createRunner(options: RunnerOptions): Runner {
         model: settings.model,
         effort: settings.effort,
         resume,
+        permissions: config.permissions,
       }),
       startedAt: options.now(),
       first: true,

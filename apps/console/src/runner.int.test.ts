@@ -82,6 +82,7 @@ function echoingDriver() {
     name: "claude",
     product: { name: "Claude Code", tried: ["2.1.0"] },
     can: { steer: true, images: true, resume: true, set: false },
+    permissions: { modes: ["auto", "dontAsk"], unattended: "auto", least: "dontAsk" },
     probe: async () => ({ version: "2.1.0", models: ["opus", "sonnet"], efforts: ["low", "high"] }),
     start(options) {
       const sent: DriverMessage[] = [];

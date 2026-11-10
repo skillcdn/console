@@ -91,7 +91,8 @@ describe("the invitation that leads a machine to an agent account", () => {
     const seen = (await stranger.textContent(".sc-main")) ?? "";
     expect(seen).toContain("Setting up @mira (Mira, Release engineer)");
     expect(seen).toContain("signs in there as dana through GitHub");
-    expect(seen).toContain(`console login --url ${console_.origin} --self`);
+    expect(seen).toContain("It makes the machine the agent's");
+    expect(seen).toContain("console agent setup --refresh");
     expect(seen).toContain(said);
     expect(await stranger.locator(".sc-sign-in").count()).toBe(0);
     expect(await stranger.locator(".sc-header").count()).toBe(0);

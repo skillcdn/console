@@ -2037,9 +2037,7 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     expect(seen).toContain("1. Before the line");
     expect(seen).toContain("Whoever prepares the machine");
     expect(seen).toContain("2. On the machine");
-    expect(seen).toContain(
-      '<pre class="sc-code">console login --url https://console.test --self</pre>',
-    );
+    expect(seen).toContain('<pre class="sc-code">console agent setup --refresh</pre>');
     expect(seen).toContain(
       '<pre class="sc-code">Run: console agent setup --console https://console.test --code ABCD-EFGH (before it: npm i -g @skillcdn/console), then do what it prints</pre>',
     );

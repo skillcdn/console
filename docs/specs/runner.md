@@ -143,7 +143,7 @@ An administrator seals an event that must not be kept, `POST /api/v1/agents/<han
 
 ## The desk
 
-The desk is the agent account's own repository ([ADR-0088](../adr/0088-an-agent-account-has-a-desk-and-is-set-up-from-an-invitation-by-signing-in-as-itself.md)), and the directory the runner is started in. The package carries its template (`deskFiles` in `@skillcdn/console/runner`), which setup writes when the desk does not exist yet; [`examples/agent-desk`](../../examples/agent-desk/AGENTS.md) is what it writes for an invented account, and a test holds the two equal. Five files, and nothing that prescribes what a product already does for itself:
+The desk is the agent account's own repository ([ADR-0088](../adr/0088-an-agent-account-has-a-desk-and-is-set-up-from-an-invitation-by-signing-in-as-itself.md)), and the directory the runner is started in. The package carries its template (`deskFiles` in `@skillcdn/console/runner`), which setup writes when the desk does not exist yet and the account pushed none before ([cli.md](cli.md#setting-a-machine-up)); [`examples/agent-desk`](../../examples/agent-desk/AGENTS.md) is what it writes for an invented account, and a test holds the two equal. Five files, and nothing that prescribes what a product already does for itself:
 
 | File | What it is |
 |---|---|
@@ -172,7 +172,24 @@ In the desk, the working directory the runner is started in; written by setup, t
 - `driver`: the product's driver, `claude` when the file names none. `wake`: the wake sources beside the console's own.
 - `conversation`: `continuous`, or `daily` or `weekly` to begin a new conversation with that briefing when the session is idle then.
 - `secrets`: which secrets of the account's store the runner hands a session, as environment variables and as files of mode 600 under the desk's ignored `work/`, written at the session's start and removed at its end. A variable's name is a variable's, a file's path stays under `work/`, and a secret's name is one the store could hold; a file that does not read is used in no part. Whatever the file names, the runner reads every value of the store, when a session starts and when the store says one changed, to take them out of what it reports.
+- `permissions`, left out of the example: the permission mode the product is started in, in the product's own word (`dontAsk`, `bypassPermissions`), for whoever prepares the machine to say what the agent does there without asking, as they say whether its OS account may use `sudo`. Left out, the driver's own for a run nobody attends, `auto` for `claude`.
 - A runner started where there is no `runner.json` runs with these defaults and hands the session no secret.
+
+## The service
+
+A service is the module that keeps the runner running across restarts of the machine, a platform each. It says what to write and what to run, and `console agent setup` does it ([cli.md](cli.md#setting-a-machine-up)):
+
+```ts
+interface Service {
+  readonly name: string;
+  /** The platforms it keeps a runner running on, as the runtime names them. */
+  readonly platforms: readonly string[];
+  /** Whole files with their modes, commands in order, where the runner's lines are kept; or why it cannot. */
+  plan(input: { desk: string; home: string; uid: number | undefined; program: string[]; path: string | undefined }): ServicePlan | { problem: string };
+}
+```
+
+`launchd`, for macOS, plans a launch agent of the agent's own OS account: the unit `~/Library/LaunchAgents/ai.skillcdn.console.runner.plist`, which starts the runner in the desk when the account logs in (`RunAtLoad`) and again whenever it ends (`KeepAlive`), with the `PATH` setup ran with, so that the product is found where it was, and its lines in `~/Library/Logs/ai.skillcdn.console.runner.log`; then `launchctl bootout gui/<uid>/ai.skillcdn.console.runner`, which fails where none was loaded, and `launchctl bootstrap gui/<uid> <unit>`. Nothing of it needs an administrator's rights, and so the runner runs while the account is logged in at the machine: that the account is logged in when the machine starts is for whoever prepares it. The unit holds no secret: the runner signs in with what the command keeps. What a path or a login holds is written as text of the unit. It is written from the system's own documentation and was not run on a Mac yet; `systemd-user` for Ubuntu and a module for Windows follow (milestone 44).
 
 ## The driver
 
@@ -188,6 +205,8 @@ interface Driver {
   /** Starts the product: resuming the conversation before where `resume` is given, with a model and an effort where they are. */
   start(options: StartOptions): DriverSession;
   readonly can: { readonly steer: boolean; readonly images: boolean; readonly resume: boolean; readonly set: boolean };
+  /** The product's permission modes, the one for a run nobody attends, and the one that allows the least. */
+  readonly permissions: { readonly modes: readonly string[]; readonly unattended: string; readonly least: string };
 }
 
 interface DriverSession {
@@ -208,7 +227,7 @@ A `DriverEvent` is a transcript event before its number (`kind`, `text`, `data`,
 
 The Claude Code binary, unmodified, over its streaming JSON input and output, as its own documentation has them. What the documentation states is relied on; what it leaves unsaid is held by fixtures recorded per version of the binary, in tests that call nobody, and a version the driver was not tried with is started all the same and said on the Live page.
 
-- **Started** as `claude -p --input-format stream-json --output-format stream-json --verbose`, in the desk, with `--model` and `--effort` where the account's settings name them, `--resume <id>` where a conversation is resumed, and `--permission-prompts none` (`--settings`, naming the settings setup writes, comes with setup, milestone 43): nobody is at the terminal, so what would prompt is denied, the agent is told not to try it again, and the tool that asks a person at the terminal is taken away. The process stays open, reading one message a line from its standard input.
+- **Started** as `claude -p --input-format stream-json --output-format stream-json --verbose`, in the desk, with `--model` and `--effort` where the account's settings name them, `--resume <id>` where a conversation is resumed, `--permission-mode` and `--permission-prompts none`: nobody is at the terminal. The mode says what runs without asking, and is `auto` where `runner.json` names none (`permissions`): the product's own classifier reviews each action, which is how its documentation runs a task nobody attends; where the account or the model has no such mode, the product starts in its manual one, in which whatever needs approval is denied. What would still prompt is denied, the agent is told not to try it again, and the tool that asks a person at the terminal is taken away. A mode named that is none of the product's is a mistake in the desk's file and never leave to do more: the session starts in `dontAsk`, which allows the least, and its denials say so in the transcript. No file of settings is written for the product: its own settings in the agent's OS account stay its operator's and the agent's. The process stays open, reading one message a line from its standard input.
 - **A message** is one line: `{"type":"user","message":{"role":"user","content":[...]},"parent_tool_use_id":null,"priority":"next"}`, the content a text block and an image block for each picture (`base64`, of the kinds the product takes). `priority` is the product's own: `next` is read when the tool calls under way finish, or starts the next turn; `now` stops the turn first, which is how an `interrupt` with its words is delivered. A build that does not take `priority` on its input delivers after the turn, and the driver says `steer: false` of it.
 - **What it reads**, a line each: `system` with `init` (the conversation's id as `session_id`, the model, the effort, the product's version) becomes a `status` event and the driver's `conversation`; `assistant` becomes `assistant`, `thinking` and `tool_call` events, a block each; `user` carrying tool results becomes `tool_result` events, a picture among them an attachment; `system` with `compact_boundary`, `api_retry` or `permission_denied` becomes `status`, `error` and `permission`; `result` ends a turn: `turn_completed`, with the denials of `permission_denials` as `permission` events.
 - **An agent that cannot go on.** A result whose `stop_reason` is the model's own word for an answer it would not give, `refusal`, is `cannot_go_on` with `refused` and `model_refused`. A result or an exit that says the product is not signed in, its login expired or its key is refused is `failed` with `sign_in`: the product's words for it are its own and no contract, so they are read by pattern, which is the first thing a version's fixtures hold. A process that does not start is `start`, and one that dies mid-turn `crashed`. What was sent to a product that did not start, or is not signed in, is kept and tried again; a turn that ended with any other error is a turn that ended, and the agent takes the next message.

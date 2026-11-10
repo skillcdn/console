@@ -124,6 +124,8 @@ describe("the claude driver", () => {
           "--output-format",
           "stream-json",
           "--verbose",
+          "--permission-mode",
+          "auto",
           "--permission-prompts",
           "none",
         ],
@@ -138,7 +140,7 @@ describe("the claude driver", () => {
         model: "opus",
         effort: "high",
         resume: "0199c4d8-0000-7000-8000-0000000000c1",
-      }).slice(8),
+      }).slice(10),
     ).toEqual([
       "--model",
       "opus",
@@ -148,6 +150,29 @@ describe("the claude driver", () => {
       "0199c4d8-0000-7000-8000-0000000000c1",
     ]);
     expect(plain.driver.can).toEqual({ steer: true, images: true, resume: true, set: false });
+    // The mode the desk names, in the product's own word; one that is none of the product's is
+    // never leave to do more: the session starts in the mode that allows the least.
+    const modeOf = (permissions: string | undefined) => {
+      const args = claudeArguments({
+        cwd: "/d",
+        env: {},
+        model: null,
+        effort: null,
+        resume: undefined,
+        permissions,
+      });
+      return args[args.indexOf("--permission-mode") + 1];
+    };
+    expect(modeOf(undefined)).toBe("auto");
+    expect(modeOf("dontAsk")).toBe("dontAsk");
+    expect(modeOf("bypassPermissions")).toBe("bypassPermissions");
+    expect(modeOf("dontask")).toBe("dontAsk");
+    expect(modeOf("everything")).toBe("dontAsk");
+    expect(plain.driver.permissions).toEqual({
+      modes: ["default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions"],
+      unattended: "auto",
+      least: "dontAsk",
+    });
     // No version is said to be tried until the driver was run against it.
     expect(plain.driver.product).toEqual({ name: "Claude Code", tried: [] });
   });

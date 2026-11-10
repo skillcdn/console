@@ -3,6 +3,7 @@ import { isDomain, restWorkspacePatchSchema, serviceProblem } from "./schemas.js
 import {
   agentLoginOf,
   describeService,
+  deskRemoteOf,
   fillTemplate,
   SERVICE_PROVIDERS,
   serviceAccountOf,
@@ -50,6 +51,27 @@ describe("a name at a service", () => {
     ).toEqual({ host: "gh", login: "acme-mira" });
     // No identity service, one nobody signs in through, or a name that cannot be made yet.
     expect(agentLoginOf({ ...workspace, services: {} }, "mira")).toBeUndefined();
+    // Where the desk is cloned from, as the git host's module says: by the account's name there.
+    expect(deskRemoteOf({ ...workspace, services: { git: { kind: "github" } } }, "mira")).toBe(
+      "https://github.com/acme-mira/desk.git",
+    );
+    expect(
+      deskRemoteOf(
+        { ...workspace, services: { git: { kind: "github", account: "{agent}-bot" } } },
+        "mira",
+      ),
+    ).toBe("https://github.com/mira-bot/desk.git");
+    // Nothing where no git host is named, the kind does not say, or a name is missing.
+    expect(deskRemoteOf({ ...workspace, services: {} }, "mira")).toBeUndefined();
+    expect(
+      deskRemoteOf({ ...workspace, services: { identity: { kind: "github" } } }, "mira"),
+    ).toBeUndefined();
+    expect(
+      deskRemoteOf({ ...workspace, services: { git: { kind: "forge" } } }, "mira"),
+    ).toBeUndefined();
+    expect(
+      deskRemoteOf({ handle: null, domain: null, services: { git: { kind: "github" } } }, "mira"),
+    ).toBeUndefined();
     expect(agentLoginOf(workspace, "mira")).toBeUndefined();
     expect(
       agentLoginOf({ ...workspace, services: { identity: { kind: "okta" } } }, "mira"),

@@ -8,6 +8,7 @@ import type { Install } from "./install.js";
 import type { NoticeStore, VersionNotice } from "./notices.js";
 import type { RunnerHost } from "./runner-host.js";
 import type { Listen, ServeHandler } from "./serve.js";
+import type { Ran, SetupMachine } from "./setup-machine.js";
 
 const WHEN = "2026-10-09T10:00:00.000Z";
 const PERSON = {
@@ -2762,14 +2763,19 @@ describe("configuring, as the person", () => {
     // is taken as a person types one.
     const read = harness({ fetch });
     expect(
-      await runCli(["agent", "setup", "--console", ORIGIN, "--code", "abcdefgh"], read.io),
+      await runCli(
+        ["agent", "setup", "--console", ORIGIN, "--code", "abcdefgh", "--guide"],
+        read.io,
+      ),
     ).toBe(EXIT.ok);
     expect(calls.map((call) => call.key)).toEqual(["GET /api/v1/setup/ABCD-EFGH"]);
     expect(new Headers(calls[0]?.init?.headers).get("authorization")).toBeNull();
     expect(read.out()).toContain("# Setting up @mira (Mira, Release engineer)");
     expect(read.out()).toContain("The invitation is good until 2026-10-16T10:00:00.000Z.");
     expect(read.out()).toContain("## 2. On the machine (the agent)");
-    expect(read.out()).toContain(`      console login --url ${ORIGIN} --self`);
+    expect(read.out()).toContain("      console agent setup --refresh");
+    // The guide alone: nothing is asked of the console but what the code opens.
+    expect(read.out()).not.toContain("Setting this machine up");
     expect(read.out()).toContain("`acme-mira`");
     expect(read.err()).toBe("");
 
@@ -2795,6 +2801,13 @@ describe("configuring, as the person", () => {
       await runCli(["agent", "setup", "--console", ORIGIN, "--code", "WXYZ-2345"], gone.io),
     ).toBe(EXIT.failed);
     expect(gone.err()).toContain("No setup has that code");
+    // Where the command has no machine to set up, it says the guide and that it goes no further.
+    const nowhere = harness({ fetch });
+    expect(
+      await runCli(["agent", "setup", "--console", ORIGIN, "--code", "ABCD-EFGH"], nowhere.io),
+    ).toBe(EXIT.failed);
+    expect(nowhere.out()).toContain("# Setting up @mira");
+    expect(nowhere.err()).toContain("A machine cannot be set up from here");
     expect(gone.err()).toContain("console agent invite <handle>");
     expect(gone.out()).toBe("");
 
@@ -3529,6 +3542,491 @@ describe("the runner on the command line (ADR-0085)", () => {
       product: { driver: "claude", name: "Claude Code", version: null, tried: false },
       offers: { models: ["opus", "sonnet", "haiku", "fable"], steer: true, resume: true },
     });
+  });
+});
+
+describe("setting a machine up for an agent account (ADR-0088)", () => {
+  const SERVICES = { git: { kind: "github", organization: "acme" } };
+  const SETUP = {
+    account: {
+      handle: "mira",
+      name: "Mira",
+      title: "Release engineer",
+      login: "acme-mira",
+      host: "gh",
+      avatarParts: null,
+    },
+    workspace: { name: "Acme", handle: "acme", domain: null, services: SERVICES },
+    console: { url: ORIGIN },
+    expiresAt: "2026-10-16T10:00:00.000Z",
+  };
+  const MIRA = {
+    ...ME,
+    workspace: { ...ME.workspace, handle: "acme", domain: null, services: SERVICES },
+    person: {
+      ...PERSON,
+      login: "acme-mira",
+      name: "Mira",
+      kind: "agent",
+      handle: "mira",
+      title: "Release engineer",
+    },
+    agent: null,
+    session: { kind: "command", name: "console as mira on mac-mini" },
+  };
+  const AGENT = { person: MIRA.person, manager: null, supervised: false };
+  const HEARD = {
+    ...AGENT,
+    state: { state: "running", reason: "started", since: WHEN, heardAt: WHEN },
+    runner: {
+      delivered: 0,
+      latest: 0,
+      session: null,
+      machine: { name: "mac-mini", os: "Darwin 24.1.0", user: "mira" },
+      runner: "0.4.8",
+      product: { driver: "claude", name: "Claude Code", version: "2.1.0", tried: false },
+      offers: { models: [], efforts: [], steer: true, images: true, resume: true },
+      running: { model: null, effort: null },
+      settings: { model: null, effort: null },
+    },
+  };
+  const SESSION = {
+    id: "0199c4d8-0000-7000-8000-0000000000a1",
+    current: false,
+    createdAt: WHEN,
+    lastSeenAt: WHEN,
+    expiresAt: WHEN,
+    browser: null,
+    platform: null,
+    address: null,
+    kind: "command",
+    name: "console as mira on mac-mini",
+  };
+  const PAGE = `${ORIGIN}/connect/WXYZ-2345`;
+  const UNIT = "/Users/mira/Library/LaunchAgents/ai.skillcdn.console.runner.plist";
+  const LINE = ["agent", "setup", "--console", ORIGIN, "--code", "ABCD-EFGH"];
+  /** The account's command, signed in already: what the command keeps of it. */
+  const KEPT: Credentials = {
+    default: ORIGIN,
+    logins: [
+      {
+        url: ORIGIN,
+        account: "acme-mira",
+        token: "cns_a_kept",
+        agent: undefined,
+        since: undefined,
+        self: true,
+      },
+    ],
+  };
+
+  /** The console as a setup meets it: the invitation's code, the connection, the account and its runner. */
+  const consoleOf = (over: Record<string, Answer | Answer[]> = {}) =>
+    fakeConsole({
+      "GET /api/v1/setup/ABCD-EFGH": { body: SETUP },
+      "POST /api/v1/connect": {
+        status: 201,
+        body: { ...CONNECTION, code: "WXYZ-2345", url: PAGE },
+      },
+      "POST /api/v1/connect/claim": [
+        { status: 202, body: { status: "pending", expiresAt: WHEN } },
+        { body: { status: "signed_in", session: SESSION, secret: "cns_a_handed" } },
+      ],
+      "GET /api/v1/me": { body: MIRA },
+      "DELETE /api/v1/me/token": { status: 204 },
+      "GET /api/v1/agents/mira": [{ body: AGENT }, { body: HEARD }],
+      "GET /api/v1/agents/me/secrets": { body: { items: [] } },
+      ...over,
+    });
+
+  /** A machine that touches nothing: its files in memory, and what it was asked to run and to open. */
+  function fakeMachine(
+    over: {
+      readonly platform?: string;
+      readonly cwd?: string;
+      readonly files?: Readonly<Record<string, string>>;
+      readonly ran?: (command: string, args: readonly string[]) => Ran | undefined;
+    } = {},
+  ) {
+    const files = new Map(Object.entries(over.files ?? {}));
+    const written: { path: string; mode: number }[] = [];
+    const runs: {
+      command: string;
+      args: readonly string[];
+      env: Readonly<Record<string, string>> | undefined;
+    }[] = [];
+    const opened: string[] = [];
+    const under = (path: string) => [...files.keys()].some((file) => file.startsWith(`${path}/`));
+    const machine: SetupMachine = {
+      platform: over.platform ?? "darwin",
+      user: "mira",
+      home: "/Users/mira",
+      uid: 502,
+      self: ["/usr/local/bin/node", "/opt/console/dist/cli/main.js"],
+      searchPath: "/usr/local/bin:/usr/bin:/bin",
+      path: (...parts) => {
+        const [first = "", ...rest] = parts;
+        const cwd = over.cwd ?? "/Users/mira";
+        const base = first === "." ? cwd : first.startsWith("/") ? first : `${cwd}/${first}`;
+        return [base, ...rest].join("/");
+      },
+      exists: async (path) => files.has(path) || under(path),
+      read: async (path) => files.get(path),
+      holds: async (path) => under(path),
+      write: async (path, text, mode) => {
+        files.set(path, text);
+        written.push({ path, mode });
+      },
+      run: async (command, args, options) => {
+        runs.push({ command, args, env: options?.env });
+        return over.ran?.(command, args) ?? { code: 0, out: "", err: "" };
+      },
+      open: async (url) => {
+        opened.push(url);
+        return true;
+      },
+    };
+    return { machine, files, written, runs, opened };
+  }
+
+  it("prints the guide, signs in as the account in the machine's browser, writes the desk and the service, and hears the runner", async () => {
+    const { fetch, calls } = consoleOf();
+    const at = fakeMachine();
+    const store = memoryStore();
+    const run = harness({ fetch, machine: at.machine, store: store.store, hostname: "mac-mini" });
+    expect(await runCli(LINE, run.io)).toBe(EXIT.ok);
+    const out = run.out();
+    // The guide first, for whoever reads the command's words; then the machine.
+    expect(out).toContain("# Setting up @mira (Mira, Release engineer)");
+    expect(out).toContain("Setting this machine up for @mira, in the OS account mira on mac-mini.");
+    // It asks to be the account itself, named by the OS account and the machine, and opens the
+    // console's own page in the machine's browser.
+    expect(calls.find((call) => call.key === "POST /api/v1/connect")?.body).toEqual({
+      agent: "console as mira on mac-mini",
+      as: "self",
+    });
+    expect(at.opened).toEqual([PAGE]);
+    expect(out).toContain(`The page is opened in this machine's browser: ${PAGE}.`);
+    expect(out).toContain("check that the page shows the code WXYZ-2345, and say that it is you");
+    // What it keeps is the account's own session, as the default here; its secret is said nowhere.
+    expect(store.kept()).toMatchObject({
+      default: ORIGIN,
+      logins: [{ url: ORIGIN, account: "acme-mira", token: "cns_a_handed", self: true }],
+    });
+    expect(out).toContain(
+      "Signed in as @mira: what this command does from now on, the account does.",
+    );
+    expect(out).not.toContain("cns_a_handed");
+    expect(out).not.toContain("Next, say which project");
+    // The desk, from the template, in the OS account's home.
+    expect(at.written.filter((file) => file.path.startsWith("/Users/mira/desk/"))).toEqual(
+      ["README.md", "AGENTS.md", "CLAUDE.md", "runner.json", ".gitignore"].map((name) => ({
+        path: `/Users/mira/desk/${name}`,
+        mode: 0o644,
+      })),
+    );
+    expect(at.files.get("/Users/mira/desk/AGENTS.md")).toContain("@mira");
+    expect(at.files.get("/Users/mira/desk/AGENTS.md")).toContain("acme-mira");
+    expect(out).toContain(
+      "A new desk is written at /Users/mira/desk (README.md, AGENTS.md, CLAUDE.md, runner.json, .gitignore).",
+    );
+    // The service: the runner as this command was started, in the desk, at this console and as
+    // this account; loaded with no administrator's rights, and nothing else is run.
+    const unit = at.files.get(UNIT) ?? "";
+    expect(unit).toContain(
+      [
+        "    <string>/usr/local/bin/node</string>",
+        "    <string>/opt/console/dist/cli/main.js</string>",
+        "    <string>runner</string>",
+        "    <string>--url</string>",
+        `    <string>${ORIGIN}</string>`,
+        "    <string>--account</string>",
+        "    <string>acme-mira</string>",
+      ].join("\n"),
+    );
+    expect(unit).toContain("<key>WorkingDirectory</key>\n  <string>/Users/mira/desk</string>");
+    expect(unit).not.toContain("cns_a_handed");
+    expect(at.runs.map((ran) => [ran.command, ...ran.args])).toEqual([
+      ["launchctl", "bootout", "gui/502/ai.skillcdn.console.runner"],
+      ["launchctl", "bootstrap", "gui/502", UNIT],
+    ]);
+    expect(out).toContain(`The launchd service is written (${UNIT}) and loaded`);
+    // And how the runner stands, with the machine and the OS account as it said them.
+    expect(out).toContain(
+      "The runner is heard from: mac-mini, Darwin 24.1.0, OS account mira. @mira is set up on this machine",
+    );
+    expect(run.err()).toBe("");
+  });
+
+  it("gives up a sign-in that is not the account's, and sets nothing up", async () => {
+    // A person at the browser said that the command is them.
+    const person = { ...ME, agent: null, session: { kind: "command", name: "console as mira" } };
+    const { fetch, calls } = consoleOf({ "GET /api/v1/me": { body: person } });
+    const at = fakeMachine();
+    const store = memoryStore();
+    const run = harness({ fetch, machine: at.machine, store: store.store });
+    expect(await runCli(LINE, run.io)).toBe(EXIT.failed);
+    expect(run.err()).toContain("The page said that this command is alice, who is not @mira.");
+    expect(run.err()).toContain("That sign-in is given up, and nothing was set up.");
+    expect(calls.map((call) => call.key)).toContain("DELETE /api/v1/me/token");
+    expect(store.kept()).toBeUndefined();
+    expect(at.written).toEqual([]);
+    expect(at.runs).toEqual([]);
+
+    // Nobody said anything in time: nothing is kept either.
+    const late = consoleOf({
+      "POST /api/v1/connect/claim": {
+        status: 404,
+        body: { error: { code: "connect.not_found", message: "No connection." } },
+      },
+    });
+    const waited = harness({ fetch: late.fetch, machine: fakeMachine().machine });
+    expect(await runCli(LINE, waited.io)).toBe(EXIT.failed);
+    expect(waited.err()).toContain("Nobody said in time that this command is the account");
+
+    // An address that is not the console's own is not opened: it is printed, for a person to judge.
+    const elsewhere = consoleOf({
+      "POST /api/v1/connect": {
+        status: 201,
+        body: { ...CONNECTION, code: "WXYZ-2345", url: "https://elsewhere.test/connect/WXYZ-2345" },
+      },
+    });
+    const wary = fakeMachine();
+    const shown = harness({ fetch: elsewhere.fetch, machine: wary.machine });
+    expect(await runCli(LINE, shown.io)).toBe(EXIT.ok);
+    expect(wary.opened).toEqual([]);
+    expect(shown.out()).toContain(
+      "Open https://elsewhere.test/connect/WXYZ-2345 in this machine's browser.",
+    );
+  });
+
+  it("leaves a desk that is there, and writes over no file of one that is half there", async () => {
+    // Signed in already, and a desk with the agent's own files: only the service is written.
+    const { fetch, calls } = consoleOf();
+    const at = fakeMachine({
+      files: {
+        "/Users/mira/desk/runner.json": '{"driver":"claude"}\n',
+        "/Users/mira/desk/AGENTS.md": "# Mine\n",
+      },
+    });
+    const run = harness({ fetch, machine: at.machine, store: memoryStore(KEPT).store });
+    expect(await runCli(LINE, run.io)).toBe(EXIT.ok);
+    expect(run.out()).toContain("This command is signed in as @mira here already.");
+    expect(calls.map((call) => call.key)).not.toContain("POST /api/v1/connect");
+    expect(at.opened).toEqual([]);
+    expect(run.out()).toContain(
+      "The desk at /Users/mira/desk is there already, and is left as it is.",
+    );
+    expect(at.files.get("/Users/mira/desk/AGENTS.md")).toBe("# Mine\n");
+    expect(at.written.map((file) => file.path)).toEqual([UNIT]);
+
+    // A place that holds one file of its own gets the rest, and keeps its own.
+    const half = fakeMachine({ files: { "/srv/desks/mira/README.md": "# My own words\n" } });
+    const filled = harness({
+      fetch: consoleOf().fetch,
+      machine: half.machine,
+      store: memoryStore(KEPT).store,
+    });
+    expect(await runCli([...LINE, "--desk", "/srv/desks/mira"], filled.io)).toBe(EXIT.ok);
+    expect(half.files.get("/srv/desks/mira/README.md")).toBe("# My own words\n");
+    expect(filled.out()).toContain(
+      "A new desk is written at /srv/desks/mira (AGENTS.md, CLAUDE.md, runner.json, .gitignore).",
+    );
+    expect(half.files.get(UNIT)).toContain("<string>/srv/desks/mira</string>");
+  });
+
+  it("clones the desk an account pushed before, with its own token and never on a command line", async () => {
+    const pushed = {
+      "GET /api/v1/agents/me/secrets": {
+        body: { items: [{ name: "git.token", setAt: WHEN, seeded: false, expiresOn: null }] },
+      },
+      "GET /api/v1/agents/me/secrets/git.token": {
+        body: {
+          name: "git.token",
+          setAt: WHEN,
+          seeded: false,
+          expiresOn: null,
+          value: "not-a-real-token-51c2",
+        },
+      },
+    };
+    const at = fakeMachine();
+    const run = harness({
+      fetch: consoleOf(pushed).fetch,
+      machine: at.machine,
+      store: memoryStore(KEPT).store,
+    });
+    expect(await runCli(LINE, run.io)).toBe(EXIT.ok);
+    const [clone] = at.runs;
+    expect([clone?.command, ...(clone?.args ?? [])]).toEqual([
+      "git",
+      "clone",
+      "--quiet",
+      "https://github.com/acme-mira/desk.git",
+      "/Users/mira/desk",
+    ]);
+    // The token reaches git through the environment alone, and git asks nobody at a terminal.
+    expect(clone?.env?.CONSOLE_DESK_TOKEN).toBe("not-a-real-token-51c2");
+    expect(clone?.env?.GIT_TERMINAL_PROMPT).toBe("0");
+    expect(clone?.env?.GIT_CONFIG_KEY_1).toBe("credential.helper");
+    expect(clone?.env?.GIT_CONFIG_VALUE_1).toContain("$CONSOLE_DESK_TOKEN");
+    expect(JSON.stringify(clone?.args)).not.toContain("not-a-real-token");
+    expect(clone?.env?.GIT_CONFIG_VALUE_1).not.toContain("not-a-real-token");
+    expect(run.out()).toContain(
+      "The desk is cloned from https://github.com/acme-mira/desk.git into /Users/mira/desk.",
+    );
+    expect(run.out()).not.toContain("not-a-real-token");
+    expect(at.written.map((file) => file.path)).toEqual([UNIT]);
+
+    // A clone that fails stops the setup, and writes no desk in its place.
+    const refused = fakeMachine({
+      ran: (command) =>
+        command === "git"
+          ? {
+              code: 128,
+              out: "",
+              err: "remote: Repository not found.\nfatal: repository not found\n",
+            }
+          : undefined,
+    });
+    const stopped = harness({
+      fetch: consoleOf(pushed).fetch,
+      machine: refused.machine,
+      store: memoryStore(KEPT).store,
+    });
+    expect(await runCli(LINE, stopped.io)).toBe(EXIT.failed);
+    expect(stopped.err()).toContain(
+      "The desk could not be cloned from https://github.com/acme-mira/desk.git: fatal: repository not found.",
+    );
+    expect(stopped.err()).toContain("--new-desk");
+    expect(stopped.err()).not.toContain("not-a-real-token");
+    expect(refused.written).toEqual([]);
+
+    // Told to begin a new one, it writes the template and asks git for nothing.
+    const fresh = fakeMachine();
+    const begun = harness({
+      fetch: consoleOf(pushed).fetch,
+      machine: fresh.machine,
+      store: memoryStore(KEPT).store,
+    });
+    expect(await runCli([...LINE, "--new-desk"], begun.io)).toBe(EXIT.ok);
+    expect(fresh.runs.map((ran) => ran.command)).toEqual(["launchctl", "launchctl"]);
+    expect(fresh.files.has("/Users/mira/desk/AGENTS.md")).toBe(true);
+
+    // A place that holds something else is cloned into by nobody.
+    const taken = fakeMachine({ files: { "/Users/mira/desk/notes.txt": "mine\n" } });
+    const kept = harness({
+      fetch: consoleOf(pushed).fetch,
+      machine: taken.machine,
+      store: memoryStore(KEPT).store,
+    });
+    expect(await runCli(LINE, kept.io)).toBe(EXIT.failed);
+    expect(kept.err()).toContain("holds something that is no desk");
+    expect(taken.runs).toEqual([]);
+  });
+
+  it("writes no service where the platform has none or when asked not to, and says when one was not loaded", async () => {
+    const elsewhere = fakeMachine({ platform: "linux" });
+    const run = harness({
+      fetch: consoleOf().fetch,
+      machine: elsewhere.machine,
+      store: memoryStore(KEPT).store,
+    });
+    expect(await runCli(LINE, run.io)).toBe(EXIT.ok);
+    expect(run.out()).toContain(
+      `No service keeps a runner running on linux yet. Start the runner yourself and keep it running: cd /Users/mira/desk && console runner --url ${ORIGIN} --account acme-mira`,
+    );
+    expect(elsewhere.runs).toEqual([]);
+    expect(elsewhere.files.has(UNIT)).toBe(false);
+    expect(elsewhere.files.has("/Users/mira/desk/runner.json")).toBe(true);
+
+    const asked = fakeMachine();
+    const without = harness({
+      fetch: consoleOf().fetch,
+      machine: asked.machine,
+      store: memoryStore(KEPT).store,
+    });
+    expect(await runCli([...LINE, "--no-service"], without.io)).toBe(EXIT.ok);
+    expect(without.out()).toContain("No service is written, as asked.");
+    expect(asked.files.has(UNIT)).toBe(false);
+    expect(asked.runs).toEqual([]);
+
+    // The unit is written and the system would not load it: its own words, and what to look at.
+    const unloaded = fakeMachine({
+      ran: (_, args) =>
+        args[0] === "bootstrap"
+          ? { code: 5, out: "", err: "Bootstrap failed: 5: Input/output error\n" }
+          : args[0] === "bootout"
+            ? { code: 3, out: "", err: "Boot-out failed: 3: No such process\n" }
+            : undefined,
+    });
+    const failed = harness({
+      fetch: consoleOf().fetch,
+      machine: unloaded.machine,
+      store: memoryStore(KEPT).store,
+    });
+    expect(await runCli(LINE, failed.io)).toBe(EXIT.failed);
+    expect(failed.err()).toContain("was not loaded: launchctl bootstrap gui/502");
+    expect(failed.err()).toContain("Bootstrap failed: 5: Input/output error.");
+    expect(failed.err()).toContain("log in at the machine as that account");
+    expect(unloaded.files.has(UNIT)).toBe(true);
+
+    // A runner that says nothing in the while the command looks is said so, with where its lines are.
+    const quiet = harness({
+      fetch: consoleOf({ "GET /api/v1/agents/mira": { body: AGENT } }).fetch,
+      machine: fakeMachine().machine,
+      store: memoryStore(KEPT).store,
+    });
+    expect(await runCli(LINE, quiet.io)).toBe(EXIT.ok);
+    expect(quiet.out()).toContain(
+      "The runner is not heard from yet. Its own lines are in /Users/mira/Library/Logs/ai.skillcdn.console.runner.log",
+    );
+  });
+
+  it("derives a machine again with --refresh, for the account's own command, and unloads nothing", async () => {
+    const env = { CONSOLE_URL: ORIGIN, CONSOLE_TOKEN: "cns_a_kept" };
+    // In the desk, with the unit as setup wrote it: nothing changes, and the services are said.
+    const first = fakeMachine();
+    await runCli(
+      LINE,
+      harness({ fetch: consoleOf().fetch, machine: first.machine, store: memoryStore(KEPT).store })
+        .io,
+    );
+    const same = fakeMachine({ cwd: "/Users/mira/desk", files: Object.fromEntries(first.files) });
+    const { fetch, calls } = consoleOf();
+    const again = harness({ fetch, env, machine: same.machine });
+    expect(await runCli(["agent", "setup", "--refresh"], again.io)).toBe(EXIT.ok);
+    expect(again.out()).toContain("The desk at /Users/mira/desk is there already");
+    expect(again.out()).toContain(`The launchd service is as it was (${UNIT}).`);
+    expect(again.out()).toContain(
+      "The services Acme names now, with what @mira is called at each:\n  git: GitHub, as acme-mira\n",
+    );
+    expect(same.written).toEqual([]);
+    expect(same.runs).toEqual([]);
+    expect(calls.map((call) => call.key)).not.toContain("GET /api/v1/setup/ABCD-EFGH");
+
+    // A unit that says something else is written again, and read when the service is next
+    // loaded: the runner this command may be running under is never unloaded.
+    const moved = fakeMachine({
+      cwd: "/Users/mira/desk",
+      files: { ...Object.fromEntries(first.files), [UNIT]: "<plist>an older one</plist>\n" },
+    });
+    const rewritten = harness({ fetch: consoleOf().fetch, env, machine: moved.machine });
+    expect(await runCli(["agent", "setup", "--refresh"], rewritten.io)).toBe(EXIT.ok);
+    expect(rewritten.out()).toContain(
+      `The launchd service is written again (${UNIT}). It is read when the OS account next logs in, or the machine starts again.`,
+    );
+    expect(moved.files.get(UNIT)).toBe(first.files.get(UNIT));
+    expect(moved.runs).toEqual([]);
+
+    // Nobody but the account's own command refreshes a machine.
+    const person = harness({
+      fetch: consoleOf({ "GET /api/v1/me": { body: ME } }).fetch,
+      env,
+      machine: fakeMachine().machine,
+    });
+    expect(await runCli(["agent", "setup", "--refresh"], person.io)).toBe(EXIT.failed);
+    expect(person.err()).toContain("A machine is refreshed by the agent account's own command");
   });
 });
 

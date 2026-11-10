@@ -351,6 +351,25 @@ function sessionOf(child: Child): DriverSession {
   };
 }
 
+/** The product's permission modes, as its documentation names them. */
+const MODES = ["default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions"] as const;
+/** The mode the product's documentation pairs with a run nobody attends: its own classifier reviews each action. */
+const UNATTENDED_MODE = "auto";
+/** The mode that allows the least: what would prompt is denied. */
+const LEAST_MODE = "dontAsk";
+
+/**
+ * The mode a session is started in: the product's own for a run nobody attends where the desk
+ * names none. A mode named that is none of the product's is a mistake in the desk's file, and
+ * is never read as leave to do more: the session starts in the mode that allows the least, and
+ * its denials say so in the transcript.
+ */
+export function claudeMode(named: string | undefined): string {
+  return named === undefined
+    ? UNATTENDED_MODE
+    : (MODES.find((mode) => mode === named) ?? LEAST_MODE);
+}
+
 /** The arguments the product is started with. */
 export function claudeArguments(options: StartOptions): readonly string[] {
   return [
@@ -360,7 +379,10 @@ export function claudeArguments(options: StartOptions): readonly string[] {
     "--output-format",
     "stream-json",
     "--verbose",
-    // Nobody is at the terminal: what would ask is denied, and the tool that asks is taken away.
+    // Nobody is at the terminal: the mode says what runs without asking, what would still ask
+    // is denied, and the tool that asks a person is taken away.
+    "--permission-mode",
+    claudeMode(options.permissions),
     "--permission-prompts",
     "none",
     ...(options.model === null ? [] : ["--model", options.model]),
@@ -376,6 +398,7 @@ export function createClaudeDriver(host: DriverHost): Driver {
     // No version is listed until the driver was run against that build of the binary.
     product: { name: "Claude Code", tried: [] },
     can: { steer: true, images: true, resume: true, set: false },
+    permissions: { modes: MODES, unattended: UNATTENDED_MODE, least: LEAST_MODE },
     async probe() {
       let version: string | undefined;
       try {

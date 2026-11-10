@@ -41,6 +41,11 @@ export const runnerConfigSchema = z.object({
     { env: {}, files: {} },
   ),
   autosave: z._default(z.boolean(), true),
+  /**
+   * The permission mode the product is started in, in the product's own word: what runs without
+   * asking. Left out, the driver's own for a run nobody attends.
+   */
+  permissions: z.optional(z.string().check(z.regex(/^[A-Za-z][A-Za-z0-9-]{0,39}$/))),
 });
 export type RunnerConfig = z.infer<typeof runnerConfigSchema>;
 

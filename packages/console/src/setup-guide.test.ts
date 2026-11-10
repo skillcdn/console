@@ -84,10 +84,20 @@ describe("the guide of an agent account's setup (ADR-0088)", () => {
     expect(before?.steps[4]?.line).toBe(SETUP_INSTALL);
     expect(before?.steps[5]?.line).toBe(setupSentenceOf(COMMAND));
     // On the machine: the account's own sign-in, at this console, and nobody else's.
-    expect(machine?.steps[0]?.line).toBe("console login --url https://console.acme.example --self");
-    expect(machine?.steps[0]?.body).toContain("sign in through Google as `mira@acme.example`");
+    expect(machine?.steps.map((step) => step.title)).toEqual([
+      "The command asks to be signed in as the account",
+      "It makes the machine the agent's",
+      "Check who the command is",
+      "When the services or the account change",
+    ]);
+    expect(machine?.steps[0]?.body).toContain(
+      "sign in there through Google as `mira@acme.example`",
+    );
     expect(machine?.steps[0]?.body).toContain("nobody else's sign-in answers for the account");
-    expect(machine?.steps[1]?.line).toBe("console whoami");
+    expect(machine?.steps[0]?.line).toBeUndefined();
+    expect(machine?.steps[1]?.body).toContain("It needs no administrator's rights");
+    expect(machine?.steps[2]?.line).toBe("console whoami");
+    expect(machine?.steps[3]?.line).toBe("console agent setup --refresh");
     // What the agent does itself, and what is asked of a person.
     expect(start?.steps.map((step) => step.title)).toContain("Make your desk there and push it");
     expect(asked?.steps.map((step) => step.title)).toEqual([
@@ -176,7 +186,7 @@ describe("the guide of an agent account's setup (ADR-0088)", () => {
     expect(lines).toContain("## 3. When the agent starts (the agent)");
     expect(lines).toContain("## 4. What is asked of a person (its manager)");
     expect(lines).toContain(`      ${setupSentenceOf(COMMAND)}`);
-    expect(lines).toContain("      console login --url https://console.acme.example --self");
+    expect(lines).toContain("      console agent setup --refresh");
     expect(text.endsWith("\n")).toBe(false);
     // As the API gives the day, where nothing says how to print a moment.
     expect(setupGuideText(setupGuideOf(SETUP, CODE))).toContain(

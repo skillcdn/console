@@ -15,6 +15,7 @@ export {
   deskFiles,
   deskServicesOf,
 } from "./runner/desk.js";
+export { LAUNCHD_LABEL, launchd, launchdUnit } from "./runner/launchd.js";
 export {
   composeSignals,
   fenced,
@@ -57,6 +58,8 @@ export type {
   Picture,
   Probe,
   Service,
+  ServiceInput,
+  ServicePlan,
   Spawn,
   StartOptions,
   WakeSource,

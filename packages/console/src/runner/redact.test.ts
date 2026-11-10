@@ -101,6 +101,11 @@ describe("runner.json", () => {
         autosave: false,
       }),
     );
+    // The permission mode is a word of the product's, for the driver to know or not.
+    expect(parseRunnerConfig(JSON.stringify({ permissions: "dontAsk" }))).toMatchObject({
+      ok: true,
+      config: { permissions: "dontAsk" },
+    });
     expect(read).toMatchObject({
       ok: true,
       config: {
@@ -137,6 +142,9 @@ describe("runner.json", () => {
         "secrets.env",
       ],
       [JSON.stringify({ wake: Array.from({ length: 11 }, () => "console") }), "wake"],
+      [JSON.stringify({ permissions: "--dangerously-skip-permissions" }), "permissions"],
+      [JSON.stringify({ permissions: "auto --settings x.json" }), "permissions"],
+      [JSON.stringify({ permissions: ["auto"] }), "permissions"],
       [`{"driver":"claude","pad":"${"x".repeat(70_000)}"}`, "larger"],
     ] as const) {
       const read = parseRunnerConfig(config);

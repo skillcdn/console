@@ -50,6 +50,8 @@ export interface ServiceProvider {
   onboarding(context: ServiceContext): readonly ServiceItem[];
   /** What only a person can do there, with the exact values and what to hand back. */
   asks(context: ServiceContext): readonly ServiceItem[];
+  /** Where the agent's desk is cloned from, for a git host that says; nothing for any other. */
+  deskRemote(context: ServiceContext): string | undefined;
 }
 
 const PLACE = /\{(workspace|agent|domain)\}/g;
@@ -112,6 +114,8 @@ const github: ServiceProvider = {
       body: `The host's terms ask that a person make an account. Make ${called(account, "it")}${service.organization === undefined ? "" : `, invite it to \`${service.organization}\``}, and seed its first password where only the agent reads it.`,
     },
   ],
+  deskRemote: ({ role, account }) =>
+    role !== "git" || account === undefined ? undefined : `https://github.com/${account}/desk.git`,
 };
 
 const googleWorkspace: ServiceProvider = {
@@ -132,6 +136,7 @@ const googleWorkspace: ServiceProvider = {
     },
   ],
   asks: () => [],
+  deskRemote: () => undefined,
 };
 
 const slack: ServiceProvider = {
@@ -160,6 +165,7 @@ const slack: ServiceProvider = {
       body: `Invite the agent's own address to ${service.workspace === undefined ? "the Slack workspace" : `\`${service.workspace}\``} as a member, and approve the app it asks to install for itself.`,
     },
   ],
+  deskRemote: () => undefined,
 };
 
 /** The kinds the package knows. */
@@ -184,6 +190,7 @@ function generic(kind: string): ServiceProvider {
       },
     ],
     asks: () => [],
+    deskRemote: () => undefined,
   };
 }
 
@@ -234,6 +241,28 @@ export function describeService(
     onboarding: provider.onboarding(context),
     asks: provider.asks(context),
   };
+}
+
+/**
+ * Where an agent account's desk is cloned from, as the module of the workspace's git host says:
+ * nothing where the workspace names no git host, the kind does not say, or the account's name
+ * there cannot be put together yet.
+ */
+export function deskRemoteOf(
+  workspace: Pick<RestWorkspace, "handle" | "domain" | "services">,
+  agent: string,
+): string | undefined {
+  const git = workspace.services?.git;
+  if (git === undefined) {
+    return undefined;
+  }
+  const names = serviceNamesOf(workspace, agent);
+  return serviceProviderOf(git.kind ?? "").deskRemote({
+    role: "git",
+    service: git,
+    names,
+    account: serviceAccountOf(git, names),
+  });
 }
 
 /**
