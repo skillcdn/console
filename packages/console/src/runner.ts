@@ -37,6 +37,7 @@ export {
   type RunnerModules,
 } from "./runner/registry.js";
 export {
+  AUTOSAVE_MESSAGE,
   BATCH_MS,
   COOL_DOWN_MS,
   createRunner,

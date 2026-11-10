@@ -43,6 +43,8 @@ export const COOL_DOWN_MS = 15 * 60_000;
 export const MAX_COOL_DOWN_MS = 4 * 60 * 60_000;
 /** How long the runner waits before it asks for its stream of signals again. */
 export const RECONNECT_MS = 5000;
+/** What an autosave's commit says: the runner's, and never the agent's own words. */
+export const AUTOSAVE_MESSAGE = "Autosave at the end of a session";
 /** The longest the runner waits before it starts a wake source again that keeps ending at once. */
 export const MAX_SOURCE_PAUSE_MS = 5 * 60_000;
 /** How long a wake source holds before the runner takes it to have worked. */
@@ -100,6 +102,11 @@ export interface RunnerOptions {
   };
   /** A line for whoever reads the runner's own output: ids, numbers and codes, never what a signal or an event says. */
   readonly log: (line: string) => void;
+  /**
+   * Runs git in the desk to its end and answers how it ended, for the autosave (ADR-0088); left
+   * out, the runner saves nothing. It asks nobody at a terminal, and what it prints is not kept.
+   */
+  readonly git?: ((args: readonly string[]) => Promise<number | null>) | undefined;
   /** The wake sources `runner.json` names beside the console's own, and what they need of the machine. */
   readonly wakes?:
     | {
@@ -566,7 +573,42 @@ export function createRunner(options: RunnerOptions): Runner {
       await options.files.remove(path).catch(() => undefined);
     }
     log(`session ${target.id} ended: ${how}`);
+    await autosave();
     push({ t: "heartbeat" });
+  };
+
+  /**
+   * The autosave (ADR-0088): the desk committed and pushed at the end of a session, a net under
+   * the agent's own commits, where `runner.json` leaves it on and the desk is a repository. A
+   * step that does not succeed is said by how git ended, and the runner goes on.
+   */
+  const autosave = async (): Promise<void> => {
+    const git = options.git;
+    if (!config.autosave || git === undefined) {
+      return;
+    }
+    try {
+      if ((await git(["rev-parse", "--is-inside-work-tree"])) !== 0) {
+        return;
+      }
+      await git(["add", "--all"]);
+      // Ends in 1 where something is staged, and in 0 where nothing is.
+      if ((await git(["diff", "--cached", "--quiet"])) === 1) {
+        const committed = await git(["commit", "--quiet", "--message", AUTOSAVE_MESSAGE]);
+        if (committed !== 0) {
+          log(`the desk was not saved: git commit ended in ${committed}`);
+          return;
+        }
+      }
+      const pushed = await git(["push", "--quiet"]);
+      log(
+        pushed === 0
+          ? "the desk was saved"
+          : `the desk was committed and not pushed: git push ended in ${pushed}`,
+      );
+    } catch (error) {
+      log(`the desk was not saved (${codeOf(error)})`);
+    }
   };
 
   /** Hands the product what is pending, as one message; begins a session where none is open. */

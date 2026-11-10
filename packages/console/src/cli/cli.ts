@@ -3521,6 +3521,15 @@ const runner: Command = async (args, io) => {
       save: (state) => host.writePrivate(statePath, `${JSON.stringify(state)}\n`),
     },
     log: (line) => io.stdout(`${new Date(io.now()).toISOString()} ${line}\n`),
+    // The autosave's git: in the desk, asking nobody at a terminal, its words read and let go.
+    git: async (args) => {
+      const child = host.spawn("git", args, { cwd: host.cwd, env: { GIT_TERMINAL_PROMPT: "0" } });
+      child.end();
+      for await (const _ of child.lines) {
+        // Nothing of what git prints is kept.
+      }
+      return (await child.exited).code;
+    },
     // The wake sources the desk names beside the console's own stream, which the runner listens to itself.
     wakes: {
       sources: read.config.wake.flatMap((name) => {

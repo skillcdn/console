@@ -506,7 +506,7 @@ Ends with: one line pasted on a Mac sets an agent account up, the board and the 
 - [x] The `slack` wake source: one app per agent account, receiving over its socket mode the events its own member of the messenger can see, mentions and direct messages as wakes grouped by thread; the wake sources of a runner, which it keeps listening and whose wakes it raises to the console (`POST /api/v1/agents/me/signals`). Written from the messenger's documentation.
 - [ ] The `slack` wake source run in a workspace: the app made from the skill's manifest, a mention and a direct message heard. Waits for a workspace to run it in.
 - [ ] The messenger plugin, in its own repository, telling a manager that an agent of theirs stopped, was refused, failed or is not heard from, and that it runs again, from `agent.state_changed`.
-- [ ] Autosave: the desk committed and pushed by the runner at the end of a session.
+- [x] Autosave: the desk committed and pushed by the runner at the end of a session, where it is a repository and `runner.json` leaves it on.
 - [ ] The skill `running-an-agent` and the guide for the three roles, the operator, the agent and the manager, on a Mac first: the OS account on a shared machine, with an administrator's rights for an agent that is to look after itself, and, as a suggestion where agents are to be kept apart, standard accounts with one administrator to ask; the sign-ins without a screen and the browser tool; what a manager does when an agent could not go on; `working-the-board` on a signal's header and on asking as an agent account; the console's own rules saying that instructions are a supervisor's `tell`, the board's tasks and decisions and the rules.
 
 ## Milestone 44, the second lap

@@ -335,6 +335,8 @@ function setup(
     before?: (console: ReturnType<typeof fakeConsole>) => void;
     /** The wake sources the runner keeps beside the console's own. */
     sources?: readonly WakeSource[];
+    /** How git ends for the autosave, by its first words; a desk that is a repository with nothing to save where left out. */
+    git?: (args: readonly string[]) => number | null;
   } = {},
 ) {
   const console = fakeConsole();
@@ -343,7 +345,12 @@ function setup(
   const saved: RunnerState[] = [];
   const files = { written: [] as [string, string][], removed: [] as string[] };
   const log: string[] = [];
+  const gitted: string[] = [];
   const runner = createRunner({
+    git: async (args) => {
+      gitted.push(args.join(" "));
+      return over.git === undefined ? 0 : over.git(args);
+    },
     client: console.client,
     driver: product.driver,
     config: { ...DEFAULT_RUNNER_CONFIG, ...over.config },
@@ -386,7 +393,7 @@ function setup(
   });
   const done = runner.run();
   running.push({ stop: () => runner.stop(), done });
-  return { console, product, saved, files, log, runner, done };
+  return { console, product, saved, files, log, gitted, runner, done };
 }
 
 /** The session started `index`th, once it was. */
@@ -843,6 +850,71 @@ describe("the runner", () => {
       "#2 · wake · schedule: day · 14:02]\nThe day's briefing.",
     );
     expect(second.sent[0]?.text).not.toContain("You were reset");
+  });
+
+  it("saves the desk at the end of a session: committed where something changed, and pushed (ADR-0088)", async () => {
+    // Something changed in the desk: staged, committed in the runner's own words, pushed.
+    const changed = setup({ git: (args) => (args[0] === "diff" ? 1 : 0) });
+    changed.console.signal({ text: "Write it down." });
+    await sessionOf(changed.product);
+    changed.console.signal({ kind: "stop" });
+    await until("the desk to be saved", () => changed.log.includes("the desk was saved"));
+    expect(changed.gitted).toEqual([
+      "rev-parse --is-inside-work-tree",
+      "add --all",
+      "diff --cached --quiet",
+      "commit --quiet --message Autosave at the end of a session",
+      "push --quiet",
+    ]);
+    // Nothing changed: nothing is committed, and what the agent committed itself is pushed.
+    const same = setup();
+    same.console.signal({ text: "Nothing to write." });
+    await sessionOf(same.product);
+    same.console.signal({ kind: "stop" });
+    await until("the push", () => same.gitted.includes("push --quiet"));
+    expect(same.gitted.some((line) => line.startsWith("commit"))).toBe(false);
+  });
+
+  it("saves nothing where the desk is no repository or runner.json says no, and says how git ended where it failed", async () => {
+    const plain = setup({ git: (args) => (args[0] === "rev-parse" ? 128 : 0) });
+    plain.console.signal({ text: "Hello." });
+    await sessionOf(plain.product);
+    plain.console.signal({ kind: "stop" });
+    await until("the session to end", () =>
+      plain.log.some((line) => line.includes("ended: stopped")),
+    );
+    await until("git to be asked", () => plain.gitted.length > 0);
+    expect(plain.gitted).toEqual(["rev-parse --is-inside-work-tree"]);
+
+    const off = setup({ config: { autosave: false } });
+    off.console.signal({ text: "Hello." });
+    await sessionOf(off.product);
+    off.console.signal({ kind: "stop" });
+    await until("the session to end", () =>
+      off.log.some((line) => line.includes("ended: stopped")),
+    );
+    expect(off.gitted).toEqual([]);
+
+    // A push that is refused is said by how git ended, and the runner goes on.
+    const refused = setup({
+      git: (args) => (args[0] === "push" ? 128 : args[0] === "diff" ? 1 : 0),
+    });
+    refused.console.signal({ text: "Hello." });
+    await sessionOf(refused.product);
+    refused.console.signal({ kind: "stop" });
+    await until("the line", () =>
+      refused.log.includes("the desk was committed and not pushed: git push ended in 128"),
+    );
+    const uncommitted = setup({
+      git: (args) => (args[0] === "commit" ? 1 : args[0] === "diff" ? 1 : 0),
+    });
+    uncommitted.console.signal({ text: "Hello." });
+    await sessionOf(uncommitted.product);
+    uncommitted.console.signal({ kind: "stop" });
+    await until("the line", () =>
+      uncommitted.log.includes("the desk was not saved: git commit ended in 1"),
+    );
+    expect(uncommitted.gitted).not.toContain("push --quiet");
   });
 
   it("keeps a wake source listening, and carries what it raises to the agent as someone else's words", async () => {
