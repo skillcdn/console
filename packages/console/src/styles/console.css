@@ -2852,6 +2852,125 @@ select.sc-input {
   margin-bottom: var(--sc-space-4);
 }
 
+/* An agent account's card (ADR-0084): the face, the name with its handle and under them what it
+   does; how it stands at the top right, where every card says it; then whom it reports to and
+   the login it signs in with, as the rows of a person's facts. Where the card leads to the
+   account's page, the name's link is drawn over the whole card, and the card answers the pointer
+   and the focus as a tile of the front page does. */
+.sc-agent-card {
+  gap: var(--sc-space-4);
+}
+
+.sc-agent-card-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sc-space-3);
+  min-width: 0;
+}
+
+.sc-agent-card-head > .sc-avatar {
+  width: 3rem;
+  height: 3rem;
+}
+
+.sc-agent-card .sc-person-card-who {
+  gap: var(--sc-space-1);
+}
+
+.sc-agent-card-handle {
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+  font-weight: var(--sc-weight-normal);
+}
+
+.sc-agent-card-state {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-self: start;
+  gap: var(--sc-space-1);
+}
+
+.sc-agent-card-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.sc-agent-card-link::after {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  content: "";
+}
+
+.sc-agent-card-link:focus-visible {
+  outline: none;
+}
+
+.sc-agent-card-linked {
+  transition:
+    border-color var(--sc-transition),
+    background var(--sc-transition),
+    box-shadow var(--sc-transition);
+}
+
+.sc-agent-card-linked:hover,
+.sc-agent-card-linked:focus-within {
+  border-color: var(--sc-color-accent);
+  background: var(--sc-glass-surface-hover);
+  box-shadow: var(--sc-glass-sheen), var(--sc-glass-lift), var(--sc-glow);
+}
+
+.sc-agent-card-linked:hover .sc-agent-card-link {
+  color: var(--sc-color-accent);
+}
+
+.sc-agent-card-linked:has(.sc-agent-card-link:focus-visible) {
+  outline: var(--sc-focus-ring);
+  outline-offset: 2px;
+}
+
+.sc-agent-card .sc-person-facts {
+  padding-top: var(--sc-space-3);
+}
+
+.sc-agent-card-login {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* What an invited account waits for, at the foot of its card, in the tone of its badge. */
+.sc-agent-card-note {
+  margin: auto 0 0;
+  padding: var(--sc-space-2) var(--sc-space-3);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-warning-subtle);
+  color: var(--sc-color-text);
+  font-size: var(--sc-text-xs);
+  line-height: var(--sc-leading-snug);
+}
+
+/* An agent account's picture on its settings, with the way to save it as a file beside it. */
+.sc-agent-picture {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-space-4);
+  margin-bottom: var(--sc-space-4);
+}
+
+.sc-agent-picture-what {
+  display: grid;
+  justify-items: start;
+  gap: var(--sc-space-1);
+  min-width: 0;
+}
+
+.sc-agent-picture-what > .sc-field-hint {
+  margin: 0;
+}
+
 /* The personas an agent account is proposed (ADR-0084): a row of pictures with a name each, one chosen. */
 .sc-agent-proposals {
   min-width: 0;
@@ -7208,25 +7327,95 @@ a.sc-tile-project:focus-visible {
   }
 }
 
-/* An agent account's page (ADR-0085, ADR-0086): who it is and how it stands, then its views. */
+/* An agent account's page (ADR-0085, ADR-0086): who it is and how it stands, then its views. The
+   face beside the name, the handle beside the name as on its card, what it does under them, and
+   how it stands under that, its times told short. */
 .sc-agent-head {
+  flex-wrap: nowrap;
+  align-items: center;
   justify-content: flex-start;
-  gap: var(--sc-space-4);
+  gap: var(--sc-space-5);
+  margin-bottom: var(--sc-space-4);
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.sc-agent-head > .sc-avatar {
+  flex: none;
+  width: 4.5rem;
+  height: 4.5rem;
 }
 
 .sc-agent-head-who {
+  display: grid;
+  flex: 1 1 auto;
+  gap: var(--sc-space-1);
   min-width: 0;
 }
 
+/* Whom it reports to and what it signs in with, at the right of the head, set off by a hairline:
+   a column of names and a column of values, as a card's facts read. */
+.sc-agent-head-facts {
+  display: grid;
+  flex: none;
+  grid-template-columns: max-content minmax(0, auto);
+  align-self: center;
+  gap: var(--sc-space-2) var(--sc-space-4);
+  margin: 0;
+  padding-inline-start: var(--sc-space-5);
+  border-inline-start: var(--sc-hairline);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-agent-head-fact {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+}
+
+.sc-agent-head-fact dt {
+  color: var(--sc-color-text-muted);
+}
+
+.sc-agent-head-fact dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.sc-agent-head-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sc-space-1) var(--sc-space-2);
+  min-width: 0;
+}
+
+.sc-agent-head-name .sc-page-title {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.sc-agent-head-handle {
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-md);
+}
+
 .sc-agent-head-who .sc-lead {
-  margin-bottom: var(--sc-space-2);
+  margin: 0;
+  color: var(--sc-color-text);
+}
+
+.sc-agent-head-who .sc-agent-state {
+  margin-top: var(--sc-space-1);
 }
 
 .sc-agent-state {
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--sc-space-2);
+  gap: var(--sc-space-1) var(--sc-space-2);
 }
 
 .sc-agent-state-why {
@@ -7234,45 +7423,303 @@ a.sc-tile-project:focus-visible {
   font-size: var(--sc-text-sm);
 }
 
-/* What a supervisor says to the agent: the words, then the pictures and the ways to send them. */
+/* The views under the head, the hairline that closes the head drawn under them, so that who the
+   agent is and the ways into it read as one header. */
+.sc-agent-tabs {
+  margin-bottom: var(--sc-space-5);
+  padding-bottom: var(--sc-space-3);
+  border-bottom: var(--sc-hairline);
+}
+
+/* The head and the views as one card, a profile's: the face ringed and lifted off the glass, the
+   name and how the agent stands beside it, whom it reports to at the right; the views along the
+   card's foot, the one shown underlined in the accent. While the agent runs, the dot of its
+   badge breathes: the one moving thing on the page, still where motion is not wanted. */
+.sc-agent-header {
+  margin-bottom: var(--sc-space-5);
+  padding: var(--sc-space-6) var(--sc-space-6) 0;
+}
+
+.sc-agent-header > .sc-agent-head {
+  margin-bottom: var(--sc-space-5);
+}
+
+.sc-agent-header .sc-agent-head > .sc-avatar {
+  width: 5rem;
+  height: 5rem;
+  border: 0;
+  box-shadow:
+    0 0 0 4px var(--sc-color-sheet),
+    0 0 0 5px var(--sc-color-border),
+    var(--sc-glass-lift);
+}
+
+.sc-agent-header .sc-page-title {
+  font-size: var(--sc-text-2xl);
+}
+
+.sc-agent-header > .sc-agent-tabs {
+  gap: var(--sc-space-2);
+  margin: 0 calc(var(--sc-space-6) * -1);
+  padding: 0 var(--sc-space-5);
+  border-top: var(--sc-hairline);
+  border-bottom: 0;
+}
+
+.sc-agent-header > .sc-agent-tabs .sc-tab {
+  position: relative;
+  padding: var(--sc-space-3) var(--sc-space-2);
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--sc-color-text-muted);
+}
+
+.sc-agent-header > .sc-agent-tabs .sc-tab:hover {
+  background: none;
+  color: var(--sc-color-text);
+}
+
+.sc-agent-header > .sc-agent-tabs .sc-tab-current {
+  background: none;
+  box-shadow: none;
+  color: var(--sc-color-text);
+  font-weight: var(--sc-weight-medium);
+}
+
+.sc-agent-header > .sc-agent-tabs .sc-tab-current::after {
+  position: absolute;
+  inset: auto 0 -1px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--sc-color-accent);
+  content: "";
+}
+
+.sc-agent-header .sc-agent-state > .sc-badge-success::before {
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: var(--sc-radius-full);
+  background: currentColor;
+  content: "";
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sc-agent-header .sc-agent-state > .sc-badge-success::before {
+    animation: sc-agent-breathe 2.4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  }
+}
+
+@keyframes sc-agent-breathe {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 45%, transparent);
+  }
+
+  70%,
+  100% {
+    box-shadow: 0 0 0 0.375rem color-mix(in srgb, currentColor 0%, transparent);
+  }
+}
+
+@media (max-width: 40rem) {
+  .sc-agent-header {
+    padding: var(--sc-space-4) var(--sc-space-4) 0;
+  }
+
+  .sc-agent-header .sc-agent-head > .sc-avatar {
+    width: 3.5rem;
+    height: 3.5rem;
+  }
+
+  .sc-agent-header .sc-page-title {
+    font-size: var(--sc-text-xl);
+  }
+
+  .sc-agent-header > .sc-agent-tabs {
+    margin: 0 calc(var(--sc-space-4) * -1);
+    padding: 0 var(--sc-space-3);
+  }
+}
+
+/* What the agent is doing now: the session as it happens with the box to speak in under it, and
+   beside them, where there is room, the session in a row and what it runs with. The box stays at
+   the foot of the window while the session runs past it. */
+.sc-agent-live {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: var(--sc-space-5);
+}
+
+@media (min-width: 64rem) {
+  .sc-agent-live {
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 20rem);
+  }
+
+  .sc-agent-live-side {
+    position: sticky;
+    top: var(--sc-space-5);
+  }
+}
+
+.sc-agent-live-main {
+  display: grid;
+  gap: var(--sc-space-4);
+  min-width: 0;
+}
+
+.sc-agent-live-main > .sc-signal-composer {
+  position: sticky;
+  bottom: var(--sc-space-4);
+  z-index: 2;
+}
+
+.sc-agent-live-lead {
+  margin: 0;
+  font-size: var(--sc-text-sm);
+}
+
+.sc-agent-live-side {
+  display: grid;
+  gap: var(--sc-space-4);
+  min-width: 0;
+}
+
+.sc-agent-live-side > .sc-panel {
+  margin: 0;
+}
+
+/* What a supervisor says to the agent: the words; the pictures chosen, a chip each; then a row
+   with the pictures and what changes how the agent stands at the left, quiet, and what says
+   something at the right, the tell foremost. */
 .sc-signal-composer {
   display: grid;
   gap: var(--sc-space-3);
-  margin-bottom: var(--sc-space-4);
+  margin: 0;
+  padding: var(--sc-space-4);
 }
 
 .sc-signal-text {
   width: 100%;
+  min-height: 4.5rem;
   resize: vertical;
 }
 
-.sc-signal-row,
+.sc-signal-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2) var(--sc-space-3);
+}
+
+.sc-signal-states,
 .sc-signal-ways {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--sc-space-2);
+  gap: var(--sc-space-1);
 }
 
 .sc-signal-ways {
+  gap: var(--sc-space-2);
   margin-left: auto;
 }
 
 .sc-signal-pictures {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sc-space-2);
-  color: var(--sc-color-text-muted);
-  font-size: var(--sc-text-sm);
+  cursor: pointer;
 }
 
+.sc-signal-pictures:focus-within {
+  outline: var(--sc-focus-ring);
+  outline-offset: 2px;
+}
+
+.sc-signal-rule {
+  width: 1px;
+  height: 1.25rem;
+  margin-inline: var(--sc-space-1);
+  background: var(--sc-color-border);
+}
+
+.sc-signal-chosen {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sc-signal-chosen-one {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sc-space-1);
+  max-width: 100%;
+  padding: 0.125rem var(--sc-space-1) 0.125rem var(--sc-space-3);
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-color-bg-inset);
+  font-size: var(--sc-text-xs);
+}
+
+.sc-signal-chosen-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-signal-chosen-remove {
+  display: inline-grid;
+  place-items: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--sc-radius-full);
+  background: transparent;
+  color: var(--sc-color-text-muted);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.sc-signal-chosen-remove:hover {
+  background: var(--sc-color-border);
+  color: var(--sc-color-text);
+}
+
+.sc-signal-chosen-remove:focus-visible {
+  outline: var(--sc-focus-ring);
+  outline-offset: 1px;
+}
+
+.sc-signal-composer > .sc-field-hint {
+  margin: 0;
+}
+
+.sc-signal-warning {
+  padding: var(--sc-space-2) var(--sc-space-3);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-danger-subtle);
+  color: var(--sc-color-text);
+}
+
+/* The model and the effort an agent runs with: the two side by side, filling the room they have,
+   and what the open session runs with under them. */
 .sc-agent-choice {
   display: flex;
   flex-wrap: wrap;
   align-items: end;
-  gap: var(--sc-space-3) var(--sc-space-4);
-  margin-bottom: var(--sc-space-5);
+  gap: var(--sc-space-3);
+}
+
+.sc-agent-choice-field {
+  flex: 1 1 9rem;
+  min-width: 0;
+}
+
+.sc-agent-choice-field .sc-input {
+  width: 100%;
 }
 
 .sc-agent-choice .sc-field-hint {
@@ -7280,90 +7727,228 @@ a.sc-tile-project:focus-visible {
   margin: 0;
 }
 
-/* A session's transcript: a block for each event, what it is and when above what it says. What an
-   agent's product printed keeps its spaces and its lines, and wraps rather than widen the page. */
+/* A session's transcript, as a log: what each event is and when in a narrow column at the left,
+   what it says at the right. What the agent says reads as prose, a little larger; what it was
+   told sits on the tint of the accent; what its tools were called with and answered reads as
+   code on a sheet of its own; a wake, a permission and an error as notes in their tone; a
+   thought and a status quieter than the rest. What an agent's product printed keeps its spaces
+   and its lines, and wraps rather than widen the page. */
+.sc-agent-transcript {
+  display: grid;
+  gap: var(--sc-space-3);
+  min-width: 0;
+}
+
+.sc-agent-transcript > .sc-button {
+  justify-self: start;
+}
+
+.sc-agent-transcript > .sc-callout,
+.sc-agent-transcript > .sc-field-hint {
+  margin: 0;
+}
+
 .sc-transcript {
   display: grid;
-  gap: var(--sc-space-2);
-  margin: var(--sc-space-3) 0 0;
-  padding: 0;
+  margin: 0;
+  padding: var(--sc-space-2) var(--sc-space-5);
+  border: 1px solid var(--sc-color-glass-edge);
+  border-radius: var(--sc-radius-xl);
+  background: var(--sc-color-bg-raised);
   list-style: none;
 }
 
 .sc-transcript-event {
+  display: grid;
+  grid-template-columns: 6.5rem minmax(0, 1fr);
+  align-items: start;
+  gap: var(--sc-space-1) var(--sc-space-4);
   min-width: 0;
-  padding: var(--sc-space-2) var(--sc-space-3);
-  border: var(--sc-hairline);
-  border-left: 3px solid var(--sc-color-border-strong);
-  border-radius: var(--sc-radius-md);
-  background: var(--sc-color-bg-raised);
+  padding: var(--sc-space-3) 0;
 }
 
-.sc-transcript-person,
-.sc-transcript-wake {
-  border-left-color: var(--sc-color-accent-solid);
-  background: var(--sc-color-accent-subtle);
-}
-
-.sc-transcript-assistant {
-  border-left-color: var(--sc-color-success);
-}
-
-.sc-transcript-error,
-.sc-transcript-permission {
-  border-left-color: var(--sc-color-danger);
-}
-
-.sc-transcript-thinking .sc-transcript-text {
-  color: var(--sc-color-text-muted);
+.sc-transcript-event + .sc-transcript-event {
+  border-top: var(--sc-hairline);
 }
 
 .sc-transcript-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--sc-space-2);
+  display: grid;
+  gap: 0.125rem;
+  padding-top: 0.125rem;
   color: var(--sc-color-text-faint);
   font-size: var(--sc-text-xs);
 }
 
 .sc-transcript-kind {
-  color: var(--sc-color-text);
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sc-space-2);
+  color: var(--sc-color-text-muted);
+  font-weight: var(--sc-weight-medium);
 }
 
-.sc-transcript-facts {
-  min-width: 0;
-  overflow-wrap: anywhere;
+.sc-transcript-kind::before {
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-color-border-strong);
+  content: "";
 }
 
 .sc-transcript-head .sc-time {
-  margin-left: auto;
+  padding-inline-start: calc(0.5rem + var(--sc-space-2));
+  font-feature-settings: var(--sc-numeric);
+}
+
+.sc-transcript-body {
+  display: grid;
+  gap: var(--sc-space-2);
+  min-width: 0;
+}
+
+.sc-transcript-about {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-1) var(--sc-space-2);
+  min-width: 0;
+}
+
+.sc-transcript-tool {
+  padding: 0.0625rem var(--sc-space-2);
+  border-radius: var(--sc-radius-sm);
+  background: var(--sc-color-bg-inset);
+  color: var(--sc-color-text);
+  font-family: var(--sc-font-mono);
+  font-size: var(--sc-text-xs);
+}
+
+.sc-transcript-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-1) var(--sc-space-3);
+  min-width: 0;
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-xs);
+  overflow-wrap: anywhere;
+}
+
+.sc-transcript-fact b {
+  color: var(--sc-color-text-muted);
+  font-weight: var(--sc-weight-medium);
 }
 
 .sc-transcript-text {
   max-height: 28rem;
-  margin: var(--sc-space-1) 0 0;
+  margin: 0;
   overflow: auto;
-  font-family: var(--sc-font-mono);
+  color: var(--sc-color-text);
+  font-family: inherit;
   font-size: var(--sc-text-sm);
-  line-height: var(--sc-leading-code);
+  line-height: 1.65;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
+.sc-transcript-assistant .sc-transcript-text {
+  font-size: var(--sc-text-md);
+}
+
+.sc-transcript-assistant .sc-transcript-kind {
+  color: var(--sc-color-text);
+}
+
+.sc-transcript-assistant .sc-transcript-kind::before {
+  background: var(--sc-color-success);
+}
+
+.sc-transcript-thinking .sc-transcript-text,
+.sc-transcript-status .sc-transcript-text {
+  color: var(--sc-color-text-muted);
+}
+
+.sc-transcript-tool_call .sc-transcript-text,
+.sc-transcript-tool_result .sc-transcript-text {
+  padding: var(--sc-space-2) var(--sc-space-3);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-bg-inset);
+  font-family: var(--sc-font-mono);
+  font-size: var(--sc-text-xs);
+  line-height: var(--sc-leading-code);
+}
+
+.sc-transcript-tool_result .sc-transcript-text {
+  max-height: 14rem;
+  color: var(--sc-color-text-muted);
+}
+
+.sc-transcript-person .sc-transcript-text,
+.sc-transcript-wake .sc-transcript-text,
+.sc-transcript-permission .sc-transcript-text,
+.sc-transcript-error .sc-transcript-text {
+  padding: var(--sc-space-2) var(--sc-space-3);
+  border-radius: var(--sc-radius-md);
+}
+
+.sc-transcript-person .sc-transcript-text {
+  background: var(--sc-color-accent-subtle);
+}
+
+.sc-transcript-person .sc-transcript-kind,
+.sc-transcript-wake .sc-transcript-kind {
+  color: var(--sc-color-accent);
+}
+
+.sc-transcript-person .sc-transcript-kind::before,
+.sc-transcript-wake .sc-transcript-kind::before {
+  background: var(--sc-color-accent);
+}
+
+.sc-transcript-wake .sc-transcript-text {
+  background: var(--sc-color-bg-inset);
+}
+
+.sc-transcript-permission .sc-transcript-text {
+  background: var(--sc-color-warning-subtle);
+}
+
+.sc-transcript-permission .sc-transcript-kind {
+  color: var(--sc-color-warning);
+}
+
+.sc-transcript-permission .sc-transcript-kind::before {
+  background: var(--sc-color-warning);
+}
+
+.sc-transcript-error .sc-transcript-text {
+  background: var(--sc-color-danger-subtle);
+}
+
+.sc-transcript-error .sc-transcript-kind {
+  color: var(--sc-color-danger);
+}
+
+.sc-transcript-error .sc-transcript-kind::before {
+  background: var(--sc-color-danger);
+}
+
 .sc-transcript-cut,
 .sc-transcript-sealed {
-  margin: var(--sc-space-1) 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
+  margin: 0;
   color: var(--sc-color-text-muted);
-  font-size: var(--sc-text-sm);
+  font-size: var(--sc-text-xs);
 }
 
 .sc-transcript-pictures {
   display: flex;
   flex-wrap: wrap;
   gap: var(--sc-space-2);
-  margin: var(--sc-space-2) 0 0;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
@@ -7373,41 +7958,278 @@ a.sc-tile-project:focus-visible {
   max-width: min(100%, 24rem);
   max-height: 16rem;
   border: var(--sc-hairline);
-  border-radius: var(--sc-radius-sm);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-bg-inset);
 }
 
-/* An agent's sessions, a line each; and the short lists of its settings, a line each with what is done to it at the end. */
-.sc-agent-sessions,
-.sc-agent-secret-list {
+/* On a phone the face stays beside the name, smaller, and the box to speak in stays where it is
+   written, at the end of the session, rather than over a third of the screen. */
+@media (max-width: 40rem) {
+  .sc-agent-head {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--sc-space-3);
+  }
+
+  .sc-agent-head {
+    flex-wrap: wrap;
+  }
+
+  .sc-agent-head > .sc-avatar {
+    width: 3.5rem;
+    height: 3.5rem;
+  }
+
+  .sc-agent-head-who {
+    flex-basis: calc(100% - 3.5rem - var(--sc-space-3));
+  }
+
+  .sc-agent-head-facts {
+    flex: 1 1 100%;
+    padding: var(--sc-space-3) 0 0;
+    border-inline-start: 0;
+    border-top: var(--sc-hairline);
+  }
+
+  .sc-agent-live-main > .sc-signal-composer {
+    position: static;
+  }
+
+  .sc-signal-ways {
+    margin-left: 0;
+  }
+}
+
+/* Where the window is narrow, what an event is and when stand on one line above what it says. */
+@media (max-width: 40rem) {
+  .sc-transcript {
+    padding-inline: var(--sc-space-3);
+  }
+
+  .sc-transcript-event {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sc-transcript-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sc-space-2);
+  }
+
+  .sc-transcript-head .sc-time {
+    margin-left: auto;
+    padding: 0;
+  }
+}
+
+/* An agent's sessions, a row each that leads to the session: when, how it ended, what it ran and
+   where, and how many events it holds at the end. The row answers the pointer as a whole. */
+.sc-agent-session-panel {
   display: grid;
   gap: var(--sc-space-2);
+}
+
+.sc-agent-session-panel > .sc-button {
+  justify-self: start;
+}
+
+.sc-agent-sessions {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) auto minmax(0, 2fr) auto;
+  column-gap: var(--sc-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Every row on the columns of the list, so that what each says stands under the same thing above. */
+.sc-agent-session {
+  position: relative;
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+  gap: var(--sc-space-1) var(--sc-space-4);
+  min-width: 0;
+  margin-inline: calc(var(--sc-space-3) * -1);
+  padding: var(--sc-space-3);
+  border-radius: var(--sc-radius-md);
+  transition: background var(--sc-transition);
+}
+
+.sc-agent-session + .sc-agent-session::before {
+  position: absolute;
+  inset: 0 var(--sc-space-3) auto;
+  height: 1px;
+  background: var(--sc-color-border);
+  content: "";
+}
+
+.sc-agent-session:hover,
+.sc-agent-session:focus-within {
+  background: var(--sc-color-bg-inset);
+}
+
+.sc-agent-session-when {
+  min-width: 0;
+  font-size: var(--sc-text-sm);
+  font-weight: var(--sc-weight-medium);
+  font-feature-settings: var(--sc-numeric);
+}
+
+.sc-agent-session-link {
+  color: var(--sc-color-text);
+  text-decoration: none;
+}
+
+.sc-agent-session-link::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  content: "";
+}
+
+.sc-agent-session-link:focus-visible {
+  outline: none;
+}
+
+.sc-agent-session:has(.sc-agent-session-link:focus-visible) {
+  outline: var(--sc-focus-ring);
+  outline-offset: 0;
+}
+
+.sc-agent-session-until {
+  color: var(--sc-color-text-muted);
+  font-weight: var(--sc-weight-normal);
+}
+
+.sc-agent-session-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-1);
+}
+
+.sc-agent-session-facts {
+  min-width: 0;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+  overflow-wrap: anywhere;
+}
+
+.sc-agent-session-count {
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+  font-feature-settings: var(--sc-numeric);
+  white-space: nowrap;
+}
+
+/* In the narrow column beside a session, and where the window is narrow, a session reads as a
+   few lines: when and how it ended, then what it ran. */
+.sc-agent-live-side .sc-agent-sessions {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.sc-agent-live-side .sc-agent-session-facts,
+.sc-agent-live-side .sc-agent-session-count {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 48rem) {
+  .sc-agent-sessions {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .sc-agent-session-facts,
+  .sc-agent-session-count {
+    grid-column: 1 / -1;
+  }
+}
+
+/* The way back from one session to all of them. */
+.sc-agent-crumbs {
+  margin-bottom: var(--sc-space-3);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-agent-crumbs a {
+  color: var(--sc-color-text-muted);
+  text-decoration: none;
+}
+
+.sc-agent-crumbs a::before {
+  content: "‹ ";
+}
+
+.sc-agent-crumbs a:hover {
+  color: var(--sc-color-accent);
+}
+
+.sc-agent-session-panel + .sc-agent-transcript {
+  margin-top: var(--sc-space-4);
+}
+
+/* The short lists of the settings, a row each, a hairline between, what is done to it at the end. */
+.sc-agent-secret-list {
+  display: grid;
   margin: 0 0 var(--sc-space-3);
   padding: 0;
   list-style: none;
 }
 
-.sc-agent-session,
 .sc-agent-secret {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--sc-space-2) var(--sc-space-3);
+  gap: var(--sc-space-1) var(--sc-space-3);
   min-width: 0;
+  padding-block: var(--sc-space-2);
+  font-size: var(--sc-text-sm);
 }
 
-.sc-agent-session-facts {
-  color: var(--sc-color-text-muted);
-  font-size: var(--sc-text-sm);
-  overflow-wrap: anywhere;
+.sc-agent-secret + .sc-agent-secret {
+  border-top: var(--sc-hairline);
+}
+
+.sc-agent-secret > code {
+  padding: 0.0625rem var(--sc-space-2);
+  border-radius: var(--sc-radius-sm);
+  background: var(--sc-color-bg-inset);
+  font-size: var(--sc-text-xs);
+}
+
+.sc-agent-secret > .sc-muted {
+  font-size: var(--sc-text-xs);
 }
 
 .sc-agent-secret > :last-child {
   margin-left: auto;
 }
 
+/* What is kept of the agent: two columns where there is room, each a stack of sections. */
 .sc-agent-settings {
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr));
+  align-items: start;
   gap: var(--sc-space-4);
+}
+
+.sc-agent-settings > .sc-callout {
+  grid-column: 1 / -1;
+}
+
+.sc-agent-settings-column {
+  display: grid;
+  gap: var(--sc-space-4);
+  min-width: 0;
+}
+
+.sc-agent-settings-column > .sc-panel {
+  margin: 0;
+}
+
+.sc-agent-settings .sc-field-hint {
+  margin-bottom: 0;
 }
 
 .sc-agent-secret-form,
@@ -7418,6 +8240,22 @@ a.sc-tile-project:focus-visible {
   gap: var(--sc-space-2) var(--sc-space-3);
 }
 
+.sc-agent-persona .sc-field {
+  flex: 1 1 10rem;
+  min-width: 0;
+  margin: 0;
+}
+
+.sc-agent-persona .sc-input {
+  width: 100%;
+}
+
+.sc-agent-settings .sc-agent-runner-facts {
+  margin-bottom: var(--sc-space-4);
+  padding-top: 0;
+  border-top: 0;
+}
+
 .sc-agents-need-you {
   margin-bottom: var(--sc-space-5);
 }
@@ -7426,10 +8264,6 @@ a.sc-tile-project:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: var(--sc-space-2);
-}
-
-.sc-agent-tabs {
-  margin-bottom: var(--sc-space-4);
 }
 
 .sc-agent-settings-sub {
@@ -7444,9 +8278,14 @@ a.sc-tile-project:focus-visible {
   gap: var(--sc-space-2);
 }
 
+/* A secret seeded in one row: its name, its value and the way to seed it. */
+.sc-agent-secret-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+}
+
 .sc-agent-secret-form .sc-input {
-  flex: 1 1 12rem;
-  width: auto;
+  width: 100%;
 }
 
 /* The invitation under an agent account, and the guide its code opens (ADR-0088). */

@@ -31,7 +31,7 @@ import {
   SignalComposer,
   TranscriptView,
 } from "./agent-page.js";
-import { AgentAccountForm, AgentAccountList, suggestLogin } from "./agents.js";
+import { AgentAccountForm, AgentAccountList, AgentPictureSave, suggestLogin } from "./agents.js";
 import { Board, BoardFilters, byDue, columnStateOf, edgeScrollOf, filterTasks } from "./board.js";
 import {
   Calendar,
@@ -1567,19 +1567,22 @@ describe("the agent accounts (ADR-0084)", () => {
     invited: true,
   };
 
-  it("lists each with who it is, the login it signs in with and whom it reports to, and offers its picture to its supervisors", () => {
+  it("lists each with who it is, how it stands, whom it reports to and the login it signs in with", () => {
     const seen = renderToStaticMarkup(
       <AgentAccountList agents={[{ person: mira, manager: alice, supervised: false }]} />,
     );
     expect(seen).toContain("Mira");
     expect(seen).toContain('<span class="sc-person-card-title">Release engineer</span>');
-    expect(seen).toContain("@mira · signs in as mira@acme.example");
+    expect(seen).toContain('<span class="sc-agent-card-handle">@mira</span>');
+    expect(seen).toContain(
+      '<dt>Signs in as</dt><dd><span class="sc-agent-card-login">mira@acme.example</span>',
+    );
     expect(seen).toContain(">Invited<");
     expect(seen).toContain("Nobody has signed in with it yet.");
     expect(seen).toMatch(/<dt>Manager<\/dt><dd><span class="sc-person"[^>]*>.*?Alice Example/);
     expect(seen).toContain('<svg class="sc-avatar sc-avatar-lg"');
-    // Whoever reads it without supervising it keeps nothing of it, its picture included.
-    expect(seen).not.toContain("Save its picture");
+    // Its picture is saved on its own page, not from the list (ADR-0084).
+    expect(seen).not.toContain("profile picture");
     const supervised = renderToStaticMarkup(
       <AgentAccountList
         agents={[
@@ -1592,12 +1595,21 @@ describe("the agent accounts (ADR-0084)", () => {
         ]}
       />,
     );
-    expect(supervised.match(/>Save its picture</g)).toHaveLength(2);
     expect(supervised).toContain("Not shown to you");
     expect(supervised).toContain(">Deactivated<");
     expect(supervised.match(/>Invited</g)).toHaveLength(1);
     expect(renderToStaticMarkup(<AgentAccountList agents={[]} empty={<p>none</p>} />)).toBe(
       "<p>none</p>",
+    );
+  });
+
+  it("offers an account's picture as a file, with its face and what the file is for", () => {
+    const seen = renderToStaticMarkup(<AgentPictureSave person={mira} />);
+    expect(seen).toContain('<svg class="sc-avatar sc-avatar-lg"');
+    expect(seen).toContain(">Download its profile picture (PNG)<");
+    expect(seen).toContain("A PNG of 1024 pixels a side");
+    expect(renderToStaticMarkup(<AgentPictureSave person={{ ...mira, avatarParts: null }} />)).toBe(
+      "",
     );
   });
 
@@ -1763,6 +1775,8 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     expect(renderToStaticMarkup(<AgentStateBadge state={undefined} full />)).toContain(
       "No runner has been heard from yet",
     );
+    // Where there is room, it says so in a badge, as an account that stands somehow does.
+    expect(renderToStaticMarkup(<AgentStateBadge state={null} full />)).toContain(">Not set up<");
     const brief = renderToStaticMarkup(<AgentStateBadge state={standing("running", "started")} />);
     expect(brief).toContain("sc-badge-success");
     expect(brief).toContain(">Running<");
@@ -1798,7 +1812,8 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
         href={(agent) => `/agents/${agent.person.handle}`}
       />,
     );
-    expect(seen).toContain('<a href="/agents/mira">Mira</a>');
+    expect(seen).toContain('<a class="sc-agent-card-link" href="/agents/mira">Mira</a>');
+    expect(seen).toContain("sc-agent-card-linked");
     expect(seen).toContain(">Stopped<");
   });
 
@@ -1832,8 +1847,19 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
       />,
     );
     expect(seen).toContain('<span class="sc-transcript-kind">Told</span>');
-    expect(seen).toContain("signal: 3 · by: alice");
+    // What the runner said of an event reads as its facts, a name and a value each.
+    expect(seen).toContain('<span class="sc-transcript-fact">signal <b>3</b></span>');
+    expect(seen).toContain('<span class="sc-transcript-fact">by <b>alice</b></span>');
     expect(seen).not.toContain("key:");
+    // The tool a call names is said apart, as code, and not again among the facts.
+    const call = renderToStaticMarkup(
+      <TranscriptView
+        events={[event(6, { kind: "tool_call", text: "ls", data: { tool: "Bash" } })]}
+        fileHref={(id) => id}
+      />,
+    );
+    expect(call).toContain('<code class="sc-transcript-tool">Bash</code>');
+    expect(call).not.toContain("sc-transcript-fact");
     // Whatever the product printed is text in a block that keeps its lines.
     expect(seen).toContain(
       '<pre class="sc-transcript-text">&lt;script&gt;alert(1)&lt;/script&gt;\n  [x](javascript:alert(1))</pre>',
@@ -1912,10 +1938,13 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     expect(seen).toContain(">open<");
     expect(seen).toContain(">taken over<");
     expect(seen).toContain(">put away<");
-    expect(seen).toContain("12 events · Claude Code 2.1.0 · opus · mac-mini");
-    expect(seen).toContain(
-      "1 event · Claude Code 2.1.0 · opus · goes on with the conversation before",
-    );
+    expect(seen).toContain("Claude Code 2.1.0 · opus · mac-mini");
+    expect(seen).toContain('<span class="sc-agent-session-count">12 events</span>');
+    expect(seen).toContain("Claude Code 2.1.0 · opus · goes on with the conversation before");
+    expect(seen).toContain('<span class="sc-agent-session-count">1 event</span>');
+    // A session that ended says until when, and the open one leads the list in its own tone.
+    expect(seen).toContain('class="sc-agent-session-until"');
+    expect(seen).toContain('class="sc-agent-session sc-agent-session-open"');
     const facts = renderToStaticMarkup(<AgentRunnerFacts runner={runner} />);
     expect(facts).toContain("<dt>Machine</dt><dd>mac-mini · Darwin 24.1.0</dd>");
     expect(facts).toContain("<dt>OS account</dt><dd>mira</dd>");

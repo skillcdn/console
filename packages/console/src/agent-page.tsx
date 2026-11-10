@@ -32,6 +32,7 @@ import {
   SignalComposer,
   TranscriptView,
 } from "./components/agent-page.js";
+import { AgentPictureSave } from "./components/agents.js";
 import { AgentInvitationPanel } from "./components/setup.js";
 import {
   Avatar,
@@ -40,6 +41,7 @@ import {
   cx,
   EmptyState,
   LinkButton,
+  PersonChip,
   personName,
   Spinner,
   Time,
@@ -234,62 +236,83 @@ function AgentLive(props: {
   );
   const sessions = useRead(read, REFRESH_MS);
   const session = sessions.value?.items[0];
+  const composer = (
+    <SignalComposer
+      state={agent.state?.state}
+      busy={busy}
+      note={note}
+      onSend={(kind, text, pictures) =>
+        void act(async () => {
+          const sent = await client.sendSignal(
+            handle,
+            { kind, ...(text.length === 0 ? {} : { text }) },
+            pictures,
+          );
+          setNote(words.tell.sent(sent.number, sent.kind));
+          onChanged();
+          sessions.again();
+        })
+      }
+    />
+  );
   return (
-    <>
-      {error !== undefined && <Callout tone="danger">{error}</Callout>}
-      <SignalComposer
-        state={agent.state?.state}
-        busy={busy}
-        note={note}
-        onSend={(kind, text, pictures) =>
-          void act(async () => {
-            const sent = await client.sendSignal(
-              handle,
-              { kind, ...(text.length === 0 ? {} : { text }) },
-              pictures,
-            );
-            setNote(words.tell.sent(sent.number, sent.kind));
-            onChanged();
-            sessions.again();
-          })
-        }
-      />
-      <AgentChoice
-        runner={agent.runner}
-        busy={busy}
-        onSet={(choice) =>
-          void act(async () => {
-            const sent = await client.sendSignal(handle, { kind: "set", set: choice });
-            setNote(words.tell.sent(sent.number, sent.kind));
-            onChanged();
-          })
-        }
-      />
-      {sessions.value === undefined ? (
-        sessions.failed === undefined ? (
-          <div className="sc-loading">
-            <Spinner label={words.loading} />
-          </div>
+    <div className="sc-agent-live">
+      <div className="sc-agent-live-main">
+        {error !== undefined && <Callout tone="danger">{error}</Callout>}
+        {sessions.value === undefined ? (
+          sessions.failed === undefined ? (
+            <div className="sc-loading">
+              <Spinner label={words.loading} />
+            </div>
+          ) : (
+            <Callout tone="danger">{words.live.couldNotLoad}</Callout>
+          )
+        ) : session === undefined ? (
+          <EmptyState title={words.live.noSession.title} body={words.live.noSession.body} />
         ) : (
-          <Callout tone="danger">{words.live.couldNotLoad}</Callout>
-        )
-      ) : session === undefined ? (
-        <EmptyState title={words.live.noSession.title} body={words.live.noSession.body} />
-      ) : (
-        <>
-          <p className="sc-lead">{session.ended === null ? words.live.open : words.live.last}</p>
-          <SessionTranscript
-            client={client}
-            handle={handle}
-            session={session}
-            onEnded={() => {
-              sessions.again();
-              onChanged();
-            }}
+          <>
+            <p className="sc-lead sc-agent-live-lead">
+              {session.ended === null ? words.live.open : words.live.last}
+            </p>
+            <SessionTranscript
+              client={client}
+              handle={handle}
+              session={session}
+              onEnded={() => {
+                sessions.again();
+                onChanged();
+              }}
+            />
+          </>
+        )}
+        {composer}
+      </div>
+      <aside className="sc-agent-live-side">
+        {session !== undefined && (
+          <section className="sc-panel" aria-label={words.live.now}>
+            <h2 className="sc-section-title">{words.live.now}</h2>
+            <AgentSessionList
+              sessions={[session]}
+              href={(one) => agentHref(handle, "sessions", one.id)}
+            />
+          </section>
+        )}
+        <section className="sc-panel" aria-label={words.choice.title}>
+          <h2 className="sc-section-title">{words.choice.title}</h2>
+          <AgentChoice
+            runner={agent.runner}
+            busy={busy}
+            onSet={(choice) =>
+              void act(async () => {
+                const sent = await client.sendSignal(handle, { kind: "set", set: choice });
+                setNote(words.tell.sent(sent.number, sent.kind));
+                onChanged();
+              })
+            }
           />
-        </>
-      )}
-    </>
+        </section>
+      </aside>
+    </div>
   );
 }
 
@@ -323,13 +346,15 @@ function AgentSessions(props: {
   if (found.value.one !== undefined) {
     return (
       <>
-        <div className="sc-section-head">
+        <nav className="sc-agent-crumbs" aria-label={words.sessions.title}>
+          <a href={agentHref(handle, "sessions")}>{words.sessions.back}</a>
+        </nav>
+        <section className="sc-panel sc-agent-session-panel" aria-label={words.sessions.title}>
           <AgentSessionList
             sessions={[found.value.one]}
             href={() => agentHref(handle, "sessions", session)}
           />
-          <LinkButton href={agentHref(handle, "sessions")}>{words.sessions.back}</LinkButton>
-        </div>
+        </section>
         <SessionTranscript
           client={client}
           handle={handle}
@@ -354,15 +379,17 @@ function AgentSessions(props: {
   };
   return (
     <>
-      <AgentSessionList
-        sessions={all}
-        href={(one) => agentHref(handle, "sessions", one.id)}
-        empty={<EmptyState title={words.sessions.empty.title} body={words.sessions.empty.body} />}
-      />
-      {hasMore && (
-        <Button variant="ghost" onClick={earlier}>
-          {words.sessions.more}
-        </Button>
+      {all.length === 0 ? (
+        <EmptyState title={words.sessions.empty.title} body={words.sessions.empty.body} />
+      ) : (
+        <section className="sc-panel sc-agent-session-panel" aria-label={words.sessions.title}>
+          <AgentSessionList sessions={all} href={(one) => agentHref(handle, "sessions", one.id)} />
+          {hasMore && (
+            <Button variant="ghost" size="sm" onClick={earlier}>
+              {words.sessions.more}
+            </Button>
+          )}
+        </section>
       )}
     </>
   );
@@ -439,159 +466,165 @@ function AgentSettings(props: {
   };
   const unchanged =
     name.trim() === (agent.person.name ?? "") && role.trim() === (agent.person.title ?? "");
+  // Two columns where there is room: who the agent is, when it works and where it is signed in at
+  // the left, how it runs and what it holds at the right; one column, in that order, where not.
   return (
     <div className="sc-agent-settings">
       {error !== undefined && <Callout tone="danger">{error}</Callout>}
-      <section className="sc-panel" aria-label={page.settings.runner.title}>
-        <h2 className="sc-section-title">{page.settings.runner.title}</h2>
-        <AgentRunnerFacts runner={agent.runner} />
-        <h3 className="sc-field-label sc-agent-settings-sub">{page.choice.title}</h3>
-        <AgentChoice
-          runner={agent.runner}
-          busy={busy}
-          onSet={(choice) =>
-            void act(async () => {
-              await client.sendSignal(handle, { kind: "set", set: choice });
-              onChanged();
-            })
-          }
-        />
-      </section>
-      <section className="sc-panel" aria-label={page.settings.machine.title}>
-        <h2 className="sc-section-title">{page.settings.machine.title}</h2>
-        <AgentInvitationPanel
-          invitation={invitation.failed === undefined ? invitation.value?.invitation : null}
-          made={made}
-          first={first}
-          guideHref={setupHref}
-          busy={busy}
-          onInvite={() =>
-            void act(async () => {
-              setMade(await client.inviteAgent(handle));
-              invitation.again();
-            })
-          }
-          onRevoke={() =>
-            void act(async () => {
-              await client.revokeAgentInvitation(handle);
-              setMade(undefined);
-              invitation.again();
-            })
-          }
-        />
-      </section>
-      <section className="sc-panel" aria-label={page.settings.signIns.title}>
-        <h2 className="sc-section-title">{page.settings.signIns.title}</h2>
-        {viaToken || signIns.failed !== undefined ? (
-          <p className="sc-field-hint">{page.settings.signIns.couldNotLoad}</p>
-        ) : where.length === 0 ? (
-          <p className="sc-field-hint">{page.settings.signIns.empty}</p>
-        ) : (
-          <ul className="sc-agent-secret-list">
-            {where.map((one) => (
-              <li key={one.id} className="sc-agent-secret">
-                <span>
-                  {one.kind === "command"
-                    ? words.sessions.command(one.name ?? "")
-                    : one.browser !== null && one.platform !== null
-                      ? words.sessions.on(one.browser, one.platform)
-                      : (one.browser ?? one.platform ?? words.sessions.unknownBrowser)}
-                </span>
-                <span className="sc-muted">
-                  <Time iso={one.lastSeenAt} />
-                </span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() =>
-                    void act(async () => {
-                      await client.endAgentSignIn(handle, one.id);
-                      signIns.again();
-                    })
-                  }
-                >
-                  {words.sessions.end}
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-      <section className="sc-panel" aria-label={page.settings.secrets.title}>
-        <h2 className="sc-section-title">{page.settings.secrets.title}</h2>
-        <AgentSecretList
-          secrets={kept}
-          busy={busy}
-          onSeed={(secret, value) =>
-            void act(async () => {
-              await client.seedAgentSecret(handle, secret, { value });
-              secrets.again();
-            })
-          }
-          onRemove={(secret) =>
-            void act(async () => {
-              await client.removeAgentSecret(handle, secret);
-              secrets.again();
-            })
-          }
-        />
-      </section>
-      <section className="sc-panel" aria-label={page.settings.hours.title}>
-        <h2 className="sc-section-title">{page.settings.hours.title}</h2>
-        <form className="sc-agent-persona" onSubmit={saveHours}>
-          <label className="sc-field">
-            <span className="sc-field-label">{page.settings.hours.start}</span>
-            <input
-              className="sc-input"
-              type="time"
-              value={dayStart}
-              onChange={(event) => setDayStart(event.target.value)}
-            />
-          </label>
-          <label className="sc-field">
-            <span className="sc-field-label">{page.settings.hours.end}</span>
-            <input
-              className="sc-input"
-              type="time"
-              value={dayEnd}
-              onChange={(event) => setDayEnd(event.target.value)}
-            />
-          </label>
-          <Button type="submit" disabled={busy || hoursUnchanged}>
-            {page.settings.hours.save}
-          </Button>
-        </form>
-        <p className="sc-field-hint">{page.settings.hours.intro}</p>
-      </section>
-      <section className="sc-panel" aria-label={page.settings.elsewhere.title}>
-        <h2 className="sc-section-title">{page.settings.elsewhere.title}</h2>
-        <AgentElsewhereList accounts={agent.accounts} />
-      </section>
-      <section className="sc-panel" aria-label={page.settings.persona.title}>
-        <h2 className="sc-section-title">{page.settings.persona.title}</h2>
-        <form className="sc-agent-persona" onSubmit={savePersona}>
-          <label className="sc-field">
-            <span className="sc-field-label">{page.settings.persona.name}</span>
-            <input
-              className="sc-input"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-            />
-          </label>
-          <label className="sc-field">
-            <span className="sc-field-label">{page.settings.persona.role}</span>
-            <input
-              className="sc-input"
-              value={role}
-              onChange={(event) => setRole(event.target.value)}
-            />
-          </label>
-          <Button type="submit" disabled={busy || unchanged || name.trim().length === 0}>
-            {page.settings.persona.save}
-          </Button>
-        </form>
-      </section>
+      <div className="sc-agent-settings-column">
+        <section className="sc-panel" aria-label={page.settings.persona.title}>
+          <h2 className="sc-section-title">{page.settings.persona.title}</h2>
+          <AgentPictureSave person={agent.person} busy={busy} />
+          <form className="sc-agent-persona" onSubmit={savePersona}>
+            <label className="sc-field">
+              <span className="sc-field-label">{page.settings.persona.name}</span>
+              <input
+                className="sc-input"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+              />
+            </label>
+            <label className="sc-field">
+              <span className="sc-field-label">{page.settings.persona.role}</span>
+              <input
+                className="sc-input"
+                value={role}
+                onChange={(event) => setRole(event.target.value)}
+              />
+            </label>
+            <Button type="submit" disabled={busy || unchanged || name.trim().length === 0}>
+              {page.settings.persona.save}
+            </Button>
+          </form>
+        </section>
+        <section className="sc-panel" aria-label={page.settings.hours.title}>
+          <h2 className="sc-section-title">{page.settings.hours.title}</h2>
+          <form className="sc-agent-persona" onSubmit={saveHours}>
+            <label className="sc-field">
+              <span className="sc-field-label">{page.settings.hours.start}</span>
+              <input
+                className="sc-input"
+                type="time"
+                value={dayStart}
+                onChange={(event) => setDayStart(event.target.value)}
+              />
+            </label>
+            <label className="sc-field">
+              <span className="sc-field-label">{page.settings.hours.end}</span>
+              <input
+                className="sc-input"
+                type="time"
+                value={dayEnd}
+                onChange={(event) => setDayEnd(event.target.value)}
+              />
+            </label>
+            <Button type="submit" disabled={busy || hoursUnchanged}>
+              {page.settings.hours.save}
+            </Button>
+          </form>
+          <p className="sc-field-hint">{page.settings.hours.intro}</p>
+        </section>
+        <section className="sc-panel" aria-label={page.settings.elsewhere.title}>
+          <h2 className="sc-section-title">{page.settings.elsewhere.title}</h2>
+          <AgentElsewhereList accounts={agent.accounts} />
+        </section>
+        <section className="sc-panel" aria-label={page.settings.signIns.title}>
+          <h2 className="sc-section-title">{page.settings.signIns.title}</h2>
+          {viaToken || signIns.failed !== undefined ? (
+            <p className="sc-field-hint">{page.settings.signIns.couldNotLoad}</p>
+          ) : where.length === 0 ? (
+            <p className="sc-field-hint">{page.settings.signIns.empty}</p>
+          ) : (
+            <ul className="sc-agent-secret-list">
+              {where.map((one) => (
+                <li key={one.id} className="sc-agent-secret">
+                  <span>
+                    {one.kind === "command"
+                      ? words.sessions.command(one.name ?? "")
+                      : one.browser !== null && one.platform !== null
+                        ? words.sessions.on(one.browser, one.platform)
+                        : (one.browser ?? one.platform ?? words.sessions.unknownBrowser)}
+                  </span>
+                  <span className="sc-muted">
+                    <Time iso={one.lastSeenAt} />
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() =>
+                      void act(async () => {
+                        await client.endAgentSignIn(handle, one.id);
+                        signIns.again();
+                      })
+                    }
+                  >
+                    {words.sessions.end}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+      <div className="sc-agent-settings-column">
+        <section className="sc-panel" aria-label={page.settings.runner.title}>
+          <h2 className="sc-section-title">{page.settings.runner.title}</h2>
+          <AgentRunnerFacts runner={agent.runner} />
+          <AgentChoice
+            runner={agent.runner}
+            busy={busy}
+            onSet={(choice) =>
+              void act(async () => {
+                await client.sendSignal(handle, { kind: "set", set: choice });
+                onChanged();
+              })
+            }
+          />
+        </section>
+        <section className="sc-panel" aria-label={page.settings.machine.title}>
+          <h2 className="sc-section-title">{page.settings.machine.title}</h2>
+          <AgentInvitationPanel
+            invitation={invitation.failed === undefined ? invitation.value?.invitation : null}
+            made={made}
+            first={first}
+            guideHref={setupHref}
+            busy={busy}
+            onInvite={() =>
+              void act(async () => {
+                setMade(await client.inviteAgent(handle));
+                invitation.again();
+              })
+            }
+            onRevoke={() =>
+              void act(async () => {
+                await client.revokeAgentInvitation(handle);
+                setMade(undefined);
+                invitation.again();
+              })
+            }
+          />
+        </section>
+        <section className="sc-panel" aria-label={page.settings.secrets.title}>
+          <h2 className="sc-section-title">{page.settings.secrets.title}</h2>
+          <AgentSecretList
+            secrets={kept}
+            busy={busy}
+            onSeed={(secret, value) =>
+              void act(async () => {
+                await client.seedAgentSecret(handle, secret, { value });
+                secrets.again();
+              })
+            }
+            onRemove={(secret) =>
+              void act(async () => {
+                await client.removeAgentSecret(handle, secret);
+                secrets.again();
+              })
+            }
+          />
+        </section>
+      </div>
     </div>
   );
 }
@@ -637,29 +670,47 @@ export function AgentPage(props: AgentPageProps) {
   const labels: Readonly<Record<AgentTab, string>> = words.tabs;
   return (
     <>
-      <div className="sc-page-head sc-agent-head">
-        <Avatar person={person} size="lg" />
-        <div className="sc-agent-head-who">
-          <h1 className="sc-page-title">{personName(person)}</h1>
-          <p className="sc-lead">
-            @{person.handle}
-            {(person.title ?? "") !== "" && ` · ${person.title}`}
-          </p>
-          <AgentStateBadge state={agent.state} full />
+      <header className="sc-panel sc-agent-header">
+        <div className="sc-page-head sc-agent-head">
+          <Avatar person={person} size="lg" />
+          <div className="sc-agent-head-who">
+            <div className="sc-agent-head-name">
+              <h1 className="sc-page-title">{personName(person)}</h1>
+              <span className="sc-agent-head-handle">@{person.handle}</span>
+            </div>
+            {(person.title ?? "") !== "" && <p className="sc-lead">{person.title}</p>}
+            <AgentStateBadge state={agent.state} full />
+          </div>
+          <dl className="sc-agent-head-facts">
+            <div className="sc-agent-head-fact">
+              <dt>{all.people.manager}</dt>
+              <dd>
+                {agent.manager === null ? (
+                  <span className="sc-muted">{all.agents.accounts.managerUnseen}</span>
+                ) : (
+                  <PersonChip person={agent.manager} />
+                )}
+              </dd>
+            </div>
+            <div className="sc-agent-head-fact">
+              <dt>{all.agents.accounts.login}</dt>
+              <dd>{person.login}</dd>
+            </div>
+          </dl>
         </div>
-      </div>
-      <nav className="sc-subtabs sc-agent-tabs" aria-label={words.tabs.aria}>
-        {TABS.map((one) => (
-          <a
-            key={one}
-            className={cx("sc-tab", one === tab && "sc-tab-current")}
-            href={agentHref(handle, one)}
-            aria-current={one === tab ? "page" : undefined}
-          >
-            {labels[one]}
-          </a>
-        ))}
-      </nav>
+        <nav className="sc-subtabs sc-agent-tabs" aria-label={words.tabs.aria}>
+          {TABS.map((one) => (
+            <a
+              key={one}
+              className={cx("sc-tab", one === tab && "sc-tab-current")}
+              href={agentHref(handle, one)}
+              aria-current={one === tab ? "page" : undefined}
+            >
+              {labels[one]}
+            </a>
+          ))}
+        </nav>
+      </header>
       {tab === "work" ? (
         props.work(agent)
       ) : !agent.supervised ? (

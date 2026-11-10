@@ -1587,6 +1587,7 @@ export const en = {
       },
       state: {
         none: "No runner has been heard from yet",
+        unset: "Not set up",
         running: "Running",
         stopped: "Stopped",
         refused: "Refused",
@@ -1620,6 +1621,8 @@ export const en = {
         away: "The events of this session are put away with their month.",
         couldNotLoad: "The session could not be read.",
         earlier: "Earlier events",
+        now: "This session",
+        controls: "Running it",
         whole: "Read it whole",
         cutAt: (size: string) => `The beginning of ${size}.`,
         sealed: (who: string, why: string) => `Sealed by ${who}: ${why}`,
@@ -1638,7 +1641,8 @@ export const en = {
       tell: {
         aria: "Say something to the agent",
         placeholder: "Say something to the agent",
-        pictures: "Pictures",
+        pictures: "Attach pictures",
+        removePicture: (name: string) => `Remove ${name}`,
         send: "Tell",
         tellHint: "Read by the agent after the tool call under way.",
         interrupt: "Interrupt",
@@ -1777,10 +1781,11 @@ export const en = {
       },
       invited: "Invited",
       invitedHint: "Nobody has signed in with it yet. Work can be assigned to it already.",
-      signsInAs: (login: string) => `signs in as ${login}`,
+      login: "Signs in as",
       managerUnseen: "Not shown to you",
-      savePicture: "Save its picture",
-      savePictureHint: "A PNG of 1024 pixels, for its profile elsewhere.",
+      savePicture: "Download its profile picture (PNG)",
+      savePictureHint:
+        "A PNG of 1024 pixels a side, for its profile at the messenger or the identity provider.",
       loadingProposals: "Rolling a few personas",
       form: {
         aria: "Add an agent account",

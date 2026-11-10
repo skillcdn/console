@@ -554,11 +554,34 @@ export function formatBytes(size: number): string {
 
 export function Time(props: {
   readonly iso: string;
-  /** `day` shows the day alone, with the moment as the title, where a row has no room for the hour. */
-  readonly precision?: "minute" | "day";
+  /**
+   * `day` shows the day alone, with the moment as the title, where a row has no room for the hour;
+   * `clock` the hour alone for a moment of today and the day with the hour for another, with the
+   * whole moment as the title, where moments follow one another down a log.
+   */
+  readonly precision?: "minute" | "day" | "clock";
+  /** For `clock`: the moment whose day the hour alone is read against; now, where none is given. */
+  readonly against?: string | undefined;
 }) {
   const { tag } = useLanguage();
   const full = formatInstant(props.iso, tag);
+  if (props.precision === "clock") {
+    const date = new Date(props.iso);
+    if (Number.isNaN(date.getTime())) {
+      return <time className="sc-time">{props.iso}</time>;
+    }
+    const shown = date.toLocaleString(
+      tag,
+      dayOf(date) === dayOf(props.against === undefined ? new Date() : new Date(props.against))
+        ? { hour: "2-digit", minute: "2-digit" }
+        : { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" },
+    );
+    return (
+      <time className="sc-time" dateTime={props.iso} title={full}>
+        {shown}
+      </time>
+    );
+  }
   if (props.precision === "day") {
     const date = new Date(props.iso);
     return (

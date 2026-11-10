@@ -2397,6 +2397,8 @@ function PlatePage(props: {
   /** The name the plate was asked for under as the console opened (`askEarly`), where it was; taken once. */
   readonly early?: string | undefined;
   readonly title: string;
+  /** Where the plate is a view of a page with a head of its own, an agent account's: no second head. */
+  readonly headless?: boolean | undefined;
   /** A line under the title: what the member whose plate it is does (ADR-0084), where a title says. */
   readonly lead?: string | undefined;
   /** What stands beside the title: the way back, on another person's plate. */
@@ -2449,11 +2451,13 @@ function PlatePage(props: {
   }, [load, couldNotLoad, refused, remember, early]);
   return (
     <>
-      <div className="sc-page-head">
-        <h1 className="sc-page-title">{props.title}</h1>
-        {props.lead !== undefined && <p className="sc-page-lead">{props.lead}</p>}
-        {props.aside}
-      </div>
+      {props.headless !== true && (
+        <div className="sc-page-head">
+          <h1 className="sc-page-title">{props.title}</h1>
+          {props.lead !== undefined && <p className="sc-page-lead">{props.lead}</p>}
+          {props.aside}
+        </div>
+      )}
       {problem !== undefined && <Callout tone="danger">{problem}</Callout>}
       {forbidden && refused !== undefined ? (
         <EmptyState
@@ -2772,6 +2776,7 @@ function AgentWork(props: {
       load={load}
       remember={`work:${data.me?.person?.id ?? ""}:${id}`}
       title={words.people.workOf(name)}
+      headless
       week={props.week}
       weekStart={weekStartOf(data.me?.workspace)}
       weekHref={(day) => agentWorkHref(handle, day)}

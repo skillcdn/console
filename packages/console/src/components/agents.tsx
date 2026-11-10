@@ -75,57 +75,64 @@ function saveBlob(blob: Blob, name: string): void {
 
 export interface AgentAccountListProps {
   readonly agents: readonly RestAgent[];
+  /** Whether something is being done; the default list offers nothing to do, and reads it not. */
   readonly busy?: boolean | undefined;
   /** Shown where there is no agent account to list. */
   readonly empty?: React.ReactNode;
-  /** Where an account's own page is; left out, its name is not a link. */
+  /** Where an account's own page is; given, the whole card leads there, and left out, nothing does. */
   readonly href?: ((agent: RestAgent) => string) | undefined;
 }
 
-/** The workspace's agent accounts: who each is, the login it signs in with, and whom it reports to. */
+/**
+ * The workspace's agent accounts, a card each: the face, the name with the handle and what it
+ * does, how it stands across from them; then whom it reports to and the login it signs in with,
+ * as rows of one shape, so that the cards read alike down a column. The whole card leads to the
+ * account's page; its picture is saved there (ADR-0084), not here.
+ */
 export function AgentAccountList(props: AgentAccountListProps) {
   const words = useWords();
   const accounts = words.agents.accounts;
-  const sets = useContext(AvatarSetsContext);
-  const [saving, setSaving] = useState<string | undefined>(undefined);
   if (props.agents.length === 0) {
     return <>{props.empty ?? null}</>;
   }
-  const save = (agent: RestAgent) => {
-    const parts = agent.person.avatarParts;
-    if (parts === null || parts === undefined) {
-      return;
-    }
-    setSaving(agent.person.id);
-    void avatarPngBlob(parts, MAX_AVATAR_PIXELS, sets)
-      .then((blob) => saveBlob(blob, `${agent.person.handle ?? "avatar"}.png`))
-      .catch(() => undefined)
-      .finally(() => setSaving(undefined));
-  };
   return (
     <ul className="sc-people sc-agent-accounts" aria-label={accounts.list}>
       {props.agents.map((agent) => {
         const { person, manager } = agent;
         const name = personName(person);
         const out = person.status !== "active";
+        const invited = person.invited === true;
+        const title = person.title ?? "";
         return (
-          <li key={person.id} className={cx("sc-person-card", out && "sc-person-card-out")}>
-            <div className="sc-person-card-head">
+          <li
+            key={person.id}
+            className={cx(
+              "sc-person-card",
+              "sc-agent-card",
+              props.href !== undefined && "sc-agent-card-linked",
+              out && "sc-person-card-out",
+            )}
+          >
+            <div className="sc-agent-card-head">
               <Avatar person={person} size="lg" />
               <div className="sc-person-card-who">
                 <span className="sc-person-card-name">
-                  {props.href === undefined ? name : <a href={props.href(agent)}>{name}</a>}
-                  <AgentStateBadge state={agent.state} />
-                  {person.invited === true && <Badge tone="warning">{accounts.invited}</Badge>}
-                  {out && <Badge>{words.people.deactivated}</Badge>}
+                  {props.href === undefined ? (
+                    name
+                  ) : (
+                    <a className="sc-agent-card-link" href={props.href(agent)}>
+                      {name}
+                    </a>
+                  )}
+                  <span className="sc-agent-card-handle">@{person.handle}</span>
                 </span>
-                {(person.title ?? "") !== "" && (
-                  <span className="sc-person-card-title">{person.title}</span>
-                )}
-                <span className="sc-person-card-note">
-                  @{person.handle} · {accounts.signsInAs(person.login)}
-                </span>
+                {title !== "" && <span className="sc-person-card-title">{title}</span>}
               </div>
+              <span className="sc-agent-card-state">
+                <AgentStateBadge state={agent.state} />
+                {invited && <Badge tone="warning">{accounts.invited}</Badge>}
+                {out && <Badge>{words.people.deactivated}</Badge>}
+              </span>
             </div>
             <dl className="sc-person-facts">
               <div className="sc-person-fact">
@@ -138,27 +145,60 @@ export function AgentAccountList(props: AgentAccountListProps) {
                   )}
                 </dd>
               </div>
+              <div className="sc-person-fact">
+                <dt>{accounts.login}</dt>
+                <dd>
+                  <span className="sc-agent-card-login">{person.login}</span>
+                </dd>
+              </div>
             </dl>
-            {person.invited === true && <p className="sc-field-hint">{accounts.invitedHint}</p>}
-            {agent.supervised &&
-              person.avatarParts !== null &&
-              person.avatarParts !== undefined && (
-                <div className="sc-person-card-ways">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={props.busy === true || saving === person.id}
-                    title={accounts.savePictureHint}
-                    onClick={() => save(agent)}
-                  >
-                    {accounts.savePicture}
-                  </Button>
-                </div>
-              )}
+            {invited && <p className="sc-agent-card-note">{accounts.invitedHint}</p>}
           </li>
         );
       })}
     </ul>
+  );
+}
+
+/**
+ * The way a supervisor saves an agent account's picture (ADR-0084): its face, and a button that
+ * writes it out as a PNG of 1024 pixels a side, drawn here in the browser, for the profile of its
+ * account at the messenger or at the identity provider. Nothing where it has no parts to draw.
+ */
+export function AgentPictureSave(props: {
+  readonly person: RestPerson;
+  readonly busy?: boolean | undefined;
+}) {
+  const accounts = useWords().agents.accounts;
+  const sets = useContext(AvatarSetsContext);
+  const [saving, setSaving] = useState(false);
+  const { person } = props;
+  const parts = person.avatarParts;
+  if (parts === null || parts === undefined) {
+    return null;
+  }
+  const save = () => {
+    setSaving(true);
+    void avatarPngBlob(parts, MAX_AVATAR_PIXELS, sets)
+      .then((blob) => saveBlob(blob, `${person.handle ?? "avatar"}.png`))
+      .catch(() => undefined)
+      .finally(() => setSaving(false));
+  };
+  return (
+    <div className="sc-agent-picture">
+      <Avatar person={person} size="lg" />
+      <div className="sc-agent-picture-what">
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={props.busy === true || saving}
+          onClick={save}
+        >
+          {accounts.savePicture}
+        </Button>
+        <p className="sc-field-hint">{accounts.savePictureHint}</p>
+      </div>
+    </div>
   );
 }
 

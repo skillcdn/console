@@ -37,7 +37,16 @@ export function AgentStateBadge(props: {
   const words = useWords().agents.page.state;
   const state = props.state ?? null;
   if (state === null) {
-    return props.full === true ? <span className="sc-muted">{words.none}</span> : null;
+    // Where there is room, an account no runner has spoken for says so as the others say how they
+    // stand: a word in a badge, and why beside it.
+    return props.full === true ? (
+      <span className="sc-agent-state">
+        <Badge tone="neutral" kind="state">
+          {words.unset}
+        </Badge>
+        <span className="sc-agent-state-why">{words.none}</span>
+      </span>
+    ) : null;
   }
   const reasons: Readonly<Record<string, string>> = words.reasons;
   const reason = state.reason === null ? undefined : (reasons[state.reason] ?? state.reason);
@@ -54,11 +63,11 @@ export function AgentStateBadge(props: {
       {badge}
       <span className="sc-agent-state-why">
         {reason !== undefined && `${reason} · `}
-        {words.since} <Time iso={state.since} />
+        {words.since} <Time iso={state.since} precision="clock" />
         {state.heardAt !== null && (
           <>
             {" · "}
-            {words.heard} <Time iso={state.heardAt} />
+            {words.heard} <Time iso={state.heardAt} precision="clock" />
           </>
         )}
       </span>
@@ -75,7 +84,15 @@ export interface TranscriptViewProps {
   readonly empty?: ReactNode;
 }
 
-/** The events of a session, in order: a block each, what it is and when, and what it says as text. */
+/** What a runner says of an event that is said apart from the rest: the tool it names. */
+const TOOL = "tool";
+
+/**
+ * The events of a session, in order, as a log: what each is and when in a narrow column at the
+ * left, what it says at the right. What the agent says and what it was told read as prose; what
+ * its tools were called with and answered reads as code, on a sheet of its own; a wake, a status
+ * and an error read as notes. Everything is text, never markup.
+ */
 export function TranscriptView(props: TranscriptViewProps) {
   const words = useWords().agents.page.live;
   const [whole, setWhole] = useState<Readonly<Record<number, string>>>({});
@@ -98,7 +115,10 @@ export function TranscriptView(props: TranscriptViewProps) {
   return (
     <ol className="sc-transcript" aria-label={words.transcript}>
       {props.events.map((event) => {
-        const facts = Object.entries(event.data).filter(([, fact]) => fact !== null);
+        const tool = event.data[TOOL];
+        const facts = Object.entries(event.data).filter(
+          ([name, fact]) => fact !== null && name !== TOOL,
+        );
         const text = whole[event.n] ?? event.text;
         return (
           <li
@@ -108,56 +128,69 @@ export function TranscriptView(props: TranscriptViewProps) {
           >
             <div className="sc-transcript-head">
               <span className="sc-transcript-kind">{kinds[event.kind] ?? event.kind}</span>
-              {facts.length > 0 && (
-                <span className="sc-transcript-facts">
-                  {facts.map(([name, fact]) => `${name}: ${String(fact)}`).join(" · ")}
-                </span>
-              )}
-              <Time iso={event.at} />
+              <Time iso={event.at} precision="clock" />
             </div>
-            {event.sealed !== null ? (
-              <p className="sc-transcript-sealed">
-                {words.sealed(
-                  event.sealed.by === null ? "?" : (event.sealed.by.name ?? event.sealed.by.login),
-                  event.sealed.reason,
-                )}
-              </p>
-            ) : (
-              <>
-                {text.length > 0 && <pre className="sc-transcript-text">{text}</pre>}
-                {event.whole !== null && whole[event.n] === undefined && (
-                  <p className="sc-transcript-cut">
-                    {words.cutAt(formatBytes(event.whole))}{" "}
-                    {props.onReadWhole !== undefined && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={reading === event.n}
-                        onClick={() => read(event.n)}
-                      >
-                        {words.whole}
-                      </Button>
-                    )}
-                  </p>
-                )}
-                {event.files.length > 0 && (
-                  <ul className="sc-transcript-pictures">
-                    {event.files.map((file) => (
-                      <li key={file.id}>
-                        <a href={props.fileHref(file.id)} target="_blank" rel="noreferrer">
-                          <img
-                            src={props.fileHref(file.id)}
-                            alt={file.name}
-                            title={`${file.name} · ${formatBytes(file.size)}`}
-                            loading="lazy"
-                          />
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </>
-            )}
+            <div className="sc-transcript-body">
+              {(typeof tool === "string" || facts.length > 0) && (
+                <div className="sc-transcript-about">
+                  {typeof tool === "string" && <code className="sc-transcript-tool">{tool}</code>}
+                  {facts.length > 0 && (
+                    <span className="sc-transcript-facts">
+                      {facts.map(([name, fact]) => (
+                        <span key={name} className="sc-transcript-fact">
+                          {name} <b>{String(fact)}</b>
+                        </span>
+                      ))}
+                    </span>
+                  )}
+                </div>
+              )}
+              {event.sealed !== null ? (
+                <p className="sc-transcript-sealed">
+                  {words.sealed(
+                    event.sealed.by === null
+                      ? "?"
+                      : (event.sealed.by.name ?? event.sealed.by.login),
+                    event.sealed.reason,
+                  )}
+                </p>
+              ) : (
+                <>
+                  {text.length > 0 && <pre className="sc-transcript-text">{text}</pre>}
+                  {event.whole !== null && whole[event.n] === undefined && (
+                    <p className="sc-transcript-cut">
+                      {words.cutAt(formatBytes(event.whole))}{" "}
+                      {props.onReadWhole !== undefined && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={reading === event.n}
+                          onClick={() => read(event.n)}
+                        >
+                          {words.whole}
+                        </Button>
+                      )}
+                    </p>
+                  )}
+                  {event.files.length > 0 && (
+                    <ul className="sc-transcript-pictures">
+                      {event.files.map((file) => (
+                        <li key={file.id}>
+                          <a href={props.fileHref(file.id)} target="_blank" rel="noreferrer">
+                            <img
+                              src={props.fileHref(file.id)}
+                              alt={file.name}
+                              title={`${file.name} · ${formatBytes(file.size)}`}
+                              loading="lazy"
+                            />
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
+            </div>
           </li>
         );
       })}
@@ -177,7 +210,9 @@ export interface SignalComposerProps {
 /**
  * What a supervisor says to the agent: a tell, with pictures; an interruption of the turn under
  * way; and the three that change how it stands, a stop, a restart with the same conversation and
- * a reset with a new one, each with words for the agent. A reset is asked twice.
+ * a reset with a new one, each with words for the agent. A reset is asked twice. The two that say
+ * something stand at the right, the tell foremost; the three that change how it stands at the
+ * left, quieter, beside the pictures. Ctrl or Cmd with Enter tells.
  */
 export function SignalComposer(props: SignalComposerProps) {
   const words = useWords().agents.page.tell;
@@ -203,9 +238,10 @@ export function SignalComposer(props: SignalComposerProps) {
       picker.current.value = "";
     }
   };
+  const ready = said.length > 0 && !tooMany && !busy;
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (said.length > 0 && !tooMany && !busy) {
+    if (ready) {
       send("tell");
     }
   };
@@ -218,58 +254,85 @@ export function SignalComposer(props: SignalComposerProps) {
         placeholder={words.placeholder}
         value={text}
         maxLength={MAX_SIGNAL_LENGTH}
-        rows={3}
+        rows={2}
         onChange={(event) => setText(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && ready) {
+            event.preventDefault();
+            send("tell");
+          }
+        }}
       />
+      {pictures.length > 0 && (
+        <ul className="sc-signal-chosen">
+          {pictures.map((file, index) => (
+            <li
+              key={`${file.name}-${file.size}-${file.lastModified}`}
+              className="sc-signal-chosen-one"
+            >
+              <span className="sc-signal-chosen-name">{file.name}</span>
+              <button
+                type="button"
+                className="sc-signal-chosen-remove"
+                aria-label={words.removePicture(file.name)}
+                onClick={() => setPictures((current) => current.filter((_, at) => at !== index))}
+              >
+                ×
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
       <div className="sc-signal-row">
-        <label className="sc-signal-pictures">
-          <span>{words.pictures}</span>
-          <input
-            ref={picker}
-            type="file"
-            accept="image/png,image/jpeg,image/gif,image/webp"
-            multiple
-            onChange={(event) => setPictures([...(event.target.files ?? [])])}
-          />
-        </label>
-        {tooMany && <span className="sc-field-error">{words.tooMany(MAX_SIGNAL_ATTACHMENTS)}</span>}
-        <span className="sc-signal-ways">
-          <Button
-            type="submit"
-            variant="primary"
-            disabled={busy || said.length === 0 || tooMany}
-            title={words.tellHint}
-          >
-            {words.send}
-          </Button>
-          <Button
-            disabled={busy || said.length === 0 || tooMany || stopped}
-            title={words.interruptHint}
-            onClick={() => send("interrupt")}
-          >
-            {words.interrupt}
-          </Button>
+        <span className="sc-signal-states">
+          <label className="sc-button sc-button-ghost sc-button-sm sc-signal-pictures">
+            <span>{words.pictures}</span>
+            <input
+              ref={picker}
+              className="sc-visually-hidden"
+              type="file"
+              accept="image/png,image/jpeg,image/gif,image/webp"
+              multiple
+              onChange={(event) =>
+                setPictures((current) => [...current, ...(event.target.files ?? [])])
+              }
+            />
+          </label>
+          <span className="sc-signal-rule" aria-hidden="true" />
           {stopped ? (
-            <Button disabled={busy} title={words.restartHint} onClick={() => send("restart")}>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={busy}
+              title={words.restartHint}
+              onClick={() => send("restart")}
+            >
               {words.restart}
             </Button>
           ) : (
-            <Button disabled={busy} title={words.stopHint} onClick={() => send("stop")}>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={busy}
+              title={words.stopHint}
+              onClick={() => send("stop")}
+            >
               {words.stop}
             </Button>
           )}
           {resetting ? (
             <>
-              <Button variant="danger" disabled={busy} onClick={() => send("reset")}>
+              <Button variant="danger" size="sm" disabled={busy} onClick={() => send("reset")}>
                 {words.resetConfirm}
               </Button>
-              <Button variant="ghost" disabled={busy} onClick={() => setResetting(false)}>
+              <Button variant="ghost" size="sm" disabled={busy} onClick={() => setResetting(false)}>
                 {words.cancel}
               </Button>
             </>
           ) : (
             <Button
               variant="ghost"
+              size="sm"
               disabled={busy}
               title={words.resetHint}
               onClick={() => setResetting(true)}
@@ -278,8 +341,21 @@ export function SignalComposer(props: SignalComposerProps) {
             </Button>
           )}
         </span>
+        {tooMany && <span className="sc-field-error">{words.tooMany(MAX_SIGNAL_ATTACHMENTS)}</span>}
+        <span className="sc-signal-ways">
+          <Button
+            disabled={!ready || stopped}
+            title={words.interruptHint}
+            onClick={() => send("interrupt")}
+          >
+            {words.interrupt}
+          </Button>
+          <Button type="submit" variant="primary" disabled={!ready} title={words.tellHint}>
+            {words.send}
+          </Button>
+        </span>
       </div>
-      {resetting && <p className="sc-field-hint">{words.resetWarning}</p>}
+      {resetting && <p className="sc-field-hint sc-signal-warning">{words.resetWarning}</p>}
       {props.note !== undefined && <p className="sc-field-hint">{props.note}</p>}
     </form>
   );
@@ -351,7 +427,10 @@ export interface AgentSessionListProps {
   readonly empty?: ReactNode;
 }
 
-/** An agent account's sessions, the newest first: when each began, how it ended, what it ran, how much it holds. */
+/**
+ * An agent account's sessions, the newest first, a row each that leads to it: when it began and
+ * ended, how it ended, what it ran and where, and how much it holds.
+ */
 export function AgentSessionList(props: AgentSessionListProps) {
   const words = useWords().agents.page.sessions;
   if (props.sessions.length === 0) {
@@ -361,27 +440,42 @@ export function AgentSessionList(props: AgentSessionListProps) {
   return (
     <ul className="sc-agent-sessions" aria-label={words.title}>
       {props.sessions.map((session) => (
-        <li key={session.id} className="sc-agent-session">
-          <a className="sc-agent-session-link" href={props.href(session)}>
-            <Time iso={session.startedAt} />
-          </a>
-          {session.ended === null ? (
-            <Badge tone="success" kind="state">
-              {words.open}
-            </Badge>
-          ) : (
-            <Badge>{ends[session.ended] ?? session.ended}</Badge>
-          )}
-          {session.away && <Badge tone="warning">{words.away}</Badge>}
+        <li
+          key={session.id}
+          className={cx("sc-agent-session", session.ended === null && "sc-agent-session-open")}
+        >
+          <span className="sc-agent-session-when">
+            <a className="sc-agent-session-link" href={props.href(session)}>
+              <Time iso={session.startedAt} />
+            </a>
+            {session.endedAt !== null && (
+              <span className="sc-agent-session-until">
+                {" – "}
+                <Time iso={session.endedAt} precision="clock" against={session.startedAt} />
+              </span>
+            )}
+          </span>
+          <span className="sc-agent-session-badges">
+            {session.ended === null ? (
+              <Badge tone="success" kind="state">
+                {words.open}
+              </Badge>
+            ) : (
+              <Badge tone={session.ended === "crashed" ? "danger" : "neutral"}>
+                {ends[session.ended] ?? session.ended}
+              </Badge>
+            )}
+            {session.away && <Badge tone="warning">{words.away}</Badge>}
+          </span>
           <span className="sc-agent-session-facts">
             {[
-              words.events(session.events),
               `${session.product.name}${session.product.version === null ? "" : ` ${session.product.version}`}`,
               ...(session.model === null ? [] : [session.model]),
               ...(session.resumed ? [words.resumed] : []),
               session.machine.name,
             ].join(" · ")}
           </span>
+          <span className="sc-agent-session-count">{words.events(session.events)}</span>
         </li>
       ))}
     </ul>
