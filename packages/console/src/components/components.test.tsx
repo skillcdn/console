@@ -23,6 +23,7 @@ import { KOREAN, LanguageContext } from "../i18n/index.js";
 import { setupGuideOf } from "../setup-guide.js";
 import {
   AgentChoice,
+  AgentElsewhereList,
   AgentRunnerFacts,
   AgentSecretList,
   AgentSessionList,
@@ -1923,6 +1924,20 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     expect(renderToStaticMarkup(<AgentRunnerFacts runner={null} />)).toContain(
       "No runner has been heard from.",
     );
+  });
+
+  it("lists the accounts it holds elsewhere, as words (ADR-0089)", () => {
+    const seen = renderToStaticMarkup(
+      <AgentElsewhereList accounts={{ github: "acme-mira", slack: "<b>U0123</b>" }} />,
+    );
+    expect(seen).toContain("<dt>github</dt><dd>acme-mira</dd>");
+    expect(seen).toContain("<dt>slack</dt><dd>&lt;b&gt;U0123&lt;/b&gt;</dd>");
+    expect(seen).toContain("What to close when the account is taken out.");
+    for (const none of [{}, undefined]) {
+      expect(renderToStaticMarkup(<AgentElsewhereList accounts={none} />)).toContain(
+        "None is recorded yet.",
+      );
+    }
   });
 
   it("lists its secrets by name, with the way to seed one, and never a value", () => {

@@ -2399,7 +2399,7 @@ describe("configuring, as the person", () => {
     const { fetch, calls } = fakeConsole({
       "GET /api/v1/people?login=bob": { body: { items: [BOB], listed: [], organization: null } },
       "POST /api/v1/agents": [
-        { status: 201, body: made },
+        { status: 201, body: { ...made, onboarding: { project: "web", number: 412 } } },
         { status: 201, body: { ...made, manager: null } },
         {
           status: 409,
@@ -2441,6 +2441,11 @@ describe("configuring, as the person", () => {
       "@mira  Mira, Release engineer  (signs in as acme-mira, reports to bob, not signed in yet)",
     );
     expect(full.out()).toContain("A person makes the account acme-mira at the provider");
+    // Its first task, where the console made one with it, and what comes next: a machine.
+    expect(full.out()).toContain(
+      "Its first task is #412 in web, with what setting it up takes; its runner is woken with it when it first starts.",
+    );
+    expect(full.out()).toContain("Next, a machine: console agent invite mira");
     // The least there is to say: the handle and the login; whoever makes it is its manager.
     const least = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["agent", "new", "mira", "--login", "mira@acme.example"], least.io)).toBe(
@@ -2453,6 +2458,8 @@ describe("configuring, as the person", () => {
       name: "Mira",
       project: "web",
     });
+    // An older console, or a board that took no more tasks: nothing is said of a task.
+    expect(least.out()).not.toContain("Its first task");
     const taken = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["agent", "new", "mira", "--login", "x"], taken.io)).toBe(EXIT.failed);
     const unsaid = harness({ fetch, env: SIGNED_IN });
@@ -2698,6 +2705,54 @@ describe("configuring, as the person", () => {
         "signals: 8 of 10 delivered",
       ].join("\n"),
     );
+  });
+
+  it("records the accounts an agent holds elsewhere, and takes one away (ADR-0089)", async () => {
+    const mira = {
+      person: { ...PERSON, login: "acme-mira", name: "Mira", kind: "agent", handle: "mira" },
+      manager: null,
+      supervised: false,
+    };
+    const { fetch, calls } = fakeConsole({
+      "PATCH /api/v1/agents/mira": {
+        body: { ...mira, accounts: { github: "acme-mira", slack: "U0123 (mira)" } },
+      },
+      "GET /api/v1/agents/mira": { body: { ...mira, accounts: { github: "acme-mira" } } },
+    });
+    const kept = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(
+        [
+          "agent",
+          "@mira",
+          "--account",
+          "github=acme-mira",
+          "--account",
+          "slack = U0123 (mira)",
+          "--account",
+          "mail=none",
+        ],
+        kept.io,
+      ),
+    ).toBe(EXIT.ok);
+    // One request with all of them: a name kept, and none for the one taken away.
+    expect(calls.map((call) => call.key)).toEqual(["PATCH /api/v1/agents/mira"]);
+    expect(calls[0]?.body).toEqual({
+      accounts: { github: "acme-mira", slack: "U0123 (mira)", mail: null },
+    });
+    expect(kept.out()).toContain("accounts elsewhere: github acme-mira, slack U0123 (mira)");
+    // Read back with the account's line; an account that records none says nothing of them.
+    const read = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["agent", "mira"], read.io)).toBe(EXIT.ok);
+    expect(read.out()).toContain("accounts elsewhere: github acme-mira");
+    // What names no service or no name is a misuse, and asks nothing of the console.
+    const before = calls.length;
+    for (const word of ["github", "=acme-mira", "github=", "  =  "]) {
+      const wrong = harness({ fetch, env: SIGNED_IN });
+      expect(await runCli(["agent", "mira", "--account", word], wrong.io), word).toBe(EXIT.usage);
+      expect(wrong.err()).toContain("--account github=acme-mira");
+    }
+    expect(calls.length).toBe(before);
   });
 
   it("makes the invitation that leads a machine to an agent account, and takes it away (ADR-0088)", async () => {

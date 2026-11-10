@@ -486,6 +486,29 @@ export const agentInvitations = pgTable(
 );
 
 /**
+ * An account an agent account holds elsewhere (ADR-0089): what it is called at a service, by
+ * the service's short name, and no secret. Recorded by the account or a supervisor, so that
+ * taking the account out knows what to close.
+ */
+export const agentAccounts = pgTable(
+  "agent_accounts",
+  {
+    personId: uuid()
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    /** The service's short name, spelled as a kind is: `github`, `slack`. */
+    service: text().notNull(),
+    /** What the agent is called there. */
+    name: text().notNull(),
+    setById: uuid().references(() => people.id),
+    /** The agent whoever recorded it acted through, when with a token. */
+    agent: text(),
+    setAt: instant().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.personId, table.service] })],
+);
+
+/**
  * A picture a supervisor sent with a tell (ADR-0086, point 4): of that signal, kept with the
  * account's record, its bytes among the board's files under their hash.
  */

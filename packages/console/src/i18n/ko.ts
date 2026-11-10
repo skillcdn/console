@@ -176,6 +176,8 @@ export const ko: Messages = {
     "person.agent_admin": "에이전트 계정은 관리자가 될 수 없습니다.",
     "person.manager_required":
       "에이전트 계정에는 매니저가 꼭 있어야 합니다. 비울 수 없으니 다른 사람을 지정하세요.",
+    "agent.too_many_accounts":
+      "한 계정이 기록할 수 있는 만큼의 외부 계정이 이미 기록되어 있습니다.",
     "setup.not_found":
       "이 코드의 셋업이 없습니다. 만든 적이 없거나, 기한이 지났거나, 계정의 명령이 이미 로그인했습니다.",
     "secret.not_found": "이 계정에 그런 이름의 시크릿이 없습니다.",
@@ -1652,6 +1654,12 @@ export const ko: Messages = {
           value: "값",
           seed: "심기",
           remove: "삭제",
+        },
+        elsewhere: {
+          title: "외부 계정",
+          empty: "아직 기록된 계정이 없습니다.",
+          intro:
+            "에이전트가 계정을 가진 서비스마다 그곳에서 불리는 이름을 에이전트가 기록한 것입니다. 시크릿은 기록하지 않습니다. 계정을 내보낼 때 무엇을 닫아야 하는지 여기서 확인합니다.",
         },
         persona: {
           title: "페르소나",

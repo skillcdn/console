@@ -1,4 +1,4 @@
-import type { RestAgentSetup } from "./schemas.js";
+import type { RestAgentSetup, RestWorkspace } from "./schemas.js";
 import { describeService, type ServiceItem, serviceNamesOf } from "./services.js";
 import { type ProviderKey, SERVICE_ROLES, type ServiceRole } from "./vocabulary.js";
 
@@ -61,7 +61,7 @@ const ROLE_WORDS: Readonly<Record<ServiceRole, string>> = {
 };
 
 /** A service of the workspace as the guide says it: once, whatever roles it has. */
-interface GuideService {
+export interface GuideService {
   readonly kind: string;
   readonly name: string;
   readonly account: string | undefined;
@@ -88,13 +88,18 @@ function itemsOnce(items: readonly ServiceItem[], more: readonly ServiceItem[]):
 /**
  * The services a workspace names, each with what its module says of it for one account. A
  * service that has two roles with one account there, a git host people also sign in through, is
- * said once, with what either role adds.
+ * said once, with what either role adds. Nothing is asked of a person later at the service the
+ * account signs in through: that account comes before the line, since the agent signs in with
+ * it, and so does whatever a person does of it there.
  */
-function servicesOf(setup: RestAgentSetup): GuideService[] {
-  const names = serviceNamesOf(setup.workspace, setup.account.handle);
+export function guideServicesOf(
+  workspace: Pick<RestWorkspace, "handle" | "domain" | "services">,
+  handle: string,
+): GuideService[] {
+  const names = serviceNamesOf(workspace, handle);
   const services: GuideService[] = [];
   for (const role of SERVICE_ROLES) {
-    const service = setup.workspace.services[role];
+    const service = workspace.services?.[role];
     if (service === undefined) {
       continue;
     }
@@ -119,6 +124,11 @@ function servicesOf(setup: RestAgentSetup): GuideService[] {
     same.onboarding = itemsOnce(same.onboarding, said.onboarding);
     same.asks = itemsOnce(same.asks, said.asks);
   }
+  for (const service of services) {
+    if (service.roles.includes("identity")) {
+      service.asks = [];
+    }
+  }
   return services;
 }
 
@@ -131,7 +141,7 @@ export function setupGuideOf(setup: RestAgentSetup, code: string): SetupGuide {
     account.name === null || account.name.length === 0
       ? `@${account.handle}`
       : `@${account.handle} (${[account.name, account.title].filter((part) => part !== null && part.length > 0).join(", ")})`;
-  const described = servicesOf(setup);
+  const described = guideServicesOf(workspace, account.handle);
   const serviceTitle = (one: GuideService): string =>
     `${one.name}, ${one.roles.map((role) => ROLE_WORDS[role]).join(" and ")}`;
 

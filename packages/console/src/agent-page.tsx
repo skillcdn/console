@@ -24,6 +24,7 @@ import {
 } from "./api.js";
 import {
   AgentChoice,
+  AgentElsewhereList,
   AgentRunnerFacts,
   AgentSecretList,
   AgentSessionList,
@@ -521,6 +522,10 @@ function AgentSettings(props: {
             })
           }
         />
+      </section>
+      <section className="sc-panel" aria-label={page.settings.elsewhere.title}>
+        <h2 className="sc-section-title">{page.settings.elsewhere.title}</h2>
+        <AgentElsewhereList accounts={agent.accounts} />
       </section>
       <section className="sc-panel" aria-label={page.settings.persona.title}>
         <h2 className="sc-section-title">{page.settings.persona.title}</h2>

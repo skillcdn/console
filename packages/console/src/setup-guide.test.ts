@@ -130,10 +130,10 @@ describe("the guide of an agent account's setup (ADR-0088)", () => {
       "Sign in at the git host and keep what you sign in with",
       "Make your desk there and push it",
     ]);
-    // Of two asks with one title, the fuller stands.
-    expect(asked?.steps).toHaveLength(1);
-    expect(asked?.steps[0]?.title).toBe("Make the account `acme-mira` at GitHub");
-    expect(asked?.steps[0]?.body).toContain("invite it to `acme`");
+    // Nothing is asked of a person later at the service the account signs in through: that
+    // account, and what a person does of it there, came before the line.
+    expect(asked).toBeUndefined();
+    expect(guide.sections.map((section) => section.key)).toEqual(["before", "machine", "start"]);
     // An account spelled otherwise for one of the roles is another account, said apart.
     const apart = setupGuideOf(
       {

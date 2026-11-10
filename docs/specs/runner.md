@@ -106,6 +106,8 @@ Hold the release until the migration is checked.
 
 What the agent itself does on the board raises no wake to it.
 
+The first signal of an account's record is the wake of its onboarding task ([ADR-0088](../adr/0088-an-agent-account-has-a-desk-and-is-set-up-from-an-invitation-by-signing-in-as-itself.md)), from the `board` with the task's number as its key: the console sends it when the account is made ([rest.md](rest.md#get-apiv1agents-and-post-apiv1agents)), and it waits on the record until a runner first connects.
+
 ## A session's life
 
 - There is one main session per account. The runner begins one when there is something to deliver and none is open: `POST /api/v1/agents/me/sessions` with what it runs (`product`, `model`, `effort`, `resumed`, `machine`, as the heartbeat spells them), answered `201` with the session, its id in it. A session begun while another of the account is open takes that one over: the console ends the older as taken over, as a run takes over a run.

@@ -176,7 +176,8 @@ describe("the command signed in as the account itself (ADR-0084)", () => {
     const events = restEventsSchema.parse(
       await (await get({ cookie: alice }, `${projectPath("ops", "events")}?after=0`)).json(),
     ).items;
-    expect(events.find((event) => event.kind === "task.created")).toMatchObject({
+    // The task before it on the feed is its onboarding, which whoever made the account wrote.
+    expect(events.filter((event) => event.kind === "task.created").at(-1)).toMatchObject({
       actor: { id: miraId },
       agent: null,
     });

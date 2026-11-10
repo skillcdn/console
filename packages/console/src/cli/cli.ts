@@ -3660,6 +3660,12 @@ const agentNew = async (args: readonly string[], io: CliIo): Promise<number> => 
       made.person.invited === true
         ? `It is a member now, and work can be assigned to it. A person makes the account ${made.person.login} at the provider, which is a person's to make; its first sign-in with that account binds it here.`
         : `${made.person.login} is an agent account from now on, with everything it did.`,
+      ...(made.onboarding === null || made.onboarding === undefined
+        ? []
+        : [
+            `Its first task is #${made.onboarding.number} in ${made.onboarding.project}, with what setting it up takes; its runner is woken with it when it first starts.`,
+          ]),
+      `Next, a machine: console agent invite ${handle} makes the invitation that leads one to it.`,
     ].join("\n"),
   );
   return EXIT.ok;
@@ -4370,9 +4376,32 @@ const agent: Command = async (args, io) => {
   if (args[0] === "secret") {
     return agentSecret(args.slice(1), io);
   }
-  const { values, positionals } = parse(args, { avatar: { type: "string" } });
+  const { values, positionals } = parse(args, {
+    avatar: { type: "string" },
+    account: { type: "string", multiple: true },
+  });
   const handle = handleOf(theOne(positionals, AGENT_USAGE));
   const session = await open(io, values);
+  const held = texts(values, "account");
+  if (held.length > 0) {
+    // The accounts it holds elsewhere (ADR-0089), each as <service>=<name>, or =none to take
+    // one away: what it is called there, and never a secret.
+    const accounts: Record<string, string | null> = {};
+    for (const word of held) {
+      const at = word.indexOf("=");
+      const service = at === -1 ? "" : word.slice(0, at).trim();
+      const name = at === -1 ? "" : word.slice(at + 1).trim();
+      if (service.length === 0 || name.length === 0) {
+        throw misuse(
+          `Not an account: ${word}. Say the service and what the agent is called there, as --account github=acme-mira, or --account github=none to take one away.`,
+        );
+      }
+      accounts[service] = name === "none" ? null : name;
+    }
+    const kept = await session.client.updateAgent(handle, { accounts });
+    answer(io, session, kept, () => formatAgent(kept));
+    return EXIT.ok;
+  }
   const found = await session.client.agent(handle);
   const file = text(values, "avatar");
   if (file === undefined) {

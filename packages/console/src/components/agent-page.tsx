@@ -429,6 +429,34 @@ export function AgentRunnerFacts(props: { readonly runner: RestAgentRunner | nul
   );
 }
 
+/**
+ * The accounts an agent account holds elsewhere (ADR-0089): what it is called at each service,
+ * as it or a supervisor recorded them, and no secret. What to close when the account is taken out.
+ */
+export function AgentElsewhereList(props: {
+  readonly accounts: Readonly<Record<string, string>> | undefined;
+}) {
+  const words = useWords().agents.page.settings.elsewhere;
+  const held = Object.entries(props.accounts ?? {});
+  return (
+    <div className="sc-agent-elsewhere">
+      {held.length === 0 ? (
+        <p className="sc-field-hint">{words.empty}</p>
+      ) : (
+        <dl className="sc-person-facts sc-agent-runner-facts" aria-label={words.title}>
+          {held.map(([service, name]) => (
+            <div key={service} className="sc-person-fact">
+              <dt>{service}</dt>
+              <dd>{name}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      <p className="sc-field-hint">{words.intro}</p>
+    </div>
+  );
+}
+
 export interface AgentSecretListProps {
   readonly secrets: readonly RestAgentSecret[];
   readonly busy?: boolean | undefined;

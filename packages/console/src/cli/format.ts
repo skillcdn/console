@@ -198,6 +198,13 @@ export function formatAgent(agent: RestAgent): string {
               ]),
           `signals: ${runner.delivered} of ${runner.latest} delivered`,
         ]),
+    ...(agent.accounts === undefined || Object.keys(agent.accounts).length === 0
+      ? []
+      : [
+          `accounts elsewhere: ${Object.entries(agent.accounts)
+            .map(([service, name]) => `${service} ${name}`)
+            .join(", ")}`,
+        ]),
     agent.supervised
       ? "You supervise it: an administrator, or above it in the reporting line."
       : "You do not supervise it.",

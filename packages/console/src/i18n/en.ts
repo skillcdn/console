@@ -221,6 +221,7 @@ export const en = {
     "person.agent_admin": "An agent account is never an administrator.",
     "person.manager_required":
       "An agent account always has a manager. Name another; the manager is never taken away.",
+    "agent.too_many_accounts": "The account records as many accounts held elsewhere as one may.",
     "setup.not_found":
       "No setup has that code: it was never made, its day has passed, or the account's command has signed in already.",
     "secret.not_found": "The account keeps no secret of that name.",
@@ -1735,6 +1736,12 @@ export const en = {
           value: "Value",
           seed: "Seed",
           remove: "Remove",
+        },
+        elsewhere: {
+          title: "Accounts elsewhere",
+          empty: "None is recorded yet.",
+          intro:
+            "What the agent is called at each service where it holds an account, as it recorded them; never a secret. What to close when the account is taken out.",
         },
         persona: {
           title: "Persona",

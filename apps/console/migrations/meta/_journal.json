@@ -386,6 +386,13 @@
       "when": 1794291980801,
       "tag": "0054_agent_invitations",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1794295029190,
+      "tag": "0055_agent_accounts",
+      "breakpoints": true
     }
   ]
 }

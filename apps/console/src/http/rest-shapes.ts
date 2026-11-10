@@ -82,8 +82,15 @@ export function restAgent(
   agent: AgentRecord,
   runner?: RunnerRecord | undefined,
   detailed = false,
+  /** What is answered of one account alone: the accounts it holds elsewhere, and the onboarding task made with it. */
+  more: {
+    readonly accounts?: Readonly<Record<string, string>> | undefined;
+    readonly onboarding?: { readonly project: string; readonly number: number } | null | undefined;
+  } = {},
 ): RestAgent {
   return {
+    ...(more.accounts === undefined ? {} : { accounts: { ...more.accounts } }),
+    ...(more.onboarding === undefined ? {} : { onboarding: more.onboarding }),
     person: restPerson(agent.person),
     manager: agent.manager === undefined ? null : restPerson(agent.manager),
     supervised: agent.supervised,

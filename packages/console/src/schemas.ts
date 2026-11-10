@@ -12,6 +12,7 @@ import {
 import * as z from "zod/mini";
 import { isDocumentPath } from "./documents.js";
 import {
+  MAX_AGENT_ELSEWHERE,
   MAX_AGENT_LENGTH,
   MAX_AGENT_SECRET_BYTES,
   MAX_AGENT_SECRET_NAME_LENGTH,
@@ -21,6 +22,7 @@ import {
   MAX_DECIDERS,
   MAX_DOCUMENT_LENGTH,
   MAX_DOCUMENT_PATH_LENGTH,
+  MAX_ELSEWHERE_NAME_LENGTH,
   MAX_FILE_NAME_LENGTH,
   MAX_HANDLE_LENGTH,
   MAX_HOME_ROW,
@@ -1204,12 +1206,32 @@ export type RestAgentProposal = z.infer<typeof restAgentProposalSchema>;
 export const restAgentProposalsSchema = z.object({ items: z.array(restAgentProposalSchema) });
 export type RestAgentProposals = z.infer<typeof restAgentProposalsSchema>;
 
+/** The short name of a service an account is held at, spelled as a kind is: `github`, `slack`. */
+const elsewhereService = z.string().check(z.regex(/^[a-z][a-z0-9-]{0,39}$/));
+/** What the agent is called at a service: a line, and no secret. */
+const elsewhereName = line(MAX_ELSEWHERE_NAME_LENGTH);
+/** The accounts an agent account holds elsewhere (ADR-0089): what it is called at each, by service. */
+export const restAgentElsewhereSchema = z.record(elsewhereService, elsewhereName);
+export type RestAgentElsewhere = z.infer<typeof restAgentElsewhereSchema>;
+
 /**
- * What `PATCH /api/v1/agents/<handle>` is sent, by a supervisor: the persona to keep, one or
- * more of its name, its title (`null` for none) and its avatar; the handle never changes.
+ * What `PATCH /api/v1/agents/<handle>` is sent: by a supervisor, the persona to keep, one or
+ * more of its name, its title (`null` for none) and its avatar; by a supervisor or the account
+ * itself, the accounts it holds elsewhere. The handle never changes.
  */
 export const restAgentPatchSchema = z
   .object({
+    /** The accounts it holds elsewhere, by service: one left out stays as it is, `null` takes one away. */
+    accounts: z.optional(
+      z
+        .record(elsewhereService, z.nullable(elsewhereName))
+        .check(
+          z.refine(
+            (accounts) => Object.keys(accounts).length <= MAX_AGENT_ELSEWHERE,
+            "names more accounts than one may hold",
+          ),
+        ),
+    ),
     name: z.optional(line(MAX_PERSON_NAME_LENGTH)),
     title: z.optional(z.nullable(line(MAX_PERSON_TITLE_LENGTH))),
     /** The parts of the avatar, and optionally the seed they were rolled from, `null` for parts chosen by hand. */
@@ -1219,8 +1241,11 @@ export const restAgentPatchSchema = z
   .check(
     z.refine(
       (patch) =>
-        patch.name !== undefined || patch.title !== undefined || patch.avatarParts !== undefined,
-      "must name a name, a title or the parts of an avatar",
+        patch.name !== undefined ||
+        patch.title !== undefined ||
+        patch.avatarParts !== undefined ||
+        (patch.accounts !== undefined && Object.keys(patch.accounts).length > 0),
+      "must name a name, a title, the parts of an avatar or an account held elsewhere",
     ),
   );
 export type RestAgentPatch = z.infer<typeof restAgentPatchSchema>;
@@ -1243,6 +1268,16 @@ export const restAgentSchema = z.object({
   state: z.optional(z.nullable(restAgentStateSchema)),
   /** What its runner last said of itself and what was chosen for it: answered to its supervisors and to the account, `null` to anyone else and while there is none. */
   runner: z.optional(z.nullable(restAgentRunnerSchema)),
+  /**
+   * The accounts it holds elsewhere (ADR-0089), what it is called at each by the service's short
+   * name, and no secret: answered where one account is read, so that taking it out knows what
+   * to close.
+   */
+  accounts: z.optional(restAgentElsewhereSchema),
+  /** Its onboarding task (ADR-0088), where the console made one with the account: answered when the account is made. */
+  onboarding: z.optional(
+    z.nullable(z.object({ project: z.string(), number: z.number().check(z.int()) })),
+  ),
 });
 export type RestAgent = z.infer<typeof restAgentSchema>;
 

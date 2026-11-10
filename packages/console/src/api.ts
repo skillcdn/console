@@ -87,6 +87,7 @@ export {
   EVENTS_PAGE_LIMIT,
   INVITATION_DAYS,
   LIST_LIMIT,
+  MAX_AGENT_ELSEWHERE,
   MAX_AGENT_LENGTH,
   MAX_AGENT_SECRET_BYTES,
   MAX_AGENT_SECRET_NAME_LENGTH,
@@ -103,6 +104,7 @@ export {
   MAX_DOCUMENT_PATH_LENGTH,
   MAX_DOCUMENT_SEGMENT_LENGTH,
   MAX_DOCUMENTS_PER_PROJECT,
+  MAX_ELSEWHERE_NAME_LENGTH,
   MAX_FILE_BYTES,
   MAX_FILE_NAME_LENGTH,
   MAX_FILES_PER_COMMENT,
@@ -173,6 +175,12 @@ export {
 } from "./limits.js";
 export { projectColorOf, projectSymbolOf } from "./marks.js";
 export {
+  type OnboardingInput,
+  onboardingOf,
+  onboardingTitle,
+  onboardingWake,
+} from "./onboarding.js";
+export {
   DEFAULT_PROPOSALS,
   MAX_PROPOSALS,
   PERSONA_NAMES,
@@ -229,6 +237,7 @@ export {
   RESERVED_HANDLES,
   type RestAgent,
   type RestAgentChoice,
+  type RestAgentElsewhere,
   type RestAgentInput,
   type RestAgentInvitation,
   type RestAgentInvitationMade,
@@ -380,6 +389,7 @@ export {
   type RestWorkspaceService,
   type RestWorkspaceServices,
   restAgentChoiceSchema,
+  restAgentElsewhereSchema,
   restAgentInputSchema,
   restAgentInvitationMadeSchema,
   restAgentInvitationSchema,
@@ -548,6 +558,8 @@ export {
   serviceProviderOf,
 } from "./services.js";
 export {
+  type GuideService,
+  guideServicesOf,
   SETUP_INSTALL,
   type SetupGuide,
   type SetupGuideSection,

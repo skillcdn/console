@@ -3,7 +3,14 @@ import { and, asc, eq, isNotNull, isNull, or, type SQL, sql } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
-import { listings, people, projectMembers, projects, workspaces } from "../schema.js";
+import {
+  agentAccounts,
+  listings,
+  people,
+  projectMembers,
+  projects,
+  workspaces,
+} from "../schema.js";
 import { type Actor, recordEvent } from "./events.js";
 import { type PersonRecord, personColumns, toPerson } from "./people.js";
 
@@ -21,7 +28,8 @@ export class AgentError extends DomainError {
       | "agent.exists"
       | "agent.administrator"
       | "agent.invalid_manager"
-      | "agent.invalid_project",
+      | "agent.invalid_project"
+      | "agent.too_many_accounts",
   ) {
     super(code, AGENT_ERROR_WORDS[code]);
   }
@@ -35,6 +43,7 @@ const AGENT_ERROR_WORDS = {
   "agent.invalid_manager":
     "the manager is not another active member of the workspace, or reports to this account",
   "agent.invalid_project": "the project it starts in was not found",
+  "agent.too_many_accounts": "the account records as many accounts held elsewhere as one may",
 } as const;
 
 /** An agent account with whom it reports to, as one asker reads it. */
@@ -337,6 +346,89 @@ export async function findAgent(
     .where(and(readable(workspaceId, reader), eq(people.handle, handle)))
     .limit(1);
   return row === undefined ? undefined : toAgent(row);
+}
+
+/** The accounts an agent account holds elsewhere (ADR-0089): what it is called at each service, by the service's name. */
+export async function accountsOfAgent(
+  database: Database,
+  personId: string,
+): Promise<Record<string, string>> {
+  const rows = await drizzleOf(database)
+    .select({ service: agentAccounts.service, name: agentAccounts.name })
+    .from(agentAccounts)
+    .where(eq(agentAccounts.personId, personId))
+    .orderBy(asc(agentAccounts.service));
+  return Object.fromEntries(rows.map((row) => [row.service, row.name]));
+}
+
+/**
+ * Records the accounts an agent account holds elsewhere, and tells the board: a service named
+ * with a name is kept, one named with `null` is taken away, one left out stays as it is. What
+ * is already so writes nothing. Answers the accounts as they are from then on.
+ */
+export async function recordAgentAccounts(
+  database: Database,
+  input: {
+    readonly workspaceId: string;
+    readonly actor: Actor;
+    readonly account: PersonRecord;
+    readonly accounts: Readonly<Record<string, string | null>>;
+    /** How many an account records; the package's bound. */
+    readonly limit: number;
+    readonly now: Date;
+  },
+): Promise<Record<string, string>> {
+  const { workspaceId, actor, account, now } = input;
+  await drizzleOf(database).transaction(async (tx) => {
+    // The account's row first: two who record at once count one after the other.
+    await tx.select({ id: people.id }).from(people).where(eq(people.id, account.id)).for("update");
+    const held = new Map(
+      (
+        await tx
+          .select({ service: agentAccounts.service, name: agentAccounts.name })
+          .from(agentAccounts)
+          .where(eq(agentAccounts.personId, account.id))
+      ).map((row) => [row.service, row.name]),
+    );
+    let changed = false;
+    for (const [service, name] of Object.entries(input.accounts)) {
+      if (name === null) {
+        if (held.delete(service)) {
+          await tx
+            .delete(agentAccounts)
+            .where(and(eq(agentAccounts.personId, account.id), eq(agentAccounts.service, service)));
+          changed = true;
+        }
+        continue;
+      }
+      if (held.get(service) === name) {
+        continue;
+      }
+      held.set(service, name);
+      if (held.size > input.limit) {
+        throw new AgentError("agent.too_many_accounts");
+      }
+      const row = { name, setById: actor.id, agent: actor.agent ?? null, setAt: now };
+      await tx
+        .insert(agentAccounts)
+        .values({ personId: account.id, service, ...row })
+        .onConflictDoUpdate({
+          target: [agentAccounts.personId, agentAccounts.service],
+          set: row,
+        });
+      changed = true;
+    }
+    if (changed) {
+      await recordEvent(tx, {
+        workspaceId,
+        kind: "person.updated",
+        actor,
+        data: { login: account.login, handle: account.handle, fields: ["accounts"] },
+        now,
+      });
+    }
+  });
+  return accountsOfAgent(database, account.id);
 }
 
 /** Whether two avatars are made of the same parts, in whatever order each was written down. */

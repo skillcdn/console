@@ -7,8 +7,11 @@ import { randomBytes } from "node:crypto";
 import {
   DEFAULT_PROPOSALS,
   isHandle,
+  MAX_AGENT_ELSEWHERE,
   MAX_LANGUAGE_TAG_LENGTH,
   MAX_PROPOSALS,
+  onboardingOf,
+  onboardingWake,
   type ProviderKey,
   proposeAgents,
   RESERVED_HANDLES,
@@ -32,13 +35,15 @@ import {
 } from "../auth/policy.js";
 import type { Sessions } from "../auth/sessions.js";
 import type { Database } from "../db/client.js";
-import { findRunner, runnersOf } from "../db/queries/agent-runners.js";
+import { findRunner, runnersOf, sendSignal } from "../db/queries/agent-runners.js";
 import {
   AgentError,
   type AgentReader,
+  accountsOfAgent,
   createAgentAccount,
   findAgent,
   listAgents,
+  recordAgentAccounts,
   takenHandles,
   updateAgentPersona,
 } from "../db/queries/agents.js";
@@ -49,6 +54,8 @@ import {
   PersonError,
   type PersonRecord,
 } from "../db/queries/people.js";
+import { findProjectByKey } from "../db/queries/plugin-board.js";
+import { createTask } from "../db/queries/tasks.js";
 import type { TokenRecord } from "../db/queries/tokens.js";
 import { readWorkspaceSettings } from "../db/queries/workspaces.js";
 import type { Logger } from "../logger.js";
@@ -295,6 +302,44 @@ export function registerAgentsRest(app: Hono<AppEnv>, dependencies: AgentsRestDe
     return c.json(body);
   });
 
+  /**
+   * The onboarding of an account just made (ADR-0088, points 4 and 5): its first task, in the
+   * project it starts in, with the account as its worker and whoever made the account as its
+   * owner, in the words of the workspace's services; and the wake its runner is sent with it,
+   * which waits on the account's record until a runner first connects.
+   */
+  const onboard = async (
+    caller: Caller,
+    account: PersonRecord,
+    projectKey: string,
+  ): Promise<{ project: string; number: number } | null> => {
+    const handle = account.handle;
+    const project = await findProjectByKey(database, account.workspaceId, projectKey);
+    if (handle === undefined || project === undefined) {
+      return null;
+    }
+    const settings = await readWorkspaceSettings(database, account.workspaceId);
+    const words = onboardingOf({ handle, workspace: settings });
+    const now = clock.now();
+    const task = await createTask(database, {
+      scope: { workspaceId: account.workspaceId, projectId: project.id },
+      actor: actorOf(caller),
+      task: { title: words.title, body: words.body, state: "ready", workerIds: [account.id] },
+      now,
+    });
+    await sendSignal(database, {
+      account,
+      kind: "wake",
+      by: undefined,
+      source: "board",
+      key: `#${task.number}`,
+      text: onboardingWake(handle, projectKey, task.number),
+      set: undefined,
+      now,
+    });
+    return { project: projectKey, number: task.number };
+  };
+
   // An administrator makes an agent account (ADR-0084), signed in or through their agent's
   // token (ADR-0021): the member's row at once, and the login let in.
   app.post(REST_ROUTES.agents, tooLarge, async (c) => {
@@ -343,7 +388,18 @@ export function registerAgentsRest(app: Hono<AppEnv>, dependencies: AgentsRestDe
         { person: person.id, agent: agent.person.id, requestId: c.get("requestId") },
         "an agent account was made",
       );
-      return c.json(restAgent(agent), 201);
+      const onboarding = await onboard(caller, agent.person, input.project).catch(
+        (error: unknown) => {
+          // The account is made: its first task is the console's courtesy, and a board that
+          // takes no more tasks does not unmake it.
+          logger.warn(
+            { agent: agent.person.id, err: error, requestId: c.get("requestId") },
+            "the onboarding task of an agent account was not made",
+          );
+          return null;
+        },
+      );
+      return c.json(restAgent(agent, undefined, false, { onboarding }), 201);
     } catch (error) {
       return failure(c, error);
     }
@@ -410,30 +466,49 @@ export function registerAgentsRest(app: Hono<AppEnv>, dependencies: AgentsRestDe
     }
     const settings = await readWorkspaceSettings(database, person.workspaceId);
     const reader = readerOf(person, settings);
-    // An account the asker may see and does not supervise is theirs to read, not to keep.
+    // An account the asker may see and does not supervise is theirs to read, not to keep. The
+    // accounts it holds elsewhere are the one thing the account records of itself.
     const seen = await findAgent(database, person.workspaceId, handle, reader);
     if (seen === undefined) {
       return notFound(c);
     }
-    if (!seen.supervised) {
+    const { accounts, ...persona } = parsed.data;
+    const keepsPersona = Object.values(persona).some((value) => value !== undefined);
+    const own = seen.person.id === person.id;
+    if (!seen.supervised && (!own || keepsPersona)) {
       return c.json(
         errorBody("auth.forbidden", "Only a supervisor of the agent account may do this."),
         403,
       );
     }
     try {
-      const agent = await updateAgentPersona(database, {
-        workspaceId: person.workspaceId,
-        actor: actorOf(caller),
-        handle,
-        reader,
-        name: parsed.data.name,
-        title: parsed.data.title,
-        avatarParts: parsed.data.avatarParts,
-        avatarSeed: parsed.data.avatarSeed,
-        now: clock.now(),
-      });
-      return c.json(restAgent(agent));
+      const agent = keepsPersona
+        ? await updateAgentPersona(database, {
+            workspaceId: person.workspaceId,
+            actor: actorOf(caller),
+            handle,
+            reader,
+            name: persona.name,
+            title: persona.title,
+            avatarParts: persona.avatarParts,
+            avatarSeed: persona.avatarSeed,
+            now: clock.now(),
+          })
+        : seen;
+      const held =
+        accounts === undefined
+          ? await accountsOfAgent(database, agent.person.id)
+          : await recordAgentAccounts(database, {
+              workspaceId: person.workspaceId,
+              actor: actorOf(caller),
+              account: agent.person,
+              accounts,
+              limit: MAX_AGENT_ELSEWHERE,
+              now: clock.now(),
+            });
+      return c.json(
+        restAgent(agent, await findRunner(database, agent.person.id), true, { accounts: held }),
+      );
     } catch (error) {
       return failure(c, error);
     }
@@ -459,6 +534,7 @@ export function registerAgentsRest(app: Hono<AppEnv>, dependencies: AgentsRestDe
         agent,
         await findRunner(database, agent.person.id),
         agent.supervised || agent.person.id === person.id,
+        { accounts: await accountsOfAgent(database, agent.person.id) },
       ),
     );
   });
