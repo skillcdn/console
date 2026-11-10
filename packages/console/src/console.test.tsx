@@ -586,6 +586,7 @@ describe("createConsole", () => {
     readSignalFile: never,
     signals: never,
     runnerHeartbeat: never,
+    raiseWake: never,
     signalStream: () => ({
       [Symbol.asyncIterator]: () => ({ next: async () => ({ done: true, value: undefined }) }),
     }),

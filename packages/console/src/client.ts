@@ -104,6 +104,7 @@ import {
   type RestRunInput,
   type RestRunnerHeartbeat,
   type RestRunnerHeartbeatInput,
+  type RestRunnerWake,
   type RestRuns,
   type RestSessions,
   type RestSignal,
@@ -712,6 +713,8 @@ export interface ConsoleClient {
    * left out.
    */
   signalStream(after: number, signal: AbortSignal): AsyncIterable<RestSignal>;
+  /** Raises a wake of the runner's own, from a wake source on its machine: it comes back in order on the stream. */
+  raiseWake(input: Omit<RestRunnerWake, "kind">): Promise<RestSignal>;
   /** The runner begins a session (ADR-0086): the one that was open is taken over. */
   beginAgentSession(input: RestAgentSessionInput): Promise<RestAgentSession>;
   /** The runner reports a batch of a session's events, in order; the same number sent again changes nothing. */
@@ -1606,6 +1609,13 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
       ),
     runnerHeartbeat: (input) =>
       request("PUT", `${base}${agentPath("me", "runner")}`, input, restRunnerHeartbeatSchema),
+    raiseWake: (input) =>
+      request(
+        "POST",
+        `${base}${agentPath("me", "signals")}`,
+        { kind: "wake", ...input },
+        restSignalSchema,
+      ),
     async *signalStream(after, signal) {
       let response: Response;
       try {

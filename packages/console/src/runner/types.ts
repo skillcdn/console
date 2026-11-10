@@ -147,9 +147,43 @@ export type Spawn = (
   options: { readonly cwd: string; readonly env: Readonly<Record<string, string>> },
 ) => Child;
 
+/** A socket a wake source listens on: messages of text in, messages of text out. */
+export interface WakeSocket {
+  /** What arrives, a message at a time, until the socket closes. Read once. */
+  readonly messages: AsyncIterable<string>;
+  send(text: string): void;
+  close(): void;
+}
+
+/** What a wake source is given of the runner and of the machine. */
+export interface WakeHost {
+  /** A secret of the account's store, by name; nothing where it keeps none. */
+  secret(name: string): Promise<string | undefined>;
+  /** Raises a wake: the console records it, and it reaches the agent in order, as someone else's words. */
+  raise(wake: { readonly key: string; readonly text: string }): Promise<void>;
+  /** A line for whoever reads the runner's own output: never what a message says. */
+  log(line: string): void;
+  fetch(
+    url: string,
+    init: {
+      readonly method: string;
+      readonly headers: Readonly<Record<string, string>>;
+      readonly signal: AbortSignal;
+    },
+  ): Promise<{ json(): Promise<unknown> }>;
+  socket(url: string): WakeSocket;
+  /** Waits so long, or less where the signal ends the wait. */
+  wait(ms: number, signal: AbortSignal): Promise<void>;
+}
+
 /** A module that raises wakes from outside the console. `console`, the console's own stream of signals, is the runner's own. */
 export interface WakeSource {
   readonly name: string;
+  /**
+   * Listens until it ends or the signal does, raising a wake for what is said to the agent. A
+   * source that ended is started again by the runner, after a while. `console` has none.
+   */
+  run?(host: WakeHost, signal: AbortSignal): Promise<void>;
 }
 
 /** What a service is told of the runner it keeps running. */

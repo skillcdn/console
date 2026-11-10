@@ -3521,6 +3521,15 @@ const runner: Command = async (args, io) => {
       save: (state) => host.writePrivate(statePath, `${JSON.stringify(state)}\n`),
     },
     log: (line) => io.stdout(`${new Date(io.now()).toISOString()} ${line}\n`),
+    // The wake sources the desk names beside the console's own stream, which the runner listens to itself.
+    wakes: {
+      sources: read.config.wake.flatMap((name) => {
+        const source = modules.wakeSources.get(name);
+        return source === undefined || source.run === undefined ? [] : [source];
+      }),
+      fetch: (url, init) => io.fetch(url, { ...init, headers: { ...init.headers } }),
+      socket: (url) => host.socket(url),
+    },
   });
   io.stdout(
     `The runner of @${me.person.handle ?? me.person.login} at ${me.workspace.name} (${session.url}) starts in ${host.cwd}. Stop with Ctrl+C.\n`,

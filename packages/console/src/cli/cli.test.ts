@@ -3524,6 +3524,9 @@ describe("the runner on the command line (ADR-0085)", () => {
     readText: async () => undefined,
     writePrivate: async () => undefined,
     remove: async () => undefined,
+    socket: () => {
+      throw new Error("no socket is opened here");
+    },
     untilStopped: () => new Promise(() => undefined),
     random: () => 0.5,
     ...over,
@@ -3560,7 +3563,7 @@ describe("the runner on the command line (ADR-0085)", () => {
         "runner.json: secrets.files",
       ],
       [JSON.stringify({ driver: "another" }), "names the driver another"],
-      [JSON.stringify({ wake: ["console", "slack"] }), "names the wake source slack"],
+      [JSON.stringify({ wake: ["console", "pager"] }), "names the wake source pager"],
     ] as const) {
       const refused = harness({
         fetch,

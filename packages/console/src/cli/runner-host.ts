@@ -4,7 +4,7 @@ import { type as osType, release, userInfo } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import process from "node:process";
 import { createSpawn } from "../runner/process.js";
-import type { Spawn } from "../runner/types.js";
+import type { Spawn, WakeSocket } from "../runner/types.js";
 
 // What `console runner` needs of the machine it runs on (ADR-0085): the desk it was started in,
 // processes to start, a few files of its own there, and the word to stop. The command takes it
@@ -23,6 +23,8 @@ export interface RunnerHost {
   writePrivate(path: string, text: string): Promise<void>;
   /** Removes a file under the desk; one that is not there is removed already. */
   remove(path: string): Promise<void>;
+  /** Opens a socket for a wake source: the messages of text it carries, until it closes. */
+  socket(url: string): WakeSocket;
   /**
    * Resolves when the process is asked to stop. Asked for by the command that runs a runner, and
    * by no other: listening for the word to stop is what keeps a process from stopping by itself.
@@ -80,6 +82,57 @@ export function createRunnerHost(
     },
     async remove(path) {
       await rm(under(path), { force: true });
+    },
+    socket(url) {
+      const socket = new WebSocket(url);
+      const waiting: string[] = [];
+      let closed = false;
+      let wake: (() => void) | undefined;
+      const turn = (): void => {
+        wake?.();
+        wake = undefined;
+      };
+      socket.addEventListener("message", (event) => {
+        if (typeof event.data === "string") {
+          waiting.push(event.data);
+          turn();
+        }
+      });
+      const end = (): void => {
+        closed = true;
+        turn();
+      };
+      socket.addEventListener("close", end);
+      socket.addEventListener("error", end);
+      return {
+        messages: (async function* () {
+          for (;;) {
+            const next = waiting.shift();
+            if (next !== undefined) {
+              yield next;
+            } else if (closed) {
+              return;
+            } else {
+              await new Promise<void>((resolve) => {
+                wake = resolve;
+              });
+            }
+          }
+        })(),
+        send(text) {
+          if (socket.readyState === WebSocket.OPEN) {
+            socket.send(text);
+          }
+        },
+        close() {
+          end();
+          try {
+            socket.close();
+          } catch {
+            // Closed already, or never opened: there is nothing to close.
+          }
+        },
+      };
     },
     untilStopped: () =>
       new Promise<void>((done) => {

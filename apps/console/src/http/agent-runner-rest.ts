@@ -13,6 +13,7 @@ import {
   type RestSignals,
   restFileInputSchema,
   restRunnerHeartbeatInputSchema,
+  restRunnerWakeSchema,
   restSignalInputSchema,
   SIGNALS_PAGE_LIMIT,
 } from "@skillcdn/console/api";
@@ -226,6 +227,38 @@ export function registerAgentRunnerRest(
         logger.warn({ err: error, requestId: c.get("requestId") }, "a signals stream failed");
       },
     );
+  });
+
+  // A wake the runner raises itself (ADR-0085), from a wake source on its machine: a messenger
+  // said something to its agent. It is recorded as any signal is, by nobody, and comes back to
+  // the runner on its stream in order. A wake alone, and from the messenger alone: a runner
+  // tells its own agent nothing in a supervisor's name, the board's or the console's.
+  app.post(`${OWN}/signals`, tooLarge, async (c) => {
+    const caller = await running(c);
+    if (caller instanceof Response) {
+      return caller;
+    }
+    let json: unknown;
+    try {
+      json = await c.req.json();
+    } catch {
+      return invalid(c, "The request body is not readable JSON.");
+    }
+    const parsed = restRunnerWakeSchema.safeParse(json);
+    if (!parsed.success) {
+      return invalid(c, problemOf(parsed.error.issues));
+    }
+    const sent = await sendSignal(database, {
+      account: caller.person,
+      kind: "wake",
+      by: undefined,
+      source: "messenger",
+      key: parsed.data.key,
+      text: parsed.data.text ?? "",
+      set: undefined,
+      now: clock.now(),
+    });
+    return c.json(restSignal(sent), 201);
   });
 
   // The account's own record of what it was told.

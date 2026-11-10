@@ -660,4 +660,59 @@ describe("an agent account's runner (ADR-0085)", () => {
     ]);
     expect(restSignalSchema.parse(await interrupt.json()).number).toBe(told.number + 1);
   });
+
+  it("takes a wake its own runner raises, from the messenger and from nowhere else", async () => {
+    const raise = (headers: Record<string, string>, body: unknown) =>
+      send(headers, "POST", OWN_SIGNALS, body);
+    const wake = {
+      kind: "wake",
+      source: "messenger",
+      key: "slack:C0OPS:1762800000.000100",
+      text: "A mention at Slack, from the member U0TOM:\nCan you look?",
+    };
+    const raised = await raise(bearer(command), wake);
+    expect(raised.status).toBe(201);
+    // Recorded as any signal is, by nobody, under the next number of the account's record.
+    const signal = restSignalSchema.parse(await raised.json());
+    expect(signal).toMatchObject({
+      kind: "wake",
+      source: "messenger",
+      key: "slack:C0OPS:1762800000.000100",
+      by: null,
+      agent: null,
+      text: "A mention at Slack, from the member U0TOM:\nCan you look?",
+    });
+    const record = restSignalsSchema.parse(await (await get({ cookie: alice }, SIGNALS)).json());
+    expect(record.items[0]?.number).toBe(signal.number);
+    // A runner tells its own agent nothing in anyone's name: a wake alone, from the messenger alone.
+    for (const body of [
+      { ...wake, kind: "tell" },
+      { ...wake, kind: "reset" },
+      { ...wake, source: "person" },
+      { ...wake, source: "board" },
+      { ...wake, source: "console" },
+      { ...wake, key: "" },
+      { ...wake, key: "x".repeat(201) },
+      { ...wake, key: "two\nlines" },
+      { ...wake, text: "x".repeat(MAX_SIGNAL_LENGTH + 1) },
+      { ...wake, by: { login: "Alice" } },
+      { kind: "wake" },
+      "wake",
+    ]) {
+      const refused = await raise(bearer(command), body);
+      // A field the route does not read changes nothing of who is said to have sent it.
+      if (refused.status === 201) {
+        expect(restSignalSchema.parse(await refused.json()).by).toBeNull();
+        continue;
+      }
+      expect(refused.status, JSON.stringify(body).slice(0, 60)).toBe(400);
+      expect(await errorOf(refused)).toBe("request.invalid");
+    }
+    // Only the account's own command raises one: not its browser, not its supervisor, nobody.
+    const browser = await raise({ cookie: mira, origin: SIGN_IN_URL }, wake);
+    expect(browser.status).toBe(403);
+    expect(await errorOf(browser)).toBe("agent.own_command");
+    expect((await raise(fromPages(alice), wake)).status).toBe(404);
+    expect((await raise({}, wake)).status).not.toBe(201);
+  });
 });

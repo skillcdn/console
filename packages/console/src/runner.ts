@@ -47,6 +47,7 @@ export {
   type RunnerOptions,
   type RunnerState,
 } from "./runner/runner.js";
+export { SLACK_APP_TOKEN, slack, slackWakeOf } from "./runner/slack.js";
 export type {
   Boundary,
   Child,
@@ -62,5 +63,7 @@ export type {
   ServicePlan,
   Spawn,
   StartOptions,
+  WakeHost,
+  WakeSocket,
   WakeSource,
 } from "./runner/types.js";

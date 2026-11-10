@@ -61,6 +61,8 @@ export const MAX_AGENT_SECRET_BYTES = 8 * 1024;
 export const MAX_AGENT_SECRETS = 200;
 /** What a signal says to an agent (ADR-0085): a few paragraphs. */
 export const MAX_SIGNAL_LENGTH = 8000;
+/** What a wake a runner raises itself is about, in a line: a thread at a messenger, say. */
+export const MAX_SIGNAL_KEY_LENGTH = 200;
 /** A line a runner says of its machine, its product, a model or a level of effort; and how many of those a product offers. */
 export const MAX_RUNNER_LINE_LENGTH = 120;
 export const MAX_RUNNER_OFFERS = 50;

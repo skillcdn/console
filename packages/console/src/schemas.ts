@@ -48,6 +48,7 @@ import {
   MAX_SECRET_LENGTH,
   MAX_SERVICE_PARAMETERS,
   MAX_SERVICE_VALUE_LENGTH,
+  MAX_SIGNAL_KEY_LENGTH,
   MAX_SIGNAL_LENGTH,
   MAX_SKILLS_ADDRESS_LENGTH,
   MAX_SUMMARY_LENGTH,
@@ -891,6 +892,20 @@ export const restSignalInputSchema = z
     ),
   );
 export type RestSignalInput = z.infer<typeof restSignalInputSchema>;
+
+/**
+ * What `POST /api/v1/agents/me/signals` is sent, by an account's own runner (ADR-0085): a wake
+ * one of its wake sources raised on the machine, from the messenger, with what it is about as
+ * its `key`, a thread say, and someone else's words as its `text`. Nothing else is raised this
+ * way: a runner tells its own agent nothing in anyone's name.
+ */
+export const restRunnerWakeSchema = z.object({
+  kind: z.literal("wake"),
+  source: z.literal("messenger"),
+  key: line(MAX_SIGNAL_KEY_LENGTH),
+  text: z.optional(paragraphs(MAX_SIGNAL_LENGTH)),
+});
+export type RestRunnerWake = z.infer<typeof restRunnerWakeSchema>;
 
 /**
  * The invitation that leads a machine to an agent account (ADR-0088), as it stands: when it was

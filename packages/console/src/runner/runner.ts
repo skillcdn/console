@@ -13,7 +13,16 @@ import type { AgentStateReason, TranscriptKind } from "../vocabulary.js";
 import type { RunnerConfig } from "./config.js";
 import { composeSignals, GROUP_WINDOW_MS, introOf, makeMark } from "./message.js";
 import { redactorOf } from "./redact.js";
-import type { Driver, DriverEvent, DriverSession, Fact, Picture, Probe } from "./types.js";
+import type {
+  Driver,
+  DriverEvent,
+  DriverSession,
+  Fact,
+  Picture,
+  Probe,
+  WakeHost,
+  WakeSource,
+} from "./types.js";
 
 // The runner (ADR-0085, docs/specs/runner.md): one process per agent account on its machine. It
 // keeps one session of the agent's product at a time, feeds it what the console sends, reports
@@ -34,6 +43,10 @@ export const COOL_DOWN_MS = 15 * 60_000;
 export const MAX_COOL_DOWN_MS = 4 * 60 * 60_000;
 /** How long the runner waits before it asks for its stream of signals again. */
 export const RECONNECT_MS = 5000;
+/** The longest the runner waits before it starts a wake source again that keeps ending at once. */
+export const MAX_SOURCE_PAUSE_MS = 5 * 60_000;
+/** How long a wake source holds before the runner takes it to have worked. */
+const SOURCE_HELD_MS = 60_000;
 /** How many events wait to be sent before the oldest are let go: a console away for hours is not kept up with in memory. */
 const MAX_OUTBOX = 20_000;
 /** Room left in a batch for what wraps its events. */
@@ -52,6 +65,7 @@ export type RunnerClient = Pick<
   | "secrets"
   | "secret"
   | "readSignalFile"
+  | "raiseWake"
 >;
 
 /** What the runner keeps between its own restarts. No secret is in it. */
@@ -86,6 +100,14 @@ export interface RunnerOptions {
   };
   /** A line for whoever reads the runner's own output: ids, numbers and codes, never what a signal or an event says. */
   readonly log: (line: string) => void;
+  /** The wake sources `runner.json` names beside the console's own, and what they need of the machine. */
+  readonly wakes?:
+    | {
+        readonly sources: readonly WakeSource[];
+        readonly fetch: WakeHost["fetch"];
+        readonly socket: WakeHost["socket"];
+      }
+    | undefined;
   /** The durations, for a test to shorten. */
   readonly timing?: Partial<{
     heartbeatMs: number;
@@ -850,6 +872,62 @@ export function createRunner(options: RunnerOptions): Runner {
     }
   };
 
+  /** Waits so long, or until the runner stops. */
+  const pause = (ms: number, signal: AbortSignal = abort.signal): Promise<void> =>
+    new Promise<void>((resolve) => {
+      if (signal.aborted) {
+        resolve();
+        return;
+      }
+      const timer = setTimeout(resolve, ms);
+      signal.addEventListener(
+        "abort",
+        () => {
+          clearTimeout(timer);
+          resolve();
+        },
+        { once: true },
+      );
+    });
+
+  /**
+   * Keeps a wake source listening for as long as the runner runs: started again when it ends,
+   * soon where it held for a while, and after longer and longer where it keeps ending at once.
+   * What it raises goes to the console, and comes back in order on the runner's own stream.
+   */
+  const keepSource = async (source: WakeSource): Promise<void> => {
+    const wakes = options.wakes;
+    if (source.run === undefined || wakes === undefined) {
+      return;
+    }
+    const host: WakeHost = {
+      secret: async (name) => secretValues.get(name),
+      raise: async (raised) => {
+        await client.raiseWake({ source: "messenger", key: raised.key, text: raised.text });
+      },
+      log,
+      fetch: wakes.fetch,
+      socket: wakes.socket,
+      wait: pause,
+    };
+    let wait = timing.reconnectMs;
+    while (!stopped) {
+      const began = options.now();
+      try {
+        await source.run(host, abort.signal);
+      } catch (error) {
+        if (!stopped) {
+          log(`the wake source ${source.name} ended (${codeOf(error)}); started again`);
+        }
+      }
+      wait =
+        options.now() - began >= SOURCE_HELD_MS
+          ? timing.reconnectMs
+          : Math.min(wait * 2, MAX_SOURCE_PAUSE_MS);
+      await pause(wait);
+    }
+  };
+
   /** Reads the account's signals as they are sent, from the last one received on, for as long as the runner runs. */
   const listen = async (): Promise<void> => {
     while (!stopped) {
@@ -929,6 +1007,7 @@ export function createRunner(options: RunnerOptions): Runner {
       handled = delivered;
       said = `${stands.state} ${stands.reason} `;
       const listening = listen();
+      const sourcing = (options.wakes?.sources ?? []).map((source) => keepSource(source));
       const beating = setInterval(() => push({ t: "heartbeat" }), timing.heartbeatMs);
       const batching = setInterval(() => push({ t: "flush" }), timing.batchMs);
       log(
@@ -976,6 +1055,7 @@ export function createRunner(options: RunnerOptions): Runner {
         await end("exited");
         abort.abort();
         await listening;
+        await Promise.all(sourcing);
         log("the runner stopped");
       }
     },
