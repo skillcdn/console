@@ -11,6 +11,7 @@ import type { PackConnector } from "../ports/skill-source.js";
 import type { Skills } from "../skills.js";
 import { registerAgentRunnerRest } from "./agent-runner-rest.js";
 import { registerAgentSecretsRest } from "./agent-secrets-rest.js";
+import { registerAgentTranscriptRest } from "./agent-transcript-rest.js";
 import { registerAgentsRest } from "./agents-rest.js";
 import { type AppAuth, createAccess, registerAuth } from "./auth.js";
 import type { ClientAddressResolver } from "./client-address.js";
@@ -157,6 +158,15 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
   });
 
   registerAgentRunnerRest(app, { database, access, wakes: feed.agents, clock, logger });
+
+  registerAgentTranscriptRest(app, {
+    database,
+    access,
+    blobs,
+    wakes: feed.agents,
+    clock,
+    logger,
+  });
 
   registerAgentSecretsRest(app, {
     database,

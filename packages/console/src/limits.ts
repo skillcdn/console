@@ -67,6 +67,27 @@ export const MAX_RUNNER_OFFERS = 50;
 /** How many signals one page of an account's record carries when none is asked for, and the most it may. */
 export const SIGNALS_PAGE_LIMIT = 50;
 export const MAX_SIGNALS_PAGE_LIMIT = 200;
+/** A batch of a transcript's events (ADR-0086): how many events, and how many bytes, one request carries. */
+export const MAX_TRANSCRIPT_BATCH = 100;
+export const MAX_TRANSCRIPT_BATCH_BYTES = 2 * 1024 * 1024;
+/** What a person reads of one event, in bytes of UTF-8, and how much of it the row keeps: the whole of a longer text is in the blob store. */
+export const MAX_TRANSCRIPT_TEXT_BYTES = 256 * 1024;
+export const TRANSCRIPT_INLINE_BYTES = 16 * 1024;
+/** The facts about a block: how many, how long the name of one, and how long one that is a text. */
+export const MAX_TRANSCRIPT_FACTS = 32;
+export const MAX_TRANSCRIPT_FACT_NAME_LENGTH = 64;
+export const MAX_TRANSCRIPT_FACT_LENGTH = 1000;
+/** How many pictures one event carries, and how many a session hands in within a minute. */
+export const MAX_TRANSCRIPT_ATTACHMENTS = 8;
+export const MAX_TRANSCRIPT_FILES_PER_MINUTE = 60;
+/** How many events one page of a session carries when none is asked for, and the most it may. */
+export const TRANSCRIPT_PAGE_LIMIT = 100;
+export const MAX_TRANSCRIPT_PAGE_LIMIT = 500;
+/** How many sessions one page of an account's carries when none is asked for, and the most it may. */
+export const SESSIONS_PAGE_LIMIT = 50;
+export const MAX_SESSIONS_PAGE_LIMIT = 200;
+/** Why an event was sealed, in a line. */
+export const MAX_SEAL_REASON_LENGTH = 500;
 /** A team's name (ADR-0073). */
 export const MAX_TEAM_NAME_LENGTH = 60;
 /** A team's key (ADR-0074), as long as a project's may be: the two are one set of names. */

@@ -129,11 +129,29 @@ describe("the blob store on a bucket with the S3 API", () => {
     expect(await store.get(sha256("never kept"))).toBeUndefined();
   });
 
+  it("keeps a month of the transcript under a prefix of its own, and takes bytes off it (ADR-0086)", async () => {
+    const store = storeOn();
+    const text = randomBytes(40_000);
+    const shelf = { transcript: "2026-11" };
+    const kept = await store.put(text, new Date(), shelf);
+    expect(kept).toEqual({ sha256: sha256(text), size: text.byteLength });
+    const read = await store.get(kept.sha256, shelf);
+    expect(Buffer.from(read ?? []).equals(text)).toBe(true);
+    // Apart from the board's files, and from another month's.
+    expect(await store.get(kept.sha256)).toBeUndefined();
+    expect(await store.get(kept.sha256, { transcript: "2026-12" })).toBeUndefined();
+    await store.remove(kept.sha256, shelf);
+    expect(await store.get(kept.sha256, shelf)).toBeUndefined();
+    // What is gone already is gone.
+    await expect(store.remove(kept.sha256, shelf)).resolves.toBeUndefined();
+  });
+
   it("reads what was kept before the bucket from there, and refuses bytes that are not their hash's", async () => {
     const elsewhere = new TextEncoder().encode("kept in the rows before the bucket");
     const before: BlobStore = {
       put: () => Promise.reject(new Error("not written here")),
       get: async (asked) => (asked === sha256(elsewhere) ? elsewhere : undefined),
+      remove: async () => undefined,
     };
     const store = storeOn({ before });
     expect(await store.get(sha256(elsewhere))).toEqual(elsewhere);

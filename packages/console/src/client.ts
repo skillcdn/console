@@ -24,6 +24,10 @@ import {
   type RestAgentSecretInput,
   type RestAgentSecrets,
   type RestAgentSecretValue,
+  type RestAgentSession,
+  type RestAgentSessionEndInput,
+  type RestAgentSessionInput,
+  type RestAgentSessions,
   type RestAgents,
   type RestAnswerInput,
   type RestArchivedTasks,
@@ -118,6 +122,13 @@ import {
   type RestTokenCreated,
   type RestTokenInput,
   type RestTokens,
+  type RestTranscriptBatch,
+  type RestTranscriptBatchInput,
+  type RestTranscriptEvent,
+  type RestTranscriptEvents,
+  type RestTranscriptFile,
+  type RestTranscriptSealInput,
+  type RestTranscriptText,
   type RestVersion,
   type RestVersions,
   type RestWork,
@@ -131,6 +142,8 @@ import {
   restAgentSecretSchema,
   restAgentSecretsSchema,
   restAgentSecretValueSchema,
+  restAgentSessionSchema,
+  restAgentSessionsSchema,
   restAgentsSchema,
   restArchivedTasksSchema,
   restCategoriesSchema,
@@ -192,6 +205,11 @@ import {
   restTeamsSchema,
   restTokenCreatedSchema,
   restTokensSchema,
+  restTranscriptBatchSchema,
+  restTranscriptEventSchema,
+  restTranscriptEventsSchema,
+  restTranscriptFileSchema,
+  restTranscriptTextSchema,
   restVersionSchema,
   restVersionsSchema,
   restWorkBriefSchema,
@@ -664,6 +682,46 @@ export interface ConsoleClient {
   ): Promise<RestSignals>;
   /** The runner's heartbeat, on the command signed in as the account itself. */
   runnerHeartbeat(input: RestRunnerHeartbeatInput): Promise<RestRunnerHeartbeat>;
+  /** The runner begins a session (ADR-0086): the one that was open is taken over. */
+  beginAgentSession(input: RestAgentSessionInput): Promise<RestAgentSession>;
+  /** The runner reports a batch of a session's events, in order; the same number sent again changes nothing. */
+  sendTranscript(sessionId: string, input: RestTranscriptBatchInput): Promise<RestTranscriptBatch>;
+  /** The runner hands in a picture of a session, and is answered the id an event names it by. */
+  uploadTranscriptFile(sessionId: string, input: FileUpload): Promise<RestTranscriptFile>;
+  /** The runner ends a session, and says how. */
+  endAgentSession(sessionId: string, input: RestAgentSessionEndInput): Promise<RestAgentSession>;
+  /** The sessions of an agent account, the newest first; for its supervisors, and as `me` for the account itself. */
+  agentSessions(
+    handle: string,
+    query?: { readonly before?: string | undefined; readonly limit?: number | undefined },
+    signal?: AbortSignal,
+  ): Promise<RestAgentSessions>;
+  agentSession(handle: string, sessionId: string, signal?: AbortSignal): Promise<RestAgentSession>;
+  /** The events of a session after a number, in order, a page at a time. */
+  transcript(
+    handle: string,
+    sessionId: string,
+    query?: { readonly after?: number | undefined; readonly limit?: number | undefined },
+    signal?: AbortSignal,
+  ): Promise<RestTranscriptEvents>;
+  /** Where an `EventSource` subscribes to a session's events after number `after`, as they happen. */
+  transcriptStreamUrl(handle: string, sessionId: string, after: number): string;
+  /** The whole text of one event, where its row keeps the beginning alone. */
+  transcriptText(
+    handle: string,
+    sessionId: string,
+    n: number,
+    signal?: AbortSignal,
+  ): Promise<RestTranscriptText>;
+  /** Where the bytes of a picture of a session are read. */
+  transcriptFileUrl(handle: string, sessionId: string, fileId: string): string;
+  /** Seals an event: what it held is replaced by who sealed it, when and why; for an administrator. */
+  sealTranscriptEvent(
+    handle: string,
+    sessionId: string,
+    n: number,
+    input: RestTranscriptSealInput,
+  ): Promise<RestTranscriptEvent>;
   /** Where an agent account is signed in, its browsers and its command; for a supervisor, on the console's own pages. */
   agentSignIns(handle: string, signal?: AbortSignal): Promise<RestSessions>;
   /** Ends one of an agent account's sessions; for a supervisor, on the console's own pages. */
@@ -1481,6 +1539,78 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
       ),
     runnerHeartbeat: (input) =>
       request("PUT", `${base}${agentPath("me", "runner")}`, input, restRunnerHeartbeatSchema),
+    beginAgentSession: (input) =>
+      request("POST", `${base}${agentPath("me", "sessions")}`, input, restAgentSessionSchema),
+    sendTranscript: (sessionId, input) =>
+      request(
+        "POST",
+        `${base}${agentPath("me", "sessions", sessionId, "events")}`,
+        input,
+        restTranscriptBatchSchema,
+      ),
+    uploadTranscriptFile: (sessionId, input) =>
+      request(
+        "POST",
+        `${base}${agentPath("me", "sessions", sessionId, "files")}`,
+        formOf(input),
+        restTranscriptFileSchema,
+      ),
+    endAgentSession: (sessionId, input) =>
+      request(
+        "POST",
+        `${base}${agentPath("me", "sessions", sessionId, "end")}`,
+        input,
+        restAgentSessionSchema,
+      ),
+    agentSessions: (handle, query, signal) =>
+      request(
+        "GET",
+        withQuery(agentPath(handle, "sessions"), {
+          before: query?.before,
+          limit: query?.limit === undefined ? undefined : String(query.limit),
+        }),
+        undefined,
+        restAgentSessionsSchema,
+        signal,
+      ),
+    agentSession: (handle, sessionId, signal) =>
+      request(
+        "GET",
+        `${base}${agentPath(handle, "sessions", sessionId)}`,
+        undefined,
+        restAgentSessionSchema,
+        signal,
+      ),
+    transcript: (handle, sessionId, query, signal) =>
+      request(
+        "GET",
+        withQuery(agentPath(handle, "sessions", sessionId, "events"), {
+          after: query?.after === undefined ? undefined : String(query.after),
+          limit: query?.limit === undefined ? undefined : String(query.limit),
+        }),
+        undefined,
+        restTranscriptEventsSchema,
+        signal,
+      ),
+    transcriptStreamUrl: (handle, sessionId, after) =>
+      `${base}${agentPath(handle, "sessions", sessionId, "events", "stream")}?after=${after}`,
+    transcriptText: (handle, sessionId, n, signal) =>
+      request(
+        "GET",
+        `${base}${agentPath(handle, "sessions", sessionId, "events", String(n), "text")}`,
+        undefined,
+        restTranscriptTextSchema,
+        signal,
+      ),
+    transcriptFileUrl: (handle, sessionId, fileId) =>
+      `${base}${agentPath(handle, "sessions", sessionId, "files", fileId)}`,
+    sealTranscriptEvent: (handle, sessionId, n, input) =>
+      request(
+        "POST",
+        `${base}${agentPath(handle, "sessions", sessionId, "events", String(n), "seal")}`,
+        input,
+        restTranscriptEventSchema,
+      ),
     agentSignIns: (handle, signal) =>
       request(
         "GET",

@@ -8,10 +8,42 @@ import { DomainError } from "../errors.js";
  * never from input: holding a hash is not permission to read what it names.
  */
 export interface BlobStore {
-  /** Keeps the bytes and answers their hash and size. Keeping the same bytes twice keeps one copy. */
-  put(bytes: Uint8Array, now: Date): Promise<StoredBlob>;
-  /** The bytes kept under the hash, or nothing. */
-  get(sha256: string): Promise<Uint8Array | undefined>;
+  /**
+   * Keeps the bytes and answers their hash and size. Keeping the same bytes twice keeps one
+   * copy. On the shelf named, or among the board's files where none is.
+   */
+  put(bytes: Uint8Array, now: Date, shelf?: BlobShelf): Promise<StoredBlob>;
+  /** The bytes kept under the hash, on the shelf named or among the board's files, or nothing. */
+  get(sha256: string, shelf?: BlobShelf): Promise<Uint8Array | undefined>;
+  /**
+   * Takes the bytes under a hash off a shelf, where they are: what a sealed event held
+   * (ADR-0086). Nothing of the board's files is ever removed this way.
+   */
+  remove(sha256: string, shelf: BlobShelf): Promise<void>;
+}
+
+/**
+ * A part of the store kept apart from the board's files, so that whoever keeps the store moves it
+ * alone (ADR-0086): a month of the transcript, as `2026-11`. A table of the month in the store
+ * the database keeps, a prefix of the month in a bucket.
+ */
+export interface BlobShelf {
+  readonly transcript: string;
+}
+
+const MONTH = /^[0-9]{4}-(?:0[1-9]|1[0-2])$/;
+
+/** Whether `value` is spelled as a month is, `2026-11`: what names a shelf, a table and a prefix. */
+export function isMonth(value: string): boolean {
+  return MONTH.test(value);
+}
+
+/** The shelf's month, or an error: a month goes into a key and a table's name, and is never input. */
+export function monthOfShelf(shelf: BlobShelf): string {
+  if (!isMonth(shelf.transcript)) {
+    throw new Error("a shelf of the blob store is named by a month");
+  }
+  return shelf.transcript;
 }
 
 export interface StoredBlob {

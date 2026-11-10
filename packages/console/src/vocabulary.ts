@@ -146,6 +146,52 @@ export const SIGNAL_SOURCES = ["person", "board", "schedule", "messenger", "cons
 export type SignalSource = (typeof SIGNAL_SOURCES)[number];
 
 /**
+ * How a runner's session ended (ADR-0085, ADR-0086): a supervisor stopped the agent, restarted
+ * it or reset it; the product's process died, or exited by itself; or a session begun after it
+ * took it over, which is the console's word and never the runner's.
+ */
+export const SESSION_ENDS = [
+  "stopped",
+  "restarted",
+  "reset",
+  "crashed",
+  "exited",
+  "taken_over",
+] as const;
+
+export type SessionEnd = (typeof SESSION_ENDS)[number];
+
+/**
+ * What an event of a session's transcript is (ADR-0086): what the agent was sent, `wake` by the
+ * console and `person` by a supervisor; what it said and what it thought; a tool it called and
+ * what came back; a permission asked and how it was answered; a status of the product or of the
+ * session; an error.
+ */
+export const TRANSCRIPT_KINDS = [
+  "wake",
+  "person",
+  "assistant",
+  "thinking",
+  "tool_call",
+  "tool_result",
+  "permission",
+  "status",
+  "error",
+] as const;
+
+export type TranscriptKind = (typeof TRANSCRIPT_KINDS)[number];
+
+/** The kinds of picture a transcript keeps: what an agent's tools returned, shown in place and never run. */
+export const TRANSCRIPT_PICTURE_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+] as const;
+
+export type TranscriptPictureType = (typeof TRANSCRIPT_PICTURE_TYPES)[number];
+
+/**
  * What was done to a secret of an agent account's store (ADR-0087), as the account's record
  * says it: set, by the account or seeded by a supervisor; read, by the account; or removed.
  */

@@ -161,6 +161,43 @@ Every file is one object under the SHA-256 of its bytes, below the prefix: the c
 
 A console that kept files in PostgreSQL before it was given a bucket loses none of them: what the bucket has nothing under is read from the rows, which are never written again, and nothing is copied. Locally, `deploy/compose.dev.yaml` runs a store with the S3 API on `127.0.0.1:7070`, where the integration tests make the bucket `console`; [`.env.example`](../.env.example) shows how to point the api at it.
 
+## The transcript of a month that is past
+
+An agent account's sessions leave a transcript that the console keeps for good and never deletes ([ADR-0086](../docs/adr/0086-a-session-leaves-a-transcript-that-is-kept-for-good.md)). It grows with the work, and what becomes of the old part is yours: the console lays it out so that a month is moved alone, with the database's and the bucket's own tools, and keeps working while a month is away.
+
+Everything of a session is under the month it began in, by UTC, in the schema `transcript`, which references nothing outside itself:
+
+| What | Where, for the month `2026-11` |
+|---|---|
+| The events | the partition `transcript.events_2026_11` of `transcript.events` |
+| The pictures' records | the partition `transcript.files_2026_11` of `transcript.files` |
+| The bytes of long texts and pictures | with a bucket, the objects under `<S3_KEY_PREFIX>transcript/2026-11/`; without one, the partition `transcript.blobs_2026_11` of `transcript.blobs` |
+| The sessions themselves | rows of `transcript.sessions`, which stay |
+
+A month is ready to be put away when no session that began in it, or before it, is open:
+
+```sql
+select count(*) from transcript.sessions where ended_at is null and month <= '2026-11';
+```
+
+Then detach its partitions, and do with the tables what your procedure says: dump them, move them to other storage, keep them where they are.
+
+```sql
+alter table transcript.events detach partition transcript.events_2026_11;
+alter table transcript.files detach partition transcript.files_2026_11;
+alter table transcript.blobs detach partition transcript.blobs_2026_11;
+```
+
+The objects under the month's prefix are moved with the bucket's own tools. From then on the sessions of that month are still listed, and say that their events are put away. To read a month again, bring the tables back, attach them, and put the objects back under the prefix:
+
+```sql
+alter table transcript.events attach partition transcript.events_2026_11 for values in ('2026-11');
+alter table transcript.files attach partition transcript.files_2026_11 for values in ('2026-11');
+alter table transcript.blobs attach partition transcript.blobs_2026_11 for values in ('2026-11');
+```
+
+The console makes a month's partitions itself, when a session begins in it and ahead of time from the `worker` role, so its database role creates tables in the schema `transcript`; it never drops or detaches one. A deployment with agent accounts is better served by a bucket than by the rows of PostgreSQL: pictures kept for good do not belong in rows.
+
 ## Behind a reverse proxy
 
 A proxy in front reuses idle connections to the console. `HTTP_KEEP_ALIVE_SECONDS` must be longer than the proxy's own idle timeout, or the proxy now and then sends a request into a connection the console has just closed. `HTTP_REQUEST_TIMEOUT_SECONDS` bounds how long one request may take to arrive in full.

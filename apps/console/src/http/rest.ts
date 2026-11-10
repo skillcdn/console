@@ -251,6 +251,7 @@ import {
   teamKeysByPerson,
 } from "../db/queries/teams.js";
 import { TokenError } from "../db/queries/tokens.js";
+import { openSessionOf } from "../db/queries/transcript.js";
 import {
   membersSyncedAt,
   readWorkspacePackToken,
@@ -3041,11 +3042,18 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     }
     const { person, token } = found;
     try {
+      // An agent account's command works inside the session its runner keeps: the run names it,
+      // so that what the agent did for the task is read in its transcript (ADR-0086).
+      const session =
+        person.kind === "agent" && found.command !== undefined
+          ? await openSessionOf(database, person.id)
+          : undefined;
       const run = await startRun(database, {
         scope: found.scope,
         limit: quotas.runsPerTask,
         actor: found.actor,
         tokenId: token?.id,
+        sessionId: session?.id,
         taskId: input.taskId,
         // What people see at work: what the agent says it is, else what its person called the
         // token, else what the command signed in as the account called itself.

@@ -72,6 +72,8 @@ export interface RunRecord {
   readonly artifacts: readonly ArtifactRecord[];
   /** The decision the run waits for, while one does. */
   readonly waitingFor: string | undefined;
+  /** The session of an agent account's runner the run was begun in (ADR-0086), where it was in one. */
+  readonly sessionId: string | undefined;
 }
 
 /** What is wrong with a run an agent or a person asked for. `code` is what the API answers with. */
@@ -128,6 +130,7 @@ const runColumns = {
   lastHeardAt: runs.lastHeardAt,
   person: personColumns(runners),
   waitingFor: waitingForOf,
+  sessionId: runs.sessionId,
 };
 
 const artifactColumns = {
@@ -217,6 +220,7 @@ async function attach(handle: Handle, rows: readonly RunRow[]): Promise<RunRecor
       .map((report) => ({ id: report.id, body: report.body, createdAt: report.createdAt })),
     artifacts: handedIn.filter((artifact) => artifact.runId === row.id).map(toArtifact),
     waitingFor: row.waitingFor ?? undefined,
+    sessionId: row.sessionId ?? undefined,
   }));
 }
 
@@ -314,6 +318,8 @@ export async function startRun(
     readonly tokenId: string | undefined;
     readonly taskId: string;
     readonly agent: string;
+    /** The session of an agent account's runner the run is begun in, where it is in one. */
+    readonly sessionId?: string | undefined;
     /** How many runs the task may carry, this one included; the package's bound when left out. */
     readonly limit?: number | undefined;
     readonly now: Date;
@@ -371,6 +377,7 @@ export async function startRun(
         taskId,
         personId: actor.id,
         tokenId: tokenId ?? null,
+        sessionId: input.sessionId ?? null,
         agent,
         status: "running",
         startedAt: now,

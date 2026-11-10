@@ -429,11 +429,37 @@ What passes between the console and an agent account's runner ([ADR-0085](../adr
 
 **Sending one.** `POST /api/v1/agents/<handle>/signals`, for a supervisor, signed in on the console's own pages or through their agent's token ([ADR-0021](../adr/0021-a-token-configures-as-its-person-does.md)), takes `{ "kind", "text", "set" }` and answers `201` with the signal, numbered next on the account's record and naming who sent it and the agent they sent it through. `kind` is one of `wake`, `tell`, `interrupt`, `stop`, `restart`, `reset` and `set`; `text` is up to `MAX_SIGNAL_LENGTH` characters, which `tell` and `interrupt` need; `set` is `{ "model", "effort" }` for the kind `set`, one or both, a field left out staying as it is and `null` meaning the product's own again, each one of those the runner last offered where it offered any (`signal.not_offered`). A `stop` makes the agent `stopped` at once, by whoever sent it, and it stays so until a `restart` or a `reset` is sent; a `set` is kept with the account, and its runner applies it. The account's stream is woken in every process, on a channel of the accounts' own, which wakes no reader of the board's feed.
 
+### The sessions and the transcript
+
+A session is the lifetime of one process of an agent account's product, and leaves a transcript that the console keeps for good ([ADR-0086](../adr/0086-a-session-leaves-a-transcript-that-is-kept-for-good.md)). The bodies and their bounds are in [runner.md](runner.md#the-transcript); the routes, who asks them and what they refuse are here. Nothing of it is an event of the board's feed.
+
+A session is `{ "id", "month", "startedAt", "endedAt", "ended", "product", "model", "effort", "resumed", "machine", "events", "lastEventAt", "away" }`: the month it began in (`2026-11`), under which everything of it is kept; when and how it ended (`stopped`, `restarted`, `reset`, `crashed`, `exited`, or `taken_over` by a session begun after it), `null` each while it is open; what it ran, with which model and effort, whether it went on with the conversation before, and where; the number of its last event and when that came; and `away`, whether its month is not with the database now, put away by whoever keeps it.
+
+**The runner's own**, under `/api/v1/agents/me/sessions`, for an agent account on its command's session, as the heartbeat is (`agent.own_command`, `agent.not_found`).
+
+- `POST` begins a session and answers `201` with it. One session of an account is open at a time: the one that was open ends as `taken_over`.
+- `POST .../<id>/events` takes `{ "events": [...] }`, a batch in order, and answers `{ "last" }`, the number of the session's last event now. A number the session has already changes nothing; `transcript.out_of_order` (`400`) for a batch not in order, `transcript.gap` (`409`) for one that would leave a gap, `transcript.unknown_file` (`400`) for a picture that is not the session's, `transcript.session_over` (`409`) for a session that ended, `transcript.away` (`409`) for one whose month is put away, `request.too_large` beyond 2 MiB, and `transcript.session_not_found` for a session that is not the account's.
+- `POST .../<id>/files` takes a form with one part `file`, a picture (`image/png`, `image/jpeg`, `image/gif`, `image/webp`) up to `MAX_FILE_BYTES`, and answers `201` with `{ "id", "name", "size", "contentType" }`, what an event names it by; `transcript.too_fast` (`429`) beyond 60 a minute for one session.
+- `POST .../<id>/end` takes `{ "how" }` and answers the session; ended already, it stays as it ended.
+
+**Reading**, under `/api/v1/agents/<handle>/sessions`, for the account's supervisors, with a session or a token, and for the account itself, as `me` or by its handle, on a session of its own (`auth.forbidden` for whoever sees the account and does not supervise it; `agent.own_command` for a token the account made).
+
+- `GET ?before=&limit=` answers `{ "items": [session, ...], "more" }`, the newest first, `limit` of them (50 where none is said, 200 at most), from before the moment `before` on, which is a session's `startedAt`.
+- `GET .../<id>` answers one; `transcript.session_not_found` for a session that is not that account's.
+- `GET .../<id>/events?after=&limit=` answers `{ "items": [event, ...], "more" }`, the events after the number `after`, in order, `limit` of them (100 where none is said, 500 at most). An event is `{ "n", "kind", "at", "text", "whole", "data", "files", "sealed" }`: `text` is the whole text, or its beginning where `whole` says how many bytes the whole is; `files` its pictures; `sealed` is `null`, or `{ "by", "at", "reason" }` for an event whose content was sealed, which then has no text, no facts and no pictures.
+- `GET .../<id>/events/stream?after=` is the same as server-sent events: each `event` with an event as its data and its number as its id, a comment in the silences, and an `end` with the session as its data once it is over and everything of it was sent, after which the stream ends. `Last-Event-ID` is read in place of `after` where it is further on. Whoever watches is woken on the agent accounts' own channel, by the session.
+- `GET .../<id>/events/<n>/text` answers `{ "n", "text" }`, the whole text of one event; `transcript.event_not_found` for a number the session has not.
+- `GET .../<id>/files/<file id>` answers the bytes of a picture, shown in place under its kind, with `nosniff` and a policy that runs nothing; `file.not_found` for an id that is not that session's.
+
+**Sealing.** `POST /api/v1/agents/<handle>/sessions/<id>/events/<n>/seal`, for an administrator, signed in on the console's own pages or through their agent's token ([ADR-0021](../adr/0021-a-token-configures-as-its-person-does.md)), takes `{ "reason" }`, a line up to `MAX_SEAL_REASON_LENGTH`, and answers the event as it is from then on: its content replaced by who sealed it, when and why. A supervisor who is no administrator is `auth.forbidden`. An event sealed already stays as it was sealed. The one way anything leaves a transcript, and on the record.
+
+A run carries `sessionId`, the session of an agent account's runner it was begun in, or `null`: set by the console for a run the account's command begins while a session of the account is open.
+
 ### To come
 
 | Milestone | What |
 |---|---|
-| 42 | The transcript: the runner's `POST /api/v1/agents/me/sessions` and `.../sessions/<id>/events`, and `GET /api/v1/agents/<handle>/sessions` and `.../sessions/<id>/events?after=`; the pictures sent with a `tell` |
+| 42 | The pictures a supervisor sends with a `tell`, with the agent's page |
 | 43 | The invitation ([ADR-0088](../adr/0088-an-agent-account-has-a-desk-and-is-set-up-from-an-invitation-by-signing-in-as-itself.md)) and the guide it opens; the workspace's `handle`, `domain` and `services` ([ADR-0089](../adr/0089-a-workspace-names-the-services-its-agents-work-with.md)) |
 
 ## Signing in

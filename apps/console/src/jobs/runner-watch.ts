@@ -1,5 +1,6 @@
 import type { Database } from "../db/client.js";
 import { noteUnheardRunners } from "../db/queries/agent-runners.js";
+import { ensureMonths, monthAfter, monthOf } from "../db/queries/transcript.js";
 import type { Logger } from "../logger.js";
 import type { Clock } from "../ports/clock.js";
 
@@ -9,11 +10,13 @@ export const RUNNER_UNHEARD_MS = 5 * 60_000;
 export const RUNNER_WATCH_INTERVAL_MS = 60_000;
 
 /**
- * Notes the agent accounts whose runner was last heard from too long ago (ADR-0085): the
- * agent's state becomes `unheard`, and the workspace is told, by nobody, so that whoever manages
- * it hears of it. The runner's next heartbeat says how the agent stands again. Every process may
- * run it: a pass that finds nothing notes nothing. The worker runs it on a schedule, and so does
- * the `api` role when told to carry the worker's work itself.
+ * What the worker does for the agent accounts on a schedule. It notes those whose runner was
+ * last heard from too long ago (ADR-0085): the agent's state becomes `unheard`, and the
+ * workspace is told, by nobody, so that whoever manages it hears of it; the runner's next
+ * heartbeat says how the agent stands again. And it makes the partitions of the transcript for
+ * this month and the next ahead of time (ADR-0086), so that a session that begins as a month
+ * turns finds its month there. Every process may run it: a pass that finds nothing does nothing.
+ * The worker runs it, and so does the `api` role when told to carry the worker's work itself.
  */
 export class RunnerWatch {
   readonly #database: Database;
@@ -46,6 +49,12 @@ export class RunnerWatch {
         }
       } catch (error) {
         this.#logger.warn({ err: error }, "runners not heard from were not noted");
+      }
+      try {
+        const month = monthOf(this.#clock.now());
+        await ensureMonths(this.#database, [month, monthAfter(month)]);
+      } catch (error) {
+        this.#logger.warn({ err: error }, "the transcript's months were not made ahead");
       }
     });
     return this.#running;

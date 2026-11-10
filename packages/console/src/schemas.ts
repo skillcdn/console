@@ -42,6 +42,7 @@ import {
   MAX_RULES_LENGTH,
   MAX_RUNNER_LINE_LENGTH,
   MAX_RUNNER_OFFERS,
+  MAX_SEAL_REASON_LENGTH,
   MAX_SECRET_LENGTH,
   MAX_SIGNAL_LENGTH,
   MAX_SKILLS_ADDRESS_LENGTH,
@@ -51,6 +52,12 @@ import {
   MAX_TITLE_LENGTH,
   MAX_TOKEN_DAYS,
   MAX_TOKEN_NAME_LENGTH,
+  MAX_TRANSCRIPT_ATTACHMENTS,
+  MAX_TRANSCRIPT_BATCH,
+  MAX_TRANSCRIPT_FACT_LENGTH,
+  MAX_TRANSCRIPT_FACT_NAME_LENGTH,
+  MAX_TRANSCRIPT_FACTS,
+  MAX_TRANSCRIPT_TEXT_BYTES,
   MAX_URL_LENGTH,
   MAX_WORKERS,
   MIN_HANDLE_LENGTH,
@@ -84,12 +91,14 @@ import {
   RUN_ENDINGS,
   RUN_STATUSES,
   SECRET_ACCESSES,
+  SESSION_ENDS,
   SESSION_KINDS,
   SIGNAL_KINDS,
   SIGNAL_SOURCES,
   SKILLS_STATUSES,
   TASK_PRIORITIES,
   TASK_STATES,
+  TRANSCRIPT_KINDS,
   WEEK_STARTS,
 } from "./vocabulary.js";
 
@@ -752,6 +761,168 @@ export const restSignalInputSchema = z
     ),
   );
 export type RestSignalInput = z.infer<typeof restSignalInputSchema>;
+
+/** How many bytes of UTF-8 a text is, without encoding one that cannot be over or under the bound anyway. */
+function utf8Within(value: string, bytes: number): boolean {
+  if (value.length > bytes) {
+    return false;
+  }
+  return value.length * 3 <= bytes || new TextEncoder().encode(value).byteLength <= bytes;
+}
+
+/**
+ * What `POST /api/v1/agents/me/sessions` is sent (ADR-0085, docs/specs/runner.md): what the
+ * session the runner begins runs, and where.
+ */
+export const restAgentSessionInputSchema = z.object({
+  product: runnerProduct,
+  model: z.nullable(runnerChoice),
+  effort: z.nullable(runnerChoice),
+  /** Whether the conversation of the session before is gone on with. */
+  resumed: z.boolean(),
+  machine: runnerMachine,
+});
+export type RestAgentSessionInput = z.infer<typeof restAgentSessionInputSchema>;
+
+/**
+ * A session of an agent account's runner (ADR-0086): the lifetime of one process of its product,
+ * which leaves a transcript. The row stays, and says what the session held, whatever becomes of
+ * the month its events are kept under.
+ */
+export const restAgentSessionSchema = z.object({
+  id: uuid,
+  /** The month it began in, as `2026-11`: what its events and its pictures are kept under. */
+  month: z.string(),
+  startedAt: instant,
+  /** When it ended, and how; `null` each while it is open. */
+  endedAt: z.nullable(instant),
+  ended: z.nullable(z.enum(SESSION_ENDS)),
+  product: z.object({
+    driver: z.string(),
+    name: z.string(),
+    version: z.nullable(z.string()),
+    tried: z.boolean(),
+  }),
+  model: z.nullable(z.string()),
+  effort: z.nullable(z.string()),
+  resumed: z.boolean(),
+  machine: z.object({ name: z.string(), os: z.string(), user: z.string() }),
+  /** The number of its last event; `0` for none. */
+  events: count,
+  lastEventAt: z.nullable(instant),
+  /** Whether its events are put away: the month they are kept under is not with the database now. */
+  away: z.boolean(),
+});
+export type RestAgentSession = z.infer<typeof restAgentSessionSchema>;
+
+/** `GET /api/v1/agents/<handle>/sessions?before=&limit=`: the sessions, the newest first, and whether there are more before. */
+export const restAgentSessionsSchema = z.object({
+  items: z.array(restAgentSessionSchema),
+  more: z.boolean(),
+});
+export type RestAgentSessions = z.infer<typeof restAgentSessionsSchema>;
+
+/** What `POST /api/v1/agents/me/sessions/<id>/end` is sent: how the session ended, as the runner saw it. */
+export const restAgentSessionEndInputSchema = z.object({
+  how: z.enum(["stopped", "restarted", "reset", "crashed", "exited"]),
+});
+export type RestAgentSessionEndInput = z.infer<typeof restAgentSessionEndInputSchema>;
+
+/** A fact about a block of a transcript: a word, a number, a yes or a no. Shown as text, never run. */
+const transcriptFact = z.union([
+  z.string().check(z.maxLength(MAX_TRANSCRIPT_FACT_LENGTH)),
+  z.number(),
+  z.boolean(),
+  z.null(),
+]);
+
+/**
+ * One event of a session's transcript as its runner reports it (ADR-0086): a whole block,
+ * numbered per session from 1, with what a person reads of it as text and a few facts about it.
+ * The text is whatever the product said, control characters and all: it is kept as data and
+ * shown as text, so nothing of it is refused but its length.
+ */
+export const restTranscriptEventInputSchema = z.object({
+  n: z.int().check(z.positive()),
+  kind: z.enum(TRANSCRIPT_KINDS),
+  /** When it happened, as the runner's clock had it. */
+  at: instant,
+  text: z
+    .string()
+    .check(z.refine((value) => utf8Within(value, MAX_TRANSCRIPT_TEXT_BYTES), "is too long")),
+  data: z.optional(
+    z
+      .record(
+        z.string().check(z.minLength(1), z.maxLength(MAX_TRANSCRIPT_FACT_NAME_LENGTH)),
+        transcriptFact,
+      )
+      .check(
+        z.refine((data) => Object.keys(data).length <= MAX_TRANSCRIPT_FACTS, "has too many facts"),
+      ),
+  ),
+  /** The pictures of the block, by the ids their upload answered, of this session. */
+  files: z.optional(z.array(uuid).check(z.maxLength(MAX_TRANSCRIPT_ATTACHMENTS))),
+});
+export type RestTranscriptEventInput = z.infer<typeof restTranscriptEventInputSchema>;
+
+/** What `POST /api/v1/agents/me/sessions/<id>/events` is sent: a batch, in order. The same number sent again changes nothing. */
+export const restTranscriptBatchInputSchema = z.object({
+  events: z
+    .array(restTranscriptEventInputSchema)
+    .check(z.minLength(1), z.maxLength(MAX_TRANSCRIPT_BATCH)),
+});
+export type RestTranscriptBatchInput = z.infer<typeof restTranscriptBatchInputSchema>;
+
+/** What a batch is answered: the number of the session's last event now, which the next batch goes on from. */
+export const restTranscriptBatchSchema = z.object({ last: count });
+export type RestTranscriptBatch = z.infer<typeof restTranscriptBatchSchema>;
+
+/** A picture of a transcript, as its upload answers it and as an event names it. */
+export const restTranscriptFileSchema = z.object({
+  id: uuid,
+  name: z.string(),
+  size: count,
+  contentType: z.string(),
+});
+export type RestTranscriptFile = z.infer<typeof restTranscriptFileSchema>;
+
+/**
+ * One event of a session's transcript as it is read (ADR-0086). `text` is the whole text, or its
+ * beginning where `whole` says how many bytes the whole is, which is read apart. A sealed event
+ * keeps its number, its kind and its time, and says who sealed it, when and why in place of what
+ * it held.
+ */
+export const restTranscriptEventSchema = z.object({
+  n: z.int().check(z.positive()),
+  kind: z.enum(TRANSCRIPT_KINDS),
+  at: instant,
+  text: z.string(),
+  whole: z.nullable(count),
+  data: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
+  files: z.array(restTranscriptFileSchema),
+  sealed: z.nullable(
+    z.object({ by: z.nullable(restPersonSchema), at: instant, reason: z.string() }),
+  ),
+});
+export type RestTranscriptEvent = z.infer<typeof restTranscriptEventSchema>;
+
+/** `GET /api/v1/agents/<handle>/sessions/<id>/events?after=&limit=`: the events after a number, in order, and whether there are more. */
+export const restTranscriptEventsSchema = z.object({
+  items: z.array(restTranscriptEventSchema),
+  more: z.boolean(),
+});
+export type RestTranscriptEvents = z.infer<typeof restTranscriptEventsSchema>;
+
+/** `GET /api/v1/agents/<handle>/sessions/<id>/events/<n>/text`: the whole text of one event, where its row keeps the beginning alone. */
+export const restTranscriptTextSchema = z.object({
+  n: z.int().check(z.positive()),
+  text: z.string(),
+});
+export type RestTranscriptText = z.infer<typeof restTranscriptTextSchema>;
+
+/** What sealing an event is sent: why, in a line, which stays on the record in place of what the event held. */
+export const restTranscriptSealInputSchema = z.object({ reason: line(MAX_SEAL_REASON_LENGTH) });
+export type RestTranscriptSealInput = z.infer<typeof restTranscriptSealInputSchema>;
 
 /** Whether `value` is spelled as a secret's name is: lowercase letters, digits, dots, hyphens and underscores, a letter or a digit first and last. */
 export function isSecretName(value: string): boolean {
@@ -1663,6 +1834,8 @@ export const restRunSchema = z.object({
   artifacts: z.array(restArtifactSchema),
   /** The id of the decision the run waits for, or `null`. */
   waitingFor: z.nullable(uuid),
+  /** The session of an agent account's runner the run was begun in (ADR-0086), or `null`; read as optional. */
+  sessionId: z.optional(z.nullable(uuid)),
 });
 export type RestRun = z.infer<typeof restRunSchema>;
 

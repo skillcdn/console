@@ -4,9 +4,7 @@
 // bounded, and stored as data.
 
 import {
-  isHandle,
   MAX_SIGNALS_PAGE_LIMIT,
-  RESERVED_HANDLES,
   REST_ROUTES,
   type RestRunnerHeartbeat,
   type RestSignal,
@@ -18,7 +16,6 @@ import {
 import type { Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { streamSSE } from "hono/streaming";
-import { personVisibleTo, supervises } from "../auth/policy.js";
 import type { Database } from "../db/client.js";
 import {
   findRunner,
@@ -28,14 +25,12 @@ import {
   type SignalRecord,
   sendSignal,
 } from "../db/queries/agent-runners.js";
-import { findAgent } from "../db/queries/agents.js";
 import type { Actor } from "../db/queries/events.js";
-import type { PersonRecord } from "../db/queries/people.js";
-import { readWorkspaceSettings } from "../db/queries/workspaces.js";
 import type { Logger } from "../logger.js";
 import type { Clock } from "../ports/clock.js";
+import { createAgentGuards } from "./agent-guards.js";
 import { errorBody } from "./app.js";
-import { type Access, type AccessCaller, foreignOrigin, signInRequired } from "./auth.js";
+import type { Access, AccessCaller } from "./auth.js";
 import type { AgentWakes } from "./live-feed.js";
 import type { AppEnv } from "./request-context.js";
 import { restPerson } from "./rest-shapes.js";
@@ -86,8 +81,6 @@ export function registerAgentRunnerRest(
   });
   const invalid = (c: Context<AppEnv>, message: string): Response =>
     c.json(errorBody("request.invalid", message), 400);
-  const noSuchAgent = (c: Context<AppEnv>): Response =>
-    c.json(errorBody("agent.not_found", "The agent account was not found."), 404);
   const problemOf = (
     issues: readonly { readonly path?: PropertyKey[]; readonly message: string }[],
   ): string => {
@@ -116,84 +109,7 @@ export function registerAgentRunnerRest(
       : page;
   };
 
-  /**
-   * The account's own runner asking, or the refusal: an agent account, on the session of its
-   * command signed in as itself (ADR-0084), which is the runner's one credential. Neither a
-   * browser nor a token the account made stands in for it.
-   */
-  const running = async (c: Context<AppEnv>): Promise<AccessCaller | Response> => {
-    const caller = await access.caller(c);
-    if (caller === undefined) {
-      return signInRequired(c);
-    }
-    if (caller.person.kind !== "agent") {
-      return noSuchAgent(c);
-    }
-    if (caller.command === undefined) {
-      return c.json(
-        errorBody(
-          "agent.own_command",
-          "This is the runner's: asked by the command signed in as the account itself.",
-        ),
-        403,
-      );
-    }
-    return caller;
-  };
-
-  /** The account itself reading its own record: on a session of its own, a browser's or its command's. */
-  const own = async (c: Context<AppEnv>): Promise<AccessCaller | Response> => {
-    const caller = await access.caller(c);
-    if (caller === undefined) {
-      return signInRequired(c);
-    }
-    if (caller.person.kind !== "agent") {
-      return noSuchAgent(c);
-    }
-    if (caller.token !== undefined) {
-      return c.json(
-        errorBody(
-          "agent.own_command",
-          "This is the account's own: asked by the account itself, signed in, not with a token it made.",
-        ),
-        403,
-      );
-    }
-    return caller;
-  };
-
-  /** The agent account a supervisor asks about, with a session or a token, or the refusal. */
-  const supervising = async (
-    c: Context<AppEnv>,
-    changes: boolean,
-  ): Promise<{ readonly caller: AccessCaller; readonly agent: PersonRecord } | Response> => {
-    if (changes && !access.presentsToken(c) && !access.fromOwnPages(c)) {
-      return foreignOrigin(c);
-    }
-    const caller = await access.caller(c);
-    if (caller === undefined) {
-      return signInRequired(c);
-    }
-    const handle = c.req.param("handle") ?? "";
-    if (!isHandle(handle) || RESERVED_HANDLES.includes(handle)) {
-      return noSuchAgent(c);
-    }
-    const settings = await readWorkspaceSettings(database, caller.person.workspaceId);
-    const found = await findAgent(database, caller.person.workspaceId, handle, {
-      visible: personVisibleTo(caller.person, settings),
-      supervises: supervises(caller.person),
-    });
-    if (found === undefined) {
-      return noSuchAgent(c);
-    }
-    if (!found.supervised) {
-      return c.json(
-        errorBody("auth.forbidden", "Only a supervisor of the agent account may do this."),
-        403,
-      );
-    }
-    return { caller, agent: found.person };
-  };
+  const { running, own, supervising } = createAgentGuards(database, access);
 
   // The heartbeat: how the agent stands, what its runner is, and where the record stands.
   app.put(`${OWN}/runner`, tooLarge, async (c) => {

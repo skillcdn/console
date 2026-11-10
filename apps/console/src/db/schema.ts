@@ -21,11 +21,13 @@ import {
   type RestTaskLink,
   RUN_STATUSES,
   SECRET_ACCESSES,
+  SESSION_ENDS,
   SESSION_KINDS,
   SIGNAL_KINDS,
   SIGNAL_SOURCES,
   TASK_PRIORITIES,
   TASK_STATES,
+  TRANSCRIPT_KINDS,
   WEEK_STARTS,
 } from "@skillcdn/console/api";
 import { sql } from "drizzle-orm";
@@ -39,6 +41,7 @@ import {
   index,
   integer,
   jsonb,
+  pgSchema,
   pgTable,
   primaryKey,
   text,
@@ -451,6 +454,127 @@ export const agentSignals = pgTable(
 );
 
 /**
+ * The transcript's own schema (ADR-0086), apart from the board's. Its rows name what they are
+ * about by id and reference nothing: a month of it is a table of its own, which whoever keeps the
+ * database detaches, moves and attaches again with the database's own tools. `events`, `files`
+ * and `blobs` are partitioned by the month their session began (`partition by list (month)`,
+ * which the migration says and this file cannot); the console makes a month's partitions when a
+ * session begins in it, and the worker ahead of time.
+ */
+export const transcript = pgSchema("transcript");
+
+/**
+ * A session of an agent account's runner: the lifetime of one process of its product. The row
+ * stays whatever becomes of its month, and says what the session held.
+ */
+export const transcriptSessions = transcript.table(
+  "sessions",
+  {
+    id: id(),
+    workspaceId: uuid().notNull(),
+    /** The agent account, by its id among the people. */
+    personId: uuid().notNull(),
+    /** The month it began in, `2026-11`: what its events, its pictures and their bytes are kept under. */
+    month: text().notNull(),
+    startedAt: instant().notNull(),
+    endedAt: instant(),
+    /** How it ended; null while it is open. */
+    ended: text({ enum: SESSION_ENDS }),
+    product: jsonb()
+      .$type<{ driver: string; name: string; version: string | null; tried: boolean }>()
+      .notNull(),
+    model: text(),
+    effort: text(),
+    /** Whether the conversation of the session before was gone on with. */
+    resumed: boolean().notNull(),
+    machine: jsonb().$type<{ name: string; os: string; user: string }>().notNull(),
+    /** The number of its last event; 0 for none. */
+    events: integer().notNull().default(0),
+    lastEventAt: instant(),
+  },
+  (table) => [
+    index("sessions_person_idx").on(table.personId, table.startedAt),
+    // One session of an account is open at a time: a new one takes the open one over.
+    uniqueIndex("sessions_open_key").on(table.personId).where(sql`${table.endedAt} is null`),
+    check(
+      "sessions_ended_check",
+      sql`(${table.endedAt} is null) = (${table.ended} is null) and (${table.ended} is null or ${table.ended} in (${sql.raw(literals(SESSION_ENDS))}))`,
+    ),
+    check("sessions_month_check", sql`${table.month} ~ '^[0-9]{4}-[0-9]{2}$'`),
+  ],
+);
+
+/**
+ * One event of a session's transcript: a whole block, numbered per session by the runner. The
+ * row keeps the beginning of a long text and names the whole by its hash in the month's blobs.
+ * A sealed event keeps its number, its kind and its time, and who sealed it, when and why in
+ * place of what it held.
+ */
+export const transcriptEvents = transcript.table(
+  "events",
+  {
+    month: text().notNull(),
+    sessionId: uuid().notNull(),
+    n: integer().notNull(),
+    /** The agent account, so that a month read alone says whose each event is. */
+    personId: uuid().notNull(),
+    kind: text({ enum: TRANSCRIPT_KINDS }).notNull(),
+    /** When it happened, as the runner's clock had it; and when the console received it. */
+    at: instant().notNull(),
+    receivedAt: instant().notNull(),
+    text: text().notNull(),
+    /** The hash and the size of the whole text, where the row keeps its beginning alone. */
+    textSha256: text(),
+    textSize: integer(),
+    data: jsonb().$type<Record<string, string | number | boolean | null>>().notNull(),
+    /** The pictures of the block, as their uploads were kept. */
+    files: jsonb()
+      .$type<{ id: string; name: string; size: number; contentType: string; sha256: string }[]>()
+      .notNull(),
+    sealedAt: instant(),
+    sealedById: uuid(),
+    sealedReason: text(),
+  },
+  (table) => [primaryKey({ columns: [table.month, table.sessionId, table.n] })],
+);
+
+/** A picture a session's runner handed in, before an event names it: of that session alone. */
+export const transcriptFiles = transcript.table(
+  "files",
+  {
+    month: text().notNull(),
+    id: uuid().notNull(),
+    sessionId: uuid().notNull(),
+    personId: uuid().notNull(),
+    name: text().notNull(),
+    size: integer().notNull(),
+    contentType: text().notNull(),
+    sha256: text().notNull(),
+    createdAt: instant().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.month, table.id] }),
+    index("files_session_idx").on(table.month, table.sessionId, table.createdAt),
+  ],
+);
+
+/**
+ * The bytes of a month of the transcript, where the store is the database's: the long texts and
+ * the pictures, under their hash, apart from the board's files (`blobs`).
+ */
+export const transcriptBlobs = transcript.table(
+  "blobs",
+  {
+    month: text().notNull(),
+    sha256: text().notNull(),
+    size: integer().notNull(),
+    bytes: bytea().notNull(),
+    createdAt: instant().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.month, table.sha256] })],
+);
+
+/**
  * A secret of an agent account's store (ADR-0087): a named value, sealed with the console's
  * key, which the account alone reads back; a supervisor seeds one write-only and removes one.
  * The value is never here in the clear, and never in a log.
@@ -755,6 +879,12 @@ export const runs = pgTable(
       .references(() => people.id),
     /** The token the agent presented, while it exists: which of the person's agents. */
     tokenId: uuid().references(() => tokens.id, { onDelete: "set null" }),
+    /**
+     * The session of an agent account's runner the run was begun in (ADR-0086), by its id in the
+     * transcript's own schema: named, never referenced, so that a month of the transcript is
+     * moved without the board.
+     */
+    sessionId: uuid(),
     /** What the agent calls itself. */
     agent: text().notNull(),
     status: text({ enum: RUN_STATUSES }).notNull().default("running"),

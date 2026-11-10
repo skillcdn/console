@@ -1,7 +1,13 @@
 import { createHash, createHmac } from "node:crypto";
 import { MAX_FILE_BYTES } from "@skillcdn/console/api";
 import type { Logger } from "../logger.js";
-import { type BlobStore, BlobStoreError, type StoredBlob } from "../ports/blob-store.js";
+import {
+  type BlobShelf,
+  type BlobStore,
+  BlobStoreError,
+  monthOfShelf,
+  type StoredBlob,
+} from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
 import type { Credentials, CredentialsSource } from "../ports/credentials.js";
 import { type FetchLike, readBody } from "./upstream.js";
@@ -171,7 +177,7 @@ export function createS3BlobStore(options: S3Options): S3BlobStore {
    * no answer at all is already an error, named for what it says about the settings.
    */
   const request = async (
-    method: "GET" | "PUT" | "HEAD",
+    method: "GET" | "PUT" | "HEAD" | "DELETE",
     key: string | undefined,
     body: Uint8Array | undefined,
     payloadHash: string,
@@ -244,11 +250,15 @@ export function createS3BlobStore(options: S3Options): S3BlobStore {
     );
   };
 
+  /** Where the bytes of a hash are: under the prefix, and under the month of a shelf (ADR-0086). */
+  const keyOf = (sha256: string, shelf: BlobShelf | undefined): string =>
+    `${options.keyPrefix}${shelf === undefined ? "" : `transcript/${monthOfShelf(shelf)}/`}${sha256}`;
+
   return {
-    async put(bytes, _now) {
+    async put(bytes, _now, shelf) {
       const sha256 = sha256Hex(bytes);
       // The hash travels with the bytes, so the store keeps nothing it did not receive whole.
-      const response = await request("PUT", `${options.keyPrefix}${sha256}`, bytes, sha256);
+      const response = await request("PUT", keyOf(sha256, shelf), bytes, sha256);
       await response.body?.cancel();
       if (response.status === 404) {
         throw new BlobStoreError("bucket_not_found", "there is no such bucket at the endpoint");
@@ -257,16 +267,11 @@ export function createS3BlobStore(options: S3Options): S3BlobStore {
       return kept;
     },
 
-    async get(sha256) {
-      const response = await request(
-        "GET",
-        `${options.keyPrefix}${sha256}`,
-        undefined,
-        EMPTY_SHA256,
-      );
+    async get(sha256, shelf) {
+      const response = await request("GET", keyOf(sha256, shelf), undefined, EMPTY_SHA256);
       if (response.status === 404) {
         await response.body?.cancel();
-        return options.before?.get(sha256);
+        return options.before?.get(sha256, shelf);
       }
       const bytes = await readBody(response, MAX_FILE_BYTES);
       if (bytes === undefined || sha256Hex(bytes) !== sha256) {
@@ -277,6 +282,13 @@ export function createS3BlobStore(options: S3Options): S3BlobStore {
         );
       }
       return bytes;
+    },
+
+    async remove(sha256, shelf) {
+      // Gone from the bucket and from what was kept before it; a key that is not there is gone.
+      const response = await request("DELETE", keyOf(sha256, shelf), undefined, EMPTY_SHA256);
+      await response.body?.cancel();
+      await options.before?.remove(sha256, shelf);
     },
 
     async probe() {

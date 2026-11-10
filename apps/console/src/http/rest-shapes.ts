@@ -347,6 +347,7 @@ export function restRun(run: RunRecord): RestRun {
     startedAt: run.startedAt.toISOString(),
     endedAt: run.endedAt?.toISOString() ?? null,
     lastHeardAt: run.lastHeardAt.toISOString(),
+    sessionId: run.sessionId ?? null,
     summary: run.summary ?? null,
     reports: run.reports.map((report) => ({
       id: report.id,

@@ -182,6 +182,11 @@ function createBucket(options: {
       objects.set(key, bytes);
       return new Response(null, { status: 200 });
     }
+    if (request.method === "DELETE") {
+      // As a bucket does: gone, whether or not it was there.
+      objects.delete(key);
+      return new Response(null, { status: 204 });
+    }
     const found = objects.get(key);
     if (found === undefined) {
       return new Response(`<Error><Code>NoSuchKey</Code></Error>`, { status: 404 });
@@ -276,11 +281,51 @@ describe("the blob store in a bucket", () => {
     const before: BlobStore = {
       put: () => Promise.reject(new Error("not written")),
       get: async (sha256) => (sha256 === hash ? bytes : undefined),
+      remove: async () => undefined,
     };
     const store = storeOn(bucket, { before });
     expect(await store.get(hash)).toEqual(bytes);
     expect(await store.get(sha256("never kept"))).toBeUndefined();
     expect(bucket.requests).toHaveLength(2);
+  });
+
+  it("keeps a month of the transcript under a prefix of its own, and takes bytes off it alone (ADR-0086)", async () => {
+    const bucket = createBucket({ bucket: "files", credentials: CREDENTIALS });
+    const removed: string[] = [];
+    const before: BlobStore = {
+      put: () => Promise.reject(new Error("not written")),
+      get: async () => undefined,
+      remove: async (sha256, shelf) => {
+        removed.push(`${shelf.transcript}/${sha256}`);
+      },
+    };
+    const store = storeOn(bucket, { before });
+    const shelf = { transcript: "2026-11" };
+    expect(await store.put(bytes, new Date(), shelf)).toEqual({
+      sha256: hash,
+      size: bytes.byteLength,
+    });
+    expect([...bucket.objects.keys()]).toEqual([`console/transcript/2026-11/${hash}`]);
+    // A shelf is apart from the board's files, and from another month's.
+    expect(await store.get(hash)).toBeUndefined();
+    expect(await store.get(hash, { transcript: "2026-12" })).toBeUndefined();
+    expect(await store.get(hash, shelf)).toEqual(bytes);
+    await store.remove(hash, shelf);
+    expect(bucket.requests.at(-1)).toMatchObject({
+      method: "DELETE",
+      url: `https://store.test/files/console/transcript/2026-11/${hash}`,
+    });
+    expect(bucket.objects.size).toBe(0);
+    // And from what was kept before the bucket.
+    expect(removed).toEqual([`2026-11/${hash}`]);
+    // What is gone already is gone.
+    await expect(store.remove(hash, shelf)).resolves.toBeUndefined();
+    // A shelf is named by a month and nothing else: what names it goes into a key.
+    const asked = bucket.requests.length;
+    await expect(store.put(bytes, new Date(), { transcript: "../other" })).rejects.toThrow();
+    await expect(store.get(hash, { transcript: "2026-13" })).rejects.toThrow();
+    await expect(store.remove(hash, { transcript: "" })).rejects.toThrow();
+    expect(bucket.requests).toHaveLength(asked);
   });
 
   it("refuses bytes that are not the bytes of their hash, and more than a file may be", async () => {
