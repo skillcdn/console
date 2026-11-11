@@ -92,7 +92,7 @@ import { MAX_WAITING_PER_ADDRESS } from "./auth/connect.js";
 import { drizzleOf } from "./db/client.js";
 import { archiveStaleTasks } from "./db/queries/tasks.js";
 import { ensureWorkspace } from "./db/queries/workspaces.js";
-import { tasks } from "./db/schema.js";
+import { people as peopleTable, tasks } from "./db/schema.js";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "./db/testing.js";
 import { Archivist } from "./jobs/archivist.js";
 import { OrganizationSync } from "./jobs/organization-sync.js";
@@ -4451,16 +4451,33 @@ describe("who sees whom (ADR-0035)", () => {
 
   it("lists everyone of the workspace as a member of a project open to it, and lists only owners there", async () => {
     const before = await latestEventIn(owner);
+    // A person's row is dated by the database and a project by the console's clock, and the two
+    // need not agree to the second: bob's joining is dated here, on either side of the project's
+    // making, by the project's own date.
+    const project = restProjectSchema.parse(await (await get(owner, IN)).json());
+    const made = Date.parse(project.createdAt);
+    const joined = (at: Date) =>
+      drizzleOf(testDatabase.database)
+        .update(peopleTable)
+        .set({ createdAt: at })
+        .where(eq(peopleTable.login, "bob"));
+    const bobsRow = async () =>
+      restMembersSchema
+        .parse(await (await get(member, `${IN}/members`)).json())
+        .items.find((item) => item.person.login === "bob");
+    // A member without a listing is one since the later of the project's making and their joining.
+    const DAY_MS = 86_400_000;
+    const afterIt = new Date(made + DAY_MS);
+    await joined(afterIt);
+    expect((await bobsRow())?.addedAt).toBe(afterIt.toISOString());
+    await joined(new Date(made - DAY_MS));
+    expect((await bobsRow())?.addedAt).toBe(project.createdAt);
     const everyone = restMembersSchema.parse(await (await get(member, `${IN}/members`)).json());
     expect(everyone.items.map((item) => [item.person.login, item.role, item.listed])).toEqual([
       ["Alice", "owner", true],
       ["bob", "member", false],
       ["carol", "owner", false],
     ]);
-    // A member without a listing is one since the later of the project's making and their joining.
-    const project = restProjectSchema.parse(await (await get(owner, IN)).json());
-    const bobsRow = everyone.items.find((item) => item.person.login === "bob");
-    expect(bobsRow?.addedAt).toBe(project.createdAt);
     // Everyone is a member already: only an owner is listed.
     const asMember = await send(owner, "POST", `${IN}/members`, { personId: memberId });
     expect(asMember.status).toBe(409);

@@ -214,6 +214,9 @@ export async function createAgentAccount(
           title: title ?? null,
           role: "member",
           source: "listed",
+          // By the console's clock, as the events an account's date is read against are.
+          createdAt: now,
+          updatedAt: now,
           lastLoginAt: null,
         })
         .returning(personColumns(people));

@@ -97,13 +97,6 @@ beforeAll(async () => {
     ).person.id;
   miraId = await made("carol", "mira");
   noorId = await made("dana", "noor");
-  // A member's row is dated by the database, whose clock is the day this runs on, and an event
-  // by the clock the test moves: the accounts are dated as made before anything here happens,
-  // so that whether they were there when a thing happened is not read from today's date.
-  await drizzleOf(testDatabase.database)
-    .update(people)
-    .set({ createdAt: new Date(now.getTime() - 3_600_000) })
-    .where(inArray(people.id, [miraId, noorId]));
   mira = await h.signIn("carol");
   const [workspace] = await drizzleOf(testDatabase.database).select().from(workspaces).limit(1);
   wakes = new BoardWakes({
@@ -126,6 +119,21 @@ describe("the board's wakes (ADR-0085)", () => {
     expect(dayIn("America/Los_Angeles", evening)).toBe("2026-11-10");
     expect(dayIn(null, evening)).toBe("2026-11-10");
     expect(dayIn("Not/A_Zone", evening)).toBe("2026-11-10");
+  });
+
+  it("dates a member by the console's clock, as the events it is read against are", async () => {
+    // Whether an account was there when a thing happened compares its date with an event's.
+    // Both are the console's clock, here the one this test holds, and never the database's,
+    // which is the day this runs on and need not agree with the console's to the second.
+    const rows = await drizzleOf(testDatabase.database)
+      .select({ createdAt: people.createdAt })
+      .from(people)
+      .where(inArray(people.id, [bobId, miraId, noorId]));
+    expect(rows.map((row) => row.createdAt.toISOString())).toEqual([
+      now.toISOString(),
+      now.toISOString(),
+      now.toISOString(),
+    ]);
   });
 
   it("wakes an account first with its onboarding task, once", async () => {
@@ -294,6 +302,19 @@ describe("the board's wakes (ADR-0085)", () => {
     expect((await record("noor")).map((signal) => signal.key)).not.toContain(
       `ops#${waiting.number}`,
     );
+    // An account made after a change is told nothing of it: it is set up with the services as
+    // they are. The change and the account are a second apart on the console's clock.
+    await send(alice, "PATCH", REST_ROUTES.workspace, { domain: "acme.example" });
+    now = new Date(now.getTime() + 1000);
+    await send(alice, "POST", REST_ROUTES.agents, {
+      host: "gh",
+      login: "erin",
+      handle: "pia",
+      name: "pia",
+      project: "ops",
+    });
+    expect((await sent("mira")).map((signal) => signal.key)).toEqual(["services"]);
+    expect((await record("pia")).map((signal) => signal.key)).not.toContain("services");
   });
 
   it("reads the feed once whoever passes, and carries on from where it was read to", async () => {

@@ -497,6 +497,9 @@ export async function savePerson(
         source,
         // The address the provider vouches for is the person's work email, kept at every sign-in.
         ...(email === undefined ? {} : { email }),
+        // By the console's clock, as an event or a project is dated: what a member's date is
+        // read against is, and the database's clock need not agree with it.
+        createdAt: now,
         lastLoginAt: now,
         updatedAt: now,
       })
