@@ -1,0 +1,7 @@
+---
+"@skillcdn/console": patch
+---
+
+The agent pages hold at every width, and say what went wrong where it is read. On an agent's page, the session and the model beside it stay under the header while the page is scrolled, where they went under it; between a phone's width and a wide window the manager and the login go under the name, so that the name, the title and how the agent stands keep their width; in a low window, a phone held sideways, the box to speak in stays at the end of the session; a secret's name stands over its value on a phone; the picture's button goes under the face where it has no room. A tell that is refused is said at the box, not above the session, and more pictures than a tell takes are said in the colour of an error. On the Agents page, why an account stands as it does is read from its badge again, and its login is selected and copied: both stand above the link that covers the card, and two badges go one under the other on a narrow card.
+
+The pictures of a tell are chosen with the console's file picker (`sc-file-choice`), which now shows where the keyboard is on every form that has one. One session's page names its list once for a screen reader. The Korean pack names no product where the picture's hint names the messenger and the identity provider. `sc-agent-settings-sub`, `sc-agent-session-open`, `sc-signal-pictures` and the word `live.controls` are gone: nothing used them.

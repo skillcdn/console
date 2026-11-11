@@ -215,6 +215,20 @@ export function withChosen(current: readonly File[], chosen: readonly File[]): r
   return [...current, ...added];
 }
 
+/** The pictures of a tell without the one at a place: what the way out of its chip leaves. */
+export function withoutChosen(current: readonly File[], at: number): readonly File[] {
+  return current.filter((_, index) => index !== at);
+}
+
+/** Whether a key pressed in the box tells what is written: Enter with Ctrl, or with Cmd. */
+export function tellsWith(event: {
+  readonly key: string;
+  readonly ctrlKey: boolean;
+  readonly metaKey: boolean;
+}): boolean {
+  return event.key === "Enter" && (event.ctrlKey || event.metaKey);
+}
+
 export interface SignalComposerProps {
   /** How the agent stands, by which what may be said is chosen: a stopped agent is restarted, a running one stopped. */
   readonly state: AgentState | undefined;
@@ -274,7 +288,7 @@ export function SignalComposer(props: SignalComposerProps) {
         rows={2}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => {
-          if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && ready) {
+          if (tellsWith(event) && ready) {
             event.preventDefault();
             send("tell");
           }
@@ -292,7 +306,7 @@ export function SignalComposer(props: SignalComposerProps) {
                 type="button"
                 className="sc-signal-chosen-remove"
                 aria-label={words.removePicture(file.name)}
-                onClick={() => setPictures((current) => current.filter((_, at) => at !== index))}
+                onClick={() => setPictures((current) => withoutChosen(current, index))}
               >
                 ×
               </button>
@@ -302,11 +316,11 @@ export function SignalComposer(props: SignalComposerProps) {
       )}
       <div className="sc-signal-row">
         <span className="sc-signal-states">
-          <label className="sc-button sc-button-ghost sc-button-sm sc-signal-pictures">
-            <span>{words.pictures}</span>
+          <label className="sc-button sc-button-ghost sc-button-sm sc-file-choice">
+            {words.pictures}
             <input
               ref={picker}
-              className="sc-visually-hidden"
+              className="sc-file-input"
               type="file"
               accept="image/png,image/jpeg,image/gif,image/webp"
               multiple
@@ -361,7 +375,11 @@ export function SignalComposer(props: SignalComposerProps) {
             </Button>
           )}
         </span>
-        {tooMany && <span className="sc-field-error">{words.tooMany(MAX_SIGNAL_ATTACHMENTS)}</span>}
+        {tooMany && (
+          <span className="sc-form-error" role="alert">
+            {words.tooMany(MAX_SIGNAL_ATTACHMENTS)}
+          </span>
+        )}
         <span className="sc-signal-ways">
           <Button
             disabled={!ready || stopped}
@@ -460,10 +478,7 @@ export function AgentSessionList(props: AgentSessionListProps) {
   return (
     <ul className="sc-agent-sessions" aria-label={words.title}>
       {props.sessions.map((session) => (
-        <li
-          key={session.id}
-          className={cx("sc-agent-session", session.ended === null && "sc-agent-session-open")}
-        >
+        <li key={session.id} className="sc-agent-session">
           <span className="sc-agent-session-when">
             <a className="sc-agent-session-link" href={props.href(session)}>
               <Time iso={session.startedAt} />

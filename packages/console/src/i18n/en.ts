@@ -1629,7 +1629,6 @@ export const en = {
         couldNotLoad: "The session could not be read.",
         earlier: "Earlier events",
         now: "This session",
-        controls: "Running it",
         whole: "Read it whole",
         cutAt: (size: string) => `The beginning of ${size}.`,
         sealed: (who: string, why: string) => `Sealed by ${who}: ${why}`,

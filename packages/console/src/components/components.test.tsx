@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { AgentsNeedingYou } from "../agent-page.js";
+import { AgentsNeedingYou, agentViewOf } from "../agent-page.js";
 import type {
   RestCategory,
   RestComment,
@@ -30,7 +30,9 @@ import {
   AgentStateBadge,
   SignalComposer,
   TranscriptView,
+  tellsWith,
   withChosen,
+  withoutChosen,
 } from "./agent-page.js";
 import { AgentAccountForm, AgentAccountList, AgentPictureSave, suggestLogin } from "./agents.js";
 import { Board, BoardFilters, byDue, columnStateOf, edgeScrollOf, filterTasks } from "./board.js";
@@ -89,6 +91,7 @@ import {
   PriorityBadge,
   personName,
   StateBadge,
+  Time,
   Workers,
 } from "./ui.js";
 import { WorkList } from "./work.js";
@@ -1582,8 +1585,8 @@ describe("the agent accounts (ADR-0084)", () => {
     expect(seen).toContain("Nobody has signed in with it yet.");
     expect(seen).toMatch(/<dt>Manager<\/dt><dd><span class="sc-person"[^>]*>.*?Alice Example/);
     expect(seen).toContain('<svg class="sc-avatar sc-avatar-lg"');
-    // Its picture is saved on its own page, not from the list (ADR-0084).
-    expect(seen).not.toContain("profile picture");
+    // The list offers nothing to do: an account's picture is saved on its own page (ADR-0084).
+    expect(seen).not.toContain("<button");
     const supervised = renderToStaticMarkup(
       <AgentAccountList
         agents={[
@@ -1612,6 +1615,16 @@ describe("the agent accounts (ADR-0084)", () => {
     expect(renderToStaticMarkup(<AgentPictureSave person={{ ...mira, avatarParts: null }} />)).toBe(
       "",
     );
+  });
+
+  it("shows an account's work to whoever sees it, and the rest of its page to its supervisors alone", () => {
+    // The picture and the names of the secrets are on the settings, which a supervisor reads.
+    for (const tab of ["live", "sessions", "settings"] as const) {
+      expect(agentViewOf(tab, true)).toBe(tab);
+      expect(agentViewOf(tab, false)).toBe("closed");
+    }
+    expect(agentViewOf("work", false)).toBe("work");
+    expect(agentViewOf("work", true)).toBe("work");
   });
 
   it("proposes the login an account signs in with from its handle and what the provider admits", () => {
@@ -1700,6 +1713,35 @@ describe("the agent accounts (ADR-0084)", () => {
     expect(render({ identity: { kind: "github" } })).toContain("First, at GitHub");
     // With no identity service named, the first way people sign in here.
     expect(render({})).toContain("First, at GitHub");
+  });
+});
+
+describe("a moment told short", () => {
+  const AT = "2026-11-10T14:02:11.000Z";
+
+  it("gives the hour alone on the day it is read against, and the day with it on another", () => {
+    // Read against its own day, whatever the zone of the machine: the hour and nothing else.
+    const same = renderToStaticMarkup(<Time iso={AT} precision="clock" against={AT} />);
+    expect(same).toMatch(
+      /^<time class="sc-time" dateTime="2026-11-10T14:02:11\.000Z" title="[^"]+">\d{2}:\d{2}\s[AP]M<\/time>$/,
+    );
+    // Read against a day three days on, it says which day it was.
+    const other = renderToStaticMarkup(
+      <Time iso={AT} precision="clock" against="2026-11-13T14:02:11.000Z" />,
+    );
+    expect(other).toMatch(/>Nov (9|10|11), \d{2}:\d{2}\s[AP]M<\/time>$/);
+    // Against nothing it is read against now, which this moment's day is not.
+    expect(renderToStaticMarkup(<Time iso="2001-02-03T12:00:00.000Z" precision="clock" />)).toMatch(
+      />Feb \d, \d{2}:\d{2}\s[AP]M</,
+    );
+    // The whole moment stays in the title, for whoever rests the pointer on it.
+    expect(same).toContain('title="');
+  });
+
+  it("says a moment that is none as it came", () => {
+    expect(renderToStaticMarkup(<Time iso="soon" precision="clock" />)).toBe(
+      '<time class="sc-time">soon</time>',
+    );
   });
 });
 
@@ -1900,6 +1942,20 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     expect(withChosen([], [first, file("one.png", 3)])).toEqual([first]);
     // The same name with other bytes is another file.
     expect(withChosen([first], [file("one.png", 9)])).toHaveLength(2);
+    // The way out of a chip takes that picture out and leaves the others in their order.
+    const third = file("three.png", 5);
+    expect(withoutChosen([first, second, third], 1)).toEqual([first, third]);
+    expect(withoutChosen([first], 0)).toEqual([]);
+    expect(withoutChosen([first, second], 5)).toEqual([first, second]);
+  });
+
+  it("tells with Ctrl or Cmd and Enter, and with nothing else", () => {
+    const key = (over: object) => ({ key: "Enter", ctrlKey: false, metaKey: false, ...over });
+    expect(tellsWith(key({ ctrlKey: true }))).toBe(true);
+    expect(tellsWith(key({ metaKey: true }))).toBe(true);
+    // Enter alone is a new line in the box, and another key with Ctrl is whatever it is.
+    expect(tellsWith(key({}))).toBe(false);
+    expect(tellsWith(key({ key: "a", ctrlKey: true }))).toBe(false);
   });
 
   it("offers what a supervisor says to it: a tell, an interrupt, and a stop or a restart as it stands", () => {
@@ -1914,6 +1970,9 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     // Nothing is said yet: there is nothing to tell.
     expect(/<button[^>]*type="submit"[^>]*>/.exec(running)?.[0]).toContain('disabled=""');
     expect(running).toContain('accept="image/png,image/jpeg,image/gif,image/webp"');
+    // The pictures are chosen with the console's file picker, as a decision's files are.
+    expect(running).toContain('class="sc-button sc-button-ghost sc-button-sm sc-file-choice"');
+    expect(running).toContain('class="sc-file-input"');
     const stopped = renderToStaticMarkup(
       <SignalComposer state="stopped" note="Sent as #4: stop." onSend={() => undefined} />,
     );
@@ -1966,9 +2025,11 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     expect(seen).toContain('<span class="sc-agent-session-count">12 events</span>');
     expect(seen).toContain("Claude Code 2.1.0 · opus · goes on with the conversation before");
     expect(seen).toContain('<span class="sc-agent-session-count">1 event</span>');
-    // A session that ended says until when, and the open one leads the list in its own tone.
+    // A session that ended says until when; the open one says so in a badge of a state.
     expect(seen).toContain('class="sc-agent-session-until"');
-    expect(seen).toContain('class="sc-agent-session sc-agent-session-open"');
+    expect(seen).toContain(
+      '<span class="sc-badge sc-badge-success sc-badge-kind-state">open</span>',
+    );
     const facts = renderToStaticMarkup(<AgentRunnerFacts runner={runner} />);
     expect(facts).toContain("<dt>Machine</dt><dd>mac-mini · Darwin 24.1.0</dd>");
     expect(facts).toContain("<dt>OS account</dt><dd>mira</dd>");

@@ -1546,7 +1546,6 @@ export const ko: Messages = {
         couldNotLoad: "세션을 읽지 못했습니다.",
         earlier: "이전 이벤트",
         now: "지금 세션",
-        controls: "실행 관리",
         whole: "전체 읽기",
         cutAt: (size: string) => `${size} 중 앞부분입니다.`,
         sealed: (who: string, why: string) => `${who} 님이 봉인함: ${why}`,
@@ -1709,7 +1708,7 @@ export const ko: Messages = {
       login: "로그인 계정",
       managerUnseen: "나에게는 보이지 않음",
       savePicture: "프로필 사진 받기 (PNG)",
-      savePictureHint: "Slack이나 Google처럼 다른 서비스의 프로필에 올릴 1024픽셀 PNG입니다.",
+      savePictureHint: "메신저나 로그인 제공자의 프로필에 올릴, 한 변이 1024픽셀인 PNG입니다.",
       loadingProposals: "페르소나 후보를 뽑는 중",
       form: {
         aria: "에이전트 계정 추가",

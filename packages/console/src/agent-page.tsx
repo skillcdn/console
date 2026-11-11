@@ -240,7 +240,15 @@ function AgentLive(props: {
     <SignalComposer
       state={agent.state?.state}
       busy={busy}
-      note={note}
+      note={
+        error === undefined ? (
+          note
+        ) : (
+          <span className="sc-form-error" role="alert">
+            {error}
+          </span>
+        )
+      }
       onSend={(kind, text, pictures) =>
         void act(async () => {
           const sent = await client.sendSignal(
@@ -258,7 +266,6 @@ function AgentLive(props: {
   return (
     <div className="sc-agent-live">
       <div className="sc-agent-live-main">
-        {error !== undefined && <Callout tone="danger">{error}</Callout>}
         {sessions.value === undefined ? (
           sessions.failed === undefined ? (
             <div className="sc-loading">
@@ -346,15 +353,15 @@ function AgentSessions(props: {
   if (found.value.one !== undefined) {
     return (
       <>
-        <nav className="sc-agent-crumbs" aria-label={words.sessions.title}>
+        <nav className="sc-doc-crumbs sc-agent-crumbs" aria-label={words.sessions.title}>
           <a href={agentHref(handle, "sessions")}>{words.sessions.back}</a>
         </nav>
-        <section className="sc-panel sc-agent-session-panel" aria-label={words.sessions.title}>
+        <div className="sc-panel sc-agent-session-panel">
           <AgentSessionList
             sessions={[found.value.one]}
             href={() => agentHref(handle, "sessions", session)}
           />
-        </section>
+        </div>
         <SessionTranscript
           client={client}
           handle={handle}
@@ -382,14 +389,14 @@ function AgentSessions(props: {
       {all.length === 0 ? (
         <EmptyState title={words.sessions.empty.title} body={words.sessions.empty.body} />
       ) : (
-        <section className="sc-panel sc-agent-session-panel" aria-label={words.sessions.title}>
+        <div className="sc-panel sc-agent-session-panel">
           <AgentSessionList sessions={all} href={(one) => agentHref(handle, "sessions", one.id)} />
           {hasMore && (
             <Button variant="ghost" size="sm" onClick={earlier}>
               {words.sessions.more}
             </Button>
           )}
-        </section>
+        </div>
       )}
     </>
   );
@@ -642,6 +649,15 @@ export interface AgentPageProps {
   readonly work: (agent: RestAgent) => ReactNode;
 }
 
+/**
+ * What a view of an agent's page shows to whoever opens it: its work to anyone who sees the
+ * account, and the rest, what it is doing, its sessions and what is kept of it, its picture and
+ * the names of its secrets among them, to its supervisors alone.
+ */
+export function agentViewOf(tab: AgentTab, supervised: boolean): AgentTab | "closed" {
+  return tab === "work" || supervised ? tab : "closed";
+}
+
 export function AgentPage(props: AgentPageProps) {
   const all = useWords();
   const words = all.agents.page;
@@ -668,10 +684,11 @@ export function AgentPage(props: AgentPageProps) {
   }
   const { person } = agent;
   const labels: Readonly<Record<AgentTab, string>> = words.tabs;
+  const view = agentViewOf(tab, agent.supervised);
   return (
     <>
       <header className="sc-panel sc-agent-header">
-        <div className="sc-page-head sc-agent-head">
+        <div className="sc-agent-head">
           <Avatar person={person} size="lg" />
           <div className="sc-agent-head-who">
             <div className="sc-agent-head-name">
@@ -711,13 +728,13 @@ export function AgentPage(props: AgentPageProps) {
           ))}
         </nav>
       </header>
-      {tab === "work" ? (
+      {view === "work" ? (
         props.work(agent)
-      ) : !agent.supervised ? (
+      ) : view === "closed" ? (
         <EmptyState title={words.notSupervised.title} body={words.notSupervised.body} />
-      ) : tab === "live" ? (
+      ) : view === "live" ? (
         <AgentLive client={client} agent={agent} handle={handle} onChanged={found.again} />
-      ) : tab === "sessions" ? (
+      ) : view === "sessions" ? (
         <AgentSessions client={client} handle={handle} session={props.session} />
       ) : (
         <AgentSettings

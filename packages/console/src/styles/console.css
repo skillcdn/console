@@ -2863,7 +2863,7 @@ select.sc-input {
 
 .sc-agent-card-head {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) fit-content(45%);
   align-items: center;
   gap: var(--sc-space-3);
   min-width: 0;
@@ -2884,7 +2884,11 @@ select.sc-input {
   font-weight: var(--sc-weight-normal);
 }
 
+/* How it stands is above the link that covers the card, so that why it stands so is read where
+   the pointer rests on it; two badges go one under the other where the card is narrow. */
 .sc-agent-card-state {
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
@@ -2936,7 +2940,10 @@ select.sc-input {
   padding-top: var(--sc-space-3);
 }
 
+/* The login is above the card's link too: it is text to select and copy. */
 .sc-agent-card-login {
+  position: relative;
+  z-index: 2;
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -2955,13 +2962,16 @@ select.sc-input {
 /* An agent account's picture on its settings, with the way to save it as a file beside it. */
 .sc-agent-picture {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--sc-space-4);
   margin-bottom: var(--sc-space-4);
 }
 
+/* Beside the face while the button has room for its words on one line, under it where not. */
 .sc-agent-picture-what {
   display: grid;
+  flex: 1 1 14rem;
   justify-items: start;
   gap: var(--sc-space-1);
   min-width: 0;
@@ -3751,6 +3761,13 @@ select.sc-input-quiet {
 .sc-file-choice {
   position: relative;
   cursor: pointer;
+}
+
+/* The label shows where the keyboard is, since the input it holds is not seen. */
+.sc-comment-form-actions label:has(:focus-visible),
+.sc-file-choice:has(:focus-visible) {
+  outline: var(--sc-focus-ring);
+  outline-offset: 2px;
 }
 
 /* The file input is the label's: there for the keyboard and the screen reader, not seen. */
@@ -7331,13 +7348,10 @@ a.sc-tile-project:focus-visible {
    face beside the name, the handle beside the name as on its card, what it does under them, and
    how it stands under that, its times told short. */
 .sc-agent-head {
-  flex-wrap: nowrap;
+  display: flex;
   align-items: center;
-  justify-content: flex-start;
   gap: var(--sc-space-5);
   margin-bottom: var(--sc-space-4);
-  padding-bottom: 0;
-  border-bottom: 0;
 }
 
 .sc-agent-head > .sc-avatar {
@@ -7558,7 +7572,7 @@ a.sc-tile-project:focus-visible {
 
   .sc-agent-live-side {
     position: sticky;
-    top: var(--sc-space-5);
+    top: calc(var(--sc-header-height) + 2.75rem + var(--sc-space-5));
   }
 }
 
@@ -7623,15 +7637,6 @@ a.sc-tile-project:focus-visible {
 .sc-signal-ways {
   gap: var(--sc-space-2);
   margin-left: auto;
-}
-
-.sc-signal-pictures {
-  cursor: pointer;
-}
-
-.sc-signal-pictures:focus-within {
-  outline: var(--sc-focus-ring);
-  outline-offset: 2px;
 }
 
 .sc-signal-rule {
@@ -7962,17 +7967,40 @@ a.sc-tile-project:focus-visible {
   background: var(--sc-color-bg-inset);
 }
 
+/* Where the head has no room for its facts beside the name, they go under it, across the card,
+   so that the name and how the agent stands keep the width they need: from the width at which
+   the sessions fold into a few lines, down. */
+@media (max-width: 48rem) {
+  .sc-agent-head {
+    flex-wrap: wrap;
+  }
+
+  .sc-agent-head-who {
+    flex-basis: calc(100% - 5rem - var(--sc-space-5));
+  }
+
+  .sc-agent-head-facts {
+    flex: 1 1 100%;
+    padding: var(--sc-space-3) 0 0;
+    border-inline-start: 0;
+    border-top: var(--sc-hairline);
+  }
+}
+
+/* In a window that is low, a phone held sideways, the box to speak in stays where it is written:
+   kept at the foot, it would cover half of what is read. */
+@media (max-height: 32rem) {
+  .sc-agent-live-main > .sc-signal-composer {
+    position: static;
+  }
+}
+
 /* On a phone the face stays beside the name, smaller, and the box to speak in stays where it is
    written, at the end of the session, rather than over a third of the screen. */
 @media (max-width: 40rem) {
   .sc-agent-head {
-    display: flex;
     align-items: flex-start;
     gap: var(--sc-space-3);
-  }
-
-  .sc-agent-head {
-    flex-wrap: wrap;
   }
 
   .sc-agent-head > .sc-avatar {
@@ -7982,13 +8010,6 @@ a.sc-tile-project:focus-visible {
 
   .sc-agent-head-who {
     flex-basis: calc(100% - 3.5rem - var(--sc-space-3));
-  }
-
-  .sc-agent-head-facts {
-    flex: 1 1 100%;
-    padding: var(--sc-space-3) 0 0;
-    border-inline-start: 0;
-    border-top: var(--sc-hairline);
   }
 
   .sc-agent-live-main > .sc-signal-composer {
@@ -8146,23 +8167,9 @@ a.sc-tile-project:focus-visible {
   }
 }
 
-/* The way back from one session to all of them. */
-.sc-agent-crumbs {
-  margin-bottom: var(--sc-space-3);
-  font-size: var(--sc-text-sm);
-}
-
-.sc-agent-crumbs a {
-  color: var(--sc-color-text-muted);
-  text-decoration: none;
-}
-
+/* The way back from one session to all of them: the console's crumbs, a mark of the way back before it. */
 .sc-agent-crumbs a::before {
   content: "‹ ";
-}
-
-.sc-agent-crumbs a:hover {
-  color: var(--sc-color-accent);
 }
 
 .sc-agent-session-panel + .sc-agent-transcript {
@@ -8266,11 +8273,6 @@ a.sc-tile-project:focus-visible {
   gap: var(--sc-space-2);
 }
 
-.sc-agent-settings-sub {
-  display: block;
-  margin: var(--sc-space-4) 0 var(--sc-space-2);
-}
-
 .sc-agent-product {
   display: inline-flex;
   flex-wrap: wrap;
@@ -8286,6 +8288,16 @@ a.sc-tile-project:focus-visible {
 
 .sc-agent-secret-form .sc-input {
   width: 100%;
+}
+
+@media (max-width: 40rem) {
+  .sc-agent-secret-form {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .sc-agent-secret-form > :first-child {
+    grid-column: 1 / -1;
+  }
 }
 
 /* The invitation under an agent account, and the guide its code opens (ADR-0088). */
