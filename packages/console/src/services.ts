@@ -3,9 +3,12 @@ import type { ProviderKey, ServiceRole } from "./vocabulary.js";
 
 // The services a workspace's agents work with (ADR-0089), and what each kind of service says of
 // itself: a provider module in the package, as a product is a driver. The console prescribes no
-// service; a kind names how an account there is called, what a person does there, what the
-// agent does there when it starts, and what is asked of a person. A kind the package does not
-// know is still named, with steps that say the least.
+// service; a kind names how an account there is called, what has to be there before the agent
+// starts, what the agent does there when it starts, and what it asks for where it cannot. Who
+// makes an account at a service, a person or an agent that keeps the organization's accounts,
+// is the organization's to say, and a service's terms are the organization's to read: a module
+// says neither (ADR-0094). A kind the package does not know is still named, with steps that say
+// the least.
 
 /** The three short names a name elsewhere is put together from. */
 export interface ServiceNames {
@@ -44,11 +47,11 @@ export interface ServiceProvider {
   readonly signsInThrough: ProviderKey | undefined;
   /** The wake source its events reach an agent through, for a messenger that has one. */
   readonly wakeSource: string | undefined;
-  /** What whoever sets an agent up does at the service before the agent starts, in order. */
+  /** What has to be there at the service before the agent starts, in order: what, never who. */
   guide(context: ServiceContext): readonly string[];
   /** What the agent itself does at the service when it starts: items of its onboarding. */
   onboarding(context: ServiceContext): readonly ServiceItem[];
-  /** What only a person can do there, with the exact values and what to hand back. */
+  /** What the agent asks for where it cannot do it itself, with the exact values and what to hand back. */
   asks(context: ServiceContext): readonly ServiceItem[];
   /** Where the agent's desk is cloned from, for a git host that says; nothing for any other. */
   deskRemote(context: ServiceContext): string | undefined;
@@ -77,6 +80,10 @@ export function fillTemplate(template: string, names: ServiceNames): string | un
 const called = (account: string | undefined, otherwise: string): string =>
   account === undefined ? otherwise : `\`${account}\``;
 
+/** What a service the account signs in to the console through says last: the sign-in is needed once, at the setup. */
+const SIGN_IN_AT_HAND =
+  "What it signs in with, its password and its second step, at hand when its machine is set up: the setup signs in with it once, in the machine's browser.";
+
 const github: ServiceProvider = {
   kind: "github",
   name: "GitHub",
@@ -85,15 +92,13 @@ const github: ServiceProvider = {
   signsInThrough: "gh",
   wakeSource: undefined,
   guide: ({ role, service, account }) => [
-    `A person makes the account ${called(account, "of the agent")} at GitHub, with the agent's own mailbox where it has one: the host asks that a person make an account, and holds an organization to one account that a machine runs for each person who answers for it.`,
+    `The account ${called(account, "of the agent")} at GitHub, made if it is not there yet, with the agent's own mailbox where it has one.`,
     ...(service.organization === undefined
       ? []
       : [
-          `An owner of the organization \`${service.organization}\` invites ${called(account, "it")}, with the rights its work needs and no more.`,
+          `Its invitation to the organization \`${service.organization}\`, with the rights its work needs and no more.`,
         ]),
-    ...(role === "identity"
-      ? ["Its first password goes to whoever prepares the agent's machine, and to nobody else."]
-      : []),
+    ...(role === "identity" ? [SIGN_IN_AT_HAND] : []),
   ],
   onboarding: ({ role, service, account }) =>
     role !== "git"
@@ -110,8 +115,8 @@ const github: ServiceProvider = {
         ],
   asks: ({ service, account }) => [
     {
-      title: `Make the account ${called(account, "of the agent")} at GitHub`,
-      body: `The host's terms ask that a person make an account. Make ${called(account, "it")}${service.organization === undefined ? "" : `, invite it to \`${service.organization}\``}, and seed its first password where only the agent reads it.`,
+      title: `The account ${called(account, "of the agent")} at GitHub`,
+      body: `Where you cannot sign in at GitHub as ${called(account, "your account")}: that the account is made${service.organization === undefined ? "" : `, invited to \`${service.organization}\``}, and what it signs in with seeded where only you read it.`,
     },
   ],
   deskRemote: ({ role, account }) =>
@@ -142,11 +147,11 @@ const gitlab: ServiceProvider = {
           `They give it the role its work needs in the group and no more, make it a token that reads and writes repositories and nothing else, and seed the token where only the agent reads it, with the day it ends: console agent secret ${names.agent} git.token --expires <day>.`,
         ]
       : [
-          `A person makes the account ${called(account, "of the agent")} at ${gitlabHost(service)}, with the agent's own mailbox where it has one.`,
+          `The account ${called(account, "of the agent")} at ${gitlabHost(service)}, made if it is not there yet, with the agent's own mailbox where it has one.`,
           ...(service.group === undefined
             ? []
             : [
-                `An owner of the group \`${service.group}\` invites ${called(account, "it")}, with the role its work needs and no more.`,
+                `Its invitation to the group \`${service.group}\`, with the role its work needs and no more.`,
               ]),
         ],
   onboarding: ({ role, service, names, account }) => {
@@ -186,8 +191,8 @@ const gitlab: ServiceProvider = {
         ]
       : [
           {
-            title: `Make the account ${called(account, "of the agent")} at GitLab`,
-            body: `A person makes an account at the host. Make ${called(account, "it")}${service.group === undefined ? "" : `, invite it to \`${service.group}\``}, and seed its first password where only the agent reads it.`,
+            title: `The account ${called(account, "of the agent")} at GitLab`,
+            body: `Where you cannot sign in at ${gitlabHost(service)} as ${called(account, "your account")}: that the account is made${service.group === undefined ? "" : `, invited to \`${service.group}\``}, and what it signs in with seeded where only you read it.`,
           },
         ],
   deskRemote: ({ role, service, names, account }) => {
@@ -211,8 +216,8 @@ const googleWorkspace: ServiceProvider = {
   signsInThrough: "google",
   wakeSource: undefined,
   guide: ({ account }) => [
-    `An administrator of the Workspace makes the user ${called(account, "of the agent")}, with a mailbox: the agent signs in to the console with it, and it is its address everywhere else.`,
-    "Its first password goes to whoever prepares the agent's machine, and to nobody else; the agent changes it at its first sign-in and keeps the new one in its store.",
+    `The user ${called(account, "of the agent")} in the Workspace, with a mailbox, made if it is not there yet: the agent signs in to the console with it, and it is its address everywhere else.`,
+    SIGN_IN_AT_HAND,
   ],
   onboarding: ({ account }) => [
     {
@@ -232,7 +237,7 @@ const slack: ServiceProvider = {
   signsInThrough: undefined,
   wakeSource: "slack",
   guide: ({ service }) => [
-    `An administrator of ${service.workspace === undefined ? "the Slack workspace" : `\`${service.workspace}\``} invites the agent's own address as a member: it is a member there as a person is, called by its name.`,
+    `An invitation for the agent's own address to ${service.workspace === undefined ? "the Slack workspace" : `\`${service.workspace}\``}, as a member: it is a member there as a person is, called by its name.`,
   ],
   onboarding: ({ service }) => [
     {
@@ -246,8 +251,8 @@ const slack: ServiceProvider = {
   ],
   asks: ({ service, names }) => [
     {
-      title: `Invite ${names.agent} to the messenger`,
-      body: `Invite the agent's own address to ${service.workspace === undefined ? "the Slack workspace" : `\`${service.workspace}\``} as a member, and approve the app it asks to install for itself.`,
+      title: `An invitation for ${names.agent} to the messenger`,
+      body: `Where none has reached your address: an invitation to ${service.workspace === undefined ? "the Slack workspace" : `\`${service.workspace}\``} as a member, and the approval of the app you ask to install for yourself.`,
     },
   ],
   deskRemote: () => undefined,
@@ -271,7 +276,7 @@ function generic(kind: string): ServiceProvider {
     signsInThrough: undefined,
     wakeSource: undefined,
     guide: () => [
-      `Make the agent an account of its own at ${kind}, as a person's is made there, and hand what it signs in with to nobody but whoever prepares its machine.`,
+      `An account of the agent's own at ${kind}, made if it is not there yet, and what it signs in with at hand when its machine is set up.`,
     ],
     onboarding: () => [
       {

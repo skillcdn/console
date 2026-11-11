@@ -1592,6 +1592,32 @@ export const en = {
         settings: "Settings",
       },
       loading: "Loading the agent",
+      /** From an account just added to one at work: what is next, in order. */
+      start: {
+        title: "Getting it started",
+        intro: "Four things, in order. Each is said done as the console sees it.",
+        done: "Done",
+        account: {
+          title: "The account it signs in with",
+          body: (login: string, provider: string) =>
+            `${login}, at ${provider}. It is made there where it is not yet, and what it signs in with is asked for once, on its machine.`,
+          done: (login: string) => `It has signed in as ${login}.`,
+        },
+        invitation: {
+          title: "An invitation",
+          body: "One line that leads a machine to this account. Its code is no credential: it says which account a setup is for, and gives nobody the account.",
+        },
+        machine: {
+          title: "On its machine",
+          body: "In the agent's own OS account, say the line to its product, or run the command it names. The agent asks whoever is there for the account's sign-in, and goes on by itself.",
+          done: "Its command is signed in as the account.",
+        },
+        runner: {
+          title: "Its runner",
+          body: "The setup starts it. Once it is heard from, this page shows what the agent is doing.",
+          done: "Its runner is heard from.",
+        },
+      },
       notFound: {
         title: "No such agent account",
         body: "It is not there, or it is not yours to see.",
@@ -1722,8 +1748,7 @@ export const en = {
         machine: {
           title: "Its machine",
           intro:
-            "An invitation leads a machine to this account, with one line said to the agent's product there. Its code is no credential: it says which account a setup is for and opens the guide, and the account is entered through its own sign-in alone.",
-          first: "First, a person:",
+            "An invitation leads another machine to this account, with one line said to the agent's product there. Its code is no credential: it says which account a setup is for and opens the guide, and the account is entered through its own sign-in alone.",
           none: "No invitation stands.",
           stands: "An invitation stands until",
           by: (name: string) => `made by ${name}`,
@@ -1824,19 +1849,32 @@ export const en = {
           "The handle is what the pages and the command call it by, as @handle: lowercase letters, digits and hyphens. It never changes.",
         title: "Title",
         titlePlaceholder: "What it does, in a line",
+        who: "Who it is",
+        signsIn: "The account it signs in with",
+        signsInHint:
+          "An agent account signs in to this console as a person does, with an account of its own. Name that account exactly: the console lets in this one and no other.",
         provider: "Signs in through",
-        login: "The account it signs in with",
-        first: {
-          title: (provider: string) => `First, at ${provider}`,
-          make: (login: string, provider: string) =>
-            `A person makes the account ${login} at ${provider}. An agent account signs in with an account of its own, as a person does.`,
-          unnamed: (provider: string) =>
-            `A person makes its account at ${provider}, and you write its login above. An agent account signs in with an account of its own, as a person does.`,
-          password:
-            "Its first password goes to whoever sets its machine up; the agent keeps what it signs in with from then on.",
-          gitHost:
-            "The host's terms ask that a person registers an account; the agent keeps what it signs in with from then on.",
+        login: "Login",
+        loginAt: {
+          google: {
+            label: "Google Workspace address",
+            example: "mira@acme.example",
+            invalid: "An address, as mira@acme.example.",
+          },
+          gh: {
+            label: "GitHub login",
+            example: "acme-mira",
+            invalid: "A GitHub login: letters, digits and hyphens, 39 at most.",
+          },
         },
+        loginNamed: (login: string, provider: string) =>
+          `It signs in as ${login}, through ${provider}. The account need not be there yet: it has to be before its machine is set up.`,
+        loginUnnamed: (provider: string) =>
+          `Write the account it signs in with at ${provider}. It need not be there yet: it has to be before its machine is set up.`,
+        loginDerived:
+          "Put together from the workspace's services; change it where the account is called otherwise.",
+        reports: "Whom it reports to, and where it starts",
+        next: "Next, on its page: an invitation that leads a machine to it.",
         manager: "Manager",
         managerHint:
           "Its manager is whom it turns to first and who answers for it; an administrator names another at any time. It starts in the project chosen, as a member.",

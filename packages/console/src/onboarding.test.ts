@@ -24,9 +24,15 @@ describe("the onboarding task of an agent account", () => {
     const { body } = onboardingOf({ handle: "mira", workspace: WORKSPACE });
     const own = body.slice(
       body.indexOf("## What you do yourself"),
-      body.indexOf("## What only a person can do"),
+      body.indexOf("## What you ask for"),
     );
-    expect(own.split("\n").filter((line) => line.startsWith("- **"))).toHaveLength(8);
+    expect(own.split("\n").filter((line) => line.startsWith("- **"))).toHaveLength(9);
+    // Where it signs in at a page, it is told how a sign-in stays and what to do where one
+    // wants a person, with nothing it signs in with in a message.
+    expect(own).toContain(
+      "- **Sign in at a page in the machine's own browser.** Use a browser tool of your product that attaches to the ordinary browser of your OS account",
+    );
+    expect(own).toContain("ask for a person to sign in inside your session");
     expect(own).toContain(
       "- **Make the account your own.** Sign in as `mira@acme.example`, change the first password",
     );
@@ -49,18 +55,25 @@ describe("the onboarding task of an agent account", () => {
     expect(body.endsWith("finish the task.\n")).toBe(true);
   });
 
-  it("says what only a person can do as decisions to ask, with how a secret is handed back", () => {
+  it("says what it cannot do itself as decisions to ask, with how a secret is handed back", () => {
     const { body } = onboardingOf({ handle: "mira", workspace: WORKSPACE });
     const asked = body.slice(
-      body.indexOf("## What only a person can do"),
+      body.indexOf("## What you ask for"),
       body.indexOf("## When you are done"),
     );
+    // Who makes an account at a service, and what a service's terms ask, is the organization's
+    // to say: the task says neither (ADR-0094).
+    expect(body).not.toMatch(/only a person|a person makes|terms/i);
     expect(asked).toContain('`console ask "<question>" --option "Done" --option "Not now"`');
     expect(asked).toContain("`console agent secret mira <name>`");
     expect(asked).toContain("of your manager where you do not know who");
     expect(asked.split("\n").filter((line) => line.startsWith("- **"))).toEqual([
-      expect.stringContaining("- **Make the account `acme-mira` at GitHub.** The host's terms ask"),
-      expect.stringContaining("- **Invite mira to the messenger.** Invite the agent's own address"),
+      expect.stringContaining(
+        "- **The account `acme-mira` at GitHub.** Where you cannot sign in at GitHub as `acme-mira`: that the account is made",
+      ),
+      expect.stringContaining(
+        "- **An invitation for mira to the messenger.** Where none has reached your address",
+      ),
     ]);
   });
 
@@ -73,8 +86,8 @@ describe("the onboarding task of an agent account", () => {
         services: { identity: { kind: "github" }, git: { kind: "github", organization: "acme" } },
       },
     });
-    expect(body).not.toContain("## What only a person can do");
-    expect(body).not.toContain("Make the account `acme-mira` at GitHub");
+    expect(body).not.toContain("## What you ask for");
+    expect(body).not.toContain("The account `acme-mira` at GitHub");
     // What the agent does there itself stays: its token for git, and its desk.
     expect(body).toContain("- **Sign in at the git host and keep what you sign in with.**");
     expect(body).toContain("- **Make your desk there and push it.**");
@@ -86,10 +99,11 @@ describe("the onboarding task of an agent account", () => {
       workspace: { handle: null, domain: null, services: {} },
     });
     expect(body.split("\n").filter((line) => line.startsWith("- **"))).toEqual([
+      expect.stringContaining("Sign in at a page in the machine's own browser"),
       expect.stringContaining("Put your picture on your profiles"),
       expect.stringContaining("Record the accounts you hold elsewhere"),
       expect.stringContaining("Introduce yourself to your manager"),
     ]);
-    expect(body).not.toContain("## What only a person can do");
+    expect(body).not.toContain("## What you ask for");
   });
 });

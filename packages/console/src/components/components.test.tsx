@@ -75,7 +75,7 @@ import { GoalTimeline, timelineBars } from "./roadmap.js";
 import { RulesForm, RulesView } from "./rules.js";
 import { RunList } from "./runs.js";
 import { SessionList } from "./sessions.js";
-import { AgentInvitationPanel, SetupGuideView } from "./setup.js";
+import { AgentInvitationPanel, AgentStartSteps, SetupGuideView } from "./setup.js";
 import { Shell } from "./shell.js";
 import { SignIn } from "./sign-in.js";
 import { SkillList } from "./skills.js";
@@ -1697,7 +1697,7 @@ describe("the agent accounts (ADR-0084)", () => {
     expect(suggestLogin("mira", undefined)).toBe("");
   });
 
-  it("is added from a form: personas to choose from, what a person does first at the provider, a manager and a project", () => {
+  it("is added from a form in three parts: who it is, the account it signs in with, whom it reports to", () => {
     const form = renderToStaticMarkup(
       <AgentAccountForm
         proposals={[
@@ -1722,15 +1722,74 @@ describe("the agent accounts (ADR-0084)", () => {
     expect(form).toContain(">Roll again<");
     // Whoever makes it is its manager, unless another is chosen.
     expect(form).toMatch(/sc-picker-chosen[\s\S]*?Alice Example/);
-    // The account at the provider is a person's to make, and the page says so in plain words.
-    expect(form).toContain("First, at Google");
-    expect(form).toContain("A person makes its account at Google, and you write its login above.");
+    // Three parts, each under its heading.
+    expect(form.match(/<section class="sc-form-part" aria-label="([^"]+)"/g)).toEqual([
+      '<section class="sc-form-part" aria-label="Who it is"',
+      '<section class="sc-form-part" aria-label="The account it signs in with"',
+      '<section class="sc-form-part" aria-label="Whom it reports to, and where it starts"',
+    ]);
+    // The account it signs in with is the one thing to get right: the form says what kind of
+    // name it is, and that the account has to be there before the machine is set up. Who makes
+    // it at the provider, and what a provider's terms ask, it does not say (ADR-0094).
     expect(form).toContain(">Signs in through<");
+    expect(form).toContain(">Google Workspace address<");
+    expect(form).toContain('placeholder="mira@acme.example"');
+    expect(form).toContain(
+      "Write the account it signs in with at Google. It need not be there yet: it has to be before its machine is set up.",
+    );
+    expect(form).not.toMatch(/a person makes|a person registers|terms/i);
     expect(form).toContain(">Add the agent account<");
+    expect(form).toContain("Next, on its page: an invitation that leads a machine to it.");
     // Nothing is sent until there is a persona, a login and a project.
     expect(form).toMatch(
       /<button[^>]*type="submit"[^>]*disabled=""|<button[^>]*disabled=""[^>]*type="submit"/,
     );
+  });
+
+  it("says what stands between an account just added and one at work, each step done as the console sees it", () => {
+    const steps = (props: Partial<Parameters<typeof AgentStartSteps>[0]>) =>
+      renderToStaticMarkup(
+        <AgentStartSteps
+          login="mira@acme.example"
+          provider="Google"
+          signedIn={false}
+          invited={false}
+          onMachine={false}
+          heard={false}
+          invitation={<button type="button">invite</button>}
+          {...props}
+        />,
+      );
+    const fresh = steps({});
+    // The four, in order, the first one next; the account is named, and when it has to be there.
+    expect(fresh.match(/<span class="sc-step-title">([^<]+)/g)).toEqual([
+      '<span class="sc-step-title">The account it signs in with',
+      '<span class="sc-step-title">An invitation',
+      '<span class="sc-step-title">On its machine',
+      '<span class="sc-step-title">Its runner',
+    ]);
+    expect(fresh).toContain('<li class="sc-step sc-step-next" aria-current="step">');
+    expect(fresh).toContain(
+      "mira@acme.example, at Google. It is made there where it is not yet, and what it signs in with is asked for once, on its machine.",
+    );
+    expect(fresh).toContain(">invite</button>");
+    expect(fresh).not.toContain(">Done<");
+    expect(fresh).not.toMatch(/a person makes|terms/i);
+    // An invitation stands: the machine is next.
+    const invited = steps({ invited: true });
+    expect(invited.match(/>Done</g)).toHaveLength(1);
+    expect(invited.indexOf("sc-step-next")).toBeGreaterThan(invited.indexOf("An invitation"));
+    // Its command signed in on a machine: the account signed in, and the invitation did its work.
+    const onMachine = steps({ onMachine: true });
+    expect(onMachine.match(/>Done</g)).toHaveLength(3);
+    expect(onMachine).toContain("It has signed in as mira@acme.example.");
+    expect(onMachine).toContain("Its command is signed in as the account.");
+    expect(onMachine).not.toContain(">invite</button>");
+    // Heard from: every step is done, whatever else was seen.
+    const heard = steps({ heard: true });
+    expect(heard.match(/>Done</g)).toHaveLength(4);
+    expect(heard).not.toContain("sc-step-next");
+    expect(heard).toContain("Its runner is heard from.");
   });
 
   it("signs an account in through the service the workspace names for it, whichever provider comes first (ADR-0089)", () => {
@@ -1757,10 +1816,12 @@ describe("the agent accounts (ADR-0084)", () => {
           onSubmit={() => undefined}
         />,
       );
-    expect(render({ identity: { kind: "google-workspace" } })).toContain("First, at Google");
-    expect(render({ identity: { kind: "github" } })).toContain("First, at GitHub");
+    expect(render({ identity: { kind: "google-workspace" } })).toContain(
+      ">Google Workspace address<",
+    );
+    expect(render({ identity: { kind: "github" } })).toContain(">GitHub login<");
     // With no identity service named, the first way people sign in here.
-    expect(render({})).toContain("First, at GitHub");
+    expect(render({})).toContain(">GitHub login<");
   });
 });
 
@@ -2165,11 +2226,10 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     const command = "console agent setup --console https://console.test --code ABCD-EFGH";
     const nothing = () => undefined;
     const href = (code: string) => `/setup/${code}`;
-    // None stands: the way to make one, and what a person does first, in the service's words.
+    // None stands: what an invitation is, and the way to make one.
     const none = renderToStaticMarkup(
       <AgentInvitationPanel
         invitation={null}
-        first={["An administrator makes the user `mira@acme.example`, with a mailbox."]}
         guideHref={href}
         onInvite={nothing}
         onRevoke={nothing}
@@ -2177,9 +2237,20 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     );
     expect(none).toContain("No invitation stands.");
     expect(none).toContain("Its code is no credential");
-    expect(none).toContain("makes the user <code>mira@acme.example</code>, with a mailbox.");
     expect(none).toContain(">Make an invitation</button>");
     expect(none).not.toContain("Take it away");
+    // Under the steps of an account that is getting started, the step says what it is.
+    expect(
+      renderToStaticMarkup(
+        <AgentInvitationPanel
+          invitation={null}
+          intro={false}
+          guideHref={href}
+          onInvite={nothing}
+          onRevoke={nothing}
+        />,
+      ),
+    ).not.toContain("Its code is no credential");
     // Just made: the sentence and the command to copy, the guide's address, and its day.
     const made = renderToStaticMarkup(
       <AgentInvitationPanel

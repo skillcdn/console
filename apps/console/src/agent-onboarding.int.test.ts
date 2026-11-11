@@ -104,17 +104,17 @@ describe("the onboarding of an agent account (ADR-0088)", () => {
     expect(tasks[0]?.workers.map((worker) => worker.handle)).toEqual(["mira"]);
     expect(tasks[0]?.owner.login).toBe("Alice");
     // Its words, for this account and the services of its workspace: what the agent does
-    // itself, and what only a person can do, asked as decisions. The account it signs in with
-    // came before the line, and is asked for nowhere.
+    // itself, and what it cannot, asked as decisions. The account it signs in with came before
+    // the line, and is asked for nowhere.
     const task = restTaskSchema.parse(
       await (await get({ cookie: alice }, projectPath("ops", "tasks", "1"))).json(),
     );
     expect(task.body).toContain("This is your first task, @mira");
     expect(task.body).toContain("Make the repository `acme-mira/desk`, private");
     expect(task.body).toContain("`console agent mira --account <service>=<name>`");
-    expect(task.body).toContain("## What only a person can do");
-    expect(task.body).toContain("**Invite mira to the messenger.**");
-    expect(task.body).not.toContain("Make the account `acme-mira` at GitHub");
+    expect(task.body).toContain("## What you ask for");
+    expect(task.body).toContain("**An invitation for mira to the messenger.**");
+    expect(task.body).not.toContain("The account `acme-mira` at GitHub");
 
     // The board wakes the account with it, as with any ready task it is at work on, and the
     // wake waits on the account's record for a runner's first connection: nothing is there

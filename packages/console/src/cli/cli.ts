@@ -3703,7 +3703,7 @@ const agentNew = async (args: readonly string[], io: CliIo): Promise<number> => 
     [
       formatAgentLine(made),
       made.person.invited === true
-        ? `It is a member now, and work can be assigned to it. A person makes the account ${made.person.login} at the provider, which is a person's to make; its first sign-in with that account binds it here.`
+        ? `It is a member now, and work can be assigned to it. It signs in as ${made.person.login}: that account is made at the provider before its machine is set up, and its first sign-in with it binds it here.`
         : `${made.person.login} is an agent account from now on, with everything it did.`,
       ...(made.onboarding === null || made.onboarding === undefined
         ? []

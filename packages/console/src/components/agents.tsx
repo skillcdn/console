@@ -281,9 +281,13 @@ export interface AgentAccountFormProps {
 }
 
 /**
- * "Add an agent account": a persona chosen among the proposals and edited, the login it will
- * sign in with, its manager, and the project it starts in. What a person does first at the
- * provider is said in plain words, since the account there is a person's to make.
+ * "Add an agent account", in the three things it settles: who the account is, a persona chosen
+ * among the proposals and edited; the account it signs in to this console with, at one of the
+ * providers the deployment has, put together from the workspace's services and edited freely;
+ * and whom it reports to and where it starts. The one thing the form has to get right is that
+ * login, so it says what kind of name it is and when the account has to be there. Who makes the
+ * account at the provider is the organization's to say, and the form says nothing of it
+ * (ADR-0094).
  */
 export function AgentAccountForm(props: AgentAccountFormProps) {
   const words = useWords();
@@ -353,143 +357,164 @@ export function AgentAccountForm(props: AgentAccountFormProps) {
       project,
     });
   };
+  /** Whether the login is the one the workspace's services put together, and not one typed. */
+  const derived =
+    typedLogin === undefined && named !== undefined && named.host === host && handle.length > 0;
+  const hostWords = host === undefined ? undefined : form.loginAt[host];
   return (
     <form className="sc-form sc-agent-form" aria-label={form.aria} onSubmit={submit}>
-      <fieldset className="sc-agent-proposals">
-        <legend className="sc-field-label">{form.proposals}</legend>
-        <div className="sc-agent-proposal-row">
-          {props.proposals.map((proposal) => (
-            <button
-              key={proposal.seed}
-              type="button"
-              className={cx(
-                "sc-agent-proposal",
-                chosen?.seed === proposal.seed && "sc-agent-proposal-chosen",
-              )}
-              aria-pressed={chosen?.seed === proposal.seed}
-              disabled={props.busy === true}
-              onClick={() => choose(proposal)}
-            >
-              <AvatarPicture parts={proposal.avatarParts} className="sc-avatar sc-avatar-lg" />
-              <span className="sc-agent-proposal-name">{proposal.name}</span>
-              <span className="sc-agent-proposal-handle">@{proposal.handle}</span>
-            </button>
-          ))}
-          {props.onRoll !== undefined && (
-            <Button type="button" size="sm" disabled={props.busy === true} onClick={props.onRoll}>
-              {form.roll}
-            </Button>
-          )}
-        </div>
-        <p className="sc-field-hint">{form.proposalsHint}</p>
-      </fieldset>
-      <div className="sc-field-row">
-        <label className="sc-field">
-          <span className="sc-field-label">{form.name}</span>
-          <input
-            className="sc-input"
-            value={name}
-            maxLength={MAX_PERSON_NAME_LENGTH}
-            autoComplete="off"
-            onChange={(event) => setName(event.target.value)}
-          />
-        </label>
-        <label className="sc-field">
-          <span className="sc-field-label">{form.handle}</span>
-          <input
-            className="sc-input"
-            value={handle}
-            maxLength={MAX_HANDLE_LENGTH}
-            autoComplete="off"
-            spellCheck={false}
-            aria-invalid={handle !== "" && !handleOk}
-            onChange={(event) => setHandle(event.target.value.toLowerCase())}
-          />
-        </label>
-        <label className="sc-field">
-          <span className="sc-field-label">{form.title}</span>
-          <input
-            className="sc-input"
-            value={title}
-            maxLength={MAX_PERSON_TITLE_LENGTH}
-            placeholder={form.titlePlaceholder}
-            autoComplete="off"
-            onChange={(event) => setTitle(event.target.value)}
-          />
-        </label>
-      </div>
-      <p className="sc-field-hint">{form.handleHint}</p>
-      <div className="sc-field-row">
-        {props.providers.length > 1 && (
+      <section className="sc-form-part" aria-label={form.who}>
+        <h2 className="sc-section-title">{form.who}</h2>
+        <fieldset className="sc-agent-proposals">
+          <legend className="sc-field-label">{form.proposals}</legend>
+          <div className="sc-agent-proposal-row">
+            {props.proposals.map((proposal) => (
+              <button
+                key={proposal.seed}
+                type="button"
+                className={cx(
+                  "sc-agent-proposal",
+                  chosen?.seed === proposal.seed && "sc-agent-proposal-chosen",
+                )}
+                aria-pressed={chosen?.seed === proposal.seed}
+                disabled={props.busy === true}
+                onClick={() => choose(proposal)}
+              >
+                <AvatarPicture parts={proposal.avatarParts} className="sc-avatar sc-avatar-lg" />
+                <span className="sc-agent-proposal-name">{proposal.name}</span>
+                <span className="sc-agent-proposal-handle">@{proposal.handle}</span>
+              </button>
+            ))}
+            {props.onRoll !== undefined && (
+              <Button type="button" size="sm" disabled={props.busy === true} onClick={props.onRoll}>
+                {form.roll}
+              </Button>
+            )}
+          </div>
+          <p className="sc-field-hint">{form.proposalsHint}</p>
+        </fieldset>
+        <div className="sc-field-row">
           <label className="sc-field">
-            <span className="sc-field-label">{form.provider}</span>
+            <span className="sc-field-label">{form.name}</span>
+            <input
+              className="sc-input"
+              value={name}
+              maxLength={MAX_PERSON_NAME_LENGTH}
+              autoComplete="off"
+              onChange={(event) => setName(event.target.value)}
+            />
+          </label>
+          <label className="sc-field">
+            <span className="sc-field-label">{form.handle}</span>
+            <input
+              className="sc-input"
+              value={handle}
+              maxLength={MAX_HANDLE_LENGTH}
+              autoComplete="off"
+              spellCheck={false}
+              aria-invalid={handle !== "" && !handleOk}
+              onChange={(event) => setHandle(event.target.value.toLowerCase())}
+            />
+          </label>
+          <label className="sc-field">
+            <span className="sc-field-label">{form.title}</span>
+            <input
+              className="sc-input"
+              value={title}
+              maxLength={MAX_PERSON_TITLE_LENGTH}
+              placeholder={form.titlePlaceholder}
+              autoComplete="off"
+              onChange={(event) => setTitle(event.target.value)}
+            />
+          </label>
+        </div>
+        <p className="sc-field-hint">{form.handleHint}</p>
+      </section>
+      <section className="sc-form-part" aria-label={form.signsIn}>
+        <h2 className="sc-section-title">{form.signsIn}</h2>
+        <p className="sc-field-hint">{form.signsInHint}</p>
+        <div className="sc-field-row">
+          {props.providers.length > 1 && (
+            <label className="sc-field">
+              <span className="sc-field-label">{form.provider}</span>
+              <select
+                className="sc-input"
+                value={host ?? ""}
+                onChange={(event) => {
+                  setHost(event.target.value as ProviderKey);
+                  // A login typed for one provider is no login at another.
+                  setTypedLogin(undefined);
+                }}
+              >
+                {props.providers.map((candidate) => (
+                  <option key={candidate.key} value={candidate.key}>
+                    {candidate.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <label className="sc-field">
+            <span className="sc-field-label">{hostWords?.label ?? form.login}</span>
+            <input
+              className="sc-input"
+              value={login}
+              maxLength={MAX_LOGIN_LENGTH}
+              placeholder={hostWords?.example}
+              autoComplete="off"
+              spellCheck={false}
+              aria-invalid={login !== "" && !loginOk}
+              onChange={(event) => setTypedLogin(event.target.value)}
+            />
+          </label>
+        </div>
+        {provider !== undefined && (
+          <p className="sc-field-hint" aria-live="polite">
+            {login.trim() !== "" && !loginOk
+              ? hostWords?.invalid
+              : [
+                  login.trim() === ""
+                    ? form.loginUnnamed(provider.label)
+                    : form.loginNamed(login.trim(), provider.label),
+                  ...(derived ? [form.loginDerived] : []),
+                ].join(" ")}
+          </p>
+        )}
+      </section>
+      <section className="sc-form-part" aria-label={form.reports}>
+        <h2 className="sc-section-title">{form.reports}</h2>
+        <div className="sc-field-row">
+          <div className="sc-field">
+            <span className="sc-field-label">{form.manager}</span>
+            <Picker
+              value={manager}
+              search={peopleSearch(props.people.filter((person) => person.status === "active"))}
+              keyOf={(person) => person.id}
+              render={(person) => <PersonChip person={person} />}
+              renderOption={(person) => <PersonOption person={person} />}
+              label={form.manager}
+              placeholder={words.people.nobody}
+              disabled={props.busy === true}
+              onChange={(person) => setManager(person)}
+            />
+          </div>
+          <label className="sc-field">
+            <span className="sc-field-label">{form.project}</span>
             <select
               className="sc-input"
-              value={host ?? ""}
-              onChange={(event) => setHost(event.target.value as ProviderKey)}
+              value={project}
+              onChange={(event) => setProject(event.target.value)}
             >
-              {props.providers.map((candidate) => (
-                <option key={candidate.key} value={candidate.key}>
-                  {candidate.label}
+              {props.projects.map((candidate) => (
+                <option key={candidate.id} value={candidate.key}>
+                  {candidate.name}
                 </option>
               ))}
             </select>
           </label>
-        )}
-        <label className="sc-field">
-          <span className="sc-field-label">{form.login}</span>
-          <input
-            className="sc-input"
-            value={login}
-            maxLength={MAX_LOGIN_LENGTH}
-            autoComplete="off"
-            spellCheck={false}
-            aria-invalid={login !== "" && !loginOk}
-            onChange={(event) => setTypedLogin(event.target.value)}
-          />
-        </label>
-      </div>
-      {provider !== undefined && (
-        <Callout tone="info" title={form.first.title(provider.label)}>
-          <p>
-            {login.trim() === ""
-              ? form.first.unnamed(provider.label)
-              : form.first.make(login.trim(), provider.label)}
-          </p>
-          <p>{provider.key === "gh" ? form.first.gitHost : form.first.password}</p>
-        </Callout>
-      )}
-      <div className="sc-field-row">
-        <div className="sc-field">
-          <span className="sc-field-label">{form.manager}</span>
-          <Picker
-            value={manager}
-            search={peopleSearch(props.people.filter((person) => person.status === "active"))}
-            keyOf={(person) => person.id}
-            render={(person) => <PersonChip person={person} />}
-            renderOption={(person) => <PersonOption person={person} />}
-            label={form.manager}
-            placeholder={words.people.nobody}
-            disabled={props.busy === true}
-            onChange={(person) => setManager(person)}
-          />
         </div>
-        <label className="sc-field">
-          <span className="sc-field-label">{form.project}</span>
-          <select
-            className="sc-input"
-            value={project}
-            onChange={(event) => setProject(event.target.value)}
-          >
-            {props.projects.map((candidate) => (
-              <option key={candidate.id} value={candidate.key}>
-                {candidate.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-      <p className="sc-field-hint">{form.managerHint}</p>
+        <p className="sc-field-hint">{form.managerHint}</p>
+      </section>
       {props.error !== undefined && <Callout tone="danger">{props.error}</Callout>}
       <div className="sc-form-actions">
         <Button type="submit" variant="primary" disabled={props.busy === true || !valid}>
@@ -500,6 +525,7 @@ export function AgentAccountForm(props: AgentAccountFormProps) {
             {words.common.cancel}
           </Button>
         )}
+        <span className="sc-field-hint">{form.next}</span>
       </div>
     </form>
   );

@@ -33,6 +33,10 @@ export function onboardingOf(input: OnboardingInput): {
   const own = [
     ...services.flatMap((one) => one.onboarding.map((step) => item(step.title, step.body))),
     item(
+      "Sign in at a page in the machine's own browser",
+      "Use a browser tool of your product that attaches to the ordinary browser of your OS account: a sign-in stays there from one session to the next. Where a sign-in wants a person, a code sent to a phone or a picture to solve, ask for a person to sign in inside your session, over a remote desktop or at the machine, and say which service and which account; nothing you sign in with goes into a message, a task or a comment.",
+    ),
+    item(
       "Put your picture on your profiles",
       `\`console agent ${handle} --avatar avatar.png\` writes it as a file. Put it on your profile at each service where you have one, with that service's own tool or in a browser.`,
     ),
@@ -56,9 +60,9 @@ export function onboardingOf(input: OnboardingInput): {
       ? []
       : [
           "",
-          "## What only a person can do",
+          "## What you ask for",
           "",
-          `Ask for each as a decision, of whoever can do it, and of your manager where you do not know who. Say the exact values, what to hand back and how, and offer "Done" and "Not now": \`console ask "<question>" --option "Done" --option "Not now"\`. A secret that is handed back is seeded where only you read it, by whoever has it: \`console agent secret ${handle} <name>\`. Go on with the rest meanwhile: the answer wakes you.`,
+          `What you cannot do yourself. Ask for each as a decision, of whoever can do it, and of your manager where you do not know who. Say the exact values, what to hand back and how, and offer "Done" and "Not now": \`console ask "<question>" --option "Done" --option "Not now"\`. A secret that is handed back is seeded where only you read it, by whoever has it: \`console agent secret ${handle} <name>\`. Go on with the rest meanwhile: the answer wakes you.`,
           "",
           ...asked,
         ]),

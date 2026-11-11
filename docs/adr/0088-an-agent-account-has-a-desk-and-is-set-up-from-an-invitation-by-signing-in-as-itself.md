@@ -1,6 +1,6 @@
 # ADR-0088: An agent account has a desk, and is set up from an invitation by signing in as itself
 
-- Status: Accepted
+- Status: Accepted; what the account's page says a person does first (point 4) and the reason a git-host account is asked for (point 6) are amended by [ADR-0094](0094-the-account-an-agent-signs-in-with-is-named-and-who-makes-it-is-the-organizations-to-say.md): the account it signs in with is named, and who makes it is the organization's to say
 - Date: 2026-11-12
 - Follows [ADR-0084](0084-an-agent-account-is-a-member-of-its-own-with-a-manager-above-it.md), [ADR-0085](0085-a-runner-on-the-agents-machine-is-told-by-signals-and-runs-one-session-at-a-time.md) and [ADR-0087](0087-an-agent-account-keeps-its-secrets-in-a-store-of-its-own-that-only-it-reads.md); the command signs in through the connection of [ADR-0011](0011-an-agent-connects-with-a-short-code-a-person-approves-and-the-token-is-never-shown.md), which stands. The services the setup is derived from are [ADR-0089](0089-a-workspace-names-the-services-its-agents-work-with.md)'s.
 

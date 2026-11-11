@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type { RestAgentInvitation, RestAgentInvitationMade, RestAgentSetup } from "../api.js";
 import { useWords } from "../i18n/index.js";
 import { type SetupGuide, setupSentenceOf } from "../setup-guide.js";
-import { AvatarPicture, Badge, Button, Callout, CopyButton, personName, Time } from "./ui.js";
+import { AvatarPicture, Badge, Button, Callout, CopyButton, cx, personName, Time } from "./ui.js";
 
 // The way a machine is led to an agent account (ADR-0088): the invitation as a supervisor sees
 // it under the account, with the one line to say on the machine, and the guide its code opens,
@@ -77,8 +77,8 @@ export interface AgentInvitationPanelProps {
   readonly invitation: RestAgentInvitation | null | undefined;
   /** The invitation just made, with its code, which is shown this once. */
   readonly made?: RestAgentInvitationMade | undefined;
-  /** What a person does before the line, in the words of the workspace's identity service. */
-  readonly first?: readonly string[];
+  /** Whether what an invitation is is said first; left out where the words around the panel say it. */
+  readonly intro?: boolean | undefined;
   /** Where a person reads the guide a code opens. */
   readonly guideHref: (code: string) => string;
   readonly busy?: boolean;
@@ -94,21 +94,10 @@ export function AgentInvitationPanel(props: AgentInvitationPanelProps) {
   const words = useWords().agents.page.settings.machine;
   const { invitation, made } = props;
   const busy = props.busy === true;
-  const first = props.first ?? [];
   const standing = made?.invitation ?? invitation;
   return (
     <div className="sc-agent-invitation">
-      <p className="sc-field-hint">{words.intro}</p>
-      {first.length > 0 && (
-        <>
-          <p className="sc-field-label">{words.first}</p>
-          <ul className="sc-setup-first">
-            {first.map((line) => (
-              <li key={line}>{withCode(line)}</li>
-            ))}
-          </ul>
-        </>
-      )}
+      {props.intro !== false && <p className="sc-field-hint">{words.intro}</p>}
       {made !== undefined ? (
         <Callout tone="warning" title={words.made.title}>
           <p>{words.made.say}</p>
@@ -143,5 +132,100 @@ export function AgentInvitationPanel(props: AgentInvitationPanelProps) {
         )}
       </div>
     </div>
+  );
+}
+
+export interface AgentStartStepsProps {
+  /** The login the account signs in to the console with, and what its provider is called. */
+  readonly login: string;
+  readonly provider: string;
+  /** Whether anyone has signed in with the account. */
+  readonly signedIn: boolean;
+  /** Whether an invitation stands. */
+  readonly invited: boolean;
+  /** Whether the account's command is signed in on a machine. */
+  readonly onMachine: boolean;
+  /** Whether its runner was ever heard from. */
+  readonly heard: boolean;
+  /** The invitation, with the way to make one: shown under its step. */
+  readonly invitation?: ReactNode;
+}
+
+/**
+ * What stands between an agent account that was just added and one at work, in the order it is
+ * done: the account it signs in with, an invitation, the one line on its machine, its runner.
+ * Each is said done as the console sees it, so that whoever looks reads what is next. Who makes
+ * the account at the provider is not said: the account is named, and when it has to be there
+ * (ADR-0094).
+ */
+export function AgentStartSteps(props: AgentStartStepsProps) {
+  const words = useWords().agents.page.start;
+  // A step further on that is done says the ones before it are: a runner heard from was set up.
+  const heard = props.heard;
+  const onMachine = props.onMachine || heard;
+  const signedIn = props.signedIn || onMachine;
+  const steps: readonly {
+    readonly key: string;
+    readonly title: string;
+    readonly body: string;
+    readonly done: boolean;
+    readonly more?: ReactNode;
+  }[] = [
+    {
+      key: "account",
+      title: words.account.title,
+      body: signedIn
+        ? words.account.done(props.login)
+        : words.account.body(props.login, props.provider),
+      done: signedIn,
+    },
+    {
+      key: "invitation",
+      title: words.invitation.title,
+      body: words.invitation.body,
+      done: props.invited || onMachine,
+      more: onMachine ? undefined : props.invitation,
+    },
+    {
+      key: "machine",
+      title: words.machine.title,
+      body: onMachine ? words.machine.done : words.machine.body,
+      done: onMachine,
+    },
+    {
+      key: "runner",
+      title: words.runner.title,
+      body: heard ? words.runner.done : words.runner.body,
+      done: heard,
+    },
+  ];
+  // What is next is the first step not done. Whether the account is there at its provider the
+  // console cannot see before it signs in: once a later step is done, the one after that is next.
+  const open = steps.findIndex((step) => !step.done);
+  const next = steps.some((step, index) => index > open && step.done)
+    ? steps.findIndex((step, index) => index > open && !step.done)
+    : open;
+  return (
+    <ol className="sc-steps" aria-label={words.title}>
+      {steps.map((step, index) => (
+        <li
+          key={step.key}
+          className={cx("sc-step", step.done && "sc-step-done", index === next && "sc-step-next")}
+          aria-current={index === next ? "step" : undefined}
+        >
+          <span className="sc-step-mark" aria-hidden="true">
+            {index + 1}
+          </span>
+          <div className="sc-step-what">
+            <span className="sc-step-title">
+              {step.title}
+              {step.done && <Badge tone="success">{words.done}</Badge>}
+            </span>
+            <p className="sc-step-body">{step.body}</p>
+            {step.more}
+          </div>
+        </li>
+      ))}
+    </ol>
   );
 }

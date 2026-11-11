@@ -2877,8 +2877,9 @@ function NewAgentPage(props: {
             onSubmit={(input) =>
               void act(async () => {
                 await data.actions.createAgent(input);
-                // To the account's settings, where the invitation that leads a machine to it is made.
-                navigation.replace(agentHref(input.handle, "settings"));
+                // To the account's page, which says what is next: the invitation that leads a
+                // machine to it, made there.
+                navigation.replace(agentHref(input.handle));
               })
             }
             onCancel={() => navigation.back(PATHS.agents)}
@@ -3174,7 +3175,7 @@ function WorkspacePage(props: {
         session={route.session}
         client={client}
         viaToken={holdsToken(data)}
-        workspace={data.me?.workspace}
+        providers={data.me?.signIn}
         work={(agent) => (
           <AgentWork agent={agent} data={data} components={components} week={route.week} />
         )}

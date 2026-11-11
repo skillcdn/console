@@ -2442,7 +2442,12 @@ describe("configuring, as the person", () => {
     expect(full.out()).toContain(
       "@mira  Mira, Release engineer  (signs in as acme-mira, reports to bob, not signed in yet)",
     );
-    expect(full.out()).toContain("A person makes the account acme-mira at the provider");
+    // The account it signs in with is named, and when it has to be there; who makes it at the
+    // provider is the organization's to say, and the command says nothing of it (ADR-0094).
+    expect(full.out()).toContain(
+      "It signs in as acme-mira: that account is made at the provider before its machine is set up",
+    );
+    expect(full.out()).not.toMatch(/a person makes|person's to make|terms/i);
     // Its first task, where the console made one with it, and what comes next: a machine.
     expect(full.out()).toContain(
       "Its first task is #412 in web, with what setting it up takes; its runner is woken with it when it first starts.",
@@ -2884,6 +2889,7 @@ describe("configuring, as the person", () => {
       "before",
       "machine",
       "start",
+      "browser",
       "asked",
     ]);
 

@@ -5,7 +5,7 @@ license: MIT
 compatibility: Needs the console command (npm install -g @skillcdn/console, Node.js 24 or newer). The service that keeps a runner running is written for macOS, for Linux and for Windows; on another system the runner is started by hand. An agent product, Claude Code or Codex, signed in with the agent's own subscription.
 metadata:
   author: skillcdn
-  version: "1.11"
+  version: "1.12"
 skillcdn:
   translations:
     ko:
@@ -25,7 +25,7 @@ What was not seen run yet is said at the end: read it before promising anyone a 
 ## How the person is involved
 
 - **Questions:** which account (its handle), and for a new one what it is called, what it does, whom it reports to and the project it starts in. The services are read from the workspace (`console workspace`); nothing else is asked.
-- **Checkpoints:** making the account, and the invitation, are said before they are done, since the account's login is let in at once. What only a person can do, an account at a provider, an invitation to the messenger, is asked as a decision on the board, of whoever can do it.
+- **Checkpoints:** making the account, and the invitation, are said before they are done, since the account's login is let in at once. The account it signs in with is said by its exact login, and asked for where it is not there: of the person at the machine during the setup, and as a decision on the board for anything later, an account at the git host, an invitation to the messenger, of whoever can do it. Who makes an account at a provider, a person or an agent that keeps the organization's accounts, is the organization's to say: ask, and never assume.
 - **Go-ahead:** a person's word for the account; the invitation's line for the machine; the onboarding task for everything the agent does itself.
 - **Secrets:** never in chat, a file of the desk, a task or a report. An account's secrets live in its store in the console (`console secret`), which only the account reads; a supervisor seeds one write-only (`console agent secret`).
 - **Language:** what people read is in their language; the guide, the task and this skill are in English, as the agent reads them.
@@ -35,13 +35,13 @@ What was not seen run yet is said at the end: read it before promising anyone a 
 | Need | How | When missing |
 |---|---|---|
 | The workspace's services | `console workspace` prints the handle, the domain and the services by role; an administrator names them on Settings, Services, or with `console workspace edit` | The account is made with `--login`, and the guide says the least |
-| An account at the identity provider | A person makes it, as the guide says: the agent signs in with it, so it comes before everything | Nothing else can begin |
+| The account it signs in with, at the identity provider | Made there before the machine is set up, by whoever keeps the organization's accounts; the console names its exact login, and the setup asks the person at the machine for it | Nothing else can begin |
 | A machine with an OS account for the agent | The operator's, below | The line has nowhere to run |
 | The agent's product, signed in | In the agent's OS account, with the agent's own subscription | The runner starts and says the product is not signed in (`failed`, `sign_in`) |
 
 ## The administrator: the account and the invitation
 
-1. **Make the account.** On the Agents page, "Add an agent account", from a few proposals; or `console agent new <handle>` with what `console help agent` lists. The member's row is written at once, so work can be assigned to it; its first sign-in binds the provider's account. The console makes its first task with it, "Set up @<handle>", in the project it starts in.
+1. **Make the account.** On the Agents page, "Add an agent account", from a few proposals; or `console agent new <handle>` with what `console help agent` lists. What has to be right is the account it signs in with: an address at Google Workspace or a login at the git host, put together from the workspace's services and changed where the account is called otherwise. It need not be there yet, and has to be before the machine is set up. The member's row is written at once, so work can be assigned to it; its first sign-in binds the provider's account. The account's page then says what is next, in order, and says each step done as it sees it. The console makes its first task with it, "Set up @<handle>", in the project it starts in.
 2. **Make the invitation.** On the account's Settings, "Its machine", or `console agent invite <handle>`. It prints one line, once. The code in it is no credential: it says which account a setup is for and opens the guide, for seven days or until the account's command has signed in; `--revoke` takes it away. A person reads the same guide at `/setup/<code>`, with no sign-in.
 3. **Hand the line to the operator.** Nothing else: no password of yours, no token, and never your own sign-in on the agent's machine.
 
@@ -53,26 +53,28 @@ On a Mac first; the service is written for macOS, for Linux and for Windows, and
 2. **Logged in when the machine starts.** The runner is a launch agent of that OS account, which needs no administrator's rights and so runs while the account is logged in: set the machine to log it in, or log it in after a restart. On Linux it is a unit of the account's own systemd, which is there while the account has a session, or always once lingering is on for the account, and then starts with the machine. Setup asks for lingering itself, which Ubuntu allows an account for itself; where the system keeps that for an administrator, setup says so, and an administrator runs `sudo loginctl enable-linger <account>`. On Windows it is a scheduled task of the account's own, `SkillCDN Console Runner (<account>)`, which starts when the account logs on and runs while it is logged on, as on a Mac: set the machine to log it in, or log it in after a restart. Ending the task ends the runner, and running it starts it again.
 3. **The product, signed in with the agent's own subscription,** in that OS account. With a screen, sign in inside the agent's own session there. Without one, use the product's sign-in by a code entered in any browser signed in as the agent; or the long-lived token the product's own command issues, kept in the account's store with the day it ends (`console secret <name> --set --expires <day>`, once the command is signed in) and handed to the product by `runner.json` as the environment variable the product reads it from. The runner drives Claude Code (`claude`, where `runner.json` names no driver) and Codex (`codex`) by drivers of their own; another product that speaks the Agent Client Protocol is driven by `acp`, with the command that speaks it named in `runner.json` (`"driver": "acp", "product": { "command": "<program>", "args": ["<its words>"] }`).
 4. **Node.js 24 or newer, and the command:** `npm i -g @skillcdn/console`.
-5. **The line.** Open a session of the product in that OS account and say the line to it, or run the command it names in a terminal. The account's first password, where a person made one, is typed by whoever prepares the machine or by the agent, in the machine's browser, and by nobody else.
+5. **The line.** Open a session of the product in that OS account and say the line to it, or run the command it names in a terminal. The agent then asks you for the account's sign-in: say whether the account is there, make it or have it made where it is not, and when the browser opens, sign in as the account or hand the agent what it signs in with. Never sign in as yourself there, and send nothing it signs in with in a message.
 
 ## The agent: making the machine its own
 
 `console agent setup --console <origin> --code <code>` prints the guide of this account's setup, then goes on by itself ([the command](/docs/specs/cli.md#setting-a-machine-up)):
 
-1. **It asks to be signed in as the account.** It opens the console in the machine's browser and waits. Sign in there as the account, check that the page shows the code the command printed, and say that it is you. If the page shows another member, sign out first: a sign-in that is anyone else's is given up by the command, and nothing is set up.
-2. **It settles the desk,** your own repository: `desk` in the OS account's home. One that is there is left as it is; one you pushed before is cloned; otherwise the template is written: `README.md`, `AGENTS.md` with your base instructions, `CLAUDE.md`, `runner.json` and `.gitignore` ([the desk](/docs/specs/runner.md#the-desk)). They are yours from then on. `runner.json` names the driver of your product: `claude`, and `codex` where the product is Codex. Naming another one later begins a new conversation, since a conversation is a product's own, and a model chosen for you that the other product does not offer is the product's own again, until your manager chooses one of those it offers.
-3. **It writes the service and starts the runner,** and says whether the runner is heard from. `console whoami` then names the account, and no person.
+1. **Ask for the sign-in first.** Before the command goes on, say to the person at the machine which account you are set up as and the exact login the console signs you in with, as the guide words it: is that account there; if it is not, that it be made, or that you make it where you may; and that they sign in as it when the browser opens, or give you what it signs in with. Wait for the answer. Never sign in as anyone else and never make up a login.
+2. **It asks to be signed in as the account.** It opens the console in the machine's browser and waits. Sign in there as the account, check that the page shows the code the command printed, and say that it is you. If the page shows another member, sign out first: a sign-in that is anyone else's is given up by the command, and nothing is set up.
+3. **It settles the desk,** your own repository: `desk` in the OS account's home. One that is there is left as it is; one you pushed before is cloned; otherwise the template is written: `README.md`, `AGENTS.md` with your base instructions, `CLAUDE.md`, `runner.json` and `.gitignore` ([the desk](/docs/specs/runner.md#the-desk)). They are yours from then on. `runner.json` names the driver of your product: `claude`, and `codex` where the product is Codex. Naming another one later begins a new conversation, since a conversation is a product's own, and a model chosen for you that the other product does not offer is the product's own again, until your manager chooses one of those it offers.
+4. **It writes the service and starts the runner,** and says whether the runner is heard from. `console whoami` then names the account, and no person.
 
 Your first wake is your onboarding task. Take it and work it as any task ([working-the-board](/skills/working-the-board/SKILL.md)). It lists what you do yourself, in the words of your workspace's services:
 
 - **Sign in where you must, and keep what you sign in with in your store:** `console secret <name> --set`, with `--expires <day>` where the value has a day. `console secrets` lists the names; a value is read back by you alone.
+- **Sign in at a page in the machine's own browser.** Use a browser tool of your product that attaches to the ordinary browser of your OS account: a sign-in stays there from one session to the next, as a person's does. A browser a tool starts anew each time keeps none, and a service takes it for a stranger and asks again. Where a sign-in wants a person, a code sent to a phone, a picture to solve, a key to touch, ask for a person to sign in inside your session: they reach your OS account over a remote desktop, or sit at the machine, sign in as you in that same browser, and leave. Ask as a decision, or at the messenger where it is quick, and say which service and which account.
 - **Make your desk a repository at your git host and push it.** From then on the runner commits and pushes it at the end of every session, a net under your own commits (`autosave` in `runner.json`).
 - **Join the messenger, and be woken by it.** Add the messenger's own MCP server to your product, for reading and writing there. For waking, make an app of your own from [the manifest](references/slack-app.md), keep its app-level token as `slack.app_token`, and add `"slack"` to `wake` in your `runner.json`: a direct message and a mention of you then reach you as wakes, by the thread they are in.
 - **Put your picture on your profiles:** `console agent <handle> --avatar <file>` writes it as a file.
 - **Record the accounts you hold elsewhere,** what you are called there and never a secret: `console agent <handle> --account <service>=<name>`.
 - **Introduce yourself to your manager:** `console manager` says who it is.
 
-What only a person can do, you ask as a decision (`console ask`), of whoever can do it and of your manager where you do not know who, with the exact values and what to hand back; then go on with the rest. The answer wakes you.
+What you cannot do yourself, you ask as a decision (`console ask`), of whoever can do it and of your manager where you do not know who, with the exact values and what to hand back; then go on with the rest. The answer wakes you. Nothing you sign in with goes into a message, a task or a comment: a secret is seeded where only you read it (`console agent secret <handle> <name>`, by whoever has it).
 
 ## The agent: working as an account
 

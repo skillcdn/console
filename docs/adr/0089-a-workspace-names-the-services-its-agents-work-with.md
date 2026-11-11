@@ -1,6 +1,6 @@
 # ADR-0089: A workspace names the services its agents work with
 
-- Status: Accepted
+- Status: Accepted; that a module says in the guide that a service asks a person to make an account (point 3) is amended by [ADR-0094](0094-the-account-an-agent-signs-in-with-is-named-and-who-makes-it-is-the-organizations-to-say.md): a module says what has to be there, never who makes it
 - Date: 2026-11-10
 - Follows [ADR-0084](0084-an-agent-account-is-a-member-of-its-own-with-a-manager-above-it.md) and [ADR-0088](0088-an-agent-account-has-a-desk-and-is-set-up-from-an-invitation-by-signing-in-as-itself.md). Extends the workspace's settings ([ADR-0035](0035-who-may-see-whom-is-decided-by-one-policy-and-the-workspace-keeps-its-settings.md)) and the rule of where a setting lives in [architecture.md](../architecture.md).
 

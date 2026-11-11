@@ -91,13 +91,26 @@ describe("a name at a service", () => {
 });
 
 describe("what a kind of service says of itself", () => {
-  it("names the account, the organization and what a person does there, in the guide and in what is asked", () => {
+  it("names the account, the organization and what has to be there, in the guide and in what is asked for", () => {
     const git = describeService("git", { kind: "github", organization: "acme" }, ACME);
     expect(git.provider.name).toBe("GitHub");
     expect(git.account).toBe("acme-mira");
     expect(git.guide.join("\n")).toContain("`acme-mira`");
     expect(git.guide.join("\n")).toContain("`acme`");
-    expect(git.asks[0]?.title).toBe("Make the account `acme-mira` at GitHub");
+    expect(git.asks[0]?.title).toBe("The account `acme-mira` at GitHub");
+    // What has to be there is said, and never who makes it or what a service's terms ask: that
+    // is the organization's to say (ADR-0094).
+    for (const kind of ["github", "gitlab", "google-workspace", "slack", "forge"]) {
+      for (const role of ["identity", "git", "messenger"] as const) {
+        const said = describeService(role, { kind, organization: "acme", group: "acme" }, ACME);
+        const words = [...said.guide, ...said.asks.flatMap((item) => [item.title, item.body])].join(
+          " ",
+        );
+        expect(words, `${kind} as ${role}`).not.toMatch(
+          /a person makes|person's to make|terms|asks that a person/i,
+        );
+      }
+    }
     // The agent's own part: its token in its store, and its desk in its own account.
     const onboarding = git.onboarding.map((item) => item.body).join("\n");
     expect(onboarding).toContain("console secret git.token --set");
@@ -115,7 +128,7 @@ describe("what a kind of service says of itself", () => {
     );
     expect(messenger.provider.wakeSource).toBe("slack");
     expect(messenger.guide[0]).toContain("`acme.slack.com`");
-    expect(messenger.asks[0]?.title).toBe("Invite mira to the messenger");
+    expect(messenger.asks[0]?.title).toBe("An invitation for mira to the messenger");
   });
 
   it("names a GitLab by its group and its host, and an account there in the form the entry says", () => {
@@ -125,7 +138,7 @@ describe("what a kind of service says of itself", () => {
     expect(user.account).toBe("acme-mira");
     expect(user.guide[0]).toContain("`acme-mira` at gitlab.com");
     expect(user.guide[1]).toContain("`acme/platform`");
-    expect(user.asks[0]?.title).toBe("Make the account `acme-mira` at GitLab");
+    expect(user.asks[0]?.title).toBe("The account `acme-mira` at GitLab");
     const own = user.onboarding.map((item) => item.body).join("\n");
     expect(own).toContain("console secret git.token --set --expires <day>");
     expect(own).toContain("`acme-mira/desk`");

@@ -201,6 +201,8 @@ export { SessionList, type SessionListProps } from "./components/sessions.js";
 export {
   AgentInvitationPanel,
   type AgentInvitationPanelProps,
+  AgentStartSteps,
+  type AgentStartStepsProps,
   SetupGuideView,
   type SetupGuideViewProps,
 } from "./components/setup.js";
