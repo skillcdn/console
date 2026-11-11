@@ -3644,7 +3644,7 @@ const agents: Command = async (args, io) => {
 };
 
 const AGENT_USAGE =
-  'Say what to do: console agent <handle> [--avatar <file>]  |  console agent new <handle> --login <login> --project <key> [--name "<name>"] [--title "<title>"] [--manager <login|me>] [--host gh|google] [--seed <seed>]';
+  'Say what to do: console agent <handle> [--avatar <file>]  |  console agent new <handle> [--login <login>] [--project <key>] [--name "<name>"] [--title "<title>"] [--manager <login|me>] [--host gh|google] [--seed <seed>]';
 
 // An administrator makes an agent account with flags, where the pages make one from a form
 // (ADR-0084): the member's row at once, its login let in. What is left out is proposed: the

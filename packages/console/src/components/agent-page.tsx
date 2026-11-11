@@ -232,6 +232,12 @@ export function tellsWith(event: {
 export interface SignalComposerProps {
   /** How the agent stands, by which what may be said is chosen: a stopped agent is restarted, a running one stopped. */
   readonly state: AgentState | undefined;
+  /**
+   * Whether the agent's product takes a message in a turn, as its driver says on the heartbeat
+   * (`offers.steer`): where it takes none, a tell is read when the turn ends, and the button
+   * says so. Nothing said is a product that takes one.
+   */
+  readonly steer?: boolean | undefined;
   readonly busy?: boolean | undefined;
   /** What was sent last, as a line under the box; or what went wrong. */
   readonly note?: ReactNode;
@@ -388,7 +394,12 @@ export function SignalComposer(props: SignalComposerProps) {
           >
             {words.interrupt}
           </Button>
-          <Button type="submit" variant="primary" disabled={!ready} title={words.tellHint}>
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={!ready}
+            title={props.steer === false ? words.tellHintAfterTurn : words.tellHint}
+          >
             {words.send}
           </Button>
         </span>

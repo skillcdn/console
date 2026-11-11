@@ -1651,6 +1651,8 @@ export const en = {
         removePicture: (name: string) => `Remove ${name}`,
         send: "Tell",
         tellHint: "Read by the agent after the tool call under way.",
+        tellHintAfterTurn:
+          "Read by the agent when the turn under way ends: its product takes no message in a turn.",
         interrupt: "Interrupt",
         interruptHint: "Stops the turn under way, then gives these words.",
         stop: "Stop",

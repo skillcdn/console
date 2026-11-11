@@ -1568,6 +1568,8 @@ export const ko: Messages = {
         removePicture: (name) => `${name} 빼기`,
         send: "전달",
         tellHint: "진행 중인 도구 호출이 끝난 뒤 에이전트가 읽습니다.",
+        tellHintAfterTurn:
+          "진행 중인 턴이 끝난 뒤 에이전트가 읽습니다. 이 제품은 턴 도중에 메시지를 받지 않습니다.",
         interrupt: "중단",
         interruptHint: "진행 중인 턴을 멈추고 이 말을 전합니다.",
         stop: "멈춤",

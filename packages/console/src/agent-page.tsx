@@ -239,6 +239,7 @@ function AgentLive(props: {
   const composer = (
     <SignalComposer
       state={agent.state?.state}
+      steer={agent.runner?.offers?.steer}
       busy={busy}
       note={
         error === undefined ? (

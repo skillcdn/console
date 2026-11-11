@@ -1981,6 +1981,45 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     expect(stopped).toContain("Sent as #4: stop.");
   });
 
+  it("says when a tell is read by what the agent's product takes: after the tool call, or when the turn ends", () => {
+    const tell = (markup: string) => /<button[^>]*type="submit"[^>]*>/.exec(markup)?.[0] ?? "";
+    // A product that takes a message in a turn, and one nothing is known of yet.
+    for (const steer of [true, undefined]) {
+      const steered = tell(
+        renderToStaticMarkup(
+          <SignalComposer state="running" steer={steer} onSend={() => undefined} />,
+        ),
+      );
+      expect(steered).toContain('title="Read by the agent after the tool call under way."');
+    }
+    // One that takes none: the words wait for the turn to end, and the button says so.
+    const waits = tell(
+      renderToStaticMarkup(
+        <SignalComposer state="running" steer={false} onSend={() => undefined} />,
+      ),
+    );
+    expect(waits).toContain(
+      'title="Read by the agent when the turn under way ends: its product takes no message in a turn."',
+    );
+    expect(waits).not.toContain("after the tool call");
+    // In Korean too, each in its own words.
+    const korean = (steer: boolean) =>
+      tell(
+        renderToStaticMarkup(
+          <LanguageContext.Provider value={KOREAN}>
+            <SignalComposer state="running" steer={steer} onSend={() => undefined} />
+          </LanguageContext.Provider>,
+        ),
+      );
+    expect(korean(true)).toContain(`title="${KOREAN.messages.agents.page.tell.tellHint}"`);
+    expect(korean(false)).toContain(
+      `title="${KOREAN.messages.agents.page.tell.tellHintAfterTurn}"`,
+    );
+    expect(KOREAN.messages.agents.page.tell.tellHintAfterTurn).not.toBe(
+      KOREAN.messages.agents.page.tell.tellHint,
+    );
+  });
+
   it("offers the model and the effort its product offers, and says what the open session runs with", () => {
     expect(renderToStaticMarkup(<AgentChoice runner={null} onSet={() => undefined} />)).toContain(
       "offered nothing to choose from yet",
