@@ -3525,6 +3525,7 @@ const runner: Command = async (args, io) => {
       cwd: host.cwd,
       command: read.config.product?.command,
       args: read.config.product?.args,
+      version: io.version,
     }),
     config: read.config,
     cwd: host.cwd,

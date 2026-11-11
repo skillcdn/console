@@ -205,8 +205,9 @@ const OPTIONS: StartOptions = {
   resume: undefined,
 };
 
-function driverFor(agent: ReturnType<typeof fakeAgent>) {
+function driverFor(agent: ReturnType<typeof fakeAgent>, version?: string) {
   return createAcpDriver({
+    version,
     spawn: (command, args, options) => {
       agent.started.command = command;
       agent.started.args = args;
@@ -290,7 +291,12 @@ describe("the acp driver", () => {
       params: {
         protocolVersion: 1,
         clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-        clientInfo: { name: "skillcdn-console-runner", title: "SkillCDN Console runner" },
+        // The protocol has a client say a version: none that this one was told is said as none.
+        clientInfo: {
+          name: "skillcdn-console-runner",
+          title: "SkillCDN Console runner",
+          version: "0.0.0",
+        },
       },
     });
     expect(agent.sent[1]).toMatchObject({
@@ -304,6 +310,12 @@ describe("the acp driver", () => {
     await session.stop();
     expect(agent.ended).toBe(true);
     expect(await until(session, [], isType("ended"))).toEqual([{ type: "ended", how: "exited" }]);
+    // The command's own version, where the runner was told it.
+    const told = agentThat();
+    const versioned = driverFor(told, "0.4.8").start(OPTIONS);
+    await until(versioned, [], isType("running"));
+    expect(told.sent[0]).toMatchObject({ params: { clientInfo: { version: "0.4.8" } } });
+    await versioned.stop();
   });
 
   it("starts with the model and the effort chosen for it, where the agent offers them, and takes another in a running session", async () => {
@@ -682,6 +694,209 @@ describe("the acp driver", () => {
     await fresh.stop();
   });
 
+  it("takes a call's result from what was said of it last, and from what its command printed where the agent sends that beside the protocol", async () => {
+    const agent = agentThat({
+      prompt: (asked, one) => {
+        one.says(
+          // A change to files, said when the call began: its end says the status alone, and an
+          // update leaves what it does not name as it was.
+          update("tool_call", {
+            toolCallId: "edit-1",
+            title: "Edit notes.md",
+            kind: "edit",
+            status: "in_progress",
+            content: [
+              {
+                type: "diff",
+                path: "notes.md",
+                oldText: "a",
+                newText: "b",
+                _meta: { kind: "update" },
+              },
+              {
+                type: "diff",
+                path: "notes.md",
+                oldText: "c",
+                newText: "d",
+                _meta: { kind: "update" },
+              },
+              {
+                type: "diff",
+                path: "old.md",
+                oldText: "gone",
+                newText: "",
+                _meta: { kind: "delete" },
+              },
+              {
+                type: "diff",
+                path: "new.md",
+                oldText: "",
+                newText: "fresh",
+                _meta: { kind: "add" },
+              },
+            ],
+          }),
+          update("tool_call_update", { toolCallId: "edit-1", status: "completed" }),
+          // A command whose output arrives in pieces beside the protocol, and whose end holds
+          // nothing but how it exited.
+          update("tool_call", {
+            toolCallId: "run-1",
+            title: "pnpm test",
+            kind: "execute",
+            status: "in_progress",
+            rawInput: { command: "pnpm test", cwd: "/home/mira/desk" },
+            content: [{ type: "terminal", terminalId: "term-1" }],
+          }),
+          update("tool_call_update", {
+            toolCallId: "run-1",
+            _meta: { terminal_output_delta: { terminal_id: "term-1", data: "12 passed\n" } },
+          }),
+          update("tool_call_update", {
+            toolCallId: "run-1",
+            _meta: { terminal_output_delta: { terminal_id: "term-1", data: "1 failed\n" } },
+          }),
+          update("tool_call_update", {
+            toolCallId: "run-1",
+            status: "failed",
+            rawOutput: { exit_code: 1 },
+            _meta: { terminal_exit: { terminal_id: "term-1", exit_code: 1 } },
+          }),
+          // One that says what it printed whole, and one that says nothing but its output as data.
+          update("tool_call", { toolCallId: "run-2", title: "ls", kind: "execute" }),
+          update("tool_call_update", {
+            toolCallId: "run-2",
+            _meta: { terminal_output: { terminal_id: "term-2", data: "README.md\n" } },
+          }),
+          update("tool_call_update", { toolCallId: "run-2", status: "completed" }),
+          update("tool_call", { toolCallId: "read-1", title: "Read notes.md", kind: "read" }),
+          update("tool_call_update", { toolCallId: "read-1", rawOutput: { lines: 3 } }),
+          update("tool_call_update", { toolCallId: "read-1", status: "completed" }),
+          { id: asked.id, result: { stopReason: "end_turn" } },
+        );
+      },
+    });
+    const session = driverFor(agent).start(OPTIONS);
+    await session.send(message("Run the tests."));
+    const seen = await until(session, [], isType("turn_completed"));
+    expect(seen.slice(2)).toEqual([
+      {
+        type: "event",
+        kind: "tool_call",
+        text: "Edit notes.md",
+        data: { tool: "edit", id: "edit-1" },
+      },
+      {
+        type: "event",
+        kind: "tool_result",
+        text: "Changed notes.md\nRemoved old.md\nWrote new.md",
+        data: { id: "edit-1", error: false },
+        pictures: [],
+      },
+      {
+        type: "event",
+        kind: "tool_call",
+        text: "pnpm test",
+        data: { tool: "execute", id: "run-1" },
+      },
+      {
+        type: "event",
+        kind: "tool_result",
+        text: "12 passed\n1 failed\n",
+        data: { id: "run-1", error: true },
+        pictures: [],
+      },
+      { type: "event", kind: "tool_call", text: "ls", data: { tool: "execute", id: "run-2" } },
+      {
+        type: "event",
+        kind: "tool_result",
+        text: "README.md\n",
+        data: { id: "run-2", error: false },
+        pictures: [],
+      },
+      {
+        type: "event",
+        kind: "tool_call",
+        text: "Read notes.md",
+        data: { tool: "read", id: "read-1" },
+      },
+      {
+        type: "event",
+        kind: "tool_result",
+        text: '{"lines":3}',
+        data: { id: "read-1", error: false },
+        pictures: [],
+      },
+      { type: "turn_completed" },
+    ]);
+    await session.stop();
+  });
+
+  it("begins a new conversation where the agent cannot go on with the one it had, and says why; an agent that is signed out is said as that", async () => {
+    const resuming = {
+      ...INITIALIZED,
+      agentCapabilities: { sessionCapabilities: { resume: {} } },
+    };
+    // Why is in what the error carries beside its message, as an agent may put it there.
+    const lost = agentThat({
+      initialized: resuming,
+      other: (sent, one) => {
+        if (sent.method === "session/resume") {
+          one.says({
+            id: sent.id,
+            error: {
+              code: -32603,
+              message: "Internal error",
+              data: { message: "no rollout found for sess-9" },
+            },
+          });
+          return true;
+        }
+        return false;
+      },
+    });
+    const session = driverFor(lost).start({ ...OPTIONS, resume: "sess-9" });
+    expect(await until(session, [], isType("running"))).toEqual([
+      {
+        type: "event",
+        kind: "status",
+        text: "The agent could not go on with the conversation it had (Internal error: no rollout found for sess-9): a new one begins.",
+      },
+      { type: "conversation", id: "sess-1" },
+      { type: "running", model: "lathe-small", effort: "low", version: "2.3.1" },
+    ]);
+    await session.stop();
+
+    const out = agentThat({
+      initialized: resuming,
+      other: (sent, one) => {
+        if (sent.method === "session/resume") {
+          one.says({
+            id: sent.id,
+            error: {
+              code: -32603,
+              message: "Internal error",
+              data: "You have been logged out. Please try again.",
+            },
+          });
+          return true;
+        }
+        return false;
+      },
+    });
+    expect(
+      await until(driverFor(out).start({ ...OPTIONS, resume: "sess-9" }), [], isType("ended")),
+    ).toEqual([
+      {
+        type: "event",
+        kind: "error",
+        text: "The product is not signed in: Internal error: You have been logged out. Please try again.",
+      },
+      { type: "cannot_go_on", state: "failed", reason: "sign_in" },
+      { type: "ended", how: "exited" },
+    ]);
+    expect(out.of("session/new")).toEqual([]);
+  });
+
   it("hands a picture over where the agent takes one, and says so where it takes none", async () => {
     const picture = {
       name: "screen.png",
@@ -831,6 +1046,23 @@ describe("the acp driver", () => {
     // What it said it is called is what the runner calls it from then on.
     expect(driver.product.name).toBe("Lathe");
     expect(agent.ended).toBe(true);
+    expect(agent.of("session/close")).toEqual([]);
+    // An agent that closes a session is asked to close the one that was opened to ask.
+    const tidy = agentThat({
+      initialized: {
+        ...INITIALIZED,
+        agentCapabilities: { sessionCapabilities: { close: {} } },
+      },
+      other: (sent, one) => {
+        if (sent.method === "session/close") {
+          one.says({ id: sent.id, result: {} });
+          return true;
+        }
+        return false;
+      },
+    });
+    await driverFor(tidy).probe();
+    expect(tidy.of("session/close").map((one) => one.params)).toEqual([{ sessionId: "sess-1" }]);
     // A product that is not there offers nothing, and nothing fails for it.
     const absent = fakeAgent(() => undefined);
     const probing = driverFor(absent).probe();

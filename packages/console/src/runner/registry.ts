@@ -41,6 +41,8 @@ export interface DriverHost {
   readonly command?: string | undefined;
   /** The words the product's command is started with, for a driver that has none of its own. */
   readonly args?: readonly string[] | undefined;
+  /** The version of the command the runner is, for a driver that says to the product what it is spoken to by. */
+  readonly version?: string | undefined;
   /** The ids a driver writes its messages under, where a test wants to know them; random otherwise. */
   readonly uuid?: (() => string) | undefined;
 }

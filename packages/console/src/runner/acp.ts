@@ -19,7 +19,8 @@ import type {
 // the agent no file and no terminal of its own, so the agent works with its own tools in the
 // desk; it answers what the agent asks leave for, since nobody is at a terminal to ask; and it
 // reads what the agent does as whole blocks, where the protocol sends a message in pieces.
-// Written from the protocol's documentation, version 1.
+// Written from the protocol's documentation, version 1, and read against the types the protocol
+// publishes and the source of one agent that speaks it; it was run against none yet.
 
 /** The protocol's version this driver speaks. */
 const PROTOCOL_VERSION = 1;
@@ -32,6 +33,10 @@ const START_TIMEOUT_MS = 120_000;
 const PROBE_TIMEOUT_MS = 30_000;
 /** The most of a tool's input that is shown. */
 const MAX_INPUT_LENGTH = 4000;
+/** The most that is kept of what a command printed while it ran, where an agent sends it in pieces. */
+const MAX_PRINTED_LENGTH = 200_000;
+/** The most that is shown of what an error carries beside its message. */
+const MAX_DETAIL_LENGTH = 1000;
 /** The protocol's code for a request the agent takes only once the product is signed in. */
 const AUTH_REQUIRED = -32000;
 /** The answer to a request for a method this client does not offer. */
@@ -42,7 +47,7 @@ const METHOD_NOT_FOUND = -32601;
  * own: read by pattern, beside the protocol's own code for it.
  */
 const SIGN_IN =
-  /not logged in|log ?in (?:is )?required|authentication (?:is )?required|auth_required|invalid (?:x-)?api[- ]key|token (?:has )?expired|unauthorized/i;
+  /not (?:logged|signed) in|logged out|(?:log|sign) ?in (?:is )?required|authentication (?:is )?required|auth_required|invalid (?:x-)?api[- ]key|token (?:has )?expired|unauthorized/i;
 
 /**
  * What the runner answers where the agent asks leave for a tool call. `allow` lets it, once
@@ -85,11 +90,26 @@ const wait = (ms: number): Promise<"timeout"> =>
     setTimeout(() => resolve("timeout"), ms).unref?.();
   });
 
-/** What a request was refused with, as the protocol says it. */
+/**
+ * What an error carries beside its message, as words: an agent may say "Internal error" and put
+ * why under `data`, as text or as an object with a message of its own.
+ */
+function detailOf(data: unknown): string | undefined {
+  const words = isObject(data)
+    ? (textOf(data.message) ?? textOf(data.details) ?? textOf(data.error))
+    : textOf(data);
+  const detail = words?.trim();
+  return detail === undefined || detail.length === 0
+    ? undefined
+    : detail.slice(0, MAX_DETAIL_LENGTH);
+}
+
+/** What a request was refused with, as the protocol says it: the message, with what it carries beside it. */
 class RpcError extends Error {
   readonly code: number;
-  constructor(code: number, message: string) {
-    super(message);
+  constructor(code: number, message: string, data?: unknown) {
+    const detail = detailOf(data);
+    super(detail === undefined || message.includes(detail) ? message : `${message}: ${detail}`);
     this.code = code;
   }
 }
@@ -165,6 +185,7 @@ function connectionOf(child: Child): Connection {
               new RpcError(
                 typeof line.error.code === "number" ? line.error.code : 0,
                 textOf(line.error.message) ?? "the request was refused",
+                line.error.data,
               ),
             );
           } else {
@@ -255,9 +276,19 @@ function contentOf(
     }
     if (item.type === "diff") {
       const path = textOf(item.path) ?? "a file";
-      texts.push(
-        `${item.oldText === null || item.oldText === undefined ? "Wrote" : "Changed"} ${path}`,
-      );
+      // What became of the file: as the agent says it beside the protocol where it does, read
+      // from the text before where it does not. A file changed in several places is said once.
+      const said = isObject(item._meta) ? textOf(item._meta.kind) : undefined;
+      const fresh = item.oldText === null || item.oldText === undefined;
+      const what =
+        said === "delete"
+          ? "Removed"
+          : said === "add" || (said === undefined && fresh)
+            ? "Wrote"
+            : "Changed";
+      if (!texts.includes(`${what} ${path}`)) {
+        texts.push(`${what} ${path}`);
+      }
       continue;
     }
     if (item.type !== "content" || !isObject(item.content)) {
@@ -305,10 +336,15 @@ function agentOf(initialized: unknown): { name: string | undefined; version: str
 }
 
 /** What the runner says of itself when it begins: no file and no terminal of its own, so that the agent works with its own tools. */
-const hello = (): Json => ({
+const hello = (version: string | undefined): Json => ({
   protocolVersion: PROTOCOL_VERSION,
   clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-  clientInfo: { name: "skillcdn-console-runner", title: "SkillCDN Console runner" },
+  // The protocol has a client say its version: the command's, or none that it knows.
+  clientInfo: {
+    name: "skillcdn-console-runner",
+    title: "SkillCDN Console runner",
+    version: version ?? "0.0.0",
+  },
 });
 
 /** Ends a process: its input closed first, then asked, then made to. */
@@ -322,7 +358,12 @@ async function endOf(child: Child): Promise<void> {
   }
 }
 
-function sessionOf(child: Child, options: StartOptions): DriverSession {
+function sessionOf(
+  child: Child,
+  options: StartOptions,
+  /** The version of the command the runner is, said to the product. */
+  own: string | undefined,
+): DriverSession {
   const connection = connectionOf(child);
   const mode = acpMode(options.permissions);
 
@@ -387,16 +428,29 @@ function sessionOf(child: Child, options: StartOptions): DriverSession {
     piece = { kind, text: `${piece?.text ?? ""}${text}` };
   };
 
-  /** The tool calls under way, by id: what each is called, and whether its end was said. */
-  const calls = new Map<string, { tool: string; done: boolean }>();
+  /**
+   * The tool calls under way, by id: what each is called, what it holds so far, what its command
+   * printed, and whether its end was said.
+   */
+  const calls = new Map<
+    string,
+    { tool: string; done: boolean; content: unknown; raw: unknown; printed: string }
+  >();
   const toolUpdate = (update: Json, first: boolean): void => {
     const id = textOf(update.toolCallId);
     if (id === undefined) {
       return;
     }
     let call = calls.get(id);
+    const known = call !== undefined;
     if (call === undefined) {
-      call = { tool: textOf(update.name) ?? textOf(update.kind) ?? "tool", done: false };
+      call = {
+        tool: textOf(update.name) ?? textOf(update.kind) ?? "tool",
+        done: false,
+        content: undefined,
+        raw: undefined,
+        printed: "",
+      };
       calls.set(id, call);
       flush();
       const title = textOf(update.title) ?? "";
@@ -407,16 +461,48 @@ function sessionOf(child: Child, options: StartOptions): DriverSession {
         text: input.length === 0 || title.includes(input) ? title : `${title}\n${input}`.trim(),
         data: { tool: call.tool, id },
       });
-    } else if (first) {
+    }
+    if ((known && first) || call.done) {
       return;
     }
+    // An update says what changed and leaves the rest as it was: what a call holds is what was
+    // said of it last, when it began or since.
+    if (update.content !== undefined && update.content !== null) {
+      call.content = update.content;
+    }
+    if (update.rawOutput !== undefined && update.rawOutput !== null) {
+      call.raw = update.rawOutput;
+    }
+    // Beside the protocol, an agent may send what a command prints while it runs: whole, or a
+    // piece at a time. It is the call's result where the call holds no text of its own.
+    const beside = isObject(update._meta) ? update._meta : {};
+    const whole = isObject(beside.terminal_output)
+      ? textOf(beside.terminal_output.data)
+      : undefined;
+    const more = isObject(beside.terminal_output_delta)
+      ? textOf(beside.terminal_output_delta.data)
+      : undefined;
+    if (whole !== undefined) {
+      call.printed = whole.slice(0, MAX_PRINTED_LENGTH);
+    } else if (more !== undefined && call.printed.length < MAX_PRINTED_LENGTH) {
+      call.printed = `${call.printed}${more}`.slice(0, MAX_PRINTED_LENGTH);
+    }
     const status = textOf(update.status);
-    if (!call.done && (status === "completed" || status === "failed")) {
+    if (status === "completed" || status === "failed") {
       call.done = true;
       flush();
       results += 1;
-      const result = contentOf(update.content, `tool-${results}`);
-      const output = result.text.length > 0 ? result.text : inputOf(update.rawOutput);
+      const result = contentOf(call.content, `tool-${results}`);
+      const output =
+        result.text.length > 0
+          ? result.text
+          : call.printed.trim().length > 0
+            ? call.printed
+            : inputOf(call.raw);
+      // Nothing more is read of a call that ended.
+      call.content = undefined;
+      call.raw = undefined;
+      call.printed = "";
       emit({
         type: "event",
         kind: "tool_result",
@@ -653,7 +739,7 @@ function sessionOf(child: Child, options: StartOptions): DriverSession {
   };
 
   const open = async (): Promise<void> => {
-    const initialized = await connection.request("initialize", hello());
+    const initialized = await connection.request("initialize", hello(own));
     began = true;
     const version = isObject(initialized) ? initialized.protocolVersion : undefined;
     if (version !== PROTOCOL_VERSION) {
@@ -686,18 +772,34 @@ function sessionOf(child: Child, options: StartOptions): DriverSession {
           sessionId: options.resume,
           ...place,
         });
-      } finally {
-        replaying = false;
-      }
-      session = options.resume;
-    } else {
-      if (options.resume !== undefined) {
+        session = options.resume;
+      } catch (error) {
+        // Not signed in is said as that, and a process that is gone where its output ends.
+        if (
+          !(error instanceof RpcError) ||
+          error.code === AUTH_REQUIRED ||
+          SIGN_IN.test(error.message)
+        ) {
+          throw error;
+        }
+        // A conversation the agent has no more, or never kept: said, and a new one begun, as
+        // the runner begins one where the conversation kept was another product's.
         emit({
           type: "event",
           kind: "status",
-          text: "This agent goes on with no conversation from one session to the next: a new one begins.",
+          text: `The agent could not go on with the conversation it had (${error.message}): a new one begins.`,
         });
+      } finally {
+        replaying = false;
       }
+    } else if (options.resume !== undefined) {
+      emit({
+        type: "event",
+        kind: "status",
+        text: "This agent goes on with no conversation from one session to the next: a new one begins.",
+      });
+    }
+    if (session === undefined) {
       opened = await connection.request("session/new", place);
       session = isObject(opened) ? textOf(opened.sessionId) : undefined;
       if (session === undefined) {
@@ -875,13 +977,27 @@ export function createAcpDriver(host: DriverHost): Driver {
         },
       });
       const asked = (async (): Promise<Probe> => {
-        const initialized = await connection.request("initialize", hello());
+        const initialized = await connection.request("initialize", hello(host.version));
         const agent = agentOf(initialized);
         name = agent.name ?? name;
         try {
-          // What it offers to choose from is a session's to say: one is opened, and left.
+          // What it offers to choose from is a session's to say: one is opened, and closed
+          // again where the agent closes one, so that it keeps nothing of a session nobody had.
           const opened = await connection.request("session/new", { cwd: host.cwd, mcpServers: [] });
           const configuration = isObject(opened) ? opened.configOptions : undefined;
+          const capabilities =
+            isObject(initialized) && isObject(initialized.agentCapabilities)
+              ? initialized.agentCapabilities
+              : {};
+          const closes =
+            isObject(capabilities.sessionCapabilities) &&
+            isObject(capabilities.sessionCapabilities.close);
+          const opening = isObject(opened) ? textOf(opened.sessionId) : undefined;
+          if (closes && opening !== undefined) {
+            await connection
+              .request("session/close", { sessionId: opening })
+              .catch(() => undefined);
+          }
           return {
             version: agent.version,
             models: choiceOf(configuration, "model")?.values ?? [],
@@ -902,7 +1018,7 @@ export function createAcpDriver(host: DriverHost): Driver {
           "runner.json names the driver acp and no command for it: say which program speaks the protocol, as product.command.",
         );
       }
-      return sessionOf(start(options.cwd, options.env), options);
+      return sessionOf(start(options.cwd, options.env), options, host.version);
     },
   };
 }
