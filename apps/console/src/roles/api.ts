@@ -628,6 +628,45 @@ export async function pluginsOf(
   blobs: BlobStore,
   logger: Logger,
 ): Promise<Plugins> {
+  const { plugins, host, discovery, dir } = await buildPlugins(config, database, blobs, logger);
+  try {
+    await host.start();
+  } catch (error) {
+    logger.error(
+      { err: error },
+      "the plugin host could not be started; every plugin is unavailable",
+    );
+  }
+  await plugins.start();
+  logger.info(
+    {
+      plugins: discovery.plugins.map((plugin) => plugin.key),
+      failed: discovery.failed.map((plugin) => plugin.key),
+      directory: dir,
+    },
+    "plugins read",
+  );
+  return plugins;
+}
+
+/**
+ * The plugins with their host, read and wired and not yet started: what the api and worker
+ * roles start and take stock of, and what the migrate role runs the upgrades in, so that an
+ * upgrade asks of `ctx` what a job asks of it.
+ */
+export async function buildPlugins(
+  config: Config,
+  database: Database,
+  blobs: BlobStore,
+  logger: Logger,
+  /** The compiled host; another where the console runs from its sources, as its tests do. */
+  hostEntry: string = HOST_ENTRY,
+): Promise<{
+  plugins: Plugins;
+  host: PluginHost;
+  discovery: Awaited<ReturnType<typeof discoverPlugins>>;
+  dir: string;
+}> {
   const dir = config.plugins.dir;
   if (dir === undefined) {
     throw new ConfigError(["PLUGINS_DIR: not set"]);
@@ -646,7 +685,7 @@ export async function pluginsOf(
   }
   const holder: { current: Plugins | undefined } = { current: undefined };
   const host = new PluginHost({
-    entry: HOST_ENTRY,
+    entry: hostEntry,
     allowRead: await allowedReadRoots(
       dir,
       discovery.plugins.map((plugin) => plugin.dir),
@@ -682,24 +721,7 @@ export async function pluginsOf(
     publicUrl: config.auth?.publicUrl,
   });
   holder.current = plugins;
-  try {
-    await host.start();
-  } catch (error) {
-    logger.error(
-      { err: error },
-      "the plugin host could not be started; every plugin is unavailable",
-    );
-  }
-  await plugins.start();
-  logger.info(
-    {
-      plugins: discovery.plugins.map((plugin) => plugin.key),
-      failed: discovery.failed.map((plugin) => plugin.key),
-      directory: dir,
-    },
-    "plugins read",
-  );
-  return plugins;
+  return { plugins, host, discovery, dir };
 }
 
 /** The organization at the git host, read through the app the configuration names, or none. */

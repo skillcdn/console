@@ -1,30 +1,37 @@
-import { systemClock } from "../adapters/system-clock.js";
 import type { Config } from "../config/config.js";
 import { createDatabase } from "../db/client.js";
 import { migrateDatabase } from "../db/migrate.js";
-import { ensureWorkspace } from "../db/queries/workspaces.js";
 import type { Logger } from "../logger.js";
-import { discoverPlugins } from "../plugins/discovery.js";
-import { PluginHost } from "../plugins/host.js";
-import { allowedReadRoots, HOST_ENTRY } from "../plugins/paths.js";
-import { PluginSqlService } from "../plugins/sql.js";
-import { runPluginUpgrades } from "../plugins/upgrades.js";
-import { APP_NAME } from "../version.js";
+import { APP_NAME, APP_VERSION } from "../version.js";
+import { blobStoreOf, buildPlugins } from "./api.js";
 
 /**
  * Applies pending migrations, then the upgrades of the plugins' records where the image carries
  * plugins (docs/specs/plugins.md, "Lifecycle"), then exits. Run once, before a new version rolls out.
  */
-export async function runMigrate(config: Config, logger: Logger): Promise<void> {
+export async function runMigrate(
+  config: Config,
+  logger: Logger,
+  /** The compiled plugin host; another where the role runs from its sources, as its tests do. */
+  hostEntry?: string,
+): Promise<void> {
   const { latest } = await migrateDatabase(config.database.url, { ca: config.database.ca });
   logger.info({ latest }, "migrations applied");
   if (config.plugins.dir !== undefined) {
-    await upgradePlugins(config, config.plugins.dir, logger);
+    await upgradePlugins(config, logger, hostEntry);
   }
 }
 
-/** The plugins' upgrades, in a host of this role's own, which ends with it. */
-async function upgradePlugins(config: Config, dir: string, logger: Logger): Promise<void> {
+/**
+ * The plugins' upgrades, in a host of this role's own, which ends with it. The plugins are wired
+ * as the api role wires them, so that an upgrade reaches through `ctx` what a job reaches, its
+ * records first; none of them is started, and nothing but the upgrades runs.
+ */
+async function upgradePlugins(
+  config: Config,
+  logger: Logger,
+  hostEntry: string | undefined,
+): Promise<void> {
   const database = createDatabase({
     connectionString: config.database.url,
     ca: config.database.ca,
@@ -32,45 +39,32 @@ async function upgradePlugins(config: Config, dir: string, logger: Logger): Prom
     applicationName: `${APP_NAME}-migrate`,
   });
   try {
-    const discovery = await discoverPlugins(dir);
-    const workspace = await ensureWorkspace(database, {
-      name: config.workspace.name,
-      now: systemClock.now(),
-    });
-    const host = new PluginHost({
-      entry: HOST_ENTRY,
-      allowRead: await allowedReadRoots(dir),
-      env: config.plugins.hostEnv,
-      logger,
-      // An upgrade works on the records alone, which come with the record store; until then it
-      // reaches nothing.
-      onContext: () => Promise.reject(new Error("ctx is not available during an upgrade yet")),
-    });
-    const sql = new PluginSqlService({
+    const blobs = await blobStoreOf(config, database, logger, `${APP_NAME}/${APP_VERSION}`);
+    const { plugins, host, discovery } = await buildPlugins(
+      config,
       database,
-      connectionString: config.database.url,
-      ca: config.database.ca,
+      blobs,
       logger,
-    });
+      hostEntry,
+    );
     await host.start();
     try {
-      const steps = await runPluginUpgrades({
-        sql: (await sql.available()) ? sql : undefined,
-        database,
-        workspace,
-        host,
-        discovery,
-        memoryMb: config.plugins.memoryMb,
-        clock: systemClock,
-        logger,
-      });
-      logger.info(
-        { steps, plugins: discovery.plugins.map((plugin) => plugin.key) },
-        "plugin upgrades applied",
-      );
+      const { steps, failed } = await plugins.upgrade();
+      // One line whoever rolls a version out reads: how many steps ran, and how many plugins
+      // are left behind their code, by name. The console's own migrations went through either
+      // way, and the roles start on them.
+      const said = {
+        steps,
+        failed: failed.length,
+        plugins: discovery.plugins.map((plugin) => plugin.key),
+      };
+      if (failed.length === 0) {
+        logger.info(said, "plugin upgrades applied");
+      } else {
+        logger.error({ ...said, behind: failed }, "plugin upgrades applied");
+      }
     } finally {
-      await sql.stop();
-      await host.stop();
+      await plugins.stop();
     }
   } finally {
     await database.close();

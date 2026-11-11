@@ -2,9 +2,10 @@
 // and worker roles start on a new image, every enabled plugin whose records are behind its
 // manifest's `dataVersion` runs its `upgrades` in order, in a host of its own; each step brings
 // the install one version on and leaves its event. A step that fails stops that plugin's
-// upgrades, with a `plugin.failed` event; the others go on.
+// upgrades, with a `plugin.failed` event; the others go on. An upgrade has `ctx` as a job has
+// it: what it asks goes through the handler the host was started with.
 import { join } from "node:path";
-import { PLUGIN_LIFECYCLE_MS } from "@skillcdn/console/plugin";
+import { PLUGIN_LIFECYCLE_MS, type PluginDescription } from "@skillcdn/console/plugin";
 import type { Database } from "../db/client.js";
 import { listInstalls, recordPluginFailure, upgradeInstall } from "../db/queries/plugins.js";
 import { readWorkspaceSettings, type WorkspaceRecord } from "../db/queries/workspaces.js";
@@ -24,11 +25,20 @@ export interface UpgradeOptions {
   readonly logger: Logger;
   /** The schemas plugins have of their own; their migrations are applied before the upgrades. None where left out. */
   readonly sql?: PluginSqlService | undefined;
+  /** Told what a plugin's module declares once it is loaded for its upgrades: its collections, which `ctx.records` reads by. */
+  readonly onLoaded?: ((key: string, description: PluginDescription) => void) | undefined;
 }
 
-/** Runs the pending upgrades of every enabled plugin; answers how many steps ran. */
-export async function runPluginUpgrades(options: UpgradeOptions): Promise<number> {
+/** What the upgrades came to: how many steps ran, and the plugins whose upgrades did not go through. */
+export interface UpgradeOutcome {
+  readonly steps: number;
+  readonly failed: readonly string[];
+}
+
+/** Runs the pending upgrades of every enabled plugin; answers how many steps ran, and which plugins failed. */
+export async function runPluginUpgrades(options: UpgradeOptions): Promise<UpgradeOutcome> {
   const { database, workspace, host, discovery, logger, clock } = options;
+  const failures: string[] = [];
   const installs = await listInstalls(database, workspace.id);
   // The language the upgrades run in: the workspace's (ADR-0081), else the first the console speaks.
   const language = (await readWorkspaceSettings(database, workspace.id)).language ?? "en";
@@ -63,6 +73,7 @@ export async function runPluginUpgrades(options: UpgradeOptions): Promise<number
           problem,
           now: clock.now(),
         });
+        failures.push(plugin.key);
         continue;
       }
     }
@@ -80,6 +91,7 @@ export async function runPluginUpgrades(options: UpgradeOptions): Promise<number
         problem,
         now: clock.now(),
       });
+      failures.push(plugin.key);
       continue;
     }
     const loaded = await host.load({
@@ -98,8 +110,10 @@ export async function runPluginUpgrades(options: UpgradeOptions): Promise<number
         problem,
         now: clock.now(),
       });
+      failures.push(plugin.key);
       continue;
     }
+    options.onLoaded?.(plugin.key, loaded.description);
     let version = install.dataVersion;
     let failed = false;
     for (const upgrade of loaded.description.upgrades) {
@@ -136,6 +150,7 @@ export async function runPluginUpgrades(options: UpgradeOptions): Promise<number
           now: clock.now(),
         });
         failed = true;
+        failures.push(plugin.key);
         break;
       }
       version = upgrade.to;
@@ -161,5 +176,5 @@ export async function runPluginUpgrades(options: UpgradeOptions): Promise<number
     }
     host.unload(plugin.key);
   }
-  return steps;
+  return { steps, failed: failures };
 }

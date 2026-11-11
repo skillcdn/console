@@ -126,6 +126,7 @@ import { type SweepTarget, sweepCollections } from "./retention.js";
 import { mayUse, rolesHeld } from "./roles.js";
 import type { JobTarget } from "./scheduler.js";
 import type { PluginSqlService } from "./sql.js";
+import { runPluginUpgrades, type UpgradeOutcome } from "./upgrades.js";
 
 /** A plugin as the registry knows it at runtime: the package read, and the module loaded or not. */
 interface Entry {
@@ -356,6 +357,28 @@ export function settingProblem(setting: PluginSetting, value: unknown): string |
   }
   return fits(setting.type, value);
 }
+/**
+ * What is said of an enabled plugin whose records are behind its code: its upgrades did not
+ * run, or one of them failed. It is loaded all the same, since a plugin is written to read the
+ * records of the version before; an administrator is told, and so is whoever lists the plugins.
+ */
+function recordsBehind(
+  manifest: PluginManifest | undefined,
+  install: PluginInstallRecord | undefined,
+): string[] {
+  if (
+    manifest === undefined ||
+    install === undefined ||
+    install.state !== "enabled" ||
+    install.dataVersion >= manifest.dataVersion
+  ) {
+    return [];
+  }
+  return [
+    `its records are at data version ${install.dataVersion} and its code at ${manifest.dataVersion}: the upgrades did not run, or one failed; the migrate role runs them, and plugin.failed in the feed says why one failed`,
+  ];
+}
+
 export class Plugins {
   private readonly options: PluginsOptions;
   private readonly entries = new Map<string, Entry>();
@@ -537,6 +560,50 @@ export class Plugins {
   }
 
   /**
+   * The upgrades of the plugins' records (docs/specs/plugins.md, "Lifecycle"), for the migrate
+   * role: every enabled plugin behind its manifest's data version runs its upgrades in the
+   * host, with `ctx` as a job has it. Nothing is taken stock of and nothing else is started:
+   * the plugins are known by their manifests, and by what their modules declare as each is
+   * loaded for its upgrades.
+   */
+  async upgrade(): Promise<UpgradeOutcome> {
+    const { discovery, host } = this.options;
+    if (host === undefined) {
+      return { steps: 0, failed: [] };
+    }
+    this.sqlAvailable = (await this.options.sql?.available()) ?? false;
+    for (const plugin of discovery.plugins) {
+      if (!this.entries.has(plugin.key)) {
+        this.entries.set(plugin.key, {
+          key: plugin.key,
+          packageName: plugin.packageName,
+          version: plugin.version,
+          dir: plugin.dir,
+          manifest: plugin.manifest,
+          description: undefined,
+          problems: [],
+        });
+      }
+    }
+    return runPluginUpgrades({
+      database: this.options.database,
+      workspace: await this.options.workspace(),
+      host,
+      discovery,
+      memoryMb: this.options.memoryMb,
+      clock: this.options.clock,
+      logger: this.options.logger,
+      sql: this.sqlAvailable ? this.options.sql : undefined,
+      onLoaded: (key, description) => {
+        const entry = this.entries.get(key);
+        if (entry !== undefined) {
+          entry.description = description;
+        }
+      },
+    });
+  }
+
+  /**
    * Makes the plugin's schema and role, draws the role's password, and applies the plugin's
    * migrations as the role (docs/specs/plugins.md, "SQL"). Needs the SQL service and `storage:sql`.
    */
@@ -681,7 +748,7 @@ export class Plugins {
       version: entry.version,
       console: manifest?.console ?? null,
       state: this.stateOf(entry, install),
-      problems: [...entry.problems],
+      problems: [...entry.problems, ...recordsBehind(manifest, install)],
       roles: held,
       declaredRoles: Object.entries(manifest?.roles ?? {}).map(([key, role]) => ({
         key,

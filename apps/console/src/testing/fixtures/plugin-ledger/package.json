@@ -1,0 +1,8 @@
+{
+  "name": "console-plugin-ledger",
+  "version": "0.3.0",
+  "private": true,
+  "description": "A fixture: a plugin whose records are upgraded twice.",
+  "license": "MIT",
+  "type": "module"
+}

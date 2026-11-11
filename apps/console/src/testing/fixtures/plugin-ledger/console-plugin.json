@@ -1,0 +1,11 @@
+{
+  "key": "ledger",
+  "name": { "en": "Ledger" },
+  "description": {
+    "en": "Keeps entries whose shape changed twice, for the tests of the upgrades."
+  },
+  "pluginApi": 1,
+  "server": "server/index.js",
+  "dataVersion": 3,
+  "capabilities": []
+}

@@ -83,3 +83,8 @@ export const AUDIT_PLUGIN_DIR = fileURLToPath(new URL("./fixtures/plugin-audit/"
 
 /** The fixture whose page may use WebRTC where an administrator turns it on. */
 export const CALL_PLUGIN_DIR = fileURLToPath(new URL("./fixtures/plugin-call/", import.meta.url));
+
+/** The fixture whose records changed shape twice, for the tests of the upgrades the migrate role runs. */
+export const LEDGER_PLUGIN_DIR = fileURLToPath(
+  new URL("./fixtures/plugin-ledger/", import.meta.url),
+);
