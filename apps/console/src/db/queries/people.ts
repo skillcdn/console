@@ -228,14 +228,12 @@ export const personJson = (table: PersonTable): SQL =>
 
 const avatarPartsRow = z.object({
   set: z.number(),
-  background: z.number(),
-  head: z.number(),
-  ears: z.number(),
-  eyes: z.number(),
-  mouth: z.number(),
-  marks: z.number(),
-  accessory: z.number(),
   palette: z.number(),
+  ground: z.number(),
+  form: z.number(),
+  material: z.number(),
+  accent: z.number(),
+  vein: z.number(),
 });
 
 const personJsonRow = z.object({

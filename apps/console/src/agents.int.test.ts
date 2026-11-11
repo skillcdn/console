@@ -32,14 +32,12 @@ let bobId: string;
 
 const PARTS: RestAvatarParts = {
   set: 1,
-  background: 0,
-  head: 1,
-  ears: 0,
-  eyes: 2,
-  mouth: 1,
-  marks: 0,
-  accessory: 0,
   palette: 3,
+  ground: 0,
+  form: 1,
+  material: 0,
+  accent: 0,
+  vein: 7,
 };
 
 const JSON_HEADERS = { "content-type": "application/json" };

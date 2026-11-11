@@ -2321,14 +2321,12 @@ describe("configuring, as the person", () => {
   it("lists the agent accounts, reads one by its handle, and writes its avatar as a picture file (ADR-0084)", async () => {
     const parts = {
       set: 1,
-      background: 0,
-      head: 1,
-      ears: 0,
-      eyes: 0,
-      mouth: 1,
-      marks: 0,
-      accessory: 0,
       palette: 0,
+      ground: 0,
+      form: 1,
+      material: 0,
+      accent: 0,
+      vein: 7,
     };
     const mira = {
       person: {

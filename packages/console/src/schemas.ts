@@ -147,27 +147,27 @@ const languageTag = z
     z.regex(/^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/, "must be a language tag"),
   );
 
-/** One part of an avatar: which of the set's shapes of that part, by its place in the set. */
+/** One part of an avatar: which of the set's choices of that part, by its place in the set. */
 const avatarPart = z.int().check(z.gte(0), z.lte(255));
 
 /**
- * What an agent account's avatar is made of (ADR-0084): flat parts, each an index into the set
- * of shapes the package ships, with that set's version. Nothing drawn is kept or sent: whoever
- * shows the picture draws it from these, with the package's own function. A released set never
- * changes, so an avatar keeps the look it was made with.
+ * What an agent account's avatar is made of (ADR-0084, ADR-0093): a form cut from a material on
+ * a ground, in a palette, with something small beside it or nothing; each a place in the set the
+ * package ships, with that set's version, and the seed of the stone's grain. Nothing drawn is
+ * kept or sent: whoever shows the picture draws it from these, with the package's own function.
+ * A released set never changes, so an avatar keeps the look it was made with.
  */
 export const restAvatarPartsSchema = z.object({
-  /** The version of the set of shapes the indexes are into. */
+  /** The version of the set the places are in. */
   set: z.int().check(z.gte(1), z.lte(9999)),
-  background: avatarPart,
-  head: avatarPart,
-  /** `0` for none, as for every part that may be left out. */
-  ears: avatarPart,
-  eyes: avatarPart,
-  mouth: avatarPart,
-  marks: avatarPart,
-  accessory: avatarPart,
   palette: avatarPart,
+  ground: avatarPart,
+  form: avatarPart,
+  material: avatarPart,
+  /** `0` for nothing beside the form. */
+  accent: avatarPart,
+  /** The seed of the grain: two avatars alike in every other part differ in their veins. */
+  vein: avatarPart,
 });
 export type RestAvatarParts = z.infer<typeof restAvatarPartsSchema>;
 

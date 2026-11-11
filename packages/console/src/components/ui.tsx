@@ -15,7 +15,7 @@ import {
   type TaskPriority,
   type TaskState,
 } from "../api.js";
-import { AVATAR_BOX, AVATAR_SETS, type AvatarSet, avatarShapes } from "../avatar.js";
+import { AVATAR_SETS, type AvatarSet, avatarDataUrl } from "../avatar.js";
 import { dayOf, daysBetween, formatDay, today } from "../dates.js";
 import { useLanguage, useWords } from "../i18n/index.js";
 import { useRemotePictureSrc } from "./remote-pictures.js";
@@ -104,59 +104,43 @@ export function personName(person: {
 }
 
 /**
- * The sets of shapes the avatars of agent accounts are drawn from (ADR-0084): the package's,
+ * The sets the avatars of agent accounts are drawn from (ADR-0084, ADR-0093): the package's,
  * unless a console built on it brings its own (`createConsole`'s `persona.avatarSets`).
  */
 export const AvatarSetsContext = createContext<readonly AvatarSet[]>(AVATAR_SETS);
 
 /**
- * An agent account's avatar, drawn from its parts where it is shown (ADR-0084): a few shapes of
- * the package's set in the palette's colours, as elements of the page and never as markup from
- * anywhere. Sized by `className`, as a picture is.
+ * How many pixels a side an avatar is drawn with at each size of a picture: about twice what the
+ * stylesheet gives it, so that it is sharp on a dense screen, and no more, since a picture is
+ * drawn in the page.
+ */
+const AVATAR_PIXELS = { xs: 32, sm: 48, md: 72, lg: 128, xl: 224 } as const;
+export type AvatarSize = keyof typeof AVATAR_PIXELS;
+
+/**
+ * An agent account's avatar, drawn from its parts where it is shown (ADR-0084, ADR-0093): a
+ * picture this page draws itself, pixel by pixel, from the numbers alone, and never one fetched
+ * or markup from anywhere. Cut as a soft square, where a person's picture is round, so that an
+ * agent account is told from a person at a glance. Sized by `className`, as a picture is;
+ * `size` says how finely it is drawn.
  */
 export function AvatarPicture(props: {
   readonly parts: NonNullable<RestPerson["avatarParts"]>;
   readonly className?: string | undefined;
+  readonly size?: AvatarSize | undefined;
 }) {
   const sets = useContext(AvatarSetsContext);
+  const pixels = AVATAR_PIXELS[props.size ?? "lg"];
   return (
-    <svg
-      className={props.className}
-      viewBox={`0 0 ${AVATAR_BOX} ${AVATAR_BOX}`}
-      aria-hidden="true"
-      focusable="false"
-    >
-      {avatarShapes(props.parts, sets).map((shape, index) => {
-        // The shapes of one avatar never change place: their order is what they are.
-        const key = `${shape.kind}-${index}`;
-        if (shape.kind === "ellipse") {
-          return (
-            <ellipse
-              key={key}
-              cx={shape.cx}
-              cy={shape.cy}
-              rx={shape.rx}
-              ry={shape.ry}
-              fill={shape.color}
-            />
-          );
-        }
-        if (shape.kind === "rect") {
-          return (
-            <rect
-              key={key}
-              x={shape.x}
-              y={shape.y}
-              width={shape.w}
-              height={shape.h}
-              rx={shape.r}
-              fill={shape.color}
-            />
-          );
-        }
-        return <polygon key={key} points={shape.points.join(" ")} fill={shape.color} />;
-      })}
-    </svg>
+    <img
+      className={cx("sc-avatar-drawn", props.className)}
+      src={avatarDataUrl(props.parts, pixels, sets)}
+      width={pixels}
+      height={pixels}
+      alt=""
+      decoding="async"
+      draggable={false}
+    />
   );
 }
 
@@ -166,10 +150,7 @@ export function AvatarPicture(props: {
  * cannot be loaded, leaving the initial of the name instead. An agent account's is drawn from
  * its parts (ADR-0084).
  */
-export function Avatar(props: {
-  readonly person: RestPerson;
-  readonly size?: "xs" | "sm" | "md" | "lg";
-}) {
+export function Avatar(props: { readonly person: RestPerson; readonly size?: AvatarSize }) {
   const remote = useRemotePictureSrc();
   const size = props.size ?? "md";
   const initial = personName(props.person).slice(0, 1).toUpperCase();
@@ -178,7 +159,9 @@ export function Avatar(props: {
   // A picture that would not load gives way to the initial, and never to a broken image.
   const [failed, setFailed] = useState<string | undefined>(undefined);
   if (parts !== undefined) {
-    return <AvatarPicture parts={parts} className={cx("sc-avatar", `sc-avatar-${size}`)} />;
+    return (
+      <AvatarPicture parts={parts} size={size} className={cx("sc-avatar", `sc-avatar-${size}`)} />
+    );
   }
   if (src === undefined || src === failed) {
     return (

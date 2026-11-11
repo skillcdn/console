@@ -1549,14 +1549,12 @@ describe("tokens", () => {
 describe("the agent accounts (ADR-0084)", () => {
   const parts = {
     set: 1,
-    background: 0,
-    head: 1,
-    ears: 0,
-    eyes: 0,
-    mouth: 1,
-    marks: 0,
-    accessory: 0,
     palette: 0,
+    ground: 0,
+    form: 1,
+    material: 0,
+    accent: 0,
+    vein: 7,
   };
   const mira: RestPerson = {
     ...bob,
@@ -1584,7 +1582,9 @@ describe("the agent accounts (ADR-0084)", () => {
     expect(seen).toContain(">Invited<");
     expect(seen).toContain("Nobody has signed in with it yet.");
     expect(seen).toMatch(/<dt>Manager<\/dt><dd><span class="sc-person"[^>]*>.*?Alice Example/);
-    expect(seen).toContain('<svg class="sc-avatar sc-avatar-lg"');
+    expect(seen).toContain(
+      '<img class="sc-avatar-drawn sc-avatar sc-avatar-lg" src="data:image/png;base64,',
+    );
     // The list offers nothing to do: an account's picture is saved on its own page (ADR-0084).
     expect(seen).not.toContain("<button");
     const supervised = renderToStaticMarkup(
@@ -1609,7 +1609,9 @@ describe("the agent accounts (ADR-0084)", () => {
 
   it("offers an account's picture as a file, with its face and what the file is for", () => {
     const seen = renderToStaticMarkup(<AgentPictureSave person={mira} />);
-    expect(seen).toContain('<svg class="sc-avatar sc-avatar-lg"');
+    expect(seen).toContain(
+      '<img class="sc-avatar-drawn sc-avatar sc-avatar-lg" src="data:image/png;base64,',
+    );
     expect(seen).toContain(">Download its profile picture (PNG)<");
     expect(seen).toContain("A PNG of 1024 pixels a side");
     expect(renderToStaticMarkup(<AgentPictureSave person={{ ...mira, avatarParts: null }} />)).toBe(
@@ -2392,23 +2394,21 @@ describe("people", () => {
       invited: true,
       avatarParts: {
         set: 1,
-        background: 0,
-        head: 0,
-        ears: 0,
-        eyes: 0,
-        mouth: 0,
-        marks: 0,
-        accessory: 0,
         palette: 0,
+        ground: 0,
+        form: 1,
+        material: 0,
+        accent: 0,
+        vein: 7,
       },
     };
     const read = renderToStaticMarkup(<PeopleList people={[alice, bob, mira]} me={alice} />);
     expect(read).toContain('<span class="sc-person-card-title">Release engineer</span>');
     // Its picture is drawn from its parts, where a person's is the provider's or an initial.
     expect(read).toMatch(
-      /<svg class="sc-avatar sc-avatar-lg" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><rect [^>]*fill="#e4e7ff"/,
+      /<img class="sc-avatar-drawn sc-avatar sc-avatar-lg" src="data:image\/png;base64,[A-Za-z0-9+/=]+" width="128" height="128" alt=""/,
     );
-    expect(read.match(/<svg class="sc-avatar sc-avatar-lg"/g)).toHaveLength(1);
+    expect(read.match(/<img class="sc-avatar-drawn sc-avatar sc-avatar-lg"/g)).toHaveLength(1);
     // The account is called by its handle, said to be an agent, and to be waiting for its sign-in.
     expect(read).toMatch(/Mira<span class="sc-badge sc-badge-neutral"[^>]*>Agent<\/span>/);
     expect(read).toContain("@mira · carol · Invited, not signed in yet");
