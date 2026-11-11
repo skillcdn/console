@@ -97,8 +97,8 @@ const indent = (text: string): string =>
 
 const asker = (decision: RestDecision): string =>
   decision.run === null
-    ? decision.raisedBy.login
-    : `${decision.run.agent} for ${decision.raisedBy.login}`;
+    ? calledOf(decision.raisedBy)
+    : `${decision.run.agent} for ${calledOf(decision.raisedBy)}`;
 
 /** One project: its key, its name, what the person is in it, and what waits in it. */
 export function formatProjectLine(project: RestProject): string {
@@ -158,7 +158,7 @@ export function formatAgentLine(agent: RestAgent): string {
   );
   const standing = [
     `signs in as ${person.login}`,
-    ...(manager === null ? [] : [`reports to ${manager.login}`]),
+    ...(manager === null ? [] : [`reports to ${calledOf(manager)}`]),
     ...(person.invited === true ? ["not signed in yet"] : []),
     ...(person.status === "active" ? [] : ["deactivated"]),
   ].join(", ");
@@ -236,7 +236,7 @@ export function formatSignalLine(signal: RestSignal): string {
   const who =
     signal.by === null
       ? `${signal.source}${signal.key === null ? "" : `: ${signal.key}`}`
-      : `${signal.by.login}${signal.agent === null ? "" : ` through ${signal.agent}`}`;
+      : `${calledOf(signal.by)}${signal.agent === null ? "" : ` through ${signal.agent}`}`;
   const set =
     signal.set === null
       ? ""
@@ -299,7 +299,7 @@ export function formatWorkspace(workspace: RestWorkspace): string {
 
 /** One member of a project: their login, what they are in it, and since when. */
 export function formatMemberLine(member: RestMember): string {
-  return `${member.person.login}  ${member.role}  (since ${moment(member.addedAt).slice(0, 10)})`;
+  return `${calledOf(member.person)}  ${member.role}  (since ${moment(member.addedAt).slice(0, 10)})`;
 }
 
 /** The line under a page of a listing that has more after it: how to ask for the next page. */
@@ -307,12 +307,19 @@ export function formatMore(more: boolean, limit: number, offset: number): string
   return more ? `\n... more: --offset ${offset + limit}` : "";
 }
 
-/** The logins of the people at work on a task, in the order they came to it. */
-const logins = (people: readonly RestPerson[]): string =>
-  people.map((person) => person.login).join(", ");
+/**
+ * What a member is called in a line: an agent account by its handle, `@mira`, which the command
+ * takes wherever it takes a login (ADR-0084), so that a line tells an agent account from a
+ * person; a person by their login.
+ */
+export const calledOf = (person: Pick<RestPerson, "login" | "handle">): string =>
+  typeof person.handle === "string" ? `@${person.handle}` : person.login;
+
+/** The members at work on a task as a line calls them, in the order they came to it. */
+const logins = (people: readonly RestPerson[]): string => people.map(calledOf).join(", ");
 
 export function formatTaskLine(task: RestTask): string {
-  const notes = [`owner ${task.owner.login}`];
+  const notes = [`owner ${calledOf(task.owner)}`];
   if (task.workers.length > 0) {
     notes.push(`workers ${logins(task.workers)}`);
   }
@@ -363,7 +370,7 @@ export function formatTask(
 ): string {
   const lines = [
     `#${task.number} ${task.title}`,
-    `state: ${task.state}  priority: ${task.priority}  owner: ${task.owner.login}  workers: ${task.workers.length === 0 ? "nobody" : logins(task.workers)}`,
+    `state: ${task.state}  priority: ${task.priority}  owner: ${calledOf(task.owner)}  workers: ${task.workers.length === 0 ? "nobody" : logins(task.workers)}`,
     `id: ${task.id}${task.parentId === null ? "" : `  part of: ${task.parentId}`}`,
     ...(task.agent == null ? [] : [`written through: ${task.agent}`]),
     ...scheduleLines(task),
@@ -404,7 +411,9 @@ export function formatTask(
  */
 export function formatComment(comment: RestComment): string {
   const who =
-    comment.agent === null ? comment.author.login : `${comment.author.login} as ${comment.agent}`;
+    comment.agent === null
+      ? calledOf(comment.author)
+      : `${calledOf(comment.author)} as ${comment.agent}`;
   const lines = [`  ${who}, ${moment(comment.createdAt)}, comment ${comment.id}:`];
   if (comment.body.trim().length > 0) {
     lines.push(indent(comment.body));
@@ -425,7 +434,7 @@ export function formatRunLine(run: RestRun): string {
   if (run.endedAt === null) {
     notes.push(`last heard ${moment(run.lastHeardAt)}`);
   }
-  return `${run.id}  ${run.status}  ${run.agent} for ${run.person.login}  task #${run.taskNumber}  (${notes.join(", ")})`;
+  return `${run.id}  ${run.status}  ${run.agent} for ${calledOf(run.person)}  task #${run.taskNumber}  (${notes.join(", ")})`;
 }
 
 /** One run in full; with where each file handed in is read, when the caller knows. */
@@ -526,7 +535,7 @@ export function formatGoalLine(goal: RestGoal): string {
 export function formatGoal(goal: RestGoal, tasks?: readonly RestTask[]): string {
   const lines = [
     `goal ${goal.id}: ${goal.title}`,
-    `state: ${goal.state}  category: ${goal.category?.key ?? "none"}  starts: ${goal.startsOn ?? "none"}  due: ${goal.dueOn ?? "none"}  set by: ${goal.createdBy.login}${through(goal.agent)}`,
+    `state: ${goal.state}  category: ${goal.category?.key ?? "none"}  starts: ${goal.startsOn ?? "none"}  due: ${goal.dueOn ?? "none"}  set by: ${calledOf(goal.createdBy)}${through(goal.agent)}`,
     `progress: ${progressOf(goal)}`,
   ];
   if (goal.body.trim().length > 0) {
@@ -570,10 +579,10 @@ export function formatWork(work: RestWork): string {
 /** Another person's plate: their open tasks, each with its project; no decisions, which wait for anyone. */
 export function formatPersonWork(person: RestPerson, work: RestPersonWork): string {
   if (work.tasks.length === 0) {
-    return `No open task is on ${person.login}'s plate.`;
+    return `No open task is on ${calledOf(person)}'s plate.`;
   }
   return [
-    `tasks ${person.login} works on:`,
+    `tasks ${calledOf(person)} works on:`,
     ...work.tasks.map(({ project, task }) => `  ${project.key}  ${formatTaskLine(task)}`),
   ].join("\n");
 }
@@ -590,9 +599,7 @@ const decidersOf = (decision: RestDecision): readonly RestPerson[] =>
 
 /** The logins of everyone a decision is addressed to, with commas between. */
 export const deciderLogins = (decision: RestDecision): string =>
-  decidersOf(decision)
-    .map((person) => person.login)
-    .join(", ");
+  decidersOf(decision).map(calledOf).join(", ");
 
 /** Whom a decision is for, where that is not the one who asked alone (ADR-0042, ADR-0057). */
 const addressed = (decision: RestDecision): string =>
@@ -623,7 +630,7 @@ export function formatAnswer(decision: RestDecision): string {
   }
   const chosen = decision.options.find((option) => option.id === answer.option);
   const lines = [
-    `Answered: ${answer.option}) ${chosen?.label ?? answer.option}${chosen?.own === true ? ", in their own words" : ""}, by ${answer.by.login}${through(answer.agent)} at ${answer.at}`,
+    `Answered: ${answer.option}) ${chosen?.label ?? answer.option}${chosen?.own === true ? ", in their own words" : ""}, by ${calledOf(answer.by)}${through(answer.agent)} at ${answer.at}`,
   ];
   if (answer.note !== null && answer.note.length > 0) {
     lines.push(`Note: ${answer.note}`);
@@ -668,7 +675,7 @@ export function formatDecision(
     if (decision.outcomeBy != null && decision.outcomeAt != null) {
       lines.push(
         indent(
-          `written by ${decision.outcomeBy.login}${through(decision.outcomeAgent)} at ${decision.outcomeAt}`,
+          `written by ${calledOf(decision.outcomeBy)}${through(decision.outcomeAgent)} at ${decision.outcomeAt}`,
         ),
       );
     }
@@ -678,7 +685,7 @@ export function formatDecision(
 
 /** Who wrote a version, and through which agent. */
 const writer = (by: { readonly login: string }, agent: string | null): string =>
-  agent === null ? by.login : `${agent} for ${by.login}`;
+  agent === null ? calledOf(by) : `${agent} for ${calledOf(by)}`;
 
 /** One document in a list: its path, its title, its version, who wrote it last and when. */
 export function formatDocumentLine(document: RestDocumentSummary): string {
@@ -943,7 +950,7 @@ export function formatPluginGrantLine(grant: RestPluginGrant): string {
       : grant.team !== null && grant.team !== undefined
         ? `the team ${grant.team.key}`
         : grant.person !== null
-          ? `person ${grant.person.login}`
+          ? `person ${calledOf(grant.person)}`
           : grant.project !== null
             ? `the members of ${grant.project.key}`
             : "everyone";

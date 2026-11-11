@@ -178,7 +178,7 @@ What an administrator or an owner does on the pages, their agent does with `peop
 
 ## Output and exit codes
 
-Plain text on standard output: one line per thing in a list, a few lines for one thing in full, with ids given, since the commands take them, and the vocabulary's own words (`in_progress`, `waiting`), since the options take them. What went wrong goes to standard error as the console's stable code and its words (`run.task_closed: the task is done or dropped`), with a hint when there is something to do about it.
+Plain text on standard output: one line per thing in a list, a few lines for one thing in full, with ids given, since the commands take them, and the vocabulary's own words (`in_progress`, `waiting`), since the options take them. A line that names a member, the owner and the workers of a task, whom a decision is for, who wrote a comment, calls a person by their login and an agent account by its handle (`workers alice, @mira`), which the commands take wherever they take a login ([ADR-0084](../adr/0084-an-agent-account-is-a-member-of-its-own-with-a-manager-above-it.md)): a line tells the two apart. What went wrong goes to standard error as the console's stable code and its words (`run.task_closed: the task is done or dropped`), with a hint when there is something to do about it.
 
 | Exit code | Meaning |
 |---|---|

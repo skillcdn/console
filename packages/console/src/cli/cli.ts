@@ -100,6 +100,7 @@ import {
 } from "./credentials.js";
 import { type DirectorySettings, type DirectoryStore, THE_SENTENCE } from "./directory.js";
 import {
+  calledOf,
   deciderLogins,
   formatAgent,
   formatAgentLine,
@@ -2614,7 +2615,7 @@ const take: Command = async (args, io) => {
   };
   answer(io, session, { run, task: taken, comments: comments.items, rules }, () =>
     [
-      `Run ${run.id} began on #${found.number} ${found.title}, as "${run.agent}" for ${run.person.login}. The task is in progress and theirs.${tookOver}${elsewhere}`,
+      `Run ${run.id} began on #${found.number} ${found.title}, as "${run.agent}" for ${calledOf(run.person)}. The task is in progress and theirs.${tookOver}${elsewhere}`,
       // The ids on a line of their own, each named: a run's and a task's begin alike, and a
       // task has a number for people as well.
       `run id: ${run.id}  task id: ${found.id}  (task #${found.number})`,
@@ -3583,7 +3584,7 @@ const people: Command = async (args, io) => {
   const { values } = parse(args, {}, false);
   const session = await open(io, values);
   const found = await session.client.people();
-  const loginOf = new Map(found.items.map((person) => [person.id, person.login]));
+  const loginOf = new Map(found.items.map((person) => [person.id, calledOf(person)]));
   answer(io, session, found, () =>
     [
       ...found.items.map((person) =>
@@ -4524,7 +4525,7 @@ const teams: Command = async (args, io) => {
   const { values } = parse(args, {}, false);
   const session = await open(io, values);
   const [found, everyone] = await Promise.all([session.client.teams(), session.client.people()]);
-  const loginOf = new Map(everyone.items.map((person) => [person.id, person.login]));
+  const loginOf = new Map(everyone.items.map((person) => [person.id, calledOf(person)]));
   answer(io, session, found, () =>
     found.items.length === 0
       ? "No teams yet. console team new <key> <name> makes one."
@@ -4583,7 +4584,7 @@ const team: Command = async (args, io) => {
         : await session.client.removeTeamMember(key, person.id);
     const everyone = await session.client.people();
     answer(io, session, changed, () =>
-      formatTeamLine(changed, new Map(everyone.items.map((one) => [one.id, one.login]))),
+      formatTeamLine(changed, new Map(everyone.items.map((one) => [one.id, calledOf(one)]))),
     );
     return EXIT.ok;
   }

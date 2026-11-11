@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import type { RestPluginOperation } from "../plugin/rest-schemas.js";
 import { restDecisionSchema, restGoalSchema, restTaskSchema } from "../schemas.js";
 import {
+  calledOf,
   formatDecision,
   formatGoal,
   formatOperationUsage,
   formatPersonLine,
   formatPluginGrantLine,
   formatTask,
+  formatTaskLine,
 } from "./format.js";
 
 describe("the usage of a plugin's command", () => {
@@ -249,5 +251,19 @@ describe("a member's line", () => {
       "carol @mira  Mira, Release engineer  (agent account, member, not signed in yet, reports to alice)",
     );
     expect(formatPersonLine(mira)).toBe("carol @mira  Mira  (agent account, member)");
+  });
+
+  it("calls an agent account by its handle where a line names who has a task, and a person by their login (ADR-0084)", () => {
+    // A task with a person and an agent account at work on it reads as both: `@mira` is what
+    // the command takes for the account wherever it takes a login.
+    const mira = { ...person, name: "Mira", kind: "agent", handle: "mira" } as const;
+    expect(calledOf(person)).toBe("carol");
+    expect(calledOf(mira)).toBe("@mira");
+    expect(calledOf({ login: "dave", handle: null })).toBe("dave");
+    const shared = task({ owner: mira, workers: [alice, mira] });
+    expect(formatTaskLine(shared)).toBe(
+      "#7  ready  normal  Fix the parser  (owner @mira; workers alice, @mira)",
+    );
+    expect(formatTask(shared)).toContain("owner: @mira  workers: alice, @mira");
   });
 });
