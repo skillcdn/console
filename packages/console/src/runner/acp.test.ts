@@ -605,6 +605,81 @@ describe("the acp driver", () => {
     expect(byMode.answered).toEqual({ outcome: { outcome: "selected", optionId: "no" } });
   });
 
+  it("says a call once what it was called with is known, where the agent opens it before its input is whole", async () => {
+    const agent = agentThat({
+      prompt: (asked, one) => {
+        one.says(
+          // Opened with nothing in its input, and named by its kind: the command comes after.
+          update("tool_call", {
+            toolCallId: "call-1",
+            name: "Bash",
+            title: "Terminal",
+            kind: "execute",
+            status: "pending",
+            rawInput: {},
+          }),
+          update("tool_call_update", {
+            toolCallId: "call-1",
+            title: "echo hi",
+            rawInput: { command: "echo hi" },
+          }),
+          update("tool_call_update", {
+            toolCallId: "call-1",
+            status: "completed",
+            content: [{ type: "content", content: text("hi") }],
+          }),
+          // One that is called with nothing is said at the next thing said of it.
+          update("tool_call", {
+            toolCallId: "call-2",
+            name: "Clock",
+            title: "Clock",
+            rawInput: {},
+          }),
+          update("tool_call_update", { toolCallId: "call-2", status: "in_progress" }),
+          update("agent_message_chunk", { content: text("It is noon.") }),
+          update("tool_call_update", {
+            toolCallId: "call-2",
+            status: "completed",
+            content: [{ type: "content", content: text("12:00") }],
+          }),
+          // One that is never said more of is said before what comes next, in its place.
+          update("tool_call", {
+            toolCallId: "call-3",
+            name: "Sleep",
+            title: "Sleep",
+            rawInput: {},
+          }),
+          { id: asked.id, result: { stopReason: "end_turn" } },
+        );
+      },
+    });
+    const session = driverFor(agent).start(OPTIONS);
+    await session.send(message("Say hi."));
+    const seen = await until(session, [], isType("turn_completed"));
+    expect(seen.slice(2)).toEqual([
+      { type: "event", kind: "tool_call", text: "echo hi", data: { tool: "Bash", id: "call-1" } },
+      {
+        type: "event",
+        kind: "tool_result",
+        text: "hi",
+        data: { id: "call-1", error: false },
+        pictures: [],
+      },
+      { type: "event", kind: "tool_call", text: "Clock", data: { tool: "Clock", id: "call-2" } },
+      { type: "event", kind: "assistant", text: "It is noon." },
+      {
+        type: "event",
+        kind: "tool_result",
+        text: "12:00",
+        data: { id: "call-2", error: false },
+        pictures: [],
+      },
+      { type: "event", kind: "tool_call", text: "Sleep", data: { tool: "Sleep", id: "call-3" } },
+      { type: "turn_completed" },
+    ]);
+    await session.stop();
+  });
+
   it("offers the agent no file and no terminal, and says so where it asks for one", async () => {
     const agent = agentThat({
       prompt: (asked, one) => {

@@ -63,17 +63,24 @@ const MODES = ["allow", "deny"] as const;
  * The mode an agent has for a run nobody attends, by what the agent calls itself: the one in
  * which it works without asking and asks leave only for what its own review holds back. The
  * driver names it where the desk names none, as the other drivers name their product's, and
- * refuses what the agent still asks. Seen with the adapter that puts Codex behind the protocol,
- * whose word for it is `agent`. An agent the driver does not know runs in its own mode and is
- * allowed what it asks: the desk names its mode for such a run.
+ * refuses what the agent still asks. Seen with the adapters that put Codex and Claude Code
+ * behind the protocol, whose words for it are `agent` and `auto`. An agent the driver does not
+ * know runs in its own mode and is allowed what it asks: the desk names its mode for such a run.
  */
-const UNATTENDED_MODES: Readonly<Record<string, string>> = { Codex: "agent" };
+const UNATTENDED_MODES: Readonly<Record<string, string>> = {
+  Codex: "agent",
+  "Claude Agent": "auto",
+};
 
 /**
  * The agents the driver was run against, each by what it calls itself, with the versions it said
- * of itself: an adapter that puts Codex behind the protocol, run on Windows with a real account.
+ * of itself: the adapters that put Codex and Claude Code behind the protocol, each run on
+ * Windows with a real account.
  */
-const TRIED: Readonly<Record<string, readonly string[]>> = { Codex: ["2.6.0"] };
+const TRIED: Readonly<Record<string, readonly string[]>> = {
+  Codex: ["2.6.0"],
+  "Claude Agent": ["0.106.0"],
+};
 const UNATTENDED_MODE = "allow";
 const LEAST_MODE = "deny";
 
@@ -290,6 +297,10 @@ function inputOf(input: unknown): string {
     return "";
   }
   if (isObject(input)) {
+    // An input with nothing in it yet is none: an agent may open a call before it is whole.
+    if (Object.keys(input).length === 0) {
+      return "";
+    }
     const line =
       textOf(input.command) ??
       textOf(input.file_path) ??
@@ -422,7 +433,46 @@ function sessionOf(
   // What the session says, in order, for whoever reads it: until it ends.
   const said: DriverEvent[] = [];
   let reader: (() => void) | undefined;
+  /**
+   * The tool calls under way, by id: what each is called and was called with, what it holds so
+   * far, what its command printed, and whether it and its end were said.
+   */
+  const calls = new Map<
+    string,
+    {
+      tool: string;
+      title: string;
+      input: string;
+      said: boolean;
+      done: boolean;
+      content: unknown;
+      raw: unknown;
+      printed: string;
+    }
+  >();
+  /**
+   * The calls that began and are not said yet, in order: an agent may open a call before what
+   * it is called with is whole, and say that in an update. A call is said once its input is
+   * known, and before anything else is, so that the transcript keeps the order of what happened.
+   */
+  const held: string[] = [];
   const emit = (...events: DriverEvent[]): void => {
+    for (const id of held.splice(0)) {
+      const call = calls.get(id);
+      if (call === undefined || call.said) {
+        continue;
+      }
+      call.said = true;
+      said.push({
+        type: "event",
+        kind: "tool_call",
+        text:
+          call.input.length === 0 || call.title.includes(call.input)
+            ? call.title
+            : `${call.title}\n${call.input}`.trim(),
+        data: { tool: call.tool, id },
+      });
+    }
     said.push(...events);
     reader?.();
     reader = undefined;
@@ -482,14 +532,6 @@ function sessionOf(
     piece = { kind, text: `${piece?.text ?? ""}${text}` };
   };
 
-  /**
-   * The tool calls under way, by id: what each is called, what it holds so far, what its command
-   * printed, and whether its end was said.
-   */
-  const calls = new Map<
-    string,
-    { tool: string; done: boolean; content: unknown; raw: unknown; printed: string }
-  >();
   const toolUpdate = (update: Json, first: boolean): void => {
     const id = textOf(update.toolCallId);
     if (id === undefined) {
@@ -500,6 +542,9 @@ function sessionOf(
     if (call === undefined) {
       call = {
         tool: textOf(update.name) ?? textOf(update.kind) ?? "tool",
+        title: "",
+        input: "",
+        said: false,
         done: false,
         content: undefined,
         raw: undefined,
@@ -507,14 +552,19 @@ function sessionOf(
       };
       calls.set(id, call);
       flush();
-      const title = textOf(update.title) ?? "";
+      held.push(id);
+    }
+    if (!call.said && !(known && first)) {
+      // What a call is called, and was called with, as it was said last before the call is.
+      call.title = textOf(update.title) ?? call.title;
       const input = inputOf(update.rawInput);
-      emit({
-        type: "event",
-        kind: "tool_call",
-        text: input.length === 0 || title.includes(input) ? title : `${title}\n${input}`.trim(),
-        data: { tool: call.tool, id },
-      });
+      if (input.length > 0) {
+        call.input = input;
+      }
+      // Said once its input is known, or at the next thing said of it: a call may have none.
+      if (call.input.length > 0 || known) {
+        emit();
+      }
     }
     if ((known && first) || call.done) {
       return;
