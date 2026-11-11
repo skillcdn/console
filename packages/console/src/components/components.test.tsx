@@ -1569,19 +1569,62 @@ describe("the agent accounts (ADR-0084)", () => {
     invited: true,
   };
 
-  it("lists each with who it is, how it stands, whom it reports to and the login it signs in with", () => {
+  it("lists each with who it is, how it stands, what it is doing now and whom it reports to", () => {
     const seen = renderToStaticMarkup(
       <AgentAccountList agents={[{ person: mira, manager: alice, supervised: false }]} />,
     );
     expect(seen).toContain("Mira");
     expect(seen).toContain('<span class="sc-person-card-title">Release engineer</span>');
-    expect(seen).toContain('<span class="sc-agent-card-handle">@mira</span>');
-    expect(seen).toContain(
-      '<dt>Signs in as</dt><dd><span class="sc-agent-card-login">mira@acme.example</span>',
-    );
+    expect(seen).toContain('<span class="sc-person-card-note">@mira</span>');
+    // What is kept of the account, the login it signs in with among it, is said on its page.
+    expect(seen).not.toContain("mira@acme.example");
     expect(seen).toContain(">Invited<");
+    expect(seen).toContain("<dt>Now</dt>");
     expect(seen).toContain("Nobody has signed in with it yet.");
     expect(seen).toMatch(/<dt>Manager<\/dt><dd><span class="sc-person"[^>]*>.*?Alice Example/);
+    // Whoever looks is not told that they are the manager of what reports to them.
+    expect(
+      renderToStaticMarkup(
+        <AgentAccountList
+          agents={[{ person: mira, manager: alice, supervised: true }]}
+          me={alice}
+        />,
+      ),
+    ).not.toContain("<dt>Manager</dt>");
+    // How it stands, why and since when, and what it runs, where its runner has said.
+    const running = renderToStaticMarkup(
+      <AgentAccountList
+        agents={[
+          {
+            person: { ...mira, invited: undefined },
+            manager: alice,
+            supervised: true,
+            state: {
+              state: "stopped",
+              reason: "stop",
+              since: "2026-11-10T09:00:00.000Z",
+              heardAt: "2026-11-10T09:00:30.000Z",
+            },
+            runner: {
+              delivered: 3,
+              latest: 3,
+              session: null,
+              machine: { name: "studio-2", os: "Darwin 25.1.0", user: "mira" },
+              runner: "0.4.8",
+              product: { driver: "claude", name: "Claude Code", version: "2.1.321", tried: true },
+              offers: null,
+              running: { model: "opus", effort: null },
+              settings: { model: null, effort: null },
+            },
+          },
+        ]}
+        href={() => "/agents/mira"}
+      />,
+    );
+    expect(running).toContain(">Stopped<");
+    expect(running).toContain("a supervisor stopped it · since ");
+    expect(running).toContain("<dt>Runs</dt><dd>Claude Code 2.1.321 · opus</dd>");
+    expect(running).toContain('<a class="sc-agent-card-link" href="/agents/mira">Mira</a>');
     expect(seen).toContain(
       '<img class="sc-avatar-drawn sc-avatar sc-avatar-lg" src="data:image/png;base64,',
     );
@@ -1601,7 +1644,10 @@ describe("the agent accounts (ADR-0084)", () => {
     );
     expect(supervised).toContain("Not shown to you");
     expect(supervised).toContain(">Deactivated<");
-    expect(supervised.match(/>Invited</g)).toHaveLength(1);
+    // Signed in and with no runner yet, an account says so; one that is out says only that.
+    expect(supervised).toContain(">Not set up<");
+    expect(supervised).toContain("No runner has been heard from yet");
+    expect(supervised).not.toContain(">Invited<");
     expect(renderToStaticMarkup(<AgentAccountList agents={[]} empty={<p>none</p>} />)).toBe(
       "<p>none</p>",
     );
@@ -2412,6 +2458,33 @@ describe("people", () => {
     // The account is called by its handle, said to be an agent, and to be waiting for its sign-in.
     expect(read).toMatch(/Mira<span class="sc-badge sc-badge-neutral"[^>]*>Agent<\/span>/);
     expect(read).toContain("@mira · carol · Invited, not signed in yet");
+    // The people first and the agent accounts after them, each under its heading with how many.
+    expect(read).toMatch(
+      /aria-label="People"><h2 class="sc-section-title">People<span class="sc-badge sc-badge-neutral sc-badge-kind-count">2<\/span><\/h2>/,
+    );
+    expect(read).toMatch(
+      /aria-label="Agent accounts"><h2 class="sc-section-title">Agent accounts<span class="sc-badge sc-badge-neutral sc-badge-kind-count">1<\/span><\/h2>/,
+    );
+    expect(read.indexOf('aria-label="People"')).toBeLessThan(
+      read.indexOf('aria-label="Agent accounts"'),
+    );
+    // Where there are people alone, they stand under the page's own title.
+    const peopleAlone = renderToStaticMarkup(<PeopleList people={[alice, bob]} me={alice} />);
+    expect(peopleAlone).not.toContain("sc-section-title");
+    expect(peopleAlone).toContain('aria-label="People"');
+    // An agent account's name and a way at the foot of its card lead to its own page.
+    const linked = renderToStaticMarkup(
+      <PeopleList
+        people={[alice, bob, mira]}
+        me={alice}
+        agentHref={(person) => `/agents/${person.handle}`}
+        agentsHref={(person) => `/people/${person.id}/agents`}
+      />,
+    );
+    expect(linked).toContain('<a class="sc-person-card-link" href="/agents/mira">Mira</a>');
+    expect(linked).toContain('href="/agents/mira">Its page</a>');
+    // A person's agents are a person's: none are listed of an agent account.
+    expect(linked.match(/\/agents">Agents<\/a>/g)).toHaveLength(2);
     expect(read).not.toContain("<dt>Title</dt>");
     // An administrator writes anyone's; an agent account's role is read, never chosen.
     const administered = renderToStaticMarkup(

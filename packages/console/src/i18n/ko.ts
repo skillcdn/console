@@ -1377,7 +1377,9 @@ export const ko: Messages = {
     joinTeamOf: (name) => `${name}을(를) 추가할 팀`,
     leaveTeam: (name, team) => `${team}에서 ${name} 빼기`,
     howMany: (count) => `${count}명`,
-    views: { aria: "사람과 팀", people: "사람", teams: "팀" },
+    views: { aria: "구성원과 팀", people: "구성원", teams: "팀" },
+    sections: { people: "사람", agents: "에이전트 계정" },
+    agentPage: "페이지",
     nobody: "없음",
     letIn: "사람 추가",
     letInAria: "사람 추가",
@@ -1456,6 +1458,12 @@ export const ko: Messages = {
 
   agents: {
     title: "에이전트",
+    views: {
+      aria: "에이전트 보기",
+      mine: "내 에이전트",
+      all: "전체",
+      connected: "나를 대신하는 에이전트",
+    },
     makeByHand: "토큰 직접 만들기",
     makeAria: "토큰 만들기",
     empty: {
@@ -1517,7 +1525,7 @@ export const ko: Messages = {
         refused: "거절됨",
         failed: "실패",
         unheard: "소식 없음",
-        since: "시작",
+        since: { before: "", after: "부터" },
         heard: "러너의 마지막 소식",
         reasons: {
           started: "러너가 시작했습니다",
@@ -1696,15 +1704,24 @@ export const ko: Messages = {
     accounts: {
       title: "에이전트 계정",
       intro:
-        "자기 계정으로 일하는 에이전트입니다. 각자 자기 계정으로 로그인하고, 사람과 같은 규칙으로 일하며, 매니저에게 보고합니다.",
-      yours: "내 에이전트",
-      yoursIntro: "나를 대신해 일하는 에이전트입니다. 각자 내 토큰을 가집니다.",
+        "나에게 보고하는 에이전트 계정입니다. 내가 매니저이거나, 매니저가 나에게 보고하는 계정입니다. 각자 자기 계정으로 로그인하고 사람과 같은 규칙으로 일합니다.",
+      allIntro:
+        "워크스페이스의 모든 에이전트 계정입니다. 매니저가 자리에 없을 때는 관리자가 대신 살핍니다.",
+      yours: "나를 대신하는 에이전트",
+      yoursIntro:
+        "나를 대신해 일하는 에이전트입니다. 각자 내 토큰을 가지며, 에이전트가 한 일은 내가 한 일로 남습니다.",
       list: "에이전트 계정",
       add: "에이전트 계정 추가",
       empty: {
         title: "아직 에이전트 계정이 없습니다",
         body: "관리자가 여기서 추가합니다. 추가한 때부터 멤버가 되고, 자기 계정으로 로그인합니다.",
       },
+      mineEmpty: {
+        title: "나에게 보고하는 에이전트 계정이 없습니다",
+        body: "내가 매니저이거나 매니저가 나에게 보고하는 계정이 여기에 나옵니다. 워크스페이스의 모든 에이전트 계정은 사람들에서 볼 수 있습니다.",
+      },
+      now: "지금",
+      runs: "실행",
       invited: "초대됨",
       invitedHint: "아직 아무도 이 계정으로 로그인하지 않았습니다. 작업은 지금도 맡길 수 있습니다.",
       login: "로그인 계정",

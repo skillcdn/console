@@ -113,7 +113,11 @@ export type Route =
   | { readonly name: "person-agents"; readonly id: string }
   /** Another person's plate, for whoever oversees them: a day of the week shown at the top, or today's. */
   | { readonly name: "person-work"; readonly id: string; readonly week: string | undefined }
-  | { readonly name: "agents" }
+  /**
+   * The agents' page, in one of its views: the agent accounts that report to whoever is signed
+   * in, every agent account for an administrator, or the agents that act as them with a token.
+   */
+  | { readonly name: "agents"; readonly view: AgentsView }
   | { readonly name: "new-token" }
   /** The form where an administrator adds an agent account (ADR-0084). */
   | { readonly name: "new-agent" }
@@ -350,7 +354,8 @@ export function matchRoute(pathname: string, search = ""): Route {
     return { name: "new-team" };
   }
   if (path === PATHS.agents) {
-    return { name: "agents" };
+    const view = params.get("view") ?? "mine";
+    return isAgentsView(view) ? { name: "agents", view } : NOT_FOUND;
   }
   if (path === PATHS.newToken) {
     return { name: "new-token" };
@@ -579,6 +584,21 @@ export function connectHref(code?: string): string {
 /** Where the guide of an agent account's setup is read, by the code of its invitation. */
 export function setupHref(code: string): string {
   return `${PATHS.setup}/${encodeURIComponent(code)}`;
+}
+
+/**
+ * The views of the agents' page: the agent accounts that report to whoever is signed in, all of
+ * the workspace's, and the agents that act as them, each with a token of theirs.
+ */
+export const AGENTS_VIEWS = ["mine", "all", "connected"] as const;
+export type AgentsView = (typeof AGENTS_VIEWS)[number];
+
+const isAgentsView = (value: string): value is AgentsView =>
+  (AGENTS_VIEWS as readonly string[]).includes(value);
+
+/** Where a view of the agents' page is: the page itself for the first, named in the query for the others. */
+export function agentsHref(view: AgentsView = "mine"): string {
+  return view === "mine" ? PATHS.agents : `${PATHS.agents}?view=${view}`;
 }
 
 /** The views of an agent account's page. */

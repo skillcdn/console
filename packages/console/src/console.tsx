@@ -136,7 +136,9 @@ import {
 import { type PersonaName, proposeAgents } from "./persona.js";
 import { pluginNavItems, pluginPagesAt, pluginWordOf } from "./plugin-nav.js";
 import {
+  type AgentsView,
   agentHref,
+  agentsHref,
   agentWorkHref,
   boardHref,
   calendarHref,
@@ -3152,6 +3154,7 @@ function WorkspacePage(props: {
             }
             workHref={oversees ? (person) => personWorkHref(person.id) : undefined}
             agentsHref={administrator ? (person) => personAgentsHref(person.id) : undefined}
+            agentHref={(person) => agentHref(person.handle ?? "")}
           />
         )}
       </>
@@ -3195,78 +3198,129 @@ function WorkspacePage(props: {
     const accounts = agents.accounts;
     const making = route.name === "new-token";
     const origin = typeof window === "undefined" ? "" : window.location.origin;
-    const administrator = data.me?.person?.role === "admin";
-    // The agent accounts (ADR-0084): members of their own, read by whoever sees them, with a
-    // token too. A person's own agents and their tokens stay on the console's own pages.
-    const accountsSection = (
-      <section className="sc-agents-section" aria-label={accounts.title}>
-        <div className="sc-section-head">
-          <h2 className="sc-section-title">{accounts.title}</h2>
-          {administrator && (
-            <LinkButton href={PATHS.newAgent} variant="primary">
-              {accounts.add}
-            </LinkButton>
-          )}
-        </div>
-        <p className="sc-settings-hint">{accounts.intro}</p>
-        <components.AgentAccountList
-          agents={data.agents}
-          busy={busy}
-          href={(agent) => agentHref(agent.person.handle ?? "")}
-          empty={<EmptyState title={accounts.empty.title} body={accounts.empty.body} />}
-        />
-      </section>
+    const me = data.me?.person ?? undefined;
+    const administrator = me?.role === "admin";
+    // A console held through a token shows no tokens: the agents that act as a person are
+    // listed where that person is signed in.
+    const viaToken = holdsToken(data);
+    const view: AgentsView = making ? "connected" : route.view;
+    // The agent accounts (ADR-0084) that report to whoever is looking, directly or through
+    // someone who does: theirs to look after. An administrator supervises every account, so
+    // which are theirs is read off the reporting line; for anyone else the console has said.
+    const mine = data.agents.filter((agent) =>
+      administrator ? supervisedBy(me, agent.person, data.people) : agent.supervised,
     );
-    if (holdsToken(data)) {
-      return (
-        <>
-          <div className="sc-page-head">
-            <h1 className="sc-page-title">{agents.title}</h1>
-          </div>
-          {accountsSection}
-        </>
-      );
+    const shown = view === "all" ? data.agents : mine;
+    const views: readonly {
+      readonly view: AgentsView;
+      readonly label: string;
+      readonly count: number;
+    }[] = [
+      { view: "mine", label: agents.views.mine, count: mine.length },
+      ...(administrator
+        ? [{ view: "all" as const, label: agents.views.all, count: data.agents.length }]
+        : []),
+      ...(viaToken
+        ? []
+        : [
+            {
+              view: "connected" as const,
+              label: agents.views.connected,
+              count: data.tokens.length,
+            },
+          ]),
+    ];
+    if (view === "all" && !administrator) {
+      return <NothingHere />;
+    }
+    if (view === "connected" && viaToken) {
+      return <NothingHere />;
     }
     return (
       <>
         <div className="sc-page-head">
           <h1 className="sc-page-title">{agents.title}</h1>
-          {!making && (
+          {view !== "connected" && administrator && (
+            <LinkButton href={PATHS.newAgent} variant="primary">
+              {accounts.add}
+            </LinkButton>
+          )}
+          {view === "connected" && !making && (
             <LinkButton href={PATHS.newToken} variant="primary">
               {agents.makeByHand}
             </LinkButton>
           )}
         </div>
+        <nav className="sc-subtabs sc-agents-views" aria-label={agents.views.aria}>
+          {views.map((one) => (
+            <a
+              key={one.view}
+              className={cx("sc-tab", one.view === view && "sc-tab-current")}
+              href={agentsHref(one.view)}
+              aria-current={one.view === view ? "page" : undefined}
+            >
+              {one.label}
+              <span className="sc-tab-count">{one.count}</span>
+            </a>
+          ))}
+        </nav>
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
-        {!making && accountsSection}
-        <h2 className="sc-section-title">{accounts.yours}</h2>
-        <p className="sc-settings-hint">{accounts.yoursIntro}</p>
-        {fresh !== undefined && (
-          <NewToken token={fresh.token} secret={fresh.secret} onDone={() => setFresh(undefined)} />
-        )}
-        {making && (
-          <section className="sc-panel sc-panel-form" aria-label={agents.makeAria}>
-            <TokenForm
-              daysAtMost={data.me?.workspace.tokenDaysAtMost}
+        {view !== "connected" ? (
+          <section aria-label={view === "all" ? agents.views.all : agents.views.mine}>
+            <p className="sc-lead">{view === "all" ? accounts.allIntro : accounts.intro}</p>
+            <components.AgentAccountList
+              agents={shown}
+              me={me}
               busy={busy}
-              onSubmit={(input) =>
-                void act(async () => {
-                  setFresh(await data.actions.createToken(input));
-                  navigation.replace(PATHS.agents);
-                })
+              href={(agent) => agentHref(agent.person.handle ?? "")}
+              empty={
+                view === "all" ? (
+                  <EmptyState title={accounts.empty.title} body={accounts.empty.body} />
+                ) : (
+                  <EmptyState
+                    title={accounts.mineEmpty.title}
+                    body={accounts.mineEmpty.body}
+                    action={<LinkButton href={PATHS.people}>{words.nav.people}</LinkButton>}
+                  />
+                )
               }
-              onCancel={() => navigation.back(PATHS.agents)}
             />
           </section>
+        ) : (
+          <section aria-label={agents.views.connected}>
+            <p className="sc-lead">{accounts.yoursIntro}</p>
+            {fresh !== undefined && (
+              <NewToken
+                token={fresh.token}
+                secret={fresh.secret}
+                onDone={() => setFresh(undefined)}
+              />
+            )}
+            {making && (
+              <section className="sc-panel sc-panel-form" aria-label={agents.makeAria}>
+                <TokenForm
+                  daysAtMost={data.me?.workspace.tokenDaysAtMost}
+                  busy={busy}
+                  onSubmit={(input) =>
+                    void act(async () => {
+                      setFresh(await data.actions.createToken(input));
+                      navigation.replace(agentsHref("connected"));
+                    })
+                  }
+                  onCancel={() => navigation.back(agentsHref("connected"))}
+                />
+              </section>
+            )}
+            <components.TokenList
+              tokens={data.tokens}
+              busy={busy}
+              consoleVersion={data.me?.console?.version}
+              onRevoke={(token) => void act(() => data.actions.revokeToken(token.id))}
+              empty={<EmptyState title={agents.empty.title} body={agents.empty.body} />}
+            />
+            <ConnectWords origin={origin} />
+          </section>
         )}
-        <components.TokenList
-          tokens={data.tokens}
-          busy={busy}
-          consoleVersion={data.me?.console?.version}
-          onRevoke={(token) => void act(() => data.actions.revokeToken(token.id))}
-          empty={<EmptyState title={agents.empty.title} body={agents.empty.body} />}
-        />
-        <ConnectWords origin={origin} />
       </>
     );
   }

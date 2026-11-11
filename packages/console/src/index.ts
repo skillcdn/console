@@ -324,8 +324,11 @@ export {
   useWords,
 } from "./i18n/index.js";
 export {
+  AGENTS_VIEWS,
+  type AgentsView,
   type AgentTab,
   agentHref,
+  agentsHref,
   agentWorkHref,
   type BoardFilter,
   boardHref,

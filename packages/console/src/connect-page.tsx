@@ -9,7 +9,7 @@ import { ConnectApproval, ConnectCodeForm } from "./components/connect.js";
 import { Callout, Spinner } from "./components/ui.js";
 import type { ConsoleData } from "./data.js";
 import { useWords } from "./i18n/index.js";
-import { connectHref, type Navigation, PATHS } from "./router.js";
+import { agentsHref, connectHref, type Navigation, PATHS } from "./router.js";
 import { errorWords, useAction } from "./use-action.js";
 
 // The page where a person connects their agent (ADR-0011): the code typed when the address
@@ -94,7 +94,7 @@ export function ConnectPage(props: ConnectPageProps) {
         {head}
         <Callout tone="info" title={words.approved.title(request.agent)}>
           <p>
-            {words.approved.body} <a href={PATHS.agents}>{words.approved.agentsPage}</a>
+            {words.approved.body} <a href={agentsHref("connected")}>{words.approved.agentsPage}</a>
           </p>
         </Callout>
       </>

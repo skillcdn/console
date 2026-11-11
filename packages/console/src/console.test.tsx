@@ -12,6 +12,7 @@ import {
 import { ENGLISH, KOREAN } from "./i18n/index.js";
 import {
   agentHref,
+  agentsHref,
   agentWorkHref,
   boardHref,
   calendarHref,
@@ -54,7 +55,15 @@ describe("matchRoute", () => {
     expect(matchRoute("/people/teams")).toEqual({ name: "teams" });
     expect(matchRoute("/people/teams/new")).toEqual({ name: "new-team" });
     expect(matchRoute("/people/teams/other")).toEqual({ name: "not-found" });
-    expect(matchRoute("/agents")).toEqual({ name: "agents" });
+    // The agents' page opens on the accounts that report to whoever looks; its other views are
+    // named in the query, where no account's handle is taken for one.
+    expect(matchRoute("/agents")).toEqual({ name: "agents", view: "mine" });
+    expect(matchRoute("/agents", "?view=all")).toEqual({ name: "agents", view: "all" });
+    expect(matchRoute("/agents", "?view=connected")).toEqual({ name: "agents", view: "connected" });
+    expect(matchRoute("/agents", "?view=other")).toEqual({ name: "not-found" });
+    expect(agentsHref()).toBe("/agents");
+    expect(agentsHref("all")).toBe("/agents?view=all");
+    expect(agentsHref("connected")).toBe("/agents?view=connected");
     expect(matchRoute("/agents/new")).toEqual({ name: "new-token" });
     // The form for an agent account (ADR-0084), under `new`, which no account's handle may be.
     expect(matchRoute("/agents/new/account")).toEqual({ name: "new-agent" });

@@ -1455,7 +1455,9 @@ export const en = {
     joinTeamOf: (name: string) => `Add ${name} to a team`,
     leaveTeam: (name: string, team: string) => `Take ${name} out of ${team}`,
     howMany: (count: number) => (count === 1 ? "1 person" : `${count} people`),
-    views: { aria: "People and teams", people: "People", teams: "Teams" },
+    views: { aria: "Members and teams", people: "Members", teams: "Teams" },
+    sections: { people: "People", agents: "Agent accounts" },
+    agentPage: "Its page",
     nobody: "None",
     letIn: "Add a person",
     letInAria: "Add a person",
@@ -1538,6 +1540,12 @@ export const en = {
 
   agents: {
     title: "Agents",
+    views: {
+      aria: "Views of the agents",
+      mine: "My agents",
+      all: "All",
+      connected: "Acting as me",
+    },
     makeByHand: "Make a token by hand",
     makeAria: "Make a token",
     empty: {
@@ -1600,7 +1608,8 @@ export const en = {
         refused: "Refused",
         failed: "Failed",
         unheard: "Not heard from",
-        since: "since",
+        /** What stands before and after the moment a state began: "since 14:02". */
+        since: { before: "since ", after: "" },
         heard: "runner last heard from",
         reasons: {
           started: "its runner started",
@@ -1778,15 +1787,24 @@ export const en = {
     accounts: {
       title: "Agent accounts",
       intro:
-        "Agents that are members of their own: each signs in with an account of its own, works under the rules a person does, and reports to a manager.",
-      yours: "Your agents",
-      yoursIntro: "The agents that act as you, each with a token of yours.",
+        "The agent accounts that report to you, or to someone who reports to you. Each is a member of its own: it signs in with an account of its own and works under the rules a person does.",
+      allIntro:
+        "Every agent account of the workspace. An administrator stands in for a manager who is away.",
+      yours: "Acting as me",
+      yoursIntro:
+        "The agents that act as you, each with a token of yours: what one of them does, you did through it.",
       list: "Agent accounts",
       add: "Add an agent account",
       empty: {
         title: "No agent account yet",
         body: "An administrator adds one here. It is a member from then on, and signs in with an account of its own.",
       },
+      mineEmpty: {
+        title: "No agent account reports to you",
+        body: "An account whose manager you are, or whose manager reports to you, is listed here. Every agent account of the workspace is among the people.",
+      },
+      now: "Now",
+      runs: "Runs",
       invited: "Invited",
       invitedHint: "Nobody has signed in with it yet. Work can be assigned to it already.",
       login: "Signs in as",

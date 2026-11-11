@@ -2855,57 +2855,29 @@ select.sc-input {
   font-weight: var(--sc-weight-normal);
 }
 
-/* The agent accounts on the Agents page: a section of its own above a person's own agents. */
-.sc-agents-section {
-  margin-bottom: var(--sc-space-6);
+/* A member's name where it leads to a page of theirs: the name's own type, underlined under the pointer. */
+.sc-person-card-link {
+  color: inherit;
+  text-decoration: none;
 }
 
-.sc-agents-section > .sc-settings-hint {
-  margin-bottom: var(--sc-space-4);
+.sc-person-card-link:hover {
+  color: var(--sc-color-accent);
+  text-decoration: underline;
 }
 
-/* An agent account's card (ADR-0084): the face, the name with its handle and under them what it
-   does; how it stands at the top right, where every card says it; then whom it reports to and
-   the login it signs in with, as the rows of a person's facts. Where the card leads to the
-   account's page, the name's link is drawn over the whole card, and the card answers the pointer
-   and the focus as a tile of the front page does. */
-.sc-agent-card {
-  gap: var(--sc-space-4);
-}
-
-.sc-agent-card-head {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) fit-content(45%);
-  align-items: center;
-  gap: var(--sc-space-3);
-  min-width: 0;
-}
-
-.sc-agent-card-head > .sc-avatar {
-  width: 3rem;
-  height: 3rem;
-}
-
-.sc-agent-card .sc-person-card-who {
-  gap: var(--sc-space-1);
-}
-
-.sc-agent-card-handle {
-  color: var(--sc-color-text-muted);
-  font-size: var(--sc-text-sm);
-  font-weight: var(--sc-weight-normal);
-}
+/* An agent account's card (ADR-0084): a person's card, with how the account stands across from
+   its name, where every card says it. Where the card leads to the account's page, the name's
+   link is drawn over the whole card, and the card answers the pointer and the focus as a tile
+   of the front page does. */
 
 /* How it stands is above the link that covers the card, so that why it stands so is read where
-   the pointer rests on it; two badges go one under the other where the card is narrow. */
+   the pointer rests on it. */
 .sc-agent-card-state {
   position: relative;
   z-index: 2;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
   align-self: start;
-  gap: var(--sc-space-1);
+  margin-inline-start: auto;
 }
 
 .sc-agent-card-link {
@@ -2948,27 +2920,9 @@ select.sc-input {
   outline-offset: 2px;
 }
 
-.sc-agent-card .sc-person-facts {
-  padding-top: var(--sc-space-3);
-}
-
-/* The login is above the card's link too: it is text to select and copy. */
-.sc-agent-card-login {
-  position: relative;
-  z-index: 2;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-/* What an invited account waits for, at the foot of its card, in the tone of its badge. */
-.sc-agent-card-note {
-  margin: auto 0 0;
-  padding: var(--sc-space-2) var(--sc-space-3);
-  border-radius: var(--sc-radius-md);
-  background: var(--sc-color-warning-subtle);
-  color: var(--sc-color-text);
-  font-size: var(--sc-text-xs);
-  line-height: var(--sc-leading-snug);
+/* The views of the agents' page stand as the people's do. */
+.sc-agents-views {
+  margin-bottom: var(--sc-space-5);
 }
 
 /* An agent account's picture on its settings, with the way to save it as a file beside it. */
@@ -3246,6 +3200,18 @@ select.sc-input-quiet {
    many each holds beside its name. */
 .sc-people-views {
   margin-bottom: var(--sc-space-5);
+}
+
+/* The members in groups, the people and then the agent accounts, each under its heading. */
+.sc-people-group + .sc-people-group {
+  margin-top: var(--sc-space-6);
+}
+
+.sc-people-group > .sc-section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-space-2);
+  margin-bottom: var(--sc-space-3);
 }
 
 .sc-people-views .sc-tab {

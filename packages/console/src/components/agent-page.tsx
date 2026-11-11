@@ -63,7 +63,9 @@ export function AgentStateBadge(props: {
       {badge}
       <span className="sc-agent-state-why">
         {reason !== undefined && `${reason} · `}
-        {words.since} <Time iso={state.since} precision="clock" />
+        {words.since.before}
+        <Time iso={state.since} precision="clock" />
+        {words.since.after}
         {state.heardAt !== null && (
           <>
             {" · "}

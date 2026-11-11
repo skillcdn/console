@@ -35,6 +35,7 @@ import {
   PersonChip,
   PersonOption,
   personName,
+  Time,
 } from "./ui.js";
 
 // The agent accounts of the workspace (ADR-0084): agents that are members of their own, listed
@@ -75,6 +76,8 @@ function saveBlob(blob: Blob, name: string): void {
 
 export interface AgentAccountListProps {
   readonly agents: readonly RestAgent[];
+  /** Whoever is looking: a card names the manager of an account that reports to someone else. */
+  readonly me?: RestPerson | undefined;
   /** Whether something is being done; the default list offers nothing to do, and reads it not. */
   readonly busy?: boolean | undefined;
   /** Shown where there is no agent account to list. */
@@ -84,17 +87,20 @@ export interface AgentAccountListProps {
 }
 
 /**
- * The workspace's agent accounts, a card each: the face, the name with the handle and what it
- * does, how it stands across from them; then whom it reports to and the login it signs in with,
- * as rows of one shape, so that the cards read alike down a column. The whole card leads to the
- * account's page; its picture is saved there (ADR-0084), not here.
+ * Agent accounts, a card each, for whoever looks after several: the picture, the name with the
+ * handle and what it does, and across from them how it stands; then what it is doing now and
+ * since when, what it runs, and whom it reports to where that is someone else. Rows of one
+ * shape, so that the cards read alike down a column. The whole card leads to the account's
+ * page; what is kept of the account, the login it signs in with among it, is said there.
  */
 export function AgentAccountList(props: AgentAccountListProps) {
   const words = useWords();
   const accounts = words.agents.accounts;
+  const states = words.agents.page.state;
   if (props.agents.length === 0) {
     return <>{props.empty ?? null}</>;
   }
+  const reasons: Readonly<Record<string, string>> = states.reasons;
   return (
     <ul className="sc-people sc-agent-accounts" aria-label={accounts.list}>
       {props.agents.map((agent) => {
@@ -103,6 +109,9 @@ export function AgentAccountList(props: AgentAccountListProps) {
         const out = person.status !== "active";
         const invited = person.invited === true;
         const title = person.title ?? "";
+        const state = agent.state ?? null;
+        const product = agent.runner?.product ?? null;
+        const model = agent.runner?.running?.model ?? agent.runner?.settings.model ?? null;
         return (
           <li
             key={person.id}
@@ -113,7 +122,7 @@ export function AgentAccountList(props: AgentAccountListProps) {
               out && "sc-person-card-out",
             )}
           >
-            <div className="sc-agent-card-head">
+            <div className="sc-person-card-head">
               <Avatar person={person} size="lg" />
               <div className="sc-person-card-who">
                 <span className="sc-person-card-name">
@@ -124,35 +133,62 @@ export function AgentAccountList(props: AgentAccountListProps) {
                       {name}
                     </a>
                   )}
-                  <span className="sc-agent-card-handle">@{person.handle}</span>
+                  <span className="sc-person-card-note">@{person.handle}</span>
                 </span>
                 {title !== "" && <span className="sc-person-card-title">{title}</span>}
               </div>
               <span className="sc-agent-card-state">
-                <AgentStateBadge state={agent.state} />
-                {invited && <Badge tone="warning">{accounts.invited}</Badge>}
-                {out && <Badge>{words.people.deactivated}</Badge>}
+                {out ? (
+                  <Badge>{words.people.deactivated}</Badge>
+                ) : state !== null ? (
+                  <AgentStateBadge state={state} />
+                ) : (
+                  <Badge tone={invited ? "warning" : "neutral"}>
+                    {invited ? accounts.invited : states.unset}
+                  </Badge>
+                )}
               </span>
             </div>
             <dl className="sc-person-facts">
               <div className="sc-person-fact">
-                <dt>{words.people.manager}</dt>
+                <dt>{accounts.now}</dt>
                 <dd>
-                  {manager === null ? (
-                    <span className="sc-muted">{accounts.managerUnseen}</span>
+                  {state === null ? (
+                    <span className="sc-muted">{invited ? accounts.invitedHint : states.none}</span>
                   ) : (
-                    <PersonChip person={manager} />
+                    <span>
+                      {state.reason !== null && `${reasons[state.reason] ?? state.reason} · `}
+                      {states.since.before}
+                      <Time iso={state.since} precision="clock" />
+                      {states.since.after}
+                    </span>
                   )}
                 </dd>
               </div>
-              <div className="sc-person-fact">
-                <dt>{accounts.login}</dt>
-                <dd>
-                  <span className="sc-agent-card-login">{person.login}</span>
-                </dd>
-              </div>
+              {product !== null && (
+                <div className="sc-person-fact">
+                  <dt>{accounts.runs}</dt>
+                  <dd>
+                    {[
+                      `${product.name}${product.version === null ? "" : ` ${product.version}`}`,
+                      ...(model === null ? [] : [model]),
+                    ].join(" · ")}
+                  </dd>
+                </div>
+              )}
+              {manager?.id !== props.me?.id || manager === null ? (
+                <div className="sc-person-fact">
+                  <dt>{words.people.manager}</dt>
+                  <dd>
+                    {manager === null ? (
+                      <span className="sc-muted">{accounts.managerUnseen}</span>
+                    ) : (
+                      <PersonChip person={manager} />
+                    )}
+                  </dd>
+                </div>
+              ) : null}
             </dl>
-            {invited && <p className="sc-agent-card-note">{accounts.invitedHint}</p>}
           </li>
         );
       })}
