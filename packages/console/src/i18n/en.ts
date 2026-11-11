@@ -608,7 +608,7 @@ export const en = {
       pasteTitle: "With a token made by hand",
       pasteAria: "Paste a token",
       label: "Token",
-      hint: "Made on the account page at SkillCDN, for the pack's repository.",
+      hint: "Made on the account page at SkillCDN, for the pack's repository; or by the deployment's operator, for a pack of its own directory.",
       setSince: "A token has been set since",
       placeholder: "scdn_repo_…",
       connect: "Connect at SkillCDN",

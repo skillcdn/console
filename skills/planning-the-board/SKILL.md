@@ -5,7 +5,7 @@ license: MIT
 compatibility: Needs a shell with the console command on the PATH (npm install -g @skillcdn/console, Node.js 24 or newer), signed in by a person who works in the project, owns it, or administers the workspace, as the step needs. Nothing else; the agent never sees a token.
 metadata:
   author: skillcdn
-  version: "1.2"
+  version: "1.3"
 skillcdn:
   translations:
     ko:

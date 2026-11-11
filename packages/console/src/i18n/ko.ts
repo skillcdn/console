@@ -540,7 +540,7 @@ export const ko: Messages = {
       pasteTitle: "직접 만든 토큰으로",
       pasteAria: "토큰 붙여넣기",
       label: "토큰",
-      hint: "SkillCDN 계정 페이지에서 팩의 저장소에 대해 만든 토큰입니다.",
+      hint: "SkillCDN 계정 페이지에서 팩의 저장소에 대해 만든 토큰, 또는 배포의 운영자가 배포 자체의 디렉터리에 있는 팩에 대해 만든 토큰입니다.",
       setSince: "토큰이 설정되어 있습니다:",
       placeholder: "scdn_repo_…",
       connect: "SkillCDN에서 연결",
