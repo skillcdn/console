@@ -40,6 +40,7 @@ import { DEFAULT_RUNNER_CONFIG, parseRunnerConfig } from "../runner/config.js";
 import { deskFiles, deskServicesOf } from "../runner/desk.js";
 import { ownRunnerModules } from "../runner/modules.js";
 import { createRunner, type RunnerState } from "../runner/runner.js";
+import type { ServiceCommand } from "../runner/types.js";
 import {
   hostOfLogin,
   type RestAgentSetup,
@@ -3985,6 +3986,8 @@ const DESK_TOKEN = "git.token";
 /** How often, and how many times, a setup looks whether the runner it started is heard from. */
 const RUNNER_HEARD_PAUSE_MS = 2000;
 const RUNNER_HEARD_TRIES = 15;
+/** How long a command of the service that is tried again waits between its tries. */
+const SERVICE_TRY_PAUSE_MS = 1000;
 
 const SETUP_FLAGS: OptionSpec = {
   console: { type: "string" },
@@ -4144,24 +4147,50 @@ async function settleService(
     }
   }
   const where = plan.files.map((file) => file.path).join(", ");
+  const said = (step: ServiceCommand): string => `${step.command} ${step.args.join(" ")}`;
+  // A command of the service's, tried as often as it says, a second apart.
+  const run = async (step: ServiceCommand): Promise<Ran> => {
+    let ran = await machine.run(step.command, step.args, { env: step.env });
+    for (let tried = 1; ran.code !== 0 && tried < (step.tries ?? 1); tried += 1) {
+      await io.sleep(SERVICE_TRY_PAUSE_MS);
+      ran = await machine.run(step.command, step.args, { env: step.env });
+    }
+    return ran;
+  };
   if (how === "write") {
+    if (!changed) {
+      io.stdout(`The ${service.name} service is as it was (${where}).\n`);
+      return undefined;
+    }
+    // What has the system read the file anew ends nothing that runs: a refresh runs that much.
+    const unread: string[] = [];
+    for (const step of plan.reread ?? []) {
+      if ((await run(step)).code !== 0) {
+        unread.push(said(step));
+      }
+    }
     io.stdout(
-      changed
-        ? `The ${service.name} service is written again (${where}). It is read ${plan.reload}\n`
-        : `The ${service.name} service is as it was (${where}).\n`,
+      `The ${service.name} service is written again (${where}). It is read ${plan.reload}${unread.length === 0 ? "" : ` Run this first, which did not succeed here: ${unread.join("; ")}.`}\n`,
     );
     return undefined;
   }
+  const left: string[] = [];
   for (const step of plan.commands) {
-    const ran = await machine.run(step.command, step.args);
-    if (ran.code !== 0 && step.mayFail !== true) {
+    const ran = await run(step);
+    if (ran.code === 0) {
+      continue;
+    }
+    if (step.mayFail !== true) {
       throw failed(
-        `The ${service.name} service is written (${where}) and was not loaded: ${step.command} ${step.args.join(" ")} said: ${lastWords(ran)}. ${plan.failing} Or start the runner yourself and keep it running: ${byHand}`,
+        `The ${service.name} service is written (${where}) and was not loaded: ${said(step)} said: ${lastWords(ran)}. ${plan.failing} Or start the runner yourself and keep it running: ${byHand}`,
       );
+    }
+    if (step.otherwise !== undefined) {
+      left.push(step.otherwise);
     }
   }
   io.stdout(
-    `The ${service.name} service is written (${where}) and loaded: the runner starts with the OS account ${machine.user}, and is started again when it ends. Its own lines are in ${plan.log}.\n`,
+    `The ${service.name} service is written (${where}) and loaded: the runner starts with the OS account ${machine.user}, and is started again when it ends. Its own lines are in ${plan.log}.\n${left.map((line) => `${line}\n`).join("")}`,
   );
   return plan.log;
 }

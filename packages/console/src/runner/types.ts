@@ -199,6 +199,22 @@ export interface ServiceInput {
   readonly path: string | undefined;
 }
 
+/** A command a service has run. */
+export interface ServiceCommand {
+  readonly command: string;
+  readonly args: readonly string[];
+  /** What is added to the environment it runs in. */
+  readonly env?: Readonly<Record<string, string>> | undefined;
+  readonly mayFail?: boolean | undefined;
+  /** For one that may fail: what is left to do where it did, in a sentence. */
+  readonly otherwise?: string | undefined;
+  /**
+   * How many times it is tried, a second apart, until it succeeds: for the first command after
+   * one the system answers before it has done what was asked. Once where nothing is said.
+   */
+  readonly tries?: number | undefined;
+}
+
 /** What a service writes and runs to keep a runner running. Nothing of it needs an administrator's rights. */
 export interface ServicePlan {
   /** Whole files, each with the mode it is written in. */
@@ -207,12 +223,17 @@ export interface ServicePlan {
     readonly text: string;
     readonly mode: number;
   }[];
-  /** Commands, in order; one that fails where nothing was there before says so. */
-  readonly commands: readonly {
-    readonly command: string;
-    readonly args: readonly string[];
-    readonly mayFail?: boolean | undefined;
-  }[];
+  /**
+   * Commands, in order; one that fails where nothing was there before says so. One that may fail
+   * and did says what is left to do, where it names it: the setup prints that, and goes on.
+   */
+  readonly commands: readonly ServiceCommand[];
+  /**
+   * What has the system read files written again, without ending the runner that may be
+   * running under the service: run by a refresh that changed one. None where the system reads
+   * a file only when it loads the service.
+   */
+  readonly reread?: readonly ServiceCommand[] | undefined;
   /** Where the runner's own lines are kept, for whoever looks when it is not heard from. */
   readonly log: string;
   /** What to look at when a command did not succeed, in a sentence. */

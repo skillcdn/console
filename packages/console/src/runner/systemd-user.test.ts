@@ -37,24 +37,50 @@ describe("the systemd-user service", () => {
       throw new Error(plan.problem);
     }
     expect(plan.files.map((file) => [file.path, file.mode])).toEqual([[UNIT, 0o644]]);
+    // The account's own systemd is reached through the folder the system keeps for the account.
+    const env = { XDG_RUNTIME_DIR: "/run/user/1001" };
     expect(plan.commands).toEqual([
-      { command: "systemctl", args: ["--user", "daemon-reload"] },
-      { command: "systemctl", args: ["--user", "enable", "skillcdn-console-runner.service"] },
-      { command: "systemctl", args: ["--user", "restart", "skillcdn-console-runner.service"] },
+      {
+        command: "loginctl",
+        args: ["enable-linger", "1001"],
+        mayFail: true,
+        otherwise: expect.stringContaining("have an administrator run loginctl enable-linger 1001"),
+      },
+      { command: "systemctl", args: ["--user", "daemon-reload"], env, tries: 10 },
+      { command: "systemctl", args: ["--user", "enable", "skillcdn-console-runner.service"], env },
+      { command: "systemctl", args: ["--user", "restart", "skillcdn-console-runner.service"], env },
     ]);
-    // Nothing of it needs an administrator's rights: everything is the account's own.
+    // Nothing of it needs an administrator's rights: everything is the account's own, and
+    // lingering is asked for the account itself, which may be refused.
     expect(
-      plan.commands.every((step) => step.command === "systemctl" && step.args[0] === "--user"),
+      plan.commands.every(
+        (step) =>
+          (step.command === "systemctl" && step.args[0] === "--user") ||
+          (step.command === "loginctl" && step.mayFail === true && step.args[1] === "1001"),
+      ),
     ).toBe(true);
     expect(plan.files.every((file) => file.path.startsWith("/home/mira/"))).toBe(true);
+    // A unit written again is read once the account's systemd is told to, which ends nothing.
+    expect(plan.reread).toEqual([{ command: "systemctl", args: ["--user", "daemon-reload"], env }]);
     expect(plan.log).toContain("journalctl --user -u skillcdn-console-runner.service");
     expect(plan.failing).toContain("loginctl enable-linger");
     expect(plan.reload).toBe("when the service is next started.");
-    // The system has no number to ask for here: a unit is written whatever the account's is.
-    expect("problem" in systemdUser.plan({ ...INPUT, uid: undefined })).toBe(false);
     expect(systemdUser.plan({ ...INPUT, program: [] })).toEqual({
       problem: "nothing says how the runner is started",
     });
+  });
+
+  it("plans without the account's number where the system does not say it: no lingering asked, and the environment as it is", () => {
+    const plan = systemdUser.plan({ ...INPUT, uid: undefined });
+    if ("problem" in plan) {
+      throw new Error(plan.problem);
+    }
+    expect(plan.commands).toEqual([
+      { command: "systemctl", args: ["--user", "daemon-reload"], tries: 10 },
+      { command: "systemctl", args: ["--user", "enable", "skillcdn-console-runner.service"] },
+      { command: "systemctl", args: ["--user", "restart", "skillcdn-console-runner.service"] },
+    ]);
+    expect(plan.reread).toEqual([{ command: "systemctl", args: ["--user", "daemon-reload"] }]);
   });
 
   it("writes the unit: the runner in the desk, started with the account's session and again when it ends", () => {

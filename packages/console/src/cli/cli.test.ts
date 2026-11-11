@@ -4094,14 +4094,71 @@ describe("setting a machine up for an agent account (ADR-0088)", () => {
     );
     expect(at.files.get(unit)).toContain("WorkingDirectory=/Users/mira/desk");
     expect(at.files.has(UNIT)).toBe(false);
-    expect(at.runs.map((ran) => [ran.command, ...ran.args])).toEqual([
-      ["systemctl", "--user", "daemon-reload"],
-      ["systemctl", "--user", "enable", "skillcdn-console-runner.service"],
-      ["systemctl", "--user", "restart", "skillcdn-console-runner.service"],
+    // Lingering is asked for the account itself first, and its own systemd reached through the
+    // folder the system keeps for it, which a shell entered from another account is not told of.
+    const own = { XDG_RUNTIME_DIR: "/run/user/502" };
+    expect(at.runs.map((ran) => [ran.command, ...ran.args, ran.env])).toEqual([
+      ["loginctl", "enable-linger", "502", undefined],
+      ["systemctl", "--user", "daemon-reload", own],
+      ["systemctl", "--user", "enable", "skillcdn-console-runner.service", own],
+      ["systemctl", "--user", "restart", "skillcdn-console-runner.service", own],
     ]);
     expect(run.out()).toContain(`The systemd-user service is written (${unit}) and loaded`);
     expect(run.out()).toContain("journalctl --user -u skillcdn-console-runner.service");
-    // An account with no session of its own systemd: the unit stays written, and the words say what to do.
+    expect(run.out()).not.toContain("Lingering was not turned on");
+
+    // A system that keeps lingering for an administrator: the service is loaded all the same,
+    // and the words say what is left to do and who does it.
+    const kept = fakeMachine({
+      platform: "linux",
+      ran: (command) =>
+        command === "loginctl"
+          ? { code: 1, out: "", err: "Could not enable linger: Access denied\n" }
+          : undefined,
+    });
+    const told = harness({
+      fetch: consoleOf().fetch,
+      machine: kept.machine,
+      store: memoryStore(KEPT).store,
+    });
+    expect(await runCli(LINE, told.io)).toBe(EXIT.ok);
+    expect(told.out()).toContain(`The systemd-user service is written (${unit}) and loaded`);
+    expect(told.out()).toContain(
+      "Lingering was not turned on for this OS account, so the runner runs while the account has a session and no longer, and does not start with the machine: have an administrator run loginctl enable-linger 502.",
+    );
+
+    // The account's systemd is started by the lingering just asked for, and is there a moment
+    // after the system answered: the first command to it is tried until it is.
+    let reloads = 0;
+    const starting = fakeMachine({
+      platform: "linux",
+      ran: (command, args) => {
+        if (command === "systemctl" && args.includes("daemon-reload")) {
+          reloads += 1;
+          return reloads < 3
+            ? { code: 1, out: "", err: "Failed to connect to bus: No such file or directory\n" }
+            : undefined;
+        }
+        return undefined;
+      },
+    });
+    const waited = harness({
+      fetch: consoleOf().fetch,
+      machine: starting.machine,
+      store: memoryStore(KEPT).store,
+    });
+    expect(await runCli(LINE, waited.io)).toBe(EXIT.ok);
+    expect(starting.runs.map((ran) => ran.args.at(-1))).toEqual([
+      "502",
+      "daemon-reload",
+      "daemon-reload",
+      "daemon-reload",
+      "skillcdn-console-runner.service",
+      "skillcdn-console-runner.service",
+    ]);
+
+    // An account with no session and no lingering, so no systemd of its own: the unit stays
+    // written, and the words say what to do.
     const sessionless = fakeMachine({
       platform: "linux",
       ran: () => ({ code: 1, out: "", err: "Failed to connect to bus: No medium found\n" }),
@@ -4115,6 +4172,59 @@ describe("setting a machine up for an agent account (ADR-0088)", () => {
     expect(failed.err()).toContain("Failed to connect to bus: No medium found.");
     expect(failed.err()).toContain("loginctl enable-linger");
     expect(sessionless.files.has(unit)).toBe(true);
+    // Lingering once, then the first command to the account's systemd as often as it is tried.
+    expect(sessionless.runs).toHaveLength(11);
+  });
+
+  it("has the system read a unit a refresh wrote again, where that ends nothing: on Linux", async () => {
+    const env = { CONSOLE_URL: ORIGIN, CONSOLE_TOKEN: "cns_a_kept" };
+    const unit = "/Users/mira/.config/systemd/user/skillcdn-console-runner.service";
+    const first = fakeMachine({ platform: "linux" });
+    await runCli(
+      LINE,
+      harness({ fetch: consoleOf().fetch, machine: first.machine, store: memoryStore(KEPT).store })
+        .io,
+    );
+    // As setup wrote it: nothing is written and nothing is run.
+    const same = fakeMachine({
+      platform: "linux",
+      cwd: "/Users/mira/desk",
+      files: Object.fromEntries(first.files),
+    });
+    const again = harness({ fetch: consoleOf().fetch, env, machine: same.machine });
+    expect(await runCli(["agent", "setup", "--refresh"], again.io)).toBe(EXIT.ok);
+    expect(again.out()).toContain(`The systemd-user service is as it was (${unit}).`);
+    expect(same.runs).toEqual([]);
+
+    // A unit that says something else is written again, and the account's systemd told to read
+    // it: the runner this command may be running under goes on, and starts with it next time.
+    const moved = fakeMachine({
+      platform: "linux",
+      cwd: "/Users/mira/desk",
+      files: { ...Object.fromEntries(first.files), [unit]: "[Unit]\nDescription=An older one\n" },
+    });
+    const rewritten = harness({ fetch: consoleOf().fetch, env, machine: moved.machine });
+    expect(await runCli(["agent", "setup", "--refresh"], rewritten.io)).toBe(EXIT.ok);
+    expect(rewritten.out()).toContain(
+      `The systemd-user service is written again (${unit}). It is read when the service is next started.\n`,
+    );
+    expect(moved.files.get(unit)).toBe(first.files.get(unit));
+    expect(moved.runs.map((ran) => [ran.command, ...ran.args, ran.env])).toEqual([
+      ["systemctl", "--user", "daemon-reload", { XDG_RUNTIME_DIR: "/run/user/502" }],
+    ]);
+
+    // Where the system could not be told, the words say what is left to run.
+    const deaf = fakeMachine({
+      platform: "linux",
+      cwd: "/Users/mira/desk",
+      files: { ...Object.fromEntries(first.files), [unit]: "[Unit]\nDescription=An older one\n" },
+      ran: () => ({ code: 1, out: "", err: "Failed to connect to bus: No medium found\n" }),
+    });
+    const untold = harness({ fetch: consoleOf().fetch, env, machine: deaf.machine });
+    expect(await runCli(["agent", "setup", "--refresh"], untold.io)).toBe(EXIT.ok);
+    expect(untold.out()).toContain(
+      "It is read when the service is next started. Run this first, which did not succeed here: systemctl --user daemon-reload.",
+    );
   });
 
   it("derives a machine again with --refresh, for the account's own command, and unloads nothing", async () => {

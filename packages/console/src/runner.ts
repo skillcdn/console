@@ -62,6 +62,7 @@ export type {
   Picture,
   Probe,
   Service,
+  ServiceCommand,
   ServiceInput,
   ServicePlan,
   Spawn,
