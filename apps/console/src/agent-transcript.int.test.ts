@@ -30,10 +30,13 @@ import {
 import { sql } from "drizzle-orm";
 import { pino } from "pino";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { loadConfig } from "./config/config.js";
 import { drizzleOf } from "./db/client.js";
 import { attachedMonths } from "./db/queries/transcript.js";
+import { checkTranscript } from "./db/queries/transcript-check.js";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "./db/testing.js";
 import { RunnerWatch } from "./jobs/runner-watch.js";
+import { runVerify } from "./roles/verify.js";
 import { createFixtureProvider } from "./testing/fixture-provider.js";
 import { createHarness, type Harness, SIGN_IN_URL } from "./testing/harness.js";
 
@@ -787,6 +790,128 @@ describe("the sessions of an agent account and their transcript (ADR-0086)", () 
     }
     expect((await sessionOf({ cookie: alice }, session)).away).toBe(false);
     expect((await eventsOf({ cookie: alice }, session)).items).toHaveLength(9);
+  });
+
+  it("holds a session's events by a chain, which a month that was away is checked against (ADR-0090)", async () => {
+    // Every session of the month holds as the tests above left it: the short texts and the
+    // long, the pictures, and the event that was sealed, whose digest was kept.
+    const whole = await checkTranscript(testDatabase.database, { months: [MONTH] });
+    expect(whole.broken).toEqual([]);
+    expect(whole.months).toEqual([MONTH]);
+    expect(whole.away).toEqual([]);
+    expect(whole.unchained).toBe(0);
+    expect(whole.sealed).toBeGreaterThanOrEqual(1);
+    expect(whole.events).toBeGreaterThanOrEqual(9);
+    // Asked of nothing, it is every month whose events are there.
+    expect(await checkTranscript(testDatabase.database)).toEqual(whole);
+    // A month whose events are away is said to be, and nothing of it is checked.
+    expect(await checkTranscript(testDatabase.database, { months: ["2020-01"] })).toMatchObject({
+      months: [],
+      away: ["2020-01"],
+      sessions: 0,
+    });
+
+    // What was done to a month while it was away shows when it is back: each of these is done
+    // to the session of the tests above, and put right again.
+    const one = `month = '${MONTH}' and session_id = '${session}'`;
+    const brokenBy = async (statement: string, undo: string) => {
+      await raw(statement);
+      try {
+        return (await checkTranscript(testDatabase.database, { months: [MONTH] })).broken;
+      } finally {
+        await raw(undo);
+      }
+    };
+    const fails = (at: number, why: string) => [{ session, month: MONTH, at, why }];
+    // An event's text changed, and a fact added to one.
+    expect(
+      await brokenBy(
+        `update transcript.events set text = text || '!' where ${one} and n = 2`,
+        `update transcript.events set text = left(text, length(text) - 1) where ${one} and n = 2`,
+      ),
+    ).toEqual(fails(2, "an event is not what its digest says"));
+    expect(
+      await brokenBy(
+        `update transcript.events set data = data || '{"forged":true}' where ${one} and n = 3`,
+        `update transcript.events set data = data - 'forged' where ${one} and n = 3`,
+      ),
+    ).toEqual(fails(3, "an event is not what its digest says"));
+    // An event taken out.
+    expect(
+      await brokenBy(
+        `update transcript.events set n = 99 where ${one} and n = 9`,
+        `update transcript.events set n = 9 where ${one} and n = 99`,
+      ),
+    ).toEqual(fails(9, "an event is missing"));
+    expect(
+      await brokenBy(
+        `update transcript.events set n = 98 where ${one} and n = 4`,
+        `update transcript.events set n = 4 where ${one} and n = 98`,
+      ),
+    ).toEqual(fails(4, "an event is missing"));
+    // The digest of the sealed event changed: what it held is gone, so nothing says that it
+    // is another, but the digests no longer come to the head the session keeps.
+    const [kept] = (await raw(`select digest from transcript.events where ${one} and n = 6`))
+      .rows as { digest: string }[];
+    expect(
+      await brokenBy(
+        `update transcript.events set digest = repeat('0', 64) where ${one} and n = 6`,
+        `update transcript.events set digest = '${kept?.digest}' where ${one} and n = 6`,
+      ),
+    ).toEqual(fails(9, "the events do not come to the session's head"));
+    // An event whose digest was taken away.
+    expect(
+      await brokenBy(
+        `update transcript.events set digest = null where ${one} and n = 1`,
+        `update transcript.events set digest = (select encode(sha256('x'), 'hex')) where ${one} and n = 1`,
+      ),
+    ).toEqual(fails(1, "an event has no digest"));
+    // That last undo left another digest in its place: the event is no longer what it says.
+    const [first] = (await eventsOf({ cookie: alice }, session, "?limit=1")).items;
+    expect((await checkTranscript(testDatabase.database, { months: [MONTH] })).broken).toEqual(
+      fails(1, "an event is not what its digest says"),
+    );
+    expect(first?.n).toBe(1);
+
+    // The role whoever keeps the database runs: one line for a session that does not hold, a
+    // last line with the counts, and how many do not hold as its answer.
+    const lines: Record<string, unknown>[] = [];
+    const logger = pino(
+      { level: "info" },
+      { write: (line: string) => void lines.push(JSON.parse(line) as Record<string, unknown>) },
+    );
+    const config = loadConfig({ DATABASE_URL: testDatabase.connectionString }, () => {
+      throw new Error("no file is read");
+    });
+    expect(await runVerify(config, logger, [MONTH])).toEqual({ unheld: 1 });
+    expect(lines.find((line) => line.msg === "transcript session does not hold")).toMatchObject({
+      level: 50,
+      session,
+      month: MONTH,
+      at: 1,
+      why: "an event is not what its digest says",
+    });
+    expect(lines.find((line) => line.msg === "transcript verified")).toMatchObject({
+      level: 50,
+      months: [MONTH],
+      broken: 1,
+    });
+    // A session begun before the chain was kept has none to check, and is counted so.
+    await raw(`update transcript.sessions set chain = null where id = '${session}'`);
+    lines.length = 0;
+    expect(await runVerify(config, logger, [])).toEqual({ unheld: 0 });
+    expect(lines.find((line) => line.msg === "transcript verified")).toMatchObject({
+      level: 30,
+      months: [MONTH],
+      away: [],
+      unchained: 1,
+      broken: 0,
+    });
+    // A month that is away counts against the answer, and a word that is no month is refused.
+    expect(await runVerify(config, logger, ["2020-01"])).toEqual({ unheld: 1 });
+    expect(await runVerify(config, logger, ["november"])).toEqual({
+      usage: "a month is named as 2026-11: november is not",
+    });
   });
 
   it("has its months made ahead of time by the worker", async () => {

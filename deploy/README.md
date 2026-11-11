@@ -4,7 +4,7 @@ Everything needed to build the image and hand it to whatever runs it. This repos
 
 | File | Purpose |
 |---|---|
-| [`Dockerfile`](Dockerfile) | The one multi-stage image. Roles `api`, `worker` and `migrate` are selected by the container command. |
+| [`Dockerfile`](Dockerfile) | The one multi-stage image. Roles `api`, `worker` and `migrate`, and `verify` for whoever keeps the database, are selected by the container command. |
 | [`compose.dev.yaml`](compose.dev.yaml) | Local development dependencies (PostgreSQL 18 on `127.0.0.1:5433`, next to a SkillCDN development database on 5432). Not a production topology. |
 | [`compose.yaml`](compose.yaml) | The smallest install: the image next to PostgreSQL on one machine, the worker inside the api, the files in the database, the packs read from a directory. For a trial, one machine, or a closed network ([below](#the-smallest-install-and-a-closed-network)). |
 | [`../.github/workflows/ci.yml`](../.github/workflows/ci.yml) | Lint, build, typecheck, tests (integration tests run against a PostgreSQL service container), a secret scan, and an image build that is then exercised: exit codes, `migrate`, readiness, the page, the license and the console's own pack in the image, non-root user, clean shutdown. It needs no secrets. |
@@ -195,6 +195,14 @@ alter table transcript.events attach partition transcript.events_2026_11 for val
 alter table transcript.files attach partition transcript.files_2026_11 for values in ('2026-11');
 alter table transcript.blobs attach partition transcript.blobs_2026_11 for values in ('2026-11');
 ```
+
+A month that is back is checked against what never left: every session's row keeps the head of a chain over its events ([ADR-0090](../docs/adr/0090-a-sessions-events-are-held-by-a-chain-whose-head-stays-with-the-session.md)), and the image's `verify` role reads the month against it.
+
+```sh
+docker run --rm --env-file .env skillcdn-console verify 2026-11    # or no month, for every month that is there
+```
+
+It writes a line, `transcript session does not hold`, for every session with an event changed, taken out, put in or without its digest, naming the session, the event and why; then `transcript verified`, with the months, the sessions, the events, how many of them were sealed, and how many sessions do not hold (`broken`) or have no chain (`unchained`, begun before the chain was kept). It ends with 1 where a session does not hold or a month asked for is away, with 0 otherwise, and changes nothing; it needs `DATABASE_URL` and nothing else. The bytes of the long texts and the pictures are held by their names, which are their hashes: the bucket's own tools check an object against its name. A month that was put away before a release that changed the transcript's tables is brought to their shape before it is attached, the columns that release added among it.
 
 The console makes a month's partitions itself, when a session begins in it and ahead of time from the `worker` role, so its database role creates tables in the schema `transcript`; it never drops or detaches one. A deployment with agent accounts is better served by a bucket than by the rows of PostgreSQL: pictures kept for good do not belong in rows.
 

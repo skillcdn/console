@@ -36,7 +36,7 @@ Public repository hygiene
 
 ```
 apps/
-  console/    the single deployable; roles: api | worker | migrate; serves the default UI (Node 24)
+  console/    the single deployable; roles: api | worker | migrate, and verify, run by hand; serves the default UI (Node 24)
 packages/
   console/    @skillcdn/console: the API client and schemas, the components, the composition of the default console   on npm, once it exists
 examples/     plugin-hello, the plugin `console-plugin init` writes, built and tested as a workspace, held equal to the package's template; agent-desk, the desk an agent account is set up with, held equal to the package's template too

@@ -9,6 +9,7 @@ import {
 import { and, asc, count, desc, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
 import { DomainError } from "../../errors.js";
 import { type BlobStore, isMonth } from "../../ports/blob-store.js";
+import { chainNext, chainStart, eventDigest } from "../../transcript-chain.js";
 import { type Database, drizzleOf } from "../client.js";
 import { people, transcriptEvents, transcriptFiles, transcriptSessions } from "../schema.js";
 import { AGENTS_CHANNEL } from "./agent-runners.js";
@@ -260,6 +261,11 @@ export async function beginSession(
     if (row === undefined) {
       throw new Error("session insert returned no row");
     }
+    // The chain its events are held by begins at the session itself (ADR-0090).
+    await tx
+      .update(transcriptSessions)
+      .set({ chain: chainStart(row.id) })
+      .where(eq(transcriptSessions.id, row.id));
     return { session: toSession(row), tookOver: open.map((previous) => previous.id) };
   });
 }
@@ -507,7 +513,11 @@ export async function appendEvents(
   try {
     return await drizzleOf(database).transaction(async (tx) => {
       const [locked] = await tx
-        .select({ events: transcriptSessions.events, endedAt: transcriptSessions.endedAt })
+        .select({
+          events: transcriptSessions.events,
+          endedAt: transcriptSessions.endedAt,
+          chain: transcriptSessions.chain,
+        })
         .from(transcriptSessions)
         .where(eq(transcriptSessions.id, sessionId))
         .for("update");
@@ -518,6 +528,8 @@ export async function appendEvents(
         throw new TranscriptError("transcript.session_over");
       }
       let last = locked.events;
+      // A session begun before the chain was kept has none, and gets none halfway.
+      let chain = locked.chain;
       const fresh = prepared.filter((item) => item.event.n > last);
       const first = fresh[0]?.event.n ?? events[0]?.n ?? last + 1;
       if (first > last + 1) {
@@ -564,25 +576,28 @@ export async function appendEvents(
         for (const [name, fact] of Object.entries(item.event.data ?? {})) {
           data[kept(name)] = typeof fact === "string" ? kept(fact) : fact;
         }
-        return {
-          month: session.month,
+        const held = {
           sessionId,
           n: item.event.n,
-          personId: account.id,
           kind: item.event.kind,
           at: new Date(item.event.at),
-          receivedAt: now,
           text: item.text,
           textSha256: item.textSha256,
           textSize: item.textSize,
           data,
           files,
         };
+        // A link of the session's chain (ADR-0090): the digest of the event as it is kept.
+        const digest = chain === null ? null : eventDigest(held);
+        if (chain !== null && digest !== null) {
+          chain = chainNext(chain, digest);
+        }
+        return { ...held, month: session.month, personId: account.id, receivedAt: now, digest };
       });
       await tx.insert(transcriptEvents).values(rows).onConflictDoNothing();
       await tx
         .update(transcriptSessions)
-        .set({ events: last, lastEventAt: now })
+        .set({ events: last, lastEventAt: now, chain })
         .where(eq(transcriptSessions.id, sessionId));
       await tx.execute(sql`select pg_notify(${AGENTS_CHANNEL}, ${sessionId})`);
       return { last };

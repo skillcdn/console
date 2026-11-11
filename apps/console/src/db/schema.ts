@@ -594,6 +594,11 @@ export const transcriptSessions = transcript.table(
     /** The number of its last event; 0 for none. */
     events: integer().notNull().default(0),
     lastEventAt: instant(),
+    /**
+     * The head of the chain its events' digests fold to (ADR-0090), by which a month that was
+     * put away is checked when it is back; null for a session begun before the chain was kept.
+     */
+    chain: text(),
   },
   (table) => [
     index("sessions_person_idx").on(table.personId, table.startedAt),
@@ -637,6 +642,11 @@ export const transcriptEvents = transcript.table(
     sealedAt: instant(),
     sealedById: uuid(),
     sealedReason: text(),
+    /**
+     * The digest of what the event held when it arrived (ADR-0090), a link of its session's
+     * chain: kept when the event is sealed, so that the chain holds over what was taken out.
+     */
+    digest: text(),
   },
   (table) => [primaryKey({ columns: [table.month, table.sessionId, table.n] })],
 );
