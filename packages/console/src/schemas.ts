@@ -430,6 +430,11 @@ const SERVICE_PARAMETER = /^[a-z][A-Za-z0-9]{0,39}$/;
 const SERVICE_TEMPLATE = /^(?:[A-Za-z0-9._@-]|\{(?:workspace|agent|domain)\})+$/;
 /** An organization or an account as a git host spells one. */
 const HOST_ACCOUNT = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
+/** A group as a git host that nests them spells one: `acme`, or `acme/platform`. */
+const HOST_GROUP =
+  /^(?=.{1,200}$)[A-Za-z0-9_][A-Za-z0-9_.-]*(?:\/[A-Za-z0-9_][A-Za-z0-9_.-]*){0,7}$/;
+/** The forms of account a git host has: a person's, and the one it has for a machine. */
+const ACCOUNT_FORM = /^(?:user|service)$/;
 
 /**
  * The parameters the kinds the package knows take, and the roles each may be named for
@@ -447,6 +452,15 @@ const SERVICE_SHAPES: Readonly<
   github: {
     roles: ["identity", "git"],
     parameters: { organization: HOST_ACCOUNT, account: SERVICE_TEMPLATE },
+  },
+  gitlab: {
+    roles: ["git"],
+    parameters: {
+      group: HOST_GROUP,
+      host: DOMAIN,
+      form: ACCOUNT_FORM,
+      account: SERVICE_TEMPLATE,
+    },
   },
   "google-workspace": { roles: ["identity"], parameters: { account: SERVICE_TEMPLATE } },
   slack: { roles: ["messenger"], parameters: { workspace: DOMAIN } },

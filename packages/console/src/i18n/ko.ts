@@ -926,6 +926,13 @@ export const ko: Messages = {
         organization: "조직",
         account: "계정 이름",
         workspace: "워크스페이스 주소",
+        group: "그룹",
+        host: "호스트 (gitlab.com이 아닐 때)",
+        form: "계정 형태",
+      },
+      forms: {
+        user: "사람이 만드는 일반 계정",
+        service: "서비스 계정 (호스트가 기계용으로 두는 계정)",
       },
       accountHint:
         "그곳에서 에이전트 계정을 부르는 방식입니다. {workspace}, {agent}, {domain}으로 씁니다. 비워 두면 서비스의 기본 방식을 따릅니다.",

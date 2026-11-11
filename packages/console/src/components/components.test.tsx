@@ -4798,6 +4798,28 @@ describe("the workspace's settings", () => {
     expect(form).toContain('value="matrix"');
     // Nothing changed yet: nothing to save.
     expect(/<button[^>]*type="submit"[^>]*>/.exec(form)?.[0]).toContain('disabled=""');
+    // A GitLab is a git host and nothing else, named with its group, its host and the form of
+    // account an agent has there: a person's, or the host's own for a machine.
+    expect(form.match(/<option value="gitlab"/g)).toHaveLength(1);
+    const atGitLab = {
+      ...named,
+      services: {
+        git: { kind: "gitlab", group: "acme/platform", host: "git.acme.example", form: "service" },
+      },
+    };
+    const gitlab = renderToStaticMarkup(
+      <WorkspaceServicesForm workspace={atGitLab} onSubmit={() => undefined} />,
+    );
+    expect(gitlab).toContain('<option value="gitlab" selected="">GitLab</option>');
+    expect(gitlab).toContain(">Group</span>");
+    expect(gitlab).toContain('value="acme/platform"');
+    expect(gitlab).toContain(">Host, where it is not gitlab.com</span>");
+    expect(gitlab).toContain(
+      '<option value="service" selected="">A service account, the host&#x27;s own for a machine</option>',
+    );
+    expect(renderToStaticMarkup(<WorkspaceServicesView workspace={atGitLab} />)).toContain(
+      "An agent called mira is acme-mira there.",
+    );
     const korean = renderToStaticMarkup(
       <LanguageContext.Provider value={KOREAN}>
         <WorkspaceServicesView workspace={named} />

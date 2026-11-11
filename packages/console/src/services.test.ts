@@ -118,6 +118,72 @@ describe("what a kind of service says of itself", () => {
     expect(messenger.asks[0]?.title).toBe("Invite mira to the messenger");
   });
 
+  it("names a GitLab by its group and its host, and an account there in the form the entry says", () => {
+    // A person's account, as at any git host: signed in with, and its desk its own.
+    const user = describeService("git", { kind: "gitlab", group: "acme/platform" }, ACME);
+    expect(user.provider.name).toBe("GitLab");
+    expect(user.account).toBe("acme-mira");
+    expect(user.guide[0]).toContain("`acme-mira` at gitlab.com");
+    expect(user.guide[1]).toContain("`acme/platform`");
+    expect(user.asks[0]?.title).toBe("Make the account `acme-mira` at GitLab");
+    const own = user.onboarding.map((item) => item.body).join("\n");
+    expect(own).toContain("console secret git.token --set --expires <day>");
+    expect(own).toContain("`acme-mira/desk`");
+    expect(
+      deskRemoteOf(
+        {
+          handle: "acme",
+          domain: "acme.example",
+          services: { git: { kind: "gitlab", group: "acme" } },
+        },
+        "mira",
+      ),
+    ).toBe("https://gitlab.com/acme-mira/desk.git");
+
+    // The form the host has for a machine: it signs in at no page, so whoever keeps the group
+    // makes it and seeds its token, and its desk is a project of the group.
+    const service = {
+      kind: "gitlab",
+      group: "acme/platform",
+      host: "git.acme.example",
+      form: "service",
+    };
+    const machine = describeService("git", service, ACME);
+    expect(machine.guide[0]).toContain("makes a service account for the agent, `acme-mira`");
+    expect(machine.guide[0]).toContain("signs in at no page and takes no seat");
+    expect(machine.guide[1]).toContain("console agent secret mira git.token --expires <day>");
+    expect(machine.asks).toEqual([
+      {
+        title: "Make a service account for mira at GitLab",
+        body: "In the settings of the group `acme/platform`, under Service accounts, add one named `acme-mira`, give it the role its work needs in the group and no more, and make it a token that reads and writes repositories. Seed the token where only the agent reads it, with the day it ends: console agent secret mira git.token --expires <day>.",
+      },
+    ]);
+    const held = machine.onboarding.map((item) => item.body).join("\n");
+    expect(held).toContain("seeded in your store as git.token");
+    expect(held).not.toContain("Sign in at");
+    expect(held).toContain("`acme/platform/mira-desk`");
+    expect(
+      deskRemoteOf({ handle: "acme", domain: "acme.example", services: { git: service } }, "mira"),
+    ).toBe("https://git.acme.example/acme/platform/mira-desk.git");
+    // Without a group there is nowhere to say its desk is.
+    expect(
+      deskRemoteOf(
+        {
+          handle: "acme",
+          domain: "acme.example",
+          services: { git: { kind: "gitlab", form: "service" } },
+        },
+        "mira",
+      ),
+    ).toBeUndefined();
+    // It signs nobody in to the console, and is a git host and nothing else.
+    expect(serviceProviderOf("gitlab")).toMatchObject({
+      roles: ["git"],
+      signsInThrough: undefined,
+      wakeSource: undefined,
+    });
+  });
+
   it("says the least of a kind the package does not know, and never nothing", () => {
     const provider = serviceProviderOf("forgejo");
     expect(provider).toMatchObject({ kind: "forgejo", name: "forgejo", account: undefined });
@@ -127,6 +193,7 @@ describe("what a kind of service says of itself", () => {
     expect(described.onboarding).toHaveLength(1);
     expect(SERVICE_PROVIDERS.map((one) => one.kind)).toEqual([
       "github",
+      "gitlab",
       "google-workspace",
       "slack",
     ]);
@@ -150,6 +217,16 @@ describe("a service as an administrator names one", () => {
     expect(
       serviceProblem("messenger", { kind: "slack", workspace: "acme.slack.com" }),
     ).toBeUndefined();
+    expect(serviceProblem("git", { kind: "gitlab" })).toBeUndefined();
+    expect(
+      serviceProblem("git", {
+        kind: "gitlab",
+        group: "acme/platform",
+        host: "git.acme.example",
+        form: "service",
+        account: "{agent}",
+      }),
+    ).toBeUndefined();
     // A kind it does not know is kept with what it came with.
     expect(
       serviceProblem("git", { kind: "forgejo", url: "git.acme.example", team: "agents" }),
@@ -158,6 +235,13 @@ describe("a service as an administrator names one", () => {
       ["messenger", { kind: "github" }],
       ["git", { kind: "slack" }],
       ["git", { kind: "google-workspace" }],
+      ["identity", { kind: "gitlab" }],
+      ["messenger", { kind: "gitlab" }],
+      ["git", { kind: "gitlab", form: "bot" }],
+      ["git", { kind: "gitlab", group: "acme//platform" }],
+      ["git", { kind: "gitlab", group: "../acme" }],
+      ["git", { kind: "gitlab", host: "https://git.acme.example" }],
+      ["git", { kind: "gitlab", organization: "acme" }],
       ["git", { kind: "github", organization: "not a name" }],
       ["git", { kind: "github", organisation: "acme" }],
       ["git", { kind: "github", account: "{agent}/../x" }],

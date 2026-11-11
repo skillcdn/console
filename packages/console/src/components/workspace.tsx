@@ -376,11 +376,17 @@ const kindsFor = (role: ServiceRole): readonly ServiceProvider[] =>
   SERVICE_PROVIDERS.filter((provider) => provider.roles.includes(role));
 
 /** The parameters the form asks of a kind the package knows, beside the account's template. */
-const PARAMETERS: Readonly<Record<string, readonly ("organization" | "workspace")[]>> = {
+const PARAMETERS: Readonly<
+  Record<string, readonly ("organization" | "workspace" | "group" | "host" | "form")[]>
+> = {
   github: ["organization"],
+  gitlab: ["group", "host", "form"],
   "google-workspace": [],
   slack: ["workspace"],
 };
+
+/** The forms of account a git host has, for the kinds that have more than a person's. */
+const FORMS = ["user", "service"] as const;
 
 /** The services a workspace's agents work with (ADR-0089), as they stand: a row each. */
 export function WorkspaceServicesView(props: { readonly workspace: RestWorkspace }) {
@@ -585,17 +591,36 @@ export function WorkspaceServicesForm(props: WorkspaceServicesFormProps) {
                 />
               </label>
             )}
-            {(PARAMETERS[kind] ?? []).map((name) => (
-              <label key={name} className="sc-field">
-                <span className="sc-field-label">{words.parameters[name]}</span>
-                <input
-                  className="sc-input"
-                  value={draft[name] ?? ""}
-                  autoComplete="off"
-                  onChange={(event) => set(role, name, event.target.value)}
-                />
-              </label>
-            ))}
+            {(PARAMETERS[kind] ?? []).map((name) =>
+              name === "form" ? (
+                // One of the forms the host has: left as it is, a person's.
+                <label key={name} className="sc-field">
+                  <span className="sc-field-label">{words.parameters.form}</span>
+                  <select
+                    className="sc-input"
+                    value={draft.form ?? ""}
+                    onChange={(event) => set(role, "form", event.target.value)}
+                  >
+                    <option value="">{words.forms.user}</option>
+                    {FORMS.filter((form) => form !== "user").map((form) => (
+                      <option key={form} value={form}>
+                        {words.forms[form]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <label key={name} className="sc-field">
+                  <span className="sc-field-label">{words.parameters[name]}</span>
+                  <input
+                    className="sc-input"
+                    value={draft[name] ?? ""}
+                    autoComplete="off"
+                    onChange={(event) => set(role, name, event.target.value)}
+                  />
+                </label>
+              ),
+            )}
             {serviceProviderOf(kind).account !== undefined && !other && kind.length > 0 && (
               <label className="sc-field">
                 <span className="sc-field-label">{words.parameters.account}</span>

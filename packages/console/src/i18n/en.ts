@@ -996,6 +996,13 @@ export const en = {
         organization: "Organization",
         account: "Account name",
         workspace: "Workspace address",
+        group: "Group",
+        host: "Host, where it is not gitlab.com",
+        form: "Form of account",
+      },
+      forms: {
+        user: "A person's account, which a person makes",
+        service: "A service account, the host's own for a machine",
       },
       accountHint:
         "How an agent's account is called there, from {workspace}, {agent} and {domain}. Left empty, the service's own way.",
