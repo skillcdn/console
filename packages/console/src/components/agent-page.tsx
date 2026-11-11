@@ -116,8 +116,9 @@ export function TranscriptView(props: TranscriptViewProps) {
     <ol className="sc-transcript" aria-label={words.transcript}>
       {props.events.map((event) => {
         const tool = event.data[TOOL];
+        // The tool's name stands by itself where it is one; whatever else an event says is a fact.
         const facts = Object.entries(event.data).filter(
-          ([name, fact]) => fact !== null && name !== TOOL,
+          ([name, fact]) => fact !== null && !(name === TOOL && typeof fact === "string"),
         );
         const text = whole[event.n] ?? event.text;
         return (
@@ -196,6 +197,22 @@ export function TranscriptView(props: TranscriptViewProps) {
       })}
     </ol>
   );
+}
+
+/**
+ * The pictures of a tell with the ones just chosen added: a file that is there already is not
+ * added again, so that nothing is sent twice.
+ */
+export function withChosen(current: readonly File[], chosen: readonly File[]): readonly File[] {
+  const same = (one: File, other: File): boolean =>
+    one.name === other.name && one.size === other.size && one.lastModified === other.lastModified;
+  const added: File[] = [];
+  for (const file of chosen) {
+    if (![...current, ...added].some((one) => same(one, file))) {
+      added.push(file);
+    }
+  }
+  return [...current, ...added];
 }
 
 export interface SignalComposerProps {
@@ -293,9 +310,12 @@ export function SignalComposer(props: SignalComposerProps) {
               type="file"
               accept="image/png,image/jpeg,image/gif,image/webp"
               multiple
-              onChange={(event) =>
-                setPictures((current) => [...current, ...(event.target.files ?? [])])
-              }
+              onChange={(event) => {
+                const chosen = [...(event.target.files ?? [])];
+                setPictures((current) => withChosen(current, chosen));
+                // The box is emptied, so that a file taken out can be chosen again.
+                event.target.value = "";
+              }}
             />
           </label>
           <span className="sc-signal-rule" aria-hidden="true" />

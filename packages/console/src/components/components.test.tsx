@@ -30,6 +30,7 @@ import {
   AgentStateBadge,
   SignalComposer,
   TranscriptView,
+  withChosen,
 } from "./agent-page.js";
 import { AgentAccountForm, AgentAccountList, AgentPictureSave, suggestLogin } from "./agents.js";
 import { Board, BoardFilters, byDue, columnStateOf, edgeScrollOf, filterTasks } from "./board.js";
@@ -1860,6 +1861,15 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     );
     expect(call).toContain('<code class="sc-transcript-tool">Bash</code>');
     expect(call).not.toContain("sc-transcript-fact");
+    // A tool that is no name, which an event may hold, is a fact as any other is, and is shown.
+    const numbered = renderToStaticMarkup(
+      <TranscriptView
+        events={[event(7, { kind: "tool_call", text: "", data: { tool: 3 } })]}
+        fileHref={(id) => id}
+      />,
+    );
+    expect(numbered).not.toContain('class="sc-transcript-tool"');
+    expect(numbered).toContain('<span class="sc-transcript-fact">tool <b>3</b></span>');
     // Whatever the product printed is text in a block that keeps its lines.
     expect(seen).toContain(
       '<pre class="sc-transcript-text">&lt;script&gt;alert(1)&lt;/script&gt;\n  [x](javascript:alert(1))</pre>',
@@ -1876,6 +1886,20 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     expect(
       renderToStaticMarkup(<TranscriptView events={[]} fileHref={() => ""} empty={<p>none</p>} />),
     ).toBe("<p>none</p>");
+  });
+
+  it("adds the pictures chosen to the ones of a tell, each once", () => {
+    const file = (name: string, size: number) =>
+      new File([new Uint8Array(size)], name, { type: "image/png", lastModified: 1 });
+    const first = file("one.png", 3);
+    const second = file("two.png", 4);
+    // Chosen again, what is there stays: one more choice adds to it.
+    expect(withChosen([first], [second]).map((one) => one.name)).toEqual(["one.png", "two.png"]);
+    // A file that is there already, or chosen twice at once, is sent once.
+    expect(withChosen([first, second], [file("one.png", 3)])).toEqual([first, second]);
+    expect(withChosen([], [first, file("one.png", 3)])).toEqual([first]);
+    // The same name with other bytes is another file.
+    expect(withChosen([first], [file("one.png", 9)])).toHaveLength(2);
   });
 
   it("offers what a supervisor says to it: a tell, an interrupt, and a stop or a restart as it stands", () => {
