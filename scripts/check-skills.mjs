@@ -165,6 +165,91 @@ for (const page of ["skills/building-a-console/references/the-default-console.md
   }
 }
 
+// 7. The pack as the image carries it (deploy/Dockerfile, ADR-0031) holds every file a page
+//    of it links to. The image copies the manifest, skills/ and docs/ whole and a file
+//    elsewhere by name, to the path it has in the repository; a link that resolves here and not
+//    there is one a deployed console's index reports as leading nowhere, and a page copied by
+//    name is read for its links as the others are. The build's ignore file keeps Markdown and
+//    the workflows out of the context, so such a file is excepted there too.
+const PACK_IN_IMAGE = "./packs/skillcdn/console/";
+const carried = new Set();
+for (const line of read("deploy/Dockerfile").split(/\r?\n/)) {
+  const words = line.trim().split(/\s+/);
+  const to = words.at(-1) ?? "";
+  if (words[0] !== "COPY" || !to.startsWith(PACK_IN_IMAGE)) {
+    continue;
+  }
+  const under = to.slice(PACK_IN_IMAGE.length);
+  for (const from of words.slice(1, -1).filter((word) => word.startsWith("/repo/"))) {
+    const source = from.slice("/repo/".length);
+    carried.add(
+      under.endsWith("/") || under === "" ? `${under}${path.posix.basename(source)}` : under,
+    );
+  }
+}
+const ignored = read(".dockerignore").split(/\r?\n/);
+const pages = (directory) =>
+  readdirSync(path.join(root, directory), { withFileTypes: true }).flatMap((entry) =>
+    entry.isDirectory()
+      ? pages(`${directory}/${entry.name}`)
+      : entry.name.endsWith(".md")
+        ? [`${directory}/${entry.name}`]
+        : [],
+  );
+// A file is carried by name or under a folder copied whole; a folder, where a file under it is.
+const inPack = (target) =>
+  [...carried].some(
+    (one) => target === one || target.startsWith(`${one}/`) || one.startsWith(`${target}/`),
+  );
+const whole = ["SKILLCDN.md", "skills", "docs"];
+const byName = [...carried].filter((one) => !whole.includes(one));
+if (!whole.every((one) => carried.has(one))) {
+  fail("deploy/Dockerfile", "the copies of the console's own pack into the image were not found");
+}
+const left = new Map();
+for (const one of byName) {
+  if (!existsSync(path.join(root, one))) {
+    fail("deploy/Dockerfile", `copies ${one} into the image's pack, which does not exist`);
+  }
+}
+const read7 = [
+  "SKILLCDN.md",
+  ...pages("skills"),
+  ...pages("docs"),
+  ...byName.filter((one) => one.endsWith(".md") && existsSync(path.join(root, one))),
+];
+for (const file of read7) {
+  for (const match of read(file).matchAll(/\]\(([^)\s]+)\)/g)) {
+    const bare = match[1].replace(/#.*$/, "");
+    if (bare === "" || /^[a-z]+:/.test(bare)) {
+      continue;
+    }
+    const target = path.posix
+      .normalize(
+        bare.startsWith("/") ? bare.slice(1) : path.posix.join(path.posix.dirname(file), bare),
+      )
+      .replace(/\/$/, "");
+    if (target.startsWith("..") || !existsSync(path.join(root, target)) || inPack(target)) {
+      continue;
+    }
+    left.set(target, [...(left.get(target) ?? []), file]);
+  }
+}
+for (const [target, from] of left) {
+  fail(
+    from[0],
+    `links to ${target}${from.length === 1 ? "" : `, as ${from.length - 1} more do`}, which the image's pack does not carry: copy it in deploy/Dockerfile to the same path under ${PACK_IN_IMAGE}`,
+  );
+}
+for (const one of byName) {
+  if ((one.endsWith(".md") || one.startsWith(".github/")) && !ignored.includes(`!${one}`)) {
+    fail(
+      ".dockerignore",
+      `keeps ${one} out of the build's context, which the image's pack carries: except it with !${one}`,
+    );
+  }
+}
+
 if (errors.length > 0) {
   process.stderr.write(`skills: ${errors.length} problem${errors.length === 1 ? "" : "s"}\n`);
   for (const error of errors) {

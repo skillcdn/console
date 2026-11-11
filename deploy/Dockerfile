@@ -44,6 +44,16 @@ COPY --from=build --chown=node:node /repo/apps/console/web/dist ./web
 COPY --from=build --chown=node:node /repo/SKILLCDN.md ./packs/skillcdn/console/
 COPY --from=build --chown=node:node /repo/skills ./packs/skillcdn/console/skills
 COPY --from=build --chown=node:node /repo/docs ./packs/skillcdn/console/docs
+# The files of the repository those link to, and the ones these link to in turn, each at its
+# own path, so that no link of the pack leads nowhere in a deployed console; `pnpm check:skills`
+# holds the list to the links.
+COPY --from=build --chown=node:node /repo/AGENTS.md /repo/README.md /repo/CONTRIBUTING.md /repo/SECURITY.md /repo/LICENSE.md /repo/.env.example ./packs/skillcdn/console/
+COPY --from=build --chown=node:node /repo/.github/dependabot.yml ./packs/skillcdn/console/.github/
+COPY --from=build --chown=node:node /repo/.github/workflows/ci.yml /repo/.github/workflows/release.yml ./packs/skillcdn/console/.github/workflows/
+COPY --from=build --chown=node:node /repo/apps/console/README.md ./packs/skillcdn/console/apps/console/
+COPY --from=build --chown=node:node /repo/deploy/README.md /repo/deploy/Dockerfile /repo/deploy/compose.yaml /repo/deploy/compose.dev.yaml ./packs/skillcdn/console/deploy/
+COPY --from=build --chown=node:node /repo/examples/agent-desk/AGENTS.md ./packs/skillcdn/console/examples/agent-desk/
+COPY --from=build --chown=node:node /repo/packages/console/README.md ./packs/skillcdn/console/packages/console/
 # What the image is distributed under travels with it.
 COPY --from=build --chown=node:node /repo/LICENSE.md ./
 ENV WEB_ROOT=/app/web \

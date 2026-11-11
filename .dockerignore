@@ -31,9 +31,21 @@ tmp
 docs
 **/*.md
 # What the image carries of the repository itself: its license, and the console's own pack
-# served from the image, its manifest, skills and docs (deploy/Dockerfile, ADR-0031). An
-# exception below a rule wins over it.
+# served from the image, its manifest, skills and docs, with the files those link to and the
+# ones these link to in turn (deploy/Dockerfile, ADR-0031). An exception below a rule wins
+# over it.
 !LICENSE.md
 !SKILLCDN.md
 !skills/**
 !docs/**
+!AGENTS.md
+!README.md
+!CONTRIBUTING.md
+!SECURITY.md
+!.github/dependabot.yml
+!.github/workflows/ci.yml
+!.github/workflows/release.yml
+!apps/console/README.md
+!deploy/README.md
+!examples/agent-desk/AGENTS.md
+!packages/console/README.md
