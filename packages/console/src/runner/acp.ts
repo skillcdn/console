@@ -50,12 +50,24 @@ const SIGN_IN =
   /not (?:logged|signed) in|logged out|(?:log|sign) ?in (?:is )?required|authentication (?:is )?required|auth_required|invalid (?:x-)?api[- ]key|token (?:has )?expired|unauthorized/i;
 
 /**
- * What the runner answers where the agent asks leave for a tool call. `allow` lets it, once
- * each: a run nobody attends has nobody to ask, and an agent that is refused everything does no
- * work. `deny` refuses each, for an agent that is to do only what its own mode lets it without
- * asking.
+ * What the runner answers where the agent asks leave for a tool call, in the driver's own two
+ * words. `allow` lets it, once each: a run nobody attends has nobody to ask, and an agent that
+ * is refused everything does no work. `deny` refuses each, for an agent that is to do only what
+ * its own mode lets it without asking. Beside the two, the desk may name one of the agent's own
+ * modes, which the protocol has a session say and set: the agent then runs in it, and what it
+ * still asks is refused, since the mode is what it may do with nobody there.
  */
 const MODES = ["allow", "deny"] as const;
+
+/**
+ * The mode an agent has for a run nobody attends, by what the agent calls itself: the one in
+ * which it works without asking and asks leave only for what its own review holds back. The
+ * driver names it where the desk names none, as the other drivers name their product's, and
+ * refuses what the agent still asks. Seen with the adapter that puts Codex behind the protocol,
+ * whose word for it is `agent`. An agent the driver does not know runs in its own mode and is
+ * allowed what it asks: the desk names its mode for such a run.
+ */
+const UNATTENDED_MODES: Readonly<Record<string, string>> = { Codex: "agent" };
 
 /**
  * The agents the driver was run against, each by what it calls itself, with the versions it said
@@ -242,6 +254,36 @@ function choiceOf(options: unknown, category: string): Choice | undefined {
   return undefined;
 }
 
+/** The agent's own modes, as a session says them: a choice of the category `mode`, or its modes. */
+interface Standing {
+  readonly choice: Choice;
+  /** How one is set: as a choice of the session's configuration, or as the session's mode. */
+  readonly by: "option" | "mode";
+}
+
+function standingOf(opened: unknown): Standing | undefined {
+  if (!isObject(opened)) {
+    return undefined;
+  }
+  const configured = choiceOf(opened.configOptions, "mode");
+  if (configured !== undefined) {
+    return { choice: configured, by: "option" };
+  }
+  if (!isObject(opened.modes)) {
+    return undefined;
+  }
+  const values = listOf(opened.modes.availableModes)
+    .map((one) => (isObject(one) ? textOf(one.id) : undefined))
+    .filter((id): id is string => id !== undefined && id.length > 0 && id.length <= 200)
+    .slice(0, 100);
+  return values.length === 0
+    ? undefined
+    : {
+        choice: { id: "", current: textOf(opened.modes.currentModeId) ?? null, values },
+        by: "mode",
+      };
+}
+
 /** A tool's input as a person reads it: the command of a shell, the path of a file, or the input whole and bounded. */
 function inputOf(input: unknown): string {
   if (input === undefined || input === null) {
@@ -374,7 +416,8 @@ function sessionOf(
   own: string | undefined,
 ): DriverSession {
   const connection = connectionOf(child);
-  const mode = acpMode(options.permissions);
+  /** How what the agent asks leave for is answered: settled once the session says its modes. */
+  let mode = acpMode(options.permissions);
 
   // What the session says, in order, for whoever reads it: until it ends.
   const said: DriverEvent[] = [];
@@ -659,6 +702,59 @@ function sessionOf(
     }
   };
 
+  /**
+   * How the session stands to what the agent may do. The driver's own two words leave the
+   * agent's mode as it is. A mode of the agent's own, the one the desk names or, where it names
+   * none, the one the agent has for a run nobody attends, is set, and what the agent still asks
+   * is refused. A mode named that the agent does not offer is a mistake in the desk's file, and
+   * is never read as leave to do more.
+   */
+  const stand = async (
+    standing: Standing | undefined,
+    agent: string | undefined,
+  ): Promise<void> => {
+    const named = options.permissions;
+    if (named === "allow" || named === "deny") {
+      return;
+    }
+    const wanted = named ?? (agent === undefined ? undefined : UNATTENDED_MODES[agent]);
+    if (wanted === undefined) {
+      return;
+    }
+    const offered = standing?.choice.values ?? [];
+    if (standing === undefined || !offered.includes(wanted)) {
+      if (named !== undefined) {
+        emit({
+          type: "event",
+          kind: "status",
+          text: `runner.json names the mode ${named}, which this agent does not offer${offered.length === 0 ? "" : ` (it offers ${offered.join(", ")})`}: it runs in its own, and what it asks leave for is refused.`,
+        });
+      }
+      return;
+    }
+    mode = "deny";
+    if (standing.choice.current === wanted) {
+      return;
+    }
+    try {
+      if (standing.by === "option") {
+        await connection.request("session/set_config_option", {
+          sessionId: session ?? "",
+          configId: standing.choice.id,
+          value: wanted,
+        });
+      } else {
+        await connection.request("session/set_mode", { sessionId: session ?? "", modeId: wanted });
+      }
+    } catch (error) {
+      emit({
+        type: "event",
+        kind: "status",
+        text: `The agent did not take the mode ${wanted}${error instanceof Error ? ` (${error.message})` : ""}: it runs in its own, and what it asks leave for is refused.`,
+      });
+    }
+  };
+
   /** One turn: what arrived together is read together, each under its own header. */
   const prompt = (messages: readonly DriverMessage[]): void => {
     const mine: NonNullable<typeof turn> = { cut: undefined, refused: false };
@@ -845,6 +941,7 @@ function sessionOf(
     await choose(model, options.model);
     await choose(effort, options.effort);
     const agent = agentOf(initialized);
+    await stand(standingOf(opened), agent.name);
     emit(
       { type: "conversation", id: session },
       {

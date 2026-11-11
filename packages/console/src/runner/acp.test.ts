@@ -487,6 +487,124 @@ describe("the acp driver", () => {
     expect(none.said[0]).toMatchObject({ data: { answer: "cancelled" } });
   });
 
+  it("runs the agent in a mode of its own where the desk names one, or where the driver knows the agent's mode for a run nobody attends, and refuses what it still asks", async () => {
+    const MODE = {
+      id: "mode",
+      name: "Mode",
+      category: "mode",
+      type: "select",
+      currentValue: "read-only",
+      options: [
+        { value: "read-only", name: "Read-only" },
+        { value: "agent", name: "Auto review" },
+        { value: "full", name: "Full access" },
+      ],
+    };
+    /** An agent with modes of its own, which asks leave once in its turn. */
+    const moded = (over: { title?: string; opened?: Json } = {}) => {
+      let prompt: unknown;
+      return agentThat({
+        initialized: {
+          ...INITIALIZED,
+          agentInfo: { name: "an-agent", title: over.title ?? "Lathe", version: "1.0.0" },
+        },
+        opened: over.opened ?? { sessionId: "sess-1", configOptions: [MODE] },
+        prompt: (asked, one) => {
+          prompt = asked.id;
+          one.says({
+            id: "leave-1",
+            method: "session/request_permission",
+            params: {
+              sessionId: "sess-1",
+              toolCall: { toolCallId: "call-1", title: "Remove the desk" },
+              options: [
+                { optionId: "yes", name: "Allow", kind: "allow_once" },
+                { optionId: "no", name: "Decline", kind: "reject_once" },
+              ],
+            },
+          });
+        },
+        other: (sent, one) => {
+          if (sent.method === "session/set_mode") {
+            one.says({ id: sent.id, result: {} });
+            return true;
+          }
+          if (sent.id === "leave-1") {
+            one.says({ id: prompt, result: { stopReason: "end_turn" } });
+            return true;
+          }
+          return false;
+        },
+      });
+    };
+    const answerOf = async (agent: ReturnType<typeof fakeAgent>, permissions?: string) => {
+      const session = driverFor(agent).start({ ...OPTIONS, permissions });
+      await session.send(message("Tidy up."));
+      const seen = await until(session, [], isType("turn_completed"));
+      await session.stop();
+      return {
+        seen,
+        answered: agent.sent.find((one) => one.id === "leave-1")?.result,
+        set: agent.of("session/set_config_option").map((one) => one.params),
+      };
+    };
+
+    // The desk names one of the agent's modes: the agent is put in it, and what it still asks
+    // is refused, since the mode is what it may do with nobody there.
+    const named = await answerOf(moded(), "agent");
+    expect(named.set).toEqual([{ sessionId: "sess-1", configId: "mode", value: "agent" }]);
+    expect(named.answered).toEqual({ outcome: { outcome: "selected", optionId: "no" } });
+
+    // An agent the driver does not know, and no mode named: its own mode, and allowed once.
+    const unknown = await answerOf(moded());
+    expect(unknown.set).toEqual([]);
+    expect(unknown.answered).toEqual({ outcome: { outcome: "selected", optionId: "yes" } });
+
+    // The driver's own two words leave the agent's mode as it is.
+    const refused = await answerOf(moded(), "deny");
+    expect(refused.set).toEqual([]);
+    expect(refused.answered).toEqual({ outcome: { outcome: "selected", optionId: "no" } });
+
+    // An agent the driver was run against is put in the mode it has for a run nobody attends.
+    const known = await answerOf(moded({ title: "Codex" }));
+    expect(known.set).toEqual([{ sessionId: "sess-1", configId: "mode", value: "agent" }]);
+    expect(known.answered).toEqual({ outcome: { outcome: "selected", optionId: "no" } });
+    // Where the desk says to allow, that is what the desk says.
+    const allowed = await answerOf(moded({ title: "Codex" }), "allow");
+    expect(allowed.set).toEqual([]);
+    expect(allowed.answered).toEqual({ outcome: { outcome: "selected", optionId: "yes" } });
+
+    // A mode the agent does not offer is a mistake in the desk's file: said with what it
+    // offers, and never read as leave to do more.
+    const mistaken = await answerOf(moded(), "yolo");
+    expect(mistaken.set).toEqual([]);
+    expect(mistaken.answered).toEqual({ outcome: { outcome: "selected", optionId: "no" } });
+    expect(mistaken.seen[0]).toEqual({
+      type: "event",
+      kind: "status",
+      text: "runner.json names the mode yolo, which this agent does not offer (it offers read-only, agent, full): it runs in its own, and what it asks leave for is refused.",
+    });
+
+    // An agent that says its modes as the session's own is set by the method for them.
+    const older = moded({
+      opened: {
+        sessionId: "sess-1",
+        modes: {
+          currentModeId: "ask",
+          availableModes: [
+            { id: "ask", name: "Ask" },
+            { id: "auto", name: "Auto" },
+          ],
+        },
+      },
+    });
+    const byMode = await answerOf(older, "auto");
+    expect(older.of("session/set_mode").map((one) => one.params)).toEqual([
+      { sessionId: "sess-1", modeId: "auto" },
+    ]);
+    expect(byMode.answered).toEqual({ outcome: { outcome: "selected", optionId: "no" } });
+  });
+
   it("offers the agent no file and no terminal, and says so where it asks for one", async () => {
     const agent = agentThat({
       prompt: (asked, one) => {

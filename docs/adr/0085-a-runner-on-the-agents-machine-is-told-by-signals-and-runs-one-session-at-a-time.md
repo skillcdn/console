@@ -1,6 +1,6 @@
 # ADR-0085: A runner on the agent's machine is told by signals and runs one session at a time
 
-- Status: Accepted
+- Status: Accepted; the sentence of point 12 on a product that asks leave of whoever drives it is amended by [ADR-0091](0091-an-agent-over-the-protocol-runs-in-a-mode-of-its-own-which-the-desk-or-the-driver-names.md): such an agent runs in a mode of its own, which the desk or the driver names
 - Date: 2026-11-12
 - Follows [ADR-0084](0084-an-agent-account-is-a-member-of-its-own-with-a-manager-above-it.md). Closes open question 3 of [architecture.md](../architecture.md), unattended runs: the console still starts no agent and calls no model API ([ADR-0004](0004-people-and-agents-reach-the-board-only-through-the-api-with-a-credential-of-their-own.md), [ADR-0006](0006-agents-work-the-board-through-the-rest-api-and-the-command-line-not-an-mcp-server.md)); a program on the agent's own machine does. Keeps [ADR-0020](0020-the-console-does-not-claim-an-agent-is-at-work-a-run-says-when-it-was-last-heard-from-and-a-new-run-takes-over.md) and [ADR-0071](0071-the-console-sends-no-notification-of-its-own-a-plugin-carries-them-out-of-the-board-and-back.md).
 
