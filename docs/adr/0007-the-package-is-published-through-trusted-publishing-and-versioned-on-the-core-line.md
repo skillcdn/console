@@ -1,6 +1,6 @@
 # ADR-0007: The package is published through trusted publishing, and its version follows the `@skillcdn/core` line it is built on
 
-- Status: Accepted; points 2 and 3 are amended by [ADR-0034](0034-the-package-is-versioned-on-skillcdns-line-one-line-at-a-time-with-a-patch-of-its-own.md), the line of SkillCDN's one version instead of core's, adopted one line at a time (ADR-0032 and ADR-0033 came between, on one day)
+- Status: Accepted; points 2 and 3 are amended by [ADR-0034](0034-the-package-is-versioned-on-skillcdns-line-one-line-at-a-time-with-a-patch-of-its-own.md), the line of SkillCDN's one version instead of core's, adopted one line at a time (ADR-0032 and ADR-0033 came between, on one day); that the image has no version of its own is amended by [ADR-0092](0092-the-image-of-a-release-is-published-and-the-smallest-install-is-made-from-a-bundle.md): the image of a release is published at the package's version
 - Date: 2026-10-10
 - Amends: [ADR-0002](0002-one-image-one-database-and-the-main-repositorys-toolchain.md) (the one workflow that publishes anything)
 

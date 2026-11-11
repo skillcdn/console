@@ -190,3 +190,25 @@ jobs:
           test "$(docker inspect --format '{{.State.ExitCode}}' api)" -eq 0
           docker logs api 2>&1 | grep -q 'shutdown complete'
           docker logs api
+      # The two scripts of an installation (ADR-0092), on the image just built: a bundle made of
+      # what this host has, and an installation made from it with nothing fetched.
+      - name: A bundle is made, and the smallest install comes up from it offline
+        run: |
+          bundle="$RUNNER_TEMP/bundle"
+          deploy/bundle.sh --image skillcdn-console:ci --no-pull --no-command "$bundle"
+          (cd "$bundle" && sha256sum -c --quiet SHA256SUMS)
+          grep -qx 'image=skillcdn-console:ci' "$bundle/VERSION"
+          "$bundle/install.sh" --offline
+          curl -fsS http://127.0.0.1:11199/readyz
+          # Nobody signs in until a person registers a provider, and the console says so.
+          curl -fsS 'http://127.0.0.1:11199/api/v1/me' | grep -qF '"signIn":[]'
+          # The settings are its owner's alone, hold the password it made, and are kept by a second run.
+          test "$(stat -c %a "$bundle/.env")" = 600
+          grep -q '^POSTGRES_PASSWORD=[0-9a-f]\{64\}$' "$bundle/.env"
+          before=$(sha256sum "$bundle/.env")
+          "$bundle/install.sh" --offline
+          test "$before" = "$(sha256sum "$bundle/.env")"
+          # A file that is not what the bundle was made with stops the installation.
+          echo >> "$bundle/compose.yaml"
+          if "$bundle/install.sh" --offline --no-start; then exit 1; fi
+          (cd "$bundle" && docker compose down --volumes)

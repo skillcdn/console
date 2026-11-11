@@ -51,7 +51,7 @@ COPY --from=build --chown=node:node /repo/AGENTS.md /repo/README.md /repo/CONTRI
 COPY --from=build --chown=node:node /repo/.github/dependabot.yml ./packs/skillcdn/console/.github/
 COPY --from=build --chown=node:node /repo/.github/workflows/ci.yml /repo/.github/workflows/release.yml ./packs/skillcdn/console/.github/workflows/
 COPY --from=build --chown=node:node /repo/apps/console/README.md ./packs/skillcdn/console/apps/console/
-COPY --from=build --chown=node:node /repo/deploy/README.md /repo/deploy/Dockerfile /repo/deploy/compose.yaml /repo/deploy/compose.dev.yaml ./packs/skillcdn/console/deploy/
+COPY --from=build --chown=node:node /repo/deploy/README.md /repo/deploy/Dockerfile /repo/deploy/compose.yaml /repo/deploy/compose.dev.yaml /repo/deploy/install.sh /repo/deploy/bundle.sh ./packs/skillcdn/console/deploy/
 COPY --from=build --chown=node:node /repo/examples/agent-desk/AGENTS.md ./packs/skillcdn/console/examples/agent-desk/
 COPY --from=build --chown=node:node /repo/packages/console/README.md ./packs/skillcdn/console/packages/console/
 # What the image is distributed under travels with it.
