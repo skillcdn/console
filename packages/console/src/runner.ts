@@ -2,6 +2,7 @@
 // console of one's own that registers a driver for another product, or a test that runs one
 // against a console. The command's `console runner` is made of the same.
 
+export { acpMode, createAcpDriver } from "./runner/acp.js";
 export { createClaudeDriver } from "./runner/claude.js";
 export { createCodexDriver } from "./runner/codex.js";
 export {

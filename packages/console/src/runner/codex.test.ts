@@ -159,7 +159,7 @@ const REVIEWED = [
 describe("the codex driver", () => {
   it("is the package's driver for Codex, beside the one for Claude Code", () => {
     const modules = ownRunnerModules({ user: "mira" });
-    expect(modules.drivers.names()).toEqual(["claude", "codex"]);
+    expect(modules.drivers.names()).toEqual(["acp", "claude", "codex"]);
     const { driver } = started();
     expect(driver.name).toBe("codex");
     // The builds the driver was run against, and no other.

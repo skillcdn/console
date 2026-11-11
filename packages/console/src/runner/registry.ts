@@ -37,8 +37,10 @@ export interface DriverHost {
   readonly spawn: Spawn;
   /** The desk: where the product is asked what it is, and where it works. */
   readonly cwd: string;
-  /** The product's binary, where the machine names another than the driver's own. */
+  /** The product's binary, where the desk names another than the driver's own. */
   readonly command?: string | undefined;
+  /** The words the product's command is started with, for a driver that has none of its own. */
+  readonly args?: readonly string[] | undefined;
   /** The ids a driver writes its messages under, where a test wants to know them; random otherwise. */
   readonly uuid?: (() => string) | undefined;
 }

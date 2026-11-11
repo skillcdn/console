@@ -3520,7 +3520,12 @@ const runner: Command = async (args, io) => {
   const statePath = workPath("runner-state.json");
   const running = createRunner({
     client: session.client,
-    driver: driverOf({ spawn: host.spawn, cwd: host.cwd }),
+    driver: driverOf({
+      spawn: host.spawn,
+      cwd: host.cwd,
+      command: read.config.product?.command,
+      args: read.config.product?.args,
+    }),
     config: read.config,
     cwd: host.cwd,
     machine: {

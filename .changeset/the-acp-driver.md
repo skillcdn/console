@@ -1,0 +1,5 @@
+---
+"@skillcdn/console": patch
+---
+
+The runner drives any product that speaks the Agent Client Protocol (ADR-0085): the `acp` driver, with the command that speaks it named in the desk, `"driver": "acp", "product": { "command": "<program>", "args": [...] }` in `runner.json`. The runner is the protocol's client and offers no file and no terminal of its own, so that the agent works with its own tools; a conversation is resumed or loaded where the agent can; a message that arrives in a turn is the next turn's, and the turn is cancelled for one that is to be read now; what the agent asks leave for is answered at once, allowed once, or refused where `permissions` says `deny`; the model and the level of thought are the session's own choices, set in a running session. Written from the protocol's documentation, version 1, and not run against a product yet. `product.command` also names another binary for the `claude` and `codex` drivers. For whoever builds on the runner: `createAcpDriver` and `acpMode` in `@skillcdn/console/runner`, and `args` on what a driver is made with.

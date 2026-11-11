@@ -1,3 +1,4 @@
+import { createAcpDriver } from "./acp.js";
 import { createClaudeDriver } from "./claude.js";
 import { createCodexDriver } from "./codex.js";
 import { launchd } from "./launchd.js";
@@ -6,7 +7,8 @@ import { slack } from "./slack.js";
 import { systemdUser } from "./systemd-user.js";
 
 /**
- * The modules the package ships (ADR-0085): the drivers `claude` and `codex`; `console`, the console's own
+ * The modules the package ships (ADR-0085): the drivers `claude` and `codex`, and `acp` for
+ * whichever product speaks the Agent Client Protocol; `console`, the console's own
  * stream of signals, which every runner listens to, and `slack`, which raises a wake for what
  * is said to the agent at that messenger; `launchd` and `systemd-user`, the services that keep a runner
  * running on macOS and on Linux; and `os-user`, the boundary that keeps one agent apart from another by the
@@ -14,6 +16,7 @@ import { systemdUser } from "./systemd-user.js";
  */
 export function ownRunnerModules(machine: { readonly user: string }): RunnerModules {
   const modules = createRunnerModules();
+  modules.drivers.register("acp", createAcpDriver);
   modules.drivers.register("claude", createClaudeDriver);
   modules.drivers.register("codex", createCodexDriver);
   modules.wakeSources.register("console", { name: "console" });

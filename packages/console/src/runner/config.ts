@@ -42,6 +42,17 @@ export const runnerConfigSchema = z.object({
   ),
   autosave: z._default(z.boolean(), true),
   /**
+   * The product's command, where it is another than the driver's own, and the words it is
+   * started with, for a driver that has none of its own: `acp`, whose product is whichever
+   * program speaks the protocol.
+   */
+  product: z.optional(
+    z.object({
+      command: z.string().check(z.minLength(1), z.maxLength(400)),
+      args: z._default(z.array(z.string().check(z.maxLength(400))).check(z.maxLength(40)), []),
+    }),
+  ),
+  /**
    * The permission mode the product is started in, in the product's own word: what runs without
    * asking. Left out, the driver's own for a run nobody attends.
    */
