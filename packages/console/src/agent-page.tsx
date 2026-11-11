@@ -15,6 +15,7 @@ import {
 } from "./api.js";
 import {
   AgentChoice,
+  AgentControls,
   AgentElsewhereList,
   AgentRunnerFacts,
   AgentSecretList,
@@ -50,7 +51,7 @@ const REFRESH_MS = 10_000;
 /** How many of a session's last events the page reads first, and how many more a step back reads. */
 const TAIL = 200;
 
-const TABS: readonly AgentTab[] = ["live", "sessions", "work", "settings"];
+const TABS: readonly AgentTab[] = ["live", "work", "sessions", "settings"];
 
 /** Something read from the console and read again on a timer: what it answered last, and the way to read it now. */
 export function useRead<T>(
@@ -94,11 +95,27 @@ function SessionTranscript(props: {
   readonly client: ConsoleClient;
   readonly handle: string;
   readonly session: RestAgentSession;
+  /** The account, whose picture stands beside what it said. */
+  readonly agent: RestAgent["person"];
+  /** Whether the page follows what arrives: the foot of the session kept in sight while it is. */
+  readonly follow?: boolean | undefined;
   /** Told when the console says the session is over. */
   readonly onEnded?: (() => void) | undefined;
 }) {
   const words = useWords().agents.page.live;
   const { client, handle, session, onEnded } = props;
+  // The files that came with the signals the session was sent: what is no picture is offered to
+  // save from the signal's own address, which the account's record names.
+  const readSignals = useCallback(
+    (signal: AbortSignal) => client.signals(handle, { limit: 100 }, signal),
+    [client, handle],
+  );
+  const sent = useRead(readSignals, session.ended === null ? REFRESH_MS : undefined);
+  const filesOf = (number: number) =>
+    sent.value?.items.find((one) => one.number === number)?.attachments;
+  const foot = useRef<HTMLDivElement>(null);
+  /** Whether the foot of the page was in sight when the last events arrived. */
+  const near = useRef(true);
   const [events, setEvents] = useState<readonly RestTranscriptEvent[]>([]);
   const [from, setFrom] = useState(0);
   const [problem, setProblem] = useState(false);
@@ -178,6 +195,26 @@ function SessionTranscript(props: {
       source?.close();
     };
   }, [client, handle, session.id, session.events, open]);
+  // What arrives is kept in sight while whoever reads is at the foot of the session, and left
+  // where it is once they scrolled up to read.
+  const count = events.length;
+  useEffect(() => {
+    if (props.follow !== true || typeof window === "undefined") {
+      return;
+    }
+    const watch = () => {
+      const page = document.documentElement;
+      near.current = window.innerHeight + window.scrollY >= page.scrollHeight - 240;
+    };
+    window.addEventListener("scroll", watch, { passive: true });
+    return () => window.removeEventListener("scroll", watch);
+  }, [props.follow]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `count` is the trigger
+  useEffect(() => {
+    if (props.follow === true && near.current) {
+      foot.current?.scrollIntoView({ block: "end" });
+    }
+  }, [count, props.follow]);
   const earlier = () => {
     const after = Math.max(0, from - TAIL);
     void client
@@ -202,10 +239,14 @@ function SessionTranscript(props: {
       )}
       <TranscriptView
         events={events}
+        agent={props.agent}
         fileHref={(fileId) => client.transcriptFileUrl(handle, session.id, fileId)}
+        signalFiles={filesOf}
+        signalFileHref={(number, fileId) => client.signalFileUrl(handle, number, fileId)}
         onReadWhole={async (n) => (await client.transcriptText(handle, session.id, n)).text}
         empty={session.away ? null : <p className="sc-field-hint">{words.empty}</p>}
       />
+      <div ref={foot} />
     </section>
   );
 }
@@ -314,10 +355,22 @@ function AgentLive(props: {
   );
   const sessions = useRead(read, REFRESH_MS);
   const session = sessions.value?.items[0];
+  const heard = agent.state !== null && agent.state !== undefined;
+  const send = (kind: "stop" | "restart" | "reset", text: string) =>
+    void act(async () => {
+      const sent = await client.sendSignal(handle, {
+        kind,
+        ...(text.length === 0 ? {} : { text }),
+      });
+      setNote(words.tell.sent(sent.number, sent.kind));
+      onChanged();
+      sessions.again();
+    });
   const composer = (
     <SignalComposer
       state={agent.state?.state}
       steer={agent.runner?.offers?.steer}
+      images={agent.runner?.offers?.images}
       busy={busy}
       note={
         error === undefined ? (
@@ -373,13 +426,15 @@ function AgentLive(props: {
           )
         ) : (
           <>
-            <p className="sc-lead sc-agent-live-lead">
-              {session.ended === null ? words.live.open : words.live.last}
-            </p>
+            {session.ended !== null && (
+              <p className="sc-field-hint sc-agent-live-lead">{words.live.last}</p>
+            )}
             <SessionTranscript
               client={client}
               handle={handle}
               session={session}
+              agent={agent.person}
+              follow
               onEnded={() => {
                 sessions.again();
                 onChanged();
@@ -387,7 +442,8 @@ function AgentLive(props: {
             />
           </>
         )}
-        {composer}
+        {/* An account no runner has spoken for is told nothing yet: its first task waits for it. */}
+        {heard && composer}
       </div>
       <aside className="sc-agent-live-side">
         {session !== undefined && (
@@ -397,6 +453,12 @@ function AgentLive(props: {
               sessions={[session]}
               href={(one) => agentHref(handle, "sessions", one.id)}
             />
+          </section>
+        )}
+        {heard && (
+          <section className="sc-panel" aria-label={words.controls.title}>
+            <h2 className="sc-section-title">{words.controls.title}</h2>
+            <AgentControls state={agent.state?.state} busy={busy} onSend={send} />
           </section>
         )}
         <section className="sc-panel" aria-label={words.choice.title}>
@@ -423,6 +485,8 @@ function AgentSessions(props: {
   readonly client: ConsoleClient;
   readonly handle: string;
   readonly session: string | undefined;
+  /** The account, whose picture stands beside what it said. */
+  readonly agent: RestAgent["person"];
 }) {
   const words = useWords().agents.page;
   const { client, handle, session } = props;
@@ -461,6 +525,7 @@ function AgentSessions(props: {
           client={client}
           handle={handle}
           session={found.value.one}
+          agent={props.agent}
           onEnded={found.again}
         />
       </>
@@ -564,6 +629,14 @@ function AgentSettings(props: {
         <section className="sc-panel" aria-label={page.settings.persona.title}>
           <h2 className="sc-section-title">{page.settings.persona.title}</h2>
           <AgentPictureSave person={agent.person} busy={busy} />
+          <dl className="sc-person-facts sc-agent-runner-facts">
+            <div className="sc-person-fact">
+              <dt>{words.agents.accounts.login}</dt>
+              <dd>
+                {agent.person.login} · {props.provider}
+              </dd>
+            </div>
+          </dl>
           <form className="sc-agent-persona" onSubmit={savePersona}>
             <label className="sc-field">
               <span className="sc-field-label">{page.settings.persona.name}</span>
@@ -725,10 +798,15 @@ export interface AgentPageProps {
 /**
  * What a view of an agent's page shows to whoever opens it: its work to anyone who sees the
  * account, and the rest, what it is doing, its sessions and what is kept of it, its picture and
- * the names of its secrets among them, to its supervisors alone.
+ * the names of its secrets among them, to its supervisors alone. Whoever only sees the account
+ * and opens its page, from the people's list say, is shown its work, which is theirs to read;
+ * a view named in an address that is not theirs to open says so.
  */
 export function agentViewOf(tab: AgentTab, supervised: boolean): AgentTab | "closed" {
-  return tab === "work" || supervised ? tab : "closed";
+  if (supervised || tab === "work") {
+    return tab;
+  }
+  return tab === "live" ? "work" : "closed";
 }
 
 export function AgentPage(props: AgentPageProps) {
@@ -763,17 +841,17 @@ export function AgentPage(props: AgentPageProps) {
     <>
       <header className="sc-panel sc-agent-header">
         <div className="sc-agent-head">
-          <Avatar person={person} size="lg" />
+          <Avatar person={person} size="xl" />
           <div className="sc-agent-head-who">
             <div className="sc-agent-head-name">
               <h1 className="sc-page-title">{personName(person)}</h1>
-              <span className="sc-agent-head-handle">@{person.handle}</span>
+              <span className="sc-muted">@{person.handle}</span>
             </div>
             {(person.title ?? "") !== "" && <p className="sc-lead">{person.title}</p>}
             <AgentStateBadge state={agent.state} full />
           </div>
-          <dl className="sc-agent-head-facts">
-            <div className="sc-agent-head-fact">
+          <dl className="sc-facts-row sc-agent-head-facts">
+            <div>
               <dt>{all.people.manager}</dt>
               <dd>
                 {agent.manager === null ? (
@@ -783,13 +861,12 @@ export function AgentPage(props: AgentPageProps) {
                 )}
               </dd>
             </div>
-            <div className="sc-agent-head-fact">
-              <dt>{all.agents.accounts.login}</dt>
-              <dd>{person.login}</dd>
-            </div>
           </dl>
         </div>
-        <nav className="sc-subtabs sc-agent-tabs" aria-label={words.tabs.aria}>
+      </header>
+      {/* Whoever only sees the account reads its plate, and is offered no view they cannot open. */}
+      {agent.supervised && (
+        <nav className="sc-subtabs sc-agent-views" aria-label={words.tabs.aria}>
           {TABS.map((one) => (
             <a
               key={one}
@@ -801,7 +878,7 @@ export function AgentPage(props: AgentPageProps) {
             </a>
           ))}
         </nav>
-      </header>
+      )}
       {view === "work" ? (
         props.work(agent)
       ) : view === "closed" ? (
@@ -816,7 +893,12 @@ export function AgentPage(props: AgentPageProps) {
           onChanged={found.again}
         />
       ) : view === "sessions" ? (
-        <AgentSessions client={client} handle={handle} session={props.session} />
+        <AgentSessions
+          client={client}
+          handle={handle}
+          session={props.session}
+          agent={agent.person}
+        />
       ) : (
         <AgentSettings
           client={client}

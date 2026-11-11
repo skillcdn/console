@@ -23,13 +23,16 @@ import { KOREAN, LanguageContext } from "../i18n/index.js";
 import { setupGuideOf } from "../setup-guide.js";
 import {
   AgentChoice,
+  AgentControls,
   AgentElsewhereList,
   AgentRunnerFacts,
   AgentSecretList,
   AgentSessionList,
   AgentStateBadge,
+  pastedName,
   SignalComposer,
   TranscriptView,
+  talkOf,
   tellsWith,
   withChosen,
   withoutChosen,
@@ -1669,10 +1672,13 @@ describe("the agent accounts (ADR-0084)", () => {
     // The picture and the names of the secrets are on the settings, which a supervisor reads.
     for (const tab of ["live", "sessions", "settings"] as const) {
       expect(agentViewOf(tab, true)).toBe(tab);
-      expect(agentViewOf(tab, false)).toBe("closed");
     }
+    expect(agentViewOf("sessions", false)).toBe("closed");
+    expect(agentViewOf("settings", false)).toBe("closed");
     expect(agentViewOf("work", false)).toBe("work");
     expect(agentViewOf("work", true)).toBe("work");
+    // The page itself, opened by whoever only sees the account, is its work: what they may read.
+    expect(agentViewOf("live", false)).toBe("work");
   });
 
   it("proposes the login an account signs in with from its handle and what the provider admits", () => {
@@ -1969,77 +1975,207 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     expect(seen).toContain(">Stopped<");
   });
 
-  it("shows what an agent did as text, a block each, and never as markup", () => {
+  it("reads the events of a session as the things a person reads: a tool's call with its answer, one thing", () => {
+    const call = (n: number, id: string | undefined, tool = "execute") =>
+      event(n, { kind: "tool_call", text: `run ${n}`, data: { tool, ...(id ? { id } : {}) } });
+    const result = (n: number, id: string | undefined, error = false) =>
+      event(n, { kind: "tool_result", text: `out ${n}`, data: { error, ...(id ? { id } : {}) } });
+    const asked = (n: number, id: string) =>
+      event(n, {
+        kind: "permission",
+        text: "Allowed.",
+        data: { tool: "edit", id, answer: "allowed" },
+      });
+    const talk = talkOf([
+      event(1, { kind: "person", text: "Go." }),
+      event(2, { kind: "thinking", text: "Hm." }),
+      call(3, "a"),
+      result(4, "a"),
+      // What was asked comes before the call it is about, and is the same thing.
+      asked(5, "b"),
+      call(6, "b", "edit"),
+      result(7, "b", true),
+      // Two calls under way at once, answered out of order.
+      call(8, "c"),
+      call(9, "d"),
+      result(10, "d"),
+      result(11, "c"),
+      // An agent that numbers its calls anew at every turn: the same id is another call.
+      call(12, "a"),
+      event(13, { text: "Done." }),
+      // With no id, an answer is the call's before it that waits; one with none before is alone.
+      call(14, undefined),
+      result(15, undefined),
+      event(16, { kind: "status", text: "The product started." }),
+      result(17, undefined),
+      event(18, { kind: "wake", text: "ready", data: { key: "#412" } }),
+      event(19, { kind: "error", text: "It fell over." }),
+    ]);
+    const shape = talk.map((one) =>
+      one.type === "tool"
+        ? `tool ${one.permission?.n ?? "-"}/${one.call?.n ?? "-"}/${one.result?.n ?? "-"}`
+        : `${one.type} ${one.event.n}`,
+    );
+    expect(shape).toEqual([
+      "told 1",
+      "thought 2",
+      "tool -/3/4",
+      "tool 5/6/7",
+      "tool -/8/11",
+      "tool -/9/10",
+      "tool -/12/-",
+      "said 13",
+      "tool -/14/15",
+      "note 16",
+      "tool -/-/17",
+      "wake 18",
+      "note 19",
+    ]);
+    // A sealed event is a note where it stood, whatever it was.
+    expect(
+      talkOf([event(1, { kind: "tool_call", sealed: { by: alice, at: WHEN, reason: "x" } })]),
+    ).toMatchObject([{ type: "note" }]);
+    expect(talkOf([])).toEqual([]);
+  });
+
+  it("shows a session as a conversation, what an agent's product printed as text and never as markup", () => {
+    const picture = {
+      id: "0199c4d8-0000-7000-8000-0000000000f1",
+      name: "screen.png",
+      size: 2048,
+      contentType: "image/png",
+    };
+    const sheet = {
+      id: "0199c4d8-0000-7000-8000-0000000000f2",
+      name: "export.csv",
+      size: 55,
+      contentType: "text/csv",
+    };
     const seen = renderToStaticMarkup(
       <TranscriptView
+        agent={mira}
         events={[
           event(1, {
             kind: "person",
             text: "Hold the release.",
-            data: { signal: 3, by: "alice", key: null },
+            data: {
+              signal: 3,
+              kind: "interrupt",
+              by: "alice",
+              agent: "Claude Code",
+              key: null,
+              files: "export.csv",
+              unseen: "screen.png",
+            },
+            files: [picture],
           }),
           event(2, { text: "<script>alert(1)</script>\n  [x](javascript:alert(1))" }),
-          event(3, { kind: "tool_result", text: "The beginning", whole: 60_000 }),
+          event(3, {
+            kind: "tool_call",
+            text: "ls -la\nsecond line",
+            data: { tool: "Bash", id: "t1" },
+          }),
           event(4, {
             kind: "tool_result",
-            text: "",
-            files: [
-              {
-                id: "0199c4d8-0000-7000-8000-0000000000f1",
-                name: "screen.png",
-                size: 2048,
-                contentType: "image/png",
-              },
-            ],
+            text: "The beginning",
+            whole: 60_000,
+            data: { id: "t1", error: true },
           }),
-          event(5, { text: "", sealed: { by: alice, at: WHEN, reason: "A token in it." } }),
+          event(5, { kind: "tool_result", text: "", files: [picture] }),
+          event(6, { text: "", sealed: { by: alice, at: WHEN, reason: "A token in it." } }),
+          event(7, { kind: "thinking", text: "First thought.\nSecond line." }),
+          event(8, { kind: "status", text: "The product started.", data: { model: "opus" } }),
         ]}
         fileHref={(id) => `/api/v1/agents/mira/sessions/s/files/${id}`}
+        signalFiles={(number) => (number === 3 ? [picture, sheet] : undefined)}
+        signalFileHref={(number, id) => `/api/v1/agents/mira/signals/${number}/files/${id}`}
         onReadWhole={async () => "whole"}
       />,
     );
-    expect(seen).toContain('<span class="sc-transcript-kind">Told</span>');
-    // What the runner said of an event reads as its facts, a name and a value each.
-    expect(seen).toContain('<span class="sc-transcript-fact">signal <b>3</b></span>');
-    expect(seen).toContain('<span class="sc-transcript-fact">by <b>alice</b></span>');
-    expect(seen).not.toContain("key:");
-    // The tool a call names is said apart, as code, and not again among the facts.
-    const call = renderToStaticMarkup(
-      <TranscriptView
-        events={[event(6, { kind: "tool_call", text: "ls", data: { tool: "Bash" } })]}
-        fileHref={(id) => id}
-      />,
-    );
-    expect(call).toContain('<code class="sc-transcript-tool">Bash</code>');
-    expect(call).not.toContain("sc-transcript-fact");
-    // A tool that is no name, which an event may hold, is a fact as any other is, and is shown.
-    const numbered = renderToStaticMarkup(
-      <TranscriptView
-        events={[event(7, { kind: "tool_call", text: "", data: { tool: 3 } })]}
-        fileHref={(id) => id}
-      />,
-    );
-    expect(numbered).not.toContain('class="sc-transcript-tool"');
-    expect(numbered).toContain('<span class="sc-transcript-fact">tool <b>3</b></span>');
-    // Whatever the product printed is text in a block that keeps its lines.
+    // What the agent was told: who said it and through what, what kind of signal it was where
+    // it was more than a tell, its words, its picture, and the file that is no picture, to save
+    // from the signal's own address.
+    expect(seen).toContain('<li class="sc-talk-item sc-talk-told" data-n="1">');
     expect(seen).toContain(
-      '<pre class="sc-transcript-text">&lt;script&gt;alert(1)&lt;/script&gt;\n  [x](javascript:alert(1))</pre>',
+      '<span class="sc-talk-who">alice</span><span>through Claude Code</span>',
+    );
+    expect(seen).toMatch(/<span class="sc-badge sc-badge-neutral">Interrupt<\/span>/);
+    expect(seen).toContain('<pre class="sc-talk-text">Hold the release.</pre>');
+    expect(seen).toContain(
+      '<a href="/api/v1/agents/mira/signals/3/files/0199c4d8-0000-7000-8000-0000000000f2" download="export.csv">export.csv</a>',
+    );
+    // A picture is shown, never offered among the files to save.
+    expect(seen).not.toContain('download="screen.png"');
+    // What its product was not shown as a picture is said to whoever sent it.
+    expect(seen).toContain(
+      "Not shown to the agent as a picture, since its product takes none: handed over as a file in its desk (screen.png).",
+    );
+    // What the agent said, beside its picture, as text that keeps its lines.
+    expect(seen).toContain('<li class="sc-talk-item sc-talk-said" data-n="2">');
+    expect(seen).toContain(
+      '<pre class="sc-talk-text">&lt;script&gt;alert(1)&lt;/script&gt;\n  [x](javascript:alert(1))</pre>',
     );
     expect(seen).not.toContain("<script>");
     expect(seen).not.toContain('href="javascript:');
+    expect(seen).toMatch(
+      /<li class="sc-talk-item sc-talk-said" data-n="2"><(?:img|span) class="[^"]*sc-avatar/,
+    );
+    // A tool's call and its answer are one row that opens: the tool, the first line of what it
+    // was called with, that it failed; inside, the call and the answer, cut where it was long.
+    expect(seen).toContain('<li class="sc-talk-item sc-talk-tool sc-talk-tool-failed" data-n="3">');
+    expect(seen).toContain(
+      '<code class="sc-talk-tool-name">Bash</code><span class="sc-talk-tool-line">ls -la</span>',
+    );
+    expect(seen).toMatch(/<span class="sc-badge sc-badge-danger">Failed<\/span>/);
+    expect(seen).toContain('<pre class="sc-talk-code">ls -la\nsecond line</pre>');
+    expect(seen).toContain('<pre class="sc-talk-code sc-talk-code-answer">The beginning</pre>');
     expect(seen).toContain("The beginning of 59 KB.");
     expect(seen).toContain(">Read it whole<");
+    // A picture a tool returned stands under its row, seen without opening it.
     expect(seen).toContain(
       '<img src="/api/v1/agents/mira/sessions/s/files/0199c4d8-0000-7000-8000-0000000000f1" alt="screen.png"',
     );
     expect(seen).toContain("Sealed by Alice Example: A token in it.");
-    expect(seen.match(/sc-transcript-event/g)).toHaveLength(5);
+    // A thought is folded to its first line; a status is a note with what the runner said of it.
+    expect(seen).toContain(
+      '<span class="sc-talk-kind">Thought</span><span class="sc-talk-tool-line">First thought.</span>',
+    );
+    expect(seen).toContain('<span class="sc-talk-kind">Status</span>');
+    expect(seen).toContain('<span class="sc-talk-fact">model opus</span>');
+    expect(seen.match(/<li class="sc-talk-item/g)).toHaveLength(7);
+    // A call still under way says so; one that was refused says that, and is no failure of a tool.
+    const waits = renderToStaticMarkup(
+      <TranscriptView
+        events={[
+          event(1, { kind: "tool_call", text: "sleep 60", data: { tool: "Bash", id: "w" } }),
+          event(2, {
+            kind: "permission",
+            text: "Refused.",
+            data: { tool: "edit", id: "x", answer: "denied" },
+          }),
+        ]}
+        fileHref={(id) => id}
+      />,
+    );
+    expect(waits).toContain(">running<");
+    expect(waits).toMatch(/<span class="sc-badge sc-badge-warning">Refused<\/span>/);
+    // Where the page has not read the account's record, the other files are named, with no link.
+    const named = renderToStaticMarkup(
+      <TranscriptView
+        events={[
+          event(1, { kind: "person", text: "See.", data: { signal: 4, files: "a.csv, b.pdf" } }),
+        ]}
+        fileHref={(id) => id}
+      />,
+    );
+    expect(named).toContain("Files: a.csv, b.pdf");
+    expect(named).not.toContain("download=");
     expect(
       renderToStaticMarkup(<TranscriptView events={[]} fileHref={() => ""} empty={<p>none</p>} />),
     ).toBe("<p>none</p>");
   });
 
-  it("adds the pictures chosen to the ones of a tell, each once", () => {
+  it("adds the files chosen to the ones of a tell, each once", () => {
     const file = (name: string, size: number) =>
       new File([new Uint8Array(size)], name, { type: "image/png", lastModified: 1 });
     const first = file("one.png", 3);
@@ -2051,43 +2187,79 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     expect(withChosen([], [first, file("one.png", 3)])).toEqual([first]);
     // The same name with other bytes is another file.
     expect(withChosen([first], [file("one.png", 9)])).toHaveLength(2);
-    // The way out of a chip takes that picture out and leaves the others in their order.
+    // The way out of a chip takes that file out and leaves the others in their order.
     const third = file("three.png", 5);
     expect(withoutChosen([first, second, third], 1)).toEqual([first, third]);
     expect(withoutChosen([first], 0)).toEqual([]);
     expect(withoutChosen([first, second], 5)).toEqual([first, second]);
+    // A picture pasted from a clipboard is called the same by every browser: named by the moment.
+    const at = new Date(2026, 10, 12, 9, 5, 7);
+    expect(pastedName(file("image.png", 1), at)).toBe("pasted-20261112-090507.png");
+    expect(pastedName(new File([new Uint8Array(1)], "image.png", { type: "image/jpeg" }), at)).toBe(
+      "pasted-20261112-090507.jpg",
+    );
+    expect(pastedName(file("chart.png", 1), at)).toBe("chart.png");
   });
 
-  it("tells with Ctrl or Cmd and Enter, and with nothing else", () => {
-    const key = (over: object) => ({ key: "Enter", ctrlKey: false, metaKey: false, ...over });
-    expect(tellsWith(key({ ctrlKey: true }))).toBe(true);
-    expect(tellsWith(key({ metaKey: true }))).toBe(true);
-    // Enter alone is a new line in the box, and another key with Ctrl is whatever it is.
-    expect(tellsWith(key({}))).toBe(false);
-    expect(tellsWith(key({ key: "a", ctrlKey: true }))).toBe(false);
+  it("tells with Enter, as the box of an agent product does, and never while a word is being composed", () => {
+    const key = (over: object) => ({ key: "Enter", shiftKey: false, isComposing: false, ...over });
+    expect(tellsWith(key({}))).toBe(true);
+    // Shift with Enter is a new line, and another key is whatever it is.
+    expect(tellsWith(key({ shiftKey: true }))).toBe(false);
+    expect(tellsWith(key({ key: "a" }))).toBe(false);
+    // Enter that ends the composing of a word, as in Korean, ends the word and not the message;
+    // a browser that says nothing of composing says it by the key's number.
+    expect(tellsWith(key({ isComposing: true }))).toBe(false);
+    expect(tellsWith(key({ keyCode: 229 }))).toBe(false);
+    expect(tellsWith({ key: "Enter" })).toBe(true);
   });
 
-  it("offers what a supervisor says to it: a tell, an interrupt, and a stop or a restart as it stands", () => {
+  it("offers what a supervisor says to it: words and files, a tell and an interrupt, and nothing that changes how it stands", () => {
     const running = renderToStaticMarkup(
       <SignalComposer state="running" onSend={() => undefined} />,
     );
     expect(running).toContain(">Tell<");
     expect(running).toContain(">Interrupt<");
-    expect(running).toContain(">Stop<");
-    expect(running).not.toContain(">Restart<");
-    expect(running).toContain(">Reset<");
+    // What changes how the agent stands is said apart from what is said to it.
+    expect(running).not.toContain(">Stop<");
+    expect(running).not.toContain(">Reset<");
     // Nothing is said yet: there is nothing to tell.
     expect(/<button[^>]*type="submit"[^>]*>/.exec(running)?.[0]).toContain('disabled=""');
-    expect(running).toContain('accept="image/png,image/jpeg,image/gif,image/webp"');
-    // The pictures are chosen with the console's file picker, as a decision's files are.
+    // Files of any kind, chosen with the console's file picker, as a decision's files are.
+    expect(running).not.toContain("accept=");
     expect(running).toContain('class="sc-button sc-button-ghost sc-button-sm sc-file-choice"');
     expect(running).toContain('class="sc-file-input"');
+    expect(running).toContain(">Attach files<");
+    expect(running).toContain(
+      "Enter tells, Shift with Enter is a new line. Paste a picture, or drop files here.",
+    );
     const stopped = renderToStaticMarkup(
       <SignalComposer state="stopped" note="Sent as #4: stop." onSend={() => undefined} />,
     );
-    expect(stopped).toContain(">Restart<");
-    expect(stopped).not.toContain(">Stop<");
+    expect(stopped).toContain(
+      'placeholder="It is stopped: what you say is read once it is started again"',
+    );
     expect(stopped).toContain("Sent as #4: stop.");
+  });
+
+  it("offers what changes how an agent stands, apart from what is said to it, with what each does", () => {
+    const of = (state: "running" | "stopped" | "refused" | undefined) =>
+      renderToStaticMarkup(<AgentControls state={state} onSend={() => undefined} />);
+    const running = of("running");
+    expect(running).toContain(">Stop</button>");
+    expect(running).not.toContain(">Restart</button>");
+    expect(running).toContain(">Reset</button>");
+    expect(running).toContain("<b>Stop</b> Ends its session.");
+    expect(running).toContain("<b>Reset</b> Begins a new conversation.");
+    expect(running).toContain(">Words for the agent<");
+    // A stopped agent is started again; one that could not go on is either.
+    const stopped = of("stopped");
+    expect(stopped).toContain(">Restart</button>");
+    expect(stopped).not.toContain(">Stop</button>");
+    expect(stopped).toContain("<b>Restart</b> Goes on with the same conversation.");
+    const refused = of("refused");
+    expect(refused).toContain(">Restart</button>");
+    expect(refused).toContain(">Stop</button>");
   });
 
   it("says when a tell is read by what the agent's product takes: after the tool call, or when the turn ends", () => {
