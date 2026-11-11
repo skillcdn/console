@@ -338,10 +338,27 @@ describe("the acp driver", () => {
     });
     // In a running session: what it offers is taken, what it does not is said not to be.
     expect(await session.set({ model: "lathe-small" })).toBe(true);
+    // What the session runs with from then on is said, as it was when it began.
+    expect(await until(session, [], isType("running"))).toEqual([
+      { type: "running", model: "lathe-small", effort: "high", version: "2.3.1" },
+    ]);
     expect(await session.set({ effort: "high" })).toBe(true);
     expect(await session.set({ model: "another" })).toBe(false);
     expect(agent.of("session/set_config_option")).toHaveLength(3);
+    // A choice the agent changes by itself is said too.
+    agent.says(
+      update("config_option_update", {
+        configOptions: CONFIG.map((option) =>
+          option.id === "thinking" ? { ...option, currentValue: "low" } : option,
+        ),
+      }),
+    );
+    expect(await until(session, [], isType("running"))).toEqual([
+      { type: "running", model: "lathe-small", effort: "low", version: "2.3.1" },
+    ]);
     await session.stop();
+    // And nothing where nothing changed: a level it had, a model it does not offer.
+    expect(await until(session, [], isType("ended"))).toEqual([{ type: "ended", how: "exited" }]);
   });
 
   it("reads a turn as whole blocks: what the agent says and thinks in pieces, a tool call and what came back, a plan", async () => {
@@ -675,6 +692,66 @@ describe("the acp driver", () => {
         pictures: [],
       },
       { type: "event", kind: "tool_call", text: "Sleep", data: { tool: "Sleep", id: "call-3" } },
+      { type: "turn_completed" },
+    ]);
+    await session.stop();
+  });
+
+  it("says a call opened under an id whose call is done as another call", async () => {
+    // An agent that numbers its calls anew at every turn: the second is on the record as the first is.
+    const agent = agentThat({
+      prompt: (asked, one) => {
+        const times = agent.of("session/prompt").length;
+        one.says(
+          update("tool_call", {
+            toolCallId: "call-1",
+            name: "Bash",
+            title: `echo ${times}`,
+            kind: "execute",
+            rawInput: { command: `echo ${times}` },
+          }),
+          // Said again while it is open, it is the same call still.
+          update("tool_call", {
+            toolCallId: "call-1",
+            name: "Bash",
+            title: `echo ${times}`,
+            kind: "execute",
+            rawInput: { command: `echo ${times}` },
+          }),
+          update("tool_call_update", {
+            toolCallId: "call-1",
+            status: "completed",
+            content: [{ type: "content", content: text(String(times)) }],
+          }),
+          { id: asked.id, result: { stopReason: "end_turn" } },
+        );
+      },
+    });
+    const session = driverFor(agent).start(OPTIONS);
+    await session.send(message("Say one."));
+    const first = await until(session, [], isType("turn_completed"));
+    await session.send(message("Say two."));
+    const second = await until(session, [], isType("turn_completed"));
+    expect(first.slice(2)).toEqual([
+      { type: "event", kind: "tool_call", text: "echo 1", data: { tool: "Bash", id: "call-1" } },
+      {
+        type: "event",
+        kind: "tool_result",
+        text: "1",
+        data: { id: "call-1", error: false },
+        pictures: [],
+      },
+      { type: "turn_completed" },
+    ]);
+    expect(second).toEqual([
+      { type: "event", kind: "tool_call", text: "echo 2", data: { tool: "Bash", id: "call-1" } },
+      {
+        type: "event",
+        kind: "tool_result",
+        text: "2",
+        data: { id: "call-1", error: false },
+        pictures: [],
+      },
       { type: "turn_completed" },
     ]);
     await session.stop();

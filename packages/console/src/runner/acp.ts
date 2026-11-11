@@ -502,6 +502,22 @@ function sessionOf(
   let takesImages = false;
   let model: Choice | undefined;
   let effort: Choice | undefined;
+  /** The agent's version, and what the session was last said to run with. */
+  let product: string | null = null;
+  let ran: { model: string | null; effort: string | null } | undefined;
+  /**
+   * Says what the session runs with, where that is not what was said last: when it opens, when
+   * a choice is taken in it, and when the agent changes one itself. The runner tells the
+   * console from it, so a choice that is taken and not said stays the old one on every page.
+   */
+  const runs = (): void => {
+    const now = { model: model?.current ?? null, effort: effort?.current ?? null };
+    if (ran !== undefined && ran.model === now.model && ran.effort === now.effort) {
+      return;
+    }
+    ran = now;
+    emit({ type: "running", ...now, version: product });
+  };
   /** While a conversation is loaded, what the agent replays of it is none of this session's. */
   let replaying = false;
   /** The turn under way: why it was stopped where it was, and whether the agent was refused leave in it. */
@@ -538,6 +554,11 @@ function sessionOf(
       return;
     }
     let call = calls.get(id);
+    // A call opened under an id whose call is done is another call: an agent that numbers its
+    // calls anew at every turn has each of them on the record.
+    if (first && call?.done === true) {
+      call = undefined;
+    }
     const known = call !== undefined;
     if (call === undefined) {
       call = {
@@ -665,6 +686,7 @@ function sessionOf(
       case "config_option_update":
         model = choiceOf(update.configOptions, "model") ?? model;
         effort = choiceOf(update.configOptions, "thought_level") ?? effort;
+        runs();
         return;
       default:
         // What the client was not asked to keep: the commands the agent offers, its mode, how
@@ -992,15 +1014,9 @@ function sessionOf(
     await choose(effort, options.effort);
     const agent = agentOf(initialized);
     await stand(standingOf(opened), agent.name);
-    emit(
-      { type: "conversation", id: session },
-      {
-        type: "running",
-        model: model?.current ?? null,
-        effort: effort?.current ?? null,
-        version: agent.version ?? null,
-      },
-    );
+    product = agent.version ?? null;
+    emit({ type: "conversation", id: session });
+    runs();
     ready = true;
     if (waiting.length > 0) {
       const next = waiting;
@@ -1088,6 +1104,7 @@ function sessionOf(
     async set(next) {
       const tookModel = await choose(model, next.model);
       const tookEffort = await choose(effort, next.effort);
+      runs();
       return tookModel && tookEffort;
     },
     async stop() {
