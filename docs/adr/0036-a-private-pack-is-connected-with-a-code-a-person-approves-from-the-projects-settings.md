@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-10-18
-- Amends point 2 of [ADR-0028](0028-the-console-reads-a-projects-pack-through-the-deployments-rest-api-with-a-pack-token-for-a-private-one.md), which stands otherwise. The contract is in [specs/rest.md](../specs/rest.md#post-apiv1projectskeypack-tokenconnect-get-pack-tokenconnect-and-delete-pack-tokenconnect) and [specs/cli.md](../specs/cli.md).
+- Amends point 2 of [ADR-0028](0028-the-console-reads-a-projects-pack-through-the-deployments-rest-api-with-a-pack-token-for-a-private-one.md), which stands otherwise. The contract is in [specs/rest.md](../specs/rest.md#post-apiv1projectskeypack-tokenconnect-get-pack-tokenconnect-post-pack-tokenconnectclaim-and-delete-pack-tokenconnect) and [specs/cli.md](../specs/cli.md).
 
 ## Context
 

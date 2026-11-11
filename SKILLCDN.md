@@ -13,6 +13,7 @@ exclude:
   - docs/adr/0000-template.md
   - examples
   - packages/console/template
+  - apps/console/src/testing
 metadata:
   author: skillcdn
 ---

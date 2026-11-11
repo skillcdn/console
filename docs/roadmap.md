@@ -522,6 +522,16 @@ Ends with: one line pasted on a Mac sets an agent account up, the board and the 
 - [ ] More provider kinds, `gitlab`, `discord`, `teams`, and the form of account a git host provides for a machine.
 - [ ] The names and the palette edited by an administrator on the Settings page; a parts editor for an avatar, and a picture of one's own in its place, if asked for.
 
+## Milestone 45, the console on SkillCDN 0.5
+
+Goal: the main repository's 0.5.0 holds a pack's documents closer: a link's fragment names a section and is checked, a table and a code block are had as data, a document made from another says so, an original that is encrypted stays so, and a word joined by slashes or dots is found by its parts. The console adopts the packages once 0.5.0 is published, in the release that is its own 0.5.0 ([ADR-0034](adr/0034-the-package-is-versioned-on-skillcdns-line-one-line-at-a-time-with-a-patch-of-its-own.md)), and passes those answers on as it passes every answer of a pack. Read from the main repository's source ahead of its release: nothing the console imports changes shape, and every new field of an answer is one more that may be there.
+
+- [x] Ahead of the release, on the line the console is on (2026-11-11): the two links of the decisions whose fragment named a heading that has changed since lead to it again, which the check of 0.5 fails on; the commands of [specs/cli.md](specs/cli.md) stand in groups under headings of their own and the index of the decisions in tables of thirty, each within one read, which that check notes; the tests' fixture skill is kept out of the pack, where it was listed as a skill of the console's. The console's own pack checked by the rules of 0.5, run from the main repository's source: no diagnostic.
+- [ ] The packages: every `@skillcdn` package at 0.5.0, adopted with one `minor` changeset; both floors at 0.5.0 with the snapshot of the REST contract taken again ([ADR-0038](adr/0038-the-command-and-the-console-go-together-within-a-line-and-a-release-that-changes-what-passes-between-them-raises-the-floors.md)), so that every command and every runner is updated with the deployment, a second time where the agent accounts were released on 0.4 before it.
+- [ ] A document's tables and code blocks as data: the outline's pointer to them is an address of the deployment itself, which an agent holding the console's token cannot read of a private pack, and which goes round the console of a public one. Either the console passes the rows and the code on, with routes and reads of the command's own, or it takes the pointer out of what it passes on: decided with the adoption.
+- [ ] The specs' sentences for what is passed on and printed: the section a reference names, an outline's tables and code blocks, a derived document's mark, an encrypted original, and how a search of identifiers was ranked.
+- [ ] The pack as the image carries it, the manifest with the skills and the documents: its documents link to files the image leaves out (`AGENTS.md`, `deploy/README.md`, the workspaces' `README.md`), which the index of a deployed console reports as links that lead nowhere, on 0.4 already.
+
 ## After milestone 16
 
 Nothing is chosen yet; the list below is where the next milestone comes from.

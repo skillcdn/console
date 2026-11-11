@@ -6,12 +6,16 @@ One short file per decision that has lasting consequences and that a future cont
 
 - Copy [`0000-template.md`](0000-template.md) to `NNNN-short-title.md` using the next free number.
 - Keep it under a page: context, decision, consequences. No essays.
-- An accepted ADR is never edited, apart from its status line. To change course, write a new ADR and mark the old one `Superseded by ADR-NNNN`.
+- An accepted ADR is never edited, apart from its status line and a link whose target moved. To change course, write a new ADR and mark the old one `Superseded by ADR-NNNN`.
 - If two changes take the same number, the one that lands second renumbers.
 - This repository is public: no business reasoning, no operations details, no comparisons with other products.
 - Decisions about SkillCDN itself are made in the main repository's ADRs, never here.
 
 ## Index
+
+Thirty decisions a table, in order.
+
+### ADR-0001 to ADR-0030
 
 | ADR | Decision | Status |
 |---|---|---|
@@ -45,6 +49,11 @@ One short file per decision that has lasting consequences and that a future cont
 | [0028](0028-the-console-reads-a-projects-pack-through-the-deployments-rest-api-with-a-pack-token-for-a-private-one.md) | The console reads a project's pack through the deployment's REST API, a private pack with a pack token an owner sets and the console keeps sealed; what a token reads is held for nobody, a read is logged and never its content, one pack per project | Accepted | 2026-10-15 |
 | [0029](0029-a-task-done-or-dropped-is-put-away-out-of-the-board-and-open-by-its-number.md) | A task done or dropped is put away, out of the board and open by its number: a moment the board keeps, not a state; from the task's page, with its goal, or by the console after a period; the board keeps its six columns and links to the archive; the pages read the current tasks whole | Accepted, amended by 0030 | 2026-10-15 |
 | [0030](0030-a-task-is-put-away-from-any-state.md) | A task is put away from any state, by a person's hand; the goal's and the console's own putting away keep to the done and dropped; `task.open` is no refusal | Accepted | 2026-10-15 |
+
+### ADR-0031 to ADR-0060
+
+| ADR | Decision | Status |
+|---|---|---|
 | [0031](0031-the-console-reads-a-pack-as-the-skillcdn-command-does-and-a-local-one-from-a-directory.md) | The console reads a pack as the `skillcdn` command does, through the main repository's client, reader and renderers; a `local` address from a directory of its own, which the image fills with the console's skills; the API passes the pack's answers on as they are and the command renders what a model is given; the smallest install is a compose file | Accepted | 2026-10-18 |
 | [0032](0032-the-version-is-skillcdns-with-a-patch-of-its-own-and-the-packages-are-taken-at-one-version.md) | The package's major and minor are SkillCDN's, the one version the main repository's packages share, its patch its own; the packages it is built on are declared and resolved at one version and moved together; a release on the line is a patch, whose entry starts with `Breaking:` where it changes what exists, the next line a minor; `pnpm check` holds it; amends points 2 and 3 of 0007 | Superseded by 0033 | 2026-10-18 |
 | [0033](0033-the-package-has-a-version-of-its-own-and-says-which-skillcdn-it-is-built-on.md) | The package has a version of its own, read as the main repository reads a 0.x line: a patch changes nothing that exists, a minor may and says `Breaking:` first, never a major at 0; which SkillCDN it is built on is the one version of the main repository's packages, declared in every manifest, resolved by the lockfile, held by `pnpm check` and said by `GET /api/v1/me` and `console whoami`; before 1.0 a console takes a command of its own minor whatever the patch; supersedes 0032, amends 0007 and 0025 | Superseded by 0034 | 2026-10-18 |
@@ -75,6 +84,11 @@ One short file per decision that has lasting consequences and that a future cont
 | [0058](0058-what-a-plugin-writes-on-the-board-is-in-every-language-of-the-workspace-and-read-in-the-readers.md) | What a plugin writes on the board, a decision's question, body and labels, a task's title and body, a comment's body, may come in every language of the workspace as a map; the board keeps the map whole with one text beside it, answers each reader their own language and the map, and the pages read the map again in the language they speak; refines 0012 and 0052 | Superseded by 0065 |
 | [0059](0059-a-person-arranges-the-front-pages-widgets-from-the-sizes-each-comes-in.md) | A widget comes in sizes of one family (`small` 2×1, `medium` 3×1, `large` 3×2, `wide` 6×1, `full` 6×2 of the six-column grid), declared as `sizes` with a `defaultSize`, the one size of before read as one of them; the frame is told its size; the person arranges the front page, which widgets at which size in what order, kept on them (`home` on `me`); amends point 4 of 0054 | Accepted |
 | [0060](0060-what-a-plugin-asks-is-required-or-optional-and-the-optional-are-the-administrators-to-choose.md) | A plugin says what it requires (`capabilities`) and what it can go without (`optionalCapabilities`, never `storage:sql`); the form shows the two apart, those it requires on and locked, the optional off until turned on, then or later (`PATCH .../consent`, `console plugin <key> capabilities`); a new version waits only for what it requires, and `ctx.plugin.capabilities` says what it holds; amends point 3 of 0049 | Accepted |
+
+### ADR-0061 to ADR-0090
+
+| ADR | Decision | Status |
+|---|---|---|
 | [0061](0061-the-front-page-is-one-grid-of-tiles-a-person-arranges-by-hand.md) | The front page is one grid of square cells on which the projects and the widgets stand as tiles a person arranges by hand; there is no default layout, and each width is arranged for itself. | Accepted |
 | [0062](0062-a-widget-comes-in-a-size-a-phone-can-hold.md) | A widget comes in a size at most four cells across, a grid offers the sizes that fit it, and a frame is told the size it has. | Accepted |
 | [0063](0063-a-frame-reads-a-persons-picture-by-the-person-and-a-plugin-reads-who-it-granted-a-role.md) | A frame reads a person's picture by the person through the bridge, never by an address; a plugin reads who was granted a role (`ctx.console.people.granted`); the frame's workspace says its name and languages. | Accepted |
