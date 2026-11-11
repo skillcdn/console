@@ -151,6 +151,24 @@ describe("the services a workspace's agents work with (ADR-0089)", () => {
       expect(refused.status, JSON.stringify(body).slice(0, 70)).toBe(400);
       expect(await errorOf(refused)).toBe("request.invalid");
     }
+    // Whoever sent a service that does not read is told which, and what is wrong with it.
+    const said = async (body: unknown): Promise<string> =>
+      ((await (await patch(alice, body)).json()) as { error: { message: string } }).error.message;
+    expect(await said({ services: { git: { kind: "github", org: "acme" } } })).toBe(
+      "services.git: takes no org.",
+    );
+    expect(await said({ services: { messenger: { kind: "slack", workspace: "acme" } } })).toBe(
+      "services.messenger: workspace is not spelled as one is.",
+    );
+    expect(await said({ services: { messenger: { kind: "github" } } })).toBe(
+      "services.messenger: is no messenger service.",
+    );
+    expect(await said({ services: { git: {} } })).toBe("services.git: names no kind.");
+    // What is no word is not said back.
+    expect(await said({ services: { git: { kind: "forgejo", "<b>": "x" } } })).toBe(
+      "services.git: has more parameters than one may, or one that is no word.",
+    );
+    expect(await said({})).toBe("The patch names nothing to change, or no setting.");
     // The service agents sign in through is one people sign in through here.
     for (const identity of [{ kind: "okta" }, { kind: "forgejo", url: "id.acme.example" }]) {
       const refused = await patch(alice, { services: { identity } });

@@ -11,6 +11,8 @@ import {
   type RestWorkspace,
   restMePatchSchema,
   restWorkspacePatchSchema,
+  SERVICE_ROLES,
+  serviceProblem,
   serviceProviderOf,
 } from "@skillcdn/console/api";
 import type { Context, Hono } from "hono";
@@ -339,6 +341,36 @@ export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies):
     return c.json(await meOf(await access.caller(c)));
   });
 
+  /**
+   * What a patch of the workspace's settings that does not read is answered with. Where one of
+   * its services is why, the answer says which and what is wrong with it, in the schema's own
+   * few words: an administrator who misspelled a parameter is told so, and not that the patch
+   * names nothing. Of what was sent it says back a parameter's name at most, a word.
+   */
+  const patchProblem = (json: unknown): string => {
+    const services =
+      typeof json === "object" && json !== null
+        ? (json as { services?: unknown }).services
+        : undefined;
+    if (typeof services === "object" && services !== null) {
+      for (const role of SERVICE_ROLES) {
+        const service = (services as Record<string, unknown>)[role];
+        if (
+          typeof service === "object" &&
+          service !== null &&
+          !Array.isArray(service) &&
+          Object.values(service).every((value) => typeof value === "string")
+        ) {
+          const problem = serviceProblem(role, service as Record<string, string>);
+          if (problem !== undefined) {
+            return `services.${role}: ${problem}.`;
+          }
+        }
+      }
+    }
+    return "The patch names nothing to change, or no setting.";
+  };
+
   // The workspace's settings (ADR-0035): an administrator's, from the console's own pages or
   // through their agent's token (ADR-0021); answered as `me` describes the workspace.
   app.patch(REST_ROUTES.workspace, tooLarge, async (c) => {
@@ -361,10 +393,7 @@ export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies):
     }
     const parsed = restWorkspacePatchSchema.safeParse(json);
     if (!parsed.success) {
-      return c.json(
-        errorBody("request.invalid", "The patch names nothing to change, or no setting."),
-        400,
-      );
+      return c.json(errorBody("request.invalid", patchProblem(json)), 400);
     }
     const zone = parsed.data.timeZone;
     if (typeof zone === "string" && !isTimeZone(zone)) {
