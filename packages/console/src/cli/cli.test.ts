@@ -4176,6 +4176,74 @@ describe("setting a machine up for an agent account (ADR-0088)", () => {
     expect(sessionless.runs).toHaveLength(11);
   });
 
+  it("writes the service of the platform the machine is: a task of the account's own on Windows", async () => {
+    const back = String.fromCodePoint(0x5c);
+    const folder = ["/Users/mira", "AppData", "Local", "skillcdn-console"].join(back);
+    const definition = `${folder}${back}runner-task.xml`;
+    const name = "SkillCDN Console Runner (mira)";
+    const at = fakeMachine({ platform: "win32" });
+    const run = harness({
+      fetch: consoleOf().fetch,
+      machine: at.machine,
+      store: memoryStore(KEPT).store,
+    });
+    expect(await runCli(LINE, run.io)).toBe(EXIT.ok);
+    // The task is the account's, named by it: started when it logs on, with the runner's own words.
+    expect(at.files.get(definition)).toContain("<UserId>mira</UserId>");
+    expect(at.files.get(definition)).toContain(
+      `$words = @('/opt/console/dist/cli/main.js', 'runner', '--url', '${ORIGIN}', '--account', 'acme-mira')`,
+    );
+    expect(at.files.get(definition)).toContain("Set-Location -LiteralPath '/Users/mira/desk'");
+    expect(at.files.has(UNIT)).toBe(false);
+    // Registered in place of the one that was there, the one that runs ended, and started now.
+    expect(at.runs.map((ran) => [ran.command, ...ran.args])).toEqual([
+      ["schtasks", "/Create", "/TN", name, "/XML", definition, "/F"],
+      ["schtasks", "/End", "/TN", name],
+      ["schtasks", "/Run", "/TN", name],
+    ]);
+    expect(run.out()).toContain(
+      `The task-scheduler service is written (${definition}) and loaded: the runner starts with the OS account mira, and is started again when it ends. Its own lines are in ${folder}${back}runner.log.`,
+    );
+
+    // A machine that lets no account register a task: the definition stays written, and the
+    // words say what the system said and what to look at.
+    const closed = fakeMachine({
+      platform: "win32",
+      ran: (_, args) =>
+        args[0] === "/Create" ? { code: 1, out: "", err: "ERROR: Access is denied.\n" } : undefined,
+    });
+    const refused = harness({
+      fetch: consoleOf().fetch,
+      machine: closed.machine,
+      store: memoryStore(KEPT).store,
+    });
+    expect(await runCli(LINE, refused.io)).toBe(EXIT.failed);
+    expect(refused.err()).toContain("was not loaded: schtasks /Create /TN");
+    expect(refused.err()).toContain(
+      "said: ERROR: Access is denied.. A scheduled task is registered",
+    );
+    expect(closed.files.has(definition)).toBe(true);
+    expect(closed.runs).toHaveLength(1);
+
+    // A refresh that wrote the definition again registers it, which ends nothing: the runner
+    // this command may be running under goes on, and the next start is with what was written.
+    const env = { CONSOLE_URL: ORIGIN, CONSOLE_TOKEN: "cns_a_kept" };
+    const moved = fakeMachine({
+      platform: "win32",
+      cwd: "/Users/mira/desk",
+      files: { ...Object.fromEntries(at.files), [definition]: "<Task/>" },
+    });
+    const rewritten = harness({ fetch: consoleOf().fetch, env, machine: moved.machine });
+    expect(await runCli(["agent", "setup", "--refresh"], rewritten.io)).toBe(EXIT.ok);
+    expect(rewritten.out()).toContain(
+      `The task-scheduler service is written again (${definition}). It is read when the task is next started: when the OS account next logs on, or once the task is ended and run again.\n`,
+    );
+    expect(moved.files.get(definition)).toBe(at.files.get(definition));
+    expect(moved.runs.map((ran) => [ran.command, ...ran.args])).toEqual([
+      ["schtasks", "/Create", "/TN", name, "/XML", definition, "/F"],
+    ]);
+  });
+
   it("has the system read a unit a refresh wrote again, where that ends nothing: on Linux", async () => {
     const env = { CONSOLE_URL: ORIGIN, CONSOLE_TOKEN: "cns_a_kept" };
     const unit = "/Users/mira/.config/systemd/user/skillcdn-console-runner.service";

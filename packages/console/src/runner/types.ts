@@ -193,6 +193,8 @@ export interface ServiceInput {
   /** The home directory of the OS account the runner runs in, and the account's number where the system has one. */
   readonly home: string;
   readonly uid: number | undefined;
+  /** The name of that OS account, for a service that names it: a task of Windows is the machine's, called by whose it is. */
+  readonly user?: string | undefined;
   /** What starts the runner: the runtime, the command and its words, absolute where they are files. */
   readonly program: readonly string[];
   /** Where the runner's process, and the product it starts, look for programs. */
@@ -241,6 +243,13 @@ export interface ServicePlan {
   /** When files written again are read, where the commands are not run: the end of a sentence. */
   readonly reload: string;
 }
+
+/**
+ * The variable a service's keeper names its own process in, by number, on a system that ends a
+ * keeper and leaves what it started: a runner told so looks for that process, and stops when it
+ * is gone.
+ */
+export const KEEPER_VARIABLE = "CONSOLE_RUNNER_KEEPER";
 
 /** A module that keeps the runner running across restarts of the machine. */
 export interface Service {

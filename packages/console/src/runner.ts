@@ -52,6 +52,13 @@ export {
 } from "./runner/runner.js";
 export { SLACK_APP_TOKEN, slack, slackWakeOf } from "./runner/slack.js";
 export { SYSTEMD_UNIT, systemdUnit, systemdUser } from "./runner/systemd-user.js";
+export {
+  TASK_NAME,
+  taskDefinition,
+  taskNameOf,
+  taskScheduler,
+  taskScript,
+} from "./runner/task-scheduler.js";
 export type {
   Boundary,
   Child,
@@ -72,3 +79,4 @@ export type {
   WakeSocket,
   WakeSource,
 } from "./runner/types.js";
+export { KEEPER_VARIABLE } from "./runner/types.js";

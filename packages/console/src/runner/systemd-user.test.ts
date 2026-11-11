@@ -24,9 +24,9 @@ const INPUT: ServiceInput = {
 const UNIT = "/home/mira/.config/systemd/user/skillcdn-console-runner.service";
 
 describe("the systemd-user service", () => {
-  it("is the package's service for Linux, beside the one for macOS", () => {
+  it("is the package's service for Linux, beside the ones for macOS and for Windows", () => {
     const modules = ownRunnerModules({ user: "mira" });
-    expect(modules.services.names()).toEqual(["launchd", "systemd-user"]);
+    expect(modules.services.names()).toEqual(["launchd", "systemd-user", "task-scheduler"]);
     expect(modules.services.get("systemd-user")?.platforms).toEqual(["linux"]);
     expect(SYSTEMD_UNIT).toBe("skillcdn-console-runner.service");
   });

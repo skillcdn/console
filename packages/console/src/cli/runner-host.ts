@@ -4,7 +4,7 @@ import { type as osType, release, userInfo } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import process from "node:process";
 import { createSpawn } from "../runner/process.js";
-import type { Spawn, WakeSocket } from "../runner/types.js";
+import { KEEPER_VARIABLE, type Spawn, type WakeSocket } from "../runner/types.js";
 
 // What `console runner` needs of the machine it runs on (ADR-0085): the desk it was started in,
 // processes to start, a few files of its own there, and the word to stop. The command takes it
@@ -26,17 +26,44 @@ export interface RunnerHost {
   /** Opens a socket for a wake source: the messages of text it carries, until it closes. */
   socket(url: string): WakeSocket;
   /**
-   * Resolves when the process is asked to stop. Asked for by the command that runs a runner, and
-   * by no other: listening for the word to stop is what keeps a process from stopping by itself.
+   * Resolves when the process is asked to stop, or when the process that keeps the runner
+   * running is gone, where the runner was told which that is. Asked for by the command that runs
+   * a runner, and by no other: listening for the word to stop is what keeps a process from
+   * stopping by itself.
    */
   untilStopped(): Promise<void>;
   readonly random: () => number;
 }
 
-/** The runner's host on this machine, in `cwd`, with `env` as what a product's process begins from. */
+/** How often a runner that was told which process keeps it looks whether that one is still there. */
+const KEEPER_PAUSE_MS = 2000;
+
+/** The process a runner was told keeps it, by its number; nothing where none is named, or what is named is no number. */
+function keeperOf(named: string | undefined): number | undefined {
+  if (named === undefined || !/^[1-9]\d{0,9}$/.test(named)) {
+    return undefined;
+  }
+  return Number(named);
+}
+
+/** Whether a process is still there: one that may not be asked about is. */
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error instanceof Error && "code" in error && error.code === "EPERM";
+  }
+}
+
+/**
+ * The runner's host on this machine, in `cwd`, with `env` as what a product's process begins
+ * from, and where a keeper names itself (`CONSOLE_RUNNER_KEEPER`).
+ */
 export function createRunnerHost(
   cwd: string,
   env: Readonly<Record<string, string | undefined>>,
+  options: { readonly keeperPauseMs?: number | undefined } = {},
 ): RunnerHost {
   /** A path under the desk, or an error: nothing the runner reads or writes is anywhere else. */
   const under = (path: string): string => {
@@ -138,6 +165,18 @@ export function createRunnerHost(
       new Promise<void>((done) => {
         process.once("SIGINT", () => done());
         process.once("SIGTERM", () => done());
+        // A system that ends what keeps the runner running may leave the runner itself: told
+        // which process that is, the runner looks for it, and stops when it is gone.
+        const keeper = keeperOf(env[KEEPER_VARIABLE]);
+        if (keeper !== undefined) {
+          const timer = setInterval(() => {
+            if (!alive(keeper)) {
+              clearInterval(timer);
+              done();
+            }
+          }, options.keeperPauseMs ?? KEEPER_PAUSE_MS);
+          timer.unref();
+        }
       }),
     // A session's mark is made of these: not to be guessed from outside the machine.
     random: () => randomInt(0, 2 ** 31) / 2 ** 31,

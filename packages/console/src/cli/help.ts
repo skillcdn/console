@@ -763,7 +763,7 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     usage: "runner",
     synopsis: "For an agent account's machine: keeps its agent's session going, in its desk.",
     about:
-      "For an agent account's machine: the runner of the account the command is signed in as (console login --self), started in its desk. It starts the agent's product there, hands it what the console sends, a supervisor's tell or a wake, as messages under a header only the session knows, reports what the product does as the session's transcript, and says every thirty seconds that it is there. It restarts nothing by itself: an agent that cannot go on waits, and its supervisor's next word is tried. runner.json in the desk names the product's driver, claude or codex, and the secrets a session is handed. Stop it with Ctrl+C.",
+      "For an agent account's machine: the runner of the account the command is signed in as (console login --self), started in its desk. It starts the agent's product there, hands it what the console sends, a supervisor's tell or a wake, as messages under a header only the session knows, reports what the product does as the session's transcript, and says every thirty seconds that it is there. It restarts nothing by itself: an agent that cannot go on waits, and its supervisor's next word is tried. runner.json in the desk names the product's driver, claude or codex, and the secrets a session is handed. Stop it with Ctrl+C; where the service that keeps it running names its own process (CONSOLE_RUNNER_KEEPER), it stops when that process is gone.",
     refusals: [
       "a runner is an agent account's own: sign the command in as the account, console login --self",
       "runner.json does not read: nothing of it is used",

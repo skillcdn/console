@@ -4137,6 +4137,7 @@ async function settleService(
     desk,
     home: machine.home,
     uid: machine.uid,
+    user: machine.user,
     program: [...machine.self, "runner", "--url", url, "--account", login],
     path: machine.searchPath,
   });
