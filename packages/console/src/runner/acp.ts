@@ -20,7 +20,7 @@ import type {
 // desk; it answers what the agent asks leave for, since nobody is at a terminal to ask; and it
 // reads what the agent does as whole blocks, where the protocol sends a message in pieces.
 // Written from the protocol's documentation, version 1, and read against the types the protocol
-// publishes and the source of one agent that speaks it; it was run against none yet.
+// publishes and the source of one agent that speaks it, and run against that agent since.
 
 /** The protocol's version this driver speaks. */
 const PROTOCOL_VERSION = 1;
@@ -57,8 +57,11 @@ const SIGN_IN =
  */
 const MODES = ["allow", "deny"] as const;
 
-/** The agents the driver was run against, by the version each said of itself. */
-const TRIED: readonly string[] = [];
+/**
+ * The agents the driver was run against, each by what it calls itself, with the versions it said
+ * of itself: an adapter that puts Codex behind the protocol, run on Windows with a real account.
+ */
+const TRIED: Readonly<Record<string, readonly string[]>> = { Codex: ["2.6.0"] };
 const UNATTENDED_MODE = "allow";
 const LEAST_MODE = "deny";
 
@@ -338,7 +341,13 @@ function agentOf(initialized: unknown): { name: string | undefined; version: str
 /** What the runner says of itself when it begins: no file and no terminal of its own, so that the agent works with its own tools. */
 const hello = (version: string | undefined): Json => ({
   protocolVersion: PROTOCOL_VERSION,
-  clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
+  // What the agent has to tell beside its work, a warning say, is taken as a notice: an agent
+  // that is offered none says it as its own words, in the middle of its answer.
+  clientCapabilities: {
+    fs: { readTextFile: false, writeTextFile: false },
+    terminal: false,
+    session: { notices: {} },
+  },
   // The protocol has a client say its version: the command's, or none that it knows.
   clientInfo: {
     name: "skillcdn-console-runner",
@@ -402,8 +411,8 @@ function sessionOf(
   let effort: Choice | undefined;
   /** While a conversation is loaded, what the agent replays of it is none of this session's. */
   let replaying = false;
-  /** The turn under way, and why it was stopped where it was. */
-  let turn: { cut: "message" | "stopped" | undefined } | undefined;
+  /** The turn under way: why it was stopped where it was, and whether the agent was refused leave in it. */
+  let turn: { cut: "message" | "stopped" | undefined; refused: boolean } | undefined;
   /** The messages that wait for the session to open, or for the turn under way to end. */
   let waiting: DriverMessage[] = [];
   let ready = false;
@@ -412,8 +421,10 @@ function sessionOf(
   /** What the agent says in pieces, kept until it is whole: a block of the transcript. */
   let piece: { kind: "assistant" | "thinking"; text: string } | undefined;
   const flush = (): void => {
-    if (piece !== undefined && piece.text.trim().length > 0) {
-      emit({ type: "event", kind: piece.kind, text: piece.text });
+    // A block is its words: an agent may begin one with empty lines, which are none of it.
+    const words = piece?.text.trim() ?? "";
+    if (piece !== undefined && words.length > 0) {
+      emit({ type: "event", kind: piece.kind, text: words });
     }
     piece = undefined;
   };
@@ -543,6 +554,21 @@ function sessionOf(
         }
         return;
       }
+      case "notice": {
+        // What the agent tells beside its work: an error as one, anything else as a status.
+        const title = textOf(update.title)?.trim() ?? "";
+        const more = textOf(update.description)?.trim() ?? "";
+        const words = [title, more].filter((one) => one.length > 0).join("\n");
+        if (words.length > 0) {
+          flush();
+          emit({
+            type: "event",
+            kind: update.severity === "error" ? "error" : "status",
+            text: words.slice(0, MAX_INPUT_LENGTH),
+          });
+        }
+        return;
+      }
       case "config_option_update":
         model = choiceOf(update.configOptions, "model") ?? model;
         effort = choiceOf(update.configOptions, "thought_level") ?? effort;
@@ -578,6 +604,9 @@ function sessionOf(
     };
     if (callId !== undefined) {
       data.id = callId;
+    }
+    if (turn !== undefined && data.answer !== "allowed") {
+      turn.refused = true;
     }
     flush();
     emit({
@@ -632,7 +661,7 @@ function sessionOf(
 
   /** One turn: what arrived together is read together, each under its own header. */
   const prompt = (messages: readonly DriverMessage[]): void => {
-    const mine: NonNullable<typeof turn> = { cut: undefined };
+    const mine: NonNullable<typeof turn> = { cut: undefined, refused: false };
     turn = mine;
     const blocks: Json[] = [];
     for (const message of messages) {
@@ -696,10 +725,13 @@ function sessionOf(
         emit({
           type: "event",
           kind: "status",
+          // An agent may end its turn where it is refused leave: nobody stopped that one.
           text:
             mine.cut === "message"
               ? "The turn was stopped for a message."
-              : "The turn was stopped.",
+              : mine.cut === undefined && mine.refused
+                ? "The agent ended the turn where it was refused leave."
+                : "The turn was stopped.",
         });
       } else if (reason === "max_tokens" || reason === "max_turn_requests") {
         emit({
@@ -950,7 +982,10 @@ export function createAcpDriver(host: DriverHost): Driver {
   return {
     name: "acp",
     get product() {
-      return { name: name ?? "An agent over the Agent Client Protocol", tried: TRIED };
+      return {
+        name: name ?? "An agent over the Agent Client Protocol",
+        tried: (name === undefined ? undefined : TRIED[name]) ?? [],
+      };
     },
     // A message waits for the turn under way, or stops it: none is taken in one. Pictures, a
     // conversation gone on with and the model are the agent's to offer, and are asked of it.

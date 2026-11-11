@@ -290,7 +290,11 @@ describe("the acp driver", () => {
       method: "initialize",
       params: {
         protocolVersion: 1,
-        clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
+        clientCapabilities: {
+          fs: { readTextFile: false, writeTextFile: false },
+          terminal: false,
+          session: { notices: {} },
+        },
         // The protocol has a client say a version: none that this one was told is said as none.
         clientInfo: {
           name: "skillcdn-console-runner",
@@ -897,6 +901,110 @@ describe("the acp driver", () => {
     expect(out.of("session/new")).toEqual([]);
   });
 
+  it("takes what the agent tells beside its work as a notice, and a block as its words without the empty lines around them", async () => {
+    const agent = agentThat({
+      prompt: (asked, one) => {
+        one.says(
+          update("notice", {
+            severity: "warning",
+            title: "This session is resuming with another model.",
+            description: "Consider switching back.",
+          }),
+          update("notice", { severity: "error", title: "The index could not be read." }),
+          update("notice", { severity: "info", title: "  " }),
+          update("agent_thought_chunk", { content: text("\n\n**Reading the file**") }),
+          update("agent_message_chunk", { content: text("Done.\n") }),
+          { id: asked.id, result: { stopReason: "end_turn" } },
+        );
+      },
+    });
+    const session = driverFor(agent).start(OPTIONS);
+    await session.send(message("Go on."));
+    const seen = await until(session, [], isType("turn_completed"));
+    // The client says that it takes notices, or the agent says them as its own words.
+    expect(agent.sent[0]).toMatchObject({
+      params: { clientCapabilities: { session: { notices: {} } } },
+    });
+    expect(seen.slice(2)).toEqual([
+      {
+        type: "event",
+        kind: "status",
+        text: "This session is resuming with another model.\nConsider switching back.",
+      },
+      { type: "event", kind: "error", text: "The index could not be read." },
+      { type: "event", kind: "thinking", text: "**Reading the file**" },
+      { type: "event", kind: "assistant", text: "Done." },
+      { type: "turn_completed" },
+    ]);
+    await session.stop();
+  });
+
+  it("says that the agent ended its turn where it was refused leave, which nobody stopped", async () => {
+    let prompt: unknown;
+    const agent = agentThat({
+      prompt: (asked, one) => {
+        prompt = asked.id;
+        one.says(
+          update("tool_call", { toolCallId: "call-1", title: "Write notes.md", kind: "edit" }),
+          {
+            id: "leave-1",
+            method: "session/request_permission",
+            params: {
+              sessionId: "sess-1",
+              toolCall: { toolCallId: "call-1", title: "Write notes.md" },
+              options: [
+                { optionId: "yes", name: "Allow", kind: "allow_once" },
+                { optionId: "no", name: "Decline", kind: "reject_once" },
+              ],
+            },
+          },
+        );
+      },
+      other: (sent, one) => {
+        // The agent hears that it was refused, fails the call and ends the turn as cancelled.
+        if (sent.id === "leave-1") {
+          one.says(update("tool_call_update", { toolCallId: "call-1", status: "failed" }), {
+            id: prompt,
+            result: { stopReason: "cancelled" },
+          });
+          return true;
+        }
+        return false;
+      },
+    });
+    const session = driverFor(agent).start({ ...OPTIONS, permissions: "deny" });
+    await session.send(message("Write the notes."));
+    const seen = await until(session, [], isType("turn_completed"));
+    expect(seen.slice(2)).toEqual([
+      {
+        type: "event",
+        kind: "tool_call",
+        text: "Write notes.md",
+        data: { tool: "edit", id: "call-1" },
+      },
+      {
+        type: "event",
+        kind: "permission",
+        text: "Denied, with nobody at the terminal to ask: Write notes.md",
+        data: { tool: "edit", answer: "denied", id: "call-1" },
+      },
+      {
+        type: "event",
+        kind: "tool_result",
+        text: "",
+        data: { id: "call-1", error: true },
+        pictures: [],
+      },
+      {
+        type: "event",
+        kind: "status",
+        text: "The agent ended the turn where it was refused leave.",
+      },
+      { type: "turn_completed" },
+    ]);
+    await session.stop();
+  });
+
   it("hands a picture over where the agent takes one, and says so where it takes none", async () => {
     const picture = {
       name: "screen.png",
@@ -1043,8 +1151,19 @@ describe("the acp driver", () => {
       models: ["lathe-small", "lathe-large"],
       efforts: ["low", "high"],
     });
-    // What it said it is called is what the runner calls it from then on.
-    expect(driver.product.name).toBe("Lathe");
+    // What it said it is called is what the runner calls it from then on, and what it was run
+    // against is by that name: an agent it was never run against is one, whatever its version.
+    expect(driver.product).toEqual({ name: "Lathe", tried: [] });
+    const known = driverFor(
+      agentThat({
+        initialized: {
+          ...INITIALIZED,
+          agentInfo: { name: "codex-acp", title: "Codex", version: "2.6.0" },
+        },
+      }),
+    );
+    expect((await known.probe()).version).toBe("2.6.0");
+    expect(known.product).toEqual({ name: "Codex", tried: ["2.6.0"] });
     expect(agent.ended).toBe(true);
     expect(agent.of("session/close")).toEqual([]);
     // An agent that closes a session is asked to close the one that was opened to ask.
