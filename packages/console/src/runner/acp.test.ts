@@ -1306,12 +1306,30 @@ describe("the acp driver", () => {
         prompt: [
           {
             type: "text",
-            text: "Look.\n\n(2 pictures came with this and could not be handed over: this agent takes none.)",
+            text: "Look.\n\n(2 pictures came with this and were not shown to you: this agent takes none as a picture.)",
           },
         ],
       },
     ]);
+    // Once the agent has said what it takes, the session says so, and the runner hands a
+    // picture over as a file alone, saying so to the agent and on the record.
+    expect(second.images?.()).toBe(false);
     await second.stop();
+    expect(first.images?.()).toBe(true);
+    // A picture the runner wrote in the desk is named by where it is.
+    const third = driverFor(
+      agentThat({ initialized: { ...INITIALIZED, agentCapabilities: {} } }),
+    ).start(OPTIONS);
+    const before = third.images?.();
+    await third.send({
+      text: "Look.",
+      images: [{ ...picture, path: "work/inbox/3/screen.png" }],
+      priority: "next",
+    });
+    await until(third, [], isType("turn_completed"));
+    // Before the agent answered, nothing was known of what it takes.
+    expect(before).toBeUndefined();
+    await third.stop();
   });
 
   it("says that the product is not signed in, by the protocol's own word for it, and ends it", async () => {

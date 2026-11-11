@@ -500,6 +500,8 @@ function sessionOf(
   let gaveUp = false;
   let session: string | undefined;
   let takesImages = false;
+  /** Whether the agent has said what it takes: before that, nothing is known of pictures. */
+  let saidWhatItTakes = false;
   let model: Choice | undefined;
   let effort: Choice | undefined;
   /** The agent's version, and what the session was last said to run with. */
@@ -833,13 +835,16 @@ function sessionOf(
     turn = mine;
     const blocks: Json[] = [];
     for (const message of messages) {
-      const left = takesImages ? 0 : message.images.length;
+      const left = takesImages ? [] : message.images;
+      // Where the runner did not know yet that this agent takes no picture, the message says a
+      // picture was shown: said here that it was not, with where it is in the desk.
+      const where = left.flatMap((image) => (image.path === undefined ? [] : [image.path]));
       blocks.push({
         type: "text",
         text:
-          left === 0
+          left.length === 0
             ? message.text
-            : `${message.text}\n\n(${left} picture${left === 1 ? "" : "s"} came with this and could not be handed over: this agent takes none.)`,
+            : `${message.text}\n\n(${left.length} picture${left.length === 1 ? "" : "s"} came with this and ${left.length === 1 ? "was" : "were"} not shown to you: this agent takes none as a picture.${where.length === 0 ? "" : ` Open ${where.join(", ")}.`})`,
       });
       for (const image of takesImages ? message.images : []) {
         blocks.push({
@@ -955,6 +960,7 @@ function sessionOf(
         : {};
     takesImages =
       isObject(capabilities.promptCapabilities) && capabilities.promptCapabilities.image === true;
+    saidWhatItTakes = true;
     const resumes =
       isObject(capabilities.sessionCapabilities) &&
       capabilities.sessionCapabilities.resume !== undefined &&
@@ -1083,6 +1089,7 @@ function sessionOf(
 
   return {
     events: events(),
+    images: () => (saidWhatItTakes ? takesImages : undefined),
     async send(message) {
       if (stopping || gaveUp) {
         throw new Error("the session takes no more input");

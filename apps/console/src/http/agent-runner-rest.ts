@@ -37,7 +37,12 @@ import type { Clock } from "../ports/clock.js";
 import { createAgentGuards } from "./agent-guards.js";
 import { errorBody } from "./app.js";
 import type { Access, AccessCaller } from "./auth.js";
-import { imageTypeOf, type KeptPictureType, pictureResponse } from "./kept-pictures.js";
+import {
+  downloadResponse,
+  type KeptPictureType,
+  keptTypeOf,
+  pictureResponse,
+} from "./kept-pictures.js";
 import type { AgentWakes } from "./live-feed.js";
 import type { AppEnv } from "./request-context.js";
 import { restPerson } from "./rest-shapes.js";
@@ -45,7 +50,7 @@ import { restPerson } from "./rest-shapes.js";
 export interface AgentRunnerRestDependencies {
   readonly database: Database;
   readonly access: Access;
-  /** Where the pictures sent with a tell are kept, among the board's files. */
+  /** Where the files sent with a tell are kept, among the board's files. */
   readonly blobs: BlobStore;
   /** Whoever waits in this process for something new of an agent account. */
   readonly wakes: AgentWakes;
@@ -55,7 +60,7 @@ export interface AgentRunnerRestDependencies {
 
 const MAX_BODY_BYTES = 64 * 1024;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-/** The kinds of picture a signal carries, as they were read off the bytes when it was sent. */
+/** The kinds of picture a signal carries, as they were read off the bytes when it was sent: shown in place, where any other file is handed over to save. */
 const PICTURE_TYPES: ReadonlyMap<string, KeptPictureType> = new Map([
   ["image/png", "image/png"],
   ["image/jpeg", "image/jpeg"],
@@ -277,10 +282,11 @@ export function registerAgentRunnerRest(
   });
 
   /**
-   * The pictures of a form, kept among the board's files: a few, pictures by their bytes, within
-   * the bound on a file together. What they were kept as, or the refusal.
+   * The files of a form, kept among the board's files: a few, of any kind, within the bound on
+   * a file together. A picture is one by its bytes; what is called one and is none is kept as
+   * bytes of no kind. What they were kept as, or the refusal.
    */
-  const picturesOf = async (
+  const filesOf = async (
     c: Context<AppEnv>,
     form: FormData,
   ): Promise<
@@ -294,7 +300,7 @@ export function registerAgentRunnerRest(
   > => {
     const parts = form.getAll("file");
     if (parts.length > MAX_SIGNAL_ATTACHMENTS) {
-      return invalid(c, `file: at most ${MAX_SIGNAL_ATTACHMENTS} pictures with one signal.`);
+      return invalid(c, `file: at most ${MAX_SIGNAL_ATTACHMENTS} files with one signal.`);
     }
     const read: { name: string; contentType: string; bytes: Uint8Array }[] = [];
     let total = 0;
@@ -302,7 +308,11 @@ export function registerAgentRunnerRest(
       if (!(part instanceof File)) {
         return invalid(c, "file: every part called file is a file.");
       }
-      const named = restFileInputSchema.safeParse({ name: part.name });
+      const declared = part.type.split(";")[0]?.trim() ?? "";
+      const named = restFileInputSchema.safeParse({
+        name: part.name,
+        ...(declared.length === 0 ? {} : { contentType: declared }),
+      });
       if (!named.success || named.data === undefined) {
         return invalid(c, problemOf(named.success ? [] : named.error.issues));
       }
@@ -310,23 +320,23 @@ export function registerAgentRunnerRest(
       if (part.size === 0 || total > MAX_FILE_BYTES) {
         return part.size === 0
           ? invalid(c, `file: ${named.data.name} is empty.`)
-          : c.json(errorBody("request.too_large", "The pictures are too large together."), 413);
+          : c.json(errorBody("request.too_large", "The files are too large together."), 413);
       }
       const bytes = new Uint8Array(await part.arrayBuffer());
-      // What it is is read off its bytes, whatever the form called it.
-      const contentType = imageTypeOf(bytes);
-      if (contentType === undefined) {
-        return invalid(c, "file: a picture, a PNG, a JPEG, a GIF or a WebP.");
-      }
-      read.push({ name: named.data.name, contentType, bytes });
+      // A picture is read off its bytes, whatever the form called it.
+      read.push({
+        name: named.data.name,
+        contentType: keptTypeOf(bytes, named.data.contentType),
+        bytes,
+      });
     }
     const kept = [];
-    for (const picture of read) {
-      const stored = await blobs.put(picture.bytes, clock.now());
+    for (const file of read) {
+      const stored = await blobs.put(file.bytes, clock.now());
       kept.push({
-        name: picture.name,
+        name: file.name,
         size: stored.size,
-        contentType: picture.contentType,
+        contentType: file.contentType,
         sha256: stored.sha256,
       });
     }
@@ -335,8 +345,8 @@ export function registerAgentRunnerRest(
 
   // A supervisor sends a signal: a tell, an interruption, a stop, a start, the model and the
   // effort, a wake. In their own name, on the account's record. As JSON, or as a form where a
-  // tell or an interruption carries pictures: the part `signal` with what the JSON would say,
-  // and a part `file` for each picture.
+  // tell or an interruption carries files: the part `signal` with what the JSON would say,
+  // and a part `file` for each file.
   app.post(`${REST_ROUTES.agents}/:handle/signals`, formTooLarge, async (c) => {
     const found = await supervising(c, true);
     if (found instanceof Response) {
@@ -366,7 +376,7 @@ export function registerAgentRunnerRest(
     const input = parsed.data;
     const carries = form !== undefined && form.getAll("file").length > 0;
     if (carries && input.kind !== "tell" && input.kind !== "interrupt") {
-      return invalid(c, "file: pictures go with a tell or an interrupt.");
+      return invalid(c, "file: files go with a tell or an interrupt.");
     }
     if (input.kind === "set" && input.set !== undefined) {
       // A model or an effort is one of those the runner last offered, where it offered any.
@@ -386,7 +396,7 @@ export function registerAgentRunnerRest(
         );
       }
     }
-    const files = form === undefined || !carries ? [] : await picturesOf(c, form);
+    const files = form === undefined || !carries ? [] : await filesOf(c, form);
     if (files instanceof Response) {
       return files;
     }
@@ -416,33 +426,37 @@ export function registerAgentRunnerRest(
     return c.json(restSignal(signal), 201);
   });
 
-  /** A picture sent with a signal of an account, as its bytes; nothing for one that is not that signal's. */
-  const pictureOf = async (c: Context<AppEnv>, accountId: string): Promise<Response> => {
+  /**
+   * A file sent with a signal of an account, as its bytes: a picture shown in place, any other
+   * handed over to save; nothing for one that is not that signal's.
+   */
+  const fileOf = async (c: Context<AppEnv>, accountId: string): Promise<Response> => {
     const number = Number(c.req.param("number"));
     const fileId = c.req.param("file") ?? "";
     const file =
       Number.isSafeInteger(number) && number > 0 && UUID.test(fileId)
         ? await findSignalFile(database, accountId, number, fileId)
         : undefined;
-    const type = file === undefined ? undefined : PICTURE_TYPES.get(file.contentType);
-    const bytes =
-      file === undefined || type === undefined ? undefined : await blobs.get(file.sha256);
-    if (type === undefined || bytes === undefined) {
+    const bytes = file === undefined ? undefined : await blobs.get(file.sha256);
+    if (file === undefined || bytes === undefined) {
       return c.json(errorBody("file.not_found", "The file was not found."), 404);
     }
-    return pictureResponse(c, type, bytes);
+    const picture = PICTURE_TYPES.get(file.contentType);
+    return picture === undefined
+      ? downloadResponse(c, file.name, bytes)
+      : pictureResponse(c, picture, bytes);
   };
 
-  // The pictures of a signal: for the account, whose runner hands them to the product, and for
+  // The files of a signal: for the account, whose runner hands them to the product, and for
   // its supervisors, who sent them.
   app.get(`${OWN}/signals/:number/files/:file`, async (c) => {
     const caller = await own(c);
-    return caller instanceof Response ? caller : pictureOf(c, caller.person.id);
+    return caller instanceof Response ? caller : fileOf(c, caller.person.id);
   });
 
   app.get(`${REST_ROUTES.agents}/:handle/signals/:number/files/:file`, async (c) => {
     const found = await supervising(c, false);
-    return found instanceof Response ? found : pictureOf(c, found.agent.id);
+    return found instanceof Response ? found : fileOf(c, found.agent.id);
   });
 
   app.get(`${REST_ROUTES.agents}/:handle/signals`, async (c) => {

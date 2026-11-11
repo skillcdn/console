@@ -98,6 +98,8 @@ export function codexArguments(turn: {
   readonly permissions: string | undefined;
   /** The conversation to go on with, or nothing for a new one. */
   readonly conversation: string | undefined;
+  /** The pictures that go with the turn's message, each a file by its path from the desk. */
+  readonly images?: readonly string[] | undefined;
 }): readonly string[] {
   const model = word(turn.model);
   const effort = word(turn.effort);
@@ -105,6 +107,9 @@ export function codexArguments(turn: {
   return [
     "exec",
     ...(conversation === undefined ? [] : ["resume"]),
+    // A picture each under its own option, and before an option that takes nothing: the
+    // product's option takes several values, and would take what follows it for one.
+    ...(turn.images ?? []).filter(isPicturePath).flatMap((path) => ["-i", path]),
     "--json",
     // The desk is the agent's own, a repository or not one yet.
     "--skip-git-repo-check",
@@ -116,6 +121,16 @@ export function codexArguments(turn: {
     "-",
   ];
 }
+
+/**
+ * A path that goes on the product's command line as a picture: one the runner wrote under the
+ * desk's `work/inbox/`, and nothing that begins as an option.
+ */
+const PICTURE_PATH = /^work\/inbox\/[1-9]\d{0,15}\/([^/\\]{1,200})$/;
+const isPicturePath = (path: string): boolean => {
+  const name = PICTURE_PATH.exec(path)?.[1];
+  return name !== undefined && !/^\.+$/.test(name);
+};
 
 type Json = Record<string, unknown>;
 const isObject = (value: unknown): value is Json =>
@@ -429,7 +444,15 @@ function sessionOf(
   const run = (messages: readonly DriverMessage[]): void => {
     const child = host.spawn(
       host.command,
-      codexArguments({ ...choice, permissions: options.permissions, conversation }),
+      codexArguments({
+        ...choice,
+        permissions: options.permissions,
+        conversation,
+        // What arrived together is one turn's: every picture of it goes with the turn.
+        images: messages.flatMap((message) =>
+          message.images.flatMap((picture) => (picture.path === undefined ? [] : [picture.path])),
+        ),
+      }),
       { cwd: options.cwd, env: options.env },
     );
     const mine: NonNullable<typeof turn> = { child, cut: undefined, done: Promise.resolve() };
@@ -632,7 +655,7 @@ export function createCodexDriver(host: DriverHost): Driver {
     product: { name: "Codex", tried: TRIED },
     // No message is taken in a turn, and a picture is taken as a file, which the driver has
     // nowhere to write: neither is offered. The model and the effort are each turn's.
-    can: { steer: false, images: false, resume: true, set: true },
+    can: { steer: false, images: true, imageFiles: true, resume: true, set: true },
     permissions: { modes: MODES, unattended: UNATTENDED_MODE, least: LEAST_MODE },
     async probe() {
       // One line: what the command is called, then its version.

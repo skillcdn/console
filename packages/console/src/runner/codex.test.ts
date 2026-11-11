@@ -164,8 +164,15 @@ describe("the codex driver", () => {
     expect(driver.name).toBe("codex");
     // The builds the driver was run against, and no other.
     expect(driver.product).toEqual({ name: "Codex", tried: ["0.164.0-alpha.11.1"] });
-    // No message is taken in a turn and no picture is handed over; the model is each turn's.
-    expect(driver.can).toEqual({ steer: false, images: false, resume: true, set: true });
+    // No message is taken in a turn; a picture is taken as a file, by its path in the desk;
+    // the model is each turn's.
+    expect(driver.can).toEqual({
+      steer: false,
+      images: true,
+      imageFiles: true,
+      resume: true,
+      set: true,
+    });
     expect(driver.permissions).toEqual({
       modes: ["read-only", "workspace-write", "approve-for-me", "danger-full-access"],
       unattended: "approve-for-me",
@@ -277,6 +284,89 @@ describe("the codex driver", () => {
       { type: "event", kind: "assistant", text: "seen" },
       { type: "turn_completed" },
     ]);
+  });
+
+  it("hands a turn the pictures of its message as files, each under the product's own option, before what takes nothing", async () => {
+    // Seen with the binary (0.167.0): `codex exec -i <file>` and `codex exec resume -i <file>`
+    // attach a picture to the prompt, and the product described the ones it was handed.
+    const picture = (name: string, path?: string) => ({
+      name,
+      contentType: "image/png",
+      bytes: Uint8Array.from([1]),
+      ...(path === undefined ? {} : { path }),
+    });
+    const { session, turn } = started();
+    await session.send({
+      text: "Look at these.",
+      priority: "next",
+      images: [
+        picture("screen.png", "work/inbox/7/screen.png"),
+        picture("보고서 (최종).png", "work/inbox/7/보고서 (최종).png"),
+        // A picture with no file in the desk cannot be handed over this way, and is left out.
+        picture("lost.png"),
+      ],
+    });
+    const first = await turn(0);
+    await until("the message", () => first.ended);
+    expect(first.args.slice(0, 6)).toEqual([
+      "exec",
+      "-i",
+      "work/inbox/7/screen.png",
+      "-i",
+      "work/inbox/7/보고서 (최종).png",
+      "--json",
+    ]);
+    // The message is still read from the standard input, last.
+    expect(first.args.at(-1)).toBe("-");
+    expect(first.sent).toEqual(["Look at these."]);
+    first.says(...BEGAN, answers("item_0", "seen"), COMPLETED);
+    first.exits(0);
+    // The turn after goes on with the conversation, and its pictures come after `resume`.
+    await until("the first turn's end", () => first.ended);
+    await session.send({
+      text: "And this.",
+      priority: "next",
+      images: [picture("next.png", "work/inbox/8/next.png")],
+    });
+    const second = await turn(1);
+    expect(second.args.slice(0, 5)).toEqual([
+      "exec",
+      "resume",
+      "-i",
+      "work/inbox/8/next.png",
+      "--json",
+    ]);
+    // Only a path the runner wrote under the desk's inbox goes on the command line: nothing
+    // that begins as an option, leaves the inbox, or names no file.
+    for (const path of [
+      "--dangerously-bypass-approvals-and-sandbox",
+      "-c",
+      "work/inbox/7/../../../.ssh/id",
+      "/etc/passwd",
+      "work/inbox/7/..",
+      "work/inbox/x/a.png",
+      "work/inbox/7/a/b.png",
+      "work/inbox/7/a\\b.png",
+      "",
+    ]) {
+      expect(
+        codexArguments({
+          model: null,
+          effort: null,
+          permissions: undefined,
+          conversation: undefined,
+          images: [path],
+        }),
+        path,
+      ).toEqual(
+        codexArguments({
+          model: null,
+          effort: null,
+          permissions: undefined,
+          conversation: undefined,
+        }),
+      );
+    }
   });
 
   it("goes on with the conversation a session before left, where it names one", async () => {

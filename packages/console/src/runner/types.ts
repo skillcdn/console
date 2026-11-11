@@ -13,6 +13,11 @@ export interface Picture {
   readonly name: string;
   readonly contentType: string;
   readonly bytes: Uint8Array;
+  /**
+   * Where the runner wrote it, from the desk, for a picture that came with a signal: what a
+   * product that takes a picture as a file is handed. Nothing for a picture a tool returned.
+   */
+  readonly path?: string | undefined;
 }
 
 /**
@@ -66,6 +71,12 @@ export interface DriverSession {
   }): Promise<boolean>;
   /** Ends the process: asked first, then made to. */
   stop(): Promise<void>;
+  /**
+   * Whether this session's product takes a picture, where that is known only of a session: an
+   * agent says what it takes when it starts. Nothing while it is not known, and left out by a
+   * driver whose product always answers as `can.images` says.
+   */
+  images?(): boolean | undefined;
   /** What the product does, as whole blocks, until it ends. Read once. */
   readonly events: AsyncIterable<DriverEvent>;
 }
@@ -101,7 +112,10 @@ export interface Driver {
   readonly can: {
     /** Whether a message reaches the agent after the tool call under way, and a turn is stopped for one. */
     readonly steer: boolean;
+    /** Whether a message carries pictures the product sees. */
     readonly images: boolean;
+    /** Whether the product takes a picture as a file in the desk, by its path, where others take its bytes. */
+    readonly imageFiles?: boolean | undefined;
     /** Whether a conversation is gone on with from one session to the next. */
     readonly resume: boolean;
     /** Whether the model and the effort are taken in a running session. */

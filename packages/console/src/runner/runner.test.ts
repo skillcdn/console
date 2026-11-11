@@ -97,13 +97,18 @@ function fakeSession(options: StartOptions, can: { set: boolean }) {
 }
 
 function fakeDriver(
-  over: { set?: boolean; onStart?: (session: ReturnType<typeof fakeSession>) => void } = {},
+  over: {
+    set?: boolean;
+    /** Whether the product takes a picture; one that does where nothing is said. */
+    images?: boolean;
+    onStart?: (session: ReturnType<typeof fakeSession>) => void;
+  } = {},
 ) {
   const sessions: ReturnType<typeof fakeSession>[] = [];
   const driver: Driver = {
     name: "claude",
     product: { name: "Claude Code", tried: ["2.1.0"] },
-    can: { steer: true, images: true, resume: true, set: over.set ?? false },
+    can: { steer: true, images: over.images ?? true, resume: true, set: over.set ?? false },
     permissions: { modes: ["auto", "dontAsk"], unattended: "auto", least: "dontAsk" },
     probe: async () => ({ version: "2.1.0", models: ["opus", "sonnet"], efforts: ["low", "high"] }),
     start(options) {
@@ -139,6 +144,8 @@ function fakeConsole() {
     /** What the next sending of a transcript is answered with, once. */
     refuse: undefined as ApiError | undefined,
     sessions: 0,
+    /** The ids of files of a signal the console answers no bytes of. */
+    lost: new Set<string>(),
   };
   const sessionOf = (id: string, input?: RestAgentSessionInput): RestAgentSession => ({
     id,
@@ -263,6 +270,9 @@ function fakeConsole() {
     }),
     readSignalFile: async (number, fileId) => {
       fetched.push(`${number}/${fileId}`);
+      if (says.lost.has(fileId)) {
+        throw new ApiError(404, "file.not_found", "The file was not found.");
+      }
       return { name: fileId, contentType: "image/png", bytes: Uint8Array.from([9, 8, 7]) };
     },
     secret: async (name) => {
@@ -343,7 +353,12 @@ function setup(
   over.before?.(console);
   const product = fakeDriver(over.driver);
   const saved: RunnerState[] = [];
-  const files = { written: [] as [string, string][], removed: [] as string[] };
+  const files = {
+    written: [] as [string, string | Uint8Array][],
+    removed: [] as string[],
+    /** Paths the desk takes no file at, for a test of a desk that cannot be written. */
+    refused: new Set<string>(),
+  };
   const log: string[] = [];
   const gitted: string[] = [];
   const runner = createRunner({
@@ -362,6 +377,9 @@ function setup(
     time: () => "14:02",
     files: {
       write: async (path, text) => {
+        if (files.refused.has(path)) {
+          throw new Error("EACCES");
+        }
         files.written.push([path, text]);
       },
       remove: async (path) => {
@@ -811,29 +829,136 @@ describe("the runner", () => {
     expect(console.events()).toHaveLength(1);
   });
 
-  it("hands the product the pictures a supervisor sent, and keeps them with what the agent was sent", async () => {
-    const { console, product } = setup();
-    const picture = {
-      id: "0199c4d8-0000-7000-8000-0000000000a1",
-      name: "screen.png",
-      size: 3,
-      contentType: "image/png",
-    };
-    console.signal({ text: "Look at this.", attachments: [picture] });
+  /** What the product was handed, with the session's mark, which the runner makes, written `MARK`. */
+  const marked = (text: string | undefined): string =>
+    (text ?? "").replaceAll(/\[console [a-z0-9]{6} /g, "[console MARK ");
+
+  const PICTURE = {
+    id: "0199c4d8-0000-7000-8000-0000000000a1",
+    name: "screen.png",
+    size: 3,
+    contentType: "image/png",
+  };
+  const SHEET = {
+    id: "0199c4d8-0000-7000-8000-0000000000a2",
+    name: "export 2026-11.csv",
+    size: 2048,
+    contentType: "text/csv",
+  };
+
+  it("hands the product the files a supervisor sent: each in the desk and named in the message, a picture as a picture too", async () => {
+    const { console, product, files } = setup();
+    console.signal({ text: "Look at this.", attachments: [PICTURE, SHEET] });
     const session = await sessionOf(product);
     await until("the message", () => session.sent.length === 1);
-    expect(console.fetched).toEqual([`1/${picture.id}`]);
-    expect(session.sent[0]?.images).toEqual([
-      { name: "screen.png", contentType: "image/png", bytes: Uint8Array.from([9, 8, 7]) },
+    expect(console.fetched).toEqual([`1/${PICTURE.id}`, `1/${SHEET.id}`]);
+    // Every file is written under the desk's ignored work/, by the signal's number, for the
+    // agent to open, to pass on, to attach elsewhere.
+    expect(files.written).toEqual([
+      ["inbox/1/screen.png", Uint8Array.from([9, 8, 7])],
+      ["inbox/1/export 2026-11.csv", Uint8Array.from([9, 8, 7])],
     ]);
-    // The transcript says what the agent was sent, the picture with it.
+    // A picture is handed to the product as a picture, with where it is in the desk.
+    expect(session.sent[0]?.images).toEqual([
+      {
+        name: "screen.png",
+        contentType: "image/png",
+        bytes: Uint8Array.from([9, 8, 7]),
+        path: "work/inbox/1/screen.png",
+      },
+    ]);
+    // The message says each under the signal's own header, after its words.
+    const text = marked(session.sent[0]?.text);
+    expect(text).toContain(
+      [
+        "Look at this.",
+        "[console MARK · attached picture, shown to you: work/inbox/1/screen.png]",
+        "[console MARK · attached file: work/inbox/1/export 2026-11.csv · text/csv · 2.0 KB]",
+      ].join("\n"),
+    );
+    // The transcript says what the agent was sent: the picture with it, the other file by name.
     await until("the transcript", () => console.events().length === 1);
     expect(console.uploads).toEqual(["screen.png"]);
-    expect(console.kept.values().next().value?.[0]).toMatchObject({
+    const event = console.kept.values().next().value?.[0];
+    expect(event).toMatchObject({
       kind: "person",
       text: "Look at this.",
       files: ["0199c4d8-0000-7000-8000-0000000000f1"],
     });
+    expect(event?.data).toMatchObject({ files: "export 2026-11.csv" });
+    expect(event?.data).not.toHaveProperty("unseen");
+  });
+
+  it("says so where the product takes no picture: the agent is told to open the file, and the record says it was not shown", async () => {
+    const { console, product, files } = setup({ driver: { images: false } });
+    console.signal({ text: "Look at this.", attachments: [PICTURE] });
+    const session = await sessionOf(product);
+    await until("the message", () => session.sent.length === 1);
+    // Nothing is dropped unsaid: the picture is a file in the desk, and the agent is told.
+    expect(session.sent[0]?.images).toEqual([]);
+    expect(files.written).toEqual([["inbox/1/screen.png", Uint8Array.from([9, 8, 7])]]);
+    expect(marked(session.sent[0]?.text)).toContain(
+      "[console MARK · attached picture, not shown to you, since your product takes none as a picture: open work/inbox/1/screen.png]",
+    );
+    // The record keeps the picture, and says that the product was not handed it as one: the
+    // page tells whoever sent it.
+    await until("the transcript", () => console.events().length === 1);
+    expect(console.uploads).toEqual(["screen.png"]);
+    expect(console.kept.values().next().value?.[0]?.data).toMatchObject({ unseen: "screen.png" });
+  });
+
+  it("writes a file under a name that is one, and says what could not be handed over", async () => {
+    const { console, product, files, log } = setup({
+      before: (at) => {
+        at.says.lost.add("0199c4d8-0000-7000-8000-0000000000b3");
+      },
+    });
+    files.refused.add("inbox/1/notes.txt");
+    const file = (id: string, name: string, contentType = "text/plain") => ({
+      id: `0199c4d8-0000-7000-8000-0000000000b${id}`,
+      name,
+      size: 1,
+      contentType,
+    });
+    console.signal({
+      text: "These.",
+      attachments: [
+        file("1", "../../.ssh/authorized_keys"),
+        file("2", "..\\..\\x:y?.txt"),
+        file("3", "lost.txt"),
+        file("4", "notes.txt"),
+        file("5", "보고서 [최종].pdf", "application/pdf"),
+        file("6", "보고서 [최종].pdf", "application/pdf"),
+        file("7", ".."),
+      ],
+    });
+    const session = await sessionOf(product);
+    await until("the message", () => session.sent.length === 1);
+    expect(files.written.map(([path]) => path)).toEqual([
+      "inbox/1/.._.._.ssh_authorized_keys",
+      "inbox/1/.._.._x_y_.txt",
+      "inbox/1/보고서 (최종).pdf",
+      "inbox/1/보고서 (최종)-2.pdf",
+      "inbox/1/file",
+    ]);
+    for (const [path] of files.written) {
+      expect(path.split("/")).toHaveLength(3);
+    }
+    const text = marked(session.sent[0]?.text);
+    // What could not be read from the console, or written in the desk, is said: never dropped.
+    expect(text).toContain(
+      "[console MARK · attached file lost.txt could not be handed to you: ask whoever sent it]",
+    );
+    expect(text).toContain(
+      "[console MARK · attached file notes.txt could not be handed to you: ask whoever sent it]",
+    );
+    // A console that names a file as no console should: the name is made one before it is
+    // written, and two of a name are kept apart. A name's brackets end no line they are said in.
+    expect(text).toContain(
+      "[console MARK · attached file: work/inbox/1/보고서 (최종).pdf · application/pdf · 1 B]",
+    );
+    expect(log.join("\n")).toContain("could not be read");
+    expect(log.join("\n")).not.toContain("authorized_keys");
   });
 
   it("holds a stop the console says stands, which the runner did not see itself", async () => {

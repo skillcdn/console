@@ -277,7 +277,7 @@ import {
   sessionRequired,
   signInRequired,
 } from "./auth.js";
-import { imageTypeOf } from "./kept-pictures.js";
+import { filenameParameters, imageTypeOf } from "./kept-pictures.js";
 import type { LiveFeed } from "./live-feed.js";
 import type { PictureCache } from "./pictures.js";
 import type { Quotas } from "./quotas.js";
@@ -493,19 +493,6 @@ interface InProject extends Caller {
   readonly scope: Scope;
   /** Who the change is attributed to: the person, as the agent when they act with a token. */
   readonly actor: Actor;
-}
-
-/**
- * `filename="..."; filename*=UTF-8''...`: the name for every browser, in what every one of them
- * reads, and the exact one for those that read the second form.
- */
-function filenameParameters(name: string): string {
-  const plain = name.replaceAll(/[^\x20-\x7e]/g, "_").replaceAll(/["\\]/g, "_");
-  const exact = encodeURIComponent(name).replaceAll(
-    /[!'()*]/g,
-    (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
-  );
-  return `filename="${plain}"; filename*=UTF-8''${exact}`;
 }
 
 /** The first thing wrong with what was sent, for a person. */

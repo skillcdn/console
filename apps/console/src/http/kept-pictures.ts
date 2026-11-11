@@ -45,3 +45,48 @@ export function pictureResponse(
   // A copy of its own: what the driver hands over may be a view of a larger buffer.
   return c.body(new Uint8Array(bytes).buffer);
 }
+
+/**
+ * `filename="..."; filename*=UTF-8''...`: the name for every browser, in what every one of them
+ * reads, and the exact one for those that read the second form.
+ */
+export function filenameParameters(name: string): string {
+  const plain = name.replaceAll(/[^\x20-\x7e]/g, "_").replaceAll(/["\\]/g, "_");
+  const exact = encodeURIComponent(name).replaceAll(
+    /[!'()*]/g,
+    (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+  return `filename="${plain}"; filename*=UTF-8''${exact}`;
+}
+
+/** What a file that is no picture is kept as where nothing better is known of it: bytes of no kind. */
+export const PLAIN_BYTES = "application/octet-stream";
+
+/**
+ * What a file is kept as: a picture by its bytes, whatever it was called; else what its sender
+ * called it, unless that was a picture, which it is not: such a file is bytes of no kind, so
+ * that nothing that goes by a file's kind shows it in place.
+ */
+export function keptTypeOf(bytes: Uint8Array, declared: string | undefined): string {
+  const picture = imageTypeOf(bytes);
+  if (picture !== undefined) {
+    return picture;
+  }
+  return declared === undefined || declared.toLowerCase().startsWith("image/")
+    ? PLAIN_BYTES
+    : declared;
+}
+
+/**
+ * The bytes of a file that is no picture, handed over to save under its name and shown nowhere
+ * in place: never sniffed, never run, whatever it was called.
+ */
+export function downloadResponse(c: Context<AppEnv>, name: string, bytes: Uint8Array): Response {
+  c.header("content-type", PLAIN_BYTES);
+  c.header("content-length", String(bytes.byteLength));
+  c.header("content-disposition", `attachment; ${filenameParameters(name)}`);
+  c.header("x-content-type-options", "nosniff");
+  c.header("content-security-policy", "default-src 'none'; sandbox");
+  c.header("cross-origin-resource-policy", "same-origin");
+  return c.body(new Uint8Array(bytes).buffer);
+}

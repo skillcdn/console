@@ -19,8 +19,8 @@ export interface RunnerHost {
   readonly user: string;
   /** A file under the desk, as text; nothing where there is none. */
   readText(path: string): Promise<string | undefined>;
-  /** Writes a file under the desk for its owner alone, its folders made on the way. */
-  writePrivate(path: string, text: string): Promise<void>;
+  /** Writes a file under the desk for its owner alone, its folders made on the way: a text, or bytes as they are. */
+  writePrivate(path: string, value: string | Uint8Array): Promise<void>;
   /** Removes a file under the desk; one that is not there is removed already. */
   remove(path: string): Promise<void>;
   /** Opens a socket for a wake source: the messages of text it carries, until it closes. */
@@ -100,10 +100,10 @@ export function createRunnerHost(
         throw error;
       }
     },
-    async writePrivate(path, text) {
+    async writePrivate(path, value) {
       const full = under(path);
       await mkdir(dirname(full), { recursive: true });
-      await writeFile(full, text, { mode: 0o600 });
+      await writeFile(full, value, { mode: 0o600 });
       // A file that was there keeps the mode it had: say it again.
       await chmod(full, 0o600);
     },

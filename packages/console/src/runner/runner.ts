@@ -11,7 +11,14 @@ import {
 import type { RestSignal, RestTranscriptEventInput } from "../schemas.js";
 import type { AgentStateReason, TranscriptKind } from "../vocabulary.js";
 import type { RunnerConfig } from "./config.js";
-import { composeSignals, GROUP_WINDOW_MS, introOf, makeMark } from "./message.js";
+import {
+  type Attached,
+  composeSignals,
+  deskName,
+  GROUP_WINDOW_MS,
+  introOf,
+  makeMark,
+} from "./message.js";
 import { redactorOf } from "./redact.js";
 import type {
   Driver,
@@ -49,6 +56,14 @@ export const AUTOSAVE_MESSAGE = "Autosave at the end of a session";
 export const MAX_SOURCE_PAUSE_MS = 5 * 60_000;
 /** How long a wake source holds before the runner takes it to have worked. */
 const SOURCE_HELD_MS = 60_000;
+/** The kinds of file a console keeps as a picture: what a product is handed as one. */
+const PICTURE_TYPES: ReadonlySet<string> = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+]);
+
 /** How many events wait to be sent before the oldest are let go: a console away for hours is not kept up with in memory. */
 const MAX_OUTBOX = 20_000;
 /** Room left in a batch for what wraps its events. */
@@ -97,9 +112,13 @@ export interface RunnerOptions {
   readonly random: () => number;
   /** A moment as a header says it: the hour and the minute in the workspace's zone. */
   readonly time: (iso: string) => string;
-  /** A session's files under the desk's ignored `work/`: written for their owner alone, removed at its end. */
+  /**
+   * Files under the desk's ignored `work/`, written for their owner alone: what a session is
+   * handed of the account's store, removed at its end, and what came with a signal, under
+   * `inbox/<number>/`, which is the agent's to keep or to remove.
+   */
   readonly files: {
-    write(path: string, text: string): Promise<void>;
+    write(path: string, value: string | Uint8Array): Promise<void>;
     remove(path: string): Promise<void>;
   };
   readonly state: {
@@ -651,23 +670,68 @@ export function createRunner(options: RunnerOptions): Runner {
     }
     const batch = pending;
     pending = [];
-    // The pictures a supervisor sent, read from the console for the product to see.
+    // The files a supervisor sent, read from the console and written in the desk, under its
+    // ignored work/, for the agent to open; a picture is handed to the product as a picture
+    // too, where the product takes one. What could not be handed over is said to the agent in
+    // the message, and what a product was not shown as a picture is said on the record.
     const pictures = new Map<number, Picture[]>();
+    const attached = new Map<number, Attached[]>();
+    const images: Picture[] = [];
+    // What the session says of itself where it knows, an agent that said what it takes; else
+    // what the driver says of its product.
+    const takesPictures = target.driver.images?.() ?? driver.can.images;
     for (const signal of batch) {
+      const taken = new Set<string>();
       for (const file of signal.attachments) {
+        const picture = PICTURE_TYPES.has(file.contentType);
+        let bytes: Uint8Array | undefined;
         try {
-          const read = await client.readSignalFile(signal.number, file.id, abort.signal);
-          pictures.set(signal.number, [
-            ...(pictures.get(signal.number) ?? []),
-            { name: file.name, contentType: file.contentType, bytes: read.bytes },
-          ]);
+          bytes = (await client.readSignalFile(signal.number, file.id, abort.signal)).bytes;
         } catch (error) {
-          log(`a picture of signal #${signal.number} could not be read (${codeOf(error)})`);
+          log(`a file of signal #${signal.number} could not be read (${codeOf(error)})`);
         }
+        let path: string | undefined;
+        if (bytes !== undefined) {
+          const name = deskName(file.name, taken);
+          taken.add(name);
+          try {
+            await options.files.write(`inbox/${signal.number}/${name}`, bytes);
+            path = `work/inbox/${signal.number}/${name}`;
+          } catch (error) {
+            log(`a file of signal #${signal.number} could not be written (${codeOf(error)})`);
+          }
+        }
+        // A product that takes a picture as a file takes it by its path in the desk.
+        const shown =
+          picture &&
+          bytes !== undefined &&
+          takesPictures &&
+          (driver.can.imageFiles !== true || path !== undefined);
+        if (picture && bytes !== undefined) {
+          const kept = { name: file.name, contentType: file.contentType, bytes, path };
+          pictures.set(signal.number, [...(pictures.get(signal.number) ?? []), kept]);
+          if (shown) {
+            images.push(kept);
+          }
+        }
+        attached.set(signal.number, [
+          ...(attached.get(signal.number) ?? []),
+          {
+            name: file.name,
+            // A picture that could not be written is still handed over where its bytes are taken.
+            path: bytes === undefined ? undefined : path,
+            contentType: file.contentType,
+            size: file.size,
+            picture: !picture ? undefined : shown ? "shown" : "unseen",
+          },
+        ]);
       }
     }
-    const images = driver.can.images ? [...pictures.values()].flat() : [];
-    const composed = composeSignals(batch, { mark: target.mark, time: options.time });
+    const composed = composeSignals(batch, {
+      mark: target.mark,
+      time: options.time,
+      attached: (signal) => attached.get(signal.number) ?? [],
+    });
     const intro = target.first
       ? introOf(target.mark, resetBy === undefined ? undefined : { by: resetBy })
       : undefined;
@@ -686,11 +750,24 @@ export function createRunner(options: RunnerOptions): Runner {
     }
     target.turn = true;
     for (const signal of batch) {
+      const files = attached.get(signal.number) ?? [];
+      const named = (which: (file: Attached) => boolean): string | undefined => {
+        const names = files.filter(which).map((file) => file.name);
+        return names.length === 0 ? undefined : names.join(", ");
+      };
+      // Beside the pictures: the other files by name, and the pictures the product was not
+      // handed as pictures, which whoever sent them is told of on the page.
+      const others = named((file) => file.picture === undefined);
+      const unseen = named((file) => file.picture === "unseen");
       record(
         target,
         signal.source === "person" ? "person" : "wake",
         signal.text,
-        signalData(signal),
+        {
+          ...signalData(signal),
+          ...(others === undefined ? {} : { files: others }),
+          ...(unseen === undefined ? {} : { unseen }),
+        },
         pictures.get(signal.number),
       );
     }

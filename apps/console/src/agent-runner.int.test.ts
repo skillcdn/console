@@ -4,6 +4,7 @@ import {
   connectPath,
   MAX_RUNNER_LINE_LENGTH,
   MAX_RUNNER_OFFERS,
+  MAX_SIGNAL_ATTACHMENTS,
   MAX_SIGNAL_LENGTH,
   REST_ROUTES,
   restAgentSchema,
@@ -578,7 +579,7 @@ describe("an agent account's runner (ADR-0085)", () => {
     });
   });
 
-  it("carries the pictures a supervisor sends with a tell, read by the account's runner and its supervisors", async () => {
+  it("carries the files a supervisor sends with a tell, read by the account's runner and its supervisors", async () => {
     const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
     const GIF = Uint8Array.from([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 1, 2, 3]);
     const form = (signal: unknown, files: readonly [Uint8Array, string, string][]) => {
@@ -591,10 +592,19 @@ describe("an agent account's runner (ADR-0085)", () => {
       }
       return h.request(SIGNALS, { method: "POST", headers: fromPages(alice), body });
     };
+    const CSV = new TextEncoder().encode("week,orders\n2026-W45,1297\n");
+    const PAGE = new TextEncoder().encode("<script>alert(1)</script>");
+    const DRAWING = new TextEncoder().encode("<svg onload=alert(1)>");
     const sent = await form({ kind: "tell", text: "Look at these." }, [
       [PNG, "screen.png", "image/png"],
       // What it is is read off its bytes, whatever the form called it.
       [GIF, "moving.bin", "application/octet-stream"],
+      // A file that is no picture is carried as what its sender called it.
+      [CSV, "export 2026-11.csv", "text/csv"],
+      // What is called a picture and is none by its bytes is carried as bytes of no kind, so
+      // that nothing shows it in place: a page with a script, a drawing that runs.
+      [PAGE, "page.png", "image/png"],
+      [DRAWING, "x.svg", "image/svg+xml"],
     ]);
     expect(sent.status).toBe(201);
     const told = restSignalSchema.parse(await sent.json());
@@ -602,9 +612,12 @@ describe("an agent account's runner (ADR-0085)", () => {
     expect(told.attachments).toMatchObject([
       { name: "screen.png", size: PNG.byteLength, contentType: "image/png" },
       { name: "moving.bin", size: GIF.byteLength, contentType: "image/gif" },
+      { name: "export 2026-11.csv", size: CSV.byteLength, contentType: "text/csv" },
+      { name: "page.png", size: PAGE.byteLength, contentType: "application/octet-stream" },
+      { name: "x.svg", size: DRAWING.byteLength, contentType: "application/octet-stream" },
     ]);
     expect(JSON.stringify(told)).not.toContain("sha256");
-    const [first, second] = told.attachments;
+    const [first, second, third, fourth, fifth] = told.attachments;
     const file = (number: number, id: string, who = "mira") =>
       agentPath(who, "signals", String(number), "files", id);
 
@@ -618,6 +631,27 @@ describe("an agent account's runner (ADR-0085)", () => {
     const own = await get(bearer(command), file(told.number, second?.id ?? "", "me"));
     expect(own.headers.get("content-type")).toBe("image/gif");
     expect(new Uint8Array(await own.arrayBuffer())).toEqual(GIF);
+    // A file that is no picture is handed over as bytes to save, under its name, and shown
+    // nowhere in place, whatever it was called.
+    for (const [attachment, bytes, name] of [
+      [third, CSV, "export 2026-11.csv"],
+      [fourth, PAGE, "page.png"],
+      [fifth, DRAWING, "x.svg"],
+    ] as const) {
+      for (const read of [
+        await get({ cookie: alice }, file(told.number, attachment?.id ?? "")),
+        await get(bearer(command), file(told.number, attachment?.id ?? "", "me")),
+      ]) {
+        expect(read.status, name).toBe(200);
+        expect(read.headers.get("content-type"), name).toBe("application/octet-stream");
+        expect(read.headers.get("content-disposition"), name).toBe(
+          `attachment; filename="${name}"; filename*=UTF-8''${encodeURIComponent(name)}`,
+        );
+        expect(read.headers.get("x-content-type-options")).toBe("nosniff");
+        expect(read.headers.get("content-security-policy")).toBe("default-src 'none'; sandbox");
+        expect(new Uint8Array(await read.arrayBuffer())).toEqual(bytes);
+      }
+    }
     expect((await get({ cookie: bob }, file(told.number, first?.id ?? ""))).status).toBe(403);
     expect((await get({ cookie: bob }, file(told.number, first?.id ?? "", "me"))).status).toBe(404);
     // A picture is its own signal's, and nothing else's.
@@ -641,19 +675,11 @@ describe("an agent account's runner (ADR-0085)", () => {
     expect(carried[0]?.signal.attachments).toEqual(told.attachments);
     await reading.cancel();
 
-    // A few pictures, pictures by their bytes, with a tell or an interrupt, and what says which.
+    // A few files, with a tell or an interrupt that has words, and what says which.
     for (const [signal, files] of [
       [
         { kind: "tell", text: "Too many." },
-        Array.from({ length: 5 }, () => [PNG, "a.png", "image/png"]),
-      ],
-      [
-        { kind: "tell", text: "Not a picture." },
-        [[new TextEncoder().encode("<script>alert(1)</script>"), "page.png", "image/png"]],
-      ],
-      [
-        { kind: "tell", text: "A drawing that runs." },
-        [[new TextEncoder().encode("<svg onload=alert(1)>"), "x.svg", "image/svg+xml"]],
+        Array.from({ length: MAX_SIGNAL_ATTACHMENTS + 1 }, () => [PNG, "a.png", "image/png"]),
       ],
       [{ kind: "tell", text: "Empty." }, [[new Uint8Array(), "empty.png", "image/png"]]],
       [{ kind: "tell", text: "A path." }, [[PNG, "../screen.png", "image/png"]]],

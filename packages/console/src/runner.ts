@@ -19,7 +19,10 @@ export {
 } from "./runner/desk.js";
 export { LAUNCHD_LABEL, launchd, launchdUnit } from "./runner/launchd.js";
 export {
+  type Attached,
+  attachedLine,
   composeSignals,
+  deskName,
   fenced,
   GROUP_WINDOW_MS,
   headerOf,

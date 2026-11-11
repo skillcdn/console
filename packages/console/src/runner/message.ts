@@ -44,6 +44,85 @@ export interface MessageOptions {
   readonly mark: string;
   /** A moment as a header says it: the hour and the minute in the workspace's zone. */
   readonly time: (iso: string) => string;
+  /** The files that came with a signal, as the runner handed them over: a line each after its words. */
+  readonly attached?: ((signal: RestSignal) => readonly Attached[]) | undefined;
+}
+
+/** A file that came with a signal, as the agent is told of it. */
+export interface Attached {
+  readonly name: string;
+  /** Where it is, from the desk; nothing where it could not be read or written there. */
+  readonly path: string | undefined;
+  readonly contentType: string;
+  readonly size: number;
+  /** Whether it is a picture, and whether the product was handed it as one. */
+  readonly picture: "shown" | "unseen" | undefined;
+}
+
+/** A size as a line says it: bytes, then kilobytes and megabytes to a tenth. */
+function sizeOf(bytes: number): string {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  const kb = bytes / 1024;
+  return kb < 1024 ? `${kb.toFixed(1)} KB` : `${(kb / 1024).toFixed(1)} MB`;
+}
+
+/**
+ * One file as the agent reads it, on a line of its own after the signal's words: where it is in
+ * the desk, and for a picture whether the product was handed it as a picture too. What could
+ * not be handed over is said, never dropped. The line carries the session's mark, as a header
+ * does: it is the console's runner that says where the file is, and nothing a supervisor wrote.
+ */
+export function attachedLine(file: Attached, mark: string): string {
+  const says = (what: string): string => `[console ${mark} · ${what}]`;
+  if (file.picture === "shown") {
+    return says(`attached picture, shown to you: ${file.path ?? inHeader(file.name)}`);
+  }
+  if (file.path === undefined) {
+    return says(
+      `attached file ${inHeader(file.name)} could not be handed to you: ask whoever sent it`,
+    );
+  }
+  if (file.picture === "unseen") {
+    return says(
+      `attached picture, not shown to you, since your product takes none as a picture: open ${file.path}`,
+    );
+  }
+  return says(`attached file: ${file.path} · ${inHeader(file.contentType)} · ${sizeOf(file.size)}`);
+}
+
+/**
+ * A name a file is written under in the desk: one segment, with nothing a file system reads as a
+ * path, a drive or a pattern, no brackets, which end a line the agent is told the name in, and
+ * no control character; `file` where nothing is left of it.
+ */
+export function deskName(name: string, taken: ReadonlySet<string> = new Set()): string {
+  const cleaned = [...name]
+    .map((char) => {
+      const code = char.codePointAt(0) ?? 0;
+      if (code < 0x20 || code === 0x7f || '/\\:*?"<>|'.includes(char)) {
+        return "_";
+      }
+      return char === "[" ? "(" : char === "]" ? ")" : char;
+    })
+    .join("")
+    .trim()
+    .slice(0, 120);
+  const whole = cleaned.length === 0 || /^\.+$/.test(cleaned) ? "file" : cleaned;
+  if (!taken.has(whole)) {
+    return whole;
+  }
+  const dot = whole.lastIndexOf(".");
+  const stem = dot > 0 ? whole.slice(0, dot) : whole;
+  const ending = dot > 0 ? whole.slice(dot) : "";
+  for (let number = 2; number < 1000; number += 1) {
+    const candidate = `${stem}-${number}${ending}`;
+    if (!taken.has(candidate)) {
+      return candidate;
+    }
+  }
+  return whole;
 }
 
 /** The header of one signal: `[console k3f9a2 #8812 · tell · Jane (through Claude Code) · 14:02]`. */
@@ -59,15 +138,17 @@ export function fenced(text: string): string {
   return `${fence}\n${text}\n${fence}`;
 }
 
-/** One signal as the agent reads it: its header, and what it says under it. */
+/** One signal as the agent reads it: its header, what it says under it, and the files that came with it. */
 function entryOf(signal: RestSignal, options: MessageOptions, times: number): string {
   const header = headerOf(signal, options, times);
   const words = signal.text.trim();
-  if (words.length === 0) {
-    return header;
-  }
-  // What came from outside the console is carried as what it is: someone else's words.
-  return `${header}\n${signal.source === "messenger" ? fenced(words) : words}`;
+  const files = (options.attached?.(signal) ?? []).map((file) => attachedLine(file, options.mark));
+  return [
+    header,
+    // What came from outside the console is carried as what it is: someone else's words.
+    ...(words.length === 0 ? [] : [signal.source === "messenger" ? fenced(words) : words]),
+    ...files,
+  ].join("\n");
 }
 
 export interface Composed {
