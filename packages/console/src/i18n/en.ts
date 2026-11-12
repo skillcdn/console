@@ -1701,6 +1701,34 @@ export const en = {
         toolFailed: "Failed",
         toolRefused: "Refused",
         toolRunning: "running",
+        /** Who stopped a turn with no words of their own, so that what waited was read. */
+        interrupted: (who: string) => `${who} interrupted, so that what waited is read now.`,
+        unread: "The session ended before the agent read this.",
+        /** Where a turn ended, with how long the agent was at it where that is known. */
+        turnDone: (seconds: number | undefined) =>
+          seconds === undefined
+            ? "Done"
+            : seconds < 60
+              ? `Done in ${seconds}s`
+              : `Done in ${Math.floor(seconds / 60)}m ${seconds % 60}s`,
+        latest: "To the latest",
+        latestNew: "New below",
+        /** What the agent is at while a turn is under way. */
+        working: {
+          thinking: "Thinking",
+          working: "Working",
+          tool: (name: string) => `Running ${name}`,
+        },
+        /** When what was told and not taken yet is read, by why it waits; and the way to have it read now. */
+        waiting: {
+          call: "Read after the tool call under way.",
+          turn: "Read when the turn under way ends.",
+          stopped: "Read once it is started again.",
+          unheard: "Read once its runner is heard from.",
+          soon: "On its way to the agent.",
+          interrupt: "Interrupt",
+          interruptHint: "Stops the turn under way so that this is read now.",
+        },
       },
       tell: {
         aria: "Say something to the agent",
@@ -1709,18 +1737,12 @@ export const en = {
         files: "Files to send",
         attach: "Attach files",
         removeFile: (name: string) => `Remove ${name}`,
-        keys: "Enter tells, Shift with Enter is a new line. Paste a picture, or drop files here.",
         needsWords: "Say something with the files: a file alone tells the agent nothing to do.",
         unseen:
           "Its product takes no picture: the picture is handed over as a file in its desk, and the agent is told to open it.",
         controlWords: "Words for the agent",
         controlWordsPlaceholder: "Why, where you have a word for it",
         send: "Tell",
-        tellHint: "Read by the agent after the tool call under way.",
-        tellHintAfterTurn:
-          "Read by the agent when the turn under way ends: its product takes no message in a turn.",
-        interrupt: "Interrupt",
-        interruptHint: "Stops the turn under way, then gives these words.",
         stop: "Stop",
         stopHint: "Ends its session. It stays stopped until it is restarted or reset.",
         restart: "Restart",

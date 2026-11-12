@@ -14,6 +14,7 @@ import type {
   RestPlugin,
   RestProject,
   RestRun,
+  RestSignal,
   RestTask,
   RestToken,
   RestWork,
@@ -29,13 +30,22 @@ import {
   AgentSecretList,
   AgentSessionList,
   AgentStateBadge,
+  ChatPane,
+  FOLLOW_SLACK,
+  followsAfter,
+  followsEnd,
   pastedName,
   SignalComposer,
+  TalkWaiting,
+  TalkWorking,
   TranscriptView,
+  takenOf,
   talkOf,
   tellsWith,
+  waitingOf,
   withChosen,
   withoutChosen,
+  workingOf,
 } from "./agent-page.js";
 import {
   AgentAccountForm,
@@ -2196,8 +2206,9 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     // it was more than a tell, its words, its picture, and the file that is no picture, to save
     // from the signal's own address.
     expect(seen).toContain('<li class="sc-talk-item sc-talk-told" data-n="1">');
-    expect(seen).toContain(
-      '<span class="sc-talk-who">alice</span><span>through Claude Code</span>',
+    // Who said it stands under the words, as in a chat, and not within them.
+    expect(seen).toMatch(
+      /<\/div><div class="sc-talk-meta"><span class="sc-talk-who">alice<\/span><span>through Claude Code<\/span>/,
     );
     expect(seen).toMatch(/<span class="sc-badge sc-badge-neutral">Interrupt<\/span>/);
     expect(seen).toContain('<pre class="sc-talk-text">Hold the release.</pre>');
@@ -2222,7 +2233,9 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     );
     // A tool's call and its answer are one row that opens: the tool, the first line of what it
     // was called with, that it failed; inside, the call and the answer, cut where it was long.
-    expect(seen).toContain('<li class="sc-talk-item sc-talk-tool sc-talk-tool-failed" data-n="3">');
+    expect(seen).toContain(
+      '<li class="sc-talk-item sc-talk-step sc-talk-tool sc-talk-tool-failed" data-n="3">',
+    );
     expect(seen).toContain(
       '<code class="sc-talk-tool-name">Bash</code><span class="sc-talk-tool-line">ls -la</span>',
     );
@@ -2231,10 +2244,12 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     expect(seen).toContain('<pre class="sc-talk-code sc-talk-code-answer">The beginning</pre>');
     expect(seen).toContain("The beginning of 59 KB.");
     expect(seen).toContain(">Read it whole<");
-    // A picture a tool returned stands under its row, seen without opening it.
+    // A picture a tool returned stands under its row, seen without opening it, and opens
+    // large over the page as every picture of the console does.
     expect(seen).toContain(
-      '<img src="/api/v1/agents/mira/sessions/s/files/0199c4d8-0000-7000-8000-0000000000f1" alt="screen.png"',
+      '<button type="button" class="sc-picture-thumb" aria-label="Open the picture screen.png"><img src="/api/v1/agents/mira/sessions/s/files/0199c4d8-0000-7000-8000-0000000000f1" alt="screen.png"',
     );
+    expect(seen).not.toContain('target="_blank"');
     expect(seen).toContain("Sealed by Alice Example: A token in it.");
     // A thought is folded to its first line; a status is a note with what the runner said of it.
     expect(seen).toContain(
@@ -2273,6 +2288,272 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     expect(
       renderToStaticMarkup(<TranscriptView events={[]} fileHref={() => ""} empty={<p>none</p>} />),
     ).toBe("<p>none</p>");
+    // What stands at the foot is there with no event too: words that wait for a first session.
+    expect(
+      renderToStaticMarkup(
+        <TranscriptView
+          events={[]}
+          fileHref={() => ""}
+          empty={<p>none</p>}
+          foot={<li>waits</li>}
+        />,
+      ),
+    ).toBe(
+      '<p>none</p><ol class="sc-talk" aria-label="What the agent is doing"><li>waits</li></ol>',
+    );
+  });
+
+  it("says where a turn ended and how long it took, who stopped one with no words, and what was never read", () => {
+    const at = (seconds: number) => new Date(Date.parse(WHEN) + seconds * 1000).toISOString();
+    const seen = renderToStaticMarkup(
+      <TranscriptView
+        events={[
+          event(1, { kind: "person", text: "Count them.", at: at(0), data: { signal: 1 } }),
+          event(2, { text: "Six.", at: at(40) }),
+          event(3, {
+            kind: "status",
+            text: "The turn completed.",
+            at: at(133),
+            data: { turn: "completed" },
+          }),
+          event(4, {
+            kind: "person",
+            text: "",
+            at: at(200),
+            data: { signal: 3, kind: "interrupt", by: "alice" },
+          }),
+          event(5, {
+            kind: "person",
+            text: "And the refunds?",
+            at: at(201),
+            data: { signal: 2, by: "alice", unread: true },
+          }),
+          event(6, {
+            kind: "status",
+            text: "The turn completed.",
+            at: at(202),
+            data: { turn: "completed" },
+          }),
+        ]}
+        fileHref={(id) => id}
+      />,
+    );
+    // A turn's end is a line of its own, with how long the agent was at it, and no note of a status.
+    expect(seen).toContain('<li class="sc-talk-item sc-talk-turn" data-n="3">');
+    expect(seen).toContain("Done in 2m 13s");
+    expect(seen).not.toContain("The turn completed.");
+    expect(seen).toContain("Done in 2s");
+    // An interrupt with no words is who stopped the turn, and no message.
+    expect(seen).toContain('<li class="sc-talk-item sc-talk-note" data-n="4">');
+    expect(seen).toContain("alice interrupted, so that what waited is read now.");
+    // What the session ended on before the agent took it says so.
+    expect(seen).toContain(
+      '<p class="sc-talk-note-line sc-talk-unread">The session ended before the agent read this.</p>',
+    );
+    expect(seen.match(/sc-talk-unread/g)).toHaveLength(1);
+    const korean = renderToStaticMarkup(
+      <LanguageContext.Provider value={KOREAN}>
+        <TranscriptView
+          events={[
+            event(1, { kind: "person", text: "세어 주세요.", at: at(0), data: { signal: 1 } }),
+            event(2, {
+              kind: "status",
+              text: "The turn completed.",
+              at: at(45),
+              data: { turn: "completed" },
+            }),
+          ]}
+          fileHref={(id) => id}
+        />
+      </LanguageContext.Provider>,
+    );
+    expect(korean).toContain("45초 만에 마침");
+  });
+
+  it("reads off a session's events whether a turn is under way, and what the agent is at", () => {
+    const told = event(1, { kind: "person", text: "Go.", data: { signal: 4 } });
+    const done = event(9, {
+      kind: "status",
+      text: "The turn completed.",
+      data: { turn: "completed" },
+    });
+    expect(workingOf([])).toBeUndefined();
+    // Told and nothing said yet, or a thought: thinking.
+    expect(workingOf([told])).toEqual({ at: "thinking" });
+    expect(workingOf([told, event(2, { kind: "thinking", text: "Hm." })])).toEqual({
+      at: "thinking",
+    });
+    // A call that was not answered is the tool it runs; answered, the agent is at work again.
+    const call = event(3, { kind: "tool_call", text: "ls", data: { tool: "Bash", id: "t1" } });
+    expect(workingOf([told, call])).toEqual({ at: "tool", tool: "Bash" });
+    expect(
+      workingOf([told, call, event(4, { kind: "tool_result", text: "a", data: { id: "t1" } })]),
+    ).toEqual({ at: "working" });
+    expect(workingOf([told, event(2, { text: "Looking." })])).toEqual({ at: "working" });
+    // A status that is no end of a turn, and a permission, say nothing of it.
+    expect(
+      workingOf([told, call, event(4, { kind: "status", text: "Compacted.", data: {} })]),
+    ).toEqual({ at: "tool", tool: "Bash" });
+    // Where the record says the turn ended, or the session did, no turn is under way.
+    expect(workingOf([told, event(2, { text: "Done." }), done])).toBeUndefined();
+    expect(
+      workingOf([
+        told,
+        event(2, {
+          kind: "status",
+          text: "The session ended: stopped.",
+          data: { ended: "stopped" },
+        }),
+      ]),
+    ).toBeUndefined();
+    expect(
+      workingOf([told, done, event(10, { kind: "wake", text: "", data: { signal: 5 } })]),
+    ).toEqual({ at: "thinking" });
+    // The last signal the record says was taken; nothing where no event carries one.
+    expect(takenOf([told, call, event(10, { kind: "wake", text: "", data: { signal: 6 } })])).toBe(
+      6,
+    );
+    expect(takenOf([call])).toBeUndefined();
+  });
+
+  it("knows which of the words sent still wait: a supervisor's, after the last signal the agent took", () => {
+    const signal = (number: number, over: Partial<RestSignal> = {}): RestSignal => ({
+      number,
+      kind: "tell",
+      by: alice,
+      agent: null,
+      plugin: null,
+      source: "person",
+      key: null,
+      text: `Word ${number}.`,
+      set: null,
+      attachments: [],
+      at: WHEN,
+      ...over,
+    });
+    const SHEET = {
+      id: "0199c4d8-0000-7000-8000-0000000000f2",
+      name: "a.csv",
+      size: 3,
+      contentType: "text/csv",
+    };
+    const record = [
+      signal(7, { kind: "interrupt", text: "" }),
+      signal(6),
+      signal(5, { kind: "wake", source: "board", by: null, text: "A task." }),
+      signal(4, { kind: "interrupt", text: "Stop that." }),
+      signal(3),
+      signal(2, { kind: "stop", text: "Enough." }),
+    ];
+    // The oldest first; a wake, a stop and an interrupt with no words are no message that waits.
+    expect(waitingOf(record, 2).map((one) => one.number)).toEqual([3, 4, 6]);
+    expect(waitingOf(record, 4).map((one) => one.number)).toEqual([6]);
+    expect(waitingOf(record, 7)).toEqual([]);
+    // Files alone wait too, as what was sent.
+    expect(waitingOf([signal(8, { text: "", attachments: [SHEET] })], 0)).toHaveLength(1);
+    // A pane is followed while whoever reads is at its end, give or take a line.
+    expect(followsEnd({ scrollHeight: 2000, scrollTop: 1400, clientHeight: 600 })).toBe(true);
+    expect(
+      followsEnd({ scrollHeight: 2000, scrollTop: 1400 - FOLLOW_SLACK, clientHeight: 600 }),
+    ).toBe(true);
+    expect(
+      followsEnd({ scrollHeight: 2000, scrollTop: 1399 - FOLLOW_SLACK, clientHeight: 600 }),
+    ).toBe(false);
+    // Once it scrolled: at its end it follows, and moved up it does not, whatever it did before.
+    const far = { scrollHeight: 2000, scrollTop: 900, clientHeight: 600 };
+    expect(followsAfter(false, 0, { ...far, scrollTop: 1400 })).toBe(true);
+    expect(followsAfter(true, 1400, far)).toBe(false);
+    // What arrives makes the conversation taller without moving the pane up: it goes on as it
+    // was, following where it followed, and away where whoever reads had scrolled away.
+    expect(followsAfter(true, 900, { ...far, scrollHeight: 2600 })).toBe(true);
+    expect(followsAfter(true, 800, far)).toBe(true);
+    expect(followsAfter(false, 800, far)).toBe(false);
+
+    // At the conversation's foot: each as it will stand, with when it is read under the last,
+    // and the way to have it read now while a turn is under way.
+    const waiting = renderToStaticMarkup(
+      <ol>
+        <TalkWaiting
+          signals={[signal(3), signal(6, { attachments: [SHEET] })]}
+          why="turn"
+          onInterrupt={() => undefined}
+        />
+      </ol>,
+    );
+    expect(waiting.match(/<li class="sc-talk-item sc-talk-told sc-talk-waiting"/g)).toHaveLength(2);
+    expect(waiting).toContain('<pre class="sc-talk-text">Word 3.</pre>');
+    expect(waiting).toContain("a.csv");
+    expect(waiting.match(/Read when the turn under way ends\./g)).toHaveLength(1);
+    expect(waiting).toMatch(
+      /<button[^>]*title="Stops the turn under way so that this is read now\."[^>]*>Interrupt<\/button>/,
+    );
+    // With no turn to stop there is no such way: it says when the words are read, and that is all.
+    for (const [why, says] of [
+      ["stopped", "Read once it is started again."],
+      ["unheard", "Read once its runner is heard from."],
+      ["soon", "On its way to the agent."],
+    ] as const) {
+      const still = renderToStaticMarkup(
+        <ol>
+          <TalkWaiting signals={[signal(3)]} why={why} onInterrupt={() => undefined} />
+        </ol>,
+      );
+      expect(still).toContain(says);
+      expect(still).not.toContain(">Interrupt<");
+    }
+    expect(
+      renderToStaticMarkup(
+        <ol>
+          <TalkWaiting signals={[signal(3)]} why="call" />
+        </ol>,
+      ),
+    ).not.toContain(">Interrupt<");
+    expect(renderToStaticMarkup(<TalkWaiting signals={[]} why="call" />)).toBe("");
+    const korean = renderToStaticMarkup(
+      <LanguageContext.Provider value={KOREAN}>
+        <ol>
+          <TalkWaiting signals={[signal(3)]} why="call" onInterrupt={() => undefined} />
+        </ol>
+      </LanguageContext.Provider>,
+    );
+    expect(korean).toContain(KOREAN.messages.agents.page.live.waiting.call);
+    expect(korean).toContain(">끼어들기<");
+  });
+
+  it("shows that the agent is at work, and the conversation in a pane with the box at its foot", () => {
+    expect(renderToStaticMarkup(<TalkWorking working={undefined} />)).toBe("");
+    const thinking = renderToStaticMarkup(
+      <ol>
+        <TalkWorking working={{ at: "thinking" }} agent={mira} />
+      </ol>,
+    );
+    expect(thinking).toContain('<li class="sc-talk-item sc-talk-working" role="status">');
+    expect(thinking).toContain('<span class="sc-talk-dots" aria-hidden="true">');
+    expect(thinking).toContain(">Thinking<");
+    expect(
+      renderToStaticMarkup(
+        <ol>
+          <TalkWorking working={{ at: "tool", tool: "Bash" }} />
+        </ol>,
+      ),
+    ).toContain(">Running Bash<");
+    expect(
+      renderToStaticMarkup(
+        <ol>
+          <TalkWorking working={{ at: "tool", tool: undefined }} />
+        </ol>,
+      ),
+    ).toContain(">Working<");
+    const pane = renderToStaticMarkup(
+      <ChatPane label="What the agent is doing" composer={<form>box</form>}>
+        <p>conversation</p>
+      </ChatPane>,
+    );
+    expect(pane).toBe(
+      '<section class="sc-panel sc-chat" aria-label="What the agent is doing"><div class="sc-chat-scroll"><div class="sc-chat-content"><p>conversation</p></div></div><div class="sc-chat-foot"><form>box</form></div></section>',
+    );
+    // Read at its end, there is no way back to the latest to offer.
+    expect(pane).not.toContain("sc-chat-latest");
   });
 
   it("adds the files chosen to the ones of a tell, each once", () => {
@@ -2314,12 +2595,14 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     expect(tellsWith({ key: "Enter" })).toBe(true);
   });
 
-  it("offers what a supervisor says to it: words and files, a tell and an interrupt, and nothing that changes how it stands", () => {
+  it("offers what a supervisor says to it: words and files in one box, a tell, and nothing that stops a turn or changes how it stands", () => {
     const running = renderToStaticMarkup(
       <SignalComposer state="running" onSend={() => undefined} />,
     );
     expect(running).toContain(">Tell<");
-    expect(running).toContain(">Interrupt<");
+    // The way to have what was told read now stands beside it in the conversation, not here.
+    expect(running).not.toContain(">Interrupt<");
+    expect(running).toContain('<div class="sc-signal-box">');
     // What changes how the agent stands is said apart from what is said to it.
     expect(running).not.toContain(">Stop<");
     expect(running).not.toContain(">Reset<");
@@ -2330,16 +2613,16 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     expect(running).toContain('class="sc-button sc-button-ghost sc-button-sm sc-file-choice"');
     expect(running).toContain('class="sc-file-input"');
     expect(running).toContain(">Attach files<");
-    expect(running).toContain(
-      "Enter tells, Shift with Enter is a new line. Paste a picture, or drop files here.",
-    );
+    // How the keys work is not said: the box works as the box of a chat does.
+    expect(running).not.toContain("Enter tells");
+    expect(running).not.toContain("sc-field-hint");
     const stopped = renderToStaticMarkup(
-      <SignalComposer state="stopped" note="Sent as #4: stop." onSend={() => undefined} />,
+      <SignalComposer state="stopped" note="It could not be sent." onSend={() => undefined} />,
     );
     expect(stopped).toContain(
       'placeholder="It is stopped: what you say is read once it is started again"',
     );
-    expect(stopped).toContain("Sent as #4: stop.");
+    expect(stopped).toContain("It could not be sent.");
   });
 
   it("offers what changes how an agent stands, apart from what is said to it, with what each does", () => {
@@ -2360,45 +2643,12 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     const refused = of("refused");
     expect(refused).toContain(">Restart</button>");
     expect(refused).toContain(">Stop</button>");
-  });
-
-  it("says when a tell is read by what the agent's product takes: after the tool call, or when the turn ends", () => {
-    const tell = (markup: string) => /<button[^>]*type="submit"[^>]*>/.exec(markup)?.[0] ?? "";
-    // A product that takes a message in a turn, and one nothing is known of yet.
-    for (const steer of [true, undefined]) {
-      const steered = tell(
-        renderToStaticMarkup(
-          <SignalComposer state="running" steer={steer} onSend={() => undefined} />,
-        ),
-      );
-      expect(steered).toContain('title="Read by the agent after the tool call under way."');
-    }
-    // One that takes none: the words wait for the turn to end, and the button says so.
-    const waits = tell(
+    // What was sent last is said under the ways, where it was sent from.
+    expect(
       renderToStaticMarkup(
-        <SignalComposer state="running" steer={false} onSend={() => undefined} />,
+        <AgentControls state="running" note="Sent as #4: stop." onSend={() => undefined} />,
       ),
-    );
-    expect(waits).toContain(
-      'title="Read by the agent when the turn under way ends: its product takes no message in a turn."',
-    );
-    expect(waits).not.toContain("after the tool call");
-    // In Korean too, each in its own words.
-    const korean = (steer: boolean) =>
-      tell(
-        renderToStaticMarkup(
-          <LanguageContext.Provider value={KOREAN}>
-            <SignalComposer state="running" steer={steer} onSend={() => undefined} />
-          </LanguageContext.Provider>,
-        ),
-      );
-    expect(korean(true)).toContain(`title="${KOREAN.messages.agents.page.tell.tellHint}"`);
-    expect(korean(false)).toContain(
-      `title="${KOREAN.messages.agents.page.tell.tellHintAfterTurn}"`,
-    );
-    expect(KOREAN.messages.agents.page.tell.tellHintAfterTurn).not.toBe(
-      KOREAN.messages.agents.page.tell.tellHint,
-    );
+    ).toContain('<p class="sc-field-hint" role="status">Sent as #4: stop.</p>');
   });
 
   it("offers the model and the effort its product offers, and says what the open session runs with", () => {

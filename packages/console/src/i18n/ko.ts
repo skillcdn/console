@@ -1614,6 +1614,30 @@ export const ko: Messages = {
         toolFailed: "실패",
         toolRefused: "거절됨",
         toolRunning: "실행 중",
+        interrupted: (who) => `${who} 님이 끼어들어, 기다리던 말을 지금 읽게 했습니다.`,
+        unread: "에이전트가 읽기 전에 세션이 끝났습니다.",
+        turnDone: (seconds) =>
+          seconds === undefined
+            ? "마침"
+            : seconds < 60
+              ? `${seconds}초 만에 마침`
+              : `${Math.floor(seconds / 60)}분 ${seconds % 60}초 만에 마침`,
+        latest: "최신으로",
+        latestNew: "새 내용 보기",
+        working: {
+          thinking: "생각하는 중",
+          working: "작업 중",
+          tool: (name) => `${name} 실행 중`,
+        },
+        waiting: {
+          call: "지금 하는 도구 호출이 끝나면 읽습니다.",
+          turn: "지금 턴이 끝나면 읽습니다.",
+          stopped: "다시 시작하면 읽습니다.",
+          unheard: "러너가 연결되면 읽습니다.",
+          soon: "에이전트에게 전달하는 중입니다.",
+          interrupt: "끼어들기",
+          interruptHint: "하던 일을 멈추고 지금 읽게 합니다.",
+        },
       },
       tell: {
         aria: "에이전트에게 말하기",
@@ -1622,7 +1646,6 @@ export const ko: Messages = {
         files: "보낼 파일",
         attach: "파일 첨부",
         removeFile: (name) => `${name} 빼기`,
-        keys: "Enter로 전달, Shift+Enter로 줄바꿈. 사진을 붙여 넣거나 파일을 여기로 끌어다 놓을 수 있습니다.",
         needsWords:
           "파일과 함께 할 말을 적어 주세요. 파일만으로는 에이전트가 무엇을 할지 알 수 없습니다.",
         unseen:
@@ -1630,11 +1653,6 @@ export const ko: Messages = {
         controlWords: "에이전트에게 남길 말",
         controlWordsPlaceholder: "이유를 적어 둘 수 있습니다",
         send: "전달",
-        tellHint: "진행 중인 도구 호출이 끝난 뒤 에이전트가 읽습니다.",
-        tellHintAfterTurn:
-          "진행 중인 턴이 끝난 뒤 에이전트가 읽습니다. 이 제품은 턴 도중에 메시지를 받지 않습니다.",
-        interrupt: "끼어들기",
-        interruptHint: "진행 중인 턴을 멈추고 이 말을 전합니다.",
         stop: "멈춤",
         stopHint: "세션을 끝냅니다. 다시 시작하거나 초기화할 때까지 멈춰 있습니다.",
         restart: "다시 시작",

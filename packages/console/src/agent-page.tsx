@@ -9,6 +9,7 @@ import {
   type RestAgentSession,
   type RestProvider,
   type RestSession,
+  type RestSignal,
   type RestTranscriptEvent,
   restAgentSessionSchema,
   restTranscriptEventSchema,
@@ -21,8 +22,14 @@ import {
   AgentSecretList,
   AgentSessionList,
   AgentStateBadge,
+  ChatPane,
   SignalComposer,
+  TalkWaiting,
+  TalkWorking,
   TranscriptView,
+  takenOf,
+  waitingOf,
+  workingOf,
 } from "./components/agent-page.js";
 import { AgentPictureSave } from "./components/agents.js";
 import { AgentInvitationPanel, AgentStartSteps } from "./components/setup.js";
@@ -50,6 +57,8 @@ import { useAction } from "./use-action.js";
 const REFRESH_MS = 10_000;
 /** How many of a session's last events the page reads first, and how many more a step back reads. */
 const TAIL = 200;
+/** How many steps back the page reads for the last word the agent took, where the events it shows hold none. */
+const LOOK_BACK_STEPS = 5;
 
 const TABS: readonly AgentTab[] = ["live", "work", "sessions", "settings"];
 
@@ -87,6 +96,16 @@ export function useRead<T>(
   return { value, failed, again: () => setTurn((current) => current + 1) };
 }
 
+/** What a session's events say to whoever puts something at the conversation's foot. */
+interface SessionRead {
+  readonly events: readonly RestTranscriptEvent[];
+  /**
+   * The number of the last signal the session's events say the agent took; nothing where the
+   * events read, and a few steps before them, say none.
+   */
+  readonly taken: number | undefined;
+}
+
 /**
  * The events of one session: its last ones first, the ones before on asking, and what is
  * appended as it happens while the session is open.
@@ -97,29 +116,33 @@ function SessionTranscript(props: {
   readonly session: RestAgentSession;
   /** The account, whose picture stands beside what it said. */
   readonly agent: RestAgent["person"];
-  /** Whether the page follows what arrives: the foot of the session kept in sight while it is. */
-  readonly follow?: boolean | undefined;
+  /** The account's record of signals, where the page around reads it: read here where it does not. */
+  readonly signals?: readonly RestSignal[] | undefined;
+  /** What stands at the conversation's foot, from what the session's events say. */
+  readonly foot?: ((read: SessionRead) => ReactNode) | undefined;
   /** Told when the console says the session is over. */
   readonly onEnded?: (() => void) | undefined;
 }) {
   const words = useWords().agents.page.live;
   const { client, handle, session, onEnded } = props;
+  const given = props.signals;
+  const own = given === undefined;
   // The files that came with the signals the session was sent: what is no picture is offered to
   // save from the signal's own address, which the account's record names.
   const readSignals = useCallback(
-    (signal: AbortSignal) => client.signals(handle, { limit: 100 }, signal),
-    [client, handle],
+    (signal: AbortSignal) =>
+      own ? client.signals(handle, { limit: 100 }, signal) : Promise.resolve(undefined),
+    [client, handle, own],
   );
-  const sent = useRead(readSignals, session.ended === null ? REFRESH_MS : undefined);
-  const filesOf = (number: number) =>
-    sent.value?.items.find((one) => one.number === number)?.attachments;
-  const foot = useRef<HTMLDivElement>(null);
-  /** Whether the foot of the page was in sight when the last events arrived. */
-  const near = useRef(true);
+  const read = useRead(readSignals, own && session.ended === null ? REFRESH_MS : undefined);
+  const sent = given ?? read.value?.items;
+  const filesOf = (number: number) => sent?.find((one) => one.number === number)?.attachments;
   const [events, setEvents] = useState<readonly RestTranscriptEvent[]>([]);
   const [from, setFrom] = useState(0);
   const [problem, setProblem] = useState(false);
   const [live, setLive] = useState(false);
+  /** The last signal taken before the events read, once looked for: `0` where a few steps back say none. */
+  const [before, setBefore] = useState<number | undefined>(undefined);
   const last = useRef(0);
   const ended = useRef(onEnded);
   ended.current = onEnded;
@@ -132,6 +155,7 @@ function SessionTranscript(props: {
     setFrom(after);
     setProblem(false);
     setLive(false);
+    setBefore(undefined);
     last.current = after;
     const append = (items: readonly RestTranscriptEvent[]) => {
       const fresh = items.filter((item) => item.n > last.current);
@@ -195,26 +219,37 @@ function SessionTranscript(props: {
       source?.close();
     };
   }, [client, handle, session.id, session.events, open]);
-  // What arrives is kept in sight while whoever reads is at the foot of the session, and left
-  // where it is once they scrolled up to read.
-  const count = events.length;
+  // Which of the words sent still wait is read off the last signal the agent took. Where the
+  // events read hold none, a long turn since the last word say, the ones before are read a few
+  // steps back for it, and not shown.
+  const known = takenOf(events);
+  const looks = props.foot !== undefined && open && known === undefined && from > 0;
   useEffect(() => {
-    if (props.follow !== true || typeof window === "undefined") {
+    if (!looks || before !== undefined) {
       return;
     }
-    const watch = () => {
-      const page = document.documentElement;
-      near.current = window.innerHeight + window.scrollY >= page.scrollHeight - 240;
-    };
-    window.addEventListener("scroll", watch, { passive: true });
-    return () => window.removeEventListener("scroll", watch);
-  }, [props.follow]);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `count` is the trigger
-  useEffect(() => {
-    if (props.follow === true && near.current) {
-      foot.current?.scrollIntoView({ block: "end" });
-    }
-  }, [count, props.follow]);
+    const controller = new AbortController();
+    void (async () => {
+      let upTo = from;
+      for (let step = 0; step < LOOK_BACK_STEPS && upTo > 0; step += 1) {
+        const after = Math.max(0, upTo - TAIL);
+        const page = await client.transcript(
+          handle,
+          session.id,
+          { after, limit: upTo - after },
+          controller.signal,
+        );
+        const found = takenOf(page.items);
+        if (found !== undefined) {
+          setBefore(found);
+          return;
+        }
+        upTo = after;
+      }
+      setBefore(0);
+    })().catch(() => undefined);
+    return () => controller.abort();
+  }, [looks, before, from, client, handle, session.id]);
   const earlier = () => {
     const after = Math.max(0, from - TAIL);
     void client
@@ -225,6 +260,7 @@ function SessionTranscript(props: {
       })
       .catch(() => setProblem(true));
   };
+  const taken = known ?? (before !== undefined && before > 0 ? before : undefined);
   return (
     <section className="sc-agent-transcript" aria-label={words.transcript}>
       {session.away && <Callout tone="warning">{words.away}</Callout>}
@@ -245,8 +281,8 @@ function SessionTranscript(props: {
         signalFileHref={(number, fileId) => client.signalFileUrl(handle, number, fileId)}
         onReadWhole={async (n) => (await client.transcriptText(handle, session.id, n)).text}
         empty={session.away ? null : <p className="sc-field-hint">{words.empty}</p>}
+        foot={props.foot?.({ events, taken })}
       />
-      <div ref={foot} />
     </section>
   );
 }
@@ -349,6 +385,8 @@ function AgentLive(props: {
   const { client, agent, handle, onChanged } = props;
   const { busy, error, act } = useAction();
   const [note, setNote] = useState<string | undefined>(undefined);
+  /** Counts what was said here: the pane goes to its end with each. */
+  const [said, setSaid] = useState(0);
   const read = useCallback(
     (signal: AbortSignal) => client.agentSessions(handle, { limit: 1 }, signal),
     [client, handle],
@@ -356,6 +394,17 @@ function AgentLive(props: {
   const sessions = useRead(read, REFRESH_MS);
   const session = sessions.value?.items[0];
   const heard = agent.state !== null && agent.state !== undefined;
+  // The account's record of signals: what was told and not taken yet stands at the
+  // conversation's foot, and the files of a signal are named there.
+  const readSignals = useCallback(
+    (signal: AbortSignal) =>
+      heard ? client.signals(handle, { limit: 100 }, signal) : Promise.resolve(undefined),
+    [client, handle, heard],
+  );
+  const record = useRead(readSignals, heard ? REFRESH_MS : undefined);
+  const signals = record.value?.items;
+  const state = agent.state?.state;
+  const delivered = agent.runner?.delivered ?? 0;
   const send = (kind: "stop" | "restart" | "reset", text: string) =>
     void act(async () => {
       const sent = await client.sendSignal(handle, {
@@ -365,30 +414,64 @@ function AgentLive(props: {
       setNote(words.tell.sent(sent.number, sent.kind));
       onChanged();
       sessions.again();
+      record.again();
     });
+  /** The rows at the conversation's foot: what waits to be taken, and the sign that the agent is at work. */
+  const foot = (events: readonly RestTranscriptEvent[], taken: number | undefined): ReactNode => {
+    const open = session !== undefined && session.ended === null;
+    const working = open && state === "running" ? workingOf(events) : undefined;
+    // Signals are taken in order: everything up to the last one the record says was taken is.
+    // Where the record says none, what the runner was handed counts as taken.
+    const floor = open ? (taken ?? delivered) : Math.max(taken ?? 0, delivered);
+    const waiting = waitingOf(signals ?? [], floor);
+    const why =
+      state === "stopped"
+        ? "stopped"
+        : state === "unheard"
+          ? "unheard"
+          : working === undefined
+            ? "soon"
+            : agent.runner?.offers?.steer === false
+              ? "turn"
+              : "call";
+    return (
+      <>
+        <TalkWorking working={working} agent={agent.person} />
+        <TalkWaiting
+          signals={waiting}
+          why={why}
+          fileHref={(number, fileId) => client.signalFileUrl(handle, number, fileId)}
+          busy={busy}
+          onInterrupt={
+            working === undefined
+              ? undefined
+              : () =>
+                  void act(async () => {
+                    await client.sendSignal(handle, { kind: "interrupt" });
+                    record.again();
+                  })
+          }
+        />
+      </>
+    );
+  };
   const composer = (
     <SignalComposer
-      state={agent.state?.state}
-      steer={agent.runner?.offers?.steer}
+      state={state}
       images={agent.runner?.offers?.images}
       busy={busy}
       note={
-        error === undefined ? (
-          note
-        ) : (
+        error === undefined ? undefined : (
           <span className="sc-form-error" role="alert">
             {error}
           </span>
         )
       }
-      onSend={(kind, text, pictures) =>
+      onSend={(text, pictures) =>
         void act(async () => {
-          const sent = await client.sendSignal(
-            handle,
-            { kind, ...(text.length === 0 ? {} : { text }) },
-            pictures,
-          );
-          setNote(words.tell.sent(sent.number, sent.kind));
+          await client.sendSignal(handle, { kind: "tell", text }, pictures);
+          setSaid((count) => count + 1);
+          record.again();
           onChanged();
           sessions.again();
         })
@@ -406,44 +489,52 @@ function AgentLive(props: {
           ) : (
             <Callout tone="danger">{words.live.couldNotLoad}</Callout>
           )
-        ) : session === undefined ? (
-          agent.state === null || agent.state === undefined ? (
-            // An account no runner has spoken for has no session to show: what stands between
-            // it and its first one is shown in its place.
-            <section className="sc-panel" aria-label={words.start.title}>
-              <h2 className="sc-section-title">{words.start.title}</h2>
-              <p className="sc-field-hint">{words.start.intro}</p>
-              <AgentStart
-                client={client}
-                agent={agent}
-                handle={handle}
-                viaToken={props.viaToken}
-                provider={props.provider}
-              />
-            </section>
-          ) : (
-            <EmptyState title={words.live.noSession.title} body={words.live.noSession.body} />
-          )
-        ) : (
-          <>
-            {session.ended !== null && (
-              <p className="sc-field-hint sc-agent-live-lead">{words.live.last}</p>
-            )}
-            <SessionTranscript
+        ) : !heard ? (
+          // An account no runner has spoken for has no session to show and is told nothing yet:
+          // what stands between it and its first one is shown in its place.
+          <section className="sc-panel" aria-label={words.start.title}>
+            <h2 className="sc-section-title">{words.start.title}</h2>
+            <p className="sc-field-hint">{words.start.intro}</p>
+            <AgentStart
               client={client}
+              agent={agent}
               handle={handle}
-              session={session}
-              agent={agent.person}
-              follow
-              onEnded={() => {
-                sessions.again();
-                onChanged();
-              }}
+              viaToken={props.viaToken}
+              provider={props.provider}
             />
-          </>
+          </section>
+        ) : (
+          <ChatPane label={words.live.transcript} composer={composer} said={said}>
+            {session === undefined ? (
+              <TranscriptView
+                events={[]}
+                fileHref={() => ""}
+                empty={
+                  <EmptyState title={words.live.noSession.title} body={words.live.noSession.body} />
+                }
+                foot={foot([], undefined)}
+              />
+            ) : (
+              <>
+                {session.ended !== null && (
+                  <p className="sc-field-hint sc-agent-live-lead">{words.live.last}</p>
+                )}
+                <SessionTranscript
+                  client={client}
+                  handle={handle}
+                  session={session}
+                  agent={agent.person}
+                  signals={signals ?? []}
+                  foot={({ events, taken }) => foot(events, taken)}
+                  onEnded={() => {
+                    sessions.again();
+                    onChanged();
+                  }}
+                />
+              </>
+            )}
+          </ChatPane>
         )}
-        {/* An account no runner has spoken for is told nothing yet: its first task waits for it. */}
-        {heard && composer}
       </div>
       <aside className="sc-agent-live-side">
         {session !== undefined && (
@@ -458,7 +549,7 @@ function AgentLive(props: {
         {heard && (
           <section className="sc-panel" aria-label={words.controls.title}>
             <h2 className="sc-section-title">{words.controls.title}</h2>
-            <AgentControls state={agent.state?.state} busy={busy} onSend={send} />
+            <AgentControls state={state} busy={busy} onSend={send} note={note} />
           </section>
         )}
         <section className="sc-panel" aria-label={words.choice.title}>

@@ -10,18 +10,20 @@ import {
   type RestAgentSecret,
   type RestAgentSession,
   type RestPerson,
+  type RestSignal,
   type RestTranscriptEvent,
-  type SignalKind,
 } from "../api.js";
 import { useWords } from "../i18n/index.js";
 import { isPicture } from "./files.js";
-import { Avatar, Badge, Button, cx, formatBytes, Time } from "./ui.js";
+import { Lightbox, PictureThumb, usePicture } from "./pictures.js";
+import { Avatar, Badge, Button, Callout, cx, formatBytes, personName, Time } from "./ui.js";
 
 // The parts of an agent account's page (ADR-0085, ADR-0086): how it stands, what it is doing as
-// it happens, read as a conversation, what a supervisor says to it, what changes how it stands,
-// its sessions, and what its runner said of itself. Everything an agent's product printed is
-// shown as text, in a block that keeps its spaces and its lines, and is never made markup; a
-// picture is shown by its address at the console, and any other file is offered to save.
+// it happens, read as a conversation in a pane that follows its end, what a supervisor says to
+// it, shown as waiting until the agent takes it, what changes how it stands, its sessions, and
+// what its runner said of itself. Everything an agent's product printed is shown as text, in a
+// block that keeps its spaces and its lines, and is never made markup; a picture is shown by its
+// address at the console, and any other file is offered to save.
 
 /** How an agent stands, in a word, with the tone of it. */
 const STATE_TONES: Readonly<Record<AgentState, "success" | "neutral" | "warning" | "danger">> = {
@@ -97,6 +99,11 @@ export interface TranscriptViewProps {
   /** Where the bytes of a file of a signal are read. */
   readonly signalFileHref?: ((number: number, fileId: string) => string) | undefined;
   readonly empty?: ReactNode;
+  /**
+   * What stands at the conversation's foot, rows of its list: the words that wait to be taken,
+   * and the sign that the agent is at work.
+   */
+  readonly foot?: ReactNode;
 }
 
 /** A file that came with a signal, as the account's record names it. */
@@ -222,6 +229,126 @@ export function talkOf(events: readonly RestTranscriptEvent[]): TalkItem[] {
   return items;
 }
 
+/** What the agent is at while a turn is under way: thinking, at a tool, or at work between the two. */
+export type Working =
+  | { readonly at: "thinking" | "working" }
+  | { readonly at: "tool"; readonly tool: string | undefined };
+
+/**
+ * Whether a turn is under way, and what the agent is at, read off a session's events alone:
+ * the record says where a turn ends (`turn: "completed"` on a status) and where the session
+ * does, so whatever follows the last of those is a turn that is not done. Nothing where the
+ * session has no event yet, or its last turn is over.
+ */
+export function workingOf(events: readonly RestTranscriptEvent[]): Working | undefined {
+  /** The calls that were answered, by the id the product gave them. */
+  const answered = new Set<string>();
+  for (let at = events.length - 1; at >= 0; at -= 1) {
+    const event = events[at];
+    if (event === undefined || event.sealed !== null) {
+      continue;
+    }
+    if (event.kind === "status") {
+      if (event.data.turn === "completed" || typeof event.data.ended === "string") {
+        return undefined;
+      }
+      continue;
+    }
+    if (event.kind === "tool_result") {
+      const id = idOf(event);
+      if (id === undefined) {
+        return { at: "working" };
+      }
+      answered.add(id);
+      continue;
+    }
+    if (event.kind === "tool_call") {
+      const id = idOf(event);
+      return id !== undefined && answered.has(id)
+        ? { at: "working" }
+        : { at: "tool", tool: word(event.data[TOOL]) };
+    }
+    if (event.kind === "permission") {
+      continue;
+    }
+    if (event.kind === "error") {
+      return undefined;
+    }
+    if (answered.size > 0) {
+      return { at: "working" };
+    }
+    return event.kind === "assistant" ? { at: "working" } : { at: "thinking" };
+  }
+  return undefined;
+}
+
+/** The number of the last signal a session's events say the agent took, or nothing where none says. */
+export function takenOf(events: readonly RestTranscriptEvent[]): number | undefined {
+  let most: number | undefined;
+  for (const event of events) {
+    const number = event.data.signal;
+    if (
+      (event.kind === "person" || event.kind === "wake") &&
+      typeof number === "number" &&
+      (most === undefined || number > most)
+    ) {
+      most = number;
+    }
+  }
+  return most;
+}
+
+/**
+ * The words supervisors sent that the agent has not taken: the tells, and the interrupts that
+ * carry words or files, after the last signal the record says it took, the oldest first. A
+ * signal is taken in order, so everything up to that one was.
+ */
+export function waitingOf(signals: readonly RestSignal[], taken: number): readonly RestSignal[] {
+  return signals
+    .filter(
+      (signal) =>
+        signal.number > taken &&
+        signal.source === "person" &&
+        (signal.kind === "tell" || signal.kind === "interrupt") &&
+        (signal.text.trim().length > 0 || signal.attachments.length > 0),
+    )
+    .slice()
+    .sort((a, b) => a.number - b.number);
+}
+
+/** How far from its end a conversation may stand and still be followed, in pixels. */
+export const FOLLOW_SLACK = 72;
+
+/** Whether whoever reads a pane is at its end, give or take a line: there the pane follows what arrives. */
+export function followsEnd(pane: {
+  readonly scrollHeight: number;
+  readonly scrollTop: number;
+  readonly clientHeight: number;
+}): boolean {
+  return pane.scrollHeight - pane.scrollTop - pane.clientHeight <= FOLLOW_SLACK;
+}
+
+/**
+ * Whether a pane goes on following its end once it scrolled: at its end it does; moved up from
+ * where it stood it does not, since only whoever reads moves a pane up; and otherwise it goes
+ * on as it was, since what arrives makes the conversation taller before the pane is told that
+ * it went to its end, which would read as someone having scrolled away.
+ */
+export function followsAfter(
+  following: boolean,
+  stood: number,
+  pane: {
+    readonly scrollHeight: number;
+    readonly scrollTop: number;
+    readonly clientHeight: number;
+  },
+): boolean {
+  if (followsEnd(pane)) {
+    return true;
+  }
+  return pane.scrollTop < stood ? false : following;
+}
+
 /** The first line of a text, for a row that shows one: cut where it is long. */
 function firstLine(text: string, most = 160): string {
   const line = text.split("\n").find((one) => one.trim().length > 0) ?? "";
@@ -235,16 +362,41 @@ const word = (value: unknown): string | undefined =>
 /**
  * A session as a conversation: what the agent was told at the right, as whoever said it wrote
  * it, with the files that came with it; what the agent said at the left, beside its picture; its
- * thoughts folded; a tool's call and what it answered as one row that opens; a wake, a status
- * and an error as notes between. Everything an agent's product printed is text, never markup.
+ * thoughts folded; a tool's call and what it answered as one row that opens, the steps of a turn
+ * close together; a wake, a status and an error as notes between, and a line where a turn
+ * ended, with how long it took. A picture opens large over the page. Everything an agent's
+ * product printed is text, never markup.
  */
 export function TranscriptView(props: TranscriptViewProps) {
   const all = useWords();
   const words = all.agents.page.live;
+  const shown = usePicture();
   const [whole, setWhole] = useState<Readonly<Record<number, string>>>({});
   const [reading, setReading] = useState<number | undefined>(undefined);
   if (props.events.length === 0) {
-    return <>{props.empty ?? null}</>;
+    return (
+      <>
+        {props.empty ?? null}
+        {props.foot !== undefined && props.foot !== null && (
+          <ol className="sc-talk" aria-label={words.transcript}>
+            {props.foot}
+          </ol>
+        )}
+      </>
+    );
+  }
+  /** When the turn an event ends began: the first thing the agent was sent after the turn before. */
+  const began = new Map<number, string>();
+  let since: string | undefined;
+  for (const event of props.events) {
+    if (event.kind === "status" && event.data.turn === "completed") {
+      if (since !== undefined) {
+        began.set(event.n, since);
+      }
+      since = undefined;
+    } else if ((event.kind === "person" || event.kind === "wake") && since === undefined) {
+      since = event.at;
+    }
   }
   const kinds: Readonly<Record<string, string>> = words.kinds;
   const signalKinds: Readonly<Record<string, string>> = words.signalKinds;
@@ -288,14 +440,15 @@ export function TranscriptView(props: TranscriptViewProps) {
       <ul className="sc-talk-pictures">
         {event.files.map((file) => (
           <li key={file.id}>
-            <a href={props.fileHref(file.id)} target="_blank" rel="noreferrer">
-              <img
-                src={props.fileHref(file.id)}
-                alt={file.name}
-                title={`${file.name} · ${formatBytes(file.size)}`}
-                loading="lazy"
-              />
-            </a>
+            <PictureThumb
+              picture={{
+                src: props.fileHref(file.id),
+                alt: file.name,
+                name: file.name,
+                size: file.size,
+              }}
+              onOpen={shown.open}
+            />
           </li>
         ))}
       </ul>
@@ -317,6 +470,7 @@ export function TranscriptView(props: TranscriptViewProps) {
           key={first.n}
           className={cx(
             "sc-talk-item",
+            "sc-talk-step",
             "sc-talk-tool",
             (failed || refused) && "sc-talk-tool-failed",
           )}
@@ -373,15 +527,27 @@ export function TranscriptView(props: TranscriptViewProps) {
         number === undefined
           ? undefined
           : props.signalFiles?.(number)?.filter((file) => !isPicture(file.contentType));
+      const who = word(event.data.by) ?? words.kinds.person;
+      // An interrupt with no words of its own stopped the turn so that what waited is read: a
+      // note of who did, and no message.
+      if (
+        kind === "interrupt" &&
+        event.text.length === 0 &&
+        event.files.length === 0 &&
+        others === undefined
+      ) {
+        return (
+          <li key={event.n} className="sc-talk-item sc-talk-note" data-n={event.n}>
+            <span className="sc-talk-note-line">
+              {words.interrupted(who)}
+              {when(event)}
+            </span>
+          </li>
+        );
+      }
       return (
         <li key={event.n} className="sc-talk-item sc-talk-told" data-n={event.n}>
           <div className="sc-talk-bubble">
-            <div className="sc-talk-meta">
-              <span className="sc-talk-who">{word(event.data.by) ?? kinds.person}</span>
-              {through !== undefined && <span>{words.through(through)}</span>}
-              {kind !== undefined && kind !== "tell" && <Badge>{signalKinds[kind] ?? kind}</Badge>}
-              {when(event)}
-            </div>
             {text(event, "sc-talk-text")}
             {pictures(event)}
             {listed !== undefined && listed.length > 0 ? (
@@ -410,6 +576,15 @@ export function TranscriptView(props: TranscriptViewProps) {
               <p className="sc-talk-note-line sc-talk-unseen">{words.unseen(unseen)}</p>
             )}
           </div>
+          <div className="sc-talk-meta">
+            <span className="sc-talk-who">{who}</span>
+            {through !== undefined && <span>{words.through(through)}</span>}
+            {kind !== undefined && kind !== "tell" && <Badge>{signalKinds[kind] ?? kind}</Badge>}
+            {when(event)}
+          </div>
+          {event.data.unread === true && (
+            <p className="sc-talk-note-line sc-talk-unread">{words.unread}</p>
+          )}
         </li>
       );
     }
@@ -427,7 +602,7 @@ export function TranscriptView(props: TranscriptViewProps) {
     }
     if (one.type === "thought") {
       return (
-        <li key={event.n} className="sc-talk-item sc-talk-thought" data-n={event.n}>
+        <li key={event.n} className="sc-talk-item sc-talk-step sc-talk-thought" data-n={event.n}>
           <details className="sc-talk-tool-fold">
             <summary className="sc-talk-tool-head">
               <span className="sc-talk-kind">{kinds.thinking}</span>
@@ -436,6 +611,22 @@ export function TranscriptView(props: TranscriptViewProps) {
             </summary>
             <div className="sc-talk-tool-body">{text(event, "sc-talk-text")}</div>
           </details>
+        </li>
+      );
+    }
+    // Where a turn ended: a line, with how long the agent was at it where the record says when it began.
+    if (event.kind === "status" && event.data.turn === "completed") {
+      const from = began.get(event.n);
+      const seconds =
+        from === undefined
+          ? undefined
+          : Math.max(0, Math.round((Date.parse(event.at) - Date.parse(from)) / 1000));
+      return (
+        <li key={event.n} className="sc-talk-item sc-talk-turn" data-n={event.n}>
+          <span className="sc-talk-note-line">
+            {words.turnDone(Number.isFinite(seconds) ? seconds : undefined)}
+            {when(event)}
+          </span>
         </li>
       );
     }
@@ -470,9 +661,261 @@ export function TranscriptView(props: TranscriptViewProps) {
     );
   };
   return (
-    <ol className="sc-talk" aria-label={words.transcript}>
-      {talkOf(props.events).map(item)}
-    </ol>
+    <>
+      <ol className="sc-talk" aria-label={words.transcript}>
+        {talkOf(props.events).map(item)}
+        {props.foot}
+      </ol>
+      <Lightbox picture={shown.shown} onClose={shown.close} />
+    </>
+  );
+}
+
+export interface TalkWaitingProps {
+  /** The words that wait, the oldest first: `waitingOf` says which. */
+  readonly signals: readonly RestSignal[];
+  /**
+   * Why they wait, which says when they are read: a turn under way that the product takes a
+   * message in (`call`) or takes none in (`turn`), an agent that is stopped, a runner not heard
+   * from, or nothing but the moment it takes to hand them over (`soon`).
+   */
+  readonly why: "call" | "turn" | "stopped" | "unheard" | "soon";
+  /** Where the bytes of a file of a signal are read. */
+  readonly fileHref?: ((number: number, fileId: string) => string) | undefined;
+  readonly busy?: boolean | undefined;
+  /**
+   * Stops the turn under way so that what waits is read now. Left out, or with no turn to
+   * stop, there is no such way.
+   */
+  readonly onInterrupt?: (() => void) | undefined;
+}
+
+/**
+ * What supervisors said and the agent has not taken yet, at the foot of the conversation: each
+ * as it will stand there, quieter, with when it is read; and under the last, while a turn is
+ * under way, the way to have them read now. Rows of the conversation's list.
+ */
+export function TalkWaiting(props: TalkWaitingProps) {
+  const words = useWords().agents.page.live;
+  const waits = words.waiting;
+  if (props.signals.length === 0) {
+    return null;
+  }
+  const stops = props.onInterrupt !== undefined && (props.why === "call" || props.why === "turn");
+  return (
+    <>
+      {props.signals.map((signal, index) => {
+        const last = index === props.signals.length - 1;
+        const pictures = signal.attachments.filter((file) => isPicture(file.contentType));
+        const others = signal.attachments.filter((file) => !isPicture(file.contentType));
+        return (
+          <li
+            key={signal.number}
+            className="sc-talk-item sc-talk-told sc-talk-waiting"
+            data-signal={signal.number}
+          >
+            <div className="sc-talk-bubble">
+              {signal.text.length > 0 && <pre className="sc-talk-text">{signal.text}</pre>}
+              {pictures.length > 0 && props.fileHref !== undefined && (
+                <ul className="sc-talk-pictures">
+                  {pictures.map((file) => (
+                    <li key={file.id}>
+                      <img
+                        src={props.fileHref?.(signal.number, file.id)}
+                        alt={file.name}
+                        title={`${file.name} · ${formatBytes(file.size)}`}
+                        loading="lazy"
+                      />
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {others.length > 0 && (
+                <ul className="sc-chosen-files" aria-label={words.files}>
+                  {others.map((file) => (
+                    <li key={file.id} className="sc-chosen-file">
+                      <span>{file.name}</span>{" "}
+                      <span className="sc-muted">{formatBytes(file.size)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div className="sc-talk-meta">
+              <span className="sc-talk-who">
+                {signal.by === null ? words.kinds.person : personName(signal.by)}
+              </span>
+              <Time iso={signal.at} precision="clock" />
+            </div>
+            {last && (
+              <p className="sc-talk-wait" role="status">
+                <span>{waits[props.why]}</span>
+                {stops && (
+                  <Button
+                    size="sm"
+                    disabled={props.busy === true}
+                    title={waits.interruptHint}
+                    onClick={props.onInterrupt}
+                  >
+                    {waits.interrupt}
+                  </Button>
+                )}
+              </p>
+            )}
+          </li>
+        );
+      })}
+    </>
+  );
+}
+
+/**
+ * The sign that the agent is at work while a turn is under way: its picture, three dots, and
+ * what it is at, a thought, a tool by its name, or the work between. A row of the
+ * conversation's list; nothing where no turn is under way.
+ */
+export function TalkWorking(props: {
+  readonly working: Working | undefined;
+  readonly agent?: RestPerson | undefined;
+}) {
+  const words = useWords().agents.page.live.working;
+  const { working } = props;
+  if (working === undefined) {
+    return null;
+  }
+  return (
+    <li className="sc-talk-item sc-talk-working" role="status">
+      {props.agent !== undefined && <Avatar person={props.agent} size="sm" />}
+      <span className="sc-talk-dots" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </span>
+      <span className="sc-talk-working-what">
+        {working.at === "tool"
+          ? working.tool === undefined
+            ? words.working
+            : words.tool(working.tool)
+          : words[working.at]}
+      </span>
+    </li>
+  );
+}
+
+export interface ChatPaneProps {
+  /** What the pane is called to a screen reader. */
+  readonly label: string;
+  /** The conversation: whatever is read in the pane, which scrolls by itself. */
+  readonly children: ReactNode;
+  /** The box to speak in, at the pane's foot, always in sight. */
+  readonly composer?: ReactNode;
+  /**
+   * Changes when whoever reads said something: the pane goes to its end and follows from
+   * there, wherever they had scrolled to.
+   */
+  readonly said?: number | undefined;
+}
+
+/**
+ * A conversation in a pane of its own, as a chat is read: it scrolls within the pane, with the
+ * box to speak in at its foot. The pane follows the conversation's end while whoever reads is
+ * there, leaves them where they are once they scrolled up to read, and then offers the way
+ * back to the latest, saying when something arrived meanwhile.
+ */
+export function ChatPane(props: ChatPaneProps) {
+  const words = useWords().agents.page.live;
+  const scroller = useRef<HTMLDivElement>(null);
+  const content = useRef<HTMLDivElement>(null);
+  const whole = useRef<HTMLElement>(null);
+  /** Whether the pane follows its end: true until whoever reads scrolls away from it. */
+  const follows = useRef(true);
+  /** Where the pane stood when it last scrolled. */
+  const stood = useRef(0);
+  const [away, setAway] = useState(false);
+  const [fresh, setFresh] = useState(false);
+  const toEnd = () => {
+    const pane = scroller.current;
+    if (pane !== null) {
+      follows.current = true;
+      pane.scrollTop = pane.scrollHeight;
+      setAway(false);
+      setFresh(false);
+    }
+  };
+  // The pane is as tall as the window leaves under what stands over it on the page, so that
+  // the box to speak in is in sight without scrolling: where it begins is measured, here and
+  // whenever the page is drawn again or the window changes, and the stylesheet takes it from there.
+  useEffect(() => {
+    const measure = () => {
+      const pane = whole.current;
+      if (pane !== null) {
+        const top = Math.round(pane.getBoundingClientRect().top + window.scrollY);
+        pane.style.setProperty("--sc-chat-top", `${top}px`);
+      }
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  });
+  useEffect(() => {
+    const pane = scroller.current;
+    const inner = content.current;
+    if (pane === null || inner === null) {
+      return;
+    }
+    const onScroll = () => {
+      const goes = followsAfter(follows.current, stood.current, pane);
+      stood.current = pane.scrollTop;
+      follows.current = goes;
+      setAway(!goes);
+      if (goes) {
+        setFresh(false);
+      }
+    };
+    pane.addEventListener("scroll", onScroll, { passive: true });
+    // What arrives, and a picture that loads late, change how tall the conversation is: the
+    // pane goes with it while it is followed, and says that there is more where it is not.
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? undefined
+        : new ResizeObserver(() => {
+            if (follows.current) {
+              pane.scrollTop = pane.scrollHeight;
+            } else {
+              setFresh(true);
+            }
+          });
+    observer?.observe(inner);
+    pane.scrollTop = pane.scrollHeight;
+    return () => {
+      pane.removeEventListener("scroll", onScroll);
+      observer?.disconnect();
+    };
+  }, []);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `said` is the trigger
+  useEffect(() => {
+    if (props.said !== undefined && props.said > 0) {
+      toEnd();
+    }
+  }, [props.said]);
+  return (
+    <section className="sc-panel sc-chat" aria-label={props.label} ref={whole}>
+      <div className="sc-chat-scroll" ref={scroller}>
+        <div className="sc-chat-content" ref={content}>
+          {props.children}
+        </div>
+      </div>
+      {away && (
+        <div className="sc-chat-latest">
+          <Button size="sm" onClick={toEnd}>
+            {fresh ? words.latestNew : words.latest}
+          </Button>
+        </div>
+      )}
+      {props.composer !== undefined && props.composer !== null && (
+        <div className="sc-chat-foot">{props.composer}</div>
+      )}
+    </section>
   );
 }
 
@@ -538,28 +981,25 @@ export interface SignalComposerProps {
   /** How the agent stands: a stopped agent is told nothing until it is started again, and the box says so. */
   readonly state: AgentState | undefined;
   /**
-   * Whether the agent's product takes a message in a turn, as its driver says on the heartbeat
-   * (`offers.steer`): where it takes none, a tell is read when the turn ends, and the button
-   * says so. Nothing said is a product that takes one.
-   */
-  readonly steer?: boolean | undefined;
-  /**
    * Whether the agent's product takes a picture (`offers.images`): where it takes none, a
    * picture is handed over as a file in its desk, and the box says so before it is sent.
    */
   readonly images?: boolean | undefined;
   readonly busy?: boolean | undefined;
-  /** What was sent last, as a line under the box; or what went wrong. */
+  /** What went wrong with what was sent last, as a line under the box. */
   readonly note?: ReactNode;
-  readonly onSend: (kind: SignalKind, text: string, files: readonly FileUpload[]) => void;
+  /** Tells the agent what was written, with the files chosen. */
+  readonly onSend: (text: string, files: readonly FileUpload[]) => void;
 }
 
 /**
- * What a supervisor says to the agent, as the box of an agent product is: words, with files
- * chosen, pasted or dropped on it, a picture shown small and any other file by its name, each
- * taken out again from its chip. Enter tells; Shift with Enter is a new line. An interruption
- * of the turn under way stands beside the tell. What changes how the agent stands, a stop, a
- * restart, a reset, is not said here: `AgentControls` has it.
+ * What a supervisor says to the agent, as the box of a chat is: one box with the words, the
+ * files chosen, pasted or dropped on it above them, a picture shown small and any other file by
+ * its name, each taken out again from its chip, and under the words the way to choose files and
+ * the way to send. Enter tells; Shift with Enter is a new line. What is told stands in the
+ * conversation at once, as waiting until the agent takes it, and the way to have it read now is
+ * there, beside it: the box has none. What changes how the agent stands, a stop, a restart, a
+ * reset, is not said here: `AgentControls` has it.
  */
 export function SignalComposer(props: SignalComposerProps) {
   const words = useWords().agents.page.tell;
@@ -605,9 +1045,8 @@ export function SignalComposer(props: SignalComposerProps) {
       }
     }
   };
-  const send = (kind: SignalKind) => {
+  const send = () => {
     props.onSend(
-      kind,
       said,
       files.map((file) => ({ name: file.name, bytes: file, contentType: file.type })),
     );
@@ -619,14 +1058,14 @@ export function SignalComposer(props: SignalComposerProps) {
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (ready) {
-      send("tell");
+      send();
     }
   };
   const stopped = props.state === "stopped";
   const unseen = props.images === false && files.some((file) => isPicture(file.type));
   return (
     <form
-      className={cx("sc-panel", "sc-signal-composer", over && "sc-signal-composer-over")}
+      className={cx("sc-signal-composer", over && "sc-signal-composer-over")}
       aria-label={words.aria}
       onSubmit={submit}
       onDragOver={(event) => {
@@ -644,100 +1083,91 @@ export function SignalComposer(props: SignalComposerProps) {
         setOver(false);
       }}
     >
-      {files.length > 0 && (
-        <ul className="sc-chosen-files sc-signal-files" aria-label={words.files}>
-          {files.map((file, index) => {
-            const preview = previews[keyOf(file)];
-            return (
-              <li key={keyOf(file)} className="sc-chosen-file">
-                {preview !== undefined && <img className="sc-signal-thumb" src={preview} alt="" />}
-                <span className="sc-signal-file-name">{file.name}</span>{" "}
-                <span className="sc-muted">{formatBytes(file.size)}</span>{" "}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  aria-label={words.removeFile(file.name)}
-                  onClick={() => setFiles((current) => withoutChosen(current, index))}
-                >
-                  ×
-                </Button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      <textarea
-        ref={box}
-        className="sc-input sc-signal-text"
-        aria-label={words.placeholder}
-        placeholder={stopped ? words.placeholderStopped : words.placeholder}
-        value={text}
-        maxLength={MAX_SIGNAL_LENGTH}
-        rows={2}
-        onChange={(event) => setText(event.target.value)}
-        onPaste={(event) => {
-          const pasted = [...event.clipboardData.files];
-          if (pasted.length > 0) {
-            event.preventDefault();
-            const now = new Date();
-            add(pasted.map((file) => new File([file], pastedName(file, now), { type: file.type })));
-          }
-        }}
-        onKeyDown={(event) => {
-          // On a screen that is touched, Enter is the keyboard's new line: the button tells.
-          if (
-            typeof window !== "undefined" &&
-            window.matchMedia?.("(pointer: coarse)").matches === true
-          ) {
-            return;
-          }
-          if (
-            tellsWith({
-              key: event.key,
-              shiftKey: event.shiftKey,
-              isComposing: event.nativeEvent.isComposing,
-              keyCode: event.keyCode,
-            })
-          ) {
-            event.preventDefault();
-            if (ready) {
-              send("tell");
+      <div className="sc-signal-box">
+        {files.length > 0 && (
+          <ul className="sc-chosen-files sc-signal-files" aria-label={words.files}>
+            {files.map((file, index) => {
+              const preview = previews[keyOf(file)];
+              return (
+                <li key={keyOf(file)} className="sc-chosen-file">
+                  {preview !== undefined && (
+                    <img className="sc-signal-thumb" src={preview} alt="" />
+                  )}
+                  <span className="sc-signal-file-name">{file.name}</span>{" "}
+                  <span className="sc-muted">{formatBytes(file.size)}</span>{" "}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    aria-label={words.removeFile(file.name)}
+                    onClick={() => setFiles((current) => withoutChosen(current, index))}
+                  >
+                    ×
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        <textarea
+          ref={box}
+          className="sc-signal-text"
+          aria-label={words.placeholder}
+          placeholder={stopped ? words.placeholderStopped : words.placeholder}
+          value={text}
+          maxLength={MAX_SIGNAL_LENGTH}
+          rows={1}
+          onChange={(event) => setText(event.target.value)}
+          onPaste={(event) => {
+            const pasted = [...event.clipboardData.files];
+            if (pasted.length > 0) {
+              event.preventDefault();
+              const now = new Date();
+              add(
+                pasted.map((file) => new File([file], pastedName(file, now), { type: file.type })),
+              );
             }
-          }
-        }}
-      />
-      <div className="sc-signal-row">
-        <label className="sc-button sc-button-ghost sc-button-sm sc-file-choice">
-          {words.attach}
-          <input
-            className="sc-file-input"
-            type="file"
-            multiple
-            onChange={(event) => {
-              add([...(event.target.files ?? [])]);
-              // The box is emptied, so that a file taken out can be chosen again.
-              event.target.value = "";
-            }}
-          />
-        </label>
-        <span className="sc-field-hint sc-signal-keys">{words.keys}</span>
-        <span className="sc-signal-ways">
-          <Button
-            disabled={!ready || stopped}
-            title={words.interruptHint}
-            onClick={() => send("interrupt")}
-          >
-            {words.interrupt}
-          </Button>
-          <Button
-            type="submit"
-            variant="primary"
-            disabled={!ready}
-            title={props.steer === false ? words.tellHintAfterTurn : words.tellHint}
-          >
+          }}
+          onKeyDown={(event) => {
+            // On a screen that is touched, Enter is the keyboard's new line: the button tells.
+            if (
+              typeof window !== "undefined" &&
+              window.matchMedia?.("(pointer: coarse)").matches === true
+            ) {
+              return;
+            }
+            if (
+              tellsWith({
+                key: event.key,
+                shiftKey: event.shiftKey,
+                isComposing: event.nativeEvent.isComposing,
+                keyCode: event.keyCode,
+              })
+            ) {
+              event.preventDefault();
+              if (ready) {
+                send();
+              }
+            }
+          }}
+        />
+        <div className="sc-signal-row">
+          <label className="sc-button sc-button-ghost sc-button-sm sc-file-choice">
+            {words.attach}
+            <input
+              className="sc-file-input"
+              type="file"
+              multiple
+              onChange={(event) => {
+                add([...(event.target.files ?? [])]);
+                // The box is emptied, so that a file taken out can be chosen again.
+                event.target.value = "";
+              }}
+            />
+          </label>
+          <Button type="submit" variant="primary" size="sm" disabled={!ready}>
             {words.send}
           </Button>
-        </span>
+        </div>
       </div>
       {tooMany && (
         <p className="sc-form-error" role="alert">
@@ -762,6 +1192,8 @@ export interface AgentControlsProps {
   readonly busy?: boolean | undefined;
   /** Sends a stop, a restart or a reset, with the words for the agent where any were written. */
   readonly onSend: (kind: "stop" | "restart" | "reset", text: string) => void;
+  /** What was sent last, as a line under the ways. */
+  readonly note?: ReactNode;
 }
 
 /**
@@ -820,8 +1252,13 @@ export function AgentControls(props: AgentControlsProps) {
           </Button>
         )}
       </div>
+      {props.note !== undefined && props.note !== null && (
+        <p className="sc-field-hint" role="status">
+          {props.note}
+        </p>
+      )}
       {resetting ? (
-        <p className="sc-field-hint sc-signal-warning">{words.resetWarning}</p>
+        <Callout tone="warning">{words.resetWarning}</Callout>
       ) : (
         <ul className="sc-agent-controls-says">
           {!running && (
