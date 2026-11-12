@@ -57,7 +57,12 @@ export function AgentStateBadge(props: {
   const reasons: Readonly<Record<string, string>> = words.reasons;
   const reason = state.reason === null ? undefined : (reasons[state.reason] ?? state.reason);
   const badge = (
-    <Badge tone={STATE_TONES[state.state]} kind="state" title={reason}>
+    <Badge
+      tone={STATE_TONES[state.state]}
+      kind="state"
+      live={state.state === "running"}
+      title={reason}
+    >
       {words[state.state]}
     </Badge>
   );

@@ -51,8 +51,13 @@ export function Button(
 
 export function Badge(props: {
   readonly tone?: "neutral" | "accent" | "point" | "success" | "warning" | "danger";
-  /** What the badge says, which the stylesheet shows in its shape: a state carries a dot, a priority is outlined, a due day is a square-cornered tag, a count is figures. */
+  /** What the badge says, which the stylesheet shows in how it is filled: a state is a soft fill, a priority dark words on one, a due day a line and bold words, a count figures. */
   readonly kind?: "state" | "priority" | "due" | "count" | undefined;
+  /**
+   * What the badge names is at work this moment: a dot of its hue before its words, a ring spreading
+   * slowly from it, and a dot that stands still for whoever asked their device for less motion.
+   */
+  readonly live?: boolean | undefined;
   /** A class of the badge's own beside the tone's and the kind's, for a step within a kind. */
   readonly className?: string | undefined;
   readonly title?: string;
@@ -64,6 +69,7 @@ export function Badge(props: {
         "sc-badge",
         `sc-badge-${props.tone ?? "neutral"}`,
         props.kind !== undefined && `sc-badge-kind-${props.kind}`,
+        props.live === true && "sc-badge-live",
         props.className,
       )}
       title={props.title}

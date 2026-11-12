@@ -2049,6 +2049,12 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     expect(brief).toContain("sc-badge-success");
     expect(brief).toContain(">Running<");
     expect(brief).not.toContain("since");
+    // An account at work carries the dot of what is at work this moment, where it is said in a
+    // word and where there is room alike; no other state does.
+    expect(brief).toContain("sc-badge-live");
+    expect(
+      renderToStaticMarkup(<AgentStateBadge state={standing("running", "started")} full />),
+    ).toContain("sc-badge-live");
     const full = renderToStaticMarkup(
       <AgentStateBadge state={standing("refused", "model_refused")} full />,
     );
@@ -2068,7 +2074,9 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
       const seen = renderToStaticMarkup(<AgentStateBadge state={standing(state, "stop")} />);
       expect(seen).toContain(`>${word}<`);
       expect(seen).toContain(`sc-badge-${tone}`);
+      expect(seen).not.toContain("sc-badge-live");
     }
+    expect(full).not.toContain("sc-badge-live");
   });
 
   it("leads from the list of accounts to an account's page, with how it stands beside its name", () => {

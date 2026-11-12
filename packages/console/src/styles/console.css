@@ -4312,7 +4312,7 @@ select.sc-input-quiet {
 
 /* A badge's kind in how it is filled, so that a plain badge, a category, a state, a priority
    and a due day beside each other are kinds and not five of one thing; the pill is the shape
-   of them all and nothing stands before the words:
+   of them all and nothing stands before the words, but the dot of one at work this moment:
    - a plain badge (a role, a count, public or private): a soft fill with a line of its hue, a
      warning's a clear amber, since one mixed from its words reads as brown on its pale amber;
    - a category and a state: a soft fill, no line;
@@ -4400,6 +4400,35 @@ select.sc-input-quiet {
 
 .sc-badge-kind-count {
   font-variant-numeric: tabular-nums;
+}
+
+/* A badge of what is at work this moment: a dot of the badge's hue before its words, the one
+   thing that stands there, and a ring that spreads slowly from it. The dot stands still for
+   whoever asked their device for less motion. */
+.sc-badge-live::before {
+  flex: none;
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: var(--sc-radius-full);
+  background: currentcolor;
+  content: "";
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sc-badge-live::before {
+    animation: sc-badge-live 2.4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  }
+}
+
+@keyframes sc-badge-live {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, currentcolor 45%, transparent);
+  }
+
+  70%,
+  100% {
+    box-shadow: 0 0 0 0.375rem color-mix(in srgb, currentcolor 0%, transparent);
+  }
 }
 
 .sc-category-swatch,
