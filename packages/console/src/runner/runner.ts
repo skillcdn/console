@@ -180,6 +180,12 @@ interface OpenSession {
   turn: boolean;
   /** The signals of the turn under way. */
   sent: readonly RestSignal[];
+  /**
+   * The messages handed to the product, the oldest first, each with what writes it on the
+   * record: written at once where the product was waiting for one, and when the product takes
+   * it where a turn was under way.
+   */
+  handed: { written: boolean; readonly write: (unread?: boolean) => void }[];
   /** The number of the last event of it. */
   n: number;
   /** What the product did and the console has not been sent yet. */
@@ -556,6 +562,7 @@ export function createRunner(options: RunnerOptions): Runner {
       first: true,
       turn: false,
       sent: [],
+      handed: [],
       n: 0,
       outbox: [],
       refused: false,
@@ -587,6 +594,8 @@ export function createRunner(options: RunnerOptions): Runner {
       await target.driver.stop().catch(() => undefined);
     }
     await target.pumped;
+    // What the product was handed and never took is on the record as that.
+    settle(target, true);
     record(target, "status", `The session ended: ${how}.`, { ended: how });
     await flush(target);
     try {
@@ -748,34 +757,59 @@ export function createRunner(options: RunnerOptions): Runner {
       target.first = false;
       resetBy = undefined;
     }
-    target.turn = true;
-    for (const signal of batch) {
-      const files = attached.get(signal.number) ?? [];
-      const named = (which: (file: Attached) => boolean): string | undefined => {
-        const names = files.filter(which).map((file) => file.name);
-        return names.length === 0 ? undefined : names.join(", ");
-      };
-      // Beside the pictures: the other files by name, and the pictures the product was not
-      // handed as pictures, which whoever sent them is told of on the page.
-      const others = named((file) => file.picture === undefined);
-      const unseen = named((file) => file.picture === "unseen");
-      record(
-        target,
-        signal.source === "person" ? "person" : "wake",
-        signal.text,
-        {
-          ...signalData(signal),
-          ...(others === undefined ? {} : { files: others }),
-          ...(unseen === undefined ? {} : { unseen }),
-        },
-        pictures.get(signal.number),
-      );
+    const write = (unread?: boolean): void => {
+      for (const signal of batch) {
+        const files = attached.get(signal.number) ?? [];
+        const named = (which: (file: Attached) => boolean): string | undefined => {
+          const names = files.filter(which).map((file) => file.name);
+          return names.length === 0 ? undefined : names.join(", ");
+        };
+        // Beside the pictures: the other files by name, and the pictures the product was not
+        // handed as pictures, which whoever sent them is told of on the page.
+        const others = named((file) => file.picture === undefined);
+        const unseen = named((file) => file.picture === "unseen");
+        record(
+          target,
+          signal.source === "person" ? "person" : "wake",
+          signal.text,
+          {
+            ...signalData(signal),
+            ...(others === undefined ? {} : { files: others }),
+            ...(unseen === undefined ? {} : { unseen }),
+            ...(unread === true ? { unread: true } : {}),
+          },
+          pictures.get(signal.number),
+        );
+      }
+    };
+    // A product that waited for a message takes this one at once, and the record says so here.
+    // One at a turn takes it when it comes to it, after the tool call under way or after the
+    // turn: the record is written then, where the agent read it, and until then the page shows
+    // it as waiting.
+    const waited = !target.turn;
+    if (waited) {
+      write();
     }
+    target.handed.push({ written: waited, write });
+    target.turn = true;
     // Everything handed over since the agent was last done: what a product that took nothing is sent again.
     target.sent = [...target.sent, ...batch];
     delivered = Math.max(delivered, ...batch.map((signal) => signal.number));
     await persist();
     await account();
+  };
+
+  /**
+   * Writes on the record what the product was handed and the record does not hold yet: all of
+   * it once the agent is done with what it was sent, or as never read where the session is
+   * over or the agent cannot go on.
+   */
+  const settle = (target: OpenSession, unread = false): void => {
+    for (const message of target.handed.splice(0)) {
+      if (!message.written) {
+        message.write(unread);
+      }
+    }
   };
 
   /**
@@ -821,6 +855,8 @@ export function createRunner(options: RunnerOptions): Runner {
       case "stop": {
         held = true;
         if (session !== undefined) {
+          // What the product had not taken is on the record before the stop that leaves it unread.
+          settle(session, true);
           record(session, "person", signal.text, signalData(signal));
         }
         await end("stopped");
@@ -866,10 +902,31 @@ export function createRunner(options: RunnerOptions): Runner {
         return;
       }
       case "interrupt": {
-        pending.push(signal);
         // A turn of the session open when it was sent is stopped first; anything else just reads the words.
         const sent = Date.parse(signal.at);
-        if (session?.turn === true && !held && sent >= session.startedAt) {
+        const stops = session?.turn === true && !held && sent >= session.startedAt;
+        if (signal.text.trim().length === 0 && signal.attachments.length === 0) {
+          // No words of its own: the turn is stopped so that what the agent was sent and has
+          // not taken is read now. On the record as who stopped the turn, where one was.
+          if (session !== undefined && stops) {
+            record(session, "person", "", signalData(signal));
+          }
+          if (pending.length > 0) {
+            if (stops) {
+              await deliver("now");
+            } else {
+              scheduleDeliver();
+            }
+          } else if (session !== undefined && stops) {
+            await session.driver.interrupt().catch((error: unknown) => {
+              log(`the turn could not be stopped (${codeOf(error)})`);
+            });
+          }
+          await account(signal);
+          return;
+        }
+        pending.push(signal);
+        if (stops) {
           await deliver("now");
         } else {
           scheduleDeliver();
@@ -907,7 +964,19 @@ export function createRunner(options: RunnerOptions): Runner {
         await persist();
         return;
       }
+      case "taken": {
+        // The oldest message handed over: on the record now, where it was not written at once.
+        const message = target.handed.shift();
+        if (message !== undefined && !message.written) {
+          message.write();
+        }
+        return;
+      }
       case "turn_completed": {
+        // The agent is done with everything it was sent: what a product did not say it took is taken.
+        settle(target);
+        // The record says where a turn ends, so that whoever reads it live knows the agent is done.
+        record(target, "status", "The turn completed.", { turn: "completed" });
         target.turn = false;
         target.sent = [];
         if (waits !== undefined || stands.state !== "running") {
@@ -928,6 +997,8 @@ export function createRunner(options: RunnerOptions): Runner {
         // A product that did not start, or is not signed in, took nothing: what was sent is tried again.
         if (event.reason === "start" || event.reason === "sign_in") {
           pending = [...target.sent, ...pending];
+          // Sent again, and on the record when it is taken then.
+          target.handed = [];
         }
         target.sent = [];
         waits = cooled(waits);

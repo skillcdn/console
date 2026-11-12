@@ -1,6 +1,6 @@
 # ADR-0086: A session leaves a transcript that is kept for good
 
-- Status: Accepted
+- Status: Accepted; [ADR-0098](0098-a-message-is-on-the-record-where-the-agent-took-it-and-an-interrupt-may-carry-no-words.md) says when what the agent was sent is written: when the product takes it
 - Date: 2026-11-10
 - Follows [ADR-0085](0085-a-runner-on-the-agents-machine-is-told-by-signals-and-runs-one-session-at-a-time.md). Closes open question 4 of [architecture.md](../architecture.md), what of a run is kept: for a person's agent, its reports, as before; for an agent account, the whole transcript of every session.
 

@@ -199,6 +199,8 @@ interface Read {
   failed: string | undefined;
   /** Whether the process of the turn under way got as far as a turn: it said that one started. */
   turned: boolean;
+  /** How many messages the turn under way was started with. */
+  messages: number;
 }
 
 /** What a turn runs with, as the session's first event and the heartbeat say it. */
@@ -346,6 +348,12 @@ function eventsOf(line: Json, read: Read, runs: Runs): DriverEvent[] {
       return events;
     }
     case "turn.started":
+      // The turn's messages are the product's from here on: said once for each.
+      if (!read.turned) {
+        for (let taken = 0; taken < read.messages; taken += 1) {
+          events.push({ type: "taken" });
+        }
+      }
       read.turned = true;
       return events;
     case "turn.completed":
@@ -425,6 +433,7 @@ function sessionOf(
     completed: false,
     failed: undefined,
     turned: false,
+    messages: 0,
   };
   const mode = codexMode(options.permissions);
   let conversation = word(options.resume);
@@ -464,6 +473,7 @@ function sessionOf(
     read.completed = false;
     read.failed = undefined;
     read.turned = false;
+    read.messages = messages.length;
     read.error = undefined;
     read.called.clear();
     turn = mine;

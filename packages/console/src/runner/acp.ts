@@ -833,6 +833,8 @@ function sessionOf(
   const prompt = (messages: readonly DriverMessage[]): void => {
     const mine: NonNullable<typeof turn> = { cut: undefined, refused: false };
     turn = mine;
+    // A turn's messages are the agent's once it is prompted with them: said once for each.
+    emit(...messages.map((): DriverEvent => ({ type: "taken" })));
     const blocks: Json[] = [];
     for (const message of messages) {
       const left = takesImages ? [] : message.images;

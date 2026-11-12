@@ -110,9 +110,15 @@ function started(over: Partial<StartOptions> = {}) {
     ...over,
   });
   const events: DriverEvent[] = [];
+  /** How many messages the product was said to have taken: told apart from the blocks, which the tests read in order. */
+  const taken = { count: 0 };
   const read = (async () => {
     for await (const event of session.events) {
-      events.push(event);
+      if (event.type === "taken") {
+        taken.count += 1;
+      } else {
+        events.push(event);
+      }
     }
   })();
   /** The process of a turn, once the driver started it: the first is 0. */
@@ -130,7 +136,7 @@ function started(over: Partial<StartOptions> = {}) {
     await tick();
     return events;
   };
-  return { driver, session, turns, turn, events, said, read };
+  return { driver, session, turns, turn, events, said, read, taken };
 }
 
 const THREAD = "0199c4d8-0000-7000-8000-0000000000c1";
@@ -583,16 +589,19 @@ describe("the codex driver", () => {
   });
 
   it("keeps a message that arrives while a turn runs for the turn after, and says the agent done when nothing waits", async () => {
-    const { session, turn, turns, said } = started();
+    const { session, turn, turns, said, taken } = started();
     await session.send(message("Run the tests."));
     const first = await turn(0);
     first.says(...BEGAN);
+    await until("the first message to be taken", () => taken.count === 1);
     // The product takes no message in a turn: two that arrive wait, and no process is started.
     await session.send(message("And say which failed."));
     await session.send(message("Then stop."));
     await tick();
     expect(turns).toHaveLength(1);
     expect(first.killed).toEqual([]);
+    // What waits is not said taken: the record has it where the agent comes to it.
+    expect(taken.count).toBe(1);
     first.says(answers("item_0", "All passed."), COMPLETED);
     first.exits(0);
     // The first turn's end is not the agent done: what waited is the next turn's, read together.
@@ -600,7 +609,10 @@ describe("the codex driver", () => {
     await until("the message", () => second.ended);
     expect(second.sent).toEqual(["And say which failed.\n\nThen stop."]);
     expect(second.args.slice(0, 2)).toEqual(["exec", "resume"]);
+    expect(taken.count).toBe(1);
     second.says(...BEGAN, answers("item_0", "None failed."), COMPLETED);
+    // Each of the two is said taken once the product says that their turn started.
+    await until("the two that waited to be taken", () => taken.count === 3);
     second.exits(0);
     expect((await said(6)).slice(3)).toEqual([
       { type: "event", kind: "assistant", text: "All passed." },

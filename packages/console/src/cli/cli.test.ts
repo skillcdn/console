@@ -2600,6 +2600,7 @@ describe("configuring, as the person", () => {
       "POST /api/v1/agents/mira/signals": [
         { status: 201, body: sent({ text: "Hold the release." }) },
         { status: 201, body: sent({ number: 8, kind: "interrupt", text: "From a file." }) },
+        { status: 201, body: sent({ number: 8, kind: "interrupt" }) },
         { status: 201, body: sent({ number: 9, kind: "stop" }) },
         {
           status: 201,
@@ -2633,6 +2634,10 @@ describe("configuring, as the person", () => {
       EXIT.ok,
     );
     expect(calls.at(-1)?.body).toEqual({ kind: "interrupt", text: "From a file." });
+    // An interrupt without words stops the turn so that what the agent was told is read now.
+    const bare = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["agent", "interrupt", "mira"], bare.io)).toBe(EXIT.ok);
+    expect(calls.at(-1)?.body).toEqual({ kind: "interrupt" });
     // A stop needs no words, and sends none.
     const stopped = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["agent", "stop", "mira"], stopped.io)).toBe(EXIT.ok);

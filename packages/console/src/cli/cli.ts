@@ -3869,7 +3869,8 @@ const agentSecret = async (args: readonly string[], io: CliIo): Promise<number> 
 /** The kinds of signal a supervisor sends with words: which need them, and which take them. */
 const WORDED_SIGNALS: Readonly<Record<string, { readonly needs: boolean }>> = {
   tell: { needs: true },
-  interrupt: { needs: true },
+  // Without words it stops the turn so that what the agent was sent and has not taken is read now.
+  interrupt: { needs: false },
   stop: { needs: false },
   restart: { needs: false },
   reset: { needs: false },

@@ -221,6 +221,8 @@ function driverFor(agent: ReturnType<typeof fakeAgent>, version?: string) {
 }
 
 /** What a session says, read until one of a kind comes, or it ends. */
+/** How many messages the sessions read so far said were taken. */
+const taken = { count: 0 };
 async function until(
   session: DriverSession,
   seen: DriverEvent[],
@@ -231,6 +233,11 @@ async function until(
     const next = await reader.next();
     if (next.done === true) {
       return seen;
+    }
+    // That a message was taken is told apart from the blocks, which the tests read in order.
+    if (next.value.type === "taken") {
+      taken.count += 1;
+      continue;
     }
     seen.push(next.value);
     if (stop(next.value)) {
@@ -793,6 +800,7 @@ describe("the acp driver", () => {
       },
     });
     const session = driverFor(agent).start(OPTIONS);
+    taken.count = 0;
     await session.send(message("First."));
     await until(session, [], isType("running"));
     // In the turn: one that waits, then one to be read now, which stops the turn.
@@ -800,7 +808,10 @@ describe("the acp driver", () => {
     expect(agent.of("session/cancel")).toEqual([]);
     await session.send(message("Third, now.", "now"));
     expect(agent.of("session/cancel").map((one) => one.params)).toEqual([{ sessionId: "sess-1" }]);
+    // What waits is said taken when the agent is prompted with it, and not when it was sent.
+    expect(taken.count).toBeLessThanOrEqual(1);
     const seen = await until(session, [], isType("turn_completed"));
+    expect(taken.count).toBe(3);
     expect(seen).toEqual([
       { type: "event", kind: "status", text: "The turn was stopped for a message." },
       { type: "turn_completed" },

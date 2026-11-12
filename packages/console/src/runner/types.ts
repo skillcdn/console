@@ -41,6 +41,12 @@ export type DriverEvent =
     }
   /** The id the product resumes the conversation from next time. */
   | { readonly type: "conversation"; readonly id: string }
+  /**
+   * The product took a message: the oldest it was sent and had not said so of. Said once for
+   * every message sent, when the product reads it, so that a message handed over in a turn is
+   * on the record where the agent came to it and not where it was written.
+   */
+  | { readonly type: "taken" }
   /** A turn completed: the agent is done with what it was sent, and waits for more. */
   | { readonly type: "turn_completed" }
   /** The agent cannot go on: the model refused, or the product failed; with why, in the heartbeat's words. */

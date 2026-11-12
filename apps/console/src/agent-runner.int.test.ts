@@ -362,7 +362,7 @@ describe("an agent account's runner (ADR-0085)", () => {
     // What is sent is read by schema: a tell needs words, a kind is one of the seven, words are bounded.
     for (const body of [
       { kind: "tell" },
-      { kind: "interrupt", text: "   " },
+      { kind: "tell", text: "   " },
       { kind: "shout", text: "Hey" },
       { kind: "tell", text: "x".repeat(MAX_SIGNAL_LENGTH + 1) },
       { kind: "tell", text: `Fine${String.fromCodePoint(0x202e)}` },
@@ -758,5 +758,19 @@ describe("an agent account's runner (ADR-0085)", () => {
     expect(await errorOf(browser)).toBe("agent.own_command");
     expect((await raise(fromPages(alice), wake)).status).toBe(404);
     expect((await raise({}, wake)).status).not.toBe(201);
+  });
+
+  it("takes an interrupt with no words, which stops the turn so that what the agent was sent is read now", async () => {
+    const wordless = await send(fromPages(alice), "POST", SIGNALS, { kind: "interrupt" });
+    expect(wordless.status).toBe(201);
+    expect(restSignalSchema.parse(await wordless.json())).toMatchObject({
+      kind: "interrupt",
+      text: "",
+      attachments: [],
+    });
+    // A tell with none is still refused: it would tell the agent nothing.
+    const silent = await send(fromPages(alice), "POST", SIGNALS, { kind: "tell" });
+    expect(silent.status).toBe(400);
+    expect(await errorOf(silent)).toBe("request.invalid");
   });
 });

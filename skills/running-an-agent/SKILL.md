@@ -5,7 +5,7 @@ license: MIT
 compatibility: Needs the console command (npm install -g @skillcdn/console, Node.js 24 or newer). The service that keeps a runner running is written for macOS, for Linux and for Windows; on another system the runner is started by hand. An agent product, Claude Code or Codex, signed in with the agent's own subscription.
 metadata:
   author: skillcdn
-  version: "1.12"
+  version: "1.13"
 skillcdn:
   translations:
     ko:
@@ -96,7 +96,7 @@ The account's page, Agents, then the account, shows how it stands, what it is do
 | `failed` | Its product could not go on: not signed in, or it did not start | Mend what the reason says, the product's sign-in on its machine for `sign_in`, then `console agent restart <handle>` |
 | `unheard` | Its runner said nothing for five minutes | Look at the machine: is the OS account logged in, is the machine on. The runner's own lines are in `~/Library/Logs/ai.skillcdn.console.runner.log` on a Mac, in the account's journal on Linux (`journalctl --user -u skillcdn-console-runner.service`), and in `~\AppData\Local\skillcdn-console\runner.log` on Windows |
 
-`console agent interrupt <handle> "<words>"` stops what it is doing first; `console agent stop <handle>` ends its session until it is started again. `console agent reset <handle>` starts it with a new conversation, with nothing of the one before: the last thing to try, and nothing else begins one for an agent that could not go on. Every signal is on the account's record, with who sent it.
+`console agent interrupt <handle> "<words>"` stops what it is doing first, and without words has it read now what it was told and has not come to, which its page offers beside the words that wait; `console agent stop <handle>` ends its session until it is started again. `console agent reset <handle>` starts it with a new conversation, with nothing of the one before: the last thing to try, and nothing else begins one for an agent that could not go on. Every signal is on the account's record, with who sent it.
 
 Taking an account out is deactivating its member on the People page. Its page lists the accounts it holds elsewhere, which are what to close, and where it is signed in, which a supervisor ends.
 

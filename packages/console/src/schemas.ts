@@ -882,8 +882,10 @@ export type RestSignals = z.infer<typeof restSignalsSchema>;
 
 /**
  * What `POST /api/v1/agents/<handle>/signals` is sent, by a supervisor: the kind, the words for
- * the agent, and for `set` the model or the effort. `tell` and `interrupt` need words; `set`
- * needs one of its two, a field left out staying as it is and `null` meaning the product's own.
+ * the agent, and for `set` the model or the effort. A `tell` needs words; an `interrupt` takes
+ * them, and without any stops the turn under way so that what the agent was sent and has not
+ * taken is read now; `set` needs one of its two, a field left out staying as it is and `null`
+ * meaning the product's own.
  */
 export const restSignalInputSchema = z
   .object({
@@ -898,10 +900,8 @@ export const restSignalInputSchema = z
   })
   .check(
     z.refine(
-      (input) =>
-        (input.kind !== "tell" && input.kind !== "interrupt") ||
-        (input.text ?? "").trim().length > 0,
-      "a tell and an interrupt need words",
+      (input) => input.kind !== "tell" || (input.text ?? "").trim().length > 0,
+      "a tell needs words",
     ),
     z.refine(
       (input) =>

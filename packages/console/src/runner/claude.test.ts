@@ -569,6 +569,7 @@ describe("the claude driver", () => {
     await stopping;
     expect(killed).toEqual([]);
     expect((await collect(session.events)).slice(3)).toEqual([
+      { type: "taken" },
       {
         type: "event",
         kind: "tool_result",
@@ -660,7 +661,10 @@ describe("the claude driver", () => {
     within.says(says1("Two failed."));
     within.says(RESULT);
     within.exits(0);
+    // Each is said taken where the product says it back: there the record has it.
     expect((await collect(within.session.events)).slice(3)).toEqual([
+      { type: "taken" },
+      { type: "taken" },
       { type: "event", kind: "assistant", text: "Two failed." },
       { type: "turn_completed" },
       { type: "ended", how: "exited" },
@@ -682,7 +686,9 @@ describe("the claude driver", () => {
     after.says(RESULT);
     after.exits(0);
     expect((await collect(after.session.events)).slice(3)).toEqual([
+      { type: "taken" },
       { type: "event", kind: "assistant", text: "one" },
+      { type: "taken" },
       { type: "event", kind: "assistant", text: "two" },
       { type: "turn_completed" },
       { type: "ended", how: "exited" },
@@ -709,7 +715,9 @@ describe("the claude driver", () => {
     instead.says(RESULT);
     instead.exits(0);
     expect((await collect(instead.session.events)).slice(3)).toEqual([
+      { type: "taken" },
       { type: "event", kind: "status", text: "The turn was stopped for a message." },
+      { type: "taken" },
       { type: "event", kind: "assistant", text: "halted" },
       { type: "turn_completed" },
       { type: "ended", how: "exited" },
@@ -726,7 +734,9 @@ describe("the claude driver", () => {
     dropped.says(became("m2", "cancelled"));
     dropped.says(RESULT);
     dropped.exits(0);
+    // One it will not take is never said taken.
     expect((await collect(dropped.session.events)).slice(3)).toEqual([
+      { type: "taken" },
       { type: "turn_completed" },
       { type: "ended", how: "exited" },
     ]);
@@ -739,7 +749,10 @@ describe("the claude driver", () => {
     silent.says(RESULT);
     silent.says(RESULT);
     silent.exits(0);
+    // What it was sent is taken by the time a turn ends, for all the driver can know.
     expect((await collect(silent.session.events)).slice(3)).toEqual([
+      { type: "taken" },
+      { type: "taken" },
       { type: "turn_completed" },
       { type: "turn_completed" },
       { type: "ended", how: "exited" },
@@ -753,6 +766,7 @@ describe("the claude driver", () => {
     forged.says(RESULT);
     forged.exits(0);
     expect((await collect(forged.session.events)).slice(3)).toEqual([
+      { type: "taken" },
       { type: "turn_completed" },
       { type: "ended", how: "exited" },
     ]);

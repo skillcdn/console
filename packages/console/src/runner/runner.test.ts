@@ -497,12 +497,15 @@ describe("the runner", () => {
       { type: "event", kind: "assistant", text: "Held." },
       { type: "turn_completed" },
     );
-    await until("the transcript", () => console.events().length === 3);
+    await until("the transcript", () => console.events().length === 4);
+    // The record says where the turn ended, so that whoever reads it live knows the agent is done.
     expect(console.events()).toEqual([
       [1, "person", "Hold the release."],
       [2, "status", "The product started."],
       [3, "assistant", "Held."],
+      [4, "status", "The turn completed."],
     ]);
+    expect(console.kept.values().next().value?.[3]?.data).toEqual({ turn: "completed" });
     expect(console.kept.values().next().value?.[0]?.data).toEqual({
       signal: 1,
       kind: "tell",
@@ -575,6 +578,99 @@ describe("the runner", () => {
     console.signal({ kind: "interrupt", text: "Another word." });
     await until("the words", () => session.sent.length === 3);
     expect(session.sent[2]).toMatchObject({ priority: "next" });
+  });
+
+  it("writes a message handed over in a turn on the record when the product takes it, and not before", async () => {
+    const { console, product } = setup();
+    console.signal({ text: "A long task." });
+    const session = await sessionOf(product);
+    await until("the message", () => session.sent.length === 1);
+    // The product waited for a message: the first is on the record at once.
+    session.emit(...STARTED, { type: "taken" });
+    await until("the transcript", () => console.events().length === 2);
+    // One handed over in the turn is the product's to take when it comes to it.
+    console.signal({ text: "And say which failed." });
+    await until("the second message", () => session.sent.length === 2);
+    session.emit({ type: "event", kind: "tool_result", text: "ok", data: { id: "toolu_01" } });
+    await until("the transcript", () => console.events().length === 3);
+    await sleep(40);
+    expect(console.events().map((event) => event[1])).toEqual(["person", "status", "tool_result"]);
+    // Taken: on the record here, after what the agent did before it read it.
+    session.emit({ type: "taken" });
+    await until("the transcript", () => console.events().length === 4);
+    expect(console.events()[3]).toEqual([4, "person", "And say which failed."]);
+    expect(console.kept.values().next().value?.[3]?.data).toMatchObject({ signal: 2 });
+    // A product that never says so has taken what it was sent by the time the turn is done.
+    console.signal({ text: "Then stop." });
+    await until("the third message", () => session.sent.length === 3);
+    await sleep(40);
+    expect(console.events()).toHaveLength(4);
+    session.emit({ type: "turn_completed" });
+    await until("the transcript", () => console.events().length === 6);
+    expect(console.events().slice(4)).toEqual([
+      [5, "person", "Then stop."],
+      [6, "status", "The turn completed."],
+    ]);
+  });
+
+  it("says on the record that a message was never read where the session ends before the product takes it", async () => {
+    const { console, product } = setup();
+    console.signal({ text: "A long task." });
+    const session = await sessionOf(product);
+    await until("the message", () => session.sent.length === 1);
+    session.emit(...STARTED, { type: "taken" });
+    console.signal({ text: "And say which failed." });
+    await until("the second message", () => session.sent.length === 2);
+    console.signal({ kind: "stop", text: "Enough." });
+    await until("the session to end", () => console.ended.length === 1);
+    await until("the transcript", () => console.events().length === 5);
+    expect(console.events()).toEqual([
+      [1, "person", "A long task."],
+      [2, "status", "The product started."],
+      [3, "person", "And say which failed."],
+      [4, "person", "Enough."],
+      [5, "status", "The session ended: stopped."],
+    ]);
+    const kept = console.kept.values().next().value ?? [];
+    expect(kept[2]?.data).toMatchObject({ signal: 2, unread: true });
+    expect(kept[0]?.data).not.toHaveProperty("unread");
+  });
+
+  it("stops the turn for an interrupt without words, so that what the agent was sent is read now, and sends no message of its own", async () => {
+    const { console, product } = setup();
+    console.signal({ text: "A long task." });
+    const session = await sessionOf(product);
+    await until("the message", () => session.sent.length === 1);
+    session.emit(...STARTED, { type: "taken" });
+    console.signal({ text: "Read this first." });
+    await until("the second message", () => session.sent.length === 2);
+    console.signal({ kind: "interrupt" });
+    await until("the turn to be stopped", () => session.state.interrupted === 1);
+    await sleep(40);
+    // Nothing is sent twice, and nothing with no words: the product goes on with what waited.
+    expect(session.sent).toHaveLength(2);
+    await until("the transcript", () => console.events().length === 3);
+    expect(console.events()[2]).toEqual([3, "person", ""]);
+    expect(console.kept.values().next().value?.[2]?.data).toMatchObject({
+      signal: 3,
+      kind: "interrupt",
+      by: "jane",
+    });
+    session.emit({ type: "taken" }, { type: "turn_completed" });
+    await until("the transcript", () => console.events().length === 5);
+    expect(console.events().slice(3)).toEqual([
+      [4, "person", "Read this first."],
+      [5, "status", "The turn completed."],
+    ]);
+    // With no turn under way there is nothing to stop, and nothing to say of it.
+    console.signal({ kind: "interrupt" });
+    await sleep(60);
+    expect(session.state.interrupted).toBe(1);
+    expect(session.sent).toHaveLength(2);
+    expect(console.events()).toHaveLength(5);
+    await until("the signal to be accounted for", () =>
+      console.beats.some((beat) => beat.delivered === 4),
+    );
   });
 
   it("stops for a supervisor and stays stopped: what arrives is kept until a restart, which goes on with the conversation", async () => {
@@ -776,7 +872,7 @@ describe("the runner", () => {
       },
       { type: "turn_completed" },
     );
-    await until("the transcript", () => console.events().length === 3);
+    await until("the transcript", () => console.events().length === 4);
     const reported = JSON.stringify([...console.kept.values()]);
     expect(reported).not.toContain(TOKEN);
     expect(reported).not.toContain(Buffer.from(TOKEN).toString("base64").slice(4, -4));

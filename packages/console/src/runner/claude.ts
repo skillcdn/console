@@ -301,6 +301,7 @@ function eventsOf(line: Json, state: Read): DriverEvent[] {
         const id = textOf(line.uuid);
         if (id !== undefined && state.waiting.delete(id)) {
           state.acknowledges = true;
+          events.push({ type: "taken" });
         }
         return events;
       }
@@ -358,6 +359,9 @@ function eventsOf(line: Json, state: Read): DriverEvent[] {
       }
       // A build that says no message back is read without: every result ends a turn.
       if (!state.acknowledges) {
+        state.waiting.forEach(() => {
+          events.push({ type: "taken" });
+        });
         state.waiting.clear();
       }
       // A turn that ended while a message waits is not the agent done: the product goes on
@@ -383,8 +387,14 @@ function eventsOf(line: Json, state: Read): DriverEvent[] {
       // What the product says became of a message: one it is done with, or will not take, is
       // not waited for, whether or not it was said back.
       const id = textOf(line.command_uuid);
-      if (id !== undefined && (line.state === "completed" || line.state === "cancelled")) {
-        state.waiting.delete(id);
+      if (
+        id !== undefined &&
+        (line.state === "completed" || line.state === "cancelled") &&
+        state.waiting.delete(id) &&
+        line.state === "completed"
+      ) {
+        // Done with, and never said back: taken all the same.
+        events.push({ type: "taken" });
       }
       return events;
     }
