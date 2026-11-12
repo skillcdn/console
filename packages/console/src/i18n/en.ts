@@ -1550,9 +1550,8 @@ export const en = {
     title: "Agents",
     views: {
       aria: "Views of the agents",
-      mine: "My agents",
-      all: "All",
-      connected: "Acting as me",
+      mine: "Agent accounts you manage",
+      connected: "Connected agents",
     },
     makeByHand: "Make a token by hand",
     makeAria: "Make a token",
@@ -1846,9 +1845,9 @@ export const en = {
       title: "Agent accounts",
       intro:
         "The agent accounts that report to you, or to someone who reports to you. Each is a member of its own: it signs in with an account of its own and works under the rules a person does.",
-      allIntro:
-        "Every agent account of the workspace. An administrator stands in for a manager who is away.",
-      yours: "Acting as me",
+      others: "Other agent accounts",
+      othersIntro: "Their manager is someone else.",
+      yours: "Connected agents",
       yoursIntro:
         "The agents that act as you, each with a token of yours: what one of them does, you did through it.",
       list: "Agent accounts",
@@ -1858,7 +1857,7 @@ export const en = {
         body: "An administrator adds one here. It is a member from then on, and signs in with an account of its own.",
       },
       mineEmpty: {
-        title: "No agent account reports to you",
+        title: "You manage no agent account",
         body: "An account whose manager you are, or whose manager reports to you, is listed here. Every agent account of the workspace is among the people.",
       },
       now: "Now",

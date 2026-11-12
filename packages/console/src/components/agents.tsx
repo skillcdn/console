@@ -22,6 +22,7 @@ import {
 } from "../limits.js";
 import { agentLoginOf } from "../services.js";
 import { AgentStateBadge } from "./agent-page.js";
+import { supervisedBy } from "./people.js";
 import { Picker } from "./picker.js";
 import { peopleSearch } from "./searches.js";
 import {
@@ -72,6 +73,28 @@ function saveBlob(blob: Blob, name: string): void {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+/**
+ * The agent accounts as the agents' page lists them: the ones whoever looks manages, directly
+ * or through someone who reports to them, and the others of the workspace, which only an
+ * administrator is shown. An administrator supervises every account, so which they manage is
+ * read off the reporting line; for anyone else the console has said which are theirs, and the
+ * rest are not theirs to list.
+ */
+export function agentAccountGroups(
+  agents: readonly RestAgent[],
+  me: RestPerson | undefined,
+  people: readonly RestPerson[],
+): { readonly managed: readonly RestAgent[]; readonly others: readonly RestAgent[] } {
+  const administrator = me?.role === "admin";
+  const managed = agents.filter((agent) =>
+    administrator ? supervisedBy(me, agent.person, people) : agent.supervised,
+  );
+  return {
+    managed,
+    others: administrator ? agents.filter((agent) => !managed.includes(agent)) : [],
+  };
 }
 
 export interface AgentAccountListProps {

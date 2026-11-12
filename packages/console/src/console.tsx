@@ -51,6 +51,7 @@ import {
   type AgentAccountFormProps,
   AgentAccountList,
   type AgentAccountListProps,
+  agentAccountGroups,
 } from "./components/agents.js";
 import { Board, BoardFilters, type BoardProps, byDue, filterTasks } from "./components/board.js";
 import { Calendar, type CalendarProps, Workload } from "./components/calendar.js";
@@ -105,6 +106,7 @@ import { TaskView, type TaskViewProps } from "./components/task-view.js";
 import { NewToken, TokenForm, TokenList, type TokenListProps } from "./components/tokens.js";
 import {
   AvatarSetsContext,
+  Badge,
   Button,
   Callout,
   CategoryBadge,
@@ -3265,22 +3267,15 @@ function WorkspacePage(props: {
     // listed where that person is signed in.
     const viaToken = holdsToken(data);
     const view: AgentsView = making ? "connected" : route.view;
-    // The agent accounts (ADR-0084) that report to whoever is looking, directly or through
-    // someone who does: theirs to look after. An administrator supervises every account, so
-    // which are theirs is read off the reporting line; for anyone else the console has said.
-    const mine = data.agents.filter((agent) =>
-      administrator ? supervisedBy(me, agent.person, data.people) : agent.supervised,
-    );
-    const shown = view === "all" ? data.agents : mine;
+    // The agent accounts (ADR-0084) whoever is looking manages, theirs to look after, and
+    // under them, for an administrator, the ones someone else manages.
+    const { managed: mine, others } = agentAccountGroups(data.agents, me, data.people);
     const views: readonly {
       readonly view: AgentsView;
       readonly label: string;
       readonly count: number;
     }[] = [
       { view: "mine", label: agents.views.mine, count: mine.length },
-      ...(administrator
-        ? [{ view: "all" as const, label: agents.views.all, count: data.agents.length }]
-        : []),
       ...(viaToken
         ? []
         : [
@@ -3291,9 +3286,6 @@ function WorkspacePage(props: {
             },
           ]),
     ];
-    if (view === "all" && !administrator) {
-      return <NothingHere />;
-    }
     if (view === "connected" && viaToken) {
       return <NothingHere />;
     }
@@ -3327,26 +3319,46 @@ function WorkspacePage(props: {
         </nav>
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
         {view !== "connected" ? (
-          <section aria-label={view === "all" ? agents.views.all : agents.views.mine}>
-            <p className="sc-lead">{view === "all" ? accounts.allIntro : accounts.intro}</p>
-            <components.AgentAccountList
-              agents={shown}
-              me={me}
-              busy={busy}
-              href={(agent) => agentHref(agent.person.handle ?? "")}
-              empty={
-                view === "all" ? (
-                  <EmptyState title={accounts.empty.title} body={accounts.empty.body} />
-                ) : (
-                  <EmptyState
-                    title={accounts.mineEmpty.title}
-                    body={accounts.mineEmpty.body}
-                    action={<LinkButton href={PATHS.people}>{words.nav.people}</LinkButton>}
-                  />
-                )
-              }
-            />
-          </section>
+          <>
+            <section className="sc-people-group" aria-label={agents.views.mine}>
+              <p className="sc-lead">{accounts.intro}</p>
+              <components.AgentAccountList
+                agents={mine}
+                me={me}
+                busy={busy}
+                href={(agent) => agentHref(agent.person.handle ?? "")}
+                empty={
+                  others.length > 0 ? (
+                    // The accounts under this say that there are some: a line is enough here.
+                    <p className="sc-field-hint">{accounts.mineEmpty.title}</p>
+                  ) : administrator ? (
+                    <EmptyState title={accounts.empty.title} body={accounts.empty.body} />
+                  ) : (
+                    <EmptyState
+                      title={accounts.mineEmpty.title}
+                      body={accounts.mineEmpty.body}
+                      action={<LinkButton href={PATHS.people}>{words.nav.people}</LinkButton>}
+                    />
+                  )
+                }
+              />
+            </section>
+            {others.length > 0 && (
+              <section className="sc-people-group" aria-label={accounts.others}>
+                <h2 className="sc-section-title">
+                  {accounts.others}
+                  <Badge kind="count">{others.length}</Badge>
+                </h2>
+                <p className="sc-lead">{accounts.othersIntro}</p>
+                <components.AgentAccountList
+                  agents={others}
+                  me={me}
+                  busy={busy}
+                  href={(agent) => agentHref(agent.person.handle ?? "")}
+                />
+              </section>
+            )}
+          </>
         ) : (
           <section aria-label={agents.views.connected}>
             <p className="sc-lead">{accounts.yoursIntro}</p>

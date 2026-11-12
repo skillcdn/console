@@ -37,7 +37,13 @@ import {
   withChosen,
   withoutChosen,
 } from "./agent-page.js";
-import { AgentAccountForm, AgentAccountList, AgentPictureSave, suggestLogin } from "./agents.js";
+import {
+  AgentAccountForm,
+  AgentAccountList,
+  AgentPictureSave,
+  agentAccountGroups,
+  suggestLogin,
+} from "./agents.js";
 import { Board, BoardFilters, byDue, columnStateOf, edgeScrollOf, filterTasks } from "./board.js";
 import {
   Calendar,
@@ -1704,6 +1710,43 @@ describe("the agent accounts (ADR-0084)", () => {
     expect(renderToStaticMarkup(<AgentAccountList agents={[]} empty={<p>none</p>} />)).toBe(
       "<p>none</p>",
     );
+  });
+
+  it("groups the accounts as the agents' page lists them: the ones managed, and the others for an administrator", () => {
+    const ines: RestPerson = {
+      ...mira,
+      id: "0199c4d8-0000-7000-8000-00000000000a",
+      handle: "ines",
+    };
+    const people = [alice, bob, mira, { ...ines, managerId: bob.id }];
+    const accounts = [
+      { person: mira, manager: alice, supervised: true },
+      { person: { ...ines, managerId: bob.id }, manager: bob, supervised: true },
+    ];
+    // An administrator supervises every account: which they manage is the reporting line's to say.
+    const administrator = agentAccountGroups(accounts, { ...alice, role: "admin" }, people);
+    expect(administrator.managed.map((one) => one.person.handle)).toEqual(["mira"]);
+    expect(administrator.others.map((one) => one.person.handle)).toEqual(["ines"]);
+    // An account whose manager reports to them is theirs too.
+    const above = agentAccountGroups(
+      accounts,
+      { ...alice, role: "admin" },
+      people.map((one) => (one.id === bob.id ? { ...one, managerId: alice.id } : one)),
+    );
+    expect(above.managed.map((one) => one.person.handle)).toEqual(["mira", "ines"]);
+    expect(above.others).toEqual([]);
+    // Anyone else is listed what the console said is theirs, and nothing of the rest.
+    const member = agentAccountGroups(
+      [
+        { person: mira, manager: alice, supervised: false },
+        { person: ines, manager: bob, supervised: true },
+      ],
+      { ...bob, role: "member" },
+      people,
+    );
+    expect(member.managed.map((one) => one.person.handle)).toEqual(["ines"]);
+    expect(member.others).toEqual([]);
+    expect(agentAccountGroups(accounts, undefined, people).others).toEqual([]);
   });
 
   it("offers an account's picture as a file, with its face and what the file is for", () => {

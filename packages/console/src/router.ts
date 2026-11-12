@@ -587,10 +587,11 @@ export function setupHref(code: string): string {
 }
 
 /**
- * The views of the agents' page: the agent accounts that report to whoever is signed in, all of
- * the workspace's, and the agents that act as them, each with a token of theirs.
+ * The views of the agents' page: the agent accounts whoever is signed in manages, with the
+ * workspace's other accounts under them for an administrator, and the agents connected to act
+ * as them, each with a token of theirs.
  */
-export const AGENTS_VIEWS = ["mine", "all", "connected"] as const;
+export const AGENTS_VIEWS = ["mine", "connected"] as const;
 export type AgentsView = (typeof AGENTS_VIEWS)[number];
 
 const isAgentsView = (value: string): value is AgentsView =>
