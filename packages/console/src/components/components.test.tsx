@@ -4867,6 +4867,37 @@ describe("the roadmap as months (ADR-0026)", () => {
     expect(unmarked).not.toContain("sc-calendar-goal");
   });
 
+  it("keeps a goal's row in every day of its week, so that a bar lies level under the goals", () => {
+    // A goal on a Sunday and a task across that week: the bar's pieces on the other days would
+    // lie a row higher than the first, and the title running along it would cross what is there.
+    const html = renderToStaticMarkup(
+      <Calendar
+        tasks={[task({ startsOn: "2026-11-15", dueOn: "2026-11-18", title: "Across" })]}
+        month="2026-11"
+        today={TODAY}
+        goals={[goal(), goal({ id: ids(32), title: "Second", dueOn: "2026-11-15" })]}
+        taskHref={href}
+        goalHref={(item) => `/projects/web/roadmap/${item.id}`}
+        monthHref={(month) => `/projects/web/calendar?month=${month}`}
+        weekStart="sunday"
+      />,
+    );
+    // Two goals on the 15th: the six other days of that week keep two rows each, and no other week any.
+    expect(html.match(/sc-calendar-goal sc-calendar-goal-held/g)).toHaveLength(12);
+    const weeks = html.split("<tr>").filter((row) => row.includes("sc-calendar-cell"));
+    const held = weeks.filter((row) => row.includes("sc-calendar-goal-held"));
+    expect(held).toHaveLength(1);
+    expect(held[0]).toContain("Across");
+    // In every day of that week the bar comes after the rows for goals, real or kept.
+    for (const cell of (held[0] ?? "").split("<td").slice(1, 5)) {
+      expect(cell.indexOf("sc-calendar-bar")).toBeGreaterThan(cell.lastIndexOf("sc-calendar-goal"));
+    }
+    // A kept row is nothing to read or to follow.
+    expect(html).toMatch(
+      /<span class="sc-calendar-goal sc-calendar-goal-held" aria-hidden="true">/,
+    );
+  });
+
   it("takes the category and the start day on the form, and shows them on the list and the goal", () => {
     const form = renderToStaticMarkup(
       <GoalForm categories={[engineering]} onSubmit={() => undefined} />,

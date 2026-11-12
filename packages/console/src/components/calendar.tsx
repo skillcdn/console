@@ -418,10 +418,17 @@ function WeekRow<T extends RestTaskBrief>(props: WeekRowProps<T>) {
   const who = (task: RestTaskBrief): ReactNode =>
     props.people === true ? <Workers workers={task.workers} size="xs" shown={2} /> : null;
   const lanes = segments.reduce((most, segment) => Math.max(most, segment.lane + 1), 0);
+  const goalsOf = (day: string): readonly RestGoal[] =>
+    props.goalHref === undefined ? [] : (props.goalsOn?.get(day) ?? []);
+  // A goal stands over the bars of its day, and a bar is one line across the days it covers:
+  // every day of the week keeps as many rows for goals as the day with the most, so that the
+  // pieces of a bar lie level, and a title running along it crosses nothing.
+  const goalRows = week.reduce((most, cell) => Math.max(most, goalsOf(cell.day).length), 0);
   return (
     <tr>
       {week.map((cell, column) => {
         const number = Number(cell.day.slice(8));
+        const goals = goalsOf(cell.day);
         // Everything on the day: its own tasks and the bars crossing it, for a phone's count.
         const total =
           (props.on.get(cell.day)?.length ?? 0) +
@@ -449,21 +456,28 @@ function WeekRow<T extends RestTaskBrief>(props: WeekRowProps<T>) {
                 {number}
               </button>
             )}
-            {props.goalHref !== undefined &&
-              (props.goalsOn?.get(cell.day) ?? []).map((goal) => (
-                <a
-                  key={goal.id}
-                  className={cx(
-                    "sc-calendar-goal",
-                    `sc-category-${goal.category?.color ?? "gray"}`,
-                    goal.state === "done" && "sc-calendar-over",
-                  )}
-                  href={props.goalHref?.(goal)}
-                >
-                  <span className="sc-calendar-flag" aria-hidden="true" />
-                  <span className="sc-calendar-task-title">{goal.title}</span>
-                </a>
-              ))}
+            {goals.map((goal) => (
+              <a
+                key={goal.id}
+                className={cx(
+                  "sc-calendar-goal",
+                  `sc-category-${goal.category?.color ?? "gray"}`,
+                  goal.state === "done" && "sc-calendar-over",
+                )}
+                href={props.goalHref?.(goal)}
+              >
+                <span className="sc-calendar-flag" aria-hidden="true" />
+                <span className="sc-calendar-task-title">{goal.title}</span>
+              </a>
+            ))}
+            {Array.from({ length: goalRows - goals.length }, (_, row) => (
+              // A row kept for a goal another day of the week has: as tall as a goal, and empty.
+              // biome-ignore lint/suspicious/noArrayIndexKey: an empty row is nothing but its position
+              <span key={row} className="sc-calendar-goal sc-calendar-goal-held" aria-hidden="true">
+                <span className="sc-calendar-flag" />
+                <span className="sc-calendar-task-title">&nbsp;</span>
+              </span>
+            ))}
             {Array.from({ length: lanes }, (_, lane) => {
               const segment = segments.find(
                 (candidate) =>

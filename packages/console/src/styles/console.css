@@ -1786,6 +1786,8 @@ select.sc-input {
 /* The workers of a task on a card or a row: pictures side by side, and how many more. */
 .sc-workers {
   display: inline-flex;
+  /* Beside a title in a row, the pictures keep their room and the title gives way. */
+  flex: none;
   align-items: center;
 }
 
@@ -1795,6 +1797,8 @@ select.sc-input {
 
 .sc-workers-more {
   margin-inline: var(--sc-space-1);
+  /* The count of the rest is one word: its sign and its figure never part. */
+  white-space: nowrap;
   color: var(--sc-color-text-muted);
   font-size: var(--sc-text-xs);
   font-weight: var(--sc-weight-medium);
@@ -5830,6 +5834,12 @@ select.sc-input-quiet {
   color: var(--sc-color-accent);
 }
 
+/* The row a day keeps for a goal another day of its week has, so that the bars under the goals
+   lie level across the week: as tall as a goal, and nothing to see. */
+.sc-calendar-goal-held {
+  visibility: hidden;
+}
+
 .sc-calendar-flag {
   display: inline-block;
   flex: none;
@@ -6459,7 +6469,8 @@ select.sc-input-quiet {
     line-height: var(--sc-leading-snug);
   }
 
-  .sc-calendar-lane {
+  .sc-calendar-lane,
+  .sc-calendar-goal-held {
     display: none;
   }
 
