@@ -10,6 +10,7 @@ translations:
 documents:
   - docs
 exclude:
+  - .claude
   - docs/adr/0000-template.md
   - examples
   - packages/console/template
