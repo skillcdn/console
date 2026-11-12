@@ -2474,15 +2474,20 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     expect(
       followsEnd({ scrollHeight: 2000, scrollTop: 1399 - FOLLOW_SLACK, clientHeight: 600 }),
     ).toBe(false);
-    // Once it scrolled: at its end it follows, and moved up it does not, whatever it did before.
+    // Once it scrolled: at its end it follows, whoever moved it and whatever it did before.
     const far = { scrollHeight: 2000, scrollTop: 900, clientHeight: 600 };
-    expect(followsAfter(false, 0, { ...far, scrollTop: 1400 })).toBe(true);
-    expect(followsAfter(true, 1400, far)).toBe(false);
-    // What arrives makes the conversation taller without moving the pane up: it goes on as it
-    // was, following where it followed, and away where whoever reads had scrolled away.
-    expect(followsAfter(true, 900, { ...far, scrollHeight: 2600 })).toBe(true);
-    expect(followsAfter(true, 800, far)).toBe(true);
-    expect(followsAfter(false, 800, far)).toBe(false);
+    expect(followsAfter(false, true, { ...far, scrollTop: 1400 })).toBe(true);
+    expect(followsAfter(false, false, { ...far, scrollTop: 1400 })).toBe(true);
+    // Away from its end by the reader's hand, it follows no more.
+    expect(followsAfter(true, true, far)).toBe(false);
+    // Away from its end by itself, it goes on as it was: a conversation read again is short for
+    // a moment, and the pane stands at its top by the time it is told; and what arrives makes
+    // the conversation taller under a pane that has not moved.
+    expect(followsAfter(true, false, { scrollHeight: 3057, scrollTop: 0, clientHeight: 402 })).toBe(
+      true,
+    );
+    expect(followsAfter(true, false, { ...far, scrollHeight: 2600 })).toBe(true);
+    expect(followsAfter(false, false, far)).toBe(false);
 
     // At the conversation's foot: each as it will stand, with when it is read under the last,
     // and the way to have it read now while a turn is under way.

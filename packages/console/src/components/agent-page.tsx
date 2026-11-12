@@ -329,14 +329,16 @@ export function followsEnd(pane: {
 }
 
 /**
- * Whether a pane goes on following its end once it scrolled: at its end it does; moved up from
- * where it stood it does not, since only whoever reads moves a pane up; and otherwise it goes
- * on as it was, since what arrives makes the conversation taller before the pane is told that
- * it went to its end, which would read as someone having scrolled away.
+ * Whether a pane goes on following its end once it scrolled: at its end it does; away from it
+ * by the hand of whoever reads, a wheel, a finger, a key or the bar, it does not; and away from
+ * it by itself it goes on as it was. A pane moves by itself whenever the conversation changes
+ * how tall it is, taller by what arrives and shorter while it is read again, and it is told so
+ * after the fact, when the conversation may have changed once more: where the pane stands says
+ * nothing then of who moved it.
  */
 export function followsAfter(
   following: boolean,
-  stood: number,
+  byHand: boolean,
   pane: {
     readonly scrollHeight: number;
     readonly scrollTop: number;
@@ -346,8 +348,11 @@ export function followsAfter(
   if (followsEnd(pane)) {
     return true;
   }
-  return pane.scrollTop < stood ? false : following;
+  return byHand ? false : following;
 }
+
+/** How long after a wheel, a touch, a key or a press on the pane a scroll is taken for the reader's own, in milliseconds. */
+export const HAND_MS = 1200;
 
 /** The first line of a text, for a row that shows one: cut where it is long. */
 function firstLine(text: string, most = 160): string {
@@ -830,8 +835,8 @@ export function ChatPane(props: ChatPaneProps) {
   const whole = useRef<HTMLElement>(null);
   /** Whether the pane follows its end: true until whoever reads scrolls away from it. */
   const follows = useRef(true);
-  /** Where the pane stood when it last scrolled. */
-  const stood = useRef(0);
+  /** Until when a scroll is taken for the reader's own: set by what a hand does to the pane. */
+  const hand = useRef(0);
   const [away, setAway] = useState(false);
   const [fresh, setFresh] = useState(false);
   const toEnd = () => {
@@ -864,16 +869,31 @@ export function ChatPane(props: ChatPaneProps) {
     if (pane === null || inner === null) {
       return;
     }
+    const now = () => (typeof performance === "undefined" ? Date.now() : performance.now());
+    const onHand = () => {
+      hand.current = now() + HAND_MS;
+    };
     const onScroll = () => {
-      const goes = followsAfter(follows.current, stood.current, pane);
-      stood.current = pane.scrollTop;
+      const byHand = now() < hand.current;
+      const goes = followsAfter(follows.current, byHand, pane);
       follows.current = goes;
       setAway(!goes);
       if (goes) {
         setFresh(false);
+        // Moved by itself while it follows: the conversation changed under it, so back to its end.
+        if (!byHand && !followsEnd(pane)) {
+          pane.scrollTop = pane.scrollHeight;
+        }
+      } else if (byHand) {
+        // A finger let go goes on scrolling for a while: each step of it is still the reader's.
+        hand.current = now() + HAND_MS;
       }
     };
     pane.addEventListener("scroll", onScroll, { passive: true });
+    const hands = ["wheel", "touchstart", "touchmove", "pointerdown", "keydown"] as const;
+    for (const name of hands) {
+      pane.addEventListener(name, onHand, { passive: true });
+    }
     // What arrives, and a picture that loads late, change how tall the conversation is: the
     // pane goes with it while it is followed, and says that there is more where it is not.
     const observer =
@@ -890,6 +910,9 @@ export function ChatPane(props: ChatPaneProps) {
     pane.scrollTop = pane.scrollHeight;
     return () => {
       pane.removeEventListener("scroll", onScroll);
+      for (const name of hands) {
+        pane.removeEventListener(name, onHand);
+      }
       observer?.disconnect();
     };
   }, []);

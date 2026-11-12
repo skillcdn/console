@@ -147,10 +147,18 @@ function SessionTranscript(props: {
   const ended = useRef(onEnded);
   ended.current = onEnded;
   const open = session.ended === null;
+  // How many events the session holds and whether it is open are read when a session is first
+  // shown, and not followed: the page asks every few seconds how the session stands, and the
+  // count it is answered grows with every event, which is no reason to read the session again
+  // from its start under whoever is reading it. What arrives comes by the stream.
+  const count = useRef(session.events);
+  count.current = session.events;
+  const opened = useRef(open);
+  opened.current = open;
   useEffect(() => {
     const controller = new AbortController();
     let source: EventSource | undefined;
-    const after = Math.max(0, session.events - TAIL);
+    const after = Math.max(0, count.current - TAIL);
     setEvents([]);
     setFrom(after);
     setProblem(false);
@@ -181,7 +189,7 @@ function SessionTranscript(props: {
           break;
         }
       }
-      if (!open || typeof EventSource === "undefined") {
+      if (!opened.current || typeof EventSource === "undefined") {
         return;
       }
       source = new EventSource(client.transcriptStreamUrl(handle, session.id, last.current));
@@ -218,7 +226,7 @@ function SessionTranscript(props: {
       controller.abort();
       source?.close();
     };
-  }, [client, handle, session.id, session.events, open]);
+  }, [client, handle, session.id]);
   // Which of the words sent still wait is read off the last signal the agent took. Where the
   // events read hold none, a long turn since the last word say, the ones before are read a few
   // steps back for it, and not shown.
