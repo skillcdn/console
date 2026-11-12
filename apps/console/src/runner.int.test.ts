@@ -208,6 +208,9 @@ describe("a runner and the console, together (ADR-0085, ADR-0086)", () => {
         offers: { models: ["opus", "sonnet"], efforts: ["low", "high"] },
       });
 
+      /** The event by which the record says a turn ended: a session is read whole once it is there. */
+      const turnEnded = ([kind, text]: readonly [string, string]): boolean =>
+        kind === "status" && text === "The turn completed.";
       // A tell: the stream carries it, a session begins, the agent reads it under a header.
       await tell({ kind: "tell", text: "Hold the release." });
       const first = await until("the first session's transcript", async () => {
@@ -216,7 +219,7 @@ describe("a runner and the console, together (ADR-0085, ADR-0086)", () => {
           return undefined;
         }
         const events = await transcript(open.id);
-        return events.some(([kind]) => kind === "assistant") ? { open, events } : undefined;
+        return events.some(turnEnded) ? { open, events } : undefined;
       });
       expect(first.open).toMatchObject({ ended: null, resumed: false, model: null });
       expect(first.events).toEqual([
@@ -224,6 +227,8 @@ describe("a runner and the console, together (ADR-0085, ADR-0086)", () => {
         // What the product printed of the secret it was handed never left the machine.
         ["tool_result", `GIT_TOKEN=${WITHHELD}`],
         ["assistant", "Heard: Hold the release."],
+        // The record says where the turn ended.
+        ["status", "The turn completed."],
       ]);
       expect(product.started[0]?.options.env).toEqual({ GIT_TOKEN: TOKEN });
       expect(product.started[0]?.sent[0]?.text).toMatch(
@@ -252,11 +257,14 @@ describe("a runner and the console, together (ADR-0085, ADR-0086)", () => {
           return undefined;
         }
         const events = await transcript(open.id);
-        return events.some(([kind]) => kind === "assistant") ? { open, events } : undefined;
+        return events.some(turnEnded) ? { open, events } : undefined;
       });
       expect(second.open).toMatchObject({ ended: null, resumed: true, model: "sonnet" });
       expect(product.started[1]?.options).toMatchObject({ model: "sonnet", resume: "c-1" });
-      expect(second.events.at(-1)).toEqual(["assistant", "Heard: Go on."]);
+      expect(second.events.slice(-2)).toEqual([
+        ["assistant", "Heard: Go on."],
+        ["status", "The turn completed."],
+      ]);
 
       // A stop: the session ends as stopped, and the agent stays so.
       await tell({ kind: "stop", text: "Wait for the review." });
