@@ -37,6 +37,23 @@ import {
 // public listing is held for a while, since an address changes slowly, and asked for again
 // after; what a token reads is the project's for that request and is never held.
 
+/**
+ * A document's outline as the console passes it on: without where its tables and its code
+ * blocks are had as data. A deployment names an address of its own there, which whoever holds
+ * the console's token cannot read of a private pack, holding no token of the pack, and which
+ * leads past the console of a public one. How many tables, rows and code blocks the document
+ * has is still said; the rows and the code themselves are read in the document's sections.
+ */
+function withoutDataPointer<
+  T extends { readonly outline?: { readonly data?: unknown } | undefined },
+>(read: T): T {
+  if (read.outline === undefined || read.outline.data === undefined) {
+    return read;
+  }
+  const { data: _pointer, ...outline } = read.outline;
+  return { ...read, outline };
+}
+
 /** How long one listing stands for, before the pack is asked again. */
 export const SKILLS_CACHE_MS = 60_000;
 /** How many addresses are held at once: beyond, the oldest listing goes. */
@@ -238,7 +255,7 @@ export class Skills {
     try {
       const read = await pack.browse(query);
       return read.status === "ready"
-        ? { ...this.#at(address, where, "ready"), read }
+        ? { ...this.#at(address, where, "ready"), read: withoutDataPointer(read) }
         : { ...this.#at(address, where, read.status), read: null };
     } catch (error) {
       return { ...this.#at(address, where, this.#refused(error)), read: null };

@@ -64,7 +64,7 @@ const beat = (over: Record<string, unknown> = {}) => ({
   delivered: 0,
   session: null,
   machine: { name: "mac-mini", os: "macOS 15.1", user: "mira" },
-  runner: "0.4.8",
+  runner: "0.5.0",
   product: { driver: "claude", name: "Claude Code", version: "2.1.0", tried: true },
   offers: {
     models: ["opus", "sonnet"],
@@ -237,7 +237,7 @@ describe("an agent account's runner (ADR-0085)", () => {
       latest: 0,
       session: null,
       machine: { name: "mac-mini", os: "macOS 15.1", user: "mira" },
-      runner: "0.4.8",
+      runner: "0.5.0",
       product: { driver: "claude", name: "Claude Code", version: "2.1.0", tried: true },
       offers: { models: ["opus", "sonnet"], efforts: ["low", "medium", "high"], steer: true },
       running: { model: null, effort: null },
@@ -273,8 +273,8 @@ describe("an agent account's runner (ADR-0085)", () => {
       beat({ machine: { name: "m".repeat(MAX_RUNNER_LINE_LENGTH + 1), os: "x", user: "y" } }),
     );
     // A line is one line, with nothing in it that hides.
-    await refused(beat({ runner: `0.4.8${String.fromCodePoint(0x202e)}` }));
-    await refused(beat({ runner: "0.4.8\n<script>" }));
+    await refused(beat({ runner: `0.5.0${String.fromCodePoint(0x202e)}` }));
+    await refused(beat({ runner: "0.5.0\n<script>" }));
     await refused(
       beat({
         offers: {

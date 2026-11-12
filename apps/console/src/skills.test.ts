@@ -251,6 +251,26 @@ describe("the skills of the board", () => {
       entries: [],
       nextCursor: null,
     };
+    const document: RestBrowse = {
+      status: "ready",
+      commit: COMMIT,
+      path: "docs/prices.md",
+      entries: [],
+      nextCursor: null,
+      outline: {
+        path: "docs/prices.md",
+        size: 420,
+        totalLength: 420,
+        headings: [],
+        truncated: false,
+        tables: { count: 1, rows: 3 },
+        codeBlocks: 2,
+        data: {
+          rows: "https://skillcdn.test/api/v1/rows/gh/acme/skills?path=docs/prices.md",
+          code: "https://skillcdn.test/api/v1/code/gh/acme/skills?path=docs/prices.md",
+        },
+      },
+    };
     const found: RestFind = { status: "indexing" };
     const source: PackSource = {
       open(address, token): Pack {
@@ -262,7 +282,7 @@ describe("the skills of the board", () => {
             listed += 1;
             return mountOf(formatAddress(address), READY);
           },
-          browse: async () => folder,
+          browse: async (query) => (query.path === "docs/prices.md" ? document : folder),
           find: async () => found,
           skill: async (path, cursor) => {
             if (path !== "review/SKILL.md") {
@@ -317,6 +337,17 @@ describe("the skills of the board", () => {
     });
     expect((await skills.file(undefined, { path: "review/guide.md" })).read).toEqual(file);
     expect((await skills.browse(undefined, { path: "docs" })).read).toEqual(folder);
+    // A document's outline is passed on with how many tables and code blocks it has, and
+    // without the deployment's own address for them: the console's token reads nothing there.
+    const outlined = await skills.browse(undefined, { path: "docs/prices.md" });
+    expect(outlined.read).toMatchObject({
+      status: "ready",
+      outline: { path: "docs/prices.md", tables: { count: 1, rows: 3 }, codeBlocks: 2 },
+    });
+    expect(JSON.stringify(outlined.read)).not.toContain("skillcdn.test/api/v1/rows");
+    expect(
+      outlined.read?.status === "ready" ? outlined.read.outline : undefined,
+    ).not.toHaveProperty("data");
     // An index that is not there to read from is the status, and nothing was read.
     expect(await skills.find(undefined, { query: "review" })).toMatchObject({
       status: "indexing",

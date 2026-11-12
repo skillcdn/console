@@ -1,7 +1,7 @@
 {
   "floors": {
-    "client": "0.4.8",
-    "console": "0.4.2"
+    "client": "0.5.0",
+    "console": "0.5.0"
   },
   "schemas": {
     "restAgentChoiceSchema": {
@@ -28447,6 +28447,11 @@
                                 "type": "integer",
                                 "minimum": 0,
                                 "maximum": 9007199254740991
+                              },
+                              "rows": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
                               }
                             },
                             "required": [
@@ -28557,6 +28562,43 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "tables": {
+                          "type": "object",
+                          "properties": {
+                            "count": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "rows": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "count",
+                            "rows"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "codeBlocks": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "rows": {
+                              "type": "string"
+                            },
+                            "code": {
+                              "type": "string"
+                            }
+                          },
+                          "additionalProperties": false
                         }
                       },
                       "required": [
@@ -28884,6 +28926,26 @@
                               "missing",
                               "blocked"
                             ]
+                          },
+                          "section": {
+                            "type": "object",
+                            "properties": {
+                              "offset": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "length": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "offset",
+                              "length"
+                            ],
+                            "additionalProperties": false
                           }
                         },
                         "required": [
@@ -29331,6 +29393,9 @@
                               },
                               "overview": {
                                 "type": "boolean"
+                              },
+                              "derived": {
+                                "type": "boolean"
                               }
                             },
                             "required": [
@@ -29403,6 +29468,29 @@
                         },
                         "reranked": {
                           "type": "boolean"
+                        },
+                        "identifiers": {
+                          "type": "boolean"
+                        },
+                        "embedding": {
+                          "type": "object",
+                          "properties": {
+                            "embedded": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "total": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "embedded",
+                            "total"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
@@ -29604,6 +29692,26 @@
                                   "missing",
                                   "blocked"
                                 ]
+                              },
+                              "section": {
+                                "type": "object",
+                                "properties": {
+                                  "offset": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "length": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "offset",
+                                  "length"
+                                ],
+                                "additionalProperties": false
                               }
                             },
                             "required": [

@@ -86,11 +86,12 @@ describe("the common rule", () => {
     // The floors on both sides: the 0.4 line was adopted whole (ADR-0034, ADR-0038), the plugins
     // raised them to 0.4.2, where every event gained the plugin that caused it and eight kinds, and
     // the reporting line raised the console's to 0.4.4, where the event person.manager_changed came,
-    // the work email to 0.4.5, where person.email_changed came, and the agent accounts to 0.4.8,
-    // once for their whole plan (ADR-0084): the events person.updated and agent.state_changed, and
-    // a claim that answers a session; the command's stays, since it needs nothing new of the console.
-    expect(CLIENT_POLICY).toEqual({ atLeast: "0.4.8" });
-    expect(CONSOLE_AT_LEAST).toBe("0.4.2");
+    // the work email to 0.4.5, where person.email_changed came. The 0.5 line was adopted whole
+    // too, and with it came the agent accounts, once for their whole plan (ADR-0084): the events
+    // person.updated and agent.state_changed, a claim that answers a session, and everything a
+    // runner asks of a console, so that both sides begin the line together.
+    expect(CLIENT_POLICY).toEqual({ atLeast: "0.5.0" });
+    expect(CONSOLE_AT_LEAST).toBe("0.5.0");
     expect(formatRange(clientRange(v("1.4.2"), { atLeast: "1.4.1" }))).toBe(">=1.4.1 <1.6.0");
     expect(formatRange(clientRange(v("1.4.2"), { atLeast: "1.2.0" }))).toBe(">=1.3.0 <1.6.0");
     expect(formatRange(clientRange(v("1.4.2"), { atLeast: "1.6.0" }))).toBe(">=1.3.0 <1.6.0");
@@ -114,12 +115,12 @@ describe("judging a command", () => {
     // The floor of the console's policy, where it is within the line.
     expect(judgeClient(v("0.3.1"), v("0.3.4"), { atLeast: "0.3.2" }).verdict).toBe("outdated");
     expect(judgeClient(v("0.3.2"), v("0.3.4"), { atLeast: "0.3.2" }).verdict).toBe("behind");
-    // The console's own policy: a command of the line before is refused, one of the line from
-    // the floor on answered, one below the floor refused (the agent accounts raised it to 0.4.8).
-    expect(judgeClient(v("0.3.9"), v("0.4.9")).verdict).toBe("outdated");
-    expect(judgeClient(v("0.4.7"), v("0.4.9")).verdict).toBe("outdated");
-    expect(judgeClient(v("0.4.8"), v("0.4.9")).verdict).toBe("behind");
-    expect(formatRange(judgeClient(v("0.4.8"), v("0.4.9")).range)).toBe(">=0.4.8 <0.5.0");
+    // The console's own policy: a command of the line before is refused, whatever its patch,
+    // and one of the line answered from its first version on.
+    expect(judgeClient(v("0.3.9"), v("0.5.1")).verdict).toBe("outdated");
+    expect(judgeClient(v("0.4.7"), v("0.5.1")).verdict).toBe("outdated");
+    expect(judgeClient(v("0.5.0"), v("0.5.1")).verdict).toBe("behind");
+    expect(formatRange(judgeClient(v("0.5.0"), v("0.5.1")).range)).toBe(">=0.5.0 <0.6.0");
   });
 
   it("from 1.0 answers a minor within one and refuses the rest", () => {

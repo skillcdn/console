@@ -36,7 +36,10 @@ beforeAll(async () => {
     providers: [createFixtureProvider()],
     live: true,
     feed: { heartbeatMs: 200, pollMs: 60_000 },
-    agents: { waitMs: 400 },
+    // How long a read that waits is held: long enough that the answer written below lands
+    // within it on a machine busy with the whole check, where at 400 milliseconds the read came
+    // back empty-handed first.
+    agents: { waitMs: 1500 },
   });
   alice = await h.signIn("alice");
   bob = await h.signIn("bob");
@@ -176,7 +179,7 @@ describe("runs", () => {
     const stillWaiting = await asAgent(aliceToken, "GET", `${IN}/decisions/${decision.id}?wait=30`);
     expect(stillWaiting.status).toBe(200);
     expect(restDecisionSchema.parse(await stillWaiting.json()).answer).toBeNull();
-    expect(Date.now() - began).toBeGreaterThanOrEqual(300);
+    expect(Date.now() - began).toBeGreaterThanOrEqual(1200);
     const pending = asAgent(aliceToken, "GET", `${IN}/decisions/${decision.id}?wait=30`);
     await new Promise((resolve) => setTimeout(resolve, 100));
     const answered = await asPerson(bob, "POST", `${IN}/decisions/${decision.id}/answer`, {

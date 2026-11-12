@@ -10,7 +10,8 @@ import { type PackConnector, PackError, type PackSource } from "../ports/skill-s
 // someone else's: what it refuses, and what goes wrong on the way, is a PackError with the code
 // the API gave it, for the board to say in its own words, so that the board stays up when the
 // skills are not there. A `local` address is asked of the deployment as any other: a deployment
-// serves none, and a pack served from a machine by the skillcdn command answers it. The same
+// serves the packs of a directory of its own under it, and so does a pack served from a machine
+// by the skillcdn command. The same
 // client connects a project's pack with a code a person approves (ADR-0036), as nobody.
 
 export interface SkillCdnOptions {

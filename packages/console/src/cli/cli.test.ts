@@ -2716,7 +2716,7 @@ describe("configuring, as the person", () => {
               latest: 10,
               session: null,
               machine: { name: "mac-mini", os: "macOS 15.1", user: "mira" },
-              runner: "0.4.8",
+              runner: "0.5.0",
               product: { driver: "claude", name: "Claude Code", version: "2.1.0", tried: false },
               offers: { models: [], efforts: [], steer: true, images: true, resume: true },
               running: { model: "opus", effort: null },
@@ -2735,7 +2735,7 @@ describe("configuring, as the person", () => {
     expect(full.out()).toContain(
       [
         `state: refused (model refused) since ${WHEN}; its runner was last heard from ${WHEN}`,
-        "runner: 0.4.8 on mac-mini (macOS 15.1), as mira",
+        "runner: 0.5.0 on mac-mini (macOS 15.1), as mira",
         "product: Claude Code 2.1.0, a version the driver was not tried with",
         "set to: model sonnet, effort high",
         "runs with: model opus, effort the product's own",
@@ -3640,7 +3640,7 @@ describe("the runner on the command line (ADR-0085)", () => {
       fetch,
       env: SIGNED_IN,
       hostname: "mac-mini",
-      version: "0.4.8",
+      version: "0.5.0",
       runner: host({
         readText: async (path) => {
           read.push(path);
@@ -3669,7 +3669,7 @@ describe("the runner on the command line (ADR-0085)", () => {
       delivered: 0,
       session: null,
       machine: { name: "mac-mini", os: "Darwin 24.1.0", user: "mira" },
-      runner: "0.4.8",
+      runner: "0.5.0",
       product: { driver: "claude", name: "Claude Code", version: null, tried: false },
       offers: { models: ["opus", "sonnet", "haiku", "fable"], steer: true, resume: true },
     });
@@ -3714,7 +3714,7 @@ describe("setting a machine up for an agent account (ADR-0088)", () => {
       latest: 0,
       session: null,
       machine: { name: "mac-mini", os: "Darwin 24.1.0", user: "mira" },
-      runner: "0.4.8",
+      runner: "0.5.0",
       product: { driver: "claude", name: "Claude Code", version: "2.1.0", tried: false },
       offers: { models: [], efforts: [], steer: true, images: true, resume: true },
       running: { model: null, effort: null },

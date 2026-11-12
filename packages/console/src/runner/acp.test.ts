@@ -316,9 +316,9 @@ describe("the acp driver", () => {
     expect(await until(session, [], isType("ended"))).toEqual([{ type: "ended", how: "exited" }]);
     // The command's own version, where the runner was told it.
     const told = agentThat();
-    const versioned = driverFor(told, "0.4.8").start(OPTIONS);
+    const versioned = driverFor(told, "0.5.0").start(OPTIONS);
     await until(versioned, [], isType("running"));
-    expect(told.sent[0]).toMatchObject({ params: { clientInfo: { version: "0.4.8" } } });
+    expect(told.sent[0]).toMatchObject({ params: { clientInfo: { version: "0.5.0" } } });
     await versioned.stop();
   });
 

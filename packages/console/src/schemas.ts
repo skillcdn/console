@@ -217,23 +217,23 @@ export const restPersonSchema = z.object({
   email: z.optional(z.nullable(z.string())),
   /**
    * What the member is (ADR-0084): a person, or an agent account, a member of its own under the
-   * same rules. Answered from 0.4.8 and read as optional: a person, where a console says nothing.
+   * same rules. Answered from 0.5.0 and read as optional: a person, where a console says nothing.
    */
   kind: z.optional(z.enum(PERSON_KINDS)),
   /**
    * An agent account's handle, what the pages and the command call it by (`mira`, addressed as
-   * `@mira`); it never changes. `null` for a person. Answered from 0.4.8 and read as optional.
+   * `@mira`); it never changes. `null` for a person. Answered from 0.5.0 and read as optional.
    */
   handle: z.optional(z.nullable(z.string())),
   /**
    * What the member does, in a line (`Release engineer`): every member's, a person's as an agent
-   * account's, kept by an administrator; `null` for none. It is not `role`. Answered from 0.4.8
+   * account's, kept by an administrator; `null` for none. It is not `role`. Answered from 0.5.0
    * and read as optional.
    */
   title: z.optional(z.nullable(z.string())),
   /**
    * What an agent account's avatar is drawn from, where the picture of a person is `avatar`,
-   * the provider's; `null` for a person. Answered from 0.4.8 and read as optional.
+   * the provider's; `null` for a person. Answered from 0.5.0 and read as optional.
    */
   avatarParts: z.optional(z.nullable(restAvatarPartsSchema)),
   /**
@@ -533,7 +533,7 @@ export const restWorkspaceSchema = z.object({
   /**
    * The organization's short name (`acme`) and its mail and web domain (ADR-0089), from which
    * with an agent account's handle a name at a service is put together; `null` each for none.
-   * And the services its agents work with. Answered from 0.4.8 and read as optional.
+   * And the services its agents work with. Answered from 0.5.0 and read as optional.
    */
   handle: z.optional(z.nullable(z.string())),
   domain: z.optional(z.nullable(z.string())),
@@ -633,7 +633,7 @@ export const restMeSchema = z.object({
    * The session asking, when a session asks (ADR-0084): a browser's, or the command's, signed in
    * as the account itself, with what it called itself. A console served through the command is
    * told a command's session by it, as it is told a token by `agent`, and offers nothing either
-   * cannot do. `null` on a token, and for nobody. Answered from 0.4.8 and read as optional.
+   * cannot do. `null` on a token, and for nobody. Answered from 0.5.0 and read as optional.
    */
   session: z.optional(
     z.nullable(z.object({ kind: z.enum(SESSION_KINDS), name: z.nullable(z.string()) })),
@@ -2208,7 +2208,7 @@ export const restSessionSchema = z.object({
   address: z.nullable(z.string()),
   /**
    * What holds the session (ADR-0084): a browser, or the command signed in as the account
-   * itself. Answered from 0.4.8 and read as optional; a browser's then.
+   * itself. Answered from 0.5.0 and read as optional; a browser's then.
    */
   kind: z.optional(z.enum(SESSION_KINDS)),
   /** For the command's: what it called itself when it signed in, and where it runs; `null` for a browser's. Optional as above. */
@@ -2280,7 +2280,7 @@ export const restConnectRequestSchema = z.object({
   createdAt: instant,
   expiresAt: instant,
   approved: z.boolean(),
-  /** What it asks to be: an agent of the approver's, or the approver themselves. Answered from 0.4.8 and read as optional; an agent then. */
+  /** What it asks to be: an agent of the approver's, or the approver themselves. Answered from 0.5.0 and read as optional; an agent then. */
   as: z.optional(z.enum(CONNECT_AS)),
 });
 export type RestConnectRequest = z.infer<typeof restConnectRequestSchema>;

@@ -12,7 +12,7 @@ import type { RestPluginEvent } from "../plugin/rest-schemas.js";
 export const EVENTS_POLL_MS = 5_000;
 /** How many events one ask reads at most; what is past them comes with the next. */
 const EVENTS_PAGE = 50;
-/** How many events are read to find the newest where the console does not say it (one older than 0.4.8). */
+/** How many events are read to find the newest where the console does not say it (one older than 0.5.0). */
 const NEWEST_PAGE = 200;
 
 /** What a reader asks of the page: whether it is out of view, and a word when it comes back. */
@@ -131,7 +131,7 @@ export class PluginEventsReader {
     if (first.newest !== undefined) {
       return first.newest;
     }
-    // A console older than 0.4.8 says no newest: the first page of the stream is read for it,
+    // A console older than 0.5.0 says no newest: the first page of the stream is read for it,
     // and past the page the stream is read from the page's last event.
     if (!first.more) {
       return first.items.at(-1)?.id ?? 0;

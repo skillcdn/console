@@ -1672,7 +1672,7 @@ describe("the agent accounts (ADR-0084)", () => {
               latest: 3,
               session: null,
               machine: { name: "studio-2", os: "Darwin 25.1.0", user: "mira" },
-              runner: "0.4.8",
+              runner: "0.5.0",
               product: { driver: "claude", name: "Claude Code", version: "2.1.321", tried: true },
               offers: null,
               running: { model: "opus", effort: null },
@@ -1988,7 +1988,7 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     latest: 10,
     session: null,
     machine: { name: "mac-mini", os: "Darwin 24.1.0", user: "mira" },
-    runner: "0.4.8",
+    runner: "0.5.0",
     product: { driver: "claude", name: "Claude Code", version: "2.1.0", tried: false },
     offers: {
       models: ["opus", "sonnet"],

@@ -186,7 +186,7 @@ describe("a runner and the console, together (ADR-0085, ADR-0086)", () => {
       config: { ...DEFAULT_RUNNER_CONFIG, secrets: { env: { GIT_TOKEN: "git.token" }, files: {} } },
       cwd: "/home/mira/desk",
       machine: { name: "mac-mini", os: "Darwin 24.1.0", user: "mira" },
-      version: "0.4.8",
+      version: "0.5.0",
       now: () => Date.now(),
       random: Math.random,
       time: () => "14:02",

@@ -32,7 +32,7 @@ The runner is the program on an agent account's machine that keeps its agent goi
   "delivered": 8812,
   "session": "0199c4d8-0000-7000-8000-0000000000a1",
   "machine": { "name": "mac-mini", "os": "macOS 15.1", "user": "mira" },
-  "runner": "0.4.8",
+  "runner": "0.5.0",
   "product": { "driver": "claude", "name": "Claude Code", "version": "2.1.0", "tried": true },
   "offers": { "models": ["opus", "sonnet"], "efforts": ["low", "medium", "high"], "steer": true, "images": true, "resume": true },
   "running": { "model": "opus", "effort": "high" }
