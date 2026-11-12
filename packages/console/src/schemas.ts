@@ -151,22 +151,28 @@ const languageTag = z
 const avatarPart = z.int().check(z.gte(0), z.lte(255));
 
 /**
- * What an agent account's avatar is made of (ADR-0084, ADR-0093): a form cut from a material on
- * a ground, in a palette, with something small beside it or nothing; each a place in the set the
- * package ships, with that set's version, and the seed of the stone's grain. Nothing drawn is
- * kept or sent: whoever shows the picture draws it from these, with the package's own function.
- * A released set never changes, so an avatar keeps the look it was made with.
+ * What an agent account's avatar is made of (ADR-0084, ADR-0097): a small planet, its body, what
+ * lies on its surface, the ramp of colours both are drawn in, and one thing beside it or
+ * nothing, on a ground; each a place in the set the package ships, with that set's version, and
+ * the seed the squares on the ground are strewn by. The names of the parts are older than the
+ * planets and say which list of a set each is a place in. Nothing drawn is kept or sent: whoever
+ * shows the picture draws it from these, with the package's own function. A released set never
+ * changes, so an avatar keeps the look it was made with.
  */
 export const restAvatarPartsSchema = z.object({
   /** The version of the set the places are in. */
   set: z.int().check(z.gte(1), z.lte(9999)),
+  /** The ramp of colours: a place among the set's `ramps`. */
   palette: avatarPart,
+  /** The colour behind everything: a place among the set's `grounds`. */
   ground: avatarPart,
+  /** The body: a place among the set's `bodies`. */
   form: avatarPart,
+  /** What lies on the body: a place among the set's `surfaces`. */
   material: avatarPart,
-  /** `0` for nothing beside the form. */
+  /** What stands beside the body, a place among the set's `accents`: `0` for nothing. */
   accent: avatarPart,
-  /** The seed of the grain: two avatars alike in every other part differ in their veins. */
+  /** The seed of the squares strewn over the ground: two avatars alike in every other part differ in them. */
   vein: avatarPart,
 });
 export type RestAvatarParts = z.infer<typeof restAvatarPartsSchema>;

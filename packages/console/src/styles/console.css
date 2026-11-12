@@ -1244,10 +1244,11 @@ html[data-console] body {
   font-size: 2.25rem;
 }
 
-/* An agent account's picture is a soft square where a person's is round (ADR-0093): told apart
-   at a glance, at the size of a chip as on a page of its own. */
+/* An agent account's picture is a soft square where a person's is round (ADR-0097): told apart
+   at a glance, at the size of a chip as on a page of its own. Its corners are rounded by a fifth
+   of its side, as the set's tile is drawn. */
 .sc-avatar-drawn {
-  border-radius: 28%;
+  border-radius: 20%;
 }
 
 .sc-person {

@@ -1,6 +1,6 @@
 # ADR-0093: An avatar is a form cut from a material, drawn as pixels
 
-- Status: Accepted
+- Status: Superseded by [ADR-0097](0097-an-avatar-is-a-planet-of-flat-shapes-in-two-tones-filled-as-pixels.md), which draws a planet of flat shapes in place of the still life and takes points 5 and 6 over as they are
 - Date: 2026-11-12
 - Amends point 8 of [ADR-0084](0084-an-agent-account-is-a-member-of-its-own-with-a-manager-above-it.md), which made the avatar a face of flat parts (background, head, ears, eyes, mouth, marks, accessory, palette), each a list of simple shapes drawn as SVG and as PNG. Everything else of that point stands: a seed and its parts, drawn where shown, a picture file where one is needed, a released set that never changes, nothing uploaded and no SVG from outside.
 

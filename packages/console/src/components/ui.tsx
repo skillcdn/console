@@ -104,7 +104,7 @@ export function personName(person: {
 }
 
 /**
- * The sets the avatars of agent accounts are drawn from (ADR-0084, ADR-0093): the package's,
+ * The sets the avatars of agent accounts are drawn from (ADR-0084, ADR-0097): the package's,
  * unless a console built on it brings its own (`createConsole`'s `persona.avatarSets`).
  */
 export const AvatarSetsContext = createContext<readonly AvatarSet[]>(AVATAR_SETS);
@@ -118,7 +118,7 @@ const AVATAR_PIXELS = { xs: 32, sm: 48, md: 72, lg: 128, xl: 224 } as const;
 export type AvatarSize = keyof typeof AVATAR_PIXELS;
 
 /**
- * An agent account's avatar, drawn from its parts where it is shown (ADR-0084, ADR-0093): a
+ * An agent account's avatar, drawn from its parts where it is shown (ADR-0084, ADR-0097): a
  * picture this page draws itself, pixel by pixel, from the numbers alone, and never one fetched
  * or markup from anywhere. Cut as a soft square, where a person's picture is round, so that an
  * agent account is told from a person at a glance. Sized by `className`, as a picture is;
