@@ -3,8 +3,8 @@ import { formatAddress } from "@skillcdn/core";
 import type { Logger } from "../logger.js";
 import { type PackConnector, PackError, type PackSource } from "../ports/skill-source.js";
 
-// A pack at a SkillCDN deployment: the five reads of its REST API through the main repository's
-// own client, which parses every answer with the contracts of @skillcdn/core, sends a token to
+// A pack at a SkillCDN deployment: the five reads of its REST API, and its tables and code blocks
+// as data, through the main repository's own client, which parses every answer with the contracts of @skillcdn/core, sends a token to
 // the deployment's origin only and follows no redirect (ADR-0028, ADR-0031). The pack token a
 // project holds travels as the bearer of the request and nowhere else. The deployment is
 // someone else's: what it refuses, and what goes wrong on the way, is a PackError with the code
@@ -70,6 +70,8 @@ export function createSkillCdnSource(options: SkillCdnOptions): PackSource {
         find: (query) => client.find(address, query).catch(failed),
         skill: (path, cursor) => client.skill(address, { path, cursor }).catch(failed),
         file: (query) => client.file(address, query).catch(failed),
+        rows: (query) => client.rows(address, query).catch(failed),
+        code: (query) => client.code(address, query).catch(failed),
       };
     },
   };

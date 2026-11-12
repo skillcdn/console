@@ -516,6 +516,8 @@ describe("createConsole", () => {
     skillFile: never,
     skillBrowse: never,
     skillFind: never,
+    skillRows: never,
+    skillCode: never,
     members: never,
     addMember: never,
     updateMember: never,

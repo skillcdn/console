@@ -144,6 +144,69 @@ describe("the SkillCDN source", () => {
     ]);
   });
 
+  it("asks for the tables and the code blocks as data at their routes, with the token, and says a refusal as the other reads do (ADR-0100)", async () => {
+    const sent: { url: URL; authorization: string | null }[] = [];
+    const { source: packs } = source(async (url, init) => {
+      const asked = new URL(url);
+      sent.push({ url: asked, authorization: new Headers(init.headers).get("authorization") });
+      if (asked.searchParams.get("path") === "nothing") {
+        return refusal("file.not_found", 404);
+      }
+      return asked.pathname.startsWith("/api/v1/rows/")
+        ? json({
+            status: "ready",
+            commit: READY.commit,
+            path: "docs",
+            tables: [
+              {
+                path: "docs/prices.md",
+                heading: ["Prices"],
+                columns: ["Region", "Price"],
+                rows: [["North", "12"]],
+              },
+            ],
+            rowCount: 1,
+            nextCursor: "more",
+          })
+        : json({
+            status: "ready",
+            commit: READY.commit,
+            path: "docs",
+            blocks: [{ path: "docs/prices.md", heading: [], language: "json", text: "{}" }],
+            nextCursor: null,
+          });
+    });
+    const pack = packs.open(ADDRESS, "scdn_repo_x");
+    if (pack === undefined) {
+      throw new Error("the deployment serves every address");
+    }
+    const rows = await pack.rows({ path: "docs", heading: "Prices", cursor: "c", limit: 5000 });
+    expect(rows).toMatchObject({ status: "ready", rowCount: 1, nextCursor: "more" });
+    expect(rows.status === "ready" ? rows.tables[0]?.rows : undefined).toEqual([["North", "12"]]);
+    const code = await pack.code({ path: "docs" });
+    expect(code.status === "ready" ? code.blocks.map((block) => block.language) : []).toEqual([
+      "json",
+    ]);
+    expect(sent.map((one) => one.url.pathname)).toEqual([
+      "/api/v1/rows/gh/acme/skills",
+      "/api/v1/code/gh/acme/skills",
+    ]);
+    expect(Object.fromEntries(sent[0]?.url.searchParams ?? [])).toEqual({
+      path: "docs",
+      heading: "Prices",
+      cursor: "c",
+      limit: "5000",
+    });
+    expect(Object.fromEntries(sent[1]?.url.searchParams ?? [])).toEqual({ path: "docs" });
+    expect(sent.map((one) => one.authorization)).toEqual([
+      "Bearer scdn_repo_x",
+      "Bearer scdn_repo_x",
+    ]);
+    const missing = await pack.rows({ path: "nothing" }).catch((error: unknown) => error);
+    expect(missing).toBeInstanceOf(PackError);
+    expect(missing).toMatchObject({ status: 404, code: "file.not_found" });
+  });
+
   it("says what the deployment refused as a PackError with the code it gave, and what went wrong on the way as the client's own", async () => {
     const failing = async (answer: () => Response | Promise<Response>) => {
       const { source: packs, logs } = source(async () => answer());

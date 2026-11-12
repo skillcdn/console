@@ -35,9 +35,57 @@ async function writePack(directory: string): Promise<void> {
   await writeFile(join(directory, "docs", "handbook.md"), "# Handbook\n\nWelcome aboard.\n");
 }
 
+/** A table of codes as Markdown writes one. */
+const tableOf = (rows: readonly (readonly [string, string])[]): string =>
+  ["| Code | Meaning |", "| --- | --- |", ...rows.map((row) => `| ${row.join(" | ")} |`)].join(
+    "\n",
+  );
+
+/** A pack of documents: one table of codes written in two files, a code block in the first. */
+async function writeManual(directory: string): Promise<void> {
+  await mkdir(join(directory, "docs", "annex"), { recursive: true });
+  await writeFile(
+    join(directory, "SKILLCDN.md"),
+    "---\nname: Manual\ndescription: The manual of an invented machine.\ndocuments:\n  - docs\n---\n",
+  );
+  await writeFile(
+    join(directory, "docs", "annex", "codes-1.md"),
+    [
+      "# Codes",
+      "",
+      "## A to B",
+      "",
+      tableOf([
+        ["A1", "Starts"],
+        ["B1", "Stops, with a pipe \\| in its cell"],
+      ]),
+      "",
+      "```sh",
+      "machine --start",
+      "```",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    join(directory, "docs", "annex", "codes-2.md"),
+    [
+      "# Codes",
+      "",
+      "## C to D",
+      "",
+      tableOf([
+        ["C1", "Waits"],
+        ["D1", "Ends"],
+      ]),
+      "",
+    ].join("\n"),
+  );
+}
+
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "console-packs-"));
   await writePack(join(root, "acme", "skills"));
+  await writeManual(join(root, "acme", "manual"));
 });
 
 afterAll(async () => {
@@ -132,6 +180,76 @@ describe("packs served from this machine (ADR-0031)", () => {
       code: "skill.not_found",
     });
     expect(await failure(pack.browse({ path: "../elsewhere" }))).toBeInstanceOf(PackError);
+  });
+
+  it("answer the tables and the code blocks of a document, or of every document under a folder, as data (ADR-0100)", async () => {
+    const pack = sourceAt(() => 0).open(addressOf("/local/acme/manual"));
+    if (pack === undefined) {
+      throw new Error("a local address is served from the directory");
+    }
+    // One table written in two files comes out file after file, each with where it stands.
+    const rows = await pack.rows({ path: "docs/annex" });
+    expect(rows.status).toBe("ready");
+    if (rows.status !== "ready") {
+      return;
+    }
+    expect(rows.commit).toBe("0".repeat(40));
+    expect(rows.tables).toEqual([
+      {
+        path: "docs/annex/codes-1.md",
+        heading: ["Codes", "A to B"],
+        columns: ["Code", "Meaning"],
+        rows: [
+          ["A1", "Starts"],
+          ["B1", "Stops, with a pipe | in its cell"],
+        ],
+      },
+      {
+        path: "docs/annex/codes-2.md",
+        heading: ["Codes", "C to D"],
+        columns: ["Code", "Meaning"],
+        rows: [
+          ["C1", "Waits"],
+          ["D1", "Ends"],
+        ],
+      },
+    ]);
+    expect(rows.rowCount).toBe(4);
+    expect(rows.nextCursor).toBeNull();
+    // A file alone, the whole pack, and what stands under a heading.
+    const one = await pack.rows({ path: "docs/annex/codes-2.md" });
+    expect(one.status === "ready" ? one.tables.map((table) => table.path) : []).toEqual([
+      "docs/annex/codes-2.md",
+    ]);
+    const whole = await pack.rows({});
+    expect(whole.status === "ready" ? whole.rowCount : 0).toBe(4);
+    const under = await pack.rows({ path: "docs", heading: "C to D" });
+    expect(under.status === "ready" ? under.tables.map((table) => table.heading) : []).toEqual([
+      ["Codes", "C to D"],
+    ]);
+    // The code blocks, as written, with what each says it is written in.
+    const code = await pack.code({ path: "docs" });
+    expect(code.status === "ready" ? code.blocks : []).toEqual([
+      {
+        path: "docs/annex/codes-1.md",
+        heading: ["Codes", "A to B"],
+        language: "sh",
+        text: "machine --start",
+      },
+    ]);
+    // No document at the path, and none under it, is the refusal the API answers.
+    for (const read of [pack.rows({ path: "docs/nothing" }), pack.code({ path: "nowhere.md" })]) {
+      const refused = await failure(read);
+      expect(refused).toBeInstanceOf(PackError);
+      expect(refused).toMatchObject({ status: 404, code: "file.not_found" });
+    }
+    // A document's outline says how many it has; a directory names no address for them.
+    const outlined = await pack.browse({ path: "docs/annex/codes-1.md" });
+    expect(outlined.status === "ready" ? outlined.outline : undefined).toMatchObject({
+      path: "docs/annex/codes-1.md",
+      tables: { count: 1, rows: 2 },
+      codeBlocks: 1,
+    });
   });
 
   it("serve a folder of the pack as a mount of its own", async () => {

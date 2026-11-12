@@ -28,6 +28,7 @@ import {
   renderFindResult,
   renderInstructions,
   renderSkillResult,
+  rowsCsv,
   type SkillResult,
   skillOutcome,
   skillResultOf,
@@ -35,9 +36,11 @@ import {
 } from "@skillcdn/core";
 import type {
   RestSkillBrowse,
+  RestSkillCode,
   RestSkillFile,
   RestSkillFind,
   RestSkillLoad,
+  RestSkillRows,
   RestSkills,
 } from "../schemas.js";
 import type { SkillsStatus } from "../vocabulary.js";
@@ -285,10 +288,38 @@ export function joinFolder(
 export const bodyOfFolder = (result: BrowseResult): RestBrowse =>
   browseBody({ status: "ready", result });
 
-/** What a folder holds, as `browse_repo` lays it out for a model. */
+/** A path as a word of a command line: as it is, or quoted where a shell would split it. */
+const pathWord = (path: string): string =>
+  /^[\w./@+-]+$/.test(path) ? path : JSON.stringify(path);
+
+/**
+ * A document's outline with the reads of its tables and its code blocks named as commands
+ * (ADR-0100): where the console said an address of its own for one, the command that reads it,
+ * `command` being the one the pack is read with, so that an agent is told what to run.
+ */
+function withDataCommands(whole: BrowseResult, command: string): BrowseResult {
+  const outline = whole.outline;
+  if (outline?.data === undefined) {
+    return whole;
+  }
+  const path = pathWord(outline.path);
+  return {
+    ...whole,
+    outline: {
+      ...outline,
+      data: {
+        ...(outline.data.rows === undefined ? {} : { rows: `${command} --rows ${path}` }),
+        ...(outline.data.code === undefined ? {} : { code: `${command} --code ${path}` }),
+      },
+    },
+  };
+}
+
+/** What a folder holds, as `browse_repo` lays it out for a model; `command` is the one the pack is read with. */
 export function formatSkillBrowse(
   browsed: RestSkillBrowse,
   whole: BrowseResult | undefined,
+  command = "console skills",
 ): string {
   if (browsed.status === "none" || browsed.address === null) {
     return NO_ADDRESS;
@@ -299,8 +330,85 @@ export function formatSkillBrowse(
   if (whole === undefined) {
     return `${head("folder", browsed)}\nNothing was read.`;
   }
-  return renderBrowseResult(whole, CONSOLE_WORDS);
+  return renderBrowseResult(withDataCommands(whole, command), CONSOLE_WORDS);
 }
+
+type ReadyRows = Extract<NonNullable<RestSkillRows["read"]>, { readonly status: "ready" }>;
+type ReadyCode = Extract<NonNullable<RestSkillCode["read"]>, { readonly status: "ready" }>;
+
+/** The pages of a read of tables, as the console answered them, as the one answer they were cut from: every table in reading order. */
+export function joinRows(pages: readonly RestSkillRows[]): ReadyRows | undefined {
+  const reads = pages.flatMap((page) => (page.read?.status === "ready" ? [page.read] : []));
+  const first = reads[0];
+  const last = reads[reads.length - 1];
+  if (first === undefined || last === undefined) {
+    return undefined;
+  }
+  return {
+    ...first,
+    tables: reads.flatMap((read) => read.tables),
+    rowCount: reads.reduce((sum, read) => sum + read.rowCount, 0),
+    nextCursor: last.nextCursor,
+  };
+}
+
+/** The pages of a read of code blocks, as the one answer they were cut from: every block in reading order. */
+export function joinCode(pages: readonly RestSkillCode[]): ReadyCode | undefined {
+  const reads = pages.flatMap((page) => (page.read?.status === "ready" ? [page.read] : []));
+  const first = reads[0];
+  const last = reads[reads.length - 1];
+  if (first === undefined || last === undefined) {
+    return undefined;
+  }
+  return {
+    ...first,
+    blocks: reads.flatMap((read) => read.blocks),
+    nextCursor: last.nextCursor,
+  };
+}
+
+/** Why a read of tables or of code blocks did not happen, for the command to fail with; nothing when it did. */
+export function dataRefusal(
+  what: "tables" | "code blocks",
+  read: RestSkillRows | RestSkillCode,
+): string | undefined {
+  if (read.status === "none" || read.address === null) {
+    return NO_ADDRESS;
+  }
+  return read.status === "ready" ? undefined : refused(what, read);
+}
+
+/** How many files the tables, or the blocks, stand in. */
+const filesOf = (items: readonly { readonly path: string }[]): number =>
+  new Set(items.map((item) => item.path)).size;
+
+const counted = (count: number, one: string, many = `${one}s`): string =>
+  `${count} ${count === 1 ? one : many}`;
+
+/** The tables as one CSV: a header of `path`, `heading` and every column name, then a line per row (`rowsCsv` of `@skillcdn/core`). */
+export const csvOfRows = (whole: ReadyRows): string => rowsCsv(whole.tables);
+
+/** What a read of tables held, in a line. */
+export const describeRows = (whole: ReadyRows): string =>
+  `${counted(whole.rowCount, "row")} of ${counted(whole.tables.length, "table")} in ${counted(filesOf(whole.tables), "file")}`;
+
+/**
+ * The code blocks as written, each under a line that names its file, the section it stands in
+ * and what it says it is written in, a blank line between two.
+ */
+export function textOfCode(whole: ReadyCode): string {
+  return whole.blocks
+    .map((block) => {
+      const where = [block.path, ...block.heading].join(" > ");
+      const language = block.language === "" ? "" : ` [${block.language}]`;
+      return `--- ${where}${language}\n${block.text}${block.text.endsWith("\n") ? "" : "\n"}`;
+    })
+    .join("\n");
+}
+
+/** What a read of code blocks held, in a line. */
+export const describeCode = (whole: ReadyCode): string =>
+  `${counted(whole.blocks.length, "code block")} in ${counted(filesOf(whole.blocks), "file")}`;
 
 /** What words found, as `search_repo` lays it out for a model, one page of it. */
 export function formatSkillFind(found: RestSkillFind, summary: PackSummary | undefined): string {

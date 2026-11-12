@@ -8,7 +8,7 @@ import type { Plugins } from "./registry.js";
 // A plugin's skills as a pack of its own (docs/specs/plugins.md, "REST"): the plugin's package,
 // with `SKILLCDN.md` at its root and its skills under the directory the manifest names, read
 // from the console's machine as any local pack is (ADR-0031), at the address
-// `/local/plugins/<key>`, and answered through the five reads a project's pack has. Nothing of
+// `/local/plugins/<key>`, and answered through the reads a project's pack has. Nothing of
 // the package is executed to read it, and the address means something on this console alone.
 
 /** The owner every plugin's pack is filed under, in the address `/local/plugins/<key>`. */

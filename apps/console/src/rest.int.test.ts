@@ -56,9 +56,11 @@ import {
   restRulesSchema,
   restRunSchema,
   restSkillBrowseSchema,
+  restSkillCodeSchema,
   restSkillFileSchema,
   restSkillFindSchema,
   restSkillLoadSchema,
+  restSkillRowsSchema,
   restSkillsSchema,
   restTaskSchema,
   restTasksSchema,
@@ -79,9 +81,11 @@ import {
   formatAddress,
   parseAddress,
   type RestBrowse,
+  type RestCode,
   type RestFile,
   type RestFind,
   type RestMount,
+  type RestRows,
   type RestSkill,
 } from "@skillcdn/core";
 import { eq } from "drizzle-orm";
@@ -2508,6 +2512,12 @@ const unread = {
   file: async (): Promise<RestFile> => {
     throw new Error("not asked");
   },
+  rows: async (): Promise<RestRows> => {
+    throw new Error("not asked");
+  },
+  code: async (): Promise<RestCode> => {
+    throw new Error("not asked");
+  },
 };
 
 const COMMIT = "0123456789abcdef0123456789abcdef01234567";
@@ -4118,6 +4128,7 @@ describe("the discussion on a task", () => {
 describe("the pack of a project (ADR-0028)", () => {
   it("is read through the console with the pack token an owner sets, which goes to the deployment and nowhere else, and answered as the pack answered it", async () => {
     const tokens: (string | undefined)[] = [];
+    const asked: string[] = [];
     const page = (cursor: string | undefined): RestSkill => ({
       status: "ready",
       commit: COMMIT,
@@ -4176,7 +4187,75 @@ describe("the pack of a project (ADR-0028)", () => {
               totalLength: 14,
             };
           },
+          async rows(query) {
+            asked.push(`rows ${JSON.stringify(query)}`);
+            if (query.path === "nothing") {
+              throw new PackError(
+                404,
+                "file.not_found",
+                "No Markdown document at that path in this mount, and none under it.",
+              );
+            }
+            return {
+              status: "ready",
+              commit: COMMIT,
+              path: query.path ?? "",
+              tables: [
+                {
+                  path: "review/codes.md",
+                  heading: ["Codes"],
+                  columns: ["Code", "Meaning"],
+                  rows: [
+                    ["R1", "Reads well"],
+                    ["R2", "Needs a test"],
+                  ],
+                },
+              ],
+              rowCount: 2,
+              nextCursor: null,
+            };
+          },
+          async code(query) {
+            asked.push(`code ${JSON.stringify(query)}`);
+            return {
+              status: "ready",
+              commit: COMMIT,
+              path: query.path ?? "",
+              blocks: [
+                {
+                  path: "review/codes.md",
+                  heading: ["Codes"],
+                  language: "sh",
+                  text: "pnpm check\n",
+                },
+              ],
+              nextCursor: null,
+            };
+          },
           async browse(query) {
+            if (query.path === "review/codes.md") {
+              // A document's outline, with the deployment's own address for its data.
+              return {
+                status: "ready",
+                commit: COMMIT,
+                path: query.path,
+                entries: [],
+                nextCursor: null,
+                outline: {
+                  path: query.path,
+                  size: 400,
+                  totalLength: 400,
+                  headings: [],
+                  truncated: false,
+                  tables: { count: 1, rows: 2 },
+                  codeBlocks: 1,
+                  data: {
+                    rows: "https://skillcdn.test/api/v1/rows/gh/acme/skills?path=review/codes.md",
+                    code: "https://skillcdn.test/api/v1/code/gh/acme/skills?path=review/codes.md",
+                  },
+                },
+              };
+            }
             return {
               status: "ready",
               commit: COMMIT,
@@ -4302,6 +4381,67 @@ describe("the pack of a project (ADR-0028)", () => {
     );
     expect((await served.request(`${IN}/skills/browse?limit=0`, { headers })).status).toBe(400);
     expect(tokens.filter((token) => token === "scdn_repo_ok").length).toBeGreaterThanOrEqual(7);
+    // The tables and the code blocks of a document as data (ADR-0100): read with the token as
+    // the other reads are, a page as the pack answered it; and the document's outline names
+    // the console's own reads of them, never the deployment's.
+    const before = tokens.length;
+    const table = restSkillRowsSchema.parse(
+      await (
+        await served.request(
+          `${IN}/skills/rows?path=review%2Fcodes.md&heading=Codes&cursor=two&limit=50`,
+          { headers },
+        )
+      ).json(),
+    );
+    expect(table).toMatchObject({
+      address: "/gh/acme/skills",
+      source: "https://skillcdn.test",
+      status: "ready",
+      refusal: null,
+    });
+    expect(table.read?.status === "ready" ? table.read.tables : []).toEqual([
+      {
+        path: "review/codes.md",
+        heading: ["Codes"],
+        columns: ["Code", "Meaning"],
+        rows: [
+          ["R1", "Reads well"],
+          ["R2", "Needs a test"],
+        ],
+      },
+    ]);
+    const blocks = restSkillCodeSchema.parse(
+      await (await served.request(`${IN}/skills/code?path=review`, { headers })).json(),
+    );
+    expect(blocks.read?.status === "ready" ? blocks.read.blocks.map((b) => b.text) : []).toEqual([
+      "pnpm check\n",
+    ]);
+    expect(asked).toEqual([
+      'rows {"path":"review/codes.md","heading":"Codes","cursor":"two","limit":50}',
+      'code {"path":"review"}',
+    ]);
+    expect(tokens.slice(before)).toEqual(["scdn_repo_ok", "scdn_repo_ok"]);
+    const outlined = restSkillBrowseSchema.parse(
+      await (
+        await served.request(`${IN}/skills/browse?path=review%2Fcodes.md`, { headers })
+      ).json(),
+    );
+    expect(outlined.read?.status === "ready" ? outlined.read.outline?.data : undefined).toEqual({
+      rows: `${IN}/skills/rows?path=review%2Fcodes.md`,
+      code: `${IN}/skills/code?path=review%2Fcodes.md`,
+    });
+    expect(JSON.stringify(outlined)).not.toContain("skillcdn.test/api/v1");
+    // Nothing at the path is the pack's own refusal; what is asked wrong is refused here.
+    expect(
+      restSkillRowsSchema.parse(
+        await (await served.request(`${IN}/skills/rows?path=nothing`, { headers })).json(),
+      ),
+    ).toMatchObject({ status: "not_found", refusal: { code: "file.not_found" }, read: null });
+    expect((await served.request(`${IN}/skills/rows?limit=5001`, { headers })).status).toBe(400);
+    expect((await served.request(`${IN}/skills/code?limit=501`, { headers })).status).toBe(400);
+    expect((await served.request(`${IN}/skills/code?limit=0`, { headers })).status).toBe(400);
+    // Whoever is not signed in reads none of it.
+    expect((await served.request(`${IN}/skills/rows?path=review`)).status).toBe(401);
     // A skill that is not there, with the pack's own words; and a read that is not asked right.
     const missing = restSkillLoadSchema.parse(
       await (await served.request(`${IN}/skills/one?path=nothing%2FSKILL.md`, { headers })).json(),
@@ -4979,6 +5119,8 @@ describe("the workspace's SkillCDN token (ADR-0036)", () => {
         find: nothing,
         skill: nothing,
         file: nothing,
+        rows: nothing,
+        code: nothing,
       };
     },
   };

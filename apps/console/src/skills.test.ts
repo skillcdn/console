@@ -2,9 +2,11 @@ import {
   formatAddress,
   parseAddress,
   type RestBrowse,
+  type RestCode,
   type RestFile,
   type RestFind,
   type RestMount,
+  type RestRows,
   type RestSkill,
 } from "@skillcdn/core";
 import { describe, expect, it } from "vitest";
@@ -97,6 +99,8 @@ function sourceOf(
           }
           return mountOf(canonical, next);
         },
+        rows: unasked,
+        code: unasked,
         browse: unasked,
         find: unasked,
         skill: unasked,
@@ -272,6 +276,35 @@ describe("the skills of the board", () => {
       },
     };
     const found: RestFind = { status: "indexing" };
+    const rows: RestRows = {
+      status: "ready",
+      commit: "0123456789abcdef0123456789abcdef01234567",
+      path: "docs/prices.md",
+      tables: [
+        {
+          path: "docs/prices.md",
+          heading: ["Prices", "By region"],
+          columns: ["Region", "Price"],
+          rows: [
+            ["North", "12"],
+            ["South", "9"],
+            ["East", "11"],
+          ],
+        },
+      ],
+      rowCount: 3,
+      nextCursor: null,
+    };
+    const code: RestCode = {
+      status: "ready",
+      commit: "0123456789abcdef0123456789abcdef01234567",
+      path: "docs",
+      blocks: [
+        { path: "docs/prices.md", heading: ["Prices"], language: "json", text: '{"north": 12}\n' },
+      ],
+      nextCursor: null,
+    };
+    const asked: { read: string; query: unknown; token: string | undefined }[] = [];
     const source: PackSource = {
       open(address, token): Pack {
         tokens.push(token);
@@ -295,6 +328,21 @@ describe("the skills of the board", () => {
             return page(cursor);
           },
           file: async () => file,
+          rows: async (query) => {
+            asked.push({ read: "rows", query, token });
+            if (query.path === "nothing") {
+              throw new PackError(
+                404,
+                "file.not_found",
+                "No Markdown document at that path in this mount, and none under it.",
+              );
+            }
+            return rows;
+          },
+          code: async (query) => {
+            asked.push({ read: "code", query, token });
+            return query.path === "later" ? { status: "indexing" } : code;
+          },
         };
       },
     };
@@ -348,6 +396,56 @@ describe("the skills of the board", () => {
     expect(
       outlined.read?.status === "ready" ? outlined.read.outline : undefined,
     ).not.toHaveProperty("data");
+    // Where the caller names its own reads of them, the outline names those (ADR-0100): each
+    // for the document's path, and only for what the document has.
+    const pointed = await skills.browse(
+      undefined,
+      { path: "docs/prices.md" },
+      undefined,
+      (read, path) => `/console/${read}?path=${encodeURIComponent(path)}`,
+    );
+    expect(pointed.read?.status === "ready" ? pointed.read.outline?.data : undefined).toEqual({
+      rows: "/console/rows?path=docs%2Fprices.md",
+      code: "/console/code?path=docs%2Fprices.md",
+    });
+    expect(JSON.stringify(pointed.read)).not.toContain("skillcdn.test/api/v1");
+    // A folder has no outline, and nothing is added to it.
+    expect(
+      (await skills.browse(undefined, { path: "docs" }, undefined, () => "/never")).read,
+    ).toEqual(folder);
+    // The tables and the code blocks as data: a page as the pack answered it, in the console's
+    // envelope, read with the token the other reads are read with.
+    const table = await skills.rows(
+      "/gh/acme/playbooks",
+      { path: "docs/prices.md", heading: "Prices", cursor: "two", limit: 50 },
+      "scdn_repo_x",
+    );
+    expect(table).toEqual({
+      address: "/gh/acme/playbooks",
+      source: "https://skillcdn.test",
+      page: "https://skillcdn.test/gh/acme/playbooks",
+      status: "ready",
+      refusal: null,
+      read: rows,
+    });
+    expect(asked.at(-1)).toEqual({
+      read: "rows",
+      query: { path: "docs/prices.md", heading: "Prices", cursor: "two", limit: 50 },
+      token: "scdn_repo_x",
+    });
+    expect((await skills.code(undefined, { path: "docs" })).read).toEqual(code);
+    expect(asked.at(-1)).toEqual({ read: "code", query: { path: "docs" }, token: undefined });
+    // What the pack refuses is the status, with its own words; an index not there is the status.
+    expect(await skills.rows(undefined, { path: "nothing" })).toMatchObject({
+      status: "not_found",
+      refusal: { code: "file.not_found" },
+      read: null,
+    });
+    expect(await skills.code(undefined, { path: "later" })).toMatchObject({
+      status: "indexing",
+      refusal: null,
+      read: null,
+    });
     // An index that is not there to read from is the status, and nothing was read.
     expect(await skills.find(undefined, { query: "review" })).toMatchObject({
       status: "indexing",

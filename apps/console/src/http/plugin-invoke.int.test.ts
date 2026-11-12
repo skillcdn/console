@@ -14,8 +14,10 @@ import {
   restPluginInvocationSchema,
   restProjectRulesSchema,
   restRulesSchema,
+  restSkillCodeSchema,
   restSkillFindSchema,
   restSkillLoadSchema,
+  restSkillRowsSchema,
   restSkillsSchema,
 } from "@skillcdn/console/api";
 import { pino } from "pino";
@@ -521,5 +523,33 @@ describe("a plugin's skills", () => {
       headers: { cookie: member },
     });
     expect(unknown.status).toBe(404);
+  });
+
+  it("answer their tables and their code blocks as data, as a project's pack does (ADR-0100)", async () => {
+    const headers = { cookie: member };
+    const rows = restSkillRowsSchema.parse(
+      await (await h.request(pluginPath("gate", "skills", "rows"), { headers })).json(),
+    );
+    expect(rows).toMatchObject({ address: "/local/plugins/gate", source: null, status: "ready" });
+    expect(rows.read?.status === "ready" ? rows.read.tables : undefined).toEqual([]);
+    const code = restSkillCodeSchema.parse(
+      await (
+        await h.request(`${pluginPath("gate", "skills", "code")}?path=skills%2Fgate`, { headers })
+      ).json(),
+    );
+    expect(code.read?.status === "ready" ? code.read.blocks : undefined).toEqual([]);
+    const missing = restSkillRowsSchema.parse(
+      await (
+        await h.request(`${pluginPath("gate", "skills", "rows")}?path=nothing`, { headers })
+      ).json(),
+    );
+    expect(missing).toMatchObject({ status: "not_found", refusal: { code: "file.not_found" } });
+    expect(
+      (await h.request(`${pluginPath("gate", "skills", "rows")}?limit=5001`, { headers })).status,
+    ).toBe(400);
+    expect((await h.request(pluginPath("nothing", "skills", "rows"), { headers })).status).toBe(
+      404,
+    );
+    expect((await h.request(pluginPath("gate", "skills", "code"))).status).toBe(401);
   });
 });

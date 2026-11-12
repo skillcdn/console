@@ -55,8 +55,10 @@ import {
   type RestPluginGrantInput,
   type RestPluginInvocation,
   type RestSkillBrowse,
+  type RestSkillCode,
   type RestSkillFile,
   type RestSkillLoad,
+  type RestSkillRows,
   type RestSkills,
   type RestTaskPatch,
 } from "../schemas.js";
@@ -154,17 +156,24 @@ import {
   bodyOfFile,
   bodyOfFolder,
   bodyOfSkill,
+  csvOfRows,
+  dataRefusal,
+  describeCode,
+  describeRows,
   formatSkillBrowse,
   formatSkillFile,
   formatSkillFind,
   formatSkillLoad,
   formatSkills,
+  joinCode,
   joinFile,
   joinFolder,
+  joinRows,
   joinSkill,
   type PackSummary,
   skillPathIn,
   summaryOf,
+  textOfCode,
 } from "./pack.js";
 import { type RunnerHost, workPath } from "./runner-host.js";
 import { createServeHandler, DEFAULT_SERVE_PORT, type Listen } from "./serve.js";
@@ -1228,6 +1237,9 @@ const categories: Command = async (args, io) => {
 const MAX_SKILL_PAGES = 64;
 /** How many results a search answers at most: what the deployment allows on one page. */
 const MAX_FIND_LIMIT = 25;
+/** How many rows, and how many code blocks, one page of a read as data is asked to end after: the most the console takes. */
+const DATA_PAGE_ROWS = 5000;
+const DATA_PAGE_BLOCKS = 500;
 
 /** The pack of the project as the console lists it, and what its reads are rendered at; none when the pack did not answer. */
 async function packOf(
@@ -1240,14 +1252,133 @@ async function packOf(
 /** What reads a pack: a project's client, or a plugin's, whose skills are a pack of their own. */
 type PackReader = Pick<
   ProjectClient,
-  "skills" | "skill" | "skillFile" | "skillBrowse" | "skillFind"
+  "skills" | "skill" | "skillFile" | "skillBrowse" | "skillFind" | "skillRows" | "skillCode"
 >;
 
 const SKILLS_OPTIONS: OptionSpec = {
   search: { type: "string" },
   limit: { type: "string" },
   cursor: { type: "string" },
+  rows: { type: "boolean" },
+  code: { type: "boolean" },
+  heading: { type: "string" },
+  out: { type: "string" },
 };
+
+/**
+ * The tables, or the code blocks, of a document or of every document under a folder, as data
+ * (ADR-0100): every page the console answers, joined, and printed as one CSV or as the blocks
+ * as written, or written to a file with `--out`. What a program takes is never a refusal: a
+ * read the pack refused fails with why, and so does one that did not reach its end.
+ */
+async function readData(
+  io: CliIo,
+  session: Session,
+  reader: PackReader,
+  asked: {
+    readonly what: "rows" | "code";
+    readonly path: string | undefined;
+    readonly heading: string | undefined;
+    readonly out: string | undefined;
+  },
+): Promise<number> {
+  const where = asked.path ?? "the pack";
+  /** The answer written to a file, or printed: what was read in a line when a file was written. */
+  const give = async (
+    body: unknown,
+    words: string,
+    summary: string,
+    name: string,
+  ): Promise<number> => {
+    const printed = session.json ? `${JSON.stringify(body, null, 2)}\n` : words;
+    if (asked.out === undefined) {
+      io.stdout(printed);
+      return EXIT.ok;
+    }
+    let saved: string;
+    try {
+      saved = await io.writeBytes(asked.out, new TextEncoder().encode(printed), name);
+    } catch {
+      throw failed(`The file could not be written at ${asked.out}.`);
+    }
+    answer(io, session, { path: saved, summary }, () => `Saved ${summary} at ${saved}`);
+    return EXIT.ok;
+  };
+  if (asked.what === "rows") {
+    const pages: RestSkillRows[] = [];
+    let next: string | undefined;
+    for (let n = 0; n < MAX_SKILL_PAGES; n += 1) {
+      const page = await reader.skillRows({
+        path: asked.path,
+        heading: asked.heading,
+        cursor: next,
+        limit: DATA_PAGE_ROWS,
+      });
+      const refusal = dataRefusal("tables", page);
+      if (refusal !== undefined) {
+        throw failed(refusal);
+      }
+      pages.push(page);
+      next = page.read?.status === "ready" ? (page.read.nextCursor ?? undefined) : undefined;
+      if (next === undefined) {
+        break;
+      }
+    }
+    const whole = joinRows(pages);
+    const last = pages[pages.length - 1];
+    if (whole === undefined || last === undefined) {
+      throw failed("The tables could not be read.");
+    }
+    if (next !== undefined) {
+      throw failed(
+        `The tables under ${where} are more than the command reads at once (${describeRows(whole)} so far): name a folder or a file under it.`,
+      );
+    }
+    if (whole.tables.length === 0 && !session.json) {
+      io.stdout(
+        `No tables in ${where}${asked.heading === undefined ? "" : " under that heading"}.\n`,
+      );
+      return EXIT.ok;
+    }
+    return give({ ...last, read: whole }, csvOfRows(whole), describeRows(whole), "rows.csv");
+  }
+  const pages: RestSkillCode[] = [];
+  let next: string | undefined;
+  for (let n = 0; n < MAX_SKILL_PAGES; n += 1) {
+    const page = await reader.skillCode({
+      path: asked.path,
+      heading: asked.heading,
+      cursor: next,
+      limit: DATA_PAGE_BLOCKS,
+    });
+    const refusal = dataRefusal("code blocks", page);
+    if (refusal !== undefined) {
+      throw failed(refusal);
+    }
+    pages.push(page);
+    next = page.read?.status === "ready" ? (page.read.nextCursor ?? undefined) : undefined;
+    if (next === undefined) {
+      break;
+    }
+  }
+  const whole = joinCode(pages);
+  const last = pages[pages.length - 1];
+  if (whole === undefined || last === undefined) {
+    throw failed("The code blocks could not be read.");
+  }
+  if (next !== undefined) {
+    throw failed(
+      `The code blocks under ${where} are more than the command reads at once (${describeCode(whole)} so far): name a folder or a file under it.`,
+    );
+  }
+  if (whole.blocks.length === 0 && !session.json) {
+    io.stdout(
+      `No code blocks in ${where}${asked.heading === undefined ? "" : " under that heading"}.\n`,
+    );
+    return EXIT.ok;
+  }
+  return give({ ...last, read: whole }, textOfCode(whole), describeCode(whole), "code.txt");
+}
 
 const SKILL_OPTIONS: OptionSpec = {
   file: { type: "string" },
@@ -1287,6 +1418,22 @@ async function readSkills(
   const words = text(values, "search");
   const limit = text(values, "limit");
   const cursor = text(values, "cursor");
+  const rows = on(values, "rows");
+  const code = on(values, "code");
+  const heading = text(values, "heading");
+  const out = text(values, "out");
+  const dataUsage = `${extras.command} --rows|--code [<folder|file>] [--heading <words>] [--out <path>]`;
+  if (rows && code) {
+    throw misuse(`Say one: --rows for the tables, or --code for the code blocks: ${dataUsage}`);
+  }
+  if ((rows || code) && (words !== undefined || limit !== undefined || cursor !== undefined)) {
+    throw misuse(
+      `--rows and --code read a folder or a file whole, and go without --search: ${dataUsage}`,
+    );
+  }
+  if (!rows && !code && (heading !== undefined || out !== undefined)) {
+    throw misuse(`--heading and --out go with --rows or --code: ${dataUsage}`);
+  }
   if (words === undefined && (limit !== undefined || cursor !== undefined)) {
     throw misuse(
       `--limit and --cursor go with --search: ${extras.command} --search <words> [--limit <n>] [--cursor <cursor>]`,
@@ -1298,6 +1445,15 @@ async function readSkills(
     (!Number.isInteger(atMost) || atMost < 1 || atMost > MAX_FIND_LIMIT)
   ) {
     throw misuse(`Not a number of results, 1 to ${MAX_FIND_LIMIT}: ${limit}`);
+  }
+  // As data: the read answers for itself how the pack stands, and fails where it does not.
+  if (rows || code) {
+    return readData(io, session, reader, {
+      what: rows ? "rows" : "code",
+      path: folder,
+      heading,
+      out,
+    });
   }
   const { listing, summary } = await packOf(reader);
   // The pack as it stands; or why it does not answer, which a folder or a search would meet too.
@@ -1336,7 +1492,7 @@ async function readSkills(
   const browsed = last;
   const whole = joinFolder(pages, summary);
   answer(io, session, { ...browsed, read: whole === undefined ? null : bodyOfFolder(whole) }, () =>
-    formatSkillBrowse(browsed, whole),
+    formatSkillBrowse(browsed, whole, extras.command),
   );
   return EXIT.ok;
 }

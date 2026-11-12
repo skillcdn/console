@@ -2,9 +2,11 @@ import type {
   RestPackRefusal,
   RestSkill,
   RestSkillBrowse,
+  RestSkillCode,
   RestSkillFile,
   RestSkillFind,
   RestSkillLoad,
+  RestSkillRows,
   RestSkills,
   SkillsStatus,
 } from "@skillcdn/console/api";
@@ -15,12 +17,14 @@ import {
   LOCAL_HOST_KEY,
   parseAddress,
   parseRepoPath,
+  type RestBrowse,
   type RestMount,
 } from "@skillcdn/core";
 import type { Logger } from "./logger.js";
 import type { Clock } from "./ports/clock.js";
 import {
   type BrowseQuery,
+  type DataQuery,
   type FileQuery,
   type FindQuery,
   type Pack,
@@ -35,23 +39,41 @@ import {
 // answers it, in the console's envelope, so that the command renders what a deployment's tools
 // would give a model. The console refers to the pack by address and keeps nothing of it: a
 // public listing is held for a while, since an address changes slowly, and asked for again
-// after; what a token reads is the project's for that request and is never held.
+// after; what a token reads is the project's for that request and is never held. A document's
+// tables and its code blocks are had as data through the console too (ADR-0100), a page at a
+// time, as the pack answers them.
+
+/** Where the console answers a document's tables, or its code blocks, as data: the address of that read for the document at `path`. */
+export type DataAddress = (read: "rows" | "code", path: string) => string;
+
+type ReadyBrowse = Extract<RestBrowse, { readonly status: "ready" }>;
 
 /**
- * A document's outline as the console passes it on: without where its tables and its code
- * blocks are had as data. A deployment names an address of its own there, which whoever holds
- * the console's token cannot read of a private pack, holding no token of the pack, and which
- * leads past the console of a public one. How many tables, rows and code blocks the document
- * has is still said; the rows and the code themselves are read in the document's sections.
+ * A document's outline as the console passes it on: saying where its tables and its code
+ * blocks are had as data through the console, where the caller names its reads, and nothing
+ * of it where it names none. A deployment names an address of its own there, which whoever
+ * holds the console's token cannot read of a private pack, holding no token of the pack, and
+ * which leads past the console of a public one; a directory names none. How many tables, rows
+ * and code blocks the document has is said either way.
  */
-function withoutDataPointer<
-  T extends { readonly outline?: { readonly data?: unknown } | undefined },
->(read: T): T {
-  if (read.outline === undefined || read.outline.data === undefined) {
+function withDataAddress(read: ReadyBrowse, at: DataAddress | undefined): ReadyBrowse {
+  if (read.outline === undefined) {
     return read;
   }
   const { data: _pointer, ...outline } = read.outline;
-  return { ...read, outline };
+  const data =
+    at === undefined
+      ? {}
+      : {
+          ...(outline.tables === undefined ? {} : { rows: at("rows", outline.path) }),
+          ...(outline.codeBlocks === undefined || outline.codeBlocks === 0
+            ? {}
+            : { code: at("code", outline.path) }),
+        };
+  return {
+    ...read,
+    outline: Object.keys(data).length === 0 ? outline : { ...outline, data },
+  };
 }
 
 /** How long one listing stands for, before the pack is asked again. */
@@ -241,11 +263,16 @@ export class Skills {
     }
   }
 
-  /** What a folder of the pack holds, a page of it, as the deployment browses it (`browse_repo`). */
+  /**
+   * What a folder of the pack holds, a page of it, as the deployment browses it (`browse_repo`);
+   * a document's outline names where its tables and its code blocks are had as data through
+   * the console, as `data` says where.
+   */
   async browse(
     projectAddress: string | undefined,
     query: BrowseQuery,
     token?: string,
+    data?: DataAddress,
   ): Promise<RestSkillBrowse> {
     const opened = this.#open(projectAddress, token);
     if (opened === undefined) {
@@ -255,7 +282,49 @@ export class Skills {
     try {
       const read = await pack.browse(query);
       return read.status === "ready"
-        ? { ...this.#at(address, where, "ready"), read: withoutDataPointer(read) }
+        ? { ...this.#at(address, where, "ready"), read: withDataAddress(read, data) }
+        : { ...this.#at(address, where, read.status), read: null };
+    } catch (error) {
+      return { ...this.#at(address, where, this.#refused(error)), read: null };
+    }
+  }
+
+  /** The tables of a document of the pack, or of every document under a folder, as data: a page of them, by whole files (ADR-0100). */
+  async rows(
+    projectAddress: string | undefined,
+    query: DataQuery,
+    token?: string,
+  ): Promise<RestSkillRows> {
+    const opened = this.#open(projectAddress, token);
+    if (opened === undefined) {
+      return { ...this.#nowhere(), read: null };
+    }
+    const { address, where, pack } = opened;
+    try {
+      const read = await pack.rows(query);
+      return read.status === "ready"
+        ? { ...this.#at(address, where, "ready"), read }
+        : { ...this.#at(address, where, read.status), read: null };
+    } catch (error) {
+      return { ...this.#at(address, where, this.#refused(error)), read: null };
+    }
+  }
+
+  /** The fenced code blocks of a document of the pack, or of every document under a folder, as data: a page of them. */
+  async code(
+    projectAddress: string | undefined,
+    query: DataQuery,
+    token?: string,
+  ): Promise<RestSkillCode> {
+    const opened = this.#open(projectAddress, token);
+    if (opened === undefined) {
+      return { ...this.#nowhere(), read: null };
+    }
+    const { address, where, pack } = opened;
+    try {
+      const read = await pack.code(query);
+      return read.status === "ready"
+        ? { ...this.#at(address, where, "ready"), read }
         : { ...this.#at(address, where, read.status), read: null };
     } catch (error) {
       return { ...this.#at(address, where, this.#refused(error)), read: null };

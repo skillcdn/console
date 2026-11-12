@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import {
   type Address,
   browseBody,
+  codeBody,
   describeLicense,
   directoryBody,
   fileBody,
@@ -14,6 +15,7 @@ import {
   REST_MOUNT_LIST_LIMIT,
   type RepoPath,
   type RestFile,
+  rowsBody,
   skillOutcome,
 } from "@skillcdn/core";
 import { INDEX_LIMIT_DEFAULTS, readDirectory } from "@skillcdn/indexer";
@@ -77,6 +79,30 @@ const asPackError = (error: unknown): never => {
   }
   throw error;
 };
+
+/**
+ * A read of tables or code blocks that found something, or the refusal the API answers where no
+ * document is at the path and none under it.
+ */
+function dataOf<T>(
+  lookup:
+    | { readonly kind: "not_ready" }
+    | { readonly kind: "not_found" }
+    | { readonly kind: "found"; readonly result: T },
+): T {
+  switch (lookup.kind) {
+    case "found":
+      return lookup.result;
+    case "not_found":
+      throw new PackError(
+        404,
+        "file.not_found",
+        "No Markdown document at that path in this pack, and none under it.",
+      );
+    case "not_ready":
+      throw new Error("the index of a directory is always ready");
+  }
+}
 
 export function createDirectorySource(options: DirectoryPacksOptions): PackSource {
   const root = resolve(options.root);
@@ -268,6 +294,18 @@ export function createDirectorySource(options: DirectoryPacksOptions): PackSourc
                 { sourceUrl: lookup.sourceUrl },
               );
           }
+        },
+        async rows(query) {
+          const read = await opened(address);
+          const mount = mountOf(address, read);
+          const result = dataOf(await read.reader.rows(mount, query).catch(asPackError));
+          return rowsBody({ status: "ready", result });
+        },
+        async code(query) {
+          const read = await opened(address);
+          const mount = mountOf(address, read);
+          const result = dataOf(await read.reader.code(mount, query).catch(asPackError));
+          return codeBody({ status: "ready", result });
         },
       };
       return pack;

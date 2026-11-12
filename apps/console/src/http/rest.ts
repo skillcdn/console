@@ -26,6 +26,7 @@ import {
   normalizeConnectCode,
   type ProjectIconType,
   type ProviderKey,
+  projectPath,
   REST_ROUTES,
   type RestArchivedTasks,
   type RestCategories,
@@ -51,9 +52,11 @@ import {
   type RestRuns,
   type RestSessions,
   type RestSkillBrowse,
+  type RestSkillCode,
   type RestSkillFile,
   type RestSkillFind,
   type RestSkillLoad,
+  type RestSkillRows,
   type RestSkills,
   type RestTasks,
   type RestTeams,
@@ -102,6 +105,8 @@ import {
 } from "@skillcdn/console/api";
 import {
   CONNECT_AGENT_MAX_LENGTH,
+  DATA_CODE_MAX_LIMIT,
+  DATA_ROWS_MAX_LIMIT,
   formatAddress,
   LOCAL_HOST_KEY,
   parseAddress,
@@ -332,6 +337,16 @@ const findQuerySchema = z.object({
   cursor: z.string().max(4000).optional(),
   limit: z.coerce.number().int().min(1).max(25).optional(),
 });
+/** A read of tables, or of code blocks, as data: the file or the folder, the words of a heading, where to go on, how many at most. */
+const dataQuerySchema = (most: number) =>
+  z.object({
+    path: z.string().max(500).optional(),
+    heading: z.string().max(500).optional(),
+    cursor: z.string().max(4096).optional(),
+    limit: z.coerce.number().int().min(1).max(most).optional(),
+  });
+const rowsQuerySchema = dataQuerySchema(DATA_ROWS_MAX_LIMIT);
+const codeQuerySchema = dataQuerySchema(DATA_CODE_MAX_LIMIT);
 
 export interface RestDependencies {
   readonly database: Database;
@@ -3450,10 +3465,13 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     if (!query.success) {
       return c.json(errorBody("request.invalid", `query: ${query.error.message}`), 400);
     }
+    // A document's outline names the two reads below for its tables and its code blocks.
     const body: RestSkillBrowse = await skills.browse(
       found.project.skillsAddress,
       query.data,
       await packTokenFor(found.project),
+      (read, path) =>
+        `${projectPath(found.project.key, "skills")}/${read}?path=${encodeURIComponent(path)}`,
     );
     logger.info(
       {
@@ -3498,6 +3516,74 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         requestId: c.get("requestId"),
       },
       "the pack was searched",
+    );
+    return c.json(body);
+  });
+
+  // The tables and the fenced code blocks of the pack's documents as data (ADR-0100): a page of
+  // them as the pack answers it, read with the token the other reads are read with, so that a
+  // table is taken whole by a program and never copied out of a document by a model.
+  app.get(`${PROJECT}/skills/rows`, async (c) => {
+    const found = await reading(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    const query = rowsQuerySchema.safeParse({
+      path: c.req.query("path"),
+      heading: c.req.query("heading"),
+      cursor: c.req.query("cursor"),
+      limit: c.req.query("limit"),
+    });
+    if (!query.success) {
+      return c.json(errorBody("request.invalid", `query: ${query.error.message}`), 400);
+    }
+    const body: RestSkillRows = await skills.rows(
+      found.project.skillsAddress,
+      query.data,
+      await packTokenFor(found.project),
+    );
+    logger.info(
+      {
+        person: found.person.id,
+        project: found.project.key,
+        address: body.address,
+        path: query.data.path ?? "",
+        status: body.status,
+        requestId: c.get("requestId"),
+      },
+      "the tables of the pack were read as data",
+    );
+    return c.json(body);
+  });
+  app.get(`${PROJECT}/skills/code`, async (c) => {
+    const found = await reading(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    const query = codeQuerySchema.safeParse({
+      path: c.req.query("path"),
+      heading: c.req.query("heading"),
+      cursor: c.req.query("cursor"),
+      limit: c.req.query("limit"),
+    });
+    if (!query.success) {
+      return c.json(errorBody("request.invalid", `query: ${query.error.message}`), 400);
+    }
+    const body: RestSkillCode = await skills.code(
+      found.project.skillsAddress,
+      query.data,
+      await packTokenFor(found.project),
+    );
+    logger.info(
+      {
+        person: found.person.id,
+        project: found.project.key,
+        address: body.address,
+        path: query.data.path ?? "",
+        status: body.status,
+        requestId: c.get("requestId"),
+      },
+      "the code blocks of the pack were read as data",
     );
     return c.json(body);
   });

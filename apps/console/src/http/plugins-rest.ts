@@ -16,9 +16,11 @@ import {
   type RestPluginGrants,
   type RestPluginInvocation,
   type RestSkillBrowse,
+  type RestSkillCode,
   type RestSkillFile,
   type RestSkillFind,
   type RestSkillLoad,
+  type RestSkillRows,
   type RestSkills,
   restFileInputSchema,
   restPluginCommandInputSchema,
@@ -41,6 +43,7 @@ import {
   SETTING_KEY_PATTERN,
 } from "@skillcdn/console/plugin";
 import type { WebRoot } from "@skillcdn/console/web";
+import { DATA_CODE_MAX_LIMIT, DATA_ROWS_MAX_LIMIT } from "@skillcdn/core";
 import type { Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { stream } from "hono/streaming";
@@ -149,7 +152,7 @@ const queryQuery = z.object({
   args: z.string().max(100_000).optional(),
   project: z.string().max(40).optional(),
 });
-/** The five reads of a plugin's skills, asked as a project's are (http/rest.ts). */
+/** The reads of a plugin's skills, asked as a project's are (http/rest.ts). */
 const skillQuery = z.object({
   path: z.string().min(1).max(500),
   cursor: z.string().max(4000).optional(),
@@ -170,6 +173,15 @@ const findQuery = z.object({
   cursor: z.string().max(4000).optional(),
   limit: z.coerce.number().int().min(1).max(25).optional(),
 });
+const dataQuery = (most: number) =>
+  z.object({
+    path: z.string().max(500).optional(),
+    heading: z.string().max(500).optional(),
+    cursor: z.string().max(4096).optional(),
+    limit: z.coerce.number().int().min(1).max(most).optional(),
+  });
+const rowsQuery = dataQuery(DATA_ROWS_MAX_LIMIT);
+const codeQuery = dataQuery(DATA_CODE_MAX_LIMIT);
 
 /** A file's name as a header carries it: printable ASCII, no quotes. */
 const plainName = (name: string): string =>
@@ -1183,7 +1195,12 @@ export function registerPluginsRest(
     const body: RestSkillBrowse =
       key === null
         ? { ...noPack, read: null }
-        : await pluginSkills.browse(pluginSkillsAddress(key), query.data);
+        : await pluginSkills.browse(
+            pluginSkillsAddress(key),
+            query.data,
+            undefined,
+            (read, path) => `${pluginPath(key, "skills", read)}?path=${encodeURIComponent(path)}`,
+          );
     return c.json(body);
   });
 
@@ -1205,6 +1222,50 @@ export function registerPluginsRest(
       key === null
         ? { ...noPack, read: null }
         : await pluginSkills.find(pluginSkillsAddress(key), query.data);
+    return c.json(body);
+  });
+
+  // The tables and the code blocks of the plugin's documents as data, as a project's pack
+  // answers them (ADR-0100).
+  app.get(`${PLUGIN}/skills/rows`, async (c) => {
+    const key = await skillsOf(c);
+    if (key instanceof Response) {
+      return key;
+    }
+    const query = rowsQuery.safeParse({
+      path: c.req.query("path"),
+      heading: c.req.query("heading"),
+      cursor: c.req.query("cursor"),
+      limit: c.req.query("limit"),
+    });
+    if (!query.success) {
+      return invalid(c, `query: ${query.error.message}`);
+    }
+    const body: RestSkillRows =
+      key === null
+        ? { ...noPack, read: null }
+        : await pluginSkills.rows(pluginSkillsAddress(key), query.data);
+    return c.json(body);
+  });
+
+  app.get(`${PLUGIN}/skills/code`, async (c) => {
+    const key = await skillsOf(c);
+    if (key instanceof Response) {
+      return key;
+    }
+    const query = codeQuery.safeParse({
+      path: c.req.query("path"),
+      heading: c.req.query("heading"),
+      cursor: c.req.query("cursor"),
+      limit: c.req.query("limit"),
+    });
+    if (!query.success) {
+      return invalid(c, `query: ${query.error.message}`);
+    }
+    const body: RestSkillCode =
+      key === null
+        ? { ...noPack, read: null }
+        : await pluginSkills.code(pluginSkillsAddress(key), query.data);
     return c.json(body);
   });
 

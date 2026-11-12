@@ -4,9 +4,11 @@
 // Absent values are `null` on the wire, never missing keys. Changes within a version are additive.
 import {
   restBrowseSchema as packBrowseSchema,
+  restCodeSchema as packCodeSchema,
   restFileSchema as packFileSchema,
   restFindSchema as packFindSchema,
   restMountSchema as packMountSchema,
+  restRowsSchema as packRowsSchema,
   restSkillSchema as packSkillSchema,
 } from "@skillcdn/core";
 import * as z from "zod/mini";
@@ -2449,6 +2451,28 @@ export const restSkillFindSchema = z.object({
   read: z.nullable(packFindSchema),
 });
 export type RestSkillFind = z.infer<typeof restSkillFindSchema>;
+
+/**
+ * `GET .../skills/rows?path=&heading=&cursor=&limit=`: the tables of a document, or of every
+ * document under a folder, as data, a page of them by whole files, as the pack answers its
+ * `rows` read (`RestRows` of `@skillcdn/core`); `read` is `null` unless `ready` (ADR-0100).
+ */
+export const restSkillRowsSchema = z.object({
+  ...packEnvelope,
+  read: z.nullable(packRowsSchema),
+});
+export type RestSkillRows = z.infer<typeof restSkillRowsSchema>;
+
+/**
+ * `GET .../skills/code?path=&heading=&cursor=&limit=`: the fenced code blocks of a document, or
+ * of every document under a folder, as data, a page of them, as the pack answers its `code`
+ * read (`RestCode` of `@skillcdn/core`); `read` is `null` unless `ready` (ADR-0100).
+ */
+export const restSkillCodeSchema = z.object({
+  ...packEnvelope,
+  read: z.nullable(packCodeSchema),
+});
+export type RestSkillCode = z.infer<typeof restSkillCodeSchema>;
 
 /**
  * A document's path (ADR-0009): segments of lowercase letters, digits and hyphens, separated

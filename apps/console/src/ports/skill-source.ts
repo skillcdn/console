@@ -1,16 +1,19 @@
 import type {
   Address,
   RestBrowse,
+  RestCode,
   RestConnectClaimed,
   RestConnectStarted,
   RestFile,
   RestFind,
   RestMount,
+  RestRows,
   RestSkill,
 } from "@skillcdn/core";
 
 // A pack as the console reads one for a project (ADR-0028, ADR-0031): the five reads of the
-// main repository's REST API, answered in its shapes, so that the console's own API passes them
+// main repository's REST API, and the two that answer a document's tables and its code blocks as
+// data (ADR-0100), answered in its shapes, so that the console's own API passes them
 // on as they are and the command renders them as a deployment's tools would. One source opens a
 // pack at a deployment, through the published client, with the pack token a project holds as
 // the bearer; another opens a directory on this machine for a `local` address, read with the
@@ -68,6 +71,18 @@ export interface FileQuery {
   readonly limit?: number | undefined;
 }
 
+/**
+ * Which tables, or which code blocks, are read as data: of the document at the path, or of every
+ * document under the folder there (the mounted one when left out), under a heading that holds
+ * the words when given; where to go on, and how many rows or blocks a page ends after.
+ */
+export interface DataQuery {
+  readonly path?: string | undefined;
+  readonly heading?: string | undefined;
+  readonly cursor?: string | undefined;
+  readonly limit?: number | undefined;
+}
+
 /** Where a pack is read: a deployment, by its origin, or a directory on this machine. */
 export type PackLocation =
   | { readonly kind: "deployment"; readonly url: string }
@@ -87,6 +102,10 @@ export interface Pack {
   skill(path: string, cursor?: string): Promise<RestSkill>;
   /** `read_repo_file`: a page of a file, or what a folder holds. */
   file(query: FileQuery): Promise<RestFile>;
+  /** The tables under a path as data, in reading order: a page of them, by whole files. */
+  rows(query: DataQuery): Promise<RestRows>;
+  /** The fenced code blocks under a path as data, in reading order: a page of them, by whole files. */
+  code(query: DataQuery): Promise<RestCode>;
 }
 
 /**

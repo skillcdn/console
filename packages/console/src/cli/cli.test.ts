@@ -5314,6 +5314,210 @@ describe("the pack of the project, through the console (ADR-0028)", () => {
     }
   });
 
+  it("takes the tables and the code blocks of the pack as data: the pages joined, one CSV or the blocks as written, printed or written to a file (ADR-0100)", async () => {
+    const table = (path: string, heading: string, rows: string[][]) => ({
+      path,
+      heading: ["Codes", heading],
+      columns: ["Code", "Meaning"],
+      rows,
+    });
+    const rowsPage = (tables: unknown[], rowCount: number, nextCursor: string | null) => ({
+      ...AT,
+      read: { status: "ready", commit: COMMIT, path: "docs/annex", tables, rowCount, nextCursor },
+    });
+    const refused = {
+      ...AT,
+      status: "not_found",
+      refusal: {
+        code: "file.not_found",
+        message: "No Markdown document at that path in this mount, and none under it.",
+        sourceUrl: null,
+        directories: [],
+      },
+      read: null,
+    };
+    const { fetch, calls } = fakeConsole({
+      [`GET ${IN}/skills`]: { body: LISTING },
+      [`GET ${IN}/skills/rows?path=docs%2Fannex&limit=5000`]: {
+        body: rowsPage(
+          [
+            table("docs/annex/codes-1.md", "A to B", [
+              ["A1", "Starts"],
+              ["B1", 'Says "stop", then stops'],
+            ]),
+          ],
+          2,
+          "two",
+        ),
+      },
+      [`GET ${IN}/skills/rows?path=docs%2Fannex&cursor=two&limit=5000`]: {
+        body: rowsPage([table("docs/annex/codes-2.md", "C to D", [["C1", "Waits"]])], 1, null),
+      },
+      [`GET ${IN}/skills/rows?path=docs%2Fannex&heading=C+to+D&limit=5000`]: {
+        body: rowsPage([table("docs/annex/codes-2.md", "C to D", [["C1", "Waits"]])], 1, null),
+      },
+      [`GET ${IN}/skills/rows?path=docs%2Fempty.md&limit=5000`]: { body: rowsPage([], 0, null) },
+      [`GET ${IN}/skills/rows?path=nothing&limit=5000`]: { body: refused },
+      [`GET ${IN}/skills/rows?path=endless&limit=5000`]: {
+        body: rowsPage([table("endless/a.md", "A", [["A1", "Starts"]])], 1, "again"),
+      },
+      [`GET ${IN}/skills/rows?path=endless&cursor=again&limit=5000`]: {
+        body: rowsPage([table("endless/a.md", "A", [["A1", "Starts"]])], 1, "again"),
+      },
+      [`GET ${IN}/skills/code?limit=500`]: {
+        body: {
+          ...AT,
+          read: {
+            status: "ready",
+            commit: COMMIT,
+            path: "",
+            blocks: [
+              {
+                path: "docs/annex/codes-1.md",
+                heading: ["Codes", "A to B"],
+                language: "sh",
+                text: "machine --start",
+              },
+              { path: "docs/notes.md", heading: [], language: "", text: "as written\n" },
+            ],
+            nextCursor: null,
+          },
+        },
+      },
+      [`GET ${IN}/skills/code?path=nothing&limit=500`]: { body: refused },
+      [`GET ${IN}/skills/browse?path=docs%2Fannex%2Fcodes-1.md`]: {
+        body: {
+          ...AT,
+          read: {
+            status: "ready",
+            commit: COMMIT,
+            path: "docs/annex/codes-1.md",
+            outline: {
+              path: "docs/annex/codes-1.md",
+              size: 400,
+              totalLength: 390,
+              headings: [],
+              truncated: false,
+              tables: { count: 1, rows: 2 },
+              codeBlocks: 1,
+              data: {
+                rows: `${IN}/skills/rows?path=docs%2Fannex%2Fcodes-1.md`,
+                code: `${IN}/skills/code?path=docs%2Fannex%2Fcodes-1.md`,
+              },
+            },
+            entries: [],
+            diagnostics: [],
+            nextCursor: null,
+          },
+        },
+      },
+    });
+    const run = async (args: string[], overrides: Partial<CliIo> = {}) => {
+      const h = harness({ fetch, env: SIGNED_IN, ...overrides });
+      return { code: await runCli(args, h.io), out: h.out(), err: h.err() };
+    };
+    // The tables under a folder as one CSV: every page the console answers, joined, a table
+    // written in two files coming out under one header, a cell with a comma or a quote quoted.
+    const csv = await run(["skills", "--rows", "docs/annex"]);
+    expect(csv.code).toBe(EXIT.ok);
+    expect(csv.out).toBe(
+      [
+        "path,heading,Code,Meaning",
+        "docs/annex/codes-1.md,Codes > A to B,A1,Starts",
+        'docs/annex/codes-1.md,Codes > A to B,B1,"Says ""stop"", then stops"',
+        "docs/annex/codes-2.md,Codes > C to D,C1,Waits",
+        "",
+      ].join("\r\n"),
+    );
+    expect(calls.map((call) => call.key).filter((key) => key.includes("/rows"))).toEqual([
+      `GET ${IN}/skills/rows?path=docs%2Fannex&limit=5000`,
+      `GET ${IN}/skills/rows?path=docs%2Fannex&cursor=two&limit=5000`,
+    ]);
+    // Under a heading; and as the console answered it, the pages joined.
+    const under = await run(["skills", "--rows", "docs/annex", "--heading", "C to D"]);
+    expect(under.out).toContain("docs/annex/codes-2.md,Codes > C to D,C1,Waits");
+    expect(under.out).not.toContain("codes-1.md");
+    const json = await run(["skills", "--rows", "docs/annex", "--json"]);
+    const parsed = JSON.parse(json.out) as {
+      status: string;
+      read: { tables: { path: string }[]; rowCount: number; nextCursor: string | null };
+    };
+    expect(parsed.status).toBe("ready");
+    expect(parsed.read.tables.map((one) => one.path)).toEqual([
+      "docs/annex/codes-1.md",
+      "docs/annex/codes-2.md",
+    ]);
+    expect(parsed.read.rowCount).toBe(3);
+    expect(parsed.read.nextCursor).toBeNull();
+    // Written to a file instead, with how much it holds said.
+    const written: { path: string; text: string; name: string }[] = [];
+    const saved = await run(["skills", "--rows", "docs/annex", "--out", "codes.csv"], {
+      writeBytes: async (path, bytes, name) => {
+        written.push({ path, text: new TextDecoder().decode(bytes), name });
+        return `/work/${path}`;
+      },
+    });
+    expect(saved.code).toBe(EXIT.ok);
+    expect(saved.out).toBe("Saved 3 rows of 2 tables in 2 files at /work/codes.csv\n");
+    expect(written).toEqual([{ path: "codes.csv", text: csv.out, name: "rows.csv" }]);
+    const unwritable = await run(["skills", "--rows", "docs/annex", "--out", "/nowhere/x.csv"]);
+    expect(unwritable.code).toBe(EXIT.failed);
+    expect(unwritable.err).toContain("The file could not be written at /nowhere/x.csv.");
+    // The code blocks of the whole pack, as written, each under a line that says where it stands.
+    const code = await run(["skills", "--code"]);
+    expect(code.code).toBe(EXIT.ok);
+    expect(code.out).toBe(
+      "--- docs/annex/codes-1.md > Codes > A to B [sh]\nmachine --start\n\n--- docs/notes.md\nas written\n",
+    );
+    // Nothing to give is said, and is no CSV.
+    const empty = await run(["skills", "--rows", "docs/empty.md"]);
+    expect(empty.code).toBe(EXIT.ok);
+    expect(empty.out).toBe("No tables in docs/empty.md.\n");
+    // What the pack refuses fails, on standard error, so that a file a program takes is never
+    // a refusal; and so does a read that does not reach its end.
+    for (const what of ["--rows", "--code"]) {
+      const missing = await run(["skills", what, "nothing"]);
+      expect(missing.code, what).toBe(EXIT.failed);
+      expect(missing.out).toBe("");
+      expect(missing.err).toContain(
+        "at /gh/acme/skills, served by https://skillcdn.test: not_found",
+      );
+      expect(missing.err).toContain("No Markdown document at that path in this mount");
+    }
+    const endless = await run(["skills", "--rows", "endless"]);
+    expect(endless.code).toBe(EXIT.failed);
+    expect(endless.out).toBe("");
+    expect(endless.err).toContain(
+      "The tables under endless are more than the command reads at once (64 rows of 64 tables in 1 file so far)",
+    );
+    // A document's outline names the two reads as commands; --json keeps what the console said.
+    const outlined = await run(["skills", "docs/annex/codes-1.md"]);
+    expect(outlined.out).toContain(
+      "Tables: 1 with 2 rows; as data: console skills --rows docs/annex/codes-1.md",
+    );
+    expect(outlined.out).toContain(
+      "Code blocks: 1; as data: console skills --code docs/annex/codes-1.md",
+    );
+    const outline = await run(["skills", "docs/annex/codes-1.md", "--json"]);
+    expect(
+      (JSON.parse(outline.out) as { read: { outline: { data: unknown } } }).read.outline.data,
+    ).toEqual({
+      rows: `${IN}/skills/rows?path=docs%2Fannex%2Fcodes-1.md`,
+      code: `${IN}/skills/code?path=docs%2Fannex%2Fcodes-1.md`,
+    });
+    // One of the two, without a search, and the flags of theirs with them.
+    for (const args of [
+      ["skills", "--rows", "--code", "docs"],
+      ["skills", "--rows", "docs", "--search", "codes"],
+      ["skills", "--code", "docs", "--limit", "5"],
+      ["skills", "docs", "--heading", "Codes"],
+      ["skills", "docs", "--out", "codes.csv"],
+      ["skills", "--rows", "docs", "more"],
+    ]) {
+      expect((await run(args)).code, args.join(" ")).toBe(EXIT.usage);
+    }
+  });
+
   it("connects the pack with a code a person approves at SkillCDN, printing the page and the code and waiting", async () => {
     const started = {
       code: "ABCD-EFGH",

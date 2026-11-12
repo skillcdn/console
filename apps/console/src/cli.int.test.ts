@@ -10,7 +10,9 @@ import {
   restTokensSchema,
 } from "@skillcdn/console/api";
 import { type CliIo, EXIT, runCli } from "@skillcdn/console/cli";
+import { pino } from "pino";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createSkillCdnSource } from "./adapters/skillcdn.js";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "./db/testing.js";
 import { createFixtureProvider } from "./testing/fixture-provider.js";
 import { createHarness, type Harness, SIGN_IN_URL } from "./testing/harness.js";
@@ -695,5 +697,202 @@ describe("the command line", () => {
     });
     expect(tokens.status).toBe(403);
     expect(restErrorSchema.parse(await tokens.json()).error.code).toBe("auth.session_required");
+  });
+
+  it("takes the tables and the code of a private pack as data, read by the console with the pack token the project holds (ADR-0100)", async () => {
+    const COMMIT = "0123456789abcdef0123456789abcdef01234567";
+    const json = (body: unknown, status = 200) =>
+      new Response(JSON.stringify(body), {
+        status,
+        headers: { "content-type": "application/json" },
+      });
+    const table = (file: string, heading: string, rows: string[][]) => ({
+      path: `docs/annex/${file}`,
+      heading: ["Codes", heading],
+      columns: ["Code", "Meaning"],
+      rows,
+    });
+    // A deployment that serves one private pack: to the token of the pack and to nobody else,
+    // to whom the pack and nothing are one answer.
+    const asked: string[] = [];
+    const source = createSkillCdnSource({
+      baseUrl: "https://skillcdn.test",
+      userAgent: "console-test",
+      logger: pino({ level: "silent" }),
+      fetch: async (url, init) => {
+        const at = new URL(url);
+        const bearer = new Headers(init.headers).get("authorization");
+        asked.push(`${bearer === null ? "nobody" : "the pack's token"} ${at.pathname}${at.search}`);
+        if (bearer !== "Bearer scdn_repo_manual" || !at.pathname.endsWith("/gh/acme/manual")) {
+          return json(
+            { error: { code: "mount.repo_not_found", message: "No repository at this address." } },
+            404,
+          );
+        }
+        const read = at.pathname.split("/")[3];
+        if (read === "mounts") {
+          return json({
+            address: "/gh/acme/manual",
+            repository: {
+              host: "gh",
+              owner: "acme",
+              name: "manual",
+              defaultBranch: "main",
+              description: null,
+              avatar: "https://avatars.example/acme.png",
+              visibility: "private",
+            },
+            ref: null,
+            pinned: false,
+            commit: COMMIT,
+            path: "",
+            verified: false,
+            image: null,
+            index: {
+              status: "ready",
+              truncated: false,
+              manifest: null,
+              skillCount: 0,
+              documentCount: 2,
+              skills: [],
+              documents: [],
+              diagnostics: [],
+            },
+          });
+        }
+        if (read === "rows") {
+          // One table written in two files, a page each.
+          return at.searchParams.get("cursor") === null
+            ? json({
+                status: "ready",
+                commit: COMMIT,
+                path: "docs/annex",
+                tables: [
+                  table("codes-1.md", "A to B", [
+                    ["A1", "Starts"],
+                    ["B1", "Stops, at once"],
+                  ]),
+                ],
+                rowCount: 2,
+                nextCursor: "codes-2",
+              })
+            : json({
+                status: "ready",
+                commit: COMMIT,
+                path: "docs/annex",
+                tables: [
+                  table("codes-2.md", "C to D", [
+                    ["C1", "Waits"],
+                    ["D1", "Ends"],
+                  ]),
+                ],
+                rowCount: 2,
+                nextCursor: null,
+              });
+        }
+        if (read === "code") {
+          return json({
+            status: "ready",
+            commit: COMMIT,
+            path: "docs/annex",
+            blocks: [
+              {
+                path: "docs/annex/codes-1.md",
+                heading: ["Codes", "A to B"],
+                language: "sh",
+                text: "machine --start",
+              },
+            ],
+            nextCursor: null,
+          });
+        }
+        if (read === "browse") {
+          // The outline of a document, naming the deployment's own address for its data.
+          return json({
+            status: "ready",
+            commit: COMMIT,
+            path: "docs/annex/codes-1.md",
+            entries: [],
+            nextCursor: null,
+            outline: {
+              path: "docs/annex/codes-1.md",
+              size: 300,
+              totalLength: 300,
+              headings: [{ level: 1, text: "Codes", offset: 0, length: 300, rows: 2 }],
+              truncated: false,
+              tables: { count: 1, rows: 2 },
+              codeBlocks: 1,
+              data: {
+                rows: "https://skillcdn.test/api/v1/rows/gh/acme/manual?path=docs/annex/codes-1.md",
+                code: "https://skillcdn.test/api/v1/code/gh/acme/manual?path=docs/annex/codes-1.md",
+              },
+            },
+          });
+        }
+        return json({ error: { code: "request.invalid", message: "Not a read." } }, 400);
+      },
+    });
+    const served = createHarness(testDatabase, {
+      providers: [createFixtureProvider()],
+      skills: { address: "/gh/Acme/manual", source },
+    });
+    const owner = await served.signIn("alice");
+    await served.project(owner, { key: "manual", name: "The manual", visibility: "workspace" });
+    const agent = await tokenFor(bob, "Codex reading the manual");
+    const as = (args: readonly string[]) =>
+      console_(args, agent, { harness: served, project: "manual" });
+    // Without a token of the pack, the console is nobody at the deployment: the read fails, on
+    // standard error, and nothing is printed for a program to take.
+    const before = await as(["skills", "--rows", "docs/annex"]);
+    expect(before.code).toBe(EXIT.failed);
+    expect(before.out).toBe("");
+    expect(before.err).toContain(
+      "tables at /gh/acme/manual, served by https://skillcdn.test: not_found",
+    );
+    expect(before.err).toContain("the project holds no pack token for it");
+    // An owner sets the pack token; a member's agent then takes the table whole, both pages of
+    // it as one CSV, holding no token of the pack itself.
+    const set = await served.request(`${projectPath("manual")}/pack-token`, {
+      method: "PUT",
+      headers: { cookie: owner, ...JSON_HEADERS },
+      body: JSON.stringify({ token: "scdn_repo_manual" }),
+    });
+    expect(set.status).toBe(200);
+    asked.length = 0;
+    const rows = await as(["skills", "--rows", "docs/annex"]);
+    expect(rows.err).toBe("");
+    expect(rows.code).toBe(EXIT.ok);
+    expect(rows.out).toBe(
+      [
+        "path,heading,Code,Meaning",
+        "docs/annex/codes-1.md,Codes > A to B,A1,Starts",
+        'docs/annex/codes-1.md,Codes > A to B,B1,"Stops, at once"',
+        "docs/annex/codes-2.md,Codes > C to D,C1,Waits",
+        "docs/annex/codes-2.md,Codes > C to D,D1,Ends",
+        "",
+      ].join("\r\n"),
+    );
+    expect(asked).toEqual([
+      "the pack's token /api/v1/rows/gh/acme/manual?path=docs%2Fannex&limit=5000",
+      "the pack's token /api/v1/rows/gh/acme/manual?path=docs%2Fannex&cursor=codes-2&limit=5000",
+    ]);
+    const code = await as(["skills", "--code", "docs/annex"]);
+    expect(code.code).toBe(EXIT.ok);
+    expect(code.out).toBe("--- docs/annex/codes-1.md > Codes > A to B [sh]\nmachine --start\n");
+    // The outline of the document names the commands that read them, and never the
+    // deployment's own address, which the console's token reads nothing at.
+    const outlined = await as(["skills", "docs/annex/codes-1.md"]);
+    expect(outlined.code).toBe(EXIT.ok);
+    expect(outlined.out).toContain(
+      "Tables: 1 with 2 rows; as data: console skills --rows docs/annex/codes-1.md",
+    );
+    expect(outlined.out).toContain(
+      "Code blocks: 1; as data: console skills --code docs/annex/codes-1.md",
+    );
+    expect(outlined.out).not.toContain("skillcdn.test/api/v1");
+    // The pack's token is in nothing the command printed and nothing the console logged.
+    expect(JSON.stringify([before, rows, code, outlined, served.logs]).includes("scdn_repo")).toBe(
+      false,
+    );
   });
 });

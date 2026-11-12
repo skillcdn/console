@@ -112,9 +112,11 @@ import {
   type RestSignalInput,
   type RestSignals,
   type RestSkillBrowse,
+  type RestSkillCode,
   type RestSkillFile,
   type RestSkillFind,
   type RestSkillLoad,
+  type RestSkillRows,
   type RestSkills,
   type RestTask,
   type RestTaskInput,
@@ -203,9 +205,11 @@ import {
   restSignalSchema,
   restSignalsSchema,
   restSkillBrowseSchema,
+  restSkillCodeSchema,
   restSkillFileSchema,
   restSkillFindSchema,
   restSkillLoadSchema,
+  restSkillRowsSchema,
   restSkillsSchema,
   restTaskSchema,
   restTasksSchema,
@@ -460,6 +464,30 @@ export interface ProjectClient {
     },
     signal?: AbortSignal,
   ): Promise<RestSkillFind>;
+  /**
+   * The tables of a document of the pack, or of every document under a folder, as data: a page
+   * of them by whole files, under a heading that holds the words of `heading` when given; the
+   * mounted folder when `path` is left out (ADR-0100).
+   */
+  skillRows(
+    page?: {
+      readonly path?: string | undefined;
+      readonly heading?: string | undefined;
+      readonly cursor?: string | undefined;
+      readonly limit?: number | undefined;
+    },
+    signal?: AbortSignal,
+  ): Promise<RestSkillRows>;
+  /** The fenced code blocks of a document of the pack, or of every document under a folder, as data: a page of them, as `skillRows` answers the tables. */
+  skillCode(
+    page?: {
+      readonly path?: string | undefined;
+      readonly heading?: string | undefined;
+      readonly cursor?: string | undefined;
+      readonly limit?: number | undefined;
+    },
+    signal?: AbortSignal,
+  ): Promise<RestSkillCode>;
   /** Sets the pack token the project reads a private pack with; for an owner. The token travels once and is answered never. */
   setPackToken(input: RestPackTokenInput): Promise<RestProject>;
   /** Takes the pack token away; for an owner. */
@@ -586,7 +614,7 @@ export interface PluginClient {
   ): Promise<RestPluginEvents>;
   /** Removes everything the console keeps of a disabled plugin, the key named again; for an administrator. */
   purge(confirm: string): Promise<void>;
-  /** The plugin's skills, a pack of its own read from its package, as a project's five reads. */
+  /** The plugin's skills, a pack of its own read from its package, as a project's reads. */
   skills(signal?: AbortSignal): Promise<RestSkills>;
   skill(path: string, cursor?: string, signal?: AbortSignal): Promise<RestSkillLoad>;
   skillFile(
@@ -611,6 +639,25 @@ export interface PluginClient {
     },
     signal?: AbortSignal,
   ): Promise<RestSkillFind>;
+  /** The tables and the code blocks of the plugin's documents as data, as a project's pack answers them. */
+  skillRows(
+    page?: {
+      readonly path?: string | undefined;
+      readonly heading?: string | undefined;
+      readonly cursor?: string | undefined;
+      readonly limit?: number | undefined;
+    },
+    signal?: AbortSignal,
+  ): Promise<RestSkillRows>;
+  skillCode(
+    page?: {
+      readonly path?: string | undefined;
+      readonly heading?: string | undefined;
+      readonly cursor?: string | undefined;
+      readonly limit?: number | undefined;
+    },
+    signal?: AbortSignal,
+  ): Promise<RestSkillCode>;
   /** The plugin's events, newest first, a page at a time. */
   events(page?: Page, signal?: AbortSignal): Promise<RestEvents>;
   /** Enables the plugin, with consent to every capability it asks; for an administrator. */
@@ -1235,6 +1282,32 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
           restSkillFindSchema,
           signal,
         ),
+      skillRows: (page = {}, signal) =>
+        request(
+          "GET",
+          withQuery(`${at("skills")}/rows`, {
+            path: page.path,
+            heading: page.heading,
+            cursor: page.cursor,
+            limit: page.limit === undefined ? undefined : String(page.limit),
+          }),
+          undefined,
+          restSkillRowsSchema,
+          signal,
+        ),
+      skillCode: (page = {}, signal) =>
+        request(
+          "GET",
+          withQuery(`${at("skills")}/code`, {
+            path: page.path,
+            heading: page.heading,
+            cursor: page.cursor,
+            limit: page.limit === undefined ? undefined : String(page.limit),
+          }),
+          undefined,
+          restSkillCodeSchema,
+          signal,
+        ),
       setPackToken: (input) =>
         request("PUT", `${base}${at()}/pack-token`, input, restProjectSchema),
       removePackToken: () =>
@@ -1446,6 +1519,32 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
           }),
           undefined,
           restSkillFindSchema,
+          signal,
+        ),
+      skillRows: (page = {}, signal) =>
+        request(
+          "GET",
+          skillsQuery("rows", {
+            path: page.path,
+            heading: page.heading,
+            cursor: page.cursor,
+            limit: number(page.limit),
+          }),
+          undefined,
+          restSkillRowsSchema,
+          signal,
+        ),
+      skillCode: (page = {}, signal) =>
+        request(
+          "GET",
+          skillsQuery("code", {
+            path: page.path,
+            heading: page.heading,
+            cursor: page.cursor,
+            limit: number(page.limit),
+          }),
+          undefined,
+          restSkillCodeSchema,
           signal,
         ),
       events: (page = {}, signal) =>
