@@ -277,6 +277,39 @@ describe("the board's wakes (ADR-0085)", () => {
     ]);
   });
 
+  it("wakes for a decision addressed to it anew, once, and not for one it was among already (ADR-0096)", async () => {
+    const DECISIONS = projectPath("ops", "decisions");
+    const asked = restDecisionSchema.parse(
+      await (
+        await send(alice, "POST", DECISIONS, {
+          question: "Which colour for the mark?",
+          options: [{ label: "Blue" }, { label: "Green" }],
+        })
+      ).json(),
+    );
+    expect(await sent("mira")).toEqual([]);
+    const passed = await send(alice, "PUT", `${DECISIONS}/${asked.id}/deciders`, {
+      deciderIds: [miraId],
+    });
+    expect(passed.status, await passed.clone().text()).toBe(200);
+    expect(await sent("mira")).toEqual([
+      {
+        kind: "wake",
+        source: "board",
+        key: `decision:${asked.id}`,
+        by: "Alice",
+        text: `A decision waits for you: "Which colour for the mark?". Read it and answer: console decision ${asked.id}`,
+      },
+    ]);
+    // One more named beside it: the agent was among them already, and is woken for nothing.
+    await send(alice, "PUT", `${DECISIONS}/${asked.id}/deciders`, { deciderIds: [miraId, bobId] });
+    expect(await sent("mira")).toEqual([]);
+    // What the agent passes on itself wakes it for nothing either.
+    await send(mira, "PUT", `${DECISIONS}/${asked.id}/deciders`, { deciderIds: [bobId] });
+    await send(mira, "PUT", `${DECISIONS}/${asked.id}/deciders`, { deciderIds: [bobId, miraId] });
+    expect(await sent("mira")).toEqual([]);
+  });
+
   it("tells every agent account when the services the workspace names change, and no account that is out", async () => {
     await send(alice, "PATCH", REST_ROUTES.workspace, { name: "Acme Works" });
     expect(await sent("mira")).toEqual([]);

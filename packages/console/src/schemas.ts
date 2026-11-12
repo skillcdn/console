@@ -1937,6 +1937,15 @@ export const restDecisionPatchSchema = z.object({
 export type RestDecisionPatch = z.infer<typeof restDecisionPatchSchema>;
 
 /**
+ * What `PUT .../decisions/<id>/deciders` is sent (ADR-0096): everyone a decision that waits is
+ * for from now on, each once in the order named, in place of those it was for.
+ */
+export const restDecisionDecidersSchema = z.object({
+  deciderIds: z.array(uuid).check(z.minLength(1), z.maxLength(MAX_DECIDERS)),
+});
+export type RestDecisionDeciders = z.infer<typeof restDecisionDecidersSchema>;
+
+/**
  * What `POST .../decisions/<id>/answer` is sent: one of the options by its id, or the person's
  * own answer in a line, one of the two; and a word about either.
  */
@@ -1967,6 +1976,9 @@ export const restEventDataSchema = z.object({
   fields: z.optional(z.array(z.string())),
   /** For a `task.updated` that put anyone to work on the task: their ids. */
   workersAdded: z.optional(z.array(uuid)),
+  /** For `decision.addressed` (ADR-0096): the logins of everyone the decision is for now, and the ids of those named anew. */
+  deciders: z.optional(z.array(z.string())),
+  decidersAdded: z.optional(z.array(uuid)),
   /** For the events about a document: its path, and the version written. */
   path: z.optional(z.string()),
   version: z.optional(z.int()),

@@ -133,6 +133,7 @@ export const ko: Messages = {
     "decision.not_found": "결정을 찾을 수 없습니다.",
     "decision.too_many": "프로젝트에 올릴 수 있는 결정 수를 다 채웠습니다.",
     "decision.too_many_deciders": "결정할 사람을 너무 많이 지정했습니다.",
+    "decision.plugin_addressed": "플러그인이 올린 결정은 결정할 사람을 플러그인이 정합니다.",
     "decision.too_many_files": "결정에 파일이 너무 많습니다.",
     "document.archived": "보관된 문서입니다.",
     "document.conflict": "작성하는 사이 문서가 바뀌었습니다. 다시 불러온 뒤 수정하세요.",
@@ -714,6 +715,10 @@ export const ko: Messages = {
     outcomePlaceholder: "답변으로 무엇을 했고 무엇이 됐는지, Markdown으로.",
     writeWhatFollowed: "그 뒤에 일어난 일 쓰기",
     changeIt: "고치기",
+    changeDeciders: "결정할 사람 바꾸기",
+    addressNobody: "한 명 이상 지정하세요.",
+    addressHint: "지정한 사람의 내 결정에 나타나고, 뺀 사람의 내 결정에서는 빠집니다.",
+    peopleNotLoaded: "프로젝트 구성원을 불러오지 못했습니다.",
     form: {
       question: "질문",
       context: "맥락",
@@ -1104,6 +1109,8 @@ export const ko: Messages = {
       taskRestored: (task) => `${task}을(를) 되살렸습니다`,
       decisionRaised: (question) => `질문했습니다: ${question}`,
       decisionAnswered: (question, option) => `"${question}"에 답했습니다: ${option}`,
+      decisionAddressed: (question, deciders) =>
+        `결정 "${question}"을(를) ${deciders}에게 넘겼습니다`,
       decisionUpdated: (fields, question) => `결정 "${question}"의 ${fields}을(를) 썼습니다`,
       runStarted: (task) => `${task} 작업을 시작했습니다`,
       runReported: (task, excerpt) =>

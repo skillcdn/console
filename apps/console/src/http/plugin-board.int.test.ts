@@ -508,6 +508,15 @@ describe("a plugin on the board", () => {
       ["Approve", "approve"],
       ["Reject", "reject"],
     ]);
+    // A plugin's decision stays as the plugin addressed it (ADR-0096): nobody passes it on.
+    const passed = await h.request(
+      `${projectPath(BOARD, "decisions", decisionId ?? "")}/deciders`,
+      json({ deciderIds: [bobId] }, admin, "PUT"),
+    );
+    expect(passed.status).toBe(409);
+    expect(((await passed.json()) as { error: { code: string } }).error.code).toBe(
+      "decision.plugin_addressed",
+    );
     // Alice approves, on the board as any decision is answered.
     const answered = await h.request(
       `${projectPath(BOARD, "decisions", decisionId ?? "")}/answer`,

@@ -176,6 +176,7 @@ export const en = {
     "decision.not_found": "The decision was not found.",
     "decision.too_many": "The project has as many decisions as it can hold.",
     "decision.too_many_deciders": "Too many people were named to decide.",
+    "decision.plugin_addressed": "A plugin raised this decision, and says itself who decides it.",
     "decision.too_many_files": "The decision has too many files.",
     "document.archived": "This page is archived.",
     "document.conflict":
@@ -782,6 +783,11 @@ export const en = {
     outcomePlaceholder: "What was done with the answer, and what came of it, in Markdown.",
     writeWhatFollowed: "Write what followed",
     changeIt: "Change it",
+    changeDeciders: "Change who decides",
+    addressNobody: "Name at least one person.",
+    addressHint:
+      "Whoever you name finds it among their decisions; whoever you take out no longer does.",
+    peopleNotLoaded: "The people of the project could not be loaded.",
     form: {
       question: "Question",
       context: "Context",
@@ -1177,6 +1183,8 @@ export const en = {
       taskRestored: (task: string) => `brought ${task} back`,
       decisionRaised: (question: string) => `asked: ${question}`,
       decisionAnswered: (question: string, option: string) => `answered "${question}": ${option}`,
+      decisionAddressed: (question: string, deciders: string) =>
+        `passed the decision "${question}" to ${deciders}`,
       decisionUpdated: (fields: string, question: string) =>
         `wrote ${fields} of the decision "${question}"`,
       runStarted: (task: string) => `started on ${task}`,

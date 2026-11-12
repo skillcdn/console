@@ -57,6 +57,7 @@ export {
 } from "./components/connect.js";
 export { DecisionForm, type DecisionFormProps } from "./components/decision-form.js";
 export {
+  type DecisionAddressing,
   DecisionCard,
   type DecisionCardProps,
   DecisionList,

@@ -7,7 +7,7 @@ import {
   type RestReachedDecision,
 } from "../api.js";
 import { useWords } from "../i18n/index.js";
-import { DecisionCard, DecisionLog } from "./decision-list.js";
+import { type DecisionAddressing, DecisionCard, DecisionLog } from "./decision-list.js";
 import { ProjectMark } from "./projects.js";
 import { Button } from "./ui.js";
 
@@ -47,6 +47,8 @@ export interface MyDecisionsProps {
   readonly onAnswer?:
     | ((projectKey: string, decision: RestDecision, input: RestAnswerInput) => void)
     | undefined;
+  /** How a waiting decision is addressed anew (ADR-0096), by its project's key. Left out, whom one is for is changed on its project's pages. */
+  readonly addressing?: ((projectKey: string) => DecisionAddressing) | undefined;
   readonly busy?: boolean | undefined;
 }
 
@@ -106,6 +108,7 @@ export function MyDecisions(props: MyDecisionsProps) {
           ? (decision, input) => onAnswer(item.project.key, decision, input)
           : undefined
       }
+      addressing={props.addressing?.(item.project.key)}
       busy={props.busy}
     />
   );
@@ -163,6 +166,8 @@ export interface ReachedDecisionProps {
   readonly reached: RestReachedDecision;
   /** Called with the person's answer; the decision is answered here only where `mayAnswer` says they may. */
   readonly onAnswer?: ((decision: RestDecision, input: RestAnswerInput) => void) | undefined;
+  /** How the decision is addressed anew while it waits (ADR-0096); offered only where `mayAnswer` says the person may answer it. */
+  readonly addressing?: DecisionAddressing | undefined;
   readonly busy?: boolean | undefined;
 }
 
@@ -180,6 +185,7 @@ export function ReachedDecision(props: ReachedDecisionProps) {
       project={<InProject project={reached.project} />}
       fileHref={(fileId) => decisionFilePath(decision.id, fileId)}
       onAnswer={reached.mayAnswer === true ? props.onAnswer : undefined}
+      addressing={reached.mayAnswer === true ? props.addressing : undefined}
       busy={props.busy}
     />
   );

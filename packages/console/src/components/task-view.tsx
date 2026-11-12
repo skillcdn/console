@@ -20,6 +20,7 @@ import type { TaskFormKind } from "../router.js";
 import { TASK_STATES } from "../vocabulary.js";
 import { type CommentDraft, TaskThread } from "./comments.js";
 import { DecisionForm } from "./decision-form.js";
+import type { DecisionAddressing } from "./decision-list.js";
 import { EventFeed } from "./event-feed.js";
 import { Markdown } from "./markdown.js";
 import { type GoalSearch, TaskForm, type TaskSearch } from "./task-form.js";
@@ -91,6 +92,8 @@ export interface TaskViewProps {
   readonly onUpdateDecision?:
     | ((decision: RestDecision, patch: RestDecisionPatch) => void)
     | undefined;
+  /** How a waiting decision about the task is addressed anew (ADR-0096). */
+  readonly addressing?: DecisionAddressing | undefined;
   readonly onAbandonRun?: ((run: RestRun) => void) | undefined;
   /** Called to put a done or dropped task away, and to bring one back (ADR-0029); left out, neither is offered. */
   readonly onArchive?: ((task: RestTask) => void) | undefined;
@@ -248,6 +251,7 @@ export function TaskView(props: TaskViewProps) {
                 docHref={props.docHref}
                 onAnswer={props.onAnswer}
                 onUpdateDecision={props.onUpdateDecision}
+                addressing={props.addressing}
                 onAbandonRun={props.onAbandonRun}
                 onComment={props.onComment}
                 busy={props.busy}

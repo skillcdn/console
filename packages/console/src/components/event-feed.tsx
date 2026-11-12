@@ -148,6 +148,8 @@ function sentenceOf(event: RestEvent, words: Messages): string {
       return feed.event.decisionRaised(question);
     case "decision.answered":
       return feed.event.decisionAnswered(question, data.option ?? "");
+    case "decision.addressed":
+      return feed.event.decisionAddressed(question, (data.deciders ?? []).join(", "));
     case "decision.updated":
       return feed.event.decisionUpdated(fields, data.question ?? "");
     case "run.started":

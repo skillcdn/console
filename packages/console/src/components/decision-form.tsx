@@ -58,6 +58,87 @@ export function decidersInput(
   return ids.length === 1 ? { deciderId: first } : { deciderId: first, deciderIds: ids };
 }
 
+export interface DecidersFieldProps {
+  /** Everyone the decision is for, in the order named. */
+  readonly value: readonly RestPerson[];
+  readonly onChange: (deciders: readonly RestPerson[]) => void;
+  /** Who may be named: the people of the project, those chosen among them or not. */
+  readonly people: readonly RestPerson[];
+  /** Whoever is looking, marked among them. */
+  readonly me?: RestPerson | undefined;
+  /** What stands in the row while nobody is named. */
+  readonly placeholder?: string | undefined;
+  /** A word under the row, said before the one about several people. */
+  readonly hint?: string | undefined;
+  readonly busy?: boolean | undefined;
+}
+
+/**
+ * Whom a decision is for (ADR-0042, ADR-0057): a chip each, the way to take one out in its end,
+ * and the way to name one more at the end of the row, found by typing among those who may be
+ * named and are not yet. The form that raises a decision and the one that addresses a waiting one
+ * anew (ADR-0096) are the same field.
+ */
+export function DecidersField(props: DecidersFieldProps) {
+  const words = useWords();
+  const form = words.decisions.form;
+  const { value, people, me } = props;
+  const find = useMemo(
+    () => peopleSearch(people.filter((person) => !value.some((chosen) => chosen.id === person.id))),
+    [people, value],
+  );
+  return (
+    <fieldset className="sc-field sc-workers-field">
+      <legend className="sc-field-label">{form.decider}</legend>
+      <div className="sc-chips">
+        {value.map((person) => (
+          <Chip
+            key={person.id}
+            onRemove={() => props.onChange(value.filter((chosen) => chosen.id !== person.id))}
+            removeLabel={`${words.common.remove}: ${personName(person)}`}
+            disabled={props.busy}
+          >
+            <PersonChip person={person} />
+            {person.id === me?.id && <span className="sc-muted"> {form.me}</span>}
+          </Chip>
+        ))}
+        {value.length === 0 && props.placeholder !== undefined && (
+          <span className="sc-muted">{props.placeholder}</span>
+        )}
+        {value.length < MAX_DECIDERS && (
+          <Picker
+            className="sc-picker-add"
+            value={undefined}
+            search={find}
+            keyOf={(person) => person.id}
+            render={(person) => (
+              <>
+                <PersonChip person={person} size="sm" />
+                {person.id === me?.id && <span className="sc-muted"> {form.me}</span>}
+              </>
+            )}
+            label={form.addDecider}
+            placeholder={form.addDecider}
+            disabled={props.busy}
+            onChange={(person) => {
+              if (person !== undefined) {
+                props.onChange([...value, person]);
+              }
+            }}
+          />
+        )}
+      </div>
+      {(props.hint !== undefined || value.length > 1) && (
+        <p className="sc-field-hint">
+          {[props.hint, value.length > 1 ? form.decidersHint : undefined]
+            .filter((line) => line !== undefined)
+            .join(" ")}
+        </p>
+      )}
+    </fieldset>
+  );
+}
+
 export function DecisionForm(props: DecisionFormProps) {
   const words = useWords();
   const form = words.decisions.form;
@@ -70,15 +151,6 @@ export function DecisionForm(props: DecisionFormProps) {
     props.me === undefined ? [] : [props.me],
   );
   const [files, setFiles] = useState<readonly File[]>([]);
-  const findDeciders = useMemo(
-    () =>
-      peopleSearch(
-        (props.deciders ?? []).filter(
-          (person) => !deciders.some((chosen) => chosen.id === person.id),
-        ),
-      ),
-    [props.deciders, deciders],
-  );
 
   const labels = options.map((option) => option.trim()).filter((option) => option.length > 0);
   const ready = question.trim().length > 0 && labels.length >= MIN_OPTIONS;
@@ -208,48 +280,14 @@ export function DecisionForm(props: DecisionFormProps) {
         </div>
       )}
       {props.deciders !== undefined && (
-        <fieldset className="sc-field sc-workers-field">
-          <legend className="sc-field-label">{form.decider}</legend>
-          <div className="sc-chips">
-            {deciders.map((person) => (
-              <Chip
-                key={person.id}
-                onRemove={() =>
-                  setDeciders((current) => current.filter((chosen) => chosen.id !== person.id))
-                }
-                removeLabel={`${words.common.remove}: ${personName(person)}`}
-                disabled={props.busy}
-              >
-                <PersonChip person={person} />
-                {person.id === props.me?.id && <span className="sc-muted"> {form.me}</span>}
-              </Chip>
-            ))}
-            {deciders.length === 0 && <span className="sc-muted">{form.deciderPlaceholder}</span>}
-            {deciders.length < MAX_DECIDERS && (
-              <Picker
-                className="sc-picker-add"
-                value={undefined}
-                search={findDeciders}
-                keyOf={(person) => person.id}
-                render={(person) => (
-                  <>
-                    <PersonChip person={person} size="sm" />
-                    {person.id === props.me?.id && <span className="sc-muted"> {form.me}</span>}
-                  </>
-                )}
-                label={form.addDecider}
-                placeholder={form.addDecider}
-                disabled={props.busy}
-                onChange={(person) => {
-                  if (person !== undefined) {
-                    setDeciders((current) => [...current, person]);
-                  }
-                }}
-              />
-            )}
-          </div>
-          {deciders.length > 1 && <p className="sc-field-hint">{form.decidersHint}</p>}
-        </fieldset>
+        <DecidersField
+          value={deciders}
+          onChange={setDeciders}
+          people={props.deciders}
+          me={props.me}
+          placeholder={form.deciderPlaceholder}
+          busy={props.busy}
+        />
       )}
       <fieldset className="sc-field sc-options">
         <legend className="sc-field-label">{form.options}</legend>

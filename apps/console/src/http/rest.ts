@@ -73,6 +73,7 @@ import {
   restClaimInputSchema,
   restCommentInputSchema,
   restConnectInputSchema,
+  restDecisionDecidersSchema,
   restDecisionInputSchema,
   restDecisionPatchSchema,
   restDocumentInputSchema,
@@ -139,6 +140,7 @@ import {
 } from "../db/queries/comments.js";
 import { ConnectError, type ConnectRequestRecord } from "../db/queries/connect.js";
 import {
+  addressDecision,
   answerDecision,
   DecisionError,
   type DecisionRecord,
@@ -760,7 +762,9 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       const status =
         error.code === "decision.not_found"
           ? 404
-          : error.code === "decision.answered" || error.code === "decision.too_many"
+          : error.code === "decision.answered" ||
+              error.code === "decision.too_many" ||
+              error.code === "decision.plugin_addressed"
             ? 409
             : 400;
       return c.json(errorBody(error.code, error.message), status);
@@ -2930,6 +2934,39 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         patch,
         now: clock.now(),
       });
+      return c.json(restDecision(decision));
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
+  // Whom a decision that waits is for, said anew (ADR-0096) by anyone who works in the project,
+  // as its answer is: the people named take the place of those it was for.
+  app.put(`${PROJECT}/decisions/:id/deciders`, tooLarge, async (c) => {
+    const found = await changing(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    const input = await bodyOf(c, restDecisionDecidersSchema);
+    if (input instanceof Response) {
+      return input;
+    }
+    const id = c.req.param("id");
+    if (!UUID.test(id)) {
+      return noSuchDecision(c);
+    }
+    try {
+      const decision = await addressDecision(database, {
+        scope: found.scope,
+        actor: found.actor,
+        decisionId: id,
+        deciderIds: input.deciderIds,
+        now: clock.now(),
+      });
+      logger.info(
+        { person: found.person.id, decision: decision.id, requestId: c.get("requestId") },
+        "decision addressed anew",
+      );
       return c.json(restDecision(decision));
     } catch (error) {
       return failure(c, error);

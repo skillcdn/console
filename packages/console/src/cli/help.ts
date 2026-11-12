@@ -612,13 +612,22 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     ],
   },
   decision: {
-    usage: "decision <id> [--wait <seconds>]  |  decision <id> --outcome <markdown>|--file <path>",
+    usage:
+      "decision <id> [--wait <seconds>]  |  decision <id> --outcome <markdown>|--file <path>  |  decision <id> --to <login|me>...",
     synopsis:
-      "One decision in full; waits for its answer with --wait; writes what followed with --outcome.",
+      "One decision in full; --wait waits for its answer, --outcome writes what followed, --to says whom it is for now.",
     about:
-      "One decision, with its context, its options, its answer (one of the options, or the person's own words as one more, marked own) and what followed. With --wait, holds on for the answer that long, and exits with 3 if it is still to come. With --outcome, writes down what followed the decision, so that it reads as a record; the record names who wrote it, you beside them, and when (ADR-0056).",
-    limits: [`outcome: ${MARKDOWN}`],
-    refusals: ["decision.not_found: no decision has that id"],
+      "One decision, with its context, its options, its answer (one of the options, or the person's own words as one more, marked own) and what followed. With --wait, holds on for the answer that long, and exits with 3 if it is still to come. With --outcome, writes down what followed the decision, so that it reads as a record; the record names who wrote it, you beside them, and when (ADR-0056). With --to, a decision that waits is addressed anew (ADR-0096): the people named, --to given once for each, take the place of those it was for, so to add someone, name those it is for again with them; each must be able to work in the project, each finds it among their decisions from then on, and the first answer ends it. Anyone who may work in the project may, as anyone may answer; a question that reached the wrong person is passed on this way and never raised twice. The run that waits for the answer waits on.",
+    limits: [
+      `outcome: ${MARKDOWN}`,
+      `to: a login of the project, or me; up to ${MAX_DECIDERS} of them`,
+    ],
+    refusals: [
+      "decision.not_found: no decision has that id",
+      "decision.answered: the decision has an answer already, and stays as it was addressed",
+      "decision.plugin_addressed: a plugin raised the decision, and says itself whom it is for",
+      "decision.invalid_decider: a person named may not work in the project",
+    ],
   },
   decisions: {
     usage: "decisions [--open] [--mine|--raised] [--limit <n>] [--offset <n>]",

@@ -11,6 +11,7 @@ import {
   updateCategory,
 } from "./queries/categories.js";
 import {
+  addressDecision,
   answerDecision,
   countWaitingDecisionsFor,
   DecisionError,
@@ -770,6 +771,135 @@ describe("decisions", () => {
     expect((await listDecisions(database, scope, { open: true, limit: 100 })).items).toEqual(
       waiting,
     );
+  });
+
+  it("are addressed anew while they wait, to people of the project, and the board is told who it is for now (ADR-0096)", async () => {
+    const raised = await raiseDecision(database, {
+      scope,
+      actor: alice,
+      decision: { question: "Whose is the look of it?", options: ["Keep", "Change"] },
+      now: minutes(700),
+    });
+    expect(raised.deciders.map((person) => person.id)).toEqual([alice.id]);
+
+    // Bob takes her place: it is his from then on, and no longer hers to find among her own.
+    const passed = await addressDecision(database, {
+      scope,
+      actor: alice,
+      decisionId: raised.id,
+      deciderIds: [bob.id, bob.id],
+      now: minutes(701),
+    });
+    expect(passed.decider.id).toBe(bob.id);
+    expect(passed.deciders.map((person) => person.id)).toEqual([bob.id]);
+    expect(passed.raisedBy.id).toBe(alice.id);
+    const bobs = await listWaitingDecisionsFor(database, workspaceId, bob, 50);
+    expect(bobs.map((item) => item.id)).toContain(raised.id);
+    const alices = await listWaitingDecisionsFor(database, workspaceId, alice, 50);
+    expect(alices.map((item) => item.id)).not.toContain(raised.id);
+    const asked = await listDecisionsFor(database, workspaceId, alice, { limit: 50, raised: true });
+    expect(asked.items.map((item) => item.id)).toContain(raised.id);
+    const told = (await listEventsAfter(database, scope, 0, 500)).items.filter(
+      (candidate) => candidate.decisionId === raised.id && candidate.kind === "decision.addressed",
+    );
+    expect(told).toHaveLength(1);
+    expect(told[0]).toMatchObject({
+      actor: { id: alice.id },
+      data: {
+        question: "Whose is the look of it?",
+        deciders: [bob.login],
+        decidersAdded: [bob.id],
+      },
+    });
+
+    // The same people in the same order write nothing; one more named is one more event, which
+    // names the one added alone.
+    await addressDecision(database, {
+      scope,
+      actor: bob,
+      decisionId: raised.id,
+      deciderIds: [bob.id],
+      now: minutes(702),
+    });
+    const both = await addressDecision(database, {
+      scope,
+      actor: bob,
+      decisionId: raised.id,
+      deciderIds: [bob.id, alice.id],
+      now: minutes(703),
+    });
+    expect(both.deciders.map((person) => person.id)).toEqual([bob.id, alice.id]);
+    const after = (await listEventsAfter(database, scope, 0, 500)).items.filter(
+      (candidate) => candidate.decisionId === raised.id && candidate.kind === "decision.addressed",
+    );
+    expect(after).toHaveLength(2);
+    expect(after[1]?.data).toMatchObject({
+      deciders: [bob.login, alice.login],
+      decidersAdded: [alice.id],
+    });
+
+    // Nobody who may not work in the project, nobody at all, and no more than a decision takes.
+    await expect(
+      addressDecision(database, {
+        scope,
+        actor: alice,
+        decisionId: raised.id,
+        deciderIds: [bob.id, "0199c4d8-0000-7000-8000-0000000000de"],
+        now: minutes(704),
+      }),
+    ).rejects.toMatchObject({ code: "decision.invalid_decider" });
+    await expect(
+      addressDecision(database, {
+        scope,
+        actor: alice,
+        decisionId: raised.id,
+        deciderIds: [],
+        now: minutes(704),
+      }),
+    ).rejects.toMatchObject({ code: "decision.invalid_decider" });
+    await expect(
+      addressDecision(database, {
+        scope,
+        actor: alice,
+        decisionId: raised.id,
+        deciderIds: Array.from(
+          { length: 11 },
+          (_, i) => `0199c4d8-0000-7000-8000-0000000000${(10 + i).toString(16)}`,
+        ),
+        now: minutes(704),
+      }),
+    ).rejects.toMatchObject({ code: "decision.too_many_deciders" });
+    await expect(
+      addressDecision(database, {
+        scope,
+        actor: alice,
+        decisionId: "0199c4d8-0000-7000-8000-000000000099",
+        deciderIds: [bob.id],
+        now: minutes(704),
+      }),
+    ).rejects.toMatchObject({ code: "decision.not_found" });
+    const unchanged = await getDecision(database, scope, raised.id);
+    expect(unchanged?.deciders.map((person) => person.id)).toEqual([bob.id, alice.id]);
+
+    // Once answered it is a record, and stays as it was addressed.
+    await answerDecision(database, {
+      scope,
+      actor: alice,
+      decisionId: raised.id,
+      option: "1",
+      own: undefined,
+      note: undefined,
+      now: minutes(705),
+    });
+    await expect(
+      addressDecision(database, {
+        scope,
+        actor: alice,
+        decisionId: raised.id,
+        deciderIds: [alice.id],
+        now: minutes(706),
+      }),
+    ).rejects.toMatchObject({ code: "decision.answered" });
   });
 
   it("reach whom they are addressed to when the version before the list raised them", async () => {

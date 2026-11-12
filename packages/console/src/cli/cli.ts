@@ -2915,14 +2915,40 @@ const decision: Command = async (args, io) => {
     wait: { type: "string" },
     outcome: { type: "string" },
     file: { type: "string" },
+    to: { type: "string", multiple: true },
   });
   const id = theOne(
     positionals,
-    "Say which decision: console decision <id> [--wait <seconds>] [--outcome <markdown>|--file <path>]",
+    "Say which decision: console decision <id> [--wait <seconds>] [--outcome <markdown>|--file <path>] [--to <login|me>]...",
   );
   const seconds = secondsOf(text(values, "wait"), 0);
+  const tos = texts(values, "to");
+  if (tos.includes("none")) {
+    throw misuse("Say whom the decision is for: --to <login|me>, given again for several.");
+  }
+  if (tos.length > MAX_DECIDERS) {
+    throw misuse(`Name up to ${MAX_DECIDERS} people with --to.`);
+  }
   const outcome = await bodyOf(io, values, text(values, "outcome"));
+  if (tos.length > 0 && outcome !== undefined) {
+    throw misuse("Say one thing at a time: whom the decision is for (--to), or what followed it.");
+  }
   const session = await open(io, values);
+  if (tos.length > 0) {
+    // Whom a decision that waits is for, said anew (ADR-0096): the people named take the place
+    // of those it was for, each once in the order named.
+    const project = await session.project();
+    const deciderIds: string[] = [];
+    for (const to of tos) {
+      const named = await personIdOf(session, to);
+      if (typeof named === "string" && !deciderIds.includes(named)) {
+        deciderIds.push(named);
+      }
+    }
+    const addressed = await project.addressDecision(id, deciderIds);
+    answer(io, session, addressed, () => formatDecision(addressed));
+    return EXIT.ok;
+  }
   if (outcome !== undefined) {
     // What followed the decision: the record grows, and is printed as it stands.
     const project = await session.project();

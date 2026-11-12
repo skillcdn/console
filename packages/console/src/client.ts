@@ -46,6 +46,7 @@ import {
   type RestConnection,
   type RestConnectRequest,
   type RestDecision,
+  type RestDecisionDeciders,
   type RestDecisionInput,
   type RestDecisionPatch,
   type RestDecisions,
@@ -400,6 +401,8 @@ export interface ProjectClient {
   answerDecision(id: string, input: RestAnswerInput): Promise<RestDecision>;
   /** Grows a decision's record: its context, or what followed. */
   updateDecision(id: string, patch: RestDecisionPatch): Promise<RestDecision>;
+  /** Addresses a decision that waits anew (ADR-0096): the people named, by id, take the place of those it was for. */
+  addressDecision(id: string, deciderIds: readonly string[]): Promise<RestDecision>;
   /** The runs, newest first; or only those on one task, only the open ones, only the asker's own; a page of them. */
   runs(
     filter?: { readonly task?: string; readonly open?: boolean; readonly mine?: boolean } & Page,
@@ -1120,6 +1123,13 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
         request("POST", `${base}${at("decisions", id)}/answer`, input, restDecisionSchema),
       updateDecision: (id, patch) =>
         request("PATCH", `${base}${at("decisions", id)}`, patch, restDecisionSchema),
+      addressDecision: (id, deciderIds) =>
+        request(
+          "PUT",
+          `${base}${at("decisions", id)}/deciders`,
+          { deciderIds: [...deciderIds] } satisfies RestDecisionDeciders,
+          restDecisionSchema,
+        ),
       runs: (filter = {}, signal) =>
         request(
           "GET",

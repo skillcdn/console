@@ -142,6 +142,16 @@ export interface ConsoleActions {
   answerDecisionIn(projectKey: string, id: string, input: RestAnswerInput): Promise<RestDecision>;
   /** Grows a decision's record: its context, or what followed. */
   updateDecision(id: string, patch: RestDecisionPatch): Promise<RestDecision>;
+  /** Addresses a decision that waits anew (ADR-0096): the people named, by id, take the place of those it was for. */
+  addressDecision(id: string, deciderIds: readonly string[]): Promise<RestDecision>;
+  /** The same for a decision of any project the person may work in, by its project's key: for the person's own page of decisions. */
+  addressDecisionIn(
+    projectKey: string,
+    id: string,
+    deciderIds: readonly string[],
+  ): Promise<RestDecision>;
+  /** Who may be named on a decision of a project, by its key: its members, read when a page of several projects asks. */
+  membersOf(projectKey: string, signal?: AbortSignal): Promise<readonly RestPerson[]>;
   /** Sets a goal on the roadmap of the project the page is on; for an owner. */
   createGoal(input: RestGoalInput): Promise<RestGoal>;
   updateGoal(id: string, patch: RestGoalPatch): Promise<RestGoal>;
@@ -798,6 +808,21 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
         );
         return decision;
       },
+      async addressDecision(id, deciderIds) {
+        const decision = await scope().addressDecision(id, deciderIds);
+        setDecisions((current) =>
+          current.map((candidate) => (candidate.id === id ? decision : candidate)),
+        );
+        await refreshMe().catch(() => undefined);
+        return decision;
+      },
+      async addressDecisionIn(projectKey, id, deciderIds) {
+        const decision = await client.project(projectKey).addressDecision(id, deciderIds);
+        await refreshMe().catch(() => undefined);
+        return decision;
+      },
+      membersOf: async (projectKey, signal) =>
+        (await client.project(projectKey).members(signal)).items.map((member) => member.person),
       async createGoal(input) {
         const goal = await scope().createGoal(input);
         await refreshProject();

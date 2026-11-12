@@ -1881,6 +1881,36 @@ describe("the console command", () => {
     expect(h.out()).toContain("what followed:");
   });
 
+  it("addresses a waiting decision anew with --to, each person once, and refuses to do two things at once", async () => {
+    const BOB = {
+      ...PERSON,
+      id: "0199c4d8-0000-7000-8000-000000000002",
+      login: "bob",
+      name: "Bob",
+    };
+    const passed = { ...DECISION, decider: BOB, deciders: [BOB, PERSON] };
+    const { fetch, calls } = fakeConsole({
+      "GET /api/v1/me": { body: ME },
+      "GET /api/v1/people?login=bob": { body: { items: [BOB], listed: [], organization: null } },
+      [`PUT ${IN}/decisions/${DECISION.id}/deciders`]: { body: passed },
+    });
+    const h = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(["decision", DECISION.id, "--to", "bob", "--to", "me", "--to", "bob"], h.io),
+    ).toBe(EXIT.ok);
+    const sent = calls.find((call) => call.key.startsWith("PUT "));
+    expect(sent?.body).toEqual({ deciderIds: [BOB.id, PERSON.id] });
+    expect(h.out()).toContain(`for ${BOB.login}, ${PERSON.login}`);
+
+    const both = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(["decision", DECISION.id, "--to", "bob", "--outcome", "Done."], both.io),
+    ).toBe(EXIT.usage);
+    expect(both.err()).toContain("one thing at a time");
+    const none = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["decision", DECISION.id, "--to", "none"], none.io)).toBe(EXIT.usage);
+  });
+
   it("reads an answer in the person's own words as one more option, marked as theirs", async () => {
     const own = {
       ...DECISION,

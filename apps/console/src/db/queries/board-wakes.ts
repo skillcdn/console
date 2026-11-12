@@ -159,7 +159,7 @@ async function taskWakes(
   );
 }
 
-/** What a decision's event wakes: whom it is addressed to when raised, and whoever raised it when answered. */
+/** What a decision's event wakes: whom it is addressed to when raised, whoever is named anew when it is addressed anew (ADR-0096), and whoever raised it when answered. */
 async function decisionWakes(database: Database, event: EventRecord): Promise<BoardWake[]> {
   if (event.decisionId === undefined) {
     return [];
@@ -180,15 +180,21 @@ async function decisionWakes(database: Database, event: EventRecord): Promise<Bo
   const key = `decision:${decision.id}`;
   const read = `console decision ${decision.id}`;
   const asked = `"${said(decision.question)}"`;
-  if (event.kind === "decision.raised") {
-    return (
-      await agentsAmong(database, event.workspaceId, decision.deciderIds, event.actor?.id)
-    ).map((account) => ({
-      account,
-      source: "board",
-      key,
-      text: `A decision waits for you: ${asked}. Read it and answer: ${read}`,
-    }));
+  if (event.kind === "decision.raised" || event.kind === "decision.addressed") {
+    // Raised, it wakes everyone it is for; addressed anew, those the change named and nobody
+    // it was for already, and only where they are still among those it is for.
+    const named =
+      event.kind === "decision.raised"
+        ? decision.deciderIds
+        : (event.data.decidersAdded ?? []).filter((id) => decision.deciderIds.includes(id));
+    return (await agentsAmong(database, event.workspaceId, named, event.actor?.id)).map(
+      (account) => ({
+        account,
+        source: "board",
+        key,
+        text: `A decision waits for you: ${asked}. Read it and answer: ${read}`,
+      }),
+    );
   }
   const option = event.data.option === undefined ? "" : `: ${said(event.data.option)}`;
   return (
@@ -217,6 +223,7 @@ export async function boardWakesOf(
     case "task.commented":
       return taskWakes(database, event, today);
     case "decision.raised":
+    case "decision.addressed":
     case "decision.answered":
       return decisionWakes(database, event);
     case "workspace.updated": {

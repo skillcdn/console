@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
   agentLabel,
   MAX_BODY_LENGTH,
@@ -12,6 +12,7 @@ import {
   type RestTask,
 } from "../api.js";
 import { useWords } from "../i18n/index.js";
+import { DecidersField } from "./decision-form.js";
 import { isPicture, namedFile, placed } from "./files.js";
 import { Markdown } from "./markdown.js";
 import { Pager, pageOf, RECORD_PAGE_SIZE } from "./paged.js";
@@ -23,6 +24,16 @@ import { Badge, Button, cx, formatBytes, PersonChip, personName, Time } from "./
 // rarely and looked up by what was asked. Each decision is a record (ADR-0009) of its context,
 // its answer with the rationale, and what followed, read on its own page. Each component takes
 // its data as props and nothing from the network.
+
+/** How a decision that waits is addressed anew (ADR-0096), where a page lets it be. */
+export interface DecisionAddressing {
+  /** Who may be named: those who may work in the decision's project, given, or read when the form opens. */
+  readonly people: readonly RestPerson[] | (() => Promise<readonly RestPerson[]>);
+  /** Whoever is looking, marked among them. */
+  readonly me?: RestPerson | undefined;
+  /** Called with everyone the decision is for from now on, in the order named. */
+  readonly onAddress: (decision: RestDecision, deciders: readonly RestPerson[]) => void;
+}
 
 export interface DecisionCardProps {
   readonly decision: RestDecision;
@@ -41,6 +52,8 @@ export interface DecisionCardProps {
   readonly onAnswer?: ((decision: RestDecision, input: RestAnswerInput) => void) | undefined;
   /** Called to grow the record, with what followed. Left out, it cannot be written here. */
   readonly onUpdate?: ((decision: RestDecision, patch: RestDecisionPatch) => void) | undefined;
+  /** How the decision is addressed anew while it waits (ADR-0096). Left out, whom it is for cannot be changed here. */
+  readonly addressing?: DecisionAddressing | undefined;
   readonly busy?: boolean | undefined;
 }
 
@@ -117,6 +130,8 @@ function AnswerForm(props: {
   readonly decision: RestDecision;
   readonly onAnswer: (decision: RestDecision, input: RestAnswerInput) => void;
   readonly busy: boolean | undefined;
+  /** What else may be done with the decision, beside answering it. */
+  readonly aside?: ReactNode;
 }) {
   const words = useWords();
   const { decision } = props;
@@ -200,6 +215,94 @@ function AnswerForm(props: {
           disabled={answer === undefined || props.busy === true}
         >
           {words.decisions.answer}
+        </Button>
+        {props.aside}
+      </div>
+    </form>
+  );
+}
+
+/**
+ * Whom a decision that waits is for, said anew (ADR-0096): those it is for now, to take out and
+ * to add to, and nothing sent until it is saved, so that one hand-over is one event. The people
+ * who may be named are the page's, or read when the form opens.
+ */
+export function DecisionAddressForm(props: {
+  readonly decision: RestDecision;
+  readonly addressing: DecisionAddressing;
+  readonly busy: boolean | undefined;
+  readonly onDone: () => void;
+}) {
+  const words = useWords();
+  const { decision, addressing } = props;
+  const before = decidersOf(decision);
+  const [deciders, setDeciders] = useState<readonly RestPerson[]>(before);
+  const [read, setRead] = useState<readonly RestPerson[] | undefined>(undefined);
+  const [problem, setProblem] = useState(false);
+  // Read once, when the form opens: a page may hand a new function with every drawing.
+  const source = useRef(addressing.people);
+  useEffect(() => {
+    const load = source.current;
+    if (typeof load !== "function") {
+      return;
+    }
+    let live = true;
+    load().then(
+      (people) => {
+        if (live) {
+          setRead(people);
+        }
+      },
+      () => {
+        if (live) {
+          setProblem(true);
+        }
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, []);
+  const people = typeof addressing.people === "function" ? read : addressing.people;
+  const changed =
+    deciders.length !== before.length ||
+    deciders.some((person, index) => person.id !== before[index]?.id);
+  return (
+    <form
+      className="sc-address-form"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (deciders.length > 0 && changed) {
+          addressing.onAddress(decision, deciders);
+        }
+        props.onDone();
+      }}
+    >
+      <DecidersField
+        value={deciders}
+        onChange={setDeciders}
+        people={people ?? []}
+        me={addressing.me}
+        placeholder={words.decisions.addressNobody}
+        hint={words.decisions.addressHint}
+        busy={props.busy === true || people === undefined}
+      />
+      {problem && (
+        <p className="sc-form-error" role="alert">
+          {words.decisions.peopleNotLoaded}
+        </p>
+      )}
+      <div className="sc-form-actions">
+        <Button
+          type="submit"
+          variant="primary"
+          size="sm"
+          disabled={props.busy === true || deciders.length === 0 || !changed}
+        >
+          {words.common.save}
+        </Button>
+        <Button variant="ghost" size="sm" onClick={props.onDone}>
+          {words.common.cancel}
         </Button>
       </div>
     </form>
@@ -294,6 +397,19 @@ export function DecisionCard(props: DecisionCardProps) {
   const words = useWords();
   const { decision, task } = props;
   const answered = decision.answer !== null;
+  // A plugin's decision stays as the plugin addressed it (ADR-0096), so the way is not offered.
+  const addressing = answered || (decision.plugin ?? null) !== null ? undefined : props.addressing;
+  const [addressingNow, setAddressingNow] = useState(false);
+  const handOn = addressing !== undefined && (
+    <Button
+      variant="ghost"
+      size="sm"
+      disabled={props.busy === true}
+      onClick={() => setAddressingNow(true)}
+    >
+      {words.decisions.changeDeciders}
+    </Button>
+  );
   // The files put on the decision (ADR-0055): a picture the context names by its file name is
   // shown where the text puts it; the rest follow the context, pictures in place and
   // everything else as a link.
@@ -406,10 +522,27 @@ export function DecisionCard(props: DecisionCardProps) {
             <Time iso={decision.answer.at} />
           </p>
         </div>
+      ) : addressing !== undefined && addressingNow ? (
+        <DecisionAddressForm
+          decision={decision}
+          addressing={addressing}
+          busy={props.busy}
+          onDone={() => setAddressingNow(false)}
+        />
       ) : props.onAnswer === undefined ? (
-        <p className="sc-decision-waiting">{words.decisions.waitingFor(deciderNames(decision))}</p>
+        <>
+          <p className="sc-decision-waiting">
+            {words.decisions.waitingFor(deciderNames(decision))}
+          </p>
+          {handOn !== false && <div className="sc-form-actions">{handOn}</div>}
+        </>
       ) : (
-        <AnswerForm decision={decision} onAnswer={props.onAnswer} busy={props.busy} />
+        <AnswerForm
+          decision={decision}
+          onAnswer={props.onAnswer}
+          busy={props.busy}
+          aside={handOn}
+        />
       )}
       {answered && (
         <Outcome
@@ -439,6 +572,8 @@ export interface DecisionListProps {
   readonly pageHref?: ((page: number) => string) | undefined;
   readonly onAnswer?: ((decision: RestDecision, input: RestAnswerInput) => void) | undefined;
   readonly onUpdate?: ((decision: RestDecision, patch: RestDecisionPatch) => void) | undefined;
+  /** How a waiting decision is addressed anew (ADR-0096). */
+  readonly addressing?: DecisionAddressing | undefined;
   readonly busy?: boolean | undefined;
   readonly empty?: React.ReactNode;
 }
@@ -569,6 +704,7 @@ export function DecisionList(props: DecisionListProps) {
       href={props.decisionHref?.(decision)}
       onAnswer={props.onAnswer}
       onUpdate={props.onUpdate}
+      addressing={props.addressing}
       busy={props.busy}
     />
   );

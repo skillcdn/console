@@ -1,6 +1,6 @@
 # ADR-0057: A decision may be addressed to several people, and the first answer ends it
 
-- Status: Accepted
+- Status: Accepted; a decider changed after the fact, rejected here, is taken up by [ADR-0096](0096-a-decision-that-waits-may-be-addressed-anew-by-whoever-may-answer-it.md)
 - Date: 2026-11-06
 - Amends point 1 of [ADR-0042](0042-a-decision-is-addressed-to-a-person-its-raiser-unless-another-is-named.md), which stands otherwise. The contract is in [specs/rest.md](../specs/rest.md), [specs/cli.md](../specs/cli.md) and [specs/plugins.md](../specs/plugins.md).
 

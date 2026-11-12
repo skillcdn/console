@@ -122,7 +122,12 @@ afterAll(async () => {
 });
 
 /** A request from the console's own pages, as the browser of a signed-in person sends one. */
-const send = (cookie: string, method: "POST" | "PATCH" | "DELETE", path: string, body?: unknown) =>
+const send = (
+  cookie: string,
+  method: "POST" | "PATCH" | "PUT" | "DELETE",
+  path: string,
+  body?: unknown,
+) =>
   h.request(path, {
     method,
     headers: {
@@ -3290,6 +3295,95 @@ describe("the schedule and the roadmap", () => {
       option: raised.options[1]?.id,
     });
     expect(await errorOf(again)).toBe("decision.answered");
+  });
+
+  it("addresses a waiting decision anew, by anyone who works in the project, for those named and no longer for those left out (ADR-0096)", async () => {
+    const carol = await h.signIn("carol");
+    const people = restPeopleSchema.parse(await (await get(alice, REST_ROUTES.people)).json());
+    const bobId = people.items.find((person) => person.login === "bob")?.id ?? "";
+    const carolId = people.items.find((person) => person.login === "carol")?.id ?? "";
+    const listed = await send(alice, "POST", `${IN}/members`, {
+      personId: carolId,
+      role: "member",
+    });
+    expect([201, 409]).toContain(listed.status);
+    const raised = restDecisionSchema.parse(
+      await (
+        await send(alice, "POST", `${IN}/decisions`, {
+          question: "Is this the designer's to say?",
+          options: [{ label: "Yes" }, { label: "No" }],
+        })
+      ).json(),
+    );
+    const mine = async (cookie: string) =>
+      restMyDecisionsSchema
+        .parse(await (await get(cookie, `${REST_ROUTES.decisions}?open=true`)).json())
+        .items.some((item) => item.decision.id === raised.id);
+    expect(await mine(alice)).toBe(true);
+    expect(await mine(carol)).toBe(false);
+    const before = restMeSchema.parse(await (await get(carol, REST_ROUTES.me)).json()).decisions;
+
+    // A colleague who works in the project passes it on, as they could have answered it.
+    const passed = await send(bob, "PUT", `${IN}/decisions/${raised.id}/deciders`, {
+      deciderIds: [carolId],
+    });
+    expect(passed.status, await passed.clone().text()).toBe(200);
+    const addressed = restDecisionSchema.parse(await passed.json());
+    expect(addressed.decider.id).toBe(carolId);
+    expect(addressed.deciders?.map((person) => person.id)).toEqual([carolId]);
+    expect(addressed.raisedBy.id).toBe(raised.raisedBy.id);
+    expect(await mine(carol)).toBe(true);
+    expect(await mine(alice)).toBe(false);
+    const after = restMeSchema.parse(await (await get(carol, REST_ROUTES.me)).json()).decisions;
+    expect(after?.waiting).toBe((before?.waiting ?? 0) + 1);
+    const asked = restMyDecisionsSchema.parse(
+      await (await get(alice, `${REST_ROUTES.decisions}?raised=true`)).json(),
+    );
+    expect(asked.items.some((item) => item.decision.id === raised.id)).toBe(true);
+    const feed = restEventsSchema.parse(
+      await (await get(alice, `${IN}/events?latest=true&limit=1`)).json(),
+    );
+    expect(feed.items[0]).toMatchObject({
+      kind: "decision.addressed",
+      decisionId: raised.id,
+      actor: { login: "bob" },
+      data: { deciders: ["carol"], decidersAdded: [carolId] },
+    });
+
+    // Nobody named, a stranger, an id that is none, and a decision that is not there are refused.
+    const nobody = await send(bob, "PUT", `${IN}/decisions/${raised.id}/deciders`, {
+      deciderIds: [],
+    });
+    expect(nobody.status).toBe(400);
+    const stranger = await send(bob, "PUT", `${IN}/decisions/${raised.id}/deciders`, {
+      deciderIds: [bobId, "0199c4d8-0000-7000-8000-0000000000de"],
+    });
+    expect(await errorOf(stranger)).toBe("decision.invalid_decider");
+    const missing = await send(
+      bob,
+      "PUT",
+      `${IN}/decisions/0199c4d8-0000-7000-8000-000000000099/deciders`,
+      { deciderIds: [bobId] },
+    );
+    expect(await errorOf(missing)).toBe("decision.not_found");
+    // Whoever is not signed in is told so, and nothing changes.
+    const unsigned = await h.request(`${IN}/decisions/${raised.id}/deciders`, {
+      method: "PUT",
+      headers: { origin: SIGN_IN_URL, "content-type": "application/json" },
+      body: JSON.stringify({ deciderIds: [bobId] }),
+    });
+    expect(unsigned.status).toBe(401);
+
+    // Answered, it stays as it was addressed.
+    const answered = await send(carol, "POST", `${IN}/decisions/${raised.id}/answer`, {
+      option: raised.options[0]?.id,
+    });
+    expect(answered.status).toBe(200);
+    const late = await send(alice, "PUT", `${IN}/decisions/${raised.id}/deciders`, {
+      deciderIds: [bobId],
+    });
+    expect(late.status).toBe(409);
+    expect(await errorOf(late)).toBe("decision.answered");
   });
 });
 

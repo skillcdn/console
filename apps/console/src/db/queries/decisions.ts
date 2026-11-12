@@ -98,6 +98,7 @@ export class DecisionError extends DomainError {
       | "decision.invalid_run"
       | "decision.invalid_decider"
       | "decision.too_many_deciders"
+      | "decision.plugin_addressed"
       | "decision.too_many"
       | "decision.too_many_files",
   ) {
@@ -113,6 +114,7 @@ const DECISION_ERROR_WORDS = {
   "decision.invalid_run": "the run is not the asker's, or is over",
   "decision.invalid_decider": "the person named to decide may not work in the project",
   "decision.too_many_deciders": "more people were named to decide than one decision takes",
+  "decision.plugin_addressed": "the decision is a plugin's, which says itself whom it is for",
   "decision.too_many": "the project holds as many decisions as one may",
   "decision.too_many_files": "the decision carries more files than one may",
 } as const;
@@ -521,6 +523,111 @@ export async function answerDecision(
             sql`not exists (select 1 from ${decisions} where ${decisions.runId} = ${runs.id} and ${decisions.answeredAt} is null)`,
           ),
         );
+    }
+    const written = await readDecision(tx, scope, decisionId);
+    if (written === undefined) {
+      throw new DecisionError("decision.not_found");
+    }
+    return written;
+  });
+}
+
+/**
+ * Addresses a decision that waits anew (ADR-0096): the people named take the place of those it
+ * was for, each once in the order named, each able to work in the project as at its raising,
+ * and the board is told whom it is for now and who was named anew. Nothing else of it changes:
+ * who raised it, what it asks, the run that waits. One addressed to the same people in the same
+ * order writes nothing. Rejects with a {@link DecisionError} for a decision that is not there,
+ * one answered already, one a plugin raised, which says itself whom it is for, and a person
+ * named who may not work in the project.
+ */
+export async function addressDecision(
+  database: Database,
+  input: {
+    readonly scope: Scope;
+    readonly actor: Actor;
+    readonly decisionId: string;
+    /** Everyone it is for from now on, the first being the one a reader of before is told. */
+    readonly deciderIds: readonly string[];
+    readonly now: Date;
+  },
+): Promise<DecisionRecord> {
+  const { scope, actor, decisionId, now } = input;
+  const deciderIds = [...new Set(input.deciderIds)];
+  const first = deciderIds[0];
+  if (first === undefined) {
+    throw new DecisionError("decision.invalid_decider");
+  }
+  if (deciderIds.length > MAX_DECIDERS) {
+    throw new DecisionError("decision.too_many_deciders");
+  }
+  return drizzleOf(database).transaction(async (tx) => {
+    const [current] = await tx
+      .select({
+        question: decisions.question,
+        answeredAt: decisions.answeredAt,
+        taskId: decisions.taskId,
+        runId: decisions.runId,
+        deciderId: decisions.deciderId,
+        deciderIds: decisions.deciderIds,
+      })
+      .from(decisions)
+      .where(and(eq(decisions.projectId, scope.projectId), eq(decisions.id, decisionId)))
+      .for("update");
+    if (current === undefined) {
+      throw new DecisionError("decision.not_found");
+    }
+    if (current.answeredAt !== null) {
+      throw new DecisionError("decision.answered");
+    }
+    // Read by itself: a column of the one table selected is written without its table's name,
+    // and would mean the link's own inside a query nested in this one.
+    const [raisedByPlugin] = await tx
+      .select({ key: pluginLinks.pluginKey })
+      .from(pluginLinks)
+      .where(
+        and(
+          eq(pluginLinks.targetKind, "decision"),
+          eq(pluginLinks.targetId, decisionId),
+          isNull(pluginLinks.recordId),
+        ),
+      )
+      .limit(1);
+    if (raisedByPlugin !== undefined) {
+      throw new DecisionError("decision.plugin_addressed");
+    }
+    // A decision of before the list (ADR-0057) names its one decider alone.
+    const before = current.deciderIds.length > 0 ? current.deciderIds : [current.deciderId];
+    const same =
+      before.length === deciderIds.length && before.every((id, index) => id === deciderIds[index]);
+    if (!same) {
+      const able = await tx
+        .select({ id: deciders.id, login: deciders.login })
+        .from(deciders)
+        .where(and(inArray(deciders.id, deciderIds), mayWorkIn(scope.projectId, deciders.id)));
+      if (able.length !== deciderIds.length) {
+        throw new DecisionError("decision.invalid_decider");
+      }
+      const loginOf = new Map(able.map((person) => [person.id, person.login]));
+      const added = deciderIds.filter((id) => !before.includes(id));
+      await tx
+        .update(decisions)
+        .set({ deciderId: first, deciderIds, updatedAt: now })
+        .where(eq(decisions.id, decisionId));
+      await recordEvent(tx, {
+        ...scope,
+        kind: "decision.addressed",
+        actor,
+        taskId: current.taskId ?? undefined,
+        decisionId,
+        runId: current.runId ?? undefined,
+        data: {
+          question: current.question,
+          deciders: deciderIds.flatMap((id) => loginOf.get(id) ?? []),
+          ...(added.length === 0 ? {} : { decidersAdded: added }),
+        },
+        now,
+      });
     }
     const written = await readDecision(tx, scope, decisionId);
     if (written === undefined) {

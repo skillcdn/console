@@ -316,6 +316,7 @@ table {
 .sc-decision-section > *,
 .sc-answer > *,
 .sc-answer-form > *,
+.sc-address-form > *,
 .sc-run > *,
 .sc-report > *,
 .sc-comment > *,
@@ -2388,9 +2389,17 @@ select.sc-input {
   white-space: pre-wrap;
 }
 
-.sc-answer-form {
+.sc-answer-form,
+.sc-address-form {
   display: grid;
   gap: var(--sc-space-3);
+}
+
+/* Whom a waiting decision is for, said anew (ADR-0096): the field with a word under it and the
+   two buttons, where the way to answer stood. */
+.sc-address-form > .sc-field,
+.sc-address-form > .sc-form-error {
+  margin: 0;
 }
 
 .sc-options-list {

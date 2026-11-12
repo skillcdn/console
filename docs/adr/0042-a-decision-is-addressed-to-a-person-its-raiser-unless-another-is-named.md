@@ -1,6 +1,6 @@
 # ADR-0042: A decision is addressed to a person, its raiser unless another is named
 
-- Status: Accepted; point 1 is amended by [ADR-0057](0057-a-decision-may-be-addressed-to-several-people-and-the-first-answer-ends-it.md), which lets a decision be addressed to several people, any of whom may answer
+- Status: Accepted; point 1 is amended by [ADR-0057](0057-a-decision-may-be-addressed-to-several-people-and-the-first-answer-ends-it.md), which lets a decision be addressed to several people, any of whom may answer, and by [ADR-0096](0096-a-decision-that-waits-may-be-addressed-anew-by-whoever-may-answer-it.md), which lets one that waits be addressed anew
 - Date: 2026-10-26
 
 ## Context

@@ -53,7 +53,7 @@ import { CategoryList } from "./categories.js";
 import { CommentCard, CommentForm, TaskThread, threadOf } from "./comments.js";
 import { ConnectApproval, ConnectCodeForm, ConnectWords } from "./connect.js";
 import { DecisionForm } from "./decision-form.js";
-import { DecisionCard, DecisionList, DecisionLog } from "./decision-list.js";
+import { DecisionAddressForm, DecisionCard, DecisionList, DecisionLog } from "./decision-list.js";
 import { DocumentForm, DocumentList, DocumentView, FolderView } from "./documents.js";
 import { describeEvent, EventFeed } from "./event-feed.js";
 import { GoalForm, GoalList, GoalView, goalMonth } from "./goals.js";
@@ -488,6 +488,47 @@ describe("decisions", () => {
     expect(renderToStaticMarkup(<DecisionForm onSubmit={() => undefined} />)).not.toContain(
       "Who decides",
     );
+    // Addressed anew (ADR-0096): the way stands beside the answer while the decision waits, and
+    // beside the word that it waits where it is not answered here; never on a record, never on
+    // a plugin's decision, never where the page gives none.
+    const addressing = { people: [alice, bob, carol], me: alice, onAddress: () => undefined };
+    const waiting = decision({ decider: bob, deciders: [bob] });
+    const offered = renderToStaticMarkup(
+      <DecisionCard decision={waiting} onAnswer={() => undefined} addressing={addressing} />,
+    );
+    expect(offered).toContain("Change who decides");
+    expect(offered).toContain(">Answer<");
+    expect(
+      renderToStaticMarkup(<DecisionCard decision={waiting} addressing={addressing} />),
+    ).toContain("Change who decides");
+    expect(
+      renderToStaticMarkup(<DecisionCard decision={waiting} onAnswer={() => undefined} />),
+    ).not.toContain("Change who decides");
+    expect(
+      renderToStaticMarkup(
+        <DecisionCard decision={decision({ plugin: "leave" })} addressing={addressing} />,
+      ),
+    ).not.toContain("Change who decides");
+    const record = decision({
+      answer: { option: "1", note: null, by: alice, at: "2026-10-20T09:00:00.000Z" },
+    });
+    expect(
+      renderToStaticMarkup(<DecisionCard decision={record} addressing={addressing} />),
+    ).not.toContain("Change who decides");
+    // The form opens on those it is for, with nothing to save until someone is changed.
+    const opened = renderToStaticMarkup(
+      <DecisionAddressForm
+        decision={decision({ decider: bob, deciders: [bob, carol] })}
+        addressing={addressing}
+        busy={false}
+        onDone={() => undefined}
+      />,
+    );
+    expect(opened).toContain("Who decides");
+    expect(opened).toContain("Remove: bob");
+    expect(opened).toContain("Remove: carol");
+    expect(opened).toContain("Whoever you name finds it among their decisions");
+    expect(opened).toContain('<button disabled="" type="submit"');
     const web = { key: "web", name: "The web app", color: null, symbol: null, icon: null };
     const mine = renderToStaticMarkup(
       <MyDecisions
@@ -831,6 +872,15 @@ describe("the feed", () => {
       data: { path: "guides/onboarding", title: "Onboarding", version: 2 },
     });
     expect(describeEvent(written)).toBe("wrote the page Onboarding, version 2");
+    // A decision passed on (ADR-0096) names the question and everyone it is for now.
+    expect(
+      describeEvent(
+        event({
+          kind: "decision.addressed",
+          data: { question: "Which one?", deciders: ["bob", "carol"] },
+        }),
+      ),
+    ).toBe('passed the decision "Which one?" to bob, carol');
     expect(describeEvent(event({ kind: "document.archived", data: { path: "plan" } }))).toBe(
       "archived the page plan",
     );

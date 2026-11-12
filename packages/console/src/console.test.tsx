@@ -549,6 +549,7 @@ describe("createConsole", () => {
     skills: never,
     rules: never,
     updateDecision: never,
+    addressDecision: never,
     documents: never,
     document: never,
     writeDocument: never,

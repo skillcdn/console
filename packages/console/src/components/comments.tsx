@@ -265,6 +265,8 @@ export interface TaskThreadProps {
   readonly docHref?: ((path: string) => string) | undefined;
   readonly onAnswer?: DecisionCardProps["onAnswer"];
   readonly onUpdateDecision?: DecisionCardProps["onUpdate"];
+  /** How a waiting decision is addressed anew (ADR-0096). */
+  readonly addressing?: DecisionCardProps["addressing"];
   readonly onAbandonRun?: ((run: RestRun) => void) | undefined;
   /** Called with what was written; left out, nothing can be said here. */
   readonly onComment?: ((draft: CommentDraft) => void) | undefined;
@@ -308,6 +310,7 @@ export function TaskThread(props: TaskThreadProps) {
         fileHref={fileHref}
         onAnswer={props.onAnswer}
         onUpdate={props.onUpdateDecision}
+        addressing={props.addressing}
         busy={props.busy}
       />
     );

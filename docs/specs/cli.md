@@ -136,6 +136,7 @@ A table a group, each row a command: what it asks the console, and what it says.
 | `runs [--task <number\|id>] [--open] [--mine] [--limit <n>] [--offset <n>]` | `GET .../runs` | one line per run, with when an open one was last heard from; a page at a time |
 | `run <id>` | `GET .../runs/<id>` | the run in full, with its reports, what it handed in and where each file is read |
 | `decision <id> --outcome <markdown>\|--file <path>` | `PATCH .../decisions/<id>` | the decision as a record, with what followed written down |
+| `decision <id> --to <login\|me>...` | `GET /api/v1/people?login=` for each login, `GET /api/v1/me` for `me`; then `PUT .../decisions/<id>/deciders` | the decision as it stands, addressed to the people named in place of those it was for ([ADR-0096](../adr/0096-a-decision-that-waits-may-be-addressed-anew-by-whoever-may-answer-it.md)); `decision.answered` for one answered already, `decision.plugin_addressed` for a plugin's, `decision.invalid_decider` for someone who may not work in the project; not together with `--outcome` |
 
 ### Commands for documents
 

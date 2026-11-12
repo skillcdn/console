@@ -57,7 +57,12 @@ import { Calendar, type CalendarProps, Workload } from "./components/calendar.js
 import { CategoryList, type CategoryListProps } from "./components/categories.js";
 import { ConnectWords } from "./components/connect.js";
 import { DecisionForm } from "./components/decision-form.js";
-import { DecisionCard, DecisionList, type DecisionListProps } from "./components/decision-list.js";
+import {
+  type DecisionAddressing,
+  DecisionCard,
+  DecisionList,
+  type DecisionListProps,
+} from "./components/decision-list.js";
 import { EventFeed, type EventFeedProps } from "./components/event-feed.js";
 import { GoalForm, GoalList, type GoalListProps, GoalView, goalMonth } from "./components/goals.js";
 import { HomeGrid, type HomeGridProps } from "./components/home.js";
@@ -973,6 +978,17 @@ function TaskPage(props: {
       onUpdateDecision={(decision, patch) =>
         void act(() => data.actions.updateDecision(decision.id, patch))
       }
+      addressing={{
+        people: data.members.map((member) => member.person),
+        me: data.me?.person ?? undefined,
+        onAddress: (decision, deciders) =>
+          void act(() =>
+            data.actions.addressDecision(
+              decision.id,
+              deciders.map((person) => person.id),
+            ),
+          ),
+      }}
       onAbandonRun={(run) => void act(() => data.actions.abandonRun(run.id))}
       onArchive={(target) =>
         void act(async () => {
@@ -1019,6 +1035,19 @@ function ProjectPage(props: {
     void act(() => data.actions.answerDecision(decision.id, input));
   const onUpdate = (decision: RestDecision, patch: RestDecisionPatch) =>
     void act(() => data.actions.updateDecision(decision.id, patch));
+  // Whom a waiting decision is for, said anew (ADR-0096), by anyone who may work here: the
+  // people to name are the project's members, as where a decision is raised.
+  const addressing: DecisionAddressing = {
+    people: data.members.map((member) => member.person),
+    me: data.me?.person ?? undefined,
+    onAddress: (decision, deciders) =>
+      void act(() =>
+        data.actions.addressDecision(
+          decision.id,
+          deciders.map((person) => person.id),
+        ),
+      ),
+  };
 
   if (route.name === "board") {
     const me = data.me?.person ?? undefined;
@@ -1408,6 +1437,7 @@ function ProjectPage(props: {
           pageHref={(page) => decisionsHref(key, page)}
           onAnswer={onAnswer}
           onUpdate={onUpdate}
+          addressing={addressing}
           busy={busy}
           empty={
             <EmptyState title={words.decisions.empty.title} body={words.decisions.empty.body} />
@@ -1461,6 +1491,7 @@ function ProjectPage(props: {
             fileHref={(fileId) => projectPath(key, "files", fileId)}
             onAnswer={onAnswer}
             onUpdate={onUpdate}
+            addressing={addressing}
             busy={busy}
           />
         )}
@@ -2500,7 +2531,7 @@ function PlatePage(props: {
 function MyDecisionPage(props: { readonly id: string; readonly data: ConsoleData }) {
   const words = useWords();
   const { id, data } = props;
-  const { reachDecision, answerReachedDecision } = data.actions;
+  const { reachDecision, answerReachedDecision, addressDecisionIn, membersOf } = data.actions;
   const [reached, setReached] = useState<RestReachedDecision | undefined>(undefined);
   const [problem, setProblem] = useState<string | undefined>(undefined);
   const { busy, error, act } = useAction();
@@ -2548,6 +2579,21 @@ function MyDecisionPage(props: { readonly id: string; readonly data: ConsoleData
               );
             })
           }
+          addressing={{
+            people: () => membersOf(reached.project.key),
+            me: data.me?.person ?? undefined,
+            onAddress: (_decision, deciders) =>
+              void act(async () => {
+                const addressed = await addressDecisionIn(
+                  reached.project.key,
+                  id,
+                  deciders.map((person) => person.id),
+                );
+                setReached((current) =>
+                  current === undefined ? current : { ...current, decision: addressed },
+                );
+              }),
+          }}
           busy={busy}
         />
       )}
@@ -2643,7 +2689,7 @@ function useMyDecisions(
  */
 function MyDecisionsPage(props: { readonly data: ConsoleData }) {
   const words = useWords();
-  const { myDecisions, answerReachedDecision } = props.data.actions;
+  const { myDecisions, answerReachedDecision, addressDecisionIn, membersOf } = props.data.actions;
   const whose = props.data.me?.person?.id ?? "";
   const addressed = useMyDecisions(
     myDecisions,
@@ -2692,6 +2738,20 @@ function MyDecisionsPage(props: { readonly data: ConsoleData }) {
               : myDecisionHref(decisionId)
           }
           onAnswer={onAnswer}
+          addressing={(projectKey) => ({
+            people: () => membersOf(projectKey),
+            me: props.data.me?.person ?? undefined,
+            onAddress: (decision, deciders) =>
+              void act(async () => {
+                await addressDecisionIn(
+                  projectKey,
+                  decision.id,
+                  deciders.map((person) => person.id),
+                );
+                addressed.reload();
+                raised.reload();
+              }),
+          })}
           busy={busy || addressed.busy || raised.busy}
         />
       )}
