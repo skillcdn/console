@@ -16,9 +16,10 @@ export interface PersonaName {
 }
 
 /**
- * The names the package proposes: short, said alike in many languages, and nobody's product. A
- * handle each, and its spelling in every language the console speaks, which the language packs
- * hold (ADR-0012): a name added to one pack is added to every other.
+ * The names the package proposes: names of asteroids, to go with the planet an account's avatar
+ * is (ADR-0097), each of two or three syllables, said alike in many languages, and nobody's
+ * product. A handle each, and its spelling in every language the console speaks, which the
+ * language packs hold (ADR-0012): a name added to one pack is added to every other.
  */
 export const PERSONA_NAMES: readonly PersonaName[] = Object.entries(en.persona.names).map(
   ([handle, english]) => ({

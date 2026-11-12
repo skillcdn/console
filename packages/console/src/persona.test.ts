@@ -15,7 +15,14 @@ describe("the persona proposed for an agent account (ADR-0084)", () => {
       expect(RESERVED_HANDLES).not.toContain(name.handle);
       expect(name.names.en, name.handle).toMatch(/^[A-Z][a-z]+$/);
       expect(name.names.ko, name.handle).toMatch(HANGUL);
+      // A name is short enough to call an account by: the handle is the English name as it is
+      // written, of six letters at most, and the Korean spelling two or three syllables.
+      expect(name.names.en?.toLowerCase(), name.handle).toBe(name.handle);
+      expect(name.handle.length, name.handle).toBeLessThanOrEqual(6);
+      expect([...(name.names.ko ?? "")].length, name.handle).toBeGreaterThanOrEqual(2);
+      expect([...(name.names.ko ?? "")].length, name.handle).toBeLessThanOrEqual(3);
     }
+    expect(PERSONA_NAMES).toHaveLength(40);
   });
 
   it("proposes the same name and avatar from the same seed, and no name twice in one asking", () => {
