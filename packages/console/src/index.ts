@@ -253,6 +253,7 @@ export {
   formatBytes,
   formatInstant,
   GoalStateBadge,
+  KindMark,
   LinkButton,
   PersonChip,
   PersonOption,

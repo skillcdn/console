@@ -1261,6 +1261,26 @@ html[data-console] body {
   font-weight: var(--sc-weight-medium);
 }
 
+/* What a member is where it is no person: two letters after the name, small and quiet, in a
+   frame of their own so that they are not read as part of the name. */
+.sc-kind-mark {
+  flex: none;
+  padding: 0 0.3em;
+  border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+  border-radius: var(--sc-radius-sm);
+  color: var(--sc-color-text-muted);
+  font-size: 0.6875rem;
+  font-weight: var(--sc-weight-bold);
+  letter-spacing: var(--sc-tracking-wide);
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+/* After a name in a chip, the mark stands closer to the name than the name to the picture. */
+.sc-person > .sc-kind-mark {
+  margin-inline-start: calc(-1 * var(--sc-space-1));
+}
+
 /* The picture in the menu's label sits in the control with a little room around it. */
 .sc-menu-summary .sc-avatar {
   width: 1.75rem;
@@ -3117,6 +3137,13 @@ select.sc-input {
 .sc-person-option-who {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+}
+
+.sc-person-option-name {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-space-1);
   min-width: 0;
 }
 

@@ -206,12 +206,36 @@ export function CopyButton(props: { readonly text: string; readonly size?: "md" 
   );
 }
 
-/** A person, as a picture and their name, wherever one is named; the login is there on hover. */
+/**
+ * What a member is, where it is no person: a mark of two letters after the name, wherever a
+ * member is named short, a worker, a decider, an owner, a manager, so that an agent account is
+ * told from a person where its picture is small. What the letters stand for is there on hover.
+ * Nothing for a person: most members are people, and a mark on each would say nothing.
+ */
+export function KindMark(props: {
+  readonly person: { readonly kind?: RestPerson["kind"] | undefined };
+}) {
+  const words = useWords().people.kindMark;
+  if (props.person.kind !== "agent") {
+    return null;
+  }
+  return (
+    <span className="sc-kind-mark" title={words.agentTitle}>
+      {words.agent}
+    </span>
+  );
+}
+
+/**
+ * A member, as a picture and their name, wherever one is named; the login is there on hover, and
+ * an agent account carries its mark after the name.
+ */
 export function PersonChip(props: { readonly person: RestPerson; readonly size?: "sm" | "md" }) {
   return (
     <span className="sc-person" title={props.person.login}>
       <Avatar person={props.person} size={props.size ?? "sm"} />
       <span className="sc-person-login">{personName(props.person)}</span>
+      <KindMark person={props.person} />
     </span>
   );
 }
@@ -228,7 +252,10 @@ export function PersonOption(props: { readonly person: RestPerson }) {
     <span className="sc-person sc-person-option" title={person.login}>
       <Avatar person={person} size="sm" />
       <span className="sc-person-option-who">
-        <span className="sc-person-login">{personName(person)}</span>
+        <span className="sc-person-option-name">
+          <span className="sc-person-login">{personName(person)}</span>
+          <KindMark person={person} />
+        </span>
         <span className="sc-person-option-note">{title === "" ? handle : title}</span>
       </span>
     </span>
@@ -281,13 +308,18 @@ export function Workers(props: {
   /** How many are shown as pictures; the rest are a count. */
   readonly shown?: number;
 }) {
+  const mark = useWords().people.kindMark.agent;
   if (props.workers.length === 0) {
     return null;
   }
   const shown = props.shown ?? WORKERS_SHOWN;
   const rest = props.workers.length - shown;
+  // Pictures alone say little of who is an agent account: the names on hover say it.
+  const names = props.workers
+    .map((worker) => `${personName(worker)}${worker.kind === "agent" ? ` (${mark})` : ""}`)
+    .join(", ");
   return (
-    <span className="sc-workers" title={props.workers.map(personName).join(", ")}>
+    <span className="sc-workers" title={names}>
       {props.workers.slice(0, shown).map((worker) => (
         <Avatar key={worker.id} person={worker} size={props.size ?? "sm"} />
       ))}

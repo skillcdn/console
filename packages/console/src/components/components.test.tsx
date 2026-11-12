@@ -96,7 +96,9 @@ import {
   Avatar,
   Chip,
   DueBadge,
+  KindMark,
   PersonChip,
+  PersonOption,
   PriorityBadge,
   personName,
   StateBadge,
@@ -4437,6 +4439,31 @@ describe("a person's name", () => {
     );
     expect(personName({ login: "carol", name: "  " })).toBe("carol");
     expect(renderToStaticMarkup(<Avatar person={{ ...alice, avatar: null }} />)).toContain(">A<");
+  });
+
+  it("carries a mark after it where the member is an agent account, and none for a person", () => {
+    const account: RestPerson = { ...bob, name: "Mira", kind: "agent", handle: "mira" };
+    const chip = renderToStaticMarkup(<PersonChip person={account} />);
+    // After the name, with what the letters stand for on hover.
+    expect(chip).toMatch(
+      />Mira<\/span><span class="sc-kind-mark" title="Agent account">AI<\/span><\/span>$/,
+    );
+    expect(renderToStaticMarkup(<PersonChip person={alice} />)).not.toContain("sc-kind-mark");
+    expect(
+      renderToStaticMarkup(<PersonChip person={{ ...alice, kind: "person" }} />),
+    ).not.toContain("sc-kind-mark");
+    // Among others to choose from, beside the name and not under it.
+    const option = renderToStaticMarkup(<PersonOption person={account} />);
+    expect(option).toMatch(
+      /<span class="sc-person-option-name"><span class="sc-person-login">Mira<\/span><span class="sc-kind-mark"/,
+    );
+    expect(renderToStaticMarkup(<PersonOption person={alice} />)).not.toContain("sc-kind-mark");
+    expect(renderToStaticMarkup(<KindMark person={account} />)).toContain(">AI<");
+    expect(renderToStaticMarkup(<KindMark person={{}} />)).toBe("");
+    // Pictures alone: the names on hover say which of them is one.
+    expect(renderToStaticMarkup(<Workers workers={[alice, account]} />)).toContain(
+      'title="Alice Example, Mira (AI)"',
+    );
   });
 });
 

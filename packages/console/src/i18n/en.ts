@@ -1465,6 +1465,7 @@ export const en = {
     howMany: (count: number) => (count === 1 ? "1 person" : `${count} people`),
     views: { aria: "Members and teams", people: "Members", teams: "Teams" },
     sections: { people: "People", agents: "Agent accounts" },
+    kindMark: { agent: "AI", agentTitle: "Agent account" },
     agentPage: "Its page",
     nobody: "None",
     letIn: "Add a person",

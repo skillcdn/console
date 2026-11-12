@@ -1386,6 +1386,7 @@ export const ko: Messages = {
     howMany: (count) => `${count}명`,
     views: { aria: "구성원과 팀", people: "구성원", teams: "팀" },
     sections: { people: "사람", agents: "에이전트 계정" },
+    kindMark: { agent: "AI", agentTitle: "에이전트 계정" },
     agentPage: "페이지",
     nobody: "없음",
     letIn: "사람 추가",
