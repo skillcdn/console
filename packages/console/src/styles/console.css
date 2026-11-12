@@ -1830,6 +1830,16 @@ select.sc-input {
   margin: 0;
 }
 
+/* A part's title with something to do beside it: the title's line runs up to it. */
+.sc-form-part > .sc-section-head {
+  align-items: center;
+  margin: 0;
+}
+
+.sc-form-part > .sc-section-head > .sc-section-title {
+  flex: 1 1 auto;
+}
+
 /* Steps done in order: a number each, what the step is and what it takes. One that is done reads
    quieter and says so; the next one to do stands out by its number. */
 .sc-steps {

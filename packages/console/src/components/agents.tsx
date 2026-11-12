@@ -387,7 +387,15 @@ export function AgentAccountForm(props: AgentAccountFormProps) {
   return (
     <form className="sc-form sc-agent-form" aria-label={form.aria} onSubmit={submit}>
       <section className="sc-form-part" aria-label={form.who}>
-        <h2 className="sc-section-title">{form.who}</h2>
+        {/* The way to roll the proposals again stands with the part's title, over all of them. */}
+        <div className="sc-section-head">
+          <h2 className="sc-section-title">{form.who}</h2>
+          {props.onRoll !== undefined && (
+            <Button type="button" size="sm" disabled={props.busy === true} onClick={props.onRoll}>
+              {form.roll}
+            </Button>
+          )}
+        </div>
         <fieldset className="sc-agent-proposals">
           <legend className="sc-field-label">{form.proposals}</legend>
           <div className="sc-agent-proposal-row">
@@ -408,11 +416,6 @@ export function AgentAccountForm(props: AgentAccountFormProps) {
                 <span className="sc-agent-proposal-handle">@{proposal.handle}</span>
               </button>
             ))}
-            {props.onRoll !== undefined && (
-              <Button type="button" size="sm" disabled={props.busy === true} onClick={props.onRoll}>
-                {form.roll}
-              </Button>
-            )}
           </div>
           <p className="sc-field-hint">{form.proposalsHint}</p>
         </fieldset>

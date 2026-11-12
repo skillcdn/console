@@ -1818,7 +1818,11 @@ describe("the agent accounts (ADR-0084)", () => {
     expect(form).toContain("Choose a persona");
     expect(form.match(/class="sc-agent-proposal"/g)).toHaveLength(2);
     expect(form).toContain(">@mira<");
-    expect(form).toContain(">Roll again<");
+    // The way to roll them again stands beside the part's title, over the proposals.
+    expect(form).toMatch(
+      /<div class="sc-section-head"><h2 class="sc-section-title">[^<]+<\/h2><button[^>]*>Roll again<\/button><\/div>/,
+    );
+    expect(form).not.toMatch(/sc-agent-proposal-row">[\s\S]*?Roll again[\s\S]*?<\/fieldset>/);
     // Whoever makes it is its manager, unless another is chosen.
     expect(form).toMatch(/sc-picker-chosen[\s\S]*?Alice Example/);
     // Three parts, each under its heading.
