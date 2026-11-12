@@ -555,7 +555,7 @@ export function claudeArguments(options: StartOptions): readonly string[] {
  * a message during a tool call, a turn stopped for a message, a denial and a conversation gone
  * on with: what the fixtures of the tests were written down from.
  */
-const TRIED = ["2.1.321"] as const;
+const TRIED = ["2.1.321", "2.1.322"] as const;
 
 export function createClaudeDriver(host: DriverHost): Driver {
   const command = host.command ?? "claude";

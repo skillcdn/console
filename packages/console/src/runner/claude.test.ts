@@ -242,7 +242,7 @@ describe("the claude driver", () => {
       least: "dontAsk",
     });
     // The builds the driver was run against, and no other.
-    expect(plain.driver.product).toEqual({ name: "Claude Code", tried: ["2.1.321"] });
+    expect(plain.driver.product).toEqual({ name: "Claude Code", tried: ["2.1.321", "2.1.322"] });
   });
 
   it("sends a message as one line under an id of its own, with its pictures as image blocks and the product's own priority", async () => {
