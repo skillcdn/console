@@ -2368,6 +2368,21 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
       </LanguageContext.Provider>,
     );
     expect(korean).toContain("45초 만에 마침");
+    // How a session ended is said by the note's words, and not again as a fact beside them.
+    const over = renderToStaticMarkup(
+      <TranscriptView
+        events={[
+          event(1, {
+            kind: "status",
+            text: "The session ended: stopped.",
+            data: { ended: "stopped" },
+          }),
+        ]}
+        fileHref={(id) => id}
+      />,
+    );
+    expect(over).toContain("<span>The session ended: stopped.</span>");
+    expect(over).not.toContain("sc-talk-fact");
   });
 
   it("reads off a session's events whether a turn is under way, and what the agent is at", () => {

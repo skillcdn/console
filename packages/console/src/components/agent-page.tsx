@@ -631,8 +631,9 @@ export function TranscriptView(props: TranscriptViewProps) {
       );
     }
     // A wake, a status, an error, and whatever a newer runner calls otherwise: a note between.
+    // What the note's own words say already, how a session ended, is not said twice as a fact.
     const facts = Object.entries(event.data).filter(
-      ([name, fact]) => fact !== null && name !== "signal" && name !== "kind",
+      ([name, fact]) => fact !== null && name !== "signal" && name !== "kind" && name !== "ended",
     );
     const lines = event.text.split("\n").filter((line) => line.trim().length > 0);
     return (

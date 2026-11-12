@@ -7989,6 +7989,12 @@ a.sc-tile-project:focus-visible {
   background: var(--sc-color-bg-inset);
 }
 
+/* That a call is still running is one word at the row's end, never broken where the row is narrow. */
+.sc-talk-tool-head > .sc-muted {
+  flex: none;
+  white-space: nowrap;
+}
+
 .sc-talk-tool-head:focus-visible {
   outline: var(--sc-focus-ring);
   outline-offset: 2px;
