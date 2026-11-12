@@ -5,6 +5,7 @@ import {
   AVATAR_BOX,
   AVATAR_CLOSE_MOST,
   AVATAR_CLOSE_UNDER,
+  AVATAR_FILL_MOST,
   AVATAR_PLAIN_UNDER,
   AVATAR_SET_1,
   AVATAR_SETS,
@@ -84,7 +85,7 @@ describe("an agent account's avatar (ADR-0084, ADR-0097)", () => {
     // large. If the first fails, a released set was changed; if the second alone, the drawing.
     expect(AVATAR_SET_1.version).toBe(1);
     expect(createHash("sha256").update(JSON.stringify(AVATAR_SET_1)).digest("hex")).toBe(
-      "c22d872ea7f1c4b5c4550d3e2e30883e6cff16b2e211131b51e7234d0ba07731",
+      "ed3fba444d3b54a74907435e443aab56041508f855268708a8848df8d2062a7c",
     );
     const look = createHash("sha256");
     for (let form = 0; form < AVATAR_SET_1.bodies.length; form += 1) {
@@ -109,7 +110,7 @@ describe("an agent account's avatar (ADR-0084, ADR-0097)", () => {
       look.update(avatarPixels({ ...PLAIN, palette, accent: palette % 6, vein: palette }, 48));
     }
     expect(look.digest("hex")).toBe(
-      "476551b1c292db25a1b63cb8b4d571a70e2c4c218bc7cb838935a237e4f5dc9e",
+      "9a91d26dfa1147004eb35394057a9c2fdf6e2de4c45b2c5bef208465a6f7bc78",
     );
     expect(AVATAR_SETS.map((set) => set.version)).toEqual([1]);
     // Four bodies, ten surfaces, eighteen ramps of five tones and five things beside the body
@@ -519,14 +520,43 @@ describe("an agent account's avatar (ADR-0084, ADR-0097)", () => {
       1 - ground(avatarPixels({ ...PLAIN, accent }, size));
     // What is counted is every pixel the body touches, so a little over its area.
     const full = Math.PI * 0.27 * 0.27;
-    expect(disc(AVATAR_CLOSE_UNDER)).toBeGreaterThan(full);
-    expect(disc(AVATAR_CLOSE_UNDER)).toBeLessThan(full * 1.12);
+    // The first set asks for its planet a twentieth larger than it is written, at every size.
+    const fill = AVATAR_SET_1.fill ?? 1;
+    expect(fill).toBe(1.05);
+    const filled = full * fill * fill;
+    expect(disc(AVATAR_CLOSE_UNDER)).toBeGreaterThan(filled);
+    expect(disc(AVATAR_CLOSE_UNDER)).toBeLessThan(filled * 1.12);
+    expect(disc(AVATAR_PLAIN_UNDER - 1)).toBeGreaterThan(filled);
+    expect(disc(AVATAR_PLAIN_UNDER - 1)).toBeLessThan(filled * 1.08);
     const close = disc(AVATAR_CLOSE_UNDER - 1);
     expect(close).toBeGreaterThan(full * AVATAR_CLOSE_MOST * AVATAR_CLOSE_MOST);
     expect(close).toBeLessThan(full * AVATAR_CLOSE_MOST * AVATAR_CLOSE_MOST * 1.12);
     const ringed = disc(AVATAR_CLOSE_UNDER - 1, 1) - disc(AVATAR_CLOSE_UNDER, 1);
-    expect(ringed).toBeGreaterThan(0.02);
+    expect(ringed).toBeGreaterThan(0.01);
     expect(ringed).toBeLessThan(close - full);
+    // A set that says nothing is drawn as written, and closer when small; one that asks for
+    // more than a set may, or for nothing a drawing can use, is held to what one may.
+    const own = (set: unknown, size: number): number => {
+      const pixels = avatarPixels(OWN_PARTS, size, [set as AvatarSet]);
+      let lit = 0;
+      for (let at = 0; at < pixels.length; at += 3) {
+        lit += pixels[at] === 0 ? 0 : 1;
+      }
+      return lit / (pixels.length / 3);
+    };
+    expect(own(OWN, 200)).toBeCloseTo(0.25, 9);
+    expect(own({ ...OWN, fill: 1.2 }, 200)).toBeCloseTo(0.25 * 1.2 * 1.2, 9);
+    expect(own({ ...OWN, fill: 0.5 }, 200)).toBeCloseTo(0.25, 9);
+    expect(own({ ...OWN, fill: "2" }, 200)).toBeCloseTo(0.25, 9);
+    expect(own({ ...OWN, fill: Number.POSITIVE_INFINITY }, 200)).toBeCloseTo(0.25, 9);
+    expect(own({ ...OWN, fill: 99 }, 200)).toBeCloseTo(
+      0.25 * AVATAR_FILL_MOST * AVATAR_FILL_MOST,
+      9,
+    );
+    // Whatever a set asks, nothing is drawn past the room the picture has.
+    expect(
+      own({ ...OWN, fill: 99, bodies: [{ outlines: [square(10, 10, 90, 90)] }] }, 200),
+    ).toBeCloseTo(0.94 * 0.94, 9);
     // Nothing of a picture drawn closer leaves it: the ring's ends stay clear of the edge.
     const small = reader(avatarPixels({ ...PLAIN, accent: 1 }, 48), 48);
     for (let y = 0; y < 48; y += 1) {

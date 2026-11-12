@@ -95,6 +95,11 @@ export interface AvatarSet {
   readonly bodies: readonly AvatarBody[];
   readonly surfaces: readonly AvatarSurface[];
   readonly accents: readonly AvatarAccent[];
+  /**
+   * How much larger than its outlines are written a planet is drawn, at every size and never past
+   * what stands beside it leaves room for; as written where the set says nothing (ADR-0099).
+   */
+  readonly fill?: number | undefined;
 }
 
 /** The side of the square a set's outlines are written in. */
@@ -110,10 +115,13 @@ export const AVATAR_PLAIN_UNDER = 96;
 /**
  * Under this many pixels a side, a picture shown in a line of text or among a task's workers,
  * the planet is drawn closer: as large as what stands beside it leaves room for, up to
- * `AVATAR_CLOSE_MOST` times.
+ * `AVATAR_CLOSE_MOST` times what its set writes, or what the set's own `fill` says where that is
+ * more (ADR-0099).
  */
 export const AVATAR_CLOSE_UNDER = 64;
-export const AVATAR_CLOSE_MOST = 1.4;
+export const AVATAR_CLOSE_MOST = 1.1;
+/** The most a set may ask its planet to be drawn larger by. */
+export const AVATAR_FILL_MOST = 1.5;
 
 // Numbers
 
@@ -313,6 +321,8 @@ const ICE: readonly [string, string] = ["#ffffff", "#ebe4f1"];
  */
 export const AVATAR_SET_1: AvatarSet = {
   version: 1,
+  // The set is drawn with air round its planet; on a page a tile reads better a little fuller.
+  fill: 1.05,
   grounds: ["#fdfcff"],
   confetti: ["#ffd643", "#ffb052", "#7fa8ff", "#6f74e8", "#d0cde4", "#ebe4f1"],
   ramps: [
@@ -1044,7 +1054,7 @@ function reachOf(shapes: readonly AvatarShape[], turn: number): number {
   return far;
 }
 
-/** How much of the picture's half a planet drawn closer may reach, with what stands beside it. */
+/** How much of the picture's half a planet drawn larger may reach, with what stands beside it. */
 const CLOSE_REACH = 0.94;
 
 /** The picture an avatar's parts name, `side` pixels a side: red, green and blue of each pixel. */
@@ -1099,9 +1109,12 @@ function drawn(parts: RestAvatarParts, side: number, sets: readonly AvatarSet[])
     }
   }
 
-  // The planet of a picture that small is drawn as large as what stands beside it leaves room for.
+  // The planet is drawn as much larger as its set asks, and that of a small picture closer
+  // still: never past what stands beside it leaves room for.
+  const fuller = finite(set.fill) ? clamp(set.fill, 1, AVATAR_FILL_MOST) : 1;
+  const most = side < AVATAR_CLOSE_UNDER ? Math.max(fuller, AVATAR_CLOSE_MOST) : fuller;
   let zoom = 1;
-  if (side < AVATAR_CLOSE_UNDER) {
+  if (most > 1) {
     let far = reachOf(
       [{ outlines: listOf(body?.outlines), tone: 0 }, ...thingsOf(body?.behind)],
       0,
@@ -1109,7 +1122,7 @@ function drawn(parts: RestAvatarParts, side: number, sets: readonly AvatarSet[])
     for (const layer of [...thingsOf(accent.behind), ...thingsOf(accent.before)]) {
       far = Math.max(far, reachOf(thingsOf(layer.shapes), finite(layer.turn) ? layer.turn : 0));
     }
-    zoom = far > 0 ? clamp((middle * CLOSE_REACH) / far, 1, AVATAR_CLOSE_MOST) : 1;
+    zoom = far > 0 ? clamp((middle * CLOSE_REACH) / far, 1, most) : 1;
   }
 
   /** One shape, in its ramp, as its layer is turned and cut. */
