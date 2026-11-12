@@ -143,6 +143,8 @@ function fakeConsole() {
     settings: { model: null as string | null, effort: null as string | null },
     /** What the next sending of a transcript is answered with, once. */
     refuse: undefined as ApiError | undefined,
+    /** Whether the console refuses the runner's command as too old, at every heartbeat. */
+    tooOld: false,
     sessions: 0,
     /** The ids of files of a signal the console answers no bytes of. */
     lost: new Set<string>(),
@@ -169,6 +171,13 @@ function fakeConsole() {
   });
   const client: RunnerClient = {
     runnerHeartbeat: async (input) => {
+      if (says.tooOld) {
+        throw new ApiError(
+          426,
+          "client.outdated",
+          "This command, 0.5.0, is older than this console takes (>=0.5.3 <0.6.0; the console is 0.5.3). Update it to 0.5.3.",
+        );
+      }
       beats.push(input);
       says.delivered = Math.max(says.delivered, input.delivered);
       return {
@@ -329,7 +338,7 @@ function fakeConsole() {
   };
 }
 
-const running: { stop(): void; done: Promise<void> }[] = [];
+const running: { stop(): void; done: Promise<unknown> }[] = [];
 afterEach(async () => {
   for (const one of running.splice(0)) {
     one.stop();
@@ -347,6 +356,10 @@ function setup(
     sources?: readonly WakeSource[];
     /** How git ends for the autosave, by its first words; a desk that is a repository with nothing to save where left out. */
     git?: (args: readonly string[]) => number | null;
+    /** The version of the package on the machine, read again; a runner that never looks where left out. */
+    installed?: () => Promise<string | undefined>;
+    /** The command that installs the console's version here. */
+    updateCommand?: () => string | undefined;
   } = {},
 ) {
   const console = fakeConsole();
@@ -372,6 +385,8 @@ function setup(
     cwd: "/home/mira/desk",
     machine: { name: "mac-mini", os: "Darwin 24.1.0", user: "mira" },
     version: "0.5.0",
+    installed: over.installed,
+    updateCommand: over.updateCommand,
     now: () => Date.now(),
     random: () => 0.5,
     time: () => "14:02",
@@ -1230,6 +1245,122 @@ describe("the runner", () => {
       "the wake source chat ended (chat.refused); started again",
     ]);
     expect(log.join("\n")).not.toContain("hunter2");
+  });
+
+  it("ends by itself once the command it runs from was updated, seen twice, and at once where no turn is under way (ADR-0101)", async () => {
+    // What the manifest says at each look: the runner's own version, a manifest that does not
+    // read, another version once, as an install under way may show, then the new one to stay.
+    const manifest: (string | undefined)[] = ["0.5.0", undefined, "0.5.1", "0.5.0"];
+    let looks = 0;
+    const { console, done, log, product } = setup({
+      installed: async () => {
+        looks += 1;
+        if (manifest.length === 0) {
+          return "0.5.2";
+        }
+        const said = manifest.shift();
+        if (said === undefined) {
+          throw new Error("ENOENT");
+        }
+        return said;
+      },
+    });
+    expect(await done).toBe("updated");
+    // Four looks that ended nothing, then the new version seen twice.
+    expect(looks).toBe(6);
+    expect(log).toContain(
+      "the command the runner runs from is 0.5.2 now, and was 0.5.0 when the runner started: the runner ends once no turn is under way, to be started again",
+    );
+    expect(log.at(-1)).toBe("the runner ended, for the update");
+    // No session was open: none was begun for it, and none ended.
+    expect(product.sessions).toHaveLength(0);
+    expect(console.ended).toEqual([]);
+    // A runner that is not told where to look never ends for one.
+    const blind = setup();
+    await until("heartbeats", () => blind.console.beats.length >= 4);
+    blind.runner.stop();
+    expect(await blind.done).toBe("stopped");
+    expect(blind.log.at(-1)).toBe("the runner stopped");
+  });
+
+  it("takes an update between two turns: the turn under way ends first, nothing more is handed over, and the session goes on after as one restarted", async () => {
+    let version = "0.5.0";
+    const { console, product, done, log, saved } = setup({ installed: async () => version });
+    console.signal({ text: "Begin." });
+    const session = await sessionOf(product);
+    await until("the message", () => session.sent.length === 1);
+    session.emit(...STARTED);
+    await until("the transcript", () => console.events().length >= 2);
+    // Updated in the middle of a turn: the runner sees it, and waits for the turn.
+    version = "0.5.1";
+    await until("the update to be seen", () =>
+      log.some((line) => line.startsWith("the command the runner runs from is 0.5.1 now")),
+    );
+    // What arrives meanwhile is kept at the console: nothing more is handed to the product.
+    console.signal({ text: "And then this." });
+    await sleep(80);
+    expect(session.sent).toHaveLength(1);
+    expect(console.ended).toEqual([]);
+    session.emit({ type: "event", kind: "assistant", text: "Begun." }, { type: "turn_completed" });
+    expect(await done).toBe("updated");
+    // The session ended as one a supervisor restarted: the conversation is kept for the next.
+    expect(console.ended).toEqual(["restarted"]);
+    expect(saved.at(-1)).toMatchObject({ delivered: 1, conversation: "c-1" });
+    const record = console.events().map(([, kind, text]) => `${kind}: ${text}`);
+    expect(record).toContain(
+      "status: The command the runner runs from was updated, from 0.5.0 to 0.5.1: the runner ends, to be started again with it.",
+    );
+    expect(record.at(-1)).toBe("status: The session ended: restarted.");
+    expect(session.sent).toHaveLength(1);
+    // The runner started after is sent, from the console's record, what was never handed over.
+    const after = setup({
+      state: saved.at(-1),
+      before: (at) => {
+        at.says.delivered = 1;
+        at.signal({ text: "Begin." });
+        at.signal({ text: "And then this." });
+      },
+    });
+    const next = await sessionOf(after.product);
+    await until("the message", () => next.sent.length === 1);
+    expect(next.options).toMatchObject({ resume: "c-1" });
+    expect(next.sent[0]?.text).toContain("And then this.");
+    expect(next.sent[0]?.text).not.toContain("Begin.");
+  });
+
+  it("tells its agent, once, what installs the version the console takes when the console refuses the runner as too old", async () => {
+    const { console, product, log } = setup({
+      updateCommand: () => "npm install -g @skillcdn/console@0.5.3",
+    });
+    console.signal({ text: "Begin." });
+    const session = await sessionOf(product);
+    await until("the message", () => session.sent.length === 1);
+    session.emit(...STARTED, { type: "turn_completed" });
+    console.says.tooOld = true;
+    await until("the agent to be told", () => session.sent.length === 2);
+    const told = session.sent[1]?.text ?? "";
+    expect(told).toMatch(/^\[console [a-z0-9]{6} \u00b7 runner\]\n/);
+    expect(told).toContain(
+      "The console no longer takes this version of the command the runner runs from, and hears nothing of this session until it is updated. Update it: npm install -g @skillcdn/console@0.5.3\nThe runner sees the update and is started again with it by itself, once no turn is under way.\nWhere you cannot update it, say so to whom you report to.",
+    );
+    expect(log.filter((line) => line.includes("What installs it:"))).toEqual([
+      "the console no longer takes this version of the command: This command, 0.5.0, is older than this console takes (>=0.5.3 <0.6.0; the console is 0.5.3). Update it to 0.5.3. What installs it: npm install -g @skillcdn/console@0.5.3",
+    ]);
+    // Once: the heartbeats that follow say nothing more to it.
+    await sleep(150);
+    expect(session.sent).toHaveLength(2);
+    // A runner that cannot say what installs it tells the agent whom to tell.
+    const bare = setup();
+    bare.console.signal({ text: "Begin." });
+    const other = await sessionOf(bare.product);
+    await until("the message", () => other.sent.length === 1);
+    other.emit(...STARTED, { type: "turn_completed" });
+    bare.console.says.tooOld = true;
+    await until("the agent to be told", () => other.sent.length === 2);
+    expect(other.sent[1]?.text).toContain(
+      "until it is updated.\nWhere you cannot update it, say so to whom you report to.",
+    );
+    expect(other.sent[1]?.text).not.toContain("Update it:");
   });
 
   it("asks for its stream again when it ends, from the last signal it received", async () => {

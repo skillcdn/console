@@ -35,6 +35,8 @@ import type {
 // keeps one session of the agent's product at a time, feeds it what the console sends, reports
 // what the product does, and says every thirty seconds that it is there. It restarts nothing by
 // itself: an agent that cannot go on waits, and a supervisor's signal is what is tried next.
+// The one thing it ends for by itself is an update of the command it runs from (ADR-0101): when
+// no turn is under way, for the service that keeps it to start it again with the new one.
 //
 // Everything that changes what the runner holds goes through one queue, handled one at a time:
 // a signal received, a word of the driver's, a timer that fired. What the product prints is
@@ -108,6 +110,17 @@ export interface RunnerOptions {
   readonly machine: { readonly name: string; readonly os: string; readonly user: string };
   /** The version of the package the runner runs from. */
   readonly version: string;
+  /**
+   * The version of that package as it stands on the machine now, read again from where the
+   * runner runs from; nothing where it cannot be read. Left out, the runner never ends for an
+   * update (ADR-0101).
+   */
+  readonly installed?: (() => Promise<string | undefined>) | undefined;
+  /**
+   * The command that installs the console's version of the package where the runner runs from,
+   * for an agent whose runner the console refuses as too old; nothing where it cannot be said.
+   */
+  readonly updateCommand?: (() => string | undefined) | undefined;
   readonly now: () => number;
   readonly random: () => number;
   /** A moment as a header says it: the hour and the minute in the workspace's zone. */
@@ -151,9 +164,12 @@ export interface RunnerOptions {
   }>;
 }
 
+/** How a runner ended: stopped by whoever runs it, or by itself for an update of the command it runs from. */
+export type RunnerEnd = "stopped" | "updated";
+
 export interface Runner {
-  /** Runs until stopped: resolves when the open session is ended and nothing is left to send. */
-  run(): Promise<void>;
+  /** Runs until it ends: resolves, with how, when the open session is ended and nothing is left to send. */
+  run(): Promise<RunnerEnd>;
   /** Stops the runner: the session open is ended as exited. */
   stop(): void;
 }
@@ -320,6 +336,12 @@ export function createRunner(options: RunnerOptions): Runner {
   let secretValues = new Map<string, string>();
   let redact: (text: string) => string = (text) => text;
   let tooOldSaid = false;
+  /**
+   * The package the runner runs from, where it is another version than the runner's: the one
+   * last seen, and the one seen twice running, which the runner ends for.
+   */
+  let seenVersion: string | undefined;
+  let updatedTo: string | undefined;
 
   const persist = async (): Promise<void> => {
     try {
@@ -648,7 +670,9 @@ export function createRunner(options: RunnerOptions): Runner {
   /** Hands the product what is pending, as one message; begins a session where none is open. */
   const deliver = async (priority: "now" | "next"): Promise<void> => {
     deliverAt = undefined;
-    if (held || pending.length === 0) {
+    // Nothing more is handed over once the runner is to end for an update: what waits is sent
+    // again by the console, in order, to the runner started after.
+    if (held || updatedTo !== undefined || pending.length === 0) {
       return;
     }
     // An agent that could not go on is tried at once for a supervisor, and after the cool-down for the rest.
@@ -1062,12 +1086,20 @@ export function createRunner(options: RunnerOptions): Runner {
       if (error instanceof ApiError && error.code === "client.outdated") {
         if (!tooOldSaid) {
           tooOldSaid = true;
-          log(`the console no longer takes this version of the command: ${error.message}`);
-          // The agent is told, once, so that it tells whoever it reports to.
+          const install = options.updateCommand?.();
+          log(
+            `the console no longer takes this version of the command: ${error.message}${install === undefined ? "" : ` What installs it: ${install}`}`,
+          );
+          // The agent is told, once: what installs the version the console takes, which the
+          // runner then sees and starts again for; and whom to tell where it cannot.
           if (session !== undefined && !session.first) {
+            const update =
+              install === undefined
+                ? ""
+                : ` Update it: ${install}\nThe runner sees the update and is started again with it by itself, once no turn is under way.`;
             await session.driver
               .send({
-                text: `[console ${session.mark} · runner]\nThe console no longer takes this version of the command the runner runs from, and hears nothing of this session until it is updated. Say so to whom you report to (console manager).`,
+                text: `[console ${session.mark} · runner]\nThe console no longer takes this version of the command the runner runs from, and hears nothing of this session until it is updated.${update}\nWhere you cannot update it, say so to whom you report to.`,
                 images: [],
                 priority: "next",
               })
@@ -1078,6 +1110,30 @@ export function createRunner(options: RunnerOptions): Runner {
       }
       log(`the console did not take the heartbeat (${codeOf(error)})`);
     }
+  };
+
+  /**
+   * Looks whether the package the runner runs from was updated (ADR-0101). A version is taken
+   * once it was seen twice, a heartbeat apart, so that an install under way has put its last
+   * file down by the time the runner is started again.
+   */
+  const lookForUpdate = async (): Promise<void> => {
+    if (options.installed === undefined || updatedTo !== undefined) {
+      return;
+    }
+    const now = await options.installed().catch(() => undefined);
+    if (now === undefined || now === options.version) {
+      seenVersion = undefined;
+      return;
+    }
+    if (seenVersion !== now) {
+      seenVersion = now;
+      return;
+    }
+    updatedTo = now;
+    log(
+      `the command the runner runs from is ${now} now, and was ${options.version} when the runner started: the runner ends once no turn is under way, to be started again`,
+    );
   };
 
   /** Waits so long, or until the runner stops. */
@@ -1229,8 +1285,21 @@ export function createRunner(options: RunnerOptions): Runner {
       log(
         `the runner is there: ${driver.product.name} ${probe.version ?? "of a version it did not say"}, signals after #${delivered}`,
       );
+      let how: RunnerEnd = "stopped";
       try {
         for (;;) {
+          // An update is taken between two turns, and at once where none is under way.
+          if (updatedTo !== undefined && session?.turn !== true) {
+            how = "updated";
+            if (session !== undefined) {
+              record(
+                session,
+                "status",
+                `The command the runner runs from was updated, from ${options.version} to ${updatedTo}: the runner ends, to be started again with it.`,
+              );
+            }
+            break;
+          }
           const message = await next();
           if (message.t === "stop") {
             break;
@@ -1250,6 +1319,7 @@ export function createRunner(options: RunnerOptions): Runner {
                 await flush(session);
               }
             } else {
+              await lookForUpdate();
               // Said every thirty seconds, and at once when how the agent stands changed.
               const changed = said !== `${stands.state} ${stands.reason} ${session?.id ?? ""}`;
               if (changed || !queue.some((queued) => queued.t === "heartbeat")) {
@@ -1268,12 +1338,15 @@ export function createRunner(options: RunnerOptions): Runner {
         for (const timer of timers) {
           clearTimeout(timer);
         }
-        await end("exited");
+        // A session ended for an update goes on, in the runner started after, as one a
+        // supervisor restarted does: with the same conversation.
+        await end(how === "updated" ? "restarted" : "exited");
         abort.abort();
         await listening;
         await Promise.all(sourcing);
-        log("the runner stopped");
+        log(how === "updated" ? "the runner ended, for the update" : "the runner stopped");
       }
+      return how;
     },
   };
 }

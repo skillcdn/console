@@ -242,6 +242,14 @@ export interface CliIo {
   readonly userAgent?: string | undefined;
   /** Where the command is installed, so that an update is told the way it takes effect; nothing when unknown. */
   readonly install?: Install | undefined;
+  /**
+   * The version of the package as it stands on this machine now, read again from its manifest:
+   * another than `version` once the package was updated under a command that runs on, which is
+   * what a runner ends for (ADR-0101). Left out, a runner never ends for an update.
+   */
+  readonly installedVersion?: (() => Promise<string | undefined>) | undefined;
+  /** The console's version as its last answer said it (ADR-0025); the command sets it for itself. */
+  readonly consoleVersion?: (() => string | undefined) | undefined;
   /** What the command last said of the versions; left out, it says it every time. */
   readonly notices?: NoticeStore | undefined;
   /** The oldest console this command works with (ADR-0038); left out, the package's own floor. */
@@ -3718,6 +3726,10 @@ const runner: Command = async (args, io) => {
       user: machineLine(modules.boundaries.get("os-user")?.user() ?? host.user),
     },
     version: io.version ?? "0.0.0",
+    // A runner whose own version is not known has nothing to hold the package's against.
+    installed: io.version === undefined ? undefined : io.installedVersion,
+    // What installs the console's version here, the way this command was installed.
+    updateCommand: () => updateWords(io, io.consoleVersion?.()),
     now: io.now,
     random: host.random,
     time: (iso) => clock.format(new Date(iso)),
@@ -3753,7 +3765,13 @@ const runner: Command = async (args, io) => {
     `The runner of @${me.person.handle ?? me.person.login} at ${me.workspace.name} (${session.url}) starts in ${host.cwd}. Stop with Ctrl+C.\n`,
   );
   void host.untilStopped().then(() => running.stop());
-  await running.run();
+  if ((await running.run()) === "updated") {
+    // The service that keeps a runner starts it again whenever it ends; one started by hand is
+    // started again by hand.
+    io.stdout(
+      "The command was updated: the runner ended, and the service that keeps it starts it again with the new one. Started by hand: console runner\n",
+    );
+  }
   return EXIT.ok;
 };
 
@@ -5664,6 +5682,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
   const seen: ConsoleSeen = {};
   const watched: CliIo = {
     ...io,
+    consoleVersion: () => seen.version,
     fetch: async (input, init) => {
       const response = await io.fetch(input, init);
       seen.version = response.headers.get(VERSION_HEADER) ?? seen.version;

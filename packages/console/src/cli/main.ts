@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { hostname } from "node:os";
+import { join } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import * as z from "zod/mini";
@@ -63,6 +65,17 @@ process.exitCode = await runCli(process.argv.slice(2), {
     exists: existsSync,
   }),
   notices: createNoticeStore(configDir),
+  // The manifest read again: what the package is now, where it was updated under a runner.
+  installedVersion: async () => {
+    try {
+      const read = z
+        .object({ version: z.string() })
+        .safeParse(JSON.parse(await readFile(join(packageDir, "package.json"), "utf8")));
+      return read.success ? read.data.version : undefined;
+    } catch {
+      return undefined;
+    }
+  },
   locale: Intl.DateTimeFormat().resolvedOptions().locale,
   skillsDir: existsSync(skillsDir) ? skillsDir : undefined,
   listen: listenOn,
