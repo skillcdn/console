@@ -70,12 +70,13 @@ import { PackConnect } from "./pack-connect.js";
 import { ListingForm, PeopleList, supervisedBy, TeamForm, TeamList } from "./people.js";
 import { opensAbove, Picker } from "./picker.js";
 import {
-  clampScale,
-  FITTED,
+  boundView,
+  openingView,
   PictureOverlay,
   PictureThumb,
   panBy,
   wheelFactor,
+  wholeScale,
   zoomAround,
 } from "./pictures.js";
 import { keyOf, MemberList, PackTokenForm, ProjectForm, ProjectMark } from "./projects.js";
@@ -4963,24 +4964,85 @@ describe("a picture large over the page", () => {
     size: 2048,
   };
 
-  it("zooms around a point within its bounds, and comes back to the centre once it fits again", () => {
-    expect(clampScale(0.2)).toBe(1);
-    expect(clampScale(99)).toBe(8);
-    expect(clampScale(Number.NaN)).toBe(1);
-    const zoomed = zoomAround(FITTED, 2, { x: 100, y: 50 });
-    expect(zoomed).toEqual({ scale: 2, x: -100, y: -50 });
-    // What was under the pointer stays under it: the point maps to the same spot of the picture.
-    const before = { x: (100 - FITTED.x) / FITTED.scale, y: (50 - FITTED.y) / FITTED.scale };
-    const after = { x: (100 - zoomed.x) / zoomed.scale, y: (50 - zoomed.y) / zoomed.scale };
-    expect(after).toEqual(before);
-    expect(zoomAround(zoomed, 0.5, { x: 100, y: 50 })).toEqual(FITTED);
-    expect(zoomAround(zoomed, 100, { x: 0, y: 0 }).scale).toBe(8);
-    expect(zoomAround(FITTED, 0.5, { x: 0, y: 0 })).toBe(FITTED);
+  const stage = { width: 1400, height: 800 };
+
+  it("opens with all of it in view, and a long one at the stage's width from its top", () => {
+    // Smaller than the stage: at its own size, in the middle.
+    expect(openingView({ width: 600, height: 400 }, stage)).toEqual({ scale: 1, x: 0, y: 0 });
+    expect(wholeScale({ width: 600, height: 400 }, stage)).toBe(1);
+    // Larger, and of a shape near the stage's: all of it, smaller than its own size.
+    const large = { width: 2800, height: 2000 };
+    expect(wholeScale(large, stage)).toBeCloseTo(0.4);
+    expect(openingView(large, stage)).toEqual({ scale: 0.4, x: 0, y: 0 });
+    // A page captured from top to bottom: whole it would be a strip, so it opens as wide as the
+    // stage has room for, never over its own size, with its top at the stage's top.
+    const long = { width: 1440, height: 6000 };
+    expect(wholeScale(long, stage)).toBeCloseTo(800 / 6000);
+    const opened = openingView(long, stage);
+    expect(opened.scale).toBeCloseTo(1400 / 1440);
+    expect(opened.x).toBe(0);
+    expect(opened.y).toBeCloseTo((6000 * opened.scale - 800) / 2);
+    // A narrow one, a phone's screen captured: at its own size, from its top.
+    expect(openingView({ width: 780, height: 5044 }, stage)).toEqual({
+      scale: 1,
+      x: 0,
+      y: (5044 - 800) / 2,
+    });
+    // A wide one: as tall as the stage has room for, from its left.
+    const wide = openingView({ width: 9000, height: 800 }, stage);
+    expect(wide).toEqual({ scale: 1, x: (9000 - 1400) / 2, y: 0 });
+    // Nothing measured yet, or nothing sensible: its own size, and no number that is none.
+    expect(openingView({ width: 0, height: 0 }, stage)).toEqual({ scale: 1, x: 0, y: 0 });
+    expect(openingView(long, { width: Number.NaN, height: 800 })).toEqual({ scale: 1, x: 0, y: 0 });
+    expect(wholeScale({ width: -5, height: 10 }, stage)).toBe(1);
+  });
+
+  it("zooms out until all of it is in view and in to eight times its own size, around a point", () => {
+    const long = { width: 1440, height: 6000 };
+    const opened = openingView(long, stage);
+    // Out, a step at a time, and no further than the whole: then it stands in the middle.
+    let view = opened;
+    for (let step = 0; step < 40; step += 1) {
+      view = zoomAround(view, 1 / 1.25, { x: 0, y: 0 }, long, stage);
+    }
+    expect(view.scale).toBeCloseTo(800 / 6000);
+    expect(view.x).toBe(0);
+    expect(view.y).toBe(0);
+    expect(zoomAround(view, 0.5, { x: 0, y: 0 }, long, stage)).toBe(view);
+    // In, around a point: what was under the pointer stays under it.
+    const small = { width: 600, height: 400 };
+    const start = { scale: 1, x: 0, y: 0 };
+    const zoomed = zoomAround(start, 4, { x: 100, y: 50 }, small, stage);
+    expect(zoomed.scale).toBe(4);
+    expect((100 - zoomed.x) / zoomed.scale).toBeCloseTo(100);
+    expect((50 - zoomed.y) / zoomed.scale).toBeCloseTo(50);
+    expect(zoomAround(zoomed, 100, { x: 0, y: 0 }, small, stage).scale).toBe(8);
     expect(wheelFactor(-100)).toBeCloseTo(1.25);
     expect(wheelFactor(100)).toBeCloseTo(0.8);
     expect(wheelFactor(0)).toBe(1);
-    expect(panBy(FITTED, 10, 10)).toBe(FITTED);
-    expect(panBy(zoomed, 10, -10)).toEqual({ scale: 2, x: -90, y: -60 });
+    expect(wheelFactor(Number.NaN)).toBe(1);
+  });
+
+  it("moves as far as there is more of it that way, and stands in the middle where there is none", () => {
+    const long = { width: 1440, height: 6000 };
+    const opened = openingView(long, stage);
+    // Down the page: the picture goes up, until its foot is at the stage's.
+    const lower = panBy(opened, 0, -500, long, stage);
+    expect(lower.y).toBeCloseTo(opened.y - 500);
+    const foot = panBy(opened, 0, -100000, long, stage);
+    expect(foot.y).toBeCloseTo(-opened.y);
+    // No further up than its top, and not sideways: it is no wider than the stage.
+    expect(panBy(opened, 300, 300, long, stage)).toEqual(opened);
+    // A view from elsewhere is held to what there is to see.
+    expect(boundView({ scale: 99, x: 1e9, y: Number.NaN }, long, stage)).toEqual({
+      scale: 8,
+      x: (1440 * 8 - 1400) / 2,
+      y: 0,
+    });
+    expect(boundView({ scale: Number.NaN, x: 0, y: 0 }, long, stage).scale).toBeCloseTo(800 / 6000);
+    // All of it in view: a drag moves nothing.
+    const whole = { scale: wholeScale(long, stage), x: 0, y: 0 };
+    expect(panBy(whole, 50, 50, long, stage)).toEqual(whole);
   });
 
   it("is a thumbnail that opens it, and a dialog that names it with the ways to zoom and to close", () => {
@@ -5002,8 +5064,9 @@ describe("a picture large over the page", () => {
     }
     expect(overlay).toContain('href="/api/v1/projects/web/files/f1" target="_blank"');
     expect(overlay).toContain("2.0 KB");
-    expect(overlay).toContain('class="sc-overlay-picture"');
-    expect(overlay).toContain("translate(0px, 0px) scale(1)");
+    // Until the picture has said how large it is, the stylesheet holds it within the stage.
+    expect(overlay).toContain('class="sc-overlay-picture sc-overlay-picture-unsized"');
+    expect(overlay).not.toContain("style=");
     const korean = renderToStaticMarkup(
       <LanguageContext.Provider value={KOREAN}>
         <PictureThumb picture={picture} onOpen={() => undefined} />

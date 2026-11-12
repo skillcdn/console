@@ -133,15 +133,16 @@ export {
   type PickerSearch,
 } from "./components/picker.js";
 export {
-  clampScale,
-  FITTED,
+  boundView,
   Lightbox,
   type LightboxProps,
+  LONG_PICTURE,
   MAX_SCALE,
-  MIN_SCALE,
+  openingView,
   type Picture,
   PictureOverlay,
   type PictureOverlayProps,
+  type PictureSize,
   type PictureState,
   PictureThumb,
   type PictureThumbProps,
@@ -149,6 +150,7 @@ export {
   panBy,
   usePicture,
   wheelFactor,
+  wholeScale,
   ZOOM_STEP,
   zoomAround,
 } from "./components/pictures.js";

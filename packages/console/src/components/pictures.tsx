@@ -29,53 +29,121 @@ export interface Picture {
   readonly size?: number | undefined;
 }
 
-/** How the picture is seen in the overlay: its scale, and where its centre is, in pixels from the stage's centre. */
+/** How wide and how tall something is, in pixels: a picture by its own, the stage it is shown on. */
+export interface PictureSize {
+  readonly width: number;
+  readonly height: number;
+}
+
+/**
+ * How the picture is seen in the overlay: its scale against its own size, `1` a pixel of the
+ * picture for a pixel of the page, and where its centre is, in pixels from the stage's centre.
+ */
 export interface PictureView {
   readonly scale: number;
   readonly x: number;
   readonly y: number;
 }
 
-/** How far the picture zooms: from fitting the stage to eight times that. */
-export const MIN_SCALE = 1;
+/** How far the picture zooms in: to eight times its own size. It zooms out until all of it is in view. */
 export const MAX_SCALE = 8;
 /** What one press of a zoom button does to the scale. */
 export const ZOOM_STEP = 1.25;
+/**
+ * How much longer than the stage a picture is, in its shape, before it opens at the stage's
+ * width and from its top, and no longer whole: a page captured from top to bottom, shown whole,
+ * is a strip nobody reads.
+ */
+export const LONG_PICTURE = 2;
 /** How far a pointer travels before a press is a drag and no longer a click. */
 const DRAG_SLACK = 4;
+/** How far a press of an arrow key moves the picture. */
+const KEY_STEP = 80;
 
-/** The picture as it first appears: fitted to the stage, centred. */
-export const FITTED: PictureView = { scale: 1, x: 0, y: 0 };
+const measured = (size: PictureSize): boolean =>
+  Number.isFinite(size.width) && Number.isFinite(size.height) && size.width > 0 && size.height > 0;
 
-export function clampScale(scale: number): number {
-  if (!Number.isFinite(scale)) {
-    return MIN_SCALE;
+/**
+ * The scale at which all of the picture is in view: as its own size where the stage has room
+ * for that, smaller where it has not, and never larger than its own size.
+ */
+export function wholeScale(picture: PictureSize, stage: PictureSize): number {
+  if (!measured(picture) || !measured(stage)) {
+    return 1;
   }
-  return Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale));
+  return Math.min(1, stage.width / picture.width, stage.height / picture.height);
+}
+
+/**
+ * The view held to what there is to see: the scale between all of the picture in view and
+ * eight times its own size; on an axis where the picture is no larger than the stage it stands
+ * in the middle, and where it is larger its edge never comes in from the stage's.
+ */
+export function boundView(
+  view: PictureView,
+  picture: PictureSize,
+  stage: PictureSize,
+): PictureView {
+  const least = wholeScale(picture, stage);
+  const asked = Number.isFinite(view.scale) ? view.scale : least;
+  const scale = Math.min(Math.max(MAX_SCALE, least), Math.max(least, asked));
+  const within = (at: number, length: number, room: number): number => {
+    const reach = Math.max(0, (length * scale - room) / 2);
+    return Number.isFinite(at) ? Math.min(reach, Math.max(-reach, at)) : 0;
+  };
+  const x = within(view.x, picture.width, stage.width);
+  const y = within(view.y, picture.height, stage.height);
+  return scale === view.scale && x === view.x && y === view.y ? view : { scale, x, y };
+}
+
+/**
+ * The picture as it first appears: all of it in view, in the middle; a picture much longer than
+ * the stage as wide as the stage has room for, from its top, and one much wider as tall as the
+ * stage has room for, from its left, so that what is shown can be read. Zooming out brings all
+ * of it in view.
+ */
+export function openingView(picture: PictureSize, stage: PictureSize): PictureView {
+  if (!measured(picture) || !measured(stage)) {
+    return { scale: 1, x: 0, y: 0 };
+  }
+  const whole = wholeScale(picture, stage);
+  const across = Math.min(1, stage.width / picture.width);
+  const down = Math.min(1, stage.height / picture.height);
+  if (across >= whole * LONG_PICTURE) {
+    return boundView({ scale: across, x: 0, y: Number.MAX_SAFE_INTEGER }, picture, stage);
+  }
+  if (down >= whole * LONG_PICTURE) {
+    return boundView({ scale: down, x: Number.MAX_SAFE_INTEGER, y: 0 }, picture, stage);
+  }
+  return { scale: whole, x: 0, y: 0 };
 }
 
 /**
  * The view after zooming by `factor` around a point of the stage, so that what was under the
- * pointer stays under it. Zooming back to the fitted scale puts the picture back in the centre.
+ * pointer stays under it, as far as the picture's edges allow.
  */
 export function zoomAround(
   view: PictureView,
   factor: number,
   point: { readonly x: number; readonly y: number },
+  picture: PictureSize,
+  stage: PictureSize,
 ): PictureView {
-  const scale = clampScale(view.scale * factor);
-  if (scale === view.scale) {
-    return view;
+  const from = boundView(view, picture, stage);
+  const scale = boundView({ ...from, scale: from.scale * factor }, picture, stage).scale;
+  if (scale === from.scale) {
+    return from;
   }
-  if (scale === MIN_SCALE) {
-    return FITTED;
-  }
-  const ratio = scale / view.scale;
-  return {
-    scale,
-    x: point.x - (point.x - view.x) * ratio,
-    y: point.y - (point.y - view.y) * ratio,
-  };
+  const ratio = scale / from.scale;
+  return boundView(
+    {
+      scale,
+      x: point.x - (point.x - from.x) * ratio,
+      y: point.y - (point.y - from.y) * ratio,
+    },
+    picture,
+    stage,
+  );
 }
 
 /** What a notch of the wheel does to the scale: in for a wheel rolled up, out for one rolled down, a step per hundred units. */
@@ -86,12 +154,15 @@ export function wheelFactor(deltaY: number): number {
   return ZOOM_STEP ** (-deltaY / 100);
 }
 
-/** The view moved by a drag; a fitted picture stays where it is. */
-export function panBy(view: PictureView, dx: number, dy: number): PictureView {
-  if (view.scale === MIN_SCALE) {
-    return view;
-  }
-  return { ...view, x: view.x + dx, y: view.y + dy };
+/** The view moved by a drag, as far as there is more of the picture that way. */
+export function panBy(
+  view: PictureView,
+  dx: number,
+  dy: number,
+  picture: PictureSize,
+  stage: PictureSize,
+): PictureView {
+  return boundView({ ...view, x: view.x + dx, y: view.y + dy }, picture, stage);
 }
 
 export interface PictureThumbProps {
@@ -137,10 +208,15 @@ const midpoint = (a: Point, b: Point): Point => ({ x: (a.x + b.x) / 2, y: (a.y +
 export function PictureOverlay(props: PictureOverlayProps) {
   const words = useWords().pictures;
   const { picture, onClose } = props;
-  const [view, setView] = useState<PictureView>(FITTED);
+  /** How the picture is seen once a person zoomed or moved it; until then, as it opens. */
+  const [chosen, setChosen] = useState<PictureView | null>(null);
+  /** The picture's own size, known once it has loaded, and the stage's, kept as the window changes. */
+  const [size, setSize] = useState<PictureSize | null>(null);
+  const [room, setRoom] = useState<PictureSize | null>(null);
   const [dragging, setDragging] = useState(false);
   const dialog = useRef<HTMLDivElement>(null);
   const stage = useRef<HTMLDivElement>(null);
+  const image = useRef<HTMLImageElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   /** The pointers on the stage, by id, where each was last seen. */
   const pointers = useRef(new Map<number, Point>());
@@ -158,6 +234,67 @@ export function PictureOverlay(props: PictureOverlayProps) {
     };
   }, []);
 
+  // The stage is measured when the overlay opens and whenever its size changes.
+  useEffect(() => {
+    const element = stage.current;
+    if (element === null) {
+      return;
+    }
+    const measure = () => {
+      const rect = element.getBoundingClientRect();
+      setRoom((before) =>
+        before !== null && before.width === rect.width && before.height === rect.height
+          ? before
+          : { width: rect.width, height: rect.height },
+      );
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", measure);
+      return () => window.removeEventListener("resize", measure);
+    }
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  /** The picture's own size, or the size it is drawn at where it says none of its own. */
+  const sizeOf = useCallback((element: HTMLImageElement) => {
+    if (element.naturalWidth > 0 && element.naturalHeight > 0) {
+      setSize({ width: element.naturalWidth, height: element.naturalHeight });
+      return;
+    }
+    const rect = element.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      setSize({ width: rect.width, height: rect.height });
+    }
+  }, []);
+
+  // A picture the thumbnail loaded already is complete before anything is heard of it.
+  useEffect(() => {
+    const element = image.current;
+    if (element?.complete === true) {
+      sizeOf(element);
+    }
+  }, [sizeOf]);
+
+  const view =
+    size === null || room === null
+      ? null
+      : boundView(chosen ?? openingView(size, room), size, room);
+
+  /** Changes the view from what it is, once the sizes are known; nothing before. */
+  const change = (
+    next: (current: PictureView, picture: PictureSize, stage: PictureSize) => PictureView,
+  ) => {
+    if (size === null || room === null) {
+      return;
+    }
+    setChosen((current) =>
+      next(boundView(current ?? openingView(size, room), size, room), size, room),
+    );
+  };
+
   /** A point of the stage, in pixels from its centre. */
   const pointOf = useCallback((event: { clientX: number; clientY: number }): Point => {
     const rect = stage.current?.getBoundingClientRect();
@@ -171,7 +308,11 @@ export function PictureOverlay(props: PictureOverlayProps) {
   }, []);
 
   const zoom = (factor: number, point: Point = { x: 0, y: 0 }) =>
-    setView((current) => zoomAround(current, factor, point));
+    change((current, own, around) => zoomAround(current, factor, point, own, around));
+  const move = (dx: number, dy: number) =>
+    change((current, own, around) => panBy(current, dx, dy, own, around));
+  /** All of the picture in view, in the middle. */
+  const whole = () => change((_, own, around) => ({ scale: wholeScale(own, around), x: 0, y: 0 }));
 
   const onWheel = (event: WheelEvent<HTMLDivElement>) => {
     zoom(wheelFactor(event.deltaY), pointOf(event));
@@ -203,10 +344,18 @@ export function PictureOverlay(props: PictureOverlayProps) {
         distance(before, other) === 0 ? 1 : distance(now, other) / distance(before, other);
       const from = midpoint(before, other);
       const to = midpoint(now, other);
-      setView((current) => zoomAround(panBy(current, to.x - from.x, to.y - from.y), factor, to));
+      change((current, own, around) =>
+        zoomAround(
+          panBy(current, to.x - from.x, to.y - from.y, own, around),
+          factor,
+          to,
+          own,
+          around,
+        ),
+      );
       return;
     }
-    setView((current) => panBy(current, now.x - before.x, now.y - before.y));
+    move(now.x - before.x, now.y - before.y);
   };
 
   const onPointerUp = (event: PointerEvent<HTMLDivElement>) => {
@@ -216,32 +365,82 @@ export function PictureOverlay(props: PictureOverlayProps) {
     }
   };
 
-  // A click beside the picture closes the overlay; a drag that ends there does not.
+  // A click beside the picture closes the overlay; a drag that ends there does not, and neither
+  // does a click on the picture. Where the click fell is read off the picture's place: the stage
+  // holds the pointer while it is down, so the click is told as the stage's wherever it fell.
   const onBackdropClick = (event: MouseEvent<HTMLDivElement>) => {
-    const beside = event.target === event.currentTarget || event.target === stage.current;
-    if (beside && !moved.current) {
+    const on =
+      event.target === event.currentTarget ||
+      event.target === stage.current ||
+      event.target === image.current;
+    const rect = image.current?.getBoundingClientRect();
+    const onPicture =
+      rect !== undefined &&
+      event.clientX >= rect.left &&
+      event.clientX <= rect.right &&
+      event.clientY >= rect.top &&
+      event.clientY <= rect.bottom;
+    if (on && !onPicture && !moved.current) {
       onClose();
     }
   };
 
-  const onDoubleClick = (event: MouseEvent<HTMLDivElement>) => {
-    const point = pointOf(event);
-    setView((current) => (current.scale > MIN_SCALE ? FITTED : zoomAround(current, 2.5, point)));
+  // A press on the picture or beside it takes the focus from nothing: it stays with the button
+  // that has it, so that Escape and the keys that zoom and move are heard after a drag as before.
+  const keepFocus = (event: MouseEvent<HTMLDivElement>) => {
+    if (!(event.target instanceof Element) || event.target.closest("a, button") === null) {
+      event.preventDefault();
+    }
   };
 
-  // Escape closes; the keys zoom; Tab stays within the dialog.
+  // A double press looks closer where it was pressed, and from any closer view shows all of it again.
+  const onDoubleClick = (event: MouseEvent<HTMLDivElement>) => {
+    const point = pointOf(event);
+    change((current, own, around) => {
+      const least = wholeScale(own, around);
+      if (current.scale > least) {
+        return { scale: least, x: 0, y: 0 };
+      }
+      // To its own size; a picture that is all in view at its own size, to two and a half times it.
+      const closer = least < 1 ? 1 : 2.5;
+      return zoomAround(current, closer / current.scale, point, own, around);
+    });
+  };
+
+  // Escape closes; the keys zoom and move; Tab stays within the dialog.
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape") {
       event.preventDefault();
       onClose();
       return;
     }
-    if (event.key === "+" || event.key === "=") {
+    const page = (room?.height ?? 0) * 0.85;
+    const far = Number.MAX_SAFE_INTEGER;
+    const moves: Readonly<Record<string, readonly [number, number]>> = {
+      ArrowLeft: [KEY_STEP, 0],
+      ArrowRight: [-KEY_STEP, 0],
+      ArrowUp: [0, KEY_STEP],
+      ArrowDown: [0, -KEY_STEP],
+      PageUp: [0, page],
+      PageDown: [0, -page],
+      Home: [0, far],
+      End: [0, -far],
+    };
+    const by = moves[event.key];
+    if (by !== undefined) {
+      event.preventDefault();
+      move(by[0], by[1]);
+    } else if (event.key === "+" || event.key === "=") {
       zoom(ZOOM_STEP);
     } else if (event.key === "-") {
       zoom(1 / ZOOM_STEP);
     } else if (event.key === "0") {
-      setView(FITTED);
+      whole();
+    } else if (event.key === "1") {
+      // Its own size: a pixel of the picture for a pixel of the page.
+      change((current, own, around) =>
+        zoomAround(current, 1 / current.scale, { x: 0, y: 0 }, own, around),
+      );
     } else if (event.key === "Tab" && dialog.current !== null) {
       const focusable = [
         ...dialog.current.querySelectorAll<HTMLElement>("a[href], button:not(:disabled)"),
@@ -261,7 +460,16 @@ export function PictureOverlay(props: PictureOverlayProps) {
     }
   };
 
-  const transform = `translate(${view.x}px, ${view.y}px) scale(${view.scale})`;
+  // Drawn at the size the scale gives it, and placed by its centre: until its size is known it
+  // is held within the stage by the stylesheet alone, whole and in the middle.
+  const drawn =
+    view === null || size === null
+      ? undefined
+      : {
+          width: `${size.width * view.scale}px`,
+          height: `${size.height * view.scale}px`,
+          transform: `translate(calc(-50% + ${view.x}px), calc(-50% + ${view.y}px))`,
+        };
   return (
     <div
       ref={dialog}
@@ -271,6 +479,7 @@ export function PictureOverlay(props: PictureOverlayProps) {
       aria-label={words.label(picture.name)}
       onKeyDown={onKeyDown}
       onClick={onBackdropClick}
+      onMouseDown={keepFocus}
     >
       <div className="sc-overlay-bar">
         <a
@@ -302,8 +511,9 @@ export function PictureOverlay(props: PictureOverlayProps) {
           >
             +
           </Button>
-          <Button variant="ghost" size="sm" aria-label={words.fit} onClick={() => setView(FITTED)}>
-            {Math.round(view.scale * 100)}%
+          {/* The scale against the picture's own size; pressed, all of it is in view. */}
+          <Button variant="ghost" size="sm" aria-label={words.fit} onClick={whole}>
+            {view === null ? "–" : `${Math.round(view.scale * 100)}%`}
           </Button>
           <button
             ref={closeButton}
@@ -330,12 +540,14 @@ export function PictureOverlay(props: PictureOverlayProps) {
         onDoubleClick={onDoubleClick}
       >
         <img
-          className="sc-overlay-picture"
+          ref={image}
+          className={cx("sc-overlay-picture", drawn === undefined && "sc-overlay-picture-unsized")}
           src={picture.src}
           alt={picture.alt}
           decoding="async"
           draggable={false}
-          style={{ transform }}
+          style={drawn}
+          onLoad={(event) => sizeOf(event.currentTarget)}
         />
       </div>
       <p className="sc-overlay-hint">{words.hint}</p>

@@ -3751,6 +3751,8 @@ select.sc-input-quiet {
   position: fixed;
   z-index: 100;
   display: grid;
+  /* One column no wider than the window: a long name in the bar is cut, never the stage widened. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
   inset: 0;
   background: color-mix(in srgb, var(--sc-color-bg) 90%, transparent);
@@ -3782,8 +3784,6 @@ select.sc-input-quiet {
 
 .sc-overlay-stage {
   position: relative;
-  display: grid;
-  place-items: center;
   overflow: hidden;
   cursor: grab;
   touch-action: none;
@@ -3794,13 +3794,24 @@ select.sc-input-quiet {
   cursor: grabbing;
 }
 
+/* The picture is placed by its centre, from the stage's: drawn at the size its scale gives it,
+   which the overlay writes on it once the picture has said how large it is. */
 .sc-overlay-picture {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  max-width: none;
+  transform: translate(-50%, -50%);
+  will-change: transform;
+}
+
+/* Until then it is held within the stage, whole: against the stage's own size, which a picture
+   laid out in the flow of a stage as tall as its content never was, so that a long one was cut. */
+.sc-overlay-picture-unsized {
   width: auto;
   max-width: 100%;
   height: auto;
   max-height: 100%;
-  transform-origin: center center;
-  will-change: transform;
 }
 
 .sc-overlay-hint {
