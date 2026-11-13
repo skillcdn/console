@@ -1,4 +1,6 @@
 import { and, eq, inArray, isNotNull, isNull, lte } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
+import { decisionReachableBy, mayWorkIn } from "../../auth/policy.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
 import {
   agentRunners,
@@ -36,29 +38,59 @@ const said = (text: string, most = 200): string => {
   return line.length > most ? `${line.slice(0, most - 1)}…` : line;
 };
 
-/** The agent accounts among some members: those that are in, and not the one who did the thing. */
+/** The members a wake is looked for among: the policy's conditions read `people` themselves. */
+const woken = alias(people, "woken");
+
+/**
+ * The agent accounts among some members: those that are in, and not the one who did the thing;
+ * with `projectId`, those of them who may still work in that project, as a worker of a task in
+ * it must (ADR-0035): a wake names the task, and whoever was taken off a private project is
+ * told nothing of what is in it.
+ */
 async function agentsAmong(
   database: Database,
   workspaceId: string,
   ids: readonly string[],
   except: string | undefined,
+  projectId?: string,
 ): Promise<PersonRecord[]> {
   const wanted = [...new Set(ids)].filter((id) => id !== except);
   if (wanted.length === 0) {
     return [];
   }
   const rows = await drizzleOf(database)
-    .select(personColumns(people))
-    .from(people)
+    .select(personColumns(woken))
+    .from(woken)
     .where(
       and(
-        eq(people.workspaceId, workspaceId),
-        eq(people.kind, "agent"),
-        eq(people.status, "active"),
-        inArray(people.id, wanted),
+        eq(woken.workspaceId, workspaceId),
+        eq(woken.kind, "agent"),
+        eq(woken.status, "active"),
+        inArray(woken.id, wanted),
+        projectId === undefined ? undefined : mayWorkIn(projectId, woken.id),
       ),
     );
   return rows.map(toPerson);
+}
+
+/** Those of some accounts a decision still reaches (ADR-0068, ADR-0077): a wake says its question, and its answer. */
+async function reachedBy(
+  database: Database,
+  decisionId: string,
+  accounts: readonly PersonRecord[],
+): Promise<PersonRecord[]> {
+  const reached: PersonRecord[] = [];
+  for (const account of accounts) {
+    const [found] = await drizzleOf(database)
+      .select({ id: decisions.id })
+      .from(decisions)
+      .where(and(eq(decisions.id, decisionId), decisionReachableBy(account)))
+      .limit(1);
+    if (found !== undefined) {
+      reached.push(account);
+    }
+  }
+  return reached;
 }
 
 /** Every agent account of the workspace that is in, and was there when the thing happened. */
@@ -98,6 +130,7 @@ async function taskWakes(
       state: tasks.state,
       dueOn: tasks.dueOn,
       ownerId: tasks.ownerId,
+      projectId: tasks.projectId,
       project: projects.key,
     })
     .from(tasks)
@@ -133,6 +166,7 @@ async function taskWakes(
       event.workspaceId,
       [task.ownerId, ...workers],
       actor,
+      task.projectId,
     );
     return wake(concerned, `A comment on ${named}. Read it: ${read}`);
   }
@@ -154,7 +188,7 @@ async function taskWakes(
           ].filter((id) => workers.includes(id))
         : [];
   return wake(
-    await agentsAmong(database, event.workspaceId, concerned, actor),
+    await agentsAmong(database, event.workspaceId, concerned, actor, task.projectId),
     `${named} is ready, and you are at work on it. Read it: ${read}`,
   );
 }
@@ -187,18 +221,26 @@ async function decisionWakes(database: Database, event: EventRecord): Promise<Bo
       event.kind === "decision.raised"
         ? decision.deciderIds
         : (event.data.decidersAdded ?? []).filter((id) => decision.deciderIds.includes(id));
-    return (await agentsAmong(database, event.workspaceId, named, event.actor?.id)).map(
-      (account) => ({
-        account,
-        source: "board",
-        key,
-        text: `A decision waits for you: ${asked}. Read it and answer: ${read}`,
-      }),
-    );
+    return (
+      await reachedBy(
+        database,
+        decision.id,
+        await agentsAmong(database, event.workspaceId, named, event.actor?.id),
+      )
+    ).map((account) => ({
+      account,
+      source: "board",
+      key,
+      text: `A decision waits for you: ${asked}. Read it and answer: ${read}`,
+    }));
   }
   const option = event.data.option === undefined ? "" : `: ${said(event.data.option)}`;
   return (
-    await agentsAmong(database, event.workspaceId, [decision.raisedById], event.actor?.id)
+    await reachedBy(
+      database,
+      decision.id,
+      await agentsAmong(database, event.workspaceId, [decision.raisedById], event.actor?.id),
+    )
   ).map((account) => ({
     account,
     source: "board",

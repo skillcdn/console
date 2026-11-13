@@ -58,8 +58,9 @@ export function dayIn(zone: string | null | undefined, now: Date): string {
  * The board's wakes (ADR-0085, point 10): the worker reads the feed from where it read it to,
  * and sends each agent account the wakes an event means to it, a signal each on the account's
  * record. One pass at a time, in whatever process: the place in the feed is the pass's lock.
- * An event's wakes are sent before the place moves past it, so that a pass that ends halfway
- * sends an event's wakes again, which an agent reads as one, and never loses one.
+ * An event's wakes are sent before the place moves past it, and the place is kept a batch at a
+ * time: a pass that ends halfway sends again the wakes of the batch it was in, which an agent
+ * reads as one, never those of the batches before it, and never loses one.
  */
 export class BoardWakes {
   readonly #database: Database;
@@ -99,51 +100,73 @@ export class BoardWakes {
   async #pass(): Promise<number> {
     const database = this.#database;
     const workspaceId = await this.#workspaceId();
-    return drizzleOf(database).transaction(async (tx) => {
-      const now = this.#clock.now();
-      const taken = await takeWakeCursor(tx, workspaceId, now);
-      if (taken === undefined) {
-        return 0;
-      }
-      const settings = await readWorkspaceSettings(database, workspaceId);
-      const today = dayIn(settings.timeZone, now);
-      let after = taken;
-      let sent = 0;
-      for (let batch = 0; batch < MAX_BATCHES; batch += 1) {
+    let sent = 0;
+    // A batch a transaction: the place is taken, the batch's wakes are sent, and the place is
+    // kept before the next batch is read. Where an event's wakes fail, the place is kept at the
+    // event before it: what was sent for the events before is not sent again.
+    for (let batch = 0; batch < MAX_BATCHES; batch += 1) {
+      const last = batch === MAX_BATCHES - 1;
+      const read = await drizzleOf(database).transaction(async (tx) => {
+        const now = this.#clock.now();
+        const taken = await takeWakeCursor(tx, workspaceId, now);
+        if (taken === undefined) {
+          return undefined;
+        }
+        const settings = await readWorkspaceSettings(database, workspaceId);
+        const today = dayIn(settings.timeZone, now);
+        let after = taken;
+        let woke = 0;
+        let failed: { readonly error: unknown } | undefined;
         const events = await listAllEventsAfter(database, workspaceId, after, BATCH);
-        for (const event of events) {
-          for (const wake of await boardWakesOf(database, event, today)) {
-            await sendSignal(database, {
-              account: wake.account,
-              kind: "wake",
-              // Who did what woke it, where the board says: the header names them.
-              by:
-                wake.source === "board" && event.actor !== undefined
-                  ? { id: event.actor.id, agent: event.agent }
-                  : undefined,
-              source: wake.source,
-              key: wake.key,
-              text: wake.text,
-              set: undefined,
-              now,
-            });
-            sent += 1;
+        try {
+          for (const event of events) {
+            for (const wake of await boardWakesOf(database, event, today)) {
+              await sendSignal(database, {
+                account: wake.account,
+                kind: "wake",
+                // Who did what woke it, where the board says: the header names them.
+                by:
+                  wake.source === "board" && event.actor !== undefined
+                    ? { id: event.actor.id, agent: event.agent }
+                    : undefined,
+                source: wake.source,
+                key: wake.key,
+                text: wake.text,
+                set: undefined,
+                now,
+              });
+              woke += 1;
+            }
+            after = event.id;
           }
-          after = event.id;
+        } catch (error) {
+          failed = { error };
         }
-        if (events.length < BATCH) {
-          break;
+        if (after !== taken) {
+          await moveWakeCursor(tx, workspaceId, after, now);
         }
+        const more = failed === undefined && events.length === BATCH;
+        if (failed === undefined && (!more || last)) {
+          // What the schedule sends, under the same lock: one pass at a time notes a day as sent.
+          const scheduled = { now, today, clock: clockIn(settings.timeZone, now) };
+          woke += await this.#brief(workspaceId, settings.weekStart, scheduled);
+          woke += await this.#warn(workspaceId, scheduled);
+        }
+        return { woke, more, failed };
+      });
+      if (read === undefined) {
+        break;
       }
-      if (after !== taken) {
-        await moveWakeCursor(tx, workspaceId, after, now);
+      sent += read.woke;
+      if (read.failed !== undefined) {
+        // The place is kept: the pass is given up on here, and the next begins at the event that failed.
+        throw read.failed.error;
       }
-      // What the schedule sends, under the same lock: one pass at a time notes a day as sent.
-      const scheduled = { now, today, clock: clockIn(settings.timeZone, now) };
-      sent += await this.#brief(workspaceId, settings.weekStart, scheduled);
-      sent += await this.#warn(workspaceId, scheduled);
-      return sent;
-    });
+      if (!read.more) {
+        break;
+      }
+    }
+    return sent;
   }
 
   /**

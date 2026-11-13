@@ -8,7 +8,7 @@ import {
   restSignalsSchema,
   restTaskSchema,
 } from "@skillcdn/console/api";
-import { inArray } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 import { pino } from "pino";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { drizzleOf } from "./db/client.js";
@@ -348,6 +348,98 @@ describe("the board's wakes (ADR-0085)", () => {
     });
     expect((await sent("mira")).map((signal) => signal.key)).toEqual(["services"]);
     expect((await record("pia")).map((signal) => signal.key)).not.toContain("services");
+  });
+
+  it("wakes nobody for what they may no longer see: a private project they were taken off", async () => {
+    await h.project(alice, { key: "vault", name: "Vault", visibility: "private" });
+    const TASKS_THERE = projectPath("vault", "tasks");
+    const MEMBERS = projectPath("vault", "members");
+    const DECISIONS = projectPath("vault", "decisions");
+    for (const personId of [miraId, bobId]) {
+      expect((await send(alice, "POST", MEMBERS, { personId })).status).toBe(201);
+    }
+    await wakes.sweep();
+    // In the project, it is woken as anywhere: for its task, and for a comment on it.
+    const kept = restTaskSchema.parse(
+      await (
+        await send(alice, "POST", TASKS_THERE, {
+          title: "Count the vault",
+          state: "ready",
+          workerIds: [miraId],
+        })
+      ).json(),
+    );
+    const comments = `${projectPath("vault", "tasks", kept.id)}/comments`;
+    await send(alice, "POST", comments, { body: "Twice, please." });
+    expect((await sent("mira")).map((signal) => signal.key)).toEqual([
+      `vault#${kept.number}`,
+      `vault#${kept.number}`,
+    ]);
+    const raised = restDecisionSchema.parse(
+      await (
+        await send(mira, "POST", DECISIONS, {
+          question: "Open the second door?",
+          options: [{ label: "The code is 4417" }, { label: "No" }],
+          deciderIds: [bobId],
+        })
+      ).json(),
+    );
+    await wakes.sweep();
+
+    // Taken off the project, it is still named on the task and on the decision, and is told
+    // nothing more of either: a wake would say the task's title, and the answer's words.
+    expect((await send(alice, "DELETE", `${MEMBERS}/${miraId}`)).status).toBe(204);
+    await send(alice, "POST", comments, { body: "The count is off." });
+    await send(bob, "POST", `${DECISIONS}/${raised.id}/answer`, { option: raised.options[0]?.id });
+    expect(await sent("mira")).toEqual([]);
+
+    // Listed again, it is woken again.
+    expect((await send(alice, "POST", MEMBERS, { personId: miraId })).status).toBe(201);
+    await send(alice, "POST", comments, { body: "Count once more." });
+    expect((await sent("mira")).map((signal) => signal.key)).toEqual([`vault#${kept.number}`]);
+  });
+
+  it("sends nothing again of what a pass had sent before it failed", async () => {
+    await wakes.sweep();
+    const before = (await record("mira")).length;
+    const handle = drizzleOf(testDatabase.database);
+    // The second of three wakes cannot be written, as a database that fails in the middle of
+    // a pass would have it.
+    await handle.execute(
+      sql.raw(`create function refuse_a_signal() returns trigger language plpgsql as $$
+        begin
+          if new.text like '%Refused by the test%' then
+            raise exception 'a signal the test refuses';
+          end if;
+          return new;
+        end $$`),
+    );
+    await handle.execute(
+      sql.raw(
+        `create trigger refuse_a_signal before insert on agent_signals for each row execute function refuse_a_signal()`,
+      ),
+    );
+    try {
+      for (const title of ["Before it", "Refused by the test", "After it"]) {
+        await task(alice, { title, state: "ready", workerIds: [miraId] });
+      }
+      await wakes.sweep();
+      await wakes.sweep();
+      // What came before the failure was sent once, and the place stays at the event that failed.
+      expect((await record("mira")).slice(before).map((signal) => signal.text)).toEqual([
+        expect.stringContaining('"Before it" in ops is ready'),
+      ]);
+    } finally {
+      await handle.execute(sql.raw(`drop trigger refuse_a_signal on agent_signals`));
+      await handle.execute(sql.raw(`drop function refuse_a_signal()`));
+    }
+    // Once the wake can be written the pass goes on from there, each sent once.
+    await wakes.sweep();
+    expect((await record("mira")).slice(before).map((signal) => signal.text)).toEqual([
+      expect.stringContaining('"Before it" in ops is ready'),
+      expect.stringContaining('"Refused by the test" in ops is ready'),
+      expect.stringContaining('"After it" in ops is ready'),
+    ]);
   });
 
   it("reads the feed once whoever passes, and carries on from where it was read to", async () => {
