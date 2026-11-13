@@ -22,6 +22,7 @@ export const CONSOLE_TOKENS: readonly string[] = [
   "--sc-color-success-subtle",
   "--sc-color-warning",
   "--sc-color-warning-subtle",
+  "--sc-color-warning-line",
   "--sc-color-danger",
   "--sc-color-danger-subtle",
   "--sc-color-info",

@@ -40,6 +40,8 @@
   /* Warning: an amber, its words at 5:1 or better on its own fill and on the page. */
   --sc-color-warning: #a64b07;
   --sc-color-warning-subtle: #fef3c7;
+  /* The line round a warning: a clear amber, where the words' own brown on the pale fill reads as an outline. */
+  --sc-color-warning-line: #e9a23b;
   --sc-color-danger: #b0273a;
   --sc-color-danger-subtle: #fadadf;
   /* For the plugins' pages (ADR-0054): a state that informs, one neither good nor bad, a palette for figures, tabular numerals. */
@@ -1312,7 +1314,7 @@ html[data-console] body {
 
 /* The line a clear amber: one of the warning's words on its pale amber reads as a brown outline. */
 .sc-callout-warning {
-  border-color: #e9a23b;
+  border-color: var(--sc-color-warning-line);
   background: var(--sc-color-warning-subtle);
 }
 
@@ -4325,7 +4327,7 @@ select.sc-input-quiet {
 
 /* The same clear amber as a warning callout's line. */
 .sc-badge.sc-badge-warning {
-  border-color: #e9a23b;
+  border-color: var(--sc-color-warning-line);
 }
 
 .sc-badge.sc-badge-kind-state {
