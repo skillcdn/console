@@ -92,16 +92,22 @@ export function attachedLine(file: Attached, mark: string): string {
   return says(`attached file: ${file.path} · ${inHeader(file.contentType)} · ${sizeOf(file.size)}`);
 }
 
+/** The names Windows keeps for its devices, with any ending or none: a file of one is no file there. */
+const DEVICE_NAME = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i;
+
 /**
  * A name a file is written under in the desk: one segment, with nothing a file system reads as a
- * path, a drive or a pattern, no brackets, which end a line the agent is told the name in, and
- * no control character; `file` where nothing is left of it.
+ * path, a drive or a pattern, no brackets, which end a line the agent is told the name in, no
+ * comma, which a product that takes pictures by their paths reads as the end of one, and no
+ * control character; `file` where nothing is left of it, and `_` before a name a system keeps
+ * for a device. Two names that differ by the case of their letters alone are one name on some
+ * file systems, and are kept apart as two of a name are.
  */
 export function deskName(name: string, taken: ReadonlySet<string> = new Set()): string {
   const cleaned = [...name]
     .map((char) => {
       const code = char.codePointAt(0) ?? 0;
-      if (code < 0x20 || code === 0x7f || '/\\:*?"<>|'.includes(char)) {
+      if (code < 0x20 || code === 0x7f || '/\\:*?"<>|,'.includes(char)) {
         return "_";
       }
       return char === "[" ? "(" : char === "]" ? ")" : char;
@@ -109,8 +115,11 @@ export function deskName(name: string, taken: ReadonlySet<string> = new Set()): 
     .join("")
     .trim()
     .slice(0, 120);
-  const whole = cleaned.length === 0 || /^\.+$/.test(cleaned) ? "file" : cleaned;
-  if (!taken.has(whole)) {
+  const named = cleaned.length === 0 || /^\.+$/.test(cleaned) ? "file" : cleaned;
+  const whole = DEVICE_NAME.test(named) ? `_${named}`.slice(0, 120) : named;
+  const used = new Set([...taken].map((one) => one.toLowerCase()));
+  const free = (candidate: string): boolean => !used.has(candidate.toLowerCase());
+  if (free(whole)) {
     return whole;
   }
   const dot = whole.lastIndexOf(".");
@@ -118,7 +127,7 @@ export function deskName(name: string, taken: ReadonlySet<string> = new Set()): 
   const ending = dot > 0 ? whole.slice(dot) : "";
   for (let number = 2; number < 1000; number += 1) {
     const candidate = `${stem}-${number}${ending}`;
-    if (!taken.has(candidate)) {
+    if (free(candidate)) {
       return candidate;
     }
   }

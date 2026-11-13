@@ -262,6 +262,16 @@ describe("the files that came with a signal", () => {
     expect(deskName("a.png", new Set(["a.png", "a-2.png"]))).toBe("a-3.png");
     expect(deskName("README", new Set(["README"]))).toBe("README-2");
     expect(deskName(".env", new Set([".env"]))).toBe(".env-2");
+    // A comma would end the path where a product takes pictures by their paths.
+    expect(deskName("chart, final.png")).toBe("chart_ final.png");
+    // A name Windows keeps for a device is no file there, with an ending or without.
+    expect(deskName("NUL")).toBe("_NUL");
+    expect(deskName("con.txt")).toBe("_con.txt");
+    expect(deskName("COM1.log")).toBe("_COM1.log");
+    expect(deskName("console.txt")).toBe("console.txt");
+    // Two names that differ by case alone are one file on some systems.
+    expect(deskName("Report.PDF", new Set(["report.pdf"]))).toBe("Report-2.PDF");
+    expect(deskName("a.png", new Set(["A.PNG", "a-2.png"]))).toBe("a-3.png");
   });
 });
 
