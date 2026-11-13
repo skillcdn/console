@@ -1,6 +1,6 @@
-// An agent account's avatar (ADR-0084, ADR-0097): a small planet, flat and of two tones. A body,
-// what lies on its surface, the ramp of colours both are drawn in, and one thing beside it or
-// nothing, on a ground that is nearly white with a few faint squares strewn over it. Its parts are
+// An agent account's avatar (ADR-0084, ADR-0097, ADR-0102): a small planet, flat and of two tones.
+// A body, what lies on its surface, the ramp of colours both are drawn in, and one thing beside
+// it or nothing, on a graphite ground with a few faint squares strewn over it. Its parts are
 // a few numbers, each a place in a set, and this module draws the picture from them wherever it
 // is shown and writes it out as a picture file where one is needed. Nothing drawn is kept: a
 // person object carries the parts, some seventy bytes, and whoever shows the picture draws it.
@@ -323,8 +323,11 @@ export const AVATAR_SET_1: AvatarSet = {
   version: 1,
   // The set is drawn with air round its planet; on a page a tile reads better a little fuller.
   fill: 1.05,
-  grounds: ["#fdfcff"],
-  confetti: ["#ffd643", "#ffb052", "#7fa8ff", "#6f74e8", "#d0cde4", "#ebe4f1"],
+  // A graphite ground, calm and of no hue, so that no ramp sinks into it as a blue would into a
+  // blue; and squares three fifths of the way from it to the bright colours they once were, seen
+  // as stars at the half they are laid at, and never louder than the planet (ADR-0102).
+  grounds: ["#51525c"],
+  confetti: ["#b9a14d", "#b98a56", "#6d86be", "#6366b0", "#9d9cae", "#adaab5"],
   ramps: [
     // Sunset, butter, gold, peach, terracotta, rose.
     ramp("#ffd643 #ffb052 #ff8a5b #ff3d5a #d6264a", 7),
@@ -333,12 +336,13 @@ export const AVATAR_SET_1: AvatarSet = {
     ramp("#ffe3d3 #ffc4a8 #ff9f80 #f2735a #d9533f", 13),
     ramp("#ffd2b8 #ffa77a #ff8a5b #e8613f #c24e33", 12),
     ramp("#ffd6e4 #ffb3c7 #ff8fb3 #ff5c8a #d6336c", 11),
-    // Berry, violet, lavender, indigo, navy, ocean.
+    // Berry, violet, lavender, indigo, denim, ocean. Denim stands a step lighter than a navy
+    // would, so that it does not sink into the graphite ground (ADR-0102).
     ramp("#ffd0f0 #f59ad8 #e05fbf #b83a9e #8c2479", 1),
     ramp("#eadcff #cdb0ff #a77cf5 #8556de #6638bd", 1),
     ramp("#fff3f2 #ebe4f1 #d0cde4 #a4a7cc #8a8db8", 0),
     ramp("#9cb8ff #6f8cf5 #4f5fe0 #3a3fb8 #2a2f99", 1),
-    ramp("#a9b6d9 #7286bd #4d5f9c #36457a #25315c", 2),
+    ramp("#d3dcf5 #a9b8e6 #8296d2 #6479bd #4c60a3", 2),
     ramp("#c7e2ff #9cc4ff #7fa8ff #6f74e8 #5257c9", 0),
     // Aqua, teal, mint, leaf, stone, graphite.
     ramp("#d8fbff #a6f0ff #5fd0f0 #2aa7d6 #1b7bb3", 5),
@@ -965,7 +969,7 @@ const NO_RAMP: AvatarRamp = {
   tones: ["#eeeeee", "#cccccc", "#aaaaaa", "#888888", "#666666"],
   partner: 0,
 };
-const NO_GROUND = "#fdfcff";
+const NO_GROUND = "#51525c";
 
 /** The two colours of a shape: its own, or two tones of the ramp it is drawn in, the last tone twice where there is none after it. */
 function tonesOf(shape: AvatarShape, ramp: AvatarRamp): readonly [AvatarColor, AvatarColor] {

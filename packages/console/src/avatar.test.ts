@@ -44,7 +44,7 @@ const LISTS = [
 ] as const;
 
 /** The ground of the first set, and the first two tones of its first ramp. */
-const GROUND = [253, 252, 255];
+const GROUND = [81, 82, 92];
 const LIGHT = [255, 214, 67];
 const DARK = [255, 176, 82];
 
@@ -85,7 +85,7 @@ describe("an agent account's avatar (ADR-0084, ADR-0097)", () => {
     // large. If the first fails, a released set was changed; if the second alone, the drawing.
     expect(AVATAR_SET_1.version).toBe(1);
     expect(createHash("sha256").update(JSON.stringify(AVATAR_SET_1)).digest("hex")).toBe(
-      "ed3fba444d3b54a74907435e443aab56041508f855268708a8848df8d2062a7c",
+      "9edb9f0eb3335173eef706ef4f9ce45af76411dd173165f9996e4948be7c1dcf",
     );
     const look = createHash("sha256");
     for (let form = 0; form < AVATAR_SET_1.bodies.length; form += 1) {
@@ -110,7 +110,7 @@ describe("an agent account's avatar (ADR-0084, ADR-0097)", () => {
       look.update(avatarPixels({ ...PLAIN, palette, accent: palette % 6, vein: palette }, 48));
     }
     expect(look.digest("hex")).toBe(
-      "9a91d26dfa1147004eb35394057a9c2fdf6e2de4c45b2c5bef208465a6f7bc78",
+      "b292262f908910baf9326d67d9e53c09edfd69be874956b02e9505e34bc50e64",
     );
     expect(AVATAR_SETS.map((set) => set.version)).toEqual([1]);
     // Four bodies, ten surfaces, eighteen ramps of five tones and five things beside the body
@@ -120,7 +120,7 @@ describe("an agent account's avatar (ADR-0084, ADR-0097)", () => {
     expect(AVATAR_SET_1.ramps).toHaveLength(18);
     expect(AVATAR_SET_1.accents).toHaveLength(6);
     expect(AVATAR_SET_1.accents[0]).toEqual({ behind: [], before: [] });
-    expect(AVATAR_SET_1.grounds).toEqual(["#fdfcff"]);
+    expect(AVATAR_SET_1.grounds).toEqual(["#51525c"]);
     for (const ramp of AVATAR_SET_1.ramps) {
       expect(ramp.tones).toHaveLength(5);
       for (const tone of ramp.tones) {
@@ -366,13 +366,16 @@ describe("an agent account's avatar (ADR-0084, ADR-0097)", () => {
     expect(at(24, 26)).toEqual(DARK);
     expect(at(40, 26)).toEqual([255, 138, 91]);
     // Along a row that crosses the body: the ground, then the body, then the ground, and
-    // between them a pixel that is neither, where the edge runs through it.
-    const blues = Array.from({ length: side }, (_, x) => at(x, 32)[2] ?? 0);
-    expect(blues.slice(0, 12).every((blue) => blue === 255)).toBe(true);
+    // between them a pixel that is neither, where the edge runs through it. The ground and the
+    // body part most in red; the two halves of the body, in blue.
+    const row = Array.from({ length: side }, (_, x) => at(x, 32));
+    const reds = row.map((pixel) => pixel[0] ?? 0);
+    const blues = row.map((pixel) => pixel[2] ?? 0);
+    expect(reds.slice(0, 12).every((red) => red === GROUND[0])).toBe(true);
     expect(blues.slice(20, 31).every((blue) => blue === 67)).toBe(true);
     expect(blues.slice(33, 44).every((blue) => blue === 82)).toBe(true);
-    expect(blues.slice(52).every((blue) => blue === 255)).toBe(true);
-    expect(blues.some((blue) => blue > 90 && blue < 240)).toBe(true);
+    expect(reds.slice(52).every((red) => red === GROUND[0])).toBe(true);
+    expect(reds.some((red) => red > 80 && red < 245)).toBe(true);
     // The same parts, the same bytes, however often they are drawn.
     expect(same(pixels, avatarPixels(PLAIN, side))).toBe(true);
     expect(() => avatarPixels(PLAIN, 8)).toThrow(RangeError);
