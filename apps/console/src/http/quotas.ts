@@ -8,6 +8,8 @@ import {
   MAX_STREAMS_PER_PERSON,
   MAX_TASKS_PER_PROJECT,
 } from "@skillcdn/console/api";
+import type { Context } from "hono";
+import type { LiveFeed } from "./live-feed.js";
 
 // How much of the board a workspace, a project, a task or a person holds at once: the bounds
 // the package publishes, which the server holds and the command's help says. Each count is of
@@ -22,7 +24,7 @@ export interface Quotas {
   readonly decisionsPerProject: number;
   readonly documentsPerProject: number;
   readonly runsPerTask: number;
-  /** How many streams of the live feed one person holds at once, across their tabs and scripts. */
+  /** How many streams one person holds at once, across their tabs and scripts: of the live feed, of an agent account's signals, of a session's transcript. */
   readonly streamsPerPerson: number;
   /** How many streams this process holds for everyone: each costs a query on every change. */
   readonly streams: number;
@@ -45,6 +47,34 @@ export const DEFAULT_QUOTAS: Quotas = {
   streams: MAX_STREAMS,
   fileBytesPerProject: Number.POSITIVE_INFINITY,
 };
+
+/**
+ * The refusal of one stream more than `owner` may hold, or than the process holds for everyone:
+ * a browser with a tab too many, or a script that opens streams and never closes them, is told
+ * to close one or try again later. Nothing where there is room. Asked of every stream there is,
+ * the feed's and an agent account's alike, so that all of them count against the one bound.
+ */
+export function tooManyStreams(
+  c: Context,
+  feed: Pick<LiveFeed, "streams" | "streamsOf">,
+  quotas: Pick<Quotas, "streams" | "streamsPerPerson">,
+  owner: string,
+): Response | undefined {
+  if (feed.streamsOf(owner) < quotas.streamsPerPerson && feed.streams < quotas.streams) {
+    return undefined;
+  }
+  c.header("retry-after", "30");
+  return c.json(
+    {
+      error: {
+        code: "feed.too_many",
+        message:
+          "As many streams of the feed are open as one may hold at once. Close one, or try again later.",
+      },
+    },
+    429,
+  );
+}
 
 /** The quotas with what a deployment, or a test, set; a bound left out, or left undefined, keeps its default. */
 export function quotasOf(given: Partial<Quotas> | undefined): Quotas {

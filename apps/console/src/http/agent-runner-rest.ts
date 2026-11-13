@@ -43,7 +43,8 @@ import {
   keptTypeOf,
   pictureResponse,
 } from "./kept-pictures.js";
-import type { AgentWakes } from "./live-feed.js";
+import type { LiveFeed } from "./live-feed.js";
+import { type Quotas, tooManyStreams } from "./quotas.js";
 import type { AppEnv } from "./request-context.js";
 import { restPerson } from "./rest-shapes.js";
 
@@ -52,8 +53,9 @@ export interface AgentRunnerRestDependencies {
   readonly access: Access;
   /** Where the files sent with a tell are kept, among the board's files. */
   readonly blobs: BlobStore;
-  /** Whoever waits in this process for something new of an agent account. */
-  readonly wakes: AgentWakes;
+  /** The streams of this process: whoever waits for something new of an agent account, and how many streams a person holds. */
+  readonly feed: LiveFeed;
+  readonly quotas: Quotas;
   readonly clock: Clock;
   readonly logger: Logger;
 }
@@ -69,6 +71,13 @@ const PICTURE_TYPES: ReadonlyMap<string, KeptPictureType> = new Map([
 ]);
 /** How many signals one look of a stream sends before it looks again. */
 const STREAM_PAGE = 100;
+/** The largest number a signal has: what the column that keeps it takes. */
+const MAX_NUMBER = 2_147_483_647;
+/** A number of a record as a query or a path names one: whole, and no larger than any is. */
+const numberOf = (value: string | undefined): number | undefined => {
+  const number = Number(value);
+  return value !== undefined && /^[0-9]+$/.test(value) && number <= MAX_NUMBER ? number : undefined;
+};
 
 export const restSignal = (signal: SignalRecord): RestSignal => ({
   number: signal.number,
@@ -99,7 +108,8 @@ export function registerAgentRunnerRest(
   app: Hono<AppEnv>,
   dependencies: AgentRunnerRestDependencies,
 ): void {
-  const { database, access, blobs, wakes, clock, logger } = dependencies;
+  const { database, access, blobs, feed, quotas, clock, logger } = dependencies;
+  const wakes = feed.agents;
   const OWN = `${REST_ROUTES.agents}/me`;
 
   const tooLarge = bodyLimit({
@@ -129,12 +139,12 @@ export function registerAgentRunnerRest(
   ): { readonly before: number | undefined; readonly limit: number } | undefined => {
     const before = c.req.query("before");
     const limit = c.req.query("limit");
+    // A number past what any signal has is no number of one: refused here, not by the database.
     const page = {
-      before: before === undefined ? undefined : Number(before),
-      limit: limit === undefined ? SIGNALS_PAGE_LIMIT : Number(limit),
+      before: before === undefined ? undefined : (numberOf(before) ?? 0),
+      limit: limit === undefined ? SIGNALS_PAGE_LIMIT : (numberOf(limit) ?? 0),
     };
-    return (page.before !== undefined && (!Number.isSafeInteger(page.before) || page.before < 1)) ||
-      !Number.isInteger(page.limit) ||
+    return (page.before !== undefined && page.before < 1) ||
       page.limit < 1 ||
       page.limit > MAX_SIGNALS_PAGE_LIMIT
       ? undefined
@@ -179,13 +189,19 @@ export function registerAgentRunnerRest(
     if (caller instanceof Response) {
       return caller;
     }
-    const asked = Number(c.req.query("after") ?? "0");
-    const lastSeen = Number(c.req.header("last-event-id"));
-    if (!Number.isSafeInteger(asked) || asked < 0) {
+    const asked = numberOf(c.req.query("after") ?? "0");
+    const lastSeen = numberOf(c.req.header("last-event-id"));
+    if (asked === undefined) {
       return invalid(c, "after: the number of a signal, or 0.");
     }
-    let cursor = Number.isSafeInteger(lastSeen) && lastSeen > asked ? lastSeen : asked;
+    let cursor = lastSeen !== undefined && lastSeen > asked ? lastSeen : asked;
     const accountId = caller.person.id;
+    // Counted with the streams the account holds, as a stream of the feed is: a runner holds one.
+    const refused = tooManyStreams(c, feed, quotas, accountId);
+    if (refused !== undefined) {
+      return refused;
+    }
+    const release = feed.hold(accountId);
     /** Whether the stream is still the account's command's: asked again before every delivery, since a stream outlives the request that opened it. */
     const stillRuns = async (): Promise<boolean> => {
       try {
@@ -202,33 +218,39 @@ export function registerAgentRunnerRest(
         let open = true;
         stream.onAbort(() => {
           open = false;
+          release();
           wakes.nudge(accountId);
         });
-        while (open && !wakes.closed) {
-          // Taken before the look, so that a signal sent while looking wakes the wait after it.
-          const mark = wakes.mark;
-          if (!(await stillRuns())) {
-            break;
+        try {
+          while (open && !wakes.closed) {
+            // Taken before the look, so that a signal sent while looking wakes the wait after it.
+            const mark = wakes.mark;
+            if (!(await stillRuns())) {
+              break;
+            }
+            const signals = await listSignalsAfter(database, accountId, cursor, STREAM_PAGE);
+            for (const signal of signals) {
+              cursor = signal.number;
+              await stream.writeSSE({
+                id: String(signal.number),
+                event: "signal",
+                data: JSON.stringify(restSignal(signal)),
+              });
+            }
+            if (signals.length === STREAM_PAGE) {
+              continue;
+            }
+            const how = await wakes.wait(accountId, mark);
+            if (how === "timeout" && open) {
+              await stream.write(": ping\n\n");
+            }
           }
-          const signals = await listSignalsAfter(database, accountId, cursor, STREAM_PAGE);
-          for (const signal of signals) {
-            cursor = signal.number;
-            await stream.writeSSE({
-              id: String(signal.number),
-              event: "signal",
-              data: JSON.stringify(restSignal(signal)),
-            });
-          }
-          if (signals.length === STREAM_PAGE) {
-            continue;
-          }
-          const how = await wakes.wait(accountId, mark);
-          if (how === "timeout" && open) {
-            await stream.write(": ping\n\n");
-          }
+        } finally {
+          release();
         }
       },
       async (error) => {
+        release();
         logger.warn({ err: error, requestId: c.get("requestId") }, "a signals stream failed");
       },
     );
@@ -431,10 +453,10 @@ export function registerAgentRunnerRest(
    * handed over to save; nothing for one that is not that signal's.
    */
   const fileOf = async (c: Context<AppEnv>, accountId: string): Promise<Response> => {
-    const number = Number(c.req.param("number"));
+    const number = numberOf(c.req.param("number"));
     const fileId = c.req.param("file") ?? "";
     const file =
-      Number.isSafeInteger(number) && number > 0 && UUID.test(fileId)
+      number !== undefined && number > 0 && UUID.test(fileId)
         ? await findSignalFile(database, accountId, number, fileId)
         : undefined;
     const bytes = file === undefined ? undefined : await blobs.get(file.sha256);

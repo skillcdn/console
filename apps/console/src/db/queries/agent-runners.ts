@@ -235,7 +235,10 @@ export async function recordHeartbeat(
       .update(agentRunners)
       .set({
         heardAt: now,
-        delivered: Math.max(before.delivered, heartbeat.delivered),
+        // Never past what was sent, whatever the runner says it took: a runner whose state was
+        // spoiled would otherwise have every later runner of the account begin past signals
+        // that are still to come, and take none of them.
+        delivered: Math.min(before.nextSignal - 1, Math.max(before.delivered, heartbeat.delivered)),
         sessionId: heartbeat.session,
         machine: heartbeat.machine,
         runner: heartbeat.runner,

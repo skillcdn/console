@@ -392,7 +392,14 @@ describe("an agent account's runner (ADR-0085)", () => {
       await (await get({ cookie: alice }, `${SIGNALS}?before=2`)).json(),
     );
     expect(before.items.map((item) => item.number)).toEqual([1]);
-    for (const query of ["limit=0", "limit=1000", "limit=x", "before=0", "before=1.5"]) {
+    for (const query of [
+      "limit=0",
+      "limit=1000",
+      "limit=x",
+      "before=0",
+      "before=1.5",
+      "before=3000000000",
+    ]) {
       expect((await get({ cookie: alice }, `${SIGNALS}?${query}`)).status, query).toBe(400);
     }
     expect((await get({ cookie: bob }, SIGNALS)).status).toBe(403);
@@ -526,9 +533,36 @@ describe("an agent account's runner (ADR-0085)", () => {
     expect(await errorOf(browser)).toBe("agent.own_command");
     expect((await get({ cookie: alice }, `${STREAM}?after=0`)).status).toBe(404);
     expect((await get({}, `${STREAM}?after=0`)).status).toBe(401);
-    for (const after of ["-1", "x", "1.5"]) {
+    for (const after of ["-1", "x", "1.5", "3000000000"]) {
       expect((await get(bearer(command), `${STREAM}?after=${after}`)).status, after).toBe(400);
     }
+  });
+
+  it("holds what a runner says it took to what it was sent, so that the next signal still comes", async () => {
+    const before = await heartbeat();
+    // A runner whose state was spoiled says it took two thousand million signals, and then more
+    // than a column holds: the console keeps what was sent, and answers as it does any heartbeat.
+    for (const delivered of [2_000_000_000, 9_000_000_000_000]) {
+      const said = await send(bearer(command), "PUT", RUNNER, beat({ delivered }));
+      expect(said.status, String(delivered)).toBe(200);
+      expect(restRunnerHeartbeatSchema.parse(await said.json())).toMatchObject({
+        latest: before.latest,
+        delivered: before.latest,
+      });
+    }
+    const told = await signal(fromPages(alice), { kind: "tell", text: "Still there?" });
+    expect(told.number).toBe(before.latest + 1);
+    const after = await heartbeat();
+    expect(after).toMatchObject({ latest: told.number, delivered: before.latest });
+    // A runner that begins from what the console says it took finds the signal on its stream.
+    const reading = tail(
+      await h.request(`${STREAM}?after=${after.delivered}`, { headers: bearer(command) }),
+    );
+    expect(
+      signalsOf(await reading.until((text) => text.includes(`id: ${told.number}`))).at(-1)?.signal
+        .text,
+    ).toBe("Still there?");
+    await reading.cancel();
   });
 
   it("ends a stream whose command was signed out", async () => {

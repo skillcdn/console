@@ -236,7 +236,7 @@ export class LiveFeed {
     return this.#subscriptions.size;
   }
 
-  /** How many streams people hold in this process: the subscriptions with an owner. */
+  /** How many streams people hold in this process: the subscriptions with an owner, and the agent accounts' streams. */
   get streams(): number {
     let total = 0;
     for (const held of this.#streams.values()) {
@@ -248,6 +248,32 @@ export class LiveFeed {
   /** How many streams one person holds in this process. */
   streamsOf(owner: string): number {
     return this.#streams.get(owner) ?? 0;
+  }
+
+  /**
+   * Counts a stream of `owner` that is no subscription of the feed, an agent account's signals
+   * or a watch of its transcript, among the streams they hold, and answers the way to let it go:
+   * called when the stream ends, and once is enough.
+   */
+  hold(owner: string): () => void {
+    this.#streams.set(owner, (this.#streams.get(owner) ?? 0) + 1);
+    let held = true;
+    return () => {
+      if (held) {
+        held = false;
+        this.#release(owner);
+      }
+    };
+  }
+
+  /** One stream fewer of `owner`. */
+  #release(owner: string): void {
+    const held = (this.#streams.get(owner) ?? 1) - 1;
+    if (held > 0) {
+      this.#streams.set(owner, held);
+    } else {
+      this.#streams.delete(owner);
+    }
   }
 
   nudge(): void {
@@ -267,12 +293,7 @@ export class LiveFeed {
       this.#options,
       () => {
         if (this.#subscriptions.delete(subscription) && owner !== undefined) {
-          const held = (this.#streams.get(owner) ?? 1) - 1;
-          if (held > 0) {
-            this.#streams.set(owner, held);
-          } else {
-            this.#streams.delete(owner);
-          }
+          this.#release(owner);
         }
       },
       owner,

@@ -158,13 +158,22 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
         : { host: auth.organization.host, name: auth.organization.name },
   });
 
-  registerAgentRunnerRest(app, { database, access, blobs, wakes: feed.agents, clock, logger });
+  registerAgentRunnerRest(app, {
+    database,
+    access,
+    blobs,
+    feed,
+    quotas: dependencies.quotas,
+    clock,
+    logger,
+  });
 
   registerAgentTranscriptRest(app, {
     database,
     access,
     blobs,
-    wakes: feed.agents,
+    feed,
+    quotas: dependencies.quotas,
     clock,
     logger,
   });

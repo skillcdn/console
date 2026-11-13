@@ -55,7 +55,8 @@ import { createAgentGuards } from "./agent-guards.js";
 import { errorBody } from "./app.js";
 import type { Access } from "./auth.js";
 import { imageTypeOf, type KeptPictureType, pictureResponse } from "./kept-pictures.js";
-import type { AgentWakes } from "./live-feed.js";
+import type { LiveFeed } from "./live-feed.js";
+import { type Quotas, tooManyStreams } from "./quotas.js";
 import type { AppEnv } from "./request-context.js";
 import { restPerson } from "./rest-shapes.js";
 
@@ -63,8 +64,9 @@ export interface AgentTranscriptRestDependencies {
   readonly database: Database;
   readonly access: Access;
   readonly blobs: BlobStore;
-  /** Whoever waits in this process for something new of a session. */
-  readonly wakes: AgentWakes;
+  /** The streams of this process: whoever waits for something new of a session, and how many streams a person holds. */
+  readonly feed: LiveFeed;
+  readonly quotas: Quotas;
   readonly clock: Clock;
   readonly logger: Logger;
 }
@@ -73,6 +75,8 @@ const MAX_BODY_BYTES = 64 * 1024;
 /** How many events one look of a stream sends before it looks again. */
 const STREAM_PAGE = 100;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+/** The largest number an event has: what the column that keeps it takes. */
+const MAX_NUMBER = 2_147_483_647;
 
 const PICTURE_TYPES: ReadonlySet<string> = new Set(TRANSCRIPT_PICTURE_TYPES);
 
@@ -147,7 +151,8 @@ export function registerAgentTranscriptRest(
   app: Hono<AppEnv>,
   dependencies: AgentTranscriptRestDependencies,
 ): void {
-  const { database, access, blobs, wakes, clock, logger } = dependencies;
+  const { database, access, blobs, feed, quotas, clock, logger } = dependencies;
+  const wakes = feed.agents;
   const { running, reading } = createAgentGuards(database, access);
   const OWN = `${REST_ROUTES.agents}/me/sessions`;
   const THEIRS = `${REST_ROUTES.agents}/:handle/sessions`;
@@ -187,10 +192,10 @@ export function registerAgentTranscriptRest(
       return undefined;
     }
   };
-  /** A whole number a path or a query names, at least `least`, or nothing for what is none. */
+  /** A whole number a path or a query names, at least `least` and no larger than an event's number is, or nothing for what is none. */
   const wholeOf = (value: string | undefined, least: number): number | undefined => {
     const number = Number(value);
-    return value !== undefined && /^[0-9]+$/.test(value) && Number.isSafeInteger(number)
+    return value !== undefined && /^[0-9]+$/.test(value) && number <= MAX_NUMBER
       ? number >= least
         ? number
         : undefined
@@ -444,6 +449,12 @@ export function registerAgentTranscriptRest(
     let cursor = lastSeen !== undefined && lastSeen > asked ? lastSeen : asked;
     const { agentId, readerId } = found;
     const sessionId = found.session.id;
+    // Counted with the streams the reader holds, as a stream of the feed is.
+    const refused = tooManyStreams(c, feed, quotas, readerId);
+    if (refused !== undefined) {
+      return refused;
+    }
+    const release = feed.hold(readerId);
     /** Whether whoever opened the stream may still read the session: asked before every look, since a stream outlives the request that opened it. */
     const stillReads = async (): Promise<boolean> => {
       try {
@@ -464,45 +475,51 @@ export function registerAgentTranscriptRest(
         let open = true;
         stream.onAbort(() => {
           open = false;
+          release();
           wakes.nudge(sessionId);
         });
-        while (open && !wakes.closed) {
-          // Taken before the look, so that what is appended while looking wakes the wait after it.
-          const mark = wakes.mark;
-          if (!(await stillReads())) {
-            break;
+        try {
+          while (open && !wakes.closed) {
+            // Taken before the look, so that what is appended while looking wakes the wait after it.
+            const mark = wakes.mark;
+            if (!(await stillReads())) {
+              break;
+            }
+            // The session first: one that is over had all its events before it ended.
+            const session = await findSession(database, agentId, sessionId);
+            if (session === undefined) {
+              break;
+            }
+            const page = await listSessionEvents(database, session, cursor, STREAM_PAGE);
+            for (const event of page.items) {
+              cursor = event.n;
+              await stream.writeSSE({
+                id: String(event.n),
+                event: "event",
+                data: JSON.stringify(restTranscriptEvent(event)),
+              });
+            }
+            if (page.more) {
+              continue;
+            }
+            if (session.endedAt !== undefined) {
+              await stream.writeSSE({
+                event: "end",
+                data: JSON.stringify(restAgentSession(session, await attachedMonths(database))),
+              });
+              break;
+            }
+            const how = await wakes.wait(sessionId, mark);
+            if (how === "timeout" && open) {
+              await stream.write(": ping\n\n");
+            }
           }
-          // The session first: one that is over had all its events before it ended.
-          const session = await findSession(database, agentId, sessionId);
-          if (session === undefined) {
-            break;
-          }
-          const page = await listSessionEvents(database, session, cursor, STREAM_PAGE);
-          for (const event of page.items) {
-            cursor = event.n;
-            await stream.writeSSE({
-              id: String(event.n),
-              event: "event",
-              data: JSON.stringify(restTranscriptEvent(event)),
-            });
-          }
-          if (page.more) {
-            continue;
-          }
-          if (session.endedAt !== undefined) {
-            await stream.writeSSE({
-              event: "end",
-              data: JSON.stringify(restAgentSession(session, await attachedMonths(database))),
-            });
-            break;
-          }
-          const how = await wakes.wait(sessionId, mark);
-          if (how === "timeout" && open) {
-            await stream.write(": ping\n\n");
-          }
+        } finally {
+          release();
         }
       },
       async (error) => {
+        release();
         logger.warn({ err: error, requestId: c.get("requestId") }, "a transcript stream failed");
       },
     );

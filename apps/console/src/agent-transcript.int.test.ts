@@ -522,7 +522,14 @@ describe("the sessions of an agent account and their transcript (ADR-0086)", () 
     const some = await eventsOf({ cookie: alice }, session, "?after=2&limit=2");
     expect(some.items.map((item) => item.n)).toEqual([3, 4]);
     expect(some.more).toBe(true);
-    for (const query of ["after=-1", "after=x", "limit=0", "limit=100000"]) {
+    for (const query of [
+      "after=-1",
+      "after=x",
+      "after=3000000000",
+      "after=99999999999999999999",
+      "limit=0",
+      "limit=100000",
+    ]) {
       expect(
         (await get({ cookie: alice }, `${theirs(session, "events")}?${query}`)).status,
         query,
@@ -625,9 +632,13 @@ describe("the sessions of an agent account and their transcript (ADR-0086)", () 
       blocksOf(await resumed.until((text) => text.includes("data:"))).map((block) => block.id),
     ).toEqual(["8"]);
     await resumed.cancel();
-    expect(
-      (await get({ cookie: alice }, `${theirs(session, "events", "stream")}?after=x`)).status,
-    ).toBe(400);
+    for (const after of ["x", "3000000000"]) {
+      expect(
+        (await get({ cookie: alice }, `${theirs(session, "events", "stream")}?after=${after}`))
+          .status,
+        after,
+      ).toBe(400);
+    }
 
     // The runner ends the session: the stream carries what was left, says so, and ends.
     await append(session, [event(9, { kind: "status", text: "The session ended." })]);
@@ -912,6 +923,60 @@ describe("the sessions of an agent account and their transcript (ADR-0086)", () 
     expect(await runVerify(config, logger, ["november"])).toEqual({
       usage: "a month is named as 2026-11: november is not",
     });
+  });
+
+  it("counts a watch of a transcript and a runner's signals among the streams a person holds", async () => {
+    // The same board with room for two streams a person: the feed's bound, held by every stream.
+    const narrow = createHarness(testDatabase, {
+      providers: [createFixtureProvider("gh"), createFixtureProvider("google")],
+      admins: ["alice"],
+      listed: ["alice", "bob"],
+      feed: { heartbeatMs: 300, pollMs: 60_000 },
+      quotas: { streamsPerPerson: 2 },
+    });
+    try {
+      const aliceId =
+        restMeSchema.parse(
+          await (await narrow.request(REST_ROUTES.me, { headers: { cookie: alice } })).json(),
+        ).person?.id ?? "";
+      const open = (await begin()).id;
+      const watch = () =>
+        narrow.request(agentPath("mira", "sessions", open, "events", "stream"), {
+          headers: { cookie: alice },
+        });
+      const first = await watch();
+      const second = await watch();
+      expect([first.status, second.status]).toEqual([200, 200]);
+      const third = await watch();
+      expect(third.status).toBe(429);
+      expect(await errorOf(third)).toBe("feed.too_many");
+      expect(third.headers.get("retry-after")).toBe("30");
+      // The feed's own stream is one of the same.
+      const feed = await narrow.request(`${projectPath("ops", "events")}/stream`, {
+        headers: { cookie: alice },
+      });
+      expect(feed.status).toBe(429);
+      expect(await errorOf(feed)).toBe("feed.too_many");
+      // One let go makes room for one.
+      await first.body?.cancel();
+      await expect.poll(() => narrow.feed.streamsOf(aliceId)).toBe(1);
+      const again = await watch();
+      expect(again.status).toBe(200);
+      // A runner's stream of signals is its account's, counted the same.
+      const signals = () =>
+        narrow.request(agentPath("me", "signals", "stream"), { headers: bearer(command) });
+      const held = [await signals(), await signals()];
+      expect(held.map((stream) => stream.status)).toEqual([200, 200]);
+      const over = await signals();
+      expect(over.status).toBe(429);
+      expect(await errorOf(over)).toBe("feed.too_many");
+      for (const stream of [second, again, ...held]) {
+        await stream.body?.cancel();
+      }
+      await expect.poll(() => narrow.feed.streams).toBe(0);
+    } finally {
+      await narrow.close();
+    }
   });
 
   it("has its months made ahead of time by the worker", async () => {

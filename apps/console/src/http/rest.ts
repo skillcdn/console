@@ -287,7 +287,7 @@ import {
 import { filenameParameters, imageTypeOf } from "./kept-pictures.js";
 import type { LiveFeed } from "./live-feed.js";
 import type { PictureCache } from "./pictures.js";
-import type { Quotas } from "./quotas.js";
+import { type Quotas, tooManyStreams } from "./quotas.js";
 import type { AppEnv } from "./request-context.js";
 import {
   restCategory,
@@ -4484,18 +4484,9 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
         : query.data.after;
     // A stream is bounded per person and per process: a browser with a tab too many, or a
     // script that opens streams and never closes them, is told to close one or try again later.
-    if (
-      feed.streamsOf(found.person.id) >= quotas.streamsPerPerson ||
-      feed.streams >= quotas.streams
-    ) {
-      c.header("retry-after", "30");
-      return c.json(
-        errorBody(
-          "feed.too_many",
-          "As many streams of the feed are open as one may hold at once. Close one, or try again later.",
-        ),
-        429,
-      );
+    const refused = tooManyStreams(c, feed, quotas, found.person.id);
+    if (refused !== undefined) {
+      return refused;
     }
     await workspace();
     const subscription = feed.subscribe(after, found.scope, found.person.id);
