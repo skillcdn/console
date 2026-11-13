@@ -27,7 +27,7 @@ services:
       retries: 10
 
   bucket:
-    image: versity/versitygw:v1.10.0
+    image: versity/versitygw:v1.11.0
     command: ["posix", "/data"]
     environment:
       ROOT_ACCESS_KEY: console
