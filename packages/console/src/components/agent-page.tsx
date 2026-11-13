@@ -1337,8 +1337,12 @@ export interface AgentControlsProps {
   /** How the agent stands, by which what is offered is chosen: a running agent is stopped, one that is not is started again. */
   readonly state: AgentState | undefined;
   readonly busy?: boolean | undefined;
-  /** Sends a stop, a restart or a reset, with the words for the agent where any were written. */
-  readonly onSend: (kind: "stop" | "restart" | "reset", text: string) => void;
+  /**
+   * Sends a stop, a restart or a reset, with the words for the agent where any were written.
+   * What it answers says whether the signal was taken, as the box to speak in is answered:
+   * `false`, or a request that failed, leaves the words where they are.
+   */
+  readonly onSend: (kind: "stop" | "restart" | "reset", text: string) => unknown;
   /** What was sent last, as a line under the ways. */
   readonly note?: ReactNode;
 }
@@ -1355,9 +1359,14 @@ export function AgentControls(props: AgentControlsProps) {
   const [resetting, setResetting] = useState(false);
   const busy = props.busy === true;
   const send = (kind: "stop" | "restart" | "reset") => {
-    props.onSend(kind, text.trim());
-    setText("");
+    const answer = props.onSend(kind, text.trim());
     setResetting(false);
+    // The words stay until the console took the signal, as what is told does.
+    void takenBy(answer).then((taken) => {
+      if (taken) {
+        setText("");
+      }
+    });
   };
   const running = props.state === "running";
   const stopped = props.state === "stopped";

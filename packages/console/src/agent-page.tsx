@@ -396,7 +396,7 @@ function AgentLive(props: {
   const state = agent.state?.state;
   const delivered = agent.runner?.delivered ?? 0;
   const send = (kind: "stop" | "restart" | "reset", text: string) =>
-    void act(async () => {
+    act(async () => {
       const sent = await client.sendSignal(handle, {
         kind,
         ...(text.length === 0 ? {} : { text }),

@@ -1560,9 +1560,9 @@ export const ko: Messages = {
           title: "로그인할 계정",
           at: {
             google: (login, provider) =>
-              `${provider}의 ${login} 계정입니다. 아직 없으면 그곳에서 만듭니다. 로그인 정보는 머신을 셋업할 때 한 번 필요합니다.`,
+              `${provider}의 ${login} 계정입니다. 아직 없으면 그곳에서 만듭니다. 로그인 정보는 머신을 설정할 때 한 번 필요합니다.`,
             gh: (login, provider) =>
-              `${provider}의 ${login} 계정입니다. 그곳에 이미 있고 조직이 가진 계정이어야 합니다. 이 계정으로 처음 로그인하기 전에는 그 이름을 가진 사람이 누구든 이 계정으로 들어옵니다. 로그인 정보는 머신을 셋업할 때 한 번 필요합니다.`,
+              `${provider}의 ${login} 계정입니다. 그곳에 이미 있고 조직이 가진 계정이어야 합니다. 이 계정으로 처음 로그인하기 전에는 그 이름을 가진 사람이 누구든 이 계정으로 들어옵니다. 로그인 정보는 머신을 설정할 때 한 번 필요합니다.`,
           },
           done: (login) => `${login} 계정으로 로그인했습니다.`,
         },
@@ -1889,9 +1889,9 @@ export const ko: Messages = {
             example: "mira@acme.example",
             invalid: "mira@acme.example 같은 주소를 적습니다.",
             named: (login, provider) =>
-              `${provider}의 ${login} 계정으로 로그인합니다. 계정은 아직 없어도 됩니다. 머신을 셋업하기 전에만 있으면 됩니다.`,
+              `${provider}의 ${login} 계정으로 로그인합니다. 계정은 아직 없어도 됩니다. 머신을 설정하기 전에만 있으면 됩니다.`,
             unnamed: (provider) =>
-              `${provider}에서 로그인할 계정을 적습니다. 계정은 아직 없어도 됩니다. 머신을 셋업하기 전에만 있으면 됩니다.`,
+              `${provider}에서 로그인할 계정을 적습니다. 계정은 아직 없어도 됩니다. 머신을 설정하기 전에만 있으면 됩니다.`,
           },
           gh: {
             label: "GitHub 로그인 이름",
