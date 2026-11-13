@@ -326,6 +326,10 @@ export function createFileStore(directory: string): CredentialStore {
           token: login.token,
           agent: login.agent,
           since: login.since,
+          // What a login is read back with: whether the command is the account itself, and the
+          // zone the workspace keeps its times in.
+          ...(login.self === true ? { self: true } : {}),
+          ...(login.timeZone === undefined ? {} : { timeZone: login.timeZone }),
         })),
       };
       // Written beside the file and moved over it in one step, so that a command that stops

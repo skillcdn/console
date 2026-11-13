@@ -213,6 +213,19 @@ describe("the credentials file", () => {
     expect(await store.load()).toBeUndefined();
   });
 
+  it("keeps with a login that the command is the account itself, and the zone its workspace keeps its times in", async () => {
+    const store = createFileStore(await directory());
+    const own: Credentials = {
+      default: A,
+      logins: [
+        { ...login(A, "mira@acme.example", "cns_a_mira"), self: true, timeZone: "Asia/Seoul" },
+        login(B, "alice", "cns_t_b"),
+      ],
+    };
+    await store.save(own);
+    expect(await store.load()).toEqual(own);
+  });
+
   it("reads the file of before as one login, and refuses one it cannot read without touching it", async () => {
     const dir = await directory();
     const store = createFileStore(dir);
