@@ -1,6 +1,6 @@
 # ADR-0014: A person's own console is served from their machine by the command, with the token it keeps
 
-- Status: Accepted
+- Status: Accepted; what the command strips of the page's origin and referrer (point 2) is amended by [ADR-0083](0083-console-serve-names-the-page-on-this-machine-by-its-origin.md)
 - Date: 2026-10-10
 
 ## Context

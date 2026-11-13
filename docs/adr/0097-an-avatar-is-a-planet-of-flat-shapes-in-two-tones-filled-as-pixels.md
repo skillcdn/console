@@ -1,6 +1,6 @@
 # ADR-0097: An avatar is a planet of flat shapes in two tones, filled as pixels
 
-- Status: Accepted
+- Status: Accepted; how full a planet is drawn and how close a small one (points 3 and 6) is amended by [ADR-0099](0099-a-set-says-how-full-its-planet-is-drawn-and-a-small-one-is-a-tenth-closer.md); the ground and its squares (points 2 and 3) by [ADR-0102](0102-the-first-avatar-sets-ground-is-graphite.md)
 - Date: 2026-11-12
 - Supersedes [ADR-0093](0093-an-avatar-is-a-form-cut-from-a-material-drawn-as-pixels.md), which made the avatar a form cut from a material, a picture computed point by point. What that decision kept of point 8 of [ADR-0084](0084-an-agent-account-is-a-member-of-its-own-with-a-manager-above-it.md) stands: a seed and its parts, drawn where shown, a picture file where one is needed, a released set that never changes, nothing uploaded and no markup from outside. Its points 5 and 6 are taken over as they were: a page shows the picture as an image it made itself, and an agent account's picture is a soft square where a person's is round.
 
