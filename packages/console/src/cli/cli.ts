@@ -4285,9 +4285,14 @@ function shellWord(text: string, platform: string): string {
     : `'${text.replaceAll("'", "'\\''")}'`;
 }
 
-/** The line that starts the runner by hand, in the desk, for a person or an agent to run. */
+/**
+ * The line that starts the runner by hand, in the desk, for a person or an agent to run. On
+ * Windows its two commands are joined by `;`: the PowerShell every Windows has takes no `&&`,
+ * which came with PowerShell 7, and the words are quoted as PowerShell takes them.
+ */
 function runnerByHand(desk: string, url: string, login: string, platform: string): string {
-  return `cd ${shellWord(desk, platform)} && console runner --url ${shellWord(url, platform)} --account ${shellWord(login, platform)}`;
+  const then = platform === "win32" ? ";" : " &&";
+  return `cd ${shellWord(desk, platform)}${then} console runner --url ${shellWord(url, platform)} --account ${shellWord(login, platform)}`;
 }
 
 /** The desk a setup is for: the place named, else this directory where it is a desk, else `desk` in the OS account's home. */

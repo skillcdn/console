@@ -4161,6 +4161,10 @@ describe("setting a machine up for an agent account (ADR-0088)", () => {
     });
     expect(await runCli([...LINE, "--no-service"], windows.io)).toBe(EXIT.ok);
     expect(windows.out()).toContain("--account 'o''mira@acme.example'\n");
+    // The line's two commands are joined as the PowerShell every Windows has joins them: `&&`
+    // is no line there before PowerShell 7.
+    expect(windows.out()).toMatch(/: cd \S+; console runner --url /);
+    expect(windows.out()).not.toContain("&& console runner");
 
     // The unit is written and the system would not load it: its own words, and what to look at.
     const unloaded = fakeMachine({
