@@ -180,7 +180,7 @@ export const ko: Messages = {
     "agent.too_many_accounts":
       "한 계정이 기록할 수 있는 만큼의 외부 계정이 이미 기록되어 있습니다.",
     "setup.not_found":
-      "이 코드의 셋업이 없습니다. 만든 적이 없거나, 기한이 지났거나, 계정의 명령이 이미 로그인했습니다.",
+      "이 코드로 진행할 설정이 없습니다. 코드를 만든 적이 없거나, 기한이 지났거나, 계정의 명령이 이미 로그인했습니다.",
     "secret.not_found": "이 계정에 그런 이름의 시크릿이 없습니다.",
     "secret.too_many": "한 계정이 가질 수 있는 만큼의 시크릿이 이미 있습니다.",
     "secret.too_large": "시크릿 값은 8KiB까지입니다.",
@@ -189,7 +189,7 @@ export const ko: Messages = {
       "시크릿 저장소는 계정 자신이 로그인해서 읽습니다. 계정이 만든 토큰으로는 읽을 수 없습니다.",
     "agent.own_command":
       "계정 자신만 할 수 있는 요청입니다. 계정으로 로그인한 명령의 러너가 요청합니다.",
-    "signal.not_offered": "에이전트의 제품이 제공하지 않는 모델 또는 effort입니다.",
+    "signal.not_offered": "에이전트의 제품이 제공하지 않는 모델 또는 추론 강도입니다.",
     "transcript.away": "이 세션이 보관된 달은 지금 데이터베이스에 없습니다.",
     "transcript.event_not_found": "이벤트를 찾을 수 없습니다.",
     "transcript.gap": "세션의 이벤트 번호는 하나씩 이어져야 합니다.",
@@ -205,7 +205,7 @@ export const ko: Messages = {
     "agent.login_is_member":
       "이미 멤버가 쓰는 로그인입니다. 바뀐 것은 없습니다. 에이전트가 쓸 계정의 로그인을 적거나, 이 멤버를 에이전트 계정으로 바꾼다고 표시하세요.",
     "agent.invalid_manager":
-      "매니저는 활성 상태인 다른 멤버여야 하고, 이 계정의 아래에 있는 멤버는 안 됩니다.",
+      "매니저는 활성 상태인 다른 구성원이어야 하고, 이 계정에게 보고하는 구성원은 될 수 없습니다.",
     "agent.invalid_project": "시작할 프로젝트를 찾을 수 없습니다.",
     "agent.unknown_host": "이 콘솔에서는 그 제공자로 로그인하지 않습니다.",
     "person.not_found": "사람을 찾을 수 없습니다.",
@@ -262,7 +262,7 @@ export const ko: Messages = {
     "workspace.pack_connect_refused": "SkillCDN이 연결을 거부했습니다.",
     "workspace.pack_connect_unsupported": "이 콘솔에서는 팩을 연결할 수 없습니다.",
     "workspace.identity_unavailable":
-      "이 콘솔에서는 그 서비스로 로그인할 수 없습니다. identity 서비스는 이 콘솔의 로그인 수단 중 하나여야 합니다.",
+      "이 콘솔에서는 그 서비스로 로그인할 수 없습니다. 로그인 서비스는 이 콘솔의 로그인 수단 중 하나여야 합니다.",
     "workspace.pack_token_refused": "SkillCDN이 이 토큰으로는 팩을 제공하지 않습니다.",
     "workspace.pack_token_unsupported": "이 콘솔에서는 팩 토큰을 보관할 수 없습니다.",
   },
@@ -1103,7 +1103,7 @@ export const ko: Messages = {
           ? "시작하지 못해 기다리고 있습니다"
           : `${agent}이(가) 시작하지 못했음을 확인했습니다`,
       agentUnheard: (agent) =>
-        agent === undefined ? "소식이 없습니다" : `${agent}의 소식을 듣지 못하고 있습니다`,
+        agent === undefined ? "응답이 없습니다" : `${agent}의 응답을 받지 못하고 있습니다`,
       teamCreated: (team) => `팀 ${team}을(를) 만들었습니다`,
       teamRenamed: (from, team) => `팀 ${from}의 이름을 ${team}(으)로 바꿨습니다`,
       teamRemoved: (team) => `팀 ${team}을(를) 삭제했습니다`,
@@ -1568,7 +1568,7 @@ export const ko: Messages = {
         },
         invitation: {
           title: "초대",
-          body: "머신을 이 계정으로 이끄는 한 줄입니다. 초대 코드는 자격 증명이 아닙니다. 어떤 계정의 셋업인지 알려 줄 뿐, 누구에게도 계정을 내주지 않습니다.",
+          body: "머신을 이 계정에 연결하는 한 줄입니다. 초대 코드는 로그인 정보가 아닙니다. 어느 계정을 설정하는지만 알려 주며, 코드만으로는 계정에 들어갈 수 없습니다.",
         },
         machine: {
           title: "머신에서",
@@ -1577,8 +1577,8 @@ export const ko: Messages = {
         },
         runner: {
           title: "러너",
-          body: "셋업이 러너를 시작합니다. 러너의 소식이 오면 이 페이지에 에이전트가 하는 일이 보입니다.",
-          done: "러너의 소식이 왔습니다.",
+          body: "설정이 끝나면 러너가 시작됩니다. 러너가 연결되면 이 페이지에 에이전트가 하는 일이 보입니다.",
+          done: "러너가 연결되었습니다.",
         },
       },
       notFound: {
@@ -1587,18 +1587,18 @@ export const ko: Messages = {
       },
       notSupervised: {
         title: "감독자만 볼 수 있습니다",
-        body: "에이전트가 하는 일은 보고받는 사람과 그 위의 사람들, 그리고 관리자가 읽습니다.",
+        body: "에이전트가 하는 일은 매니저와 그 위의 매니저들, 그리고 관리자만 볼 수 있습니다.",
       },
       state: {
-        none: "아직 러너의 소식이 없습니다",
+        none: "아직 러너가 연결된 적이 없습니다",
         unset: "연결 전",
         running: "실행 중",
         stopped: "멈춤",
         refused: "거절됨",
         failed: "실패",
-        unheard: "소식 없음",
+        unheard: "응답 없음",
         since: { before: "", after: "부터" },
-        heard: "러너의 마지막 소식",
+        heard: "러너의 마지막 응답",
         reasons: {
           started: "러너가 시작했습니다",
           resumed: "이어서 진행합니다",
@@ -1609,7 +1609,7 @@ export const ko: Messages = {
           sign_in: "제품이 로그인되어 있지 않습니다",
           start: "제품이 시작되지 않았습니다",
           crashed: "제품이 비정상 종료했습니다",
-          no_heartbeat: "러너의 소식이 없습니다",
+          no_heartbeat: "러너가 응답하지 않습니다",
         },
       },
       live: {
@@ -1672,7 +1672,8 @@ export const ko: Messages = {
         toolFailed: "실패",
         toolRefused: "거절됨",
         toolRunning: "실행 중",
-        interrupted: (who) => `${who} 님이 끼어들어, 기다리던 말을 지금 읽게 했습니다.`,
+        interrupted: (who) =>
+          `${who} 님이 에이전트가 하던 일을 멈추고, 기다리던 말을 바로 읽게 했습니다.`,
         unread: "에이전트가 읽기 전에 세션이 끝났습니다.",
         turnDone: (seconds) =>
           seconds === undefined
@@ -1739,7 +1740,7 @@ export const ko: Messages = {
         title: "세션",
         empty: {
           title: "아직 세션이 없습니다",
-          body: "에이전트의 러너가 전할 것이 생기면 세션이 시작됩니다.",
+          body: "에이전트에게 전달할 말이 생기면 세션이 시작됩니다.",
         },
         open: "열림",
         away: "보관됨",
@@ -1759,7 +1760,7 @@ export const ko: Messages = {
       settings: {
         runner: {
           title: "러너",
-          none: "러너의 소식이 없습니다.",
+          none: "아직 러너가 연결된 적이 없습니다.",
           machine: "머신",
           user: "OS 계정",
           version: "러너",
@@ -1771,7 +1772,7 @@ export const ko: Messages = {
         machine: {
           title: "머신",
           intro:
-            "초대는 다른 머신을 이 계정으로 이끕니다. 그 머신에서 에이전트의 제품에 한 줄을 말하면 됩니다. 초대 코드는 자격 증명이 아닙니다. 어떤 계정의 셋업인지 알려 주고 가이드를 열 뿐이며, 계정에는 계정 자신의 로그인으로만 들어갑니다.",
+            "초대 코드로 다른 머신에 이 계정을 연결합니다. 그 머신에서 에이전트의 제품에 한 줄만 말하면 됩니다. 초대 코드는 로그인 정보가 아닙니다. 어느 계정을 설정하는지 알려 주고 가이드를 열 뿐이며, 계정에는 그 계정의 로그인으로만 들어갈 수 있습니다.",
           none: "유효한 초대가 없습니다.",
           stands: "초대 유효 기한:",
           by: (name) => `${name} 님이 만듦`,
@@ -1791,20 +1792,21 @@ export const ko: Messages = {
         signIns: {
           title: "로그인된 곳",
           empty: "없습니다.",
-          couldNotLoad: "콘솔의 페이지에서, 로그인한 사람이 볼 수 있습니다.",
+          couldNotLoad:
+            "토큰으로 연결한 콘솔에서는 볼 수 없습니다. 콘솔에 직접 로그인하면 보입니다.",
         },
         secrets: {
           title: "시크릿",
           intro:
             "이름으로만 보입니다. 값은 여기에 한 번 입력하면 다시 보이지 않으며, 계정만 값을 읽습니다.",
           empty: "아직 보관된 시크릿이 없습니다.",
-          seedAria: "시크릿 심기",
-          seeded: "감독자가 심음",
+          seedAria: "시크릿 넣기",
+          seeded: "감독자가 넣음",
           expires: (day: string) => `${day}에 만료`,
           name: "이름",
           namePlaceholder: "git.token",
           value: "값",
-          seed: "심기",
+          seed: "넣기",
           remove: "삭제",
         },
         hours: {
@@ -1819,7 +1821,7 @@ export const ko: Messages = {
           title: "외부 계정",
           empty: "아직 기록된 계정이 없습니다.",
           intro:
-            "에이전트가 계정을 가진 서비스마다 그곳에서 불리는 이름을 에이전트가 기록한 것입니다. 시크릿은 기록하지 않습니다. 계정을 내보낼 때 무엇을 닫아야 하는지 여기서 확인합니다.",
+            "에이전트가 다른 서비스에서 쓰는 계정 이름을 직접 적어 둔 목록입니다. 비밀번호나 토큰은 적지 않습니다. 이 계정을 없앨 때 함께 닫을 외부 계정을 여기서 확인하세요.",
         },
         persona: {
           title: "페르소나",
@@ -1846,7 +1848,7 @@ export const ko: Messages = {
       add: "에이전트 계정 추가",
       empty: {
         title: "아직 에이전트 계정이 없습니다",
-        body: "관리자가 여기서 추가합니다. 추가한 때부터 멤버가 되고, 자기 계정으로 로그인합니다.",
+        body: "관리자가 여기서 추가합니다. 추가한 때부터 구성원이 되고, 자기 계정으로 로그인합니다.",
       },
       mineEmpty: {
         title: "관리 중인 에이전트 계정이 없습니다",
@@ -1947,10 +1949,10 @@ export const ko: Messages = {
       manager: "매니저",
     },
     notFound: {
-      title: "셋업을 찾을 수 없습니다",
-      body: "이 코드의 셋업이 없습니다. 만든 적이 없거나, 기한이 지났거나, 계정의 명령이 이미 로그인했습니다. 계정의 감독자가 계정 페이지에서 새 초대를 만들 수 있습니다.",
+      title: "설정을 찾을 수 없습니다",
+      body: "이 코드로 진행할 설정이 없습니다. 코드를 만든 적이 없거나, 기한이 지났거나, 계정의 명령이 이미 로그인했습니다. 계정의 감독자가 계정 페이지에서 새 초대를 만들 수 있습니다.",
     },
-    couldNotLoad: "셋업을 읽지 못했습니다.",
+    couldNotLoad: "설정 안내를 읽지 못했습니다.",
     home: "콘솔로 가기",
   },
   connect: {
@@ -1978,7 +1980,7 @@ export const ko: Messages = {
     asSelf: {
       title: "명령이 내 계정으로 로그인하려고 합니다",
       means:
-        "승인하면 그 기계의 명령이 곧 나입니다. 쓰는 동안 유지되고 안 쓰면 끝나는 내 세션을 가지며, 토큰이 할 수 있는 일을 합니다. 세션 목록에서 보고 끝낼 수 있습니다.",
+        "승인하면 그 머신의 명령이 내 계정으로 동작합니다. 세션은 쓰는 동안 유지되고 오래 쓰지 않으면 끝나며, 토큰으로 할 수 있는 일을 모두 할 수 있습니다. 세션 목록에서 확인하고 끝낼 수 있습니다.",
       approve: "나입니다",
       approved: {
         title: (name) => `"${name}"이(가) 내 계정으로 로그인했습니다`,
