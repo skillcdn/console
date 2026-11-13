@@ -39,7 +39,7 @@ import { fillRules, RULES_PATH, RULES_TITLE } from "../rules.js";
 import { DEFAULT_RUNNER_CONFIG, parseRunnerConfig } from "../runner/config.js";
 import { deskFiles, deskServicesOf } from "../runner/desk.js";
 import { ownRunnerModules } from "../runner/modules.js";
-import { createRunner, type RunnerState } from "../runner/runner.js";
+import { createRunner, GIT_TOKEN_SECRET, type RunnerState } from "../runner/runner.js";
 import type { ServiceCommand } from "../runner/types.js";
 import {
   hostOfLogin,
@@ -3743,8 +3743,18 @@ const runner: Command = async (args, io) => {
     },
     log: (line) => io.stdout(`${new Date(io.now()).toISOString()} ${line}\n`),
     // The autosave's git: in the desk, asking nobody at a terminal, its words read and let go.
-    git: async (args) => {
-      const child = host.spawn("git", args, { cwd: host.cwd, env: { GIT_TERMINAL_PROMPT: "0" } });
+    // A step that reaches the git host is handed the account's token for it, as the clone of
+    // the desk was: answered from the environment of that one command, and only to the host
+    // the workspace keeps its desks at.
+    git: async (args, handed) => {
+      const origin = gitOriginOf(deskRemoteOf(me.workspace, me.person?.handle ?? ""));
+      const child = host.spawn("git", args, {
+        cwd: host.cwd,
+        env:
+          handed?.token === undefined || origin === undefined
+            ? { GIT_TERMINAL_PROMPT: "0" }
+            : gitTokenEnv(handed.token, origin),
+      });
       child.end();
       for await (const _ of child.lines) {
         // Nothing of what git prints is kept.
@@ -4190,7 +4200,7 @@ const SETUP_USAGE =
   "Say which setup: console agent setup --console <origin> --code <code>, as the invitation's line has it. A supervisor of the account makes one: console agent invite <handle>";
 
 /** The secret of an agent account's store that its git host is read with. */
-const DESK_TOKEN = "git.token";
+const DESK_TOKEN = GIT_TOKEN_SECRET;
 /** How often, and how many times, a setup looks whether the runner it started is heard from. */
 const RUNNER_HEARD_PAUSE_MS = 2000;
 const RUNNER_HEARD_TRIES = 15;
@@ -4216,22 +4226,62 @@ function lastWords(ran: Ran): string {
 }
 
 /**
+ * The origin of a remote that git reaches over the web, `https://host`, which is what a
+ * credential is asked for; nothing for any other address, which takes no token this way.
+ */
+function gitOriginOf(remote: string | undefined): string | undefined {
+  if (remote === undefined) {
+    return undefined;
+  }
+  try {
+    const url = new URL(remote);
+    return url.protocol === "https:" || url.protocol === "http:"
+      ? `${url.protocol}//${url.host}`
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * What git is handed a token by, for one command: a credential helper named in the environment,
  * which answers with the token from the environment. The token is on no command line, which a
- * process list shows, and in no file of the repository.
+ * process list shows, and in no file of the repository. The helper is named for one origin, the
+ * remote's own: a redirect, or a repository inside the one cloned, at another host is answered
+ * nothing of it.
  */
-function gitTokenEnv(token: string): Record<string, string> {
+function gitTokenEnv(token: string, origin: string): Record<string, string> {
   return {
     GIT_TERMINAL_PROMPT: "0",
     GIT_CONFIG_COUNT: "2",
-    // An empty helper first: whatever the machine has configured is left out of this command.
-    GIT_CONFIG_KEY_0: "credential.helper",
+    // An empty helper first: whatever the machine has configured for that origin is left out of this command.
+    GIT_CONFIG_KEY_0: `credential.${origin}.helper`,
     GIT_CONFIG_VALUE_0: "",
-    GIT_CONFIG_KEY_1: "credential.helper",
+    GIT_CONFIG_KEY_1: `credential.${origin}.helper`,
     GIT_CONFIG_VALUE_1:
       '!f() { test "$1" = get && printf "username=x-access-token\\npassword=%s\\n" "$CONSOLE_DESK_TOKEN"; }; f',
     CONSOLE_DESK_TOKEN: token,
   };
+}
+
+/**
+ * A word of a line a person runs in a shell, as that shell takes it whole: quoted where it holds
+ * anything a shell reads as more than a word, in single quotes, which neither a POSIX shell nor
+ * PowerShell reads into.
+ */
+function shellWord(text: string, platform: string): string {
+  const plain = platform === "win32" ? /^[A-Za-z0-9_@%+=:,./\\-]+$/ : /^[A-Za-z0-9_@%+=:,./-]+$/;
+  if (plain.test(text)) {
+    return text;
+  }
+  return platform === "win32"
+    ? `'${text.replaceAll("'", "''")}'`
+    : `'${text.replaceAll("'", "'\\''")}'`;
+}
+
+/** The line that starts the runner by hand, in the desk, for a person or an agent to run. */
+function runnerByHand(desk: string, url: string, login: string, platform: string): string {
+  return `cd ${shellWord(desk, platform)} && console runner --url ${shellWord(url, platform)} --account ${shellWord(login, platform)}`;
 }
 
 /** The desk a setup is for: the place named, else this directory where it is a desk, else `desk` in the OS account's home. */
@@ -4280,8 +4330,9 @@ async function settleDesk(
       );
     }
     const token = (await client.secret(DESK_TOKEN)).value;
+    const origin = gitOriginOf(remote);
     const cloned = await machine.run("git", ["clone", "--quiet", remote, desk], {
-      env: gitTokenEnv(token),
+      env: origin === undefined ? { GIT_TERMINAL_PROMPT: "0" } : gitTokenEnv(token, origin),
     });
     if (cloned.code !== 0) {
       throw failed(
@@ -4323,7 +4374,7 @@ async function settleService(
   login: string,
   how: "load" | "write",
 ): Promise<string | undefined> {
-  const byHand = `cd ${desk} && console runner --url ${url} --account ${login}`;
+  const byHand = runnerByHand(desk, url, login, machine.platform);
   const modules = ownRunnerModules({ user: machine.user });
   const service = modules.services
     .names()
@@ -4606,7 +4657,7 @@ const agentSetup = async (args: readonly string[], io: CliIo): Promise<number> =
   const desk = await settleDesk(io, machine, client, me.person, me.workspace, url, values);
   if (on(values, "no-service")) {
     io.stdout(
-      `No service is written, as asked. Start the runner yourself and keep it running: cd ${desk} && console runner --url ${url} --account ${me.person.login}\n`,
+      `No service is written, as asked. Start the runner yourself and keep it running: ${runnerByHand(desk, url, me.person.login, machine.platform)}\n`,
     );
     return EXIT.ok;
   }
@@ -5509,7 +5560,8 @@ interface ConsoleSeen {
 
 /** The command that puts the console's version where this command is installed. */
 function updateWords(io: CliIo, version: string | undefined): string {
-  const wanted = version ?? "latest";
+  // What a console says its version is goes into a line someone runs: a version, or `latest`.
+  const wanted = version !== undefined && parseVersion(version) !== undefined ? version : "latest";
   if (io.install === undefined) {
     return `npm install -g @skillcdn/console@${wanted}`;
   }

