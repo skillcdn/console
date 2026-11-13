@@ -138,10 +138,13 @@ No user and no key: the tasks read and write the bucket as their own role, whose
   "Version": "2012-10-17",
   "Statement": [
     { "Effect": "Allow", "Action": ["s3:ListBucket"], "Resource": "arn:aws:s3:::<bucket>" },
-    { "Effect": "Allow", "Action": ["s3:GetObject", "s3:PutObject"], "Resource": "arn:aws:s3:::<bucket>/*" }
+    { "Effect": "Allow", "Action": ["s3:GetObject", "s3:PutObject"], "Resource": "arn:aws:s3:::<bucket>/*" },
+    { "Effect": "Allow", "Action": ["s3:DeleteObject"], "Resource": "arn:aws:s3:::<bucket>/transcript/*" }
   ]
 }
 ```
+
+The last statement lets the console take the bytes of a sealed event off the transcript of an agent account's sessions and nothing else: no file of the board is ever deleted. With `S3_KEY_PREFIX` set, the prefix stands before `transcript/` there.
 
 `ListBucket` on the bucket is what the console's probe at start (`HEAD` on the bucket) needs; the objects are read and written under their hash.
 
