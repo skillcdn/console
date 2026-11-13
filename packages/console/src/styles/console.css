@@ -7644,6 +7644,16 @@ a.sc-tile-project:focus-visible {
   overscroll-behavior: contain;
 }
 
+/* Under a finger the page moves on once the conversation stands at its end or its beginning, as
+   a finger expects of a page: the pane is nearly as tall as a phone's window, and where it held
+   every drag for itself, a finger put down on it reached nothing else of the page, the box to
+   speak in below the window's foot among it. */
+@media (pointer: coarse) {
+  .sc-chat-scroll {
+    overscroll-behavior: auto;
+  }
+}
+
 .sc-chat-content {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
