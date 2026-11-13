@@ -1,6 +1,6 @@
 # ADR-0090: A session's events are held by a chain whose head stays with the session
 
-- Status: Accepted
+- Status: Accepted; what the check holds a sealed event and an ended session to (points 2 and 3) is amended by [ADR-0103](0103-a-session-says-which-of-its-events-were-sealed-and-the-check-holds-a-month-to-it.md): the session's row says which of its events were sealed, and has no event past its last
 - Date: 2026-11-11
 - Follows [ADR-0086](0086-a-session-leaves-a-transcript-that-is-kept-for-good.md), which laid the transcript out by month for whoever keeps the database and named this as the addition its shape allows. The procedure is in [deploy/README.md](../../deploy/README.md).
 

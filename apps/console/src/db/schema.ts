@@ -599,6 +599,12 @@ export const transcriptSessions = transcript.table(
      * put away is checked when it is back; null for a session begun before the chain was kept.
      */
     chain: text(),
+    /**
+     * The numbers of its events that were sealed, in the order they were (ADR-0103): what a
+     * month that was put away is held to when it is back, since a sealed event keeps nothing
+     * its digest could be taken of again.
+     */
+    sealed: integer().array().notNull().default(sql`'{}'::integer[]`),
   },
   (table) => [
     index("sessions_person_idx").on(table.personId, table.startedAt),

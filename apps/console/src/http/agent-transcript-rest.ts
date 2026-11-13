@@ -49,7 +49,7 @@ import {
   wholeTextOf,
 } from "../db/queries/transcript.js";
 import type { Logger } from "../logger.js";
-import type { BlobStore } from "../ports/blob-store.js";
+import { type BlobStore, BlobStoreError } from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
 import { createAgentGuards } from "./agent-guards.js";
 import { errorBody } from "./app.js";
@@ -176,12 +176,25 @@ export function registerAgentTranscriptRest(
     const path = (issue.path ?? []).map(String).join(".");
     return path.length === 0 ? issue.message : `${path}: ${issue.message}`;
   };
-  /** What went wrong, as the API says it; anything that is not the transcript's own is thrown on. */
+  /** What went wrong, as the API says it; anything that is neither the transcript's own nor the store's is thrown on. */
   const failure = (c: Context<AppEnv>, error: unknown): Response => {
     if (error instanceof TranscriptError) {
       const code = error.code as keyof typeof STATUS;
       const next = error.expected === undefined ? "" : ` The next is ${error.expected}.`;
       return c.json(errorBody(code, `${WORDS[code]}${next}`), STATUS[code]);
+    }
+    if (error instanceof BlobStoreError) {
+      // The store is the deployment's to fix, and the log says what it refused; what was asked
+      // was not done, and whoever asked can only ask again.
+      logger.error({ err: error, requestId: c.get("requestId") }, "the blob store failed");
+      c.header("retry-after", "30");
+      return c.json(
+        errorBody(
+          "file.store_unavailable",
+          "The files of the console could not be reached. Try again later.",
+        ),
+        503,
+      );
     }
     throw error;
   };
@@ -532,7 +545,12 @@ export function registerAgentTranscriptRest(
       return found;
     }
     const n = wholeOf(c.req.param("n"), 1);
-    const text = n === undefined ? undefined : await wholeTextOf(database, blobs, found.session, n);
+    let text: string | undefined;
+    try {
+      text = n === undefined ? undefined : await wholeTextOf(database, blobs, found.session, n);
+    } catch (error) {
+      return failure(c, error);
+    }
     if (n === undefined || text === undefined) {
       return c.json(
         errorBody("transcript.event_not_found", WORDS["transcript.event_not_found"]),
@@ -554,10 +572,15 @@ export function registerAgentTranscriptRest(
     const file = UUID.test(fileId)
       ? await findTranscriptFile(database, found.session, fileId)
       : undefined;
-    const bytes =
-      file === undefined || !PICTURE_TYPES.has(file.contentType)
-        ? undefined
-        : await blobs.get(file.sha256, { transcript: found.session.month });
+    let bytes: Uint8Array | undefined;
+    try {
+      bytes =
+        file === undefined || !PICTURE_TYPES.has(file.contentType)
+          ? undefined
+          : await blobs.get(file.sha256, { transcript: found.session.month });
+    } catch (error) {
+      return failure(c, error);
+    }
     if (file === undefined || bytes === undefined) {
       return c.json(errorBody("file.not_found", "The file was not found."), 404);
     }

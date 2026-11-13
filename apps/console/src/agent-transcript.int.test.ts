@@ -30,12 +30,14 @@ import {
 import { sql } from "drizzle-orm";
 import { pino } from "pino";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createPgBlobStore } from "./adapters/pg-blob-store.js";
 import { loadConfig } from "./config/config.js";
 import { drizzleOf } from "./db/client.js";
 import { attachedMonths } from "./db/queries/transcript.js";
 import { checkTranscript } from "./db/queries/transcript-check.js";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "./db/testing.js";
 import { RunnerWatch } from "./jobs/runner-watch.js";
+import { type BlobStore, BlobStoreError } from "./ports/blob-store.js";
 import { runVerify } from "./roles/verify.js";
 import { createFixtureProvider } from "./testing/fixture-provider.js";
 import { createHarness, type Harness, SIGN_IN_URL } from "./testing/harness.js";
@@ -59,6 +61,8 @@ let command: string;
 let noorCommand: string;
 /** The session the tests write to, begun second. */
 let session: string;
+/** Whether the store refuses to let bytes go, as a bucket does whose role may not delete. */
+let refusing = false;
 
 const MONTH = new Date().toISOString().slice(0, 7);
 const JSON_HEADERS = { "content-type": "application/json" };
@@ -188,12 +192,25 @@ const blocksOf = (text: string) =>
 
 beforeAll(async () => {
   testDatabase = await createTestDatabase(process.env.TEST_DATABASE_URL ?? DEV_DATABASE_URL);
+  // The database's own store, which a test makes refuse a removal as a bucket would.
+  const store = createPgBlobStore(testDatabase.database);
+  const blobs: BlobStore = {
+    put: (bytes, now, shelf) => store.put(bytes, now, shelf),
+    get: (sha256, shelf) => store.get(sha256, shelf),
+    remove: async (sha256, shelf) => {
+      if (refusing) {
+        throw new BlobStoreError("forbidden", "the bucket refused the credentials (403)");
+      }
+      await store.remove(sha256, shelf);
+    },
+  };
   h = createHarness(testDatabase, {
     providers: [createFixtureProvider("gh"), createFixtureProvider("google")],
     admins: ["alice"],
     listed: ["alice", "bob"],
     live: true,
     feed: { heartbeatMs: 300, pollMs: 60_000 },
+    blobs,
   });
   alice = await h.signIn("alice");
   bob = await h.signIn("bob");
@@ -428,6 +445,17 @@ describe("the sessions of an agent account and their transcript (ADR-0086)", () 
     const shelf = await raw(`select month, size from transcript.blobs`);
     expect(shelf.rows).toEqual([{ month: MONTH, size: 60_000 }]);
     expect((await raw(`select 1 from blobs`)).rows).toEqual([]);
+    // A batch refused for a gap keeps none of its long texts: the shelf holds what it held.
+    for (const batch of [
+      [event(9, { text: "y".repeat(50_000) })],
+      [event(7), event(9, { text: "z".repeat(50_000) })],
+    ]) {
+      const refused = await append(session, batch);
+      expect(refused.status).toBe(409);
+      expect(await errorOf(refused)).toBe("transcript.gap");
+    }
+    expect((await raw(`select month, size from transcript.blobs`)).rows).toEqual(shelf.rows);
+    expect((await sessionOf({ cookie: alice }, session)).events).toBe(6);
   });
 
   it("keeps the pictures a session hands in, for the events of that session to name", async () => {
@@ -695,6 +723,27 @@ describe("the sessions of an agent account and their transcript (ADR-0086)", () 
     }
     expect((await send(fromPages(alice), "POST", seal(99), { reason: "None." })).status).toBe(404);
     expect((await send(fromPages(alice), "POST", seal("x"), { reason: "None." })).status).toBe(404);
+    expect(
+      (await send(fromPages(alice), "POST", seal(3_000_000_000), { reason: "None." })).status,
+    ).toBe(404);
+
+    // A store that will not let the bytes go leaves the event as it was, and the answer says so
+    // in words: nothing is sealed by halves, and the seal asked again goes through.
+    refusing = true;
+    const held = await send(fromPages(alice), "POST", seal(6), { reason: "A token in it." });
+    refusing = false;
+    expect(held.status).toBe(503);
+    expect(await errorOf(held)).toBe("file.store_unavailable");
+    expect(held.headers.get("retry-after")).toBe("30");
+    expect((await eventsOf({ cookie: alice }, session, "?after=5&limit=1")).items[0]).toMatchObject(
+      { n: 6, sealed: null, whole: 60_000 },
+    );
+    expect((await raw(`select size from transcript.blobs where size = 60000`)).rows).toHaveLength(
+      1,
+    );
+    expect(
+      (await raw(`select sealed from transcript.sessions where id = '${session}'`)).rows,
+    ).toEqual([{ sealed: [] }]);
 
     // The long text of event 6, and the picture of event 7.
     const picture = (await eventsOf({ cookie: alice }, session, "?after=6&limit=1")).items[0]
@@ -726,6 +775,10 @@ describe("the sessions of an agent account and their transcript (ADR-0086)", () 
     expect(restTranscriptEventSchema.parse(await again.json()).sealed?.reason).toBe(
       "A token in it.",
     );
+    // Its session keeps which of its events were sealed, each once (ADR-0103).
+    expect(
+      (await raw(`select sealed from transcript.sessions where id = '${session}'`)).rows,
+    ).toEqual([{ sealed: [6, 7] }]);
     // The rest of the session is as it was, in its numbers.
     const read = await eventsOf({ cookie: bob }, session);
     expect(read.items.map((item) => [item.n, item.sealed === null])).toEqual([
@@ -794,6 +847,17 @@ describe("the sessions of an agent account and their transcript (ADR-0086)", () 
       const refused = await append(open?.id ?? "", [event(3)]);
       expect(refused.status).toBe(409);
       expect(await errorOf(refused)).toBe("transcript.away");
+      // So does a long text, whose bytes the month's shelf would take before any row is written.
+      await raw(`alter table transcript.blobs detach partition transcript.blobs_${suffix}`);
+      try {
+        const long = await append(open?.id ?? "", [event(3, { text: "w".repeat(40_000) })]);
+        expect(long.status).toBe(409);
+        expect(await errorOf(long)).toBe("transcript.away");
+      } finally {
+        await raw(
+          `alter table transcript.blobs attach partition transcript.blobs_${suffix} for values in ('${MONTH}')`,
+        );
+      }
     } finally {
       await raw(
         `alter table transcript.events attach partition transcript.events_${suffix} for values in ('${MONTH}')`,
@@ -870,6 +934,33 @@ describe("the sessions of an agent account and their transcript (ADR-0086)", () 
         `update transcript.events set digest = '${kept?.digest}' where ${one} and n = 6`,
       ),
     ).toEqual(fails(9, "the events do not come to the session's head"));
+    // An event emptied and marked as sealed: its digest links as before, and what it held is
+    // gone as a sealed event's is, but the session never sealed it.
+    expect(
+      await brokenBy(
+        `update transcript.events set text = '', sealed_at = now(), sealed_reason = 'x' where ${one} and n = 3`,
+        `update transcript.events set text = 'Event 3.', sealed_at = null, sealed_reason = null where ${one} and n = 3`,
+      ),
+    ).toEqual(fails(3, "an event is sealed that the session did not seal"));
+    // An event the session sealed, with something in it again.
+    const [was] = (
+      await raw(
+        `select sealed_at, sealed_by_id, sealed_reason from transcript.events where ${one} and n = 7`,
+      )
+    ).rows as { sealed_at: Date; sealed_by_id: string; sealed_reason: string }[];
+    expect(
+      await brokenBy(
+        `update transcript.events set text = 'Put back.', sealed_at = null, sealed_by_id = null, sealed_reason = null where ${one} and n = 7`,
+        `update transcript.events set text = '', sealed_at = '${new Date(was?.sealed_at ?? 0).toISOString()}', sealed_by_id = '${was?.sealed_by_id}', sealed_reason = '${(was?.sealed_reason ?? "").replaceAll("'", "''")}' where ${one} and n = 7`,
+      ),
+    ).toEqual(fails(7, "an event the session sealed holds something"));
+    // An event put in past the last of a session that is over.
+    expect(
+      await brokenBy(
+        `insert into transcript.events (month, session_id, n, person_id, kind, at, received_at, text, data, files, digest) select month, session_id, 10, person_id, kind, at, received_at, 'Put in.', data, files, digest from transcript.events where ${one} and n = 9`,
+        `delete from transcript.events where ${one} and n = 10`,
+      ),
+    ).toEqual(fails(10, "an event is numbered past the session's last"));
     // An event whose digest was taken away.
     expect(
       await brokenBy(

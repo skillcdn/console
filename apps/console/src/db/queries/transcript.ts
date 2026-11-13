@@ -69,6 +69,8 @@ export interface SessionRecord {
   /** The number of its last event; 0 for none. */
   readonly events: number;
   readonly lastEventAt: Date | undefined;
+  /** The numbers of its events that were sealed, in the order they were (ADR-0103). */
+  readonly sealed: readonly number[];
 }
 
 type SessionRow = typeof transcriptSessions.$inferSelect;
@@ -87,6 +89,7 @@ const toSession = (row: SessionRow): SessionRecord => ({
   machine: row.machine,
   events: row.events,
   lastEventAt: row.lastEventAt ?? undefined,
+  sealed: row.sealed,
 });
 
 export interface TranscriptFileRecord {
@@ -454,6 +457,24 @@ export async function findTranscriptFile(
 }
 
 /**
+ * The number at which the events of a batch stop following one another, counted on from the
+ * session's last; nothing where every event past it is the next one.
+ */
+function gapAfter(events: readonly { readonly n: number }[], last: number): number | undefined {
+  let next = last + 1;
+  for (const event of events) {
+    if (event.n < next) {
+      continue;
+    }
+    if (event.n !== next) {
+      return next;
+    }
+    next += 1;
+  }
+  return undefined;
+}
+
+/**
  * Appends a batch of a session's events, in order, and answers the number of its last event
  * now. An event whose number the session has already is left as it is, so that a batch sent
  * twice changes nothing; one that would leave a gap is refused with the number expected, so that
@@ -484,33 +505,46 @@ export async function appendEvents(
     }
   });
   const shelf = { transcript: session.month };
-  // The long texts are kept before the rows that name them, outside the transaction: bytes
-  // kept for a batch that is then refused are bytes nothing names, and cost nothing else.
-  const prepared: {
-    readonly event: RestTranscriptEventInput;
-    readonly text: string;
-    readonly textSha256: string | null;
-    readonly textSize: number | null;
-  }[] = [];
-  for (const event of events) {
-    if (event.n <= session.events) {
-      continue;
+  // A batch that would leave a gap is refused before any of its long texts is kept: the bytes
+  // of a refused batch are bytes nothing names. By the session as it was read, and read once
+  // more before the refusal, since another batch of it may have been kept since.
+  let known = session.events;
+  let expected = gapAfter(events, known);
+  if (expected !== undefined) {
+    known = (await findSession(database, account.id, sessionId))?.events ?? known;
+    expected = gapAfter(events, known);
+    if (expected !== undefined) {
+      throw new TranscriptError("transcript.gap", expected);
     }
-    const text = kept(event.text);
-    const encoded = Buffer.from(text, "utf8");
-    if (encoded.byteLength <= TRANSCRIPT_INLINE_BYTES) {
-      prepared.push({ event, text, textSha256: null, textSize: null });
-      continue;
-    }
-    const stored = await blobs.put(encoded, now, shelf);
-    prepared.push({
-      event,
-      text: beginningOf(encoded, TRANSCRIPT_INLINE_BYTES),
-      textSha256: stored.sha256,
-      textSize: stored.size,
-    });
   }
   try {
+    // The long texts are kept before the rows that name them, outside the transaction: what
+    // is kept for a batch that is refused after all costs nothing else. Inside the handling of
+    // a month that is away, which the store the database keeps says as the events' table does.
+    const prepared: {
+      readonly event: RestTranscriptEventInput;
+      readonly text: string;
+      readonly textSha256: string | null;
+      readonly textSize: number | null;
+    }[] = [];
+    for (const event of events) {
+      if (event.n <= known) {
+        continue;
+      }
+      const text = kept(event.text);
+      const encoded = Buffer.from(text, "utf8");
+      if (encoded.byteLength <= TRANSCRIPT_INLINE_BYTES) {
+        prepared.push({ event, text, textSha256: null, textSize: null });
+        continue;
+      }
+      const stored = await blobs.put(encoded, now, shelf);
+      prepared.push({
+        event,
+        text: beginningOf(encoded, TRANSCRIPT_INLINE_BYTES),
+        textSha256: stored.sha256,
+        textSize: stored.size,
+      });
+    }
     return await drizzleOf(database).transaction(async (tx) => {
       const [locked] = await tx
         .select({
@@ -711,8 +745,10 @@ export async function wholeTextOf(
 /**
  * Seals an event (ADR-0086, point 5): what it held is replaced by who sealed it, when and why,
  * and its long text and its pictures are taken off the month's shelf where nothing else of the
- * month names the same bytes. Its number, its kind and its time stay. An event sealed already
- * stays as it was sealed.
+ * month names the same bytes. Its number, its kind and its time stay, and its session notes
+ * that it was sealed (ADR-0103). The bytes go with the seal: a store that refuses to let them
+ * go leaves the event as it was, unsealed, for the seal to be asked again. An event sealed
+ * already stays as it was sealed.
  */
 export async function sealEvent(
   database: Database,
@@ -731,7 +767,14 @@ export async function sealEvent(
     eq(transcriptEvents.sessionId, session.id),
     eq(transcriptEvents.n, n),
   );
-  const hashes = await drizzleOf(database).transaction(async (tx) => {
+  const shelf = { transcript: session.month };
+  await drizzleOf(database).transaction(async (tx) => {
+    // The session first, as an append takes it: its row says which of its events were sealed.
+    await tx
+      .select({ id: transcriptSessions.id })
+      .from(transcriptSessions)
+      .where(eq(transcriptSessions.id, session.id))
+      .for("update");
     const [row] = await tx
       .select({
         textSha256: transcriptEvents.textSha256,
@@ -745,7 +788,7 @@ export async function sealEvent(
       throw new TranscriptError("transcript.event_not_found");
     }
     if (row.sealedAt !== null) {
-      return [];
+      return;
     }
     await tx
       .update(transcriptEvents)
@@ -760,6 +803,10 @@ export async function sealEvent(
         sealedReason: reason,
       })
       .where(one);
+    await tx
+      .update(transcriptSessions)
+      .set({ sealed: sql`array_append(${transcriptSessions.sealed}, ${n}::integer)` })
+      .where(eq(transcriptSessions.id, session.id));
     if (row.files.length > 0) {
       await tx.delete(transcriptFiles).where(
         and(
@@ -771,31 +818,31 @@ export async function sealEvent(
         ),
       );
     }
-    return [
+    const hashes = new Set([
       ...(row.textSha256 === null ? [] : [row.textSha256]),
       ...row.files.map((file) => file.sha256),
-    ];
-  });
-  // The same bytes may be what another event of the month says too: those stay.
-  const handle = drizzleOf(database);
-  for (const sha256 of new Set(hashes)) {
-    const [text] = await handle
-      .select({ n: transcriptEvents.n })
-      .from(transcriptEvents)
-      .where(
-        and(eq(transcriptEvents.month, session.month), eq(transcriptEvents.textSha256, sha256)),
-      )
-      .limit(1);
-    const [file] = await handle
-      .select({ id: transcriptFiles.id })
-      .from(transcriptFiles)
-      .where(and(eq(transcriptFiles.month, session.month), eq(transcriptFiles.sha256, sha256)))
-      .limit(1);
-    if (text === undefined && file === undefined) {
-      await blobs.remove(sha256, { transcript: session.month });
+    ]);
+    for (const sha256 of hashes) {
+      // The same bytes may be what another event of the month says too: those stay.
+      const [text] = await tx
+        .select({ n: transcriptEvents.n })
+        .from(transcriptEvents)
+        .where(
+          and(eq(transcriptEvents.month, session.month), eq(transcriptEvents.textSha256, sha256)),
+        )
+        .limit(1);
+      const [file] = await tx
+        .select({ id: transcriptFiles.id })
+        .from(transcriptFiles)
+        .where(and(eq(transcriptFiles.month, session.month), eq(transcriptFiles.sha256, sha256)))
+        .limit(1);
+      if (text === undefined && file === undefined) {
+        // Before the seal is kept: a store that refuses throws, and nothing above stands.
+        await blobs.remove(sha256, shelf);
+      }
     }
-  }
-  const [sealed] = await handle
+  });
+  const [sealed] = await drizzleOf(database)
     .select(eventColumns)
     .from(transcriptEvents)
     .leftJoin(people, eq(people.id, transcriptEvents.sealedById))
