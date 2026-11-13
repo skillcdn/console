@@ -1,5 +1,7 @@
 import { ApiError, type ConsoleClient } from "../client.js";
 import {
+  MAX_RUNNER_LINE_LENGTH,
+  MAX_RUNNER_OFFERS,
   MAX_TRANSCRIPT_ATTACHMENTS,
   MAX_TRANSCRIPT_BATCH,
   MAX_TRANSCRIPT_BATCH_BYTES,
@@ -8,7 +10,8 @@ import {
   MAX_TRANSCRIPT_FACTS,
   MAX_TRANSCRIPT_TEXT_BYTES,
 } from "../limits.js";
-import type { RestSignal, RestTranscriptEventInput } from "../schemas.js";
+import { type RestSignal, type RestTranscriptEventInput, RUNNER_CHOICE } from "../schemas.js";
+import { hasForbiddenCodePoint } from "../text.js";
 import type { AgentStateReason, TranscriptKind } from "../vocabulary.js";
 import type { RunnerConfig } from "./config.js";
 import {
@@ -66,10 +69,21 @@ const PICTURE_TYPES: ReadonlySet<string> = new Set([
   "image/webp",
 ]);
 
-/** How many events wait to be sent before the oldest are let go: a console away for hours is not kept up with in memory. */
+/**
+ * How many events wait to be sent, and how many bytes of them, their pictures counted, before
+ * the oldest are let go: a console away for hours is not kept up with in memory. What is let go
+ * is said on the record, in the place of the first of them.
+ */
 const MAX_OUTBOX = 20_000;
+export const MAX_OUTBOX_BYTES = 64 * 1024 * 1024;
 /** Room left in a batch for what wraps its events. */
 const BATCH_ROOM_BYTES = MAX_TRANSCRIPT_BATCH_BYTES - 64 * 1024;
+/** What the id of a picture takes of a batch, with its quotes and its comma. */
+const FILE_ID_BYTES = 48;
+/** The fewest bytes a text is cut down to where the console refuses its event alone as too large. */
+const LEAST_CUT_BYTES = 1024;
+/** The name of the secret an account keeps its git host's token under (ADR-0088): what the autosave's push is handed. */
+export const GIT_TOKEN_SECRET = "git.token";
 
 /** What of the console the runner asks: the account's own routes, on its command's session. */
 export type RunnerClient = Pick<
@@ -143,8 +157,15 @@ export interface RunnerOptions {
   /**
    * Runs git in the desk to its end and answers how it ended, for the autosave (ADR-0088); left
    * out, the runner saves nothing. It asks nobody at a terminal, and what it prints is not kept.
+   * A step that reaches the git host is handed the token the account's store keeps for it,
+   * where it keeps one: for that command alone, on no command line and in no file.
    */
-  readonly git?: ((args: readonly string[]) => Promise<number | null>) | undefined;
+  readonly git?:
+    | ((
+        args: readonly string[],
+        handed?: { readonly token?: string | undefined },
+      ) => Promise<number | null>)
+    | undefined;
   /** The wake sources `runner.json` names beside the console's own, and what they need of the machine. */
   readonly wakes?:
     | {
@@ -162,6 +183,8 @@ export interface RunnerOptions {
     maxCoolDownMs: number;
     reconnectMs: number;
   }>;
+  /** The bounds, for a test to lower. */
+  readonly bounds?: Partial<{ outboxBytes: number }>;
 }
 
 /** How a runner ended: stopped by whoever runs it, or by itself for an update of the command it runs from. */
@@ -178,12 +201,36 @@ interface Outgoing {
   n: number;
   readonly kind: TranscriptKind;
   readonly at: string;
-  readonly text: string;
-  readonly data: Record<string, Fact>;
+  text: string;
+  data: Record<string, Fact>;
   readonly pictures: readonly Picture[];
   /** The ids its pictures were kept under, once they were handed in: a batch sent again hands none in twice. */
   files?: readonly string[];
+  /** What it holds of the runner's memory while it waits: its text and its pictures. */
+  held: number;
+  /** How many events it stands for, where it says that the runner let some go unsent. */
+  gone?: number;
 }
+
+/** What an event takes of a batch as the console counts one: its JSON, and the ids of its pictures. */
+const sentBytes = (event: Outgoing): number =>
+  Buffer.byteLength(
+    JSON.stringify({
+      n: event.n,
+      kind: event.kind,
+      at: event.at,
+      text: event.text,
+      data: event.data,
+    }),
+  ) +
+  event.pictures.length * FILE_ID_BYTES +
+  16;
+
+/** What an event holds of memory: its text, its facts roughly, and the bytes of its pictures. */
+const heldBytes = (event: Pick<Outgoing, "text" | "pictures">): number =>
+  Buffer.byteLength(event.text) +
+  1024 +
+  event.pictures.reduce((sum, picture) => sum + picture.bytes.byteLength, 0);
 
 interface OpenSession {
   readonly id: string;
@@ -201,11 +248,16 @@ interface OpenSession {
    * record: written at once where the product was waiting for one, and when the product takes
    * it where a turn was under way.
    */
-  handed: { written: boolean; readonly write: (unread?: boolean) => void }[];
+  handed: {
+    written: boolean;
+    /** Writes its signals on the record, as never read where so, and only those asked for where some are. */
+    readonly write: (unread?: boolean, only?: (signal: RestSignal) => boolean) => void;
+  }[];
   /** The number of the last event of it. */
   n: number;
-  /** What the product did and the console has not been sent yet. */
+  /** What the product did and the console has not been sent yet, and what that holds of memory. */
   outbox: Outgoing[];
+  waiting: number;
   /** Whether the console takes nothing more of it: over there, or its month away. */
   refused: boolean;
   running: { model: string | null; effort: string | null };
@@ -223,7 +275,13 @@ type Message =
   | { readonly t: "heartbeat" }
   | { readonly t: "stop" };
 
-/** A text within `bytes` of UTF-8, cut between characters, with a word that says it was cut. */
+/** The word a text the runner cut ends with: how long it was whole. */
+const CUT_NOTE = /\n\[cut by the runner: (\d+) bytes in all\]$/;
+
+/**
+ * A text within `bytes` of UTF-8, cut between characters, with a word that says it was cut. A
+ * text cut before and cut again still says how long it was whole.
+ */
 function boundedText(text: string, bytes: number): string {
   if (text.length * 3 <= bytes) {
     return text;
@@ -232,12 +290,15 @@ function boundedText(text: string, bytes: number): string {
   if (encoded.byteLength <= bytes) {
     return text;
   }
-  const note = `\n[cut by the runner: ${encoded.byteLength} bytes in all]`;
-  let end = bytes - Buffer.byteLength(note);
-  while (end > 0 && ((encoded[end] ?? 0) & 0xc0) === 0x80) {
+  const before = CUT_NOTE.exec(text);
+  const whole = before === null ? encoded.byteLength : Number(before[1]);
+  const body = before === null ? encoded : Buffer.from(text.slice(0, before.index), "utf8");
+  const note = `\n[cut by the runner: ${whole} bytes in all]`;
+  let end = Math.min(body.byteLength, Math.max(0, bytes - Buffer.byteLength(note)));
+  while (end > 0 && ((body[end] ?? 0) & 0xc0) === 0x80) {
     end -= 1;
   }
-  return `${encoded.subarray(0, end).toString("utf8")}${note}`;
+  return `${body.subarray(0, end).toString("utf8")}${note}`;
 }
 
 /** The facts of a block within the bounds the console takes them in, a text among them with its secrets taken out. */
@@ -259,6 +320,22 @@ function boundedFacts(
   return facts;
 }
 
+/** A model or a level of effort as the console takes one, or nothing for a name it would refuse. */
+const choiceOf = (value: string | null | undefined): string | null =>
+  typeof value === "string" && value.length <= MAX_RUNNER_LINE_LENGTH && RUNNER_CHOICE.test(value)
+    ? value
+    : null;
+
+/** Of what a product offers to choose from, what the console takes: the names it would refuse left out, the most it takes. */
+const offeredOf = (values: readonly string[]): string[] =>
+  values.filter((value) => choiceOf(value) !== null).slice(0, MAX_RUNNER_OFFERS);
+
+/** A line a runner says of its product as the console takes one, or nothing where it is none. */
+const lineOf = (value: string | null | undefined): string | null => {
+  const line = (value ?? "").trim().slice(0, MAX_RUNNER_LINE_LENGTH).trim();
+  return line.length === 0 || hasForbiddenCodePoint(line) ? null : line;
+};
+
 export function createRunner(options: RunnerOptions): Runner {
   const { client, driver, config, log } = options;
   const timing = {
@@ -269,6 +346,22 @@ export function createRunner(options: RunnerOptions): Runner {
     maxCoolDownMs: MAX_COOL_DOWN_MS,
     reconnectMs: RECONNECT_MS,
     ...options.timing,
+  };
+  const bounds = { outboxBytes: MAX_OUTBOX_BYTES, ...options.bounds };
+
+  // What keeps failing is said once, and again when what is said of it changes, so that an hour
+  // without the console is a line and not thousands; that it is over is said once too.
+  const saidOf = new Map<string, string>();
+  const sayOnce = (about: string, line: string): void => {
+    if (saidOf.get(about) !== line) {
+      saidOf.set(about, line);
+      log(line);
+    }
+  };
+  const sayOver = (about: string, line?: string): void => {
+    if (saidOf.delete(about) && line !== undefined) {
+      log(line);
+    }
   };
 
   // The queue: everything that changes what the runner holds, one at a time.
@@ -341,7 +434,15 @@ export function createRunner(options: RunnerOptions): Runner {
    * last seen, and the one seen twice running, which the runner ends for.
    */
   let seenVersion: string | undefined;
+  let seenAt = 0;
   let updatedTo: string | undefined;
+  /**
+   * The signals a product was handed and never took, since it did not start or was not signed
+   * in, which are kept to be sent again; and, of those, the ones a reset gave one more try: a
+   * product that does not start with them again is not sent them a third time.
+   */
+  const sentBefore = new Set<number>();
+  const lastTry = new Set<number>();
 
   const persist = async (): Promise<void> => {
     try {
@@ -373,17 +474,74 @@ export function createRunner(options: RunnerOptions): Runner {
     pictures: readonly Picture[] = [],
   ): void => {
     target.n += 1;
-    target.outbox.push({
+    const event = {
       n: target.n,
       kind,
       at: new Date(options.now()).toISOString(),
       text: boundedText(redact(text), MAX_TRANSCRIPT_TEXT_BYTES),
       data: boundedFacts(data, redact),
       pictures: pictures.slice(0, MAX_TRANSCRIPT_ATTACHMENTS),
-    });
-    if (target.outbox.length > MAX_OUTBOX) {
-      target.outbox.splice(0, target.outbox.length - MAX_OUTBOX);
+    };
+    const held = heldBytes(event);
+    target.outbox.push({ ...event, held });
+    target.waiting += held;
+    // A batch on its way names the events at the head: they are let go, where they must be,
+    // before the next one is put together.
+    if (!flushing) {
+      trim(target);
     }
+  };
+
+  /**
+   * Lets go of the oldest of what waits to be sent once more waits than the runner keeps, and
+   * says so on the record: one event stands in the place of the first let go, with how many
+   * went, and those after it are numbered on from it, so that the console is sent no gap.
+   */
+  const trim = (target: OpenSession): void => {
+    if (target.outbox.length <= MAX_OUTBOX && target.waiting <= bounds.outboxBytes) {
+      return;
+    }
+    let first: Outgoing | undefined;
+    let gone = 0;
+    // Down to nine tenths of each bound, so that the next event does not find it full again.
+    while (
+      target.outbox.length > 1 &&
+      (target.outbox.length > MAX_OUTBOX * 0.9 || target.waiting > bounds.outboxBytes * 0.9)
+    ) {
+      const event = target.outbox.shift();
+      if (event === undefined) {
+        break;
+      }
+      first ??= event;
+      target.waiting -= event.held;
+      gone += event.gone ?? 1;
+    }
+    if (first === undefined) {
+      return;
+    }
+    const said = {
+      text: `The runner let go of ${gone} ${gone === 1 ? "event" : "events"} of this session unsent: more waited for the console than the runner keeps.`,
+      pictures: [],
+    };
+    const held = heldBytes(said);
+    target.outbox.unshift({
+      n: first.n,
+      kind: "status",
+      at: first.at,
+      ...said,
+      data: { let_go: gone },
+      held,
+      gone,
+    });
+    target.waiting += held;
+    target.outbox.forEach((event, index) => {
+      event.n = first.n + index;
+    });
+    target.n = first.n + target.outbox.length - 1;
+    sayOnce(
+      `outbox ${target.id}`,
+      `events of session ${target.id} are let go unsent: more waits for the console than the runner keeps`,
+    );
   };
 
   /** Reads the values of the account's store where the store changed, for what a session is handed and for what is taken out of events. */
@@ -417,16 +575,18 @@ export function createRunner(options: RunnerOptions): Runner {
       return;
     }
     flushing = true;
+    const about = `transcript ${target.id}`;
     try {
+      // The most events a batch carries: fewer once the console refused one as too large.
+      let most = MAX_TRANSCRIPT_BATCH;
       while (target.outbox.length > 0 && !target.refused) {
+        trim(target);
         const batch: Outgoing[] = [];
         let bytes = 0;
         for (const event of target.outbox) {
-          const size = Buffer.byteLength(event.text) + 1024;
-          if (
-            batch.length >= MAX_TRANSCRIPT_BATCH ||
-            (batch.length > 0 && bytes + size > BATCH_ROOM_BYTES)
-          ) {
+          // Sized as it is sent: what a text grows by when it is spelled as JSON is counted.
+          const size = sentBytes(event);
+          if (batch.length >= most || (batch.length > 0 && bytes + size > BATCH_ROOM_BYTES)) {
             break;
           }
           batch.push(event);
@@ -460,7 +620,11 @@ export function createRunner(options: RunnerOptions): Runner {
         }
         try {
           await client.sendTranscript(target.id, { events });
-          target.outbox.splice(0, batch.length);
+          for (const event of target.outbox.splice(0, batch.length)) {
+            target.waiting -= event.held;
+          }
+          sayOver(about, `the transcript of session ${target.id} is sent again`);
+          sayOver(`outbox ${target.id}`);
         } catch (error) {
           const code = codeOf(error);
           if (code === "transcript.gap") {
@@ -471,6 +635,39 @@ export function createRunner(options: RunnerOptions): Runner {
               event.n = last + 1 + index;
             });
             target.n = last + target.outbox.length;
+            target.waiting = target.outbox.reduce((sum, event) => sum + event.held, 0);
+            continue;
+          }
+          if (code === "request.too_large") {
+            // More than the console takes in one request, whatever the runner counted: sent
+            // again in halves, and never the same batch twice. One event alone that is still
+            // too large is cut, with a word that says so, then sent without its facts, then
+            // let go: nothing waits behind it for ever.
+            const [only] = batch;
+            if (batch.length > 1 || only === undefined) {
+              most = Math.max(1, Math.floor(batch.length / 2));
+              continue;
+            }
+            const before = only.held;
+            const size = Buffer.byteLength(only.text);
+            if (size > LEAST_CUT_BYTES) {
+              only.text = boundedText(only.text, Math.floor(size / 2));
+            } else if (Object.keys(only.data).length > 0) {
+              only.data = {};
+            } else {
+              target.outbox.shift();
+              target.outbox.forEach((event) => {
+                event.n -= 1;
+              });
+              target.n -= 1;
+              target.waiting -= before;
+              log(
+                `an event of session ${target.id} was let go: the console refused it alone as too large`,
+              );
+              continue;
+            }
+            only.held = heldBytes(only);
+            target.waiting += only.held - before;
             continue;
           }
           if (
@@ -481,15 +678,19 @@ export function createRunner(options: RunnerOptions): Runner {
             log(`the console takes nothing more of session ${target.id} (${code})`);
             target.refused = true;
             target.outbox = [];
+            target.waiting = 0;
             return;
           }
           throw error;
         }
       }
     } catch (error) {
-      // Kept, and sent with the next batch.
+      // Kept, and sent with the next batch. Said once for as long as it lasts, and when it is over.
       if (!stopped) {
-        log(`the transcript of session ${target.id} waits to be sent (${codeOf(error)})`);
+        sayOnce(
+          about,
+          `the transcript of session ${target.id} waits to be sent (${codeOf(error)})`,
+        );
       }
     } finally {
       flushing = false;
@@ -551,12 +752,7 @@ export function createRunner(options: RunnerOptions): Runner {
     let created: { id: string };
     try {
       created = await client.beginAgentSession({
-        product: {
-          driver: driver.name,
-          name: driver.product.name,
-          version: productVersion ?? probe.version ?? null,
-          tried: driver.product.tried.includes(productVersion ?? probe.version ?? ""),
-        },
+        product: productOf(),
         model: settings.model,
         effort: settings.effort,
         resumed: resume !== undefined,
@@ -587,6 +783,7 @@ export function createRunner(options: RunnerOptions): Runner {
       handed: [],
       n: 0,
       outbox: [],
+      waiting: 0,
       refused: false,
       running: { model: settings.model, effort: settings.effort },
       written: handed.written,
@@ -647,7 +844,9 @@ export function createRunner(options: RunnerOptions): Runner {
       if ((await git(["rev-parse", "--is-inside-work-tree"])) !== 0) {
         return;
       }
-      await git(["add", "--all"]);
+      // Everything but `work/`, by name: what a supervisor sent and what the runner keeps
+      // there stay on the machine, whatever the desk's own list of what git ignores says.
+      await git(["add", "--all", "--", ".", ":(exclude)work"]);
       // Ends in 1 where something is staged, and in 0 where nothing is.
       if ((await git(["diff", "--cached", "--quiet"])) === 1) {
         const committed = await git(["commit", "--quiet", "--message", AUTOSAVE_MESSAGE]);
@@ -656,7 +855,9 @@ export function createRunner(options: RunnerOptions): Runner {
           return;
         }
       }
-      const pushed = await git(["push", "--quiet"]);
+      const pushed = await git(["push", "--quiet"], {
+        token: secretValues.get(GIT_TOKEN_SECRET),
+      });
       log(
         pushed === 0
           ? "the desk was saved"
@@ -781,8 +982,11 @@ export function createRunner(options: RunnerOptions): Runner {
       target.first = false;
       resetBy = undefined;
     }
-    const write = (unread?: boolean): void => {
+    const write = (unread?: boolean, only?: (signal: RestSignal) => boolean): void => {
       for (const signal of batch) {
+        if (only !== undefined && !only(signal)) {
+          continue;
+        }
         const files = attached.get(signal.number) ?? [];
         const named = (which: (file: Attached) => boolean): string | undefined => {
           const names = files.filter(which).map((file) => file.name);
@@ -869,6 +1073,13 @@ export function createRunner(options: RunnerOptions): Runner {
     }
   };
 
+  /** Stops the turn under way through the driver, and says so where it could not. */
+  const stopTurn = async (target: OpenSession): Promise<void> => {
+    await target.driver.interrupt().catch((error: unknown) => {
+      log(`the turn could not be stopped (${codeOf(error)})`);
+    });
+  };
+
   const onSignal = async (signal: RestSignal): Promise<void> => {
     handled = Math.max(handled, signal.number);
     if (signal.number <= delivered || pending.some((kept) => kept.number === signal.number)) {
@@ -896,6 +1107,14 @@ export function createRunner(options: RunnerOptions): Runner {
         if (signal.kind === "reset") {
           conversation = undefined;
           resetBy = by;
+          // What a product was handed and never took is tried once more, in the new
+          // conversation: a product that does not start with it again is not sent it a
+          // third time, so that no signal stands in the way of every one after it for ever.
+          for (const kept of pending) {
+            if (sentBefore.has(kept.number)) {
+              lastTry.add(kept.number);
+            }
+          }
         }
         // Its words are the agent's to read, in the first message of the session that follows.
         if (signal.text.trim().length > 0) {
@@ -935,22 +1154,26 @@ export function createRunner(options: RunnerOptions): Runner {
           if (session !== undefined && stops) {
             record(session, "person", "", signalData(signal));
           }
-          if (pending.length > 0) {
+          // Nothing is handed over once the runner is to end for an update: the turn is
+          // stopped all the same, and what waits is sent again to the runner started after.
+          if (pending.length > 0 && updatedTo === undefined) {
             if (stops) {
               await deliver("now");
             } else {
               scheduleDeliver();
             }
           } else if (session !== undefined && stops) {
-            await session.driver.interrupt().catch((error: unknown) => {
-              log(`the turn could not be stopped (${codeOf(error)})`);
-            });
+            await stopTurn(session);
           }
           await account(signal);
           return;
         }
         pending.push(signal);
-        if (stops) {
+        if (stops && updatedTo !== undefined && session !== undefined) {
+          // Its words are not handed to a runner that is to end: the turn is stopped, the
+          // runner ends for the update, and the console sends them again to the one after.
+          await stopTurn(session);
+        } else if (stops) {
           await deliver("now");
         } else {
           scheduleDeliver();
@@ -1002,6 +1225,10 @@ export function createRunner(options: RunnerOptions): Runner {
         // The record says where a turn ends, so that whoever reads it live knows the agent is done.
         record(target, "status", "The turn completed.", { turn: "completed" });
         target.turn = false;
+        for (const signal of target.sent) {
+          sentBefore.delete(signal.number);
+          lastTry.delete(signal.number);
+        }
         target.sent = [];
         if (waits !== undefined || stands.state !== "running") {
           waits = undefined;
@@ -1020,7 +1247,35 @@ export function createRunner(options: RunnerOptions): Runner {
         target.turn = false;
         // A product that did not start, or is not signed in, took nothing: what was sent is tried again.
         if (event.reason === "start" || event.reason === "sign_in") {
-          pending = [...target.sent, ...pending];
+          // What a reset gave one more try and the product did not start with again is let
+          // go: on the record as never read, with a line that says so, and sent no more.
+          const again = target.sent.filter((signal) => !lastTry.has(signal.number));
+          const gone = target.sent.filter((signal) => lastTry.has(signal.number));
+          if (gone.length > 0) {
+            for (const message of target.handed) {
+              if (!message.written) {
+                message.write(true, (signal) => lastTry.has(signal.number));
+              }
+            }
+            const numbers = gone.map((signal) => `#${signal.number}`).join(", ");
+            record(
+              target,
+              "status",
+              `What the agent was sent before the reset was let go, since the product did not start with it again: ${numbers}. Whoever sent it says it again where it still matters.`,
+              { let_go: numbers },
+            );
+            log(
+              `${numbers} let go: the product did not start with what it was sent, after a reset too`,
+            );
+            for (const signal of gone) {
+              lastTry.delete(signal.number);
+              sentBefore.delete(signal.number);
+            }
+          }
+          for (const signal of again) {
+            sentBefore.add(signal.number);
+          }
+          pending = [...again, ...pending];
           // Sent again, and on the record when it is taken then.
           target.handed = [];
         }
@@ -1043,6 +1298,26 @@ export function createRunner(options: RunnerOptions): Runner {
     }
   };
 
+  /** The product as the console is told of it: its version as the product said it last, where that is a line the console takes. */
+  const productOf = () => {
+    const version = productVersion ?? probe.version ?? null;
+    return {
+      driver: driver.name,
+      name: driver.product.name,
+      version: lineOf(version),
+      tried: driver.product.tried.includes(version ?? ""),
+    };
+  };
+
+  /** What the product offers to choose from, as far as the console takes it, and what the driver can do. */
+  const offersOf = () => ({
+    models: offeredOf(probe.models),
+    efforts: offeredOf(probe.efforts),
+    steer: driver.can.steer,
+    images: driver.can.images,
+    resume: driver.can.resume,
+  });
+
   const beat = async (): Promise<void> => {
     const now = `${stands.state} ${stands.reason} ${session?.id ?? ""}`;
     said = now;
@@ -1054,23 +1329,18 @@ export function createRunner(options: RunnerOptions): Runner {
         session: session?.id ?? null,
         machine: options.machine,
         runner: options.version,
-        product: {
-          driver: driver.name,
-          name: driver.product.name,
-          version: productVersion ?? probe.version ?? null,
-          tried: driver.product.tried.includes(productVersion ?? probe.version ?? ""),
+        product: productOf(),
+        offers: offersOf(),
+        // What the product says it runs with, where the console takes the name; nothing where
+        // it would refuse it, so that one name does not cost the account its heartbeat.
+        running: {
+          model: choiceOf(session?.running.model),
+          effort: choiceOf(session?.running.effort),
         },
-        offers: {
-          models: [...probe.models],
-          efforts: [...probe.efforts],
-          steer: driver.can.steer,
-          images: driver.can.images,
-          resume: driver.can.resume,
-        },
-        running: session?.running ?? { model: null, effort: null },
       });
       settings = answer.settings;
       tooOldSaid = false;
+      sayOver("heartbeat", "the console takes the heartbeat again");
       // A stop that stands at the console and that this runner did not see: it was sent before
       // the runner started. One still on its way down the stream is acted on when it arrives,
       // with its words.
@@ -1093,29 +1363,38 @@ export function createRunner(options: RunnerOptions): Runner {
           // The agent is told, once: what installs the version the console takes, which the
           // runner then sees and starts again for; and whom to tell where it cannot.
           if (session !== undefined && !session.first) {
+            const target = session;
             const update =
               install === undefined
                 ? ""
                 : ` Update it: ${install}\nThe runner sees the update and is started again with it by itself, once no turn is under way.`;
-            await session.driver
-              .send({
-                text: `[console ${session.mark} · runner]\nThe console no longer takes this version of the command the runner runs from, and hears nothing of this session until it is updated.${update}\nWhere you cannot update it, say so to whom you report to.`,
+            try {
+              await target.driver.send({
+                text: `[console ${target.mark} · runner]\nThe console no longer takes this version of the command the runner runs from, and hears nothing of this session until it is updated.${update}\nWhere you cannot update it, say so to whom you report to.`,
                 images: [],
                 priority: "next",
-              })
-              .catch(() => undefined);
+              });
+              // The agent has a turn's work in it, the install among it: counted as a turn, so
+              // that the update it makes is taken when that turn ends and never inside it. What
+              // the product says it took then is this message, which the record holds nothing
+              // of, and not the message of a signal that waits behind it.
+              target.turn = true;
+              target.handed.push({ written: true, write: () => undefined });
+            } catch {
+              // Not told: the runner's own line above says it to whoever reads its output.
+            }
           }
         }
         return;
       }
-      log(`the console did not take the heartbeat (${codeOf(error)})`);
+      sayOnce("heartbeat", `the console did not take the heartbeat (${codeOf(error)})`);
     }
   };
 
   /**
    * Looks whether the package the runner runs from was updated (ADR-0101). A version is taken
-   * once it was seen twice, a heartbeat apart, so that an install under way has put its last
-   * file down by the time the runner is started again.
+   * once it was seen twice, a heartbeat's interval apart, so that an install under way has put
+   * its last file down by the time the runner is started again.
    */
   const lookForUpdate = async (): Promise<void> => {
     if (options.installed === undefined || updatedTo !== undefined) {
@@ -1128,6 +1407,13 @@ export function createRunner(options: RunnerOptions): Runner {
     }
     if (seenVersion !== now) {
       seenVersion = now;
+      seenAt = options.now();
+      return;
+    }
+    // A heartbeat is said at every change of state too: two looks a moment apart are one
+    // sighting, and the second counts a heartbeat's interval after the first, less what a
+    // timer may be early by.
+    if (options.now() - seenAt < timing.heartbeatMs - Math.min(1000, timing.heartbeatMs / 2)) {
       return;
     }
     updatedTo = now;
@@ -1198,11 +1484,12 @@ export function createRunner(options: RunnerOptions): Runner {
       try {
         for await (const signal of client.signalStream(received, abort.signal)) {
           received = Math.max(received, signal.number);
+          sayOver("stream");
           push({ t: "signal", signal });
         }
       } catch (error) {
         if (!stopped) {
-          log(`the stream of signals ended (${codeOf(error)}); asked for again`);
+          sayOnce("stream", `the stream of signals ended (${codeOf(error)}); asked for again`);
         }
       }
       if (!stopped) {
@@ -1241,6 +1528,16 @@ export function createRunner(options: RunnerOptions): Runner {
         );
       }
       probe = await driver.probe();
+      const left =
+        probe.models.length +
+        probe.efforts.length -
+        offeredOf(probe.models).length -
+        offeredOf(probe.efforts).length;
+      if (left > 0) {
+        log(
+          `${left} of the models and the levels of effort the product offers are not said to the console: it takes a name of letters, digits and . _ : [ ] - and ${MAX_RUNNER_OFFERS} of each`,
+        );
+      }
       await readSecrets();
       // The first heartbeat says the runner is there, and learns where the console's record stands.
       try {
@@ -1251,19 +1548,8 @@ export function createRunner(options: RunnerOptions): Runner {
           session: null,
           machine: options.machine,
           runner: options.version,
-          product: {
-            driver: driver.name,
-            name: driver.product.name,
-            version: probe.version ?? null,
-            tried: driver.product.tried.includes(probe.version ?? ""),
-          },
-          offers: {
-            models: [...probe.models],
-            efforts: [...probe.efforts],
-            steer: driver.can.steer,
-            images: driver.can.images,
-            resume: driver.can.resume,
-          },
+          product: productOf(),
+          offers: offersOf(),
           running: { model: null, effort: null },
         });
         settings = first.settings;

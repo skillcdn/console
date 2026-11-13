@@ -1,0 +1,5 @@
+---
+"@skillcdn/console": patch
+---
+
+`console runner` sizes a batch of the transcript as it is sent, a text counted as JSON spells it: output full of newlines, quotes or escape characters made a batch the console refused as too large (`request.too_large`), which the runner then sent again every second for as long as the session lived, so that the Live page stopped and what was unsent at the session's end was lost. A batch the console still refuses as too large is sent again in halves, never the same one twice, and an event that is too large alone has its text cut, with a word that says so, then goes without its facts, then is let go. What waits while the console is away is bounded by its bytes too, 64 MiB with its pictures beside the 20,000 events: beyond either the oldest are let go, and one `status` event in their place says how many, where they went without a word. The runner says once that the transcript waits and once that it is sent again, and says a heartbeat the console does not take and a stream of signals that ends once for as long as it lasts, where it wrote a line a second. `createRunner` takes `bounds`, for a test to lower.

@@ -750,14 +750,17 @@ const handle = z.string().check(
 
 /** A line a runner says: bounded, without characters that hide. */
 const runnerLine = line(MAX_RUNNER_LINE_LENGTH);
+/**
+ * How a model or a level of effort is spelled for the console to take it: letters, digits and a
+ * few marks, beginning with a letter or a digit. The runner holds what a product says of itself
+ * to the same rule before it says it on, so that one name the console would refuse does not
+ * cost the account its heartbeat.
+ */
+export const RUNNER_CHOICE = /^[A-Za-z0-9][A-Za-z0-9._:[\]-]*$/;
 /** A model or a level of effort, as the product spells one. */
 const runnerChoice = z
   .string()
-  .check(
-    z.minLength(1),
-    z.maxLength(MAX_RUNNER_LINE_LENGTH),
-    z.regex(/^[A-Za-z0-9][A-Za-z0-9._:[\]-]*$/),
-  );
+  .check(z.minLength(1), z.maxLength(MAX_RUNNER_LINE_LENGTH), z.regex(RUNNER_CHOICE));
 
 /** The model and the level of effort an agent runs with, or is to; `null` each for "as the product has it". */
 export const restAgentChoiceSchema = z.object({

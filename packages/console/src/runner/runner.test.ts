@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { ApiError } from "../client.js";
-import type {
-  RestAgentSession,
-  RestAgentSessionInput,
-  RestRunnerHeartbeatInput,
-  RestSignal,
-  RestTranscriptEventInput,
+import {
+  type RestAgentSession,
+  type RestAgentSessionInput,
+  type RestRunnerHeartbeatInput,
+  type RestSignal,
+  type RestTranscriptEventInput,
+  restRunnerHeartbeatInputSchema,
 } from "../schemas.js";
 import { DEFAULT_RUNNER_CONFIG, type RunnerConfig } from "./config.js";
 import { WITHHELD } from "./redact.js";
@@ -102,6 +103,8 @@ function fakeDriver(
     /** Whether the product takes a picture; one that does where nothing is said. */
     images?: boolean;
     onStart?: (session: ReturnType<typeof fakeSession>) => void;
+    /** What the product offers to choose from; two models and two levels of effort where nothing is said. */
+    offers?: { models: readonly string[]; efforts: readonly string[] };
   } = {},
 ) {
   const sessions: ReturnType<typeof fakeSession>[] = [];
@@ -110,7 +113,11 @@ function fakeDriver(
     product: { name: "Claude Code", tried: ["2.1.0"] },
     can: { steer: true, images: over.images ?? true, resume: true, set: over.set ?? false },
     permissions: { modes: ["auto", "dontAsk"], unattended: "auto", least: "dontAsk" },
-    probe: async () => ({ version: "2.1.0", models: ["opus", "sonnet"], efforts: ["low", "high"] }),
+    probe: async () => ({
+      version: "2.1.0",
+      models: over.offers?.models ?? ["opus", "sonnet"],
+      efforts: over.offers?.efforts ?? ["low", "high"],
+    }),
     start(options) {
       const session = fakeSession(options, { set: over.set ?? false });
       sessions.push(session);
@@ -148,6 +155,12 @@ function fakeConsole() {
     sessions: 0,
     /** The ids of files of a signal the console answers no bytes of. */
     lost: new Set<string>(),
+    /** The most bytes the console takes in one sending of a transcript, as its body is. */
+    bodyLimit: 2 * 1024 * 1024,
+    /** Whether the console is away: no transcript reaches it. */
+    away: false,
+    /** How many sendings of a transcript the console refused as too large. */
+    tooLarge: 0,
   };
   const sessionOf = (id: string, input?: RestAgentSessionInput): RestAgentSession => ({
     id,
@@ -177,6 +190,10 @@ function fakeConsole() {
           "client.outdated",
           "This command, 0.5.0, is older than this console takes (>=0.5.3 <0.6.0; the console is 0.5.3). Update it to 0.5.3.",
         );
+      }
+      // As the console does: a heartbeat that is not in its shape is refused whole.
+      if (!restRunnerHeartbeatInputSchema.safeParse(input).success) {
+        throw new ApiError(400, "request.invalid", "The request is not valid.");
       }
       beats.push(input);
       says.delivered = Math.max(says.delivered, input.delivered);
@@ -239,6 +256,14 @@ function fakeConsole() {
       return sessionOf(id, input);
     },
     sendTranscript: async (id, input) => {
+      if (says.away) {
+        throw new ApiError(0, "network", "The server could not be reached.");
+      }
+      // As the console does: the body is bounded as it is sent, whatever it holds.
+      if (Buffer.byteLength(JSON.stringify(input)) > says.bodyLimit) {
+        says.tooLarge += 1;
+        throw new ApiError(413, "request.too_large", "The request is too large.");
+      }
       if (says.refuse !== undefined) {
         const refusal = says.refuse;
         says.refuse = undefined;
@@ -360,6 +385,8 @@ function setup(
     installed?: () => Promise<string | undefined>;
     /** The command that installs the console's version here. */
     updateCommand?: () => string | undefined;
+    /** The most bytes that wait to be sent before the oldest are let go. */
+    outboxBytes?: number;
   } = {},
 ) {
   const console = fakeConsole();
@@ -374,11 +401,15 @@ function setup(
   };
   const log: string[] = [];
   const gitted: string[] = [];
+  /** What git was handed beside its arguments, by its first word. */
+  const handedGit = new Map<string, { readonly token?: string | undefined } | undefined>();
   const runner = createRunner({
-    git: async (args) => {
+    git: async (args, handed) => {
       gitted.push(args.join(" "));
+      handedGit.set(args[0] ?? "", handed);
       return over.git === undefined ? 0 : over.git(args);
     },
+    ...(over.outboxBytes === undefined ? {} : { bounds: { outboxBytes: over.outboxBytes } }),
     client: console.client,
     driver: product.driver,
     config: { ...DEFAULT_RUNNER_CONFIG, ...over.config },
@@ -426,7 +457,7 @@ function setup(
   });
   const done = runner.run();
   running.push({ stop: () => runner.stop(), done });
-  return { console, product, saved, files, log, gitted, runner, done };
+  return { console, product, saved, files, log, gitted, handedGit, runner, done };
 }
 
 /** The session started `index`th, once it was. */
@@ -941,6 +972,124 @@ describe("the runner", () => {
     expect(console.events()).toHaveLength(1);
   });
 
+  it("sizes a batch as the console counts it, and sends in halves what the console refuses as too large, down to one event cut (never the same batch twice)", async () => {
+    const { console, product, log } = setup();
+    console.signal({ text: "Begin." });
+    const session = await sessionOf(product);
+    await until("the first event", () => console.events().length === 1);
+    // Text that grows sixfold when it is spelled as JSON: an escape character of coloured
+    // output. Three events of it are under the batch's room as text and far over it as sent.
+    const escapes = String.fromCodePoint(0x1b).repeat(250 * 1024);
+    session.emit(
+      { type: "event", kind: "tool_result", text: escapes },
+      { type: "event", kind: "tool_result", text: escapes },
+      { type: "event", kind: "tool_result", text: escapes },
+    );
+    await until("the three events", () => console.events().length === 4);
+    // Counted as sent, each went by itself: the console refused nothing.
+    expect(console.says.tooLarge).toBe(0);
+    expect(log.join("\n")).not.toContain("request.too_large");
+
+    // A console, or what stands in front of it, that takes less than the runner counts on:
+    // the batch is sent again in halves, and everything arrives in order.
+    console.says.bodyLimit = 300 * 1024;
+    const words = "w".repeat(100 * 1024);
+    session.emit(
+      ...Array.from(
+        { length: 8 },
+        (): DriverEvent => ({ type: "event", kind: "assistant", text: words }),
+      ),
+    );
+    await until("the eight events", () => console.events().length === 12);
+    expect(console.says.tooLarge).toBeGreaterThan(0);
+    expect(console.events().map(([n]) => n)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+
+    // One event that is too large by itself is cut until it is taken, and says so.
+    console.says.bodyLimit = 40 * 1024;
+    session.emit({ type: "event", kind: "assistant", text: words });
+    await until("the cut event", () => console.events().length === 13);
+    const cut = String(console.events()[12]?.[2]);
+    expect(Buffer.byteLength(cut)).toBeLessThan(40 * 1024);
+    expect(cut).toContain("[cut by the runner: 102400 bytes in all]");
+    // What comes after it is not held up.
+    session.emit({ type: "event", kind: "assistant", text: "And on." });
+    await until("the event after", () => console.events().length === 14);
+    expect(console.events()[13]).toEqual([14, "assistant", "And on."]);
+  });
+
+  it("lets go of the oldest of what waits once more waits than it keeps, says so on the record in their place, and says once that the console is away", async () => {
+    const { console, product, log } = setup({ outboxBytes: 64 * 1024 });
+    console.signal({ text: "Begin." });
+    const session = await sessionOf(product);
+    await until("the first event", () => console.events().length === 1);
+    console.says.away = true;
+    // Ten events of 16 KiB while the console is away: more than the runner keeps.
+    for (let index = 1; index <= 10; index += 1) {
+      session.emit({ type: "event", kind: "assistant", text: `${index}:${"x".repeat(16 * 1024)}` });
+    }
+    await until("the runner to say so", () =>
+      log.some((line) => line.includes("are let go unsent")),
+    );
+    await sleep(60);
+    // Said once while it lasts, not once a batch.
+    expect(log.filter((line) => line.includes("waits to be sent (network)"))).toHaveLength(1);
+    expect(log.filter((line) => line.includes("are let go unsent"))).toHaveLength(1);
+    console.says.away = false;
+    await until("the rest to arrive", () => String(console.events().at(-1)?.[2]).startsWith("10:"));
+    const record = console.events();
+    // No gap: the numbers run on, one event stands where the first let go stood, and the newest are all there.
+    expect(record.map(([n]) => n)).toEqual(record.map((_, index) => index + 1));
+    expect(record[1]?.[1]).toBe("status");
+    expect(String(record[1]?.[2])).toMatch(
+      /^The runner let go of \d+ events of this session unsent: more waited for the console than the runner keeps\.$/,
+    );
+    const gone = Number(/of (\d+) events/.exec(String(record[1]?.[2]))?.[1]);
+    expect(gone).toBeGreaterThan(0);
+    expect(record).toHaveLength(2 + 10 - gone);
+    expect(log.filter((line) => line.includes("is sent again"))).toHaveLength(1);
+  });
+
+  it("says of its product only what the console takes: a name it would refuse is left out, and the heartbeat goes on", async () => {
+    // An agent that offers more models than the console takes, some under names it refuses.
+    const models = [
+      "anthropic/claude-sonnet-4.5",
+      "a model with spaces",
+      ...Array.from({ length: 60 }, (_, index) => `model-${index}`),
+    ];
+    const { console, product, log } = setup({
+      driver: { offers: { models, efforts: ["low", "high (slow)"] } },
+    });
+    await until("the first heartbeat", () => console.beats.length >= 1);
+    expect(console.beats[0]?.offers.models).toHaveLength(50);
+    expect(console.beats[0]?.offers.models[0]).toBe("model-0");
+    expect(console.beats[0]?.offers.efforts).toEqual(["low"]);
+    expect(log).toContain(
+      "13 of the models and the levels of effort the product offers are not said to the console: it takes a name of letters, digits and . _ : [ ] - and 50 of each",
+    );
+    console.signal({ text: "Begin." });
+    const session = await sessionOf(product);
+    await until("the message", () => session.sent.length === 1);
+    // A model named as a cloud provider names one, and a version that is no line.
+    session.emit(
+      {
+        type: "running",
+        model: "claude-sonnet-4-5@20250929",
+        effort: "high",
+        version: `2.1.0${String.fromCodePoint(0x7)}`,
+      },
+      { type: "turn_completed" },
+    );
+    await until("a heartbeat of the session", () =>
+      console.beats.some((beat) => beat.session !== null && beat.running.effort === "high"),
+    );
+    const beat = console.beats.find((one) => one.session !== null && one.running.effort === "high");
+    expect(beat?.running).toEqual({ model: null, effort: "high" });
+    expect(beat?.product.version).toBeNull();
+    // Every heartbeat was taken: none was refused for what the product said.
+    await sleep(100);
+    expect(log.filter((line) => line.includes("did not take the heartbeat"))).toEqual([]);
+  });
+
   /** What the product was handed, with the session's mark, which the runner makes, written `MARK`. */
   const marked = (text: string | undefined): string =>
     (text ?? "").replaceAll(/\[console [a-z0-9]{6} /g, "[console MARK ");
@@ -1128,11 +1277,25 @@ describe("the runner", () => {
     await until("the desk to be saved", () => changed.log.includes("the desk was saved"));
     expect(changed.gitted).toEqual([
       "rev-parse --is-inside-work-tree",
-      "add --all",
+      "add --all -- . :(exclude)work",
       "diff --cached --quiet",
       "commit --quiet --message Autosave at the end of a session",
       "push --quiet",
     ]);
+    // The push is handed the token the account's store keeps for its git host; no other step is.
+    expect(changed.handedGit.get("push")).toEqual({ token: undefined });
+    expect(changed.handedGit.get("add")).toBeUndefined();
+    const kept = setup({
+      git: (args) => (args[0] === "diff" ? 1 : 0),
+      before: (at) => at.secrets.set("git.token", TOKEN),
+    });
+    kept.console.signal({ text: "Write it down." });
+    await sessionOf(kept.product);
+    kept.console.signal({ kind: "stop" });
+    await until("the desk to be saved", () => kept.log.includes("the desk was saved"));
+    expect(kept.handedGit.get("push")).toEqual({ token: TOKEN });
+    expect(kept.handedGit.get("commit")).toBeUndefined();
+    expect(kept.gitted.join("\n")).not.toContain(TOKEN);
     // Nothing changed: nothing is committed, and what the agent committed itself is pushed.
     const same = setup();
     same.console.signal({ text: "Nothing to write." });
@@ -1361,6 +1524,132 @@ describe("the runner", () => {
       "until it is updated.\nWhere you cannot update it, say so to whom you report to.",
     );
     expect(other.sent[1]?.text).not.toContain("Update it:");
+  });
+
+  it("counts the second sighting of an update a heartbeat's interval after the first: two looks a moment apart are one", async () => {
+    let version = "0.5.0";
+    const { console, product, log } = setup({ installed: async () => version });
+    console.signal({ text: "Begin." });
+    const session = await sessionOf(product);
+    await until("the message", () => session.sent.length === 1);
+    // Three changes of what the product runs with, each said to the console at once: three
+    // looks at the manifest within a moment of the update.
+    const updated = Date.now();
+    version = "0.5.1";
+    session.emit(
+      { type: "running", model: "opus", effort: "high", version: "2.1.0" },
+      { type: "running", model: "opus", effort: "low", version: "2.1.0" },
+      { type: "running", model: "sonnet", effort: "low", version: "2.1.0" },
+    );
+    await until("the update to be seen", () =>
+      log.some((line) => line.startsWith("the command the runner runs from is 0.5.1 now")),
+    );
+    // Half the interval of the test at the least, where the three looks were a millisecond apart.
+    expect(Date.now() - updated).toBeGreaterThanOrEqual(15);
+  });
+
+  it("takes an update its agent made at its word only when the turn of that word ends, and stops a turn for an interrupt once an update was seen", async () => {
+    let version = "0.5.0";
+    const { console, product, done, log, saved } = setup({
+      installed: async () => version,
+      updateCommand: () => "npm install -g @skillcdn/console@0.5.3",
+    });
+    console.signal({ text: "Begin." });
+    const session = await sessionOf(product);
+    await until("the message", () => session.sent.length === 1);
+    session.emit(...STARTED, { type: "turn_completed" });
+    await until("the turn to end", () =>
+      console.events().some(([, , text]) => text === "The turn completed."),
+    );
+    // The console refuses the runner as too old: the agent is told what installs the version it takes.
+    console.says.tooOld = true;
+    await until("the agent to be told", () => session.sent.length === 2);
+    // The agent installs it: the manifest says the new version while the install still runs.
+    version = "0.5.3";
+    await until("the update to be seen", () =>
+      log.some((line) => line.startsWith("the command the runner runs from is 0.5.3 now")),
+    );
+    await sleep(80);
+    // The turn of that word is under way: the runner does not end inside it.
+    expect(console.ended).toEqual([]);
+    expect(session.state.stopped).toBe(false);
+    // A supervisor's interrupt stops the turn all the same; its words are not handed to a
+    // runner that is to end, and are not counted as handed over.
+    console.says.tooOld = false;
+    console.signal({ kind: "interrupt", text: "Stop that." });
+    await until("the turn to be stopped", () => session.state.interrupted === 1);
+    expect(session.sent).toHaveLength(2);
+    // What the product says it took is the runner's own message: nothing of it is on the record.
+    session.emit({ type: "taken" }, { type: "turn_completed" });
+    expect(await done).toBe("updated");
+    expect(console.ended).toEqual(["restarted"]);
+    expect(saved.at(-1)).toMatchObject({ delivered: 1 });
+    expect(console.events().some(([, , text]) => String(text).includes("Stop that."))).toBe(false);
+  });
+
+  it("stops the turn for an interrupt without words once an update was seen, and hands nothing over", async () => {
+    let version = "0.5.0";
+    const { console, product, done, log } = setup({ installed: async () => version });
+    console.signal({ text: "Begin." });
+    const session = await sessionOf(product);
+    await until("the message", () => session.sent.length === 1);
+    session.emit(...STARTED);
+    version = "0.5.1";
+    await until("the update to be seen", () =>
+      log.some((line) => line.startsWith("the command the runner runs from is 0.5.1 now")),
+    );
+    console.signal({ text: "And then this." });
+    console.signal({ kind: "interrupt" });
+    await until("the turn to be stopped", () => session.state.interrupted === 1);
+    expect(session.sent).toHaveLength(1);
+    session.emit({ type: "turn_completed" });
+    expect(await done).toBe("updated");
+  });
+
+  it("gives what a product never took one more try after a reset, and lets it go where the product does not start with it again", async () => {
+    let starts = 0;
+    const { console, product, log } = setup({
+      driver: {
+        onStart: (session) => {
+          starts += 1;
+          // The product does not start with what it is sent: before the reset, and after it.
+          if (starts <= 2) {
+            session.emit(
+              { type: "cannot_go_on", state: "failed", reason: "start" },
+              { type: "ended", how: "crashed" },
+            );
+          }
+        },
+      },
+    });
+    console.signal({ text: "Look at this picture." });
+    await until("the failure", () => console.beats.some((beat) => beat.state === "failed"));
+    await until("the end of the first session", () => console.ended.length === 1);
+    // A reset: what was sent is tried once more, in a new conversation, with the reset's own words.
+    console.signal({ kind: "reset", text: "Begin again." });
+    const second = await sessionOf(product, 2);
+    await until("the message", () => second.sent.length === 1);
+    expect(second.sent[0]?.text).toContain("Look at this picture.");
+    expect(second.sent[0]?.text).toContain("Begin again.");
+    await until("the end of the second session", () => console.ended.length === 2);
+    expect(log).toContain(
+      "#1 let go: the product did not start with what it was sent, after a reset too",
+    );
+    // On the record of that session: what was handed over, and a line that says it was let go.
+    const record = console.events(2);
+    expect(record.map(([, kind, text]) => `${kind}: ${text}`)).toEqual(
+      expect.arrayContaining([
+        "person: Look at this picture.",
+        "status: What the agent was sent before the reset was let go, since the product did not start with it again: #1. Whoever sent it says it again where it still matters.",
+      ]),
+    );
+    // The reset's own words are tried again, without what was let go, and nothing stands in their way.
+    const third = await sessionOf(product, 3);
+    await until("the message", () => third.sent.length === 1);
+    expect(third.sent[0]?.text).toContain("Begin again.");
+    expect(third.sent[0]?.text).not.toContain("Look at this picture.");
+    third.emit(...STARTED, { type: "turn_completed" });
+    await until("the state", () => console.beats.at(-1)?.state === "running");
   });
 
   it("asks for its stream again when it ends, from the last signal it received", async () => {
