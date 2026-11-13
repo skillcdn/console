@@ -36,7 +36,9 @@ src/
                  chains); each loaded only when selected
   transcript-chain.ts  what of an event is hashed, and how a session's chain folds (ADR-0090)
   config/        the only reader of process.env: schema, defaults, validation, NAME_FILE secrets
-  logger.ts      pino, JSON to stdout, with the second fence of redaction
+  logger.ts      pino, JSON to stdout, with the second fence of redaction; an error is logged by
+                 its name, its codes, its statement and where it was thrown from, never with what
+                 a statement was given
   http/          app.ts (the Hono app: probes, not found, errors; everything else registers on it),
                  auth.ts (signing in and out, who is signed in, and `Access`: who a request is for
                  and whether it may change anything), rest.ts (the REST API of the board, and the
