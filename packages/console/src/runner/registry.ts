@@ -45,6 +45,8 @@ export interface DriverHost {
   readonly version?: string | undefined;
   /** The ids a driver writes its messages under, where a test wants to know them; random otherwise. */
   readonly uuid?: (() => string) | undefined;
+  /** The durations a driver waits, for a test to shorten. */
+  readonly timing?: { readonly setMs?: number | undefined } | undefined;
 }
 
 export interface RunnerModules {

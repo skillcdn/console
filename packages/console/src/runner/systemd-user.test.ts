@@ -111,7 +111,7 @@ describe("the systemd-user service", () => {
     const backslash = String.fromCodePoint(92);
     const unit = systemdUnit({
       ...INPUT,
-      desk: "/home/mira/my desk 100%",
+      desk: "/home/mira/my $desk 100%",
       program: [
         "/usr/bin/node",
         "main.js",
@@ -122,7 +122,9 @@ describe("the systemd-user service", () => {
       path: "/opt/my tools/bin:$HOME/bin",
     });
     const lines = unit.split("\n");
-    expect(lines).toContain("WorkingDirectory=/home/mira/my desk 100%%");
+    // A dollar sign is a variable to the system in a command line alone: said twice there,
+    // and once in a directory and in an assignment of the environment, where it reads none.
+    expect(lines).toContain("WorkingDirectory=/home/mira/my $desk 100%%");
     // One line of ExecStart, whatever the word holds: nothing in it begins a line of the unit.
     expect(lines.filter((line) => line.startsWith("ExecStart"))).toHaveLength(1);
     expect(lines.some((line) => line.startsWith("ExecStartPost"))).toBe(false);
@@ -130,6 +132,6 @@ describe("the systemd-user service", () => {
     expect(start).toContain(
       `"a ${backslash}"b${backslash}" $$HOME %%h ${backslash}${backslash}n ExecStartPost=/bin/rm -rf /"`,
     );
-    expect(lines).toContain('Environment="PATH=/opt/my tools/bin:$$HOME/bin"');
+    expect(lines).toContain('Environment="PATH=/opt/my tools/bin:$HOME/bin"');
   });
 });

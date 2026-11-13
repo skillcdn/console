@@ -214,6 +214,20 @@ describe("the claude driver", () => {
       "--resume",
       "0199c4d8-0000-7000-8000-0000000000c1",
     ]);
+    // A model as the product spells one with marks is a word; what is none, a value that
+    // begins as an option among it, is left out and never read as an option of the product's.
+    expect(
+      claudeArguments({
+        cwd: "/d",
+        env: {},
+        model: "opus[1m]",
+        effort: "--dangerously-skip-permissions",
+        resume: "--settings=/tmp/x.json",
+      }).slice(11),
+    ).toEqual(["--model", "opus[1m]"]);
+    expect(
+      claudeArguments({ cwd: "/d", env: {}, model: "a b", effort: "", resume: "c 1" }).slice(11),
+    ).toEqual([]);
     expect(plain.driver.can).toEqual({ steer: true, images: true, resume: true, set: false });
     // The mode the desk names, in the product's own word; one that is none of the product's is
     // never leave to do more: the session starts in the mode that allows the least.

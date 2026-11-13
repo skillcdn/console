@@ -15,16 +15,19 @@ export const SYSTEMD_UNIT = "skillcdn-console-runner.service";
 /** How long the account's systemd is given to be there once lingering was asked for: tries, a second apart. */
 const TRIES_AFTER_LINGER = 10;
 
-/** A value of the unit on one line, with what the system would read as a specifier or a variable said as itself. */
-const plain = (text: string): string =>
-  text
-    .replaceAll(/[\r\n]+/g, " ")
-    .replaceAll("%", "%%")
-    .replaceAll("$", "$$$$");
+/** A value of the unit on one line, with what the system would read as a specifier said as itself. */
+const plain = (text: string): string => text.replaceAll(/[\r\n]+/g, " ").replaceAll("%", "%%");
 
-/** A word of a command line as the unit quotes one: whole, whatever spaces and quotes it holds. */
-const word = (text: string): string =>
+/** A value as the unit quotes one: whole, whatever spaces and quotes it holds. */
+const quoted = (text: string): string =>
   `"${plain(text).replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
+
+/**
+ * A word of the command line: quoted, and a dollar sign said twice, since the system reads one
+ * there as a variable of the environment. It reads none in a directory or in an assignment of
+ * the environment, where a sign said twice would be two.
+ */
+const word = (text: string): string => quoted(text.replaceAll("$", "$$$$"));
 
 /** The unit: the runner started in the desk with the account's session, and again whenever it ends. */
 export function systemdUnit(input: ServiceInput): string {
@@ -36,10 +39,11 @@ export function systemdUnit(input: ServiceInput): string {
     "",
     "[Service]",
     "Type=simple",
+    // The rest of the line is the directory, as it is: the system reads no quotes there.
     `WorkingDirectory=${plain(input.desk)}`,
     `ExecStart=${input.program.map(word).join(" ")}`,
     // The product, and what the agent runs, are found where they were when the machine was set up.
-    ...(input.path === undefined ? [] : [`Environment=${word(`PATH=${input.path}`)}`]),
+    ...(input.path === undefined ? [] : [`Environment=${quoted(`PATH=${input.path}`)}`]),
     "Restart=always",
     "RestartSec=10",
     "",

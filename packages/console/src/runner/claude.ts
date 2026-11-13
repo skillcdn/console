@@ -526,8 +526,20 @@ function sessionOf(child: Child, asked: string, uuid: () => string): DriverSessi
   };
 }
 
+/**
+ * A word that goes on the product's command line: a model or a level of effort as the console
+ * spells one, a conversation's id. Anything else is no such word, and is left out: it never
+ * becomes an option of the product's, which a value that begins with a dash would be read as.
+ */
+const WORD = /^[A-Za-z0-9][A-Za-z0-9._:[\]-]{0,199}$/;
+const word = (value: string | null | undefined): string | undefined =>
+  typeof value === "string" && WORD.test(value) ? value : undefined;
+
 /** The arguments the product is started with. */
 export function claudeArguments(options: StartOptions): readonly string[] {
+  const model = word(options.model);
+  const effort = word(options.effort);
+  const resume = word(options.resume);
   return [
     "-p",
     "--input-format",
@@ -544,9 +556,9 @@ export function claudeArguments(options: StartOptions): readonly string[] {
     claudeMode(options.permissions),
     "--permission-prompts",
     "none",
-    ...(options.model === null ? [] : ["--model", options.model]),
-    ...(options.effort === null ? [] : ["--effort", options.effort]),
-    ...(options.resume === undefined ? [] : ["--resume", options.resume]),
+    ...(model === undefined ? [] : ["--model", model]),
+    ...(effort === undefined ? [] : ["--effort", effort]),
+    ...(resume === undefined ? [] : ["--resume", resume]),
   ];
 }
 

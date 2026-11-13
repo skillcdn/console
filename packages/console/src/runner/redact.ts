@@ -54,6 +54,40 @@ function base64Forms(text: string): readonly string[] {
   return forms;
 }
 
+/** What a driver ends a text with that it cut: a tool's input is shown to a length, and no further. */
+const CUT_MARK = "\u2026";
+
+/** For each place in a form, how long the longest beginning of the form is that also ends there. */
+function bordersOf(form: string): Int32Array {
+  const borders = new Int32Array(form.length);
+  let matched = 0;
+  for (let at = 1; at < form.length; at += 1) {
+    while (matched > 0 && form[at] !== form[matched]) {
+      matched = borders[matched - 1] ?? 0;
+    }
+    if (form[at] === form[matched]) {
+      matched += 1;
+    }
+    borders[at] = matched;
+  }
+  return borders;
+}
+
+/** How many characters at the end of a text are the beginning of a form, the whole form never among them. */
+function beginningAtEnd(text: string, form: string, borders: Int32Array): number {
+  const tail = text.slice(-(form.length - 1));
+  let matched = 0;
+  for (let at = 0; at < tail.length; at += 1) {
+    while (matched > 0 && (matched === form.length || tail[at] !== form[matched])) {
+      matched = borders[matched - 1] ?? 0;
+    }
+    if (tail[at] === form[matched]) {
+      matched += 1;
+    }
+  }
+  return matched;
+}
+
 /** The forms one value may be in, the longest first, so that a shorter form never tears a longer one. */
 export function formsOf(value: string): readonly string[] {
   if (value.length < MIN_LENGTH) {
@@ -69,7 +103,9 @@ export function formsOf(value: string): readonly string[] {
 /**
  * What takes the values out of a text: each form of each value replaced by `[withheld]`. A value
  * of several lines is looked for whole and a line at a time, since a tool prints a key a line at
- * a time. With no value to look for, the text comes through as it is.
+ * a time. A text a driver cut may end inside a value: the beginning of one that it ends in, of
+ * four characters or more, is taken out as well. With no value to look for, the text comes
+ * through as it is.
  */
 export function redactorOf(values: Iterable<string>): (text: string) => string {
   const forms = new Set<string>();
@@ -94,11 +130,25 @@ export function redactorOf(values: Iterable<string>): (text: string) => string {
   if (ordered.length === 0) {
     return (text) => text;
   }
+  const borders = ordered.map(bordersOf);
   return (text) => {
     let out = text;
     for (const form of ordered) {
       if (out.includes(form)) {
         out = out.replaceAll(form, WITHHELD);
+      }
+    }
+    if (out.endsWith(CUT_MARK)) {
+      const body = out.slice(0, -CUT_MARK.length);
+      let most = 0;
+      ordered.forEach((form, index) => {
+        const held = borders[index];
+        if (held !== undefined) {
+          most = Math.max(most, beginningAtEnd(body, form, held));
+        }
+      });
+      if (most >= MIN_LENGTH) {
+        out = `${body.slice(0, body.length - most)}${WITHHELD}${CUT_MARK}`;
       }
     }
     return out;

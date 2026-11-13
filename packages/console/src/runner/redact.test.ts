@@ -66,6 +66,25 @@ describe("taking the secrets out of an event", () => {
     expect(forms).not.toContain(Buffer.from("pin9").toString("base64"));
   });
 
+  it("takes out the beginning of a value at the end of a text a driver cut, and nothing of a text that ends in none", () => {
+    const value = "not-a-real-token-4f9a2c71";
+    const redact = redactorOf([value]);
+    const cut = "\u2026";
+    // A tool's input shown to a length, which ended inside the value.
+    expect(redact(`{"header":"Authorization: Bearer not-a-real-tok${cut}`)).toBe(
+      `{"header":"Authorization: Bearer ${WITHHELD}${cut}`,
+    );
+    // Inside base64 too: the beginning of the value as a longer run of it spells it.
+    const run = Buffer.from(`mira:${value}`).toString("base64");
+    expect(redact(`Basic ${run.slice(0, 24)}${cut}`)).not.toContain(run.slice(8, 24));
+    // Four characters at the least, as a whole value is looked for by.
+    expect(redact(`it does not${cut}`)).toBe(`it does not${cut}`);
+    expect(redact(`it does not-${cut}`)).toBe(`it does ${WITHHELD}${cut}`);
+    // A text that was not cut ends as it ends.
+    expect(redact("it ends in not-a-real-tok")).toBe("it ends in not-a-real-tok");
+    expect(redact(`nothing of it here${cut}`)).toBe(`nothing of it here${cut}`);
+  });
+
   it("takes the longest form first, so that one value inside another leaves nothing of either", () => {
     const redact = redactorOf(["secret-part", "a-secret-part-and-more"]);
     expect(redact("x a-secret-part-and-more y secret-part z")).toBe(

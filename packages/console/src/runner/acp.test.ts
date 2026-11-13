@@ -205,9 +205,10 @@ const OPTIONS: StartOptions = {
   resume: undefined,
 };
 
-function driverFor(agent: ReturnType<typeof fakeAgent>, version?: string) {
+function driverFor(agent: ReturnType<typeof fakeAgent>, version?: string, setMs?: number) {
   return createAcpDriver({
     version,
+    ...(setMs === undefined ? {} : { timing: { setMs } }),
     spawn: (command, args, options) => {
       agent.started.command = command;
       agent.started.args = args;
@@ -327,6 +328,20 @@ describe("the acp driver", () => {
     await until(versioned, [], isType("running"));
     expect(told.sent[0]).toMatchObject({ params: { clientInfo: { version: "0.5.0" } } });
     await versioned.stop();
+  });
+
+  it("waits a few seconds and no longer for an agent to take a choice in a running session, and says it was not taken", async () => {
+    // An agent that answers nothing to the choice while it works.
+    const agent = agentThat({
+      other: (message) => message.method === "session/set_config_option",
+    });
+    const session = driverFor(agent, undefined, 30).start(OPTIONS);
+    await until(session, [], isType("running"));
+    const asked = Date.now();
+    expect(await session.set({ model: "lathe-large" })).toBe(false);
+    expect(Date.now() - asked).toBeLessThan(2000);
+    expect(agent.of("session/set_config_option")).toHaveLength(1);
+    await session.stop();
   });
 
   it("starts with the model and the effort chosen for it, where the agent offers them, and takes another in a running session", async () => {

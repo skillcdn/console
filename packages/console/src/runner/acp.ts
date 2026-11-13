@@ -31,6 +31,12 @@ const KILL_GRACE_MS = 2000;
 const START_TIMEOUT_MS = 120_000;
 /** How long it is given to say what it is and offers, asked without a session to run. */
 const PROBE_TIMEOUT_MS = 30_000;
+/**
+ * How long an agent is given to take a model or a level of effort in a running session. The
+ * runner handles one thing at a time: an agent that answers nothing while it works would hold
+ * every signal behind the choice, a stop among them.
+ */
+const SET_TIMEOUT_MS = 5000;
 /** The most of a tool's input that is shown. */
 const MAX_INPUT_LENGTH = 4000;
 /** The most that is kept of what a command printed while it ran, where an agent sends it in pieces. */
@@ -425,6 +431,8 @@ function sessionOf(
   options: StartOptions,
   /** The version of the command the runner is, said to the product. */
   own: string | undefined,
+  /** How long a choice set in the running session is waited for. */
+  setMs: number = SET_TIMEOUT_MS,
 ): DriverSession {
   const connection = connectionOf(child);
   /** How what the agent asks leave for is answered: settled once the session says its modes. */
@@ -747,10 +755,15 @@ function sessionOf(
       .catch(() => undefined);
   };
 
-  /** Sets one of the product's choices; whether it took it. Nothing asked is taken. */
+  /**
+   * Sets one of the product's choices; whether it took it. Nothing asked is taken. Within
+   * `within` where one is given: an answer that comes later is not waited for, and the choice
+   * counts as not taken, which the runner then gives the next session.
+   */
   const choose = async (
     choice: Choice | undefined,
     value: string | null | undefined,
+    within?: number,
   ): Promise<boolean> => {
     if (value === undefined || value === null) {
       return true;
@@ -762,11 +775,15 @@ function sessionOf(
       return true;
     }
     try {
-      const result = await connection.request("session/set_config_option", {
+      const asked = connection.request("session/set_config_option", {
         sessionId: session,
         configId: choice.id,
         value,
       });
+      const result = within === undefined ? await asked : await Promise.race([asked, wait(within)]);
+      if (result === "timeout") {
+        return false;
+      }
       const options = isObject(result) ? result.configOptions : undefined;
       model = choiceOf(options, "model") ?? model;
       effort = choiceOf(options, "thought_level") ?? effort;
@@ -1111,8 +1128,8 @@ function sessionOf(
       stopTurn("stopped");
     },
     async set(next) {
-      const tookModel = await choose(model, next.model);
-      const tookEffort = await choose(effort, next.effort);
+      const tookModel = await choose(model, next.model, setMs);
+      const tookEffort = await choose(effort, next.effort, setMs);
       runs();
       return tookModel && tookEffort;
     },
@@ -1226,7 +1243,7 @@ export function createAcpDriver(host: DriverHost): Driver {
           "runner.json names the driver acp and no command for it: say which program speaks the protocol, as product.command.",
         );
       }
-      return sessionOf(start(options.cwd, options.env), options, host.version);
+      return sessionOf(start(options.cwd, options.env), options, host.version, host.timing?.setMs);
     },
   };
 }
