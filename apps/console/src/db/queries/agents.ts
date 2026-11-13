@@ -27,6 +27,7 @@ export class AgentError extends DomainError {
       | "agent.handle_taken"
       | "agent.exists"
       | "agent.administrator"
+      | "agent.login_is_member"
       | "agent.invalid_manager"
       | "agent.invalid_project"
       | "agent.too_many_accounts",
@@ -40,6 +41,8 @@ const AGENT_ERROR_WORDS = {
   "agent.handle_taken": "another agent account has this handle",
   "agent.exists": "the login is an agent account already",
   "agent.administrator": "an administrator is not made an agent account",
+  "agent.login_is_member":
+    "a member carries the login already; say convert to make that member the agent account",
   "agent.invalid_manager":
     "the manager is not another active member of the workspace, or reports to this account",
   "agent.invalid_project": "the project it starts in was not found",
@@ -100,6 +103,8 @@ export interface AgentAccountInput {
   readonly managerId: string;
   /** The project it starts in, by key. */
   readonly projectKey: string;
+  /** Whether the member who carries the login already is to become the account (ADR-0104). */
+  readonly convert: boolean;
   readonly now: Date;
 }
 
@@ -107,9 +112,11 @@ export interface AgentAccountInput {
  * Makes an agent account, and tells the board (ADR-0084). The member's row is written at once,
  * so that work can be assigned to it before anyone signed in with it, and the login is let in as
  * a listing lets one in; the first sign-in with that login binds the provider's account to the
- * row (`savePerson`). A login a member already carries is made an agent account the same way,
- * once: the member's row becomes the account, with everything it did, unless they administer
- * the workspace. The account is listed in the project it starts in, where the project lists its
+ * row (`savePerson`). A login a member already carries is made an agent account only where that
+ * is asked for (`convert`, ADR-0104), once: the member's row becomes the account, with
+ * everything it did, unless they administer the workspace; unasked, it is refused, since a
+ * persona's proposed login may spell a colleague's and `kind` never goes back. The account is
+ * listed in the project it starts in, where the project lists its
  * members. Its manager is another active member, who does not report to it.
  */
 export async function createAgentAccount(
@@ -186,6 +193,9 @@ export async function createAgentAccount(
       }
       if (member.role === "admin") {
         throw new AgentError("agent.administrator");
+      }
+      if (!input.convert) {
+        throw new AgentError("agent.login_is_member");
       }
       if (await reportsTo(tx, manager.id, member.id)) {
         throw new AgentError("agent.invalid_manager");

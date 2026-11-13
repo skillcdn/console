@@ -212,6 +212,8 @@ describe("an agent account (ADR-0084)", () => {
         handle: "dex",
         name: "Dex",
         project: "lab",
+        // Said of a login nobody carries, it asks nothing: the account is made as any is.
+        convert: true,
       }),
     );
     expect(dave.status).toBe(201);
@@ -285,21 +287,43 @@ describe("an agent account (ADR-0084)", () => {
     expect(await errorOf(unknown)).toBe("agent.unknown_host");
   });
 
-  it("is what a member's login is made, once, unless they administer the workspace", async () => {
+  it("is what a member's login is made only where that is asked for, once, unless they administer the workspace", async () => {
     const own = await send(
       alice,
       "POST",
       REST_ROUTES.agents,
-      account({ login: "alice", handle: "ally" }),
+      account({ login: "alice", handle: "ally", convert: true }),
     );
     expect(own.status).toBe(409);
     expect(await errorOf(own)).toBe("agent.administrator");
+    const updatedBefore = (await eventsOf(alice)).filter(
+      (event) => event.kind === "person.updated",
+    ).length;
+
+    // A login a member carries, named without saying that the member is to become the account:
+    // refused, and the member is who they were. A persona proposed may spell a colleague's login.
+    for (const convert of [undefined, false]) {
+      const unasked = await send(
+        alice,
+        "POST",
+        REST_ROUTES.agents,
+        account({ login: "BOB", handle: "bolt", name: "Bolt", convert }),
+      );
+      expect(unasked.status).toBe(409);
+      expect(await errorOf(unasked)).toBe("agent.login_is_member");
+    }
+    expect(await meOf(bob)).toMatchObject({ id: bobId, login: "bob" });
+    expect((await meOf(bob)).kind ?? "person").toBe("person");
+    expect((await meOf(bob)).handle ?? null).toBeNull();
+    expect((await eventsOf(alice)).filter((event) => event.kind === "person.updated")).toHaveLength(
+      updatedBefore,
+    );
 
     const made = await send(
       alice,
       "POST",
       REST_ROUTES.agents,
-      account({ login: "bob", handle: "bolt", name: "Bolt" }),
+      account({ login: "bob", handle: "bolt", name: "Bolt", convert: true }),
     );
     expect(made.status).toBe(201);
     const agent = restAgentSchema.parse(await made.json());
@@ -321,7 +345,7 @@ describe("an agent account (ADR-0084)", () => {
       alice,
       "POST",
       REST_ROUTES.agents,
-      account({ login: "bob", handle: "bolt-2" }),
+      account({ login: "bob", handle: "bolt-2", convert: true }),
     );
     expect(again.status).toBe(409);
     expect(await errorOf(again)).toBe("agent.exists");

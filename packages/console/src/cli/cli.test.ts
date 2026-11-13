@@ -2510,6 +2510,44 @@ describe("configuring, as the person", () => {
     expect(unsaid.err()).toContain("--login <login>");
   });
 
+  it("makes a member an agent account only where that is said (ADR-0104)", async () => {
+    const converted = {
+      person: { ...BOB, kind: "agent", handle: "bolt", name: "Bolt" },
+      manager: null,
+      supervised: true,
+    };
+    const { fetch, calls } = fakeConsole({
+      "POST /api/v1/agents": [
+        {
+          status: 409,
+          body: {
+            error: { code: "agent.login_is_member", message: "A member carries the login." },
+          },
+        },
+        { status: 201, body: converted },
+      ],
+    });
+    // Unsaid, the console refuses, and the command says the two ways on.
+    const unsaid = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["agent", "new", "bolt", "--login", "bob"], unsaid.io)).toBe(EXIT.failed);
+    expect(calls.at(-1)?.body).not.toHaveProperty("convert");
+    expect(unsaid.err()).toContain("agent.login_is_member");
+    expect(unsaid.err()).toContain("nothing was changed");
+    expect(unsaid.err()).toContain("--convert");
+    // Said, it is sent, and the answer says what became of the member.
+    const said = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["agent", "new", "bolt", "--login", "bob", "--convert"], said.io)).toBe(
+      EXIT.ok,
+    );
+    expect(calls.at(-1)?.body).toMatchObject({ login: "bob", handle: "bolt", convert: true });
+    expect(said.out()).toContain("bob is an agent account from now on, with everything it did.");
+    // The flag is in the command's own help, with the refusal it answers.
+    const help = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["help", "agent"], help.io)).toBe(EXIT.ok);
+    expect(help.out()).toContain("[--seed <seed>] [--convert]");
+    expect(help.out()).toContain("agent.login_is_member");
+  });
+
   it("keeps an agent account's secrets: the names, a value read alone, one set unseen, one removed (ADR-0087)", async () => {
     const kept = { name: "git.token", setAt: WHEN, seeded: false, expiresOn: "2027-11-10" };
     const { fetch, calls } = fakeConsole({

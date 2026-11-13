@@ -3855,7 +3855,7 @@ const agents: Command = async (args, io) => {
 };
 
 const AGENT_USAGE =
-  'Say what to do: console agent <handle> [--avatar <file>]  |  console agent new <handle> [--login <login>] [--project <key>] [--name "<name>"] [--title "<title>"] [--manager <login|me>] [--host gh|google] [--seed <seed>]';
+  'Say what to do: console agent <handle> [--avatar <file>]  |  console agent new <handle> [--login <login>] [--project <key>] [--name "<name>"] [--title "<title>"] [--manager <login|me>] [--host gh|google] [--seed <seed>] [--convert]';
 
 // An administrator makes an agent account with flags, where the pages make one from a form
 // (ADR-0084): the member's row at once, its login let in. What is left out is proposed: the
@@ -3869,6 +3869,7 @@ const agentNew = async (args: readonly string[], io: CliIo): Promise<number> => 
     manager: { type: "string" },
     host: { type: "string" },
     seed: { type: "string" },
+    convert: { type: "boolean" },
   });
   const handle = handleOf(theOne(positionals, AGENT_USAGE));
   const session = await open(io, values);
@@ -3908,6 +3909,8 @@ const agentNew = async (args: readonly string[], io: CliIo): Promise<number> => 
       ? {}
       : { managerId: (await personOf(session, manager)).id }),
     project,
+    // A member who carries the login becomes the account only where that is said (ADR-0104).
+    ...(on(values, "convert") ? { convert: true } : {}),
   });
   answer(io, session, made, () =>
     [
@@ -5714,6 +5717,8 @@ function hintFor(error: ApiError, io: CliIo, seen: ConsoleSeen): string {
       return "The board keeps at least one administrator in. Make another one first.\n";
     case "person.of_organization":
       return "The organization says who is in: a person it let in comes and goes with it, and is listed by login to stay.\n";
+    case "agent.login_is_member":
+      return "A member carries that login already, and nothing was changed. Name the login of the agent's own account with --login; or, to make that member the agent account for good, with everything they did, say so with --convert.\n";
     case "listing.exists":
       return "The login is let in already, or is a person's who is in. console people lists both.\n";
     case "listing.not_found":

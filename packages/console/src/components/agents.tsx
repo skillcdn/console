@@ -1,5 +1,6 @@
 import { type FormEvent, useContext, useEffect, useState } from "react";
 import {
+  hostOfLogin,
   isHandle,
   isLoginAt,
   type ProviderKey,
@@ -279,6 +280,30 @@ export function suggestLogin(handle: string, provider: RestProvider | undefined)
   return organization === null ? "" : `${organization.toLowerCase()}-${handle}`.slice(0, 39);
 }
 
+/**
+ * The member who signs in with a login at a provider, among the people the form has: the one
+ * whom adding an agent account with that login would make the account (ADR-0104). Logins are
+ * compared as the hosts compare them, without regard to case. Nobody for a login that is an
+ * agent account's already, or an administrator's: the console refuses those in its own words.
+ */
+export function memberSignedInAs(
+  people: readonly RestPerson[],
+  host: ProviderKey | undefined,
+  login: string,
+): RestPerson | undefined {
+  const spelled = login.trim().toLowerCase();
+  if (host === undefined || spelled === "") {
+    return undefined;
+  }
+  return people.find(
+    (person) =>
+      person.login.toLowerCase() === spelled &&
+      hostOfLogin(person.login) === host &&
+      person.kind !== "agent" &&
+      person.role !== "admin",
+  );
+}
+
 export interface AgentAccountFormProps {
   /** A few personas to choose from, rolled again with `onRoll`; none while they are asked for. */
   readonly proposals: readonly RestAgentProposal[];
@@ -311,7 +336,8 @@ export interface AgentAccountFormProps {
  * login, so it says what kind of name it is and when the account has to be there: at a git host,
  * before the account is added, since a login nobody holds there is whoever registers it first.
  * Who makes the account at the provider is the organization's to say, and the form says nothing
- * of it (ADR-0094).
+ * of it (ADR-0094). A login a member signs in with is not sent until whoever fills the form says
+ * that the member is to become the account (ADR-0104).
  */
 export function AgentAccountForm(props: AgentAccountFormProps) {
   const words = useWords();
@@ -332,6 +358,8 @@ export function AgentAccountForm(props: AgentAccountFormProps) {
   const [typedLogin, setTypedLogin] = useState<string | undefined>(undefined);
   const [manager, setManager] = useState<RestPerson | undefined>(props.me);
   const [project, setProject] = useState(props.projects[0]?.key ?? "");
+  /** The login of the member whom the person said is to become the account, as it was then. */
+  const [converting, setConverting] = useState<string | undefined>(undefined);
   const provider = props.providers.find((candidate) => candidate.key === host);
   const named = props.workspace === undefined ? undefined : agentLoginOf(props.workspace, handle);
   const login =
@@ -357,11 +385,18 @@ export function AgentAccountForm(props: AgentAccountFormProps) {
   };
   const handleOk = isHandle(handle) && !RESERVED_HANDLES.includes(handle);
   const loginOk = host !== undefined && isLoginAt(host, login.trim());
+  // The member who signs in with the login written, if one does: a persona's proposed login may
+  // spell a colleague's, and adding the account would make them it for good. An agent account
+  // and an administrator are refused by the console in its own words.
+  const spelled = login.trim().toLowerCase();
+  const member = loginOk ? memberSignedInAs(props.people, host, login) : undefined;
+  const convert = member !== undefined && converting === spelled;
   const valid =
     chosen !== undefined &&
     name.trim() !== "" &&
     handleOk &&
     loginOk &&
+    (member === undefined || convert) &&
     manager !== undefined &&
     project !== "";
   const submit = (event: FormEvent) => {
@@ -379,6 +414,7 @@ export function AgentAccountForm(props: AgentAccountFormProps) {
       avatarParts: chosen.avatarParts,
       managerId: manager.id,
       project,
+      ...(convert ? { convert: true } : {}),
     });
   };
   /** Whether the login is the one the workspace's services put together, and not one typed. */
@@ -506,6 +542,20 @@ export function AgentAccountForm(props: AgentAccountFormProps) {
                   ...(derived ? [form.loginDerived] : []),
                 ].join(" ")}
           </p>
+        )}
+        {member !== undefined && (
+          <Callout tone="warning">
+            <p>{form.member.warning(personName(member), member.login)}</p>
+            <label className="sc-check">
+              <input
+                type="checkbox"
+                checked={convert}
+                disabled={props.busy === true}
+                onChange={(event) => setConverting(event.target.checked ? spelled : undefined)}
+              />
+              {form.member.confirm}
+            </label>
+          </Callout>
         )}
       </section>
       <section className="sc-form-part" aria-label={form.reports}>

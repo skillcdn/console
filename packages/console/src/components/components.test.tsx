@@ -52,6 +52,7 @@ import {
   AgentAccountList,
   AgentPictureSave,
   agentAccountGroups,
+  memberSignedInAs,
   suggestLogin,
 } from "./agents.js";
 import { Board, BoardFilters, byDue, columnStateOf, edgeScrollOf, filterTasks } from "./board.js";
@@ -1809,6 +1810,32 @@ describe("the agent accounts (ADR-0084)", () => {
     expect(suggestLogin("mira", undefined)).toBe("");
   });
 
+  it("finds the member a login would make the agent account, whom the form asks about first (ADR-0104)", () => {
+    const flora: RestPerson = {
+      ...bob,
+      id: `${bob.id.slice(0, -1)}9`,
+      login: "Flora@acme.example",
+    };
+    const agent: RestPerson = {
+      ...bob,
+      id: `${bob.id.slice(0, -1)}8`,
+      login: "acme-mira",
+      kind: "agent",
+    };
+    const people = [alice, bob, flora, agent];
+    // As the hosts compare logins, without regard to case, and at the provider the login is of.
+    expect(memberSignedInAs(people, "gh", " BOB ")).toBe(bob);
+    expect(memberSignedInAs(people, "google", "flora@acme.example")).toBe(flora);
+    expect(memberSignedInAs(people, "google", "bob")).toBeUndefined();
+    // Nobody for a login nobody has, for one that is an agent account's already, and for an
+    // administrator's: the console refuses those two in words of its own.
+    expect(memberSignedInAs(people, "gh", "acme-vesta")).toBeUndefined();
+    expect(memberSignedInAs(people, "gh", "acme-mira")).toBeUndefined();
+    expect(memberSignedInAs(people, "gh", "alice")).toBeUndefined();
+    expect(memberSignedInAs(people, undefined, "bob")).toBeUndefined();
+    expect(memberSignedInAs(people, "gh", "")).toBeUndefined();
+  });
+
   it("is added from a form in three parts: who it is, the account it signs in with, whom it reports to", () => {
     const form = renderToStaticMarkup(
       <AgentAccountForm
@@ -1854,6 +1881,8 @@ describe("the agent accounts (ADR-0084)", () => {
       "Write the account it signs in with at Google. It need not be there yet: it has to be before its machine is set up.",
     );
     expect(form).not.toMatch(/a person makes|a person registers|terms/i);
+    // No member signs in with a login that is not written yet: nothing is asked of one.
+    expect(form).not.toContain("Make this member the agent account");
     expect(form).toContain(">Add the agent account<");
     expect(form).toContain("Next, on its page: an invitation that leads a machine to it.");
     // Nothing is sent until there is a persona, a login and a project.

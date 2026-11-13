@@ -1349,7 +1349,7 @@ export type RestAgents = z.infer<typeof restAgentsSchema>;
  * What `POST /api/v1/agents` is sent, by an administrator: the account the agent will sign in
  * with, at one of the providers the deployment has, as a listing names one; its persona; its
  * manager, whoever makes it where none is named; and the project it starts in. A login a member
- * already carries is made an agent account the same way, once.
+ * already carries is made an agent account only where `convert` asks for it, once (ADR-0104).
  */
 export const restAgentInputSchema = z
   .object({
@@ -1365,6 +1365,12 @@ export const restAgentInputSchema = z
     managerId: z.optional(uuid),
     /** The key of the project it starts in. */
     project: z.string().check(z.minLength(1), z.maxLength(MAX_PROJECT_KEY_LENGTH)),
+    /**
+     * `true` says that the member who carries the login already is to become the account, for
+     * good (ADR-0104); left out, such a login is refused (`agent.login_is_member`). It asks
+     * nothing of a login nobody carries.
+     */
+    convert: z.optional(z.boolean()),
   })
   .check(z.refine((input) => isLoginAt(input.host, input.login), "must be a login at the host"));
 export type RestAgentInput = z.infer<typeof restAgentInputSchema>;

@@ -11,6 +11,7 @@ export {
   type AgentAccountListProps,
   agentAccountGroups,
   avatarPngBlob,
+  memberSignedInAs,
   suggestLogin,
 } from "./components/agents.js";
 export {

@@ -248,6 +248,8 @@ export const en = {
     "agent.exists": "This login is an agent account already.",
     "agent.administrator":
       "An administrator is not made an agent account. Make them a member first.",
+    "agent.login_is_member":
+      "A member signs in with this login already. Nothing was changed: write the login of the agent's own account, or say that this member is to become the agent account.",
     "agent.invalid_manager":
       "A manager must be another active member, and not one who reports to this account.",
     "agent.invalid_project": "The project it starts in was not found.",
@@ -1949,6 +1951,12 @@ export const en = {
             unnamed: (provider: string) =>
               `Write the account it signs in with at ${provider}: one that is there already and that the organization holds. A login nobody holds yet is whoever registers it first.`,
           },
+        },
+        /** A member signs in with the login written: adding the account would make that member the account. */
+        member: {
+          warning: (name: string, login: string) =>
+            `${name} is a member here already and signs in as ${login}. Added with this login, that member becomes the agent account, with everything they did, and never goes back. For an account of the agent's own, write another login.`,
+          confirm: "Make this member the agent account",
         },
         loginDerived:
           "Put together from the workspace's services; change it where the account is called otherwise.",

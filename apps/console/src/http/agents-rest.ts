@@ -371,6 +371,7 @@ export function registerAgentsRest(app: Hono<AppEnv>, dependencies: AgentsRestDe
         // Whoever makes it answers for it, unless they name another.
         managerId: input.managerId ?? person.id,
         projectKey: input.project,
+        convert: input.convert === true,
         now: clock.now(),
       });
       logger.info(
