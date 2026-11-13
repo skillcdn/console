@@ -2473,10 +2473,12 @@ describe("configuring, as the person", () => {
       "@mira  Mira, Release engineer  (signs in as acme-mira, reports to bob, not signed in yet)",
     );
     // The account it signs in with is named, and when it has to be there; who makes it at the
-    // provider is the organization's to say, and the command says nothing of it (ADR-0094).
+    // provider is the organization's to say, and the command says nothing of it (ADR-0094). A
+    // login at a git host goes to whoever registers it: there the account is held already.
     expect(full.out()).toContain(
-      "It signs in as acme-mira: that account is made at the provider before its machine is set up",
+      "It signs in as acme-mira: that account has to be the organization's own at the git host already, since until its first sign-in binds it here the console lets in whoever holds that login.",
     );
+    expect(full.out()).not.toContain("is made at the provider before its machine is set up");
     expect(full.out()).not.toMatch(/a person makes|person's to make|terms/i);
     // Its first task, where the console made one with it, and what comes next: a machine.
     expect(full.out()).toContain(
@@ -2497,6 +2499,10 @@ describe("configuring, as the person", () => {
     });
     // An older console, or a board that took no more tasks: nothing is said of a task.
     expect(least.out()).not.toContain("Its first task");
+    // A Workspace makes its own addresses, so the account may be made on the way.
+    expect(least.out()).toContain(
+      "It signs in as acme-mira: that account is made at the provider before its machine is set up",
+    );
     const taken = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["agent", "new", "mira", "--login", "x"], taken.io)).toBe(EXIT.failed);
     const unsaid = harness({ fetch, env: SIGNED_IN });

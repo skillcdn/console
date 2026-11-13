@@ -1,0 +1,5 @@
+---
+"@skillcdn/console": patch
+---
+
+The account an agent signs in with at a git host has to be the organization's before the agent account is added, and everything that names that account says so: the form, the first step on the account's page, the setup guide, `console agent new` and the skills `running-an-agent` and `planning-the-board`. They said the account "need not be there yet", which is right of a Workspace, whose administrator makes its addresses, and wrong of a git host: a login there goes to whoever registers it, and until the account's first sign-in the console lets in whoever holds the login it was added with. The words follow the provider: `agents.accounts.form.loginAt.<provider>` gains `named` and `unnamed`, in place of `loginNamed` and `loginUnnamed`, and `agents.page.start.account` has `at.<provider>` in place of `body`, none of which a release had; `HELD_BEFORE_ADDED` is the guide's sentence, and GitHub's part of the guide no longer says "made if it is not there yet". An account added and not used is deactivated, which takes its listing away, and the skill says so.

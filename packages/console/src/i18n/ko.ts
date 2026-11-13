@@ -1537,8 +1537,12 @@ export const ko: Messages = {
         done: "완료",
         account: {
           title: "로그인할 계정",
-          body: (login, provider) =>
-            `${provider}의 ${login} 계정입니다. 아직 없으면 그곳에서 만듭니다. 로그인 정보는 머신을 셋업할 때 한 번 필요합니다.`,
+          at: {
+            google: (login, provider) =>
+              `${provider}의 ${login} 계정입니다. 아직 없으면 그곳에서 만듭니다. 로그인 정보는 머신을 셋업할 때 한 번 필요합니다.`,
+            gh: (login, provider) =>
+              `${provider}의 ${login} 계정입니다. 그곳에 이미 있고 조직이 가진 계정이어야 합니다. 이 계정으로 처음 로그인하기 전에는 그 이름을 가진 사람이 누구든 이 계정으로 들어옵니다. 로그인 정보는 머신을 셋업할 때 한 번 필요합니다.`,
+          },
           done: (login) => `${login} 계정으로 로그인했습니다.`,
         },
         invitation: {
@@ -1840,17 +1844,21 @@ export const ko: Messages = {
             label: "Google Workspace 주소",
             example: "mira@acme.example",
             invalid: "mira@acme.example 같은 주소를 적습니다.",
+            named: (login, provider) =>
+              `${provider}의 ${login} 계정으로 로그인합니다. 계정은 아직 없어도 됩니다. 머신을 셋업하기 전에만 있으면 됩니다.`,
+            unnamed: (provider) =>
+              `${provider}에서 로그인할 계정을 적습니다. 계정은 아직 없어도 됩니다. 머신을 셋업하기 전에만 있으면 됩니다.`,
           },
           gh: {
             label: "GitHub 로그인 이름",
             example: "acme-mira",
             invalid: "GitHub 로그인 이름은 영문, 숫자, 하이픈으로 39자까지입니다.",
+            named: (login, provider) =>
+              `${provider}의 ${login} 계정으로 로그인합니다. 그곳에 이미 있고 조직이 가진 계정이어야 합니다. 아직 아무도 쓰지 않는 이름이면 먼저 가입한 사람이 이 계정으로 들어옵니다.`,
+            unnamed: (provider) =>
+              `${provider}에서 로그인할 계정을 적습니다. 그곳에 이미 있고 조직이 가진 계정이어야 합니다. 아직 아무도 쓰지 않는 이름이면 먼저 가입한 사람이 이 계정으로 들어옵니다.`,
           },
         },
-        loginNamed: (login, provider) =>
-          `${provider}의 ${login} 계정으로 로그인합니다. 계정은 아직 없어도 됩니다. 머신을 셋업하기 전에만 있으면 됩니다.`,
-        loginUnnamed: (provider) =>
-          `${provider}에서 로그인할 계정을 적습니다. 계정은 아직 없어도 됩니다. 머신을 셋업하기 전에만 있으면 됩니다.`,
         loginDerived:
           "워크스페이스 설정의 서비스에서 만든 이름입니다. 계정 이름이 다르면 바꾸세요.",
         reports: "보고할 사람과 시작할 곳",

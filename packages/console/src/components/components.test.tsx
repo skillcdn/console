@@ -1891,6 +1891,13 @@ describe("the agent accounts (ADR-0084)", () => {
     expect(fresh).toContain(">invite</button>");
     expect(fresh).not.toContain(">Done<");
     expect(fresh).not.toMatch(/a person makes|terms/i);
+    // A login at a git host goes to whoever registers it, and the console lets that one in until
+    // the account's first sign-in: there the account has to be the organization's already.
+    const atGitHost = steps({ login: "acme-mira", provider: "GitHub" });
+    expect(atGitHost).toContain(
+      "acme-mira, at GitHub. It has to be there already, an account the organization holds: until it has signed in here, whoever holds that login is let in as this account.",
+    );
+    expect(atGitHost).not.toContain("It is made there where it is not yet");
     // An invitation stands: the machine is next.
     const invited = steps({ invited: true });
     expect(invited.match(/>Done</g)).toHaveLength(1);
@@ -1935,7 +1942,11 @@ describe("the agent accounts (ADR-0084)", () => {
     expect(render({ identity: { kind: "google-workspace" } })).toContain(
       ">Google Workspace address<",
     );
-    expect(render({ identity: { kind: "github" } })).toContain(">GitHub login<");
+    const github = render({ identity: { kind: "github" } });
+    expect(github).toContain(">GitHub login<");
+    // At a git host the account is there before it is added here, and the form says why.
+    expect(github).toContain("A login nobody holds yet is whoever registers it first.");
+    expect(github).not.toContain("need not be there yet");
     // With no identity service named, the first way people sign in here.
     expect(render({})).toContain(">GitHub login<");
   });

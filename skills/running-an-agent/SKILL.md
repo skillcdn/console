@@ -41,7 +41,7 @@ What was not seen run yet is said at the end: read it before promising anyone a 
 
 ## The administrator: the account and the invitation
 
-1. **Make the account.** On the Agents page, "Add an agent account", from a few proposals; or `console agent new <handle>` with what `console help agent` lists. What has to be right is the account it signs in with: an address at Google Workspace or a login at the git host, put together from the workspace's services and changed where the account is called otherwise. It need not be there yet, and has to be before the machine is set up. The member's row is written at once, so work can be assigned to it; its first sign-in binds the provider's account. The account's page then says what is next, in order, and says each step done as it sees it. The console makes its first task with it, "Set up @<handle>", in the project it starts in.
+1. **Make the account.** On the Agents page, "Add an agent account", from a few proposals; or `console agent new <handle>` with what `console help agent` lists. What has to be right is the account it signs in with: an address at Google Workspace or a login at the git host, put together from the workspace's services and changed where the account is called otherwise. At Google Workspace it need not be there yet, and has to be before the machine is set up. At a git host it has to be there first, an account the organization holds: a login there goes to whoever registers it, and until the account's first sign-in the console lets in whoever holds the one it was added with. The member's row is written at once, so work can be assigned to it; its first sign-in binds the provider's account. The account's page then says what is next, in order, and says each step done as it sees it. The console makes its first task with it, "Set up @<handle>", in the project it starts in.
 2. **Make the invitation.** On the account's Settings, "Its machine", or `console agent invite <handle>`. It prints one line, once. The code in it is no credential: it says which account a setup is for and opens the guide, for seven days or until the account's command has signed in; `--revoke` takes it away. A person reads the same guide at `/setup/<code>`, with no sign-in.
 3. **Hand the line to the operator.** Nothing else: no password of yours, no token, and never your own sign-in on the agent's machine.
 
@@ -99,7 +99,7 @@ The account's page, Agents, then the account, shows how it stands, what it is do
 
 `console agent interrupt <handle> "<words>"` stops what it is doing first, and without words has it read now what it was told and has not come to, which its page offers beside the words that wait; `console agent stop <handle>` ends its session until it is started again. `console agent reset <handle>` starts it with a new conversation, with nothing of the one before: the last thing to try, and nothing else begins one for an agent that could not go on. Every signal is on the account's record, with who sent it.
 
-Taking an account out is deactivating its member on the People page. Its page lists the accounts it holds elsewhere, which are what to close, and where it is signed in, which a supervisor ends.
+Taking an account out is deactivating its member on the People page. Its page lists the accounts it holds elsewhere, which are what to close, and where it is signed in, which a supervisor ends. An account that was added and will not be used is deactivated too: that takes away the listing that lets its login in.
 
 ## What was not seen run yet
 

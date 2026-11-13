@@ -84,6 +84,15 @@ const called = (account: string | undefined, otherwise: string): string =>
 const SIGN_IN_AT_HAND =
   "What it signs in with, its password and its second step, at hand when its machine is set up: the setup signs in with it once, in the machine's browser.";
 
+/**
+ * What a git host the account signs in to the console through says of its login: a login there
+ * goes to whoever registers it, and until the account's first sign-in the console lets in
+ * whoever holds the one it was added with. A Workspace makes its own addresses, and says no such
+ * thing.
+ */
+export const HELD_BEFORE_ADDED =
+  "It has to be the organization's own there already, from before the agent account was added here: until its first sign-in, the console lets in whoever holds that login. Where nobody holds it yet, register it before anything else.";
+
 const github: ServiceProvider = {
   kind: "github",
   name: "GitHub",
@@ -92,7 +101,8 @@ const github: ServiceProvider = {
   signsInThrough: "gh",
   wakeSource: undefined,
   guide: ({ role, service, account }) => [
-    `The account ${called(account, "of the agent")} at GitHub, made if it is not there yet, with the agent's own mailbox where it has one.`,
+    `The account ${called(account, "of the agent")} at GitHub, with the agent's own mailbox where it has one.`,
+    ...(role === "identity" ? [HELD_BEFORE_ADDED] : []),
     ...(service.organization === undefined
       ? []
       : [

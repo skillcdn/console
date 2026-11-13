@@ -1622,8 +1622,13 @@ export const en = {
         done: "Done",
         account: {
           title: "The account it signs in with",
-          body: (login: string, provider: string) =>
-            `${login}, at ${provider}. It is made there where it is not yet, and what it signs in with is asked for once, on its machine.`,
+          /** Until it has signed in, by where it signs in: a Workspace makes its own addresses, a git host gives a login to whoever asks first. */
+          at: {
+            google: (login: string, provider: string) =>
+              `${login}, at ${provider}. It is made there where it is not yet, and what it signs in with is asked for once, on its machine.`,
+            gh: (login: string, provider: string) =>
+              `${login}, at ${provider}. It has to be there already, an account the organization holds: until it has signed in here, whoever holds that login is let in as this account. What it signs in with is asked for once, on its machine.`,
+          },
           done: (login: string) => `It has signed in as ${login}.`,
         },
         invitation: {
@@ -1930,17 +1935,21 @@ export const en = {
             label: "Google Workspace address",
             example: "mira@acme.example",
             invalid: "An address, as mira@acme.example.",
+            named: (login: string, provider: string) =>
+              `It signs in as ${login}, through ${provider}. The account need not be there yet: it has to be before its machine is set up.`,
+            unnamed: (provider: string) =>
+              `Write the account it signs in with at ${provider}. It need not be there yet: it has to be before its machine is set up.`,
           },
           gh: {
             label: "GitHub login",
             example: "acme-mira",
             invalid: "A GitHub login: letters, digits and hyphens, 39 at most.",
+            named: (login: string, provider: string) =>
+              `It signs in as ${login}, through ${provider}. The account has to be there already, one the organization holds: a login nobody holds yet is whoever registers it first.`,
+            unnamed: (provider: string) =>
+              `Write the account it signs in with at ${provider}: one that is there already and that the organization holds. A login nobody holds yet is whoever registers it first.`,
           },
         },
-        loginNamed: (login: string, provider: string) =>
-          `It signs in as ${login}, through ${provider}. The account need not be there yet: it has to be before its machine is set up.`,
-        loginUnnamed: (provider: string) =>
-          `Write the account it signs in with at ${provider}. It need not be there yet: it has to be before its machine is set up.`,
         loginDerived:
           "Put together from the workspace's services; change it where the account is called otherwise.",
         reports: "Whom it reports to, and where it starts",

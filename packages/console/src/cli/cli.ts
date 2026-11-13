@@ -3913,7 +3913,10 @@ const agentNew = async (args: readonly string[], io: CliIo): Promise<number> => 
     [
       formatAgentLine(made),
       made.person.invited === true
-        ? `It is a member now, and work can be assigned to it. It signs in as ${made.person.login}: that account is made at the provider before its machine is set up, and its first sign-in with it binds it here.`
+        ? host === "gh"
+          ? // A login at a git host goes to whoever registers it, and the console lets that one in.
+            `It is a member now, and work can be assigned to it. It signs in as ${made.person.login}: that account has to be the organization's own at the git host already, since until its first sign-in binds it here the console lets in whoever holds that login.`
+          : `It is a member now, and work can be assigned to it. It signs in as ${made.person.login}: that account is made at the provider before its machine is set up, and its first sign-in with it binds it here.`
         : `${made.person.login} is an agent account from now on, with everything it did.`,
       ...(made.onboarding === null || made.onboarding === undefined
         ? []

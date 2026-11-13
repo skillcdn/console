@@ -1,5 +1,10 @@
 import type { RestAgentSetup, RestWorkspace } from "./schemas.js";
-import { describeService, type ServiceItem, serviceNamesOf } from "./services.js";
+import {
+  describeService,
+  HELD_BEFORE_ADDED,
+  type ServiceItem,
+  serviceNamesOf,
+} from "./services.js";
 import { type ProviderKey, SERVICE_ROLES, type ServiceRole } from "./vocabulary.js";
 
 // The guide an invitation's code opens (ADR-0088): what setting a machine up for one agent
@@ -156,7 +161,11 @@ export function setupGuideOf(setup: RestAgentSetup, code: string): SetupGuide {
       ? [
           {
             title: `${provider}, where the account signs in`,
-            body: `The account \`${account.login}\` at ${provider}, made if it is not there yet, and what it signs in with at hand when the machine is set up: the setup signs in with it once, in the machine's browser.`,
+            // A git host gives a login to whoever registers it; a Workspace makes its own.
+            body:
+              account.host === "gh"
+                ? `The account \`${account.login}\` at ${provider}. ${HELD_BEFORE_ADDED} What it signs in with is at hand when the machine is set up: the setup signs in with it once, in the machine's browser.`
+                : `The account \`${account.login}\` at ${provider}, made if it is not there yet, and what it signs in with at hand when the machine is set up: the setup signs in with it once, in the machine's browser.`,
           },
         ]
       : []),

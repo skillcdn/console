@@ -1,5 +1,10 @@
 import type { ReactNode } from "react";
-import type { RestAgentInvitation, RestAgentInvitationMade, RestAgentSetup } from "../api.js";
+import {
+  hostOfLogin,
+  type RestAgentInvitation,
+  type RestAgentInvitationMade,
+  type RestAgentSetup,
+} from "../api.js";
 import { useWords } from "../i18n/index.js";
 import { type SetupGuide, setupSentenceOf } from "../setup-guide.js";
 import { AvatarPicture, Badge, Button, Callout, CopyButton, cx, personName, Time } from "./ui.js";
@@ -156,7 +161,8 @@ export interface AgentStartStepsProps {
  * done: the account it signs in with, an invitation, the one line on its machine, its runner.
  * Each is said done as the console sees it, so that whoever looks reads what is next. Who makes
  * the account at the provider is not said: the account is named, and when it has to be there
- * (ADR-0094).
+ * (ADR-0094), which at a git host is already, since until its first sign-in the console lets in
+ * whoever holds the login.
  */
 export function AgentStartSteps(props: AgentStartStepsProps) {
   const words = useWords().agents.page.start;
@@ -176,7 +182,7 @@ export function AgentStartSteps(props: AgentStartStepsProps) {
       title: words.account.title,
       body: signedIn
         ? words.account.done(props.login)
-        : words.account.body(props.login, props.provider),
+        : words.account.at[hostOfLogin(props.login)](props.login, props.provider),
       done: signedIn,
     },
     {

@@ -308,9 +308,10 @@ export interface AgentAccountFormProps {
  * among the proposals and edited; the account it signs in to this console with, at one of the
  * providers the deployment has, put together from the workspace's services and edited freely;
  * and whom it reports to and where it starts. The one thing the form has to get right is that
- * login, so it says what kind of name it is and when the account has to be there. Who makes the
- * account at the provider is the organization's to say, and the form says nothing of it
- * (ADR-0094).
+ * login, so it says what kind of name it is and when the account has to be there: at a git host,
+ * before the account is added, since a login nobody holds there is whoever registers it first.
+ * Who makes the account at the provider is the organization's to say, and the form says nothing
+ * of it (ADR-0094).
  */
 export function AgentAccountForm(props: AgentAccountFormProps) {
   const words = useWords();
@@ -500,8 +501,8 @@ export function AgentAccountForm(props: AgentAccountFormProps) {
               ? hostWords?.invalid
               : [
                   login.trim() === ""
-                    ? form.loginUnnamed(provider.label)
-                    : form.loginNamed(login.trim(), provider.label),
+                    ? hostWords?.unnamed(provider.label)
+                    : hostWords?.named(login.trim(), provider.label),
                   ...(derived ? [form.loginDerived] : []),
                 ].join(" ")}
           </p>
