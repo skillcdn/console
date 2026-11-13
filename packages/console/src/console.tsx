@@ -825,7 +825,7 @@ function TaskPage(props: {
   readonly navigation: Navigation;
   readonly busy: boolean;
   readonly error: string | undefined;
-  readonly act: (work: () => Promise<unknown>) => Promise<void>;
+  readonly act: (work: () => Promise<unknown>) => Promise<unknown>;
 }) {
   const words = useWords();
   const { route, project, data, components, navigation, busy, error, act } = props;
@@ -3232,6 +3232,9 @@ function WorkspacePage(props: {
   if (route.name === "agent") {
     return (
       <AgentPage
+        // Keyed by the account, so that going from one account to another by the browser's
+        // history begins a page of its own: no name, title or hours of the one in the other's fields.
+        key={route.handle}
         handle={route.handle}
         tab={route.tab}
         session={route.session}

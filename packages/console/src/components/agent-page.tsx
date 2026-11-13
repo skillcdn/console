@@ -90,6 +90,12 @@ export function AgentStateBadge(props: {
 
 export interface TranscriptViewProps {
   readonly events: readonly RestTranscriptEvent[];
+  /**
+   * What the events are of: the session's id. A text read whole is kept under it, so that it is
+   * never shown for the event of the same number in another session. Left out where a view shows
+   * one list of events and no other.
+   */
+  readonly of?: string | undefined;
   /** Where the bytes of a picture of the session are read. */
   readonly fileHref: (fileId: string) => string;
   /** Reads the whole text of an event whose row keeps its beginning alone. */
@@ -321,6 +327,47 @@ export function waitingOf(signals: readonly RestSignal[], taken: number): readon
     .sort((a, b) => a.number - b.number);
 }
 
+/** The texts read whole in a session: the session they were read in, and each by its event's number. */
+export interface WholeTexts {
+  readonly of: string | undefined;
+  readonly texts: Readonly<Record<number, string>>;
+}
+
+/** Nothing read whole yet. */
+export const NO_WHOLE: WholeTexts = { of: undefined, texts: {} };
+
+/**
+ * The whole text of an event, where it was read whole in the session shown. Every session
+ * numbers its events from one, so a text read in another session is another event's, and is
+ * never answered for this one.
+ */
+export function wholeOf(kept: WholeTexts, of: string | undefined, n: number): string | undefined {
+  return kept.of === of ? kept.texts[n] : undefined;
+}
+
+/** What is kept once a text was read whole in a session: with the others read in it, without those of another. */
+export function withWhole(
+  kept: WholeTexts,
+  of: string | undefined,
+  n: number,
+  text: string,
+): WholeTexts {
+  return { of, texts: { ...(kept.of === of ? kept.texts : {}), [n]: text } };
+}
+
+/**
+ * A session's events with the ones before them put first: those up to where the events shown
+ * begin, and none that is shown already, so that a page read twice adds its events once.
+ */
+export function withEarlier(
+  current: readonly RestTranscriptEvent[],
+  earlier: readonly RestTranscriptEvent[],
+  from: number,
+): readonly RestTranscriptEvent[] {
+  const shown = new Set(current.map((event) => event.n));
+  return [...earlier.filter((event) => event.n <= from && !shown.has(event.n)), ...current];
+}
+
 /** How far from its end a conversation may stand and still be followed, in pixels. */
 export const FOLLOW_SLACK = 72;
 
@@ -370,6 +417,16 @@ const word = (value: unknown): string | undefined =>
   typeof value === "string" && value.length > 0 ? value : undefined;
 
 /**
+ * What the record names in a word of its own, a signal's kind, an answer, a fact's name, in the
+ * page's words: the pack's word for it, or the word as it came where the pack has none, as for
+ * what a newer runner writes. Only a word the pack itself holds counts: what a runner sends is
+ * data, and a name every object has is no word of the pack.
+ */
+export function wordOf(words: Readonly<Record<string, string>>, name: string): string {
+  return Object.hasOwn(words, name) ? (words[name] ?? name) : name;
+}
+
+/**
  * A session as a conversation: what the agent was told at the right, as whoever said it wrote
  * it, with the files that came with it; what the agent said at the left, beside its picture; its
  * thoughts folded; a tool's call and what it answered as one row that opens, the steps of a turn
@@ -381,8 +438,15 @@ export function TranscriptView(props: TranscriptViewProps) {
   const all = useWords();
   const words = all.agents.page.live;
   const shown = usePicture();
-  const [whole, setWhole] = useState<Readonly<Record<number, string>>>({});
-  const [reading, setReading] = useState<number | undefined>(undefined);
+  // What was read whole belongs to the session it was read in: the events of another carry the
+  // same numbers, and a view that goes on to show them must show none of this.
+  const [whole, setWhole] = useState<WholeTexts>(NO_WHOLE);
+  const [reading, setReading] = useState<
+    { readonly of: string | undefined; readonly n: number } | undefined
+  >(undefined);
+  const of = props.of;
+  const showing = useRef(of);
+  showing.current = of;
   if (props.events.length === 0) {
     return (
       <>
@@ -409,33 +473,42 @@ export function TranscriptView(props: TranscriptViewProps) {
     }
   }
   const kinds: Readonly<Record<string, string>> = words.kinds;
-  const signalKinds: Readonly<Record<string, string>> = words.signalKinds;
-  const read = (n: number) => {
+  const readWhole = (n: number) => {
     const load = props.onReadWhole;
     if (load === undefined) {
       return;
     }
-    setReading(n);
+    setReading({ of, n });
     void load(n)
-      .then((text) => setWhole((current) => ({ ...current, [n]: text })))
+      .then((text) => {
+        // An answer that arrives once another session is shown is that session's no more.
+        if (showing.current === of) {
+          setWhole((current) => withWhole(current, of, n, text));
+        }
+      })
       .catch(() => undefined)
-      .finally(() => setReading(undefined));
+      .finally(() =>
+        setReading((current) =>
+          current !== undefined && current.of === of && current.n === n ? undefined : current,
+        ),
+      );
   };
   /** The words of an event, whole where they were read whole, with the way to read the rest. */
   const text = (event: RestTranscriptEvent, className: string): ReactNode => {
-    const shown = whole[event.n] ?? event.text;
+    const read = wholeOf(whole, of, event.n);
+    const shown = read ?? event.text;
     return (
       <>
         {shown.length > 0 && <pre className={className}>{shown}</pre>}
-        {event.whole !== null && whole[event.n] === undefined && (
+        {event.whole !== null && read === undefined && (
           <p className="sc-talk-cut">
             {words.cutAt(formatBytes(event.whole))}{" "}
             {props.onReadWhole !== undefined && (
               <Button
                 variant="ghost"
                 size="sm"
-                disabled={reading === event.n}
-                onClick={() => read(event.n)}
+                disabled={reading !== undefined && reading.of === of && reading.n === event.n}
+                onClick={() => readWhole(event.n)}
               >
                 {words.whole}
               </Button>
@@ -501,7 +574,7 @@ export function TranscriptView(props: TranscriptViewProps) {
               {one.permission !== undefined && (
                 <p className="sc-talk-note-line">
                   {kinds.permission}
-                  {answer === undefined ? "" : ` · ${answer}`}
+                  {answer === undefined ? "" : ` · ${wordOf(words.answers, answer)}`}
                   {one.permission.text.length > 0 && ` · ${one.permission.text}`}
                 </p>
               )}
@@ -589,7 +662,9 @@ export function TranscriptView(props: TranscriptViewProps) {
           <div className="sc-talk-meta">
             <span className="sc-talk-who">{who}</span>
             {through !== undefined && <span>{words.through(through)}</span>}
-            {kind !== undefined && kind !== "tell" && <Badge>{signalKinds[kind] ?? kind}</Badge>}
+            {kind !== undefined && kind !== "tell" && (
+              <Badge>{wordOf(words.signalKinds, kind)}</Badge>
+            )}
             {when(event)}
           </div>
           {event.data.unread === true && (
@@ -660,7 +735,7 @@ export function TranscriptView(props: TranscriptViewProps) {
           <span className="sc-talk-kind">{kinds[event.kind] ?? event.kind}</span>
           {facts.map(([name, fact]) => (
             <span key={name} className="sc-talk-fact">
-              {name} {String(fact)}
+              {wordOf(words.facts, name)} {String(fact)}
             </span>
           ))}
           {lines.length === 1 && <span>{lines[0]}</span>}
@@ -1000,6 +1075,27 @@ export function pastedName(file: File, at: Date): string {
   return `pasted-${stamp}.${ending}`;
 }
 
+/**
+ * Whether what was told was taken, by what whoever tells answered: `false`, or a request that
+ * failed, says it was not, and the box keeps what was written; anything else, nothing among it,
+ * says it was, so that a handler that answers nothing is taken at its word.
+ */
+export async function takenBy(answer: unknown): Promise<boolean> {
+  try {
+    return (await answer) !== false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * What stands in the box once what was sent from it was taken: nothing, or what was written
+ * after it while the console was asked; words changed meanwhile are another message, and stay.
+ */
+export function afterTold(current: string, sent: string): string {
+  return current.startsWith(sent) ? current.slice(sent.length).trimStart() : current;
+}
+
 /** How tall the box grows with what is written in it, before it scrolls. */
 const MAX_BOX_PIXELS = 280;
 
@@ -1017,8 +1113,13 @@ export interface SignalComposerProps {
   readonly busy?: boolean | undefined;
   /** What went wrong with what was sent last, as a line under the box. */
   readonly note?: ReactNode;
-  /** Tells the agent what was written, with the files chosen. */
-  readonly onSend: (text: string, files: readonly FileUpload[]) => void;
+  /**
+   * Tells the agent what was written, with the files chosen. Where it answers whether the tell
+   * was taken, itself or as a promise, `false` or a failure keeps the words and the files in the
+   * box, to be sent again, and the box is emptied only once the tell was taken; where it answers
+   * nothing, the box is emptied as it is sent.
+   */
+  readonly onSend: (text: string, files: readonly FileUpload[]) => unknown;
 }
 
 /**
@@ -1036,6 +1137,8 @@ export function SignalComposer(props: SignalComposerProps) {
   const [files, setFiles] = useState<readonly File[]>([]);
   const [previews, setPreviews] = useState<Readonly<Record<string, string>>>({});
   const [over, setOver] = useState(false);
+  /** Whether a tell is on its way: nothing more is sent until the console answered. */
+  const [sending, setSending] = useState(false);
   const box = useRef<HTMLTextAreaElement>(null);
   // The box grows with what is written in it, lines that wrap among them, up to a bound.
   // biome-ignore lint/correctness/useExhaustiveDependencies: `text` is the trigger
@@ -1075,15 +1178,30 @@ export function SignalComposer(props: SignalComposerProps) {
     }
   };
   const send = () => {
-    props.onSend(
+    const written = text;
+    const sent = files;
+    const answer = props.onSend(
       said,
-      files.map((file) => ({ name: file.name, bytes: file, contentType: file.type })),
+      sent.map((file) => ({ name: file.name, bytes: file, contentType: file.type })),
     );
-    setText("");
-    setFiles([]);
-    setPreviews({});
+    setSending(true);
+    // What was written stays until the console took it: a refusal, or a request that failed,
+    // leaves the words and the files where they are, with what went wrong said under them.
+    void takenBy(answer).then((taken) => {
+      setSending(false);
+      if (!taken) {
+        return;
+      }
+      setText((current) => afterTold(current, written));
+      setFiles((current) => current.filter((file) => !sent.includes(file)));
+      setPreviews((current) =>
+        Object.fromEntries(
+          Object.entries(current).filter(([key]) => !sent.some((file) => keyOf(file) === key)),
+        ),
+      );
+    });
   };
-  const ready = said.length > 0 && !tooMany && !tooLarge && !busy;
+  const ready = said.length > 0 && !tooMany && !tooLarge && !busy && !sending;
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (ready) {

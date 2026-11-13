@@ -30,21 +30,28 @@ import {
   AgentSecretList,
   AgentSessionList,
   AgentStateBadge,
+  afterTold,
   ChatPane,
   FOLLOW_SLACK,
   followsAfter,
   followsEnd,
+  NO_WHOLE,
   pastedName,
   SignalComposer,
   TalkWaiting,
   TalkWorking,
   TranscriptView,
+  takenBy,
   takenOf,
   talkOf,
   tellsWith,
   waitingOf,
+  wholeOf,
   withChosen,
+  withEarlier,
   withoutChosen,
+  withWhole,
+  wordOf,
   workingOf,
 } from "./agent-page.js";
 import {
@@ -2351,6 +2358,54 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     );
   });
 
+  it("says what the record names in words of its own in the words of the page", () => {
+    const events = [
+      event(1, {
+        kind: "wake",
+        text: "A task was assigned.",
+        data: { signal: 2, source: "board", key: "task.assigned", origin: "the feed" },
+      }),
+      event(2, { kind: "permission", text: "", data: { tool: "edit", id: "p", answer: "denied" } }),
+      event(3, {
+        kind: "person",
+        text: "Go on.",
+        data: { signal: 3, kind: "restart", by: "alice" },
+      }),
+      event(4, { kind: "status", text: "", data: { constructor: "x", model: "opus" } }),
+      event(5, {
+        kind: "permission",
+        text: "",
+        data: { tool: "edit", id: "q", answer: "postponed" },
+      }),
+    ];
+    const korean = renderToStaticMarkup(
+      <LanguageContext.Provider value={KOREAN}>
+        <TranscriptView events={events} fileHref={(id) => id} />
+      </LanguageContext.Provider>,
+    );
+    // A fact is called by the page's word for it, an answer is said in the page's language, and
+    // a signal's kind is the word the conversation has for it.
+    expect(korean).toContain('<span class="sc-talk-fact">출처 board</span>');
+    expect(korean).toContain('<span class="sc-talk-fact">대상 task.assigned</span>');
+    expect(korean).toContain('<span class="sc-talk-fact">모델 opus</span>');
+    expect(korean).toContain("권한 · 거절됨");
+    expect(korean).toMatch(/<span class="sc-badge sc-badge-neutral">재시작<\/span>/);
+    expect(korean).not.toContain("source board");
+    expect(korean).not.toContain("· denied");
+    // What a newer runner writes, which the pack has no word for, stands as it came; and a
+    // name every object has is no word of the pack, whatever a runner sends.
+    expect(korean).toContain('<span class="sc-talk-fact">origin the feed</span>');
+    expect(korean).toContain('<span class="sc-talk-fact">constructor x</span>');
+    expect(korean).toContain("권한 · postponed");
+    const english = renderToStaticMarkup(<TranscriptView events={events} fileHref={(id) => id} />);
+    expect(english).toContain('<span class="sc-talk-fact">from board</span>');
+    expect(english).toContain('<span class="sc-talk-fact">about task.assigned</span>');
+    expect(english).toContain("Permission · denied");
+    expect(wordOf({ stop: "Stop" }, "stop")).toBe("Stop");
+    expect(wordOf({ stop: "Stop" }, "set")).toBe("set");
+    expect(wordOf({ stop: "Stop" }, "toString")).toBe("toString");
+  });
+
   it("says where a turn ended and how long it took, who stopped one with no words, and what was never read", () => {
     const at = (seconds: number) => new Date(Date.parse(WHEN) + seconds * 1000).toISOString();
     const seen = renderToStaticMarkup(
@@ -2661,6 +2716,58 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     expect(tellsWith(key({ isComposing: true }))).toBe(false);
     expect(tellsWith(key({ keyCode: 229 }))).toBe(false);
     expect(tellsWith({ key: "Enter" })).toBe(true);
+  });
+
+  it("keeps a text read whole to the session it was read in", () => {
+    const first = "0199c4d8-0000-7000-8000-0000000000a1";
+    const second = "0199c4d8-0000-7000-8000-0000000000a2";
+    // Every session numbers its events from one: event 12 of the session after a restart is
+    // another event than event 12 of the one before, and never shows that one's text.
+    const read = withWhole(NO_WHOLE, first, 12, "The whole result of session one.");
+    expect(wholeOf(read, first, 12)).toBe("The whole result of session one.");
+    expect(wholeOf(read, second, 12)).toBeUndefined();
+    expect(wholeOf(read, undefined, 12)).toBeUndefined();
+    expect(wholeOf(read, first, 13)).toBeUndefined();
+    // What is read in one session stands beside the others read in it, and lets go of another's.
+    const more = withWhole(read, first, 13, "Another.");
+    expect(wholeOf(more, first, 12)).toBe("The whole result of session one.");
+    expect(wholeOf(more, first, 13)).toBe("Another.");
+    const next = withWhole(more, second, 12, "The whole result of session two.");
+    expect(wholeOf(next, second, 12)).toBe("The whole result of session two.");
+    expect(wholeOf(next, first, 12)).toBeUndefined();
+    expect(wholeOf(next, second, 13)).toBeUndefined();
+    // A view that is told of no session keeps what it read, as one view of one list of events.
+    expect(wholeOf(withWhole(NO_WHOLE, undefined, 3, "Whole."), undefined, 3)).toBe("Whole.");
+  });
+
+  it("puts the events before a session's first shown one in once, however often they are read", () => {
+    const shown = [event(201), event(202)];
+    const earlier = [event(199), event(200), event(201)];
+    const once = withEarlier(shown, earlier, 200);
+    expect(once.map((one) => one.n)).toEqual([199, 200, 201, 202]);
+    // The same page read again, as two presses at once read it, adds nothing.
+    expect(withEarlier(once, earlier, 200).map((one) => one.n)).toEqual([199, 200, 201, 202]);
+    expect(withEarlier(once, earlier, 198).map((one) => one.n)).toEqual([199, 200, 201, 202]);
+  });
+
+  it("empties the box to speak in only once what was told was taken", async () => {
+    // Whoever tells says whether the console took it: a refusal, or a request that failed, keeps
+    // the words and the files where they are, to be sent again.
+    expect(await takenBy(Promise.resolve(false))).toBe(false);
+    expect(await takenBy(Promise.reject(new Error("the request failed")))).toBe(false);
+    expect(await takenBy(false)).toBe(false);
+    expect(await takenBy(Promise.resolve(true))).toBe(true);
+    // A console of one's own whose handler answers nothing is taken at its word, as before.
+    expect(await takenBy(undefined)).toBe(true);
+    expect(await takenBy(Promise.resolve(undefined))).toBe(true);
+    // Once taken, the box holds nothing of what was sent, and keeps what was written meanwhile.
+    expect(afterTold("Look at the ledger.", "Look at the ledger.")).toBe("");
+    expect(afterTold("Look at the ledger.\nAnd the rota.", "Look at the ledger.")).toBe(
+      "And the rota.",
+    );
+    expect(afterTold("Something else by now.", "Look at the ledger.")).toBe(
+      "Something else by now.",
+    );
   });
 
   it("offers what a supervisor says to it: words and files in one box, a tell, and nothing that stops a turn or changes how it stands", () => {

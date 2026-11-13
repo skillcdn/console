@@ -26,18 +26,23 @@ export function errorWords(
   return wordsForFailure(error, pack) ?? fallback;
 }
 
-/** Runs a change, keeps what went wrong for the page, and says when it is busy. */
+/**
+ * Runs a change, keeps what went wrong for the page, and says when it is busy. `act` answers
+ * whether the change went through, for a form that keeps what was written in it where it did not.
+ */
 export function useAction() {
   const words = useWords();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
-  const act = async (work: () => Promise<unknown>) => {
+  const act = async (work: () => Promise<unknown>): Promise<boolean> => {
     setBusy(true);
     setError(undefined);
     try {
       await work();
+      return true;
     } catch (failure) {
       setError(errorWords(failure, words.common.somethingWentWrong, words));
+      return false;
     } finally {
       setBusy(false);
     }

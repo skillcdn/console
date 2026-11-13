@@ -1,4 +1,5 @@
 import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { followSession, type StreamStanding } from "./agent-stream.js";
 import {
   ApiError,
   type ConsoleClient,
@@ -11,8 +12,6 @@ import {
   type RestSession,
   type RestSignal,
   type RestTranscriptEvent,
-  restAgentSessionSchema,
-  restTranscriptEventSchema,
 } from "./api.js";
 import {
   AgentChoice,
@@ -29,6 +28,8 @@ import {
   TranscriptView,
   takenOf,
   waitingOf,
+  withEarlier,
+  wordOf,
   workingOf,
 } from "./components/agent-page.js";
 import { AgentPictureSave } from "./components/agents.js";
@@ -140,10 +141,12 @@ function SessionTranscript(props: {
   const [events, setEvents] = useState<readonly RestTranscriptEvent[]>([]);
   const [from, setFrom] = useState(0);
   const [problem, setProblem] = useState(false);
-  const [live, setLive] = useState(false);
+  /** How the stream stands: the page says so once it has been away for longer than a moment. */
+  const [standing, setStanding] = useState<StreamStanding>("waiting");
+  /** Whether the events before the first one shown are being read: asked for once at a time. */
+  const [readingEarlier, setReadingEarlier] = useState(false);
   /** The last signal taken before the events read, once looked for: `0` where a few steps back say none. */
   const [before, setBefore] = useState<number | undefined>(undefined);
-  const last = useRef(0);
   const ended = useRef(onEnded);
   ended.current = onEnded;
   const open = session.ended === null;
@@ -155,77 +158,30 @@ function SessionTranscript(props: {
   count.current = session.events;
   const opened = useRef(open);
   opened.current = open;
+  /** The session shown, for what is answered after another one took its place. */
+  const shown = useRef(session.id);
+  shown.current = session.id;
   useEffect(() => {
-    const controller = new AbortController();
-    let source: EventSource | undefined;
     const after = Math.max(0, count.current - TAIL);
     setEvents([]);
     setFrom(after);
     setProblem(false);
-    setLive(false);
+    setStanding("waiting");
+    setReadingEarlier(false);
     setBefore(undefined);
-    last.current = after;
-    const append = (items: readonly RestTranscriptEvent[]) => {
-      const fresh = items.filter((item) => item.n > last.current);
-      if (fresh.length > 0) {
-        last.current = fresh.at(-1)?.n ?? last.current;
-        setEvents((current) => [...current, ...fresh]);
-      }
-    };
-    const run = async () => {
-      // Page after page until what is there now is read.
-      for (;;) {
-        const page = await client.transcript(
-          handle,
-          session.id,
-          { after: last.current, limit: 500 },
-          controller.signal,
-        );
-        if (controller.signal.aborted) {
-          return;
-        }
-        append(page.items);
-        if (!page.more) {
-          break;
-        }
-      }
-      if (!opened.current || typeof EventSource === "undefined") {
-        return;
-      }
-      source = new EventSource(client.transcriptStreamUrl(handle, session.id, last.current));
-      source.onopen = () => setLive(true);
-      source.onerror = () => setLive(false);
-      source.addEventListener("event", (message) => {
-        try {
-          const parsed = restTranscriptEventSchema.safeParse(JSON.parse(String(message.data)));
-          if (parsed.success) {
-            append([parsed.data]);
-          }
-        } catch {
-          // What does not read as an event is left out.
-        }
-      });
-      source.addEventListener("end", (message) => {
-        source?.close();
-        setLive(false);
-        try {
-          if (restAgentSessionSchema.safeParse(JSON.parse(String(message.data))).success) {
-            ended.current?.();
-          }
-        } catch {
-          ended.current?.();
-        }
-      });
-    };
-    run().catch(() => {
-      if (!controller.signal.aborted) {
-        setProblem(true);
-      }
+    // What is there is read, and what arrives is followed; a stream that closed for good, as
+    // one does while the console restarts, is opened again from the last event read.
+    return followSession({
+      client,
+      handle,
+      session: session.id,
+      after,
+      open: () => opened.current,
+      onEvents: (fresh) => setEvents((current) => [...current, ...fresh]),
+      onStanding: setStanding,
+      onProblem: () => setProblem(true),
+      onEnded: () => ended.current?.(),
     });
-    return () => {
-      controller.abort();
-      source?.close();
-    };
   }, [client, handle, session.id]);
   // Which of the words sent still wait is read off the last signal the agent took. Where the
   // events read hold none, a long turn since the last word say, the ones before are read a few
@@ -259,29 +215,49 @@ function SessionTranscript(props: {
     return () => controller.abort();
   }, [looks, before, from, client, handle, session.id]);
   const earlier = () => {
+    if (readingEarlier) {
+      return;
+    }
     const after = Math.max(0, from - TAIL);
+    const of = session.id;
+    setReadingEarlier(true);
     void client
-      .transcript(handle, session.id, { after, limit: from - after })
+      .transcript(handle, of, { after, limit: from - after })
       .then((page) => {
-        setEvents((current) => [...page.items.filter((item) => item.n <= from), ...current]);
+        // An answer that arrives once another session is shown is not this one.
+        if (shown.current !== of) {
+          return;
+        }
+        setEvents((current) => withEarlier(current, page.items, from));
         setFrom(after);
       })
-      .catch(() => setProblem(true));
+      .catch(() => {
+        if (shown.current === of) {
+          setProblem(true);
+        }
+      })
+      .finally(() => {
+        if (shown.current === of) {
+          setReadingEarlier(false);
+        }
+      });
   };
   const taken = known ?? (before !== undefined && before > 0 ? before : undefined);
   return (
     <section className="sc-agent-transcript" aria-label={words.transcript}>
       {session.away && <Callout tone="warning">{words.away}</Callout>}
       {problem && <Callout tone="danger">{words.couldNotLoad}</Callout>}
-      {open && !live && typeof EventSource === "undefined" && (
+      {open && typeof EventSource === "undefined" && (
         <p className="sc-field-hint">{words.notLive}</p>
       )}
       {from > 0 && (
-        <Button variant="ghost" size="sm" onClick={earlier}>
+        <Button variant="ghost" size="sm" disabled={readingEarlier} onClick={earlier}>
           {words.earlier}
         </Button>
       )}
       <TranscriptView
+        key={session.id}
+        of={session.id}
         events={events}
         agent={props.agent}
         fileHref={(fileId) => client.transcriptFileUrl(handle, session.id, fileId)}
@@ -291,6 +267,12 @@ function SessionTranscript(props: {
         empty={session.away ? null : <p className="sc-field-hint">{words.empty}</p>}
         foot={props.foot?.({ events, taken })}
       />
+      {/* At the conversation's end, where what is new would stand and a pane that follows it looks. */}
+      {open && standing === "lost" && (
+        <p className="sc-field-hint" role="status">
+          {words.lost}
+        </p>
+      )}
     </section>
   );
 }
@@ -419,7 +401,7 @@ function AgentLive(props: {
         kind,
         ...(text.length === 0 ? {} : { text }),
       });
-      setNote(words.tell.sent(sent.number, sent.kind));
+      setNote(words.tell.sent(sent.number, wordOf(words.live.signalKinds, sent.kind)));
       onChanged();
       sessions.again();
       record.again();
@@ -475,8 +457,9 @@ function AgentLive(props: {
           </span>
         )
       }
+      // The box keeps what was written until this says the console took it.
       onSend={(text, pictures) =>
-        void act(async () => {
+        act(async () => {
           await client.sendSignal(handle, { kind: "tell", text }, pictures);
           setSaid((count) => count + 1);
           record.again();
@@ -528,6 +511,7 @@ function AgentLive(props: {
                   <p className="sc-field-hint sc-agent-live-lead">{words.live.last}</p>
                 )}
                 <SessionTranscript
+                  key={session.id}
                   client={client}
                   handle={handle}
                   session={session}
@@ -568,7 +552,7 @@ function AgentLive(props: {
             onSet={(choice) =>
               void act(async () => {
                 const sent = await client.sendSignal(handle, { kind: "set", set: choice });
-                setNote(words.tell.sent(sent.number, sent.kind));
+                setNote(words.tell.sent(sent.number, wordOf(words.live.signalKinds, sent.kind)));
                 onChanged();
               })
             }
@@ -621,6 +605,7 @@ function AgentSessions(props: {
           />
         </div>
         <SessionTranscript
+          key={found.value.one.id}
           client={client}
           handle={handle}
           session={found.value.one}
